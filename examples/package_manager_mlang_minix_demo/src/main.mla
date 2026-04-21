@@ -56,13 +56,143 @@ fn read_cntvct() -> i64 {
     return asm volatile aarch64(i64, "mrs $0, cntvct_el0", seed);
 }
 
-fn line_store(base: ptr<u8>, index: i64, value: u8) {
-    asm volatile aarch64(void, "add x9, $0, $1\nstrb w2, [x9]", base, index, value);
+fn line_store(line: ptr<LineBuffer>, index: i32, value: u8) {
+    unsafe {
+        if index == 0 { (*line).b00 = value; return; }
+        if index == 1 { (*line).b01 = value; return; }
+        if index == 2 { (*line).b02 = value; return; }
+        if index == 3 { (*line).b03 = value; return; }
+        if index == 4 { (*line).b04 = value; return; }
+        if index == 5 { (*line).b05 = value; return; }
+        if index == 6 { (*line).b06 = value; return; }
+        if index == 7 { (*line).b07 = value; return; }
+        if index == 8 { (*line).b08 = value; return; }
+        if index == 9 { (*line).b09 = value; return; }
+        if index == 10 { (*line).b10 = value; return; }
+        if index == 11 { (*line).b11 = value; return; }
+        if index == 12 { (*line).b12 = value; return; }
+        if index == 13 { (*line).b13 = value; return; }
+        if index == 14 { (*line).b14 = value; return; }
+        if index == 15 { (*line).b15 = value; return; }
+        if index == 16 { (*line).b16 = value; return; }
+        if index == 17 { (*line).b17 = value; return; }
+        if index == 18 { (*line).b18 = value; return; }
+        if index == 19 { (*line).b19 = value; return; }
+        if index == 20 { (*line).b20 = value; return; }
+        if index == 21 { (*line).b21 = value; return; }
+        if index == 22 { (*line).b22 = value; return; }
+        if index == 23 { (*line).b23 = value; return; }
+        if index == 24 { (*line).b24 = value; return; }
+        if index == 25 { (*line).b25 = value; return; }
+        if index == 26 { (*line).b26 = value; return; }
+        if index == 27 { (*line).b27 = value; return; }
+        if index == 28 { (*line).b28 = value; return; }
+        if index == 29 { (*line).b29 = value; return; }
+        if index == 30 { (*line).b30 = value; return; }
+        if index == 31 { (*line).b31 = value; return; }
+        if index == 32 { (*line).b32 = value; return; }
+        if index == 33 { (*line).b33 = value; return; }
+        if index == 34 { (*line).b34 = value; return; }
+        if index == 35 { (*line).b35 = value; return; }
+        if index == 36 { (*line).b36 = value; return; }
+        if index == 37 { (*line).b37 = value; return; }
+        if index == 38 { (*line).b38 = value; return; }
+        if index == 39 { (*line).b39 = value; return; }
+        if index == 40 { (*line).b40 = value; return; }
+        if index == 41 { (*line).b41 = value; return; }
+        if index == 42 { (*line).b42 = value; return; }
+        if index == 43 { (*line).b43 = value; return; }
+        if index == 44 { (*line).b44 = value; return; }
+        if index == 45 { (*line).b45 = value; return; }
+        if index == 46 { (*line).b46 = value; return; }
+        if index == 47 { (*line).b47 = value; return; }
+        if index == 48 { (*line).b48 = value; return; }
+        if index == 49 { (*line).b49 = value; return; }
+        if index == 50 { (*line).b50 = value; return; }
+        if index == 51 { (*line).b51 = value; return; }
+        if index == 52 { (*line).b52 = value; return; }
+        if index == 53 { (*line).b53 = value; return; }
+        if index == 54 { (*line).b54 = value; return; }
+        if index == 55 { (*line).b55 = value; return; }
+        if index == 56 { (*line).b56 = value; return; }
+        if index == 57 { (*line).b57 = value; return; }
+        if index == 58 { (*line).b58 = value; return; }
+        if index == 59 { (*line).b59 = value; return; }
+        if index == 60 { (*line).b60 = value; return; }
+        if index == 61 { (*line).b61 = value; return; }
+        if index == 62 { (*line).b62 = value; return; }
+        if index == 63 { (*line).b63 = value; return; }
+    }
 }
 
-fn line_load(base: ptr<u8>, index: i64) -> u8 {
-    let seed: u8 = 0;
-    return asm volatile aarch64(u8, "add x9, $1, $2\nldrb w0, [x9]", seed, base, index);
+fn line_load(line: ptr<LineBuffer>, index: i32) -> u8 {
+    unsafe {
+        if index == 0 { return (*line).b00; }
+        if index == 1 { return (*line).b01; }
+        if index == 2 { return (*line).b02; }
+        if index == 3 { return (*line).b03; }
+        if index == 4 { return (*line).b04; }
+        if index == 5 { return (*line).b05; }
+        if index == 6 { return (*line).b06; }
+        if index == 7 { return (*line).b07; }
+        if index == 8 { return (*line).b08; }
+        if index == 9 { return (*line).b09; }
+        if index == 10 { return (*line).b10; }
+        if index == 11 { return (*line).b11; }
+        if index == 12 { return (*line).b12; }
+        if index == 13 { return (*line).b13; }
+        if index == 14 { return (*line).b14; }
+        if index == 15 { return (*line).b15; }
+        if index == 16 { return (*line).b16; }
+        if index == 17 { return (*line).b17; }
+        if index == 18 { return (*line).b18; }
+        if index == 19 { return (*line).b19; }
+        if index == 20 { return (*line).b20; }
+        if index == 21 { return (*line).b21; }
+        if index == 22 { return (*line).b22; }
+        if index == 23 { return (*line).b23; }
+        if index == 24 { return (*line).b24; }
+        if index == 25 { return (*line).b25; }
+        if index == 26 { return (*line).b26; }
+        if index == 27 { return (*line).b27; }
+        if index == 28 { return (*line).b28; }
+        if index == 29 { return (*line).b29; }
+        if index == 30 { return (*line).b30; }
+        if index == 31 { return (*line).b31; }
+        if index == 32 { return (*line).b32; }
+        if index == 33 { return (*line).b33; }
+        if index == 34 { return (*line).b34; }
+        if index == 35 { return (*line).b35; }
+        if index == 36 { return (*line).b36; }
+        if index == 37 { return (*line).b37; }
+        if index == 38 { return (*line).b38; }
+        if index == 39 { return (*line).b39; }
+        if index == 40 { return (*line).b40; }
+        if index == 41 { return (*line).b41; }
+        if index == 42 { return (*line).b42; }
+        if index == 43 { return (*line).b43; }
+        if index == 44 { return (*line).b44; }
+        if index == 45 { return (*line).b45; }
+        if index == 46 { return (*line).b46; }
+        if index == 47 { return (*line).b47; }
+        if index == 48 { return (*line).b48; }
+        if index == 49 { return (*line).b49; }
+        if index == 50 { return (*line).b50; }
+        if index == 51 { return (*line).b51; }
+        if index == 52 { return (*line).b52; }
+        if index == 53 { return (*line).b53; }
+        if index == 54 { return (*line).b54; }
+        if index == 55 { return (*line).b55; }
+        if index == 56 { return (*line).b56; }
+        if index == 57 { return (*line).b57; }
+        if index == 58 { return (*line).b58; }
+        if index == 59 { return (*line).b59; }
+        if index == 60 { return (*line).b60; }
+        if index == 61 { return (*line).b61; }
+        if index == 62 { return (*line).b62; }
+        if index == 63 { return (*line).b63; }
+    }
+    return 0;
 }
 
 fn uart_putc(ch: u8) {
@@ -95,8 +225,7 @@ fn shell_len(state: ptr<ShellState>) -> i32 {
 fn shell_reset(state: ptr<ShellState>) {
     unsafe {
         (*state).len = 0;
-        let base: ptr<u8> = &(*state).line.b00;
-        line_store(base, i64(0), u8(0));
+        line_store(&(*state).line, 0, u8(0));
     }
 }
 
@@ -107,17 +236,15 @@ fn shell_push(state: ptr<ShellState>, ch: u8) -> bool {
         }
         let index: i32 = (*state).len;
         (*state).len = (*state).len + 1;
-        let base: ptr<u8> = &(*state).line.b00;
-        line_store(base, i64(index), ch);
-        line_store(base, i64((*state).len), u8(0));
+        line_store(&(*state).line, index, ch);
+        line_store(&(*state).line, (*state).len, u8(0));
         return true;
     }
 }
 
 fn shell_char(state: ptr<ShellState>, index: i32) -> u8 {
     unsafe {
-        let base: ptr<u8> = &(*state).line.b00;
-        return line_load(base, i64(index));
+        return line_load(&(*state).line, index);
     }
 }
 
@@ -127,8 +254,7 @@ fn shell_pop(state: ptr<ShellState>) -> bool {
             return false;
         }
         (*state).len = (*state).len - 1;
-        let base: ptr<u8> = &(*state).line.b00;
-        line_store(base, i64((*state).len), u8(0));
+        line_store(&(*state).line, (*state).len, u8(0));
         return true;
     }
 }
@@ -176,6 +302,39 @@ fn cmd_is_ls_proc(state: ptr<ShellState>) -> bool {
            shell_char(state, 5) == 114 &&
            shell_char(state, 6) == 111 &&
            shell_char(state, 7) == 99;
+}
+
+fn cmd_is_ls_bin(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 7 { return false; }
+    return shell_char(state, 0) == 108 &&
+           shell_char(state, 1) == 115 &&
+           shell_char(state, 2) == ascii_space() &&
+           shell_char(state, 3) == 47 &&
+           shell_char(state, 4) == 98 &&
+           shell_char(state, 5) == 105 &&
+           shell_char(state, 6) == 110;
+}
+
+fn cmd_is_ls_dev(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 7 { return false; }
+    return shell_char(state, 0) == 108 &&
+           shell_char(state, 1) == 115 &&
+           shell_char(state, 2) == ascii_space() &&
+           shell_char(state, 3) == 47 &&
+           shell_char(state, 4) == 100 &&
+           shell_char(state, 5) == 101 &&
+           shell_char(state, 6) == 118;
+}
+
+fn cmd_is_ls_etc(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 7 { return false; }
+    return shell_char(state, 0) == 108 &&
+           shell_char(state, 1) == 115 &&
+           shell_char(state, 2) == ascii_space() &&
+           shell_char(state, 3) == 47 &&
+           shell_char(state, 4) == 101 &&
+           shell_char(state, 5) == 116 &&
+           shell_char(state, 6) == 99;
 }
 
 fn cmd_is_ps(state: ptr<ShellState>) -> bool {
@@ -242,7 +401,7 @@ fn cmd_is_cat_readme(state: ptr<ShellState>) -> bool {
 }
 
 fn cmd_is_cat_motd(state: ptr<ShellState>) -> bool {
-    if shell_len(state) != 14 { return false; }
+    if shell_len(state) != 13 { return false; }
     return shell_char(state, 0) == 99 &&
            shell_char(state, 1) == 97 &&
            shell_char(state, 2) == 116 &&
@@ -256,6 +415,44 @@ fn cmd_is_cat_motd(state: ptr<ShellState>) -> bool {
            shell_char(state, 10) == 111 &&
            shell_char(state, 11) == 116 &&
            shell_char(state, 12) == 100;
+}
+
+fn cmd_is_cat_issue(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 14 { return false; }
+    return shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 97 &&
+           shell_char(state, 2) == 116 &&
+           shell_char(state, 3) == ascii_space() &&
+           shell_char(state, 4) == 47 &&
+           shell_char(state, 5) == 101 &&
+           shell_char(state, 6) == 116 &&
+           shell_char(state, 7) == 99 &&
+           shell_char(state, 8) == 47 &&
+           shell_char(state, 9) == 105 &&
+           shell_char(state, 10) == 115 &&
+           shell_char(state, 11) == 115 &&
+           shell_char(state, 12) == 117 &&
+           shell_char(state, 13) == 101;
+}
+
+fn cmd_is_cat_profile(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 16 { return false; }
+    return shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 97 &&
+           shell_char(state, 2) == 116 &&
+           shell_char(state, 3) == ascii_space() &&
+           shell_char(state, 4) == 47 &&
+           shell_char(state, 5) == 101 &&
+           shell_char(state, 6) == 116 &&
+           shell_char(state, 7) == 99 &&
+           shell_char(state, 8) == 47 &&
+           shell_char(state, 9) == 112 &&
+           shell_char(state, 10) == 114 &&
+           shell_char(state, 11) == 111 &&
+           shell_char(state, 12) == 102 &&
+           shell_char(state, 13) == 105 &&
+           shell_char(state, 14) == 108 &&
+           shell_char(state, 15) == 101;
 }
 
 fn cmd_is_cat_version(state: ptr<ShellState>) -> bool {
@@ -321,10 +518,45 @@ fn cmd_is_cat_meminfo(state: ptr<ShellState>) -> bool {
            shell_char(state, 16) == 111;
 }
 
+fn cmd_is_cat_bin_sh(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 11 { return false; }
+    return shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 97 &&
+           shell_char(state, 2) == 116 &&
+           shell_char(state, 3) == ascii_space() &&
+           shell_char(state, 4) == 47 &&
+           shell_char(state, 5) == 98 &&
+           shell_char(state, 6) == 105 &&
+           shell_char(state, 7) == 110 &&
+           shell_char(state, 8) == 47 &&
+           shell_char(state, 9) == 115 &&
+           shell_char(state, 10) == 104;
+}
+
+fn cmd_is_cat_dev_console(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 16 { return false; }
+    return shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 97 &&
+           shell_char(state, 2) == 116 &&
+           shell_char(state, 3) == ascii_space() &&
+           shell_char(state, 4) == 47 &&
+           shell_char(state, 5) == 100 &&
+           shell_char(state, 6) == 101 &&
+           shell_char(state, 7) == 118 &&
+           shell_char(state, 8) == 47 &&
+           shell_char(state, 9) == 99 &&
+           shell_char(state, 10) == 111 &&
+           shell_char(state, 11) == 110 &&
+           shell_char(state, 12) == 115 &&
+           shell_char(state, 13) == 111 &&
+           shell_char(state, 14) == 108 &&
+           shell_char(state, 15) == 101;
+}
+
 fn print_boot_banner() {
     puts("Hello to MUnix!\r\n");
     puts("MLNIX 0.3.0 kernel booting on QEMU virt (AArch64)\r\n");
-    puts("init: mounting /, /proc, /etc, /dev ... done\r\n");
+    puts("init: unpacking built-in initramfs to / ... done\r\n");
     puts("init: bringing up serial shell ... done\r\n");
     puts("cpu: mpidr=0x");
     runtime_write_hex64(read_mpidr());
@@ -338,12 +570,14 @@ fn print_help() {
     puts("commands:\r\n");
     puts("  help               show this message\r\n");
     puts("  uname -a           print kernel identity\r\n");
-    puts("  ls /               list the tiny ramfs root\r\n");
-    puts("  ls /proc           list pseudo proc entries\r\n");
+    puts("  ls /               list the initramfs root\r\n");
+    puts("  ls /bin|/dev|/etc|/proc\r\n");
     puts("  ps                 show the toy task table\r\n");
     puts("  mem                show the pseudo meminfo page\r\n");
     puts("  cat /README        design notes\r\n");
-    puts("  cat /etc/motd      login banner\r\n");
+    puts("  cat /etc/motd|issue|profile\r\n");
+    puts("  cat /bin/sh        show the shell stub\r\n");
+    puts("  cat /dev/console   show console device info\r\n");
     puts("  cat /proc/version  version string\r\n");
     puts("  cat /proc/cpuinfo  boot cpu data\r\n");
     puts("  cat /proc/meminfo  fixed memory map\r\n");
@@ -357,11 +591,23 @@ fn print_uname() {
 }
 
 fn print_ls_root() {
-    puts("bin  dev  etc  proc  README\r\n");
+    puts("README  bin  dev  etc  proc\r\n");
 }
 
 fn print_ls_proc() {
     puts("cpuinfo  meminfo  version\r\n");
+}
+
+fn print_ls_bin() {
+    puts("sh\r\n");
+}
+
+fn print_ls_dev() {
+    puts("console\r\n");
+}
+
+fn print_ls_etc() {
+    puts("issue  motd  profile\r\n");
 }
 
 fn print_ps(state: ptr<ShellState>) {
@@ -385,7 +631,7 @@ fn print_meminfo() {
 }
 
 fn print_version_page() {
-    puts("MLNIX version 0.3.0 (mlang package_manager_mlang_minix_example)\r\n");
+    puts("MLNIX version 0.3.0 (mlang package_manager_mlang_minix_demo)\r\n");
 }
 
 fn print_cpuinfo() {
@@ -403,22 +649,43 @@ fn print_cpuinfo() {
 fn print_readme() {
     puts("MLNIX is a tiny Linux-style teaching kernel written mostly in MLang.\r\n");
     puts("It boots directly under QEMU, drives PL011 UART, exposes a serial shell,\r\n");
-    puts("and fakes a small /proc-like surface entirely in kernel space.\r\n");
-    puts("The point of the example is the build flow and the low-level MLang code,\r\n");
-    puts("not Linux compatibility or user/kernel privilege separation.\r\n");
+    puts("and now carries a small built-in initramfs under /bin, /dev, /etc,\r\n");
+    puts("and /proc entirely in kernel space.\r\n");
+    puts("The next phase is mounting a real rootfs after boot while keeping the\r\n");
+    puts("same shell and path surface stable.\r\n");
 }
 
 fn print_motd() {
     puts("Welcome to MLNIX.\r\n");
-    puts("This image keeps the shell, the pseudo-filesystem, and the task table\r\n");
+    puts("This image keeps the shell, the initramfs, and the task table\r\n");
     puts("inside one freestanding monolithic kernel binary.\r\n");
+}
+
+fn print_issue() {
+    puts("MLNIX 0.3.0 ttyAMA0\r\n");
+}
+
+fn print_profile() {
+    puts("PATH=/bin\r\n");
+    puts("PS1='root@mlnix:/# '\r\n");
+    puts("export PATH PS1\r\n");
+}
+
+fn print_bin_sh() {
+    puts("#!/bin/sh\r\n");
+    puts("# built-in MLNIX rootfs shell placeholder\r\n");
+    puts("echo userspace exec handoff not implemented yet\r\n");
+}
+
+fn print_dev_console() {
+    puts("character device ttyAMA0 backed by the PL011 UART console\r\n");
 }
 
 fn print_dmesg(state: ptr<ShellState>) {
     puts("[    0.000000] mlnix: boot cpu online, mpidr=0x");
     runtime_write_hex64(read_mpidr());
     puts("\r\n[    0.000001] mlnix: uart console on ttyAMA0\r\n");
-    puts("[    0.000002] mlnix: procfs and ramfs mounted\r\n");
+    puts("[    0.000002] mlnix: procfs and initramfs mounted\r\n");
     puts("[    0.000003] mlnix: shell commands handled=");
     unsafe {
         runtime_write_dec_i32((*state).command_count);
@@ -455,6 +722,18 @@ fn run_command(state: ptr<ShellState>) {
         print_ls_root();
         return;
     }
+    if cmd_is_ls_bin(state) {
+        print_ls_bin();
+        return;
+    }
+    if cmd_is_ls_dev(state) {
+        print_ls_dev();
+        return;
+    }
+    if cmd_is_ls_etc(state) {
+        print_ls_etc();
+        return;
+    }
     if cmd_is_ls_proc(state) {
         print_ls_proc();
         return;
@@ -481,6 +760,22 @@ fn run_command(state: ptr<ShellState>) {
     }
     if cmd_is_cat_motd(state) {
         print_motd();
+        return;
+    }
+    if cmd_is_cat_issue(state) {
+        print_issue();
+        return;
+    }
+    if cmd_is_cat_profile(state) {
+        print_profile();
+        return;
+    }
+    if cmd_is_cat_bin_sh(state) {
+        print_bin_sh();
+        return;
+    }
+    if cmd_is_cat_dev_console(state) {
+        print_dev_console();
         return;
     }
     if cmd_is_clear(state) {
