@@ -31,12 +31,16 @@ use std::io::read_keycode_nonblocking;
 use std::io::stdin;
 use std::io::stdout;
 use std::io::write;
+use std::io::write_unflushed;
+use std::io::write_unflushed_len;
 use std::rand::range_i64;
 use std::rand::seed_auto;
 use std::strbuf::StringBuilder;
 use std::strbuf::builder_append;
 use std::strbuf::builder_append_char;
+use std::strbuf::builder_clear;
 use std::strbuf::builder_free;
+use std::strbuf::builder_len;
 use std::strbuf::builder_new;
 use std::strbuf::builder_take_string;
 use std::strbuf::free;
@@ -279,12 +283,13 @@ term: TermSize, show_pattern: i32) -> list<i64> {
     return out;
 }
 
-fn render_frame(board: BitSet, width: i64, height: i64, generation: i64, alive: i64,
-paused: i32, tick_ms: i64, clear_before_draw: i32) -> str8 {
+fn render_frame_into(builder: StringBuilder, board: BitSet, width: i64, height: i64,
+                     generation: i64, alive: i64, paused: i32, tick_ms: i64,
+                     clear_before_draw: i32) -> void {
     let gcols: i64 = width / 2;
     let grows: i64 = height / 4;
     let inner_width: i64 = gcols + 2;
-    let builder: StringBuilder = builder_new(16384);
+    let _ = builder_clear(builder);
 
     let _ = builder_append(builder, cursor(cmd_home()));
     if clear_before_draw == 1 {
@@ -330,14 +335,10 @@ paused: i32, tick_ms: i64, clear_before_draw: i32) -> str8 {
     generation, alive, width, height));
     let _ = builder_append(builder, fg_rgb(150, 170, 196));
     let _ = builder_append(builder, format!(
-    "  controls: q quit   space pause/run   n step   r randomize   s showcase   c clear   tick {} ms",
-    tick_ms
+        "  controls: q quit   space pause/run   n step   r randomize   s showcase   c clear   tick {} ms",
+        tick_ms
     ));
     let _ = builder_append(builder, reset());
-
-    let out: str8 = builder_take_string(builder);
-    builder_free(builder);
-    return out;
 }
 
 fn count_alive(board: BitSet) -> i64 {
@@ -353,11 +354,12 @@ fn main() -> i32 {
     let _seed: i64 = seed_auto();
     let input: Stdin = stdin();
     let _ = stdin_enable_raw();
-    let _ = write(stdout(), cursor(cmd_save()));
+    let _ = write_unflushed(stdout(), cursor(cmd_save()));
     let on: str8 = alt_screen_on_real();
-    let _ = write(stdout(), on);
+    let _ = write_unflushed(stdout(), on);
     free(on);
-    let _ = write(stdout(), cursor(cmd_hide()));
+    let _ = write_unflushed(stdout(), cursor(cmd_hide()));
+    let _ = flush(stdout());
 
     var width: i64 = 0;
     var height: i64 = 0;
@@ -365,12 +367,13 @@ fn main() -> i32 {
     let next_r: Result<BitSet, str8> = BitSet::new(0);
     if current_r.is_err() || next_r.is_err() {
         println!("BitSet init failed");
-        let _ = write(stdout(), reset());
-        let _ = write(stdout(), cursor(cmd_show()));
+        let _ = write_unflushed(stdout(), reset());
+        let _ = write_unflushed(stdout(), cursor(cmd_show()));
         let off: str8 = alt_screen_off_real();
-        let _ = write(stdout(), off);
+        let _ = write_unflushed(stdout(), off);
         free(off);
-        let _ = write(stdout(), cursor(cmd_restore()));
+        let _ = write_unflushed(stdout(), cursor(cmd_restore()));
+        let _ = flush(stdout());
         let _ = stdin_restore();
         return 1;
     }
@@ -382,6 +385,7 @@ fn main() -> i32 {
     var running: i32 = 1;
     var needs_clear: i32 = 1;
     let tick_ms: i64 = 90;
+    let frame_builder: StringBuilder = builder_new(16384);
 
     let init_view: list<i64> = sync_view(current, next, width, height, stdout_size(), 1);
     width = init_view[0];
@@ -399,9 +403,11 @@ fn main() -> i32 {
         }
         alive = count_alive(current);
 
-        let frame: str8 = render_frame(current, width, height, generation, alive, paused, tick_ms,
-        needs_clear);
-        let _ = write(stdout(), frame);
+        render_frame_into(frame_builder, current, width, height, generation, alive, paused,
+                          tick_ms, needs_clear);
+        let frame_len: i64 = builder_len(frame_builder);
+        let frame: str8 = builder_take_string(frame_builder);
+        let _ = write_unflushed_len(stdout(), frame, frame_len);
         let _ = flush(stdout());
         free(frame);
         needs_clear = 0;
@@ -445,14 +451,16 @@ fn main() -> i32 {
         sleep_ms(tick_ms);
     }
 
-    let _ = write(stdout(), reset());
-    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = write_unflushed(stdout(), reset());
+    let _ = write_unflushed(stdout(), cursor(cmd_show()));
     let off2: str8 = alt_screen_off_real();
-    let _ = write(stdout(), off2);
+    let _ = write_unflushed(stdout(), off2);
     free(off2);
-    let _ = write(stdout(), cursor(cmd_restore()));
-    let _ = write(stdout(), "\n");
+    let _ = write_unflushed(stdout(), cursor(cmd_restore()));
+    let _ = write_unflushed(stdout(), "\n");
+    let _ = flush(stdout());
     let _ = stdin_restore();
+    builder_free(frame_builder);
     current.close();
     next.close();
     return 0;
