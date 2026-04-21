@@ -216,9 +216,9 @@ static int is_try_question_context()
 "#[inline(always)]"   { return INLINE_ALWAYS_ATTR; }
 "#[inline(never)]"    { return INLINE_NEVER_ATTR; }
 "#[inline]"           { return INLINE_ATTR; }
-"i32("          { return CAST_INT; }
-"f32("          { return CAST_FLOAT; }
-"f64("          { return CAST_DOUBLE; }
+"int("          { return CAST_INT; }
+"float("        { return CAST_FLOAT; }
+"double("       { return CAST_DOUBLE; }
 "->"            { return ARROW; }
 "=>"            { return FAT_ARROW; }
 ":"[[:space:]]*"{"     {

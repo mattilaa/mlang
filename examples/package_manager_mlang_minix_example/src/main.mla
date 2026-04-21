@@ -1,0 +1,571 @@
+extern fn runtime_write_str(text: str8) -> void;
+extern fn runtime_write_hex64(value: i64) -> void;
+extern fn runtime_write_dec_i32(value: i32) -> void;
+extern fn runtime_write_dec_i64(value: i64) -> void;
+
+struct LineBuffer {
+    var b00: u8; var b01: u8; var b02: u8; var b03: u8; var b04: u8; var b05: u8; var b06: u8; var b07: u8;
+    var b08: u8; var b09: u8; var b10: u8; var b11: u8; var b12: u8; var b13: u8; var b14: u8; var b15: u8;
+    var b16: u8; var b17: u8; var b18: u8; var b19: u8; var b20: u8; var b21: u8; var b22: u8; var b23: u8;
+    var b24: u8; var b25: u8; var b26: u8; var b27: u8; var b28: u8; var b29: u8; var b30: u8; var b31: u8;
+    var b32: u8; var b33: u8; var b34: u8; var b35: u8; var b36: u8; var b37: u8; var b38: u8; var b39: u8;
+    var b40: u8; var b41: u8; var b42: u8; var b43: u8; var b44: u8; var b45: u8; var b46: u8; var b47: u8;
+    var b48: u8; var b49: u8; var b50: u8; var b51: u8; var b52: u8; var b53: u8; var b54: u8; var b55: u8;
+    var b56: u8; var b57: u8; var b58: u8; var b59: u8; var b60: u8; var b61: u8; var b62: u8; var b63: u8;
+};
+
+struct ShellState {
+    var line: LineBuffer;
+    var len: i32;
+    var command_count: i32;
+};
+
+fn zero_line_buffer() -> LineBuffer {
+    return LineBuffer {
+        b00: 0, b01: 0, b02: 0, b03: 0, b04: 0, b05: 0, b06: 0, b07: 0,
+        b08: 0, b09: 0, b10: 0, b11: 0, b12: 0, b13: 0, b14: 0, b15: 0,
+        b16: 0, b17: 0, b18: 0, b19: 0, b20: 0, b21: 0, b22: 0, b23: 0,
+        b24: 0, b25: 0, b26: 0, b27: 0, b28: 0, b29: 0, b30: 0, b31: 0,
+        b32: 0, b33: 0, b34: 0, b35: 0, b36: 0, b37: 0, b38: 0, b39: 0,
+        b40: 0, b41: 0, b42: 0, b43: 0, b44: 0, b45: 0, b46: 0, b47: 0,
+        b48: 0, b49: 0, b50: 0, b51: 0, b52: 0, b53: 0, b54: 0, b55: 0,
+        b56: 0, b57: 0, b58: 0, b59: 0, b60: 0, b61: 0, b62: 0, b63: 0
+    };
+}
+
+fn uart_base() -> i64 { return 0x09000000; }
+fn uart_dr() -> i64 { return uart_base(); }
+fn uart_fr() -> i64 { return uart_base() + 0x18; }
+fn uart_fr_rxfe() -> i32 { return 1 << 4; }
+fn uart_fr_txff() -> i32 { return 1 << 5; }
+fn ascii_cr() -> u8 { return 13; }
+fn ascii_lf() -> u8 { return 10; }
+fn ascii_bs() -> u8 { return 8; }
+fn ascii_del() -> u8 { return 127; }
+fn ascii_space() -> u8 { return 32; }
+
+fn mmio_read32(addr: i64) -> i32 {
+    let seed: i32 = 0;
+    return asm volatile aarch64(i32, "ldr w0, [$1]", seed, addr);
+}
+
+fn mmio_read8(addr: i64) -> u8 {
+    let seed: u8 = 0;
+    return asm volatile aarch64(u8, "ldrb w0, [$1]", seed, addr);
+}
+
+fn mmio_write32(addr: i64, value: i32) {
+    asm volatile aarch64(void, "str w1, [$0]", addr, value);
+}
+
+fn cpu_relax() {
+    asm volatile aarch64(void, "yield");
+}
+
+fn cpu_wait() {
+    asm volatile aarch64(void, "wfe");
+}
+
+fn read_current_el() -> i64 {
+    let seed: i64 = 0;
+    return asm volatile aarch64(i64, "mrs $0, CurrentEL", seed);
+}
+
+fn read_mpidr() -> i64 {
+    let seed: i64 = 0;
+    return asm volatile aarch64(i64, "mrs $0, mpidr_el1", seed);
+}
+
+fn read_cntvct() -> i64 {
+    let seed: i64 = 0;
+    return asm volatile aarch64(i64, "mrs $0, cntvct_el0", seed);
+}
+
+fn line_store(base: ptr<u8>, index: i64, value: u8) {
+    asm volatile aarch64(void, "add x9, $0, $1\nstrb w2, [x9]", base, index, value);
+}
+
+fn line_load(base: ptr<u8>, index: i64) -> u8 {
+    let seed: u8 = 0;
+    return asm volatile aarch64(u8, "add x9, $1, $2\nldrb w0, [x9]", seed, base, index);
+}
+
+fn uart_putc(ch: u8) {
+    while (mmio_read32(uart_fr()) & uart_fr_txff()) != 0 {
+        cpu_relax();
+    }
+    mmio_write32(uart_dr(), i32(ch));
+}
+
+fn uart_newline() {
+    uart_putc(ascii_cr());
+    uart_putc(ascii_lf());
+}
+
+fn uart_getc() -> u8 {
+    while (mmio_read32(uart_fr()) & uart_fr_rxfe()) != 0 {
+        cpu_wait();
+    }
+    return mmio_read8(uart_dr());
+}
+
+fn puts(text: str8) {
+    runtime_write_str(text);
+}
+
+fn prompt() {
+    puts("root@mlnix:/# ");
+}
+
+fn shell_len(state: ptr<ShellState>) -> i32 {
+    unsafe {
+        return (*state).len;
+    }
+}
+
+fn shell_reset(state: ptr<ShellState>) {
+    unsafe {
+        (*state).len = 0;
+        let base: ptr<u8> = &(*state).line.b00;
+        line_store(base, i64(0), u8(0));
+    }
+}
+
+fn shell_push(state: ptr<ShellState>, ch: u8) -> bool {
+    unsafe {
+        if (*state).len >= 63 {
+            return false;
+        }
+        let index: i32 = (*state).len;
+        (*state).len = (*state).len + 1;
+        let base: ptr<u8> = &(*state).line.b00;
+        line_store(base, i64(index), ch);
+        line_store(base, i64((*state).len), u8(0));
+        return true;
+    }
+}
+
+fn shell_char(state: ptr<ShellState>, index: i32) -> u8 {
+    unsafe {
+        let base: ptr<u8> = &(*state).line.b00;
+        return line_load(base, i64(index));
+    }
+}
+
+fn shell_pop(state: ptr<ShellState>) -> bool {
+    unsafe {
+        if (*state).len <= 0 {
+            return false;
+        }
+        (*state).len = (*state).len - 1;
+        let base: ptr<u8> = &(*state).line.b00;
+        line_store(base, i64((*state).len), u8(0));
+        return true;
+    }
+}
+
+fn shell_write_from(state: ptr<ShellState>, start: i32) {
+    var i: i32 = start;
+    while i < shell_len(state) {
+        uart_putc(shell_char(state, i));
+        i = i + 1;
+    }
+}
+
+fn line_is_empty(state: ptr<ShellState>) -> bool {
+    return shell_len(state) == 0;
+}
+
+fn cmd_is_help(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 4 { return false; }
+    return shell_char(state, 0) == 104 &&
+           shell_char(state, 1) == 101 &&
+           shell_char(state, 2) == 108 &&
+           shell_char(state, 3) == 112;
+}
+
+fn cmd_is_ls_root(state: ptr<ShellState>) -> bool {
+    if shell_len(state) == 2 {
+        return shell_char(state, 0) == 108 && shell_char(state, 1) == 115;
+    }
+    if shell_len(state) == 4 {
+        return shell_char(state, 0) == 108 &&
+               shell_char(state, 1) == 115 &&
+               shell_char(state, 2) == ascii_space() &&
+               shell_char(state, 3) == 47;
+    }
+    return false;
+}
+
+fn cmd_is_ls_proc(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 8 { return false; }
+    return shell_char(state, 0) == 108 &&
+           shell_char(state, 1) == 115 &&
+           shell_char(state, 2) == ascii_space() &&
+           shell_char(state, 3) == 47 &&
+           shell_char(state, 4) == 112 &&
+           shell_char(state, 5) == 114 &&
+           shell_char(state, 6) == 111 &&
+           shell_char(state, 7) == 99;
+}
+
+fn cmd_is_ps(state: ptr<ShellState>) -> bool {
+    return shell_len(state) == 2 && shell_char(state, 0) == 112 && shell_char(state, 1) == 115;
+}
+
+fn cmd_is_mem(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 3 { return false; }
+    return shell_char(state, 0) == 109 && shell_char(state, 1) == 101 && shell_char(state, 2) == 109;
+}
+
+fn cmd_is_clear(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 5 { return false; }
+    return shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 108 &&
+           shell_char(state, 2) == 101 &&
+           shell_char(state, 3) == 97 &&
+           shell_char(state, 4) == 114;
+}
+
+fn cmd_is_uname_a(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 8 { return false; }
+    return shell_char(state, 0) == 117 &&
+           shell_char(state, 1) == 110 &&
+           shell_char(state, 2) == 97 &&
+           shell_char(state, 3) == 109 &&
+           shell_char(state, 4) == 101 &&
+           shell_char(state, 5) == ascii_space() &&
+           shell_char(state, 6) == 45 &&
+           shell_char(state, 7) == 97;
+}
+
+fn cmd_is_dmesg(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 5 { return false; }
+    return shell_char(state, 0) == 100 &&
+           shell_char(state, 1) == 109 &&
+           shell_char(state, 2) == 101 &&
+           shell_char(state, 3) == 115 &&
+           shell_char(state, 4) == 103;
+}
+
+fn cmd_is_echo(state: ptr<ShellState>) -> bool {
+    if shell_len(state) < 5 { return false; }
+    return shell_char(state, 0) == 101 &&
+           shell_char(state, 1) == 99 &&
+           shell_char(state, 2) == 104 &&
+           shell_char(state, 3) == 111 &&
+           shell_char(state, 4) == ascii_space();
+}
+
+fn cmd_is_cat_readme(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 11 { return false; }
+    return shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 97 &&
+           shell_char(state, 2) == 116 &&
+           shell_char(state, 3) == ascii_space() &&
+           shell_char(state, 4) == 47 &&
+           shell_char(state, 5) == 82 &&
+           shell_char(state, 6) == 69 &&
+           shell_char(state, 7) == 65 &&
+           shell_char(state, 8) == 68 &&
+           shell_char(state, 9) == 77 &&
+           shell_char(state, 10) == 69;
+}
+
+fn cmd_is_cat_motd(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 14 { return false; }
+    return shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 97 &&
+           shell_char(state, 2) == 116 &&
+           shell_char(state, 3) == ascii_space() &&
+           shell_char(state, 4) == 47 &&
+           shell_char(state, 5) == 101 &&
+           shell_char(state, 6) == 116 &&
+           shell_char(state, 7) == 99 &&
+           shell_char(state, 8) == 47 &&
+           shell_char(state, 9) == 109 &&
+           shell_char(state, 10) == 111 &&
+           shell_char(state, 11) == 116 &&
+           shell_char(state, 12) == 100;
+}
+
+fn cmd_is_cat_version(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 17 { return false; }
+    return shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 97 &&
+           shell_char(state, 2) == 116 &&
+           shell_char(state, 3) == ascii_space() &&
+           shell_char(state, 4) == 47 &&
+           shell_char(state, 5) == 112 &&
+           shell_char(state, 6) == 114 &&
+           shell_char(state, 7) == 111 &&
+           shell_char(state, 8) == 99 &&
+           shell_char(state, 9) == 47 &&
+           shell_char(state, 10) == 118 &&
+           shell_char(state, 11) == 101 &&
+           shell_char(state, 12) == 114 &&
+           shell_char(state, 13) == 115 &&
+           shell_char(state, 14) == 105 &&
+           shell_char(state, 15) == 111 &&
+           shell_char(state, 16) == 110;
+}
+
+fn cmd_is_cat_cpuinfo(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 17 { return false; }
+    return shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 97 &&
+           shell_char(state, 2) == 116 &&
+           shell_char(state, 3) == ascii_space() &&
+           shell_char(state, 4) == 47 &&
+           shell_char(state, 5) == 112 &&
+           shell_char(state, 6) == 114 &&
+           shell_char(state, 7) == 111 &&
+           shell_char(state, 8) == 99 &&
+           shell_char(state, 9) == 47 &&
+           shell_char(state, 10) == 99 &&
+           shell_char(state, 11) == 112 &&
+           shell_char(state, 12) == 117 &&
+           shell_char(state, 13) == 105 &&
+           shell_char(state, 14) == 110 &&
+           shell_char(state, 15) == 102 &&
+           shell_char(state, 16) == 111;
+}
+
+fn cmd_is_cat_meminfo(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 17 { return false; }
+    return shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 97 &&
+           shell_char(state, 2) == 116 &&
+           shell_char(state, 3) == ascii_space() &&
+           shell_char(state, 4) == 47 &&
+           shell_char(state, 5) == 112 &&
+           shell_char(state, 6) == 114 &&
+           shell_char(state, 7) == 111 &&
+           shell_char(state, 8) == 99 &&
+           shell_char(state, 9) == 47 &&
+           shell_char(state, 10) == 109 &&
+           shell_char(state, 11) == 101 &&
+           shell_char(state, 12) == 109 &&
+           shell_char(state, 13) == 105 &&
+           shell_char(state, 14) == 110 &&
+           shell_char(state, 15) == 102 &&
+           shell_char(state, 16) == 111;
+}
+
+fn print_boot_banner() {
+    puts("\r\nMLNIX 0.3.0 kernel booting on QEMU virt (AArch64)\r\n");
+    puts("init: mounting /, /proc, /etc, /dev ... done\r\n");
+    puts("init: bringing up serial shell ... done\r\n");
+    puts("cpu: mpidr=0x");
+    runtime_write_hex64(read_mpidr());
+    puts(" current_el_raw=0x");
+    runtime_write_hex64(read_current_el());
+    puts("\r\n");
+    puts("tip: try help, uname -a, ls /proc, cat /proc/cpuinfo, echo hello\r\n\r\n");
+}
+
+fn print_help() {
+    puts("commands:\r\n");
+    puts("  help               show this message\r\n");
+    puts("  uname -a           print kernel identity\r\n");
+    puts("  ls /               list the tiny ramfs root\r\n");
+    puts("  ls /proc           list pseudo proc entries\r\n");
+    puts("  ps                 show the toy task table\r\n");
+    puts("  mem                show the pseudo meminfo page\r\n");
+    puts("  cat /README        design notes\r\n");
+    puts("  cat /etc/motd      login banner\r\n");
+    puts("  cat /proc/version  version string\r\n");
+    puts("  cat /proc/cpuinfo  boot cpu data\r\n");
+    puts("  cat /proc/meminfo  fixed memory map\r\n");
+    puts("  echo TEXT          echo back from the shell buffer\r\n");
+    puts("  clear              ANSI clear screen\r\n");
+    puts("  dmesg              boot summary\r\n");
+}
+
+fn print_uname() {
+    puts("MLNIX mlnix 0.3.0 #1 SMP PREEMPT aarch64 GNU/minimal\r\n");
+}
+
+fn print_ls_root() {
+    puts("bin  dev  etc  proc  README\r\n");
+}
+
+fn print_ls_proc() {
+    puts("cpuinfo  meminfo  version\r\n");
+}
+
+fn print_ps(state: ptr<ShellState>) {
+    puts("PID TTY      STAT CMD\r\n");
+    puts("0   ?        SW   [swapper/0]\r\n");
+    puts("1   ?        IW   [kthreadd]\r\n");
+    puts("2   ttyAMA0  S    /bin/sh\r\n");
+    puts("cmds executed: ");
+    unsafe {
+        runtime_write_dec_i32((*state).command_count);
+    }
+    puts("\r\n");
+}
+
+fn print_meminfo() {
+    puts("MemTotal:       262144 kB\r\n");
+    puts("MemFree:        248832 kB\r\n");
+    puts("KernelCode:       2560 kB\r\n");
+    puts("KernelStack:        16 kB\r\n");
+    puts("RamDisk:           128 kB\r\n");
+}
+
+fn print_version_page() {
+    puts("MLNIX version 0.3.0 (mlang package_manager_mlang_minix_example)\r\n");
+}
+
+fn print_cpuinfo() {
+    puts("processor\t: 0\r\n");
+    puts("model name\t: QEMU virt AArch64\r\n");
+    puts("mpidr\t\t: 0x");
+    runtime_write_hex64(read_mpidr());
+    puts("\r\ncurrent_el_raw\t: 0x");
+    runtime_write_hex64(read_current_el());
+    puts("\r\ncounter\t\t: ");
+    runtime_write_dec_i64(read_cntvct());
+    puts("\r\n");
+}
+
+fn print_readme() {
+    puts("MLNIX is a tiny Linux-style teaching kernel written mostly in MLang.\r\n");
+    puts("It boots directly under QEMU, drives PL011 UART, exposes a serial shell,\r\n");
+    puts("and fakes a small /proc-like surface entirely in kernel space.\r\n");
+    puts("The point of the example is the build flow and the low-level MLang code,\r\n");
+    puts("not Linux compatibility or user/kernel privilege separation.\r\n");
+}
+
+fn print_motd() {
+    puts("Welcome to MLNIX.\r\n");
+    puts("This image keeps the shell, the pseudo-filesystem, and the task table\r\n");
+    puts("inside one freestanding monolithic kernel binary.\r\n");
+}
+
+fn print_dmesg(state: ptr<ShellState>) {
+    puts("[    0.000000] mlnix: boot cpu online, mpidr=0x");
+    runtime_write_hex64(read_mpidr());
+    puts("\r\n[    0.000001] mlnix: uart console on ttyAMA0\r\n");
+    puts("[    0.000002] mlnix: procfs and ramfs mounted\r\n");
+    puts("[    0.000003] mlnix: shell commands handled=");
+    unsafe {
+        runtime_write_dec_i32((*state).command_count);
+    }
+    puts(" tick=");
+    runtime_write_dec_i64(read_cntvct());
+    puts("\r\n");
+}
+
+fn print_unknown(state: ptr<ShellState>) {
+    puts("sh: command not found: ");
+    shell_write_from(state, 0);
+    uart_newline();
+}
+
+fn run_command(state: ptr<ShellState>) {
+    if line_is_empty(state) {
+        return;
+    }
+
+    unsafe {
+        (*state).command_count = (*state).command_count + 1;
+    }
+
+    if cmd_is_help(state) {
+        print_help();
+        return;
+    }
+    if cmd_is_uname_a(state) {
+        print_uname();
+        return;
+    }
+    if cmd_is_ls_root(state) {
+        print_ls_root();
+        return;
+    }
+    if cmd_is_ls_proc(state) {
+        print_ls_proc();
+        return;
+    }
+    if cmd_is_ps(state) {
+        print_ps(state);
+        return;
+    }
+    if cmd_is_mem(state) || cmd_is_cat_meminfo(state) {
+        print_meminfo();
+        return;
+    }
+    if cmd_is_cat_version(state) {
+        print_version_page();
+        return;
+    }
+    if cmd_is_cat_cpuinfo(state) {
+        print_cpuinfo();
+        return;
+    }
+    if cmd_is_cat_readme(state) {
+        print_readme();
+        return;
+    }
+    if cmd_is_cat_motd(state) {
+        print_motd();
+        return;
+    }
+    if cmd_is_clear(state) {
+        puts("\x1b[2J\x1b[H");
+        return;
+    }
+    if cmd_is_dmesg(state) {
+        print_dmesg(state);
+        return;
+    }
+    if cmd_is_echo(state) {
+        shell_write_from(state, 5);
+        uart_newline();
+        return;
+    }
+
+    print_unknown(state);
+}
+
+fn read_command_line(state: ptr<ShellState>) {
+    shell_reset(state);
+    while true {
+        let ch: u8 = uart_getc();
+        if ch == ascii_cr() || ch == ascii_lf() {
+            uart_newline();
+            return;
+        }
+        if ch == ascii_bs() || ch == ascii_del() {
+            if shell_pop(state) {
+                uart_putc(ascii_bs());
+                uart_putc(ascii_space());
+                uart_putc(ascii_bs());
+            }
+            continue;
+        }
+        if ch >= ascii_space() && ch < ascii_del() {
+            if shell_push(state, ch) {
+                uart_putc(ch);
+            }
+        }
+    }
+}
+
+fn kernel_main() {
+    var state: ShellState = ShellState {
+        line: zero_line_buffer(),
+        len: 0,
+        command_count: 0
+    };
+
+    print_boot_banner();
+
+    while true {
+        prompt();
+        read_command_line(&state);
+        run_command(&state);
+    }
+}

@@ -1206,6 +1206,21 @@ TEST_F(MLATest, F32F64CastAliases)
     EXPECT_TRUE(output.find("7.000000 7.000000") != std::string::npos);
 }
 
+TEST_F(MLATest, UnsignedAndWidePrimitiveCastAliases)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let neg: i32 = -1;
+            let wrapped: u8 = u8(neg);
+            let wide_i: i64 = i64(wrapped);
+            let wide_u: u64 = u64(wide_i);
+            println!("{} {} {}", wrapped, wide_i, wide_u);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "255 255 255\n");
+}
+
 // ============================================================================
 // Comment Tests
 // ============================================================================

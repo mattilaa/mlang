@@ -1,0 +1,182 @@
+[package]
+name = "mlnix"
+version = "0.3.0"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.12"
+target_arch = "aarch64"
+log_dir = "/tmp/mlang-mlnix"
+stdout_log = "pkg.stdout.log"
+stderr_log = "pkg.stderr.log"
+warn_log = "pkg.warn.log"
+path_entries = [
+  "/opt/homebrew/opt/llvm/bin",
+  "/usr/local/opt/llvm/bin",
+  "/opt/homebrew/bin",
+  "/usr/local/bin"
+]
+
+[[task]]
+name = "toolchain-check"
+print = "[mlnix] Checking mlang, llc, objcopy, cross gcc, and QEMU"
+workdir = "{{root}}"
+commands = [
+  [
+    "sh",
+    "-c",
+    "if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi"
+  ],
+  [
+    "sh",
+    "-c",
+    "for tool in llc llvm-objcopy aarch64-none-elf-gcc qemu-system-aarch64; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done"
+  ]
+]
+
+[[task]]
+name = "build-kernel-llvm"
+print = "[mlnix] Emitting LLVM IR from the MLang kernel"
+depends_on = ["toolchain-check"]
+workdir = "{{root}}"
+commands = [
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}/obj"
+  ],
+  [
+    "../../build/mlang",
+    "--target-arch",
+    "aarch64",
+    "-emit-llvm",
+    "src/main.mla",
+    "-o",
+    "{{build_dir}}/mlnix.kernel.host.ll"
+  ]
+]
+
+[[task]]
+name = "retarget-kernel-obj"
+print = "[mlnix] Retargeting kernel IR to aarch64-none-elf"
+depends_on = ["build-kernel-llvm"]
+workdir = "{{root}}"
+commands = [
+  [
+    "sh",
+    "-c",
+    "sed -e 's/target triple = \".*\"/target triple = \"aarch64-none-elf\"/' -e 's/e-m:o/e-m:e/' {{build_dir}}/mlnix.kernel.host.ll > {{build_dir}}/mlnix.kernel.elf.ll"
+  ],
+  [
+    "llc",
+    "-mtriple=aarch64-none-elf",
+    "-filetype=obj",
+    "{{build_dir}}/mlnix.kernel.elf.ll",
+    "-o",
+    "{{build_dir}}/obj/mlnix_kernel.o"
+  ]
+]
+
+[[task]]
+name = "build-runtime-shim"
+print = "[mlnix] Compiling freestanding runtime shims"
+depends_on = ["toolchain-check"]
+workdir = "{{root}}"
+commands = [
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}/obj"
+  ],
+  [
+    "aarch64-none-elf-gcc",
+    "-ffreestanding",
+    "-Wall",
+    "-Wextra",
+    "-c",
+    "src/runtime/runtime.c",
+    "-o",
+    "{{build_dir}}/obj/runtime.o"
+  ]
+]
+
+[[task]]
+name = "build-entry"
+print = "[mlnix] Assembling the boot entry shim"
+depends_on = ["toolchain-check"]
+workdir = "{{root}}"
+commands = [
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}/obj"
+  ],
+  [
+    "aarch64-none-elf-gcc",
+    "-c",
+    "src/boot/entry.S",
+    "-o",
+    "{{build_dir}}/obj/entry.o"
+  ]
+]
+
+[[task]]
+name = "link-elf"
+print = "[mlnix] Linking the freestanding kernel ELF"
+depends_on = ["retarget-kernel-obj", "build-runtime-shim", "build-entry"]
+workdir = "{{root}}"
+commands = [
+  [
+    "aarch64-none-elf-gcc",
+    "-nostdlib",
+    "-T",
+    "linker.ld",
+    "-Wl,-Map,{{build_dir}}/mlnix.map",
+    "{{build_dir}}/obj/entry.o",
+    "{{build_dir}}/obj/mlnix_kernel.o",
+    "{{build_dir}}/obj/runtime.o",
+    "-o",
+    "{{build_dir}}/mlnix.elf"
+  ]
+]
+
+[[task]]
+name = "build-image"
+print = "[mlnix] Extracting a flat kernel image"
+depends_on = ["link-elf"]
+workdir = "{{root}}"
+commands = [
+  [
+    "llvm-objcopy",
+    "-O",
+    "binary",
+    "{{build_dir}}/mlnix.elf",
+    "{{build_dir}}/mlnix.bin"
+  ]
+]
+
+[[task]]
+name = "qemu-run"
+print = "[mlnix] Booting MLNIX under QEMU"
+join_on = ["build-image"]
+workdir = "{{root}}"
+command = [
+  "qemu-system-aarch64",
+  "-machine",
+  "virt",
+  "-cpu",
+  "cortex-a57",
+  "-m",
+  "256",
+  "-nographic",
+  "-serial",
+  "mon:stdio",
+  "-monitor",
+  "none",
+  "-kernel",
+  "{{build_dir}}/mlnix.bin"
+]

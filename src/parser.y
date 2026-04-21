@@ -3200,7 +3200,14 @@ cast_expression
     | BIT LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_BIT, $3); }
     | CAST_FLOAT expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_FLOAT, $2); }
     | CAST_DOUBLE expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_DOUBLE, $2); }
+    | I8 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_I8, $3); }
+    | I16 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_I16, $3); }
     | I32 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_I32, $3); }
+    | I64 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_I64, $3); }
+    | U8 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_U8, $3); }
+    | U16 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_U16, $3); }
+    | U32 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_U32, $3); }
+    | U64 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_U64, $3); }
     | FLOAT LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_FLOAT, $3); }
     | DOUBLE LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_DOUBLE, $3); }
     ;

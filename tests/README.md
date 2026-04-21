@@ -241,6 +241,7 @@ The test suite covers the following language features:
 - `int()` cast
 - `float()` cast
 - `double()` cast
+- Primitive numeric casts such as `i32()`, `i64()`, `u8()`, `u64()`, `f32()`, `f64()`
 
 ### Comments
 - Single-line comments (`//`)
