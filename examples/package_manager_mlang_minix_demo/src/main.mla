@@ -7,6 +7,7 @@ extern fn runtime_uart_putc(ch: i32) -> void;
 extern fn runtime_init_interrupts() -> void;
 extern fn runtime_rootfs_try_ls(line: ptr<u8>, start: i32) -> i32;
 extern fn runtime_rootfs_try_cat(line: ptr<u8>, start: i32) -> i32;
+extern fn runtime_exec_hello_user() -> void;
 
 struct LineBuffer {
     var b00: u8; var b01: u8; var b02: u8; var b03: u8; var b04: u8; var b05: u8; var b06: u8; var b07: u8;
@@ -389,6 +390,14 @@ fn cmd_is_dmesg(state: ptr<ShellState>) -> bool {
            shell_char(state, 4) == 103;
 }
 
+fn cmd_is_user(state: ptr<ShellState>) -> bool {
+    if shell_len(state) != 4 { return false; }
+    return shell_char(state, 0) == 117 &&
+           shell_char(state, 1) == 115 &&
+           shell_char(state, 2) == 101 &&
+           shell_char(state, 3) == 114;
+}
+
 fn cmd_is_echo(state: ptr<ShellState>) -> bool {
     if shell_len(state) < 5 { return false; }
     return shell_char(state, 0) == 101 &&
@@ -607,6 +616,7 @@ fn print_help() {
     puts("  echo TEXT          echo back from the shell buffer\r\n");
     puts("  clear              ANSI clear screen\r\n");
     puts("  dmesg              boot summary\r\n");
+    puts("  user               run the embedded EL0 hello blob\r\n");
 }
 
 fn print_uname() {
@@ -841,6 +851,10 @@ fn run_command(state: ptr<ShellState>) {
     }
     if cmd_is_dmesg(state) {
         print_dmesg(state);
+        return;
+    }
+    if cmd_is_user(state) {
+        runtime_exec_hello_user();
         return;
     }
     if cmd_is_echo(state) {

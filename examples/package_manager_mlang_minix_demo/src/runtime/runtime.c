@@ -26,6 +26,13 @@ static volatile uint32_t* const GICC_EOIR = (volatile uint32_t*)0x08010010u;
 extern const unsigned char _binary_gnu_rootfs_tar_start[];
 extern const unsigned char _binary_gnu_rootfs_tar_end[];
 
+extern const unsigned char _user_hello_start[];
+extern const unsigned char _user_hello_end[];
+extern unsigned char __user_stack_top[];
+
+void runtime_enter_user(uint64_t entry, uint64_t user_sp, uint64_t argc, uint64_t argv);
+void runtime_exit_to_kernel(void);
+
 enum {
     UART_IRQ_ID = 33u,
     UART_RXIM = 1u << 4,
@@ -819,6 +826,105 @@ void runtime_unhandled_exception(void)
     for(;;) {
         __asm__ __volatile__("wfe");
     }
+}
+
+enum {
+    SYS_read = 63,
+    SYS_write = 64,
+    SYS_exit = 93,
+    SYS_exit_group = 94,
+    SYS_brk = 214
+};
+
+static uint64_t user_brk_current = 0u;
+
+static int64_t sys_write(int64_t fd, const void* buf, int64_t count)
+{
+    const unsigned char* p = (const unsigned char*)buf;
+    int64_t i;
+    if(fd != 1 && fd != 2) {
+        return -9;
+    }
+    if(!p || count < 0) {
+        return -14;
+    }
+    for(i = 0; i < count; ++i) {
+        uart_putc(p[i]);
+    }
+    return count;
+}
+
+static void sys_exit_group_impl(int64_t code)
+{
+    runtime_write_str("[user] exit_group code=");
+    runtime_write_dec_i64(code);
+    runtime_write_str("\n");
+    runtime_exit_to_kernel();
+    for(;;) {
+        __asm__ __volatile__("wfe");
+    }
+}
+
+static int64_t sys_brk(uint64_t addr)
+{
+    if(addr == 0u) {
+        return (int64_t)user_brk_current;
+    }
+    user_brk_current = addr;
+    return (int64_t)user_brk_current;
+}
+
+int64_t runtime_syscall_dispatch(int64_t nr,
+                                 int64_t a0,
+                                 int64_t a1,
+                                 int64_t a2,
+                                 int64_t a3,
+                                 int64_t a4,
+                                 int64_t a5)
+{
+    (void)a3;
+    (void)a4;
+    (void)a5;
+    switch(nr) {
+    case SYS_write:
+        return sys_write(a0, (const void*)a1, a2);
+    case SYS_exit:
+    case SYS_exit_group:
+        sys_exit_group_impl(a0);
+        return 0;
+    case SYS_brk:
+        return sys_brk((uint64_t)a0);
+    default:
+        runtime_write_str("[user] unknown syscall nr=");
+        runtime_write_dec_i64(nr);
+        runtime_write_str("\n");
+        return -38;
+    }
+}
+
+void runtime_user_fault(uint64_t esr, uint64_t elr, uint64_t far)
+{
+    runtime_write_str("[user] fault esr=0x");
+    runtime_write_hex64((int64_t)esr);
+    runtime_write_str(" elr=0x");
+    runtime_write_hex64((int64_t)elr);
+    runtime_write_str(" far=0x");
+    runtime_write_hex64((int64_t)far);
+    runtime_write_str("\n");
+    runtime_exit_to_kernel();
+    for(;;) {
+        __asm__ __volatile__("wfe");
+    }
+}
+
+void runtime_exec_hello_user(void)
+{
+    runtime_write_str("[kernel] handing off to EL0 hello blob...\n");
+    runtime_enter_user((uint64_t)_user_hello_start,
+                       (uint64_t)__user_stack_top,
+                       0u,
+                       0u);
+    runtime_write_str("[kernel] returned from EL0\n");
 }
 
 void __mlang_std_exceptions_pop_frame(int64_t frame)
