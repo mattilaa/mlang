@@ -7,7 +7,8 @@ extern fn runtime_uart_putc(ch: i32) -> void;
 extern fn runtime_init_interrupts() -> void;
 extern fn runtime_rootfs_try_ls(line: ptr<u8>, start: i32) -> i32;
 extern fn runtime_rootfs_try_cat(line: ptr<u8>, start: i32) -> i32;
-extern fn runtime_exec_hello_user() -> void;
+extern fn runtime_exec_user_command(line: ptr<u8>) -> i32;
+extern fn runtime_shell_try_cd(line: ptr<u8>, start: i32) -> i32;
 
 struct LineBuffer {
     var b00: u8; var b01: u8; var b02: u8; var b03: u8; var b04: u8; var b05: u8; var b06: u8; var b07: u8;
@@ -407,6 +408,16 @@ fn cmd_is_echo(state: ptr<ShellState>) -> bool {
            shell_char(state, 4) == ascii_space();
 }
 
+fn cmd_is_cd(state: ptr<ShellState>) -> bool {
+    if shell_len(state) == 2 {
+        return shell_char(state, 0) == 99 && shell_char(state, 1) == 100;
+    }
+    return shell_len(state) > 3 &&
+           shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 100 &&
+           shell_char(state, 2) == ascii_space();
+}
+
 fn cmd_is_cat_readme(state: ptr<ShellState>) -> bool {
     if shell_len(state) != 11 { return false; }
     return shell_char(state, 0) == 99 &&
@@ -587,7 +598,7 @@ fn print_boot_banner() {
     puts("Hello to MUnix!\r\n");
     puts("MLNIX 0.3.0 kernel booting on QEMU virt (AArch64)\r\n");
     puts("init: unpacking built-in initramfs to / ... done\r\n");
-    puts("init: mounting embedded GNU rootfs tar overlay ... done\r\n");
+    puts("init: mounting embedded Toybox initramfs ... done\r\n");
     puts("init: bringing up irq-driven serial shell ... done\r\n");
     puts("cpu: mpidr=0x");
     runtime_write_hex64(read_mpidr());
@@ -607,12 +618,12 @@ fn print_help() {
     puts("  mem                show the pseudo meminfo page\r\n");
     puts("  cat /README        design notes\r\n");
     puts("  cat /etc/motd|issue|profile\r\n");
-    puts("  cat /bin/sh        show the shell stub\r\n");
+    puts("  cat /bin/sh        read the Toybox shell binary\r\n");
     puts("  cat /dev/console   show console device info\r\n");
     puts("  cat /proc/version  version string\r\n");
     puts("  cat /proc/cpuinfo  boot cpu data\r\n");
     puts("  cat /proc/meminfo  fixed memory map\r\n");
-    puts("  ls /usr            browse the mounted GNU rootfs when enabled\r\n");
+    puts("  sh                 enter the Toybox user shell\r\n");
     puts("  echo TEXT          echo back from the shell buffer\r\n");
     puts("  clear              ANSI clear screen\r\n");
     puts("  dmesg              boot summary\r\n");
@@ -684,8 +695,8 @@ fn print_readme() {
     puts("It boots directly under QEMU, drives PL011 UART, exposes a serial shell,\r\n");
     puts("and now carries a small built-in initramfs under /bin, /dev, /etc,\r\n");
     puts("and /proc entirely in kernel space.\r\n");
-    puts("This build can also fetch an Ubuntu Base GNU userspace tarball through\r\n");
-    puts("mlang.toml tasks and mount that archive as a read-only rootfs overlay.\r\n");
+    puts("This build fetches an official static Toybox AArch64 binary through\r\n");
+    puts("mlang.toml tasks and mounts one shared initramfs for both browsing and EL0 exec.\r\n");
 }
 
 fn print_motd() {
@@ -706,8 +717,7 @@ fn print_profile() {
 
 fn print_bin_sh() {
     puts("#!/bin/sh\r\n");
-    puts("# built-in MLNIX rootfs shell placeholder\r\n");
-    puts("echo userspace exec handoff not implemented yet\r\n");
+    puts("[binary Toybox shell image mounted at /bin/sh]\r\n");
 }
 
 fn print_dev_console() {
@@ -718,7 +728,7 @@ fn print_dmesg(state: ptr<ShellState>) {
     puts("[    0.000000] mlnix: boot cpu online, mpidr=0x");
     runtime_write_hex64(read_mpidr());
     puts("\r\n[    0.000001] mlnix: uart irq console on ttyAMA0\r\n");
-    puts("[    0.000002] mlnix: procfs, initramfs, and rootfs tar overlay mounted\r\n");
+    puts("[    0.000002] mlnix: procfs and Toybox initramfs mounted\r\n");
     puts("[    0.000003] mlnix: shell commands handled=");
     unsafe {
         runtime_write_dec_i32((*state).command_count);
@@ -770,29 +780,16 @@ fn run_command(state: ptr<ShellState>) {
         print_ls_dev();
         return;
     }
-    if cmd_is_ls_any(state) {
-        unsafe {
-            if runtime_rootfs_try_ls(&(*state).line.b00, 2) != 0 {
-                return;
-            }
-        }
-        if cmd_is_ls_root(state) {
-            print_ls_root();
-            return;
-        }
-        if cmd_is_ls_bin(state) {
-            print_ls_bin();
-            return;
-        }
-        if cmd_is_ls_etc(state) {
-            print_ls_etc();
-            return;
-        }
-        print_no_such_path("fs: no such directory: ", state, 3);
-        return;
-    }
     if cmd_is_ps(state) {
         print_ps(state);
+        return;
+    }
+    if cmd_is_cd(state) {
+        unsafe {
+            if runtime_shell_try_cd(&(*state).line.b00, 2) != 0 {
+                print_no_such_path("cd: no such directory: ", state, 3);
+            }
+        }
         return;
     }
     if cmd_is_mem(state) || cmd_is_cat_meminfo(state) {
@@ -814,6 +811,32 @@ fn run_command(state: ptr<ShellState>) {
             }
         }
         print_dev_console();
+        return;
+    }
+    unsafe {
+        if runtime_exec_user_command(&(*state).line.b00) != 0 {
+            return;
+        }
+    }
+    if cmd_is_ls_any(state) {
+        unsafe {
+            if runtime_rootfs_try_ls(&(*state).line.b00, 2) != 0 {
+                return;
+            }
+        }
+        if cmd_is_ls_root(state) {
+            print_ls_root();
+            return;
+        }
+        if cmd_is_ls_bin(state) {
+            print_ls_bin();
+            return;
+        }
+        if cmd_is_ls_etc(state) {
+            print_ls_etc();
+            return;
+        }
+        print_no_such_path("fs: no such directory: ", state, 3);
         return;
     }
     if cmd_is_cat_readme(state) {
@@ -853,16 +876,6 @@ fn run_command(state: ptr<ShellState>) {
         print_dmesg(state);
         return;
     }
-    if cmd_is_user(state) {
-        runtime_exec_hello_user();
-        return;
-    }
-    if cmd_is_echo(state) {
-        shell_write_from(state, 5);
-        uart_newline();
-        return;
-    }
-
     print_unknown(state);
 }
 

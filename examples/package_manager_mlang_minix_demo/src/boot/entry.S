@@ -22,6 +22,27 @@ _start:
     mrs x1, cpacr_el1
     orr x1, x1, #(3 << 20)
     msr cpacr_el1, x1
+    ldr x0, =boot_l1_table
+    msr ttbr0_el1, x0
+    mov x0, xzr
+    msr ttbr1_el1, x0
+    ldr x0, =0x00000000000000ff
+    msr mair_el1, x0
+    ldr x0, =0x0000000200003519
+    msr tcr_el1, x0
+    dsb ish
+    tlbi vmalle1
+    dsb ish
+    isb
+    mrs x1, sctlr_el1
+    bic x1, x1, #(1 << 1)
+    bic x1, x1, #(1 << 3)
+    bic x1, x1, #(1 << 4)
+    bic x1, x1, #(1 << 19)
+    orr x1, x1, #(1 << 0)
+    orr x1, x1, #(1 << 2)
+    orr x1, x1, #(1 << 12)
+    msr sctlr_el1, x1
     isb
     bl kernel_main__void
 
@@ -229,6 +250,27 @@ runtime_exit_to_kernel:
 __user_exit_ksp:
     .quad 0
 
+.align 12
+boot_l1_table:
+    .quad 0x0060000000000405
+    .quad boot_l2_table + 0x3
+    .fill 510, 8, 0
+
+.align 12
+boot_l2_table:
+    .quad 0x0000000040000741
+    .quad 0x0000000040200741
+    .quad 0x0000000040400741
+    .quad 0x0000000040600741
+    .fill 108, 8, 0
+    .quad 0x000000004e000781
+    .quad 0x006000004e200741
+    .quad 0x006000004e400741
+    .quad 0x006000004e600741
+    .quad 0x006000004e800741
+    .quad 0x006000004ea00741
+    .fill 394, 8, 0
+
 .section .bss.stack, "aw", %nobits
 .align 12
 __stack_bottom:
@@ -238,6 +280,6 @@ __stack_top:
 .align 12
 .global __user_stack_bottom
 __user_stack_bottom:
-    .space 8192
+    .space 262144
 .global __user_stack_top
 __user_stack_top:

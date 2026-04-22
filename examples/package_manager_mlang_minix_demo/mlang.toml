@@ -22,8 +22,8 @@ path_entries = [
 ]
 
 [tool.mlang.options]
-userspace = "gnu"
-gnu_rootfs_arch = "aarch64"
+userspace = "toybox"
+toybox_arch = "aarch64"
 
 [[task]]
 name = "toolchain-check"
@@ -38,124 +38,88 @@ commands = [
   [
     "sh",
     "-c",
-    "for tool in llc llvm-objcopy aarch64-none-elf-gcc aarch64-none-elf-objcopy qemu-system-aarch64 curl tar; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done"
+    "for tool in llc llvm-objcopy aarch64-none-elf-gcc aarch64-none-elf-objcopy aarch64-linux-musl-gcc qemu-system-aarch64 curl tar make gsed gzip od; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done"
   ]
 ]
 
 [[task]]
-name = "gnu-userspace-fetch"
-print = "[mlnix] Fetching GNU rootfs when userspace=gnu"
+name = "toybox-userspace-fetch"
+print = "[mlnix] Fetching Toybox source when userspace=toybox"
 depends_on = ["toolchain-check"]
 workdir = "{{root}}"
 shell = [
   "set -eu",
   "mkdir -p {{build_dir}}",
-  'if [ "{{option.userspace}}" != "gnu" ]; then',
-  "  echo GNU rootfs download skipped because userspace={{option.userspace}}.",
+  'if [ "{{option.userspace}}" != "toybox" ]; then',
+  "  echo Toybox download skipped because userspace={{option.userspace}}.",
   "  exit 0",
   "fi",
-  'case "{{option.gnu_rootfs_arch}}" in',
-  "  aarch64|arm64)",
-  "    ROOTFS_FILE=ubuntu-base-24.04.3-base-arm64.tar.gz",
-  "    ROOTFS_URL=https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-arm64.tar.gz",
-  "    ;;",
-  "  x64|x86_64|amd64)",
-  "    ROOTFS_FILE=ubuntu-base-24.04.3-base-amd64.tar.gz",
-  "    ROOTFS_URL=https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-amd64.tar.gz",
-  "    ;;",
-  "  *)",
-  "    echo Unsupported GNU rootfs arch: {{option.gnu_rootfs_arch}}",
-  "    exit 1",
-  "    ;;",
-  "esac",
-  '[ -f {{build_dir}}/$ROOTFS_FILE ] || curl -L --fail "$ROOTFS_URL" -o {{build_dir}}/$ROOTFS_FILE',
-  "rm -rf {{build_dir}}/gnu-rootfs",
-  "mkdir -p {{build_dir}}/gnu-rootfs",
-  "tar -xzf {{build_dir}}/$ROOTFS_FILE -C {{build_dir}}/gnu-rootfs"
+  "TOYBOX_VERSION=0.8.13",
+  "TOYBOX_TARBALL=toybox-$TOYBOX_VERSION.tar.gz",
+  "TOYBOX_URL=https://landley.net/toybox/downloads/$TOYBOX_TARBALL",
+  '[ -f {{build_dir}}/$TOYBOX_TARBALL ] || curl -L --fail "$TOYBOX_URL" -o {{build_dir}}/$TOYBOX_TARBALL'
 ]
 
 [[task]]
-name = "build-user-hello"
-print = "[mlnix] Compiling the static EL0 hello ELF"
-depends_on = ["toolchain-check"]
-workdir = "{{root}}"
-commands = [
-  [
-    "mkdir",
-    "-p",
-    "{{build_dir}}/obj"
-  ],
-  [
-    "aarch64-none-elf-gcc",
-    "-static",
-    "-nostdlib",
-    "-nostartfiles",
-    "-ffreestanding",
-    "-fno-builtin",
-    "-fno-stack-protector",
-    "-mgeneral-regs-only",
-    "-Wall",
-    "-Wextra",
-    "-O1",
-    "-T",
-    "src/user/user.ld",
-    "src/user/hello.c",
-    "-o",
-    "{{build_dir}}/user_hello.elf"
-  ]
-]
-
-[[task]]
-name = "build-user-hello-obj"
-print = "[mlnix] Wrapping the user ELF as a linkable blob"
-depends_on = ["build-user-hello"]
+name = "toybox-userspace-build"
+print = "[mlnix] Building a RAM-linked Toybox binary for EL0"
+depends_on = ["toybox-userspace-fetch"]
 workdir = "{{root}}"
 shell = [
   "set -eu",
-  "mkdir -p {{build_dir}}/obj",
-  "cd {{build_dir}}",
-  "aarch64-none-elf-objcopy --input-target=binary --output-target=elf64-littleaarch64 --binary-architecture=aarch64 user_hello.elf obj/user_hello.o"
+  'if [ "{{option.userspace}}" != "toybox" ]; then',
+  "  echo Toybox build skipped because userspace={{option.userspace}}.",
+  "  exit 0",
+  "fi",
+  'case "{{option.toybox_arch}}" in',
+  "  aarch64|arm64)",
+  "    TOYBOX_CROSS=aarch64-linux-musl-",
+  "    TOYBOX_TEXT=0x40200000",
+  "    ;;",
+  "  *)",
+  "    echo Unsupported Toybox arch: {{option.toybox_arch}}",
+  "    exit 1",
+  "    ;;",
+  "esac",
+  "TOYBOX_VERSION=0.8.13",
+  "TOYBOX_TARBALL=toybox-$TOYBOX_VERSION.tar.gz",
+  "rm -rf {{build_dir}}/toybox-src",
+  "mkdir -p {{build_dir}}/toybox-src",
+  "tar -xzf {{build_dir}}/$TOYBOX_TARBALL -C {{build_dir}}/toybox-src --strip-components=1",
+  "cd {{build_dir}}/toybox-src",
+  "PATH=/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH",
+  "export PATH",
+  "make distclean defconfig CROSS_COMPILE=$TOYBOX_CROSS",
+  "gsed -i 's/^# CONFIG_SH is not set$/CONFIG_SH=y/' .config",
+  "gsed -i 's/^CONFIG_TOYBOX_ZHELP=y$/# CONFIG_TOYBOX_ZHELP is not set/' .config",
+  'LDOPTIMIZE=-Wl,--gc-sections\ -Wl,--as-needed',
+  'LDFLAGS=--static\ -Wl,-Ttext-segment=$TOYBOX_TEXT',
+  "export LDOPTIMIZE LDFLAGS",
+  "printf '\\n' | make oldconfig toybox CROSS_COMPILE=$TOYBOX_CROSS",
+  "cp toybox {{build_dir}}/toybox"
 ]
 
 [[task]]
 name = "build-user-initramfs"
-print = "[mlnix] Packing the EL0 user initramfs tar"
-depends_on = ["toolchain-check"]
+print = "[mlnix] Packing the Toybox EL0 initramfs tar"
+depends_on = ["toybox-userspace-build"]
 workdir = "{{root}}"
 shell = [
   "set -eu",
   "mkdir -p {{build_dir}}/obj",
+  "rm -rf {{build_dir}}/user_initramfs",
+  "mkdir -p {{build_dir}}/user_initramfs/bin",
+  "cp -R src/user/initramfs/. {{build_dir}}/user_initramfs",
+  "cp {{build_dir}}/toybox {{build_dir}}/user_initramfs/bin/toybox",
+  "cp {{build_dir}}/toybox {{build_dir}}/user_initramfs/bin/ls",
+  "cp {{build_dir}}/toybox {{build_dir}}/user_initramfs/bin/cat",
+  "cp {{build_dir}}/toybox {{build_dir}}/user_initramfs/bin/echo",
+  "cp {{build_dir}}/toybox {{build_dir}}/user_initramfs/bin/sh",
+  "cp {{build_dir}}/toybox {{build_dir}}/user_initramfs/bin/pwd",
   "rm -f {{build_dir}}/user_initramfs.tar",
-  "COPYFILE_DISABLE=1 tar --format=ustar -cf {{build_dir}}/user_initramfs.tar -C src/user/initramfs .",
+  "COPYFILE_DISABLE=1 tar --format=ustar -cf {{build_dir}}/user_initramfs.tar -C {{build_dir}}/user_initramfs .",
   "cd {{build_dir}}",
   "aarch64-none-elf-objcopy --input-target=binary --output-target=elf64-littleaarch64 --binary-architecture=aarch64 user_initramfs.tar obj/user_initramfs.o"
-]
-
-[[task]]
-name = "build-rootfs-archive"
-print = "[mlnix] Packing the selected userspace into an embedded rootfs tar archive"
-depends_on = ["gnu-userspace-fetch"]
-workdir = "{{root}}"
-shell = [
-  "set -eu",
-  "rm -f {{build_dir}}/gnu-rootfs.tar",
-  'if [ "{{option.userspace}}" = "gnu" ]; then',
-  "  COPYFILE_DISABLE=1 tar --format=ustar -cf {{build_dir}}/gnu-rootfs.tar -C {{build_dir}}/gnu-rootfs .",
-  "else",
-  "  dd if=/dev/zero of={{build_dir}}/gnu-rootfs.tar bs=512 count=2 status=none",
-  "fi"
-]
-
-[[task]]
-name = "build-rootfs-obj"
-print = "[mlnix] Converting the mounted rootfs tar archive into a linkable object"
-depends_on = ["build-rootfs-archive"]
-workdir = "{{root}}"
-shell = [
-  "set -eu",
-  "mkdir -p {{build_dir}}/obj",
-  "cd {{build_dir}}",
-  "aarch64-none-elf-objcopy --input-target=binary --output-target=elf64-littleaarch64 --binary-architecture=aarch64 gnu-rootfs.tar obj/gnu_rootfs.o"
 ]
 
 [[task]]
@@ -247,7 +211,7 @@ commands = [
 [[task]]
 name = "link-elf"
 print = "[mlnix] Linking the freestanding kernel ELF"
-depends_on = ["retarget-kernel-obj", "build-runtime-shim", "build-entry", "build-rootfs-obj", "build-user-hello-obj", "build-user-initramfs"]
+depends_on = ["retarget-kernel-obj", "build-runtime-shim", "build-entry", "build-user-initramfs"]
 workdir = "{{root}}"
 commands = [
   [
@@ -259,8 +223,6 @@ commands = [
     "{{build_dir}}/obj/entry.o",
     "{{build_dir}}/obj/mlnix_kernel.o",
     "{{build_dir}}/obj/runtime.o",
-    "{{build_dir}}/obj/gnu_rootfs.o",
-    "{{build_dir}}/obj/user_hello.o",
     "{{build_dir}}/obj/user_initramfs.o",
     "-o",
     "{{build_dir}}/mlnix.elf"
@@ -300,6 +262,6 @@ command = [
   "mon:stdio",
   "-monitor",
   "none",
-  "-kernel",
-  "{{build_dir}}/mlnix.bin"
+  "-device",
+  "loader,file={{build_dir}}/mlnix.bin,addr=0x4e000000,cpu-num=0,force-raw=on"
 ]

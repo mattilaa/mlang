@@ -23,11 +23,6 @@ static volatile uint32_t* const GICC_PMR = (volatile uint32_t*)0x08010004u;
 static volatile uint32_t* const GICC_IAR = (volatile uint32_t*)0x0801000cu;
 static volatile uint32_t* const GICC_EOIR = (volatile uint32_t*)0x08010010u;
 
-extern const unsigned char _binary_gnu_rootfs_tar_start[];
-extern const unsigned char _binary_gnu_rootfs_tar_end[];
-
-extern const unsigned char _binary_user_hello_elf_start[];
-extern const unsigned char _binary_user_hello_elf_end[];
 extern const unsigned char _binary_user_initramfs_tar_start[];
 extern const unsigned char _binary_user_initramfs_tar_end[];
 extern unsigned char __user_stack_top[];
@@ -46,7 +41,7 @@ enum {
 };
 
 enum {
-    ROOTFS_LIST_SEEN_MAX = 4096,
+    ROOTFS_LIST_SEEN_MAX = 64,
     ROOTFS_NAME_MAX = 128
 };
 
@@ -73,6 +68,8 @@ struct TarHeader {
     char prefix[155];
     char pad[12];
 };
+
+static int rootfs_child_name(const char* target, const char* full, char* child, size_t child_size);
 
 static void uart_putc_raw(uint8_t ch)
 {
@@ -325,12 +322,12 @@ static void tar_normalized_name(const struct TarHeader* hdr, char* out, size_t o
 
 static const unsigned char* rootfs_start(void)
 {
-    return _binary_gnu_rootfs_tar_start;
+    return _binary_user_initramfs_tar_start;
 }
 
 static const unsigned char* rootfs_end(void)
 {
-    return _binary_gnu_rootfs_tar_end;
+    return _binary_user_initramfs_tar_end;
 }
 
 static int rootfs_has_archive(void)
@@ -831,7 +828,13 @@ void runtime_unhandled_exception(void)
 }
 
 enum {
+    SYS_getcwd = 17,
+    SYS_dup = 23,
+    SYS_fcntl = 25,
     SYS_ioctl = 29,
+    SYS_dup3 = 24,
+    SYS_getdents64 = 61,
+    SYS_chdir = 49,
     SYS_openat = 56,
     SYS_close = 57,
     SYS_lseek = 62,
@@ -849,6 +852,7 @@ enum {
     SYS_rt_sigaction = 134,
     SYS_rt_sigprocmask = 135,
     SYS_uname = 160,
+    SYS_umask = 166,
     SYS_getpid = 172,
     SYS_getuid = 174,
     SYS_geteuid = 175,
@@ -870,6 +874,7 @@ enum {
     EINVAL_ERR = -22,
     ENOENT_ERR = -2,
     EISDIR_ERR = -21,
+    ENOTDIR_ERR = -20,
     ENOSYS_ERR = -38,
     ENOMEM_ERR = -12
 };
@@ -884,6 +889,7 @@ struct user_fd_entry {
     uint64_t size;
     uint64_t offset;
     uint8_t is_dir;
+    char path[256];
 };
 
 static struct user_fd_entry user_fds[USER_FD_MAX];
@@ -892,6 +898,18 @@ __attribute__((aligned(4096))) static unsigned char user_heap[USER_HEAP_SIZE];
 static uint64_t user_brk_start;
 static uint64_t user_brk_current;
 static uint64_t user_brk_end;
+static char user_cwd[256];
+static char user_argv_strings[16][128];
+static uint64_t user_argv_ptrs[17];
+static int user_syscall_trace_budget;
+static uint32_t user_umask;
+
+enum {
+    AT_NULL = 0,
+    AT_PAGESZ = 6,
+    AT_SECURE = 23,
+    AT_RANDOM = 25
+};
 
 struct iovec_k {
     const void* iov_base;
@@ -907,10 +925,17 @@ static void user_state_reset(void)
         user_fds[i].size = 0u;
         user_fds[i].offset = 0u;
         user_fds[i].is_dir = 0u;
+        user_fds[i].path[0] = '\0';
     }
     user_brk_start = (uint64_t)(uintptr_t)user_heap;
     user_brk_current = user_brk_start;
     user_brk_end = user_brk_start + USER_HEAP_SIZE;
+    if(user_cwd[0] == '\0') {
+        user_cwd[0] = '/';
+        user_cwd[1] = '\0';
+    }
+    user_syscall_trace_budget = 0;
+    user_umask = 0022u;
 }
 
 static struct user_fd_entry* user_fd_alloc(int* fd_out)
@@ -943,6 +968,96 @@ static struct user_fd_entry* user_fd_get(int fd)
     return &user_fds[idx];
 }
 
+static void copy_cstr(char* dst, size_t dst_size, const char* src)
+{
+    size_t i = 0u;
+    if(dst_size == 0u) {
+        return;
+    }
+    if(!src) {
+        dst[0] = '\0';
+        return;
+    }
+    while(src[i] != '\0' && i + 1u < dst_size) {
+        dst[i] = src[i];
+        ++i;
+    }
+    dst[i] = '\0';
+}
+
+static void user_resolve_path(const char* path, char* out, size_t out_size)
+{
+    char combined[256];
+    size_t pos = 0u;
+    size_t i = 0u;
+
+    if(!path || path[0] == '\0') {
+        copy_cstr(out, out_size, user_cwd);
+        return;
+    }
+    if(path[0] == '/') {
+        normalize_rootfs_path(path, out, out_size);
+        return;
+    }
+
+    while(user_cwd[pos] != '\0' && pos + 1u < sizeof(combined)) {
+        combined[pos] = user_cwd[pos];
+        ++pos;
+    }
+    if(pos == 0u) {
+        combined[pos++] = '/';
+    }
+    if(pos > 1u && pos + 1u < sizeof(combined)) {
+        combined[pos++] = '/';
+    }
+    while(path[i] != '\0' && pos + 1u < sizeof(combined)) {
+        combined[pos++] = path[i++];
+    }
+    combined[pos] = '\0';
+    normalize_rootfs_path(combined, out, out_size);
+}
+
+static int user_tar_path_exists(const char* path, uint8_t* typeflag_out)
+{
+    const unsigned char* p = _binary_user_initramfs_tar_start;
+    const unsigned char* end = _binary_user_initramfs_tar_end;
+    char normalized[256];
+    char child[ROOTFS_NAME_MAX];
+
+    normalize_rootfs_path(path, normalized, sizeof(normalized));
+    if(cstr_eq(normalized, "/")) {
+        if(typeflag_out) {
+            *typeflag_out = '5';
+        }
+        return 1;
+    }
+
+    while(p + 512u <= end) {
+        const struct TarHeader* hdr = (const struct TarHeader*)p;
+        char name[256];
+        uint64_t size;
+        if(tar_is_zero_block(p)) {
+            break;
+        }
+        tar_normalized_name(hdr, name, sizeof(name));
+        size = tar_octal_to_size(hdr->size, sizeof(hdr->size));
+        if(cstr_eq(name, normalized)) {
+            if(typeflag_out) {
+                *typeflag_out = (uint8_t)hdr->typeflag;
+            }
+            return 1;
+        }
+        if(rootfs_child_name(normalized, name, child, sizeof(child))) {
+            if(typeflag_out) {
+                *typeflag_out = '5';
+            }
+            return 1;
+        }
+        p += (((size + 511u) / 512u) + 1u) * 512u;
+    }
+    return 0;
+}
+
 static int user_tar_find_file(const char* path,
                               const unsigned char** data_out,
                               uint64_t* size_out,
@@ -952,7 +1067,7 @@ static int user_tar_find_file(const char* path,
     const unsigned char* end = _binary_user_initramfs_tar_end;
     char normalized[256];
 
-    normalize_rootfs_path(path, normalized, sizeof(normalized));
+    user_resolve_path(path, normalized, sizeof(normalized));
 
     while(p + 512u <= end) {
         const struct TarHeader* hdr = (const struct TarHeader*)p;
@@ -1020,6 +1135,7 @@ static int64_t sys_openat(int64_t dirfd, const char* path, int64_t flags)
     const unsigned char* data = NULL;
     uint64_t size = 0u;
     uint8_t typeflag = 0u;
+    char resolved[256];
     int fd_num;
     struct user_fd_entry* f;
 
@@ -1028,20 +1144,27 @@ static int64_t sys_openat(int64_t dirfd, const char* path, int64_t flags)
     if(!path) {
         return EFAULT_ERR;
     }
-    if(!user_tar_find_file(path, &data, &size, &typeflag)) {
+    user_resolve_path(path, resolved, sizeof(resolved));
+    if(!user_tar_path_exists(resolved, &typeflag)) {
         return ENOENT_ERR;
-    }
-    if(typeflag == '5') {
-        return EISDIR_ERR;
     }
     f = user_fd_alloc(&fd_num);
     if(!f) {
         return ENOMEM_ERR;
     }
-    f->data = data;
-    f->size = size;
+    f->data = NULL;
+    f->size = 0u;
     f->offset = 0u;
-    f->is_dir = 0u;
+    f->is_dir = typeflag == '5';
+    copy_cstr(f->path, sizeof(f->path), resolved);
+    if(!f->is_dir) {
+        if(!user_tar_find_file(resolved, &data, &size, &typeflag)) {
+            f->in_use = 0;
+            return ENOENT_ERR;
+        }
+        f->data = data;
+        f->size = size;
+    }
     return fd_num;
 }
 
@@ -1055,11 +1178,24 @@ static int64_t sys_read(int64_t fd, void* buf, int64_t count)
         return EFAULT_ERR;
     }
     if(fd == 0) {
-        return 0;
+        int ch;
+        if(count == 0) {
+            return 0;
+        }
+        ch = uart_rx_pop();
+        while(ch < 0) {
+            __asm__ __volatile__("wfi");
+            ch = uart_rx_pop();
+        }
+        out[0] = (unsigned char)((ch == '\r') ? '\n' : ch);
+        return 1;
     }
     f = user_fd_get((int)fd);
     if(!f) {
         return EBADF_ERR;
+    }
+    if(f->is_dir) {
+        return EISDIR_ERR;
     }
     remain = f->size > f->offset ? f->size - f->offset : 0u;
     if((uint64_t)count > remain) {
@@ -1074,6 +1210,9 @@ static int64_t sys_read(int64_t fd, void* buf, int64_t count)
 
 static int64_t sys_close(int64_t fd)
 {
+    if(fd >= 0 && fd <= 2) {
+        return 0;
+    }
     struct user_fd_entry* f = user_fd_get((int)fd);
     if(!f) {
         return EBADF_ERR;
@@ -1092,6 +1231,9 @@ static int64_t sys_lseek(int64_t fd, int64_t offset, int64_t whence)
     int64_t new_off;
     if(!f) {
         return EBADF_ERR;
+    }
+    if(f->is_dir) {
+        return EISDIR_ERR;
     }
     if(whence == 0) {
         new_off = offset;
@@ -1151,6 +1293,11 @@ static int64_t sys_fstat(int64_t fd, void* statbuf)
     if(!statbuf) {
         return EFAULT_ERR;
     }
+    if(fd >= 0 && fd <= 2) {
+        fill_stat((struct user_stat_buf*)statbuf, 0u, 0);
+        ((struct user_stat_buf*)statbuf)->st_mode = 0020000u | 0600u;
+        return 0;
+    }
     f = user_fd_get((int)fd);
     if(!f) {
         return EBADF_ERR;
@@ -1164,16 +1311,192 @@ static int64_t sys_newfstatat(int64_t dirfd, const char* path, void* statbuf, in
     const unsigned char* data = NULL;
     uint64_t size = 0u;
     uint8_t typeflag = 0u;
+    char resolved[256];
     (void)dirfd;
     (void)flags;
     if(!path || !statbuf) {
         return EFAULT_ERR;
     }
-    if(!user_tar_find_file(path, &data, &size, &typeflag)) {
+    user_resolve_path(path, resolved, sizeof(resolved));
+    if(!user_tar_path_exists(resolved, &typeflag)) {
         return ENOENT_ERR;
     }
-    fill_stat((struct user_stat_buf*)statbuf, size, typeflag == '5');
+    if(typeflag != '5' && user_tar_find_file(resolved, &data, &size, &typeflag)) {
+        fill_stat((struct user_stat_buf*)statbuf, size, 0);
+    } else {
+        fill_stat((struct user_stat_buf*)statbuf, 0u, 1);
+    }
     return 0;
+}
+
+struct user_linux_dirent64 {
+    uint64_t d_ino;
+    int64_t d_off;
+    uint16_t d_reclen;
+    uint8_t d_type;
+    char d_name[256];
+};
+
+static int64_t sys_getdents64(int64_t fd, void* dirp, uint64_t count)
+{
+    struct user_fd_entry* f = user_fd_get((int)fd);
+    unsigned char* out = (unsigned char*)dirp;
+    const unsigned char* p = _binary_user_initramfs_tar_start;
+    const unsigned char* end = _binary_user_initramfs_tar_end;
+    char seen[ROOTFS_LIST_SEEN_MAX][ROOTFS_NAME_MAX];
+    size_t seen_count = 0u;
+    uint64_t index = 0u;
+    uint64_t written = 0u;
+
+    if(!dirp) {
+        return EFAULT_ERR;
+    }
+    if(!f) {
+        return EBADF_ERR;
+    }
+    if(!f->is_dir) {
+        return ENOTDIR_ERR;
+    }
+
+    while(p + 512u <= end) {
+        const struct TarHeader* hdr = (const struct TarHeader*)p;
+        char name[256];
+        char child[ROOTFS_NAME_MAX];
+        uint64_t size;
+        uint16_t reclen;
+        if(tar_is_zero_block(p)) {
+            break;
+        }
+        tar_normalized_name(hdr, name, sizeof(name));
+        size = tar_octal_to_size(hdr->size, sizeof(hdr->size));
+        p += (((size + 511u) / 512u) + 1u) * 512u;
+        if(rootfs_skip_name(name)) {
+            continue;
+        }
+        if(!rootfs_child_name(f->path, name, child, sizeof(child))) {
+            continue;
+        }
+        if(seen_name_contains(seen, seen_count, child)) {
+            continue;
+        }
+        seen_name_add(seen, &seen_count, child);
+        if(index++ < f->offset) {
+            continue;
+        }
+        reclen = (uint16_t)(19u + cstr_len(child) + 1u);
+        reclen = (uint16_t)((reclen + 7u) & ~7u);
+        if(written + reclen > count) {
+            break;
+        }
+        {
+            struct user_linux_dirent64* ent = (struct user_linux_dirent64*)(out + written);
+            char child_path[256];
+            uint8_t child_type = 0u;
+            size_t i;
+            for(i = 0u; i < reclen; ++i) {
+                ((unsigned char*)ent)[i] = 0u;
+            }
+            ent->d_ino = index;
+            ent->d_off = (int64_t)index;
+            ent->d_reclen = reclen;
+            copy_cstr(child_path, sizeof(child_path), f->path);
+            if(cstr_eq(child_path, "/")) {
+                child_path[1] = '\0';
+            } else {
+                copy_cstr(child_path + cstr_len(child_path), sizeof(child_path) - cstr_len(child_path), "/");
+            }
+            copy_cstr(child_path + cstr_len(child_path), sizeof(child_path) - cstr_len(child_path), child);
+            if(user_tar_path_exists(child_path, &child_type) && child_type == '5') {
+                ent->d_type = 4u;
+            } else {
+                ent->d_type = 8u;
+            }
+            copy_cstr(ent->d_name, sizeof(ent->d_name), child);
+        }
+        written += reclen;
+        f->offset = index;
+    }
+
+    return (int64_t)written;
+}
+
+static int64_t sys_getcwd(char* buf, uint64_t size)
+{
+    size_t len = cstr_len(user_cwd);
+    size_t i;
+    if(!buf || size == 0u) {
+        return EFAULT_ERR;
+    }
+    if(len + 1u > size) {
+        return ENOMEM_ERR;
+    }
+    for(i = 0u; i <= len; ++i) {
+        buf[i] = user_cwd[i];
+    }
+    return (int64_t)(uintptr_t)buf;
+}
+
+static int64_t sys_chdir(const char* path)
+{
+    char resolved[256];
+    uint8_t typeflag = 0u;
+    if(!path) {
+        return EFAULT_ERR;
+    }
+    user_resolve_path(path, resolved, sizeof(resolved));
+    if(!user_tar_path_exists(resolved, &typeflag)) {
+        return ENOENT_ERR;
+    }
+    if(typeflag != '5') {
+        return ENOTDIR_ERR;
+    }
+    copy_cstr(user_cwd, sizeof(user_cwd), resolved);
+    return 0;
+}
+
+static int64_t sys_fcntl(int64_t fd, int64_t cmd, int64_t arg)
+{
+    (void)fd;
+    (void)cmd;
+    (void)arg;
+    return 0;
+}
+
+static int64_t sys_dup(int64_t oldfd)
+{
+    if(oldfd >= 0 && oldfd <= 2) {
+        return oldfd;
+    }
+
+    struct user_fd_entry* src = user_fd_get((int)oldfd);
+    struct user_fd_entry* dst;
+    size_t i;
+    int fd_num;
+    if(!src) {
+        return EBADF_ERR;
+    }
+    dst = user_fd_alloc(&fd_num);
+    if(!dst) {
+        return ENOMEM_ERR;
+    }
+    dst->data = src->data;
+    dst->size = src->size;
+    dst->offset = src->offset;
+    dst->is_dir = src->is_dir;
+    for(i = 0u; i < sizeof(dst->path); ++i) {
+        dst->path[i] = src->path[i];
+    }
+    dst->in_use = 1;
+    return fd_num;
+}
+
+static int64_t sys_dup3(int64_t oldfd, int64_t newfd, int64_t flags)
+{
+    (void)flags;
+    if(oldfd < 0 || oldfd > 2 || newfd < 0 || newfd > 2) {
+        return EBADF_ERR;
+    }
+    return newfd;
 }
 
 static int64_t sys_ioctl(int64_t fd, int64_t cmd, int64_t arg)
@@ -1192,6 +1515,13 @@ static int64_t sys_ioctl(int64_t fd, int64_t cmd, int64_t arg)
         return 0;
     }
     return EINVAL_ERR;
+}
+
+static int64_t sys_umask(int64_t mask)
+{
+    uint32_t old_mask = user_umask;
+    user_umask = (uint32_t)mask & 0777u;
+    return (int64_t)old_mask;
 }
 
 static int64_t sys_brk(uint64_t addr)
@@ -1338,11 +1668,29 @@ int64_t runtime_syscall_dispatch(int64_t nr,
 {
     (void)a4;
     (void)a5;
+    if(user_syscall_trace_budget > 0) {
+        runtime_write_str("[user] syscall nr=");
+        runtime_write_dec_i64(nr);
+        runtime_write_str("\n");
+        --user_syscall_trace_budget;
+    }
     switch(nr) {
+    case SYS_getcwd:
+        return sys_getcwd((char*)a0, (uint64_t)a1);
+    case SYS_dup:
+        return sys_dup(a0);
+    case SYS_dup3:
+        return sys_dup3(a0, a1, a2);
+    case SYS_fcntl:
+        return sys_fcntl(a0, a1, a2);
     case SYS_write:
         return sys_write(a0, (const void*)a1, a2);
     case SYS_writev:
         return sys_writev(a0, (const void*)a1, a2);
+    case SYS_getdents64:
+        return sys_getdents64(a0, (void*)a1, (uint64_t)a2);
+    case SYS_chdir:
+        return sys_chdir((const char*)a0);
     case SYS_read:
         return sys_read(a0, (void*)a1, a2);
     case SYS_openat:
@@ -1369,6 +1717,8 @@ int64_t runtime_syscall_dispatch(int64_t nr,
         return sys_clock_gettime(a0, (void*)a1);
     case SYS_uname:
         return sys_uname((void*)a0);
+    case SYS_umask:
+        return sys_umask(a0);
     case SYS_getrandom:
         return sys_getrandom((void*)a0, (uint64_t)a1, a2);
     case SYS_set_tid_address:
@@ -1507,32 +1857,146 @@ static int load_elf64_image(const unsigned char* image,
     return 0;
 }
 
-void runtime_exec_hello_user(void)
+static uint64_t prepare_user_stack(int argc)
 {
-    const unsigned char* image = _binary_user_hello_elf_start;
-    size_t image_size = (size_t)(_binary_user_hello_elf_end - _binary_user_hello_elf_start);
+    uint64_t sp = (uint64_t)(uintptr_t)__user_stack_top;
+    uint64_t rand_ptr;
+    uint64_t* words;
+    int i;
+
+    for(i = argc - 1; i >= 0; --i) {
+        size_t len = cstr_len(user_argv_strings[i]) + 1u;
+        size_t j;
+        sp -= len;
+        for(j = 0u; j < len; ++j) {
+            ((unsigned char*)(uintptr_t)sp)[j] = (unsigned char)user_argv_strings[i][j];
+        }
+        user_argv_ptrs[i] = sp;
+    }
+    user_argv_ptrs[argc] = 0u;
+
+    sp &= ~((uint64_t)15u);
+    sp -= 16u;
+    rand_ptr = sp;
+    for(i = 0; i < 16; ++i) {
+        ((unsigned char*)(uintptr_t)rand_ptr)[i] = (unsigned char)(0x41 + i);
+    }
+
+    sp &= ~((uint64_t)15u);
+    sp -= (uint64_t)(argc + 11) * 8u;
+    words = (uint64_t*)(uintptr_t)sp;
+    words[0] = (uint64_t)argc;
+    for(i = 0; i < argc; ++i) {
+        words[1 + i] = user_argv_ptrs[i];
+    }
+    words[1 + argc] = 0u;
+    words[2 + argc] = 0u;
+    words[3 + argc] = AT_PAGESZ;
+    words[4 + argc] = 4096u;
+    words[5 + argc] = AT_SECURE;
+    words[6 + argc] = 0u;
+    words[7 + argc] = AT_RANDOM;
+    words[8 + argc] = rand_ptr;
+    words[9 + argc] = AT_NULL;
+    words[10 + argc] = 0u;
+    return sp;
+}
+
+int32_t runtime_exec_user_command(const char* line)
+{
+    const unsigned char* image = NULL;
+    uint64_t image_size = 0u;
+    uint8_t typeflag = 0u;
     uint64_t entry = 0u;
+    uint64_t user_sp;
+    char exec_path[256];
+    int argc = 0;
     int rc;
+    size_t i = 0u;
 
-    runtime_write_str("[kernel] loading user ELF, size=");
-    runtime_write_dec_i64((int64_t)image_size);
-    runtime_write_str(" bytes\n");
+    if(!line) {
+        return 0;
+    }
 
-    rc = load_elf64_image(image, image_size, &entry);
+    while(line[i] == ' ') {
+        ++i;
+    }
+    while(line[i] != '\0' && argc < 16) {
+        size_t j = 0u;
+        while(line[i] == ' ') {
+            ++i;
+        }
+        if(line[i] == '\0') {
+            break;
+        }
+        while(line[i] != '\0' && line[i] != ' ' && j + 1u < sizeof(user_argv_strings[argc])) {
+            user_argv_strings[argc][j++] = line[i++];
+        }
+        user_argv_strings[argc][j] = '\0';
+        user_argv_ptrs[argc] = (uint64_t)(uintptr_t)user_argv_strings[argc];
+        ++argc;
+        while(line[i] != '\0' && line[i] != ' ') {
+            ++i;
+        }
+    }
+    if(argc == 0) {
+        return 0;
+    }
+    user_argv_ptrs[argc] = 0u;
+
+    if(user_argv_strings[0][0] == '/') {
+        copy_cstr(exec_path, sizeof(exec_path), user_argv_strings[0]);
+    } else {
+        copy_cstr(exec_path, sizeof(exec_path), "/bin/");
+        copy_cstr(exec_path + cstr_len(exec_path),
+                  sizeof(exec_path) - cstr_len(exec_path),
+                  user_argv_strings[0]);
+    }
+
+    if(!user_tar_find_file(exec_path, &image, &image_size, &typeflag) || typeflag == '5') {
+        return 0;
+    }
+
+    rc = load_elf64_image(image, (size_t)image_size, &entry);
     if(rc != 0) {
         runtime_write_str("[kernel] ELF load failed rc=");
         runtime_write_dec_i64(rc);
         runtime_write_str("\n");
-        return;
+        return 1;
     }
 
-    runtime_write_str("[kernel] entry=0x");
-    runtime_write_hex64((int64_t)entry);
-    runtime_write_str(" handing off to EL0...\n");
-
     user_state_reset();
-    runtime_enter_user(entry, (uint64_t)__user_stack_top, 0u, 0u);
-    runtime_write_str("[kernel] returned from EL0\n");
+    user_sp = prepare_user_stack(argc);
+    runtime_enter_user(entry,
+                       user_sp,
+                       (uint64_t)argc,
+                       (uint64_t)(uintptr_t)user_argv_ptrs);
+    return 1;
+}
+
+int32_t runtime_shell_try_cd(const char* line, int32_t start)
+{
+    char path[256];
+    int32_t i = 0;
+    int64_t rc;
+
+    if(!line) {
+        return EFAULT_ERR;
+    }
+    while(line[start] == ' ') {
+        ++start;
+    }
+    if(line[start] == '\0') {
+        path[0] = '/';
+        path[1] = '\0';
+    } else {
+        while(line[start] != '\0' && i + 1 < (int32_t)sizeof(path)) {
+            path[i++] = line[start++];
+        }
+        path[i] = '\0';
+    }
+    rc = sys_chdir(path);
+    return (int32_t)rc;
 }
 
 void __mlang_std_exceptions_pop_frame(int64_t frame)

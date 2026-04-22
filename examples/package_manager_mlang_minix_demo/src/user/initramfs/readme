@@ -1,3 +1,3 @@
-MLNIX M3 user initramfs.
-This tar is embedded in the kernel image and mounted read-only for
-EL0 binaries through the openat/read/close syscall path.
+MLNIX Toybox userspace root.
+This initramfs is mounted read-only and shared by both the kernel browser
+and the EL0 Toybox command environment.
