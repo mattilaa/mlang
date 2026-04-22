@@ -96,6 +96,7 @@ static int user_tar_find_file(const char* path,
                               uint64_t* size_out,
                               uint8_t* typeflag_out);
 static int overlay_child_state(const char* parent, const char* child);
+static void normalize_rootfs_path(const char* raw, char* out, size_t out_size);
 void runtime_init_rootfs_mounts(void);
 
 static void uart_putc_raw(uint8_t ch)
@@ -263,6 +264,9 @@ static int tar_entry_type(const struct TarHeader* hdr)
     if(hdr->typeflag == '2') {
         return 3;
     }
+    if(hdr->typeflag == '1') {
+        return 4;
+    }
     return 1;
 }
 
@@ -276,6 +280,26 @@ static uint32_t tar_entry_mode(const struct TarHeader* hdr)
         return 0120000u | 0777u;
     }
     return 0100000u | mode;
+}
+
+static void tar_link_target_path(const char* linkname, char* out, size_t out_size)
+{
+    char raw[256];
+    size_t out_pos = 0u;
+    size_t i = 0u;
+
+    if(out_size == 0u) {
+        return;
+    }
+
+    if(linkname[0] != '/') {
+        raw[out_pos++] = '/';
+    }
+    while(linkname[i] != '\0' && out_pos + 1u < sizeof(raw)) {
+        raw[out_pos++] = linkname[i++];
+    }
+    raw[out_pos] = '\0';
+    normalize_rootfs_path(raw, out, out_size);
 }
 
 static void tar_compose_name(const struct TarHeader* hdr, char* out, size_t out_size)
@@ -548,11 +572,16 @@ static int rootfs_resolve_path(const char* path,
         }
         candidate[pos] = '\0';
 
-        if(rootfs_find_entry(candidate, &hdr, NULL, NULL) && hdr && tar_entry_type(hdr) == 3) {
+        if(rootfs_find_entry(candidate, &hdr, NULL, NULL) && hdr &&
+           (tar_entry_type(hdr) == 3 || tar_entry_type(hdr) == 4)) {
             if(depth++ >= 8) {
                 break;
             }
-            rootfs_join_relative(candidate, hdr->linkname, current, sizeof(current));
+            if(tar_entry_type(hdr) == 3) {
+                rootfs_join_relative(candidate, hdr->linkname, current, sizeof(current));
+            } else {
+                tar_link_target_path(hdr->linkname, current, sizeof(current));
+            }
             continue;
         }
         normalize_rootfs_path(candidate, current, sizeof(current));
@@ -560,10 +589,19 @@ static int rootfs_resolve_path(const char* path,
 
     while(depth < 8) {
         const struct TarHeader* hdr = NULL;
-        if(!rootfs_find_entry(current, &hdr, NULL, NULL) || !hdr || tar_entry_type(hdr) != 3) {
+        int type = 0;
+        if(!rootfs_find_entry(current, &hdr, NULL, NULL) || !hdr) {
             break;
         }
-        rootfs_join_relative(current, hdr->linkname, current, sizeof(current));
+        type = tar_entry_type(hdr);
+        if(type != 3 && type != 4) {
+            break;
+        }
+        if(type == 3) {
+            rootfs_join_relative(current, hdr->linkname, current, sizeof(current));
+        } else {
+            tar_link_target_path(hdr->linkname, current, sizeof(current));
+        }
         ++depth;
     }
 
@@ -1429,10 +1467,18 @@ static int user_tar_resolve_entry(const char* path,
         if(!user_tar_find_entry_raw(current, &hdr, &data, &size)) {
             return 0;
         }
-        if(hdr && tar_entry_type(hdr) == 3) {
-            rootfs_join_relative(current, hdr->linkname, current, sizeof(current));
-            ++depth;
-            continue;
+        if(hdr) {
+            int type = tar_entry_type(hdr);
+            if(type == 3) {
+                rootfs_join_relative(current, hdr->linkname, current, sizeof(current));
+                ++depth;
+                continue;
+            }
+            if(type == 4) {
+                tar_link_target_path(hdr->linkname, current, sizeof(current));
+                ++depth;
+                continue;
+            }
         }
         normalize_rootfs_path(current, resolved, resolved_size);
         if(hdr_out) {
@@ -1596,6 +1642,17 @@ static int user_tar_lstat_path(const char* path,
         }
         if(size_out && hdr->typeflag == '2') {
             *size_out = cstr_len(hdr->linkname);
+        } else if(size_out && hdr->typeflag == '1') {
+            const struct TarHeader* target_hdr = NULL;
+            char target[256];
+            tar_link_target_path(hdr->linkname, target, sizeof(target));
+            if(user_tar_find_entry_raw(target, &target_hdr, NULL, size_out) && target_hdr) {
+                if(target_hdr->typeflag == '2') {
+                    *size_out = cstr_len(target_hdr->linkname);
+                }
+            } else {
+                *size_out = 0u;
+            }
         }
         if(typeflag_out) {
             *typeflag_out = hdr->typeflag ? (uint8_t)hdr->typeflag : '0';

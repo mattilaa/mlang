@@ -599,7 +599,7 @@ fn print_boot_banner() {
     puts("Hello to MUnix!\r\n");
     puts("MLNIX 0.3.0 kernel booting on QEMU virt (AArch64)\r\n");
     puts("init: unpacking built-in initramfs to / ... done\r\n");
-    puts("init: mounting embedded Toybox initramfs ... done\r\n");
+    puts("init: mounting embedded BusyBox rootfs ... done\r\n");
     puts("init: mounting tmpfs on /tmp ... done\r\n");
     puts("init: bringing up irq-driven serial shell ... done\r\n");
     puts("cpu: mpidr=0x");
@@ -616,16 +616,16 @@ fn print_help() {
     puts("  uname -a           print kernel identity\r\n");
     puts("  ls /               list the initramfs root\r\n");
     puts("  ls /bin|/dev|/etc|/lib|/proc|/sbin|/tmp|/usr\r\n");
-    puts("  ps                 show the toy task table\r\n");
+    puts("  ps                 show the task table\r\n");
     puts("  mem                show the pseudo meminfo page\r\n");
     puts("  cat /README        design notes\r\n");
     puts("  cat /etc/motd|issue|profile\r\n");
-    puts("  cat /bin/sh        read the Toybox shell binary\r\n");
+    puts("  cat /bin/sh        read the BusyBox shell binary\r\n");
     puts("  cat /dev/console   show console device info\r\n");
     puts("  cat /proc/version  version string\r\n");
     puts("  cat /proc/cpuinfo  boot cpu data\r\n");
     puts("  cat /proc/meminfo  fixed memory map\r\n");
-    puts("  sh                 enter the Toybox user shell\r\n");
+    puts("  sh                 enter the BusyBox user shell\r\n");
     puts("  echo TEXT          echo back from the shell buffer\r\n");
     puts("  clear              ANSI clear screen\r\n");
     puts("  dmesg              boot summary\r\n");
@@ -697,8 +697,8 @@ fn print_readme() {
     puts("It boots directly under QEMU, drives PL011 UART, exposes a serial shell,\r\n");
     puts("and now carries a small built-in initramfs under /bin, /dev, /etc, /lib,\r\n");
     puts("/usr, and /proc entirely in kernel space, with tmpfs mounted on /tmp.\r\n");
-    puts("This build fetches an official static Toybox AArch64 binary through\r\n");
-    puts("mlang.toml tasks and mounts one shared initramfs for both browsing and EL0 exec.\r\n");
+    puts("This build fetches BusyBox source, cross-builds a static AArch64 ELF,\r\n");
+    puts("and mounts one shared embedded rootfs for both browsing and EL0 exec.\r\n");
 }
 
 fn print_motd() {
@@ -712,14 +712,14 @@ fn print_issue() {
 }
 
 fn print_profile() {
-    puts("PATH=/bin\r\n");
+    puts("PATH=/bin:/sbin:/usr/bin:/usr/sbin\r\n");
     puts("PS1='root@mlnix:/# '\r\n");
     puts("export PATH PS1\r\n");
 }
 
 fn print_bin_sh() {
     puts("#!/bin/sh\r\n");
-    puts("[binary Toybox shell image mounted at /bin/sh]\r\n");
+    puts("[binary BusyBox shell image mounted at /bin/sh]\r\n");
 }
 
 fn print_dev_console() {
@@ -730,7 +730,7 @@ fn print_dmesg(state: ptr<ShellState>) {
     puts("[    0.000000] mlnix: boot cpu online, mpidr=0x");
     runtime_write_hex64(read_mpidr());
     puts("\r\n[    0.000001] mlnix: uart irq console on ttyAMA0\r\n");
-    puts("[    0.000002] mlnix: procfs and Toybox initramfs mounted\r\n");
+    puts("[    0.000002] mlnix: procfs and BusyBox rootfs mounted\r\n");
     puts("[    0.000003] mlnix: tmpfs mounted on /tmp\r\n");
     puts("[    0.000004] mlnix: shell commands handled=");
     unsafe {

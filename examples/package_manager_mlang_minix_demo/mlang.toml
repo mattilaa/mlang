@@ -22,8 +22,8 @@ path_entries = [
 ]
 
 [tool.mlang.options]
-userspace = "toybox"
-toybox_arch = "aarch64"
+userspace = "busybox"
+busybox_arch = "aarch64"
 
 [[task]]
 name = "toolchain-check"
@@ -43,66 +43,73 @@ commands = [
 ]
 
 [[task]]
-name = "toybox-userspace-fetch"
-print = "[mlnix] Fetching Toybox source when userspace=toybox"
+name = "busybox-userspace-fetch"
+print = "[mlnix] Fetching BusyBox source when userspace=busybox"
 depends_on = ["toolchain-check"]
 workdir = "{{root}}"
 shell = [
   "set -eu",
   "mkdir -p {{build_dir}}",
-  'if [ "{{option.userspace}}" != "toybox" ]; then',
-  "  echo Toybox download skipped because userspace={{option.userspace}}.",
+  'if [ "{{option.userspace}}" != "busybox" ]; then',
+  "  echo BusyBox download skipped because userspace={{option.userspace}}.",
   "  exit 0",
   "fi",
-  "TOYBOX_VERSION=0.8.13",
-  "TOYBOX_TARBALL=toybox-$TOYBOX_VERSION.tar.gz",
-  "TOYBOX_URL=https://landley.net/toybox/downloads/$TOYBOX_TARBALL",
-  '[ -f {{build_dir}}/$TOYBOX_TARBALL ] || curl -L --fail "$TOYBOX_URL" -o {{build_dir}}/$TOYBOX_TARBALL'
+  "BUSYBOX_VERSION=1.37.0",
+  "BUSYBOX_TARBALL=busybox-$BUSYBOX_VERSION.tar.bz2",
+  "BUSYBOX_URL=https://busybox.net/downloads/$BUSYBOX_TARBALL",
+  '[ -f {{build_dir}}/$BUSYBOX_TARBALL ] || curl -L --fail "$BUSYBOX_URL" -o {{build_dir}}/$BUSYBOX_TARBALL'
 ]
 
 [[task]]
-name = "toybox-userspace-build"
-print = "[mlnix] Building a RAM-linked Toybox binary for EL0"
-depends_on = ["toybox-userspace-fetch"]
+name = "busybox-userspace-build"
+print = "[mlnix] Building a RAM-linked BusyBox binary for EL0"
+depends_on = ["busybox-userspace-fetch"]
 workdir = "{{root}}"
 shell = [
   "set -eu",
-  'if [ "{{option.userspace}}" != "toybox" ]; then',
-  "  echo Toybox build skipped because userspace={{option.userspace}}.",
+  'if [ "{{option.userspace}}" != "busybox" ]; then',
+  "  echo BusyBox build skipped because userspace={{option.userspace}}.",
   "  exit 0",
   "fi",
-  'case "{{option.toybox_arch}}" in',
+  'case "{{option.busybox_arch}}" in',
   "  aarch64|arm64)",
-  "    TOYBOX_CROSS=aarch64-linux-musl-",
-  "    TOYBOX_TEXT=0x40200000",
+  "    BUSYBOX_CROSS=aarch64-linux-musl-",
+  "    BUSYBOX_TEXT=0x40200000",
   "    ;;",
   "  *)",
-  "    echo Unsupported Toybox arch: {{option.toybox_arch}}",
+  "    echo Unsupported BusyBox arch: {{option.busybox_arch}}",
   "    exit 1",
   "    ;;",
   "esac",
-  "TOYBOX_VERSION=0.8.13",
-  "TOYBOX_TARBALL=toybox-$TOYBOX_VERSION.tar.gz",
-  "rm -rf {{build_dir}}/toybox-src",
-  "mkdir -p {{build_dir}}/toybox-src",
-  "tar -xzf {{build_dir}}/$TOYBOX_TARBALL -C {{build_dir}}/toybox-src --strip-components=1",
-  "cd {{build_dir}}/toybox-src",
+  "BUSYBOX_VERSION=1.37.0",
+  "BUSYBOX_TARBALL=busybox-$BUSYBOX_VERSION.tar.bz2",
+  "rm -rf {{build_dir}}/busybox-src {{build_dir}}/busybox-install",
+  "mkdir -p {{build_dir}}/busybox-src {{build_dir}}/busybox-install",
+  "tar -xjf {{build_dir}}/$BUSYBOX_TARBALL -C {{build_dir}}/busybox-src --strip-components=1",
+  "cd {{build_dir}}/busybox-src",
   "PATH=/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH",
   "export PATH",
-  "make distclean defconfig CROSS_COMPILE=$TOYBOX_CROSS",
-  "gsed -i 's/^# CONFIG_SH is not set$/CONFIG_SH=y/' .config",
-  "gsed -i 's/^CONFIG_TOYBOX_ZHELP=y$/# CONFIG_TOYBOX_ZHELP is not set/' .config",
-  'LDOPTIMIZE=-Wl,--gc-sections\ -Wl,--as-needed',
-  'LDFLAGS=--static\ -Wl,-Ttext-segment=$TOYBOX_TEXT',
-  "export LDOPTIMIZE LDFLAGS",
-  "printf '\\n' | make oldconfig toybox CROSS_COMPILE=$TOYBOX_CROSS",
-  "cp toybox {{build_dir}}/toybox"
+  "make distclean defconfig CROSS_COMPILE=$BUSYBOX_CROSS",
+  "yes '' | make oldconfig CROSS_COMPILE=$BUSYBOX_CROSS",
+  "gsed -i 's/^# CONFIG_STATIC is not set$/CONFIG_STATIC=y/' .config",
+  "gsed -i 's/^CONFIG_STATIC=n$/CONFIG_STATIC=y/' .config || true",
+  "gsed -i 's/^CONFIG_PIE=y$/# CONFIG_PIE is not set/' .config || true",
+  "gsed -i 's/^# CONFIG_ASH is not set$/CONFIG_ASH=y/' .config",
+  "gsed -i 's/^# CONFIG_SH_IS_ASH is not set$/CONFIG_SH_IS_ASH=y/' .config",
+  "gsed -i 's/^CONFIG_FEATURE_PREFER_APPLETS=.*/CONFIG_FEATURE_PREFER_APPLETS=y/' .config || true",
+  "gsed -i 's/^CONFIG_SHA1_HWACCEL=y$/# CONFIG_SHA1_HWACCEL is not set/' .config || true",
+  "gsed -i 's/^CONFIG_SHA256_HWACCEL=y$/# CONFIG_SHA256_HWACCEL is not set/' .config || true",
+  'EXTRA_CFLAGS=-Os\ -fno-pie',
+  'EXTRA_LDFLAGS=--static\ -Wl,-Ttext-segment=$BUSYBOX_TEXT\ -no-pie',
+  "export EXTRA_CFLAGS EXTRA_LDFLAGS",
+  "make -j4 busybox CROSS_COMPILE=$BUSYBOX_CROSS",
+  "cp busybox {{build_dir}}/busybox"
 ]
 
 [[task]]
 name = "build-user-initramfs"
-print = "[mlnix] Packing the Toybox EL0 initramfs tar"
-depends_on = ["toybox-userspace-build"]
+print = "[mlnix] Packing the BusyBox EL0 initramfs tar"
+depends_on = ["busybox-userspace-build"]
 workdir = "{{root}}"
 shell = [
   "set -eu",
@@ -110,10 +117,7 @@ shell = [
   "rm -rf {{build_dir}}/user_initramfs",
   "mkdir -p {{build_dir}}/user_initramfs/bin {{build_dir}}/user_initramfs/sbin {{build_dir}}/user_initramfs/usr/bin {{build_dir}}/user_initramfs/usr/sbin {{build_dir}}/user_initramfs/lib {{build_dir}}/user_initramfs/usr/lib",
   "cp -R src/user/initramfs/. {{build_dir}}/user_initramfs",
-  "sh scripts/install-toybox-applets.sh {{build_dir}}/toybox {{build_dir}}/toybox-src/generated/newtoys.h {{build_dir}}/user_initramfs/bin bin",
-  "sh scripts/install-toybox-applets.sh {{build_dir}}/toybox {{build_dir}}/toybox-src/generated/newtoys.h {{build_dir}}/user_initramfs/sbin sbin",
-  "sh scripts/install-toybox-applets.sh {{build_dir}}/toybox {{build_dir}}/toybox-src/generated/newtoys.h {{build_dir}}/user_initramfs/usr/bin usrbin",
-  "sh scripts/install-toybox-applets.sh {{build_dir}}/toybox {{build_dir}}/toybox-src/generated/newtoys.h {{build_dir}}/user_initramfs/usr/sbin usrsbin",
+  "sh scripts/install-busybox-applets.sh {{build_dir}}/busybox {{build_dir}}/busybox-src/include/applets.h {{build_dir}}/user_initramfs",
   "rm -f {{build_dir}}/user_initramfs.tar",
   "COPYFILE_DISABLE=1 tar --format=ustar -cf {{build_dir}}/user_initramfs.tar -C {{build_dir}}/user_initramfs .",
   "cd {{build_dir}}",
