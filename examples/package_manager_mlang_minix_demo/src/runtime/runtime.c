@@ -45,9 +45,29 @@ enum {
     ROOTFS_NAME_MAX = 128
 };
 
+#define ROOTFS_OVERLAY_MAX 256
+#define ROOTFS_OVERLAY_DATA_SIZE (1024u * 1024u)
+
+enum {
+    OVERLAY_NONE = 0,
+    OVERLAY_FILE = 1,
+    OVERLAY_DIR = 2,
+    OVERLAY_WHITEOUT = 3
+};
+
+struct overlay_node {
+    int in_use;
+    uint8_t type;
+    char path[256];
+    uint32_t data_offset;
+    uint32_t size;
+    uint32_t capacity;
+};
+
 static volatile uint8_t uart_rx_fifo[UART_FIFO_SIZE];
 static volatile uint32_t uart_rx_head = 0u;
 static volatile uint32_t uart_rx_tail = 0u;
+static struct overlay_node rootfs_overlay[ROOTFS_OVERLAY_MAX];
 
 struct TarHeader {
     char name[100];
@@ -70,6 +90,12 @@ struct TarHeader {
 };
 
 static int rootfs_child_name(const char* target, const char* full, char* child, size_t child_size);
+static int user_tar_path_exists(const char* path, uint8_t* typeflag_out);
+static int user_tar_find_file(const char* path,
+                              const unsigned char** data_out,
+                              uint64_t* size_out,
+                              uint8_t* typeflag_out);
+static int overlay_child_state(const char* parent, const char* child);
 
 static void uart_putc_raw(uint8_t ch)
 {
@@ -583,7 +609,6 @@ int32_t runtime_rootfs_try_ls(const char* line, int32_t start)
 {
     const unsigned char* p;
     const unsigned char* end;
-    const struct TarHeader* hdr = NULL;
     char target[256];
     char name[256];
     char child[ROOTFS_NAME_MAX];
@@ -591,20 +616,39 @@ int32_t runtime_rootfs_try_ls(const char* line, int32_t start)
     size_t seen_count = 0u;
     int printed = 0;
     int found_exact = 0;
+    size_t overlay_i;
+    uint8_t typeflag = 0u;
 
     if(!rootfs_has_archive()) {
         return 0;
     }
 
     normalize_rootfs_path(line + start, target, sizeof(target));
-    if(rootfs_resolve_path(target, target, sizeof(target), &hdr, NULL, NULL)) {
-        if(hdr && tar_entry_type(hdr) == 1) {
+    if(user_tar_path_exists(target, &typeflag)) {
+        if(typeflag != '5') {
             runtime_write_str("fs: not a directory: ");
             runtime_write_str(target);
             runtime_write_str("\n");
             return 1;
         }
         found_exact = 1;
+    }
+
+    for(overlay_i = 0u; overlay_i < ROOTFS_OVERLAY_MAX; ++overlay_i) {
+        struct overlay_node* node = &rootfs_overlay[overlay_i];
+        if(!node->in_use || node->type == OVERLAY_WHITEOUT) {
+            continue;
+        }
+        if(rootfs_child_name(target, node->path, child, sizeof(child)) &&
+           !seen_name_contains(seen, seen_count, child)) {
+            if(printed) {
+                runtime_write_str("  ");
+            }
+            runtime_write_str(child);
+            seen_name_add(seen, &seen_count, child);
+            printed = 1;
+            found_exact = 1;
+        }
     }
 
     p = rootfs_start();
@@ -619,8 +663,12 @@ int32_t runtime_rootfs_try_ls(const char* line, int32_t start)
             p = tar_next_entry(p, end);
             continue;
         }
-        if(rootfs_child_name(target, name, child, sizeof(child)) &&
-           !seen_name_contains(seen, seen_count, child)) {
+        if(rootfs_child_name(target, name, child, sizeof(child))) {
+            if(overlay_child_state(target, child) != 0 ||
+               seen_name_contains(seen, seen_count, child)) {
+                p = tar_next_entry(p, end);
+                continue;
+            }
             if(printed) {
                 runtime_write_str("  ");
             }
@@ -641,46 +689,41 @@ int32_t runtime_rootfs_try_ls(const char* line, int32_t start)
 
 int32_t runtime_rootfs_try_cat(const char* line, int32_t start)
 {
-    const struct TarHeader* hdr = NULL;
     const unsigned char* data = NULL;
-    size_t size = 0u;
+    uint64_t size = 0u;
     char target[256];
-    size_t i;
+    uint8_t typeflag = 0u;
+    uint64_t i;
 
     if(!rootfs_has_archive()) {
         return 0;
     }
 
     normalize_rootfs_path(line + start, target, sizeof(target));
-    if(!rootfs_resolve_path(target, target, sizeof(target), &hdr, &data, &size)) {
-        return 0;
-    }
-
-    switch(tar_entry_type(hdr)) {
-    case 1:
-        if(looks_binary_file(data, size)) {
-            runtime_write_str("[binary file ");
+    if(!user_tar_find_file(target, &data, &size, &typeflag)) {
+        if(user_tar_path_exists(target, &typeflag) && typeflag == '5') {
+            runtime_write_str("fs: not a file: ");
             runtime_write_str(target);
-            runtime_write_str(", ");
-            runtime_write_dec_i64((int64_t)size);
-            runtime_write_str(" bytes]\n");
+            runtime_write_str("\n");
             return 1;
         }
-        for(i = 0u; i < size; ++i) {
-            runtime_uart_putc((int32_t)data[i]);
-        }
-        if(size == 0u || data[size - 1u] != '\n') {
-            runtime_write_str("\n");
-        }
-        return 1;
-    case 2:
-        runtime_write_str("fs: not a file: ");
-        runtime_write_str(target);
-        runtime_write_str("\n");
-        return 1;
-    default:
         return 0;
     }
+    if(looks_binary_file(data, size)) {
+        runtime_write_str("[binary file ");
+        runtime_write_str(target);
+        runtime_write_str(", ");
+        runtime_write_dec_i64((int64_t)size);
+        runtime_write_str(" bytes]\n");
+        return 1;
+    }
+    for(i = 0u; i < size; ++i) {
+        runtime_uart_putc((int32_t)data[i]);
+    }
+    if(size == 0u || data[size - 1u] != '\n') {
+        runtime_write_str("\n");
+    }
+    return 1;
 }
 
 static void gic_enable_uart_irq(void)
@@ -828,6 +871,9 @@ void runtime_unhandled_exception(void)
 }
 
 enum {
+    SYS_mkdirat = 34,
+    SYS_unlinkat = 35,
+    SYS_faccessat = 48,
     SYS_getcwd = 17,
     SYS_dup = 23,
     SYS_fcntl = 25,
@@ -844,6 +890,7 @@ enum {
     SYS_readlinkat = 78,
     SYS_newfstatat = 79,
     SYS_fstat = 80,
+    SYS_utimensat = 88,
     SYS_exit = 93,
     SYS_exit_group = 94,
     SYS_set_tid_address = 96,
@@ -873,8 +920,10 @@ enum {
     EFAULT_ERR = -14,
     EINVAL_ERR = -22,
     ENOENT_ERR = -2,
+    EEXIST_ERR = -17,
     EISDIR_ERR = -21,
     ENOTDIR_ERR = -20,
+    ENOTEMPTY_ERR = -39,
     ENOSYS_ERR = -38,
     ENOMEM_ERR = -12
 };
@@ -889,10 +938,14 @@ struct user_fd_entry {
     uint64_t size;
     uint64_t offset;
     uint8_t is_dir;
+    uint8_t writable;
+    struct overlay_node* overlay;
     char path[256];
 };
 
 static struct user_fd_entry user_fds[USER_FD_MAX];
+static unsigned char rootfs_overlay_data[ROOTFS_OVERLAY_DATA_SIZE];
+static uint32_t rootfs_overlay_data_used;
 
 __attribute__((aligned(4096))) static unsigned char user_heap[USER_HEAP_SIZE];
 static uint64_t user_brk_start;
@@ -906,9 +959,20 @@ static uint32_t user_umask;
 
 enum {
     AT_NULL = 0,
+    AT_REMOVEDIR_K = 0x200,
     AT_PAGESZ = 6,
     AT_SECURE = 23,
     AT_RANDOM = 25
+};
+
+enum {
+    O_ACCMODE = 03,
+    O_RDONLY_K = 00,
+    O_WRONLY_K = 01,
+    O_RDWR_K = 02,
+    O_CREAT_K = 0100,
+    O_TRUNC_K = 01000,
+    O_DIRECTORY_K = 0200000
 };
 
 struct iovec_k {
@@ -925,6 +989,8 @@ static void user_state_reset(void)
         user_fds[i].size = 0u;
         user_fds[i].offset = 0u;
         user_fds[i].is_dir = 0u;
+        user_fds[i].writable = 0u;
+        user_fds[i].overlay = NULL;
         user_fds[i].path[0] = '\0';
     }
     user_brk_start = (uint64_t)(uintptr_t)user_heap;
@@ -985,6 +1051,222 @@ static void copy_cstr(char* dst, size_t dst_size, const char* src)
     dst[i] = '\0';
 }
 
+static struct overlay_node* overlay_find_exact(const char* path)
+{
+    size_t i;
+    for(i = 0u; i < ROOTFS_OVERLAY_MAX; ++i) {
+        if(rootfs_overlay[i].in_use && cstr_eq(rootfs_overlay[i].path, path)) {
+            return &rootfs_overlay[i];
+        }
+    }
+    return NULL;
+}
+
+static int overlay_has_child(const char* path)
+{
+    size_t i;
+    char child[ROOTFS_NAME_MAX];
+    for(i = 0u; i < ROOTFS_OVERLAY_MAX; ++i) {
+        if(!rootfs_overlay[i].in_use || rootfs_overlay[i].type == OVERLAY_WHITEOUT) {
+            continue;
+        }
+        if(rootfs_child_name(path, rootfs_overlay[i].path, child, sizeof(child))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static struct overlay_node* overlay_alloc_node(void)
+{
+    size_t i;
+    for(i = 0u; i < ROOTFS_OVERLAY_MAX; ++i) {
+        if(!rootfs_overlay[i].in_use) {
+            rootfs_overlay[i].in_use = 1;
+            rootfs_overlay[i].type = OVERLAY_NONE;
+            rootfs_overlay[i].path[0] = '\0';
+            rootfs_overlay[i].data_offset = 0u;
+            rootfs_overlay[i].size = 0u;
+            rootfs_overlay[i].capacity = 0u;
+            return &rootfs_overlay[i];
+        }
+    }
+    return NULL;
+}
+
+static int overlay_ensure_capacity(struct overlay_node* node, uint32_t needed)
+{
+    unsigned char* old_ptr;
+    unsigned char* new_ptr;
+    uint32_t new_cap;
+    uint32_t i;
+    if(!node) {
+        return 0;
+    }
+    if(node->capacity >= needed) {
+        return 1;
+    }
+    new_cap = node->capacity ? node->capacity : 256u;
+    while(new_cap < needed) {
+        if(new_cap >= ROOTFS_OVERLAY_DATA_SIZE / 2u) {
+            new_cap = needed;
+            break;
+        }
+        new_cap *= 2u;
+    }
+    if(rootfs_overlay_data_used + new_cap > ROOTFS_OVERLAY_DATA_SIZE) {
+        return 0;
+    }
+    old_ptr = node->capacity ? (rootfs_overlay_data + node->data_offset) : NULL;
+    new_ptr = rootfs_overlay_data + rootfs_overlay_data_used;
+    for(i = 0u; i < node->size; ++i) {
+        new_ptr[i] = old_ptr ? old_ptr[i] : 0u;
+    }
+    node->data_offset = rootfs_overlay_data_used;
+    node->capacity = new_cap;
+    rootfs_overlay_data_used += new_cap;
+    return 1;
+}
+
+static int overlay_create_dir(const char* path)
+{
+    char parent[256];
+    uint8_t parent_type = 0u;
+    struct overlay_node* node;
+    if(cstr_eq(path, "/")) {
+        return EEXIST_ERR;
+    }
+    if(overlay_find_exact(path) || user_tar_path_exists(path, NULL)) {
+        return EEXIST_ERR;
+    }
+    rootfs_parent_path(path, parent, sizeof(parent));
+    if(!user_tar_path_exists(parent, &parent_type) || parent_type != '5') {
+        struct overlay_node* parent_node = overlay_find_exact(parent);
+        if(!parent_node || parent_node->type != OVERLAY_DIR) {
+            return ENOENT_ERR;
+        }
+    }
+    node = overlay_alloc_node();
+    if(!node) {
+        return ENOMEM_ERR;
+    }
+    node->type = OVERLAY_DIR;
+    copy_cstr(node->path, sizeof(node->path), path);
+    return 0;
+}
+
+static int overlay_create_file(const char* path, int truncate_existing, struct overlay_node** out_node)
+{
+    char parent[256];
+    uint8_t parent_type = 0u;
+    struct overlay_node* node = overlay_find_exact(path);
+
+    if(node) {
+        if(node->type == OVERLAY_DIR) {
+            return EISDIR_ERR;
+        }
+        if(node->type == OVERLAY_WHITEOUT) {
+            node->type = OVERLAY_FILE;
+        }
+        if(truncate_existing) {
+            node->size = 0u;
+        }
+        if(out_node) {
+            *out_node = node;
+        }
+        return 0;
+    }
+
+    if(user_tar_path_exists(path, &parent_type)) {
+        if(parent_type == '5') {
+            return EISDIR_ERR;
+        }
+        node = overlay_alloc_node();
+        if(!node) {
+            return ENOMEM_ERR;
+        }
+        node->type = OVERLAY_FILE;
+        copy_cstr(node->path, sizeof(node->path), path);
+        if(truncate_existing) {
+            node->size = 0u;
+        } else {
+            const unsigned char* data = NULL;
+            uint64_t size = 0u;
+            if(user_tar_find_file(path, &data, &size, &parent_type)) {
+                if(!overlay_ensure_capacity(node, (uint32_t)size)) {
+                    node->in_use = 0;
+                    return ENOMEM_ERR;
+                }
+                for(uint32_t i = 0u; i < (uint32_t)size; ++i) {
+                    rootfs_overlay_data[node->data_offset + i] = data[i];
+                }
+                node->size = (uint32_t)size;
+            }
+        }
+        if(out_node) {
+            *out_node = node;
+        }
+        return 0;
+    }
+
+    rootfs_parent_path(path, parent, sizeof(parent));
+    if(!user_tar_path_exists(parent, &parent_type) || parent_type != '5') {
+        struct overlay_node* parent_node = overlay_find_exact(parent);
+        if(!parent_node || parent_node->type != OVERLAY_DIR) {
+            return ENOENT_ERR;
+        }
+    }
+    node = overlay_alloc_node();
+    if(!node) {
+        return ENOMEM_ERR;
+    }
+    node->type = OVERLAY_FILE;
+    copy_cstr(node->path, sizeof(node->path), path);
+    node->size = 0u;
+    if(out_node) {
+        *out_node = node;
+    }
+    return 0;
+}
+
+static int overlay_remove_path(const char* path, int want_dir)
+{
+    struct overlay_node* node = overlay_find_exact(path);
+    uint8_t typeflag = 0u;
+    if(cstr_eq(path, "/")) {
+        return EINVAL_ERR;
+    }
+    if(node && node->type != OVERLAY_WHITEOUT) {
+        if(want_dir && node->type != OVERLAY_DIR) {
+            return ENOTDIR_ERR;
+        }
+        if(!want_dir && node->type == OVERLAY_DIR) {
+            return EISDIR_ERR;
+        }
+        if(node->type == OVERLAY_DIR && overlay_has_child(path)) {
+            return ENOTEMPTY_ERR;
+        }
+        node->in_use = 0;
+        return 0;
+    }
+    if(!user_tar_path_exists(path, &typeflag)) {
+        return ENOENT_ERR;
+    }
+    if(want_dir && typeflag != '5') {
+        return ENOTDIR_ERR;
+    }
+    if(!want_dir && typeflag == '5') {
+        return EISDIR_ERR;
+    }
+    node = overlay_alloc_node();
+    if(!node) {
+        return ENOMEM_ERR;
+    }
+    node->type = OVERLAY_WHITEOUT;
+    copy_cstr(node->path, sizeof(node->path), path);
+    return 0;
+}
+
 static void user_resolve_path(const char* path, char* out, size_t out_size)
 {
     char combined[256];
@@ -1017,20 +1299,13 @@ static void user_resolve_path(const char* path, char* out, size_t out_size)
     normalize_rootfs_path(combined, out, out_size);
 }
 
-static int user_tar_path_exists(const char* path, uint8_t* typeflag_out)
+static int user_tar_find_entry_raw(const char* path,
+                                   const struct TarHeader** hdr_out,
+                                   const unsigned char** data_out,
+                                   uint64_t* size_out)
 {
     const unsigned char* p = _binary_user_initramfs_tar_start;
     const unsigned char* end = _binary_user_initramfs_tar_end;
-    char normalized[256];
-    char child[ROOTFS_NAME_MAX];
-
-    normalize_rootfs_path(path, normalized, sizeof(normalized));
-    if(cstr_eq(normalized, "/")) {
-        if(typeflag_out) {
-            *typeflag_out = '5';
-        }
-        return 1;
-    }
 
     while(p + 512u <= end) {
         const struct TarHeader* hdr = (const struct TarHeader*)p;
@@ -1041,12 +1316,107 @@ static int user_tar_path_exists(const char* path, uint8_t* typeflag_out)
         }
         tar_normalized_name(hdr, name, sizeof(name));
         size = tar_octal_to_size(hdr->size, sizeof(hdr->size));
-        if(cstr_eq(name, normalized)) {
-            if(typeflag_out) {
-                *typeflag_out = (uint8_t)hdr->typeflag;
+        if(cstr_eq(name, path)) {
+            if(hdr_out) {
+                *hdr_out = hdr;
+            }
+            if(data_out) {
+                *data_out = p + 512u;
+            }
+            if(size_out) {
+                *size_out = size;
             }
             return 1;
         }
+        p += (((size + 511u) / 512u) + 1u) * 512u;
+    }
+
+    return 0;
+}
+
+static int user_tar_resolve_entry(const char* path,
+                                  char* resolved,
+                                  size_t resolved_size,
+                                  const struct TarHeader** hdr_out,
+                                  const unsigned char** data_out,
+                                  uint64_t* size_out)
+{
+    char current[256];
+    int depth = 0;
+
+    normalize_rootfs_path(path, current, sizeof(current));
+    while(depth < 8) {
+        const struct TarHeader* hdr = NULL;
+        const unsigned char* data = NULL;
+        uint64_t size = 0u;
+        if(!user_tar_find_entry_raw(current, &hdr, &data, &size)) {
+            return 0;
+        }
+        if(hdr && tar_entry_type(hdr) == 3) {
+            rootfs_join_relative(current, hdr->linkname, current, sizeof(current));
+            ++depth;
+            continue;
+        }
+        normalize_rootfs_path(current, resolved, resolved_size);
+        if(hdr_out) {
+            *hdr_out = hdr;
+        }
+        if(data_out) {
+            *data_out = data;
+        }
+        if(size_out) {
+            *size_out = size;
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+static int user_tar_path_exists(const char* path, uint8_t* typeflag_out)
+{
+    char normalized[256];
+    char child[ROOTFS_NAME_MAX];
+    const struct TarHeader* hdr = NULL;
+    struct overlay_node* overlay = NULL;
+    const unsigned char* p = _binary_user_initramfs_tar_start;
+    const unsigned char* end = _binary_user_initramfs_tar_end;
+
+    normalize_rootfs_path(path, normalized, sizeof(normalized));
+    if(cstr_eq(normalized, "/")) {
+        if(typeflag_out) {
+            *typeflag_out = '5';
+        }
+        return 1;
+    }
+
+    overlay = overlay_find_exact(normalized);
+    if(overlay) {
+        if(overlay->type == OVERLAY_WHITEOUT) {
+            return 0;
+        }
+        if(typeflag_out) {
+            *typeflag_out = overlay->type == OVERLAY_DIR ? '5' : '0';
+        }
+        return 1;
+    }
+
+    if(user_tar_resolve_entry(normalized, normalized, sizeof(normalized), &hdr, NULL, NULL)) {
+        if(typeflag_out) {
+            *typeflag_out = hdr ? (uint8_t)(hdr->typeflag ? hdr->typeflag : '0') : '0';
+        }
+        return 1;
+    }
+
+    while(p + 512u <= end) {
+        const struct TarHeader* entry = (const struct TarHeader*)p;
+        char name[256];
+        uint64_t size;
+        if(tar_is_zero_block(p)) {
+            break;
+        }
+        tar_normalized_name(entry, name, sizeof(name));
+        size = tar_octal_to_size(entry->size, sizeof(entry->size));
         if(rootfs_child_name(normalized, name, child, sizeof(child))) {
             if(typeflag_out) {
                 *typeflag_out = '5';
@@ -1063,42 +1433,41 @@ static int user_tar_find_file(const char* path,
                               uint64_t* size_out,
                               uint8_t* typeflag_out)
 {
-    const unsigned char* p = _binary_user_initramfs_tar_start;
-    const unsigned char* end = _binary_user_initramfs_tar_end;
     char normalized[256];
+    const struct TarHeader* hdr = NULL;
+    struct overlay_node* overlay = NULL;
 
     user_resolve_path(path, normalized, sizeof(normalized));
-
-    while(p + 512u <= end) {
-        const struct TarHeader* hdr = (const struct TarHeader*)p;
-        char name[256];
-        uint64_t size;
-        if(tar_is_zero_block(p)) {
-            break;
+    overlay = overlay_find_exact(normalized);
+    if(overlay) {
+        if(overlay->type == OVERLAY_WHITEOUT || overlay->type == OVERLAY_DIR) {
+            return 0;
         }
-        tar_normalized_name(hdr, name, sizeof(name));
-        size = tar_octal_to_size(hdr->size, sizeof(hdr->size));
-        if(cstr_eq(name, normalized)) {
-            if(data_out) {
-                *data_out = p + 512u;
-            }
-            if(size_out) {
-                *size_out = size;
-            }
-            if(typeflag_out) {
-                *typeflag_out = (uint8_t)hdr->typeflag;
-            }
-            return 1;
+        if(data_out) {
+            *data_out = rootfs_overlay_data + overlay->data_offset;
         }
-        p += (((size + 511u) / 512u) + 1u) * 512u;
+        if(size_out) {
+            *size_out = overlay->size;
+        }
+        if(typeflag_out) {
+            *typeflag_out = '0';
+        }
+        return 1;
     }
-    return 0;
+    if(!user_tar_resolve_entry(normalized, normalized, sizeof(normalized), &hdr, data_out, size_out)) {
+        return 0;
+    }
+    if(typeflag_out) {
+        *typeflag_out = hdr ? (uint8_t)(hdr->typeflag ? hdr->typeflag : '0') : '0';
+    }
+    return 1;
 }
 
 static int64_t sys_write(int64_t fd, const void* buf, int64_t count)
 {
     const unsigned char* p = (const unsigned char*)buf;
     int64_t i;
+    struct user_fd_entry* f;
     if(!p || count < 0) {
         return EFAULT_ERR;
     }
@@ -1108,7 +1477,31 @@ static int64_t sys_write(int64_t fd, const void* buf, int64_t count)
         }
         return count;
     }
-    return EBADF_ERR;
+    f = user_fd_get((int)fd);
+    if(!f) {
+        return EBADF_ERR;
+    }
+    if(f->is_dir) {
+        return EISDIR_ERR;
+    }
+    if(!f->writable || !f->overlay) {
+        return EBADF_ERR;
+    }
+    if(f->offset + (uint64_t)count > f->overlay->capacity) {
+        if(!overlay_ensure_capacity(f->overlay, (uint32_t)(f->offset + (uint64_t)count))) {
+            return ENOMEM_ERR;
+        }
+    }
+    for(i = 0; i < count; ++i) {
+        rootfs_overlay_data[f->overlay->data_offset + f->offset + (uint64_t)i] = p[i];
+    }
+    f->offset += (uint64_t)count;
+    if(f->offset > f->overlay->size) {
+        f->overlay->size = (uint32_t)f->offset;
+    }
+    f->data = rootfs_overlay_data + f->overlay->data_offset;
+    f->size = f->overlay->size;
+    return count;
 }
 
 static int64_t sys_writev(int64_t fd, const void* iov_user, int64_t iovcnt)
@@ -1136,17 +1529,36 @@ static int64_t sys_openat(int64_t dirfd, const char* path, int64_t flags)
     uint64_t size = 0u;
     uint8_t typeflag = 0u;
     char resolved[256];
+    struct overlay_node* overlay = NULL;
     int fd_num;
     struct user_fd_entry* f;
+    int want_dir;
+    int want_write;
+    int create_flag;
+    int trunc_flag;
 
     (void)dirfd;
-    (void)flags;
     if(!path) {
         return EFAULT_ERR;
     }
     user_resolve_path(path, resolved, sizeof(resolved));
-    if(!user_tar_path_exists(resolved, &typeflag)) {
+    want_dir = (flags & O_DIRECTORY_K) != 0;
+    want_write = (flags & O_ACCMODE) != O_RDONLY_K;
+    create_flag = (flags & O_CREAT_K) != 0;
+    trunc_flag = (flags & O_TRUNC_K) != 0;
+
+    overlay = overlay_find_exact(resolved);
+    if(want_write || create_flag || trunc_flag) {
+        int rc = overlay_create_file(resolved, trunc_flag, &overlay);
+        if(rc != 0) {
+            return rc;
+        }
+        typeflag = overlay && overlay->type == OVERLAY_DIR ? '5' : '0';
+    } else if(!user_tar_path_exists(resolved, &typeflag)) {
         return ENOENT_ERR;
+    }
+    if(want_dir && typeflag != '5') {
+        return ENOTDIR_ERR;
     }
     f = user_fd_alloc(&fd_num);
     if(!f) {
@@ -1156,8 +1568,14 @@ static int64_t sys_openat(int64_t dirfd, const char* path, int64_t flags)
     f->size = 0u;
     f->offset = 0u;
     f->is_dir = typeflag == '5';
+    f->writable = want_write ? 1u : 0u;
+    f->overlay = NULL;
     copy_cstr(f->path, sizeof(f->path), resolved);
-    if(!f->is_dir) {
+    if(overlay && overlay->type == OVERLAY_FILE) {
+        f->overlay = overlay;
+        f->data = rootfs_overlay_data + overlay->data_offset;
+        f->size = overlay->size;
+    } else if(!f->is_dir) {
         if(!user_tar_find_file(resolved, &data, &size, &typeflag)) {
             f->in_use = 0;
             return ENOENT_ERR;
@@ -1222,6 +1640,8 @@ static int64_t sys_close(int64_t fd)
     f->size = 0u;
     f->offset = 0u;
     f->is_dir = 0u;
+    f->writable = 0u;
+    f->overlay = NULL;
     return 0;
 }
 
@@ -1248,6 +1668,10 @@ static int64_t sys_lseek(int64_t fd, int64_t offset, int64_t whence)
         return EINVAL_ERR;
     }
     f->offset = (uint64_t)new_off;
+    if(f->overlay) {
+        f->size = f->overlay->size;
+        f->data = rootfs_overlay_data + f->overlay->data_offset;
+    }
     return new_off;
 }
 
@@ -1273,13 +1697,29 @@ struct user_stat_buf {
     uint32_t __unused[2];
 };
 
-static void fill_stat(struct user_stat_buf* st, uint64_t size, int is_dir)
+static uint64_t path_hash64(const char* path)
+{
+    uint64_t h = 1469598103934665603ull;
+    size_t i = 0u;
+    if(!path) {
+        return 1u;
+    }
+    while(path[i] != '\0') {
+        h ^= (unsigned char)path[i];
+        h *= 1099511628211ull;
+        ++i;
+    }
+    return h ? h : 1u;
+}
+
+static void fill_stat(struct user_stat_buf* st, uint64_t size, int is_dir, const char* path)
 {
     size_t i;
     unsigned char* bytes = (unsigned char*)st;
     for(i = 0u; i < sizeof(*st); ++i) {
         bytes[i] = 0u;
     }
+    st->st_ino = path_hash64(path);
     st->st_mode = is_dir ? (0040000u | 0755u) : (0100000u | 0644u);
     st->st_nlink = 1u;
     st->st_size = (int64_t)size;
@@ -1294,7 +1734,7 @@ static int64_t sys_fstat(int64_t fd, void* statbuf)
         return EFAULT_ERR;
     }
     if(fd >= 0 && fd <= 2) {
-        fill_stat((struct user_stat_buf*)statbuf, 0u, 0);
+        fill_stat((struct user_stat_buf*)statbuf, 0u, 0, "/dev/console");
         ((struct user_stat_buf*)statbuf)->st_mode = 0020000u | 0600u;
         return 0;
     }
@@ -1302,7 +1742,7 @@ static int64_t sys_fstat(int64_t fd, void* statbuf)
     if(!f) {
         return EBADF_ERR;
     }
-    fill_stat((struct user_stat_buf*)statbuf, f->size, f->is_dir);
+    fill_stat((struct user_stat_buf*)statbuf, f->size, f->is_dir, f->path);
     return 0;
 }
 
@@ -1322,11 +1762,32 @@ static int64_t sys_newfstatat(int64_t dirfd, const char* path, void* statbuf, in
         return ENOENT_ERR;
     }
     if(typeflag != '5' && user_tar_find_file(resolved, &data, &size, &typeflag)) {
-        fill_stat((struct user_stat_buf*)statbuf, size, 0);
+        fill_stat((struct user_stat_buf*)statbuf, size, 0, resolved);
     } else {
-        fill_stat((struct user_stat_buf*)statbuf, 0u, 1);
+        fill_stat((struct user_stat_buf*)statbuf, 0u, 1, resolved);
     }
     return 0;
+}
+
+static int overlay_child_state(const char* parent, const char* child)
+{
+    char full[256];
+    struct overlay_node* node;
+    copy_cstr(full, sizeof(full), parent);
+    if(cstr_eq(full, "/")) {
+        full[1] = '\0';
+    } else {
+        copy_cstr(full + cstr_len(full), sizeof(full) - cstr_len(full), "/");
+    }
+    copy_cstr(full + cstr_len(full), sizeof(full) - cstr_len(full), child);
+    node = overlay_find_exact(full);
+    if(!node) {
+        return 0;
+    }
+    if(node->type == OVERLAY_WHITEOUT) {
+        return -1;
+    }
+    return 1;
 }
 
 struct user_linux_dirent64 {
@@ -1347,6 +1808,7 @@ static int64_t sys_getdents64(int64_t fd, void* dirp, uint64_t count)
     size_t seen_count = 0u;
     uint64_t index = 0u;
     uint64_t written = 0u;
+    size_t overlay_i;
 
     if(!dirp) {
         return EFAULT_ERR;
@@ -1356,6 +1818,44 @@ static int64_t sys_getdents64(int64_t fd, void* dirp, uint64_t count)
     }
     if(!f->is_dir) {
         return ENOTDIR_ERR;
+    }
+
+    for(overlay_i = 0u; overlay_i < ROOTFS_OVERLAY_MAX; ++overlay_i) {
+        struct overlay_node* node = &rootfs_overlay[overlay_i];
+        char child[ROOTFS_NAME_MAX];
+        uint16_t reclen;
+        if(!node->in_use || node->type == OVERLAY_WHITEOUT) {
+            continue;
+        }
+        if(!rootfs_child_name(f->path, node->path, child, sizeof(child))) {
+            continue;
+        }
+        if(seen_name_contains(seen, seen_count, child)) {
+            continue;
+        }
+        seen_name_add(seen, &seen_count, child);
+        if(index++ < f->offset) {
+            continue;
+        }
+        reclen = (uint16_t)(19u + cstr_len(child) + 1u);
+        reclen = (uint16_t)((reclen + 7u) & ~7u);
+        if(written + reclen > count) {
+            break;
+        }
+        {
+            struct user_linux_dirent64* ent = (struct user_linux_dirent64*)(out + written);
+            size_t i;
+            for(i = 0u; i < reclen; ++i) {
+                ((unsigned char*)ent)[i] = 0u;
+            }
+            ent->d_ino = index;
+            ent->d_off = (int64_t)index;
+            ent->d_reclen = reclen;
+            ent->d_type = node->type == OVERLAY_DIR ? 4u : 8u;
+            copy_cstr(ent->d_name, sizeof(ent->d_name), child);
+        }
+        written += reclen;
+        f->offset = index;
     }
 
     while(p + 512u <= end) {
@@ -1374,6 +1874,9 @@ static int64_t sys_getdents64(int64_t fd, void* dirp, uint64_t count)
             continue;
         }
         if(!rootfs_child_name(f->path, name, child, sizeof(child))) {
+            continue;
+        }
+        if(overlay_child_state(f->path, child) != 0) {
             continue;
         }
         if(seen_name_contains(seen, seen_count, child)) {
@@ -1454,6 +1957,61 @@ static int64_t sys_chdir(const char* path)
     return 0;
 }
 
+static int64_t sys_faccessat(int64_t dirfd, const char* path, int64_t mode, int64_t flags)
+{
+    char resolved[256];
+    uint8_t typeflag = 0u;
+    (void)dirfd;
+    (void)mode;
+    (void)flags;
+    if(!path) {
+        return EFAULT_ERR;
+    }
+    user_resolve_path(path, resolved, sizeof(resolved));
+    return user_tar_path_exists(resolved, &typeflag) ? 0 : ENOENT_ERR;
+}
+
+static int64_t sys_mkdirat(int64_t dirfd, const char* path, int64_t mode)
+{
+    char resolved[256];
+    (void)dirfd;
+    (void)mode;
+    if(!path) {
+        return EFAULT_ERR;
+    }
+    user_resolve_path(path, resolved, sizeof(resolved));
+    return overlay_create_dir(resolved);
+}
+
+static int64_t sys_unlinkat(int64_t dirfd, const char* path, int64_t flags)
+{
+    char resolved[256];
+    int want_dir = (flags & AT_REMOVEDIR_K) != 0;
+    (void)dirfd;
+    if(!path) {
+        return EFAULT_ERR;
+    }
+    user_resolve_path(path, resolved, sizeof(resolved));
+    return overlay_remove_path(resolved, want_dir);
+}
+
+static int64_t sys_utimensat(int64_t dirfd, const char* path, const void* times, int64_t flags)
+{
+    char resolved[256];
+    uint8_t typeflag = 0u;
+    (void)dirfd;
+    (void)times;
+    (void)flags;
+    if(!path) {
+        return EFAULT_ERR;
+    }
+    user_resolve_path(path, resolved, sizeof(resolved));
+    if(!user_tar_path_exists(resolved, &typeflag)) {
+        return ENOENT_ERR;
+    }
+    return 0;
+}
+
 static int64_t sys_fcntl(int64_t fd, int64_t cmd, int64_t arg)
 {
     (void)fd;
@@ -1483,6 +2041,8 @@ static int64_t sys_dup(int64_t oldfd)
     dst->size = src->size;
     dst->offset = src->offset;
     dst->is_dir = src->is_dir;
+    dst->writable = src->writable;
+    dst->overlay = src->overlay;
     for(i = 0u; i < sizeof(dst->path); ++i) {
         dst->path[i] = src->path[i];
     }
@@ -1675,6 +2235,12 @@ int64_t runtime_syscall_dispatch(int64_t nr,
         --user_syscall_trace_budget;
     }
     switch(nr) {
+    case SYS_mkdirat:
+        return sys_mkdirat(a0, (const char*)a1, a2);
+    case SYS_unlinkat:
+        return sys_unlinkat(a0, (const char*)a1, a2);
+    case SYS_faccessat:
+        return sys_faccessat(a0, (const char*)a1, a2, a3);
     case SYS_getcwd:
         return sys_getcwd((char*)a0, (uint64_t)a1);
     case SYS_dup:
@@ -1703,6 +2269,8 @@ int64_t runtime_syscall_dispatch(int64_t nr,
         return sys_fstat(a0, (void*)a1);
     case SYS_newfstatat:
         return sys_newfstatat(a0, (const char*)a1, (void*)a2, a3);
+    case SYS_utimensat:
+        return sys_utimensat(a0, (const char*)a1, (const void*)a2, a3);
     case SYS_ioctl:
         return sys_ioctl(a0, a1, a2);
     case SYS_brk:
