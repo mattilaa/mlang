@@ -1,0 +1,3 @@
+MLNIX M3 user initramfs.
+This tar is embedded in the kernel image and mounted read-only for
+EL0 binaries through the openat/read/close syscall path.

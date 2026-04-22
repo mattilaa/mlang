@@ -28,6 +28,8 @@ extern const unsigned char _binary_gnu_rootfs_tar_end[];
 
 extern const unsigned char _binary_user_hello_elf_start[];
 extern const unsigned char _binary_user_hello_elf_end[];
+extern const unsigned char _binary_user_initramfs_tar_start[];
+extern const unsigned char _binary_user_initramfs_tar_end[];
 extern unsigned char __user_stack_top[];
 
 void runtime_enter_user(uint64_t entry, uint64_t user_sp, uint64_t argc, uint64_t argv);
@@ -829,29 +831,490 @@ void runtime_unhandled_exception(void)
 }
 
 enum {
+    SYS_ioctl = 29,
+    SYS_openat = 56,
+    SYS_close = 57,
+    SYS_lseek = 62,
     SYS_read = 63,
     SYS_write = 64,
+    SYS_writev = 66,
+    SYS_readlinkat = 78,
+    SYS_newfstatat = 79,
+    SYS_fstat = 80,
     SYS_exit = 93,
     SYS_exit_group = 94,
-    SYS_brk = 214
+    SYS_set_tid_address = 96,
+    SYS_set_robust_list = 99,
+    SYS_clock_gettime = 113,
+    SYS_rt_sigaction = 134,
+    SYS_rt_sigprocmask = 135,
+    SYS_uname = 160,
+    SYS_getpid = 172,
+    SYS_getuid = 174,
+    SYS_geteuid = 175,
+    SYS_getgid = 176,
+    SYS_getegid = 177,
+    SYS_brk = 214,
+    SYS_munmap = 215,
+    SYS_mmap = 222,
+    SYS_mprotect = 226,
+    SYS_madvise = 233,
+    SYS_prlimit64 = 261,
+    SYS_getrandom = 278
 };
 
-static uint64_t user_brk_current = 0u;
+enum {
+    EPERM_ERR = -1,
+    EBADF_ERR = -9,
+    EFAULT_ERR = -14,
+    EINVAL_ERR = -22,
+    ENOENT_ERR = -2,
+    EISDIR_ERR = -21,
+    ENOSYS_ERR = -38,
+    ENOMEM_ERR = -12
+};
+
+#define USER_FD_MAX 32
+#define USER_FD_BASE 3
+#define USER_HEAP_SIZE (4u * 1024u * 1024u)
+
+struct user_fd_entry {
+    int in_use;
+    const unsigned char* data;
+    uint64_t size;
+    uint64_t offset;
+    uint8_t is_dir;
+};
+
+static struct user_fd_entry user_fds[USER_FD_MAX];
+
+__attribute__((aligned(4096))) static unsigned char user_heap[USER_HEAP_SIZE];
+static uint64_t user_brk_start;
+static uint64_t user_brk_current;
+static uint64_t user_brk_end;
+
+struct iovec_k {
+    const void* iov_base;
+    uint64_t iov_len;
+};
+
+static void user_state_reset(void)
+{
+    size_t i;
+    for(i = 0u; i < USER_FD_MAX; ++i) {
+        user_fds[i].in_use = 0;
+        user_fds[i].data = NULL;
+        user_fds[i].size = 0u;
+        user_fds[i].offset = 0u;
+        user_fds[i].is_dir = 0u;
+    }
+    user_brk_start = (uint64_t)(uintptr_t)user_heap;
+    user_brk_current = user_brk_start;
+    user_brk_end = user_brk_start + USER_HEAP_SIZE;
+}
+
+static struct user_fd_entry* user_fd_alloc(int* fd_out)
+{
+    int i;
+    for(i = 0; i < (int)USER_FD_MAX; ++i) {
+        if(!user_fds[i].in_use) {
+            user_fds[i].in_use = 1;
+            if(fd_out) {
+                *fd_out = i + USER_FD_BASE;
+            }
+            return &user_fds[i];
+        }
+    }
+    if(fd_out) {
+        *fd_out = -1;
+    }
+    return NULL;
+}
+
+static struct user_fd_entry* user_fd_get(int fd)
+{
+    int idx = fd - USER_FD_BASE;
+    if(idx < 0 || idx >= (int)USER_FD_MAX) {
+        return NULL;
+    }
+    if(!user_fds[idx].in_use) {
+        return NULL;
+    }
+    return &user_fds[idx];
+}
+
+static int user_tar_find_file(const char* path,
+                              const unsigned char** data_out,
+                              uint64_t* size_out,
+                              uint8_t* typeflag_out)
+{
+    const unsigned char* p = _binary_user_initramfs_tar_start;
+    const unsigned char* end = _binary_user_initramfs_tar_end;
+    char normalized[256];
+
+    normalize_rootfs_path(path, normalized, sizeof(normalized));
+
+    while(p + 512u <= end) {
+        const struct TarHeader* hdr = (const struct TarHeader*)p;
+        char name[256];
+        uint64_t size;
+        if(tar_is_zero_block(p)) {
+            break;
+        }
+        tar_normalized_name(hdr, name, sizeof(name));
+        size = tar_octal_to_size(hdr->size, sizeof(hdr->size));
+        if(cstr_eq(name, normalized)) {
+            if(data_out) {
+                *data_out = p + 512u;
+            }
+            if(size_out) {
+                *size_out = size;
+            }
+            if(typeflag_out) {
+                *typeflag_out = (uint8_t)hdr->typeflag;
+            }
+            return 1;
+        }
+        p += (((size + 511u) / 512u) + 1u) * 512u;
+    }
+    return 0;
+}
 
 static int64_t sys_write(int64_t fd, const void* buf, int64_t count)
 {
     const unsigned char* p = (const unsigned char*)buf;
     int64_t i;
-    if(fd != 1 && fd != 2) {
-        return -9;
-    }
     if(!p || count < 0) {
-        return -14;
+        return EFAULT_ERR;
+    }
+    if(fd == 1 || fd == 2) {
+        for(i = 0; i < count; ++i) {
+            uart_putc(p[i]);
+        }
+        return count;
+    }
+    return EBADF_ERR;
+}
+
+static int64_t sys_writev(int64_t fd, const void* iov_user, int64_t iovcnt)
+{
+    const struct iovec_k* iov = (const struct iovec_k*)iov_user;
+    int64_t total = 0;
+    int64_t i;
+    int64_t rc;
+    if(!iov || iovcnt < 0) {
+        return EFAULT_ERR;
+    }
+    for(i = 0; i < iovcnt; ++i) {
+        rc = sys_write(fd, iov[i].iov_base, (int64_t)iov[i].iov_len);
+        if(rc < 0) {
+            return total > 0 ? total : rc;
+        }
+        total += rc;
+    }
+    return total;
+}
+
+static int64_t sys_openat(int64_t dirfd, const char* path, int64_t flags)
+{
+    const unsigned char* data = NULL;
+    uint64_t size = 0u;
+    uint8_t typeflag = 0u;
+    int fd_num;
+    struct user_fd_entry* f;
+
+    (void)dirfd;
+    (void)flags;
+    if(!path) {
+        return EFAULT_ERR;
+    }
+    if(!user_tar_find_file(path, &data, &size, &typeflag)) {
+        return ENOENT_ERR;
+    }
+    if(typeflag == '5') {
+        return EISDIR_ERR;
+    }
+    f = user_fd_alloc(&fd_num);
+    if(!f) {
+        return ENOMEM_ERR;
+    }
+    f->data = data;
+    f->size = size;
+    f->offset = 0u;
+    f->is_dir = 0u;
+    return fd_num;
+}
+
+static int64_t sys_read(int64_t fd, void* buf, int64_t count)
+{
+    struct user_fd_entry* f;
+    unsigned char* out = (unsigned char*)buf;
+    uint64_t remain;
+    int64_t i;
+    if(!buf || count < 0) {
+        return EFAULT_ERR;
+    }
+    if(fd == 0) {
+        return 0;
+    }
+    f = user_fd_get((int)fd);
+    if(!f) {
+        return EBADF_ERR;
+    }
+    remain = f->size > f->offset ? f->size - f->offset : 0u;
+    if((uint64_t)count > remain) {
+        count = (int64_t)remain;
     }
     for(i = 0; i < count; ++i) {
-        uart_putc(p[i]);
+        out[i] = f->data[f->offset + (uint64_t)i];
     }
+    f->offset += (uint64_t)count;
     return count;
+}
+
+static int64_t sys_close(int64_t fd)
+{
+    struct user_fd_entry* f = user_fd_get((int)fd);
+    if(!f) {
+        return EBADF_ERR;
+    }
+    f->in_use = 0;
+    f->data = NULL;
+    f->size = 0u;
+    f->offset = 0u;
+    f->is_dir = 0u;
+    return 0;
+}
+
+static int64_t sys_lseek(int64_t fd, int64_t offset, int64_t whence)
+{
+    struct user_fd_entry* f = user_fd_get((int)fd);
+    int64_t new_off;
+    if(!f) {
+        return EBADF_ERR;
+    }
+    if(whence == 0) {
+        new_off = offset;
+    } else if(whence == 1) {
+        new_off = (int64_t)f->offset + offset;
+    } else if(whence == 2) {
+        new_off = (int64_t)f->size + offset;
+    } else {
+        return EINVAL_ERR;
+    }
+    if(new_off < 0) {
+        return EINVAL_ERR;
+    }
+    f->offset = (uint64_t)new_off;
+    return new_off;
+}
+
+struct user_stat_buf {
+    uint64_t st_dev;
+    uint64_t st_ino;
+    uint32_t st_mode;
+    uint32_t st_nlink;
+    uint32_t st_uid;
+    uint32_t st_gid;
+    uint64_t st_rdev;
+    uint64_t __pad1;
+    int64_t  st_size;
+    int32_t  st_blksize;
+    int32_t  __pad2;
+    int64_t  st_blocks;
+    int64_t  st_atime;
+    uint64_t st_atime_nsec;
+    int64_t  st_mtime;
+    uint64_t st_mtime_nsec;
+    int64_t  st_ctime;
+    uint64_t st_ctime_nsec;
+    uint32_t __unused[2];
+};
+
+static void fill_stat(struct user_stat_buf* st, uint64_t size, int is_dir)
+{
+    size_t i;
+    unsigned char* bytes = (unsigned char*)st;
+    for(i = 0u; i < sizeof(*st); ++i) {
+        bytes[i] = 0u;
+    }
+    st->st_mode = is_dir ? (0040000u | 0755u) : (0100000u | 0644u);
+    st->st_nlink = 1u;
+    st->st_size = (int64_t)size;
+    st->st_blksize = 512;
+    st->st_blocks = (int64_t)((size + 511u) / 512u);
+}
+
+static int64_t sys_fstat(int64_t fd, void* statbuf)
+{
+    struct user_fd_entry* f;
+    if(!statbuf) {
+        return EFAULT_ERR;
+    }
+    f = user_fd_get((int)fd);
+    if(!f) {
+        return EBADF_ERR;
+    }
+    fill_stat((struct user_stat_buf*)statbuf, f->size, f->is_dir);
+    return 0;
+}
+
+static int64_t sys_newfstatat(int64_t dirfd, const char* path, void* statbuf, int64_t flags)
+{
+    const unsigned char* data = NULL;
+    uint64_t size = 0u;
+    uint8_t typeflag = 0u;
+    (void)dirfd;
+    (void)flags;
+    if(!path || !statbuf) {
+        return EFAULT_ERR;
+    }
+    if(!user_tar_find_file(path, &data, &size, &typeflag)) {
+        return ENOENT_ERR;
+    }
+    fill_stat((struct user_stat_buf*)statbuf, size, typeflag == '5');
+    return 0;
+}
+
+static int64_t sys_ioctl(int64_t fd, int64_t cmd, int64_t arg)
+{
+    (void)fd;
+    if(cmd == 0x5413) {
+        struct winsize_k { uint16_t ws_row; uint16_t ws_col; uint16_t ws_xp; uint16_t ws_yp; };
+        struct winsize_k* ws = (struct winsize_k*)(uintptr_t)arg;
+        if(!ws) {
+            return EFAULT_ERR;
+        }
+        ws->ws_row = 24;
+        ws->ws_col = 80;
+        ws->ws_xp = 0;
+        ws->ws_yp = 0;
+        return 0;
+    }
+    return EINVAL_ERR;
+}
+
+static int64_t sys_brk(uint64_t addr)
+{
+    if(addr == 0u) {
+        return (int64_t)user_brk_current;
+    }
+    if(addr < user_brk_start || addr > user_brk_end) {
+        return (int64_t)user_brk_current;
+    }
+    user_brk_current = addr;
+    return (int64_t)user_brk_current;
+}
+
+static int64_t sys_mmap(uint64_t addr, uint64_t len, int64_t prot, int64_t flags, int64_t fd, int64_t off)
+{
+    uint64_t aligned_len;
+    uint64_t block;
+    (void)addr;
+    (void)prot;
+    (void)flags;
+    (void)off;
+    if(fd != -1) {
+        return ENOSYS_ERR;
+    }
+    if(len == 0u) {
+        return EINVAL_ERR;
+    }
+    aligned_len = (len + 4095u) & ~((uint64_t)4095u);
+    if(user_brk_current + aligned_len > user_brk_end) {
+        return ENOMEM_ERR;
+    }
+    block = user_brk_current;
+    user_brk_current += aligned_len;
+    return (int64_t)block;
+}
+
+static int64_t sys_clock_gettime(int64_t clock_id, void* ts_out)
+{
+    struct user_timespec { int64_t tv_sec; int64_t tv_nsec; };
+    struct user_timespec* ts = (struct user_timespec*)ts_out;
+    uint64_t cntfrq;
+    uint64_t counter;
+    uint64_t seconds;
+    uint64_t frac_ns;
+    (void)clock_id;
+    if(!ts) {
+        return EFAULT_ERR;
+    }
+    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(cntfrq));
+    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(counter));
+    if(cntfrq == 0u) {
+        cntfrq = 62500000u;
+    }
+    seconds = counter / cntfrq;
+    frac_ns = ((counter % cntfrq) * 1000000000u) / cntfrq;
+    ts->tv_sec = (int64_t)seconds;
+    ts->tv_nsec = (int64_t)frac_ns;
+    return 0;
+}
+
+static int64_t sys_uname(void* buf)
+{
+    struct utsname_k {
+        char sysname[65];
+        char nodename[65];
+        char release[65];
+        char version[65];
+        char machine[65];
+        char domainname[65];
+    };
+    struct utsname_k* u = (struct utsname_k*)buf;
+    size_t i;
+    unsigned char* bytes;
+    const char* fields[6] = {
+        "MLNIX",
+        "mlnix",
+        "0.3.0",
+        "#1 M3 SMP PREEMPT",
+        "aarch64",
+        "localdomain"
+    };
+    char* slots[6];
+    if(!u) {
+        return EFAULT_ERR;
+    }
+    bytes = (unsigned char*)u;
+    for(i = 0u; i < sizeof(*u); ++i) {
+        bytes[i] = 0u;
+    }
+    slots[0] = u->sysname;
+    slots[1] = u->nodename;
+    slots[2] = u->release;
+    slots[3] = u->version;
+    slots[4] = u->machine;
+    slots[5] = u->domainname;
+    for(i = 0u; i < 6u; ++i) {
+        const char* src = fields[i];
+        size_t j = 0u;
+        while(src[j] != '\0' && j < 64u) {
+            slots[i][j] = src[j];
+            ++j;
+        }
+        slots[i][j] = '\0';
+    }
+    return 0;
+}
+
+static int64_t sys_getrandom(void* buf, uint64_t len, int64_t flags)
+{
+    unsigned char* out = (unsigned char*)buf;
+    uint64_t i;
+    uint64_t counter;
+    (void)flags;
+    if(!out) {
+        return EFAULT_ERR;
+    }
+    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(counter));
+    for(i = 0u; i < len; ++i) {
+        counter = counter * 6364136223846793005ull + 1442695040888963407ull;
+        out[i] = (unsigned char)(counter >> 33);
+    }
+    return (int64_t)len;
 }
 
 static void sys_exit_group_impl(int64_t code)
@@ -865,15 +1328,6 @@ static void sys_exit_group_impl(int64_t code)
     }
 }
 
-static int64_t sys_brk(uint64_t addr)
-{
-    if(addr == 0u) {
-        return (int64_t)user_brk_current;
-    }
-    user_brk_current = addr;
-    return (int64_t)user_brk_current;
-}
-
 int64_t runtime_syscall_dispatch(int64_t nr,
                                  int64_t a0,
                                  int64_t a1,
@@ -882,23 +1336,65 @@ int64_t runtime_syscall_dispatch(int64_t nr,
                                  int64_t a4,
                                  int64_t a5)
 {
-    (void)a3;
     (void)a4;
     (void)a5;
     switch(nr) {
     case SYS_write:
         return sys_write(a0, (const void*)a1, a2);
+    case SYS_writev:
+        return sys_writev(a0, (const void*)a1, a2);
+    case SYS_read:
+        return sys_read(a0, (void*)a1, a2);
+    case SYS_openat:
+        return sys_openat(a0, (const char*)a1, a2);
+    case SYS_close:
+        return sys_close(a0);
+    case SYS_lseek:
+        return sys_lseek(a0, a1, a2);
+    case SYS_fstat:
+        return sys_fstat(a0, (void*)a1);
+    case SYS_newfstatat:
+        return sys_newfstatat(a0, (const char*)a1, (void*)a2, a3);
+    case SYS_ioctl:
+        return sys_ioctl(a0, a1, a2);
+    case SYS_brk:
+        return sys_brk((uint64_t)a0);
+    case SYS_mmap:
+        return sys_mmap((uint64_t)a0, (uint64_t)a1, a2, a3, a4, a5);
+    case SYS_munmap:
+    case SYS_mprotect:
+    case SYS_madvise:
+        return 0;
+    case SYS_clock_gettime:
+        return sys_clock_gettime(a0, (void*)a1);
+    case SYS_uname:
+        return sys_uname((void*)a0);
+    case SYS_getrandom:
+        return sys_getrandom((void*)a0, (uint64_t)a1, a2);
+    case SYS_set_tid_address:
+    case SYS_set_robust_list:
+    case SYS_rt_sigaction:
+    case SYS_rt_sigprocmask:
+        return 0;
+    case SYS_getpid:
+        return 2;
+    case SYS_getuid:
+    case SYS_geteuid:
+    case SYS_getgid:
+    case SYS_getegid:
+        return 0;
+    case SYS_prlimit64:
+    case SYS_readlinkat:
+        return 0;
     case SYS_exit:
     case SYS_exit_group:
         sys_exit_group_impl(a0);
         return 0;
-    case SYS_brk:
-        return sys_brk((uint64_t)a0);
     default:
         runtime_write_str("[user] unknown syscall nr=");
         runtime_write_dec_i64(nr);
         runtime_write_str("\n");
-        return -38;
+        return ENOSYS_ERR;
     }
 }
 
@@ -1034,6 +1530,7 @@ void runtime_exec_hello_user(void)
     runtime_write_hex64((int64_t)entry);
     runtime_write_str(" handing off to EL0...\n");
 
+    user_state_reset();
     runtime_enter_user(entry, (uint64_t)__user_stack_top, 0u, 0u);
     runtime_write_str("[kernel] returned from EL0\n");
 }

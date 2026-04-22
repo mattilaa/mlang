@@ -118,6 +118,20 @@ shell = [
 ]
 
 [[task]]
+name = "build-user-initramfs"
+print = "[mlnix] Packing the EL0 user initramfs tar"
+depends_on = ["toolchain-check"]
+workdir = "{{root}}"
+shell = [
+  "set -eu",
+  "mkdir -p {{build_dir}}/obj",
+  "rm -f {{build_dir}}/user_initramfs.tar",
+  "COPYFILE_DISABLE=1 tar --format=ustar -cf {{build_dir}}/user_initramfs.tar -C src/user/initramfs .",
+  "cd {{build_dir}}",
+  "aarch64-none-elf-objcopy --input-target=binary --output-target=elf64-littleaarch64 --binary-architecture=aarch64 user_initramfs.tar obj/user_initramfs.o"
+]
+
+[[task]]
 name = "build-rootfs-archive"
 print = "[mlnix] Packing the selected userspace into an embedded rootfs tar archive"
 depends_on = ["gnu-userspace-fetch"]
@@ -233,7 +247,7 @@ commands = [
 [[task]]
 name = "link-elf"
 print = "[mlnix] Linking the freestanding kernel ELF"
-depends_on = ["retarget-kernel-obj", "build-runtime-shim", "build-entry", "build-rootfs-obj", "build-user-hello-obj"]
+depends_on = ["retarget-kernel-obj", "build-runtime-shim", "build-entry", "build-rootfs-obj", "build-user-hello-obj", "build-user-initramfs"]
 workdir = "{{root}}"
 commands = [
   [
@@ -247,6 +261,7 @@ commands = [
     "{{build_dir}}/obj/runtime.o",
     "{{build_dir}}/obj/gnu_rootfs.o",
     "{{build_dir}}/obj/user_hello.o",
+    "{{build_dir}}/obj/user_initramfs.o",
     "-o",
     "{{build_dir}}/mlnix.elf"
   ]

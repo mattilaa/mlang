@@ -1,0 +1,2 @@
+MLNIX user VFS test file.
+If you can read this, openat/read/close all work end-to-end.
