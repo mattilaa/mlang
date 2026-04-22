@@ -954,9 +954,14 @@ enum {
     SYS_clock_gettime = 113,
     SYS_rt_sigaction = 134,
     SYS_rt_sigprocmask = 135,
+    SYS_setpgid = 154,
+    SYS_getpgid = 155,
+    SYS_getsid = 156,
+    SYS_setsid = 157,
     SYS_uname = 160,
     SYS_umask = 166,
     SYS_getpid = 172,
+    SYS_getppid = 173,
     SYS_getuid = 174,
     SYS_geteuid = 175,
     SYS_getgid = 176,
@@ -1013,6 +1018,10 @@ static char user_argv_strings[16][128];
 static uint64_t user_argv_ptrs[17];
 static int user_syscall_trace_budget;
 static uint32_t user_umask;
+static int64_t user_pid;
+static int64_t user_pgrp;
+static int64_t user_sid;
+static int64_t user_tty_fg_pgrp;
 
 enum {
     AT_NULL = 0,
@@ -1058,6 +1067,10 @@ static void user_state_reset(void)
     user_brk_start = (uint64_t)(uintptr_t)user_heap;
     user_brk_current = user_brk_start;
     user_brk_end = user_brk_start + USER_HEAP_SIZE;
+    user_pid = 2;
+    user_pgrp = user_pid;
+    user_sid = user_pid;
+    user_tty_fg_pgrp = user_pgrp;
     if(user_cwd[0] == '\0') {
         user_cwd[0] = '/';
         user_cwd[1] = '\0';
@@ -2410,6 +2423,46 @@ static int64_t sys_dup3(int64_t oldfd, int64_t newfd, int64_t flags)
 static int64_t sys_ioctl(int64_t fd, int64_t cmd, int64_t arg)
 {
     (void)fd;
+    if(cmd == 0x5401) {
+        struct termios_k {
+            uint32_t c_iflag;
+            uint32_t c_oflag;
+            uint32_t c_cflag;
+            uint32_t c_lflag;
+            unsigned char c_line;
+            unsigned char c_cc[19];
+        };
+        struct termios_k* tio = (struct termios_k*)(uintptr_t)arg;
+        size_t i;
+        if(!tio) {
+            return EFAULT_ERR;
+        }
+        tio->c_iflag = 0u;
+        tio->c_oflag = 0u;
+        tio->c_cflag = 0u;
+        tio->c_lflag = 0u;
+        tio->c_line = 0u;
+        for(i = 0u; i < sizeof(tio->c_cc); ++i) {
+            tio->c_cc[i] = 0u;
+        }
+        return 0;
+    }
+    if(cmd == 0x540f) {
+        int32_t* pgrp = (int32_t*)(uintptr_t)arg;
+        if(!pgrp) {
+            return EFAULT_ERR;
+        }
+        *pgrp = (int32_t)user_tty_fg_pgrp;
+        return 0;
+    }
+    if(cmd == 0x5410) {
+        const int32_t* pgrp = (const int32_t*)(uintptr_t)arg;
+        if(!pgrp) {
+            return EFAULT_ERR;
+        }
+        user_tty_fg_pgrp = (int64_t)(*pgrp);
+        return 0;
+    }
     if(cmd == 0x5413) {
         struct winsize_k { uint16_t ws_row; uint16_t ws_col; uint16_t ws_xp; uint16_t ws_yp; };
         struct winsize_k* ws = (struct winsize_k*)(uintptr_t)arg;
@@ -2430,6 +2483,47 @@ static int64_t sys_umask(int64_t mask)
     uint32_t old_mask = user_umask;
     user_umask = (uint32_t)mask & 0777u;
     return (int64_t)old_mask;
+}
+
+static int64_t sys_getppid(void)
+{
+    return 1;
+}
+
+static int64_t sys_setpgid(int64_t pid, int64_t pgid)
+{
+    if(pid != 0 && pid != user_pid) {
+        return EPERM_ERR;
+    }
+    if(pgid == 0) {
+        pgid = user_pid;
+    }
+    user_pgrp = pgid;
+    return 0;
+}
+
+static int64_t sys_getpgid(int64_t pid)
+{
+    if(pid == 0 || pid == user_pid) {
+        return user_pgrp;
+    }
+    return EPERM_ERR;
+}
+
+static int64_t sys_getsid(int64_t pid)
+{
+    if(pid == 0 || pid == user_pid) {
+        return user_sid;
+    }
+    return EPERM_ERR;
+}
+
+static int64_t sys_setsid(void)
+{
+    user_sid = user_pid;
+    user_pgrp = user_pid;
+    user_tty_fg_pgrp = user_pgrp;
+    return user_sid;
 }
 
 static int64_t sys_brk(uint64_t addr)
@@ -2642,8 +2736,18 @@ int64_t runtime_syscall_dispatch(int64_t nr,
     case SYS_rt_sigaction:
     case SYS_rt_sigprocmask:
         return 0;
+    case SYS_setpgid:
+        return sys_setpgid(a0, a1);
+    case SYS_getpgid:
+        return sys_getpgid(a0);
+    case SYS_getsid:
+        return sys_getsid(a0);
+    case SYS_setsid:
+        return sys_setsid();
     case SYS_getpid:
-        return 2;
+        return user_pid;
+    case SYS_getppid:
+        return sys_getppid();
     case SYS_getuid:
     case SYS_geteuid:
     case SYS_getgid:
