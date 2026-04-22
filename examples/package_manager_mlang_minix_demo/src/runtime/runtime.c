@@ -98,6 +98,7 @@ static int user_tar_find_file(const char* path,
 static int overlay_child_state(const char* parent, const char* child);
 static void normalize_rootfs_path(const char* raw, char* out, size_t out_size);
 void runtime_init_rootfs_mounts(void);
+static int64_t sys_dup(int64_t oldfd);
 
 static void uart_putc_raw(uint8_t ch)
 {
@@ -128,9 +129,16 @@ static int uart_rx_pop(void)
     if(uart_rx_head == uart_rx_tail) {
         return -1;
     }
-    uint8_t ch = uart_rx_fifo[uart_rx_tail];
-    uart_rx_tail = (uart_rx_tail + 1u) & (UART_FIFO_SIZE - 1u);
-    return (int)ch;
+    {
+        uint8_t ch = uart_rx_fifo[uart_rx_tail];
+        uart_rx_tail = (uart_rx_tail + 1u) & (UART_FIFO_SIZE - 1u);
+        return (int)ch;
+    }
+}
+
+static int uart_rx_has_data(void)
+{
+    return uart_rx_head != uart_rx_tail;
 }
 
 static void uart_drain_rx(void)
@@ -943,6 +951,7 @@ enum {
     SYS_read = 63,
     SYS_write = 64,
     SYS_writev = 66,
+    SYS_ppoll = 73,
     SYS_readlinkat = 78,
     SYS_newfstatat = 79,
     SYS_fstat = 80,
@@ -1001,6 +1010,7 @@ struct user_fd_entry {
     uint64_t offset;
     uint8_t is_dir;
     uint8_t writable;
+    int64_t flags;
     struct overlay_node* overlay;
     char path[256];
 };
@@ -1016,12 +1026,15 @@ static uint64_t user_brk_end;
 static char user_cwd[256];
 static char user_argv_strings[16][128];
 static uint64_t user_argv_ptrs[17];
+static char user_env_strings[8][128];
+static uint64_t user_env_ptrs[9];
 static int user_syscall_trace_budget;
 static uint32_t user_umask;
 static int64_t user_pid;
 static int64_t user_pgrp;
 static int64_t user_sid;
 static int64_t user_tty_fg_pgrp;
+static int64_t user_stdio_flags[3];
 
 enum {
     AT_NULL = 0,
@@ -1037,9 +1050,19 @@ enum {
     O_RDONLY_K = 00,
     O_WRONLY_K = 01,
     O_RDWR_K = 02,
+    O_NONBLOCK_K = 04000,
     O_CREAT_K = 0100,
     O_TRUNC_K = 01000,
     O_DIRECTORY_K = 0200000
+};
+
+enum {
+    F_DUPFD_K = 0,
+    F_GETFD_K = 1,
+    F_SETFD_K = 2,
+    F_GETFL_K = 3,
+    F_SETFL_K = 4,
+    F_DUPFD_CLOEXEC_K = 1030
 };
 
 enum {
@@ -1061,6 +1084,7 @@ static void user_state_reset(void)
         user_fds[i].offset = 0u;
         user_fds[i].is_dir = 0u;
         user_fds[i].writable = 0u;
+        user_fds[i].flags = O_RDONLY_K;
         user_fds[i].overlay = NULL;
         user_fds[i].path[0] = '\0';
     }
@@ -1071,6 +1095,9 @@ static void user_state_reset(void)
     user_pgrp = user_pid;
     user_sid = user_pid;
     user_tty_fg_pgrp = user_pgrp;
+    user_stdio_flags[0] = O_RDWR_K;
+    user_stdio_flags[1] = O_RDWR_K;
+    user_stdio_flags[2] = O_RDWR_K;
     if(user_cwd[0] == '\0') {
         user_cwd[0] = '/';
         user_cwd[1] = '\0';
@@ -1815,6 +1842,7 @@ static int64_t sys_openat(int64_t dirfd, const char* path, int64_t flags)
     f->offset = 0u;
     f->is_dir = typeflag == '5';
     f->writable = want_write ? 1u : 0u;
+    f->flags = flags;
     f->overlay = NULL;
     copy_cstr(f->path, sizeof(f->path), resolved);
     if(overlay && overlay->type == OVERLAY_FILE) {
@@ -2375,10 +2403,40 @@ static int64_t sys_utimensat(int64_t dirfd, const char* path, const void* times,
 
 static int64_t sys_fcntl(int64_t fd, int64_t cmd, int64_t arg)
 {
-    (void)fd;
-    (void)cmd;
-    (void)arg;
-    return 0;
+    struct user_fd_entry* f;
+    if(fd >= 0 && fd <= 2) {
+        switch(cmd) {
+        case F_GETFL_K:
+            return user_stdio_flags[fd];
+        case F_SETFL_K:
+            user_stdio_flags[fd] = (user_stdio_flags[fd] & O_ACCMODE) | (arg & ~O_ACCMODE);
+            return 0;
+        case F_GETFD_K:
+        case F_SETFD_K:
+            return 0;
+        default:
+            return EINVAL_ERR;
+        }
+    }
+    f = user_fd_get((int)fd);
+    if(!f) {
+        return EBADF_ERR;
+    }
+    switch(cmd) {
+    case F_GETFL_K:
+        return f->flags;
+    case F_SETFL_K:
+        f->flags = (f->flags & O_ACCMODE) | (arg & ~O_ACCMODE);
+        return 0;
+    case F_GETFD_K:
+    case F_SETFD_K:
+        return 0;
+    case F_DUPFD_K:
+    case F_DUPFD_CLOEXEC_K:
+        return sys_dup(fd);
+    default:
+        return EINVAL_ERR;
+    }
 }
 
 static int64_t sys_dup(int64_t oldfd)
@@ -2403,6 +2461,7 @@ static int64_t sys_dup(int64_t oldfd)
     dst->offset = src->offset;
     dst->is_dir = src->is_dir;
     dst->writable = src->writable;
+    dst->flags = src->flags;
     dst->overlay = src->overlay;
     for(i = 0u; i < sizeof(dst->path); ++i) {
         dst->path[i] = src->path[i];
@@ -2445,6 +2504,15 @@ static int64_t sys_ioctl(int64_t fd, int64_t cmd, int64_t arg)
         for(i = 0u; i < sizeof(tio->c_cc); ++i) {
             tio->c_cc[i] = 0u;
         }
+        return 0;
+    }
+    if(cmd == 0x5402 || cmd == 0x5403 || cmd == 0x5404) {
+        if(arg == 0) {
+            return EFAULT_ERR;
+        }
+        return 0;
+    }
+    if(cmd == 0x540e) {
         return 0;
     }
     if(cmd == 0x540f) {
@@ -2524,6 +2592,106 @@ static int64_t sys_setsid(void)
     user_pgrp = user_pid;
     user_tty_fg_pgrp = user_pgrp;
     return user_sid;
+}
+
+static int64_t sys_ppoll(void* fds_ptr,
+                         uint64_t nfds,
+                         const void* timeout_ptr,
+                         const void* sigmask,
+                         uint64_t sigsetsize)
+{
+    struct user_timespec {
+        int64_t tv_sec;
+        int64_t tv_nsec;
+    };
+    struct user_pollfd {
+        int32_t fd;
+        int16_t events;
+        int16_t revents;
+    };
+    enum {
+        POLLIN_K = 0x0001,
+        POLLPRI_K = 0x0002,
+        POLLOUT_K = 0x0004,
+        POLLRDNORM_K = 0x0040,
+        POLLWRNORM_K = 0x0100,
+        POLLHUP_K = 0x0010,
+        POLLNVAL_K = 0x0020
+    };
+    struct user_pollfd* fds = (struct user_pollfd*)fds_ptr;
+    const struct user_timespec* timeout = (const struct user_timespec*)timeout_ptr;
+    int64_t remaining_ticks = -1;
+    uint64_t i;
+
+    (void)sigmask;
+    (void)sigsetsize;
+
+    if(nfds > 1024u) {
+        return EINVAL_ERR;
+    }
+    if(nfds > 0u && !fds) {
+        return EFAULT_ERR;
+    }
+    if(timeout) {
+        if(timeout->tv_sec < 0 || timeout->tv_nsec < 0 || timeout->tv_nsec >= 1000000000ll) {
+            return EINVAL_ERR;
+        }
+        remaining_ticks = timeout->tv_sec * 1000ll + timeout->tv_nsec / 1000000ll;
+    }
+
+    for(;;) {
+        int64_t ready = 0;
+        for(i = 0u; i < nfds; ++i) {
+            int32_t fd = fds[i].fd;
+            int16_t events = fds[i].events;
+            int16_t revents = 0;
+
+            if(fd < 0) {
+                fds[i].revents = 0;
+                continue;
+            }
+
+            if(fd == 0) {
+                if((events & (POLLIN_K | POLLPRI_K | POLLRDNORM_K)) != 0 && uart_rx_has_data()) {
+                    revents |= (events & (POLLIN_K | POLLPRI_K | POLLRDNORM_K));
+                }
+            } else if(fd == 1 || fd == 2) {
+                if((events & (POLLOUT_K | POLLWRNORM_K)) != 0) {
+                    revents |= (events & (POLLOUT_K | POLLWRNORM_K));
+                }
+            } else {
+                struct user_fd_entry* entry = user_fd_get(fd);
+                if(!entry) {
+                    revents |= POLLNVAL_K;
+                } else {
+                    if((events & (POLLIN_K | POLLPRI_K | POLLRDNORM_K)) != 0) {
+                        if(entry->is_dir || entry->offset < entry->size) {
+                            revents |= (events & (POLLIN_K | POLLPRI_K | POLLRDNORM_K));
+                        } else {
+                            revents |= POLLHUP_K;
+                        }
+                    }
+                    if((events & (POLLOUT_K | POLLWRNORM_K)) != 0 && entry->writable) {
+                        revents |= (events & (POLLOUT_K | POLLWRNORM_K));
+                    }
+                }
+            }
+
+            fds[i].revents = revents;
+            if(revents != 0) {
+                ++ready;
+            }
+        }
+
+        if(ready > 0 || remaining_ticks == 0) {
+            return ready;
+        }
+
+        __asm__ __volatile__("wfi");
+        if(remaining_ticks > 0) {
+            --remaining_ticks;
+        }
+    }
 }
 
 static int64_t sys_brk(uint64_t addr)
@@ -2701,6 +2869,8 @@ int64_t runtime_syscall_dispatch(int64_t nr,
         return sys_chdir((const char*)a0);
     case SYS_read:
         return sys_read(a0, (void*)a1, a2);
+    case SYS_ppoll:
+        return sys_ppoll((void*)a0, (uint64_t)a1, (const void*)a2, (const void*)a3, (uint64_t)a4);
     case SYS_openat:
         return sys_openat(a0, (const char*)a1, a2);
     case SYS_close:
@@ -2885,7 +3055,26 @@ static uint64_t prepare_user_stack(int argc)
     uint64_t sp = (uint64_t)(uintptr_t)__user_stack_top;
     uint64_t rand_ptr;
     uint64_t* words;
+    int envc = 0;
     int i;
+
+    copy_cstr(user_env_strings[envc++], sizeof(user_env_strings[0]), "TERM=dumb");
+    copy_cstr(user_env_strings[envc++], sizeof(user_env_strings[0]), "PATH=/bin:/sbin:/usr/bin:/usr/sbin");
+    copy_cstr(user_env_strings[envc++], sizeof(user_env_strings[0]), "HOME=/");
+    copy_cstr(user_env_strings[envc++], sizeof(user_env_strings[0]), "USER=root");
+    copy_cstr(user_env_strings[envc++], sizeof(user_env_strings[0]), "LOGNAME=root");
+    copy_cstr(user_env_strings[envc++], sizeof(user_env_strings[0]), "SHELL=/bin/sh");
+
+    for(i = envc - 1; i >= 0; --i) {
+        size_t len = cstr_len(user_env_strings[i]) + 1u;
+        size_t j;
+        sp -= len;
+        for(j = 0u; j < len; ++j) {
+            ((unsigned char*)(uintptr_t)sp)[j] = (unsigned char)user_env_strings[i][j];
+        }
+        user_env_ptrs[i] = sp;
+    }
+    user_env_ptrs[envc] = 0u;
 
     for(i = argc - 1; i >= 0; --i) {
         size_t len = cstr_len(user_argv_strings[i]) + 1u;
@@ -2906,22 +3095,25 @@ static uint64_t prepare_user_stack(int argc)
     }
 
     sp &= ~((uint64_t)15u);
-    sp -= (uint64_t)(argc + 11) * 8u;
+    sp -= (uint64_t)(argc + envc + 12) * 8u;
     words = (uint64_t*)(uintptr_t)sp;
     words[0] = (uint64_t)argc;
     for(i = 0; i < argc; ++i) {
         words[1 + i] = user_argv_ptrs[i];
     }
     words[1 + argc] = 0u;
-    words[2 + argc] = 0u;
-    words[3 + argc] = AT_PAGESZ;
-    words[4 + argc] = 4096u;
-    words[5 + argc] = AT_SECURE;
-    words[6 + argc] = 0u;
-    words[7 + argc] = AT_RANDOM;
-    words[8 + argc] = rand_ptr;
-    words[9 + argc] = AT_NULL;
-    words[10 + argc] = 0u;
+    for(i = 0; i < envc; ++i) {
+        words[2 + argc + i] = user_env_ptrs[i];
+    }
+    words[2 + argc + envc] = 0u;
+    words[3 + argc + envc] = AT_PAGESZ;
+    words[4 + argc + envc] = 4096u;
+    words[5 + argc + envc] = AT_SECURE;
+    words[6 + argc + envc] = 0u;
+    words[7 + argc + envc] = AT_RANDOM;
+    words[8 + argc + envc] = rand_ptr;
+    words[9 + argc + envc] = AT_NULL;
+    words[10 + argc + envc] = 0u;
     return sp;
 }
 
