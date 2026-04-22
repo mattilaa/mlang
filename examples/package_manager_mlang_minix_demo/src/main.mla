@@ -5,6 +5,7 @@ extern fn runtime_write_dec_i64(value: i64) -> void;
 extern fn runtime_uart_getc() -> i32;
 extern fn runtime_uart_putc(ch: i32) -> void;
 extern fn runtime_init_interrupts() -> void;
+extern fn runtime_init_rootfs_mounts() -> void;
 extern fn runtime_rootfs_try_ls(line: ptr<u8>, start: i32) -> i32;
 extern fn runtime_rootfs_try_cat(line: ptr<u8>, start: i32) -> i32;
 extern fn runtime_exec_user_command(line: ptr<u8>) -> i32;
@@ -599,6 +600,7 @@ fn print_boot_banner() {
     puts("MLNIX 0.3.0 kernel booting on QEMU virt (AArch64)\r\n");
     puts("init: unpacking built-in initramfs to / ... done\r\n");
     puts("init: mounting embedded Toybox initramfs ... done\r\n");
+    puts("init: mounting tmpfs on /tmp ... done\r\n");
     puts("init: bringing up irq-driven serial shell ... done\r\n");
     puts("cpu: mpidr=0x");
     runtime_write_hex64(read_mpidr());
@@ -613,7 +615,7 @@ fn print_help() {
     puts("  help               show this message\r\n");
     puts("  uname -a           print kernel identity\r\n");
     puts("  ls /               list the initramfs root\r\n");
-    puts("  ls /bin|/dev|/etc|/proc\r\n");
+    puts("  ls /bin|/dev|/etc|/lib|/proc|/sbin|/tmp|/usr\r\n");
     puts("  ps                 show the toy task table\r\n");
     puts("  mem                show the pseudo meminfo page\r\n");
     puts("  cat /README        design notes\r\n");
@@ -635,7 +637,7 @@ fn print_uname() {
 }
 
 fn print_ls_root() {
-    puts("README  bin  dev  etc  proc\r\n");
+    puts("README  bin  dev  etc  lib  proc  sbin  tmp  usr\r\n");
 }
 
 fn print_ls_proc() {
@@ -693,8 +695,8 @@ fn print_cpuinfo() {
 fn print_readme() {
     puts("MLNIX is a tiny Linux-style teaching kernel written mostly in MLang.\r\n");
     puts("It boots directly under QEMU, drives PL011 UART, exposes a serial shell,\r\n");
-    puts("and now carries a small built-in initramfs under /bin, /dev, /etc,\r\n");
-    puts("and /proc entirely in kernel space.\r\n");
+    puts("and now carries a small built-in initramfs under /bin, /dev, /etc, /lib,\r\n");
+    puts("/usr, and /proc entirely in kernel space, with tmpfs mounted on /tmp.\r\n");
     puts("This build fetches an official static Toybox AArch64 binary through\r\n");
     puts("mlang.toml tasks and mounts one shared initramfs for both browsing and EL0 exec.\r\n");
 }
@@ -729,7 +731,8 @@ fn print_dmesg(state: ptr<ShellState>) {
     runtime_write_hex64(read_mpidr());
     puts("\r\n[    0.000001] mlnix: uart irq console on ttyAMA0\r\n");
     puts("[    0.000002] mlnix: procfs and Toybox initramfs mounted\r\n");
-    puts("[    0.000003] mlnix: shell commands handled=");
+    puts("[    0.000003] mlnix: tmpfs mounted on /tmp\r\n");
+    puts("[    0.000004] mlnix: shell commands handled=");
     unsafe {
         runtime_write_dec_i32((*state).command_count);
     }
@@ -911,6 +914,7 @@ fn kernel_main() {
     };
 
     runtime_init_interrupts();
+    runtime_init_rootfs_mounts();
     print_boot_banner();
 
     while true {

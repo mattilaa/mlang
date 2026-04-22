@@ -96,6 +96,7 @@ static int user_tar_find_file(const char* path,
                               uint64_t* size_out,
                               uint8_t* typeflag_out);
 static int overlay_child_state(const char* parent, const char* child);
+void runtime_init_rootfs_mounts(void);
 
 static void uart_putc_raw(uint8_t ch)
 {
@@ -238,6 +239,11 @@ static size_t tar_octal_to_size(const char* field, size_t width)
     return value;
 }
 
+static uint32_t tar_octal_to_u32(const char* field, size_t width)
+{
+    return (uint32_t)tar_octal_to_size(field, width);
+}
+
 static int tar_is_zero_block(const unsigned char* block)
 {
     size_t i;
@@ -258,6 +264,18 @@ static int tar_entry_type(const struct TarHeader* hdr)
         return 3;
     }
     return 1;
+}
+
+static uint32_t tar_entry_mode(const struct TarHeader* hdr)
+{
+    uint32_t mode = tar_octal_to_u32(hdr->mode, sizeof(hdr->mode)) & 07777u;
+    if(hdr->typeflag == '5') {
+        return 0040000u | mode;
+    }
+    if(hdr->typeflag == '2') {
+        return 0120000u | 0777u;
+    }
+    return 0100000u | mode;
 }
 
 static void tar_compose_name(const struct TarHeader* hdr, char* out, size_t out_size)
@@ -911,7 +929,8 @@ enum {
     SYS_mprotect = 226,
     SYS_madvise = 233,
     SYS_prlimit64 = 261,
-    SYS_getrandom = 278
+    SYS_getrandom = 278,
+    SYS_statx = 291
 };
 
 enum {
@@ -960,6 +979,7 @@ static uint32_t user_umask;
 enum {
     AT_NULL = 0,
     AT_REMOVEDIR_K = 0x200,
+    AT_SYMLINK_NOFOLLOW_K = 0x100,
     AT_PAGESZ = 6,
     AT_SECURE = 23,
     AT_RANDOM = 25
@@ -973,6 +993,10 @@ enum {
     O_CREAT_K = 0100,
     O_TRUNC_K = 01000,
     O_DIRECTORY_K = 0200000
+};
+
+enum {
+    AT_FDCWD_K = -100
 };
 
 struct iovec_k {
@@ -1267,6 +1291,11 @@ static int overlay_remove_path(const char* path, int want_dir)
     return 0;
 }
 
+void runtime_init_rootfs_mounts(void)
+{
+    (void)overlay_create_dir("/tmp");
+}
+
 static void user_resolve_path(const char* path, char* out, size_t out_size)
 {
     char combined[256];
@@ -1284,6 +1313,54 @@ static void user_resolve_path(const char* path, char* out, size_t out_size)
 
     while(user_cwd[pos] != '\0' && pos + 1u < sizeof(combined)) {
         combined[pos] = user_cwd[pos];
+        ++pos;
+    }
+    if(pos == 0u) {
+        combined[pos++] = '/';
+    }
+    if(pos > 1u && pos + 1u < sizeof(combined)) {
+        combined[pos++] = '/';
+    }
+    while(path[i] != '\0' && pos + 1u < sizeof(combined)) {
+        combined[pos++] = path[i++];
+    }
+    combined[pos] = '\0';
+    normalize_rootfs_path(combined, out, out_size);
+}
+
+static void user_resolve_path_at(int64_t dirfd, const char* path, char* out, size_t out_size)
+{
+    char combined[256];
+    struct user_fd_entry* f = NULL;
+    size_t pos = 0u;
+    size_t i = 0u;
+
+    if(!path || path[0] == '\0') {
+        if(dirfd != AT_FDCWD_K) {
+            f = user_fd_get((int)dirfd);
+            if(f && f->is_dir) {
+                copy_cstr(out, out_size, f->path);
+                return;
+            }
+        }
+        copy_cstr(out, out_size, user_cwd);
+        return;
+    }
+    if(path[0] == '/') {
+        normalize_rootfs_path(path, out, out_size);
+        return;
+    }
+    if(dirfd == AT_FDCWD_K) {
+        user_resolve_path(path, out, out_size);
+        return;
+    }
+    f = user_fd_get((int)dirfd);
+    if(!f || !f->is_dir) {
+        user_resolve_path(path, out, out_size);
+        return;
+    }
+    while(f->path[pos] != '\0' && pos + 1u < sizeof(combined)) {
+        combined[pos] = f->path[pos];
         ++pos;
     }
     if(pos == 0u) {
@@ -1463,6 +1540,98 @@ static int user_tar_find_file(const char* path,
     return 1;
 }
 
+static int user_tar_lstat_path(const char* path,
+                               uint32_t* mode_out,
+                               uint64_t* size_out,
+                               uint8_t* typeflag_out,
+                               const char** linkname_out)
+{
+    char normalized[256];
+    char child[ROOTFS_NAME_MAX];
+    struct overlay_node* overlay = NULL;
+    const struct TarHeader* hdr = NULL;
+    const unsigned char* p = _binary_user_initramfs_tar_start;
+    const unsigned char* end = _binary_user_initramfs_tar_end;
+
+    normalize_rootfs_path(path, normalized, sizeof(normalized));
+    if(cstr_eq(normalized, "/")) {
+        if(mode_out) {
+            *mode_out = 0040755u;
+        }
+        if(size_out) {
+            *size_out = 0u;
+        }
+        if(typeflag_out) {
+            *typeflag_out = '5';
+        }
+        if(linkname_out) {
+            *linkname_out = NULL;
+        }
+        return 1;
+    }
+
+    overlay = overlay_find_exact(normalized);
+    if(overlay) {
+        if(overlay->type == OVERLAY_WHITEOUT) {
+            return 0;
+        }
+        if(mode_out) {
+            *mode_out = overlay->type == OVERLAY_DIR ? 0040755u : 0100644u;
+        }
+        if(size_out) {
+            *size_out = overlay->size;
+        }
+        if(typeflag_out) {
+            *typeflag_out = overlay->type == OVERLAY_DIR ? '5' : '0';
+        }
+        if(linkname_out) {
+            *linkname_out = NULL;
+        }
+        return 1;
+    }
+
+    if(user_tar_find_entry_raw(normalized, &hdr, NULL, size_out)) {
+        if(mode_out) {
+            *mode_out = tar_entry_mode(hdr);
+        }
+        if(typeflag_out) {
+            *typeflag_out = hdr->typeflag ? (uint8_t)hdr->typeflag : '0';
+        }
+        if(linkname_out) {
+            *linkname_out = hdr->typeflag == '2' ? hdr->linkname : NULL;
+        }
+        return 1;
+    }
+
+    while(p + 512u <= end) {
+        const struct TarHeader* entry = (const struct TarHeader*)p;
+        char name[256];
+        uint64_t size;
+        if(tar_is_zero_block(p)) {
+            break;
+        }
+        tar_normalized_name(entry, name, sizeof(name));
+        size = tar_octal_to_size(entry->size, sizeof(entry->size));
+        if(rootfs_child_name(normalized, name, child, sizeof(child))) {
+            if(mode_out) {
+                *mode_out = 0040755u;
+            }
+            if(size_out) {
+                *size_out = 0u;
+            }
+            if(typeflag_out) {
+                *typeflag_out = '5';
+            }
+            if(linkname_out) {
+                *linkname_out = NULL;
+            }
+            return 1;
+        }
+        p += (((size + 511u) / 512u) + 1u) * 512u;
+    }
+    return 0;
+}
+
 static int64_t sys_write(int64_t fd, const void* buf, int64_t count)
 {
     const unsigned char* p = (const unsigned char*)buf;
@@ -1541,7 +1710,7 @@ static int64_t sys_openat(int64_t dirfd, const char* path, int64_t flags)
     if(!path) {
         return EFAULT_ERR;
     }
-    user_resolve_path(path, resolved, sizeof(resolved));
+    user_resolve_path_at(dirfd, path, resolved, sizeof(resolved));
     want_dir = (flags & O_DIRECTORY_K) != 0;
     want_write = (flags & O_ACCMODE) != O_RDONLY_K;
     create_flag = (flags & O_CREAT_K) != 0;
@@ -1697,6 +1866,36 @@ struct user_stat_buf {
     uint32_t __unused[2];
 };
 
+struct user_statx_timestamp {
+    int64_t tv_sec;
+    uint32_t tv_nsec;
+    int32_t __reserved;
+};
+
+struct user_statx_buf {
+    uint32_t stx_mask;
+    uint32_t stx_blksize;
+    uint64_t stx_attributes;
+    uint32_t stx_nlink;
+    uint32_t stx_uid;
+    uint32_t stx_gid;
+    uint16_t stx_mode;
+    uint16_t __spare0[1];
+    uint64_t stx_ino;
+    uint64_t stx_size;
+    uint64_t stx_blocks;
+    uint64_t stx_attributes_mask;
+    struct user_statx_timestamp stx_atime;
+    struct user_statx_timestamp stx_btime;
+    struct user_statx_timestamp stx_ctime;
+    struct user_statx_timestamp stx_mtime;
+    uint32_t stx_rdev_major;
+    uint32_t stx_rdev_minor;
+    uint32_t stx_dev_major;
+    uint32_t stx_dev_minor;
+    uint64_t __spare2[14];
+};
+
 static uint64_t path_hash64(const char* path)
 {
     uint64_t h = 1469598103934665603ull;
@@ -1751,13 +1950,21 @@ static int64_t sys_newfstatat(int64_t dirfd, const char* path, void* statbuf, in
     const unsigned char* data = NULL;
     uint64_t size = 0u;
     uint8_t typeflag = 0u;
+    uint32_t mode = 0u;
     char resolved[256];
     (void)dirfd;
-    (void)flags;
     if(!path || !statbuf) {
         return EFAULT_ERR;
     }
-    user_resolve_path(path, resolved, sizeof(resolved));
+    user_resolve_path_at(dirfd, path, resolved, sizeof(resolved));
+    if((flags & AT_SYMLINK_NOFOLLOW_K) != 0) {
+        if(!user_tar_lstat_path(resolved, &mode, &size, &typeflag, NULL)) {
+            return ENOENT_ERR;
+        }
+        fill_stat((struct user_stat_buf*)statbuf, size, (mode & 0170000u) == 0040000u, resolved);
+        ((struct user_stat_buf*)statbuf)->st_mode = mode;
+        return 0;
+    }
     if(!user_tar_path_exists(resolved, &typeflag)) {
         return ENOENT_ERR;
     }
@@ -1766,6 +1973,83 @@ static int64_t sys_newfstatat(int64_t dirfd, const char* path, void* statbuf, in
     } else {
         fill_stat((struct user_stat_buf*)statbuf, 0u, 1, resolved);
     }
+    return 0;
+}
+
+static int64_t sys_readlinkat(int64_t dirfd, const char* path, char* buf, uint64_t bufsiz)
+{
+    char resolved[256];
+    const char* linkname = NULL;
+    uint32_t mode = 0u;
+    uint64_t size = 0u;
+    uint8_t typeflag = 0u;
+    uint64_t i;
+    (void)dirfd;
+    if(!path || !buf || bufsiz == 0u) {
+        return EFAULT_ERR;
+    }
+    user_resolve_path_at(dirfd, path, resolved, sizeof(resolved));
+    if(!user_tar_lstat_path(resolved, &mode, &size, &typeflag, &linkname)) {
+        return ENOENT_ERR;
+    }
+    if(typeflag != '2' || !linkname) {
+        return EINVAL_ERR;
+    }
+    for(i = 0u; linkname[i] != '\0' && i < bufsiz; ++i) {
+        buf[i] = linkname[i];
+    }
+    return (int64_t)i;
+}
+
+static int64_t sys_statx(int64_t dirfd,
+                         const char* path,
+                         int64_t flags,
+                         uint32_t mask,
+                         void* statxbuf)
+{
+    char resolved[256];
+    uint32_t mode = 0u;
+    uint64_t size = 0u;
+    uint8_t typeflag = 0u;
+    struct user_statx_buf* stx = (struct user_statx_buf*)statxbuf;
+    size_t i;
+    (void)dirfd;
+    (void)mask;
+    if(!path || !stx) {
+        return EFAULT_ERR;
+    }
+    user_resolve_path_at(dirfd, path, resolved, sizeof(resolved));
+    if((flags & AT_SYMLINK_NOFOLLOW_K) != 0) {
+        if(!user_tar_lstat_path(resolved, &mode, &size, &typeflag, NULL)) {
+            return ENOENT_ERR;
+        }
+    } else if(user_tar_path_exists(resolved, &typeflag)) {
+        if(typeflag != '5' && !user_tar_find_file(resolved, NULL, &size, &typeflag)) {
+            return ENOENT_ERR;
+        }
+        if(typeflag == '5') {
+            mode = 0040755u;
+            size = 0u;
+        } else {
+            mode = 0100644u;
+        }
+    } else {
+        return ENOENT_ERR;
+    }
+    for(i = 0u; i < sizeof(*stx); ++i) {
+        ((unsigned char*)stx)[i] = 0u;
+    }
+    stx->stx_mask = 0x00000fffu;
+    stx->stx_blksize = 512u;
+    stx->stx_nlink = 1u;
+    stx->stx_uid = 0u;
+    stx->stx_gid = 0u;
+    stx->stx_mode = (uint16_t)mode;
+    stx->stx_ino = path_hash64(resolved);
+    stx->stx_size = size;
+    stx->stx_blocks = (size + 511u) / 512u;
+    stx->stx_dev_major = 0u;
+    stx->stx_dev_minor = 1u;
     return 0;
 }
 
@@ -1967,7 +2251,7 @@ static int64_t sys_faccessat(int64_t dirfd, const char* path, int64_t mode, int6
     if(!path) {
         return EFAULT_ERR;
     }
-    user_resolve_path(path, resolved, sizeof(resolved));
+    user_resolve_path_at(dirfd, path, resolved, sizeof(resolved));
     return user_tar_path_exists(resolved, &typeflag) ? 0 : ENOENT_ERR;
 }
 
@@ -1979,7 +2263,7 @@ static int64_t sys_mkdirat(int64_t dirfd, const char* path, int64_t mode)
     if(!path) {
         return EFAULT_ERR;
     }
-    user_resolve_path(path, resolved, sizeof(resolved));
+    user_resolve_path_at(dirfd, path, resolved, sizeof(resolved));
     return overlay_create_dir(resolved);
 }
 
@@ -2302,8 +2586,11 @@ int64_t runtime_syscall_dispatch(int64_t nr,
     case SYS_getegid:
         return 0;
     case SYS_prlimit64:
-    case SYS_readlinkat:
         return 0;
+    case SYS_readlinkat:
+        return sys_readlinkat(a0, (const char*)a1, (char*)a2, (uint64_t)a3);
+    case SYS_statx:
+        return sys_statx(a0, (const char*)a1, a2, (uint32_t)a3, (void*)a4);
     case SYS_exit:
     case SYS_exit_group:
         sys_exit_group_impl(a0);
@@ -2478,8 +2765,10 @@ int32_t runtime_exec_user_command(const char* line)
     uint64_t entry = 0u;
     uint64_t user_sp;
     char exec_path[256];
+    const char* search_paths[4] = { "/bin/", "/sbin/", "/usr/bin/", "/usr/sbin/" };
     int argc = 0;
     int rc;
+    int path_i;
     size_t i = 0u;
 
     if(!line) {
@@ -2515,10 +2804,20 @@ int32_t runtime_exec_user_command(const char* line)
     if(user_argv_strings[0][0] == '/') {
         copy_cstr(exec_path, sizeof(exec_path), user_argv_strings[0]);
     } else {
-        copy_cstr(exec_path, sizeof(exec_path), "/bin/");
-        copy_cstr(exec_path + cstr_len(exec_path),
-                  sizeof(exec_path) - cstr_len(exec_path),
-                  user_argv_strings[0]);
+        exec_path[0] = '\0';
+        for(path_i = 0; path_i < 4; ++path_i) {
+            copy_cstr(exec_path, sizeof(exec_path), search_paths[path_i]);
+            copy_cstr(exec_path + cstr_len(exec_path),
+                      sizeof(exec_path) - cstr_len(exec_path),
+                      user_argv_strings[0]);
+            if(user_tar_find_file(exec_path, &image, &image_size, &typeflag) && typeflag != '5') {
+                break;
+            }
+            exec_path[0] = '\0';
+        }
+        if(exec_path[0] == '\0') {
+            return 0;
+        }
     }
 
     if(!user_tar_find_file(exec_path, &image, &image_size, &typeflag) || typeflag == '5') {
