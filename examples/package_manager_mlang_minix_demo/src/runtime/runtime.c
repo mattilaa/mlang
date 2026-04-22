@@ -1331,6 +1331,10 @@ static int overlay_remove_path(const char* path, int want_dir)
 
 void runtime_init_rootfs_mounts(void)
 {
+    (void)overlay_create_dir("/dev");
+    (void)overlay_create_dir("/run");
+    (void)overlay_create_dir("/var");
+    (void)overlay_create_dir("/var/tmp");
     (void)overlay_create_dir("/tmp");
 }
 
