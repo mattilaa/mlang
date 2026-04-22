@@ -26,8 +26,8 @@ static volatile uint32_t* const GICC_EOIR = (volatile uint32_t*)0x08010010u;
 extern const unsigned char _binary_gnu_rootfs_tar_start[];
 extern const unsigned char _binary_gnu_rootfs_tar_end[];
 
-extern const unsigned char _user_hello_start[];
-extern const unsigned char _user_hello_end[];
+extern const unsigned char _binary_user_hello_elf_start[];
+extern const unsigned char _binary_user_hello_elf_end[];
 extern unsigned char __user_stack_top[];
 
 void runtime_enter_user(uint64_t entry, uint64_t user_sp, uint64_t argc, uint64_t argv);
@@ -917,13 +917,124 @@ void runtime_user_fault(uint64_t esr, uint64_t elr, uint64_t far)
     }
 }
 
+struct Elf64_Ehdr {
+    unsigned char e_ident[16];
+    uint16_t e_type;
+    uint16_t e_machine;
+    uint32_t e_version;
+    uint64_t e_entry;
+    uint64_t e_phoff;
+    uint64_t e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize;
+    uint16_t e_phentsize;
+    uint16_t e_phnum;
+    uint16_t e_shentsize;
+    uint16_t e_shnum;
+    uint16_t e_shstrndx;
+};
+
+struct Elf64_Phdr {
+    uint32_t p_type;
+    uint32_t p_flags;
+    uint64_t p_offset;
+    uint64_t p_vaddr;
+    uint64_t p_paddr;
+    uint64_t p_filesz;
+    uint64_t p_memsz;
+    uint64_t p_align;
+};
+
+enum {
+    ELF_PT_LOAD = 1u,
+    ELF_EM_AARCH64 = 183u,
+    ELF_CLASS64 = 2u
+};
+
+static int load_elf64_image(const unsigned char* image,
+                            size_t image_size,
+                            uint64_t* entry_out)
+{
+    const struct Elf64_Ehdr* eh;
+    const struct Elf64_Phdr* ph;
+    uint16_t i;
+
+    if(image_size < sizeof(struct Elf64_Ehdr)) {
+        return -1;
+    }
+    eh = (const struct Elf64_Ehdr*)image;
+    if(eh->e_ident[0] != 0x7fu || eh->e_ident[1] != 'E' ||
+       eh->e_ident[2] != 'L' || eh->e_ident[3] != 'F') {
+        return -2;
+    }
+    if(eh->e_ident[4] != ELF_CLASS64) {
+        return -3;
+    }
+    if(eh->e_machine != ELF_EM_AARCH64) {
+        return -4;
+    }
+    if(eh->e_phoff == 0u || eh->e_phnum == 0u) {
+        return -5;
+    }
+    if(eh->e_phoff + (uint64_t)eh->e_phnum * eh->e_phentsize > image_size) {
+        return -6;
+    }
+
+    ph = (const struct Elf64_Phdr*)(image + eh->e_phoff);
+    for(i = 0u; i < eh->e_phnum; ++i) {
+        const struct Elf64_Phdr* seg = &ph[i];
+        unsigned char* dst;
+        const unsigned char* src;
+        uint64_t j;
+        if(seg->p_type != ELF_PT_LOAD) {
+            continue;
+        }
+        if(seg->p_offset + seg->p_filesz > image_size) {
+            return -7;
+        }
+        dst = (unsigned char*)(uintptr_t)seg->p_vaddr;
+        src = image + seg->p_offset;
+        for(j = 0u; j < seg->p_filesz; ++j) {
+            dst[j] = src[j];
+        }
+        for(j = seg->p_filesz; j < seg->p_memsz; ++j) {
+            dst[j] = 0u;
+        }
+    }
+
+    __asm__ __volatile__("dsb ish");
+    __asm__ __volatile__("ic iallu");
+    __asm__ __volatile__("dsb ish");
+    __asm__ __volatile__("isb");
+
+    *entry_out = eh->e_entry;
+    return 0;
+}
+
 void runtime_exec_hello_user(void)
 {
-    runtime_write_str("[kernel] handing off to EL0 hello blob...\n");
-    runtime_enter_user((uint64_t)_user_hello_start,
-                       (uint64_t)__user_stack_top,
-                       0u,
-                       0u);
+    const unsigned char* image = _binary_user_hello_elf_start;
+    size_t image_size = (size_t)(_binary_user_hello_elf_end - _binary_user_hello_elf_start);
+    uint64_t entry = 0u;
+    int rc;
+
+    runtime_write_str("[kernel] loading user ELF, size=");
+    runtime_write_dec_i64((int64_t)image_size);
+    runtime_write_str(" bytes\n");
+
+    rc = load_elf64_image(image, image_size, &entry);
+    if(rc != 0) {
+        runtime_write_str("[kernel] ELF load failed rc=");
+        runtime_write_dec_i64(rc);
+        runtime_write_str("\n");
+        return;
+    }
+
+    runtime_write_str("[kernel] entry=0x");
+    runtime_write_hex64((int64_t)entry);
+    runtime_write_str(" handing off to EL0...\n");
+
+    runtime_enter_user(entry, (uint64_t)__user_stack_top, 0u, 0u);
     runtime_write_str("[kernel] returned from EL0\n");
 }
 

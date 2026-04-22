@@ -75,6 +75,49 @@ shell = [
 ]
 
 [[task]]
+name = "build-user-hello"
+print = "[mlnix] Compiling the static EL0 hello ELF"
+depends_on = ["toolchain-check"]
+workdir = "{{root}}"
+commands = [
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}/obj"
+  ],
+  [
+    "aarch64-none-elf-gcc",
+    "-static",
+    "-nostdlib",
+    "-nostartfiles",
+    "-ffreestanding",
+    "-fno-builtin",
+    "-fno-stack-protector",
+    "-mgeneral-regs-only",
+    "-Wall",
+    "-Wextra",
+    "-O1",
+    "-T",
+    "src/user/user.ld",
+    "src/user/hello.c",
+    "-o",
+    "{{build_dir}}/user_hello.elf"
+  ]
+]
+
+[[task]]
+name = "build-user-hello-obj"
+print = "[mlnix] Wrapping the user ELF as a linkable blob"
+depends_on = ["build-user-hello"]
+workdir = "{{root}}"
+shell = [
+  "set -eu",
+  "mkdir -p {{build_dir}}/obj",
+  "cd {{build_dir}}",
+  "aarch64-none-elf-objcopy --input-target=binary --output-target=elf64-littleaarch64 --binary-architecture=aarch64 user_hello.elf obj/user_hello.o"
+]
+
+[[task]]
 name = "build-rootfs-archive"
 print = "[mlnix] Packing the selected userspace into an embedded rootfs tar archive"
 depends_on = ["gnu-userspace-fetch"]
@@ -190,7 +233,7 @@ commands = [
 [[task]]
 name = "link-elf"
 print = "[mlnix] Linking the freestanding kernel ELF"
-depends_on = ["retarget-kernel-obj", "build-runtime-shim", "build-entry", "build-rootfs-obj"]
+depends_on = ["retarget-kernel-obj", "build-runtime-shim", "build-entry", "build-rootfs-obj", "build-user-hello-obj"]
 workdir = "{{root}}"
 commands = [
   [
@@ -203,6 +246,7 @@ commands = [
     "{{build_dir}}/obj/mlnix_kernel.o",
     "{{build_dir}}/obj/runtime.o",
     "{{build_dir}}/obj/gnu_rootfs.o",
+    "{{build_dir}}/obj/user_hello.o",
     "-o",
     "{{build_dir}}/mlnix.elf"
   ]

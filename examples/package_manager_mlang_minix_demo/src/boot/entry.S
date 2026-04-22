@@ -223,23 +223,6 @@ runtime_exit_to_kernel:
     msr daifclr, #2
     ret
 
-.section .text.user, "ax"
-.global _user_hello_start
-.global _user_hello_end
-_user_hello_start:
-    mov x0, #1
-    adr x1, .Luser_hello_msg
-    mov x2, #15
-    mov x8, #64
-    svc #0
-    mov x0, #0
-    mov x8, #94
-    svc #0
-    b .
-.Luser_hello_msg:
-    .ascii "hello from EL0\n"
-_user_hello_end:
-
 .section .data
 .align 3
 .global __user_exit_ksp
