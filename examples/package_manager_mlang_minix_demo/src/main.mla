@@ -5,6 +5,8 @@ extern fn runtime_write_dec_i64(value: i64) -> void;
 extern fn runtime_uart_getc() -> i32;
 extern fn runtime_uart_putc(ch: i32) -> void;
 extern fn runtime_init_interrupts() -> void;
+extern fn runtime_rootfs_try_ls(line: ptr<u8>, start: i32) -> i32;
+extern fn runtime_rootfs_try_cat(line: ptr<u8>, start: i32) -> i32;
 
 struct LineBuffer {
     var b00: u8; var b01: u8; var b02: u8; var b03: u8; var b04: u8; var b05: u8; var b06: u8; var b07: u8;
@@ -305,6 +307,16 @@ fn cmd_is_ls_proc(state: ptr<ShellState>) -> bool {
            shell_char(state, 7) == 99;
 }
 
+fn cmd_is_ls_any(state: ptr<ShellState>) -> bool {
+    if shell_len(state) == 2 {
+        return shell_char(state, 0) == 108 && shell_char(state, 1) == 115;
+    }
+    return shell_len(state) > 3 &&
+           shell_char(state, 0) == 108 &&
+           shell_char(state, 1) == 115 &&
+           shell_char(state, 2) == ascii_space();
+}
+
 fn cmd_is_ls_bin(state: ptr<ShellState>) -> bool {
     if shell_len(state) != 7 { return false; }
     return shell_char(state, 0) == 108 &&
@@ -554,10 +566,19 @@ fn cmd_is_cat_dev_console(state: ptr<ShellState>) -> bool {
            shell_char(state, 15) == 101;
 }
 
+fn cmd_is_cat_any(state: ptr<ShellState>) -> bool {
+    return shell_len(state) > 4 &&
+           shell_char(state, 0) == 99 &&
+           shell_char(state, 1) == 97 &&
+           shell_char(state, 2) == 116 &&
+           shell_char(state, 3) == ascii_space();
+}
+
 fn print_boot_banner() {
     puts("Hello to MUnix!\r\n");
     puts("MLNIX 0.3.0 kernel booting on QEMU virt (AArch64)\r\n");
     puts("init: unpacking built-in initramfs to / ... done\r\n");
+    puts("init: mounting embedded GNU rootfs tar overlay ... done\r\n");
     puts("init: bringing up irq-driven serial shell ... done\r\n");
     puts("cpu: mpidr=0x");
     runtime_write_hex64(read_mpidr());
@@ -582,6 +603,7 @@ fn print_help() {
     puts("  cat /proc/version  version string\r\n");
     puts("  cat /proc/cpuinfo  boot cpu data\r\n");
     puts("  cat /proc/meminfo  fixed memory map\r\n");
+    puts("  ls /usr            browse the mounted GNU rootfs when enabled\r\n");
     puts("  echo TEXT          echo back from the shell buffer\r\n");
     puts("  clear              ANSI clear screen\r\n");
     puts("  dmesg              boot summary\r\n");
@@ -652,8 +674,8 @@ fn print_readme() {
     puts("It boots directly under QEMU, drives PL011 UART, exposes a serial shell,\r\n");
     puts("and now carries a small built-in initramfs under /bin, /dev, /etc,\r\n");
     puts("and /proc entirely in kernel space.\r\n");
-    puts("The next phase is mounting a real rootfs after boot while keeping the\r\n");
-    puts("same shell and path surface stable.\r\n");
+    puts("This build can also fetch an Ubuntu Base GNU userspace tarball through\r\n");
+    puts("mlang.toml tasks and mount that archive as a read-only rootfs overlay.\r\n");
 }
 
 fn print_motd() {
@@ -686,7 +708,7 @@ fn print_dmesg(state: ptr<ShellState>) {
     puts("[    0.000000] mlnix: boot cpu online, mpidr=0x");
     runtime_write_hex64(read_mpidr());
     puts("\r\n[    0.000001] mlnix: uart irq console on ttyAMA0\r\n");
-    puts("[    0.000002] mlnix: procfs and initramfs mounted\r\n");
+    puts("[    0.000002] mlnix: procfs, initramfs, and rootfs tar overlay mounted\r\n");
     puts("[    0.000003] mlnix: shell commands handled=");
     unsafe {
         runtime_write_dec_i32((*state).command_count);
@@ -699,6 +721,12 @@ fn print_dmesg(state: ptr<ShellState>) {
 fn print_unknown(state: ptr<ShellState>) {
     puts("sh: command not found: ");
     shell_write_from(state, 0);
+    uart_newline();
+}
+
+fn print_no_such_path(prefix: str8, state: ptr<ShellState>, start: i32) {
+    puts(prefix);
+    shell_write_from(state, start);
     uart_newline();
 }
 
@@ -719,24 +747,38 @@ fn run_command(state: ptr<ShellState>) {
         print_uname();
         return;
     }
-    if cmd_is_ls_root(state) {
-        print_ls_root();
-        return;
-    }
-    if cmd_is_ls_bin(state) {
-        print_ls_bin();
+    if cmd_is_ls_proc(state) {
+        print_ls_proc();
         return;
     }
     if cmd_is_ls_dev(state) {
+        unsafe {
+            if runtime_rootfs_try_ls(&(*state).line.b00, 2) != 0 {
+                return;
+            }
+        }
         print_ls_dev();
         return;
     }
-    if cmd_is_ls_etc(state) {
-        print_ls_etc();
-        return;
-    }
-    if cmd_is_ls_proc(state) {
-        print_ls_proc();
+    if cmd_is_ls_any(state) {
+        unsafe {
+            if runtime_rootfs_try_ls(&(*state).line.b00, 2) != 0 {
+                return;
+            }
+        }
+        if cmd_is_ls_root(state) {
+            print_ls_root();
+            return;
+        }
+        if cmd_is_ls_bin(state) {
+            print_ls_bin();
+            return;
+        }
+        if cmd_is_ls_etc(state) {
+            print_ls_etc();
+            return;
+        }
+        print_no_such_path("fs: no such directory: ", state, 3);
         return;
     }
     if cmd_is_ps(state) {
@@ -753,6 +795,15 @@ fn run_command(state: ptr<ShellState>) {
     }
     if cmd_is_cat_cpuinfo(state) {
         print_cpuinfo();
+        return;
+    }
+    if cmd_is_cat_dev_console(state) {
+        unsafe {
+            if runtime_rootfs_try_cat(&(*state).line.b00, 4) != 0 {
+                return;
+            }
+        }
+        print_dev_console();
         return;
     }
     if cmd_is_cat_readme(state) {
@@ -775,8 +826,13 @@ fn run_command(state: ptr<ShellState>) {
         print_bin_sh();
         return;
     }
-    if cmd_is_cat_dev_console(state) {
-        print_dev_console();
+    if cmd_is_cat_any(state) {
+        unsafe {
+            if runtime_rootfs_try_cat(&(*state).line.b00, 4) != 0 {
+                return;
+            }
+        }
+        print_no_such_path("fs: no such file: ", state, 4);
         return;
     }
     if cmd_is_clear(state) {

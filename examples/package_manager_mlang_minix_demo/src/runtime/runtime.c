@@ -1,4 +1,9 @@
 #include <stdint.h>
+#include <stddef.h>
+
+void runtime_uart_putc(int32_t ch);
+void runtime_write_str(const char* text);
+void runtime_write_dec_i64(int64_t value);
 
 static volatile uint32_t* const UART_DR = (volatile uint32_t*)0x09000000u;
 static volatile uint32_t* const UART_FR = (volatile uint32_t*)0x09000018u;
@@ -18,6 +23,9 @@ static volatile uint32_t* const GICC_PMR = (volatile uint32_t*)0x08010004u;
 static volatile uint32_t* const GICC_IAR = (volatile uint32_t*)0x0801000cu;
 static volatile uint32_t* const GICC_EOIR = (volatile uint32_t*)0x08010010u;
 
+extern const unsigned char _binary_gnu_rootfs_tar_start[];
+extern const unsigned char _binary_gnu_rootfs_tar_end[];
+
 enum {
     UART_IRQ_ID = 33u,
     UART_RXIM = 1u << 4,
@@ -28,9 +36,34 @@ enum {
     UART_FIFO_SIZE = 256u
 };
 
+enum {
+    ROOTFS_LIST_SEEN_MAX = 4096,
+    ROOTFS_NAME_MAX = 128
+};
+
 static volatile uint8_t uart_rx_fifo[UART_FIFO_SIZE];
 static volatile uint32_t uart_rx_head = 0u;
 static volatile uint32_t uart_rx_tail = 0u;
+
+struct TarHeader {
+    char name[100];
+    char mode[8];
+    char uid[8];
+    char gid[8];
+    char size[12];
+    char mtime[12];
+    char chksum[8];
+    char typeflag;
+    char linkname[100];
+    char magic[6];
+    char version[2];
+    char uname[32];
+    char gname[32];
+    char devmajor[8];
+    char devminor[8];
+    char prefix[155];
+    char pad[12];
+};
 
 static void uart_putc_raw(uint8_t ch)
 {
@@ -70,6 +103,577 @@ static void uart_drain_rx(void)
 {
     while((*UART_FR & UART_FR_RXFE) == 0u) {
         uart_rx_push((uint8_t)(*UART_DR & 0xffu));
+    }
+}
+
+static size_t cstr_len(const char* s)
+{
+    size_t n = 0u;
+    if(!s) {
+        return 0u;
+    }
+    while(s[n] != '\0') {
+        ++n;
+    }
+    return n;
+}
+
+static int cstr_eq(const char* a, const char* b)
+{
+    size_t i = 0u;
+    if(!a || !b) {
+        return 0;
+    }
+    while(a[i] != '\0' && b[i] != '\0') {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+        ++i;
+    }
+    return a[i] == b[i];
+}
+
+static int cstr_starts_with(const char* s, const char* prefix)
+{
+    size_t i = 0u;
+    if(!s || !prefix) {
+        return 0;
+    }
+    while(prefix[i] != '\0') {
+        if(s[i] != prefix[i]) {
+            return 0;
+        }
+        ++i;
+    }
+    return 1;
+}
+
+static int cstr_contains(const char* s, const char* needle)
+{
+    size_t i;
+    size_t needle_len = cstr_len(needle);
+    size_t len = cstr_len(s);
+    if(needle_len == 0u || needle_len > len) {
+        return 0;
+    }
+    for(i = 0u; i + needle_len <= len; ++i) {
+        size_t j = 0u;
+        while(j < needle_len && s[i + j] == needle[j]) {
+            ++j;
+        }
+        if(j == needle_len) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int is_printable_text_byte(unsigned char ch)
+{
+    return ch == '\n' || ch == '\r' || ch == '\t' || (ch >= 32u && ch < 127u);
+}
+
+static int looks_binary_file(const unsigned char* data, size_t size)
+{
+    size_t sample = size < 1024u ? size : 1024u;
+    size_t nontext = 0u;
+    size_t i;
+    for(i = 0u; i < sample; ++i) {
+        if(data[i] == 0u) {
+            return 1;
+        }
+        if(!is_printable_text_byte(data[i])) {
+            ++nontext;
+        }
+    }
+    return sample > 0u && nontext > (sample / 8u);
+}
+
+static size_t tar_octal_to_size(const char* field, size_t width)
+{
+    size_t value = 0u;
+    size_t i = 0u;
+    while(i < width && (field[i] == ' ' || field[i] == '\0')) {
+        ++i;
+    }
+    for(; i < width; ++i) {
+        char ch = field[i];
+        if(ch < '0' || ch > '7') {
+            break;
+        }
+        value = (value << 3u) + (size_t)(ch - '0');
+    }
+    return value;
+}
+
+static int tar_is_zero_block(const unsigned char* block)
+{
+    size_t i;
+    for(i = 0u; i < 512u; ++i) {
+        if(block[i] != 0u) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int tar_entry_type(const struct TarHeader* hdr)
+{
+    if(hdr->typeflag == '5') {
+        return 2;
+    }
+    if(hdr->typeflag == '2') {
+        return 3;
+    }
+    return 1;
+}
+
+static void tar_compose_name(const struct TarHeader* hdr, char* out, size_t out_size)
+{
+    size_t pos = 0u;
+    size_t i = 0u;
+    if(out_size == 0u) {
+        return;
+    }
+    if(hdr->prefix[0] != '\0') {
+        while(i < sizeof(hdr->prefix) && hdr->prefix[i] != '\0' && pos + 1u < out_size) {
+            out[pos++] = hdr->prefix[i++];
+        }
+        if(pos + 1u < out_size) {
+            out[pos++] = '/';
+        }
+    }
+    i = 0u;
+    while(i < sizeof(hdr->name) && hdr->name[i] != '\0' && pos + 1u < out_size) {
+        out[pos++] = hdr->name[i++];
+    }
+    out[pos] = '\0';
+}
+
+static void normalize_rootfs_path(const char* raw, char* out, size_t out_size)
+{
+    size_t in = 0u;
+    size_t out_pos = 0u;
+    if(out_size == 0u) {
+        return;
+    }
+
+    while(raw[in] == ' ') {
+        ++in;
+    }
+    out[out_pos++] = '/';
+
+    while(raw[in] != '\0') {
+        char segment[ROOTFS_NAME_MAX];
+        size_t seg_len = 0u;
+        size_t i;
+
+        while(raw[in] == '/') {
+            ++in;
+        }
+        if(raw[in] == '\0') {
+            break;
+        }
+        while(raw[in] != '\0' && raw[in] != '/' && seg_len + 1u < sizeof(segment)) {
+            segment[seg_len++] = raw[in++];
+        }
+        segment[seg_len] = '\0';
+
+        if(cstr_eq(segment, ".") || segment[0] == '\0') {
+            continue;
+        }
+        if(cstr_eq(segment, "..")) {
+            if(out_pos > 1u) {
+                --out_pos;
+                while(out_pos > 1u && out[out_pos - 1u] != '/') {
+                    --out_pos;
+                }
+                out[out_pos] = '\0';
+            }
+            continue;
+        }
+
+        if(out_pos > 1u && out_pos + 1u < out_size) {
+            out[out_pos++] = '/';
+        }
+        for(i = 0u; i < seg_len && out_pos + 1u < out_size; ++i) {
+            out[out_pos++] = segment[i];
+        }
+        out[out_pos] = '\0';
+    }
+
+    if(out_pos == 1u) {
+        out[1] = '\0';
+    }
+}
+
+static void tar_normalized_name(const struct TarHeader* hdr, char* out, size_t out_size)
+{
+    char raw[256];
+    tar_compose_name(hdr, raw, sizeof(raw));
+    normalize_rootfs_path(raw, out, out_size);
+}
+
+static const unsigned char* rootfs_start(void)
+{
+    return _binary_gnu_rootfs_tar_start;
+}
+
+static const unsigned char* rootfs_end(void)
+{
+    return _binary_gnu_rootfs_tar_end;
+}
+
+static int rootfs_has_archive(void)
+{
+    return rootfs_end() > rootfs_start() && !tar_is_zero_block(rootfs_start());
+}
+
+static int rootfs_skip_name(const char* name)
+{
+    return cstr_eq(name, "/") ||
+           cstr_eq(name, "/.") ||
+           cstr_starts_with(name, "/._") ||
+           cstr_contains(name, "/._") ||
+           cstr_contains(name, "/PaxHeader");
+}
+
+static void rootfs_parent_path(const char* path, char* out, size_t out_size)
+{
+    size_t len;
+    size_t i;
+    if(out_size == 0u) {
+        return;
+    }
+    len = cstr_len(path);
+    if(len <= 1u) {
+        out[0] = '/';
+        out[1] = '\0';
+        return;
+    }
+    for(i = 0u; i + 1u < out_size && i < len; ++i) {
+        out[i] = path[i];
+    }
+    out[i < out_size ? i : out_size - 1u] = '\0';
+    while(i > 1u && out[i - 1u] != '/') {
+        --i;
+        out[i] = '\0';
+    }
+    if(i > 1u) {
+        out[i - 1u] = '\0';
+    } else {
+        out[0] = '/';
+        out[1] = '\0';
+    }
+}
+
+static void rootfs_join_relative(const char* base, const char* relative, char* out, size_t out_size)
+{
+    char parent[256];
+    char combined[256];
+    size_t pos = 0u;
+    size_t i = 0u;
+    if(relative[0] == '/') {
+        normalize_rootfs_path(relative, out, out_size);
+        return;
+    }
+    rootfs_parent_path(base, parent, sizeof(parent));
+    if(out_size == 0u) {
+        return;
+    }
+    while(parent[pos] != '\0' && pos + 1u < sizeof(combined)) {
+        combined[pos] = parent[pos];
+        ++pos;
+    }
+    if(pos == 0u) {
+        combined[pos++] = '/';
+    }
+    if(pos > 1u && pos + 1u < sizeof(combined)) {
+        combined[pos++] = '/';
+    }
+    while(relative[i] != '\0' && pos + 1u < sizeof(combined)) {
+        combined[pos++] = relative[i++];
+    }
+    combined[pos] = '\0';
+    normalize_rootfs_path(combined, out, out_size);
+}
+
+static const unsigned char* tar_next_entry(const unsigned char* p, const unsigned char* end)
+{
+    const struct TarHeader* hdr;
+    size_t size;
+    size_t blocks;
+    if(p + 512u > end) {
+        return end;
+    }
+    hdr = (const struct TarHeader*)p;
+    size = tar_octal_to_size(hdr->size, sizeof(hdr->size));
+    blocks = ((size + 511u) / 512u) + 1u;
+    p += blocks * 512u;
+    if(p > end) {
+        return end;
+    }
+    return p;
+}
+
+static int rootfs_find_entry(const char* path,
+                             const struct TarHeader** out_hdr,
+                             const unsigned char** out_data,
+                             size_t* out_size)
+{
+    const unsigned char* p = rootfs_start();
+    const unsigned char* end = rootfs_end();
+    while(p + 512u <= end) {
+        const struct TarHeader* hdr = (const struct TarHeader*)p;
+        char name[256];
+        if(tar_is_zero_block(p)) {
+            break;
+        }
+        tar_normalized_name(hdr, name, sizeof(name));
+        if(rootfs_skip_name(name)) {
+            p = tar_next_entry(p, end);
+            continue;
+        }
+        if(cstr_eq(name, path)) {
+            if(out_hdr) {
+                *out_hdr = hdr;
+            }
+            if(out_data) {
+                *out_data = p + 512u;
+            }
+            if(out_size) {
+                *out_size = tar_octal_to_size(hdr->size, sizeof(hdr->size));
+            }
+            return 1;
+        }
+        p = tar_next_entry(p, end);
+    }
+    return 0;
+}
+
+static int rootfs_resolve_path(const char* path,
+                               char* resolved,
+                               size_t resolved_size,
+                               const struct TarHeader** out_hdr,
+                               const unsigned char** out_data,
+                               size_t* out_size)
+{
+    char normalized[256];
+    char current[256];
+    size_t in = 1u;
+    int depth = 0;
+
+    normalize_rootfs_path(path, normalized, sizeof(normalized));
+    current[0] = '/';
+    current[1] = '\0';
+
+    while(normalized[in] != '\0') {
+        char segment[ROOTFS_NAME_MAX];
+        char candidate[256];
+        const struct TarHeader* hdr = NULL;
+        size_t seg_len = 0u;
+        size_t pos = 0u;
+        size_t i = 0u;
+
+        while(normalized[in] == '/') {
+            ++in;
+        }
+        if(normalized[in] == '\0') {
+            break;
+        }
+        while(normalized[in] != '\0' && normalized[in] != '/' && seg_len + 1u < sizeof(segment)) {
+            segment[seg_len++] = normalized[in++];
+        }
+        segment[seg_len] = '\0';
+
+        while(current[pos] != '\0' && pos + 1u < sizeof(candidate)) {
+            candidate[pos] = current[pos];
+            ++pos;
+        }
+        if(pos > 1u && pos + 1u < sizeof(candidate)) {
+            candidate[pos++] = '/';
+        }
+        for(i = 0u; i < seg_len && pos + 1u < sizeof(candidate); ++i) {
+            candidate[pos++] = segment[i];
+        }
+        candidate[pos] = '\0';
+
+        if(rootfs_find_entry(candidate, &hdr, NULL, NULL) && hdr && tar_entry_type(hdr) == 3) {
+            if(depth++ >= 8) {
+                break;
+            }
+            rootfs_join_relative(candidate, hdr->linkname, current, sizeof(current));
+            continue;
+        }
+        normalize_rootfs_path(candidate, current, sizeof(current));
+    }
+
+    while(depth < 8) {
+        const struct TarHeader* hdr = NULL;
+        if(!rootfs_find_entry(current, &hdr, NULL, NULL) || !hdr || tar_entry_type(hdr) != 3) {
+            break;
+        }
+        rootfs_join_relative(current, hdr->linkname, current, sizeof(current));
+        ++depth;
+    }
+
+    normalize_rootfs_path(current, resolved, resolved_size);
+    return rootfs_find_entry(resolved, out_hdr, out_data, out_size);
+}
+
+static int rootfs_child_name(const char* target, const char* full, char* child, size_t child_size)
+{
+    const char* rest = full;
+    size_t i = 0u;
+    size_t j = 0u;
+    if(cstr_eq(target, "/")) {
+        if(full[0] != '/') {
+            return 0;
+        }
+        rest = full + 1;
+    } else {
+        size_t target_len = cstr_len(target);
+        if(!cstr_starts_with(full, target) || full[target_len] != '/') {
+            return 0;
+        }
+        rest = full + target_len + 1u;
+    }
+    if(rest[0] == '\0') {
+        return 0;
+    }
+    while(rest[i] != '\0' && rest[i] != '/' && j + 1u < child_size) {
+        child[j++] = rest[i++];
+    }
+    child[j] = '\0';
+    return child[0] != '\0';
+}
+
+static int seen_name_contains(char seen[][ROOTFS_NAME_MAX], size_t count, const char* name)
+{
+    size_t i;
+    for(i = 0u; i < count; ++i) {
+        if(cstr_eq(seen[i], name)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void seen_name_add(char seen[][ROOTFS_NAME_MAX], size_t* count, const char* name)
+{
+    size_t i = 0u;
+    if(*count >= ROOTFS_LIST_SEEN_MAX) {
+        return;
+    }
+    while(name[i] != '\0' && i + 1u < ROOTFS_NAME_MAX) {
+        seen[*count][i] = name[i];
+        ++i;
+    }
+    seen[*count][i] = '\0';
+    *count += 1u;
+}
+
+int32_t runtime_rootfs_try_ls(const char* line, int32_t start)
+{
+    const unsigned char* p;
+    const unsigned char* end;
+    const struct TarHeader* hdr = NULL;
+    char target[256];
+    char name[256];
+    char child[ROOTFS_NAME_MAX];
+    char seen[ROOTFS_LIST_SEEN_MAX][ROOTFS_NAME_MAX];
+    size_t seen_count = 0u;
+    int printed = 0;
+    int found_exact = 0;
+
+    if(!rootfs_has_archive()) {
+        return 0;
+    }
+
+    normalize_rootfs_path(line + start, target, sizeof(target));
+    if(rootfs_resolve_path(target, target, sizeof(target), &hdr, NULL, NULL)) {
+        if(hdr && tar_entry_type(hdr) == 1) {
+            runtime_write_str("fs: not a directory: ");
+            runtime_write_str(target);
+            runtime_write_str("\n");
+            return 1;
+        }
+        found_exact = 1;
+    }
+
+    p = rootfs_start();
+    end = rootfs_end();
+    while(p + 512u <= end) {
+        const struct TarHeader* hdr = (const struct TarHeader*)p;
+        if(tar_is_zero_block(p)) {
+            break;
+        }
+        tar_normalized_name(hdr, name, sizeof(name));
+        if(rootfs_skip_name(name)) {
+            p = tar_next_entry(p, end);
+            continue;
+        }
+        if(rootfs_child_name(target, name, child, sizeof(child)) &&
+           !seen_name_contains(seen, seen_count, child)) {
+            if(printed) {
+                runtime_write_str("  ");
+            }
+            runtime_write_str(child);
+            seen_name_add(seen, &seen_count, child);
+            printed = 1;
+            found_exact = 1;
+        }
+        p = tar_next_entry(p, end);
+    }
+
+    if(printed) {
+        runtime_write_str("\n");
+        return 1;
+    }
+    return found_exact ? 1 : 0;
+}
+
+int32_t runtime_rootfs_try_cat(const char* line, int32_t start)
+{
+    const struct TarHeader* hdr = NULL;
+    const unsigned char* data = NULL;
+    size_t size = 0u;
+    char target[256];
+    size_t i;
+
+    if(!rootfs_has_archive()) {
+        return 0;
+    }
+
+    normalize_rootfs_path(line + start, target, sizeof(target));
+    if(!rootfs_resolve_path(target, target, sizeof(target), &hdr, &data, &size)) {
+        return 0;
+    }
+
+    switch(tar_entry_type(hdr)) {
+    case 1:
+        if(looks_binary_file(data, size)) {
+            runtime_write_str("[binary file ");
+            runtime_write_str(target);
+            runtime_write_str(", ");
+            runtime_write_dec_i64((int64_t)size);
+            runtime_write_str(" bytes]\n");
+            return 1;
+        }
+        for(i = 0u; i < size; ++i) {
+            runtime_uart_putc((int32_t)data[i]);
+        }
+        if(size == 0u || data[size - 1u] != '\n') {
+            runtime_write_str("\n");
+        }
+        return 1;
+    case 2:
+        runtime_write_str("fs: not a file: ");
+        runtime_write_str(target);
+        runtime_write_str("\n");
+        return 1;
+    default:
+        return 0;
     }
 }
 

@@ -21,6 +21,10 @@ path_entries = [
   "/usr/local/bin"
 ]
 
+[tool.mlang.options]
+userspace = "gnu"
+gnu_rootfs_arch = "aarch64"
+
 [[task]]
 name = "toolchain-check"
 print = "[mlnix] Checking mlang, llc, objcopy, cross gcc, and QEMU"
@@ -34,8 +38,67 @@ commands = [
   [
     "sh",
     "-c",
-    "for tool in llc llvm-objcopy aarch64-none-elf-gcc qemu-system-aarch64; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done"
+    "for tool in llc llvm-objcopy aarch64-none-elf-gcc aarch64-none-elf-objcopy qemu-system-aarch64 curl tar; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done"
   ]
+]
+
+[[task]]
+name = "gnu-userspace-fetch"
+print = "[mlnix] Fetching GNU rootfs when userspace=gnu"
+depends_on = ["toolchain-check"]
+workdir = "{{root}}"
+shell = [
+  "set -eu",
+  "mkdir -p {{build_dir}}",
+  'if [ "{{option.userspace}}" != "gnu" ]; then',
+  "  echo GNU rootfs download skipped because userspace={{option.userspace}}.",
+  "  exit 0",
+  "fi",
+  'case "{{option.gnu_rootfs_arch}}" in',
+  "  aarch64|arm64)",
+  "    ROOTFS_FILE=ubuntu-base-24.04.3-base-arm64.tar.gz",
+  "    ROOTFS_URL=https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-arm64.tar.gz",
+  "    ;;",
+  "  x64|x86_64|amd64)",
+  "    ROOTFS_FILE=ubuntu-base-24.04.3-base-amd64.tar.gz",
+  "    ROOTFS_URL=https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-amd64.tar.gz",
+  "    ;;",
+  "  *)",
+  "    echo Unsupported GNU rootfs arch: {{option.gnu_rootfs_arch}}",
+  "    exit 1",
+  "    ;;",
+  "esac",
+  '[ -f {{build_dir}}/$ROOTFS_FILE ] || curl -L --fail "$ROOTFS_URL" -o {{build_dir}}/$ROOTFS_FILE',
+  "rm -rf {{build_dir}}/gnu-rootfs",
+  "mkdir -p {{build_dir}}/gnu-rootfs",
+  "tar -xzf {{build_dir}}/$ROOTFS_FILE -C {{build_dir}}/gnu-rootfs"
+]
+
+[[task]]
+name = "build-rootfs-archive"
+print = "[mlnix] Packing the selected userspace into an embedded rootfs tar archive"
+depends_on = ["gnu-userspace-fetch"]
+workdir = "{{root}}"
+shell = [
+  "set -eu",
+  "rm -f {{build_dir}}/gnu-rootfs.tar",
+  'if [ "{{option.userspace}}" = "gnu" ]; then',
+  "  COPYFILE_DISABLE=1 tar --format=ustar -cf {{build_dir}}/gnu-rootfs.tar -C {{build_dir}}/gnu-rootfs .",
+  "else",
+  "  dd if=/dev/zero of={{build_dir}}/gnu-rootfs.tar bs=512 count=2 status=none",
+  "fi"
+]
+
+[[task]]
+name = "build-rootfs-obj"
+print = "[mlnix] Converting the mounted rootfs tar archive into a linkable object"
+depends_on = ["build-rootfs-archive"]
+workdir = "{{root}}"
+shell = [
+  "set -eu",
+  "mkdir -p {{build_dir}}/obj",
+  "cd {{build_dir}}",
+  "aarch64-none-elf-objcopy --input-target=binary --output-target=elf64-littleaarch64 --binary-architecture=aarch64 gnu-rootfs.tar obj/gnu_rootfs.o"
 ]
 
 [[task]]
@@ -127,7 +190,7 @@ commands = [
 [[task]]
 name = "link-elf"
 print = "[mlnix] Linking the freestanding kernel ELF"
-depends_on = ["retarget-kernel-obj", "build-runtime-shim", "build-entry"]
+depends_on = ["retarget-kernel-obj", "build-runtime-shim", "build-entry", "build-rootfs-obj"]
 workdir = "{{root}}"
 commands = [
   [
@@ -139,6 +202,7 @@ commands = [
     "{{build_dir}}/obj/entry.o",
     "{{build_dir}}/obj/mlnix_kernel.o",
     "{{build_dir}}/obj/runtime.o",
+    "{{build_dir}}/obj/gnu_rootfs.o",
     "-o",
     "{{build_dir}}/mlnix.elf"
   ]
@@ -161,7 +225,7 @@ commands = [
 
 [[task]]
 name = "qemu-run"
-print = "[mlnix] Booting MLNIX under QEMU"
+print = "[mlnix] Booting MLNIX under QEMU with {{option.userspace}} userspace"
 join_on = ["build-image"]
 workdir = "{{root}}"
 command = [
