@@ -1594,6 +1594,9 @@ static int user_tar_lstat_path(const char* path,
         if(mode_out) {
             *mode_out = tar_entry_mode(hdr);
         }
+        if(size_out && hdr->typeflag == '2') {
+            *size_out = cstr_len(hdr->linkname);
+        }
         if(typeflag_out) {
             *typeflag_out = hdr->typeflag ? (uint8_t)hdr->typeflag : '0';
         }
