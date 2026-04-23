@@ -1,16 +1,432 @@
-#include <arpa/inet.h>
+#include "mlang_platform.h"
+
 #include <errno.h>
-#include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
 #include <sys/types.h>
-#include <unistd.h>
-#include <fcntl.h>
 
+#ifndef _WIN32
+  #include <unistd.h>
+  #include <sys/time.h>
+#endif
+
+/**
+ * @file std_net.c
+ * @brief TCP backend for std::net MLang bindings (POSIX + Winsock).
+ */
+
+static char g_last_error[256];
+
+static void set_error_from_socket(const char* op)
+{
+    if(!op)
+        op = "net";
+    char emsg[160];
+    mlang_socket_strerror(emsg, sizeof(emsg), mlang_socket_errno());
+    (void)snprintf(g_last_error, sizeof(g_last_error),
+                   "std::net %s failed: %s", op, emsg);
+}
+
+static void set_error_from_errno(const char* op)
+{
+    if(!op)
+        op = "net";
+    const char* e = strerror(errno);
+    if(!e)
+        e = "unknown";
+    (void)snprintf(g_last_error, sizeof(g_last_error),
+                   "std::net %s failed: %s", op, e);
+}
+
+static void clear_error(void)
+{
+    g_last_error[0] = '\0';
+}
+
+static char* dup_cstr(const char* s)
+{
+    if(!s)
+        return NULL;
+    size_t n = strlen(s);
+    char* out = (char*)malloc(n + 1);
+    if(!out)
+        return NULL;
+    if(n > 0)
+        (void)memcpy(out, s, n);
+    out[n] = '\0';
+    return out;
+}
+
+char* __mlang_std_net_last_error(void)
+{
+    if(g_last_error[0] == '\0')
+        return dup_cstr("");
+    return dup_cstr(g_last_error);
+}
+
+/**
+ * @brief Create a TCP listener socket bound to addr:port.
+ */
+int64_t __mlang_std_net_tcp_bind(const char* addr, int64_t port)
+{
+    if(!addr || port < 0 || port > 65535)
+    {
+        errno = EINVAL;
+        set_error_from_errno("bind");
+        return 0;
+    }
+
+    mlang_socket_startup();
+    mlang_socket_t fd = socket(AF_INET, SOCK_STREAM, 0);
+    if(fd == MLANG_INVALID_SOCKET)
+    {
+        set_error_from_socket("socket");
+        return 0;
+    }
+
+    int one = 1;
+    (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
+                     (const char*)&one, sizeof(one));
+
+    struct sockaddr_in sa;
+    (void)memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons((uint16_t)port);
+    if(inet_pton(AF_INET, addr, &sa.sin_addr) != 1)
+    {
+        set_error_from_socket("inet_pton");
+        mlang_close_socket(fd);
+        return 0;
+    }
+
+    if(bind(fd, (struct sockaddr*)&sa, sizeof(sa)) != 0)
+    {
+        set_error_from_socket("bind");
+        mlang_close_socket(fd);
+        return 0;
+    }
+
+    if(listen(fd, 16) != 0)
+    {
+        set_error_from_socket("listen");
+        mlang_close_socket(fd);
+        return 0;
+    }
+
+    clear_error();
+    return (int64_t)fd;
+}
+
+/**
+ * @brief Query the local bound TCP port for a socket.
+ */
+int64_t __mlang_std_net_tcp_local_port(int64_t handle)
+{
+    mlang_socket_t fd = (mlang_socket_t)handle;
+    if(handle <= 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno("local_port");
+        return -1;
+    }
+
+    struct sockaddr_in sa;
+    socklen_t n = (socklen_t)sizeof(sa);
+    (void)memset(&sa, 0, sizeof(sa));
+    if(getsockname(fd, (struct sockaddr*)&sa, &n) != 0)
+    {
+        set_error_from_socket("getsockname");
+        return -1;
+    }
+
+    clear_error();
+    return (int64_t)ntohs(sa.sin_port);
+}
+
+/**
+ * @brief Accept one incoming TCP connection.
+ */
+int64_t __mlang_std_net_tcp_accept(int64_t listener)
+{
+    mlang_socket_t lfd = (mlang_socket_t)listener;
+    if(listener <= 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno("accept");
+        return 0;
+    }
+
+    struct sockaddr_in sa;
+    socklen_t n = (socklen_t)sizeof(sa);
+    mlang_socket_t cfd = accept(lfd, (struct sockaddr*)&sa, &n);
+    if(cfd == MLANG_INVALID_SOCKET)
+    {
+        set_error_from_socket("accept");
+        return 0;
+    }
+
+    clear_error();
+    return (int64_t)cfd;
+}
+
+/**
+ * @brief Connect a TCP stream socket to addr:port.
+ */
+int64_t __mlang_std_net_tcp_connect(const char* addr, int64_t port)
+{
+    if(!addr || port < 0 || port > 65535)
+    {
+        errno = EINVAL;
+        set_error_from_errno("connect");
+        return 0;
+    }
+
+    mlang_socket_startup();
+    mlang_socket_t fd = socket(AF_INET, SOCK_STREAM, 0);
+    if(fd == MLANG_INVALID_SOCKET)
+    {
+        set_error_from_socket("socket");
+        return 0;
+    }
+
+    struct sockaddr_in sa;
+    (void)memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons((uint16_t)port);
+    if(inet_pton(AF_INET, addr, &sa.sin_addr) != 1)
+    {
+        set_error_from_socket("inet_pton");
+        mlang_close_socket(fd);
+        return 0;
+    }
+
+    if(connect(fd, (struct sockaddr*)&sa, sizeof(sa)) != 0)
+    {
+        set_error_from_socket("connect");
+        mlang_close_socket(fd);
+        return 0;
+    }
+
+    clear_error();
+    return (int64_t)fd;
+}
+
+/**
+ * @brief Read bytes from a TCP socket into a caller buffer.
+ */
+int64_t __mlang_std_net_tcp_read(int64_t handle, char* buf, int64_t capacity)
+{
+    mlang_socket_t fd = (mlang_socket_t)handle;
+    if(handle <= 0 || !buf || capacity <= 1)
+    {
+        errno = EINVAL;
+        set_error_from_errno("read");
+        return -1;
+    }
+
+    int n = recv(fd, buf, (int)(capacity - 1), 0);
+    if(n < 0)
+    {
+        set_error_from_socket("recv");
+        return -1;
+    }
+    buf[n] = '\0';
+    clear_error();
+    return (int64_t)n;
+}
+
+/**
+ * @brief Write a NUL-terminated string to a TCP socket.
+ */
+int64_t __mlang_std_net_tcp_write(int64_t handle, const char* s)
+{
+    mlang_socket_t fd = (mlang_socket_t)handle;
+    if(handle <= 0 || !s)
+    {
+        errno = EINVAL;
+        set_error_from_errno("write");
+        return -1;
+    }
+
+    size_t len = strlen(s);
+    int n = send(fd, s, (int)len, 0);
+    if(n < 0)
+    {
+        set_error_from_socket("send");
+        return -1;
+    }
+    clear_error();
+    return (int64_t)n;
+}
+
+/**
+ * @brief Close a TCP socket handle.
+ */
+int __mlang_std_net_tcp_close(int64_t handle)
+{
+    mlang_socket_t fd = (mlang_socket_t)handle;
+    if(handle <= 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno("close");
+        return -1;
+    }
+
+    if(mlang_close_socket(fd) != 0)
+    {
+        set_error_from_socket("close");
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+/**
+ * @brief Enable or disable non-blocking mode on a socket.
+ */
+int __mlang_std_net_tcp_set_nonblocking(int64_t handle, int enabled)
+{
+    mlang_socket_t fd = (mlang_socket_t)handle;
+    if(handle <= 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno("set_nonblocking");
+        return -1;
+    }
+
+    if(mlang_set_socket_nonblocking(fd, enabled) != 0)
+    {
+        set_error_from_socket("set_nonblocking");
+        return -1;
+    }
+    clear_error();
+    return 0;
+}
+
+static int set_socket_timeout_ms(mlang_socket_t fd, int optname,
+                                 int64_t timeout_ms, const char* opname)
+{
+    if(timeout_ms < 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno(opname);
+        return -1;
+    }
+
+#ifdef _WIN32
+    DWORD tv = (DWORD)timeout_ms;
+    if(setsockopt(fd, SOL_SOCKET, optname,
+                  (const char*)&tv, (int)sizeof(tv)) != 0)
+    {
+        set_error_from_socket(opname);
+        return -1;
+    }
+#else
+    struct timeval tv;
+    tv.tv_sec  = (time_t)(timeout_ms / 1000);
+    tv.tv_usec = (suseconds_t)((timeout_ms % 1000) * 1000);
+    if(setsockopt(fd, SOL_SOCKET, optname, &tv, (socklen_t)sizeof(tv)) != 0)
+    {
+        set_error_from_socket(opname);
+        return -1;
+    }
+#endif
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_net_tcp_set_read_timeout_ms(int64_t handle, int64_t timeout_ms)
+{
+    if(handle <= 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno("set_read_timeout_ms");
+        return -1;
+    }
+    return set_socket_timeout_ms((mlang_socket_t)handle, SO_RCVTIMEO,
+                                 timeout_ms, "set_read_timeout_ms");
+}
+
+int __mlang_std_net_tcp_set_write_timeout_ms(int64_t handle, int64_t timeout_ms)
+{
+    if(handle <= 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno("set_write_timeout_ms");
+        return -1;
+    }
+    return set_socket_timeout_ms((mlang_socket_t)handle, SO_SNDTIMEO,
+                                 timeout_ms, "set_write_timeout_ms");
+}
+
+/**
+ * @brief Duplicate a TCP stream handle.
+ */
+int64_t __mlang_std_net_tcp_try_clone(int64_t handle)
+{
+    mlang_socket_t fd = (mlang_socket_t)handle;
+    if(handle <= 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno("try_clone");
+        return 0;
+    }
+
+#ifdef _WIN32
+    WSAPROTOCOL_INFOA info;
+    if(WSADuplicateSocketA(fd, GetCurrentProcessId(), &info) != 0)
+    {
+        set_error_from_socket("WSADuplicateSocket");
+        return 0;
+    }
+    SOCKET clone = WSASocketA(info.iAddressFamily, info.iSocketType,
+                              info.iProtocol, &info, 0, 0);
+    if(clone == INVALID_SOCKET)
+    {
+        set_error_from_socket("WSASocket");
+        return 0;
+    }
+    clear_error();
+    return (int64_t)clone;
+#else
+    int clone_fd = dup(fd);
+    if(clone_fd < 0)
+    {
+        set_error_from_socket("dup");
+        return 0;
+    }
+    clear_error();
+    return (int64_t)clone_fd;
+#endif
+}
+
+/**
+ * @brief Adjust listener backlog by calling listen() again.
+ */
+int __mlang_std_net_tcp_set_listener_backlog(int64_t handle, int64_t backlog)
+{
+    mlang_socket_t fd = (mlang_socket_t)handle;
+    if(handle <= 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno("set_listener_backlog");
+        return -1;
+    }
+
+    int queue = (int)(backlog <= 0 ? 16 : backlog);
+    if(listen(fd, queue) != 0)
+    {
+        set_error_from_socket("listen");
+        return -1;
+    }
+
+    clear_error();
+    return 0;
+}
+
+#if 0  /* legacy POSIX implementation, superseded by portable version above */
 /**
  * @file std_net.c
  * @brief POSIX TCP backend for std::net MLang bindings.
@@ -413,3 +829,4 @@ int __mlang_std_net_tcp_set_listener_backlog(int64_t handle, int64_t backlog)
     clear_error();
     return 0;
 }
+#endif /* legacy */

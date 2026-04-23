@@ -2754,9 +2754,22 @@ void CodeGenerator::initializeStdlibFunctions()
     exceptionsFrameEnvFunc = module->getOrInsertFunction(
         "__mlang_std_exceptions_frame_env", frameEnvType);
 
+    /* On Windows x64 there's no callable plain `_setjmp` — only
+     * `_setjmpex(env, frame)` is exported by the C runtime. Emit a 2-arg
+     * call with frame=NULL so the resulting object links against libcmt. */
     llvm::FunctionType* setjmpType =
+#if defined(_WIN32)
+        llvm::FunctionType::get(intType, {ptrType, ptrType}, false);
+#else
         llvm::FunctionType::get(intType, {ptrType}, false);
-    exceptionsSetjmpFunc = module->getOrInsertFunction("_setjmp", setjmpType);
+#endif
+    const char* setjmpName =
+#if defined(_WIN32)
+        "_setjmpex";
+#else
+        "_setjmp";
+#endif
+    exceptionsSetjmpFunc = module->getOrInsertFunction(setjmpName, setjmpType);
     if(auto* setjmpFn =
            llvm::dyn_cast<llvm::Function>(exceptionsSetjmpFunc.getCallee()))
     {
@@ -6809,8 +6822,17 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         builder.CreateCall(exceptionsPushFrameFunc, {}, "fn.exc.frame");
     llvm::Value* functionExceptionEnv = builder.CreateCall(
         exceptionsFrameEnvFunc, {currentFunctionExceptionFrame}, "fn.exc.env");
+#if defined(_WIN32)
+    auto* functionSetjmpCall = builder.CreateCall(
+        exceptionsSetjmpFunc,
+        {functionExceptionEnv,
+         llvm::ConstantPointerNull::get(
+             llvm::PointerType::get(builder.getContext(), 0))},
+        "fn.exc.state");
+#else
     auto* functionSetjmpCall = builder.CreateCall(
         exceptionsSetjmpFunc, {functionExceptionEnv}, "fn.exc.state");
+#endif
     functionSetjmpCall->setCanReturnTwice();
     llvm::Value* functionExceptionState = functionSetjmpCall;
     llvm::Value* enteredNormally = builder.CreateICmpEQ(
@@ -11529,8 +11551,17 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
         builder.CreateCall(exceptionsPushFrameFunc, {}, "try.exc.frame");
     llvm::Value* frameEnv = builder.CreateCall(exceptionsFrameEnvFunc,
                                                {frameHandle}, "try.exc.env");
+#if defined(_WIN32)
+    auto* trySetjmpCall = builder.CreateCall(
+        exceptionsSetjmpFunc,
+        {frameEnv,
+         llvm::ConstantPointerNull::get(
+             llvm::PointerType::get(builder.getContext(), 0))},
+        "try.exc.state");
+#else
     auto* trySetjmpCall =
         builder.CreateCall(exceptionsSetjmpFunc, {frameEnv}, "try.exc.state");
+#endif
     trySetjmpCall->setCanReturnTwice();
     llvm::Value* frameState = trySetjmpCall;
 
@@ -23636,8 +23667,27 @@ bool Backend::linkExecutable(const std::string& objectFile,
                              const std::vector<std::string>& linkArgs)
 {
     ensure_artifact_parent_directory(outputFile);
-    // Use C++ driver so C++ stdlib symbols from native stdlib objects resolve.
-    std::string command = "c++ -o " + outputFile + " " + objectFile;
+    // Use a C++ driver so C++ stdlib symbols from native stdlib objects
+    // resolve. The driver can be overridden with MLANG_CXX; otherwise we
+    // default to the platform's conventional name.
+    std::string driver;
+    if(const char* envCxx = std::getenv("MLANG_CXX"); envCxx && envCxx[0] != '\0')
+    {
+        driver = envCxx;
+    }
+    else
+    {
+#if defined(_WIN32)
+        // Windows has no `c++` driver. Prefer clang++ (LLVM is already the
+        // compiler infrastructure used by mlang); users can override with
+        // MLANG_CXX=cl, MLANG_CXX=clang-cl, etc.
+        driver = "clang++";
+#else
+        driver = "c++";
+#endif
+    }
+
+    std::string command = driver + " -o " + outputFile + " " + objectFile;
     if(const char* extraLinkFlags = std::getenv("MLANG_LINK_FLAGS"))
     {
         if(extraLinkFlags[0] != '\0')

@@ -1,10 +1,9 @@
+#include "mlang_platform.h"
 #include <errno.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdatomic.h>
 #include <time.h>
 
 extern int __mlang_std_sync_lfqueue_send(int64_t queue_handle, const char* s);
@@ -25,9 +24,9 @@ typedef struct
     int64_t queue_handle;
     int64_t interval_ns;
     char* event_name;
-    pthread_t thread;
-    atomic_int running;
-    atomic_int started;
+    mlang_thread_t thread;
+    mlang_atomic_int running;
+    mlang_atomic_int started;
 } mlang_async_ticker_t;
 
 static int64_t now_ns_internal(void)
@@ -39,18 +38,7 @@ static int64_t now_ns_internal(void)
 
 static void sleep_ns_internal(int64_t ns)
 {
-    if(ns <= 0)
-        return;
-
-    struct timespec req;
-    req.tv_sec = (time_t)(ns / 1000000000LL);
-    req.tv_nsec = (long)(ns % 1000000000LL);
-
-    while(nanosleep(&req, &req) != 0)
-    {
-        if(errno != EINTR)
-            break;
-    }
+    mlang_sleep_ns((long long)ns);
 }
 
 int64_t __mlang_std_time_now_ms(void)
@@ -212,20 +200,20 @@ int __mlang_std_timer_interval_free(int64_t handle)
     return 0;
 }
 
-static void* ticker_thread_main(void* arg)
+static MLANG_THREAD_RETURN MLANG_THREAD_CALL ticker_thread_main(void* arg)
 {
     mlang_async_ticker_t* t = (mlang_async_ticker_t*)arg;
     if(!t)
-        return NULL;
+        return MLANG_THREAD_RETURN_VALUE;
 
-    while(atomic_load(&t->running))
+    while(mlang_atomic_load(&t->running))
     {
         sleep_ns_internal(t->interval_ns);
-        if(!atomic_load(&t->running))
+        if(!mlang_atomic_load(&t->running))
             break;
         (void)__mlang_std_sync_lfqueue_send(t->queue_handle, t->event_name ? t->event_name : "tick");
     }
-    return NULL;
+    return MLANG_THREAD_RETURN_VALUE;
 }
 
 int64_t __mlang_std_timer_async_ticker_new(int64_t queue_handle, int64_t interval_ms, const char* event_name)
@@ -247,16 +235,16 @@ int64_t __mlang_std_timer_async_ticker_new(int64_t queue_handle, int64_t interva
         free(t);
         return 0;
     }
-    atomic_store(&t->running, 1);
-    atomic_store(&t->started, 0);
+    mlang_atomic_store(&t->running, 1);
+    mlang_atomic_store(&t->started, 0);
 
-    if(pthread_create(&t->thread, NULL, ticker_thread_main, t) != 0)
+    if(mlang_thread_create(&t->thread, ticker_thread_main, t) != 0)
     {
         free(t->event_name);
         free(t);
         return 0;
     }
-    atomic_store(&t->started, 1);
+    mlang_atomic_store(&t->started, 1);
     return (int64_t)(intptr_t)t;
 }
 
@@ -266,11 +254,11 @@ int __mlang_std_timer_async_ticker_stop(int64_t handle)
     if(!t)
         return 0;
 
-    atomic_store(&t->running, 0);
-    if(atomic_load(&t->started))
+    mlang_atomic_store(&t->running, 0);
+    if(mlang_atomic_load(&t->started))
     {
-        (void)pthread_join(t->thread, NULL);
-        atomic_store(&t->started, 0);
+        (void)mlang_thread_join(t->thread);
+        mlang_atomic_store(&t->started, 0);
     }
     return 0;
 }

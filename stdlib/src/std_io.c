@@ -1,39 +1,40 @@
-#include <pthread.h>
+#include "mlang_platform.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <unistd.h>
+#ifndef _WIN32
+  #include <fcntl.h>
+#endif
 
-static pthread_mutex_t g_stdout_mutex;
-static pthread_once_t g_stdout_once = PTHREAD_ONCE_INIT;
+static mlang_mutex_t g_stdout_mutex;
+static mlang_once_t  g_stdout_once = MLANG_ONCE_INIT;
 
 static void init_stdout_mutex(void)
 {
-    (void)pthread_mutex_init(&g_stdout_mutex, NULL);
+    (void)mlang_mutex_init(&g_stdout_mutex);
 }
 
 int __mlang_std_io_stdout_lock(void)
 {
-    (void)pthread_once(&g_stdout_once, init_stdout_mutex);
-    return pthread_mutex_lock(&g_stdout_mutex);
+    mlang_call_once(&g_stdout_once, init_stdout_mutex);
+    return mlang_mutex_lock(&g_stdout_mutex);
 }
 
 int __mlang_std_io_stdout_unlock(void)
 {
-    (void)pthread_once(&g_stdout_once, init_stdout_mutex);
-    return pthread_mutex_unlock(&g_stdout_mutex);
+    mlang_call_once(&g_stdout_once, init_stdout_mutex);
+    return mlang_mutex_unlock(&g_stdout_mutex);
 }
 
 int __mlang_std_io_stdout_try_lock(void)
 {
-    (void)pthread_once(&g_stdout_once, init_stdout_mutex);
-    int rc = pthread_mutex_trylock(&g_stdout_mutex);
+    mlang_call_once(&g_stdout_once, init_stdout_mutex);
+    int rc = mlang_mutex_trylock(&g_stdout_mutex);
     if(rc == 0)
     {
-        (void)pthread_mutex_unlock(&g_stdout_mutex);
+        (void)mlang_mutex_unlock(&g_stdout_mutex);
         return 1;
     }
     return 0;
@@ -171,6 +172,136 @@ int __mlang_std_io_set_stderr_buffering(int mode, int64_t size)
 {
     return set_stream_buffering(stderr, mode, size);
 }
+
+#ifdef _WIN32
+/* Returns 1 if stdin currently has at least one byte available, 0 otherwise.
+ * Works for console (Peek for printable key events) and pipe/file inputs. */
+static int win_stdin_has_data(void)
+{
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    if(h == NULL || h == INVALID_HANDLE_VALUE)
+        return 0;
+    DWORD type = GetFileType(h);
+    if(type == FILE_TYPE_PIPE)
+    {
+        DWORD avail = 0;
+        if(!PeekNamedPipe(h, NULL, 0, NULL, &avail, NULL))
+            return 0;
+        return avail > 0 ? 1 : 0;
+    }
+    if(type == FILE_TYPE_CHAR)
+    {
+        INPUT_RECORD recs[16];
+        DWORD nread = 0;
+        if(!PeekConsoleInputA(h, recs, 16, &nread))
+            return 0;
+        for(DWORD i = 0; i < nread; ++i)
+        {
+            if(recs[i].EventType == KEY_EVENT &&
+               recs[i].Event.KeyEvent.bKeyDown &&
+               recs[i].Event.KeyEvent.uChar.AsciiChar != 0)
+                return 1;
+        }
+        /* drain non-key events to keep the queue from filling */
+        for(DWORD i = 0; i < nread; ++i)
+        {
+            if(recs[i].EventType != KEY_EVENT ||
+               !recs[i].Event.KeyEvent.bKeyDown ||
+               recs[i].Event.KeyEvent.uChar.AsciiChar == 0)
+            {
+                INPUT_RECORD junk; DWORD jr = 0;
+                (void)ReadConsoleInputA(h, &junk, 1, &jr);
+            }
+            else break;
+        }
+        return 0;
+    }
+    return 1; /* disk file: assume readable */
+}
+
+int __mlang_std_io_set_stdin_blocking(int blocking)
+{
+    /* No-op on Windows: non-blocking semantics are implemented via Peek
+     * inside the read_*_nonblocking helpers below. */
+    (void)blocking;
+    return 0;
+}
+
+int64_t __mlang_std_io_stdin_read_line_nonblocking(char* buf, int64_t capacity)
+{
+    if(!buf || capacity <= 1)
+        return -1;
+
+    if(!win_stdin_has_data())
+    {
+        buf[0] = '\0';
+        return 0;
+    }
+
+    int64_t out_n = 0;
+    int saw_any = 0;
+    while(out_n < (capacity - 1))
+    {
+        if(!win_stdin_has_data())
+            break;
+        int ch = getchar();
+        if(ch == EOF)
+        {
+            if(!saw_any)
+                return -1;
+            break;
+        }
+        saw_any = 1;
+        if(ch == '\n')
+            break;
+        if(ch == '\r')
+            continue;
+        buf[out_n++] = (char)ch;
+    }
+    buf[out_n] = '\0';
+    return out_n;
+}
+
+int32_t __mlang_std_io_stdin_read_byte_nonblocking(void)
+{
+    if(!win_stdin_has_data())
+        return -2;
+    int ch = getchar();
+    if(ch == EOF)
+        return -1;
+    return (int32_t)(unsigned char)ch;
+}
+
+int64_t __mlang_std_io_stdin_read_raw_nonblocking(char* buf, int64_t capacity)
+{
+    if(!buf || capacity <= 1)
+        return -1;
+
+    if(!win_stdin_has_data())
+    {
+        buf[0] = '\0';
+        return 0;
+    }
+
+    int64_t out_n = 0;
+    while(out_n < (capacity - 1))
+    {
+        if(!win_stdin_has_data())
+            break;
+        int ch = getchar();
+        if(ch == EOF)
+        {
+            if(out_n == 0)
+                return -1;
+            break;
+        }
+        buf[out_n++] = (char)ch;
+    }
+    buf[out_n] = '\0';
+    return out_n;
+}
+
+#else  /* POSIX */
 
 int __mlang_std_io_set_stdin_blocking(int blocking)
 {
@@ -333,6 +464,8 @@ int64_t __mlang_std_io_stdin_read_raw_nonblocking(char* buf, int64_t capacity)
     buf[out_n] = '\0';
     return out_n;
 }
+
+#endif  /* _WIN32 / POSIX */
 
 typedef int64_t (*mlang_fn0_i64_t)(void);
 

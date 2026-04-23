@@ -1,27 +1,26 @@
+#include "mlang_platform.h"
 #include <errno.h>
-#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 typedef struct
 {
-    pthread_mutex_t mu;
+    mlang_mutex_t mu;
 } mlang_sync_mutex_t;
 
 typedef struct
 {
-    pthread_cond_t cv;
+    mlang_cond_t cv;
 } mlang_sync_condvar_t;
 
 typedef struct
 {
-    pthread_mutex_t mu;
-    pthread_cond_t can_send;
-    pthread_cond_t can_recv;
+    mlang_mutex_t mu;
+    mlang_cond_t can_send;
+    mlang_cond_t can_recv;
     int closed;
     size_t cap;
     size_t count;
@@ -32,14 +31,14 @@ typedef struct
 
 typedef struct
 {
-    _Atomic size_t head;
-    _Atomic size_t tail;
-    _Atomic int closed;
+    mlang_atomic_size_t head;
+    mlang_atomic_size_t tail;
+    mlang_atomic_int closed;
     size_t cap;
     char** items;
 } mlang_sync_lfqueue_t;
 
-static __thread char g_last_error[512];
+static MLANG_THREAD_LOCAL char g_last_error[512];
 
 static void set_error(const char* msg)
 {
@@ -92,10 +91,10 @@ int64_t __mlang_std_sync_mutex_new(void)
         set_error("std::sync mutex_new: out of memory");
         return 0;
     }
-    if(pthread_mutex_init(&m->mu, NULL) != 0)
+    if(mlang_mutex_init(&m->mu) != 0)
     {
         free(m);
-        set_error("std::sync mutex_new: pthread_mutex_init failed");
+        set_error("std::sync mutex_new: mutex_init failed");
         return 0;
     }
     clear_error();
@@ -110,7 +109,7 @@ int __mlang_std_sync_mutex_lock(int64_t handle)
         set_error("std::sync mutex_lock: invalid handle");
         return -1;
     }
-    int rc = pthread_mutex_lock(&m->mu);
+    int rc = mlang_mutex_lock(&m->mu);
     if(rc != 0)
     {
         set_error("std::sync mutex_lock failed");
@@ -128,7 +127,7 @@ int __mlang_std_sync_mutex_unlock(int64_t handle)
         set_error("std::sync mutex_unlock: invalid handle");
         return -1;
     }
-    int rc = pthread_mutex_unlock(&m->mu);
+    int rc = mlang_mutex_unlock(&m->mu);
     if(rc != 0)
     {
         set_error("std::sync mutex_unlock failed");
@@ -143,7 +142,7 @@ int __mlang_std_sync_mutex_free(int64_t handle)
     mlang_sync_mutex_t* m = (mlang_sync_mutex_t*)(intptr_t)handle;
     if(!m)
         return 0;
-    (void)pthread_mutex_destroy(&m->mu);
+    (void)mlang_mutex_destroy(&m->mu);
     free(m);
     return 0;
 }
@@ -156,10 +155,10 @@ int64_t __mlang_std_sync_condvar_new(void)
         set_error("std::sync condvar_new: out of memory");
         return 0;
     }
-    if(pthread_cond_init(&cv->cv, NULL) != 0)
+    if(mlang_cond_init(&cv->cv) != 0)
     {
         free(cv);
-        set_error("std::sync condvar_new: pthread_cond_init failed");
+        set_error("std::sync condvar_new: cond_init failed");
         return 0;
     }
     clear_error();
@@ -175,7 +174,7 @@ int __mlang_std_sync_condvar_wait(int64_t cond_handle, int64_t mutex_handle)
         set_error("std::sync condvar_wait: invalid handle");
         return -1;
     }
-    int rc = pthread_cond_wait(&cv->cv, &m->mu);
+    int rc = mlang_cond_wait(&cv->cv, &m->mu);
     if(rc != 0)
     {
         set_error("std::sync condvar_wait failed");
@@ -197,19 +196,8 @@ int __mlang_std_sync_condvar_wait_timeout_ms(int64_t cond_handle, int64_t mutex_
     if(timeout_ms < 0)
         timeout_ms = 0;
 
-    struct timespec ts;
-    (void)clock_gettime(CLOCK_REALTIME, &ts);
-    int64_t add_ns = timeout_ms * 1000000LL;
-    ts.tv_sec += (time_t)(add_ns / 1000000000LL);
-    ts.tv_nsec += (long)(add_ns % 1000000000LL);
-    if(ts.tv_nsec >= 1000000000L)
-    {
-        ts.tv_sec += 1;
-        ts.tv_nsec -= 1000000000L;
-    }
-
-    int rc = pthread_cond_timedwait(&cv->cv, &m->mu, &ts);
-    if(rc == ETIMEDOUT)
+    int rc = mlang_cond_wait_for_ms(&cv->cv, &m->mu, (long long)timeout_ms);
+    if(rc == 1)
     {
         clear_error();
         return 1;
@@ -232,7 +220,7 @@ int __mlang_std_sync_condvar_notify_one(int64_t cond_handle)
         set_error("std::sync condvar_notify_one: invalid handle");
         return -1;
     }
-    int rc = pthread_cond_signal(&cv->cv);
+    int rc = mlang_cond_signal(&cv->cv);
     if(rc != 0)
     {
         set_error("std::sync condvar_notify_one failed");
@@ -250,7 +238,7 @@ int __mlang_std_sync_condvar_notify_all(int64_t cond_handle)
         set_error("std::sync condvar_notify_all: invalid handle");
         return -1;
     }
-    int rc = pthread_cond_broadcast(&cv->cv);
+    int rc = mlang_cond_broadcast(&cv->cv);
     if(rc != 0)
     {
         set_error("std::sync condvar_notify_all failed");
@@ -265,7 +253,7 @@ int __mlang_std_sync_condvar_free(int64_t cond_handle)
     mlang_sync_condvar_t* cv = (mlang_sync_condvar_t*)(intptr_t)cond_handle;
     if(!cv)
         return 0;
-    (void)pthread_cond_destroy(&cv->cv);
+    (void)mlang_cond_destroy(&cv->cv);
     free(cv);
     return 0;
 }
@@ -290,16 +278,16 @@ int64_t __mlang_std_sync_channel_new(int64_t capacity)
     }
     ch->cap = cap;
 
-    if(pthread_mutex_init(&ch->mu, NULL) != 0 ||
-       pthread_cond_init(&ch->can_send, NULL) != 0 ||
-       pthread_cond_init(&ch->can_recv, NULL) != 0)
+    if(mlang_mutex_init(&ch->mu) != 0 ||
+       mlang_cond_init(&ch->can_send) != 0 ||
+       mlang_cond_init(&ch->can_recv) != 0)
     {
-        (void)pthread_cond_destroy(&ch->can_send);
-        (void)pthread_cond_destroy(&ch->can_recv);
-        (void)pthread_mutex_destroy(&ch->mu);
+        (void)mlang_cond_destroy(&ch->can_send);
+        (void)mlang_cond_destroy(&ch->can_recv);
+        (void)mlang_mutex_destroy(&ch->mu);
         free(ch->items);
         free(ch);
-        set_error("std::sync channel_new: pthread init failed");
+        set_error("std::sync channel_new: init failed");
         return 0;
     }
 
@@ -316,18 +304,18 @@ int __mlang_std_sync_channel_send(int64_t channel_handle, const char* s)
         return -1;
     }
 
-    if(pthread_mutex_lock(&ch->mu) != 0)
+    if(mlang_mutex_lock(&ch->mu) != 0)
     {
         set_error("std::sync channel_send: mutex lock failed");
         return -1;
     }
 
     while(ch->count == ch->cap && !ch->closed)
-        (void)pthread_cond_wait(&ch->can_send, &ch->mu);
+        (void)mlang_cond_wait(&ch->can_send, &ch->mu);
 
     if(ch->closed)
     {
-        (void)pthread_mutex_unlock(&ch->mu);
+        (void)mlang_mutex_unlock(&ch->mu);
         set_error("std::sync channel_send: channel closed");
         return -1;
     }
@@ -335,7 +323,7 @@ int __mlang_std_sync_channel_send(int64_t channel_handle, const char* s)
     char* msg = mlang_strdup(s);
     if(!msg)
     {
-        (void)pthread_mutex_unlock(&ch->mu);
+        (void)mlang_mutex_unlock(&ch->mu);
         set_error("std::sync channel_send: out of memory");
         return -1;
     }
@@ -343,8 +331,8 @@ int __mlang_std_sync_channel_send(int64_t channel_handle, const char* s)
     ch->items[ch->tail] = msg;
     ch->tail = (ch->tail + 1) % ch->cap;
     ch->count++;
-    (void)pthread_cond_signal(&ch->can_recv);
-    (void)pthread_mutex_unlock(&ch->mu);
+    (void)mlang_cond_signal(&ch->can_recv);
+    (void)mlang_mutex_unlock(&ch->mu);
 
     clear_error();
     return 0;
@@ -356,7 +344,7 @@ static int64_t channel_pop_into_buf(mlang_sync_channel_t* ch, char* buf, int64_t
     ch->items[ch->head] = NULL;
     ch->head = (ch->head + 1) % ch->cap;
     ch->count--;
-    (void)pthread_cond_signal(&ch->can_send);
+    (void)mlang_cond_signal(&ch->can_send);
 
     if(!buf || capacity <= 1)
     {
@@ -382,18 +370,18 @@ int64_t __mlang_std_sync_channel_recv(int64_t channel_handle, char* buf, int64_t
         return -1;
     }
 
-    if(pthread_mutex_lock(&ch->mu) != 0)
+    if(mlang_mutex_lock(&ch->mu) != 0)
     {
         set_error("std::sync channel_recv: mutex lock failed");
         return -1;
     }
 
     while(ch->count == 0 && !ch->closed)
-        (void)pthread_cond_wait(&ch->can_recv, &ch->mu);
+        (void)mlang_cond_wait(&ch->can_recv, &ch->mu);
 
     if(ch->count == 0 && ch->closed)
     {
-        (void)pthread_mutex_unlock(&ch->mu);
+        (void)mlang_mutex_unlock(&ch->mu);
         if(buf && capacity > 0)
             buf[0] = '\0';
         clear_error();
@@ -401,7 +389,7 @@ int64_t __mlang_std_sync_channel_recv(int64_t channel_handle, char* buf, int64_t
     }
 
     int64_t n = channel_pop_into_buf(ch, buf, capacity);
-    (void)pthread_mutex_unlock(&ch->mu);
+    (void)mlang_mutex_unlock(&ch->mu);
     if(n < 0)
     {
         set_error("std::sync channel_recv: invalid buffer");
@@ -420,7 +408,7 @@ int64_t __mlang_std_sync_channel_try_recv(int64_t channel_handle, char* buf, int
         return -1;
     }
 
-    if(pthread_mutex_lock(&ch->mu) != 0)
+    if(mlang_mutex_lock(&ch->mu) != 0)
     {
         set_error("std::sync channel_try_recv: mutex lock failed");
         return -1;
@@ -429,7 +417,7 @@ int64_t __mlang_std_sync_channel_try_recv(int64_t channel_handle, char* buf, int
     if(ch->count == 0)
     {
         int closed = ch->closed;
-        (void)pthread_mutex_unlock(&ch->mu);
+        (void)mlang_mutex_unlock(&ch->mu);
         if(buf && capacity > 0)
             buf[0] = '\0';
         clear_error();
@@ -437,7 +425,7 @@ int64_t __mlang_std_sync_channel_try_recv(int64_t channel_handle, char* buf, int
     }
 
     int64_t n = channel_pop_into_buf(ch, buf, capacity);
-    (void)pthread_mutex_unlock(&ch->mu);
+    (void)mlang_mutex_unlock(&ch->mu);
     if(n < 0)
     {
         set_error("std::sync channel_try_recv: invalid buffer");
@@ -453,15 +441,15 @@ int __mlang_std_sync_channel_close(int64_t channel_handle)
     if(!ch)
         return 0;
 
-    if(pthread_mutex_lock(&ch->mu) != 0)
+    if(mlang_mutex_lock(&ch->mu) != 0)
     {
         set_error("std::sync channel_close: mutex lock failed");
         return -1;
     }
     ch->closed = 1;
-    (void)pthread_cond_broadcast(&ch->can_recv);
-    (void)pthread_cond_broadcast(&ch->can_send);
-    (void)pthread_mutex_unlock(&ch->mu);
+    (void)mlang_cond_broadcast(&ch->can_recv);
+    (void)mlang_cond_broadcast(&ch->can_send);
+    (void)mlang_mutex_unlock(&ch->mu);
     clear_error();
     return 0;
 }
@@ -472,18 +460,18 @@ int __mlang_std_sync_channel_free(int64_t channel_handle)
     if(!ch)
         return 0;
 
-    (void)pthread_mutex_lock(&ch->mu);
+    (void)mlang_mutex_lock(&ch->mu);
     ch->closed = 1;
     for(size_t i = 0; i < ch->cap; ++i)
     {
         free(ch->items[i]);
         ch->items[i] = NULL;
     }
-    (void)pthread_mutex_unlock(&ch->mu);
+    (void)mlang_mutex_unlock(&ch->mu);
 
-    (void)pthread_cond_destroy(&ch->can_send);
-    (void)pthread_cond_destroy(&ch->can_recv);
-    (void)pthread_mutex_destroy(&ch->mu);
+    (void)mlang_cond_destroy(&ch->can_send);
+    (void)mlang_cond_destroy(&ch->can_recv);
+    (void)mlang_mutex_destroy(&ch->mu);
     free(ch->items);
     free(ch);
     return 0;
@@ -508,9 +496,9 @@ int64_t __mlang_std_sync_lfqueue_new(int64_t capacity)
         return 0;
     }
     q->cap = cap;
-    atomic_store_explicit(&q->head, 0u, memory_order_relaxed);
-    atomic_store_explicit(&q->tail, 0u, memory_order_relaxed);
-    atomic_store_explicit(&q->closed, 0, memory_order_relaxed);
+    mlang_atomic_size_store(&q->head, 0u);
+    mlang_atomic_size_store(&q->tail, 0u);
+    mlang_atomic_store(&q->closed, 0);
     clear_error();
     return (int64_t)(intptr_t)q;
 }
@@ -523,14 +511,14 @@ int __mlang_std_sync_lfqueue_send(int64_t queue_handle, const char* s)
         set_error("std::sync lfqueue_send: invalid handle or message");
         return -1;
     }
-    if(atomic_load_explicit(&q->closed, memory_order_acquire) != 0)
+    if(mlang_atomic_load(&q->closed) != 0)
     {
         set_error("std::sync lfqueue_send: queue closed");
         return -1;
     }
 
-    size_t tail = atomic_load_explicit(&q->tail, memory_order_relaxed);
-    size_t head = atomic_load_explicit(&q->head, memory_order_acquire);
+    size_t tail = mlang_atomic_size_load(&q->tail);
+    size_t head = mlang_atomic_size_load(&q->head);
     if((tail - head) >= q->cap)
     {
         clear_error();
@@ -545,7 +533,7 @@ int __mlang_std_sync_lfqueue_send(int64_t queue_handle, const char* s)
     }
 
     q->items[tail % q->cap] = msg;
-    atomic_store_explicit(&q->tail, tail + 1u, memory_order_release);
+    mlang_atomic_size_store(&q->tail, tail + 1u);
     clear_error();
     return 0;
 }
@@ -564,12 +552,12 @@ int64_t __mlang_std_sync_lfqueue_try_recv(int64_t queue_handle, char* buf, int64
         return -1;
     }
 
-    size_t head = atomic_load_explicit(&q->head, memory_order_relaxed);
-    size_t tail = atomic_load_explicit(&q->tail, memory_order_acquire);
+    size_t head = mlang_atomic_size_load(&q->head);
+    size_t tail = mlang_atomic_size_load(&q->tail);
     if(head == tail)
     {
         buf[0] = '\0';
-        if(atomic_load_explicit(&q->closed, memory_order_acquire) != 0)
+        if(mlang_atomic_load(&q->closed) != 0)
         {
             clear_error();
             return 0;
@@ -581,7 +569,7 @@ int64_t __mlang_std_sync_lfqueue_try_recv(int64_t queue_handle, char* buf, int64
     size_t idx = head % q->cap;
     char* msg = q->items[idx];
     q->items[idx] = NULL;
-    atomic_store_explicit(&q->head, head + 1u, memory_order_release);
+    mlang_atomic_size_store(&q->head, head + 1u);
 
     int64_t src_len = msg ? (int64_t)strlen(msg) : 0;
     int64_t n = src_len < (capacity - 1) ? src_len : (capacity - 1);
@@ -598,7 +586,7 @@ int __mlang_std_sync_lfqueue_close(int64_t queue_handle)
     mlang_sync_lfqueue_t* q = (mlang_sync_lfqueue_t*)(intptr_t)queue_handle;
     if(!q)
         return 0;
-    atomic_store_explicit(&q->closed, 1, memory_order_release);
+    mlang_atomic_store(&q->closed, 1);
     clear_error();
     return 0;
 }
@@ -608,7 +596,7 @@ int __mlang_std_sync_lfqueue_free(int64_t queue_handle)
     mlang_sync_lfqueue_t* q = (mlang_sync_lfqueue_t*)(intptr_t)queue_handle;
     if(!q)
         return 0;
-    atomic_store_explicit(&q->closed, 1, memory_order_release);
+    mlang_atomic_store(&q->closed, 1);
     if(q->items)
     {
         for(size_t i = 0; i < q->cap; ++i)

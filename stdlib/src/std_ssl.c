@@ -1,17 +1,25 @@
-#include <arpa/inet.h>
+#include "mlang_platform.h"
+
 #include <errno.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
 #include <sys/types.h>
-#include <unistd.h>
+
+#ifndef _WIN32
+  #include <netdb.h>
+  #include <sys/time.h>
+  #include <unistd.h>
+#endif
+
+/* Every close() in this file refers to a socket fd; on Windows that needs
+ * closesocket. Redirect via a macro so the body code stays unchanged. */
+#ifdef _WIN32
+  #define close(fd) closesocket((SOCKET)(fd))
+#endif
 
 /**
  * @file std_ssl.c
@@ -133,6 +141,7 @@ static int socket_connect_host(const char* host, int64_t port)
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
+    mlang_socket_startup();
     int rc = getaddrinfo(host, service, &hints, &result);
     if(rc != 0)
     {
@@ -176,6 +185,7 @@ static int socket_bind_listener(const char* addr, int64_t port)
     hints.ai_flags = AI_PASSIVE;
 
     const char* bind_addr = (addr && addr[0] != '\0') ? addr : NULL;
+    mlang_socket_startup();
     int rc = getaddrinfo(bind_addr, service, &hints, &result);
     if(rc != 0)
     {
@@ -191,7 +201,8 @@ static int socket_bind_listener(const char* addr, int64_t port)
             continue;
 
         int one = 1;
-        (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+        (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
+                         (const char*)&one, sizeof(one));
 
         if(bind(fd, it->ai_addr, it->ai_addrlen) == 0 && listen(fd, 16) == 0)
             break;
@@ -248,15 +259,24 @@ static int set_socket_timeout_ms(int fd, int optname, int64_t timeout_ms,
         return -1;
     }
 
+#ifdef _WIN32
+    DWORD tv = (DWORD)timeout_ms;
+    if(setsockopt(fd, SOL_SOCKET, optname,
+                  (const char*)&tv, (int)sizeof(tv)) != 0)
+    {
+        set_error_from_errno(opname);
+        return -1;
+    }
+#else
     struct timeval tv;
-    tv.tv_sec = (time_t)(timeout_ms / 1000);
+    tv.tv_sec  = (time_t)(timeout_ms / 1000);
     tv.tv_usec = (suseconds_t)((timeout_ms % 1000) * 1000);
-
     if(setsockopt(fd, SOL_SOCKET, optname, &tv, (socklen_t)sizeof(tv)) != 0)
     {
         set_error_from_errno(opname);
         return -1;
     }
+#endif
 
     clear_error();
     return 0;

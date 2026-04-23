@@ -426,6 +426,10 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_testing.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_exceptions.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_image.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_time.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_sync.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fs.c
 )
 
 # These stdlib modules require deep POSIX APIs (sockets, pthreads, pty, fork,
@@ -433,15 +437,22 @@ add_library(mlang_std STATIC
 # implementations are provided.
 if(NOT WIN32)
     target_sources(mlang_std PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fs.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_time.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_sync.c
         ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ssl.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_jsonrpc.c
     )
+else()
+    target_sources(mlang_std PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process_win.c
+    )
+endif()
+target_sources(mlang_std PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ssl.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_jsonrpc.c
+)
+target_sources(mlang_std PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
+)
+if(WIN32)
+    target_link_libraries(mlang_std PRIVATE ws2_32)
 endif()
 add_dependencies(mlang_std ParserTarget LexerTarget)
 target_include_directories(mlang_std PRIVATE ${CMAKE_SOURCE_DIR}/include)

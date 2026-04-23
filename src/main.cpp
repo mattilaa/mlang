@@ -464,7 +464,10 @@ static bool stdlib_lib_exists(const std::string& dir)
 {
     std::error_code ec;
     std::filesystem::path base(dir);
-    const char* names[] = {"libmlang_std.a", "libmlang_std.so", "libmlang_std.dylib"};
+    const char* names[] = {
+        "libmlang_std.a", "libmlang_std.so", "libmlang_std.dylib",
+        "mlang_std.lib"
+    };
     for(const char* name : names)
     {
         if(std::filesystem::exists(base / name, ec))
@@ -565,8 +568,12 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
             break;
         }
     }
+#if !defined(_WIN32)
     if(!hasLibm)
         linkArgs.push_back("-lm");
+#else
+    (void)hasLibm; /* libm is not a separate library on Windows */
+#endif
 
 #ifdef MLANG_OPENSSL_SSL_DIR
     append_unique_link_arg(linkArgs,
@@ -578,13 +585,20 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
 #endif
 #ifdef MLANG_OPENSSL_SSL_LIBRARY
     append_unique_link_arg(linkArgs, MLANG_OPENSSL_SSL_LIBRARY);
-#else
+#elif !defined(_WIN32)
     append_unique_link_arg(linkArgs, "-lssl");
 #endif
 #ifdef MLANG_OPENSSL_CRYPTO_LIBRARY
     append_unique_link_arg(linkArgs, MLANG_OPENSSL_CRYPTO_LIBRARY);
-#else
+#elif !defined(_WIN32)
     append_unique_link_arg(linkArgs, "-lcrypto");
+#endif
+
+#ifdef _WIN32
+    /* Native Windows libraries used by the stdlib (sockets, secure RNG). */
+    append_unique_link_arg(linkArgs, "-lws2_32");
+    append_unique_link_arg(linkArgs, "-ladvapi32");
+    append_unique_link_arg(linkArgs, "-luser32");
 #endif
 
 #ifdef __APPLE__
@@ -1513,7 +1527,11 @@ int main(int argc, char** argv)
 
     // Parse command line arguments
     std::string inputFile;
+#if defined(_WIN32)
+    std::string outputFile = "a.exe";
+#else
     std::string outputFile = "a.out";
+#endif
     bool outputPathExplicit = false;
     bool emitObjectOnly = false;
     bool emitAssembly = false;

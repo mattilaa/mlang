@@ -1,17 +1,20 @@
+#include "mlang_platform.h"
+
 #include <ctype.h>
-#include <dirent.h>
 #include <errno.h>
 #include <limits.h>
-#include <poll.h>
-#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <unistd.h>
 
-static __thread char g_last_error[512];
+#ifndef _WIN32
+  #include <dirent.h>
+  #include <unistd.h>
+#endif
+
+static MLANG_THREAD_LOCAL char g_last_error[512];
 
 static pthread_mutex_t g_write_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_cancel_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -105,16 +108,10 @@ static int read_byte_with_timeout(int fd, char* out, int64_t timeout_ms)
 
     if(timeout_ms >= 0)
     {
-        struct pollfd pfd;
-        pfd.fd = fd;
-        pfd.events = POLLIN;
-        pfd.revents = 0;
-        int pr = poll(&pfd, 1, (int)timeout_ms);
+        int pr = mlang_poll_fd_in_ms(fd, (int)timeout_ms);
         if(pr == 0)
             return -2;
         if(pr < 0)
-            return -1;
-        if((pfd.revents & POLLIN) == 0)
             return -1;
     }
 
@@ -166,16 +163,10 @@ static int read_exact_fd(int fd, char* buf, size_t n, int64_t timeout_ms)
     {
         if(timeout_ms >= 0)
         {
-            struct pollfd pfd;
-            pfd.fd = fd;
-            pfd.events = POLLIN;
-            pfd.revents = 0;
-            int pr = poll(&pfd, 1, (int)timeout_ms);
+            int pr = mlang_poll_fd_in_ms(fd, (int)timeout_ms);
             if(pr == 0)
                 return -2;
             if(pr < 0)
-                return -1;
-            if((pfd.revents & POLLIN) == 0)
                 return -1;
         }
 
@@ -3681,7 +3672,15 @@ char* __mlang_std_jsonrpc_uri_store_get(int64_t handle, int64_t index)
     return out;
 }
 
-__attribute__((weak)) char*
+#if defined(_MSC_VER)
+  /* MSVC has no GCC weak attribute; provide a normal stub instead. The
+   * runtime can still override by linking a stronger symbol. */
+  #define MLANG_WEAK_ATTR
+#else
+  #define MLANG_WEAK_ATTR __attribute__((weak))
+#endif
+
+MLANG_WEAK_ATTR char*
 __mlang_std_jsonrpc_runtime_dispatch(const char* request_payload)
 {
     (void)request_payload;
