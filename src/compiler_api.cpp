@@ -33,7 +33,7 @@ extern "C"
 typedef size_t yy_size_t;
 struct yy_buffer_state;
 typedef yy_buffer_state* YY_BUFFER_STATE;
-extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
+extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, int len);
 extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 namespace mlang::compiler_api {
@@ -1163,7 +1163,7 @@ static ProgramNode* parseProgramFromText(std::string_view text,
     const std::string filteredText =
         mlang::preprocess_conditional_regions(text, "");
     YY_BUFFER_STATE buffer = yy_scan_bytes(filteredText.data(),
-                                           static_cast<yy_size_t>(filteredText.size()));
+                                           static_cast<int>(filteredText.size()));
     const int result = yyparse();
     yy_delete_buffer(buffer);
 

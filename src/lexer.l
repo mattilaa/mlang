@@ -5,7 +5,9 @@
 #include <cctype>
 #include <string>
 
+extern "C" {
 extern bool parseHadError;
+}
 extern const char* g_sourceFile;
 
 int yycolumn = 1;       // current column (end of last-consumed token)
@@ -99,6 +101,8 @@ static int is_try_question_context()
 
 %option noyywrap
 %option yylineno
+%option nounistd
+%option never-interactive
 
 %x COMMENT
 %x STRING_

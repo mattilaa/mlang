@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "mlang_platform.h"
 
 #if defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>
@@ -9,7 +10,7 @@
 #include <ImageIO/ImageIO.h>
 #endif
 
-static __thread char g_last_error[512];
+static MLANG_THREAD_LOCAL char g_last_error[512];
 
 typedef struct
 {

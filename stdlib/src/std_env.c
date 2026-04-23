@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#include "mlang_platform.h"
 
 #if defined(__APPLE__)
 #include <crt_externs.h>
@@ -69,10 +69,18 @@ char* __env_get(mlang_list_t values, int64_t index)
 
 char* __env_cwd(void)
 {
+#ifdef _WIN32
+    char buf[_MAX_PATH];
+    char* p = _getcwd(buf, sizeof(buf));
+    if(!p)
+        return mlang_strdup("");
+    return mlang_strdup(buf);
+#else
     char* p = getcwd(NULL, 0);
     if(!p)
         return mlang_strdup("");
     return p;
+#endif
 }
 
 char* __env_get_var(const char* name)
@@ -91,14 +99,22 @@ int32_t __env_set_var(const char* name, const char* value)
 {
     if(!name || name[0] == '\0' || !value)
         return -1;
+#ifdef _WIN32
+    return _putenv_s(name, value) == 0 ? 0 : -1;
+#else
     return setenv(name, value, 1) == 0 ? 0 : -1;
+#endif
 }
 
 int32_t __env_unset_var(const char* name)
 {
     if(!name || name[0] == '\0')
         return -1;
+#ifdef _WIN32
+    return _putenv_s(name, "") == 0 ? 0 : -1;
+#else
     return unsetenv(name) == 0 ? 0 : -1;
+#endif
 }
 
 void __env_println(const char* msg)

@@ -15,8 +15,21 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#ifdef _WIN32
+#include <process.h>
+#include <io.h>
+#define popen  _popen
+#define pclose _pclose
+#ifndef WIFEXITED
+#define WIFEXITED(status)   (((status) & 0x7f) == 0)
+#endif
+#ifndef WEXITSTATUS
+#define WEXITSTATUS(status) (((status) >> 8) & 0xff)
+#endif
+#else
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -63,10 +76,15 @@ protected:
     void SetUp() override
     {
         // Create a temporary directory for test files
+#ifdef _WIN32
+        const auto pidVal = static_cast<long long>(_getpid());
+#else
+        const auto pidVal = static_cast<long long>(getpid());
+#endif
         testDir =
-            fs::temp_directory_path() /
-            ("mla_test_" + std::to_string(static_cast<long long>(getpid())) +
-             "_" + std::to_string(rand()));
+            (fs::temp_directory_path() /
+             ("mla_test_" + std::to_string(pidVal) +
+              "_" + std::to_string(rand()))).string();
         fs::create_directories(testDir);
         sourceFile = testDir + "/test.mla";
         outputExe = testDir + "/test_exe";

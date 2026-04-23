@@ -46,23 +46,78 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ============================================================================
 # Find LLVM
 # ============================================================================
-# Try to find LLVM, with hints for common installation paths
+# Try to find LLVM, with hints for common installation paths.
+#
+# NOTE (Windows): The LLVM/Clang toolset bundled inside Visual Studio is a
+# stripped-down clang-cl distribution that does NOT ship LLVMConfig.cmake or
+# the individual LLVM component libraries.  A full, standalone LLVM SDK is
+# required.  Install one with:
+#     winget install LLVM.LLVM
+# or download from https://github.com/llvm/llvm-project/releases
+# The installer places files under C:\Program Files\LLVM by default.
 
 # Allow user to specify LLVM_DIR
 if(NOT DEFINED LLVM_DIR)
-    # Try to find llvm-config and use it to get the cmake dir
-    find_program(LLVM_CONFIG_EXE NAMES llvm-config llvm-config-20 llvm-config-29 llvm-config-18 llvm-config-17 llvm-config-16 llvm-config-15
-        PATHS
-            /opt/homebrew/opt/llvm/bin
-            /usr/local/opt/llvm/bin
-            /usr/lib/llvm-20/bin
-            /usr/lib/llvm-19/bin
-            /usr/lib/llvm-18/bin
-            /usr/lib/llvm-17/bin
-            /usr/lib/llvm-16/bin
-            /usr/lib/llvm-15/bin
-            /usr/bin
-            /usr/local/bin
+    # -- Collect candidate LLVM root directories (for llvm-config + prefix path)
+    set(_llvm_candidate_roots "")
+
+    if(WIN32)
+        # 1. Standalone LLVM installer (highest priority on Windows)
+        list(APPEND _llvm_candidate_roots "C:/Program Files/LLVM")
+
+        # 2. Visual Studio 2022 bundled LLVM — probe via vswhere
+        set(_vswhere_path "$ENV{ProgramFiles\(x86\)}/Microsoft Visual Studio/Installer/vswhere.exe")
+        if(EXISTS "${_vswhere_path}")
+            execute_process(
+                COMMAND "${_vswhere_path}"
+                    -latest -products * -property installationPath
+                    -requires Microsoft.VisualStudio.Component.VC.Llvm.Clang
+                OUTPUT_VARIABLE _vs_llvm_install_path
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+            if(_vs_llvm_install_path)
+                message(STATUS "vswhere found VS with LLVM at: ${_vs_llvm_install_path}")
+                list(APPEND _llvm_candidate_roots
+                    "${_vs_llvm_install_path}/VC/Tools/Llvm/x64"
+                    "${_vs_llvm_install_path}/VC/Tools/Llvm"
+                )
+            endif()
+        endif()
+
+        # 3. Hardcoded fallback paths for all VS 2022 editions
+        foreach(_vs_ed Professional Enterprise Community BuildTools Preview)
+            list(APPEND _llvm_candidate_roots
+                "C:/Program Files/Microsoft Visual Studio/2022/${_vs_ed}/VC/Tools/Llvm/x64"
+                "C:/Program Files/Microsoft Visual Studio/2022/${_vs_ed}/VC/Tools/Llvm"
+            )
+        endforeach()
+    endif()
+
+    # Unix / macOS candidate roots
+    list(APPEND _llvm_candidate_roots
+        /opt/homebrew/opt/llvm          # macOS Homebrew (Apple Silicon)
+        /usr/local/opt/llvm             # macOS Homebrew (Intel)
+        /usr/lib/llvm-20                # Ubuntu/Debian LLVM 20
+        /usr/lib/llvm-19                # Ubuntu/Debian LLVM 19
+        /usr/lib/llvm-18                # Ubuntu/Debian LLVM 18
+        /usr/lib/llvm-17                # Ubuntu/Debian LLVM 17
+        /usr/lib/llvm-16                # Ubuntu/Debian LLVM 16
+        /usr/lib/llvm-15                # Ubuntu/Debian LLVM 15
+        /usr/local                      # Manual installation
+    )
+
+    # -- Build a list of bin/ paths for llvm-config search
+    set(_llvm_bin_hints "")
+    foreach(_root ${_llvm_candidate_roots})
+        list(APPEND _llvm_bin_hints "${_root}/bin")
+    endforeach()
+    list(APPEND _llvm_bin_hints /usr/bin /usr/local/bin)
+
+    find_program(LLVM_CONFIG_EXE
+        NAMES llvm-config llvm-config-20 llvm-config-19 llvm-config-18
+              llvm-config-17 llvm-config-16 llvm-config-15
+        PATHS ${_llvm_bin_hints}
     )
 
     if(LLVM_CONFIG_EXE)
@@ -76,21 +131,45 @@ if(NOT DEFINED LLVM_DIR)
     endif()
 endif()
 
-# Common LLVM installation paths to search
-list(APPEND CMAKE_PREFIX_PATH
-    /opt/homebrew/opt/llvm          # macOS Homebrew (Apple Silicon)
-    /usr/local/opt/llvm             # macOS Homebrew (Intel)
-    /usr/lib/llvm-20                # Ubuntu/Debian LLVM 18
-    /usr/lib/llvm-19                # Ubuntu/Debian LLVM 18
-    /usr/lib/llvm-18                # Ubuntu/Debian LLVM 18
-    /usr/lib/llvm-17                # Ubuntu/Debian LLVM 17
-    /usr/lib/llvm-16                # Ubuntu/Debian LLVM 16
-    /usr/lib/llvm-15                # Ubuntu/Debian LLVM 15
-    /usr/local                      # Manual installation
-    "C:/Program Files/LLVM"         # Windows
-)
+# -- Build CMAKE_PREFIX_PATH from candidates that actually contain LLVMConfig.cmake
+# This avoids adding the stripped VS-bundled LLVM that lacks the CMake config.
+foreach(_root ${_llvm_candidate_roots})
+    if(EXISTS "${_root}/lib/cmake/llvm/LLVMConfig.cmake")
+        message(STATUS "LLVM candidate validated: ${_root}")
+        list(APPEND CMAKE_PREFIX_PATH "${_root}")
+    endif()
+endforeach()
 
-find_package(LLVM REQUIRED CONFIG)
+# Also add all candidates unconditionally as a last-resort fallback, so that
+# find_package can still locate non-standard layouts.
+list(APPEND CMAKE_PREFIX_PATH ${_llvm_candidate_roots})
+
+find_package(LLVM CONFIG)
+
+if(NOT LLVM_FOUND)
+    if(WIN32)
+        message(FATAL_ERROR
+            "Could not find a full LLVM development SDK (LLVMConfig.cmake).\n"
+            "\n"
+            "The LLVM/Clang toolset bundled inside Visual Studio is a stripped-down\n"
+            "clang-cl distribution and does NOT include the LLVM development libraries.\n"
+            "\n"
+            "Please install the full LLVM SDK using ONE of:\n"
+            "  winget install LLVM.LLVM\n"
+            "  choco install llvm\n"
+            "  Download from https://github.com/llvm/llvm-project/releases\n"
+            "\n"
+            "The default install path C:\\Program Files\\LLVM will be found automatically.\n"
+            "Or set -DLLVM_DIR=<path>/lib/cmake/llvm on the CMake command line."
+        )
+    else()
+        message(FATAL_ERROR
+            "Could not find LLVM (LLVMConfig.cmake). Install the LLVM development\n"
+            "package for your system, or set -DLLVM_DIR=<path>/lib/cmake/llvm."
+        )
+    endif()
+endif()
+
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
@@ -99,10 +178,106 @@ separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 
 # ============================================================================
+# DIA SDK (Windows only) — LLVM links diaguids.lib for PDB debug-info support.
+# The pre-built LLVM package may hard-code a VS edition path (e.g. Enterprise)
+# that differs from the locally installed edition.  Detect the correct path
+# and patch the LLVM target property so the linker can find diaguids.lib.
+# ============================================================================
+if(WIN32 AND TARGET LLVMDebugInfoPDB)
+    set(_dia_diaguids_path "")
+
+    # 1. Probe via vswhere for the active VS installation
+    set(_vswhere "$ENV{ProgramFiles\(x86\)}/Microsoft Visual Studio/Installer/vswhere.exe")
+    if(EXISTS "${_vswhere}")
+        execute_process(
+            COMMAND "${_vswhere}" -latest -products * -property installationPath
+            OUTPUT_VARIABLE _vs_install_path
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+        if(_vs_install_path AND EXISTS "${_vs_install_path}/DIA SDK/lib/amd64/diaguids.lib")
+            set(_dia_diaguids_path "${_vs_install_path}/DIA SDK/lib/amd64/diaguids.lib")
+            message(STATUS "DIA SDK found via vswhere: ${_dia_diaguids_path}")
+        endif()
+    endif()
+
+    # 2. Fallback: scan all VS 2022 editions
+    if(NOT _dia_diaguids_path)
+        foreach(_ed Professional Enterprise Community BuildTools Preview)
+            set(_candidate "C:/Program Files/Microsoft Visual Studio/2022/${_ed}/DIA SDK/lib/amd64/diaguids.lib")
+            if(EXISTS "${_candidate}")
+                set(_dia_diaguids_path "${_candidate}")
+                message(STATUS "DIA SDK found at: ${_dia_diaguids_path}")
+                break()
+            endif()
+        endforeach()
+    endif()
+
+    # Patch the hardcoded path in LLVMDebugInfoPDB's link libraries
+    if(_dia_diaguids_path)
+        get_target_property(_pdb_libs LLVMDebugInfoPDB INTERFACE_LINK_LIBRARIES)
+        if(_pdb_libs)
+            set(_pdb_libs_fixed "")
+            foreach(_lib ${_pdb_libs})
+                if(_lib MATCHES "diaguids\\.lib$")
+                    list(APPEND _pdb_libs_fixed "${_dia_diaguids_path}")
+                else()
+                    list(APPEND _pdb_libs_fixed "${_lib}")
+                endif()
+            endforeach()
+            set_target_properties(LLVMDebugInfoPDB PROPERTIES INTERFACE_LINK_LIBRARIES "${_pdb_libs_fixed}")
+            message(STATUS "Patched LLVMDebugInfoPDB diaguids.lib path")
+        endif()
+    else()
+        message(WARNING "DIA SDK not found - linking diaguids.lib may fail. "
+                        "Install the 'C++ ATL' workload in Visual Studio.")
+    endif()
+endif()
+
+# ============================================================================
 # Find Flex and Bison
 # ============================================================================
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
+# ============================================================================
+# Find OpenSSL
+# ============================================================================
+# On Windows, probe common standalone OpenSSL install locations so that
+# find_package can succeed without the user setting OPENSSL_ROOT_DIR.
+if(WIN32 AND NOT DEFINED OPENSSL_ROOT_DIR)
+    # Candidate roots ordered by priority
+    set(_openssl_candidate_roots "")
+
+    # FireDaemon OpenSSL (winget install FireDaemon.OpenSSL)
+    file(GLOB _fd_dirs "C:/Program Files/FireDaemon OpenSSL*")
+    list(APPEND _openssl_candidate_roots ${_fd_dirs})
+
+    # ShiningLight OpenSSL (winget install ShiningLight.OpenSSL)
+    list(APPEND _openssl_candidate_roots
+        "C:/Program Files/OpenSSL-Win64"
+        "C:/Program Files/OpenSSL"
+    )
+
+    # Chocolatey OpenSSL
+    list(APPEND _openssl_candidate_roots
+        "C:/tools/OpenSSL-Win64"
+        "C:/tools/OpenSSL"
+    )
+
+    foreach(_root ${_openssl_candidate_roots})
+        if(EXISTS "${_root}/include/openssl/ssl.h")
+            set(OPENSSL_ROOT_DIR "${_root}")
+            message(STATUS "Auto-detected OpenSSL at: ${OPENSSL_ROOT_DIR}")
+            break()
+        endif()
+    endforeach()
+
+    if(NOT DEFINED OPENSSL_ROOT_DIR)
+        message(STATUS "OpenSSL not found in standard Windows paths; "
+                       "set -DOPENSSL_ROOT_DIR=<path> if needed")
+    endif()
+endif()
+
 find_package(OpenSSL REQUIRED)
 
 get_filename_component(MLANG_OPENSSL_SSL_DIR "${OPENSSL_SSL_LIBRARY}" DIRECTORY)
@@ -236,20 +411,12 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_vec.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_error.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_compiler_api.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fs.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_env.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_time.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_rand.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_sync.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ssl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ascii.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_esc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_chat.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_term.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_jsonrpc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_json.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_toml.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_argparser.c
@@ -260,6 +427,22 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_exceptions.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_image.c
 )
+
+# These stdlib modules require deep POSIX APIs (sockets, pthreads, pty, fork,
+# poll, etc.) and are excluded from the Windows build until full Win32
+# implementations are provided.
+if(NOT WIN32)
+    target_sources(mlang_std PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_time.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_sync.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ssl.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_jsonrpc.c
+    )
+endif()
 add_dependencies(mlang_std ParserTarget LexerTarget)
 target_include_directories(mlang_std PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(mlang_std PRIVATE ${CMAKE_CURRENT_BINARY_DIR})

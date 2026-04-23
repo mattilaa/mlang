@@ -3,7 +3,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdio.h>
-#include <unistd.h>
+#include "mlang_platform.h"
 
 static char g_protocol_last_error[256] = "";
 static int32_t g_protocol_last_opcode = 0;

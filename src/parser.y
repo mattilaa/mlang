@@ -10,6 +10,12 @@
 #include "ast_handle_helpers.h"
 #include "diagnostics.h"
 
+// Include the generated parser header early so that token constants (EQ, NE,
+// etc.) are visible in helper functions defined in this prologue section.
+// The header uses a standard include guard, so the second inclusion by Bison
+// itself is harmless.
+#include "parser.hpp"
+
 ASTNode* create_identifier_at(char* name, int line, int col);
 ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
 extern int yycolumn_token;

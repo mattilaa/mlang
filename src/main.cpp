@@ -27,8 +27,20 @@
 #include <algorithm>
 #include <unordered_set>
 #include <functional>
+#ifdef _WIN32
+#include <process.h>
+#define popen  _popen
+#define pclose _pclose
+#ifndef WIFEXITED
+#define WIFEXITED(status)   (((status) & 0x7f) == 0)
+#endif
+#ifndef WEXITSTATUS
+#define WEXITSTATUS(status) (((status) >> 8) & 0xff)
+#endif
+#else
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 #include <llvm/TargetParser/Triple.h>
 
 // Declare functions and globals from parser/lexer
@@ -45,7 +57,7 @@ extern "C"
 typedef size_t yy_size_t;
 struct yy_buffer_state;
 typedef yy_buffer_state* YY_BUFFER_STATE;
-extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
+extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, int len);
 extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 void printUsage(const char* programName)
@@ -1817,7 +1829,7 @@ int main(int argc, char** argv)
         g_sourceFile = inputFile.c_str();
         g_targetArchForParse = targetArch.c_str();
         YY_BUFFER_STATE parseBuffer = yy_scan_bytes(
-            filteredInput.data(), static_cast<yy_size_t>(filteredInput.size()));
+            filteredInput.data(), static_cast<int>(filteredInput.size()));
         const int parseResult = yyparse();
         yy_delete_buffer(parseBuffer);
         if(parseResult != 0 || parseHadError)

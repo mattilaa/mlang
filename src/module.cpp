@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <unordered_map>
 
 static bool is_same_module_family(const std::string& a, const std::string& b)
 {
@@ -170,7 +171,7 @@ extern "C"
 typedef size_t yy_size_t;
 struct yy_buffer_state;
 typedef yy_buffer_state* YY_BUFFER_STATE;
-extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
+extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, int len);
 extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 ModuleLoader::ModuleLoader(const std::string& basePath,
@@ -241,7 +242,7 @@ ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
     g_sourceFile = filePath.c_str();
     g_targetArchForParse = targetArchOverride.c_str();
     YY_BUFFER_STATE buffer = yy_scan_bytes(
-        filteredText.data(), static_cast<yy_size_t>(filteredText.size()));
+        filteredText.data(), static_cast<int>(filteredText.size()));
     int result = yyparse();
     yy_delete_buffer(buffer);
 

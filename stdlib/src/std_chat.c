@@ -3,8 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && !defined(_MSC_VER)
 #define MLANG_CHAT_TLS _Thread_local
+#elif defined(_MSC_VER)
+#define MLANG_CHAT_TLS __declspec(thread)
 #else
 #define MLANG_CHAT_TLS
 #endif

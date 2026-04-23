@@ -1,4 +1,19 @@
-#include <stdatomic.h>
+#ifdef _MSC_VER
+  #include <intrin.h>
+  #include <stdint.h>
+  /* MSVC C mode lacks <stdatomic.h>; use Interlocked intrinsics instead. */
+  typedef volatile uint64_t atomic_uint_fast64_t_msvc;
+  #define atomic_load(p) (*(p))
+  #define atomic_store(p, v) (*(p) = (v))
+  #define atomic_compare_exchange_weak(p, expected, desired) \
+      (_InterlockedCompareExchange64((volatile long long*)(p), \
+          (long long)(desired), (long long)(*(expected))) == (long long)(*(expected)) \
+       ? 1 : (*(expected) = *(p), 0))
+  #define ATOMIC_VAR_INIT(x) (x)
+  typedef atomic_uint_fast64_t_msvc atomic_uint_fast64_t;
+#else
+  #include <stdatomic.h>
+#endif
 #include <stdint.h>
 
 static atomic_uint_fast64_t g_mlang_rand_state = UINT64_C(0x9E3779B97F4A7C15);

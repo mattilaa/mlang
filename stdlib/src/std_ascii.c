@@ -1,7 +1,10 @@
 #include <stdint.h>
+#include "mlang_platform.h"
 
-#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && !defined(_MSC_VER)
 #define MLANG_ASCII_TLS _Thread_local
+#elif defined(_MSC_VER)
+#define MLANG_ASCII_TLS __declspec(thread)
 #else
 #define MLANG_ASCII_TLS
 #endif

@@ -20,9 +20,22 @@
 #include <sstream>
 #include <string>
 #include <thread>
-#include <unistd.h>
 #include <condition_variable>
+#ifdef _WIN32
+#include <process.h>
+#include <io.h>
+#define popen  _popen
+#define pclose _pclose
+#ifndef WIFEXITED
+#define WIFEXITED(status)   (((status) & 0x7f) == 0)
+#endif
+#ifndef WEXITSTATUS
+#define WEXITSTATUS(status) (((status) >> 8) & 0xff)
+#endif
+#else
+#include <unistd.h>
 #include <sys/wait.h>
+#endif
 #include <unordered_set>
 #include <vector>
 
@@ -2738,7 +2751,11 @@ class ProgressSpinner
   public:
     explicit ProgressSpinner(std::string label) : label_(std::move(label))
     {
+#ifdef _WIN32
+        hideCursor_ = _isatty(_fileno(stderr)) != 0;
+#else
         hideCursor_ = ::isatty(fileno(stderr)) != 0;
+#endif
         if(hideCursor_)
             std::cerr << "\033[?25l" << std::flush;
         worker_ = std::thread([this]() {

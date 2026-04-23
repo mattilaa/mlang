@@ -9,7 +9,18 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#ifdef _WIN32
+// pthread constants used only for LLVM IR codegen (target runtime values).
+#ifndef PTHREAD_MUTEX_RECURSIVE
+#define PTHREAD_MUTEX_RECURSIVE 1
+#endif
+// pthread_mutexattr_t size for the target (Linux x86_64 = 4 bytes).
+// On Windows hosts cross-compiling, use the Linux ABI size.
+struct pthread_mutexattr_t_placeholder { int __align; };
+#define pthread_mutexattr_t pthread_mutexattr_t_placeholder
+#else
 #include <pthread.h>
+#endif
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/TargetParser/Host.h>
 #include <llvm/TargetParser/Triple.h>

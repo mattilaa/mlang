@@ -371,6 +371,90 @@ Use Make instead of Ninja:
 ./scripts/build_install_lsp.sh --use-make
 ```
 
+## Building on Windows
+
+The Windows build produces the `mlang` compiler and the host-portable subset
+of the standard library. POSIX-only stdlib modules (sockets, pthreads, pty,
+fork, file-system traversal, JSON-RPC, etc.) are excluded from the Windows
+build until full Win32 implementations are provided.
+
+### Required dependencies
+
+Install all of the following before configuring the project. Default install
+locations are auto-detected by `CMakeLists.txt`; non-default paths can be
+overridden as shown.
+
+| Tool                     | Recommended installer                                      | Notes                                                                     |
+| ------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Visual Studio 2022       | Visual Studio Installer                                    | Workloads: *Desktop development with C++* and *C++ ATL* (for the DIA SDK) |
+| CMake ≥ 3.20             | Bundled with VS or `winget install Kitware.CMake`          |                                                                           |
+| LLVM 19+ (full SDK)      | `LLVM-XX.X.X-win64.exe` from <https://github.com/llvm/llvm-project/releases> | The VS-bundled clang-cl is **not** sufficient — you need a full SDK with `LLVMConfig.cmake`. Custom path: `winget install LLVM.LLVM --custom "/D=D:\LLVM"` |
+| OpenSSL                  | `winget install FireDaemon.OpenSSL` or `ShiningLight.OpenSSL` | Auto-detected at `C:\Program Files\FireDaemon OpenSSL 4` and `C:\Program Files\OpenSSL-Win64` |
+| Flex + Bison (Win port)  | `choco install winflexbison3` or download from <https://github.com/lexxmark/winflexbison/releases> | Add the install dir containing `win_flex.exe` / `win_bison.exe` to `PATH` |
+
+### Configure and build
+
+Open a *Developer PowerShell for VS 2022* (so `cl.exe`, `link.exe`, and the
+correct environment are on `PATH`), then from the repo root:
+
+```powershell
+# Configure (add overrides only if your dependencies are in non-default paths)
+cmake -B build `
+      -DLLVM_DIR="D:\LLVM\lib\cmake\llvm" `
+      -DOPENSSL_ROOT_DIR="C:\Program Files\FireDaemon OpenSSL 4"
+
+# Build (Release configuration)
+cmake --build build --config Release
+```
+
+If CMake reports `Could not find a full LLVM development SDK
+(LLVMConfig.cmake)`, your LLVM install is incomplete — the directory
+`<LLVM>\lib\cmake\llvm\` must contain `LLVMConfig.cmake`, not just
+`LLVMConfigExtensions.cmake`.
+
+If the linker fails on `diaguids.lib` from a wrong VS edition path,
+`CMakeLists.txt` patches the hardcoded LLVM reference automatically when
+*C++ ATL* is installed; verify by looking for
+`Patched LLVMDebugInfoPDB diaguids.lib path` in the configure output.
+
+### Install to a custom directory
+
+CMake's standard `CMAKE_INSTALL_PREFIX` works the same way as on Linux/macOS.
+Set it at configure time and run the install step:
+
+```powershell
+# Example: install to D:\Tools\mlang
+cmake -B build -DCMAKE_INSTALL_PREFIX="D:\Tools\mlang" `
+      -DLLVM_DIR="D:\LLVM\lib\cmake\llvm" `
+      -DOPENSSL_ROOT_DIR="C:\Program Files\FireDaemon OpenSSL 4"
+cmake --build build --config Release
+cmake --install build --config Release
+```
+
+The install layout will be:
+
+```
+D:\Tools\mlang\
+    bin\        mlang.exe and other executables
+    lib\        mlang_std.lib
+    share\mlang\stdlib\   .mla source modules
+```
+
+Add `D:\Tools\mlang\bin` to your `PATH` to call `mlang` directly. To override
+the install prefix without re-running CMake, pass `--prefix` to the install
+step:
+
+```powershell
+cmake --install build --config Release --prefix "D:\Tools\mlang"
+```
+
+### Known Windows limitations
+
+The following stdlib modules are **not** built on Windows yet because they
+rely on POSIX APIs without portable shims: `std::io`, `std::fs`, `std::time`,
+`std::sync`, `std::process`, `std::net`, `std::ssl`, `std::jsonrpc`. Programs
+that import these will fail to link until Win32 ports are added.
+
 ## Documentation
 
 The repository ships a Doxygen-based documentation build. Run the helper from the top level to regenerate HTML under `docs/out`:

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "mlang_platform.h"
 
 typedef struct mlang_exception_frame
 {
@@ -17,8 +18,8 @@ typedef struct mlang_exception_record
     int32_t source_line;
 } mlang_exception_record;
 
-static _Thread_local mlang_exception_frame* g_exception_top = NULL;
-static _Thread_local mlang_exception_record g_current_exception = {NULL, NULL, 0};
+static MLANG_THREAD_LOCAL mlang_exception_frame* g_exception_top = NULL;
+static MLANG_THREAD_LOCAL mlang_exception_record g_current_exception = {NULL, NULL, 0};
 
 static char* mlang_exception_dup(const char* s)
 {
