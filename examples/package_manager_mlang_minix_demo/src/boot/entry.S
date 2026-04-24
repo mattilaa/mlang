@@ -91,7 +91,7 @@ vector_sync_current_spx:
     b .
 
 vector_irq_current_spx:
-    sub sp, sp, #256
+    sub sp, sp, #272
     stp x0, x1, [sp, #0]
     stp x2, x3, [sp, #16]
     stp x4, x5, [sp, #32]
@@ -108,7 +108,13 @@ vector_irq_current_spx:
     stp x26, x27, [sp, #208]
     stp x28, x29, [sp, #224]
     str x30, [sp, #240]
+    mrs x9, elr_el1
+    mrs x10, spsr_el1
+    stp x9, x10, [sp, #248]
     bl runtime_handle_irq
+    ldp x9, x10, [sp, #248]
+    msr elr_el1, x9
+    msr spsr_el1, x10
     ldr x30, [sp, #240]
     ldp x28, x29, [sp, #224]
     ldp x26, x27, [sp, #208]
@@ -125,14 +131,14 @@ vector_irq_current_spx:
     ldp x4, x5, [sp, #32]
     ldp x2, x3, [sp, #16]
     ldp x0, x1, [sp, #0]
-    add sp, sp, #256
+    add sp, sp, #272
     eret
 
 vector_irq_lower_a64:
     b vector_irq_current_spx
 
 vector_sync_lower_a64:
-    sub sp, sp, #256
+    sub sp, sp, #272
     stp x0, x1, [sp, #0]
     stp x2, x3, [sp, #16]
     stp x4, x5, [sp, #32]
@@ -149,6 +155,9 @@ vector_sync_lower_a64:
     stp x26, x27, [sp, #208]
     stp x28, x29, [sp, #224]
     str x30, [sp, #240]
+    mrs x9, elr_el1
+    mrs x10, spsr_el1
+    stp x9, x10, [sp, #248]
 
     mrs x9, esr_el1
     lsr x9, x9, #26
@@ -173,6 +182,10 @@ vector_sync_lower_a64:
     bl runtime_user_fault
 
 .Lsync_lower_return:
+    ldp x9, x10, [sp, #248]
+    msr elr_el1, x9
+    mov x10, xzr
+    msr spsr_el1, x10
     ldr x30, [sp, #240]
     ldp x28, x29, [sp, #224]
     ldp x26, x27, [sp, #208]
@@ -189,7 +202,7 @@ vector_sync_lower_a64:
     ldp x4, x5, [sp, #32]
     ldp x2, x3, [sp, #16]
     ldp x0, x1, [sp, #0]
-    add sp, sp, #256
+    add sp, sp, #272
     eret
 
 vector_unhandled:
@@ -269,7 +282,14 @@ boot_l2_table:
     .quad 0x006000004e600741
     .quad 0x006000004e800741
     .quad 0x006000004ea00741
-    .fill 394, 8, 0
+    .quad 0x006000004ec00741
+    .quad 0x006000004ee00741
+    .quad 0x006000004f000741
+    .quad 0x006000004f200741
+    .quad 0x006000004f400741
+    .quad 0x006000004f600741
+    .quad 0x006000004f800741
+    .fill 387, 8, 0
 
 .section .bss.stack, "aw", %nobits
 .align 12

@@ -99,6 +99,7 @@ static int overlay_child_state(const char* parent, const char* child);
 static void normalize_rootfs_path(const char* raw, char* out, size_t out_size);
 void runtime_init_rootfs_mounts(void);
 static int64_t sys_dup(int64_t oldfd);
+static int64_t sys_dup3(int64_t oldfd, int64_t newfd, int64_t flags);
 
 static void uart_putc_raw(uint8_t ch)
 {
@@ -146,6 +147,13 @@ static void uart_drain_rx(void)
     while((*UART_FR & UART_FR_RXFE) == 0u) {
         uart_rx_push((uint8_t)(*UART_DR & 0xffu));
     }
+}
+
+static void user_wait_for_irq(void)
+{
+    __asm__ __volatile__("msr daifclr, #2");
+    __asm__ __volatile__("wfi");
+    __asm__ __volatile__("msr daifset, #2");
 }
 
 static size_t cstr_len(const char* s)
@@ -969,6 +977,7 @@ enum {
     SYS_setsid = 157,
     SYS_uname = 160,
     SYS_umask = 166,
+    SYS_getrusage = 167,
     SYS_getpid = 172,
     SYS_getppid = 173,
     SYS_getuid = 174,
@@ -980,6 +989,7 @@ enum {
     SYS_mmap = 222,
     SYS_mprotect = 226,
     SYS_madvise = 233,
+    SYS_wait4 = 260,
     SYS_prlimit64 = 261,
     SYS_getrandom = 278,
     SYS_statx = 291
@@ -988,6 +998,7 @@ enum {
 enum {
     EPERM_ERR = -1,
     EBADF_ERR = -9,
+    ECHILD_ERR = -10,
     EFAULT_ERR = -14,
     EINVAL_ERR = -22,
     ENOENT_ERR = -2,
@@ -999,7 +1010,7 @@ enum {
     ENOMEM_ERR = -12
 };
 
-#define USER_FD_MAX 32
+#define USER_FD_MAX 512
 #define USER_FD_BASE 3
 #define USER_HEAP_SIZE (4u * 1024u * 1024u)
 
@@ -1010,6 +1021,7 @@ struct user_fd_entry {
     uint64_t offset;
     uint8_t is_dir;
     uint8_t writable;
+    int8_t stdio_fd;
     int64_t flags;
     struct overlay_node* overlay;
     char path[256];
@@ -1028,7 +1040,6 @@ static char user_argv_strings[16][128];
 static uint64_t user_argv_ptrs[17];
 static char user_env_strings[8][128];
 static uint64_t user_env_ptrs[9];
-static int user_syscall_trace_budget;
 static uint32_t user_umask;
 static int64_t user_pid;
 static int64_t user_pgrp;
@@ -1084,6 +1095,7 @@ static void user_state_reset(void)
         user_fds[i].offset = 0u;
         user_fds[i].is_dir = 0u;
         user_fds[i].writable = 0u;
+        user_fds[i].stdio_fd = -1;
         user_fds[i].flags = O_RDONLY_K;
         user_fds[i].overlay = NULL;
         user_fds[i].path[0] = '\0';
@@ -1102,7 +1114,6 @@ static void user_state_reset(void)
         user_cwd[0] = '/';
         user_cwd[1] = '\0';
     }
-    user_syscall_trace_budget = 0;
     user_umask = 0022u;
 }
 
@@ -1110,6 +1121,32 @@ static struct user_fd_entry* user_fd_alloc(int* fd_out)
 {
     int i;
     for(i = 0; i < (int)USER_FD_MAX; ++i) {
+        if(!user_fds[i].in_use) {
+            user_fds[i].in_use = 1;
+            if(fd_out) {
+                *fd_out = i + USER_FD_BASE;
+            }
+            return &user_fds[i];
+        }
+    }
+    if(fd_out) {
+        *fd_out = -1;
+    }
+    return NULL;
+}
+
+static struct user_fd_entry* user_fd_alloc_from(int min_fd, int* fd_out)
+{
+    int start;
+    int i;
+    if(min_fd < USER_FD_BASE) {
+        min_fd = USER_FD_BASE;
+    }
+    start = min_fd - USER_FD_BASE;
+    if(start < 0) {
+        start = 0;
+    }
+    for(i = start; i < (int)USER_FD_MAX; ++i) {
         if(!user_fds[i].in_use) {
             user_fds[i].in_use = 1;
             if(fd_out) {
@@ -1134,6 +1171,23 @@ static struct user_fd_entry* user_fd_get(int fd)
         return NULL;
     }
     return &user_fds[idx];
+}
+
+static void user_fd_reset_entry(struct user_fd_entry* f)
+{
+    if(!f) {
+        return;
+    }
+    f->in_use = 0;
+    f->data = NULL;
+    f->size = 0u;
+    f->offset = 0u;
+    f->is_dir = 0u;
+    f->writable = 0u;
+    f->stdio_fd = -1;
+    f->flags = O_RDONLY_K;
+    f->overlay = NULL;
+    f->path[0] = '\0';
 }
 
 static void copy_cstr(char* dst, size_t dst_size, const char* src)
@@ -1754,6 +1808,12 @@ static int64_t sys_write(int64_t fd, const void* buf, int64_t count)
     if(!f) {
         return EBADF_ERR;
     }
+    if(f->stdio_fd == 1 || f->stdio_fd == 2) {
+        for(i = 0; i < count; ++i) {
+            uart_putc(p[i]);
+        }
+        return count;
+    }
     if(f->is_dir) {
         return EISDIR_ERR;
     }
@@ -1876,7 +1936,7 @@ static int64_t sys_read(int64_t fd, void* buf, int64_t count)
         }
         ch = uart_rx_pop();
         while(ch < 0) {
-            __asm__ __volatile__("wfi");
+            user_wait_for_irq();
             ch = uart_rx_pop();
         }
         out[0] = (unsigned char)((ch == '\r') ? '\n' : ch);
@@ -1885,6 +1945,19 @@ static int64_t sys_read(int64_t fd, void* buf, int64_t count)
     f = user_fd_get((int)fd);
     if(!f) {
         return EBADF_ERR;
+    }
+    if(f->stdio_fd == 0) {
+        int ch;
+        if(count == 0) {
+            return 0;
+        }
+        ch = uart_rx_pop();
+        while(ch < 0) {
+            user_wait_for_irq();
+            ch = uart_rx_pop();
+        }
+        out[0] = (unsigned char)((ch == '\r') ? '\n' : ch);
+        return 1;
     }
     if(f->is_dir) {
         return EISDIR_ERR;
@@ -1909,13 +1982,7 @@ static int64_t sys_close(int64_t fd)
     if(!f) {
         return EBADF_ERR;
     }
-    f->in_use = 0;
-    f->data = NULL;
-    f->size = 0u;
-    f->offset = 0u;
-    f->is_dir = 0u;
-    f->writable = 0u;
-    f->overlay = NULL;
+    user_fd_reset_entry(f);
     return 0;
 }
 
@@ -1925,6 +1992,9 @@ static int64_t sys_lseek(int64_t fd, int64_t offset, int64_t whence)
     int64_t new_off;
     if(!f) {
         return EBADF_ERR;
+    }
+    if(f->stdio_fd >= 0) {
+        return 0;
     }
     if(f->is_dir) {
         return EISDIR_ERR;
@@ -2045,6 +2115,11 @@ static int64_t sys_fstat(int64_t fd, void* statbuf)
     f = user_fd_get((int)fd);
     if(!f) {
         return EBADF_ERR;
+    }
+    if(f->stdio_fd >= 0) {
+        fill_stat((struct user_stat_buf*)statbuf, 0u, 0, "/dev/console");
+        ((struct user_stat_buf*)statbuf)->st_mode = 0020000u | 0600u;
+        return 0;
     }
     fill_stat((struct user_stat_buf*)statbuf, f->size, f->is_dir, f->path);
     return 0;
@@ -2414,6 +2489,12 @@ static int64_t sys_fcntl(int64_t fd, int64_t cmd, int64_t arg)
         case F_GETFD_K:
         case F_SETFD_K:
             return 0;
+        case F_DUPFD_K:
+        case F_DUPFD_CLOEXEC_K:
+            if(arg < USER_FD_BASE) {
+                arg = USER_FD_BASE;
+            }
+            return sys_dup3(fd, arg, 0);
         default:
             return EINVAL_ERR;
         }
@@ -2421,6 +2502,26 @@ static int64_t sys_fcntl(int64_t fd, int64_t cmd, int64_t arg)
     f = user_fd_get((int)fd);
     if(!f) {
         return EBADF_ERR;
+    }
+    if(f->stdio_fd >= 0) {
+        switch(cmd) {
+        case F_GETFL_K:
+            return user_stdio_flags[f->stdio_fd];
+        case F_SETFL_K:
+            user_stdio_flags[f->stdio_fd] = (user_stdio_flags[f->stdio_fd] & O_ACCMODE) | (arg & ~O_ACCMODE);
+            return 0;
+        case F_GETFD_K:
+        case F_SETFD_K:
+            return 0;
+        case F_DUPFD_K:
+        case F_DUPFD_CLOEXEC_K:
+            if(arg < USER_FD_BASE) {
+                arg = USER_FD_BASE;
+            }
+            return sys_dup3(fd, arg, 0);
+        default:
+            return EINVAL_ERR;
+        }
     }
     switch(cmd) {
     case F_GETFL_K:
@@ -2433,7 +2534,10 @@ static int64_t sys_fcntl(int64_t fd, int64_t cmd, int64_t arg)
         return 0;
     case F_DUPFD_K:
     case F_DUPFD_CLOEXEC_K:
-        return sys_dup(fd);
+        if(arg < USER_FD_BASE) {
+            arg = USER_FD_BASE;
+        }
+        return sys_dup3(fd, arg, 0);
     default:
         return EINVAL_ERR;
     }
@@ -2441,30 +2545,44 @@ static int64_t sys_fcntl(int64_t fd, int64_t cmd, int64_t arg)
 
 static int64_t sys_dup(int64_t oldfd)
 {
-    if(oldfd >= 0 && oldfd <= 2) {
-        return oldfd;
-    }
-
-    struct user_fd_entry* src = user_fd_get((int)oldfd);
+    struct user_fd_entry* src = NULL;
     struct user_fd_entry* dst;
     size_t i;
     int fd_num;
-    if(!src) {
-        return EBADF_ERR;
+    int stdio_fd = -1;
+    if(oldfd >= 0 && oldfd <= 2) {
+        stdio_fd = (int)oldfd;
+    } else {
+        src = user_fd_get((int)oldfd);
+        if(!src) {
+            return EBADF_ERR;
+        }
     }
-    dst = user_fd_alloc(&fd_num);
+    dst = user_fd_alloc_from(USER_FD_BASE, &fd_num);
     if(!dst) {
         return ENOMEM_ERR;
     }
-    dst->data = src->data;
-    dst->size = src->size;
-    dst->offset = src->offset;
-    dst->is_dir = src->is_dir;
-    dst->writable = src->writable;
-    dst->flags = src->flags;
-    dst->overlay = src->overlay;
-    for(i = 0u; i < sizeof(dst->path); ++i) {
-        dst->path[i] = src->path[i];
+    dst->stdio_fd = (int8_t)stdio_fd;
+    if(stdio_fd >= 0) {
+        dst->data = NULL;
+        dst->size = 0u;
+        dst->offset = 0u;
+        dst->is_dir = 0u;
+        dst->writable = stdio_fd != 0 ? 1u : 0u;
+        dst->flags = user_stdio_flags[stdio_fd];
+        dst->overlay = NULL;
+        copy_cstr(dst->path, sizeof(dst->path), "/dev/console");
+    } else {
+        dst->data = src->data;
+        dst->size = src->size;
+        dst->offset = src->offset;
+        dst->is_dir = src->is_dir;
+        dst->writable = src->writable;
+        dst->flags = src->flags;
+        dst->overlay = src->overlay;
+        for(i = 0u; i < sizeof(dst->path); ++i) {
+            dst->path[i] = src->path[i];
+        }
     }
     dst->in_use = 1;
     return fd_num;
@@ -2472,15 +2590,80 @@ static int64_t sys_dup(int64_t oldfd)
 
 static int64_t sys_dup3(int64_t oldfd, int64_t newfd, int64_t flags)
 {
+    struct user_fd_entry* src = NULL;
+    struct user_fd_entry* dst = NULL;
+    int stdio_fd = -1;
+    size_t i;
     (void)flags;
-    if(oldfd < 0 || oldfd > 2 || newfd < 0 || newfd > 2) {
+    if(oldfd == newfd) {
+        return EINVAL_ERR;
+    }
+    if(oldfd >= 0 && oldfd <= 2) {
+        stdio_fd = (int)oldfd;
+    } else {
+        src = user_fd_get((int)oldfd);
+        if(!src) {
+            return EBADF_ERR;
+        }
+        stdio_fd = src->stdio_fd;
+    }
+    if(newfd >= 0 && newfd <= 2) {
+        if(stdio_fd >= 0) {
+            user_stdio_flags[newfd] = user_stdio_flags[stdio_fd];
+            return newfd;
+        }
         return EBADF_ERR;
     }
+    dst = user_fd_get((int)newfd);
+    if(dst) {
+        user_fd_reset_entry(dst);
+    } else {
+        int idx = (int)newfd - USER_FD_BASE;
+        if(idx < 0 || idx >= (int)USER_FD_MAX) {
+            return EBADF_ERR;
+        }
+        dst = &user_fds[idx];
+        dst->in_use = 1;
+    }
+    if(stdio_fd >= 0) {
+        dst->stdio_fd = (int8_t)stdio_fd;
+        dst->data = NULL;
+        dst->size = 0u;
+        dst->offset = 0u;
+        dst->is_dir = 0u;
+        dst->writable = stdio_fd != 0 ? 1u : 0u;
+        dst->flags = user_stdio_flags[stdio_fd];
+        dst->overlay = NULL;
+        copy_cstr(dst->path, sizeof(dst->path), "/dev/console");
+        dst->in_use = 1;
+        return newfd;
+    }
+    dst->data = src->data;
+    dst->size = src->size;
+    dst->offset = src->offset;
+    dst->is_dir = src->is_dir;
+    dst->writable = src->writable;
+    dst->stdio_fd = src->stdio_fd;
+    dst->flags = src->flags;
+    dst->overlay = src->overlay;
+    for(i = 0u; i < sizeof(dst->path); ++i) {
+        dst->path[i] = src->path[i];
+    }
+    dst->in_use = 1;
     return newfd;
 }
 
 static int64_t sys_ioctl(int64_t fd, int64_t cmd, int64_t arg)
 {
+    if(fd > 2) {
+        struct user_fd_entry* f = user_fd_get((int)fd);
+        if(!f) {
+            return EBADF_ERR;
+        }
+        if(f->stdio_fd >= 0) {
+            fd = f->stdio_fd;
+        }
+    }
     (void)fd;
     if(cmd == 0x5401) {
         struct termios_k {
@@ -2663,6 +2846,14 @@ static int64_t sys_ppoll(void* fds_ptr,
                 struct user_fd_entry* entry = user_fd_get(fd);
                 if(!entry) {
                     revents |= POLLNVAL_K;
+                } else if(entry->stdio_fd == 0) {
+                    if((events & (POLLIN_K | POLLPRI_K | POLLRDNORM_K)) != 0 && uart_rx_has_data()) {
+                        revents |= (events & (POLLIN_K | POLLPRI_K | POLLRDNORM_K));
+                    }
+                } else if(entry->stdio_fd == 1 || entry->stdio_fd == 2) {
+                    if((events & (POLLOUT_K | POLLWRNORM_K)) != 0) {
+                        revents |= (events & (POLLOUT_K | POLLWRNORM_K));
+                    }
                 } else {
                     if((events & (POLLIN_K | POLLPRI_K | POLLRDNORM_K)) != 0) {
                         if(entry->is_dir || entry->offset < entry->size) {
@@ -2687,7 +2878,7 @@ static int64_t sys_ppoll(void* fds_ptr,
             return ready;
         }
 
-        __asm__ __volatile__("wfi");
+        user_wait_for_irq();
         if(remaining_ticks > 0) {
             --remaining_ticks;
         }
@@ -2819,13 +3010,24 @@ static int64_t sys_getrandom(void* buf, uint64_t len, int64_t flags)
 
 static void sys_exit_group_impl(int64_t code)
 {
-    runtime_write_str("[user] exit_group code=");
-    runtime_write_dec_i64(code);
-    runtime_write_str("\n");
+    (void)code;
     runtime_exit_to_kernel();
     for(;;) {
         __asm__ __volatile__("wfe");
     }
+}
+
+static int64_t sys_getrusage(void* usage)
+{
+    size_t i;
+    unsigned char* out = (unsigned char*)usage;
+    if(!usage) {
+        return EFAULT_ERR;
+    }
+    for(i = 0u; i < 144u; ++i) {
+        out[i] = 0u;
+    }
+    return 0;
 }
 
 int64_t runtime_syscall_dispatch(int64_t nr,
@@ -2838,12 +3040,6 @@ int64_t runtime_syscall_dispatch(int64_t nr,
 {
     (void)a4;
     (void)a5;
-    if(user_syscall_trace_budget > 0) {
-        runtime_write_str("[user] syscall nr=");
-        runtime_write_dec_i64(nr);
-        runtime_write_str("\n");
-        --user_syscall_trace_budget;
-    }
     switch(nr) {
     case SYS_mkdirat:
         return sys_mkdirat(a0, (const char*)a1, a2);
@@ -2899,6 +3095,8 @@ int64_t runtime_syscall_dispatch(int64_t nr,
         return sys_uname((void*)a0);
     case SYS_umask:
         return sys_umask(a0);
+    case SYS_getrusage:
+        return sys_getrusage((void*)a1);
     case SYS_getrandom:
         return sys_getrandom((void*)a0, (uint64_t)a1, a2);
     case SYS_set_tid_address:
@@ -2925,6 +3123,8 @@ int64_t runtime_syscall_dispatch(int64_t nr,
         return 0;
     case SYS_prlimit64:
         return 0;
+    case SYS_wait4:
+        return ECHILD_ERR;
     case SYS_readlinkat:
         return sys_readlinkat(a0, (const char*)a1, (char*)a2, (uint64_t)a3);
     case SYS_statx:
@@ -3055,6 +3255,7 @@ static uint64_t prepare_user_stack(int argc)
     uint64_t sp = (uint64_t)(uintptr_t)__user_stack_top;
     uint64_t rand_ptr;
     uint64_t* words;
+    uint64_t word_count;
     int envc = 0;
     int i;
 
@@ -3095,7 +3296,11 @@ static uint64_t prepare_user_stack(int argc)
     }
 
     sp &= ~((uint64_t)15u);
-    sp -= (uint64_t)(argc + envc + 12) * 8u;
+    word_count = (uint64_t)(argc + envc + 12);
+    if((word_count & 1u) != 0u) {
+        ++word_count;
+    }
+    sp -= word_count * 8u;
     words = (uint64_t*)(uintptr_t)sp;
     words[0] = (uint64_t)argc;
     for(i = 0; i < argc; ++i) {
@@ -3160,7 +3365,6 @@ int32_t runtime_exec_user_command(const char* line)
         return 0;
     }
     user_argv_ptrs[argc] = 0u;
-
     if(user_argv_strings[0][0] == '/') {
         copy_cstr(exec_path, sizeof(exec_path), user_argv_strings[0]);
     } else {
