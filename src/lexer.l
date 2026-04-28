@@ -1,6 +1,7 @@
 %{
 #include "parser.hpp"
 #include "diagnostics.h"
+#include "lexer_api.h"
 #include <string.h>
 #include <cctype>
 #include <string>
@@ -342,3 +343,8 @@ static int is_try_question_context()
                             mlang::diag::format_message_with_code("MLANG-E1100", msg).c_str());
                 }
 %%
+
+YY_BUFFER_STATE mlang_yy_scan_bytes(const char* bytes, std::size_t len)
+{
+    return yy_scan_bytes(bytes, static_cast<yy_size_t>(len));
+}

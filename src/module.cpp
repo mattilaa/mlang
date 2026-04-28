@@ -1,4 +1,5 @@
 #include "module.h"
+#include "lexer_api.h"
 #include "source_filter.h"
 #include <filesystem>
 #include <fstream>
@@ -168,12 +169,6 @@ extern "C"
     extern bool parseHadError;
 }
 
-typedef size_t yy_size_t;
-struct yy_buffer_state;
-typedef yy_buffer_state* YY_BUFFER_STATE;
-extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
-extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
-
 ModuleLoader::ModuleLoader(const std::string& basePath,
                            const std::vector<std::string>& extraPaths)
     : basePath(basePath)
@@ -241,8 +236,8 @@ ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
     parseHadError = false;
     g_sourceFile = filePath.c_str();
     g_targetArchForParse = targetArchOverride.c_str();
-    YY_BUFFER_STATE buffer = yy_scan_bytes(
-        filteredText.data(), static_cast<yy_size_t>(filteredText.size()));
+    YY_BUFFER_STATE buffer =
+        mlang_yy_scan_bytes(filteredText.data(), filteredText.size());
     int result = yyparse();
     yy_delete_buffer(buffer);
 

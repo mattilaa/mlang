@@ -1,4 +1,5 @@
 #include "incremental_compiler.h"
+#include "lexer_api.h"
 #include "source_filter.h"
 
 #include <algorithm>
@@ -14,12 +15,6 @@ extern "C"
     extern ASTNode* programRoot;
     extern bool parseHadError;
 }
-
-typedef size_t yy_size_t;
-struct yy_buffer_state;
-typedef yy_buffer_state* YY_BUFFER_STATE;
-extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
-extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 namespace
 {
@@ -321,7 +316,7 @@ ProgramNode* IncrementalCompiler::parseText(std::string_view text)
     const std::string filteredText =
         mlang::preprocess_conditional_regions(text, "");
     YY_BUFFER_STATE buffer =
-        yy_scan_bytes(filteredText.data(), static_cast<int>(filteredText.size()));
+        mlang_yy_scan_bytes(filteredText.data(), filteredText.size());
     int result = yyparse();
     yy_delete_buffer(buffer);
 

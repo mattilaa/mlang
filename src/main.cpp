@@ -1,6 +1,7 @@
 #include "ast.h"
 #include "diagnostics.h"
 #include "ir.h"
+#include "lexer_api.h"
 #include "module.h"
 #include "package_manager.h"
 #include "source_filter.h"
@@ -41,12 +42,6 @@ extern "C"
     extern ASTNode* programRoot;
     extern bool parseHadError;
 }
-
-typedef size_t yy_size_t;
-struct yy_buffer_state;
-typedef yy_buffer_state* YY_BUFFER_STATE;
-extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
-extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 void printUsage(const char* programName)
 {
@@ -1816,8 +1811,8 @@ int main(int argc, char** argv)
         parseHadError = false;
         g_sourceFile = inputFile.c_str();
         g_targetArchForParse = targetArch.c_str();
-        YY_BUFFER_STATE parseBuffer = yy_scan_bytes(
-            filteredInput.data(), static_cast<yy_size_t>(filteredInput.size()));
+        YY_BUFFER_STATE parseBuffer =
+            mlang_yy_scan_bytes(filteredInput.data(), filteredInput.size());
         const int parseResult = yyparse();
         yy_delete_buffer(parseBuffer);
         if(parseResult != 0 || parseHadError)
