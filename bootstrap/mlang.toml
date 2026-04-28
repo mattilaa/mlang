@@ -42,15 +42,6 @@ commands = [
 ]
 
 [[task]]
-name = "build-mlangd"
-print = "[bootstrap] Building the C++ mlangd target"
-workdir = "{{root}}/.."
-depends_on = ["configure"]
-commands = [
-  "cmake --build {{build_dir}} --target mlangd"
-]
-
-[[task]]
 name = "build-mlangd-mla"
 print = "[bootstrap] Building mlangd-mla with the freshly built compiler"
 workdir = "{{root}}/.."
@@ -126,7 +117,7 @@ shell = [
 name = "build-tooling"
 print = "[bootstrap] Building the current bootstrap toolchain set"
 workdir = "{{root}}/.."
-depends_on = ["build-mlangd", "build-mlangd-mla", "build-mlang-format", "build-mlang-frontend"]
+depends_on = ["build-mlangd-mla", "build-mlang-format", "build-mlang-frontend"]
 commands = [
   "echo bootstrap tooling build completed"
 ]
@@ -150,7 +141,7 @@ shell = [
 name = "build-all"
 print = "[bootstrap] Building all bootstrap-managed tooling except mlang itself"
 workdir = "{{root}}/.."
-depends_on = ["build-mlangd", "build-mlangd-mla-existing", "build-mlang-format-existing", "build-mlang-frontend-existing"]
+depends_on = ["build-mlangd-mla-existing", "build-mlang-format-existing", "build-mlang-frontend-existing"]
 commands = [
   "echo bootstrap build-all completed"
 ]
@@ -193,18 +184,6 @@ shell = [
   "mkdir -p \"$bin_dir\"",
   "cp -f {{build_dir}}/mlangd-mla \"$bin_dir/mlangd-mla\"",
   "chmod +x \"$bin_dir/mlangd-mla\""
-]
-
-[[task]]
-name = "install-mlangd"
-print = "[bootstrap] Installing the C++ mlangd target"
-workdir = "{{root}}/.."
-depends_on = ["build-mlangd"]
-shell = [
-  "bin_dir={{option.bin_dir}}",
-  "mkdir -p \"$bin_dir\"",
-  "cp -f {{build_dir}}/mlangd \"$bin_dir/mlangd\"",
-  "chmod +x \"$bin_dir/mlangd\""
 ]
 
 [[task]]
@@ -275,7 +254,7 @@ shell = [
 name = "install-all"
 print = "[bootstrap] Installing bootstrap-managed tooling into {{option.bin_dir}}"
 workdir = "{{root}}/.."
-depends_on = ["install-mlangd", "install-mlangd-mla-existing", "install-mlang-format-existing", "install-mlang-frontend-existing"]
+depends_on = ["install-mlangd-mla-existing", "install-mlang-format-existing", "install-mlang-frontend-existing"]
 commands = [
   "echo bootstrap install-all completed"
 ]
@@ -293,7 +272,7 @@ commands = [
 name = "install-tooling"
 print = "[bootstrap] Installing the current bootstrap toolchain set"
 workdir = "{{root}}/.."
-depends_on = ["install-mlangd", "install-mlangd-mla", "install-mlang-format", "install-mlang-frontend"]
+depends_on = ["install-mlangd-mla", "install-mlang-format", "install-mlang-frontend"]
 commands = [
   "echo bootstrap tooling install completed"
 ]

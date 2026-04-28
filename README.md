@@ -33,7 +33,7 @@ In practice, the main pieces are:
 - `mlang pkg`: package manager and task runner
 - `mlang-format`: formatter
 - `mlang-frontend`: higher-level frontend CLI
-- `mlangd` / `mlangd-mla`: language-server binaries
+- `mlangd-mla`: MLang language-server binary
 
 ## Install From Scratch
 If you are starting from a fresh checkout, first inspect the bootstrap tasks:
@@ -103,7 +103,6 @@ mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_p
 
 The bootstrap phases are intentionally split, so you can run only what you
 need:
-- `build-mlangd`
 - `build-mlangd-mla`
 - `build-mlang-format`
 - `build-mlang-frontend`
@@ -536,15 +535,12 @@ mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_p
 ls "$HOME/.local/bin"
 ```
 
-That install step places tools such as `mlangd`, `mlangd-mla`,
-`mlang-format`, `mlang-frontend-mla`, and `mlang-frontend` under
-`~/.local/bin`.
+That install step places tools such as `mlangd-mla`, `mlang-format`,
+`mlang-frontend-mla`, and `mlang-frontend` under `~/.local/bin`.
 
 You can also run individual steps instead of the whole chain:
 
 ```sh
-mlang pkg --config bootstrap/mlang.toml run build-mlangd
-mlang pkg --config bootstrap/mlang.toml run build-mlangd --asan
 mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla
 mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla --asan
 mlang pkg --config bootstrap/mlang.toml run build-mlang-format
@@ -556,7 +552,6 @@ mlang pkg --config bootstrap/mlang.toml run robot-tests
 
 The current bootstrap task set covers:
 - `build-mlang`
-- `build-mlangd`
 - `build-mlangd-mla`
 - `build-mlang-format`
 - `build-mlang-frontend-mla`
@@ -568,7 +563,6 @@ The current bootstrap task set covers:
 - `robot-tests`
 - `install-mlang`
 - `install-all`
-- `install-mlangd`
 - `install-mlangd-mla`
 - `install-mlang-format`
 - `install-mlang-frontend`
