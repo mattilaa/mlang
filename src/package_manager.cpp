@@ -40,6 +40,7 @@ static std::vector<std::string> split_toml_array(std::string_view input);
 static std::string shell_quote(const std::string& s);
 static std::string unquote(std::string_view v);
 static std::string unquote_preserve(std::string_view v);
+static std::string unescape_toml_basic_string(std::string_view v);
 static void append_toml_command_value(const std::string& value,
                                       std::vector<std::string>& out);
 static void append_toml_commands_value(const std::string& value,
@@ -1083,6 +1084,36 @@ static bool is_release_opt_flag(std::string_view flag)
            flag == "-Oz";
 }
 
+static bool build_config_asan_enabled(const BuildConfig& buildConfig)
+{
+    return buildConfig.asan.value_or(false);
+}
+
+static std::string build_config_cmake_build_type(const BuildConfig& buildConfig)
+{
+    if(build_config_asan_enabled(buildConfig))
+        return "Debug";
+    const std::string optLevel = trim(buildConfig.optLevel);
+    if(optLevel == "-O0" || optLevel == "-Og")
+        return "Debug";
+    return "Release";
+}
+
+static std::string build_config_asan_compile_flags(
+    const BuildConfig& buildConfig)
+{
+    if(!build_config_asan_enabled(buildConfig))
+        return "";
+    return "-fsanitize=address -fno-omit-frame-pointer -g -O0";
+}
+
+static std::string build_config_asan_link_flags(const BuildConfig& buildConfig)
+{
+    if(!build_config_asan_enabled(buildConfig))
+        return "";
+    return "-fsanitize=address -fno-omit-frame-pointer";
+}
+
 static std::optional<std::string>
 find_opt_flag_in_fragments(const std::vector<std::string>& flags)
 {
@@ -2117,12 +2148,130 @@ static std::vector<std::string> split_semicolon(std::string_view input)
     return out;
 }
 
+static std::optional<unsigned int> parse_hex_codepoint(std::string_view text)
+{
+    if(text.empty())
+        return std::nullopt;
+
+    unsigned int value = 0;
+    for(char c : text)
+    {
+        value <<= 4u;
+        if(c >= '0' && c <= '9')
+            value |= static_cast<unsigned int>(c - '0');
+        else if(c >= 'a' && c <= 'f')
+            value |= static_cast<unsigned int>(10 + (c - 'a'));
+        else if(c >= 'A' && c <= 'F')
+            value |= static_cast<unsigned int>(10 + (c - 'A'));
+        else
+            return std::nullopt;
+    }
+    return value;
+}
+
+static void append_utf8_codepoint(std::string& out, unsigned int codepoint)
+{
+    if(codepoint <= 0x7Fu)
+    {
+        out.push_back(static_cast<char>(codepoint));
+        return;
+    }
+    if(codepoint <= 0x7FFu)
+    {
+        out.push_back(static_cast<char>(0xC0u | ((codepoint >> 6u) & 0x1Fu)));
+        out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+        return;
+    }
+    if(codepoint <= 0xFFFFu)
+    {
+        out.push_back(static_cast<char>(0xE0u | ((codepoint >> 12u) & 0x0Fu)));
+        out.push_back(static_cast<char>(0x80u | ((codepoint >> 6u) & 0x3Fu)));
+        out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+        return;
+    }
+
+    out.push_back(static_cast<char>(0xF0u | ((codepoint >> 18u) & 0x07u)));
+    out.push_back(static_cast<char>(0x80u | ((codepoint >> 12u) & 0x3Fu)));
+    out.push_back(static_cast<char>(0x80u | ((codepoint >> 6u) & 0x3Fu)));
+    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+}
+
+static std::string unescape_toml_basic_string(std::string_view v)
+{
+    std::string out;
+    out.reserve(v.size());
+    for(size_t i = 0; i < v.size(); ++i)
+    {
+        const char c = v[i];
+        if(c != '\\' || i + 1 >= v.size())
+        {
+            out.push_back(c);
+            continue;
+        }
+
+        const char escaped = v[++i];
+        switch(escaped)
+        {
+        case 'b':
+            out.push_back('\b');
+            break;
+        case 't':
+            out.push_back('\t');
+            break;
+        case 'n':
+            out.push_back('\n');
+            break;
+        case 'f':
+            out.push_back('\f');
+            break;
+        case 'r':
+            out.push_back('\r');
+            break;
+        case '"':
+            out.push_back('"');
+            break;
+        case '\\':
+            out.push_back('\\');
+            break;
+        case 'u':
+        case 'U':
+        {
+            const size_t hexDigits = escaped == 'u' ? 4u : 8u;
+            if(i + hexDigits >= v.size())
+            {
+                out.push_back('\\');
+                out.push_back(escaped);
+                break;
+            }
+
+            const auto codepoint =
+                parse_hex_codepoint(v.substr(i + 1, hexDigits));
+            if(!codepoint.has_value())
+            {
+                out.push_back('\\');
+                out.push_back(escaped);
+                break;
+            }
+
+            append_utf8_codepoint(out, *codepoint);
+            i += hexDigits;
+            break;
+        }
+        default:
+            out.push_back(escaped);
+            break;
+        }
+    }
+    return out;
+}
+
 static std::string unquote(std::string_view v)
 {
     std::string t = trim(v);
     if(t.size() >= 2 && t.front() == '"' && t.back() == '"')
     {
-        std::string inner = t.substr(1, t.size() - 2);
+        std::string inner =
+            unescape_toml_basic_string(t.substr(1, t.size() - 2));
         std::string out;
         out.reserve(inner.size());
         bool previousWasSpace = false;
@@ -2152,7 +2301,7 @@ static std::string unquote_preserve(std::string_view v)
 {
     std::string t = trim(v);
     if(t.size() >= 2 && t.front() == '"' && t.back() == '"')
-        return t.substr(1, t.size() - 2);
+        return unescape_toml_basic_string(t.substr(1, t.size() - 2));
     if(t.size() >= 2 && t.front() == '\'' && t.back() == '\'')
         return t.substr(1, t.size() - 2);
     return t;
@@ -4176,6 +4325,20 @@ static std::string expand_task_text(const std::string& text,
     out = replace_all(out, "{{make}}",
                       buildConfig.makeProgram.empty() ? "make"
                                                       : buildConfig.makeProgram);
+    out = replace_all(out, "{{cmake_build_type}}",
+                      build_config_cmake_build_type(buildConfig));
+    out = replace_all(out, "{{asan_enabled}}",
+                      build_config_asan_enabled(buildConfig) ? "1" : "0");
+    out = replace_all(out, "{{cmake_c_flags}}",
+                      build_config_asan_compile_flags(buildConfig));
+    out = replace_all(out, "{{cmake_cxx_flags}}",
+                      build_config_asan_compile_flags(buildConfig));
+    out = replace_all(out, "{{cmake_exe_linker_flags}}",
+                      build_config_asan_link_flags(buildConfig));
+    out = replace_all(out, "{{cmake_shared_linker_flags}}",
+                      build_config_asan_link_flags(buildConfig));
+    out = replace_all(out, "{{cmake_module_linker_flags}}",
+                      build_config_asan_link_flags(buildConfig));
     for(const auto& [key, value] : buildConfig.optionValues)
         out = replace_all(out, "{{option." + key + "}}", value);
     return out;
@@ -5152,14 +5315,15 @@ static int run_task_for_manifest_impl(
             effectiveWorkdir.empty() ? pkg.packageDir
                                  : std::filesystem::path(
                                        expand_task_text(effectiveWorkdir, pkg,
-                                                        buildConfig));
+                                                        effectiveTaskBuildConfig));
         if(!workdir.is_absolute())
             workdir = pkg.packageDir / workdir;
 
         const std::string taskDescription =
             effectiveMessage.empty()
                 ? taskName
-                : expand_task_text(effectiveMessage, pkg, buildConfig);
+                : expand_task_text(effectiveMessage, pkg,
+                                   effectiveTaskBuildConfig);
         const std::string taskPrefix = reserve_execution_step_prefix();
         pkg_task_print_line(taskPrefix + " " + taskDescription);
         const auto taskStart = std::chrono::steady_clock::now();
@@ -5173,7 +5337,8 @@ static int run_task_for_manifest_impl(
         if(!effectiveShell.empty())
         {
             auto scriptPathOpt =
-                write_task_script(pkg, taskName, effectiveShell, buildConfig);
+                write_task_script(pkg, taskName, effectiveShell,
+                                  effectiveTaskBuildConfig);
             if(!scriptPathOpt.has_value())
             {
                 taskStack.pop_back();
@@ -5203,15 +5368,18 @@ static int run_task_for_manifest_impl(
             std::string generationError;
             auto generatedCommand = build_task_language_command(
                 pkg, taskName, effectiveTaskBuildConfig, effectiveLanguage,
-                expand_task_text(effectiveSource, pkg, buildConfig),
-                expand_task_text(effectiveOutput, pkg, buildConfig),
+                expand_task_text(effectiveSource, pkg,
+                                 effectiveTaskBuildConfig),
+                expand_task_text(effectiveOutput, pkg,
+                                 effectiveTaskBuildConfig),
                 [&]() {
                     std::vector<std::string> expandedInputs;
                     expandedInputs.reserve(effectiveInputs.size());
                     for(const auto& input : effectiveInputs)
                     {
                         expandedInputs.push_back(
-                            expand_task_text(input, pkg, buildConfig));
+                            expand_task_text(input, pkg,
+                                             effectiveTaskBuildConfig));
                     }
                     return expandedInputs;
                 }(),
@@ -5242,12 +5410,13 @@ static int run_task_for_manifest_impl(
             for(const auto& entry : effectiveEnv)
             {
                 const std::string expandedEnv =
-                    expand_task_text(entry, pkg, buildConfig);
+                    expand_task_text(entry, pkg, effectiveTaskBuildConfig);
                 if(expandedEnv.empty())
                     continue;
                 envPrefix += " " + shell_quote(expandedEnv);
             }
-            std::string expanded = expand_task_text(command, pkg, buildConfig);
+            std::string expanded =
+                expand_task_text(command, pkg, effectiveTaskBuildConfig);
             if(!envPrefix.empty())
                 expanded = "env" + envPrefix + " " + expanded;
             const std::string fullCommand =
@@ -5309,7 +5478,8 @@ static int run_task_for_manifest_impl(
             for(const auto& chmodPathText : effectiveChmodPaths)
             {
                 const std::filesystem::path chmodPath =
-                    expand_task_text(chmodPathText, pkg, buildConfig);
+                    expand_task_text(chmodPathText, pkg,
+                                     effectiveTaskBuildConfig);
                 std::string chmodError;
                 if(!apply_recursive_permissions(chmodPath, *mode, chmodError))
                 {

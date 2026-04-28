@@ -13,6 +13,7 @@ Current task entrypoints:
 
 - `configure`
 - `build-mlang`
+- `build-mlangd`
 - `build-mlangd-mla`
 - `build-mlang-format`
 - `build-mlang-frontend-mla`
@@ -24,6 +25,7 @@ Current task entrypoints:
 - `robot-tests`
 - `install-mlang`
 - `install-all`
+- `install-mlangd`
 - `install-mlangd-mla`
 - `install-mlang-format`
 - `install-mlang-frontend`
@@ -33,10 +35,12 @@ Examples:
 
 ```sh
 ./bootstrap/run-bootstrap.sh run build-mlang
+./bootstrap/run-bootstrap.sh run build-mlangd
 ./bootstrap/run-bootstrap.sh run build-mlangd-mla
 ./bootstrap/run-bootstrap.sh run build-mlang-format
 ./bootstrap/run-bootstrap.sh run build-mlang-frontend
 ./bootstrap/run-bootstrap.sh run build-all
+./bootstrap/run-bootstrap.sh run build-all --asan
 ./bootstrap/run-bootstrap.sh run build-and-install
 ./bootstrap/run-bootstrap.sh run unit-tests
 ./bootstrap/run-bootstrap.sh run robot-tests
@@ -51,5 +55,8 @@ Notes:
   `install_prefix = "$HOME/.local"` and `bin_dir = "$HOME/.local/bin"`.
 - Override them on one command line with
   `mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin`.
+- `--asan` also applies to `build-mlangd`, `build-mlangd-mla`,
+  `build-mlang-format`, and `build-all`. For the CMake-backed `mlangd` task it
+  switches configure/build to a Debug ASan configuration.
 - If `mlang` is not yet installed, `run-bootstrap.sh` first checks
   `./build/mlang` and then `PATH`.

@@ -133,6 +133,7 @@ fn print_usage() -> void {
     println!("  mlang pkg run preview-sine --tasks --color");
     println!("  mlang pkg --tasks --color tests/mla_tests.toml");
     println!("  mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin");
+    println!("  mlang pkg --config bootstrap/mlang.toml run build-all --asan");
     println!("");
     println!("Flags may appear in any order. `--color` alone implies task-tree output.");
 }

@@ -12,8 +12,8 @@ deps_dir = "../build/deps"
 min_mlang_version = "0.2.0"
 
 [tool.mlang.options]
-install_prefix = "$HOME/.local"
-bin_dir = "$HOME/.local/bin"
+install_prefix = "~/.local"
+bin_dir = "~/.local/bin"
 
 [[task]]
 name = "toolchain-check"
@@ -29,7 +29,7 @@ print = "[bootstrap] Configuring the repository build tree"
 workdir = "{{root}}/.."
 depends_on = ["toolchain-check"]
 commands = [
-  "cmake -S . -B {{build_dir}} -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release"
+  "cmake -S . -B {{build_dir}} -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE={{cmake_build_type}} -DCMAKE_C_FLAGS=\"{{cmake_c_flags}}\" -DCMAKE_CXX_FLAGS=\"{{cmake_cxx_flags}}\" -DCMAKE_EXE_LINKER_FLAGS=\"{{cmake_exe_linker_flags}}\" -DCMAKE_SHARED_LINKER_FLAGS=\"{{cmake_shared_linker_flags}}\" -DCMAKE_MODULE_LINKER_FLAGS=\"{{cmake_module_linker_flags}}\""
 ]
 
 [[task]]
@@ -39,6 +39,15 @@ workdir = "{{root}}/.."
 depends_on = ["configure"]
 commands = [
   "cmake --build {{build_dir}} --target mlang mlang_std"
+]
+
+[[task]]
+name = "build-mlangd"
+print = "[bootstrap] Building the C++ mlangd target"
+workdir = "{{root}}/.."
+depends_on = ["configure"]
+commands = [
+  "cmake --build {{build_dir}} --target mlangd"
 ]
 
 [[task]]
@@ -117,7 +126,7 @@ shell = [
 name = "build-tooling"
 print = "[bootstrap] Building the current bootstrap toolchain set"
 workdir = "{{root}}/.."
-depends_on = ["build-mlangd-mla", "build-mlang-format", "build-mlang-frontend"]
+depends_on = ["build-mlangd", "build-mlangd-mla", "build-mlang-format", "build-mlang-frontend"]
 commands = [
   "echo bootstrap tooling build completed"
 ]
@@ -141,7 +150,7 @@ shell = [
 name = "build-all"
 print = "[bootstrap] Building all bootstrap-managed tooling except mlang itself"
 workdir = "{{root}}/.."
-depends_on = ["build-mlangd-mla-existing", "build-mlang-format-existing", "build-mlang-frontend-existing"]
+depends_on = ["build-mlangd", "build-mlangd-mla-existing", "build-mlang-format-existing", "build-mlang-frontend-existing"]
 commands = [
   "echo bootstrap build-all completed"
 ]
@@ -170,7 +179,7 @@ print = "[bootstrap] Installing mlang and stdlib through CMake"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang"]
 shell = [
-  "prefix=\"{{option.install_prefix}}\"",
+  "prefix={{option.install_prefix}}",
   "cmake --install {{build_dir}} --prefix \"$prefix\""
 ]
 
@@ -180,10 +189,22 @@ print = "[bootstrap] Installing mlangd-mla"
 workdir = "{{root}}/.."
 depends_on = ["build-mlangd-mla", "install-mlang"]
 shell = [
-  "bin_dir=\"{{option.bin_dir}}\"",
+  "bin_dir={{option.bin_dir}}",
   "mkdir -p \"$bin_dir\"",
   "cp -f {{build_dir}}/mlangd-mla \"$bin_dir/mlangd-mla\"",
   "chmod +x \"$bin_dir/mlangd-mla\""
+]
+
+[[task]]
+name = "install-mlangd"
+print = "[bootstrap] Installing the C++ mlangd target"
+workdir = "{{root}}/.."
+depends_on = ["build-mlangd"]
+shell = [
+  "bin_dir={{option.bin_dir}}",
+  "mkdir -p \"$bin_dir\"",
+  "cp -f {{build_dir}}/mlangd \"$bin_dir/mlangd\"",
+  "chmod +x \"$bin_dir/mlangd\""
 ]
 
 [[task]]
@@ -192,7 +213,7 @@ print = "[bootstrap] Installing mlangd-mla"
 workdir = "{{root}}/.."
 depends_on = ["build-mlangd-mla-existing"]
 shell = [
-  "bin_dir=\"{{option.bin_dir}}\"",
+  "bin_dir={{option.bin_dir}}",
   "mkdir -p \"$bin_dir\"",
   "cp -f {{build_dir}}/mlangd-mla \"$bin_dir/mlangd-mla\"",
   "chmod +x \"$bin_dir/mlangd-mla\""
@@ -204,7 +225,7 @@ print = "[bootstrap] Installing mlang-frontend and mlang-frontend-mla"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang-frontend", "install-mlang"]
 shell = [
-  "bin_dir=\"{{option.bin_dir}}\"",
+  "bin_dir={{option.bin_dir}}",
   "mkdir -p \"$bin_dir\"",
   "cp -f {{build_dir}}/mlang-frontend-mla \"$bin_dir/mlang-frontend-mla\"",
   "chmod +x \"$bin_dir/mlang-frontend-mla\"",
@@ -218,7 +239,7 @@ print = "[bootstrap] Installing mlang-frontend and mlang-frontend-mla"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang-frontend-existing"]
 shell = [
-  "bin_dir=\"{{option.bin_dir}}\"",
+  "bin_dir={{option.bin_dir}}",
   "mkdir -p \"$bin_dir\"",
   "cp -f {{build_dir}}/mlang-frontend-mla \"$bin_dir/mlang-frontend-mla\"",
   "chmod +x \"$bin_dir/mlang-frontend-mla\"",
@@ -232,7 +253,7 @@ print = "[bootstrap] Installing mlang-format"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang-format", "install-mlang"]
 shell = [
-  "bin_dir=\"{{option.bin_dir}}\"",
+  "bin_dir={{option.bin_dir}}",
   "mkdir -p \"$bin_dir\"",
   "cp -f {{build_dir}}/mlang-format \"$bin_dir/mlang-format\"",
   "chmod +x \"$bin_dir/mlang-format\""
@@ -244,7 +265,7 @@ print = "[bootstrap] Installing mlang-format"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang-format-existing"]
 shell = [
-  "bin_dir=\"{{option.bin_dir}}\"",
+  "bin_dir={{option.bin_dir}}",
   "mkdir -p \"$bin_dir\"",
   "cp -f {{build_dir}}/mlang-format \"$bin_dir/mlang-format\"",
   "chmod +x \"$bin_dir/mlang-format\""
@@ -254,7 +275,7 @@ shell = [
 name = "install-all"
 print = "[bootstrap] Installing bootstrap-managed tooling into {{option.bin_dir}}"
 workdir = "{{root}}/.."
-depends_on = ["install-mlangd-mla-existing", "install-mlang-format-existing", "install-mlang-frontend-existing"]
+depends_on = ["install-mlangd", "install-mlangd-mla-existing", "install-mlang-format-existing", "install-mlang-frontend-existing"]
 commands = [
   "echo bootstrap install-all completed"
 ]
@@ -272,7 +293,7 @@ commands = [
 name = "install-tooling"
 print = "[bootstrap] Installing the current bootstrap toolchain set"
 workdir = "{{root}}/.."
-depends_on = ["install-mlangd-mla", "install-mlang-format", "install-mlang-frontend"]
+depends_on = ["install-mlangd", "install-mlangd-mla", "install-mlang-format", "install-mlang-frontend"]
 commands = [
   "echo bootstrap tooling install completed"
 ]

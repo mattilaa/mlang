@@ -2,6 +2,8 @@
 MLang - Programming Language
 
 ## Table Of Contents
+- [What Is Mlang](#what-is-mlang)
+- [Install From Scratch](#install-from-scratch)
 - [LSP](#lsp)
 - [C++ LSP](#c-lsp)
 - [Mlangd (Mlang Scaffold)](#mlangd-mlang-scaffold)
@@ -19,6 +21,94 @@ MLang - Programming Language
 - [Examples](#examples)
 - [Package Manager (C++)](#package-manager-c)
 - [Package Workspaces And Fetched Subprojects](#package-workspaces-and-fetched-subprojects)
+
+## What Is Mlang
+`mlang` is the compiler and primary CLI for the MLang programming language.
+This repository also contains the standard library, the package manager,
+frontend tooling, formatter, and language-server related tools built around the
+same toolchain.
+
+In practice, the main pieces are:
+- `mlang`: compiler and main command-line entrypoint
+- `mlang pkg`: package manager and task runner
+- `mlang-format`: formatter
+- `mlang-frontend`: higher-level frontend CLI
+- `mlangd` / `mlangd-mla`: language-server binaries
+
+## Install From Scratch
+If you are starting from a fresh checkout, first inspect the bootstrap tasks:
+
+```sh
+./bootstrap/run-bootstrap.sh run build-all --tasks
+```
+
+Install the required host dependencies first:
+- `cmake`
+- LLVM development tools and libraries
+- `flex`
+- `bison`
+- OpenSSL development libraries
+- `python3`
+
+On macOS with Homebrew, for example:
+
+```sh
+brew install cmake llvm flex bison openssl@3 python
+```
+
+Then build the compiler itself with CMake:
+
+```sh
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target mlang mlang_std
+```
+
+Install `mlang` to a custom location such as `~/.local`:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+cp ./build/mlang "$HOME/.local/bin/mlang"
+```
+
+Add it to `PATH` in `~/.zshrc`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+source ~/.zshrc
+```
+
+Verify the installed compiler:
+
+```sh
+which mlang
+mlang --help
+```
+
+After that, continue with the package-manager bootstrap phases. You can use
+the helper script:
+
+```sh
+./bootstrap/run-bootstrap.sh run build-all
+./bootstrap/run-bootstrap.sh run install-all
+```
+
+or run the same phases directly through `mlang pkg`:
+
+```sh
+mlang pkg --config bootstrap/mlang.toml run build-all
+mlang pkg --config bootstrap/mlang.toml run build-all --asan
+mlang pkg --config bootstrap/mlang.toml run install-all
+mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin
+```
+
+The bootstrap phases are intentionally split, so you can run only what you
+need:
+- `build-mlangd`
+- `build-mlangd-mla`
+- `build-mlang-format`
+- `build-mlang-frontend`
+- `unit-tests`
+- `robot-tests`
 
 ## LSP
 Primary LSP servers:
@@ -431,6 +521,7 @@ or directly with `mlang pkg` if you want to skip the helper:
 
 ```sh
 mlang pkg --config bootstrap/mlang.toml run build-all
+mlang pkg --config bootstrap/mlang.toml run build-all --asan
 mlang pkg --config bootstrap/mlang.toml run install-all
 mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin
 mlang pkg --config bootstrap/mlang.toml run install-tooling
@@ -445,15 +536,19 @@ mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_p
 ls "$HOME/.local/bin"
 ```
 
-That install step places tools such as `mlangd-mla`, `mlang-format`,
-`mlang-frontend-mla`, and `mlang-frontend` under `~/.local/bin`.
+That install step places tools such as `mlangd`, `mlangd-mla`,
+`mlang-format`, `mlang-frontend-mla`, and `mlang-frontend` under
+`~/.local/bin`.
 
 You can also run individual steps instead of the whole chain:
 
 ```sh
+mlang pkg --config bootstrap/mlang.toml run build-mlangd
+mlang pkg --config bootstrap/mlang.toml run build-mlangd --asan
 mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla
 mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla --asan
 mlang pkg --config bootstrap/mlang.toml run build-mlang-format
+mlang pkg --config bootstrap/mlang.toml run build-mlang-format --asan
 mlang pkg --config bootstrap/mlang.toml run build-mlang-frontend
 mlang pkg --config bootstrap/mlang.toml run unit-tests
 mlang pkg --config bootstrap/mlang.toml run robot-tests
@@ -461,6 +556,7 @@ mlang pkg --config bootstrap/mlang.toml run robot-tests
 
 The current bootstrap task set covers:
 - `build-mlang`
+- `build-mlangd`
 - `build-mlangd-mla`
 - `build-mlang-format`
 - `build-mlang-frontend-mla`
@@ -472,6 +568,7 @@ The current bootstrap task set covers:
 - `robot-tests`
 - `install-mlang`
 - `install-all`
+- `install-mlangd`
 - `install-mlangd-mla`
 - `install-mlang-format`
 - `install-mlang-frontend`
