@@ -1,6 +1,25 @@
 # mlang
 MLang - Programming Language
 
+## Table Of Contents
+- [LSP](#lsp)
+- [C++ LSP](#c-lsp)
+- [Mlangd (Mlang Scaffold)](#mlangd-mlang-scaffold)
+- [Compiler Frontend (Primary MLang CLI)](#compiler-frontend-primary-mlang-cli)
+- [Package Manager (MLang Backend Default)](#package-manager-mlang-backend-default)
+- [Stdlib Linking](#stdlib-linking)
+- [Build + Install](#build--install)
+- [Documentation](#documentation)
+- [AddressSanitizer Verification](#addresssanitizer-verification)
+- [Formatter](#formatter)
+- [Quickstart (Package Manager + curl example)](#quickstart-package-manager--curl-example)
+- [Testing](#testing)
+- [Multithreaded TCP Demo (Local)](#multithreaded-tcp-demo-local)
+- [Advanced Protocol Stack Demo (Local)](#advanced-protocol-stack-demo-local)
+- [Examples](#examples)
+- [Package Manager (C++)](#package-manager-c)
+- [Package Workspaces And Fetched Subprojects](#package-workspaces-and-fetched-subprojects)
+
 ## LSP
 Primary LSP servers:
 - `build/mlangd` (C++)
@@ -637,6 +656,15 @@ mlang examples/protocol_mt/server.mla -o /tmp/protocol_mt_server
 # Terminal 2
 mlang examples/protocol_mt/client.mla -o /tmp/protocol_mt_client
 /tmp/protocol_mt_client --port 19095 --clients 1 --rounds 7 --delay-min-ms 500 --delay-max-ms 1000
+```
+
+Before running Robot tests, set up and activate a Python virtual environment:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r tests/requirements.txt
 ```
 
 Run the Robot Framework example suite (includes the multithreaded net case):
