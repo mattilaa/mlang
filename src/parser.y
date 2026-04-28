@@ -1078,74 +1078,7 @@ static ASTNode* add_switch_case_node(ASTNode* listNode, ASTNode* caseNode)
 
 static ASTNode* create_switch_statement_desugared(ASTNode* subject,
                                                   ASTNode* caseListNode,
-                                                  int line, int col)
-{
-    auto* cases = dynamic_cast<SwitchCaseListParseNode*>(caseListNode);
-    char* tempName = make_switch_temp_name();
-    ASTNode* letStmt = create_let_declaration(NULL, tempName, subject);
-    if(letStmt)
-    {
-        letStmt->line = line;
-        letStmt->col = col;
-    }
-
-    ASTNode* blockList = create_statement_list(letStmt);
-    StatementListNode* defaultBody = nullptr;
-    std::vector<SwitchCaseParseNode*> normalCases;
-
-    if(cases)
-    {
-        for(auto* caseNode : cases->cases)
-        {
-            if(!caseNode)
-                continue;
-            if(caseNode->isDefault)
-            {
-                if(defaultBody)
-                {
-                    parseHadError = true;
-                    yyerror("duplicate default case in switch");
-                    continue;
-                }
-                defaultBody = caseNode->body;
-                continue;
-            }
-            normalCases.push_back(caseNode);
-        }
-    }
-
-    StatementListNode* currentElse = defaultBody;
-    for(auto it = normalCases.rbegin(); it != normalCases.rend(); ++it)
-    {
-        SwitchCaseParseNode* caseNode = *it;
-        ASTNode* lhs = create_identifier_line(strdup(tempName), line);
-        ASTNode* cmp = create_binary_op(EQ, lhs, caseNode->value);
-        ASTNode* ifStmt =
-            create_if_statement(cmp, caseNode->body, NULL, currentElse);
-        if(ifStmt)
-        {
-            ifStmt->line = line;
-            ifStmt->col = col;
-        }
-        currentElse = static_cast<StatementListNode*>(
-            create_statement_list(ifStmt));
-    }
-
-    if(currentElse)
-    {
-        for(auto* stmt : currentElse->statements)
-            blockList = add_statement(blockList, stmt);
-    }
-
-    auto* block = dynamic_cast<BlockStatementNode*>(
-        create_block_statement(blockList));
-    if(block)
-    {
-        block->line = line;
-        block->col = col;
-    }
-    return block;
-}
+                                                  int line, int col);
 
 static int parser_host_is_windows()
 {
@@ -3259,6 +3192,79 @@ map_iterator
     ;
 
 %%
+
+/* Implemented in the epilogue so Bison token constants such as EQ are visible. */
+static ASTNode* create_switch_statement_desugared(ASTNode* subject,
+                                                  ASTNode* caseListNode,
+                                                  int line, int col)
+{
+    auto* cases = dynamic_cast<SwitchCaseListParseNode*>(caseListNode);
+    char* tempName = make_switch_temp_name();
+    ASTNode* letStmt = create_let_declaration(NULL, tempName, subject);
+    if(letStmt)
+    {
+        letStmt->line = line;
+        letStmt->col = col;
+    }
+
+    ASTNode* blockList = create_statement_list(letStmt);
+    StatementListNode* defaultBody = nullptr;
+    std::vector<SwitchCaseParseNode*> normalCases;
+
+    if(cases)
+    {
+        for(auto* caseNode : cases->cases)
+        {
+            if(!caseNode)
+                continue;
+            if(caseNode->isDefault)
+            {
+                if(defaultBody)
+                {
+                    parseHadError = true;
+                    yyerror("duplicate default case in switch");
+                    continue;
+                }
+                defaultBody = caseNode->body;
+                continue;
+            }
+            normalCases.push_back(caseNode);
+        }
+    }
+
+    StatementListNode* currentElse = defaultBody;
+    for(auto it = normalCases.rbegin(); it != normalCases.rend(); ++it)
+    {
+        SwitchCaseParseNode* caseNode = *it;
+        ASTNode* lhs = create_identifier_line(strdup(tempName), line);
+        ASTNode* cmp = create_binary_op(EQ, lhs, caseNode->value);
+        ASTNode* ifStmt =
+            create_if_statement(cmp, caseNode->body, NULL, currentElse);
+        if(ifStmt)
+        {
+            ifStmt->line = line;
+            ifStmt->col = col;
+        }
+        currentElse = static_cast<StatementListNode*>(
+            create_statement_list(ifStmt));
+    }
+
+    if(currentElse)
+    {
+        for(auto* stmt : currentElse->statements)
+            blockList = add_statement(blockList, stmt);
+    }
+
+    auto* block = dynamic_cast<BlockStatementNode*>(
+        create_block_statement(blockList));
+    if(block)
+    {
+        block->line = line;
+        block->col = col;
+    }
+    return block;
+}
+
 
 static bool is_reserved_type_keyword(const char* s)
 {

@@ -14,6 +14,7 @@
 #include <llvm/TargetParser/Host.h>
 #include <llvm/TargetParser/Triple.h>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace {
 

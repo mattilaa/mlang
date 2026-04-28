@@ -251,15 +251,15 @@ static int is_try_question_context()
 "..="           { return DOTDOTEQ; }
 ".."            { return DOTDOT; }
 "::"            { return COLONCOLON; }
-"."             { return DOT; }
+".into_iter().enumerate()" { return INTO_ITER_ENUMERATE_METHOD; }
+".iter().enumerate()"      { return ITER_ENUMERATE_METHOD; }
+".into_iter()"  { return INTO_ITER_METHOD; }
+".enumerate()"  { return ENUMERATE_METHOD; }
 ".keys()"       { return KEYS_METHOD; }
 ".values()"     { return VALUES_METHOD; }
 ".entries()"    { return ENTRIES_METHOD; }
 ".iter()"       { return ITER_METHOD; }
-".into_iter()"  { return INTO_ITER_METHOD; }
-".iter().enumerate()"      { return ITER_ENUMERATE_METHOD; }
-".into_iter().enumerate()" { return INTO_ITER_ENUMERATE_METHOD; }
-".enumerate()"  { return ENUMERATE_METHOD; }
+"."             { return DOT; }
 "<"             {
                   if(is_generic_struct_literal_start()) {
                       generic_depth++;
