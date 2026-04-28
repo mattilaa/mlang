@@ -979,6 +979,11 @@ static void parse_build_config_key_value(BuildConfig& cfg,
                                          const std::string& key,
                                          const std::string& value);
 static void pkg_warn_line(const std::string& text);
+static std::string expand_task_text(const std::string& text,
+                                    const PackageManifest& pkg,
+                                    const BuildConfig& buildConfig);
+static BuildConfig materialize_build_config_for_package(
+    const PackageManifest& pkg, BuildConfig buildConfig);
 
 static bool apply_task_build_config_key_value(BuildConfig& cfg,
                                               TaskTomlKey taskKeyKind,
@@ -1380,7 +1385,9 @@ static void print_pkg_usage(const std::string& programName)
         << "  " << tool
         << " pkg --color tests/mla_tests.toml            # implies --tasks\n"
         << "  " << tool
-        << " pkg fetch --config examples/foo/mlang.toml  # --config anywhere\n";
+        << " pkg fetch --config examples/foo/mlang.toml  # --config anywhere\n"
+        << "  " << tool
+        << " pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin\n";
 }
 
 static BuildConfig merge_build_config(const BuildConfig& base,
@@ -3709,10 +3716,13 @@ static int validate_mlang_version_requirement(const std::filesystem::path& manif
 static int fetch_for_manifest(const PackageManifest& pkg,
                               const BuildConfig& buildConfig)
 {
+    const BuildConfig effectiveBuildConfig =
+        materialize_build_config_for_package(pkg, buildConfig);
     ScopedPackageLogState scopedLogs(
-        make_package_log_state(pkg.packageDir, buildConfig));
+        make_package_log_state(pkg.packageDir, effectiveBuildConfig));
     auto deps = parse_source_deps(pkg.content);
-    std::filesystem::path depsDir = package_deps_dir(pkg.packageDir, buildConfig);
+    std::filesystem::path depsDir =
+        package_deps_dir(pkg.packageDir, effectiveBuildConfig);
     std::filesystem::create_directories(depsDir);
     const bool ownProgress = !current_execution_progress_state().active;
     size_t totalSteps = 0;
@@ -3730,7 +3740,7 @@ static int fetch_for_manifest(const PackageManifest& pkg,
     for(const auto& dep : deps)
     {
         if(fetch_dep(dep, depsDir, /*updateExisting=*/true,
-                     buildConfig.pathEntries) != 0)
+                     effectiveBuildConfig.pathEntries) != 0)
             return 1;
     }
     pkg_info_line("Fetch completed for " + pkg.manifestPath.string() + ".");
@@ -3884,8 +3894,10 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
                               bool useNinja,
                               const BuildConfig& packageBuildConfig)
 {
+    const BuildConfig effectivePackageBuildConfig =
+        materialize_build_config_for_package(pkg, packageBuildConfig);
     ScopedPackageLogState scopedLogs(
-        make_package_log_state(pkg.packageDir, packageBuildConfig));
+        make_package_log_state(pkg.packageDir, effectivePackageBuildConfig));
     const auto packageEntry =
         find_section_toml_string(pkg.content, "package", "entry");
     const bool hasExplicitPackageEntry =
@@ -3944,13 +3956,14 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     for(const auto& target : targets)
     {
         BuildConfig mergedConfig =
-            merge_build_config(packageBuildConfig, target.config);
+            merge_build_config(effectivePackageBuildConfig, target.config);
         apply_asan_overrides(
             mergedConfig,
             "package target '" + target.name + "' in " +
                 pkg.manifestPath.string(),
             optFlagOverride.empty() ? std::nullopt
                                     : std::optional<std::string>(optFlagOverride));
+        mergedConfig = materialize_build_config_for_package(pkg, mergedConfig);
         if(mergedConfig.useNinja.value_or(false))
             effectiveUseNinja = true;
         if(validate_mlang_version_requirement(pkg.manifestPath, mergedConfig,
@@ -3960,10 +3973,11 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         }
     }
     if(effectiveUseNinja &&
-       !ensure_ninja_available(packageBuildConfig.pathEntries))
+       !ensure_ninja_available(effectivePackageBuildConfig.pathEntries))
         return 1;
 
-    std::filesystem::path depsDir = package_deps_dir(pkg.packageDir, packageBuildConfig);
+    std::filesystem::path depsDir =
+        package_deps_dir(pkg.packageDir, effectivePackageBuildConfig);
     std::filesystem::create_directories(depsDir);
     size_t totalSteps = 0;
     for(const auto& dep : deps)
@@ -3978,14 +3992,14 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     for(const auto& dep : deps)
     {
         if(fetch_dep(dep, depsDir, /*updateExisting=*/false,
-                     packageBuildConfig.pathEntries) != 0)
+                     effectivePackageBuildConfig.pathEntries) != 0)
             return 1;
     }
     for(const auto& dep : deps)
     {
         if(build_git_dep(dep, depsDir, effectiveUseNinja,
-                         packageBuildConfig.makeProgram,
-                         packageBuildConfig.pathEntries) != 0)
+                         effectivePackageBuildConfig.makeProgram,
+                         effectivePackageBuildConfig.pathEntries) != 0)
             return 1;
     }
 
@@ -3994,7 +4008,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     for(const auto& dep : cdeps)
     {
         if(!append_pkg_config_flags(dep, pkgFlags,
-                                    packageBuildConfig.pathEntries))
+                                    effectivePackageBuildConfig.pathEntries))
             return 1;
     }
 
@@ -4004,7 +4018,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         {
             for(const auto& taskName : buildTaskRoots)
             {
-                if(run_task_for_manifest(pkg, taskName, packageBuildConfig) != 0)
+                if(run_task_for_manifest(pkg, taskName, effectivePackageBuildConfig) != 0)
                     return 1;
             }
             return 0;
@@ -4016,7 +4030,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     }
 
     const std::filesystem::path buildDir =
-        package_build_dir(pkg.packageDir, packageBuildConfig);
+        package_build_dir(pkg.packageDir, effectivePackageBuildConfig);
     std::filesystem::create_directories(buildDir);
     std::string backend = argv0;
     if(argv0.find('/') != std::string::npos)
@@ -4038,13 +4052,14 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         }
 
         BuildConfig buildConfig =
-            merge_build_config(packageBuildConfig, target.config);
+            merge_build_config(effectivePackageBuildConfig, target.config);
         apply_asan_overrides(
             buildConfig,
             "package target '" + target.name + "' in " +
                 pkg.manifestPath.string(),
             optFlagOverride.empty() ? std::nullopt
                                     : std::optional<std::string>(optFlagOverride));
+        buildConfig = materialize_build_config_for_package(pkg, buildConfig);
         if(!validate_declared_libraries(pkg.manifestPath, target.name,
                                         buildConfig, linkFlags))
             return 1;
@@ -4164,6 +4179,47 @@ static std::string expand_task_text(const std::string& text,
     for(const auto& [key, value] : buildConfig.optionValues)
         out = replace_all(out, "{{option." + key + "}}", value);
     return out;
+}
+
+static std::string expand_build_config_fragment(const PackageManifest& pkg,
+                                                const BuildConfig& buildConfig,
+                                                const std::string& text)
+{
+    return expand_task_text(text, pkg, buildConfig);
+}
+
+static std::string resolve_build_config_path_entry(
+    const PackageManifest& pkg, const BuildConfig& buildConfig,
+    const std::string& text)
+{
+    const std::string expanded =
+        expand_build_config_fragment(pkg, buildConfig, text);
+    if(expanded.empty())
+        return expanded;
+    std::filesystem::path path(expanded);
+    if(path.is_relative())
+        path = (pkg.packageDir / path).lexically_normal();
+    return path.string();
+}
+
+static BuildConfig materialize_build_config_for_package(
+    const PackageManifest& pkg, BuildConfig buildConfig)
+{
+    buildConfig.compilerProgram =
+        expand_build_config_fragment(pkg, buildConfig, buildConfig.compilerProgram);
+    buildConfig.makeProgram =
+        expand_build_config_fragment(pkg, buildConfig, buildConfig.makeProgram);
+
+    for(auto& entry : buildConfig.pathEntries)
+        entry = resolve_build_config_path_entry(pkg, buildConfig, entry);
+    for(auto& entry : buildConfig.libPaths)
+        entry = resolve_build_config_path_entry(pkg, buildConfig, entry);
+    for(auto& flag : buildConfig.compilerFlags)
+        flag = expand_build_config_fragment(pkg, buildConfig, flag);
+    for(auto& flag : buildConfig.linkerFlags)
+        flag = expand_build_config_fragment(pkg, buildConfig, flag);
+
+    return buildConfig;
 }
 
 static std::string current_host_name()
@@ -5041,6 +5097,8 @@ static int run_task_for_manifest_impl(
         apply_asan_overrides(
             effectiveTaskBuildConfig,
             "task '" + taskName + "' in " + pkg.manifestPath.string());
+        effectiveTaskBuildConfig =
+            materialize_build_config_for_package(pkg, effectiveTaskBuildConfig);
 
         taskStack.push_back(taskName);
         if(effectiveParallel && effectiveDependsOn.size() > 1)

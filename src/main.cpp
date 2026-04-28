@@ -113,6 +113,8 @@ void printUsage(const char* programName)
               << " pkg --tests --tasks --color tests/mla_tests.toml\n"
               << "  Manifest overview: " << programName
               << " pkg --color tests/mla_tests.toml   # --tasks implied\n"
+              << "  Bootstrap install: " << programName
+              << " pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin\n"
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"

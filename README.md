@@ -431,8 +431,22 @@ or directly with `mlang pkg` if you want to skip the helper:
 
 ```sh
 mlang pkg --config bootstrap/mlang.toml run build-all
+mlang pkg --config bootstrap/mlang.toml run install-all
+mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin
 mlang pkg --config bootstrap/mlang.toml run install-tooling
 ```
+
+For example, after installing `mlang` itself into `~/.local/bin`, you can use
+that installed compiler to build and install the rest of the bootstrap-managed
+tools into the same directory in one command:
+
+```sh
+mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin
+ls "$HOME/.local/bin"
+```
+
+That install step places tools such as `mlangd-mla`, `mlang-format`,
+`mlang-frontend-mla`, and `mlang-frontend` under `~/.local/bin`.
 
 You can also run individual steps instead of the whole chain:
 
@@ -452,10 +466,12 @@ The current bootstrap task set covers:
 - `build-mlang-frontend-mla`
 - `build-mlang-frontend`
 - `build-all`
+- `build-and-install`
 - `build-tooling`
 - `unit-tests`
 - `robot-tests`
 - `install-mlang`
+- `install-all`
 - `install-mlangd-mla`
 - `install-mlang-format`
 - `install-mlang-frontend`
