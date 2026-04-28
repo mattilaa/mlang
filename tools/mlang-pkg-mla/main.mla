@@ -108,11 +108,11 @@ fn print_usage() -> void {
     println!("  fetch     [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
     println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
     println!("            [--task-print-to-stdout-log]");
-    println!("  build     [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]");
+    println!("  build     [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]");
     println!("            [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
     println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
     println!("            [--task-print-to-stdout-log]");
-    println!("  run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR]");
+    println!("  run <task> [--tasks] [--color] [--asan] [--build-dir DIR] [--deps-dir DIR]");
     println!("            [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE]");
     println!("            [--warn-log FILE] [--task-print-to-stdout-log]");
     println!("            [--option KEY=VALUE]");
@@ -132,6 +132,8 @@ fn print_usage() -> void {
     println!("  mlang pkg build -O2 --ninja");
     println!("  mlang pkg run preview-sine --tasks --color");
     println!("  mlang pkg --tasks --color tests/mla_tests.toml");
+    println!("  mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin");
+    println!("  mlang pkg --config bootstrap/mlang.toml run build-all --asan");
     println!("");
     println!("Flags may appear in any order. `--color` alone implies task-tree output.");
 }
@@ -1105,8 +1107,11 @@ fn run_build(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str
             i = i + 1;
             continue;
         }
+        if (eq(arg, "--asan") == 1) {
+            return delegate_pkg_to_cpp(backend, "build", argv, start_idx + 1);
+        }
         println!("Unknown option for 'pkg build': {}", arg);
-        println!("Usage: mlang-pkg-mla build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]");
+        println!("Usage: mlang-pkg-mla build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]");
         return 1;
     }
 

@@ -40,6 +40,7 @@ static std::vector<std::string> split_toml_array(std::string_view input);
 static std::string shell_quote(const std::string& s);
 static std::string unquote(std::string_view v);
 static std::string unquote_preserve(std::string_view v);
+static std::string unescape_toml_basic_string(std::string_view v);
 static void append_toml_command_value(const std::string& value,
                                       std::vector<std::string>& out);
 static void append_toml_commands_value(const std::string& value,
@@ -900,6 +901,7 @@ struct BuildConfig
     std::vector<std::string> libs;
     std::map<std::string, std::string> optionValues;
     std::optional<bool> useNinja;
+    std::optional<bool> asan;
     std::optional<bool> staticDeps;
     std::optional<bool> staticCppRuntime;
     std::optional<bool> taskPrintToStdoutLog;
@@ -977,6 +979,12 @@ struct TaskSpec
 static void parse_build_config_key_value(BuildConfig& cfg,
                                          const std::string& key,
                                          const std::string& value);
+static void pkg_warn_line(const std::string& text);
+static std::string expand_task_text(const std::string& text,
+                                    const PackageManifest& pkg,
+                                    const BuildConfig& buildConfig);
+static BuildConfig materialize_build_config_for_package(
+    const PackageManifest& pkg, BuildConfig buildConfig);
 
 static bool apply_task_build_config_key_value(BuildConfig& cfg,
                                               TaskTomlKey taskKeyKind,
@@ -1062,6 +1070,113 @@ parse_octal_permission_bits(const std::string& value)
         mode = (mode * 8u) + static_cast<unsigned int>(c - '0');
     }
     return mode;
+}
+
+static bool is_opt_flag(std::string_view flag)
+{
+    return flag == "-O0" || flag == "-Og" || flag == "-O1" || flag == "-O2" ||
+           flag == "-O3" || flag == "-Os" || flag == "-Oz";
+}
+
+static bool is_release_opt_flag(std::string_view flag)
+{
+    return flag == "-O1" || flag == "-O2" || flag == "-O3" || flag == "-Os" ||
+           flag == "-Oz";
+}
+
+static bool build_config_asan_enabled(const BuildConfig& buildConfig)
+{
+    return buildConfig.asan.value_or(false);
+}
+
+static std::string build_config_cmake_build_type(const BuildConfig& buildConfig)
+{
+    if(build_config_asan_enabled(buildConfig))
+        return "Debug";
+    const std::string optLevel = trim(buildConfig.optLevel);
+    if(optLevel == "-O0" || optLevel == "-Og")
+        return "Debug";
+    return "Release";
+}
+
+static std::string build_config_asan_compile_flags(
+    const BuildConfig& buildConfig)
+{
+    if(!build_config_asan_enabled(buildConfig))
+        return "";
+    return "-fsanitize=address -fno-omit-frame-pointer -g -O0";
+}
+
+static std::string build_config_asan_link_flags(const BuildConfig& buildConfig)
+{
+    if(!build_config_asan_enabled(buildConfig))
+        return "";
+    return "-fsanitize=address -fno-omit-frame-pointer";
+}
+
+static std::optional<std::string>
+find_opt_flag_in_fragments(const std::vector<std::string>& flags)
+{
+    for(const auto& flag : flags)
+    {
+        const std::string trimmed = trim(flag);
+        if(is_opt_flag(trimmed))
+            return trimmed;
+    }
+    return std::nullopt;
+}
+
+static void remove_opt_flags(std::vector<std::string>& flags)
+{
+    flags.erase(std::remove_if(flags.begin(), flags.end(),
+                               [](const std::string& flag) {
+                                   return is_opt_flag(trim(flag));
+                               }),
+                flags.end());
+}
+
+static void append_unique_flag(std::vector<std::string>& flags,
+                               const std::string& flag)
+{
+    if(std::find(flags.begin(), flags.end(), flag) == flags.end())
+        flags.push_back(flag);
+}
+
+static void apply_asan_overrides(BuildConfig& buildConfig,
+                                 const std::string& contextLabel,
+                                 const std::optional<std::string>& cliOptFlag =
+                                     std::nullopt)
+{
+    if(!buildConfig.asan.value_or(false))
+        return;
+
+    const std::optional<std::string> existingCompilerOpt =
+        find_opt_flag_in_fragments(buildConfig.compilerFlags);
+    const std::string explicitOpt = cliOptFlag.has_value() &&
+                                            !cliOptFlag->empty()
+                                        ? *cliOptFlag
+                                        : buildConfig.optLevel;
+    std::string warnedOpt;
+    if(is_release_opt_flag(explicitOpt))
+        warnedOpt = explicitOpt;
+    else if(existingCompilerOpt.has_value() &&
+            is_release_opt_flag(*existingCompilerOpt))
+        warnedOpt = *existingCompilerOpt;
+
+    if(!warnedOpt.empty())
+    {
+        pkg_warn_line("warning: " + contextLabel + " requested release optimization " +
+                      warnedOpt +
+                      ", but --asan forces a debug-friendly build (-O0).");
+    }
+
+    buildConfig.optLevel = "-O0";
+    remove_opt_flags(buildConfig.compilerFlags);
+    append_unique_flag(buildConfig.compilerFlags, "-fsanitize=address");
+    append_unique_flag(buildConfig.compilerFlags, "-fno-omit-frame-pointer");
+    append_unique_flag(buildConfig.compilerFlags, "-g");
+    append_unique_flag(buildConfig.linkerFlags, "-fsanitize=address");
+    append_unique_flag(buildConfig.linkerFlags, "-fno-omit-frame-pointer");
 }
 
 static std::filesystem::perms
@@ -1263,13 +1378,13 @@ static void print_pkg_usage(const std::string& programName)
         << "           [--task-print-to-stdout-log]\n"
         << "      Fetch dependencies without building.\n"
         << "  " << tool
-        << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]\n"
+        << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]\n"
         << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
         << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
         << "           [--task-print-to-stdout-log]\n"
         << "      Build all configured targets.\n"
         << "  " << tool
-        << " pkg run <task> [--tasks] [--color]\n"
+        << " pkg run <task> [--tasks] [--color] [--asan]\n"
         << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
         << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
         << "           [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
@@ -1301,7 +1416,9 @@ static void print_pkg_usage(const std::string& programName)
         << "  " << tool
         << " pkg --color tests/mla_tests.toml            # implies --tasks\n"
         << "  " << tool
-        << " pkg fetch --config examples/foo/mlang.toml  # --config anywhere\n";
+        << " pkg fetch --config examples/foo/mlang.toml  # --config anywhere\n"
+        << "  " << tool
+        << " pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin\n";
 }
 
 static BuildConfig merge_build_config(const BuildConfig& base,
@@ -1338,6 +1455,8 @@ static BuildConfig merge_build_config(const BuildConfig& base,
         out.optionValues[key] = value;
     if(overrideCfg.useNinja.has_value())
         out.useNinja = overrideCfg.useNinja;
+    if(overrideCfg.asan.has_value())
+        out.asan = overrideCfg.asan;
     if(overrideCfg.staticDeps.has_value())
         out.staticDeps = overrideCfg.staticDeps;
     if(overrideCfg.staticCppRuntime.has_value())
@@ -2029,12 +2148,130 @@ static std::vector<std::string> split_semicolon(std::string_view input)
     return out;
 }
 
+static std::optional<unsigned int> parse_hex_codepoint(std::string_view text)
+{
+    if(text.empty())
+        return std::nullopt;
+
+    unsigned int value = 0;
+    for(char c : text)
+    {
+        value <<= 4u;
+        if(c >= '0' && c <= '9')
+            value |= static_cast<unsigned int>(c - '0');
+        else if(c >= 'a' && c <= 'f')
+            value |= static_cast<unsigned int>(10 + (c - 'a'));
+        else if(c >= 'A' && c <= 'F')
+            value |= static_cast<unsigned int>(10 + (c - 'A'));
+        else
+            return std::nullopt;
+    }
+    return value;
+}
+
+static void append_utf8_codepoint(std::string& out, unsigned int codepoint)
+{
+    if(codepoint <= 0x7Fu)
+    {
+        out.push_back(static_cast<char>(codepoint));
+        return;
+    }
+    if(codepoint <= 0x7FFu)
+    {
+        out.push_back(static_cast<char>(0xC0u | ((codepoint >> 6u) & 0x1Fu)));
+        out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+        return;
+    }
+    if(codepoint <= 0xFFFFu)
+    {
+        out.push_back(static_cast<char>(0xE0u | ((codepoint >> 12u) & 0x0Fu)));
+        out.push_back(static_cast<char>(0x80u | ((codepoint >> 6u) & 0x3Fu)));
+        out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+        return;
+    }
+
+    out.push_back(static_cast<char>(0xF0u | ((codepoint >> 18u) & 0x07u)));
+    out.push_back(static_cast<char>(0x80u | ((codepoint >> 12u) & 0x3Fu)));
+    out.push_back(static_cast<char>(0x80u | ((codepoint >> 6u) & 0x3Fu)));
+    out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+}
+
+static std::string unescape_toml_basic_string(std::string_view v)
+{
+    std::string out;
+    out.reserve(v.size());
+    for(size_t i = 0; i < v.size(); ++i)
+    {
+        const char c = v[i];
+        if(c != '\\' || i + 1 >= v.size())
+        {
+            out.push_back(c);
+            continue;
+        }
+
+        const char escaped = v[++i];
+        switch(escaped)
+        {
+        case 'b':
+            out.push_back('\b');
+            break;
+        case 't':
+            out.push_back('\t');
+            break;
+        case 'n':
+            out.push_back('\n');
+            break;
+        case 'f':
+            out.push_back('\f');
+            break;
+        case 'r':
+            out.push_back('\r');
+            break;
+        case '"':
+            out.push_back('"');
+            break;
+        case '\\':
+            out.push_back('\\');
+            break;
+        case 'u':
+        case 'U':
+        {
+            const size_t hexDigits = escaped == 'u' ? 4u : 8u;
+            if(i + hexDigits >= v.size())
+            {
+                out.push_back('\\');
+                out.push_back(escaped);
+                break;
+            }
+
+            const auto codepoint =
+                parse_hex_codepoint(v.substr(i + 1, hexDigits));
+            if(!codepoint.has_value())
+            {
+                out.push_back('\\');
+                out.push_back(escaped);
+                break;
+            }
+
+            append_utf8_codepoint(out, *codepoint);
+            i += hexDigits;
+            break;
+        }
+        default:
+            out.push_back(escaped);
+            break;
+        }
+    }
+    return out;
+}
+
 static std::string unquote(std::string_view v)
 {
     std::string t = trim(v);
     if(t.size() >= 2 && t.front() == '"' && t.back() == '"')
     {
-        std::string inner = t.substr(1, t.size() - 2);
+        std::string inner =
+            unescape_toml_basic_string(t.substr(1, t.size() - 2));
         std::string out;
         out.reserve(inner.size());
         bool previousWasSpace = false;
@@ -2064,7 +2301,7 @@ static std::string unquote_preserve(std::string_view v)
 {
     std::string t = trim(v);
     if(t.size() >= 2 && t.front() == '"' && t.back() == '"')
-        return t.substr(1, t.size() - 2);
+        return unescape_toml_basic_string(t.substr(1, t.size() - 2));
     if(t.size() >= 2 && t.front() == '\'' && t.back() == '\'')
         return t.substr(1, t.size() - 2);
     return t;
@@ -3628,10 +3865,13 @@ static int validate_mlang_version_requirement(const std::filesystem::path& manif
 static int fetch_for_manifest(const PackageManifest& pkg,
                               const BuildConfig& buildConfig)
 {
+    const BuildConfig effectiveBuildConfig =
+        materialize_build_config_for_package(pkg, buildConfig);
     ScopedPackageLogState scopedLogs(
-        make_package_log_state(pkg.packageDir, buildConfig));
+        make_package_log_state(pkg.packageDir, effectiveBuildConfig));
     auto deps = parse_source_deps(pkg.content);
-    std::filesystem::path depsDir = package_deps_dir(pkg.packageDir, buildConfig);
+    std::filesystem::path depsDir =
+        package_deps_dir(pkg.packageDir, effectiveBuildConfig);
     std::filesystem::create_directories(depsDir);
     const bool ownProgress = !current_execution_progress_state().active;
     size_t totalSteps = 0;
@@ -3649,7 +3889,7 @@ static int fetch_for_manifest(const PackageManifest& pkg,
     for(const auto& dep : deps)
     {
         if(fetch_dep(dep, depsDir, /*updateExisting=*/true,
-                     buildConfig.pathEntries) != 0)
+                     effectiveBuildConfig.pathEntries) != 0)
             return 1;
     }
     pkg_info_line("Fetch completed for " + pkg.manifestPath.string() + ".");
@@ -3803,8 +4043,10 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
                               bool useNinja,
                               const BuildConfig& packageBuildConfig)
 {
+    const BuildConfig effectivePackageBuildConfig =
+        materialize_build_config_for_package(pkg, packageBuildConfig);
     ScopedPackageLogState scopedLogs(
-        make_package_log_state(pkg.packageDir, packageBuildConfig));
+        make_package_log_state(pkg.packageDir, effectivePackageBuildConfig));
     const auto packageEntry =
         find_section_toml_string(pkg.content, "package", "entry");
     const bool hasExplicitPackageEntry =
@@ -3863,7 +4105,14 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     for(const auto& target : targets)
     {
         BuildConfig mergedConfig =
-            merge_build_config(packageBuildConfig, target.config);
+            merge_build_config(effectivePackageBuildConfig, target.config);
+        apply_asan_overrides(
+            mergedConfig,
+            "package target '" + target.name + "' in " +
+                pkg.manifestPath.string(),
+            optFlagOverride.empty() ? std::nullopt
+                                    : std::optional<std::string>(optFlagOverride));
+        mergedConfig = materialize_build_config_for_package(pkg, mergedConfig);
         if(mergedConfig.useNinja.value_or(false))
             effectiveUseNinja = true;
         if(validate_mlang_version_requirement(pkg.manifestPath, mergedConfig,
@@ -3873,10 +4122,11 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         }
     }
     if(effectiveUseNinja &&
-       !ensure_ninja_available(packageBuildConfig.pathEntries))
+       !ensure_ninja_available(effectivePackageBuildConfig.pathEntries))
         return 1;
 
-    std::filesystem::path depsDir = package_deps_dir(pkg.packageDir, packageBuildConfig);
+    std::filesystem::path depsDir =
+        package_deps_dir(pkg.packageDir, effectivePackageBuildConfig);
     std::filesystem::create_directories(depsDir);
     size_t totalSteps = 0;
     for(const auto& dep : deps)
@@ -3891,14 +4141,14 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     for(const auto& dep : deps)
     {
         if(fetch_dep(dep, depsDir, /*updateExisting=*/false,
-                     packageBuildConfig.pathEntries) != 0)
+                     effectivePackageBuildConfig.pathEntries) != 0)
             return 1;
     }
     for(const auto& dep : deps)
     {
         if(build_git_dep(dep, depsDir, effectiveUseNinja,
-                         packageBuildConfig.makeProgram,
-                         packageBuildConfig.pathEntries) != 0)
+                         effectivePackageBuildConfig.makeProgram,
+                         effectivePackageBuildConfig.pathEntries) != 0)
             return 1;
     }
 
@@ -3907,7 +4157,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     for(const auto& dep : cdeps)
     {
         if(!append_pkg_config_flags(dep, pkgFlags,
-                                    packageBuildConfig.pathEntries))
+                                    effectivePackageBuildConfig.pathEntries))
             return 1;
     }
 
@@ -3917,7 +4167,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         {
             for(const auto& taskName : buildTaskRoots)
             {
-                if(run_task_for_manifest(pkg, taskName, packageBuildConfig) != 0)
+                if(run_task_for_manifest(pkg, taskName, effectivePackageBuildConfig) != 0)
                     return 1;
             }
             return 0;
@@ -3929,7 +4179,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     }
 
     const std::filesystem::path buildDir =
-        package_build_dir(pkg.packageDir, packageBuildConfig);
+        package_build_dir(pkg.packageDir, effectivePackageBuildConfig);
     std::filesystem::create_directories(buildDir);
     std::string backend = argv0;
     if(argv0.find('/') != std::string::npos)
@@ -3951,7 +4201,14 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         }
 
         BuildConfig buildConfig =
-            merge_build_config(packageBuildConfig, target.config);
+            merge_build_config(effectivePackageBuildConfig, target.config);
+        apply_asan_overrides(
+            buildConfig,
+            "package target '" + target.name + "' in " +
+                pkg.manifestPath.string(),
+            optFlagOverride.empty() ? std::nullopt
+                                    : std::optional<std::string>(optFlagOverride));
+        buildConfig = materialize_build_config_for_package(pkg, buildConfig);
         if(!validate_declared_libraries(pkg.manifestPath, target.name,
                                         buildConfig, linkFlags))
             return 1;
@@ -4068,9 +4325,64 @@ static std::string expand_task_text(const std::string& text,
     out = replace_all(out, "{{make}}",
                       buildConfig.makeProgram.empty() ? "make"
                                                       : buildConfig.makeProgram);
+    out = replace_all(out, "{{cmake_build_type}}",
+                      build_config_cmake_build_type(buildConfig));
+    out = replace_all(out, "{{asan_enabled}}",
+                      build_config_asan_enabled(buildConfig) ? "1" : "0");
+    out = replace_all(out, "{{cmake_c_flags}}",
+                      build_config_asan_compile_flags(buildConfig));
+    out = replace_all(out, "{{cmake_cxx_flags}}",
+                      build_config_asan_compile_flags(buildConfig));
+    out = replace_all(out, "{{cmake_exe_linker_flags}}",
+                      build_config_asan_link_flags(buildConfig));
+    out = replace_all(out, "{{cmake_shared_linker_flags}}",
+                      build_config_asan_link_flags(buildConfig));
+    out = replace_all(out, "{{cmake_module_linker_flags}}",
+                      build_config_asan_link_flags(buildConfig));
     for(const auto& [key, value] : buildConfig.optionValues)
         out = replace_all(out, "{{option." + key + "}}", value);
     return out;
+}
+
+static std::string expand_build_config_fragment(const PackageManifest& pkg,
+                                                const BuildConfig& buildConfig,
+                                                const std::string& text)
+{
+    return expand_task_text(text, pkg, buildConfig);
+}
+
+static std::string resolve_build_config_path_entry(
+    const PackageManifest& pkg, const BuildConfig& buildConfig,
+    const std::string& text)
+{
+    const std::string expanded =
+        expand_build_config_fragment(pkg, buildConfig, text);
+    if(expanded.empty())
+        return expanded;
+    std::filesystem::path path(expanded);
+    if(path.is_relative())
+        path = (pkg.packageDir / path).lexically_normal();
+    return path.string();
+}
+
+static BuildConfig materialize_build_config_for_package(
+    const PackageManifest& pkg, BuildConfig buildConfig)
+{
+    buildConfig.compilerProgram =
+        expand_build_config_fragment(pkg, buildConfig, buildConfig.compilerProgram);
+    buildConfig.makeProgram =
+        expand_build_config_fragment(pkg, buildConfig, buildConfig.makeProgram);
+
+    for(auto& entry : buildConfig.pathEntries)
+        entry = resolve_build_config_path_entry(pkg, buildConfig, entry);
+    for(auto& entry : buildConfig.libPaths)
+        entry = resolve_build_config_path_entry(pkg, buildConfig, entry);
+    for(auto& flag : buildConfig.compilerFlags)
+        flag = expand_build_config_fragment(pkg, buildConfig, flag);
+    for(auto& flag : buildConfig.linkerFlags)
+        flag = expand_build_config_fragment(pkg, buildConfig, flag);
+
+    return buildConfig;
 }
 
 static std::string current_host_name()
@@ -4945,6 +5257,11 @@ static int run_task_for_manifest_impl(
             effectiveTaskBuildConfig = merge_build_config(
                 effectiveTaskBuildConfig, hostOverride->buildConfig);
         }
+        apply_asan_overrides(
+            effectiveTaskBuildConfig,
+            "task '" + taskName + "' in " + pkg.manifestPath.string());
+        effectiveTaskBuildConfig =
+            materialize_build_config_for_package(pkg, effectiveTaskBuildConfig);
 
         taskStack.push_back(taskName);
         if(effectiveParallel && effectiveDependsOn.size() > 1)
@@ -4998,14 +5315,15 @@ static int run_task_for_manifest_impl(
             effectiveWorkdir.empty() ? pkg.packageDir
                                  : std::filesystem::path(
                                        expand_task_text(effectiveWorkdir, pkg,
-                                                        buildConfig));
+                                                        effectiveTaskBuildConfig));
         if(!workdir.is_absolute())
             workdir = pkg.packageDir / workdir;
 
         const std::string taskDescription =
             effectiveMessage.empty()
                 ? taskName
-                : expand_task_text(effectiveMessage, pkg, buildConfig);
+                : expand_task_text(effectiveMessage, pkg,
+                                   effectiveTaskBuildConfig);
         const std::string taskPrefix = reserve_execution_step_prefix();
         pkg_task_print_line(taskPrefix + " " + taskDescription);
         const auto taskStart = std::chrono::steady_clock::now();
@@ -5019,7 +5337,8 @@ static int run_task_for_manifest_impl(
         if(!effectiveShell.empty())
         {
             auto scriptPathOpt =
-                write_task_script(pkg, taskName, effectiveShell, buildConfig);
+                write_task_script(pkg, taskName, effectiveShell,
+                                  effectiveTaskBuildConfig);
             if(!scriptPathOpt.has_value())
             {
                 taskStack.pop_back();
@@ -5049,15 +5368,18 @@ static int run_task_for_manifest_impl(
             std::string generationError;
             auto generatedCommand = build_task_language_command(
                 pkg, taskName, effectiveTaskBuildConfig, effectiveLanguage,
-                expand_task_text(effectiveSource, pkg, buildConfig),
-                expand_task_text(effectiveOutput, pkg, buildConfig),
+                expand_task_text(effectiveSource, pkg,
+                                 effectiveTaskBuildConfig),
+                expand_task_text(effectiveOutput, pkg,
+                                 effectiveTaskBuildConfig),
                 [&]() {
                     std::vector<std::string> expandedInputs;
                     expandedInputs.reserve(effectiveInputs.size());
                     for(const auto& input : effectiveInputs)
                     {
                         expandedInputs.push_back(
-                            expand_task_text(input, pkg, buildConfig));
+                            expand_task_text(input, pkg,
+                                             effectiveTaskBuildConfig));
                     }
                     return expandedInputs;
                 }(),
@@ -5088,12 +5410,13 @@ static int run_task_for_manifest_impl(
             for(const auto& entry : effectiveEnv)
             {
                 const std::string expandedEnv =
-                    expand_task_text(entry, pkg, buildConfig);
+                    expand_task_text(entry, pkg, effectiveTaskBuildConfig);
                 if(expandedEnv.empty())
                     continue;
                 envPrefix += " " + shell_quote(expandedEnv);
             }
-            std::string expanded = expand_task_text(command, pkg, buildConfig);
+            std::string expanded =
+                expand_task_text(command, pkg, effectiveTaskBuildConfig);
             if(!envPrefix.empty())
                 expanded = "env" + envPrefix + " " + expanded;
             const std::string fullCommand =
@@ -5155,7 +5478,8 @@ static int run_task_for_manifest_impl(
             for(const auto& chmodPathText : effectiveChmodPaths)
             {
                 const std::filesystem::path chmodPath =
-                    expand_task_text(chmodPathText, pkg, buildConfig);
+                    expand_task_text(chmodPathText, pkg,
+                                     effectiveTaskBuildConfig);
                 std::string chmodError;
                 if(!apply_recursive_permissions(chmodPath, *mode, chmodError))
                 {
@@ -5290,6 +5614,7 @@ struct PkgCliOverrides
     std::optional<std::string> stderrLog;
     std::optional<std::string> warnLog;
     std::optional<bool> taskPrintToStdoutLog;
+    std::optional<bool> asan;
     std::map<std::string, std::string> optionValues;
 };
 
@@ -5315,6 +5640,8 @@ static void apply_cli_overrides(BuildConfig& buildConfig,
         buildConfig.warnLog = *overrides.warnLog;
     if(overrides.taskPrintToStdoutLog.has_value())
         buildConfig.taskPrintToStdoutLog = *overrides.taskPrintToStdoutLog;
+    if(overrides.asan.has_value())
+        buildConfig.asan = *overrides.asan;
     for(const auto& [key, value] : overrides.optionValues)
         buildConfig.optionValues[key] = value;
     if(enableLogs)
@@ -5894,6 +6221,10 @@ int PackageManager::run(int argc, char** argv)
             {
                 useNinja = true;
             }
+            else if(arg == "--asan")
+            {
+                overrides.asan = true;
+            }
             else if(arg == "--build-dir" && i + 1 < argc)
             {
                 overrides.buildDir = argv[++i];
@@ -5926,7 +6257,7 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]"
+                          << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]"
                           << " [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
@@ -5976,7 +6307,7 @@ int PackageManager::run(int argc, char** argv)
             std::cerr << "Usage: " << argv[0]
                       << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
                       << " [--stderr-log FILE] [--warn-log FILE]"
-                      << " [--task-print-to-stdout-log]"
+                      << " [--task-print-to-stdout-log] [--asan]"
                       << " [--option KEY=VALUE]\n";
             return 1;
         }
@@ -6015,6 +6346,8 @@ int PackageManager::run(int argc, char** argv)
                 overrides.warnLog = argv[++i];
             else if(arg == "--task-print-to-stdout-log")
                 overrides.taskPrintToStdoutLog = true;
+            else if(arg == "--asan")
+                overrides.asan = true;
             else if(arg == "--build-dir" && i + 1 < argc)
                 overrides.buildDir = argv[++i];
             else if(arg == "--deps-dir" && i + 1 < argc)
@@ -6049,7 +6382,7 @@ int PackageManager::run(int argc, char** argv)
                           << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
-                          << " [--task-print-to-stdout-log]"
+                          << " [--task-print-to-stdout-log] [--asan]"
                           << " [--option KEY=VALUE]\n";
                 return 1;
             }

@@ -1,6 +1,115 @@
 # mlang
 MLang - Programming Language
 
+## Table Of Contents
+- [What Is Mlang](#what-is-mlang)
+- [Install From Scratch](#install-from-scratch)
+- [LSP](#lsp)
+- [C++ LSP](#c-lsp)
+- [Mlangd (Mlang Scaffold)](#mlangd-mlang-scaffold)
+- [Compiler Frontend (Primary MLang CLI)](#compiler-frontend-primary-mlang-cli)
+- [Package Manager (MLang Backend Default)](#package-manager-mlang-backend-default)
+- [Stdlib Linking](#stdlib-linking)
+- [Build + Install](#build--install)
+- [Documentation](#documentation)
+- [AddressSanitizer Verification](#addresssanitizer-verification)
+- [Formatter](#formatter)
+- [Quickstart (Package Manager + curl example)](#quickstart-package-manager--curl-example)
+- [Testing](#testing)
+- [Multithreaded TCP Demo (Local)](#multithreaded-tcp-demo-local)
+- [Advanced Protocol Stack Demo (Local)](#advanced-protocol-stack-demo-local)
+- [Examples](#examples)
+- [Package Manager (C++)](#package-manager-c)
+- [Package Workspaces And Fetched Subprojects](#package-workspaces-and-fetched-subprojects)
+
+## What Is Mlang
+`mlang` is the compiler and primary CLI for the MLang programming language.
+This repository also contains the standard library, the package manager,
+frontend tooling, formatter, and language-server related tools built around the
+same toolchain.
+
+In practice, the main pieces are:
+- `mlang`: compiler and main command-line entrypoint
+- `mlang pkg`: package manager and task runner
+- `mlang-format`: formatter
+- `mlang-frontend`: higher-level frontend CLI
+- `mlangd` / `mlangd-mla`: language-server binaries
+
+## Install From Scratch
+If you are starting from a fresh checkout, first inspect the bootstrap tasks:
+
+```sh
+./bootstrap/run-bootstrap.sh run build-all --tasks
+```
+
+Install the required host dependencies first:
+- `cmake`
+- LLVM development tools and libraries
+- `flex`
+- `bison`
+- OpenSSL development libraries
+- `python3`
+
+On macOS with Homebrew, for example:
+
+```sh
+brew install cmake llvm flex bison openssl@3 python
+```
+
+Then build the compiler itself with CMake:
+
+```sh
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target mlang mlang_std
+```
+
+Install `mlang` to a custom location such as `~/.local`:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+cp ./build/mlang "$HOME/.local/bin/mlang"
+```
+
+Add it to `PATH` in `~/.zshrc`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+source ~/.zshrc
+```
+
+Verify the installed compiler:
+
+```sh
+which mlang
+mlang --help
+```
+
+After that, continue with the package-manager bootstrap phases. You can use
+the helper script:
+
+```sh
+./bootstrap/run-bootstrap.sh run build-all
+./bootstrap/run-bootstrap.sh run install-all
+```
+
+or run the same phases directly through `mlang pkg`:
+
+```sh
+mlang pkg --config bootstrap/mlang.toml run build-all
+mlang pkg --config bootstrap/mlang.toml run build-all --asan
+mlang pkg --config bootstrap/mlang.toml run install-all
+mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin
+```
+
+The bootstrap phases are intentionally split, so you can run only what you
+need:
+- `build-mlangd`
+- `build-mlangd-mla`
+- `build-mlang-format`
+- `build-mlang-frontend`
+- `unit-tests`
+- `robot-tests`
+
 ## LSP
 Primary LSP servers:
 - `build/mlangd` (C++)
@@ -89,7 +198,7 @@ You can route `mlang` itself through the MLang frontend implementation:
 MLANG_FRONTEND_IMPL=mla mlang examples/main.mla -o /tmp/main_bin
 ```
 
-After install (`./scripts/build_install.sh`), prefer:
+After install, prefer:
 
 ```sh
 mlang-frontend --help
@@ -161,6 +270,7 @@ mlang tools/mlang-pkg-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-pkg-mla
 /tmp/mlang-pkg-mla --backend mlang fetch
 /tmp/mlang-pkg-mla --backend mlang build -O2
 /tmp/mlang-pkg-mla --backend mlang build --build-dir build-release --deps-dir .pkg/deps
+/tmp/mlang-pkg-mla --backend mlang build --asan
 /tmp/mlang-pkg-mla --backend mlang clean
 /tmp/mlang-pkg-mla --backend mlang clean --deps
 # Optional for CMake-based deps:
@@ -177,6 +287,11 @@ mlang pkg add zlib --url https://github.com/madler/zlib/archive/refs/tags/v1.3.1
 `mlang pkg clean` removes the configured build directory. When `deps_dir`
 points outside it, fetched dependencies are kept for reuse unless you pass
 `--deps`.
+
+`mlang pkg build --asan` and `mlang pkg run <task> --asan` force AddressSanitizer
+flags onto every binary-producing build step. When `--asan` is used, the
+package manager switches those builds to a debug-friendly `-O0` configuration
+and warns if an explicit release optimization would otherwise have been used.
 
 Task-driven manifests can also declare runtime-selectable values under
 `[tool.mlang.options]`. Override them per invocation with
@@ -351,25 +466,113 @@ The stdlib module search path is controlled by `MLANG_STDLIB_PATH` and defaults
 to `~/.local/share/mlang/stdlib` when installed.
 
 ## Build + Install
-Build and install compiler + tools (`mlang`, `mlangd`, `mlangd-mla`,
-`mlang-format`, `mlang-frontend-mla`, `mlang-frontend`):
+Build the compiler first from the repository root:
 
 ```sh
-./scripts/build_install.sh
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target mlang mlang_std
 ```
 
-Build and install only `mlangd`:
+That gives you a local compiler at `./build/mlang`.
+
+Install the compiler and stdlib to a custom prefix such as `~/.local`:
 
 ```sh
-./scripts/build_install_lsp.sh
+cmake --install build --prefix "$HOME/.local"
 ```
 
-Use Make instead of Ninja:
+If you specifically want the binary under `~/.local/bin`, ensure that
+directory exists and either install with the prefix above or copy the binary
+there explicitly:
 
 ```sh
-./scripts/build_install.sh --use-make
-./scripts/build_install_lsp.sh --use-make
+mkdir -p "$HOME/.local/bin"
+cp ./build/mlang "$HOME/.local/bin/mlang"
 ```
+
+Add your custom bin directory to `PATH` in `~/.zshrc`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Reload the shell config:
+
+```sh
+source ~/.zshrc
+```
+
+Confirm the installed compiler is the one being used:
+
+```sh
+which mlang
+mlang --help
+```
+
+Once `mlang` is available on `PATH`, build the remaining bootstrap-managed
+components either through the helper script:
+
+```sh
+./bootstrap/run-bootstrap.sh run build-all
+./bootstrap/run-bootstrap.sh run install-tooling
+```
+
+or directly with `mlang pkg` if you want to skip the helper:
+
+```sh
+mlang pkg --config bootstrap/mlang.toml run build-all
+mlang pkg --config bootstrap/mlang.toml run build-all --asan
+mlang pkg --config bootstrap/mlang.toml run install-all
+mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin
+mlang pkg --config bootstrap/mlang.toml run install-tooling
+```
+
+For example, after installing `mlang` itself into `~/.local/bin`, you can use
+that installed compiler to build and install the rest of the bootstrap-managed
+tools into the same directory in one command:
+
+```sh
+mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin
+ls "$HOME/.local/bin"
+```
+
+That install step places tools such as `mlangd`, `mlangd-mla`,
+`mlang-format`, `mlang-frontend-mla`, and `mlang-frontend` under
+`~/.local/bin`.
+
+You can also run individual steps instead of the whole chain:
+
+```sh
+mlang pkg --config bootstrap/mlang.toml run build-mlangd
+mlang pkg --config bootstrap/mlang.toml run build-mlangd --asan
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla --asan
+mlang pkg --config bootstrap/mlang.toml run build-mlang-format
+mlang pkg --config bootstrap/mlang.toml run build-mlang-format --asan
+mlang pkg --config bootstrap/mlang.toml run build-mlang-frontend
+mlang pkg --config bootstrap/mlang.toml run unit-tests
+mlang pkg --config bootstrap/mlang.toml run robot-tests
+```
+
+The current bootstrap task set covers:
+- `build-mlang`
+- `build-mlangd`
+- `build-mlangd-mla`
+- `build-mlang-format`
+- `build-mlang-frontend-mla`
+- `build-mlang-frontend`
+- `build-all`
+- `build-and-install`
+- `build-tooling`
+- `unit-tests`
+- `robot-tests`
+- `install-mlang`
+- `install-all`
+- `install-mlangd`
+- `install-mlangd-mla`
+- `install-mlang-format`
+- `install-mlang-frontend`
+- `install-tooling`
 
 ## Documentation
 
@@ -426,12 +629,13 @@ example, and run it (the program uses libcurl to fetch a URL).
 
 ```sh
 # Build compiler first
-./scripts/build_install.sh --no-install
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target mlang mlang_std
 
 # Run package-manager demo
 cd examples/package_manager_git_cjson
-mlang pkg fetch
-mlang pkg build
+../../build/mlang pkg fetch
+../../build/mlang pkg build
 # Or: mlang pkg build -O3 --ninja
 ./build/cjson_demo
 # Optional URL override:
@@ -572,6 +776,15 @@ mlang examples/protocol_mt/server.mla -o /tmp/protocol_mt_server
 # Terminal 2
 mlang examples/protocol_mt/client.mla -o /tmp/protocol_mt_client
 /tmp/protocol_mt_client --port 19095 --clients 1 --rounds 7 --delay-min-ms 500 --delay-max-ms 1000
+```
+
+Before running Robot tests, set up and activate a Python virtual environment:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r tests/requirements.txt
 ```
 
 Run the Robot Framework example suite (includes the multithreaded net case):
