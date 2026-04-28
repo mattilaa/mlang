@@ -180,6 +180,7 @@ mlang tools/mlang-pkg-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-pkg-mla
 /tmp/mlang-pkg-mla --backend mlang fetch
 /tmp/mlang-pkg-mla --backend mlang build -O2
 /tmp/mlang-pkg-mla --backend mlang build --build-dir build-release --deps-dir .pkg/deps
+/tmp/mlang-pkg-mla --backend mlang build --asan
 /tmp/mlang-pkg-mla --backend mlang clean
 /tmp/mlang-pkg-mla --backend mlang clean --deps
 # Optional for CMake-based deps:
@@ -196,6 +197,11 @@ mlang pkg add zlib --url https://github.com/madler/zlib/archive/refs/tags/v1.3.1
 `mlang pkg clean` removes the configured build directory. When `deps_dir`
 points outside it, fetched dependencies are kept for reuse unless you pass
 `--deps`.
+
+`mlang pkg build --asan` and `mlang pkg run <task> --asan` force AddressSanitizer
+flags onto every binary-producing build step. When `--asan` is used, the
+package manager switches those builds to a debug-friendly `-O0` configuration
+and warns if an explicit release optimization would otherwise have been used.
 
 Task-driven manifests can also declare runtime-selectable values under
 `[tool.mlang.options]`. Override them per invocation with
@@ -432,6 +438,7 @@ You can also run individual steps instead of the whole chain:
 
 ```sh
 mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla --asan
 mlang pkg --config bootstrap/mlang.toml run build-mlang-format
 mlang pkg --config bootstrap/mlang.toml run build-mlang-frontend
 mlang pkg --config bootstrap/mlang.toml run unit-tests

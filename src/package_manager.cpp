@@ -900,6 +900,7 @@ struct BuildConfig
     std::vector<std::string> libs;
     std::map<std::string, std::string> optionValues;
     std::optional<bool> useNinja;
+    std::optional<bool> asan;
     std::optional<bool> staticDeps;
     std::optional<bool> staticCppRuntime;
     std::optional<bool> taskPrintToStdoutLog;
@@ -977,6 +978,7 @@ struct TaskSpec
 static void parse_build_config_key_value(BuildConfig& cfg,
                                          const std::string& key,
                                          const std::string& value);
+static void pkg_warn_line(const std::string& text);
 
 static bool apply_task_build_config_key_value(BuildConfig& cfg,
                                               TaskTomlKey taskKeyKind,
@@ -1062,6 +1064,83 @@ parse_octal_permission_bits(const std::string& value)
         mode = (mode * 8u) + static_cast<unsigned int>(c - '0');
     }
     return mode;
+}
+
+static bool is_opt_flag(std::string_view flag)
+{
+    return flag == "-O0" || flag == "-Og" || flag == "-O1" || flag == "-O2" ||
+           flag == "-O3" || flag == "-Os" || flag == "-Oz";
+}
+
+static bool is_release_opt_flag(std::string_view flag)
+{
+    return flag == "-O1" || flag == "-O2" || flag == "-O3" || flag == "-Os" ||
+           flag == "-Oz";
+}
+
+static std::optional<std::string>
+find_opt_flag_in_fragments(const std::vector<std::string>& flags)
+{
+    for(const auto& flag : flags)
+    {
+        const std::string trimmed = trim(flag);
+        if(is_opt_flag(trimmed))
+            return trimmed;
+    }
+    return std::nullopt;
+}
+
+static void remove_opt_flags(std::vector<std::string>& flags)
+{
+    flags.erase(std::remove_if(flags.begin(), flags.end(),
+                               [](const std::string& flag) {
+                                   return is_opt_flag(trim(flag));
+                               }),
+                flags.end());
+}
+
+static void append_unique_flag(std::vector<std::string>& flags,
+                               const std::string& flag)
+{
+    if(std::find(flags.begin(), flags.end(), flag) == flags.end())
+        flags.push_back(flag);
+}
+
+static void apply_asan_overrides(BuildConfig& buildConfig,
+                                 const std::string& contextLabel,
+                                 const std::optional<std::string>& cliOptFlag =
+                                     std::nullopt)
+{
+    if(!buildConfig.asan.value_or(false))
+        return;
+
+    const std::optional<std::string> existingCompilerOpt =
+        find_opt_flag_in_fragments(buildConfig.compilerFlags);
+    const std::string explicitOpt = cliOptFlag.has_value() &&
+                                            !cliOptFlag->empty()
+                                        ? *cliOptFlag
+                                        : buildConfig.optLevel;
+    std::string warnedOpt;
+    if(is_release_opt_flag(explicitOpt))
+        warnedOpt = explicitOpt;
+    else if(existingCompilerOpt.has_value() &&
+            is_release_opt_flag(*existingCompilerOpt))
+        warnedOpt = *existingCompilerOpt;
+
+    if(!warnedOpt.empty())
+    {
+        pkg_warn_line("warning: " + contextLabel + " requested release optimization " +
+                      warnedOpt +
+                      ", but --asan forces a debug-friendly build (-O0).");
+    }
+
+    buildConfig.optLevel = "-O0";
+    remove_opt_flags(buildConfig.compilerFlags);
+    append_unique_flag(buildConfig.compilerFlags, "-fsanitize=address");
+    append_unique_flag(buildConfig.compilerFlags, "-fno-omit-frame-pointer");
+    append_unique_flag(buildConfig.compilerFlags, "-g");
+    append_unique_flag(buildConfig.linkerFlags, "-fsanitize=address");
+    append_unique_flag(buildConfig.linkerFlags, "-fno-omit-frame-pointer");
 }
 
 static std::filesystem::perms
@@ -1263,13 +1342,13 @@ static void print_pkg_usage(const std::string& programName)
         << "           [--task-print-to-stdout-log]\n"
         << "      Fetch dependencies without building.\n"
         << "  " << tool
-        << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]\n"
+        << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]\n"
         << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
         << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
         << "           [--task-print-to-stdout-log]\n"
         << "      Build all configured targets.\n"
         << "  " << tool
-        << " pkg run <task> [--tasks] [--color]\n"
+        << " pkg run <task> [--tasks] [--color] [--asan]\n"
         << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
         << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
         << "           [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
@@ -1338,6 +1417,8 @@ static BuildConfig merge_build_config(const BuildConfig& base,
         out.optionValues[key] = value;
     if(overrideCfg.useNinja.has_value())
         out.useNinja = overrideCfg.useNinja;
+    if(overrideCfg.asan.has_value())
+        out.asan = overrideCfg.asan;
     if(overrideCfg.staticDeps.has_value())
         out.staticDeps = overrideCfg.staticDeps;
     if(overrideCfg.staticCppRuntime.has_value())
@@ -3864,6 +3945,12 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     {
         BuildConfig mergedConfig =
             merge_build_config(packageBuildConfig, target.config);
+        apply_asan_overrides(
+            mergedConfig,
+            "package target '" + target.name + "' in " +
+                pkg.manifestPath.string(),
+            optFlagOverride.empty() ? std::nullopt
+                                    : std::optional<std::string>(optFlagOverride));
         if(mergedConfig.useNinja.value_or(false))
             effectiveUseNinja = true;
         if(validate_mlang_version_requirement(pkg.manifestPath, mergedConfig,
@@ -3952,6 +4039,12 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
 
         BuildConfig buildConfig =
             merge_build_config(packageBuildConfig, target.config);
+        apply_asan_overrides(
+            buildConfig,
+            "package target '" + target.name + "' in " +
+                pkg.manifestPath.string(),
+            optFlagOverride.empty() ? std::nullopt
+                                    : std::optional<std::string>(optFlagOverride));
         if(!validate_declared_libraries(pkg.manifestPath, target.name,
                                         buildConfig, linkFlags))
             return 1;
@@ -4945,6 +5038,9 @@ static int run_task_for_manifest_impl(
             effectiveTaskBuildConfig = merge_build_config(
                 effectiveTaskBuildConfig, hostOverride->buildConfig);
         }
+        apply_asan_overrides(
+            effectiveTaskBuildConfig,
+            "task '" + taskName + "' in " + pkg.manifestPath.string());
 
         taskStack.push_back(taskName);
         if(effectiveParallel && effectiveDependsOn.size() > 1)
@@ -5290,6 +5386,7 @@ struct PkgCliOverrides
     std::optional<std::string> stderrLog;
     std::optional<std::string> warnLog;
     std::optional<bool> taskPrintToStdoutLog;
+    std::optional<bool> asan;
     std::map<std::string, std::string> optionValues;
 };
 
@@ -5315,6 +5412,8 @@ static void apply_cli_overrides(BuildConfig& buildConfig,
         buildConfig.warnLog = *overrides.warnLog;
     if(overrides.taskPrintToStdoutLog.has_value())
         buildConfig.taskPrintToStdoutLog = *overrides.taskPrintToStdoutLog;
+    if(overrides.asan.has_value())
+        buildConfig.asan = *overrides.asan;
     for(const auto& [key, value] : overrides.optionValues)
         buildConfig.optionValues[key] = value;
     if(enableLogs)
@@ -5894,6 +5993,10 @@ int PackageManager::run(int argc, char** argv)
             {
                 useNinja = true;
             }
+            else if(arg == "--asan")
+            {
+                overrides.asan = true;
+            }
             else if(arg == "--build-dir" && i + 1 < argc)
             {
                 overrides.buildDir = argv[++i];
@@ -5926,7 +6029,7 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]"
+                          << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]"
                           << " [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
@@ -5976,7 +6079,7 @@ int PackageManager::run(int argc, char** argv)
             std::cerr << "Usage: " << argv[0]
                       << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
                       << " [--stderr-log FILE] [--warn-log FILE]"
-                      << " [--task-print-to-stdout-log]"
+                      << " [--task-print-to-stdout-log] [--asan]"
                       << " [--option KEY=VALUE]\n";
             return 1;
         }
@@ -6015,6 +6118,8 @@ int PackageManager::run(int argc, char** argv)
                 overrides.warnLog = argv[++i];
             else if(arg == "--task-print-to-stdout-log")
                 overrides.taskPrintToStdoutLog = true;
+            else if(arg == "--asan")
+                overrides.asan = true;
             else if(arg == "--build-dir" && i + 1 < argc)
                 overrides.buildDir = argv[++i];
             else if(arg == "--deps-dir" && i + 1 < argc)
@@ -6049,7 +6154,7 @@ int PackageManager::run(int argc, char** argv)
                           << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
-                          << " [--task-print-to-stdout-log]"
+                          << " [--task-print-to-stdout-log] [--asan]"
                           << " [--option KEY=VALUE]\n";
                 return 1;
             }
