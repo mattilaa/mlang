@@ -89,7 +89,7 @@ You can route `mlang` itself through the MLang frontend implementation:
 MLANG_FRONTEND_IMPL=mla mlang examples/main.mla -o /tmp/main_bin
 ```
 
-After install (`./scripts/build_install.sh`), prefer:
+After install, prefer:
 
 ```sh
 mlang-frontend --help
@@ -351,25 +351,89 @@ The stdlib module search path is controlled by `MLANG_STDLIB_PATH` and defaults
 to `~/.local/share/mlang/stdlib` when installed.
 
 ## Build + Install
-Build and install compiler + tools (`mlang`, `mlangd`, `mlangd-mla`,
-`mlang-format`, `mlang-frontend-mla`, `mlang-frontend`):
+Build the compiler first from the repository root:
 
 ```sh
-./scripts/build_install.sh
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target mlang mlang_std
 ```
 
-Build and install only `mlangd`:
+That gives you a local compiler at `./build/mlang`.
+
+Install the compiler and stdlib to a custom prefix such as `~/.local`:
 
 ```sh
-./scripts/build_install_lsp.sh
+cmake --install build --prefix "$HOME/.local"
 ```
 
-Use Make instead of Ninja:
+If you specifically want the binary under `~/.local/bin`, ensure that
+directory exists and either install with the prefix above or copy the binary
+there explicitly:
 
 ```sh
-./scripts/build_install.sh --use-make
-./scripts/build_install_lsp.sh --use-make
+mkdir -p "$HOME/.local/bin"
+cp ./build/mlang "$HOME/.local/bin/mlang"
 ```
+
+Add your custom bin directory to `PATH` in `~/.zshrc`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Reload the shell config:
+
+```sh
+source ~/.zshrc
+```
+
+Confirm the installed compiler is the one being used:
+
+```sh
+which mlang
+mlang --help
+```
+
+Once `mlang` is available on `PATH`, build the remaining bootstrap-managed
+components either through the helper script:
+
+```sh
+./bootstrap/run-bootstrap.sh run build-all
+./bootstrap/run-bootstrap.sh run install-tooling
+```
+
+or directly with `mlang pkg` if you want to skip the helper:
+
+```sh
+mlang pkg --config bootstrap/mlang.toml run build-all
+mlang pkg --config bootstrap/mlang.toml run install-tooling
+```
+
+You can also run individual steps instead of the whole chain:
+
+```sh
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla
+mlang pkg --config bootstrap/mlang.toml run build-mlang-format
+mlang pkg --config bootstrap/mlang.toml run build-mlang-frontend
+mlang pkg --config bootstrap/mlang.toml run unit-tests
+mlang pkg --config bootstrap/mlang.toml run robot-tests
+```
+
+The current bootstrap task set covers:
+- `build-mlang`
+- `build-mlangd-mla`
+- `build-mlang-format`
+- `build-mlang-frontend-mla`
+- `build-mlang-frontend`
+- `build-all`
+- `build-tooling`
+- `unit-tests`
+- `robot-tests`
+- `install-mlang`
+- `install-mlangd-mla`
+- `install-mlang-format`
+- `install-mlang-frontend`
+- `install-tooling`
 
 ## Documentation
 
@@ -426,12 +490,13 @@ example, and run it (the program uses libcurl to fetch a URL).
 
 ```sh
 # Build compiler first
-./scripts/build_install.sh --no-install
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target mlang mlang_std
 
 # Run package-manager demo
 cd examples/package_manager_git_cjson
-mlang pkg fetch
-mlang pkg build
+../../build/mlang pkg fetch
+../../build/mlang pkg build
 # Or: mlang pkg build -O3 --ninja
 ./build/cjson_demo
 # Optional URL override:

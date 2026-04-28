@@ -1,0 +1,239 @@
+[package]
+name = "mlang_bootstrap"
+version = "0.1.0"
+
+[dependencies]
+
+[c-dependencies]
+
+[tool.mlang]
+build_dir = "../build"
+deps_dir = "../build/deps"
+min_mlang_version = "0.2.0"
+
+[[task]]
+name = "toolchain-check"
+print = "[bootstrap] Checking required host tools"
+workdir = "{{root}}/.."
+commands = [
+  "sh -c 'for tool in cmake python3; do if ! command -v \"$tool\" >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done'"
+]
+
+[[task]]
+name = "configure"
+print = "[bootstrap] Configuring the repository build tree"
+workdir = "{{root}}/.."
+depends_on = ["toolchain-check"]
+commands = [
+  "cmake -S . -B {{build_dir}} -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release"
+]
+
+[[task]]
+name = "build-mlang"
+print = "[bootstrap] Building mlang and mlang_std"
+workdir = "{{root}}/.."
+depends_on = ["configure"]
+commands = [
+  "cmake --build {{build_dir}} --target mlang mlang_std"
+]
+
+[[task]]
+name = "build-mlangd-mla"
+print = "[bootstrap] Building mlangd-mla with the freshly built compiler"
+workdir = "{{root}}/.."
+depends_on = ["build-mlang"]
+commands = [
+  "{{build_dir}}/mlang tools/mlangd-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlangd-mla"
+]
+
+[[task]]
+name = "existing-mlang-check"
+print = "[bootstrap] Checking for an existing mlang compiler"
+workdir = "{{root}}/.."
+shell = [
+  "if [ -x {{build_dir}}/mlang ]; then",
+  "  echo using existing compiler at {{build_dir}}/mlang",
+  "elif command -v mlang >/dev/null 2>&1; then",
+  "  echo using compiler from PATH: $(command -v mlang)",
+  "else",
+  "  echo Missing mlang compiler. Build it first with: cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build --target mlang mlang_std",
+  "  exit 1",
+  "fi"
+]
+
+[[task]]
+name = "build-mlangd-mla-existing"
+print = "[bootstrap] Building mlangd-mla with an existing compiler"
+workdir = "{{root}}/.."
+depends_on = ["existing-mlang-check"]
+shell = [
+  "compiler_bin=\"mlang\"",
+  "if [ -x {{build_dir}}/mlang ]; then compiler_bin=\"{{build_dir}}/mlang\"; fi",
+  "\"$compiler_bin\" tools/mlangd-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlangd-mla"
+]
+
+[[task]]
+name = "build-mlang-frontend-mla"
+print = "[bootstrap] Building mlang-frontend-mla with the freshly built compiler"
+workdir = "{{root}}/.."
+depends_on = ["build-mlang"]
+commands = [
+  "{{build_dir}}/mlang tools/mlang-frontend-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlang-frontend-mla"
+]
+
+[[task]]
+name = "build-mlang-format"
+print = "[bootstrap] Building mlang-format with the freshly built compiler"
+workdir = "{{root}}/.."
+depends_on = ["build-mlang"]
+commands = [
+  "{{build_dir}}/mlang tools/mlang-format-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlang-format"
+]
+
+[[task]]
+name = "build-mlang-frontend-mla-existing"
+print = "[bootstrap] Building mlang-frontend-mla with an existing compiler"
+workdir = "{{root}}/.."
+depends_on = ["existing-mlang-check"]
+shell = [
+  "compiler_bin=\"mlang\"",
+  "if [ -x {{build_dir}}/mlang ]; then compiler_bin=\"{{build_dir}}/mlang\"; fi",
+  "\"$compiler_bin\" tools/mlang-frontend-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlang-frontend-mla"
+]
+
+[[task]]
+name = "build-mlang-format-existing"
+print = "[bootstrap] Building mlang-format with an existing compiler"
+workdir = "{{root}}/.."
+depends_on = ["existing-mlang-check"]
+shell = [
+  "compiler_bin=\"mlang\"",
+  "if [ -x {{build_dir}}/mlang ]; then compiler_bin=\"{{build_dir}}/mlang\"; fi",
+  "\"$compiler_bin\" tools/mlang-format-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlang-format"
+]
+
+[[task]]
+name = "build-mlang-frontend"
+print = "[bootstrap] Writing the mlang-frontend launcher"
+workdir = "{{root}}/.."
+depends_on = ["build-mlang-frontend-mla"]
+shell = [
+  "cat > {{build_dir}}/mlang-frontend <<'EOF'",
+  "#!/usr/bin/env bash",
+  "set -euo pipefail",
+  "bin_dir=\"$(cd \"$(dirname \"$0\")\" && pwd)\"",
+  "exec \"${bin_dir}/mlang-frontend-mla\" --backend \"${bin_dir}/mlang\" \"$@\"",
+  "EOF",
+  "chmod +x {{build_dir}}/mlang-frontend"
+]
+
+[[task]]
+name = "build-tooling"
+print = "[bootstrap] Building the current bootstrap toolchain set"
+workdir = "{{root}}/.."
+depends_on = ["build-mlangd-mla", "build-mlang-format", "build-mlang-frontend"]
+commands = [
+  "echo bootstrap tooling build completed"
+]
+
+[[task]]
+name = "build-mlang-frontend-existing"
+print = "[bootstrap] Writing the mlang-frontend launcher"
+workdir = "{{root}}/.."
+depends_on = ["build-mlang-frontend-mla-existing"]
+shell = [
+  "cat > {{build_dir}}/mlang-frontend <<'EOF'",
+  "#!/usr/bin/env bash",
+  "set -euo pipefail",
+  "bin_dir=\"$(cd \"$(dirname \"$0\")\" && pwd)\"",
+  "exec \"${bin_dir}/mlang-frontend-mla\" --backend \"${bin_dir}/mlang\" \"$@\"",
+  "EOF",
+  "chmod +x {{build_dir}}/mlang-frontend"
+]
+
+[[task]]
+name = "build-all"
+print = "[bootstrap] Building all bootstrap-managed tooling except mlang itself"
+workdir = "{{root}}/.."
+depends_on = ["build-mlangd-mla-existing", "build-mlang-format-existing", "build-mlang-frontend-existing"]
+commands = [
+  "echo bootstrap build-all completed"
+]
+
+[[task]]
+name = "unit-tests"
+print = "[bootstrap] Running the CTest-backed unit test suite"
+workdir = "{{root}}/.."
+depends_on = ["build-mlang"]
+commands = [
+  "./tests/run_tests.sh {{build_dir}}/mlang --output-on-failure"
+]
+
+[[task]]
+name = "robot-tests"
+print = "[bootstrap] Running the Robot example suite"
+workdir = "{{root}}/.."
+depends_on = ["build-mlang"]
+commands = [
+  "env MLANG_BIN=$(pwd)/{{build_dir}}/mlang ./tests/run_examples_robot.sh"
+]
+
+[[task]]
+name = "install-mlang"
+print = "[bootstrap] Installing mlang and stdlib through CMake"
+workdir = "{{root}}/.."
+depends_on = ["build-mlang"]
+shell = [
+  "prefix=\"${MLANG_BOOTSTRAP_PREFIX:-$HOME/.local}\"",
+  "cmake --install {{build_dir}} --prefix \"$prefix\""
+]
+
+[[task]]
+name = "install-mlangd-mla"
+print = "[bootstrap] Installing mlangd-mla"
+workdir = "{{root}}/.."
+depends_on = ["build-mlangd-mla", "install-mlang"]
+shell = [
+  "prefix=\"${MLANG_BOOTSTRAP_PREFIX:-$HOME/.local}\"",
+  "bin_dir=\"${MLANG_BOOTSTRAP_BIN_DIR:-$prefix/bin}\"",
+  "mkdir -p \"$bin_dir\"",
+  "cp -f {{build_dir}}/mlangd-mla \"$bin_dir/mlangd-mla\"",
+  "chmod +x \"$bin_dir/mlangd-mla\""
+]
+
+[[task]]
+name = "install-mlang-frontend"
+print = "[bootstrap] Installing mlang-frontend and mlang-frontend-mla"
+workdir = "{{root}}/.."
+depends_on = ["build-mlang-frontend", "install-mlang"]
+shell = [
+  "prefix=\"${MLANG_BOOTSTRAP_PREFIX:-$HOME/.local}\"",
+  "bin_dir=\"${MLANG_BOOTSTRAP_BIN_DIR:-$prefix/bin}\"",
+  "mkdir -p \"$bin_dir\"",
+  "cp -f {{build_dir}}/mlang-frontend-mla \"$bin_dir/mlang-frontend-mla\"",
+  "chmod +x \"$bin_dir/mlang-frontend-mla\"",
+  "cp -f {{build_dir}}/mlang-frontend \"$bin_dir/mlang-frontend\"",
+  "chmod +x \"$bin_dir/mlang-frontend\""
+]
+
+[[task]]
+name = "install-mlang-format"
+print = "[bootstrap] Installing mlang-format"
+workdir = "{{root}}/.."
+depends_on = ["build-mlang-format", "install-mlang"]
+shell = [
+  "prefix=\"${MLANG_BOOTSTRAP_PREFIX:-$HOME/.local}\"",
+  "bin_dir=\"${MLANG_BOOTSTRAP_BIN_DIR:-$prefix/bin}\"",
+  "mkdir -p \"$bin_dir\"",
+  "cp -f {{build_dir}}/mlang-format \"$bin_dir/mlang-format\"",
+  "chmod +x \"$bin_dir/mlang-format\""
+]
+
+[[task]]
+name = "install-tooling"
+print = "[bootstrap] Installing the current bootstrap toolchain set"
+workdir = "{{root}}/.."
+depends_on = ["install-mlangd-mla", "install-mlang-format", "install-mlang-frontend"]
+commands = [
+  "echo bootstrap tooling install completed"
+]
