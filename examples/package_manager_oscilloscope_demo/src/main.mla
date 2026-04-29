@@ -120,15 +120,51 @@ fn next_pow2_le(n: i64) -> i64 {
     return w;
 }
 
-fn col_to_bin(x: i64, width: i64, bins: i64) -> i64 {
-    if width <= 1 || bins <= 3 {
+fn hz_for_col(x: i64, width: i64) -> i64 {
+    if width <= 1 {
+        return 20;
+    }
+    let xp: i64 = (x * 1000) / (width - 1);
+    if xp <= 0 {
+        return 20;
+    }
+    if xp <= 159 {
+        return 20 + (xp * (60 - 20)) / 159;
+    }
+    if xp <= 333 {
+        return 60 + ((xp - 159) * (200 - 60)) / (333 - 159);
+    }
+    if xp <= 466 {
+        return 200 + ((xp - 333) * (500 - 200)) / (466 - 333);
+    }
+    if xp <= 566 {
+        return 500 + ((xp - 466) * (1000 - 500)) / (566 - 466);
+    }
+    if xp <= 699 {
+        return 1000 + ((xp - 566) * (2500 - 1000)) / (699 - 566);
+    }
+    if xp <= 799 {
+        return 2500 + ((xp - 699) * (5000 - 2500)) / (799 - 699);
+    }
+    if xp <= 899 {
+        return 5000 + ((xp - 799) * (10000 - 5000)) / (899 - 799);
+    }
+    return 10000 + ((xp - 899) * (20000 - 10000)) / (1000 - 899);
+}
+
+fn bin_for_hz(hz: i64, sr: i64, w2: i64) -> i64 {
+    if sr <= 0 {
         return 1;
     }
-    let denom: i64 = (width - 1) * (width - 1);
-    if denom <= 0 {
+    return (hz * w2) / sr;
+}
+
+fn col_to_bin(x: i64, width: i64, bins: i64, sr: i64, w2: i64) -> i64 {
+    if w2 <= 0 || sr <= 0 || bins <= 3 {
         return 1;
     }
-    var b: i64 = 1 + (x * x * (bins - 2)) / denom;
+    let hz: i64 = hz_for_col(x, width);
+    let b: i64 = bin_for_hz(hz, sr, w2);
     if b < 1 {
         return 1;
     }
@@ -138,8 +174,27 @@ fn col_to_bin(x: i64, width: i64, bins: i64) -> i64 {
     return b;
 }
 
+fn tilt_weight_permille(hz: i64) -> i64 {
+    if hz <= 50 {
+        return 200;
+    }
+    if hz <= 200 {
+        return 200 + ((hz - 50) * (500 - 200)) / (200 - 50);
+    }
+    if hz <= 1000 {
+        return 500 + ((hz - 200) * (1000 - 500)) / (1000 - 200);
+    }
+    if hz <= 4000 {
+        return 1000 + ((hz - 1000) * (1300 - 1000)) / (4000 - 1000);
+    }
+    if hz <= 16000 {
+        return 1300 + ((hz - 4000) * (1500 - 1300)) / (16000 - 4000);
+    }
+    return 1500;
+}
+
 fn compute_spectrum_heights(leftSamples: list<i64>, rightSamples: list<i64>,
-                            width: i64, height: i64) -> list<i64> {
+                            width: i64, height: i64, sr: i64) -> list<i64> {
     var heights: list<i64> = [];
     let nL: i64 = leftSamples.len();
     let nR: i64 = rightSamples.len();
@@ -170,9 +225,24 @@ fn compute_spectrum_heights(leftSamples: list<i64>, rightSamples: list<i64>,
     var mags: list<i64> = [];
     var maxMag: i64 = 1;
     for x in 0..width {
-        let bCenter: i64 = col_to_bin(x, width, bins);
-        let bLo: i64 = bCenter - 1 < 1 ? 1: bCenter - 1;
-        let bHi: i64 = bCenter + 1 > bins - 2 ? bins - 2: bCenter + 1;
+        let hz: i64 = hz_for_col(x, width);
+        let bMid: i64 = col_to_bin(x, width, bins, sr, w2);
+        let bPrev: i64 = x > 0 ? col_to_bin(x - 1, width, bins, sr, w2): bMid;
+        let bNext: i64 = x < width - 1 ? col_to_bin(x + 1, width, bins, sr, w2): bMid;
+        var bLo: i64 = (bPrev + bMid) / 2;
+        var bHi: i64 = (bNext + bMid) / 2;
+        if bLo > bMid {
+            bLo = bMid;
+        }
+        if bHi < bMid {
+            bHi = bMid;
+        }
+        if bLo < 1 {
+            bLo = 1;
+        }
+        if bHi > bins - 2 {
+            bHi = bins - 2;
+        }
         var maxB: i64 = 0;
         var bb: i64 = bLo;
         while bb <= bHi {
@@ -184,9 +254,11 @@ fn compute_spectrum_heights(leftSamples: list<i64>, rightSamples: list<i64>,
             }
             bb = bb + 1;
         }
-        mags.push(maxB);
-        if maxB > maxMag {
-            maxMag = maxB;
+        let weight: i64 = tilt_weight_permille(hz);
+        let weighted: i64 = (maxB * weight) / 1000;
+        mags.push(weighted);
+        if weighted > maxMag {
+            maxMag = weighted;
         }
     }
     let floorMag: i64 = maxMag / 32;
@@ -1033,7 +1105,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let rightSamples: list<i64> = oscilloscope_demo_snapshot_i64(1, width * 2 + 2);
         let leftFft: list<i64> = oscilloscope_demo_snapshot_i64(0, 1024);
         let rightFft: list<i64> = oscilloscope_demo_snapshot_i64(1, 1024);
-        let spectrumHeights: list<i64> = compute_spectrum_heights(leftFft, rightFft, width, height);
+        let sampleRate: i64 = oscilloscope_demo_sample_rate();
+        let spectrumHeights: list<i64> = compute_spectrum_heights(leftFft, rightFft, width, height, sampleRate);
         render_frame(wavPath, oscilloscope_demo_output_device(), leftSamples, rightSamples,
                      spectrumHeights, spectrumOn, term);
 
