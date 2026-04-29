@@ -263,9 +263,9 @@ fn compute_spectrum_heights(leftSamples: list<i64>, rightSamples: list<i64>,
     }
     let floorMag: i64 = maxMag / 32;
     let span: i64 = maxMag > floorMag ? maxMag - floorMag: 1;
-    var limit: i64 = height / 2;
-    if limit < 1 {
-        limit = 1;
+    var limit: i64 = height * 4;
+    if limit < 8 {
+        limit = 8;
     }
     for x in 0..width {
         let m: i64 = mags[x];
@@ -278,6 +278,49 @@ fn compute_spectrum_heights(leftSamples: list<i64>, rightSamples: list<i64>,
         heights.push(clamp_i64(h, 0, limit));
     }
     return heights;
+}
+
+fn spectrum_glyph(distFromBottom: i64, barCells: i64, topEighths: i64,
+                  isTopFraction: i32) -> str8 {
+    if isTopFraction == 1 {
+        if topEighths >= 7 {
+            return "▇";
+        }
+        if topEighths == 6 {
+            return "▆";
+        }
+        if topEighths == 5 {
+            return "▅";
+        }
+        if topEighths == 4 {
+            return "▄";
+        }
+        if topEighths == 3 {
+            return "▃";
+        }
+        if topEighths == 2 {
+            return "▂";
+        }
+        return "▁";
+    }
+    if barCells <= 1 {
+        return "▒";
+    }
+    let third1: i64 = barCells / 3;
+    let third2: i64 = (barCells * 2) / 3;
+    if third1 < 1 {
+        if distFromBottom == 0 {
+            return "▓";
+        }
+        return "▒";
+    }
+    if distFromBottom < third1 {
+        return "▓";
+    }
+    if distFromBottom < third2 {
+        return "▒";
+    }
+    return "░";
 }
 
 fn spectrum_color_r(row: i64, height: i64) -> i64 {
@@ -864,7 +907,7 @@ term: TermSize) {
         bput(builder, vl);
         bput(builder, reset());
         let center: i64 = height / 2;
-        let specAlpha: i64 = 280;
+        let specAlpha: i64 = 150;
         let specR_row: i64 = spectrum_color_r(row, height);
         let specG_row: i64 = spectrum_color_g(row, height);
         let specB_row: i64 = 100;
@@ -883,11 +926,23 @@ term: TermSize) {
             segment_distance(rowSub, rightCur, rightNext));
 
             var inSpectrum: i32 = 0;
+            var isTopFraction: i32 = 0;
+            var distFromBottom: i64 = 0;
+            var barFullCells: i64 = 0;
+            var topEighths: i64 = 0;
             if spectrumOn == 1 {
-                let barH: i64 = spectrumHeights[col];
-                let cellFromBottom: i64 = height - 1 - row;
-                if cellFromBottom < barH {
+                let barH8: i64 = spectrumHeights[col];
+                let fullCells: i64 = barH8 / 8;
+                let topRem: i64 = barH8 - fullCells * 8;
+                let cfb: i64 = height - 1 - row;
+                distFromBottom = cfb;
+                barFullCells = fullCells;
+                if cfb < fullCells {
                     inSpectrum = 1;
+                } else if cfb == fullCells && topRem > 0 {
+                    inSpectrum = 1;
+                    isTopFraction = 1;
+                    topEighths = topRem;
                 }
             }
             var fbgR: i64 = bgR;
@@ -938,6 +993,11 @@ term: TermSize) {
                 bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, oscilloscope_trace_color(row, height, 58, 84, 112));
                 bput(builder, axisGlyph);
+                bput(builder, reset());
+            } else if inSpectrum == 1 {
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                bput(builder, fg_rgb(specR_row, specG_row, specB_row));
+                bput(builder, spectrum_glyph(distFromBottom, barFullCells, topEighths, isTopFraction));
                 bput(builder, reset());
             } else {
                 bput(builder, bg_rgb(fbgR, fbgG, fbgB));
