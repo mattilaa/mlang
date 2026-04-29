@@ -5210,6 +5210,27 @@ void CodeGenerator::generateCode(ProgramNode* program)
     ensureAtomic64Builtin(program);
     ensureOptionBuiltin(program);
     ensureResultBuiltin(program);
+
+    traitDefinitions.clear();
+    structImplementedTraits.clear();
+    for(auto* traitDef : program->traitDefs)
+    {
+        if(!traitDef || traitDef->name.empty())
+            continue;
+        traitDefinitions[traitDef->name] = traitDef;
+    }
+    if(program->implList)
+    {
+        for(auto* impl : program->implList->impls)
+        {
+            if(!impl || impl->traitName.empty())
+                continue;
+            if(!impl->typeParams.empty())
+                continue;
+            structImplementedTraits[impl->structName].insert(impl->traitName);
+        }
+    }
+
     resolveTypeAliasesInProgram(program);
 
     enum class MainArgMode
@@ -5633,6 +5654,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 
     traitDefinitions.clear();
+    structImplementedTraits.clear();
     for(auto* traitDef : program->traitDefs)
     {
         if(!traitDef || traitDef->name.empty())
@@ -5784,6 +5806,18 @@ void CodeGenerator::generateCode(ProgramNode* program)
     {
         for(auto* impl : program->implList->impls)
             validateTraitImplBlock(impl);
+    }
+
+    if(program->implList)
+    {
+        for(auto* impl : program->implList->impls)
+        {
+            if(!impl || impl->traitName.empty())
+                continue;
+            if(!impl->typeParams.empty())
+                continue;
+            structImplementedTraits[impl->structName].insert(impl->traitName);
+        }
     }
 
     // Collect generic impl blocks
@@ -12486,6 +12520,14 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
             return typeNode;
         }
 
+        if(!validateTypeArgumentTraitBounds(
+               it->second.typeParams, it->second.typeParamTraitBounds,
+               genStruct->typeArgs, scopeTypeParams, typeNode->line,
+               "type alias", genStruct->structName))
+        {
+            return typeNode;
+        }
+
         if(in_stack(genStruct->structName))
         {
             reportError(typeNode->line, "cyclic type alias detected for '" +
@@ -12503,6 +12545,116 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
     }
 
     return typeNode;
+}
+
+bool CodeGenerator::validateTypeArgumentTraitBounds(
+    const std::vector<std::string>& typeParams,
+    const std::map<std::string, std::string>& traitBounds,
+    const std::vector<TypeNode*>& typeArgs,
+    const std::set<std::string>& scopeTypeParams, int line,
+    const std::string& ownerKind, const std::string& ownerName,
+    bool reportFailures)
+{
+    if(typeParams.size() != typeArgs.size())
+        return true;
+
+    std::function<bool(TypeNode*)> containsScopedTypeParam =
+        [&](TypeNode* type) -> bool
+    {
+        if(!type)
+            return false;
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+            return scopeTypeParams.count(structRef->structName) != 0;
+        if(auto* genericRef = dynamic_cast<GenericStructTypeRefNode*>(type))
+        {
+            for(auto* arg : genericRef->typeArgs)
+            {
+                if(containsScopedTypeParam(arg))
+                    return true;
+            }
+            return false;
+        }
+        if(auto* listType = dynamic_cast<GenericListTypeNode*>(type))
+            return containsScopedTypeParam(listType->elementType);
+        if(auto* mapType = dynamic_cast<MapTypeNode*>(type))
+            return containsScopedTypeParam(mapType->keyType) ||
+                   containsScopedTypeParam(mapType->valueType);
+        if(auto* tupleType = dynamic_cast<TupleTypeNode*>(type))
+        {
+            if(!tupleType->elementTypes)
+                return false;
+            for(auto* elem : tupleType->elementTypes->types)
+            {
+                if(containsScopedTypeParam(elem))
+                    return true;
+            }
+            return false;
+        }
+        if(auto* ptrType = dynamic_cast<PointerTypeNode*>(type))
+            return containsScopedTypeParam(ptrType->elementType);
+        if(auto* refType = dynamic_cast<ReferenceTypeNode*>(type))
+            return containsScopedTypeParam(refType->elementType);
+        return false;
+    };
+
+    for(size_t i = 0; i < typeParams.size(); ++i)
+    {
+        auto boundIt = traitBounds.find(typeParams[i]);
+        if(boundIt == traitBounds.end() || boundIt->second.empty())
+            continue;
+
+        TypeNode* typeArg = typeArgs[i];
+        if(!typeArg || containsScopedTypeParam(typeArg))
+            continue;
+
+        std::vector<std::string> aliasStack;
+        TypeNode* resolvedType =
+            resolveTypeAliasNode(cloneTypeNode(typeArg), scopeTypeParams,
+                                 aliasStack);
+        if(!resolvedType || containsScopedTypeParam(resolvedType))
+            continue;
+
+        std::string concreteTypeName;
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(resolvedType))
+        {
+            concreteTypeName = structRef->structName;
+        }
+        else if(auto* genericRef =
+                    dynamic_cast<GenericStructTypeRefNode*>(resolvedType))
+        {
+            concreteTypeName = getOrCreateMonomorphizedStruct(
+                genericRef->structName, genericRef->typeArgs);
+        }
+
+        bool satisfiesBound = false;
+        if(!concreteTypeName.empty())
+        {
+            auto traitIt = structImplementedTraits.find(concreteTypeName);
+            satisfiesBound =
+                traitIt != structImplementedTraits.end() &&
+                traitIt->second.find(boundIt->second) != traitIt->second.end();
+        }
+
+        if(!satisfiesBound)
+        {
+            if(reportFailures)
+            {
+                const int errorLine =
+                    line > 0 ? line : (typeArg->line > 0 ? typeArg->line : 0);
+                reportError(errorLine,
+                            "type argument '" +
+                                type_name_for_error(typeArg) + "' for " +
+                                ownerKind + " '" + ownerName +
+                                "' must implement trait '" +
+                                boundIt->second +
+                                "' required by type parameter '" +
+                                typeParams[i] + "'");
+            }
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void CodeGenerator::buildTypeAliasTable(ProgramNode* program)
@@ -12634,6 +12786,7 @@ void CodeGenerator::buildTypeAliasTable(ProgramNode* program)
         info.line = aliasDef->line;
         info.col = aliasDef->col;
         info.typeParams = aliasDef->typeParams;
+        info.typeParamTraitBounds = aliasDef->typeParamTraitBounds;
 
         if(info.typeParams.empty())
         {
@@ -18736,6 +18889,12 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     std::string savedModule = currentModule;
     if(!method->sourceModule.empty())
         currentModule = method->sourceModule;
+    llvm::Value* savedExceptionFrame = currentFunctionExceptionFrame;
+    currentFunctionExceptionFrame = nullptr;
+    int savedUnsafeDepth = unsafeDepth;
+    unsafeDepth = 0;
+    auto savedClosureVariables = closureVariables;
+    auto savedActiveInlineClosures = activeInlineClosures;
 
     // Create entry block
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
@@ -18752,6 +18911,8 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     variableTypes.clear();
     structVariableTypes.clear();
     enumVariableTypes.clear();
+    closureVariables.clear();
+    activeInlineClosures.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
@@ -18891,6 +19052,10 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
             generateMutexPropertyMethodBody(structName, method, function);
         activeTypeParamBindings = savedTypeParamBindings;
         currentModule = savedModule;
+        currentFunctionExceptionFrame = savedExceptionFrame;
+        unsafeDepth = savedUnsafeDepth;
+        closureVariables = savedClosureVariables;
+        activeInlineClosures = savedActiveInlineClosures;
         return ok ? function : nullptr;
     }
 
@@ -18900,6 +19065,10 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
             generateAtomicPropertyMethodBody(structName, method, function);
         activeTypeParamBindings = savedTypeParamBindings;
         currentModule = savedModule;
+        currentFunctionExceptionFrame = savedExceptionFrame;
+        unsafeDepth = savedUnsafeDepth;
+        closureVariables = savedClosureVariables;
+        activeInlineClosures = savedActiveInlineClosures;
         return ok ? function : nullptr;
     }
 
@@ -18930,6 +19099,10 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     llvm::verifyFunction(*function);
     activeTypeParamBindings = savedTypeParamBindings;
     currentModule = savedModule;
+    currentFunctionExceptionFrame = savedExceptionFrame;
+    unsafeDepth = savedUnsafeDepth;
+    closureVariables = savedClosureVariables;
+    activeInlineClosures = savedActiveInlineClosures;
     return function;
 }
 
@@ -23351,6 +23524,14 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
         return;
     }
 
+    if(!validateTypeArgumentTraitBounds(
+           typeParams, templateStruct->typeParamTraitBounds, typeArgs, {}, 0,
+           "struct", genericName))
+    {
+        hasError = true;
+        return;
+    }
+
     // Generate the monomorphized struct type
     std::vector<llvm::Type*> memberTypes;
     std::vector<std::pair<std::string, TypeNode*>> members;
@@ -23433,6 +23614,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     {
         for(auto* impl : implIt->second)
         {
+            if(!validateTypeArgumentTraitBounds(
+                   impl->typeParams, impl->typeParamTraitBounds, typeArgs, {},
+                   0, "impl", genericName, false))
+            {
+                continue;
+            }
             if(!impl->traitName.empty())
             {
                 structImplementedTraits[mangledName].insert(impl->traitName);

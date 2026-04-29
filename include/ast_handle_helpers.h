@@ -142,6 +142,8 @@ ASTNode* mla_ast_closure_with_params(ASTNode* params, ASTNode* body);
 ASTNode* mla_ast_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line);
 ASTNode* mla_ast_method_call(ASTNode* object, char* method, ASTNode* args, int line);
 ASTNode* mla_ast_format_expr(char* format_str, ASTNode* args, int line);
+ASTNode* mla_ast_bounded_type_param_list(char* param, char* trait_name);
+ASTNode* mla_ast_bounded_type_param_list_add(ASTNode* list, char* param, char* trait_name);
 }
 
 #endif // AST_HANDLE_HELPERS_H

@@ -48,6 +48,7 @@ ${MLANG}           ${EXECDIR}/build/mlang
 ...    examples/tuple_test.mla
 ...    examples/argparser_demo.mla
 ...    examples/associated_functions_demo/main.mla
+...    examples/generic_trait_bounds_demo/main.mla
 ...    examples/method_visibility_demo/main.mla
 ...    examples/type_alias_demo.mla
 ...    examples/lambda_fold_patterns.mla

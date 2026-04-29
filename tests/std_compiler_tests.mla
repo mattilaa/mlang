@@ -1076,6 +1076,109 @@ fn test_compiler_trait_impl_static_instance_mismatch_rejected() -> i32 {
 }
 
 #[test]
+fn test_compiler_generic_struct_trait_bound_syntax_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_generic_struct_trait_bound").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_generic_struct_trait_bound/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Holder<T: Summary> {\n  var value: i32;\n};\nfn main() -> i32 { return 0; }\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_generic_impl_trait_bound_syntax_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_generic_impl_trait_bound").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_generic_impl_trait_bound/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Holder<T: Summary> {\n  var value: T;\n};\nimpl<T: Summary> Holder {\n  pub fn noop(self: Holder<T>) -> i32 {\n    return 0;\n  }\n}\nfn main() -> i32 { return 0; }\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_type_alias_trait_bound_syntax_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_type_alias_trait_bound").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_type_alias_trait_bound/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\nuse type Box<T: Summary> = T;\nfn main() -> i32 { return 0; }\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_generic_struct_trait_bound_concrete_use_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_generic_struct_trait_bound_ok").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_generic_struct_trait_bound_ok/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return \"ok\";\n  }\n}\npub struct Holder<T: Summary> {\n  var value: T;\n};\nfn main() -> i32 {\n  let h: Holder<Post> = Holder<Post> { value: Post { id: 1 } };\n  return h.value.id;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_generic_struct_trait_bound_concrete_use_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_generic_struct_trait_bound_fail").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_generic_struct_trait_bound_fail/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Holder<T: Summary> {\n  var value: T;\n};\nfn main() -> i32 {\n  let h: Holder<i32> = Holder<i32> { value: 1 };\n  return h.value;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "type argument 'i32' for struct 'Holder' must implement trait 'Summary' required by type parameter 'T'") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_type_alias_trait_bound_concrete_use_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_type_alias_trait_bound_ok").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_type_alias_trait_bound_ok/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return \"ok\";\n  }\n}\nuse type Box<T: Summary> = T;\nfn main() -> i32 {\n  let p: Box<Post> = Post { id: 1 };\n  return p.id;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_type_alias_trait_bound_concrete_use_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_type_alias_trait_bound_fail").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_type_alias_trait_bound_fail/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\nuse type Box<T: Summary> = T;\nfn main() -> i32 {\n  let p: Box<i32> = 1;\n  return p;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "type argument 'i32' for type alias 'Box' must implement trait 'Summary' required by type parameter 'T'") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_generic_method_call_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_generic_method_call_ok").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_generic_method_call_ok/main.mla";
+    let src: str8 = "pub struct Holder<T> {\n  var value: T;\n};\nimpl<T> Holder {\n  pub fn noop(self: Holder<T>) -> i32 {\n    return 0;\n  }\n}\nfn main() -> i32 {\n  let h: Holder<i32> = Holder<i32> { value: 1 };\n  return h.noop();\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_generic_trait_bound_method_call_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_generic_trait_bound_method_call_ok").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_generic_trait_bound_method_call_ok/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return \"ok\";\n  }\n}\npub struct Holder<T: Summary> {\n  var value: T;\n};\nimpl<T: Summary> Holder {\n  pub fn render(self: Holder<T>) -> str8 {\n    return self.value.summarize();\n  }\n}\nfn main() -> i32 {\n  let h: Holder<Post> = Holder<Post> { value: Post { id: 1 } };\n  let s: str8 = h.render();\n  return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
 fn test_compiler_test_output_uses_robot_style_progress_format() -> i32 {
     let src_path: str8 = "/tmp/mlang_test_output_format_case.mla";
     let src: str8 = "mod std::testing;\nuse std::testing::verify_true;\n\n#[test]\nfn test_output_format_uses_progress_and_timestamp() {\n    verify_true(true);\n}\n";

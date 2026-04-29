@@ -1411,6 +1411,8 @@ ASTNode* mla_ast_method_call(ASTNode* object, char* method, ASTNode* args, int l
 // Generic structs and impl blocks
 ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
+ASTNode* create_bounded_type_param_list(char* param, char* trait_name);
+ASTNode* add_bounded_type_param(ASTNode* list, char* param, char* trait_name);
 ASTNode* mla_ast_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
 ASTNode* mla_ast_trait_def(char* name, int line);
 ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
@@ -1780,7 +1782,10 @@ trait_method_decl
 
 type_param_list
     : IDENTIFIER { $$ = create_type_param_list($1); }
+    | IDENTIFIER COLON IDENTIFIER { $$ = create_bounded_type_param_list($1, $3); }
     | type_param_list COMMA IDENTIFIER { $$ = add_type_param($1, $3); }
+    | type_param_list COMMA IDENTIFIER COLON IDENTIFIER
+        { $$ = add_bounded_type_param($1, $3, $5); }
     ;
 
 impl_block

@@ -2,6 +2,7 @@
 #define AST_H
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -1109,6 +1110,7 @@ public:
                               // visibility checks)
     std::vector<std::string>
         typeParams; // Generic type parameters like T, U, etc.
+    std::map<std::string, std::string> typeParamTraitBounds;
 
     StructDefNode(const std::string& n, const std::string& b,
                   StructMemberListNode* m, bool pub = false,
@@ -1199,10 +1201,13 @@ class TypeParamListNode : public ASTNode
 {
 public:
     std::vector<std::string> params;
+    std::map<std::string, std::string> traitBounds;
 
-    void addParam(const std::string& p)
+    void addParam(const std::string& p, const std::string& traitBound = "")
     {
         params.push_back(p);
+        if(!traitBound.empty())
+            traitBounds[p] = traitBound;
     }
     std::string toString() const override;
 };
@@ -1229,6 +1234,7 @@ public:
     std::string structName;
     std::string traitName; // Empty when this is an inherent impl
     std::vector<std::string> typeParams; // Generic type parameters
+    std::map<std::string, std::string> typeParamTraitBounds;
     std::vector<StructMethodNode*> methods;
 
     ImplBlockNode(const std::string& name) : structName(name) {}
@@ -1379,6 +1385,7 @@ class TypeAliasNode : public StatementNode
 public:
     std::string name;
     std::vector<std::string> typeParams;
+    std::map<std::string, std::string> typeParamTraitBounds;
     TypeNode* aliasedType;
 
     TypeAliasNode(const std::string& n, TypeNode* t)
@@ -1574,6 +1581,8 @@ ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
 // Generic structs and impl blocks
 ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
+ASTNode* create_bounded_type_param_list(char* param, char* trait_name);
+ASTNode* add_bounded_type_param(ASTNode* list, char* param, char* trait_name);
 ASTNode* create_generic_struct_def(char* name, char* base_name,
                                    ASTNode* type_params, ASTNode* members,
                                    int is_public, int derive_debug);

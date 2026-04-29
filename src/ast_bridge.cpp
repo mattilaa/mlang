@@ -636,6 +636,16 @@ ASTNode* add_type_param(ASTNode* list, char* param)
     return add_type_param_impl(list, param);
 }
 
+ASTNode* create_bounded_type_param_list(char* param, char* trait_name)
+{
+    return create_bounded_type_param_list_impl(param, trait_name);
+}
+
+ASTNode* add_bounded_type_param(ASTNode* list, char* param, char* trait_name)
+{
+    return add_bounded_type_param_impl(list, param, trait_name);
+}
+
 ASTNode* create_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug)
 {
     return create_generic_struct_def_impl(name, base_name, type_params, members, is_public, derive_debug);

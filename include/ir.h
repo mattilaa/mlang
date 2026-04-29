@@ -245,6 +245,7 @@ private:
     struct TypeAliasInfo
     {
         std::vector<std::string> typeParams;
+        std::map<std::string, std::string> typeParamTraitBounds;
         TypeNode* aliasedType = nullptr;
         int line = 0;
         int col = 0;
@@ -376,6 +377,13 @@ private:
     TypeNode* resolveTypeAliasNode(TypeNode* typeNode,
                                    const std::set<std::string>& typeParams,
                                    std::vector<std::string>& aliasStack);
+    bool validateTypeArgumentTraitBounds(
+        const std::vector<std::string>& typeParams,
+        const std::map<std::string, std::string>& traitBounds,
+        const std::vector<TypeNode*>& typeArgs,
+        const std::set<std::string>& scopeTypeParams, int line,
+        const std::string& ownerKind, const std::string& ownerName,
+        bool reportFailures = true);
     TypeNode* cloneTypeNode(TypeNode* typeNode);
 
     // Type helpers
