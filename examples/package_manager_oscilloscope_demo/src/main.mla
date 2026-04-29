@@ -335,6 +335,39 @@ fn spectrum_color_g(row: i64, height: i64) -> i64 {
     return lerp_i64(95, 210, t, 1000);
 }
 
+fn freq_spec_r(col: i64, width: i64) -> i64 {
+    if width <= 1 {
+        return 200;
+    }
+    let t: i64 = (col * 1000) / (width - 1);
+    if t < 500 {
+        return lerp_i64(200, 100, t, 500);
+    }
+    return 100;
+}
+
+fn freq_spec_g(col: i64, width: i64) -> i64 {
+    if width <= 1 {
+        return 100;
+    }
+    let t: i64 = (col * 1000) / (width - 1);
+    if t < 500 {
+        return lerp_i64(100, 200, t, 500);
+    }
+    return lerp_i64(200, 130, t - 500, 500);
+}
+
+fn freq_spec_b(col: i64, width: i64) -> i64 {
+    if width <= 1 {
+        return 100;
+    }
+    let t: i64 = (col * 1000) / (width - 1);
+    if t < 500 {
+        return lerp_i64(100, 110, t, 500);
+    }
+    return lerp_i64(110, 220, t - 500, 500);
+}
+
 fn blend_channel(bg: i64, fg: i64, alpha: i64) -> i64 {
     return (bg * (1000 - alpha) + fg * alpha) / 1000;
 }
@@ -829,7 +862,7 @@ fn restore_terminal(rawEnabled: i32) {
 
 fn render_frame(path: str8, outputDevice: str8, leftSamples: list<i64>,
 rightSamples: list<i64>, spectrumHeights: list<i64>, spectrumOn: i32,
-term: TermSize) {
+colorMode: i32, term: TermSize) {
     let width: i64 = viewport_width(term.cols);
     let height: i64 = viewport_height(term.rows);
     let current: i64 = oscilloscope_demo_current_frame();
@@ -945,13 +978,21 @@ term: TermSize) {
                     topEighths = topRem;
                 }
             }
+            var specR: i64 = specR_row;
+            var specG: i64 = specG_row;
+            var specB: i64 = specB_row;
+            if colorMode == 1 {
+                specR = freq_spec_r(col, width);
+                specG = freq_spec_g(col, width);
+                specB = freq_spec_b(col, width);
+            }
             var fbgR: i64 = bgR;
             var fbgG: i64 = bgG;
             var fbgB: i64 = bgB;
             if inSpectrum == 1 {
-                fbgR = blend_channel(bgR, specR_row, specAlpha);
-                fbgG = blend_channel(bgG, specG_row, specAlpha);
-                fbgB = blend_channel(bgB, specB_row, specAlpha);
+                fbgR = blend_channel(bgR, specR, specAlpha);
+                fbgG = blend_channel(bgG, specG, specAlpha);
+                fbgB = blend_channel(bgB, specB, specAlpha);
             }
 
             if leftDist == 0 && rightDist == 0 {
@@ -996,7 +1037,7 @@ term: TermSize) {
                 bput(builder, reset());
             } else if inSpectrum == 1 {
                 bput(builder, bg_rgb(fbgR, fbgG, fbgB));
-                bput(builder, fg_rgb(specR_row, specG_row, specB_row));
+                bput(builder, fg_rgb(specR, specG, specB));
                 bput(builder, spectrum_glyph(distFromBottom, barFullCells, topEighths, isTopFraction));
                 bput(builder, reset());
             } else {
@@ -1057,6 +1098,11 @@ term: TermSize) {
     bput(builder, "s");
     bput(builder, fg_rgb(216, 220, 228));
     bput(builder, spectrumOn == 1 ? " spectrum: on": " spectrum: off");
+    bput(builder, "  ");
+    bput(builder, fg_rgb(255, 170, 84));
+    bput(builder, "p");
+    bput(builder, fg_rgb(216, 220, 228));
+    bput(builder, colorMode == 1 ? " palette: freq": " palette: vert");
     bput(builder, reset());
     bput(builder, "\r\n");
 
@@ -1157,6 +1203,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
 
     var spectrumOn: i32 = 1;
+    var colorMode: i32 = 1;
     while oscilloscope_demo_running() == 1 {
         let term: TermSize = stdout_size();
         let width: i64 = viewport_width(term.cols);
@@ -1168,7 +1215,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let sampleRate: i64 = oscilloscope_demo_sample_rate();
         let spectrumHeights: list<i64> = compute_spectrum_heights(leftFft, rightFft, width, height, sampleRate);
         render_frame(wavPath, oscilloscope_demo_output_device(), leftSamples, rightSamples,
-                     spectrumHeights, spectrumOn, term);
+                     spectrumHeights, spectrumOn, colorMode, term);
 
         let key: i32 = device_popup_key();
         if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ || key == AsciiKey::Esc {
@@ -1177,6 +1224,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
         if key == AsciiKey::LowerS || key == AsciiKey::UpperS {
             spectrumOn = spectrumOn == 0 ? 1: 0;
+        }
+        if key == AsciiKey::LowerP || key == AsciiKey::UpperP {
+            colorMode = colorMode == 0 ? 1: 0;
         }
         if key == 1003 || key == 1004 {
             let sr: i64 = oscilloscope_demo_sample_rate();
