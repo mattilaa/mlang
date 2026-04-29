@@ -2,6 +2,7 @@
 /// \ingroup examples
 /// \brief CoreAudio WAV oscilloscope demo rendered with std::esc.
 ///
+mod std::algorithm::fft;
 mod std::esc;
 mod std::ascii;
 mod std::io;
@@ -9,6 +10,7 @@ mod std::strbuf;
 mod std::term;
 mod std::time;
 
+use std::algorithm::fft::forward;
 use std::ascii::AsciiKey;
 use std::esc::acs_bullet;
 use std::esc::acs_dot;
@@ -108,6 +110,266 @@ fn min_i64(a: i64, b: i64) -> i64 {
 
 fn lerp_i64(a: i64, b: i64, t: i64, scale: i64) -> i64 {
     return a + ((b - a) * t) / scale;
+}
+
+fn next_pow2_le(n: i64) -> i64 {
+    var w: i64 = 1;
+    while w * 2 <= n {
+        w = w * 2;
+    }
+    return w;
+}
+
+fn hz_for_col(x: i64, width: i64) -> i64 {
+    if width <= 1 {
+        return 20;
+    }
+    let xp: i64 = (x * 1000) / (width - 1);
+    if xp <= 0 {
+        return 20;
+    }
+    if xp <= 159 {
+        return 20 + (xp * (60 - 20)) / 159;
+    }
+    if xp <= 333 {
+        return 60 + ((xp - 159) * (200 - 60)) / (333 - 159);
+    }
+    if xp <= 466 {
+        return 200 + ((xp - 333) * (500 - 200)) / (466 - 333);
+    }
+    if xp <= 566 {
+        return 500 + ((xp - 466) * (1000 - 500)) / (566 - 466);
+    }
+    if xp <= 699 {
+        return 1000 + ((xp - 566) * (2500 - 1000)) / (699 - 566);
+    }
+    if xp <= 799 {
+        return 2500 + ((xp - 699) * (5000 - 2500)) / (799 - 699);
+    }
+    if xp <= 899 {
+        return 5000 + ((xp - 799) * (10000 - 5000)) / (899 - 799);
+    }
+    return 10000 + ((xp - 899) * (20000 - 10000)) / (1000 - 899);
+}
+
+fn bin_for_hz(hz: i64, sr: i64, w2: i64) -> i64 {
+    if sr <= 0 {
+        return 1;
+    }
+    return (hz * w2) / sr;
+}
+
+fn col_to_bin(x: i64, width: i64, bins: i64, sr: i64, w2: i64) -> i64 {
+    if w2 <= 0 || sr <= 0 || bins <= 3 {
+        return 1;
+    }
+    let hz: i64 = hz_for_col(x, width);
+    let b: i64 = bin_for_hz(hz, sr, w2);
+    if b < 1 {
+        return 1;
+    }
+    if b > bins - 2 {
+        return bins - 2;
+    }
+    return b;
+}
+
+fn tilt_weight_permille(hz: i64) -> i64 {
+    if hz <= 50 {
+        return 200;
+    }
+    if hz <= 200 {
+        return 200 + ((hz - 50) * (500 - 200)) / (200 - 50);
+    }
+    if hz <= 1000 {
+        return 500 + ((hz - 200) * (1000 - 500)) / (1000 - 200);
+    }
+    if hz <= 4000 {
+        return 1000 + ((hz - 1000) * (1300 - 1000)) / (4000 - 1000);
+    }
+    if hz <= 16000 {
+        return 1300 + ((hz - 4000) * (1500 - 1300)) / (16000 - 4000);
+    }
+    return 1500;
+}
+
+fn compute_spectrum_heights(leftSamples: list<i64>, rightSamples: list<i64>,
+                            width: i64, height: i64, sr: i64) -> list<i64> {
+    var heights: list<i64> = [];
+    let nL: i64 = leftSamples.len();
+    let nR: i64 = rightSamples.len();
+    let n: i64 = nL < nR ? nL: nR;
+    let w2: i64 = next_pow2_le(n);
+    if w2 < 64 || height <= 0 || width <= 0 {
+        for _i in 0..width {
+            heights.push(0);
+        }
+        return heights;
+    }
+    var input: list<i64> = [];
+    var i: i64 = 0;
+    while i < w2 {
+        let mixed: i64 = (leftSamples[i] + rightSamples[i]) / 2;
+        input.push(mixed);
+        input.push(0);
+        i = i + 1;
+    }
+    let freq: list<i64> = forward(input);
+    let bins: i64 = w2 / 2;
+    if bins <= 4 {
+        for _i in 0..width {
+            heights.push(0);
+        }
+        return heights;
+    }
+    var mags: list<i64> = [];
+    var maxMag: i64 = 1;
+    for x in 0..width {
+        let hz: i64 = hz_for_col(x, width);
+        let bMid: i64 = col_to_bin(x, width, bins, sr, w2);
+        let bPrev: i64 = x > 0 ? col_to_bin(x - 1, width, bins, sr, w2): bMid;
+        let bNext: i64 = x < width - 1 ? col_to_bin(x + 1, width, bins, sr, w2): bMid;
+        var bLo: i64 = (bPrev + bMid) / 2;
+        var bHi: i64 = (bNext + bMid) / 2;
+        if bLo > bMid {
+            bLo = bMid;
+        }
+        if bHi < bMid {
+            bHi = bMid;
+        }
+        if bLo < 1 {
+            bLo = 1;
+        }
+        if bHi > bins - 2 {
+            bHi = bins - 2;
+        }
+        var maxB: i64 = 0;
+        var bb: i64 = bLo;
+        while bb <= bHi {
+            let re: i64 = freq[bb * 2];
+            let im: i64 = freq[bb * 2 + 1];
+            let mag: i64 = abs_i64(re) + abs_i64(im);
+            if mag > maxB {
+                maxB = mag;
+            }
+            bb = bb + 1;
+        }
+        let weight: i64 = tilt_weight_permille(hz);
+        let weighted: i64 = (maxB * weight) / 1000;
+        mags.push(weighted);
+        if weighted > maxMag {
+            maxMag = weighted;
+        }
+    }
+    let floorMag: i64 = maxMag / 32;
+    let span: i64 = maxMag > floorMag ? maxMag - floorMag: 1;
+    var limit: i64 = height * 4;
+    if limit < 8 {
+        limit = 8;
+    }
+    for x in 0..width {
+        let m: i64 = mags[x];
+        let raw: i64 = m > floorMag ? ((m - floorMag) * 1000) / span: 0;
+        let norm: i64 = clamp_i64(raw, 0, 1000);
+        let inv: i64 = 1000 - norm;
+        let inv_sq: i64 = (inv * inv) / 1000;
+        let comp: i64 = 1000 - inv_sq;
+        let h: i64 = (comp * limit) / 1000;
+        heights.push(clamp_i64(h, 0, limit));
+    }
+    return heights;
+}
+
+fn spectrum_glyph(distFromBottom: i64, barCells: i64, topEighths: i64,
+                  isTopFraction: i32) -> str8 {
+    if isTopFraction == 1 {
+        if topEighths >= 7 {
+            return "▇";
+        }
+        if topEighths == 6 {
+            return "▆";
+        }
+        if topEighths == 5 {
+            return "▅";
+        }
+        if topEighths == 4 {
+            return "▄";
+        }
+        if topEighths == 3 {
+            return "▃";
+        }
+        if topEighths == 2 {
+            return "▂";
+        }
+        return "▁";
+    }
+    if barCells <= 1 {
+        return "▒";
+    }
+    let third1: i64 = barCells / 3;
+    let third2: i64 = (barCells * 2) / 3;
+    if third1 < 1 {
+        if distFromBottom == 0 {
+            return "▓";
+        }
+        return "▒";
+    }
+    if distFromBottom < third1 {
+        return "▓";
+    }
+    if distFromBottom < third2 {
+        return "▒";
+    }
+    return "░";
+}
+
+fn spectrum_color_r(row: i64, height: i64) -> i64 {
+    let scale: i64 = height <= 1 ? 1: (height - 1);
+    let t: i64 = (row * 1000) / scale;
+    return lerp_i64(210, 95, t, 1000);
+}
+
+fn spectrum_color_g(row: i64, height: i64) -> i64 {
+    let scale: i64 = height <= 1 ? 1: (height - 1);
+    let t: i64 = (row * 1000) / scale;
+    return lerp_i64(95, 210, t, 1000);
+}
+
+fn freq_spec_r(col: i64, width: i64) -> i64 {
+    if width <= 1 {
+        return 200;
+    }
+    let t: i64 = (col * 1000) / (width - 1);
+    if t < 500 {
+        return lerp_i64(200, 100, t, 500);
+    }
+    return 100;
+}
+
+fn freq_spec_g(col: i64, width: i64) -> i64 {
+    if width <= 1 {
+        return 100;
+    }
+    let t: i64 = (col * 1000) / (width - 1);
+    if t < 500 {
+        return lerp_i64(100, 200, t, 500);
+    }
+    return lerp_i64(200, 130, t - 500, 500);
+}
+
+fn freq_spec_b(col: i64, width: i64) -> i64 {
+    if width <= 1 {
+        return 100;
+    }
+    let t: i64 = (col * 1000) / (width - 1);
+    if t < 500 {
+        return lerp_i64(100, 110, t, 500);
+    }
+    return lerp_i64(110, 220, t - 500, 500);
+}
+
+fn blend_channel(bg: i64, fg: i64, alpha: i64) -> i64 {
+    return (bg * (1000 - alpha) + fg * alpha) / 1000;
 }
 
 fn bput(builder: i64, s: str8) {
@@ -599,7 +861,8 @@ fn restore_terminal(rawEnabled: i32) {
 }
 
 fn render_frame(path: str8, outputDevice: str8, leftSamples: list<i64>,
-rightSamples: list<i64>, term: TermSize) {
+rightSamples: list<i64>, spectrumHeights: list<i64>, spectrumOn: i32,
+oscilloscopeOn: i32, colorMode: i32, term: TermSize) {
     let width: i64 = viewport_width(term.cols);
     let height: i64 = viewport_height(term.rows);
     let current: i64 = oscilloscope_demo_current_frame();
@@ -677,6 +940,10 @@ rightSamples: list<i64>, term: TermSize) {
         bput(builder, vl);
         bput(builder, reset());
         let center: i64 = height / 2;
+        let specAlpha: i64 = 150;
+        let specR_row: i64 = spectrum_color_r(row, height);
+        let specG_row: i64 = spectrum_color_g(row, height);
+        let specB_row: i64 = 100;
         for col in 0..width {
             let base: i64 = col * 2;
             let leftPrev: i64 = sample_subrow(leftSamples[base], height);
@@ -690,48 +957,102 @@ rightSamples: list<i64>, term: TermSize) {
             segment_distance(rowSub, leftCur, leftNext));
             let rightDist: i64 = min_i64(segment_distance(rowSub, rightPrev, rightCur),
             segment_distance(rowSub, rightCur, rightNext));
-            if leftDist == 0 && rightDist == 0 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
-                bput(builder, oscilloscope_trace_color(row, height, 248, 214, 132));
-                bput(builder, coreGlyph);
-                bput(builder, reset());
-            } else if rightDist == 0 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
-                bput(builder, oscilloscope_trace_color(row, height, 255, 110, 84));
-                bput(builder, coreGlyph);
-                bput(builder, reset());
-            } else if leftDist == 0 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
-                bput(builder, oscilloscope_trace_color(row, height, 120, 248, 132));
-                bput(builder, coreGlyph);
-                bput(builder, reset());
-            } else if rightDist <= 1 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
-                bput(builder, oscilloscope_trace_color(row, height, 255, 164, 112));
-                bput(builder, nearGlyph);
-                bput(builder, reset());
-            } else if leftDist <= 1 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
-                bput(builder, oscilloscope_trace_color(row, height, 150, 232, 166));
-                bput(builder, nearGlyph);
-                bput(builder, reset());
-            } else if rightDist <= 3 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
-                bput(builder, oscilloscope_trace_color(row, height, 156, 88, 78));
-                bput(builder, farGlyph);
-                bput(builder, reset());
-            } else if leftDist <= 3 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
-                bput(builder, oscilloscope_trace_color(row, height, 74, 148, 94));
-                bput(builder, farGlyph);
-                bput(builder, reset());
-            } else if row == center {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
-                bput(builder, oscilloscope_trace_color(row, height, 58, 84, 112));
-                bput(builder, axisGlyph);
+
+            var inSpectrum: i32 = 0;
+            var isTopFraction: i32 = 0;
+            var distFromBottom: i64 = 0;
+            var barFullCells: i64 = 0;
+            var topEighths: i64 = 0;
+            if spectrumOn == 1 {
+                let barH8: i64 = spectrumHeights[col];
+                let fullCells: i64 = barH8 / 8;
+                let topRem: i64 = barH8 - fullCells * 8;
+                let cfb: i64 = height - 1 - row;
+                distFromBottom = cfb;
+                barFullCells = fullCells;
+                if cfb < fullCells {
+                    inSpectrum = 1;
+                } else if cfb == fullCells && topRem > 0 {
+                    inSpectrum = 1;
+                    isTopFraction = 1;
+                    topEighths = topRem;
+                }
+            }
+            var specR: i64 = specR_row;
+            var specG: i64 = specG_row;
+            var specB: i64 = specB_row;
+            if colorMode == 1 {
+                specR = freq_spec_r(col, width);
+                specG = freq_spec_g(col, width);
+                specB = freq_spec_b(col, width);
+            }
+            var fbgR: i64 = bgR;
+            var fbgG: i64 = bgG;
+            var fbgB: i64 = bgB;
+            if inSpectrum == 1 {
+                fbgR = blend_channel(bgR, specR, specAlpha);
+                fbgG = blend_channel(bgG, specG, specAlpha);
+                fbgB = blend_channel(bgB, specB, specAlpha);
+            }
+
+            if oscilloscopeOn == 1 {
+                if leftDist == 0 && rightDist == 0 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 248, 214, 132));
+                    bput(builder, coreGlyph);
+                    bput(builder, reset());
+                } else if rightDist == 0 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 255, 110, 84));
+                    bput(builder, coreGlyph);
+                    bput(builder, reset());
+                } else if leftDist == 0 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 120, 248, 132));
+                    bput(builder, coreGlyph);
+                    bput(builder, reset());
+                } else if rightDist <= 1 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 255, 164, 112));
+                    bput(builder, nearGlyph);
+                    bput(builder, reset());
+                } else if leftDist <= 1 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 150, 232, 166));
+                    bput(builder, nearGlyph);
+                    bput(builder, reset());
+                } else if rightDist <= 3 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 156, 88, 78));
+                    bput(builder, farGlyph);
+                    bput(builder, reset());
+                } else if leftDist <= 3 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 74, 148, 94));
+                    bput(builder, farGlyph);
+                    bput(builder, reset());
+                } else if row == center {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 58, 84, 112));
+                    bput(builder, axisGlyph);
+                    bput(builder, reset());
+                } else if inSpectrum == 1 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, fg_rgb(specR, specG, specB));
+                    bput(builder, spectrum_glyph(distFromBottom, barFullCells, topEighths, isTopFraction));
+                    bput(builder, reset());
+                } else {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, " ");
+                    bput(builder, reset());
+                }
+            } else if inSpectrum == 1 {
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                bput(builder, fg_rgb(specR, specG, specB));
+                bput(builder, spectrum_glyph(distFromBottom, barFullCells, topEighths, isTopFraction));
                 bput(builder, reset());
             } else {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, " ");
                 bput(builder, reset());
             }
@@ -783,6 +1104,21 @@ rightSamples: list<i64>, term: TermSize) {
     bput(builder, "Left / Right");
     bput(builder, fg_rgb(216, 220, 228));
     bput(builder, " seek -/+5s");
+    bput(builder, "  ");
+    bput(builder, fg_rgb(255, 170, 84));
+    bput(builder, "s");
+    bput(builder, fg_rgb(216, 220, 228));
+    bput(builder, spectrumOn == 1 ? " spectrum: on": " spectrum: off");
+    bput(builder, "  ");
+    bput(builder, fg_rgb(255, 170, 84));
+    bput(builder, "c");
+    bput(builder, fg_rgb(216, 220, 228));
+    bput(builder, oscilloscopeOn == 1 ? " oscilloscope: on": " oscilloscope: off");
+    bput(builder, "  ");
+    bput(builder, fg_rgb(255, 170, 84));
+    bput(builder, "p");
+    bput(builder, fg_rgb(216, 220, 228));
+    bput(builder, colorMode == 1 ? " palette: freq": " palette: vert");
     bput(builder, reset());
     bput(builder, "\r\n");
 
@@ -818,6 +1154,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 println!("  ../../build/mlang pkg run demo --option wav_path=../fft_example/illusion.wav");
                 println!("  ../../build/mlang pkg run demo --option wav_path=../../examples/fft_example/illusion.wav");
                 println!("  ../../build/mlang pkg run demo --option audio_output=BlackHole");
+                println!("  keys: s toggles spectrum, c toggles oscilloscope, p toggles palette");
                 println!("  ../../build/mlang pkg run list-devices");
                 println!("  ../../build/mlang pkg run list-devices-verbose");
                 return 0;
@@ -882,17 +1219,35 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
 
+    var spectrumOn: i32 = 1;
+    var oscilloscopeOn: i32 = 1;
+    var colorMode: i32 = 1;
     while oscilloscope_demo_running() == 1 {
         let term: TermSize = stdout_size();
         let width: i64 = viewport_width(term.cols);
+        let height: i64 = viewport_height(term.rows);
         let leftSamples: list<i64> = oscilloscope_demo_snapshot_i64(0, width * 2 + 2);
         let rightSamples: list<i64> = oscilloscope_demo_snapshot_i64(1, width * 2 + 2);
-        render_frame(wavPath, oscilloscope_demo_output_device(), leftSamples, rightSamples, term);
+        let leftFft: list<i64> = oscilloscope_demo_snapshot_i64(0, 1024);
+        let rightFft: list<i64> = oscilloscope_demo_snapshot_i64(1, 1024);
+        let sampleRate: i64 = oscilloscope_demo_sample_rate();
+        let spectrumHeights: list<i64> = compute_spectrum_heights(leftFft, rightFft, width, height, sampleRate);
+        render_frame(wavPath, oscilloscope_demo_output_device(), leftSamples, rightSamples,
+                     spectrumHeights, spectrumOn, oscilloscopeOn, colorMode, term);
 
         let key: i32 = device_popup_key();
         if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ || key == AsciiKey::Esc {
             let _ = oscilloscope_demo_stop();
             break;
+        }
+        if key == AsciiKey::LowerS || key == AsciiKey::UpperS {
+            spectrumOn = spectrumOn == 0 ? 1: 0;
+        }
+        if key == AsciiKey::LowerC || key == AsciiKey::UpperC {
+            oscilloscopeOn = oscilloscopeOn == 0 ? 1: 0;
+        }
+        if key == AsciiKey::LowerP || key == AsciiKey::UpperP {
+            colorMode = colorMode == 0 ? 1: 0;
         }
         if key == 1003 || key == 1004 {
             let sr: i64 = oscilloscope_demo_sample_rate();
