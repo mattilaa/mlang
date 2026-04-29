@@ -1,0 +1,25 @@
+pub struct Counter {
+    var value: i32;
+};
+
+impl Counter {
+    fn build_value(value: i32) -> Counter {
+        return Counter { value: value };
+    }
+
+    pub fn new(value: i32) -> Counter {
+        return Counter::build_value(value);
+    }
+
+    pub fn zero() -> Counter {
+        return Counter::new(0);
+    }
+
+    pub fn inc(self: Counter) -> Counter {
+        return Counter::new(self.value + 1);
+    }
+
+    pub fn read(self: Counter) -> i32 {
+        return self.value;
+    }
+}

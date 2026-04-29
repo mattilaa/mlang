@@ -961,6 +961,71 @@ fn test_compiler_inherited_public_method_cross_module_allowed() -> i32 {
 }
 
 #[test]
+fn test_compiler_associated_function_same_module_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_associated_function_same_module").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_associated_function_same_module/main.mla";
+    let src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  fn make(value: i32) -> Counter {\n    return Counter { value: value };\n  }\n  pub fn new(value: i32) -> Counter {\n    return Counter::make(value);\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter::new(4);\n  return c.value == 4 ? 0 : 1;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_private_associated_function_cross_module_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_private_associated_function/lib").is_err(): { return 1; }
+    let lib_path: str8 = "/tmp/mlang_private_associated_function/lib/counter_private_assoc.mla";
+    let main_path: str8 = "/tmp/mlang_private_associated_function/main.mla";
+    let lib_src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  fn make(value: i32) -> Counter {\n    return Counter { value: value };\n  }\n}\n";
+    let main_src: str8 = "mod lib::counter_private_assoc;\nuse lib::counter_private_assoc::Counter;\nfn main() -> i32 {\n  let c: Counter = Counter::make(2);\n  return c.value;\n}\n";
+    if write_all_text(lib_path, lib_src).is_err(): { return 1; }
+    if write_all_text(main_path, main_src).is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", main_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "function 'Counter::make' is private in module 'lib::counter_private_assoc'") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_public_associated_function_cross_module_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_public_associated_function/lib").is_err(): { return 1; }
+    let lib_path: str8 = "/tmp/mlang_public_associated_function/lib/counter_public_assoc.mla";
+    let main_path: str8 = "/tmp/mlang_public_associated_function/main.mla";
+    let lib_src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  pub fn new(value: i32) -> Counter {\n    return Counter { value: value };\n  }\n}\n";
+    let main_src: str8 = "mod lib::counter_public_assoc;\nuse lib::counter_public_assoc::Counter;\nfn main() -> i32 {\n  let c: Counter = Counter::new(5);\n  return c.value == 5 ? 0 : 1;\n}\n";
+    if write_all_text(lib_path, lib_src).is_err(): { return 1; }
+    if write_all_text(main_path, main_src).is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", main_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_instance_method_called_as_associated_function_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_instance_method_called_as_associated").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_instance_method_called_as_associated/main.mla";
+    let src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  pub fn inc(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter::inc(1);\n  return c.value;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "instance method 'Counter::inc' must be called on a value") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_associated_function_called_as_instance_method_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_associated_function_called_as_instance").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_associated_function_called_as_instance/main.mla";
+    let src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  pub fn new(value: i32) -> Counter {\n    return Counter { value: value };\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter { value: 1 };\n  let d: Counter = c.new(2);\n  return d.value;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "static method 'Counter::new' must be called as Counter::new(...)") == 1 ? 0 : 1;
+}
+
+#[test]
 fn test_compiler_test_output_uses_robot_style_progress_format() -> i32 {
     let src_path: str8 = "/tmp/mlang_test_output_format_case.mla";
     let src: str8 = "mod std::testing;\nuse std::testing::verify_true;\n\n#[test]\nfn test_output_format_uses_progress_and_timestamp() {\n    verify_true(true);\n}\n";

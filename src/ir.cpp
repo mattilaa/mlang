@@ -16908,9 +16908,17 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             if(sit != structMethods.end())
             {
                 auto mit = sit->second.find(methodName);
-                if(mit != sit->second.end() && mit->second.second &&
-                   mit->second.second->isStatic)
+                if(mit != sit->second.end() && mit->second.second)
                 {
+                    if(!mit->second.second->isStatic)
+                    {
+                        reportError(node->line,
+                                    "instance method '" + resolvedStructName +
+                                        "::" + methodName +
+                                        "' must be called on a value");
+                        return nullptr;
+                    }
+
                     std::string mangledName =
                         resolvedStructName + "_" + methodName;
                     llvm::Function* callee = module->getFunction(mangledName);
@@ -20582,6 +20590,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     bool isPublic = methodIt->second.first;
     StructMethodNode* methodNode = methodIt->second.second;
     (void)isPublic;
+    if(methodNode && methodNode->isStatic)
+    {
+        reportError(node->line,
+                    "static method '" + structTypeName + "::" +
+                        node->methodName + "' must be called as " +
+                        structTypeName + "::" + node->methodName + "(...)");
+        return nullptr;
+    }
 
     std::vector<ParameterNode*> declaredParams;
     if(methodNode && methodNode->parameters)
