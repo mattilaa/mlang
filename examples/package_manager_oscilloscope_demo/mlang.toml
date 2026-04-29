@@ -92,7 +92,7 @@ workdir = "{{root}}"
 depends_on = ["link-demo"]
 log_output = false
 shell = [
-  "exec {{build_dir}}/oscilloscope_demo '{{option.wav_path}}'"
+  "wav_path='{{option.wav_path}}'; if [ ! -f \"$wav_path\" ] && [ \"${wav_path#/}\" = \"$wav_path\" ]; then if [ -f \"../../$wav_path\" ]; then wav_path=\"../../$wav_path\"; fi; fi; exec {{build_dir}}/oscilloscope_demo \"$wav_path\""
 ]
 
 [[task]]

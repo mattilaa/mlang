@@ -816,6 +816,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 println!("Examples:");
                 println!("  ../../build/mlang pkg run demo");
                 println!("  ../../build/mlang pkg run demo --option wav_path=../fft_example/illusion.wav");
+                println!("  ../../build/mlang pkg run demo --option wav_path=../../examples/fft_example/illusion.wav");
                 println!("  ../../build/mlang pkg run demo --option audio_output=BlackHole");
                 println!("  ../../build/mlang pkg run list-devices");
                 println!("  ../../build/mlang pkg run list-devices-verbose");
