@@ -18571,6 +18571,10 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         return function;
     }
 
+    std::string savedModule = currentModule;
+    if(!method->sourceModule.empty())
+        currentModule = method->sourceModule;
+
     // Create entry block
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
     builder.SetInsertPoint(bb);
@@ -18724,6 +18728,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         bool ok =
             generateMutexPropertyMethodBody(structName, method, function);
         activeTypeParamBindings = savedTypeParamBindings;
+        currentModule = savedModule;
         return ok ? function : nullptr;
     }
 
@@ -18732,6 +18737,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         bool ok =
             generateAtomicPropertyMethodBody(structName, method, function);
         activeTypeParamBindings = savedTypeParamBindings;
+        currentModule = savedModule;
         return ok ? function : nullptr;
     }
 
@@ -18761,6 +18767,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
 
     llvm::verifyFunction(*function);
     activeTypeParamBindings = savedTypeParamBindings;
+    currentModule = savedModule;
     return function;
 }
 
