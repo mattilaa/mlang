@@ -964,17 +964,29 @@ static bool ensure_compiled_mla_tool(const char* argv0,
     fs::path exePath = compilerBin.empty()
                            ? fs::path(argv0 ? argv0 : "mlang")
                            : compilerBin;
-    fs::path exeDir = exePath.has_parent_path() ? exePath.parent_path()
-                                                : fs::current_path();
-    fs::path stdlibLibDir = exeDir;
+    std::vector<std::string> toolLinkArgs;
+    append_stdlib_link_args(toolLinkArgs, exePath.string());
+    std::vector<std::string> filteredToolLinkArgs;
+    filteredToolLinkArgs.reserve(toolLinkArgs.size());
+    for(std::size_t i = 0; i < toolLinkArgs.size(); ++i)
+    {
+        if(toolLinkArgs[i] == "-framework")
+        {
+            ++i;
+            continue;
+        }
+        filteredToolLinkArgs.push_back(toolLinkArgs[i]);
+    }
 
     std::string compileCmd;
     if(forceCppFrontendEnv)
         compileCmd += "MLANG_FRONTEND_IMPL=cpp ";
-    compileCmd += shell_quote(exePath.string()) + " " + shell_quote(src.string()) +
-                  " -Wno-colon-if -Wno-colon-while -L " +
-                  shell_quote(stdlibLibDir.string()) + " -lmlang_std -o " +
-                  shell_quote(outBin.string());
+    compileCmd += shell_quote(exePath.string()) + " " +
+                  shell_quote(src.string()) +
+                  " -Wno-colon-if -Wno-colon-while";
+    for(const auto& arg : filteredToolLinkArgs)
+        compileCmd += " " + shell_quote(arg);
+    compileCmd += " -o " + shell_quote(outBin.string());
     // The mlang compiler auto-adds CoreFoundation/CoreGraphics/ImageIO on
     // macOS when assembling default link args, so they do not need to be
     // forwarded here. Forwarding them as `-framework` CLI args would be
