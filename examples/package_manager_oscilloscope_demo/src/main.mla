@@ -2,6 +2,7 @@
 /// \ingroup examples
 /// \brief CoreAudio WAV oscilloscope demo rendered with std::esc.
 ///
+mod std::algorithm::fft;
 mod std::esc;
 mod std::ascii;
 mod std::io;
@@ -9,6 +10,7 @@ mod std::strbuf;
 mod std::term;
 mod std::time;
 
+use std::algorithm::fft::forward;
 use std::ascii::AsciiKey;
 use std::esc::acs_bullet;
 use std::esc::acs_dot;
@@ -108,6 +110,118 @@ fn min_i64(a: i64, b: i64) -> i64 {
 
 fn lerp_i64(a: i64, b: i64, t: i64, scale: i64) -> i64 {
     return a + ((b - a) * t) / scale;
+}
+
+fn next_pow2_le(n: i64) -> i64 {
+    var w: i64 = 1;
+    while w * 2 <= n {
+        w = w * 2;
+    }
+    return w;
+}
+
+fn col_to_bin(x: i64, width: i64, bins: i64) -> i64 {
+    if width <= 1 || bins <= 3 {
+        return 1;
+    }
+    let denom: i64 = (width - 1) * (width - 1);
+    if denom <= 0 {
+        return 1;
+    }
+    var b: i64 = 1 + (x * x * (bins - 2)) / denom;
+    if b < 1 {
+        return 1;
+    }
+    if b > bins - 2 {
+        return bins - 2;
+    }
+    return b;
+}
+
+fn compute_spectrum_heights(leftSamples: list<i64>, rightSamples: list<i64>,
+                            width: i64, height: i64) -> list<i64> {
+    var heights: list<i64> = [];
+    let nL: i64 = leftSamples.len();
+    let nR: i64 = rightSamples.len();
+    let n: i64 = nL < nR ? nL: nR;
+    let w2: i64 = next_pow2_le(n);
+    if w2 < 64 || height <= 0 || width <= 0 {
+        for _i in 0..width {
+            heights.push(0);
+        }
+        return heights;
+    }
+    var input: list<i64> = [];
+    var i: i64 = 0;
+    while i < w2 {
+        let mixed: i64 = (leftSamples[i] + rightSamples[i]) / 2;
+        input.push(mixed);
+        input.push(0);
+        i = i + 1;
+    }
+    let freq: list<i64> = forward(input);
+    let bins: i64 = w2 / 2;
+    if bins <= 4 {
+        for _i in 0..width {
+            heights.push(0);
+        }
+        return heights;
+    }
+    var mags: list<i64> = [];
+    var maxMag: i64 = 1;
+    for x in 0..width {
+        let bCenter: i64 = col_to_bin(x, width, bins);
+        let bLo: i64 = bCenter - 1 < 1 ? 1: bCenter - 1;
+        let bHi: i64 = bCenter + 1 > bins - 2 ? bins - 2: bCenter + 1;
+        var maxB: i64 = 0;
+        var bb: i64 = bLo;
+        while bb <= bHi {
+            let re: i64 = freq[bb * 2];
+            let im: i64 = freq[bb * 2 + 1];
+            let mag: i64 = abs_i64(re) + abs_i64(im);
+            if mag > maxB {
+                maxB = mag;
+            }
+            bb = bb + 1;
+        }
+        mags.push(maxB);
+        if maxB > maxMag {
+            maxMag = maxB;
+        }
+    }
+    let floorMag: i64 = maxMag / 32;
+    let span: i64 = maxMag > floorMag ? maxMag - floorMag: 1;
+    var limit: i64 = height / 2;
+    if limit < 1 {
+        limit = 1;
+    }
+    for x in 0..width {
+        let m: i64 = mags[x];
+        let raw: i64 = m > floorMag ? ((m - floorMag) * 1000) / span: 0;
+        let norm: i64 = clamp_i64(raw, 0, 1000);
+        let inv: i64 = 1000 - norm;
+        let inv_sq: i64 = (inv * inv) / 1000;
+        let comp: i64 = 1000 - inv_sq;
+        let h: i64 = (comp * limit) / 1000;
+        heights.push(clamp_i64(h, 0, limit));
+    }
+    return heights;
+}
+
+fn spectrum_color_r(row: i64, height: i64) -> i64 {
+    let scale: i64 = height <= 1 ? 1: (height - 1);
+    let t: i64 = (row * 1000) / scale;
+    return lerp_i64(210, 95, t, 1000);
+}
+
+fn spectrum_color_g(row: i64, height: i64) -> i64 {
+    let scale: i64 = height <= 1 ? 1: (height - 1);
+    let t: i64 = (row * 1000) / scale;
+    return lerp_i64(95, 210, t, 1000);
+}
+
+fn blend_channel(bg: i64, fg: i64, alpha: i64) -> i64 {
+    return (bg * (1000 - alpha) + fg * alpha) / 1000;
 }
 
 fn bput(builder: i64, s: str8) {
@@ -599,7 +713,8 @@ fn restore_terminal(rawEnabled: i32) {
 }
 
 fn render_frame(path: str8, outputDevice: str8, leftSamples: list<i64>,
-rightSamples: list<i64>, term: TermSize) {
+rightSamples: list<i64>, spectrumHeights: list<i64>, spectrumOn: i32,
+term: TermSize) {
     let width: i64 = viewport_width(term.cols);
     let height: i64 = viewport_height(term.rows);
     let current: i64 = oscilloscope_demo_current_frame();
@@ -677,6 +792,10 @@ rightSamples: list<i64>, term: TermSize) {
         bput(builder, vl);
         bput(builder, reset());
         let center: i64 = height / 2;
+        let specAlpha: i64 = 280;
+        let specR_row: i64 = spectrum_color_r(row, height);
+        let specG_row: i64 = spectrum_color_g(row, height);
+        let specB_row: i64 = 100;
         for col in 0..width {
             let base: i64 = col * 2;
             let leftPrev: i64 = sample_subrow(leftSamples[base], height);
@@ -690,48 +809,66 @@ rightSamples: list<i64>, term: TermSize) {
             segment_distance(rowSub, leftCur, leftNext));
             let rightDist: i64 = min_i64(segment_distance(rowSub, rightPrev, rightCur),
             segment_distance(rowSub, rightCur, rightNext));
+
+            var inSpectrum: i32 = 0;
+            if spectrumOn == 1 {
+                let barH: i64 = spectrumHeights[col];
+                let cellFromBottom: i64 = height - 1 - row;
+                if cellFromBottom < barH {
+                    inSpectrum = 1;
+                }
+            }
+            var fbgR: i64 = bgR;
+            var fbgG: i64 = bgG;
+            var fbgB: i64 = bgB;
+            if inSpectrum == 1 {
+                fbgR = blend_channel(bgR, specR_row, specAlpha);
+                fbgG = blend_channel(bgG, specG_row, specAlpha);
+                fbgB = blend_channel(bgB, specB_row, specAlpha);
+            }
+
             if leftDist == 0 && rightDist == 0 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, oscilloscope_trace_color(row, height, 248, 214, 132));
                 bput(builder, coreGlyph);
                 bput(builder, reset());
             } else if rightDist == 0 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, oscilloscope_trace_color(row, height, 255, 110, 84));
                 bput(builder, coreGlyph);
                 bput(builder, reset());
             } else if leftDist == 0 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, oscilloscope_trace_color(row, height, 120, 248, 132));
                 bput(builder, coreGlyph);
                 bput(builder, reset());
             } else if rightDist <= 1 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, oscilloscope_trace_color(row, height, 255, 164, 112));
                 bput(builder, nearGlyph);
                 bput(builder, reset());
             } else if leftDist <= 1 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, oscilloscope_trace_color(row, height, 150, 232, 166));
                 bput(builder, nearGlyph);
                 bput(builder, reset());
             } else if rightDist <= 3 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, oscilloscope_trace_color(row, height, 156, 88, 78));
                 bput(builder, farGlyph);
                 bput(builder, reset());
             } else if leftDist <= 3 {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, oscilloscope_trace_color(row, height, 74, 148, 94));
                 bput(builder, farGlyph);
                 bput(builder, reset());
             } else if row == center {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, oscilloscope_trace_color(row, height, 58, 84, 112));
                 bput(builder, axisGlyph);
                 bput(builder, reset());
             } else {
-                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, " ");
                 bput(builder, reset());
             }
@@ -783,6 +920,11 @@ rightSamples: list<i64>, term: TermSize) {
     bput(builder, "Left / Right");
     bput(builder, fg_rgb(216, 220, 228));
     bput(builder, " seek -/+5s");
+    bput(builder, "  ");
+    bput(builder, fg_rgb(255, 170, 84));
+    bput(builder, "s");
+    bput(builder, fg_rgb(216, 220, 228));
+    bput(builder, spectrumOn == 1 ? " spectrum: on": " spectrum: off");
     bput(builder, reset());
     bput(builder, "\r\n");
 
@@ -882,17 +1024,26 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
 
+    var spectrumOn: i32 = 1;
     while oscilloscope_demo_running() == 1 {
         let term: TermSize = stdout_size();
         let width: i64 = viewport_width(term.cols);
+        let height: i64 = viewport_height(term.rows);
         let leftSamples: list<i64> = oscilloscope_demo_snapshot_i64(0, width * 2 + 2);
         let rightSamples: list<i64> = oscilloscope_demo_snapshot_i64(1, width * 2 + 2);
-        render_frame(wavPath, oscilloscope_demo_output_device(), leftSamples, rightSamples, term);
+        let leftFft: list<i64> = oscilloscope_demo_snapshot_i64(0, 1024);
+        let rightFft: list<i64> = oscilloscope_demo_snapshot_i64(1, 1024);
+        let spectrumHeights: list<i64> = compute_spectrum_heights(leftFft, rightFft, width, height);
+        render_frame(wavPath, oscilloscope_demo_output_device(), leftSamples, rightSamples,
+                     spectrumHeights, spectrumOn, term);
 
         let key: i32 = device_popup_key();
         if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ || key == AsciiKey::Esc {
             let _ = oscilloscope_demo_stop();
             break;
+        }
+        if key == AsciiKey::LowerS || key == AsciiKey::UpperS {
+            spectrumOn = spectrumOn == 0 ? 1: 0;
         }
         if key == 1003 || key == 1004 {
             let sr: i64 = oscilloscope_demo_sample_rate();
