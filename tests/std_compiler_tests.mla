@@ -11,6 +11,7 @@ use std::compiler::ReferenceLocation;
 use std::compiler::ResolvedSymbol;
 use std::compiler::SyntaxDiagnostic;
 use std::compiler::session_create;
+use std::fs::mkdir_p;
 use std::fs::read_all_text;
 use std::fs::write_all_text;
 use std::process::spawn;
@@ -858,6 +859,105 @@ fn run_compiler_capture(args: list<str8>) -> i32 {
     if status_r.is_err(): { return -1; }
     let status: ExitStatus = status_r.unwrap();
     return status.code();
+}
+
+struct CompilerRunCapture {
+    var rc: i32;
+    var stdout_text: str8;
+    var stderr_text: str8;
+};
+
+fn run_compiler_capture_stdout_stderr(args: list<str8>) -> CompilerRunCapture {
+    let cr: Result<Child, str8> = spawn("./build/mlang", args);
+    if cr.is_err() { return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" }; }
+    let child: Child = cr.unwrap();
+
+    let out_r: Result<ChildStdout, str8> = child.stdout();
+    if out_r.is_err() { let _ = child.close(); return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" }; }
+    let out: ChildStdout = out_r.unwrap();
+    let err_r: Result<ChildStderr, str8> = child.stderr();
+    if err_r.is_err() { let _ = out.close(); let _ = child.close(); return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" }; }
+    let err: ChildStderr = err_r.unwrap();
+
+    let status_r: Result<ExitStatus, str8> = child.wait();
+    if status_r.is_err() {
+        let _ = out.close();
+        let _ = err.close();
+        let _ = child.close();
+        return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" };
+    }
+    let status: ExitStatus = status_r.unwrap();
+    let stdout_text: str8 = read_child_stdout_all(out);
+    let stderr_text: str8 = read_child_stderr_all(err);
+    let _ = child.close();
+    return CompilerRunCapture { rc: status.code(), stdout_text: stdout_text, stderr_text: stderr_text };
+}
+
+#[test]
+fn test_compiler_private_method_same_module_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_private_method_same_module").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_private_method_same_module/main.mla";
+    let src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  fn inc(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter { value: 1 };\n  let d: Counter = c.inc();\n  return d.value;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_private_method_cross_module_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_private_method_cross_module/lib").is_err(): { return 1; }
+    let lib_path: str8 = "/tmp/mlang_private_method_cross_module/lib/counter_private.mla";
+    let main_path: str8 = "/tmp/mlang_private_method_cross_module/main.mla";
+    let lib_src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  fn inc(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n}\n";
+    let main_src: str8 = "mod lib::counter_private;\nuse lib::counter_private::Counter;\nfn main() -> i32 {\n  let c: Counter = Counter { value: 1 };\n  c.inc();\n  return 0;\n}\n";
+    if write_all_text(lib_path, lib_src).is_err(): { return 1; }
+    if write_all_text(main_path, main_src).is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", main_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "method 'inc' is private in module 'lib::counter_private'") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_public_method_cross_module_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_public_method_cross_module/lib").is_err(): { return 1; }
+    let lib_path: str8 = "/tmp/mlang_public_method_cross_module/lib/counter_public.mla";
+    let main_path: str8 = "/tmp/mlang_public_method_cross_module/main.mla";
+    let lib_src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  pub fn inc(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n}\n";
+    let main_src: str8 = "mod lib::counter_public;\nuse lib::counter_public::Counter;\nfn main() -> i32 {\n  let c: Counter = Counter { value: 1 };\n  let d: Counter = c.inc();\n  return d.value;\n}\n";
+    if write_all_text(lib_path, lib_src).is_err(): { return 1; }
+    if write_all_text(main_path, main_src).is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", main_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_inherited_private_method_cross_module_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_inherited_private_method/lib").is_err(): { return 1; }
+    let lib_path: str8 = "/tmp/mlang_inherited_private_method/lib/inherit_private.mla";
+    let main_path: str8 = "/tmp/mlang_inherited_private_method/main.mla";
+    let lib_src: str8 = "pub struct Base {\n  var value: i32;\n  fn hidden(self: Base) -> i32 {\n    return self.value;\n  }\n};\npub struct Derived : Base {\n  var extra: i32;\n};\n";
+    let main_src: str8 = "mod lib::inherit_private;\nuse lib::inherit_private::Derived;\nfn main() -> i32 {\n  let d: Derived = Derived { value: 7, extra: 1 };\n  return d.hidden();\n}\n";
+    if write_all_text(lib_path, lib_src).is_err(): { return 1; }
+    if write_all_text(main_path, main_src).is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", main_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "method 'hidden' is private in module 'lib::inherit_private'") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_inherited_public_method_cross_module_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_inherited_public_method/lib").is_err(): { return 1; }
+    let lib_path: str8 = "/tmp/mlang_inherited_public_method/lib/inherit_public.mla";
+    let main_path: str8 = "/tmp/mlang_inherited_public_method/main.mla";
+    let lib_src: str8 = "pub struct Base {\n  var value: i32;\n  pub fn read(self: Base) -> i32 {\n    return self.value;\n  }\n};\npub struct Derived : Base {\n  var extra: i32;\n};\n";
+    let main_src: str8 = "mod lib::inherit_public;\nuse lib::inherit_public::Derived;\nfn main() -> i32 {\n  let d: Derived = Derived { value: 7, extra: 1 };\n  return d.read();\n}\n";
+    if write_all_text(lib_path, lib_src).is_err(): { return 1; }
+    if write_all_text(main_path, main_src).is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", main_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
 }
 
 #[test]

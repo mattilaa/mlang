@@ -815,6 +815,7 @@ static void synthesizePropertyMethods(StructDefNode* def)
                 paramList, body,
                 /*isPublic=*/true,
                 /*isStatic=*/false);
+            getter->sourceModule = def->sourceModule;
             copyPropertyAccessorMetadata(getter, member);
             getter->isPropertySetter = false;
             getter->line = member->line;
@@ -849,6 +850,7 @@ static void synthesizePropertyMethods(StructDefNode* def)
                 paramList, body,
                 /*isPublic=*/true,
                 /*isStatic=*/false);
+            setter->sourceModule = def->sourceModule;
             copyPropertyAccessorMetadata(setter, member);
             setter->isPropertySetter = true;
             setter->line = member->line;

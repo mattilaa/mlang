@@ -1061,6 +1061,7 @@ public:
     bool isMutexPropertyAccessor = false;
     bool isRecursiveMutexPropertyAccessor = false;
     bool isPropertySetter = false;
+    std::string sourceModule;
     std::string propertyFieldName;
     std::string propertyLockFieldName;
 

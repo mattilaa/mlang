@@ -592,6 +592,14 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             {
                 // Set source module for all structs
                 structDef->sourceModule = resolvedModuleName;
+                if(structDef->members)
+                {
+                    for(auto* method : structDef->members->methods)
+                    {
+                        if(method && method->sourceModule.empty())
+                            method->sourceModule = resolvedModuleName;
+                    }
+                }
 
                 // Check if struct already added (avoid duplicates)
                 bool alreadyAdded = false;
@@ -619,6 +627,11 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             }
             for(auto* impl : module->implList->impls)
             {
+                for(auto* method : impl->methods)
+                {
+                    if(method && method->sourceModule.empty())
+                        method->sourceModule = resolvedModuleName;
+                }
                 bool alreadyAdded = false;
                 for(auto* existing : program->implList->impls)
                 {

@@ -5792,6 +5792,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 // Non-generic impl block - process immediately
                 for(auto method : impl->methods)
                 {
+                    if(method && method->sourceModule.empty())
+                        method->sourceModule = currentModule;
                     // Register the method with the struct
                     structMethods[impl->structName][method->name] =
                         std::make_pair(method->isPublic, method);
@@ -18412,6 +18414,8 @@ void CodeGenerator::generateStructMethods(StructDefNode* node)
     // Register all methods for this struct
     for(auto method : node->members->methods)
     {
+        if(method && method->sourceModule.empty())
+            method->sourceModule = node->sourceModule;
         structMethods[node->name][method->name] =
             std::make_pair(method->isPublic, method);
 
@@ -18522,10 +18526,13 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
         }
         if(!exists)
         {
-            std::string srcModule;
-            auto sit = structVisibility.find(structName);
-            if(sit != structVisibility.end())
-                srcModule = sit->second.second;
+            std::string srcModule = method->sourceModule;
+            if(srcModule.empty())
+            {
+                auto sit = structVisibility.find(structName);
+                if(sit != structVisibility.end())
+                    srcModule = sit->second.second;
+            }
 
             std::string signatureKey = qname + "#" + function->getName().str();
 
@@ -20589,10 +20596,6 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         return nullptr;
     }
 
-    // Check visibility - if calling from outside the struct's module, must be
-    // public For now, we allow all calls within the same compilation unit
-    // TODO: Add proper cross-module visibility checking for methods
-
     // Find the actual struct that defines this method (may be a base struct)
     std::string definingStruct = structTypeName;
     std::string searchStruct = structTypeName;
@@ -20616,6 +20619,37 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         {
             break;
         }
+    }
+
+    StructMethodNode* definingMethodNode = methodNode;
+    auto definingStructIt = structMethods.find(definingStruct);
+    if(definingStructIt != structMethods.end())
+    {
+        auto definingMethodIt =
+            definingStructIt->second.find(node->methodName);
+        if(definingMethodIt != definingStructIt->second.end())
+        {
+            isPublic = definingMethodIt->second.first;
+            if(definingMethodIt->second.second)
+                definingMethodNode = definingMethodIt->second.second;
+        }
+    }
+
+    std::string methodModule =
+        definingMethodNode ? definingMethodNode->sourceModule : "";
+    if(methodModule.empty())
+    {
+        auto structVisIt = structVisibility.find(definingStruct);
+        if(structVisIt != structVisibility.end())
+            methodModule = structVisIt->second.second;
+    }
+    if(!methodModule.empty() && !isPublic &&
+       !is_same_module_family(methodModule, currentModule))
+    {
+        reportError(node->line, "method '" + node->methodName +
+                                    "' is private in module '" +
+                                    methodModule + "'");
+        return nullptr;
     }
 
     std::string mangledName = definingStruct + "_" + node->methodName;
@@ -23246,6 +23280,7 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
                 auto* newMethod = new StructMethodNode(
                     newReturnType, method->name, newParams, method->body,
                     method->isPublic, method->isStatic);
+                newMethod->sourceModule = method->sourceModule;
                 newMethod->isSynthesizedPropertyAccessor =
                     method->isSynthesizedPropertyAccessor;
                 newMethod->isAtomicPropertyAccessor =
@@ -23290,6 +23325,7 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
             auto* newMethod = new StructMethodNode(
                 newReturnType, method->name, newParams, method->body,
                 method->isPublic, method->isStatic);
+            newMethod->sourceModule = method->sourceModule;
             newMethod->isSynthesizedPropertyAccessor =
                 method->isSynthesizedPropertyAccessor;
             newMethod->isAtomicPropertyAccessor =
@@ -23343,6 +23379,7 @@ void CodeGenerator::monomorphizeImplBlock(
         auto* newMethod = new StructMethodNode(
             newReturnType, method->name, newParams, method->body,
             method->isPublic, method->isStatic);
+        newMethod->sourceModule = method->sourceModule;
         newMethod->isSynthesizedPropertyAccessor =
             method->isSynthesizedPropertyAccessor;
         newMethod->isAtomicPropertyAccessor =
