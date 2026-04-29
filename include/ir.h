@@ -607,6 +607,7 @@ private:
     std::map<std::string,
              std::map<std::string, std::pair<bool, StructMethodNode*>>>
         structMethods;
+    std::map<std::string, TraitDefNode*> traitDefinitions;
     // Track trait impls per concrete struct type name.
     std::map<std::string, std::set<std::string>> structImplementedTraits;
 

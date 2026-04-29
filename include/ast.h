@@ -1212,8 +1212,13 @@ class TraitDefNode : public ASTNode
 public:
     std::string name;
     std::string sourceModule;
+    std::vector<StructMethodNode*> methods;
 
     TraitDefNode(const std::string& n) : name(n) {}
+    void addMethod(StructMethodNode* m)
+    {
+        methods.push_back(m);
+    }
     std::string toString() const override;
 };
 
@@ -1573,6 +1578,7 @@ ASTNode* create_generic_struct_def(char* name, char* base_name,
                                    ASTNode* type_params, ASTNode* members,
                                    int is_public, int derive_debug);
 ASTNode* create_trait_def(char* name, int line);
+ASTNode* add_trait_method(ASTNode* trait, ASTNode* method);
 ASTNode* create_impl_block(char* struct_name, ASTNode* type_params,
                            char* trait_name = nullptr);
 ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);

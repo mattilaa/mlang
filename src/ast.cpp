@@ -2829,7 +2829,14 @@ std::string TypeParamListNode::toString() const
 
 std::string TraitDefNode::toString() const
 {
-    return "trait " + name + " {}";
+    std::string result = "trait " + name + " {\n";
+    for(auto* method : methods)
+    {
+        if(method)
+            result += "    " + method->toString() + "\n";
+    }
+    result += "}";
+    return result;
 }
 
 // ImplBlockNode toString
@@ -2941,6 +2948,13 @@ ASTNode* create_trait_def_impl(char* name, int line)
     auto* node = new TraitDefNode(std::string(name));
     node->line = line;
     return node;
+}
+
+ASTNode* add_trait_method_impl(ASTNode* trait, ASTNode* method)
+{
+    auto* traitDef = static_cast<TraitDefNode*>(trait);
+    traitDef->methods.push_back(static_cast<StructMethodNode*>(method));
+    return traitDef;
 }
 
 ASTNode* create_impl_block_impl(char* struct_name, ASTNode* type_params,

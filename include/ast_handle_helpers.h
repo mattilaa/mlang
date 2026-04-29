@@ -54,6 +54,7 @@ ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNo
 ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
 ASTNode* mla_ast_type_alias(char* name, ASTNode* type_params, ASTNode* aliased_type);
 ASTNode* mla_ast_trait_def(char* name, int line);
+ASTNode* mla_ast_trait_add_method(ASTNode* trait, ASTNode* method);
 ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
 ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
 ASTNode* mla_ast_block_statement(ASTNode* stmt_list);

@@ -1026,6 +1026,56 @@ fn test_compiler_associated_function_called_as_instance_method_rejected() -> i32
 }
 
 #[test]
+fn test_compiler_trait_impl_matching_signature_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_trait_impl_matching_signature").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_trait_impl_matching_signature/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return \"ok\";\n  }\n}\nfn main() -> i32 {\n  let p: Post = Post { id: 1 };\n  println!(\"{}\", p.summarize());\n  return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_trait_impl_missing_required_method_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_trait_impl_missing_method").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_trait_impl_missing_method/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n}\nfn main() -> i32 { return 0; }\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "trait 'Summary' for struct 'Post' requires method 'summarize'") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_trait_impl_wrong_return_type_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_trait_impl_wrong_return").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_trait_impl_wrong_return/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> i32 {\n    return self.id;\n  }\n}\nfn main() -> i32 { return 0; }\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "method 'Post::summarize' does not match trait 'Summary': return type 'i32' does not match expected 'str8'") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_trait_impl_static_instance_mismatch_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_trait_impl_static_mismatch").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_trait_impl_static_mismatch/main.mla";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize() -> str8 {\n    return \"ok\";\n  }\n}\nfn main() -> i32 { return 0; }\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "method 'Post::summarize' does not match trait 'Summary': expected instance method") == 1 ? 0 : 1;
+}
+
+#[test]
 fn test_compiler_test_output_uses_robot_style_progress_format() -> i32 {
     let src_path: str8 = "/tmp/mlang_test_output_format_case.mla";
     let src: str8 = "mod std::testing;\nuse std::testing::verify_true;\n\n#[test]\nfn test_output_format_uses_progress_and_timestamp() {\n    verify_true(true);\n}\n";

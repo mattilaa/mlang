@@ -5632,6 +5632,160 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
+    traitDefinitions.clear();
+    for(auto* traitDef : program->traitDefs)
+    {
+        if(!traitDef || traitDef->name.empty())
+            continue;
+        traitDefinitions[traitDef->name] = traitDef;
+    }
+
+    auto typeNodesEquivalent = [&](TypeNode* lhs, TypeNode* rhs,
+                                   const std::vector<std::string>& typeParams,
+                                   const std::string& selfTypeName) -> bool
+    {
+        std::vector<std::string> substParams = typeParams;
+        substParams.push_back("Self");
+        std::vector<TypeNode*> substArgs;
+        substArgs.reserve(typeParams.size() + 1);
+        for(const auto& typeParam : typeParams)
+            substArgs.push_back(new StructTypeRefNode(typeParam));
+        substArgs.push_back(new StructTypeRefNode(selfTypeName));
+
+        TypeNode* lhsResolved = substituteTypeParams(lhs, substParams, substArgs);
+        TypeNode* rhsResolved = substituteTypeParams(rhs, substParams, substArgs);
+        return type_name_for_error(lhsResolved) ==
+               type_name_for_error(rhsResolved);
+    };
+
+    auto validateTraitImplBlock = [&](ImplBlockNode* impl)
+    {
+        if(!impl || impl->traitName.empty())
+            return;
+
+        auto traitIt = traitDefinitions.find(impl->traitName);
+        if(traitIt == traitDefinitions.end() || !traitIt->second)
+        {
+            reportError(impl->line,
+                        "unknown trait '" + impl->traitName +
+                            "' in impl for '" + impl->structName + "'");
+            return;
+        }
+
+        TraitDefNode* traitDef = traitIt->second;
+        for(auto* traitMethod : traitDef->methods)
+        {
+            if(!traitMethod)
+                continue;
+
+            StructMethodNode* implMethod = nullptr;
+            for(auto* candidate : impl->methods)
+            {
+                if(candidate && candidate->name == traitMethod->name)
+                {
+                    implMethod = candidate;
+                    break;
+                }
+            }
+
+            if(!implMethod)
+            {
+                reportError(
+                    impl->line,
+                    "trait '" + impl->traitName + "' for struct '" +
+                        impl->structName + "' requires method '" +
+                        traitMethod->name + "'");
+                continue;
+            }
+
+            if(implMethod->isStatic != traitMethod->isStatic)
+            {
+                reportError(
+                    implMethod->line,
+                    "method '" + impl->structName + "::" + implMethod->name +
+                        "' does not match trait '" + impl->traitName +
+                        "': expected " +
+                        std::string(traitMethod->isStatic ? "static" : "instance") +
+                        " method");
+                continue;
+            }
+
+            size_t traitParamCount =
+                traitMethod->parameters ? traitMethod->parameters->parameters.size()
+                                        : 0;
+            size_t implParamCount =
+                implMethod->parameters ? implMethod->parameters->parameters.size()
+                                       : 0;
+            if(traitParamCount != implParamCount)
+            {
+                reportError(
+                    implMethod->line,
+                    "method '" + impl->structName + "::" + implMethod->name +
+                        "' does not match trait '" + impl->traitName +
+                        "': expected " + std::to_string(traitParamCount) +
+                        " parameter(s), got " + std::to_string(implParamCount));
+                continue;
+            }
+
+            bool mismatch = false;
+            for(size_t i = 0; i < traitParamCount; ++i)
+            {
+                auto* expectedParam = traitMethod->parameters->parameters[i];
+                auto* actualParam = implMethod->parameters->parameters[i];
+                if(!expectedParam || !actualParam)
+                    continue;
+                if(expectedParam->name != actualParam->name)
+                {
+                    reportError(
+                        implMethod->line,
+                        "method '" + impl->structName + "::" +
+                            implMethod->name + "' does not match trait '" +
+                            impl->traitName + "': parameter " +
+                            std::to_string(i + 1) + " must be named '" +
+                            expectedParam->name + "'");
+                    mismatch = true;
+                    break;
+                }
+                if(!typeNodesEquivalent(expectedParam->type, actualParam->type,
+                                        impl->typeParams, impl->structName))
+                {
+                    reportError(
+                        implMethod->line,
+                        "method '" + impl->structName + "::" +
+                            implMethod->name + "' does not match trait '" +
+                            impl->traitName + "': parameter '" +
+                            actualParam->name + "' has type '" +
+                            type_name_for_error(actualParam->type) +
+                            "', expected '" +
+                            type_name_for_error(expectedParam->type) + "'");
+                    mismatch = true;
+                    break;
+                }
+            }
+            if(mismatch)
+                continue;
+
+            if(!typeNodesEquivalent(traitMethod->returnType, implMethod->returnType,
+                                    impl->typeParams, impl->structName))
+            {
+                reportError(
+                    implMethod->line,
+                    "method '" + impl->structName + "::" + implMethod->name +
+                        "' does not match trait '" + impl->traitName +
+                        "': return type '" +
+                        type_name_for_error(implMethod->returnType) +
+                        "' does not match expected '" +
+                        type_name_for_error(traitMethod->returnType) + "'");
+            }
+        }
+    };
+
+    if(program->implList)
+    {
+        for(auto* impl : program->implList->impls)
+            validateTraitImplBlock(impl);
+    }
+
     // Collect generic impl blocks
     if(program->implList)
     {

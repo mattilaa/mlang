@@ -1752,19 +1752,30 @@ enum_variant
 
 trait_def
     : TRAIT IDENTIFIER LBRACE trait_method_decl_list RBRACE
-        { $$ = mla_ast_trait_def($2, yylineno); }
+        {
+            ASTNode* trait = mla_ast_trait_def($2, yylineno);
+            auto* traitDef = static_cast<TraitDefNode*>(trait);
+            auto* methodList = static_cast<TraitDefNode*>($4);
+            if(methodList) {
+                traitDef->methods = methodList->methods;
+            }
+            $$ = trait;
+        }
     ;
 
 trait_method_decl_list
-    : /* empty */ { $$ = NULL; }
-    | trait_method_decl_list trait_method_decl { $$ = NULL; }
+    : /* empty */ { $$ = mla_ast_trait_def(strdup(""), yylineno); }
+    | trait_method_decl_list trait_method_decl
+        {
+            $$ = mla_ast_trait_add_method($1, $2);
+        }
     ;
 
 trait_method_decl
     : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
-        { $$ = NULL; }
+        { $$ = mla_ast_struct_method($7, $2, $4, NULL, 0, 0); }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
-        { $$ = NULL; }
+        { $$ = mla_ast_struct_method($8, $3, $5, NULL, 1, 0); }
     ;
 
 type_param_list

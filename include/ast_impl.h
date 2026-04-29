@@ -144,6 +144,7 @@ ASTNode* create_type_param_list_impl(char* param);
 ASTNode* add_type_param_impl(ASTNode* list, char* param);
 ASTNode* create_generic_struct_def_impl(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
 ASTNode* create_trait_def_impl(char* name, int line);
+ASTNode* add_trait_method_impl(ASTNode* trait, ASTNode* method);
 ASTNode* create_impl_block_impl(char* struct_name, ASTNode* type_params, char* trait_name);
 ASTNode* add_impl_method_impl(ASTNode* impl, ASTNode* method);
 ASTNode* create_struct_literal_impl(char* struct_name, ASTNode* type_args, ASTNode* fields, int line);
