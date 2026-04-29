@@ -1,0 +1,18 @@
+mod lib::summary;
+use lib::summary::Post;
+use lib::summary::Holder;
+
+fn main() -> i32 {
+    // Local value construction can use imported type names as usual.
+    let post: Post = Post {
+        title: "module-path generic static call"
+    };
+
+    // The associated constructor call can stay fully qualified, including the
+    // generic receiver type from the module path.
+    let holder: Holder<Post> = lib::summary::Holder<Post>::new(post);
+    let text: str8 = holder.summary();
+
+    println!("summary={}", text);
+    return text == "module-path generic static call" ? 0 : 1;
+}

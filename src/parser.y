@@ -2828,6 +2828,38 @@ condition_primary
         { $$ = mla_ast_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN
         { $$ = mla_ast_format_expr($3, $5, yylineno); }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $8, yylineno);
+        }
+    | module_path GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | module_path GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $8, yylineno);
+        }
     | function_call { $$ = $1; }
     | module_path
         { $$ = create_enum_or_ident_from_path($1, yylineno); }
@@ -3052,6 +3084,22 @@ primary_expression
         { $$ = mla_ast_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN
         { $$ = mla_ast_format_expr($3, $5, yylineno); }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $8, yylineno);
+        }
     | module_path
         { $$ = create_enum_or_ident_from_path($1, yylineno); }
     | LPAREN expression RPAREN { $$ = $2; }
@@ -3168,6 +3216,38 @@ function_call
         { $$ = mla_ast_function_call_simple($1, NULL, NULL, yylineno); }
     | module_path LPAREN argument_list RPAREN
         { $$ = mla_ast_function_call_from_list($1, $3, yylineno); }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $8, yylineno);
+        }
+    | module_path GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | module_path GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $8, yylineno);
+        }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
         {
             if(strcmp($1, "add") == 0)

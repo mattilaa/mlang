@@ -1168,6 +1168,32 @@ fn test_compiler_generic_method_call_allowed() -> i32 {
 }
 
 #[test]
+fn test_compiler_generic_static_method_call_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_generic_static_method_call_ok").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_generic_static_method_call_ok/main.mla";
+    let src: str8 = "pub struct Holder<T> {\n  var value: T;\n};\nimpl<T> Holder {\n  pub fn new(value: T) -> Holder<T> {\n    return Holder<T> { value: value };\n  }\n}\nfn main() -> i32 {\n  let h: Holder<i32> = Holder<i32>::new(1);\n  return h.value;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_module_path_generic_static_method_call_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_module_path_generic_static_method_call_ok/lib").is_err(): { return 1; }
+    let lib_path: str8 = "/tmp/mlang_module_path_generic_static_method_call_ok/lib/summary.mla";
+    let main_path: str8 = "/tmp/mlang_module_path_generic_static_method_call_ok/main.mla";
+    let lib_src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var title: str8; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return self.title;\n  }\n}\npub struct Holder<T: Summary> {\n  var value: T;\n};\nimpl<T: Summary> Holder {\n  pub fn new(value: T) -> Holder<T> {\n    return Holder<T> { value: value };\n  }\n  pub fn summary(self: Holder<T>) -> str8 {\n    return self.value.summarize();\n  }\n}\n";
+    let main_src: str8 = "mod lib::summary;\nuse lib::summary::Post;\nuse lib::summary::Holder;\nfn main() -> i32 {\n  let post: Post = Post { title: \"ok\" };\n  let holder: Holder<Post> = lib::summary::Holder<Post>::new(post);\n  let text: str8 = holder.summary();\n  return text == \"ok\" ? 0 : 1;\n}\n";
+    let wr1: Result<i32, str8> = write_all_text(lib_path, lib_src);
+    if wr1.is_err(): { return 1; }
+    let wr2: Result<i32, str8> = write_all_text(main_path, main_src);
+    if wr2.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", main_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
 fn test_compiler_generic_trait_bound_method_call_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_generic_trait_bound_method_call_ok").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_generic_trait_bound_method_call_ok/main.mla";

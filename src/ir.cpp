@@ -349,7 +349,76 @@ static TypeNode* type_from_text(std::string t)
         return new TupleTypeNode(elems);
     }
 
+    size_t genericPos = t.find('<');
+    if(genericPos != std::string::npos && !t.empty() && t.back() == '>')
+    {
+        std::string baseName = trim_copy(t.substr(0, genericPos));
+        std::string inner = t.substr(genericPos + 1, t.size() - genericPos - 2);
+        auto parts = split_top_level_commas(inner);
+        auto* generic = new GenericStructTypeRefNode(baseName);
+        for(const auto& p : parts)
+            generic->typeArgs.push_back(type_from_text(p));
+        return generic;
+    }
+
     return new StructTypeRefNode(t);
+}
+
+static std::string resolve_visible_struct_base_name(
+    const std::string& structName,
+    const std::map<std::string, StructDefNode*>& genericStructTemplates,
+    const std::map<std::string,
+                   std::map<std::string, std::pair<bool, StructMethodNode*>>>&
+        structMethods,
+    const std::map<std::string, std::pair<bool, std::string>>& structVisibility)
+{
+    if(genericStructTemplates.count(structName) || structMethods.count(structName) ||
+       structVisibility.count(structName))
+    {
+        return structName;
+    }
+
+    std::string tailName = structName;
+    size_t scopePos = structName.rfind("::");
+    if(scopePos != std::string::npos)
+        tailName = structName.substr(scopePos + 2);
+
+    if(genericStructTemplates.count(tailName) || structMethods.count(tailName) ||
+       structVisibility.count(tailName))
+    {
+        return tailName;
+    }
+
+    auto matchesVisibleTail = [&](const std::string& candidate) {
+        if(candidate == structName || candidate == tailName)
+            return true;
+        if(candidate.size() > tailName.size() &&
+           candidate.compare(candidate.size() - tailName.size(), tailName.size(),
+                             tailName) == 0)
+        {
+            char sep = candidate[candidate.size() - tailName.size() - 1];
+            return sep == ':' || sep == '.' || sep == '_';
+        }
+        return false;
+    };
+
+    for(const auto& entry : genericStructTemplates)
+    {
+        if(matchesVisibleTail(entry.first))
+            return entry.first;
+    }
+    for(const auto& entry : structMethods)
+    {
+        if(matchesVisibleTail(entry.first))
+            return entry.first;
+    }
+    for(const auto& entry : structVisibility)
+    {
+        if(matchesVisibleTail(entry.first))
+            return entry.first;
+    }
+
+    return structName;
 }
 
 static std::string type_name_for_error(TypeNode* typeNode)
@@ -17174,11 +17243,32 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(overloadIt == functionOverloads.end())
     {
         // Static struct method call syntax: Type::method(...)
-        size_t scopePos = node->name.find("::");
+        size_t scopePos = node->name.rfind("::");
         if(scopePos != std::string::npos)
         {
             std::string structName = node->name.substr(0, scopePos);
             std::string methodName = node->name.substr(scopePos + 2);
+            std::string displayStructName = structName;
+
+            if(TypeNode* parsedType = type_from_text(structName))
+            {
+                if(auto* genericStructType =
+                       dynamic_cast<GenericStructTypeRefNode*>(parsedType))
+                {
+                    std::string visibleStructName = resolve_visible_struct_base_name(
+                        genericStructType->structName, genericStructTemplates,
+                        structMethods, structVisibility);
+                    structName = getOrCreateMonomorphizedStruct(
+                        visibleStructName, genericStructType->typeArgs);
+                }
+                else if(auto* structType =
+                            dynamic_cast<StructTypeRefNode*>(parsedType))
+                {
+                    structName = resolve_visible_struct_base_name(
+                        structType->structName, genericStructTemplates,
+                        structMethods, structVisibility);
+                }
+            }
 
             auto sit = structMethods.find(structName);
             std::string resolvedStructName = structName;
@@ -17220,7 +17310,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     if(!mit->second.second->isStatic)
                     {
                         reportError(node->line,
-                                    "instance method '" + resolvedStructName +
+                                    "instance method '" + displayStructName +
                                         "::" + methodName +
                                         "' must be called on a value");
                         return nullptr;
@@ -17236,8 +17326,49 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     }
                     if(callee && callee->empty())
                     {
+                        llvm::BasicBlock* savedBlock = builder.GetInsertBlock();
+                        auto savedNamedValues = namedValues;
+                        auto savedConstantVariables = constantVariables;
+                        auto savedVariableTypes = variableTypes;
+                        auto savedStructVariableTypes = structVariableTypes;
+                        auto savedEnumVariableTypes = enumVariableTypes;
+                        auto savedListElementTypes = listElementTypes;
+                        auto savedMapKeyValueTypes = mapKeyValueTypes;
+                        auto savedTupleElementTypes = tupleElementTypes;
+                        auto savedPointerElementTypes = pointerElementTypes;
+                        auto savedMovedVariables = movedVariables;
+                        auto savedPointerBorrowTarget = pointerBorrowTarget;
+                        auto savedActiveBorrowers = activeBorrowers;
+                        auto savedActiveMutBorrower = activeMutBorrower;
+                        auto savedVariableScopeDepth = variableScopeDepth;
+                        auto savedCleanupScopes = cleanupScopes;
+                        auto savedPointerBorrowScopes = pointerBorrowScopes;
+                        auto savedVariableScopeDepthScopes =
+                            variableScopeDepthScopes;
+
                         callee = generateMethodDefinition(resolvedStructName,
                                                           mit->second.second);
+
+                        namedValues = savedNamedValues;
+                        constantVariables = savedConstantVariables;
+                        variableTypes = savedVariableTypes;
+                        structVariableTypes = savedStructVariableTypes;
+                        enumVariableTypes = savedEnumVariableTypes;
+                        listElementTypes = savedListElementTypes;
+                        mapKeyValueTypes = savedMapKeyValueTypes;
+                        tupleElementTypes = savedTupleElementTypes;
+                        pointerElementTypes = savedPointerElementTypes;
+                        movedVariables = savedMovedVariables;
+                        pointerBorrowTarget = savedPointerBorrowTarget;
+                        activeBorrowers = savedActiveBorrowers;
+                        activeMutBorrower = savedActiveMutBorrower;
+                        variableScopeDepth = savedVariableScopeDepth;
+                        cleanupScopes = savedCleanupScopes;
+                        pointerBorrowScopes = savedPointerBorrowScopes;
+                        variableScopeDepthScopes = savedVariableScopeDepthScopes;
+
+                        if(savedBlock)
+                            builder.SetInsertPoint(savedBlock);
                     }
                     if(!callee)
                     {

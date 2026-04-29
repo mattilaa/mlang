@@ -6,14 +6,14 @@ use lib::summary::Post;
 fn main() -> i32 {
     // `Post` implements `Summary`, so it satisfies the `T: Summary` bound.
     let post: Post = Post { id: 7, title: "trait-bound holder" };
-    let holder: Holder<Post> = Holder<Post> { value: post };
+    let holder: Holder<Post> = Holder<Post>::new(post);
 
     // The generic impl can call trait methods through the bound.
     let text: str8 = holder.summary();
     println!("summary={}", text);
 
     // This would be rejected because `i32` does not implement `Summary`.
-    // let bad: Holder<i32> = Holder<i32> { value: 1 };
+    // let bad: Holder<i32> = Holder<i32>::new(1);
 
     return text == "trait-bound holder" ? 0 : 1;
 }
