@@ -862,7 +862,7 @@ fn restore_terminal(rawEnabled: i32) {
 
 fn render_frame(path: str8, outputDevice: str8, leftSamples: list<i64>,
 rightSamples: list<i64>, spectrumHeights: list<i64>, spectrumOn: i32,
-colorMode: i32, term: TermSize) {
+oscilloscopeOn: i32, colorMode: i32, term: TermSize) {
     let width: i64 = viewport_width(term.cols);
     let height: i64 = viewport_height(term.rows);
     let current: i64 = oscilloscope_demo_current_frame();
@@ -995,46 +995,57 @@ colorMode: i32, term: TermSize) {
                 fbgB = blend_channel(bgB, specB, specAlpha);
             }
 
-            if leftDist == 0 && rightDist == 0 {
-                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
-                bput(builder, oscilloscope_trace_color(row, height, 248, 214, 132));
-                bput(builder, coreGlyph);
-                bput(builder, reset());
-            } else if rightDist == 0 {
-                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
-                bput(builder, oscilloscope_trace_color(row, height, 255, 110, 84));
-                bput(builder, coreGlyph);
-                bput(builder, reset());
-            } else if leftDist == 0 {
-                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
-                bput(builder, oscilloscope_trace_color(row, height, 120, 248, 132));
-                bput(builder, coreGlyph);
-                bput(builder, reset());
-            } else if rightDist <= 1 {
-                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
-                bput(builder, oscilloscope_trace_color(row, height, 255, 164, 112));
-                bput(builder, nearGlyph);
-                bput(builder, reset());
-            } else if leftDist <= 1 {
-                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
-                bput(builder, oscilloscope_trace_color(row, height, 150, 232, 166));
-                bput(builder, nearGlyph);
-                bput(builder, reset());
-            } else if rightDist <= 3 {
-                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
-                bput(builder, oscilloscope_trace_color(row, height, 156, 88, 78));
-                bput(builder, farGlyph);
-                bput(builder, reset());
-            } else if leftDist <= 3 {
-                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
-                bput(builder, oscilloscope_trace_color(row, height, 74, 148, 94));
-                bput(builder, farGlyph);
-                bput(builder, reset());
-            } else if row == center {
-                bput(builder, bg_rgb(fbgR, fbgG, fbgB));
-                bput(builder, oscilloscope_trace_color(row, height, 58, 84, 112));
-                bput(builder, axisGlyph);
-                bput(builder, reset());
+            if oscilloscopeOn == 1 {
+                if leftDist == 0 && rightDist == 0 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 248, 214, 132));
+                    bput(builder, coreGlyph);
+                    bput(builder, reset());
+                } else if rightDist == 0 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 255, 110, 84));
+                    bput(builder, coreGlyph);
+                    bput(builder, reset());
+                } else if leftDist == 0 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 120, 248, 132));
+                    bput(builder, coreGlyph);
+                    bput(builder, reset());
+                } else if rightDist <= 1 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 255, 164, 112));
+                    bput(builder, nearGlyph);
+                    bput(builder, reset());
+                } else if leftDist <= 1 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 150, 232, 166));
+                    bput(builder, nearGlyph);
+                    bput(builder, reset());
+                } else if rightDist <= 3 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 156, 88, 78));
+                    bput(builder, farGlyph);
+                    bput(builder, reset());
+                } else if leftDist <= 3 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 74, 148, 94));
+                    bput(builder, farGlyph);
+                    bput(builder, reset());
+                } else if row == center {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, oscilloscope_trace_color(row, height, 58, 84, 112));
+                    bput(builder, axisGlyph);
+                    bput(builder, reset());
+                } else if inSpectrum == 1 {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, fg_rgb(specR, specG, specB));
+                    bput(builder, spectrum_glyph(distFromBottom, barFullCells, topEighths, isTopFraction));
+                    bput(builder, reset());
+                } else {
+                    bput(builder, bg_rgb(fbgR, fbgG, fbgB));
+                    bput(builder, " ");
+                    bput(builder, reset());
+                }
             } else if inSpectrum == 1 {
                 bput(builder, bg_rgb(fbgR, fbgG, fbgB));
                 bput(builder, fg_rgb(specR, specG, specB));
@@ -1100,6 +1111,11 @@ colorMode: i32, term: TermSize) {
     bput(builder, spectrumOn == 1 ? " spectrum: on": " spectrum: off");
     bput(builder, "  ");
     bput(builder, fg_rgb(255, 170, 84));
+    bput(builder, "c");
+    bput(builder, fg_rgb(216, 220, 228));
+    bput(builder, oscilloscopeOn == 1 ? " oscilloscope: on": " oscilloscope: off");
+    bput(builder, "  ");
+    bput(builder, fg_rgb(255, 170, 84));
     bput(builder, "p");
     bput(builder, fg_rgb(216, 220, 228));
     bput(builder, colorMode == 1 ? " palette: freq": " palette: vert");
@@ -1138,6 +1154,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 println!("  ../../build/mlang pkg run demo --option wav_path=../fft_example/illusion.wav");
                 println!("  ../../build/mlang pkg run demo --option wav_path=../../examples/fft_example/illusion.wav");
                 println!("  ../../build/mlang pkg run demo --option audio_output=BlackHole");
+                println!("  keys: s toggles spectrum, c toggles oscilloscope, p toggles palette");
                 println!("  ../../build/mlang pkg run list-devices");
                 println!("  ../../build/mlang pkg run list-devices-verbose");
                 return 0;
@@ -1203,6 +1220,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
 
     var spectrumOn: i32 = 1;
+    var oscilloscopeOn: i32 = 1;
     var colorMode: i32 = 1;
     while oscilloscope_demo_running() == 1 {
         let term: TermSize = stdout_size();
@@ -1215,7 +1233,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let sampleRate: i64 = oscilloscope_demo_sample_rate();
         let spectrumHeights: list<i64> = compute_spectrum_heights(leftFft, rightFft, width, height, sampleRate);
         render_frame(wavPath, oscilloscope_demo_output_device(), leftSamples, rightSamples,
-                     spectrumHeights, spectrumOn, colorMode, term);
+                     spectrumHeights, spectrumOn, oscilloscopeOn, colorMode, term);
 
         let key: i32 = device_popup_key();
         if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ || key == AsciiKey::Esc {
@@ -1224,6 +1242,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
         if key == AsciiKey::LowerS || key == AsciiKey::UpperS {
             spectrumOn = spectrumOn == 0 ? 1: 0;
+        }
+        if key == AsciiKey::LowerC || key == AsciiKey::UpperC {
+            oscilloscopeOn = oscilloscopeOn == 0 ? 1: 0;
         }
         if key == AsciiKey::LowerP || key == AsciiKey::UpperP {
             colorMode = colorMode == 0 ? 1: 0;
