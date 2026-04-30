@@ -49,6 +49,7 @@ depends_on = ["build-mlang"]
 commands = [
   "{{build_dir}}/mlang tools/mlangd-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlangd-mla"
 ]
+sign = ["{{build_dir}}/mlangd-mla"]
 
 [[task]]
 name = "build-mlangd-mla-existing"
@@ -59,6 +60,7 @@ source = "tools/mlangd-mla/main.mla"
 output = "{{build_dir}}/mlangd-mla"
 lib_paths = ["{{build_dir}}"]
 libs = ["mlang_std"]
+sign = ["{{build_dir}}/mlangd-mla"]
 
 [[task]]
 name = "build-mlang-frontend-mla"
@@ -185,6 +187,7 @@ shell = [
   "cp -f {{build_dir}}/mlangd-mla \"$bin_dir/mlangd-mla\"",
   "chmod +x \"$bin_dir/mlangd-mla\""
 ]
+sign = ["{{option.bin_dir}}/mlangd-mla"]
 
 [[task]]
 name = "install-mlangd-mla-existing"
@@ -197,6 +200,7 @@ shell = [
   "cp -f {{build_dir}}/mlangd-mla \"$bin_dir/mlangd-mla\"",
   "chmod +x \"$bin_dir/mlangd-mla\""
 ]
+sign = ["{{option.bin_dir}}/mlangd-mla"]
 
 [[task]]
 name = "install-mlang-frontend"

@@ -13,6 +13,7 @@ MLang - Programming Language
 - [Build + Install](#build--install)
 - [Documentation](#documentation)
 - [AddressSanitizer Verification](#addresssanitizer-verification)
+- [Codesigning Built Binaries On macOS](#codesigning-built-binaries-on-macos)
 - [Formatter](#formatter)
 - [Quickstart (Package Manager + curl example)](#quickstart-package-manager--curl-example)
 - [Testing](#testing)
@@ -593,6 +594,98 @@ After a clean workspace, run the helper script that configures an AddressSanitiz
 ```
 
 The script delegates to `./scripts/build_install.sh --asan --unit-tests --robot-tests --no-install`, defaults to `build-asan` plus `artifacts-asan`, and propagates `ASAN_OPTIONS` to the compiler, unit tests, and robot runs. You can still override the default sanitizer tuning when invoking the script if you want stricter checks, for example `ASAN_OPTIONS=detect_container_overflow=1:strict_init_order=1 ./scripts/run_asan.sh`.
+
+## Codesigning Built Binaries On macOS
+Locally-linked Mach-O binaries on Apple Silicon are emitted with an adhoc
+`linker-signed` signature. In some configurations the resulting CodeDirectory
+hash does not match the final on-disk page contents (mismatch can come from
+`strip`, `install_name_tool`, copying between filesystems, or certain
+TLV/chained-fixup layouts), and macOS will SIGKILL the process the first time
+it touches a "tainted" page:
+
+```text
+kernel: CODE SIGNING: cs_invalid_page(...): p=NNN[mlangd-mla] ... sending SIGKILL
+kernel: CODE SIGNING: process NNN[mlangd-mla]: rejecting invalid page ... tainted:1 ...
+```
+
+The package manager exposes adhoc re-signing as a first-class build step so
+the bootstrap pipeline can produce binaries that survive this check.
+
+### `[[task]] sign` field
+Any task in `mlang.toml` may declare one or more output paths to sign after
+the task succeeds. The value can be a single string or a list, and standard
+template substitutions (`{{build_dir}}`, `{{root}}`, `{{option.<key>}}`,
+etc.) are expanded:
+
+```toml
+[[task]]
+name = "build-mlangd-mla"
+commands = [
+  "{{build_dir}}/mlang tools/mlangd-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlangd-mla"
+]
+sign = ["{{build_dir}}/mlangd-mla"]
+
+[[task]]
+name = "install-mlangd-mla"
+shell = [
+  "cp -f {{build_dir}}/mlangd-mla \"{{option.bin_dir}}/mlangd-mla\""
+]
+sign = ["{{option.bin_dir}}/mlangd-mla"]
+```
+
+Declaring `sign` does **not** force codesigning by itself — it only registers
+which artifacts are signing candidates. The actual `codesign` invocation is
+gated on a CLI flag, so reproducible builds without signing remain the default.
+
+### `--sign` and `--force-sign` flags
+`mlang pkg run` and `mlang pkg build` accept three signing modes:
+
+| Flag | Behaviour |
+|---|---|
+| (none) | Default. `sign` declarations are ignored; no `codesign` call is made. |
+| `--sign` | Runs `codesign --sign - <path>` for every `sign` entry of every executed task. Existing valid signatures are preserved. |
+| `--force-sign` (alias `--forcesign`) | Runs `codesign --force --sign - <path>`. Any existing signature — including a tainted one — is replaced. Use this to recover a binary that is being SIGKILL'd. |
+| `--no-sign` | Explicit opt-out, useful if a profile or wrapper script enabled signing globally. |
+
+Examples — both forms the user may type are accepted:
+
+```sh
+# One-shot bootstrap that produces a known-good mlangd-mla and re-signs it:
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla --sign
+
+# Recovery: replace a tainted/broken signature on the existing artifact:
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla --force-sign
+
+# Same with the no-dash spelling (alias):
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla --forcesign
+
+# Build the whole bootstrap chain and sign every signing-aware task in it:
+mlang pkg --config bootstrap/mlang.toml run build-all --force-sign
+
+# Install variant — signs the artifact in $HOME/.local/bin after the copy:
+mlang pkg --config bootstrap/mlang.toml run install-mlangd-mla --force-sign
+```
+
+### Behaviour notes
+- The hook is **macOS-only**. On Linux/Windows hosts the flags are accepted
+  but no `codesign` invocation is made (the hook compiles to a no-op),
+  so the same `mlang.toml` is portable across platforms.
+- Missing `sign` paths print a warning but do not fail the task. This makes
+  the field safe to keep on optional/host-gated build steps.
+- A non-zero `codesign` exit fails the task. The post-task summary line will
+  show the failing path so the source of the error is obvious.
+- Manual recovery without the package manager is also possible:
+  ```sh
+  codesign --force --sign - ~/.local/bin/mlangd-mla
+  ```
+  The `--sign`/`--force-sign` flags simply automate this for every artifact
+  declared in the bootstrap manifest.
+
+The bootstrap profile `bootstrap/mlang.toml` already declares
+`sign = [...]` on the `build-mlangd-mla`, `build-mlangd-mla-existing`,
+`install-mlangd-mla`, and `install-mlangd-mla-existing` tasks, so a default
+build/install with `--force-sign` will automatically keep the language-server
+binary runnable on macOS.
 
 ## Formatter
 `mlang-format` is now a separate binary compiled from Mlang source:

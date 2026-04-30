@@ -105,6 +105,7 @@ enum class TaskTomlKey
     Libs,
     StaticDeps,
     StaticCppRuntime,
+    Sign,
 };
 
 enum class TargetArchAlias
@@ -180,7 +181,7 @@ enum class TaskLanguage
     Cpp,
 };
 
-static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 38>
+static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 39>
     kTaskTomlKeys {{{ TaskTomlKey::Name, "name" },
                     { TaskTomlKey::Message, "message" },
                     { TaskTomlKey::Print, "print" },
@@ -219,7 +220,8 @@ static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 38>
                     { TaskTomlKey::LibPaths, "lib_paths" },
                     { TaskTomlKey::Libs, "libs" },
                     { TaskTomlKey::StaticDeps, "static_deps" },
-                    { TaskTomlKey::StaticCppRuntime, "static_cpp_runtime" } }};
+                    { TaskTomlKey::StaticCppRuntime, "static_cpp_runtime" },
+                    { TaskTomlKey::Sign, "sign" } }};
 
 static constexpr std::array<std::pair<TaskLanguageAlias, std::string_view>, 6>
     kTaskLanguageAliases {{{ TaskLanguageAlias::Mlang, "mlang" },
@@ -906,6 +908,10 @@ struct BuildConfig
     std::optional<bool> staticCppRuntime;
     std::optional<bool> taskPrintToStdoutLog;
     bool enableLogs = false;
+    // 0 = off (no codesign), 1 = sign (codesign --sign -),
+    // 2 = force-sign (codesign --force --sign -). Macro-stable so it can be
+    // copied through value semantics and merged with apply_cli_overrides.
+    int signMode = 0;
 };
 
 struct BuildTarget
@@ -943,6 +949,7 @@ struct TaskSpec
     std::vector<std::string> env;
     std::vector<std::string> shellLines;
     std::vector<std::string> commands;
+    std::vector<std::string> signOutputs;
     BuildConfig buildConfig;
     struct HostOverride
     {
@@ -971,6 +978,7 @@ struct TaskSpec
         std::vector<std::string> env;
         std::vector<std::string> shellLines;
         std::vector<std::string> commands;
+        std::vector<std::string> signOutputs;
         BuildConfig buildConfig;
     };
     std::map<std::string, HostOverride> hostOverrides;
@@ -1893,6 +1901,9 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                 break;
             case TaskTomlKey::Commands:
                 append_toml_commands_value(taskValue, target.commands);
+                break;
+            case TaskTomlKey::Sign:
+                append_toml_string_list_value(taskValue, target.signOutputs);
                 break;
             case TaskTomlKey::Chmod:
                 target.chmodMode = unquote(taskValue);
@@ -5131,6 +5142,61 @@ static size_t count_reachable_task_steps(const std::vector<TaskSpec>& tasks,
     return visited.size();
 }
 
+// Sign each path in `signOutputs` after a task succeeds, when the build
+// config requested it (CLI: --sign / --force-sign). Templates such as
+// {{build_dir}} are expanded via `expand_task_text`. `force` triggers
+// `codesign --force --sign -` so an existing (and potentially tainted) adhoc
+// signature is replaced; otherwise plain `codesign --sign -` is used. macOS
+// only — silently skipped on other hosts since `codesign` does not exist.
+static int codesign_task_outputs(const std::vector<std::string>& signOutputs,
+                                 const PackageManifest& pkg,
+                                 const BuildConfig& buildConfig,
+                                 const std::string& taskName,
+                                 const std::string& taskPrefix)
+{
+    if(buildConfig.signMode == 0 || signOutputs.empty())
+        return 0;
+#if defined(__APPLE__)
+    const bool force = buildConfig.signMode == 2;
+    for(const auto& raw : signOutputs)
+    {
+        const std::string expanded = expand_task_text(raw, pkg, buildConfig);
+        if(expanded.empty())
+            continue;
+        std::error_code ec;
+        if(!std::filesystem::exists(expanded, ec))
+        {
+            pkg_warn_line(taskPrefix + " " + taskName +
+                          " sign: skipping missing output " + expanded);
+            continue;
+        }
+        std::string cmd = "codesign ";
+        if(force)
+            cmd += "--force ";
+        cmd += "--sign - " + shell_quote(expanded);
+        pkg_task_print_line(taskPrefix + " " + taskName + " " +
+                            (force ? "force-sign" : "sign") + " " + expanded);
+        const int sysRc = std::system(cmd.c_str());
+        int rc = 1;
+        if(sysRc >= 0 && WIFEXITED(sysRc))
+            rc = WEXITSTATUS(sysRc);
+        if(rc != 0)
+        {
+            pkg_error_line(taskPrefix + " " + taskName +
+                           " codesign failed (rc=" + std::to_string(rc) +
+                           ") for " + expanded);
+            return rc;
+        }
+    }
+    return 0;
+#else
+    (void)pkg;
+    (void)taskName;
+    (void)taskPrefix;
+    return 0;
+#endif
+}
+
 static int run_task_for_manifest_impl(
     const PackageManifest& pkg, const std::vector<TaskSpec>& tasks,
     const BuildConfig& buildConfig, const std::string& hostName,
@@ -5556,6 +5622,17 @@ static int run_task_for_manifest_impl(
             std::chrono::steady_clock::now() - taskStart);
         if(inlineSpinner)
             inlineSpinner->stop("");
+        if(const int signRc = codesign_task_outputs(
+               task.signOutputs, pkg, buildConfig, taskName, taskPrefix);
+           signRc != 0)
+        {
+            {
+                std::lock_guard<std::mutex> lock(taskMutex);
+                taskStates[taskName].status = TaskRunState::failed;
+            }
+            taskCv.notify_all();
+            return signRc;
+        }
         pkg_task_print_line(taskPrefix + " " + taskName +
                             " Completed, time " +
                             format_task_elapsed_compact(taskElapsed) + " - " +
@@ -5616,6 +5693,7 @@ struct PkgCliOverrides
     std::optional<bool> taskPrintToStdoutLog;
     std::optional<bool> asan;
     std::map<std::string, std::string> optionValues;
+    std::optional<int> signMode;
 };
 
 static void apply_cli_overrides(BuildConfig& buildConfig,
@@ -5644,6 +5722,8 @@ static void apply_cli_overrides(BuildConfig& buildConfig,
         buildConfig.asan = *overrides.asan;
     for(const auto& [key, value] : overrides.optionValues)
         buildConfig.optionValues[key] = value;
+    if(overrides.signMode.has_value())
+        buildConfig.signMode = *overrides.signMode;
     if(enableLogs)
         buildConfig.enableLogs = true;
 }
@@ -6225,6 +6305,18 @@ int PackageManager::run(int argc, char** argv)
             {
                 overrides.asan = true;
             }
+            else if(arg == "--sign")
+            {
+                overrides.signMode = 1;
+            }
+            else if(arg == "--force-sign" || arg == "--forcesign")
+            {
+                overrides.signMode = 2;
+            }
+            else if(arg == "--no-sign")
+            {
+                overrides.signMode = 0;
+            }
             else if(arg == "--build-dir" && i + 1 < argc)
             {
                 overrides.buildDir = argv[++i];
@@ -6258,6 +6350,7 @@ int PackageManager::run(int argc, char** argv)
                 std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
                           << "Usage: " << argv[0]
                           << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]"
+                          << " [--sign|--force-sign|--no-sign]"
                           << " [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
@@ -6308,6 +6401,7 @@ int PackageManager::run(int argc, char** argv)
                       << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
                       << " [--stderr-log FILE] [--warn-log FILE]"
                       << " [--task-print-to-stdout-log] [--asan]"
+                      << " [--sign|--force-sign|--no-sign]"
                       << " [--option KEY=VALUE]\n";
             return 1;
         }
@@ -6348,6 +6442,12 @@ int PackageManager::run(int argc, char** argv)
                 overrides.taskPrintToStdoutLog = true;
             else if(arg == "--asan")
                 overrides.asan = true;
+            else if(arg == "--sign")
+                overrides.signMode = 1;
+            else if(arg == "--force-sign" || arg == "--forcesign")
+                overrides.signMode = 2;
+            else if(arg == "--no-sign")
+                overrides.signMode = 0;
             else if(arg == "--build-dir" && i + 1 < argc)
                 overrides.buildDir = argv[++i];
             else if(arg == "--deps-dir" && i + 1 < argc)
@@ -6383,6 +6483,7 @@ int PackageManager::run(int argc, char** argv)
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
                           << " [--task-print-to-stdout-log] [--asan]"
+                          << " [--sign|--force-sign|--no-sign]"
                           << " [--option KEY=VALUE]\n";
                 return 1;
             }
