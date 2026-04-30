@@ -49,6 +49,7 @@ ${MLANG}           ${EXECDIR}/build/mlang
 ...    examples/argparser_demo.mla
 ...    examples/associated_functions_demo/main.mla
 ...    examples/generic_trait_bounds_demo/main.mla
+...    examples/dyn_trait_demo/main.mla
 ...    examples/method_visibility_demo/main.mla
 ...    examples/module_path_generic_static_demo/main.mla
 ...    examples/trait_advanced_demo/main.mla

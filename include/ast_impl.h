@@ -15,6 +15,7 @@ ASTNode* create_function_def_impl(ASTNode* type, char* name, ASTNode* params, AS
 ASTNode* create_type_node_impl(TypeNode::TypeKind type);
 ASTNode* create_pointer_type_impl(ASTNode* element_type);
 ASTNode* create_reference_type_impl(ASTNode* element_type, int is_mutable);
+ASTNode* create_trait_object_type_impl(char* trait_name);
 ASTNode* create_parameter_list_impl(ASTNode* param);
 ASTNode* create_empty_parameter_list_impl();
 ASTNode* set_parameter_list_vararg_impl(ASTNode* list);

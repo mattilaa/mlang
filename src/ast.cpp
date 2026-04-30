@@ -1154,6 +1154,11 @@ ASTNode* create_reference_type_impl(ASTNode* element_type, int is_mutable)
         static_cast<TypeNode*>(element_type), is_mutable != 0);
 }
 
+ASTNode* create_trait_object_type_impl(char* trait_name)
+{
+    return new TraitObjectTypeNode(std::string(trait_name));
+}
+
 ASTNode* create_closure_impl(ASTNode* body)
 {
     return new ClosureNode(nullptr, static_cast<StatementListNode*>(body));
@@ -1178,6 +1183,11 @@ std::string ReferenceTypeNode::toString() const
 {
     std::string m = isMutable ? "mut " : "";
     return "&" + m + (elementType ? elementType->toString() : "void");
+}
+
+std::string TraitObjectTypeNode::toString() const
+{
+    return "dyn " + traitName;
 }
 
 ASTNode* create_list_literal_impl(ASTNode* elements)

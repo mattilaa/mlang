@@ -239,6 +239,8 @@ private:
     std::vector<FunctionDefNode*> deferredModuleFunctionDefs;
     // Maps struct name -> (isPublic, sourceModule)
     std::map<std::string, std::pair<bool, std::string>> structVisibility;
+    // Trait-object lvalues tracked by variable name -> trait name.
+    std::map<std::string, std::string> traitObjectVariableTypes;
     // Current module being compiled (empty string for main module)
     std::string currentModule;
     ModuleLoader* moduleLoader = nullptr;
@@ -564,6 +566,7 @@ private:
     std::string getStructTypeName(ExpressionNode* expr) const;
     std::string getEnumTypeName(ExpressionNode* expr, int line);
     std::string resolveVisibleEnumName(const std::string& enumName) const;
+    std::string resolveVisibleStructName(const std::string& structName) const;
     bool structHasFieldNamed(const std::string& structTypeName,
                              const std::string& fieldName) const;
     std::string expressionTypeNameForLog(ExpressionNode* expr, int line);
@@ -594,6 +597,12 @@ private:
                                               StructMethodNode* method);
     llvm::Function* generateMethodDefinition(const std::string& structName,
                                              StructMethodNode* method);
+    llvm::Type* getTraitObjectType(const std::string& traitName);
+    llvm::Type* getTraitVTableType(const std::string& traitName);
+    llvm::GlobalVariable* ensureTraitVTable(const std::string& concreteTypeName,
+                                            const std::string& traitName);
+    llvm::Value* buildTraitObjectValue(ExpressionNode* expr,
+                                       const std::string& traitName, int line);
     bool generateMutexPropertyMethodBody(const std::string& structName,
                                          StructMethodNode* method,
                                          llvm::Function* function);
@@ -618,6 +627,9 @@ private:
     std::map<std::string, TraitDefNode*> traitDefinitions;
     // Track trait impls per concrete struct type name.
     std::map<std::string, std::set<std::string>> structImplementedTraits;
+    std::map<std::string, llvm::StructType*> traitObjectTypes;
+    std::map<std::string, llvm::StructType*> traitVTableTypes;
+    std::map<std::string, llvm::GlobalVariable*> traitVTableGlobals;
 
     // List/Map iteration helpers
     void generateForListLiteralIteration(ForNode* node,

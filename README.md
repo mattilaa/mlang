@@ -1106,6 +1106,7 @@ follows a Doxygen-style structure: `@brief`, `@details`, `@code` (example),
 | Trait `impl` method signature validation | `643a182` | `tests/std_compiler_tests.mla` |
 | Generic trait bounds (`T: Trait`) | `24732cf` | `examples/generic_trait_bounds_demo/` |
 | Qualified generic static method calls | `7a423d9` | `examples/module_path_generic_static_demo/` |
+| Trait objects (`dyn Trait`) | `d80f52c` | `examples/dyn_trait_demo/` |
 | Default methods on traits | (this branch) | `examples/trait_advanced_demo/` |
 | Super-traits (`trait Foo: Bar`) | (this branch) | `examples/trait_advanced_demo/` |
 | Multiple trait bounds (`T: A + B`) | (this branch) | `examples/trait_advanced_demo/` |
@@ -1335,6 +1336,53 @@ fn main() -> i32 {
 
 > **@see** `examples/generic_trait_bounds_demo/`,
 > `tests/std_compiler_tests.mla` (generic trait-bound diagnostics).
+
+---
+
+### Trait Objects (`dyn Trait`)
+
+> **@brief** Pass values behind an explicit trait-object type so a function
+> can accept any concrete implementation of that trait.
+
+> **@details** A parameter typed `dyn Summary` stores the concrete value plus
+> the trait vtable. Inside the callee, trait-method calls like
+> `item.score()` dispatch through that vtable. This is intentionally narrower
+> than a full object system: it currently covers function parameters and
+> method calls on those parameters, but not owned trait-object fields or
+> trait-object returns yet.
+
+> **@code**
+```mla
+trait Summary {
+    fn score(self: Self) -> i32;
+}
+
+pub struct Post {
+    var score_value: i32;
+};
+
+impl Summary for Post {
+    fn score(self: Post) -> i32 {
+        return self.score_value;
+    }
+}
+
+pub fn show_score(item: dyn Summary) -> i32 {
+    return item.score();
+}
+
+fn main() -> i32 {
+    // Callers pass a value of trait-object type; the callee dispatches
+    // through the vtable.
+    return 0;
+}
+```
+
+> **@note** Use `dyn Trait` when you want runtime dispatch at the function
+> boundary. Use `T: Trait` when the type should stay generic and monomorphized.
+
+> **@see** `examples/dyn_trait_demo/`,
+> `tests/std_compiler_tests.mla` (trait object dispatch test).
 
 ---
 

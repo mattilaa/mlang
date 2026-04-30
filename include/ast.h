@@ -60,6 +60,7 @@ public:
         TYPE_MAP,
         TYPE_TUPLE,
         TYPE_PTR,
+        TYPE_TRAIT_OBJECT,
         TYPE_STRUCT,
         TYPE_I8,
         TYPE_I16,
@@ -86,6 +87,17 @@ public:
     TypeNode* elementType;
     PointerTypeNode(TypeNode* elemType)
         : TypeNode(TYPE_PTR), elementType(elemType)
+    {
+    }
+    std::string toString() const override;
+};
+
+class TraitObjectTypeNode : public TypeNode
+{
+public:
+    std::string traitName;
+    TraitObjectTypeNode(const std::string& name)
+        : TypeNode(TYPE_TRAIT_OBJECT), traitName(name)
     {
     }
     std::string toString() const override;
@@ -1438,6 +1450,7 @@ ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
 ASTNode* create_type_node(TypeNode::TypeKind type);
 ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
+ASTNode* create_trait_object_type(char* trait_name);
 ASTNode* create_parameter_list(ASTNode* param);
 ASTNode* create_empty_parameter_list();
 ASTNode* set_parameter_list_vararg(ASTNode* list);

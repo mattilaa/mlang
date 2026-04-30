@@ -1431,6 +1431,7 @@ ASTNode* mla_ast_enum_variant_list_add(ASTNode* list, ASTNode* variant);
 ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* mla_ast_pointer_type(ASTNode* element_type);
 ASTNode* mla_ast_reference_type(ASTNode* element_type, int is_mutable);
+ASTNode* create_trait_object_type(char* trait_name);
 ASTNode* create_closure(ASTNode* body);
 ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
 ASTNode* mla_ast_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
@@ -1539,7 +1540,7 @@ enum UpdatePosition
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
-%token PUB IMPL TRAIT
+%token PUB IMPL TRAIT DYN
 %token EXTERN
 %token STATIC
 %token ASM VOLATILE SIZEOF
@@ -2175,6 +2176,7 @@ type
     | PTR GENERIC_LT type GT { $$ = mla_ast_pointer_type($3); }
     | AMP type               { $$ = mla_ast_reference_type($2, 0); }
     | AMP_MUT type           { $$ = mla_ast_reference_type($2, 1); }
+    | DYN module_path        { $$ = create_trait_object_type($2); }
     | LBRACKET type SEMICOLON expression RBRACKET
         { $$ = mla_ast_generic_list_type($2); /* [T; N] is list<T>, N ignored */ }
     | I8     { $$ = mla_ast_type_node(TypeNode::TYPE_I8); }

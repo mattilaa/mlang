@@ -1,0 +1,22 @@
+/// \file summary.mla
+/// @ingroup examples
+/// @brief Trait object example using `dyn Summary` in a function parameter.
+///
+trait Summary {
+    fn score(self: Self) -> i32;
+}
+
+pub struct Post {
+    var score_value: i32;
+};
+
+impl Summary for Post {
+    fn score(self: Post) -> i32 {
+        return self.score_value;
+    }
+}
+
+pub fn show_score(item: dyn Summary) -> i32 {
+    // `dyn Summary` accepts any concrete value that implements `Summary`.
+    return item.score();
+}

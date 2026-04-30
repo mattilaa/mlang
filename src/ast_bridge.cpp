@@ -58,6 +58,11 @@ ASTNode* create_reference_type(ASTNode* element_type, int is_mutable)
     return create_reference_type_impl(element_type, is_mutable);
 }
 
+ASTNode* create_trait_object_type(char* trait_name)
+{
+    return create_trait_object_type_impl(trait_name);
+}
+
 ASTNode* create_parameter_list(ASTNode* param)
 {
     return create_parameter_list_impl(param);
