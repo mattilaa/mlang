@@ -7177,6 +7177,28 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     std::string savedModule = currentModule;
     currentModule = node->sourceModule;
     auto savedIP = builder.saveIP();
+    auto savedNamedValues = namedValues;
+    auto savedConstantVariables = constantVariables;
+    auto savedMovedVariables = movedVariables;
+    auto savedPointerBorrowTarget = pointerBorrowTarget;
+    auto savedActiveBorrowers = activeBorrowers;
+    auto savedActiveMutBorrower = activeMutBorrower;
+    auto savedVariableScopeDepth = variableScopeDepth;
+    auto savedVariableTypes = variableTypes;
+    auto savedStructVariableTypes = structVariableTypes;
+    auto savedTraitObjectVariableTypes = traitObjectVariableTypes;
+    auto savedEnumVariableTypes = enumVariableTypes;
+    auto savedListElementTypes = listElementTypes;
+    auto savedMapKeyValueTypes = mapKeyValueTypes;
+    auto savedTupleElementTypes = tupleElementTypes;
+    auto savedPointerElementTypes = pointerElementTypes;
+    auto savedCleanupScopes = cleanupScopes;
+    auto savedPointerBorrowScopes = pointerBorrowScopes;
+    auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
+    auto savedClosureVariables = closureVariables;
+    auto savedActiveInlineClosures = activeInlineClosures;
+    auto savedCurrentFunctionExceptionFrame = currentFunctionExceptionFrame;
+    int savedUnsafeDepth = unsafeDepth;
 
     // Create a new basic block for the function
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
@@ -7433,9 +7455,29 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     emitAllActiveCleanups();
     builder.CreateCall(exceptionsRethrowFunc, {});
     builder.CreateUnreachable();
-    currentFunctionExceptionFrame = nullptr;
 
-    // Restore the previous module context
+    namedValues = std::move(savedNamedValues);
+    constantVariables = std::move(savedConstantVariables);
+    movedVariables = std::move(savedMovedVariables);
+    pointerBorrowTarget = std::move(savedPointerBorrowTarget);
+    activeBorrowers = std::move(savedActiveBorrowers);
+    activeMutBorrower = std::move(savedActiveMutBorrower);
+    variableScopeDepth = std::move(savedVariableScopeDepth);
+    variableTypes = std::move(savedVariableTypes);
+    structVariableTypes = std::move(savedStructVariableTypes);
+    traitObjectVariableTypes = std::move(savedTraitObjectVariableTypes);
+    enumVariableTypes = std::move(savedEnumVariableTypes);
+    listElementTypes = std::move(savedListElementTypes);
+    mapKeyValueTypes = std::move(savedMapKeyValueTypes);
+    tupleElementTypes = std::move(savedTupleElementTypes);
+    pointerElementTypes = std::move(savedPointerElementTypes);
+    cleanupScopes = std::move(savedCleanupScopes);
+    pointerBorrowScopes = std::move(savedPointerBorrowScopes);
+    variableScopeDepthScopes = std::move(savedVariableScopeDepthScopes);
+    closureVariables = std::move(savedClosureVariables);
+    activeInlineClosures = std::move(savedActiveInlineClosures);
+    currentFunctionExceptionFrame = savedCurrentFunctionExceptionFrame;
+    unsafeDepth = savedUnsafeDepth;
     currentModule = savedModule;
     builder.restoreIP(savedIP);
 
@@ -14019,6 +14061,53 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         return;
     }
 
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(node->type))
+    {
+        llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
+        if(!traitObjType)
+        {
+            reportError(node->line,
+                        "unknown trait object type: " + traitObj->traitName);
+            return;
+        }
+
+        llvm::AllocaInst* alloca = createEntryBlockAlloca(
+            builder.GetInsertBlock()->getParent(), traitObjType, node->name);
+
+        llvm::Value* storedValue = nullptr;
+        if(node->expression)
+        {
+            auto* exprType = dynamic_cast<TraitObjectTypeNode*>(
+                getLValueType(node->expression, node->line));
+            if(exprType && exprType->traitName == traitObj->traitName)
+                storedValue = generateExpression(node->expression);
+            else
+                storedValue = buildTraitObjectValue(node->expression,
+                                                    traitObj->traitName,
+                                                    node->line);
+            if(!storedValue)
+                return;
+        }
+        else
+        {
+            storedValue = llvm::Constant::getNullValue(traitObjType);
+        }
+
+        storedValue = applyStructCopySemantics(storedValue);
+        builder.CreateStore(storedValue, alloca);
+        if(node->expression)
+            consumeMoveFromExpression(node->expression, node->line,
+                                      "initializing '" + node->name + "'");
+        clearMovedVariable(node->name);
+        clearPointerBorrow(node->name);
+        namedValues[node->name] = alloca;
+        recordVariableScopeDepth(node->name);
+        variableTypes[node->name] = TypeNode::TYPE_TRAIT_OBJECT;
+        traitObjectVariableTypes[node->name] = traitObj->traitName;
+        constantVariables.insert(node->name);
+        return;
+    }
+
     // For list/array-fill initializers with a declared element type, pass that
     // type to the generator so integer literals (always i64) are coerced to the
     // declared size (e.g., i32), preventing stride mismatches during iteration.
@@ -14740,6 +14829,50 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     clearPointerBorrow(node->name);
     // `var` is always mutable, including when shadowing a previous `let`.
     constantVariables.erase(node->name);
+
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(node->type))
+    {
+        llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
+        if(!traitObjType)
+        {
+            reportError(node->line,
+                        "unknown trait object type: " + traitObj->traitName);
+            return;
+        }
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(traitObjType, nullptr, node->name);
+        llvm::Value* storedValue = nullptr;
+        if(node->initExpr)
+        {
+            auto* exprType = dynamic_cast<TraitObjectTypeNode*>(
+                getLValueType(node->initExpr, node->line));
+            if(exprType && exprType->traitName == traitObj->traitName)
+                storedValue = generateExpression(node->initExpr);
+            else
+                storedValue = buildTraitObjectValue(node->initExpr,
+                                                    traitObj->traitName,
+                                                    node->line);
+            if(!storedValue)
+                return;
+        }
+        else
+        {
+            storedValue = llvm::Constant::getNullValue(traitObjType);
+        }
+        storedValue = applyStructCopySemantics(storedValue);
+        builder.CreateStore(storedValue, alloca);
+        if(node->initExpr)
+            consumeMoveFromExpression(node->initExpr, node->line,
+                                      "initializing '" + node->name + "'");
+        clearMovedVariable(node->name);
+        namedValues[node->name] = alloca;
+        recordVariableScopeDepth(node->name);
+        variableTypes[node->name] = TypeNode::TYPE_TRAIT_OBJECT;
+        traitObjectVariableTypes[node->name] = traitObj->traitName;
+        return;
+    }
+
     if(node->initExpr)
     {
         consumeMoveFromExpression(node->initExpr, node->line,
@@ -19472,9 +19605,55 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     currentFunctionExceptionFrame = nullptr;
     int savedUnsafeDepth = unsafeDepth;
     unsafeDepth = 0;
+    auto savedNamedValues = namedValues;
+    auto savedConstantVariables = constantVariables;
+    auto savedMovedVariables = movedVariables;
+    auto savedPointerBorrowTarget = pointerBorrowTarget;
+    auto savedActiveBorrowers = activeBorrowers;
+    auto savedActiveMutBorrower = activeMutBorrower;
+    auto savedVariableScopeDepth = variableScopeDepth;
+    auto savedVariableTypes = variableTypes;
+    auto savedStructVariableTypes = structVariableTypes;
     auto savedClosureVariables = closureVariables;
     auto savedActiveInlineClosures = activeInlineClosures;
     auto savedTraitObjectVariableTypes = traitObjectVariableTypes;
+    auto savedEnumVariableTypes = enumVariableTypes;
+    auto savedListElementTypes = listElementTypes;
+    auto savedMapKeyValueTypes = mapKeyValueTypes;
+    auto savedTupleElementTypes = tupleElementTypes;
+    auto savedPointerElementTypes = pointerElementTypes;
+    auto savedCleanupScopes = cleanupScopes;
+    auto savedPointerBorrowScopes = pointerBorrowScopes;
+    auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
+    auto savedTypeParamBindings = activeTypeParamBindings;
+    auto restoreMethodCodegenState = [&]()
+    {
+        activeTypeParamBindings = savedTypeParamBindings;
+        currentModule = savedModule;
+        builder.restoreIP(savedIP);
+        currentFunctionExceptionFrame = savedExceptionFrame;
+        unsafeDepth = savedUnsafeDepth;
+        namedValues = savedNamedValues;
+        constantVariables = savedConstantVariables;
+        movedVariables = savedMovedVariables;
+        pointerBorrowTarget = savedPointerBorrowTarget;
+        activeBorrowers = savedActiveBorrowers;
+        activeMutBorrower = savedActiveMutBorrower;
+        variableScopeDepth = savedVariableScopeDepth;
+        variableTypes = savedVariableTypes;
+        structVariableTypes = savedStructVariableTypes;
+        traitObjectVariableTypes = savedTraitObjectVariableTypes;
+        enumVariableTypes = savedEnumVariableTypes;
+        listElementTypes = savedListElementTypes;
+        mapKeyValueTypes = savedMapKeyValueTypes;
+        tupleElementTypes = savedTupleElementTypes;
+        pointerElementTypes = savedPointerElementTypes;
+        cleanupScopes = savedCleanupScopes;
+        pointerBorrowScopes = savedPointerBorrowScopes;
+        variableScopeDepthScopes = savedVariableScopeDepthScopes;
+        closureVariables = savedClosureVariables;
+        activeInlineClosures = savedActiveInlineClosures;
+    };
 
     // Create entry block
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
@@ -19492,12 +19671,15 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     structVariableTypes.clear();
     traitObjectVariableTypes.clear();
     enumVariableTypes.clear();
+    listElementTypes.clear();
+    mapKeyValueTypes.clear();
+    tupleElementTypes.clear();
+    pointerElementTypes.clear();
     closureVariables.clear();
     activeInlineClosures.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
-    auto savedTypeParamBindings = activeTypeParamBindings;
     activeTypeParamBindings.clear();
     auto genericNameIt = mangledToGenericName.find(structName);
     if(genericNameIt != mangledToGenericName.end())
@@ -19639,13 +19821,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     {
         bool ok =
             generateMutexPropertyMethodBody(structName, method, function);
-        activeTypeParamBindings = savedTypeParamBindings;
-        currentModule = savedModule;
-        builder.restoreIP(savedIP);
-        currentFunctionExceptionFrame = savedExceptionFrame;
-        unsafeDepth = savedUnsafeDepth;
-        closureVariables = savedClosureVariables;
-        activeInlineClosures = savedActiveInlineClosures;
+        restoreMethodCodegenState();
         return ok ? function : nullptr;
     }
 
@@ -19653,13 +19829,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     {
         bool ok =
             generateAtomicPropertyMethodBody(structName, method, function);
-        activeTypeParamBindings = savedTypeParamBindings;
-        currentModule = savedModule;
-        builder.restoreIP(savedIP);
-        currentFunctionExceptionFrame = savedExceptionFrame;
-        unsafeDepth = savedUnsafeDepth;
-        closureVariables = savedClosureVariables;
-        activeInlineClosures = savedActiveInlineClosures;
+        restoreMethodCodegenState();
         return ok ? function : nullptr;
     }
 
@@ -19688,14 +19858,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     }
 
     llvm::verifyFunction(*function);
-    activeTypeParamBindings = savedTypeParamBindings;
-    currentModule = savedModule;
-    builder.restoreIP(savedIP);
-    currentFunctionExceptionFrame = savedExceptionFrame;
-    unsafeDepth = savedUnsafeDepth;
-    closureVariables = savedClosureVariables;
-    activeInlineClosures = savedActiveInlineClosures;
-    traitObjectVariableTypes = savedTraitObjectVariableTypes;
+    restoreMethodCodegenState();
     return function;
 }
 

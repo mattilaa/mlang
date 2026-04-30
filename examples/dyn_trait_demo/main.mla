@@ -18,6 +18,7 @@ pub fn show_score(item: dyn Summary) -> i32 {
 
 fn main() -> i32 {
     let post: Post = Post { score_value: 7 };
-    show_score(post);
+    let item: dyn Summary = post;
+    show_score(item);
     return 0;
 }
