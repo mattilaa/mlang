@@ -1200,7 +1200,7 @@ fn test_compiler_dyn_trait_object_method_call_allowed() -> i32 {
     let main_path: str8 = "/tmp/mlang_dyn_trait_object_call_ok/main.mla";
     let bin_path: str8 = "/tmp/mlang_dyn_trait_object_call_ok/dyn_trait_object_bin";
     let lib_src: str8 = "trait Summary {\n  fn score(self: Self) -> i32;\n}\npub struct Post { var score_value: i32; };\nimpl Summary for Post {\n  fn score(self: Post) -> i32 {\n    return self.score_value;\n  }\n}\npub fn wrap(item: dyn Summary) -> dyn Summary {\n  return item;\n}\npub fn show_score(item: dyn Summary) -> i32 {\n  return item.score();\n}\n";
-    let main_src: str8 = "mod lib::summary;\nfn main() -> i32 {\n  return 0;\n}\n";
+    let main_src: str8 = "mod lib::summary;\nuse lib::summary::Post;\nuse lib::summary::show_score;\nfn main() -> i32 {\n  let post: Post = Post { score_value: 7 };\n  show_score(post);\n  return 0;\n}\n";
     let wr1: Result<i32, str8> = write_all_text(lib_path, lib_src);
     if wr1.is_err(): { return 1; }
     let wr2: Result<i32, str8> = write_all_text(main_path, main_src);

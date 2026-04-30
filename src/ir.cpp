@@ -7176,6 +7176,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     // Track which module this function is from (for visibility checks)
     std::string savedModule = currentModule;
     currentModule = node->sourceModule;
+    auto savedIP = builder.saveIP();
 
     // Create a new basic block for the function
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
@@ -7436,6 +7437,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
 
     // Restore the previous module context
     currentModule = savedModule;
+    builder.restoreIP(savedIP);
 
     // Verify the function
     llvm::verifyFunction(*function);
@@ -12663,7 +12665,7 @@ llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
 
     llvm::StructType* objType =
         llvm::cast<llvm::StructType>(getTraitObjectType(traitName));
-    llvm::Value* obj = llvm::UndefValue::get(objType);
+    llvm::Value* obj = llvm::Constant::getNullValue(objType);
     obj = builder.CreateInsertValue(obj, dataPtrI8, 0, "trait.obj.data");
     obj = builder.CreateInsertValue(obj, vtablePtr, 1, "trait.obj.vtable");
     return obj;
@@ -17948,29 +17950,29 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
         int totalCost = 0;
         bool ok = true;
-        for(size_t i = 0; i < expectedArgs; ++i)
+    for(size_t i = 0; i < expectedArgs; ++i)
+    {
+        if(info.node && info.node->parameters &&
+           i < info.node->parameters->parameters.size())
         {
-            if(info.node && info.node->parameters &&
-               i < info.node->parameters->parameters.size())
+            TypeNode* expectedSemantic =
+                info.node->parameters->parameters[i]->type;
+            if(auto* refType =
+                   dynamic_cast<ReferenceTypeNode*>(expectedSemantic))
             {
-                TypeNode* expectedSemantic =
-                    info.node->parameters->parameters[i]->type;
-                if(auto* refType =
-                       dynamic_cast<ReferenceTypeNode*>(expectedSemantic))
-                {
-                    expectedSemantic = refType->elementType;
-                }
+                expectedSemantic = refType->elementType;
+            }
 
-                TypeNode* actualSemantic =
-                    semanticArgumentType(node->arguments[i]);
-                if(auto* traitObj =
-                       dynamic_cast<TraitObjectTypeNode*>(expectedSemantic))
+            TypeNode* actualSemantic =
+                semanticArgumentType(node->arguments[i]);
+            if(auto* traitObj =
+                   dynamic_cast<TraitObjectTypeNode*>(expectedSemantic))
+            {
+                if(auto* actualTraitObj =
+                       dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
                 {
-                    if(auto* actualTraitObj =
-                           dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
-                    {
-                        if(actualTraitObj->traitName == traitObj->traitName)
-                            continue;
+                    if(actualTraitObj->traitName == traitObj->traitName)
+                        continue;
                     }
                     if(!concreteTypeImplementsTrait(actualSemantic,
                                                     traitObj->traitName))
@@ -19465,6 +19467,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     std::string savedModule = currentModule;
     if(!method->sourceModule.empty())
         currentModule = method->sourceModule;
+    auto savedIP = builder.saveIP();
     llvm::Value* savedExceptionFrame = currentFunctionExceptionFrame;
     currentFunctionExceptionFrame = nullptr;
     int savedUnsafeDepth = unsafeDepth;
@@ -19638,6 +19641,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
             generateMutexPropertyMethodBody(structName, method, function);
         activeTypeParamBindings = savedTypeParamBindings;
         currentModule = savedModule;
+        builder.restoreIP(savedIP);
         currentFunctionExceptionFrame = savedExceptionFrame;
         unsafeDepth = savedUnsafeDepth;
         closureVariables = savedClosureVariables;
@@ -19651,6 +19655,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
             generateAtomicPropertyMethodBody(structName, method, function);
         activeTypeParamBindings = savedTypeParamBindings;
         currentModule = savedModule;
+        builder.restoreIP(savedIP);
         currentFunctionExceptionFrame = savedExceptionFrame;
         unsafeDepth = savedUnsafeDepth;
         closureVariables = savedClosureVariables;
@@ -19685,6 +19690,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     llvm::verifyFunction(*function);
     activeTypeParamBindings = savedTypeParamBindings;
     currentModule = savedModule;
+    builder.restoreIP(savedIP);
     currentFunctionExceptionFrame = savedExceptionFrame;
     unsafeDepth = savedUnsafeDepth;
     closureVariables = savedClosureVariables;
@@ -24855,6 +24861,15 @@ bool Backend::emitObjectFile(const std::string& filename)
         return false;
     }
 
+    std::string verifyError;
+    llvm::raw_string_ostream verifyStream(verifyError);
+    if(llvm::verifyModule(*module, &verifyStream))
+    {
+        std::cerr << "LLVM module verification failed:\n"
+                  << verifyStream.str();
+        return false;
+    }
+
     ensure_artifact_parent_directory(filename);
     std::error_code ec;
     llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
@@ -25009,6 +25024,18 @@ bool Backend::compileToExecutable(const std::string& outputFile,
 
 void Backend::optimize(const std::string& levelName)
 {
+    for(llvm::StructType* ty : module->getIdentifiedStructTypes())
+    {
+        if(!ty)
+            continue;
+        std::string name = ty->getName().str();
+        if(name.rfind("trait.obj.", 0) == 0 ||
+           name.rfind("trait.vtable.", 0) == 0)
+        {
+            return;
+        }
+    }
+
     std::string level = levelName;
     if(level.empty())
         level = std::string(kOptLevelAliases[3].second);
