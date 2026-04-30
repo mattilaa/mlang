@@ -19,6 +19,7 @@ MLang - Programming Language
 - [Multithreaded TCP Demo (Local)](#multithreaded-tcp-demo-local)
 - [Advanced Protocol Stack Demo (Local)](#advanced-protocol-stack-demo-local)
 - [Examples](#examples)
+- [Object-Oriented Language Features](#object-oriented-language-features)
 - [Package Manager (C++)](#package-manager-c)
 - [Package Workspaces And Fetched Subprojects](#package-workspaces-and-fetched-subprojects)
 
@@ -996,6 +997,291 @@ Request low-latency JACK buffer:
 ```sh
 ./examples/fft_example/run_demo.sh --buffer=32
 ```
+
+## Object-Oriented Language Features
+This section documents the object-oriented capabilities added on the
+`feature/add_oop_features` branch (commits `bd4b339`..`7a423d9`). Each entry
+follows a Doxygen-style structure: `@brief`, `@details`, `@code` (example),
+`@note`, and `@see` (cross references).
+
+### Feature Matrix
+
+| Feature | Commit | Demo |
+|---|---|---|
+| Method visibility on `impl` blocks | `bd4b339` | `examples/method_visibility_demo/` |
+| Associated (static) function calls | `3519d6b` | `examples/associated_functions_demo/` |
+| Trait `impl` method signature validation | `643a182` | `tests/std_compiler_tests.mla` |
+| Generic trait bounds (`T: Trait`) | `24732cf` | `examples/generic_trait_bounds_demo/` |
+| Qualified generic static method calls | `7a423d9` | `examples/module_path_generic_static_demo/` |
+
+---
+
+### Method Visibility On `impl` Blocks
+
+> **@brief** Allow `pub` and private methods inside `impl` blocks, with
+> visibility checked using the **defining module** of the method (not the call
+> site).
+
+> **@details** Methods declared without `pub` are callable only from within the
+> module where the `impl` block lives; methods marked `pub fn` are callable
+> from any module that can name the receiver type. The IR layer was fixed so
+> that the visibility check uses the method's own module context, allowing a
+> private helper to be invoked by another method on the same type even when
+> that public entry point is itself called from a different module.
+
+> **@code**
+```mla
+// lib/counter.mla
+pub struct Counter {
+    var value: i32;
+};
+
+impl Counter {
+    // Private helper: callable only inside this module.
+    fn inc_private(self: Counter) -> Counter {
+        return Counter { value: self.value + 1 };
+    }
+
+    // Public wrapper: callable from other modules.
+    pub fn inc(self: Counter) -> Counter {
+        return self.inc_private();
+    }
+
+    pub fn read(self: Counter) -> i32 {
+        return self.value;
+    }
+}
+```
+
+```mla
+// main.mla
+mod lib::counter;
+use lib::counter::Counter;
+
+fn main() -> i32 {
+    let c: Counter = Counter { value: 1 };
+    let d: Counter = c.inc();          // OK: pub
+    // let e: Counter = d.inc_private(); // ERROR: private to lib::counter
+    return d.read() == 2 ? 0 : 1;
+}
+```
+
+> **@note** Public methods may freely delegate to private methods on the same
+> type. Visibility resolution does not flow through the caller's module, only
+> through the defining module of each candidate method.
+
+> **@see** `examples/method_visibility_demo/` and `src/ir.cpp` (visibility
+> module-context fix).
+
+---
+
+### Associated (Static) Function Calls
+
+> **@brief** Call a function defined inside `impl Type { ... }` directly via
+> the type name (e.g. `Counter::new(0)`), without an instance.
+
+> **@details** Associated functions are functions that do not take a `self`
+> receiver. The compiler resolves `Type::func(args)` against the `impl Type`
+> namespace and emits a normal direct call. Associated functions can be used
+> as constructors (`new`, `zero`), factory helpers (`Counter::build_value`),
+> or any utility that is logically owned by the type but does not depend on a
+> specific instance.
+
+> **@code**
+```mla
+pub struct Counter {
+    var value: i32;
+};
+
+impl Counter {
+    fn build_value(value: i32) -> Counter {
+        return Counter { value: value };
+    }
+
+    pub fn new(value: i32) -> Counter {
+        return Counter::build_value(value);    // associated call
+    }
+
+    pub fn zero() -> Counter {
+        return Counter::new(0);                // associated call
+    }
+
+    pub fn inc(self: Counter) -> Counter {
+        return Counter::new(self.value + 1);   // associated call from method
+    }
+
+    pub fn read(self: Counter) -> i32 {
+        return self.value;
+    }
+}
+
+fn main() -> i32 {
+    let start: Counter = Counter::new(10);
+    let zero:  Counter = Counter::zero();
+    let next:  Counter = start.inc();
+    return next.read() == 11 ? 0 : 1;
+}
+```
+
+> **@note** Associated functions follow the same `pub` visibility rules as
+> instance methods (see "Method Visibility On `impl` Blocks").
+
+> **@see** `examples/associated_functions_demo/`,
+> `tests/std_compiler_tests.mla` (associated-call coverage).
+
+---
+
+### Trait `impl` Method Signature Validation
+
+> **@brief** Verify at compile time that every `impl Trait for Type { ... }`
+> block fully and correctly implements the methods declared by the trait.
+
+> **@details** When the compiler lowers an `impl Trait for Type` block it now
+> looks up each declared trait method and checks:
+> 1. **Presence** — every required method must be implemented.
+> 2. **Receiver shape** — an instance method (one with a `self` receiver) in
+>    the trait must be implemented as an instance method on the type, and
+>    vice versa.
+> 3. **Return type** — the implementation's return type must match the
+>    trait's declared return type.
+>
+> A descriptive diagnostic is emitted on mismatch so the user can locate
+> the offending `impl` block quickly.
+
+> **@code** Diagnostics produced for malformed implementations:
+```text
+trait 'Summary' for struct 'Post' requires method 'summarize'
+method 'Post::summarize' does not match trait 'Summary': return type 'i32' does not match expected 'str8'
+method 'Post::summarize' does not match trait 'Summary': expected instance method
+```
+
+```mla
+trait Summary {
+    fn summarize(self: Self) -> str8;
+}
+
+pub struct Post { var id: i32; };
+
+// OK — matches signature exactly.
+impl Summary for Post {
+    fn summarize(self: Post) -> str8 {
+        return "ok";
+    }
+}
+```
+
+> **@note** Validation runs even when the trait method is never called, so
+> structurally incorrect `impl` blocks cannot ride along quietly until first
+> use.
+
+> **@see** Trait-impl test cases in `tests/std_compiler_tests.mla`
+> (`test_compiler_trait_impl_*`).
+
+---
+
+### Generic Trait Bounds (`T: Trait`)
+
+> **@brief** Constrain generic type parameters with one or more trait bounds
+> on `struct`, `impl`, and (transitively) function definitions, so generic
+> code may invoke trait methods on its parameters.
+
+> **@details** A type parameter declared as `<T: Summary>` only accepts
+> concrete types whose `impl Summary` block exists at instantiation time.
+> Inside the generic `impl<T: Summary>` body, calls of the form
+> `value.summarize()` are dispatched through the trait. Attempting to
+> instantiate the generic with a type that does not satisfy the bound is a
+> compile error.
+
+> **@code**
+```mla
+trait Summary {
+    fn summarize(self: Self) -> str8;
+}
+
+pub struct Post {
+    var id: i32;
+    var title: str8;
+};
+
+impl Summary for Post {
+    fn summarize(self: Post) -> str8 {
+        return self.title;
+    }
+}
+
+pub struct Holder<T: Summary> {
+    var value: T;
+};
+
+impl<T: Summary> Holder {
+    pub fn new(value: T) -> Holder<T> {
+        return Holder<T> { value: value };
+    }
+
+    // The bound `T: Summary` makes this trait call legal.
+    pub fn summary(self: Holder<T>) -> str8 {
+        return self.value.summarize();
+    }
+}
+
+fn main() -> i32 {
+    let post: Post = Post { id: 7, title: "trait-bound holder" };
+    let holder: Holder<Post> = Holder<Post>::new(post);
+
+    // let bad: Holder<i32> = Holder<i32>::new(1); // rejected: i32: Summary missing
+    return holder.summary() == "trait-bound holder" ? 0 : 1;
+}
+```
+
+> **@note** Bounds are written on **type parameters**, not on trait or
+> function names. The compiler accepts the same `<T: TraitName>` syntax in
+> the struct header and in the `impl<...>` header.
+
+> **@see** `examples/generic_trait_bounds_demo/`,
+> `tests/std_compiler_tests.mla` (generic trait-bound diagnostics).
+
+---
+
+### Qualified Generic Static Method Calls
+
+> **@brief** Allow fully qualified, module-prefixed associated calls on
+> generic types, including the type-argument list — for example
+> `lib::summary::Holder<Post>::new(post)`.
+
+> **@details** Resolution walks the module path (`lib::summary`), looks up
+> the generic receiver type (`Holder<Post>`), and dispatches the associated
+> function (`new`) on the resolved `impl<T: Summary> Holder` block. Both
+> short-form (`Holder<Post>::new(...)`) and module-qualified
+> (`mod::path::Holder<Post>::new(...)`) call shapes are supported, and they
+> work whether the `use` import is present or not.
+
+> **@code**
+```mla
+mod lib::summary;
+use lib::summary::Post;
+use lib::summary::Holder;
+
+fn main() -> i32 {
+    let post: Post = Post { title: "module-path generic static call" };
+
+    // Fully qualified: module path + generic type argument + associated call.
+    let holder: Holder<Post> = lib::summary::Holder<Post>::new(post);
+
+    let text: str8 = holder.summary();
+    println!("summary={}", text);
+    return text == "module-path generic static call" ? 0 : 1;
+}
+```
+
+> **@note** This composes naturally with generic trait bounds: the
+> instantiation `Holder<Post>` is checked against the `T: Summary` bound at
+> the qualified call site, just as it is for the unqualified form.
+
+> **@see** `examples/module_path_generic_static_demo/`,
+> `examples/generic_trait_bounds_demo/`,
+> `tests/std_compiler_tests.mla` (qualified-static-call coverage).
+
+---
 
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:
