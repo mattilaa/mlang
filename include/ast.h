@@ -1218,6 +1218,9 @@ public:
     std::string name;
     std::string sourceModule;
     std::vector<StructMethodNode*> methods;
+    // Required super-traits, parsed from `trait Foo: Bar + Baz { ... }`.
+    // Each implementer of `Foo` must also implement every entry here.
+    std::vector<std::string> superTraits;
 
     TraitDefNode(const std::string& n) : name(n) {}
     void addMethod(StructMethodNode* m)

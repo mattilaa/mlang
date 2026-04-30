@@ -1462,6 +1462,28 @@ static ASTNode* make_compound_assign(ASTNode* lhs, int op, ASTNode* rhs,
 }
 ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line);
 
+// Concatenate two trait-name C-strings into a fresh "lhs+rhs" buffer used by
+// the `T: A + B` bound grammar. Both inputs are expected to be heap-allocated
+// (lexer-strdup'd or returned from a previous join), and they are freed
+// here. The caller owns the returned pointer.
+static char* trait_bound_concat(const char* lhs, const char* rhs)
+{
+    if(!lhs || !*lhs)
+        return rhs ? strdup(rhs) : strdup("");
+    if(!rhs || !*rhs)
+        return strdup(lhs);
+    const size_t lhsLen = strlen(lhs);
+    const size_t rhsLen = strlen(rhs);
+    char* joined = static_cast<char*>(malloc(lhsLen + rhsLen + 2));
+    if(!joined)
+        return nullptr;
+    memcpy(joined, lhs, lhsLen);
+    joined[lhsLen] = '+';
+    memcpy(joined + lhsLen + 1, rhs, rhsLen);
+    joined[lhsLen + 1 + rhsLen] = '\0';
+    return joined;
+}
+
 static void bind_impl_self_types(ImplBlockNode* implBlock)
 {
     if(!implBlock)
@@ -1576,7 +1598,7 @@ enum UpdatePosition
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression asm_expression pipe_expression
 %type <ast> mod_declaration use_declaration
-%type <sval> module_path
+%type <sval> module_path trait_bound_chain
 %type <ast> print_statement argument_list format_argument format_argument_list assert_eq_statement assert_statement static_assert_statement
 %type <ast> global_var_statement static_var_statement
 %type <ast> map_literal map_entries map_entry index_expression
@@ -1763,6 +1785,28 @@ trait_def
             }
             $$ = trait;
         }
+    | TRAIT IDENTIFIER COLON trait_bound_chain LBRACE trait_method_decl_list RBRACE
+        {
+            ASTNode* trait = mla_ast_trait_def($2, yylineno);
+            auto* traitDef = static_cast<TraitDefNode*>(trait);
+            // Split the `+`-joined chain into individual super-trait names.
+            const char* chain = $4 ? $4 : "";
+            std::string buffer(chain);
+            size_t start = 0;
+            while(start < buffer.size()) {
+                size_t plus = buffer.find('+', start);
+                if(plus == std::string::npos) plus = buffer.size();
+                std::string single = buffer.substr(start, plus - start);
+                if(!single.empty())
+                    traitDef->superTraits.push_back(single);
+                start = plus + 1;
+            }
+            auto* methodList = static_cast<TraitDefNode*>($6);
+            if(methodList) {
+                traitDef->methods = methodList->methods;
+            }
+            $$ = trait;
+        }
     ;
 
 trait_method_decl_list
@@ -1778,14 +1822,24 @@ trait_method_decl
         { $$ = mla_ast_struct_method($7, $2, $4, NULL, 0, 0); }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
         { $$ = mla_ast_struct_method($8, $3, $5, NULL, 1, 0); }
+    | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        { $$ = mla_ast_struct_method($7, $2, $4, $9, 0, 0); }
+    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        { $$ = mla_ast_struct_method($8, $3, $5, $10, 1, 0); }
     ;
 
 type_param_list
     : IDENTIFIER { $$ = create_type_param_list($1); }
-    | IDENTIFIER COLON IDENTIFIER { $$ = create_bounded_type_param_list($1, $3); }
+    | IDENTIFIER COLON trait_bound_chain { $$ = create_bounded_type_param_list($1, $3); }
     | type_param_list COMMA IDENTIFIER { $$ = add_type_param($1, $3); }
-    | type_param_list COMMA IDENTIFIER COLON IDENTIFIER
+    | type_param_list COMMA IDENTIFIER COLON trait_bound_chain
         { $$ = add_bounded_type_param($1, $3, $5); }
+    ;
+
+trait_bound_chain
+    : IDENTIFIER { $$ = $1; }
+    | trait_bound_chain PLUS IDENTIFIER
+        { $$ = trait_bound_concat($1, $3); }
     ;
 
 impl_block

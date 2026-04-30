@@ -1,0 +1,74 @@
+// Base trait: a type can produce a textual name.
+trait Display {
+    fn show(self: Self) -> str8;
+}
+
+// Super-trait: any `Tagged` is also `Display`.
+trait Tagged: Display {
+    fn tag(self: Self) -> str8;
+
+    // Default method body — uses methods from BOTH `Self` and the super-trait
+    // bound. Implementers may override `label` if they want a different
+    // formatting strategy.
+    fn label(self: Self) -> str8 {
+        return self.tag();
+    }
+}
+
+pub struct Post {
+    var title: str8;
+    var category: str8;
+};
+
+impl Display for Post {
+    fn show(self: Post) -> str8 {
+        return self.title;
+    }
+}
+
+impl Tagged for Post {
+    fn tag(self: Post) -> str8 {
+        return self.category;
+    }
+    // Inherits the default `label` from the trait.
+}
+
+pub struct Robot {
+    var name: str8;
+    var serial: str8;
+};
+
+impl Display for Robot {
+    fn show(self: Robot) -> str8 {
+        return self.name;
+    }
+}
+
+impl Tagged for Robot {
+    fn tag(self: Robot) -> str8 {
+        return self.serial;
+    }
+    // Override the default `label` to demonstrate per-impl customisation.
+    fn label(self: Robot) -> str8 {
+        return "BEEP";
+    }
+}
+
+// Generic container with a multi-bound type parameter.
+pub struct Holder<T: Display + Tagged> {
+    var value: T;
+};
+
+impl<T: Display + Tagged> Holder {
+    pub fn new(value: T) -> Holder<T> {
+        return Holder<T> { value: value };
+    }
+
+    pub fn show(self: Holder<T>) -> str8 {
+        return self.value.show();
+    }
+
+    pub fn label(self: Holder<T>) -> str8 {
+        return self.value.label();
+    }
+}

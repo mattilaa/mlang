@@ -51,6 +51,7 @@ ${MLANG}           ${EXECDIR}/build/mlang
 ...    examples/generic_trait_bounds_demo/main.mla
 ...    examples/method_visibility_demo/main.mla
 ...    examples/module_path_generic_static_demo/main.mla
+...    examples/trait_advanced_demo/main.mla
 ...    examples/type_alias_demo.mla
 ...    examples/lambda_fold_patterns.mla
 ...    examples/lambda_fold_advanced.mla

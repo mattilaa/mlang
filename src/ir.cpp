@@ -5781,6 +5781,53 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
             if(!implMethod)
             {
+                // Trait method has a default body — synthesize a method on
+                // the impl that delegates to it. We deep-copy the parameter
+                // list so we can rebind `self: Self` to the concrete type
+                // without mutating the trait definition. The body itself is
+                // shared (read-only AST during codegen).
+                if(traitMethod->body)
+                {
+                    auto* newParams =
+                        traitMethod->parameters ? new ParameterListNode() : nullptr;
+                    if(newParams && traitMethod->parameters)
+                    {
+                        for(auto* p : traitMethod->parameters->parameters)
+                        {
+                            if(!p)
+                            {
+                                newParams->parameters.push_back(nullptr);
+                                continue;
+                            }
+                            TypeNode* paramType = p->type;
+                            if(p->name == "self")
+                            {
+                                if(auto* selfRef =
+                                       dynamic_cast<StructTypeRefNode*>(p->type))
+                                {
+                                    if(selfRef->structName == "Self")
+                                        paramType = new StructTypeRefNode(
+                                            impl->structName);
+                                }
+                            }
+                            auto* cloned = new ParameterNode(paramType, p->name);
+                            cloned->line = p->line;
+                            newParams->parameters.push_back(cloned);
+                        }
+                    }
+                    auto* defaulted = new StructMethodNode(
+                        traitMethod->returnType, traitMethod->name, newParams,
+                        traitMethod->body, traitMethod->isPublic,
+                        traitMethod->isStatic);
+                    // The defaulted method should resolve under the trait's
+                    // module (same module-context rules as a normal trait
+                    // method) so visibility behaves predictably.
+                    defaulted->sourceModule = traitDef->sourceModule;
+                    defaulted->line = traitMethod->line;
+                    impl->methods.push_back(defaulted);
+                    continue;
+                }
+
                 reportError(
                     impl->line,
                     "trait '" + impl->traitName + "' for struct '" +
@@ -5869,14 +5916,32 @@ void CodeGenerator::generateCode(ProgramNode* program)
                         type_name_for_error(traitMethod->returnType) + "'");
             }
         }
+
+        // Super-trait check: `trait Foo: Bar` requires every implementer of
+        // Foo to also implement Bar. Generic impls (`impl<T> Foo for X`) are
+        // skipped here because their concrete type isn't fixed yet.
+        if(!traitDef->superTraits.empty() && impl->typeParams.empty())
+        {
+            auto& concreteImpls = structImplementedTraits[impl->structName];
+            for(const auto& superTrait : traitDef->superTraits)
+            {
+                if(superTrait.empty())
+                    continue;
+                if(concreteImpls.find(superTrait) == concreteImpls.end())
+                {
+                    reportError(
+                        impl->line,
+                        "trait '" + impl->traitName + "' for struct '" +
+                            impl->structName +
+                            "' requires struct to also implement super-trait '" +
+                            superTrait + "'");
+                }
+            }
+        }
     };
 
-    if(program->implList)
-    {
-        for(auto* impl : program->implList->impls)
-            validateTraitImplBlock(impl);
-    }
-
+    // Repopulate structImplementedTraits after the cleanup above, so the
+    // super-trait validation can see all concrete impls in the program.
     if(program->implList)
     {
         for(auto* impl : program->implList->impls)
@@ -5887,6 +5952,12 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             structImplementedTraits[impl->structName].insert(impl->traitName);
         }
+    }
+
+    if(program->implList)
+    {
+        for(auto* impl : program->implList->impls)
+            validateTraitImplBlock(impl);
     }
 
     // Collect generic impl blocks
@@ -12695,31 +12766,52 @@ bool CodeGenerator::validateTypeArgumentTraitBounds(
                 genericRef->structName, genericRef->typeArgs);
         }
 
-        bool satisfiesBound = false;
-        if(!concreteTypeName.empty())
+        // Bound list is stored as a `+`-joined string (e.g. "Foo+Bar") to
+        // keep the storage type unchanged. Split and require every trait.
+        std::vector<std::string> requiredTraits;
         {
-            auto traitIt = structImplementedTraits.find(concreteTypeName);
-            satisfiesBound =
-                traitIt != structImplementedTraits.end() &&
-                traitIt->second.find(boundIt->second) != traitIt->second.end();
+            const std::string& joined = boundIt->second;
+            size_t start = 0;
+            while(start < joined.size())
+            {
+                size_t plus = joined.find('+', start);
+                if(plus == std::string::npos)
+                    plus = joined.size();
+                std::string single = joined.substr(start, plus - start);
+                if(!single.empty())
+                    requiredTraits.push_back(single);
+                start = plus + 1;
+            }
         }
 
-        if(!satisfiesBound)
+        for(const auto& requiredTrait : requiredTraits)
         {
-            if(reportFailures)
+            bool satisfiesBound = false;
+            if(!concreteTypeName.empty())
             {
-                const int errorLine =
-                    line > 0 ? line : (typeArg->line > 0 ? typeArg->line : 0);
-                reportError(errorLine,
-                            "type argument '" +
-                                type_name_for_error(typeArg) + "' for " +
-                                ownerKind + " '" + ownerName +
-                                "' must implement trait '" +
-                                boundIt->second +
-                                "' required by type parameter '" +
-                                typeParams[i] + "'");
+                auto traitIt = structImplementedTraits.find(concreteTypeName);
+                satisfiesBound =
+                    traitIt != structImplementedTraits.end() &&
+                    traitIt->second.find(requiredTrait) != traitIt->second.end();
             }
-            return false;
+
+            if(!satisfiesBound)
+            {
+                if(reportFailures)
+                {
+                    const int errorLine =
+                        line > 0 ? line : (typeArg->line > 0 ? typeArg->line : 0);
+                    reportError(errorLine,
+                                "type argument '" +
+                                    type_name_for_error(typeArg) + "' for " +
+                                    ownerKind + " '" + ownerName +
+                                    "' must implement trait '" +
+                                    requiredTrait +
+                                    "' required by type parameter '" +
+                                    typeParams[i] + "'");
+                }
+                return false;
+            }
         }
     }
 

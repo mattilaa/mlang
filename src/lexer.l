@@ -43,7 +43,7 @@ static int is_generic_struct_literal_start()
             break;
         }
         if(!(std::isalnum(c) || c == '_' || c == ',' || c == ':' ||
-             std::isspace(c) || c == '<'))
+             std::isspace(c) || c == '<' || c == '+'))
         {
             break;
         }

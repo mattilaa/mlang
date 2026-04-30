@@ -1,0 +1,47 @@
+/// \file main.mla
+/// \brief Combined demo: default trait methods, super-traits, and multiple
+///        trait bounds.
+///
+/// Build & run:
+/// \code
+///   ./build/mlang run examples/trait_advanced_demo/main.mla
+/// \endcode
+
+mod lib::identity;
+
+use lib::identity::Post;
+use lib::identity::Robot;
+use lib::identity::Holder;
+
+fn main() -> i32 {
+    let p: Post = Post { title: "first post", category: "news" };
+    let r: Robot = Robot { name: "R2", serial: "X-99" };
+
+    // Both Post and Robot satisfy `Display + Tagged`, so the same generic
+    // Holder works for both.
+    let h_post: Holder<Post> = Holder<Post>::new(p);
+    let h_robot: Holder<Robot> = Holder<Robot>::new(r);
+
+    let post_show: str8 = h_post.show();
+    let post_label: str8 = h_post.label();   // default `label` from trait
+    let robot_show: str8 = h_robot.show();
+    let robot_label: str8 = h_robot.label(); // overridden in impl
+
+    println!("post:  show={} label={}", post_show, post_label);
+    println!("robot: show={} label={}", robot_show, robot_label);
+
+    if post_show == "first post":
+    {
+        if post_label == "news":
+        {
+            if robot_show == "R2":
+            {
+                if robot_label == "BEEP":
+                {
+                    return 0;
+                }
+            }
+        }
+    }
+    return 1;
+}

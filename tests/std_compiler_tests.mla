@@ -1307,3 +1307,73 @@ fn test_compiler_inline_asm_emit_llvm_volatile_uses_sideeffect() -> i32 {
     if contains(text, "call void asm sideeffect") == 0 { return 1; }
     return 0;
 }
+
+#[test]
+fn test_compiler_trait_default_method_inherited_when_omitted() -> i32 {
+    if mkdir_p("/tmp/mlang_trait_default_method_inherited").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_trait_default_method_inherited/main.mla";
+    let src: str8 = "trait Greeter {\n  fn name(self: Self) -> str8;\n  fn greet(self: Self) -> str8 {\n    return self.name();\n  }\n}\npub struct F { var who: str8; };\nimpl Greeter for F {\n  fn name(self: F) -> str8 { return self.who; }\n}\nfn main() -> i32 {\n  let f: F = F { who: \"x\" };\n  println!(\"{}\", f.greet());\n  return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_trait_default_method_can_be_overridden() -> i32 {
+    if mkdir_p("/tmp/mlang_trait_default_method_override").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_trait_default_method_override/main.mla";
+    let src: str8 = "trait Greeter {\n  fn name(self: Self) -> str8;\n  fn greet(self: Self) -> str8 { return self.name(); }\n}\npub struct R { var serial: str8; };\nimpl Greeter for R {\n  fn name(self: R) -> str8 { return self.serial; }\n  fn greet(self: R) -> str8 { return \"BEEP\"; }\n}\nfn main() -> i32 { return 0; }\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_super_trait_requires_super_impl() -> i32 {
+    if mkdir_p("/tmp/mlang_super_trait_missing").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_super_trait_missing/main.mla";
+    let src: str8 = "trait Display {\n  fn show(self: Self) -> str8;\n}\ntrait Loud: Display {\n  fn shout(self: Self) -> str8;\n}\npub struct W { var t: str8; };\nimpl Loud for W {\n  fn shout(self: W) -> str8 { return self.t; }\n}\nfn main() -> i32 { return 0; }\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "trait 'Loud' for struct 'W' requires struct to also implement super-trait 'Display'") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_super_trait_satisfied_when_super_impl_present() -> i32 {
+    if mkdir_p("/tmp/mlang_super_trait_ok").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_super_trait_ok/main.mla";
+    let src: str8 = "trait Display {\n  fn show(self: Self) -> str8;\n}\ntrait Loud: Display {\n  fn shout(self: Self) -> str8;\n}\npub struct W { var t: str8; };\nimpl Display for W {\n  fn show(self: W) -> str8 { return self.t; }\n}\nimpl Loud for W {\n  fn shout(self: W) -> str8 { return self.t; }\n}\nfn main() -> i32 { return 0; }\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_multiple_trait_bounds_satisfied() -> i32 {
+    if mkdir_p("/tmp/mlang_multi_bound_ok").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_multi_bound_ok/main.mla";
+    let src: str8 = "trait A { fn a(self: Self) -> i32; }\ntrait B { fn b(self: Self) -> i32; }\npub struct X { var v: i32; };\nimpl A for X { fn a(self: X) -> i32 { return self.v; } }\nimpl B for X { fn b(self: X) -> i32 { return self.v; } }\npub struct Box<T: A + B> { var inner: T; };\nimpl<T: A + B> Box {\n  pub fn new(inner: T) -> Box<T> { return Box<T> { inner: inner }; }\n}\nfn main() -> i32 {\n  let x: X = X { v: 1 };\n  let b: Box<X> = Box<X>::new(x);\n  return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_multiple_trait_bounds_partial_match_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_multi_bound_partial").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_multi_bound_partial/main.mla";
+    let src: str8 = "trait A { fn a(self: Self) -> i32; }\ntrait B { fn b(self: Self) -> i32; }\npub struct X { var v: i32; };\nimpl A for X { fn a(self: X) -> i32 { return self.v; } }\npub struct Box<T: A + B> { var inner: T; };\nimpl<T: A + B> Box {\n  pub fn new(inner: T) -> Box<T> { return Box<T> { inner: inner }; }\n}\nfn main() -> i32 {\n  let x: X = X { v: 1 };\n  let b: Box<X> = Box<X>::new(x);\n  return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "must implement trait 'B'") == 1 ? 0 : 1;
+}

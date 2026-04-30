@@ -1106,6 +1106,9 @@ follows a Doxygen-style structure: `@brief`, `@details`, `@code` (example),
 | Trait `impl` method signature validation | `643a182` | `tests/std_compiler_tests.mla` |
 | Generic trait bounds (`T: Trait`) | `24732cf` | `examples/generic_trait_bounds_demo/` |
 | Qualified generic static method calls | `7a423d9` | `examples/module_path_generic_static_demo/` |
+| Default methods on traits | (this branch) | `examples/trait_advanced_demo/` |
+| Super-traits (`trait Foo: Bar`) | (this branch) | `examples/trait_advanced_demo/` |
+| Multiple trait bounds (`T: A + B`) | (this branch) | `examples/trait_advanced_demo/` |
 
 ---
 
@@ -1373,6 +1376,161 @@ fn main() -> i32 {
 > **@see** `examples/module_path_generic_static_demo/`,
 > `examples/generic_trait_bounds_demo/`,
 > `tests/std_compiler_tests.mla` (qualified-static-call coverage).
+
+---
+
+### Default Methods On Traits
+
+> **@brief** Allow trait declarations to provide a method body. Implementing
+> types may either rely on the trait-supplied default or override it.
+
+> **@details** Trait method declarations now accept either a signature-only
+> form (`fn foo(self: Self) -> T;`) or a body form
+> (`fn foo(self: Self) -> T { ... }`). When an `impl Trait for X` block does
+> **not** define a method that the trait declares, the compiler will:
+> 1. If the trait method has a body — synthesize a method on the impl that
+>    delegates to the default body, rebinding `self: Self` to `self: X`.
+> 2. If the trait method has no body — emit the existing
+>    `'X' requires method 'foo'` diagnostic.
+>
+> Default bodies may freely call other trait methods through `self.foo()`,
+> so it is idiomatic to expose one or two required primitives and provide
+> high-level operations as defaults.
+
+> **@code**
+```mla
+trait Greeter {
+    fn name(self: Self) -> str8;
+
+    // Default body — implementers can rely on this without overriding.
+    fn greet(self: Self) -> str8 {
+        return self.name();
+    }
+}
+
+pub struct Friend { var who: str8; };
+impl Greeter for Friend {
+    fn name(self: Friend) -> str8 { return self.who; }
+    // `greet` is inherited from the trait default.
+}
+
+pub struct Robot { var serial: str8; };
+impl Greeter for Robot {
+    fn name(self: Robot) -> str8 { return self.serial; }
+    // Override the default.
+    fn greet(self: Robot) -> str8 { return "BEEP"; }
+}
+```
+
+> **@note** The default body itself is parsed once on the trait. The compiler
+> shares the body AST between every impl that doesn't override; only the
+> `self` parameter is cloned and rebound per impl, so the cost of a default
+> method is one synthesized `StructMethodNode` per impl, not a body deep-copy.
+
+> **@see** `examples/trait_advanced_demo/lib/identity.mla` (the `Tagged`
+> trait demonstrates a default method delegating to other trait methods);
+> `tests/std_compiler_tests.mla::test_compiler_trait_default_method_*`.
+
+---
+
+### Super-Traits (`trait Foo: Bar`)
+
+> **@brief** Declare that any implementer of one trait must also implement
+> another. Both single (`Foo: Bar`) and multiple (`Foo: Bar + Baz`)
+> super-trait lists are accepted.
+
+> **@details** Super-trait constraints are recorded on the `TraitDefNode`
+> at parse time. When the compiler validates `impl Foo for X`, it checks
+> that `X` also has an explicit `impl S for X` for every super-trait `S`
+> of `Foo`. Generic impls (`impl<T> Foo for X`) are skipped at this stage
+> because their concrete type isn't fixed; the equivalent check fires at
+> instantiation time through the existing trait-bound machinery.
+>
+> A missing super-impl produces a precise diagnostic:
+> ```text
+> trait 'Loud' for struct 'Word' requires struct to also implement super-trait 'Display'
+> ```
+
+> **@code**
+```mla
+trait Display {
+    fn show(self: Self) -> str8;
+}
+
+// Super-trait: every Loud is also a Display.
+trait Loud: Display {
+    fn shout(self: Self) -> str8;
+}
+
+pub struct Word { var t: str8; };
+
+impl Display for Word {
+    fn show(self: Word) -> str8 { return self.t; }
+}
+
+// OK — Display impl is present.
+impl Loud for Word {
+    fn shout(self: Word) -> str8 { return self.t; }
+}
+```
+
+> **@note** Super-traits compose: `trait C: B` and `trait B: A` together
+> require an implementer of `C` to provide `impl A`, `impl B`, and
+> `impl C` separately. The compiler does not auto-derive any of them.
+
+> **@see** `examples/trait_advanced_demo/lib/identity.mla` (the
+> `Tagged: Display` chain); `tests/std_compiler_tests.mla::test_compiler_super_trait_*`.
+
+---
+
+### Multiple Trait Bounds (`T: A + B`)
+
+> **@brief** Type parameters may be constrained by more than one trait at
+> once, using `+` to chain bounds in struct, `impl`, and type-alias headers.
+
+> **@details** The previous syntax `<T: Foo>` accepted only a single trait.
+> The grammar now accepts a `+`-joined chain (`<T: Foo + Bar + Baz>`), and
+> the bound checker requires the concrete type substituted for `T` to
+> implement **every** trait in the chain.
+>
+> Each missing bound is reported individually, so a single instantiation
+> error can surface multiple suggestions:
+> ```text
+> type argument 'Post' for struct 'Holder' must implement trait 'Tagged' required by type parameter 'T'
+> ```
+
+> **@code**
+```mla
+trait A { fn a(self: Self) -> i32; }
+trait B { fn b(self: Self) -> i32; }
+
+pub struct X { var v: i32; };
+impl A for X { fn a(self: X) -> i32 { return self.v; } }
+impl B for X { fn b(self: X) -> i32 { return self.v; } }
+
+// Bound chain accepted on struct, impl, and `use type` aliases.
+pub struct Box<T: A + B> { var inner: T; };
+impl<T: A + B> Box {
+    pub fn new(inner: T) -> Box<T> {
+        return Box<T> { inner: inner };
+    }
+}
+
+fn main() -> i32 {
+    let b: Box<X> = Box<X>::new(X { v: 1 });
+    return 0;
+}
+```
+
+> **@note** Bounds are stored internally as a `+`-joined string (e.g.
+> `"A+B"`) so the existing `map<string, string>` AST field accommodates
+> multiple bounds without a schema change. The split-and-check is done on
+> the consumer side in `validateTypeArgumentTraitBounds`. Whitespace
+> around `+` is allowed: `<T: A + B>` and `<T:A+B>` parse identically.
+
+> **@see** `examples/trait_advanced_demo/lib/identity.mla` (the
+> `Holder<T: Display + Tagged>` container);
+> `tests/std_compiler_tests.mla::test_compiler_multiple_trait_bounds_*`.
 
 ---
 
