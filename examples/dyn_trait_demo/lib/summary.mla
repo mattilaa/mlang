@@ -17,6 +17,10 @@ impl Summary for Post {
 }
 
 pub fn show_score(item: dyn Summary) -> i32 {
-    // `dyn Summary` accepts any concrete value that implements `Summary`.
     return item.score();
+}
+
+pub fn wrap(item: dyn Summary) -> dyn Summary {
+    // Trait objects can be returned and immediately used as receivers.
+    return item;
 }

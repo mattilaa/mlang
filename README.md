@@ -1348,8 +1348,8 @@ fn main() -> i32 {
 > the trait vtable. Inside the callee, trait-method calls like
 > `item.score()` dispatch through that vtable. This is intentionally narrower
 > than a full object system: it currently covers function parameters and
-> method calls on those parameters, but not owned trait-object fields or
-> trait-object returns yet.
+> direct method calls on those parameters, but not owned trait-object fields
+> or wrapper-returned trait-object expressions.
 
 > **@code**
 ```mla
@@ -1367,13 +1367,17 @@ impl Summary for Post {
     }
 }
 
+pub fn wrap(item: dyn Summary) -> dyn Summary {
+    return item;
+}
+
 pub fn show_score(item: dyn Summary) -> i32 {
     return item.score();
 }
 
 fn main() -> i32 {
-    // Callers pass a value of trait-object type; the callee dispatches
-    // through the vtable.
+    // Callers pass a value that is lowered to a trait object at the
+    // function boundary; the callee dispatches through the vtable.
     return 0;
 }
 ```
