@@ -23,7 +23,10 @@
  * parallel branches in the tree view. `mlang pkg run` also accepts
  * `--option key=value` overrides for values declared under
  * `[tool.mlang.options]`, which are exposed to task text through placeholders
- * such as `{{option.userspace}}`. Tasks may also opt into
+ * such as `{{option.userspace}}`. The main compiler CLI also exposes
+ * `mlang run docs` as a project-local Doxygen runner that searches for
+ * `docs/Doxyfile` or `Doxyfile` from the current directory upward. Tasks may
+ * also opt into
  * `inline_output = true`, which keeps command output on a single live status
  * row with task numbering and a truncated tail of the latest output line.
  * Declarative task builds are also supported via keys such as `language`,

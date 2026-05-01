@@ -167,6 +167,16 @@ commands = [
 ]
 
 [[task]]
+name = "docs"
+print = "[bootstrap] Building Doxygen documentation"
+workdir = "{{root}}/.."
+commands = [
+  "sh -c 'if ! command -v doxygen >/dev/null 2>&1; then echo doxygen not found in PATH >&2; exit 1; fi'",
+  "doxygen docs/Doxyfile",
+  "sh -c 'test -f docs/out/html/index.html && echo Docs generated: docs/out/html/index.html'"
+]
+
+[[task]]
 name = "install-mlang"
 print = "[bootstrap] Installing mlang and stdlib through CMake"
 workdir = "{{root}}/.."

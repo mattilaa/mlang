@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <unordered_set>
 #include <functional>
+#include <vector>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <llvm/TargetParser/Triple.h>
@@ -117,6 +118,8 @@ void printUsage(const char* programName)
               << " pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin\n"
               << "  Bootstrap ASan: " << programName
               << " pkg --config bootstrap/mlang.toml run build-all --asan\n"
+              << "  Documentation: " << programName
+              << " run docs [--doxyfile FILE]    # builds Doxygen docs\n"
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"
@@ -1187,6 +1190,125 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
     return std::nullopt;
 }
 
+static int decode_system_exit_code(int rc);
+
+static std::optional<std::filesystem::path> find_doxyfile_from(
+    const std::filesystem::path& startDir,
+    std::filesystem::path& projectRoot)
+{
+    namespace fs = std::filesystem;
+    fs::path dir = fs::absolute(startDir);
+    while(true)
+    {
+        const fs::path docsDoxyfile = dir / "docs" / "Doxyfile";
+        if(fs::exists(docsDoxyfile))
+        {
+            projectRoot = dir;
+            return docsDoxyfile;
+        }
+
+        const fs::path rootDoxyfile = dir / "Doxyfile";
+        if(fs::exists(rootDoxyfile))
+        {
+            projectRoot = dir;
+            return rootDoxyfile;
+        }
+
+        const fs::path parent = dir.parent_path();
+        if(parent.empty() || parent == dir)
+            break;
+        dir = parent;
+    }
+    return std::nullopt;
+}
+
+static int run_doxygen_docs(int argc, char** argv)
+{
+    namespace fs = std::filesystem;
+    fs::path projectRoot;
+    std::optional<fs::path> doxyfile;
+    bool printTasks = false;
+
+    for(int i = 3; i < argc; ++i)
+    {
+        const std::string arg = argv[i] ? argv[i] : "";
+        if(arg == "--help" || arg == "-h")
+        {
+            std::cout << "Usage: " << (argv[0] ? argv[0] : "mlang")
+                      << " run docs [--doxyfile FILE] [--tasks] [--color]\n";
+            return 0;
+        }
+        if(arg == "--tasks")
+        {
+            printTasks = true;
+            continue;
+        }
+        if(arg == "--color")
+            continue;
+        if(arg == "--doxyfile" && i + 1 < argc)
+        {
+            doxyfile = fs::absolute(argv[++i]);
+            fs::path parent = doxyfile->parent_path();
+            projectRoot = parent.filename() == "docs" ? parent.parent_path()
+                                                       : parent;
+            continue;
+        }
+        if(arg.rfind("--doxyfile=", 0) == 0)
+        {
+            doxyfile = fs::absolute(arg.substr(std::string("--doxyfile=").size()));
+            fs::path parent = doxyfile->parent_path();
+            projectRoot = parent.filename() == "docs" ? parent.parent_path()
+                                                       : parent;
+            continue;
+        }
+        std::cerr << "Unknown option for 'run docs': " << arg << "\n"
+                  << "Usage: " << (argv[0] ? argv[0] : "mlang")
+                  << " run docs [--doxyfile FILE] [--tasks] [--color]\n";
+        return 1;
+    }
+
+    if(!doxyfile.has_value())
+        doxyfile = find_doxyfile_from(fs::current_path(), projectRoot);
+    if(!doxyfile.has_value() || !fs::exists(*doxyfile))
+    {
+        std::cerr << "Doxygen config not found. Expected docs/Doxyfile or "
+                     "Doxyfile in the current directory or a parent directory.\n";
+        return 1;
+    }
+
+    fs::path relativeDoxyfile = fs::relative(*doxyfile, projectRoot);
+    if(printTasks)
+    {
+        std::cout << "Task tree for 'docs':\n"
+                  << "docs [1]\n\n"
+                  << "Execution order:\n"
+                  << "  1. docs\n";
+        return 0;
+    }
+
+    const int hasDoxygen =
+        decode_system_exit_code(std::system("command -v doxygen >/dev/null 2>&1"));
+    if(hasDoxygen != 0)
+    {
+        std::cerr << "doxygen not found in PATH\n";
+        return 1;
+    }
+
+    const std::string cmd = "cd " + shell_quote(projectRoot.string()) +
+                            " && doxygen " +
+                            shell_quote(relativeDoxyfile.generic_string());
+    const int rc = decode_system_exit_code(std::system(cmd.c_str()));
+    if(rc != 0)
+        return rc;
+
+    const fs::path htmlIndex = projectRoot / "docs" / "out" / "html" / "index.html";
+    if(fs::exists(htmlIndex))
+        std::cout << "Docs generated: "
+                  << fs::relative(htmlIndex, projectRoot).generic_string()
+                  << "\n";
+    return 0;
+}
+
 static int decode_system_exit_code(int rc)
 {
     if(rc < 0)
@@ -1429,6 +1551,11 @@ int main(int argc, char** argv)
     {
         printUsage(argv[0]);
         return 1;
+    }
+    if(argc >= 3 && std::string(argv[1]) == "run" &&
+       std::string(argv[2]) == "docs")
+    {
+        return run_doxygen_docs(argc, argv);
     }
     if(std::string(argv[1]) != "pkg")
     {

@@ -563,6 +563,7 @@ The current bootstrap task set covers:
 - `build-tooling`
 - `unit-tests`
 - `robot-tests`
+- `docs`
 - `install-mlang`
 - `install-all`
 - `install-mlangd-mla`
@@ -572,11 +573,16 @@ The current bootstrap task set covers:
 
 ## Documentation
 
-The repository ships a Doxygen-based documentation build. Run the helper from the top level to regenerate HTML under `docs/out`:
+The repository ships a Doxygen-based documentation build. Regenerate HTML
+under `docs/out` with the built-in docs runner:
 
 ```sh
-doxygen docs/Doxyfile
+mlang run docs
 ```
+
+`mlang run docs` searches from the current directory upward for `docs/Doxyfile`
+or `Doxyfile`, then runs Doxygen from that project root. Use
+`mlang run docs --doxyfile path/to/Doxyfile` to select a specific config.
 
 The generated site mirrors the Markdown sources under `docs/`, stdlib sources
 (`stdlib/std/`, `stdlib/src/`), and MLang tool sources
