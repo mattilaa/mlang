@@ -22,6 +22,7 @@ Current task entrypoints:
 - `build-tooling`
 - `unit-tests`
 - `robot-tests`
+- `docs`
 - `install-mlang`
 - `install-all`
 - `install-mlangd-mla`
@@ -41,6 +42,7 @@ Examples:
 ./bootstrap/run-bootstrap.sh run build-and-install
 ./bootstrap/run-bootstrap.sh run unit-tests
 ./bootstrap/run-bootstrap.sh run robot-tests
+./bootstrap/run-bootstrap.sh run docs
 ./bootstrap/run-bootstrap.sh run install-tooling
 ```
 

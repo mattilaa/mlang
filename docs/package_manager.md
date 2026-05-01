@@ -35,6 +35,16 @@ under `[tool.mlang.options]`. Tasks can then read those values through
 `{{option.name}}` placeholders, which is useful for switching runtime modes
 without duplicating whole manifests.
 
+Documentation builds have a built-in runner:
+
+```sh
+mlang run docs
+```
+
+It searches from the current directory upward for `docs/Doxyfile` or
+`Doxyfile`, then runs Doxygen from that project root. A specific config can be
+selected with `mlang run docs --doxyfile path/to/Doxyfile`.
+
 `mlang pkg --tests [--tasks] [--color] <manifest.toml>...` runs test-phase
 tasks from one or more dedicated test manifests. `mlang pkg [--tasks]
 [--color] <manifest.toml>...` prints runnable task entrypoints for one or more

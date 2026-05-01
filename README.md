@@ -13,12 +13,14 @@ MLang - Programming Language
 - [Build + Install](#build--install)
 - [Documentation](#documentation)
 - [AddressSanitizer Verification](#addresssanitizer-verification)
+- [Codesigning Built Binaries On macOS](#codesigning-built-binaries-on-macos)
 - [Formatter](#formatter)
 - [Quickstart (Package Manager + curl example)](#quickstart-package-manager--curl-example)
 - [Testing](#testing)
 - [Multithreaded TCP Demo (Local)](#multithreaded-tcp-demo-local)
 - [Advanced Protocol Stack Demo (Local)](#advanced-protocol-stack-demo-local)
 - [Examples](#examples)
+- [Object-Oriented Language Features](#object-oriented-language-features)
 - [Package Manager (C++)](#package-manager-c)
 - [Package Workspaces And Fetched Subprojects](#package-workspaces-and-fetched-subprojects)
 
@@ -561,6 +563,7 @@ The current bootstrap task set covers:
 - `build-tooling`
 - `unit-tests`
 - `robot-tests`
+- `docs`
 - `install-mlang`
 - `install-all`
 - `install-mlangd-mla`
@@ -570,11 +573,16 @@ The current bootstrap task set covers:
 
 ## Documentation
 
-The repository ships a Doxygen-based documentation build. Run the helper from the top level to regenerate HTML under `docs/out`:
+The repository ships a Doxygen-based documentation build. Regenerate HTML
+under `docs/out` with the built-in docs runner:
 
 ```sh
-doxygen docs/Doxyfile
+mlang run docs
 ```
+
+`mlang run docs` searches from the current directory upward for `docs/Doxyfile`
+or `Doxyfile`, then runs Doxygen from that project root. Use
+`mlang run docs --doxyfile path/to/Doxyfile` to select a specific config.
 
 The generated site mirrors the Markdown sources under `docs/`, stdlib sources
 (`stdlib/std/`, `stdlib/src/`), and MLang tool sources
@@ -592,6 +600,98 @@ After a clean workspace, run the helper script that configures an AddressSanitiz
 ```
 
 The script delegates to `./scripts/build_install.sh --asan --unit-tests --robot-tests --no-install`, defaults to `build-asan` plus `artifacts-asan`, and propagates `ASAN_OPTIONS` to the compiler, unit tests, and robot runs. You can still override the default sanitizer tuning when invoking the script if you want stricter checks, for example `ASAN_OPTIONS=detect_container_overflow=1:strict_init_order=1 ./scripts/run_asan.sh`.
+
+## Codesigning Built Binaries On macOS
+Locally-linked Mach-O binaries on Apple Silicon are emitted with an adhoc
+`linker-signed` signature. In some configurations the resulting CodeDirectory
+hash does not match the final on-disk page contents (mismatch can come from
+`strip`, `install_name_tool`, copying between filesystems, or certain
+TLV/chained-fixup layouts), and macOS will SIGKILL the process the first time
+it touches a "tainted" page:
+
+```text
+kernel: CODE SIGNING: cs_invalid_page(...): p=NNN[mlangd-mla] ... sending SIGKILL
+kernel: CODE SIGNING: process NNN[mlangd-mla]: rejecting invalid page ... tainted:1 ...
+```
+
+The package manager exposes adhoc re-signing as a first-class build step so
+the bootstrap pipeline can produce binaries that survive this check.
+
+### `[[task]] sign` field
+Any task in `mlang.toml` may declare one or more output paths to sign after
+the task succeeds. The value can be a single string or a list, and standard
+template substitutions (`{{build_dir}}`, `{{root}}`, `{{option.<key>}}`,
+etc.) are expanded:
+
+```toml
+[[task]]
+name = "build-mlangd-mla"
+commands = [
+  "{{build_dir}}/mlang tools/mlangd-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlangd-mla"
+]
+sign = ["{{build_dir}}/mlangd-mla"]
+
+[[task]]
+name = "install-mlangd-mla"
+shell = [
+  "cp -f {{build_dir}}/mlangd-mla \"{{option.bin_dir}}/mlangd-mla\""
+]
+sign = ["{{option.bin_dir}}/mlangd-mla"]
+```
+
+Declaring `sign` does **not** force codesigning by itself — it only registers
+which artifacts are signing candidates. The actual `codesign` invocation is
+gated on a CLI flag, so reproducible builds without signing remain the default.
+
+### `--sign` and `--force-sign` flags
+`mlang pkg run` and `mlang pkg build` accept three signing modes:
+
+| Flag | Behaviour |
+|---|---|
+| (none) | Default. `sign` declarations are ignored; no `codesign` call is made. |
+| `--sign` | Runs `codesign --sign - <path>` for every `sign` entry of every executed task. Existing valid signatures are preserved. |
+| `--force-sign` (alias `--forcesign`) | Runs `codesign --force --sign - <path>`. Any existing signature — including a tainted one — is replaced. Use this to recover a binary that is being SIGKILL'd. |
+| `--no-sign` | Explicit opt-out, useful if a profile or wrapper script enabled signing globally. |
+
+Examples — both forms the user may type are accepted:
+
+```sh
+# One-shot bootstrap that produces a known-good mlangd-mla and re-signs it:
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla --sign
+
+# Recovery: replace a tainted/broken signature on the existing artifact:
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla --force-sign
+
+# Same with the no-dash spelling (alias):
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla --forcesign
+
+# Build the whole bootstrap chain and sign every signing-aware task in it:
+mlang pkg --config bootstrap/mlang.toml run build-all --force-sign
+
+# Install variant — signs the artifact in $HOME/.local/bin after the copy:
+mlang pkg --config bootstrap/mlang.toml run install-mlangd-mla --force-sign
+```
+
+### Behaviour notes
+- The hook is **macOS-only**. On Linux/Windows hosts the flags are accepted
+  but no `codesign` invocation is made (the hook compiles to a no-op),
+  so the same `mlang.toml` is portable across platforms.
+- Missing `sign` paths print a warning but do not fail the task. This makes
+  the field safe to keep on optional/host-gated build steps.
+- A non-zero `codesign` exit fails the task. The post-task summary line will
+  show the failing path so the source of the error is obvious.
+- Manual recovery without the package manager is also possible:
+  ```sh
+  codesign --force --sign - ~/.local/bin/mlangd-mla
+  ```
+  The `--sign`/`--force-sign` flags simply automate this for every artifact
+  declared in the bootstrap manifest.
+
+The bootstrap profile `bootstrap/mlang.toml` already declares
+`sign = [...]` on the `build-mlangd-mla`, `build-mlangd-mla-existing`,
+`install-mlangd-mla`, and `install-mlangd-mla-existing` tasks, so a default
+build/install with `--force-sign` will automatically keep the language-server
+binary runnable on macOS.
 
 ## Formatter
 `mlang-format` is now a separate binary compiled from Mlang source:
@@ -996,6 +1096,526 @@ Request low-latency JACK buffer:
 ```sh
 ./examples/fft_example/run_demo.sh --buffer=32
 ```
+
+## Object-Oriented Language Features
+This section documents the object-oriented capabilities added on the
+`feature/add_oop_features` branch (commits `bd4b339`..`7a423d9`). Each entry
+follows a Doxygen-style structure: `@brief`, `@details`, `@code` (example),
+`@note`, and `@see` (cross references).
+
+### Feature Matrix
+
+| Feature | Commit | Demo |
+|---|---|---|
+| Method visibility on `impl` blocks | `bd4b339` | `examples/method_visibility_demo/` |
+| Associated (static) function calls | `3519d6b` | `examples/associated_functions_demo/` |
+| Trait `impl` method signature validation | `643a182` | `tests/std_compiler_tests.mla` |
+| Generic trait bounds (`T: Trait`) | `24732cf` | `examples/generic_trait_bounds_demo/` |
+| Qualified generic static method calls | `7a423d9` | `examples/module_path_generic_static_demo/` |
+| Trait objects (`dyn Trait`) | `d80f52c`+ | `examples/dyn_trait_demo/`, `examples/dyn_trait_field_demo/` |
+| Default methods on traits | (this branch) | `examples/trait_advanced_demo/` |
+| Super-traits (`trait Foo: Bar`) | (this branch) | `examples/trait_advanced_demo/` |
+| Multiple trait bounds (`T: A + B`) | (this branch) | `examples/trait_advanced_demo/` |
+
+---
+
+### Method Visibility On `impl` Blocks
+
+> **@brief** Allow `pub` and private methods inside `impl` blocks, with
+> visibility checked using the **defining module** of the method (not the call
+> site).
+
+> **@details** Methods declared without `pub` are callable only from within the
+> module where the `impl` block lives; methods marked `pub fn` are callable
+> from any module that can name the receiver type. The IR layer was fixed so
+> that the visibility check uses the method's own module context, allowing a
+> private helper to be invoked by another method on the same type even when
+> that public entry point is itself called from a different module.
+
+> **@code**
+```mla
+// lib/counter.mla
+pub struct Counter {
+    var value: i32;
+};
+
+impl Counter {
+    // Private helper: callable only inside this module.
+    fn inc_private(self: Counter) -> Counter {
+        return Counter { value: self.value + 1 };
+    }
+
+    // Public wrapper: callable from other modules.
+    pub fn inc(self: Counter) -> Counter {
+        return self.inc_private();
+    }
+
+    pub fn read(self: Counter) -> i32 {
+        return self.value;
+    }
+}
+```
+
+```mla
+// main.mla
+mod lib::counter;
+use lib::counter::Counter;
+
+fn main() -> i32 {
+    let c: Counter = Counter { value: 1 };
+    let d: Counter = c.inc();          // OK: pub
+    // let e: Counter = d.inc_private(); // ERROR: private to lib::counter
+    return d.read() == 2 ? 0 : 1;
+}
+```
+
+> **@note** Public methods may freely delegate to private methods on the same
+> type. Visibility resolution does not flow through the caller's module, only
+> through the defining module of each candidate method.
+
+> **@see** `examples/method_visibility_demo/` and `src/ir.cpp` (visibility
+> module-context fix).
+
+---
+
+### Associated (Static) Function Calls
+
+> **@brief** Call a function defined inside `impl Type { ... }` directly via
+> the type name (e.g. `Counter::new(0)`), without an instance.
+
+> **@details** Associated functions are functions that do not take a `self`
+> receiver. The compiler resolves `Type::func(args)` against the `impl Type`
+> namespace and emits a normal direct call. Associated functions can be used
+> as constructors (`new`, `zero`), factory helpers (`Counter::build_value`),
+> or any utility that is logically owned by the type but does not depend on a
+> specific instance.
+
+> **@code**
+```mla
+pub struct Counter {
+    var value: i32;
+};
+
+impl Counter {
+    fn build_value(value: i32) -> Counter {
+        return Counter { value: value };
+    }
+
+    pub fn new(value: i32) -> Counter {
+        return Counter::build_value(value);    // associated call
+    }
+
+    pub fn zero() -> Counter {
+        return Counter::new(0);                // associated call
+    }
+
+    pub fn inc(self: Counter) -> Counter {
+        return Counter::new(self.value + 1);   // associated call from method
+    }
+
+    pub fn read(self: Counter) -> i32 {
+        return self.value;
+    }
+}
+
+fn main() -> i32 {
+    let start: Counter = Counter::new(10);
+    let zero:  Counter = Counter::zero();
+    let next:  Counter = start.inc();
+    return next.read() == 11 ? 0 : 1;
+}
+```
+
+> **@note** Associated functions follow the same `pub` visibility rules as
+> instance methods (see "Method Visibility On `impl` Blocks").
+
+> **@see** `examples/associated_functions_demo/`,
+> `tests/std_compiler_tests.mla` (associated-call coverage).
+
+---
+
+### Trait `impl` Method Signature Validation
+
+> **@brief** Verify at compile time that every `impl Trait for Type { ... }`
+> block fully and correctly implements the methods declared by the trait.
+
+> **@details** When the compiler lowers an `impl Trait for Type` block it now
+> looks up each declared trait method and checks:
+> 1. **Presence** — every required method must be implemented.
+> 2. **Receiver shape** — an instance method (one with a `self` receiver) in
+>    the trait must be implemented as an instance method on the type, and
+>    vice versa.
+> 3. **Return type** — the implementation's return type must match the
+>    trait's declared return type.
+>
+> A descriptive diagnostic is emitted on mismatch so the user can locate
+> the offending `impl` block quickly.
+
+> **@code** Diagnostics produced for malformed implementations:
+```text
+trait 'Summary' for struct 'Post' requires method 'summarize'
+method 'Post::summarize' does not match trait 'Summary': return type 'i32' does not match expected 'str8'
+method 'Post::summarize' does not match trait 'Summary': expected instance method
+```
+
+```mla
+trait Summary {
+    fn summarize(self: Self) -> str8;
+}
+
+pub struct Post { var id: i32; };
+
+// OK — matches signature exactly.
+impl Summary for Post {
+    fn summarize(self: Post) -> str8 {
+        return "ok";
+    }
+}
+```
+
+> **@note** Validation runs even when the trait method is never called, so
+> structurally incorrect `impl` blocks cannot ride along quietly until first
+> use.
+
+> **@see** Trait-impl test cases in `tests/std_compiler_tests.mla`
+> (`test_compiler_trait_impl_*`).
+
+---
+
+### Generic Trait Bounds (`T: Trait`)
+
+> **@brief** Constrain generic type parameters with one or more trait bounds
+> on `struct`, `impl`, and (transitively) function definitions, so generic
+> code may invoke trait methods on its parameters.
+
+> **@details** A type parameter declared as `<T: Summary>` only accepts
+> concrete types whose `impl Summary` block exists at instantiation time.
+> Inside the generic `impl<T: Summary>` body, calls of the form
+> `value.summarize()` are dispatched through the trait. Attempting to
+> instantiate the generic with a type that does not satisfy the bound is a
+> compile error.
+
+> **@code**
+```mla
+trait Summary {
+    fn summarize(self: Self) -> str8;
+}
+
+pub struct Post {
+    var id: i32;
+    var title: str8;
+};
+
+impl Summary for Post {
+    fn summarize(self: Post) -> str8 {
+        return self.title;
+    }
+}
+
+pub struct Holder<T: Summary> {
+    var value: T;
+};
+
+impl<T: Summary> Holder {
+    pub fn new(value: T) -> Holder<T> {
+        return Holder<T> { value: value };
+    }
+
+    // The bound `T: Summary` makes this trait call legal.
+    pub fn summary(self: Holder<T>) -> str8 {
+        return self.value.summarize();
+    }
+}
+
+fn main() -> i32 {
+    let post: Post = Post { id: 7, title: "trait-bound holder" };
+    let holder: Holder<Post> = Holder<Post>::new(post);
+
+    // let bad: Holder<i32> = Holder<i32>::new(1); // rejected: i32: Summary missing
+    return holder.summary() == "trait-bound holder" ? 0 : 1;
+}
+```
+
+> **@note** Bounds are written on **type parameters**, not on trait or
+> function names. The compiler accepts the same `<T: TraitName>` syntax in
+> the struct header and in the `impl<...>` header.
+
+> **@see** `examples/generic_trait_bounds_demo/`,
+> `tests/std_compiler_tests.mla` (generic trait-bound diagnostics).
+
+---
+
+### Trait Objects (`dyn Trait`)
+
+> **@brief** Pass values behind an explicit trait-object type so a function
+> can accept any concrete implementation of that trait.
+
+> **@details** A parameter or return value typed `dyn Summary` stores a data
+> pointer plus the trait vtable. Inside the callee, trait-method calls like
+> `item.score()` dispatch through that vtable. Concrete values can be returned
+> through a dyn return type, and existing dyn values can be passed through
+> wrapper functions. This is intentionally narrower than a full object system:
+> it currently covers function parameters, local dyn variables, dyn return
+> values, direct method calls on dyn values, and owned trait-object fields in
+> structs.
+
+> **@code**
+```mla
+trait Summary {
+    fn score(self: Self) -> i32;
+}
+
+pub struct Post {
+    var score_value: i32;
+};
+
+impl Summary for Post {
+    fn score(self: Post) -> i32 {
+        return self.score_value;
+    }
+}
+
+pub fn make_summary(post: Post) -> dyn Summary {
+    return post;
+}
+
+pub fn pass_summary(item: dyn Summary) -> dyn Summary {
+    return item;
+}
+
+pub fn show_score(item: dyn Summary) -> i32 {
+    return item.score();
+}
+
+pub struct Holder {
+    var item: dyn Summary;
+};
+
+pub fn make_holder(post: Post) -> Holder {
+    return Holder { item: post };
+}
+
+fn main() -> i32 {
+    let post: Post = Post { score_value: 7 };
+    let item: dyn Summary = make_summary(post);
+    let item2: dyn Summary = pass_summary(item);
+    show_score(item2);
+    let held: Holder = make_holder(Post { score_value: 13 });
+    held.item.score();
+    return 0;
+}
+```
+
+> **@note** Use `dyn Trait` when you want runtime dispatch at the function
+> boundary. Use `T: Trait` when the type should stay generic and monomorphized.
+> When returning a concrete value as `dyn Trait`, the compiler stores a durable
+> copy behind the trait object so the returned object does not point at callee
+> stack storage. Across modules, callers may annotate locals with a qualified
+> trait path such as `dyn lib::summary::Summary`. Concrete values stored into a
+> `dyn Trait` field are copied into durable storage before the trait object is
+> stored in the struct.
+
+> **@see** `examples/dyn_trait_demo/`,
+> `examples/dyn_trait_field_demo/`,
+> `tests/std_compiler_tests.mla` (trait object dispatch and dyn return tests).
+
+---
+
+### Qualified Generic Static Method Calls
+
+> **@brief** Allow fully qualified, module-prefixed associated calls on
+> generic types, including the type-argument list — for example
+> `lib::summary::Holder<Post>::new(post)`.
+
+> **@details** Resolution walks the module path (`lib::summary`), looks up
+> the generic receiver type (`Holder<Post>`), and dispatches the associated
+> function (`new`) on the resolved `impl<T: Summary> Holder` block. Both
+> short-form (`Holder<Post>::new(...)`) and module-qualified
+> (`mod::path::Holder<Post>::new(...)`) call shapes are supported, and they
+> work whether the `use` import is present or not.
+
+> **@code**
+```mla
+mod lib::summary;
+use lib::summary::Post;
+use lib::summary::Holder;
+
+fn main() -> i32 {
+    let post: Post = Post { title: "module-path generic static call" };
+
+    // Fully qualified: module path + generic type argument + associated call.
+    let holder: Holder<Post> = lib::summary::Holder<Post>::new(post);
+
+    let text: str8 = holder.summary();
+    println!("summary={}", text);
+    return text == "module-path generic static call" ? 0 : 1;
+}
+```
+
+> **@note** This composes naturally with generic trait bounds: the
+> instantiation `Holder<Post>` is checked against the `T: Summary` bound at
+> the qualified call site, just as it is for the unqualified form.
+
+> **@see** `examples/module_path_generic_static_demo/`,
+> `examples/generic_trait_bounds_demo/`,
+> `tests/std_compiler_tests.mla` (qualified-static-call coverage).
+
+---
+
+### Default Methods On Traits
+
+> **@brief** Allow trait declarations to provide a method body. Implementing
+> types may either rely on the trait-supplied default or override it.
+
+> **@details** Trait method declarations now accept either a signature-only
+> form (`fn foo(self: Self) -> T;`) or a body form
+> (`fn foo(self: Self) -> T { ... }`). When an `impl Trait for X` block does
+> **not** define a method that the trait declares, the compiler will:
+> 1. If the trait method has a body — synthesize a method on the impl that
+>    delegates to the default body, rebinding `self: Self` to `self: X`.
+> 2. If the trait method has no body — emit the existing
+>    `'X' requires method 'foo'` diagnostic.
+>
+> Default bodies may freely call other trait methods through `self.foo()`,
+> so it is idiomatic to expose one or two required primitives and provide
+> high-level operations as defaults.
+
+> **@code**
+```mla
+trait Greeter {
+    fn name(self: Self) -> str8;
+
+    // Default body — implementers can rely on this without overriding.
+    fn greet(self: Self) -> str8 {
+        return self.name();
+    }
+}
+
+pub struct Friend { var who: str8; };
+impl Greeter for Friend {
+    fn name(self: Friend) -> str8 { return self.who; }
+    // `greet` is inherited from the trait default.
+}
+
+pub struct Robot { var serial: str8; };
+impl Greeter for Robot {
+    fn name(self: Robot) -> str8 { return self.serial; }
+    // Override the default.
+    fn greet(self: Robot) -> str8 { return "BEEP"; }
+}
+```
+
+> **@note** The default body itself is parsed once on the trait. The compiler
+> shares the body AST between every impl that doesn't override; only the
+> `self` parameter is cloned and rebound per impl, so the cost of a default
+> method is one synthesized `StructMethodNode` per impl, not a body deep-copy.
+
+> **@see** `examples/trait_advanced_demo/lib/identity.mla` (the `Tagged`
+> trait demonstrates a default method delegating to other trait methods);
+> `tests/std_compiler_tests.mla::test_compiler_trait_default_method_*`.
+
+---
+
+### Super-Traits (`trait Foo: Bar`)
+
+> **@brief** Declare that any implementer of one trait must also implement
+> another. Both single (`Foo: Bar`) and multiple (`Foo: Bar + Baz`)
+> super-trait lists are accepted.
+
+> **@details** Super-trait constraints are recorded on the `TraitDefNode`
+> at parse time. When the compiler validates `impl Foo for X`, it checks
+> that `X` also has an explicit `impl S for X` for every super-trait `S`
+> of `Foo`. Generic impls (`impl<T> Foo for X`) are skipped at this stage
+> because their concrete type isn't fixed; the equivalent check fires at
+> instantiation time through the existing trait-bound machinery.
+>
+> A missing super-impl produces a precise diagnostic:
+> ```text
+> trait 'Loud' for struct 'Word' requires struct to also implement super-trait 'Display'
+> ```
+
+> **@code**
+```mla
+trait Display {
+    fn show(self: Self) -> str8;
+}
+
+// Super-trait: every Loud is also a Display.
+trait Loud: Display {
+    fn shout(self: Self) -> str8;
+}
+
+pub struct Word { var t: str8; };
+
+impl Display for Word {
+    fn show(self: Word) -> str8 { return self.t; }
+}
+
+// OK — Display impl is present.
+impl Loud for Word {
+    fn shout(self: Word) -> str8 { return self.t; }
+}
+```
+
+> **@note** Super-traits compose: `trait C: B` and `trait B: A` together
+> require an implementer of `C` to provide `impl A`, `impl B`, and
+> `impl C` separately. The compiler does not auto-derive any of them.
+
+> **@see** `examples/trait_advanced_demo/lib/identity.mla` (the
+> `Tagged: Display` chain); `tests/std_compiler_tests.mla::test_compiler_super_trait_*`.
+
+---
+
+### Multiple Trait Bounds (`T: A + B`)
+
+> **@brief** Type parameters may be constrained by more than one trait at
+> once, using `+` to chain bounds in struct, `impl`, and type-alias headers.
+
+> **@details** The previous syntax `<T: Foo>` accepted only a single trait.
+> The grammar now accepts a `+`-joined chain (`<T: Foo + Bar + Baz>`), and
+> the bound checker requires the concrete type substituted for `T` to
+> implement **every** trait in the chain.
+>
+> Each missing bound is reported individually, so a single instantiation
+> error can surface multiple suggestions:
+> ```text
+> type argument 'Post' for struct 'Holder' must implement trait 'Tagged' required by type parameter 'T'
+> ```
+
+> **@code**
+```mla
+trait A { fn a(self: Self) -> i32; }
+trait B { fn b(self: Self) -> i32; }
+
+pub struct X { var v: i32; };
+impl A for X { fn a(self: X) -> i32 { return self.v; } }
+impl B for X { fn b(self: X) -> i32 { return self.v; } }
+
+// Bound chain accepted on struct, impl, and `use type` aliases.
+pub struct Box<T: A + B> { var inner: T; };
+impl<T: A + B> Box {
+    pub fn new(inner: T) -> Box<T> {
+        return Box<T> { inner: inner };
+    }
+}
+
+fn main() -> i32 {
+    let b: Box<X> = Box<X>::new(X { v: 1 });
+    return 0;
+}
+```
+
+> **@note** Bounds are stored internally as a `+`-joined string (e.g.
+> `"A+B"`) so the existing `map<string, string>` AST field accommodates
+> multiple bounds without a schema change. The split-and-check is done on
+> the consumer side in `validateTypeArgumentTraitBounds`. Whitespace
+> around `+` is allowed: `<T: A + B>` and `<T:A+B>` parse identically.
+
+> **@see** `examples/trait_advanced_demo/lib/identity.mla` (the
+> `Holder<T: Display + Tagged>` container);
+> `tests/std_compiler_tests.mla::test_compiler_multiple_trait_bounds_*`.
+
+---
 
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:

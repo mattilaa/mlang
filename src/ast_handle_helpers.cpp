@@ -277,6 +277,21 @@ ASTNode* mla_ast_trait_def(char* name, int line)
     return create_trait_def_impl(name, line);
 }
 
+ASTNode* mla_ast_trait_add_method(ASTNode* trait, ASTNode* method)
+{
+    return add_trait_method_impl(trait, method);
+}
+
+ASTNode* mla_ast_bounded_type_param_list(char* param, char* trait_name)
+{
+    return create_bounded_type_param_list_impl(param, trait_name);
+}
+
+ASTNode* mla_ast_bounded_type_param_list_add(ASTNode* list, char* param, char* trait_name)
+{
+    return add_bounded_type_param_impl(list, param, trait_name);
+}
+
 ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name)
 {
     return create_impl_block_impl(struct_name, type_params, trait_name);

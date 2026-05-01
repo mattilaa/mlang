@@ -239,12 +239,15 @@ private:
     std::vector<FunctionDefNode*> deferredModuleFunctionDefs;
     // Maps struct name -> (isPublic, sourceModule)
     std::map<std::string, std::pair<bool, std::string>> structVisibility;
+    // Trait-object lvalues tracked by variable name -> trait name.
+    std::map<std::string, std::string> traitObjectVariableTypes;
     // Current module being compiled (empty string for main module)
     std::string currentModule;
     ModuleLoader* moduleLoader = nullptr;
     struct TypeAliasInfo
     {
         std::vector<std::string> typeParams;
+        std::map<std::string, std::string> typeParamTraitBounds;
         TypeNode* aliasedType = nullptr;
         int line = 0;
         int col = 0;
@@ -275,6 +278,7 @@ private:
     llvm::FunctionCallee exceptionsTakeMessageFunc;
     llvm::FunctionCallee exceptionsTakeSourceLineFunc;
     llvm::Value* currentFunctionExceptionFrame = nullptr;
+    TypeNode* currentSemanticReturnType = nullptr;
     // Pthread support
     bool pthreadInitialized;
     llvm::FunctionCallee pthreadCreateFunc;
@@ -376,6 +380,13 @@ private:
     TypeNode* resolveTypeAliasNode(TypeNode* typeNode,
                                    const std::set<std::string>& typeParams,
                                    std::vector<std::string>& aliasStack);
+    bool validateTypeArgumentTraitBounds(
+        const std::vector<std::string>& typeParams,
+        const std::map<std::string, std::string>& traitBounds,
+        const std::vector<TypeNode*>& typeArgs,
+        const std::set<std::string>& scopeTypeParams, int line,
+        const std::string& ownerKind, const std::string& ownerName,
+        bool reportFailures = true);
     TypeNode* cloneTypeNode(TypeNode* typeNode);
 
     // Type helpers
@@ -556,6 +567,7 @@ private:
     std::string getStructTypeName(ExpressionNode* expr) const;
     std::string getEnumTypeName(ExpressionNode* expr, int line);
     std::string resolveVisibleEnumName(const std::string& enumName) const;
+    std::string resolveVisibleStructName(const std::string& structName) const;
     bool structHasFieldNamed(const std::string& structTypeName,
                              const std::string& fieldName) const;
     std::string expressionTypeNameForLog(ExpressionNode* expr, int line);
@@ -586,6 +598,15 @@ private:
                                               StructMethodNode* method);
     llvm::Function* generateMethodDefinition(const std::string& structName,
                                              StructMethodNode* method);
+    llvm::Type* getTraitObjectType(const std::string& traitName);
+    llvm::Type* getTraitVTableType(const std::string& traitName);
+    llvm::GlobalVariable* ensureTraitVTable(const std::string& concreteTypeName,
+                                            const std::string& traitName);
+    llvm::Value* buildTraitObjectValue(ExpressionNode* expr,
+                                       const std::string& traitName, int line,
+                                       bool heapCopy = false);
+    llvm::Value* coerceTraitObjectValue(llvm::Value* value,
+                                        llvm::Type* expectedType, int line);
     bool generateMutexPropertyMethodBody(const std::string& structName,
                                          StructMethodNode* method,
                                          llvm::Function* function);
@@ -607,8 +628,12 @@ private:
     std::map<std::string,
              std::map<std::string, std::pair<bool, StructMethodNode*>>>
         structMethods;
+    std::map<std::string, TraitDefNode*> traitDefinitions;
     // Track trait impls per concrete struct type name.
     std::map<std::string, std::set<std::string>> structImplementedTraits;
+    std::map<std::string, llvm::StructType*> traitObjectTypes;
+    std::map<std::string, llvm::StructType*> traitVTableTypes;
+    std::map<std::string, llvm::GlobalVariable*> traitVTableGlobals;
 
     // List/Map iteration helpers
     void generateForListLiteralIteration(ForNode* node,

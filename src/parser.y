@@ -1411,6 +1411,8 @@ ASTNode* mla_ast_method_call(ASTNode* object, char* method, ASTNode* args, int l
 // Generic structs and impl blocks
 ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
+ASTNode* create_bounded_type_param_list(char* param, char* trait_name);
+ASTNode* add_bounded_type_param(ASTNode* list, char* param, char* trait_name);
 ASTNode* mla_ast_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
 ASTNode* mla_ast_trait_def(char* name, int line);
 ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
@@ -1429,6 +1431,7 @@ ASTNode* mla_ast_enum_variant_list_add(ASTNode* list, ASTNode* variant);
 ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* mla_ast_pointer_type(ASTNode* element_type);
 ASTNode* mla_ast_reference_type(ASTNode* element_type, int is_mutable);
+ASTNode* create_trait_object_type(char* trait_name);
 ASTNode* create_closure(ASTNode* body);
 ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
 ASTNode* mla_ast_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
@@ -1459,6 +1462,28 @@ static ASTNode* make_compound_assign(ASTNode* lhs, int op, ASTNode* rhs,
         lhs, mla_ast_binary_op(op, lhs, rhs), line);
 }
 ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line);
+
+// Concatenate two trait-name C-strings into a fresh "lhs+rhs" buffer used by
+// the `T: A + B` bound grammar. Both inputs are expected to be heap-allocated
+// (lexer-strdup'd or returned from a previous join), and they are freed
+// here. The caller owns the returned pointer.
+static char* trait_bound_concat(const char* lhs, const char* rhs)
+{
+    if(!lhs || !*lhs)
+        return rhs ? strdup(rhs) : strdup("");
+    if(!rhs || !*rhs)
+        return strdup(lhs);
+    const size_t lhsLen = strlen(lhs);
+    const size_t rhsLen = strlen(rhs);
+    char* joined = static_cast<char*>(malloc(lhsLen + rhsLen + 2));
+    if(!joined)
+        return nullptr;
+    memcpy(joined, lhs, lhsLen);
+    joined[lhsLen] = '+';
+    memcpy(joined + lhsLen + 1, rhs, rhsLen);
+    joined[lhsLen + 1 + rhsLen] = '\0';
+    return joined;
+}
 
 static void bind_impl_self_types(ImplBlockNode* implBlock)
 {
@@ -1515,7 +1540,7 @@ enum UpdatePosition
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
-%token PUB IMPL TRAIT
+%token PUB IMPL TRAIT DYN
 %token EXTERN
 %token STATIC
 %token ASM VOLATILE SIZEOF
@@ -1574,7 +1599,7 @@ enum UpdatePosition
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression asm_expression pipe_expression
 %type <ast> mod_declaration use_declaration
-%type <sval> module_path
+%type <sval> module_path trait_bound_chain
 %type <ast> print_statement argument_list format_argument format_argument_list assert_eq_statement assert_statement static_assert_statement
 %type <ast> global_var_statement static_var_statement
 %type <ast> map_literal map_entries map_entry index_expression
@@ -1752,24 +1777,70 @@ enum_variant
 
 trait_def
     : TRAIT IDENTIFIER LBRACE trait_method_decl_list RBRACE
-        { $$ = mla_ast_trait_def($2, yylineno); }
+        {
+            ASTNode* trait = mla_ast_trait_def($2, yylineno);
+            auto* traitDef = static_cast<TraitDefNode*>(trait);
+            auto* methodList = static_cast<TraitDefNode*>($4);
+            if(methodList) {
+                traitDef->methods = methodList->methods;
+            }
+            $$ = trait;
+        }
+    | TRAIT IDENTIFIER COLON trait_bound_chain LBRACE trait_method_decl_list RBRACE
+        {
+            ASTNode* trait = mla_ast_trait_def($2, yylineno);
+            auto* traitDef = static_cast<TraitDefNode*>(trait);
+            // Split the `+`-joined chain into individual super-trait names.
+            const char* chain = $4 ? $4 : "";
+            std::string buffer(chain);
+            size_t start = 0;
+            while(start < buffer.size()) {
+                size_t plus = buffer.find('+', start);
+                if(plus == std::string::npos) plus = buffer.size();
+                std::string single = buffer.substr(start, plus - start);
+                if(!single.empty())
+                    traitDef->superTraits.push_back(single);
+                start = plus + 1;
+            }
+            auto* methodList = static_cast<TraitDefNode*>($6);
+            if(methodList) {
+                traitDef->methods = methodList->methods;
+            }
+            $$ = trait;
+        }
     ;
 
 trait_method_decl_list
-    : /* empty */ { $$ = NULL; }
-    | trait_method_decl_list trait_method_decl { $$ = NULL; }
+    : /* empty */ { $$ = mla_ast_trait_def(strdup(""), yylineno); }
+    | trait_method_decl_list trait_method_decl
+        {
+            $$ = mla_ast_trait_add_method($1, $2);
+        }
     ;
 
 trait_method_decl
     : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
-        { $$ = NULL; }
+        { $$ = mla_ast_struct_method($7, $2, $4, NULL, 0, 0); }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
-        { $$ = NULL; }
+        { $$ = mla_ast_struct_method($8, $3, $5, NULL, 1, 0); }
+    | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        { $$ = mla_ast_struct_method($7, $2, $4, $9, 0, 0); }
+    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        { $$ = mla_ast_struct_method($8, $3, $5, $10, 1, 0); }
     ;
 
 type_param_list
     : IDENTIFIER { $$ = create_type_param_list($1); }
+    | IDENTIFIER COLON trait_bound_chain { $$ = create_bounded_type_param_list($1, $3); }
     | type_param_list COMMA IDENTIFIER { $$ = add_type_param($1, $3); }
+    | type_param_list COMMA IDENTIFIER COLON trait_bound_chain
+        { $$ = add_bounded_type_param($1, $3, $5); }
+    ;
+
+trait_bound_chain
+    : IDENTIFIER { $$ = $1; }
+    | trait_bound_chain PLUS IDENTIFIER
+        { $$ = trait_bound_concat($1, $3); }
     ;
 
 impl_block
@@ -2105,6 +2176,7 @@ type
     | PTR GENERIC_LT type GT { $$ = mla_ast_pointer_type($3); }
     | AMP type               { $$ = mla_ast_reference_type($2, 0); }
     | AMP_MUT type           { $$ = mla_ast_reference_type($2, 1); }
+    | DYN module_path        { $$ = create_trait_object_type($2); }
     | LBRACKET type SEMICOLON expression RBRACKET
         { $$ = mla_ast_generic_list_type($2); /* [T; N] is list<T>, N ignored */ }
     | I8     { $$ = mla_ast_type_node(TypeNode::TYPE_I8); }
@@ -2812,6 +2884,38 @@ condition_primary
         { $$ = mla_ast_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN
         { $$ = mla_ast_format_expr($3, $5, yylineno); }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $8, yylineno);
+        }
+    | module_path GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | module_path GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $8, yylineno);
+        }
     | function_call { $$ = $1; }
     | module_path
         { $$ = create_enum_or_ident_from_path($1, yylineno); }
@@ -3036,6 +3140,22 @@ primary_expression
         { $$ = mla_ast_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN
         { $$ = mla_ast_format_expr($3, $5, yylineno); }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $8, yylineno);
+        }
     | module_path
         { $$ = create_enum_or_ident_from_path($1, yylineno); }
     | LPAREN expression RPAREN { $$ = $2; }
@@ -3152,6 +3272,38 @@ function_call
         { $$ = mla_ast_function_call_simple($1, NULL, NULL, yylineno); }
     | module_path LPAREN argument_list RPAREN
         { $$ = mla_ast_function_call_from_list($1, $3, yylineno); }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $8, yylineno);
+        }
+    | module_path GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | module_path GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string($1) + "<" +
+                                 static_cast<TypeListNode*>($3)->toString() +
+                                 ">::" + $6;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $8, yylineno);
+        }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
         {
             if(strcmp($1, "add") == 0)

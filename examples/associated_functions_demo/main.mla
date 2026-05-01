@@ -1,0 +1,15 @@
+mod lib::counter;
+
+use lib::counter::Counter;
+
+fn main() -> i32 {
+    let start: Counter = Counter::new(10);
+    let zero: Counter = Counter::zero();
+    let next: Counter = start.inc();
+
+    println!("start={}, zero={}, next={}",
+             start.read(),
+             zero.read(),
+             next.read());
+    return next.read() == 11 ? 0 : 1;
+}

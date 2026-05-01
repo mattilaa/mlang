@@ -84,6 +84,27 @@ static bool isSynthesizedPropertyLockFieldName(const std::string& fieldName)
     return fieldName.compare(0, prefix.size(), prefix) == 0;
 }
 
+static bool trait_names_equivalent(const std::string& lhs,
+                                   const std::string& rhs)
+{
+    if(lhs == rhs)
+        return true;
+
+    auto suffixMatches = [](const std::string& qualified,
+                            const std::string& shortName) {
+        if(shortName.find("::") != std::string::npos)
+            return false;
+        if(qualified.size() <= shortName.size() + 2)
+            return false;
+        return qualified.compare(qualified.size() - shortName.size(),
+                                 shortName.size(), shortName) == 0 &&
+               qualified.compare(qualified.size() - shortName.size() - 2, 2,
+                                 "::") == 0;
+    };
+
+    return suffixMatches(lhs, rhs) || suffixMatches(rhs, lhs);
+}
+
 template <typename Enum, size_t N>
 static std::optional<std::string_view> find_enum_text(
     Enum key, const std::array<std::pair<Enum, std::string_view>, N>& mappings)
@@ -349,7 +370,76 @@ static TypeNode* type_from_text(std::string t)
         return new TupleTypeNode(elems);
     }
 
+    size_t genericPos = t.find('<');
+    if(genericPos != std::string::npos && !t.empty() && t.back() == '>')
+    {
+        std::string baseName = trim_copy(t.substr(0, genericPos));
+        std::string inner = t.substr(genericPos + 1, t.size() - genericPos - 2);
+        auto parts = split_top_level_commas(inner);
+        auto* generic = new GenericStructTypeRefNode(baseName);
+        for(const auto& p : parts)
+            generic->typeArgs.push_back(type_from_text(p));
+        return generic;
+    }
+
     return new StructTypeRefNode(t);
+}
+
+static std::string resolve_visible_struct_base_name(
+    const std::string& structName,
+    const std::map<std::string, StructDefNode*>& genericStructTemplates,
+    const std::map<std::string,
+                   std::map<std::string, std::pair<bool, StructMethodNode*>>>&
+        structMethods,
+    const std::map<std::string, std::pair<bool, std::string>>& structVisibility)
+{
+    if(genericStructTemplates.count(structName) || structMethods.count(structName) ||
+       structVisibility.count(structName))
+    {
+        return structName;
+    }
+
+    std::string tailName = structName;
+    size_t scopePos = structName.rfind("::");
+    if(scopePos != std::string::npos)
+        tailName = structName.substr(scopePos + 2);
+
+    if(genericStructTemplates.count(tailName) || structMethods.count(tailName) ||
+       structVisibility.count(tailName))
+    {
+        return tailName;
+    }
+
+    auto matchesVisibleTail = [&](const std::string& candidate) {
+        if(candidate == structName || candidate == tailName)
+            return true;
+        if(candidate.size() > tailName.size() &&
+           candidate.compare(candidate.size() - tailName.size(), tailName.size(),
+                             tailName) == 0)
+        {
+            char sep = candidate[candidate.size() - tailName.size() - 1];
+            return sep == ':' || sep == '.' || sep == '_';
+        }
+        return false;
+    };
+
+    for(const auto& entry : genericStructTemplates)
+    {
+        if(matchesVisibleTail(entry.first))
+            return entry.first;
+    }
+    for(const auto& entry : structMethods)
+    {
+        if(matchesVisibleTail(entry.first))
+            return entry.first;
+    }
+    for(const auto& entry : structVisibility)
+    {
+        if(matchesVisibleTail(entry.first))
+            return entry.first;
+    }
+
+    return structName;
 }
 
 static std::string type_name_for_error(TypeNode* typeNode)
@@ -2531,6 +2621,12 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
         return llvm::StructType::get(context, elemTypes);
     }
 
+    // Handle trait object type: { i8* data, i8* vtable }
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(typeNode))
+    {
+        return getTraitObjectType(traitObj->traitName);
+    }
+
     // Handle generic list type
     if(auto* listType = dynamic_cast<GenericListTypeNode*>(typeNode))
     {
@@ -3392,6 +3488,72 @@ CodeGenerator::resolveVisibleEnumName(const std::string& enumName) const
     return {};
 }
 
+std::string
+CodeGenerator::resolveVisibleStructName(const std::string& structName) const
+{
+    auto hasStructNamed = [&](const std::string& name) -> bool
+    {
+        return structTypes.find(name) != structTypes.end() ||
+               genericStructTemplates.find(name) != genericStructTemplates.end() ||
+               structMethods.find(name) != structMethods.end();
+    };
+
+    if(hasStructNamed(structName))
+        return structName;
+
+    std::string shortName = structName;
+    size_t scopePos = structName.rfind("::");
+    if(scopePos != std::string::npos && (scopePos + 2) < structName.size())
+    {
+        shortName = structName.substr(scopePos + 2);
+        if(hasStructNamed(shortName))
+            return shortName;
+    }
+
+    for(const auto& kv : structTypes)
+    {
+        const std::string& candidate = kv.first;
+        if(candidate.size() > shortName.size() &&
+           candidate.compare(candidate.size() - shortName.size(),
+                             shortName.size(), shortName) == 0)
+        {
+            char sep = candidate[candidate.size() - shortName.size() - 1];
+            if(sep == ':' || sep == '.' || sep == '_')
+                return candidate;
+        }
+    }
+    for(const auto& kv : genericStructTemplates)
+    {
+        const std::string& candidate = kv.first;
+        if(candidate.size() > shortName.size() &&
+           candidate.compare(candidate.size() - shortName.size(),
+                             shortName.size(), shortName) == 0)
+        {
+            char sep = candidate[candidate.size() - shortName.size() - 1];
+            if(sep == ':' || sep == '.' || sep == '_')
+                return candidate;
+        }
+    }
+    for(const auto& kv : structMethods)
+    {
+        const std::string& candidate = kv.first;
+        if(candidate.size() > shortName.size() &&
+           candidate.compare(candidate.size() - shortName.size(),
+                             shortName.size(), shortName) == 0)
+        {
+            char sep = candidate[candidate.size() - shortName.size() - 1];
+            if(sep == ':' || sep == '.' || sep == '_')
+                return candidate;
+        }
+    }
+    return {};
+}
+
+static bool isTraitObjectTypeNode(TypeNode* type)
+{
+    return dynamic_cast<TraitObjectTypeNode*>(type) != nullptr;
+}
+
 llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
                                             const std::string& enumName,
                                             int line)
@@ -3685,6 +3847,17 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                 return nullptr;
             }
             return new PointerTypeNode(ptrIt->second);
+        }
+        if(kind == TypeNode::TYPE_TRAIT_OBJECT)
+        {
+            auto traitIt = traitObjectVariableTypes.find(id->name);
+            if(traitIt == traitObjectVariableTypes.end())
+            {
+                reportError(line, "trait object type not known for '" +
+                                      id->name + "'");
+                return nullptr;
+            }
+            return new TraitObjectTypeNode(traitIt->second);
         }
 
         return new TypeNode(kind);
@@ -5210,6 +5383,27 @@ void CodeGenerator::generateCode(ProgramNode* program)
     ensureAtomic64Builtin(program);
     ensureOptionBuiltin(program);
     ensureResultBuiltin(program);
+
+    traitDefinitions.clear();
+    structImplementedTraits.clear();
+    for(auto* traitDef : program->traitDefs)
+    {
+        if(!traitDef || traitDef->name.empty())
+            continue;
+        traitDefinitions[traitDef->name] = traitDef;
+    }
+    if(program->implList)
+    {
+        for(auto* impl : program->implList->impls)
+        {
+            if(!impl || impl->traitName.empty())
+                continue;
+            if(!impl->typeParams.empty())
+                continue;
+            structImplementedTraits[impl->structName].insert(impl->traitName);
+        }
+    }
+
     resolveTypeAliasesInProgram(program);
 
     enum class MainArgMode
@@ -5632,6 +5826,244 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
+    traitDefinitions.clear();
+    structImplementedTraits.clear();
+    for(auto* traitDef : program->traitDefs)
+    {
+        if(!traitDef || traitDef->name.empty())
+            continue;
+        traitDefinitions[traitDef->name] = traitDef;
+    }
+
+    auto typeNodesEquivalent = [&](TypeNode* lhs, TypeNode* rhs,
+                                   const std::vector<std::string>& typeParams,
+                                   const std::string& selfTypeName) -> bool
+    {
+        std::vector<std::string> substParams = typeParams;
+        substParams.push_back("Self");
+        std::vector<TypeNode*> substArgs;
+        substArgs.reserve(typeParams.size() + 1);
+        for(const auto& typeParam : typeParams)
+            substArgs.push_back(new StructTypeRefNode(typeParam));
+        substArgs.push_back(new StructTypeRefNode(selfTypeName));
+
+        TypeNode* lhsResolved = substituteTypeParams(lhs, substParams, substArgs);
+        TypeNode* rhsResolved = substituteTypeParams(rhs, substParams, substArgs);
+        return type_name_for_error(lhsResolved) ==
+               type_name_for_error(rhsResolved);
+    };
+
+    auto validateTraitImplBlock = [&](ImplBlockNode* impl)
+    {
+        if(!impl || impl->traitName.empty())
+            return;
+
+        auto traitIt = traitDefinitions.find(impl->traitName);
+        if(traitIt == traitDefinitions.end() || !traitIt->second)
+        {
+            reportError(impl->line,
+                        "unknown trait '" + impl->traitName +
+                            "' in impl for '" + impl->structName + "'");
+            return;
+        }
+
+        TraitDefNode* traitDef = traitIt->second;
+        for(auto* traitMethod : traitDef->methods)
+        {
+            if(!traitMethod)
+                continue;
+
+            StructMethodNode* implMethod = nullptr;
+            for(auto* candidate : impl->methods)
+            {
+                if(candidate && candidate->name == traitMethod->name)
+                {
+                    implMethod = candidate;
+                    break;
+                }
+            }
+
+            if(!implMethod)
+            {
+                // Trait method has a default body — synthesize a method on
+                // the impl that delegates to it. We deep-copy the parameter
+                // list so we can rebind `self: Self` to the concrete type
+                // without mutating the trait definition. The body itself is
+                // shared (read-only AST during codegen).
+                if(traitMethod->body)
+                {
+                    auto* newParams =
+                        traitMethod->parameters ? new ParameterListNode() : nullptr;
+                    if(newParams && traitMethod->parameters)
+                    {
+                        for(auto* p : traitMethod->parameters->parameters)
+                        {
+                            if(!p)
+                            {
+                                newParams->parameters.push_back(nullptr);
+                                continue;
+                            }
+                            TypeNode* paramType = p->type;
+                            if(p->name == "self")
+                            {
+                                if(auto* selfRef =
+                                       dynamic_cast<StructTypeRefNode*>(p->type))
+                                {
+                                    if(selfRef->structName == "Self")
+                                        paramType = new StructTypeRefNode(
+                                            impl->structName);
+                                }
+                            }
+                            auto* cloned = new ParameterNode(paramType, p->name);
+                            cloned->line = p->line;
+                            newParams->parameters.push_back(cloned);
+                        }
+                    }
+                    auto* defaulted = new StructMethodNode(
+                        traitMethod->returnType, traitMethod->name, newParams,
+                        traitMethod->body, traitMethod->isPublic,
+                        traitMethod->isStatic);
+                    // The defaulted method should resolve under the trait's
+                    // module (same module-context rules as a normal trait
+                    // method) so visibility behaves predictably.
+                    defaulted->sourceModule = traitDef->sourceModule;
+                    defaulted->line = traitMethod->line;
+                    impl->methods.push_back(defaulted);
+                    continue;
+                }
+
+                reportError(
+                    impl->line,
+                    "trait '" + impl->traitName + "' for struct '" +
+                        impl->structName + "' requires method '" +
+                        traitMethod->name + "'");
+                continue;
+            }
+
+            if(implMethod->isStatic != traitMethod->isStatic)
+            {
+                reportError(
+                    implMethod->line,
+                    "method '" + impl->structName + "::" + implMethod->name +
+                        "' does not match trait '" + impl->traitName +
+                        "': expected " +
+                        std::string(traitMethod->isStatic ? "static" : "instance") +
+                        " method");
+                continue;
+            }
+
+            size_t traitParamCount =
+                traitMethod->parameters ? traitMethod->parameters->parameters.size()
+                                        : 0;
+            size_t implParamCount =
+                implMethod->parameters ? implMethod->parameters->parameters.size()
+                                       : 0;
+            if(traitParamCount != implParamCount)
+            {
+                reportError(
+                    implMethod->line,
+                    "method '" + impl->structName + "::" + implMethod->name +
+                        "' does not match trait '" + impl->traitName +
+                        "': expected " + std::to_string(traitParamCount) +
+                        " parameter(s), got " + std::to_string(implParamCount));
+                continue;
+            }
+
+            bool mismatch = false;
+            for(size_t i = 0; i < traitParamCount; ++i)
+            {
+                auto* expectedParam = traitMethod->parameters->parameters[i];
+                auto* actualParam = implMethod->parameters->parameters[i];
+                if(!expectedParam || !actualParam)
+                    continue;
+                if(expectedParam->name != actualParam->name)
+                {
+                    reportError(
+                        implMethod->line,
+                        "method '" + impl->structName + "::" +
+                            implMethod->name + "' does not match trait '" +
+                            impl->traitName + "': parameter " +
+                            std::to_string(i + 1) + " must be named '" +
+                            expectedParam->name + "'");
+                    mismatch = true;
+                    break;
+                }
+                if(!typeNodesEquivalent(expectedParam->type, actualParam->type,
+                                        impl->typeParams, impl->structName))
+                {
+                    reportError(
+                        implMethod->line,
+                        "method '" + impl->structName + "::" +
+                            implMethod->name + "' does not match trait '" +
+                            impl->traitName + "': parameter '" +
+                            actualParam->name + "' has type '" +
+                            type_name_for_error(actualParam->type) +
+                            "', expected '" +
+                            type_name_for_error(expectedParam->type) + "'");
+                    mismatch = true;
+                    break;
+                }
+            }
+            if(mismatch)
+                continue;
+
+            if(!typeNodesEquivalent(traitMethod->returnType, implMethod->returnType,
+                                    impl->typeParams, impl->structName))
+            {
+                reportError(
+                    implMethod->line,
+                    "method '" + impl->structName + "::" + implMethod->name +
+                        "' does not match trait '" + impl->traitName +
+                        "': return type '" +
+                        type_name_for_error(implMethod->returnType) +
+                        "' does not match expected '" +
+                        type_name_for_error(traitMethod->returnType) + "'");
+            }
+        }
+
+        // Super-trait check: `trait Foo: Bar` requires every implementer of
+        // Foo to also implement Bar. Generic impls (`impl<T> Foo for X`) are
+        // skipped here because their concrete type isn't fixed yet.
+        if(!traitDef->superTraits.empty() && impl->typeParams.empty())
+        {
+            auto& concreteImpls = structImplementedTraits[impl->structName];
+            for(const auto& superTrait : traitDef->superTraits)
+            {
+                if(superTrait.empty())
+                    continue;
+                if(concreteImpls.find(superTrait) == concreteImpls.end())
+                {
+                    reportError(
+                        impl->line,
+                        "trait '" + impl->traitName + "' for struct '" +
+                            impl->structName +
+                            "' requires struct to also implement super-trait '" +
+                            superTrait + "'");
+                }
+            }
+        }
+    };
+
+    // Repopulate structImplementedTraits after the cleanup above, so the
+    // super-trait validation can see all concrete impls in the program.
+    if(program->implList)
+    {
+        for(auto* impl : program->implList->impls)
+        {
+            if(!impl || impl->traitName.empty())
+                continue;
+            if(!impl->typeParams.empty())
+                continue;
+            structImplementedTraits[impl->structName].insert(impl->traitName);
+        }
+    }
+
+    if(program->implList)
+    {
+        for(auto* impl : program->implList->impls)
+            validateTraitImplBlock(impl);
+    }
+
     // Collect generic impl blocks
     if(program->implList)
     {
@@ -5792,6 +6224,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 // Non-generic impl block - process immediately
                 for(auto method : impl->methods)
                 {
+                    if(method && method->sourceModule.empty())
+                        method->sourceModule = currentModule;
                     // Register the method with the struct
                     structMethods[impl->structName][method->name] =
                         std::make_pair(method->isPublic, method);
@@ -6763,6 +7197,31 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     // Track which module this function is from (for visibility checks)
     std::string savedModule = currentModule;
     currentModule = node->sourceModule;
+    auto savedIP = builder.saveIP();
+    auto savedNamedValues = namedValues;
+    auto savedConstantVariables = constantVariables;
+    auto savedMovedVariables = movedVariables;
+    auto savedPointerBorrowTarget = pointerBorrowTarget;
+    auto savedActiveBorrowers = activeBorrowers;
+    auto savedActiveMutBorrower = activeMutBorrower;
+    auto savedVariableScopeDepth = variableScopeDepth;
+    auto savedVariableTypes = variableTypes;
+    auto savedStructVariableTypes = structVariableTypes;
+    auto savedTraitObjectVariableTypes = traitObjectVariableTypes;
+    auto savedEnumVariableTypes = enumVariableTypes;
+    auto savedListElementTypes = listElementTypes;
+    auto savedMapKeyValueTypes = mapKeyValueTypes;
+    auto savedTupleElementTypes = tupleElementTypes;
+    auto savedPointerElementTypes = pointerElementTypes;
+    auto savedCleanupScopes = cleanupScopes;
+    auto savedPointerBorrowScopes = pointerBorrowScopes;
+    auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
+    auto savedClosureVariables = closureVariables;
+    auto savedActiveInlineClosures = activeInlineClosures;
+    auto savedCurrentFunctionExceptionFrame = currentFunctionExceptionFrame;
+    auto savedSemanticReturnType = currentSemanticReturnType;
+    int savedUnsafeDepth = unsafeDepth;
+    currentSemanticReturnType = node->returnType;
 
     // Create a new basic block for the function
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
@@ -6925,6 +7384,14 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 pointerElementTypes[std::string(arg.getName())] =
                     ptrType->elementType;
             }
+            if(auto* traitObjType =
+                   dynamic_cast<TraitObjectTypeNode*>(paramNode->type))
+            {
+                variableTypes[std::string(arg.getName())] =
+                    TypeNode::TYPE_TRAIT_OBJECT;
+                traitObjectVariableTypes[std::string(arg.getName())] =
+                    traitObjType->traitName;
+            }
         }
         paramIdx++;
     }
@@ -7011,10 +7478,32 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     emitAllActiveCleanups();
     builder.CreateCall(exceptionsRethrowFunc, {});
     builder.CreateUnreachable();
-    currentFunctionExceptionFrame = nullptr;
 
-    // Restore the previous module context
+    namedValues = std::move(savedNamedValues);
+    constantVariables = std::move(savedConstantVariables);
+    movedVariables = std::move(savedMovedVariables);
+    pointerBorrowTarget = std::move(savedPointerBorrowTarget);
+    activeBorrowers = std::move(savedActiveBorrowers);
+    activeMutBorrower = std::move(savedActiveMutBorrower);
+    variableScopeDepth = std::move(savedVariableScopeDepth);
+    variableTypes = std::move(savedVariableTypes);
+    structVariableTypes = std::move(savedStructVariableTypes);
+    traitObjectVariableTypes = std::move(savedTraitObjectVariableTypes);
+    enumVariableTypes = std::move(savedEnumVariableTypes);
+    listElementTypes = std::move(savedListElementTypes);
+    mapKeyValueTypes = std::move(savedMapKeyValueTypes);
+    tupleElementTypes = std::move(savedTupleElementTypes);
+    pointerElementTypes = std::move(savedPointerElementTypes);
+    cleanupScopes = std::move(savedCleanupScopes);
+    pointerBorrowScopes = std::move(savedPointerBorrowScopes);
+    variableScopeDepthScopes = std::move(savedVariableScopeDepthScopes);
+    closureVariables = std::move(savedClosureVariables);
+    activeInlineClosures = std::move(savedActiveInlineClosures);
+    currentFunctionExceptionFrame = savedCurrentFunctionExceptionFrame;
+    currentSemanticReturnType = savedSemanticReturnType;
+    unsafeDepth = savedUnsafeDepth;
     currentModule = savedModule;
+    builder.restoreIP(savedIP);
 
     // Verify the function
     llvm::verifyFunction(*function);
@@ -7497,6 +7986,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                         auto savedConstantVariables = constantVariables;
                         auto savedVariableTypes = variableTypes;
                         auto savedStructVariableTypes = structVariableTypes;
+                        auto savedTraitObjectVariableTypes =
+                            traitObjectVariableTypes;
                         auto savedEnumVariableTypes = enumVariableTypes;
                         auto savedListElementTypes = listElementTypes;
                         auto savedMapKeyValueTypes = mapKeyValueTypes;
@@ -7518,6 +8009,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                         constantVariables = savedConstantVariables;
                         variableTypes = savedVariableTypes;
                         structVariableTypes = savedStructVariableTypes;
+                        traitObjectVariableTypes =
+                            savedTraitObjectVariableTypes;
                         enumVariableTypes = savedEnumVariableTypes;
                         listElementTypes = savedListElementTypes;
                         mapKeyValueTypes = savedMapKeyValueTypes;
@@ -8696,6 +9189,8 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
                             auto savedConstantVariables = constantVariables;
                             auto savedVariableTypes = variableTypes;
                             auto savedStructVariableTypes = structVariableTypes;
+                            auto savedTraitObjectVariableTypes =
+                                traitObjectVariableTypes;
                             auto savedEnumVariableTypes = enumVariableTypes;
                             auto savedListElementTypes = listElementTypes;
                             auto savedMapKeyValueTypes = mapKeyValueTypes;
@@ -8717,6 +9212,8 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
                             constantVariables = savedConstantVariables;
                             variableTypes = savedVariableTypes;
                             structVariableTypes = savedStructVariableTypes;
+                            traitObjectVariableTypes =
+                                savedTraitObjectVariableTypes;
                             enumVariableTypes = savedEnumVariableTypes;
                             listElementTypes = savedListElementTypes;
                             mapKeyValueTypes = savedMapKeyValueTypes;
@@ -9003,6 +9500,8 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
                     auto savedConstantVariables = constantVariables;
                     auto savedVariableTypes = variableTypes;
                     auto savedStructVariableTypes = structVariableTypes;
+                    auto savedTraitObjectVariableTypes =
+                        traitObjectVariableTypes;
                     auto savedEnumVariableTypes = enumVariableTypes;
                     auto savedListElementTypes = listElementTypes;
                     auto savedMapKeyValueTypes = mapKeyValueTypes;
@@ -9024,6 +9523,7 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
                     constantVariables = savedConstantVariables;
                     variableTypes = savedVariableTypes;
                     structVariableTypes = savedStructVariableTypes;
+                    traitObjectVariableTypes = savedTraitObjectVariableTypes;
                     enumVariableTypes = savedEnumVariableTypes;
                     listElementTypes = savedListElementTypes;
                     mapKeyValueTypes = savedMapKeyValueTypes;
@@ -11236,7 +11736,35 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
         if(!validateNoEscapingBorrow(node->expression, node->line, "return"))
             return;
 
-        llvm::Value* returnValue = generateExpression(node->expression);
+        llvm::Value* returnValue = nullptr;
+        if(auto* traitObj =
+               dynamic_cast<TraitObjectTypeNode*>(currentSemanticReturnType))
+        {
+            llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
+            TypeNode* exprType = getLValueType(node->expression, node->line);
+            if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+            {
+                returnValue = generateExpression(node->expression);
+                returnValue =
+                    coerceTraitObjectValue(returnValue, traitObjType,
+                                           node->line);
+            }
+            else if(exprType)
+                returnValue = buildTraitObjectValue(node->expression,
+                                                    traitObj->traitName,
+                                                    node->line, true);
+            else
+            {
+                returnValue = generateExpression(node->expression);
+                returnValue =
+                    coerceTraitObjectValue(returnValue, traitObjType,
+                                           node->line);
+            }
+        }
+        else
+        {
+            returnValue = generateExpression(node->expression);
+        }
         if(!returnValue)
             return;
         consumeMoveFromExpression(node->expression, node->line, "return");
@@ -12057,6 +12585,268 @@ llvm::StructType* CodeGenerator::getStructType(const std::string& name)
     return nullptr;
 }
 
+llvm::Type* CodeGenerator::getTraitObjectType(const std::string& traitName)
+{
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* opaquePtr =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    auto it = traitObjectTypes.find(traitName);
+    if(it != traitObjectTypes.end())
+        return it->second;
+    auto* ty = llvm::StructType::create(
+        context, {opaquePtr, opaquePtr}, "trait.obj." + traitName);
+    traitObjectTypes[traitName] = ty;
+    return ty;
+}
+
+llvm::Type* CodeGenerator::getTraitVTableType(const std::string& traitName)
+{
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* opaquePtr =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    auto it = traitVTableTypes.find(traitName);
+    if(it != traitVTableTypes.end())
+        return it->second;
+
+    auto traitIt = traitDefinitions.find(traitName);
+    if(traitIt == traitDefinitions.end())
+    {
+        for(auto it = traitDefinitions.begin(); it != traitDefinitions.end(); ++it)
+        {
+            if(trait_names_equivalent(it->first, traitName))
+            {
+                traitIt = it;
+                break;
+            }
+        }
+    }
+    if(traitIt == traitDefinitions.end() || !traitIt->second)
+        return nullptr;
+
+    std::vector<llvm::Type*> fields;
+    fields.reserve(traitIt->second->methods.size());
+    for(size_t i = 0; i < traitIt->second->methods.size(); ++i)
+        fields.push_back(opaquePtr);
+
+    auto* ty = llvm::StructType::create(context, fields,
+                                        "trait.vtable." + traitName);
+    traitVTableTypes[traitName] = ty;
+    return ty;
+}
+
+llvm::GlobalVariable* CodeGenerator::ensureTraitVTable(
+    const std::string& concreteTypeName, const std::string& traitName)
+{
+    std::string key = concreteTypeName + "::" + traitName;
+    auto it = traitVTableGlobals.find(key);
+    if(it != traitVTableGlobals.end())
+        return it->second;
+
+    auto traitIt = traitDefinitions.find(traitName);
+    if(traitIt == traitDefinitions.end())
+    {
+        for(auto it = traitDefinitions.begin(); it != traitDefinitions.end(); ++it)
+        {
+            if(trait_names_equivalent(it->first, traitName))
+            {
+                traitIt = it;
+                break;
+            }
+        }
+    }
+    if(traitIt == traitDefinitions.end() || !traitIt->second)
+    {
+        reportError(0, "unknown trait object type: '" + traitName + "'");
+        return nullptr;
+    }
+    TraitDefNode* traitDef = traitIt->second;
+    llvm::Type* vtableType = getTraitVTableType(traitName);
+    if(!vtableType)
+        return nullptr;
+
+    std::vector<llvm::Constant*> entries;
+    entries.reserve(traitDef->methods.size());
+    for(auto* traitMethod : traitDef->methods)
+    {
+        if(!traitMethod)
+            continue;
+        auto methodsIt = structMethods.find(concreteTypeName);
+        if(methodsIt == structMethods.end())
+        {
+            reportError(traitMethod->line,
+                        "unknown struct '" + concreteTypeName +
+                            "' for trait object dispatch");
+            return nullptr;
+        }
+        auto mit = methodsIt->second.find(traitMethod->name);
+        if(mit == methodsIt->second.end() || !mit->second.second)
+        {
+            reportError(traitMethod->line,
+                        "missing method '" + traitMethod->name +
+                            "' for trait object dispatch on '" +
+                            concreteTypeName + "'");
+            return nullptr;
+        }
+        StructMethodNode* concreteMethod = mit->second.second;
+        llvm::Function* function =
+            generateMethodDeclaration(concreteTypeName, concreteMethod);
+        if(function && function->empty())
+            function = generateMethodDefinition(concreteTypeName,
+                                                concreteMethod);
+        if(!function)
+            return nullptr;
+
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* opaquePtr =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        entries.push_back(llvm::ConstantExpr::getBitCast(function, opaquePtr));
+    }
+
+    auto* init = llvm::ConstantStruct::get(
+        llvm::cast<llvm::StructType>(vtableType), entries);
+    auto* gv = new llvm::GlobalVariable(
+        *module, llvm::cast<llvm::StructType>(vtableType), true,
+        llvm::GlobalValue::PrivateLinkage, init,
+        "__mlang_trait_vtable." + key);
+    traitVTableGlobals[key] = gv;
+    return gv;
+}
+
+llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
+                                                  const std::string& traitName,
+                                                  int line, bool heapCopy)
+{
+    llvm::Value* dataPtr = getLValuePointer(expr, line);
+    if(!dataPtr)
+        return nullptr;
+
+    TypeNode* lvalueType = getLValueType(expr, line);
+    if(!lvalueType)
+        return nullptr;
+
+    std::string concreteTypeName;
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(lvalueType))
+    {
+        concreteTypeName = resolveVisibleStructName(structRef->structName);
+    }
+    else if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(lvalueType))
+    {
+        concreteTypeName = getOrCreateMonomorphizedStruct(genRef->structName,
+                                                          genRef->typeArgs);
+    }
+    else
+    {
+        reportError(line, "trait object arguments require a struct value");
+        return nullptr;
+    }
+
+    if(concreteTypeName.empty())
+    {
+        reportError(line, "unknown concrete type for trait object dispatch");
+        return nullptr;
+    }
+    auto implIt = structImplementedTraits.find(concreteTypeName);
+    std::string implementedTraitName;
+    if(implIt != structImplementedTraits.end())
+    {
+        for(const auto& candidate : implIt->second)
+        {
+            if(trait_names_equivalent(candidate, traitName))
+            {
+                implementedTraitName = candidate;
+                break;
+            }
+        }
+    }
+    if(implementedTraitName.empty())
+    {
+        reportError(line, "type '" + concreteTypeName +
+                              "' does not implement trait '" + traitName +
+                              "'");
+        return nullptr;
+    }
+
+    llvm::GlobalVariable* vtable =
+        ensureTraitVTable(concreteTypeName, implementedTraitName);
+    if(!vtable)
+        return nullptr;
+
+    if(heapCopy)
+    {
+        llvm::Type* concreteType = getLLVMTypeFromNode(lvalueType);
+        if(!concreteType)
+            return nullptr;
+
+        const llvm::DataLayout& dl = module->getDataLayout();
+        auto sizeBytes = dl.getTypeAllocSize(concreteType).getFixedValue();
+        llvm::Value* sizeVal = llvm::ConstantInt::get(
+            llvm::Type::getInt64Ty(context), sizeBytes);
+        llvm::Value* heapPtr =
+            builder.CreateCall(mallocFunc, {sizeVal}, "trait.obj.heap");
+        llvm::Value* concreteValue =
+            builder.CreateLoad(concreteType, dataPtr, "trait.obj.copy");
+        builder.CreateStore(concreteValue, heapPtr);
+        dataPtr = heapPtr;
+    }
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* opaquePtr =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Value* dataPtrI8 =
+        builder.CreateBitCast(dataPtr, opaquePtr, "trait.obj.data");
+    llvm::Value* vtablePtr =
+        builder.CreateBitCast(vtable, opaquePtr, "trait.obj.vtable");
+
+    llvm::StructType* objType =
+        llvm::cast<llvm::StructType>(getTraitObjectType(traitName));
+    llvm::Value* obj = llvm::Constant::getNullValue(objType);
+    obj = builder.CreateInsertValue(obj, dataPtrI8, 0, "trait.obj.data");
+    obj = builder.CreateInsertValue(obj, vtablePtr, 1, "trait.obj.vtable");
+    return obj;
+}
+
+llvm::Value* CodeGenerator::coerceTraitObjectValue(llvm::Value* value,
+                                                   llvm::Type* expectedType,
+                                                   int line)
+{
+    if(!value || !expectedType)
+        return nullptr;
+    if(value->getType() == expectedType)
+        return value;
+
+    auto* actualStruct = llvm::dyn_cast<llvm::StructType>(value->getType());
+    auto* expectedStruct = llvm::dyn_cast<llvm::StructType>(expectedType);
+    if(!actualStruct || !expectedStruct ||
+       actualStruct->getNumElements() != 2 ||
+       expectedStruct->getNumElements() != 2)
+    {
+        reportError(line, "trait object type mismatch");
+        return nullptr;
+    }
+
+    llvm::Value* dataPtr = builder.CreateExtractValue(value, 0, "trait.obj.data");
+    llvm::Value* vtablePtr =
+        builder.CreateExtractValue(value, 1, "trait.obj.vtable");
+    llvm::Value* coerced = llvm::Constant::getNullValue(expectedType);
+    coerced = builder.CreateInsertValue(coerced, dataPtr, 0,
+                                        "trait.obj.coerced.data");
+    coerced = builder.CreateInsertValue(coerced, vtablePtr, 1,
+                                        "trait.obj.coerced.vtable");
+    return coerced;
+}
+
 std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
 {
     if(!typeNode)
@@ -12068,6 +12858,9 @@ std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
                    ? "ref_mut_" + typeMangle(refType->elementType)
                    : "ref_" + typeMangle(refType->elementType);
     }
+
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(typeNode))
+        return "dyn_" + traitObj->traitName;
 
     if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
         return "ptr_" + typeMangle(ptrType->elementType);
@@ -12173,6 +12966,9 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
         return new ReferenceTypeNode(cloneTypeNode(refType->elementType),
                                      refType->isMutable);
     }
+
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(typeNode))
+        return new TraitObjectTypeNode(traitObj->traitName);
 
     if(auto* listType = dynamic_cast<GenericListTypeNode*>(typeNode))
         return new GenericListTypeNode(cloneTypeNode(listType->elementType));
@@ -12330,6 +13126,14 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
             return typeNode;
         }
 
+        if(!validateTypeArgumentTraitBounds(
+               it->second.typeParams, it->second.typeParamTraitBounds,
+               genStruct->typeArgs, scopeTypeParams, typeNode->line,
+               "type alias", genStruct->structName))
+        {
+            return typeNode;
+        }
+
         if(in_stack(genStruct->structName))
         {
             reportError(typeNode->line, "cyclic type alias detected for '" +
@@ -12347,6 +13151,137 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
     }
 
     return typeNode;
+}
+
+bool CodeGenerator::validateTypeArgumentTraitBounds(
+    const std::vector<std::string>& typeParams,
+    const std::map<std::string, std::string>& traitBounds,
+    const std::vector<TypeNode*>& typeArgs,
+    const std::set<std::string>& scopeTypeParams, int line,
+    const std::string& ownerKind, const std::string& ownerName,
+    bool reportFailures)
+{
+    if(typeParams.size() != typeArgs.size())
+        return true;
+
+    std::function<bool(TypeNode*)> containsScopedTypeParam =
+        [&](TypeNode* type) -> bool
+    {
+        if(!type)
+            return false;
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+            return scopeTypeParams.count(structRef->structName) != 0;
+        if(auto* genericRef = dynamic_cast<GenericStructTypeRefNode*>(type))
+        {
+            for(auto* arg : genericRef->typeArgs)
+            {
+                if(containsScopedTypeParam(arg))
+                    return true;
+            }
+            return false;
+        }
+        if(auto* listType = dynamic_cast<GenericListTypeNode*>(type))
+            return containsScopedTypeParam(listType->elementType);
+        if(auto* mapType = dynamic_cast<MapTypeNode*>(type))
+            return containsScopedTypeParam(mapType->keyType) ||
+                   containsScopedTypeParam(mapType->valueType);
+        if(auto* tupleType = dynamic_cast<TupleTypeNode*>(type))
+        {
+            if(!tupleType->elementTypes)
+                return false;
+            for(auto* elem : tupleType->elementTypes->types)
+            {
+                if(containsScopedTypeParam(elem))
+                    return true;
+            }
+            return false;
+        }
+        if(auto* ptrType = dynamic_cast<PointerTypeNode*>(type))
+            return containsScopedTypeParam(ptrType->elementType);
+        if(auto* refType = dynamic_cast<ReferenceTypeNode*>(type))
+            return containsScopedTypeParam(refType->elementType);
+        return false;
+    };
+
+    for(size_t i = 0; i < typeParams.size(); ++i)
+    {
+        auto boundIt = traitBounds.find(typeParams[i]);
+        if(boundIt == traitBounds.end() || boundIt->second.empty())
+            continue;
+
+        TypeNode* typeArg = typeArgs[i];
+        if(!typeArg || containsScopedTypeParam(typeArg))
+            continue;
+
+        std::vector<std::string> aliasStack;
+        TypeNode* resolvedType =
+            resolveTypeAliasNode(cloneTypeNode(typeArg), scopeTypeParams,
+                                 aliasStack);
+        if(!resolvedType || containsScopedTypeParam(resolvedType))
+            continue;
+
+        std::string concreteTypeName;
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(resolvedType))
+        {
+            concreteTypeName = structRef->structName;
+        }
+        else if(auto* genericRef =
+                    dynamic_cast<GenericStructTypeRefNode*>(resolvedType))
+        {
+            concreteTypeName = getOrCreateMonomorphizedStruct(
+                genericRef->structName, genericRef->typeArgs);
+        }
+
+        // Bound list is stored as a `+`-joined string (e.g. "Foo+Bar") to
+        // keep the storage type unchanged. Split and require every trait.
+        std::vector<std::string> requiredTraits;
+        {
+            const std::string& joined = boundIt->second;
+            size_t start = 0;
+            while(start < joined.size())
+            {
+                size_t plus = joined.find('+', start);
+                if(plus == std::string::npos)
+                    plus = joined.size();
+                std::string single = joined.substr(start, plus - start);
+                if(!single.empty())
+                    requiredTraits.push_back(single);
+                start = plus + 1;
+            }
+        }
+
+        for(const auto& requiredTrait : requiredTraits)
+        {
+            bool satisfiesBound = false;
+            if(!concreteTypeName.empty())
+            {
+                auto traitIt = structImplementedTraits.find(concreteTypeName);
+                satisfiesBound =
+                    traitIt != structImplementedTraits.end() &&
+                    traitIt->second.find(requiredTrait) != traitIt->second.end();
+            }
+
+            if(!satisfiesBound)
+            {
+                if(reportFailures)
+                {
+                    const int errorLine =
+                        line > 0 ? line : (typeArg->line > 0 ? typeArg->line : 0);
+                    reportError(errorLine,
+                                "type argument '" +
+                                    type_name_for_error(typeArg) + "' for " +
+                                    ownerKind + " '" + ownerName +
+                                    "' must implement trait '" +
+                                    requiredTrait +
+                                    "' required by type parameter '" +
+                                    typeParams[i] + "'");
+                }
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 void CodeGenerator::buildTypeAliasTable(ProgramNode* program)
@@ -12478,6 +13413,7 @@ void CodeGenerator::buildTypeAliasTable(ProgramNode* program)
         info.line = aliasDef->line;
         info.col = aliasDef->col;
         info.typeParams = aliasDef->typeParams;
+        info.typeParamTraitBounds = aliasDef->typeParamTraitBounds;
 
         if(info.typeParams.empty())
         {
@@ -13259,6 +14195,64 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         return;
     }
 
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(node->type))
+    {
+        llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
+        if(!traitObjType)
+        {
+            reportError(node->line,
+                        "unknown trait object type: " + traitObj->traitName);
+            return;
+        }
+
+        llvm::AllocaInst* alloca = createEntryBlockAlloca(
+            builder.GetInsertBlock()->getParent(), traitObjType, node->name);
+
+        llvm::Value* storedValue = nullptr;
+        if(node->expression)
+        {
+            TypeNode* exprType = getLValueType(node->expression, node->line);
+            if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+            {
+                storedValue = generateExpression(node->expression);
+                storedValue =
+                    coerceTraitObjectValue(storedValue, traitObjType,
+                                           node->line);
+            }
+            else if(exprType)
+                storedValue = buildTraitObjectValue(node->expression,
+                                                    traitObj->traitName,
+                                                    node->line);
+            else
+            {
+                storedValue = generateExpression(node->expression);
+                storedValue =
+                    coerceTraitObjectValue(storedValue, traitObjType,
+                                           node->line);
+            }
+            if(!storedValue)
+                return;
+        }
+        else
+        {
+            storedValue = llvm::Constant::getNullValue(traitObjType);
+        }
+
+        storedValue = applyStructCopySemantics(storedValue);
+        builder.CreateStore(storedValue, alloca);
+        if(node->expression)
+            consumeMoveFromExpression(node->expression, node->line,
+                                      "initializing '" + node->name + "'");
+        clearMovedVariable(node->name);
+        clearPointerBorrow(node->name);
+        namedValues[node->name] = alloca;
+        recordVariableScopeDepth(node->name);
+        variableTypes[node->name] = TypeNode::TYPE_TRAIT_OBJECT;
+        traitObjectVariableTypes[node->name] = traitObj->traitName;
+        constantVariables.insert(node->name);
+        return;
+    }
+
     // For list/array-fill initializers with a declared element type, pass that
     // type to the generator so integer literals (always i64) are coerced to the
     // declared size (e.g., i32), preventing stride mismatches during iteration.
@@ -13980,6 +14974,61 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     clearPointerBorrow(node->name);
     // `var` is always mutable, including when shadowing a previous `let`.
     constantVariables.erase(node->name);
+
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(node->type))
+    {
+        llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
+        if(!traitObjType)
+        {
+            reportError(node->line,
+                        "unknown trait object type: " + traitObj->traitName);
+            return;
+        }
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(traitObjType, nullptr, node->name);
+        llvm::Value* storedValue = nullptr;
+        if(node->initExpr)
+        {
+            TypeNode* exprType = getLValueType(node->initExpr, node->line);
+            if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+            {
+                storedValue = generateExpression(node->initExpr);
+                storedValue =
+                    coerceTraitObjectValue(storedValue, traitObjType,
+                                           node->line);
+            }
+            else if(exprType)
+                storedValue = buildTraitObjectValue(node->initExpr,
+                                                    traitObj->traitName,
+                                                    node->line);
+            else
+            {
+                storedValue = generateExpression(node->initExpr);
+                storedValue =
+                    coerceTraitObjectValue(storedValue, traitObjType,
+                                           node->line);
+            }
+            if(!storedValue)
+                return;
+        }
+        else
+        {
+            storedValue = llvm::Constant::getNullValue(traitObjType);
+        }
+        storedValue = applyStructCopySemantics(storedValue);
+        builder.CreateStore(storedValue, alloca);
+        if(node->initExpr)
+            consumeMoveFromExpression(node->initExpr, node->line,
+                                      "initializing '" + node->name + "'");
+        clearMovedVariable(node->name);
+        namedValues[node->name] = alloca;
+        recordVariableScopeDepth(node->name);
+        variableTypes[node->name] = TypeNode::TYPE_TRAIT_OBJECT;
+        traitObjectVariableTypes[node->name] = traitObj->traitName;
+        return;
+    }
+
     if(node->initExpr)
     {
         consumeMoveFromExpression(node->initExpr, node->line,
@@ -15228,13 +16277,6 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         return;
     }
 
-    // Generate the value to assign
-    llvm::Value* value = generateExpression(node->expression);
-    if(!value)
-        return;
-    consumeMoveFromExpression(node->expression, node->line,
-                              "assigning to field '" + fieldName + "'");
-
     // Get struct type
     llvm::StructType* structType = getStructType(structTypeName);
     if(!structType)
@@ -15242,6 +16284,38 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
     // Convert value if needed
     llvm::Type* targetType = getLLVMTypeFromNode(fieldType);
+    llvm::Value* value = nullptr;
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(fieldType))
+    {
+        TypeNode* exprType = getLValueType(node->expression, node->line);
+        if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+        {
+            value = generateExpression(node->expression);
+            value = coerceTraitObjectValue(value, targetType, node->line);
+        }
+        else if(exprType)
+        {
+            value = buildTraitObjectValue(node->expression,
+                                          traitObj->traitName, node->line,
+                                          /*heapCopy=*/true);
+        }
+        else
+        {
+            value = generateExpression(node->expression);
+            value = coerceTraitObjectValue(value, targetType, node->line);
+        }
+        if(!value)
+            return;
+    }
+    else
+    {
+        value = generateExpression(node->expression);
+        if(!value)
+            return;
+    }
+    consumeMoveFromExpression(node->expression, node->line,
+                              "assigning to field '" + fieldName + "'");
+
     if(targetType->isPointerTy() && targetGlobalStorage &&
        !validateNoEscapingBorrow(node->expression, node->line,
                                  "store in global/static field '" + fieldName +
@@ -16606,6 +17680,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             auto savedConstantVariables = constantVariables;
             auto savedVariableTypes = variableTypes;
             auto savedStructVariableTypes = structVariableTypes;
+            auto savedTraitObjectVariableTypes = traitObjectVariableTypes;
             auto savedEnumVariableTypes = enumVariableTypes;
             auto savedListElementTypes = listElementTypes;
             auto savedMapKeyValueTypes = mapKeyValueTypes;
@@ -16617,6 +17692,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 constantVariables = savedConstantVariables;
                 variableTypes = savedVariableTypes;
                 structVariableTypes = savedStructVariableTypes;
+                traitObjectVariableTypes = savedTraitObjectVariableTypes;
                 enumVariableTypes = savedEnumVariableTypes;
                 listElementTypes = savedListElementTypes;
                 mapKeyValueTypes = savedMapKeyValueTypes;
@@ -16789,6 +17865,31 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                dynamic_cast<TupleTypeNode*>(type) != nullptr;
     };
 
+    auto concreteTypeImplementsTrait = [&](TypeNode* type,
+                                           const std::string& traitName) -> bool
+    {
+        if(!type)
+            return false;
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+        {
+            std::string resolved = resolveVisibleStructName(structRef->structName);
+            if(resolved.empty())
+                resolved = structRef->structName;
+            auto it = structImplementedTraits.find(resolved);
+            return it != structImplementedTraits.end() &&
+                   it->second.find(traitName) != it->second.end();
+        }
+        if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(type))
+        {
+            std::string resolved = getOrCreateMonomorphizedStruct(
+                genRef->structName, genRef->typeArgs);
+            auto it = structImplementedTraits.find(resolved);
+            return it != structImplementedTraits.end() &&
+                   it->second.find(traitName) != it->second.end();
+        }
+        return false;
+    };
+
     auto semanticArgumentType = [&](ExpressionNode* expr) -> TypeNode*
     {
         if(!expr)
@@ -16865,11 +17966,32 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(overloadIt == functionOverloads.end())
     {
         // Static struct method call syntax: Type::method(...)
-        size_t scopePos = node->name.find("::");
+        size_t scopePos = node->name.rfind("::");
         if(scopePos != std::string::npos)
         {
             std::string structName = node->name.substr(0, scopePos);
             std::string methodName = node->name.substr(scopePos + 2);
+            std::string displayStructName = structName;
+
+            if(TypeNode* parsedType = type_from_text(structName))
+            {
+                if(auto* genericStructType =
+                       dynamic_cast<GenericStructTypeRefNode*>(parsedType))
+                {
+                    std::string visibleStructName = resolve_visible_struct_base_name(
+                        genericStructType->structName, genericStructTemplates,
+                        structMethods, structVisibility);
+                    structName = getOrCreateMonomorphizedStruct(
+                        visibleStructName, genericStructType->typeArgs);
+                }
+                else if(auto* structType =
+                            dynamic_cast<StructTypeRefNode*>(parsedType))
+                {
+                    structName = resolve_visible_struct_base_name(
+                        structType->structName, genericStructTemplates,
+                        structMethods, structVisibility);
+                }
+            }
 
             auto sit = structMethods.find(structName);
             std::string resolvedStructName = structName;
@@ -16906,9 +18028,17 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             if(sit != structMethods.end())
             {
                 auto mit = sit->second.find(methodName);
-                if(mit != sit->second.end() && mit->second.second &&
-                   mit->second.second->isStatic)
+                if(mit != sit->second.end() && mit->second.second)
                 {
+                    if(!mit->second.second->isStatic)
+                    {
+                        reportError(node->line,
+                                    "instance method '" + displayStructName +
+                                        "::" + methodName +
+                                        "' must be called on a value");
+                        return nullptr;
+                    }
+
                     std::string mangledName =
                         resolvedStructName + "_" + methodName;
                     llvm::Function* callee = module->getFunction(mangledName);
@@ -16919,8 +18049,53 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     }
                     if(callee && callee->empty())
                     {
+                        llvm::BasicBlock* savedBlock = builder.GetInsertBlock();
+                        auto savedNamedValues = namedValues;
+                        auto savedConstantVariables = constantVariables;
+                        auto savedVariableTypes = variableTypes;
+                        auto savedStructVariableTypes = structVariableTypes;
+                        auto savedTraitObjectVariableTypes =
+                            traitObjectVariableTypes;
+                        auto savedEnumVariableTypes = enumVariableTypes;
+                        auto savedListElementTypes = listElementTypes;
+                        auto savedMapKeyValueTypes = mapKeyValueTypes;
+                        auto savedTupleElementTypes = tupleElementTypes;
+                        auto savedPointerElementTypes = pointerElementTypes;
+                        auto savedMovedVariables = movedVariables;
+                        auto savedPointerBorrowTarget = pointerBorrowTarget;
+                        auto savedActiveBorrowers = activeBorrowers;
+                        auto savedActiveMutBorrower = activeMutBorrower;
+                        auto savedVariableScopeDepth = variableScopeDepth;
+                        auto savedCleanupScopes = cleanupScopes;
+                        auto savedPointerBorrowScopes = pointerBorrowScopes;
+                        auto savedVariableScopeDepthScopes =
+                            variableScopeDepthScopes;
+
                         callee = generateMethodDefinition(resolvedStructName,
                                                           mit->second.second);
+
+                        namedValues = savedNamedValues;
+                        constantVariables = savedConstantVariables;
+                        variableTypes = savedVariableTypes;
+                        structVariableTypes = savedStructVariableTypes;
+                        traitObjectVariableTypes =
+                            savedTraitObjectVariableTypes;
+                        enumVariableTypes = savedEnumVariableTypes;
+                        listElementTypes = savedListElementTypes;
+                        mapKeyValueTypes = savedMapKeyValueTypes;
+                        tupleElementTypes = savedTupleElementTypes;
+                        pointerElementTypes = savedPointerElementTypes;
+                        movedVariables = savedMovedVariables;
+                        pointerBorrowTarget = savedPointerBorrowTarget;
+                        activeBorrowers = savedActiveBorrowers;
+                        activeMutBorrower = savedActiveMutBorrower;
+                        variableScopeDepth = savedVariableScopeDepth;
+                        cleanupScopes = savedCleanupScopes;
+                        pointerBorrowScopes = savedPointerBorrowScopes;
+                        variableScopeDepthScopes = savedVariableScopeDepthScopes;
+
+                        if(savedBlock)
+                            builder.SetInsertPoint(savedBlock);
                     }
                     if(!callee)
                     {
@@ -17089,21 +18264,39 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
         int totalCost = 0;
         bool ok = true;
-        for(size_t i = 0; i < expectedArgs; ++i)
+    for(size_t i = 0; i < expectedArgs; ++i)
+    {
+        if(info.node && info.node->parameters &&
+           i < info.node->parameters->parameters.size())
         {
-            if(info.node && info.node->parameters &&
-               i < info.node->parameters->parameters.size())
+            TypeNode* expectedSemantic =
+                info.node->parameters->parameters[i]->type;
+            if(auto* refType =
+                   dynamic_cast<ReferenceTypeNode*>(expectedSemantic))
             {
-                TypeNode* expectedSemantic =
-                    info.node->parameters->parameters[i]->type;
-                if(auto* refType =
-                       dynamic_cast<ReferenceTypeNode*>(expectedSemantic))
-                {
-                    expectedSemantic = refType->elementType;
-                }
+                expectedSemantic = refType->elementType;
+            }
 
-                TypeNode* actualSemantic =
-                    semanticArgumentType(node->arguments[i]);
+            TypeNode* actualSemantic =
+                semanticArgumentType(node->arguments[i]);
+            if(auto* traitObj =
+                   dynamic_cast<TraitObjectTypeNode*>(expectedSemantic))
+            {
+                if(auto* actualTraitObj =
+                       dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
+                {
+                    if(trait_names_equivalent(actualTraitObj->traitName,
+                                              traitObj->traitName))
+                        continue;
+                    }
+                    if(!concreteTypeImplementsTrait(actualSemantic,
+                                                    traitObj->traitName))
+                    {
+                        ok = false;
+                        break;
+                    }
+                    continue;
+                }
                 if((isCompositeSemanticType(expectedSemantic) ||
                     isCompositeSemanticType(actualSemantic)) &&
                    actualSemantic &&
@@ -17217,6 +18410,34 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 {
                     argVal =
                         builder.CreateFPCast(argVal, expectedType, "fpcast");
+                }
+                else if(best->node &&
+                        paramIdx < (size_t)best->node->parameters->parameters.size())
+                {
+                    auto* declParam = best->node->parameters->parameters[paramIdx];
+                    if(auto* traitObj =
+                           dynamic_cast<TraitObjectTypeNode*>(declParam->type))
+                    {
+                        llvm::Value* traitObjVal = nullptr;
+                        TypeNode* actualSemantic =
+                            semanticArgumentType(node->arguments[paramIdx]);
+                        if(dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
+                        {
+                            traitObjVal = coerceTraitObjectValue(
+                                argVal, expectedType, node->line);
+                        }
+                        else
+                        {
+                            traitObjVal = buildTraitObjectValue(
+                                node->arguments[paramIdx], traitObj->traitName,
+                                node->line);
+                        }
+                        if(!traitObjVal)
+                            return nullptr;
+                        args.push_back(traitObjVal);
+                        paramIdx++;
+                        continue;
+                    }
                 }
                 else if(!(actualType->isPointerTy() &&
                           expectedType->isPointerTy()))
@@ -18412,6 +19633,8 @@ void CodeGenerator::generateStructMethods(StructDefNode* node)
     // Register all methods for this struct
     for(auto method : node->members->methods)
     {
+        if(method && method->sourceModule.empty())
+            method->sourceModule = node->sourceModule;
         structMethods[node->name][method->name] =
             std::make_pair(method->isPublic, method);
 
@@ -18522,10 +19745,13 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
         }
         if(!exists)
         {
-            std::string srcModule;
-            auto sit = structVisibility.find(structName);
-            if(sit != structVisibility.end())
-                srcModule = sit->second.second;
+            std::string srcModule = method->sourceModule;
+            if(srcModule.empty())
+            {
+                auto sit = structVisibility.find(structName);
+                if(sit != structVisibility.end())
+                    srcModule = sit->second.second;
+            }
 
             std::string signatureKey = qname + "#" + function->getName().str();
 
@@ -18564,6 +19790,67 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         return function;
     }
 
+    std::string savedModule = currentModule;
+    if(!method->sourceModule.empty())
+        currentModule = method->sourceModule;
+    auto savedIP = builder.saveIP();
+    llvm::Value* savedExceptionFrame = currentFunctionExceptionFrame;
+    currentFunctionExceptionFrame = nullptr;
+    int savedUnsafeDepth = unsafeDepth;
+    unsafeDepth = 0;
+    auto savedNamedValues = namedValues;
+    auto savedConstantVariables = constantVariables;
+    auto savedMovedVariables = movedVariables;
+    auto savedPointerBorrowTarget = pointerBorrowTarget;
+    auto savedActiveBorrowers = activeBorrowers;
+    auto savedActiveMutBorrower = activeMutBorrower;
+    auto savedVariableScopeDepth = variableScopeDepth;
+    auto savedVariableTypes = variableTypes;
+    auto savedStructVariableTypes = structVariableTypes;
+    auto savedClosureVariables = closureVariables;
+    auto savedActiveInlineClosures = activeInlineClosures;
+    auto savedTraitObjectVariableTypes = traitObjectVariableTypes;
+    auto savedEnumVariableTypes = enumVariableTypes;
+    auto savedListElementTypes = listElementTypes;
+    auto savedMapKeyValueTypes = mapKeyValueTypes;
+    auto savedTupleElementTypes = tupleElementTypes;
+    auto savedPointerElementTypes = pointerElementTypes;
+    auto savedCleanupScopes = cleanupScopes;
+    auto savedPointerBorrowScopes = pointerBorrowScopes;
+    auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
+    auto savedTypeParamBindings = activeTypeParamBindings;
+    auto savedSemanticReturnType = currentSemanticReturnType;
+    currentSemanticReturnType = method->returnType;
+    auto restoreMethodCodegenState = [&]()
+    {
+        activeTypeParamBindings = savedTypeParamBindings;
+        currentSemanticReturnType = savedSemanticReturnType;
+        currentModule = savedModule;
+        builder.restoreIP(savedIP);
+        currentFunctionExceptionFrame = savedExceptionFrame;
+        unsafeDepth = savedUnsafeDepth;
+        namedValues = savedNamedValues;
+        constantVariables = savedConstantVariables;
+        movedVariables = savedMovedVariables;
+        pointerBorrowTarget = savedPointerBorrowTarget;
+        activeBorrowers = savedActiveBorrowers;
+        activeMutBorrower = savedActiveMutBorrower;
+        variableScopeDepth = savedVariableScopeDepth;
+        variableTypes = savedVariableTypes;
+        structVariableTypes = savedStructVariableTypes;
+        traitObjectVariableTypes = savedTraitObjectVariableTypes;
+        enumVariableTypes = savedEnumVariableTypes;
+        listElementTypes = savedListElementTypes;
+        mapKeyValueTypes = savedMapKeyValueTypes;
+        tupleElementTypes = savedTupleElementTypes;
+        pointerElementTypes = savedPointerElementTypes;
+        cleanupScopes = savedCleanupScopes;
+        pointerBorrowScopes = savedPointerBorrowScopes;
+        variableScopeDepthScopes = savedVariableScopeDepthScopes;
+        closureVariables = savedClosureVariables;
+        activeInlineClosures = savedActiveInlineClosures;
+    };
+
     // Create entry block
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
     builder.SetInsertPoint(bb);
@@ -18578,11 +19865,17 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     variableScopeDepth.clear();
     variableTypes.clear();
     structVariableTypes.clear();
+    traitObjectVariableTypes.clear();
     enumVariableTypes.clear();
+    listElementTypes.clear();
+    mapKeyValueTypes.clear();
+    tupleElementTypes.clear();
+    pointerElementTypes.clear();
+    closureVariables.clear();
+    activeInlineClosures.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
-    auto savedTypeParamBindings = activeTypeParamBindings;
     activeTypeParamBindings.clear();
     auto genericNameIt = mangledToGenericName.find(structName);
     if(genericNameIt != mangledToGenericName.end())
@@ -18706,6 +19999,14 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                     pointerElementTypes[std::string(arg.getName())] =
                         ptrType->elementType;
                 }
+                if(auto* traitObjType =
+                       dynamic_cast<TraitObjectTypeNode*>(paramNode->type))
+                {
+                    variableTypes[std::string(arg.getName())] =
+                        TypeNode::TYPE_TRAIT_OBJECT;
+                    traitObjectVariableTypes[std::string(arg.getName())] =
+                        traitObjType->traitName;
+                }
                 methodParamIdx++;
             }
         }
@@ -18716,7 +20017,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     {
         bool ok =
             generateMutexPropertyMethodBody(structName, method, function);
-        activeTypeParamBindings = savedTypeParamBindings;
+        restoreMethodCodegenState();
         return ok ? function : nullptr;
     }
 
@@ -18724,7 +20025,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     {
         bool ok =
             generateAtomicPropertyMethodBody(structName, method, function);
-        activeTypeParamBindings = savedTypeParamBindings;
+        restoreMethodCodegenState();
         return ok ? function : nullptr;
     }
 
@@ -18753,7 +20054,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     }
 
     llvm::verifyFunction(*function);
-    activeTypeParamBindings = savedTypeParamBindings;
+    restoreMethodCodegenState();
     return function;
 }
 
@@ -19394,11 +20695,567 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     std::string structTypeName;
 
     auto* objId = dynamic_cast<IdentifierNode*>(node->object);
+    if(!objId)
+    {
+        TypeNode* receiverSemanticType = getLValueType(node->object, node->line);
+        std::string traitName;
+        if(auto* traitObjType =
+               dynamic_cast<TraitObjectTypeNode*>(receiverSemanticType))
+        {
+            traitName = traitObjType->traitName;
+        }
+
+        if(!traitName.empty())
+        {
+            llvm::Value* receiverValue = generateExpression(node->object);
+            if(!receiverValue)
+                return nullptr;
+
+            llvm::Type* traitObjectType = getTraitObjectType(traitName);
+            if(!traitObjectType)
+                return nullptr;
+            if(receiverValue->getType()->isPointerTy() &&
+               traitObjectType->isStructTy())
+            {
+                receiverValue = builder.CreateLoad(
+                    traitObjectType, receiverValue, "traitobj.load");
+            }
+
+            auto traitIt = traitDefinitions.find(traitName);
+            if(traitIt == traitDefinitions.end())
+            {
+                for(auto it = traitDefinitions.begin();
+                    it != traitDefinitions.end(); ++it)
+                {
+                    if(trait_names_equivalent(it->first, traitName))
+                    {
+                        traitIt = it;
+                        break;
+                    }
+                }
+            }
+            if(traitIt == traitDefinitions.end() || !traitIt->second)
+            {
+                reportError(node->line,
+                            "unknown trait object type '" + traitName + "'");
+                return nullptr;
+            }
+
+            TraitDefNode* traitDef = traitIt->second;
+            StructMethodNode* traitMethod = nullptr;
+            size_t methodIndex = 0;
+            for(size_t i = 0; i < traitDef->methods.size(); ++i)
+            {
+                if(traitDef->methods[i] &&
+                   traitDef->methods[i]->name == node->methodName)
+                {
+                    traitMethod = traitDef->methods[i];
+                    methodIndex = i;
+                    break;
+                }
+            }
+            if(!traitMethod)
+            {
+                reportError(node->line, "trait '" + traitName +
+                                            "' has no method named '" +
+                                            node->methodName + "'");
+                return nullptr;
+            }
+            if(traitMethod->isStatic)
+            {
+                reportError(node->line, "static trait method '" + traitName +
+                                            "::" + node->methodName +
+                                            "' cannot be called on a trait object");
+                return nullptr;
+            }
+
+            llvm::Value* dataPtr =
+                builder.CreateExtractValue(receiverValue, 0, "traitobj.data");
+            llvm::Value* vtablePtr =
+                builder.CreateExtractValue(receiverValue, 1, "traitobj.vtable");
+            llvm::Type* vtableType = getTraitVTableType(traitName);
+            if(!vtableType)
+                return nullptr;
+            auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
+            llvm::Value* typedVtablePtr = builder.CreateBitCast(
+                vtablePtr, vtableStructType->getPointerTo(),
+                "traitobj.vtable.cast");
+            llvm::Value* slotPtr = builder.CreateStructGEP(
+                vtableStructType, typedVtablePtr,
+                static_cast<unsigned>(methodIndex), "traitobj.slot");
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
+#else
+            llvm::Type* opaquePtr =
+                llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+            llvm::Value* fnPtr =
+                builder.CreateLoad(opaquePtr, slotPtr, "traitobj.fn");
+
+            std::vector<llvm::Type*> paramTypes;
+            paramTypes.push_back(opaquePtr);
+            if(traitMethod->parameters)
+            {
+                for(auto* param : traitMethod->parameters->parameters)
+                {
+                    if(!param || param->name == "self")
+                        continue;
+                    llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+                    if(!paramType)
+                    {
+                        reportError(node->line,
+                                    "unknown type: " +
+                                        type_name_for_error(param->type));
+                        return nullptr;
+                    }
+                    paramTypes.push_back(paramType);
+                }
+            }
+            llvm::Type* returnType = getLLVMTypeFromNode(traitMethod->returnType);
+            if(!returnType)
+            {
+                reportError(node->line,
+                            "unknown type: " +
+                                type_name_for_error(traitMethod->returnType));
+                return nullptr;
+            }
+            llvm::FunctionType* fnType =
+                llvm::FunctionType::get(returnType, paramTypes, false);
+            llvm::Value* fn = builder.CreateBitCast(
+                fnPtr, fnType->getPointerTo(), "traitobj.fn.cast");
+
+            std::vector<llvm::Value*> callArgs;
+            callArgs.push_back(dataPtr);
+            size_t argIndex = 0;
+            for(auto* argExpr : node->arguments)
+            {
+                llvm::Value* argVal = generateExpression(argExpr);
+                if(!argVal)
+                    return nullptr;
+                if(argIndex + 1 < paramTypes.size())
+                {
+                    llvm::Type* expectedType = paramTypes[argIndex + 1];
+                    if(argVal->getType() != expectedType)
+                    {
+                        if(argVal->getType()->isIntegerTy() &&
+                           expectedType->isIntegerTy())
+                        {
+                            argVal = builder.CreateIntCast(
+                                argVal, expectedType, true, "trait.arg.cast");
+                        }
+                        else if(argVal->getType()->isIntegerTy() &&
+                                expectedType->isFloatingPointTy())
+                        {
+                            argVal = builder.CreateSIToFP(
+                                argVal, expectedType, "trait.arg.sitofp");
+                        }
+                        else if(argVal->getType()->isFloatingPointTy() &&
+                                expectedType->isFloatingPointTy())
+                        {
+                            argVal = builder.CreateFPCast(
+                                argVal, expectedType, "trait.arg.fpcast");
+                        }
+                        else if(argVal->getType()->isPointerTy() &&
+                                expectedType->isPointerTy())
+                        {
+                            argVal = builder.CreateBitCast(
+                                argVal, expectedType, "trait.arg.ptrcast");
+                        }
+                        else
+                        {
+                            reportError(node->line,
+                                        "argument type mismatch for trait call '" +
+                                            node->methodName + "'");
+                            return nullptr;
+                        }
+                    }
+                }
+                callArgs.push_back(argVal);
+                ++argIndex;
+            }
+
+            return builder.CreateCall(fnType, fn, callArgs, "traitcall");
+        }
+    }
     if(objId)
     {
         if(!validateVariableAccessible(objId->name, node->line, objId->col))
             return nullptr;
 
+        auto traitObjVarIt = traitObjectVariableTypes.find(objId->name);
+        if(traitObjVarIt != traitObjectVariableTypes.end())
+        {
+            const std::string& traitName = traitObjVarIt->second;
+            auto traitIt = traitDefinitions.find(traitName);
+            if(traitIt == traitDefinitions.end())
+            {
+                for(auto it = traitDefinitions.begin();
+                    it != traitDefinitions.end(); ++it)
+                {
+                    if(trait_names_equivalent(it->first, traitName))
+                    {
+                        traitIt = it;
+                        break;
+                    }
+                }
+            }
+            if(traitIt == traitDefinitions.end() || !traitIt->second)
+            {
+                reportError(node->line,
+                            "unknown trait object type '" + traitName + "'");
+                return nullptr;
+            }
+            TraitDefNode* traitDef = traitIt->second;
+            StructMethodNode* traitMethod = nullptr;
+            size_t methodIndex = 0;
+            for(size_t i = 0; i < traitDef->methods.size(); ++i)
+            {
+                if(traitDef->methods[i] &&
+                   traitDef->methods[i]->name == node->methodName)
+                {
+                    traitMethod = traitDef->methods[i];
+                    methodIndex = i;
+                    break;
+                }
+            }
+            if(!traitMethod)
+            {
+                reportError(node->line, "trait '" + traitName +
+                                            "' has no method named '" +
+                                            node->methodName + "'");
+                return nullptr;
+            }
+            if(traitMethod->isStatic)
+            {
+                reportError(node->line, "static trait method '" + traitName +
+                                            "::" + node->methodName +
+                                            "' cannot be called on a trait object");
+                return nullptr;
+            }
+            llvm::Value* objAlloc = namedValues[objId->name];
+            if(!objAlloc)
+            {
+                reportError(node->line,
+                            "unknown variable: " + objId->name);
+                return nullptr;
+            }
+            llvm::Type* objType = getTraitObjectType(traitName);
+            llvm::Value* obj = builder.CreateLoad(objType, objAlloc,
+                                                  objId->name + ".traitobj");
+            llvm::Value* dataPtr = builder.CreateExtractValue(
+                obj, 0, objId->name + ".traitobj.data");
+            llvm::Value* vtablePtr = builder.CreateExtractValue(
+                obj, 1, objId->name + ".traitobj.vtable");
+            llvm::Type* vtableType = getTraitVTableType(traitName);
+            if(!vtableType)
+                return nullptr;
+            auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
+            llvm::Value* typedVtablePtr = builder.CreateBitCast(
+                vtablePtr, vtableStructType->getPointerTo(),
+                objId->name + ".traitobj.vtable.cast");
+            llvm::Value* slotPtr = builder.CreateStructGEP(
+                vtableStructType, typedVtablePtr, static_cast<unsigned>(methodIndex),
+                objId->name + ".traitobj.slot");
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
+#else
+            llvm::Type* opaquePtr =
+                llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+            llvm::Value* fnPtr = builder.CreateLoad(
+                opaquePtr, slotPtr, objId->name + ".traitobj.fn");
+
+            std::vector<llvm::Type*> paramTypes;
+            paramTypes.push_back(opaquePtr);
+            if(traitMethod->parameters)
+            {
+                for(auto* param : traitMethod->parameters->parameters)
+                {
+                    if(!param || param->name == "self")
+                        continue;
+                    llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+                    if(!paramType)
+                    {
+                        reportError(node->line,
+                                    "unknown type: " +
+                                        type_name_for_error(param->type));
+                        return nullptr;
+                    }
+                    paramTypes.push_back(paramType);
+                }
+            }
+            llvm::Type* returnType = getLLVMTypeFromNode(traitMethod->returnType);
+            if(!returnType)
+            {
+                reportError(node->line,
+                            "unknown type: " +
+                                type_name_for_error(traitMethod->returnType));
+                return nullptr;
+            }
+            llvm::FunctionType* fnType =
+                llvm::FunctionType::get(returnType, paramTypes, false);
+            llvm::Value* fn = builder.CreateBitCast(
+                fnPtr, fnType->getPointerTo(), objId->name + ".traitobj.fn.cast");
+
+            if(!validateTemporaryBorrowArguments(node->arguments, node->methodName,
+                                                 objId->name))
+                return nullptr;
+
+            std::vector<llvm::Value*> callArgs;
+            callArgs.push_back(dataPtr);
+            size_t argIndex = 0;
+            for(auto* argExpr : node->arguments)
+            {
+                llvm::Value* argVal = generateExpression(argExpr);
+                if(!argVal)
+                    return nullptr;
+                if(argIndex + 1 < paramTypes.size())
+                {
+                    llvm::Type* expectedType = paramTypes[argIndex + 1];
+                    if(argVal->getType() != expectedType)
+                    {
+                        if(argVal->getType()->isIntegerTy() &&
+                           expectedType->isIntegerTy())
+                        {
+                            argVal = builder.CreateIntCast(
+                                argVal, expectedType, true, "trait.arg.cast");
+                        }
+                        else if(argVal->getType()->isIntegerTy() &&
+                                expectedType->isFloatingPointTy())
+                        {
+                            argVal = builder.CreateSIToFP(
+                                argVal, expectedType, "trait.arg.sitofp");
+                        }
+                        else if(argVal->getType()->isFloatingPointTy() &&
+                                expectedType->isFloatingPointTy())
+                        {
+                            argVal = builder.CreateFPCast(
+                                argVal, expectedType, "trait.arg.fpcast");
+                        }
+                        else if(argVal->getType()->isPointerTy() &&
+                                expectedType->isPointerTy())
+                        {
+                            argVal = builder.CreateBitCast(
+                                argVal, expectedType, "trait.arg.ptrcast");
+                        }
+                        else
+                        {
+                            reportError(node->line,
+                                        "argument type mismatch for trait call '" +
+                                            node->methodName + "'");
+                            return nullptr;
+                        }
+                    }
+                }
+                consumeMoveFromExpression(argExpr, node->line,
+                                          "passing argument to trait method '" +
+                                              node->methodName + "'");
+                callArgs.push_back(argVal);
+                ++argIndex;
+            }
+
+            if(returnType->isVoidTy())
+                return builder.CreateCall(fnType, fn, callArgs, "traitcall");
+            return builder.CreateCall(fnType, fn, callArgs, "traitcall");
+        }
+
+        TypeNode* receiverSemanticType = getLValueType(node->object, node->line);
+        std::string traitName;
+        if(auto* traitObjType =
+               dynamic_cast<TraitObjectTypeNode*>(receiverSemanticType))
+        {
+            traitName = traitObjType->traitName;
+        }
+
+        llvm::Value* receiverValue = generateExpression(node->object);
+        if(!traitName.empty() && receiverValue)
+        {
+            llvm::Type* traitObjectType = getTraitObjectType(traitName);
+            if(!traitObjectType)
+                return nullptr;
+            if(receiverValue->getType()->isPointerTy() &&
+               traitObjectType->isStructTy())
+            {
+                receiverValue = builder.CreateLoad(
+                    traitObjectType, receiverValue, "traitobj.load");
+            }
+        }
+
+        if(receiverValue && receiverValue->getType()->isStructTy())
+        {
+            auto* receiverStructType =
+                llvm::cast<llvm::StructType>(receiverValue->getType());
+            if(traitName.empty())
+            {
+                std::string structTypeName = receiverStructType->getName().str();
+                const std::string prefix = "trait.obj.";
+                if(structTypeName.rfind(prefix, 0) == 0 &&
+                   structTypeName.size() > prefix.size())
+                {
+                    traitName = structTypeName.substr(prefix.size());
+                }
+            }
+            if(traitName.empty())
+                goto trait_object_receiver_fallback;
+
+            auto traitIt = traitDefinitions.find(traitName);
+            if(traitIt == traitDefinitions.end())
+            {
+                for(auto it = traitDefinitions.begin();
+                    it != traitDefinitions.end(); ++it)
+                {
+                    if(trait_names_equivalent(it->first, traitName))
+                    {
+                        traitIt = it;
+                        break;
+                    }
+                }
+            }
+            if(traitIt == traitDefinitions.end() || !traitIt->second)
+            {
+                reportError(node->line,
+                            "unknown trait object type '" + traitName + "'");
+                return nullptr;
+            }
+            TraitDefNode* traitDef = traitIt->second;
+            StructMethodNode* traitMethod = nullptr;
+            size_t methodIndex = 0;
+            for(size_t i = 0; i < traitDef->methods.size(); ++i)
+            {
+                if(traitDef->methods[i] &&
+                   traitDef->methods[i]->name == node->methodName)
+                {
+                    traitMethod = traitDef->methods[i];
+                    methodIndex = i;
+                    break;
+                }
+            }
+            if(!traitMethod)
+            {
+                reportError(node->line, "trait '" + traitName +
+                                            "' has no method named '" +
+                                            node->methodName + "'");
+                return nullptr;
+            }
+            if(traitMethod->isStatic)
+            {
+                reportError(node->line, "static trait method '" + traitName +
+                                            "::" + node->methodName +
+                                            "' cannot be called on a trait object");
+                return nullptr;
+            }
+
+            llvm::Value* dataPtr =
+                builder.CreateExtractValue(receiverValue, 0, "traitobj.data");
+            llvm::Value* vtablePtr =
+                builder.CreateExtractValue(receiverValue, 1, "traitobj.vtable");
+            llvm::Type* vtableType = getTraitVTableType(traitName);
+            if(!vtableType)
+                return nullptr;
+            auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
+            llvm::Value* typedVtablePtr = builder.CreateBitCast(
+                vtablePtr, vtableStructType->getPointerTo(),
+                "traitobj.vtable.cast");
+            llvm::Value* slotPtr = builder.CreateStructGEP(
+                vtableStructType, typedVtablePtr, static_cast<unsigned>(methodIndex),
+                "traitobj.slot");
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
+#else
+            llvm::Type* opaquePtr =
+                llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+            llvm::Value* fnPtr = builder.CreateLoad(
+                opaquePtr, slotPtr, "traitobj.fn");
+
+            std::vector<llvm::Type*> paramTypes;
+            paramTypes.push_back(opaquePtr);
+            if(traitMethod->parameters)
+            {
+                for(auto* param : traitMethod->parameters->parameters)
+                {
+                    if(!param || param->name == "self")
+                        continue;
+                    llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+                    if(!paramType)
+                    {
+                        reportError(node->line,
+                                    "unknown type: " +
+                                        type_name_for_error(param->type));
+                        return nullptr;
+                    }
+                    paramTypes.push_back(paramType);
+                }
+            }
+            llvm::Type* returnType = getLLVMTypeFromNode(traitMethod->returnType);
+            if(!returnType)
+            {
+                reportError(node->line,
+                            "unknown type: " +
+                                type_name_for_error(traitMethod->returnType));
+                return nullptr;
+            }
+            llvm::FunctionType* fnType =
+                llvm::FunctionType::get(returnType, paramTypes, false);
+            llvm::Value* fn = builder.CreateBitCast(
+                fnPtr, fnType->getPointerTo(), "traitobj.fn.cast");
+
+            std::vector<llvm::Value*> callArgs;
+            callArgs.push_back(dataPtr);
+            size_t argIndex = 0;
+            for(auto* argExpr : node->arguments)
+            {
+                llvm::Value* argVal = generateExpression(argExpr);
+                if(!argVal)
+                    return nullptr;
+                if(argIndex + 1 < paramTypes.size())
+                {
+                    llvm::Type* expectedType = paramTypes[argIndex + 1];
+                    if(argVal->getType() != expectedType)
+                    {
+                        if(argVal->getType()->isIntegerTy() &&
+                           expectedType->isIntegerTy())
+                        {
+                            argVal = builder.CreateIntCast(
+                                argVal, expectedType, true, "trait.arg.cast");
+                        }
+                        else if(argVal->getType()->isIntegerTy() &&
+                                expectedType->isFloatingPointTy())
+                        {
+                            argVal = builder.CreateSIToFP(
+                                argVal, expectedType, "trait.arg.sitofp");
+                        }
+                        else if(argVal->getType()->isFloatingPointTy() &&
+                                expectedType->isFloatingPointTy())
+                        {
+                            argVal = builder.CreateFPCast(
+                                argVal, expectedType, "trait.arg.fpcast");
+                        }
+                        else if(argVal->getType()->isPointerTy() &&
+                                expectedType->isPointerTy())
+                        {
+                            argVal = builder.CreateBitCast(
+                                argVal, expectedType, "trait.arg.ptrcast");
+                        }
+                        else
+                        {
+                            reportError(node->line,
+                                        "argument type mismatch for trait call '" +
+                                            node->methodName + "'");
+                            return nullptr;
+                        }
+                    }
+                }
+                callArgs.push_back(argVal);
+                ++argIndex;
+            }
+
+            if(returnType->isVoidTy())
+                return builder.CreateCall(fnType, fn, callArgs, "traitcall");
+            return builder.CreateCall(fnType, fn, callArgs, "traitcall");
+        }
+
+trait_object_receiver_fallback:
         // Handle built-in string methods (push_str, etc.)
         {
             auto strTypeIt = variableTypes.find(objId->name);
@@ -20568,6 +22425,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     bool isPublic = methodIt->second.first;
     StructMethodNode* methodNode = methodIt->second.second;
     (void)isPublic;
+    if(methodNode && methodNode->isStatic)
+    {
+        reportError(node->line,
+                    "static method '" + structTypeName + "::" +
+                        node->methodName + "' must be called as " +
+                        structTypeName + "::" + node->methodName + "(...)");
+        return nullptr;
+    }
 
     std::vector<ParameterNode*> declaredParams;
     if(methodNode && methodNode->parameters)
@@ -20588,10 +22453,6 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         std::to_string(node->arguments.size()) + " provided");
         return nullptr;
     }
-
-    // Check visibility - if calling from outside the struct's module, must be
-    // public For now, we allow all calls within the same compilation unit
-    // TODO: Add proper cross-module visibility checking for methods
 
     // Find the actual struct that defines this method (may be a base struct)
     std::string definingStruct = structTypeName;
@@ -20616,6 +22477,37 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         {
             break;
         }
+    }
+
+    StructMethodNode* definingMethodNode = methodNode;
+    auto definingStructIt = structMethods.find(definingStruct);
+    if(definingStructIt != structMethods.end())
+    {
+        auto definingMethodIt =
+            definingStructIt->second.find(node->methodName);
+        if(definingMethodIt != definingStructIt->second.end())
+        {
+            isPublic = definingMethodIt->second.first;
+            if(definingMethodIt->second.second)
+                definingMethodNode = definingMethodIt->second.second;
+        }
+    }
+
+    std::string methodModule =
+        definingMethodNode ? definingMethodNode->sourceModule : "";
+    if(methodModule.empty())
+    {
+        auto structVisIt = structVisibility.find(definingStruct);
+        if(structVisIt != structVisibility.end())
+            methodModule = structVisIt->second.second;
+    }
+    if(!methodModule.empty() && !isPublic &&
+       !is_same_module_family(methodModule, currentModule))
+    {
+        reportError(node->line, "method '" + node->methodName +
+                                    "' is private in module '" +
+                                    methodModule + "'");
+        return nullptr;
     }
 
     std::string mangledName = definingStruct + "_" + node->methodName;
@@ -21604,8 +23496,30 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
 
     auto convertStructLiteralFieldValue =
         [&](llvm::Value* fieldValue, llvm::Type* expectedType,
+            TypeNode* expectedSemanticType, ExpressionNode* valueExpr,
             const std::string& fullFieldName) -> llvm::Value*
     {
+        if(auto* traitObj =
+               dynamic_cast<TraitObjectTypeNode*>(expectedSemanticType))
+        {
+            llvm::Value* traitValue = nullptr;
+            TypeNode* exprType = valueExpr ? getLValueType(valueExpr, node->line)
+                                           : nullptr;
+            if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+            {
+                traitValue = fieldValue ? fieldValue : generateExpression(valueExpr);
+                return coerceTraitObjectValue(traitValue, expectedType,
+                                              node->line);
+            }
+            if(exprType)
+                return buildTraitObjectValue(valueExpr, traitObj->traitName,
+                                             node->line,
+                                             /*heapCopy=*/true);
+
+            traitValue = fieldValue ? fieldValue : generateExpression(valueExpr);
+            return coerceTraitObjectValue(traitValue, expectedType, node->line);
+        }
+
         if(!fieldValue)
             return nullptr;
 
@@ -21775,8 +23689,9 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                                            ? llvm::Type::getInt1Ty(context)
                                            : currentStructType->getElementType(
                                                  layout->storageIndex);
-            fieldValue = convertStructLiteralFieldValue(fieldValue, expectedType,
-                                                        fullFieldName);
+            fieldValue = convertStructLiteralFieldValue(
+                fieldValue, expectedType, currentMembers[memberIndex].second,
+                valueExpr, fullFieldName);
             if(!fieldValue)
                 return nullptr;
 
@@ -22094,10 +24009,12 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             std::map<std::string, std::set<std::string>>* outActiveBorrowers)
         -> llvm::Value*
     {
-        auto savedNamedValues = namedValues;
-        auto savedVariableTypes = variableTypes;
-        auto savedStructVariableTypes = structVariableTypes;
-        auto savedEnumVariableTypes = enumVariableTypes;
+                    auto savedNamedValues = namedValues;
+                    auto savedVariableTypes = variableTypes;
+                    auto savedStructVariableTypes = structVariableTypes;
+                    auto savedTraitObjectVariableTypes =
+                        traitObjectVariableTypes;
+                    auto savedEnumVariableTypes = enumVariableTypes;
         auto savedListElementTypes = listElementTypes;
         auto savedMapKeyValueTypes = mapKeyValueTypes;
         auto savedTupleElementTypes = tupleElementTypes;
@@ -22127,10 +24044,11 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(outActiveBorrowers)
             *outActiveBorrowers = activeBorrowers;
 
-        namedValues = savedNamedValues;
-        variableTypes = savedVariableTypes;
-        structVariableTypes = savedStructVariableTypes;
-        enumVariableTypes = savedEnumVariableTypes;
+                    namedValues = savedNamedValues;
+                    variableTypes = savedVariableTypes;
+                    structVariableTypes = savedStructVariableTypes;
+                    traitObjectVariableTypes = savedTraitObjectVariableTypes;
+                    enumVariableTypes = savedEnumVariableTypes;
         listElementTypes = savedListElementTypes;
         mapKeyValueTypes = savedMapKeyValueTypes;
         tupleElementTypes = savedTupleElementTypes;
@@ -23140,6 +25058,14 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
         return;
     }
 
+    if(!validateTypeArgumentTraitBounds(
+           typeParams, templateStruct->typeParamTraitBounds, typeArgs, {}, 0,
+           "struct", genericName))
+    {
+        hasError = true;
+        return;
+    }
+
     // Generate the monomorphized struct type
     std::vector<llvm::Type*> memberTypes;
     std::vector<std::pair<std::string, TypeNode*>> members;
@@ -23222,6 +25148,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     {
         for(auto* impl : implIt->second)
         {
+            if(!validateTypeArgumentTraitBounds(
+                   impl->typeParams, impl->typeParamTraitBounds, typeArgs, {},
+                   0, "impl", genericName, false))
+            {
+                continue;
+            }
             if(!impl->traitName.empty())
             {
                 structImplementedTraits[mangledName].insert(impl->traitName);
@@ -23246,6 +25178,7 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
                 auto* newMethod = new StructMethodNode(
                     newReturnType, method->name, newParams, method->body,
                     method->isPublic, method->isStatic);
+                newMethod->sourceModule = method->sourceModule;
                 newMethod->isSynthesizedPropertyAccessor =
                     method->isSynthesizedPropertyAccessor;
                 newMethod->isAtomicPropertyAccessor =
@@ -23290,6 +25223,7 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
             auto* newMethod = new StructMethodNode(
                 newReturnType, method->name, newParams, method->body,
                 method->isPublic, method->isStatic);
+            newMethod->sourceModule = method->sourceModule;
             newMethod->isSynthesizedPropertyAccessor =
                 method->isSynthesizedPropertyAccessor;
             newMethod->isAtomicPropertyAccessor =
@@ -23343,6 +25277,7 @@ void CodeGenerator::monomorphizeImplBlock(
         auto* newMethod = new StructMethodNode(
             newReturnType, method->name, newParams, method->body,
             method->isPublic, method->isStatic);
+        newMethod->sourceModule = method->sourceModule;
         newMethod->isSynthesizedPropertyAccessor =
             method->isSynthesizedPropertyAccessor;
         newMethod->isAtomicPropertyAccessor =
@@ -23514,6 +25449,15 @@ bool Backend::emitObjectFile(const std::string& filename)
         return false;
     }
 
+    std::string verifyError;
+    llvm::raw_string_ostream verifyStream(verifyError);
+    if(llvm::verifyModule(*module, &verifyStream))
+    {
+        std::cerr << "LLVM module verification failed:\n"
+                  << verifyStream.str();
+        return false;
+    }
+
     ensure_artifact_parent_directory(filename);
     std::error_code ec;
     llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
@@ -23668,6 +25612,18 @@ bool Backend::compileToExecutable(const std::string& outputFile,
 
 void Backend::optimize(const std::string& levelName)
 {
+    for(llvm::StructType* ty : module->getIdentifiedStructTypes())
+    {
+        if(!ty)
+            continue;
+        std::string name = ty->getName().str();
+        if(name.rfind("trait.obj.", 0) == 0 ||
+           name.rfind("trait.vtable.", 0) == 0)
+        {
+            return;
+        }
+    }
+
     std::string level = levelName;
     if(level.empty())
         level = std::string(kOptLevelAliases[3].second);

@@ -1,0 +1,19 @@
+pub struct Counter {
+    var value: i32;
+};
+
+impl Counter {
+    // Private helper: callable only inside this module.
+    fn inc_private(self: Counter) -> Counter {
+        return Counter { value: self.value + 1 };
+    }
+
+    // Public wrapper: callable from other modules.
+    pub fn inc(self: Counter) -> Counter {
+        return self.inc_private();
+    }
+
+    pub fn read(self: Counter) -> i32 {
+        return self.value;
+    }
+}

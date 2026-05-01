@@ -3,6 +3,71 @@
 This page documents recent language syntax/features that are now supported by
 the compiler.
 
+## Trait Objects (`dyn Trait`) {#trait_objects_dyn}
+
+MLang supports explicit trait-object types for runtime dispatch at function
+boundaries:
+
+```mla
+trait Summary {
+    fn score(self: Self) -> i32;
+}
+
+pub struct Post {
+    var score_value: i32;
+};
+
+impl Summary for Post {
+    fn score(self: Post) -> i32 {
+        return self.score_value;
+    }
+}
+```
+
+Concrete values can be passed to functions expecting `dyn Trait`:
+
+```mla
+pub fn show_score(item: dyn Summary) -> i32 {
+    return item.score();
+}
+```
+
+Concrete values can also be returned through a dyn return type. The compiler
+creates the trait-object pair and stores a durable copy of the concrete value
+behind it:
+
+```mla
+pub fn make_summary(post: Post) -> dyn Summary {
+    return post;
+}
+```
+
+Existing dyn values can be passed through wrappers without losing dispatch:
+
+```mla
+pub fn pass_summary(item: dyn Summary) -> dyn Summary {
+    return item;
+}
+```
+
+Callers may use a fully-qualified trait path when crossing module boundaries:
+
+```mla
+mod lib::summary;
+use lib::summary::Post;
+
+fn main() -> i32 {
+    let post: Post = Post { score_value: 7 };
+    let item: dyn lib::summary::Summary = lib::summary::make_summary(post);
+    let item2: dyn lib::summary::Summary = lib::summary::pass_summary(item);
+    return lib::summary::show_score(item2) == 7 ? 0 : 1;
+}
+```
+
+Use `dyn Trait` when the call boundary should use runtime dispatch. Use
+generic bounds such as `T: Trait` when the type should remain statically
+known and monomorphized.
+
 ## Type Aliases (`use type`)
 
 Global alias:

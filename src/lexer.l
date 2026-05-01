@@ -42,8 +42,8 @@ static int is_generic_struct_literal_start()
             saw_gt = true;
             break;
         }
-        if(!(std::isalnum(c) || c == '_' || c == ',' || std::isspace(c) ||
-             c == '<'))
+        if(!(std::isalnum(c) || c == '_' || c == ',' || c == ':' ||
+             std::isspace(c) || c == '<' || c == '+'))
         {
             break;
         }
@@ -140,6 +140,7 @@ static int is_try_question_context()
 "fn"            { return FUNCTION; }
 "impl"          { return IMPL; }
 "trait"         { return TRAIT; }
+"dyn"           { return DYN; }
 "return"        { return RETURN; }
 "if"            { return IF; }
 "else"          { return ELSE; }

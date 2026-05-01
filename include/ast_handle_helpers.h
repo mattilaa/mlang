@@ -54,6 +54,7 @@ ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNo
 ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
 ASTNode* mla_ast_type_alias(char* name, ASTNode* type_params, ASTNode* aliased_type);
 ASTNode* mla_ast_trait_def(char* name, int line);
+ASTNode* mla_ast_trait_add_method(ASTNode* trait, ASTNode* method);
 ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
 ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
 ASTNode* mla_ast_block_statement(ASTNode* stmt_list);
@@ -141,6 +142,8 @@ ASTNode* mla_ast_closure_with_params(ASTNode* params, ASTNode* body);
 ASTNode* mla_ast_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line);
 ASTNode* mla_ast_method_call(ASTNode* object, char* method, ASTNode* args, int line);
 ASTNode* mla_ast_format_expr(char* format_str, ASTNode* args, int line);
+ASTNode* mla_ast_bounded_type_param_list(char* param, char* trait_name);
+ASTNode* mla_ast_bounded_type_param_list_add(ASTNode* list, char* param, char* trait_name);
 }
 
 #endif // AST_HANDLE_HELPERS_H

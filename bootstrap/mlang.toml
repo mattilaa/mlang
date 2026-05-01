@@ -49,6 +49,7 @@ depends_on = ["build-mlang"]
 commands = [
   "{{build_dir}}/mlang tools/mlangd-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlangd-mla"
 ]
+sign = ["{{build_dir}}/mlangd-mla"]
 
 [[task]]
 name = "build-mlangd-mla-existing"
@@ -59,6 +60,7 @@ source = "tools/mlangd-mla/main.mla"
 output = "{{build_dir}}/mlangd-mla"
 lib_paths = ["{{build_dir}}"]
 libs = ["mlang_std"]
+sign = ["{{build_dir}}/mlangd-mla"]
 
 [[task]]
 name = "build-mlang-frontend-mla"
@@ -165,6 +167,16 @@ commands = [
 ]
 
 [[task]]
+name = "docs"
+print = "[bootstrap] Building Doxygen documentation"
+workdir = "{{root}}/.."
+commands = [
+  "sh -c 'if ! command -v doxygen >/dev/null 2>&1; then echo doxygen not found in PATH >&2; exit 1; fi'",
+  "doxygen docs/Doxyfile",
+  "sh -c 'test -f docs/out/html/index.html && echo Docs generated: docs/out/html/index.html'"
+]
+
+[[task]]
 name = "install-mlang"
 print = "[bootstrap] Installing mlang and stdlib through CMake"
 workdir = "{{root}}/.."
@@ -185,6 +197,7 @@ shell = [
   "cp -f {{build_dir}}/mlangd-mla \"$bin_dir/mlangd-mla\"",
   "chmod +x \"$bin_dir/mlangd-mla\""
 ]
+sign = ["{{option.bin_dir}}/mlangd-mla"]
 
 [[task]]
 name = "install-mlangd-mla-existing"
@@ -197,6 +210,7 @@ shell = [
   "cp -f {{build_dir}}/mlangd-mla \"$bin_dir/mlangd-mla\"",
   "chmod +x \"$bin_dir/mlangd-mla\""
 ]
+sign = ["{{option.bin_dir}}/mlangd-mla"]
 
 [[task]]
 name = "install-mlang-frontend"

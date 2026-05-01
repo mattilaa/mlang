@@ -2,6 +2,7 @@
 #define AST_H
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -59,6 +60,7 @@ public:
         TYPE_MAP,
         TYPE_TUPLE,
         TYPE_PTR,
+        TYPE_TRAIT_OBJECT,
         TYPE_STRUCT,
         TYPE_I8,
         TYPE_I16,
@@ -85,6 +87,17 @@ public:
     TypeNode* elementType;
     PointerTypeNode(TypeNode* elemType)
         : TypeNode(TYPE_PTR), elementType(elemType)
+    {
+    }
+    std::string toString() const override;
+};
+
+class TraitObjectTypeNode : public TypeNode
+{
+public:
+    std::string traitName;
+    TraitObjectTypeNode(const std::string& name)
+        : TypeNode(TYPE_TRAIT_OBJECT), traitName(name)
     {
     }
     std::string toString() const override;
@@ -1061,6 +1074,7 @@ public:
     bool isMutexPropertyAccessor = false;
     bool isRecursiveMutexPropertyAccessor = false;
     bool isPropertySetter = false;
+    std::string sourceModule;
     std::string propertyFieldName;
     std::string propertyLockFieldName;
 
@@ -1108,6 +1122,7 @@ public:
                               // visibility checks)
     std::vector<std::string>
         typeParams; // Generic type parameters like T, U, etc.
+    std::map<std::string, std::string> typeParamTraitBounds;
 
     StructDefNode(const std::string& n, const std::string& b,
                   StructMemberListNode* m, bool pub = false,
@@ -1198,10 +1213,13 @@ class TypeParamListNode : public ASTNode
 {
 public:
     std::vector<std::string> params;
+    std::map<std::string, std::string> traitBounds;
 
-    void addParam(const std::string& p)
+    void addParam(const std::string& p, const std::string& traitBound = "")
     {
         params.push_back(p);
+        if(!traitBound.empty())
+            traitBounds[p] = traitBound;
     }
     std::string toString() const override;
 };
@@ -1211,8 +1229,16 @@ class TraitDefNode : public ASTNode
 public:
     std::string name;
     std::string sourceModule;
+    std::vector<StructMethodNode*> methods;
+    // Required super-traits, parsed from `trait Foo: Bar + Baz { ... }`.
+    // Each implementer of `Foo` must also implement every entry here.
+    std::vector<std::string> superTraits;
 
     TraitDefNode(const std::string& n) : name(n) {}
+    void addMethod(StructMethodNode* m)
+    {
+        methods.push_back(m);
+    }
     std::string toString() const override;
 };
 
@@ -1223,6 +1249,7 @@ public:
     std::string structName;
     std::string traitName; // Empty when this is an inherent impl
     std::vector<std::string> typeParams; // Generic type parameters
+    std::map<std::string, std::string> typeParamTraitBounds;
     std::vector<StructMethodNode*> methods;
 
     ImplBlockNode(const std::string& name) : structName(name) {}
@@ -1373,6 +1400,7 @@ class TypeAliasNode : public StatementNode
 public:
     std::string name;
     std::vector<std::string> typeParams;
+    std::map<std::string, std::string> typeParamTraitBounds;
     TypeNode* aliasedType;
 
     TypeAliasNode(const std::string& n, TypeNode* t)
@@ -1422,6 +1450,7 @@ ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
 ASTNode* create_type_node(TypeNode::TypeKind type);
 ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
+ASTNode* create_trait_object_type(char* trait_name);
 ASTNode* create_parameter_list(ASTNode* param);
 ASTNode* create_empty_parameter_list();
 ASTNode* set_parameter_list_vararg(ASTNode* list);
@@ -1568,10 +1597,13 @@ ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
 // Generic structs and impl blocks
 ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
+ASTNode* create_bounded_type_param_list(char* param, char* trait_name);
+ASTNode* add_bounded_type_param(ASTNode* list, char* param, char* trait_name);
 ASTNode* create_generic_struct_def(char* name, char* base_name,
                                    ASTNode* type_params, ASTNode* members,
                                    int is_public, int derive_debug);
 ASTNode* create_trait_def(char* name, int line);
+ASTNode* add_trait_method(ASTNode* trait, ASTNode* method);
 ASTNode* create_impl_block(char* struct_name, ASTNode* type_params,
                            char* trait_name = nullptr);
 ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);

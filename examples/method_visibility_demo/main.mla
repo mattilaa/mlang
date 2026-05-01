@@ -1,0 +1,14 @@
+mod lib::counter;
+
+use lib::counter::Counter;
+
+fn main() -> i32 {
+    let c: Counter = Counter { value: 1 };
+    let d: Counter = c.inc();
+
+    // This would fail across modules because `inc_private` is not `pub`.
+    // let e: Counter = d.inc_private();
+
+    println!("counter={}", d.read());
+    return d.read() == 2 ? 0 : 1;
+}

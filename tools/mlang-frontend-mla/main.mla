@@ -87,6 +87,9 @@ fn print_usage(program: str8) -> void {
     println!("  {} test [path]", program);
     println!("  {} run tests", program);
     println!("");
+    println!("Documentation:");
+    println!("  {} run docs", program);
+    println!("");
     println!("Benchmarking:");
     println!("  {} bench [path]", program);
     println!("  {} bench [path] --bench-iters N --bench-warmup N", program);

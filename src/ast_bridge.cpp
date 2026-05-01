@@ -58,6 +58,11 @@ ASTNode* create_reference_type(ASTNode* element_type, int is_mutable)
     return create_reference_type_impl(element_type, is_mutable);
 }
 
+ASTNode* create_trait_object_type(char* trait_name)
+{
+    return create_trait_object_type_impl(trait_name);
+}
+
 ASTNode* create_parameter_list(ASTNode* param)
 {
     return create_parameter_list_impl(param);
@@ -634,6 +639,16 @@ ASTNode* create_type_param_list(char* param)
 ASTNode* add_type_param(ASTNode* list, char* param)
 {
     return add_type_param_impl(list, param);
+}
+
+ASTNode* create_bounded_type_param_list(char* param, char* trait_name)
+{
+    return create_bounded_type_param_list_impl(param, trait_name);
+}
+
+ASTNode* add_bounded_type_param(ASTNode* list, char* param, char* trait_name)
+{
+    return add_bounded_type_param_impl(list, param, trait_name);
 }
 
 ASTNode* create_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug)

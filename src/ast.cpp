@@ -815,6 +815,7 @@ static void synthesizePropertyMethods(StructDefNode* def)
                 paramList, body,
                 /*isPublic=*/true,
                 /*isStatic=*/false);
+            getter->sourceModule = def->sourceModule;
             copyPropertyAccessorMetadata(getter, member);
             getter->isPropertySetter = false;
             getter->line = member->line;
@@ -849,6 +850,7 @@ static void synthesizePropertyMethods(StructDefNode* def)
                 paramList, body,
                 /*isPublic=*/true,
                 /*isStatic=*/false);
+            setter->sourceModule = def->sourceModule;
             copyPropertyAccessorMetadata(setter, member);
             setter->isPropertySetter = true;
             setter->line = member->line;
@@ -1152,6 +1154,11 @@ ASTNode* create_reference_type_impl(ASTNode* element_type, int is_mutable)
         static_cast<TypeNode*>(element_type), is_mutable != 0);
 }
 
+ASTNode* create_trait_object_type_impl(char* trait_name)
+{
+    return new TraitObjectTypeNode(std::string(trait_name));
+}
+
 ASTNode* create_closure_impl(ASTNode* body)
 {
     return new ClosureNode(nullptr, static_cast<StatementListNode*>(body));
@@ -1176,6 +1183,11 @@ std::string ReferenceTypeNode::toString() const
 {
     std::string m = isMutable ? "mut " : "";
     return "&" + m + (elementType ? elementType->toString() : "void");
+}
+
+std::string TraitObjectTypeNode::toString() const
+{
+    return "dyn " + traitName;
 }
 
 ASTNode* create_list_literal_impl(ASTNode* elements)
@@ -1992,6 +2004,20 @@ std::string StructDefNode::toString() const
         result += "#[derive(Debug)]\n";
     result += isPublic ? "pub struct " : "struct ";
     result += name;
+    if(!typeParams.empty())
+    {
+        result += "<";
+        for(size_t i = 0; i < typeParams.size(); ++i)
+        {
+            if(i > 0)
+                result += ", ";
+            result += typeParams[i];
+            auto boundIt = typeParamTraitBounds.find(typeParams[i]);
+            if(boundIt != typeParamTraitBounds.end() && !boundIt->second.empty())
+                result += ": " + boundIt->second;
+        }
+        result += ">";
+    }
     if(!baseName.empty())
     {
         result += " : " + baseName;
@@ -2326,6 +2352,7 @@ ASTNode* create_type_alias_impl(char* name, ASTNode* type_params,
     {
         auto* params = static_cast<TypeParamListNode*>(type_params);
         node->typeParams = params->params;
+        node->typeParamTraitBounds = params->traitBounds;
     }
     return node;
 }
@@ -2363,6 +2390,9 @@ std::string TypeAliasNode::toString() const
             if(i > 0)
                 out += ", ";
             out += typeParams[i];
+            auto boundIt = typeParamTraitBounds.find(typeParams[i]);
+            if(boundIt != typeParamTraitBounds.end() && !boundIt->second.empty())
+                out += ": " + boundIt->second;
         }
         out += ">";
     }
@@ -2820,6 +2850,9 @@ std::string TypeParamListNode::toString() const
         if(i > 0)
             result += ", ";
         result += params[i];
+        auto boundIt = traitBounds.find(params[i]);
+        if(boundIt != traitBounds.end() && !boundIt->second.empty())
+            result += ": " + boundIt->second;
     }
     result += ">";
     return result;
@@ -2827,7 +2860,14 @@ std::string TypeParamListNode::toString() const
 
 std::string TraitDefNode::toString() const
 {
-    return "trait " + name + " {}";
+    std::string result = "trait " + name + " {\n";
+    for(auto* method : methods)
+    {
+        if(method)
+            result += "    " + method->toString() + "\n";
+    }
+    result += "}";
+    return result;
 }
 
 // ImplBlockNode toString
@@ -2842,6 +2882,9 @@ std::string ImplBlockNode::toString() const
             if(i > 0)
                 result += ", ";
             result += typeParams[i];
+            auto boundIt = typeParamTraitBounds.find(typeParams[i]);
+            if(boundIt != typeParamTraitBounds.end() && !boundIt->second.empty())
+                result += ": " + boundIt->second;
         }
         result += ">";
     }
@@ -2903,14 +2946,28 @@ std::string StructLiteralNode::toString() const
 ASTNode* create_type_param_list_impl(char* param)
 {
     auto* node = new TypeParamListNode();
-    node->params.push_back(std::string(param));
+    node->addParam(std::string(param));
     return node;
 }
 
 ASTNode* add_type_param_impl(ASTNode* list, char* param)
 {
     auto* paramList = static_cast<TypeParamListNode*>(list);
-    paramList->params.push_back(std::string(param));
+    paramList->addParam(std::string(param));
+    return paramList;
+}
+
+ASTNode* create_bounded_type_param_list_impl(char* param, char* trait_name)
+{
+    auto* node = new TypeParamListNode();
+    node->addParam(std::string(param), std::string(trait_name));
+    return node;
+}
+
+ASTNode* add_bounded_type_param_impl(ASTNode* list, char* param, char* trait_name)
+{
+    auto* paramList = static_cast<TypeParamListNode*>(list);
+    paramList->addParam(std::string(param), std::string(trait_name));
     return paramList;
 }
 
@@ -2927,6 +2984,7 @@ ASTNode* create_generic_struct_def_impl(char* name, char* base_name,
     {
         auto* paramList = static_cast<TypeParamListNode*>(type_params);
         node->typeParams = paramList->params;
+        node->typeParamTraitBounds = paramList->traitBounds;
     }
 
     synthesizePropertyMethods(node);
@@ -2939,6 +2997,13 @@ ASTNode* create_trait_def_impl(char* name, int line)
     auto* node = new TraitDefNode(std::string(name));
     node->line = line;
     return node;
+}
+
+ASTNode* add_trait_method_impl(ASTNode* trait, ASTNode* method)
+{
+    auto* traitDef = static_cast<TraitDefNode*>(trait);
+    traitDef->methods.push_back(static_cast<StructMethodNode*>(method));
+    return traitDef;
 }
 
 ASTNode* create_impl_block_impl(char* struct_name, ASTNode* type_params,
@@ -2954,6 +3019,7 @@ ASTNode* create_impl_block_impl(char* struct_name, ASTNode* type_params,
     {
         auto* paramList = static_cast<TypeParamListNode*>(type_params);
         node->typeParams = paramList->params;
+        node->typeParamTraitBounds = paramList->traitBounds;
     }
 
     return node;
