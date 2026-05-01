@@ -61,6 +61,8 @@ fn print_usage(program: str8) -> void {
     println!("  -Oz           Optimize for minimum size");
     println!("  --no-tests    Skip compiling #[test] functions");
     println!("  --tests       Compile and run #[test] for input path/file");
+    println!("  --force       Rebuild and install the bootstrap toolchain into");
+    println!("                ~/.local before running the requested command");
     println!("  -Wno-colon-if Suppress warning for plain if/else-if with ':'");
     println!("  -Wno-colon-while Suppress warning for plain while with ':'");
     println!("  -L <dir>      Add a library search path for linking");
@@ -334,6 +336,11 @@ fn append_stdlib_paths(paths: list<str8>) -> list<str8> {
 
 fn default_stdlib_lib_paths() -> list<str8> {
     var out: list<str8> = [];
+    let cwd: str8 = abspath(".");
+    if len(cwd) > 0 {
+        out.push(concat(cwd, "/build"));
+        out.push(cwd);
+    }
     let lib_path: str8 = getenv_value("MLANG_STDLIB_LIB_PATH");
     if len(lib_path) > 0 {
         let env_lib_paths: list<str8> = split_env_paths(lib_path);

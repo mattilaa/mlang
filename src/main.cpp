@@ -73,6 +73,8 @@ void printUsage(const char* programName)
               << "  -Wno-colon-if Suppress warning for plain if/else-if with ':'\n"
               << "  -Wno-colon-while Suppress warning for plain while with ':'\n"
               << "  -Wno-unwrap Suppress warning for Result.unwrap() usage\n"
+              << "  --force       Rebuild and install the bootstrap toolchain into\n"
+              << "                ~/.local before running the requested command\n"
               << "  -L <dir>      Add a library search path for linking\n"
               << "  -l <name>     Link with library (e.g. -l m)\n"
               << "  -Wl,<args>    Pass raw linker arguments\n"
@@ -434,6 +436,13 @@ static std::vector<std::string> split_env_paths(const char* env)
 static std::vector<std::string> default_stdlib_lib_paths()
 {
     std::vector<std::string> paths;
+    std::error_code cwdEc;
+    const auto cwd = std::filesystem::current_path(cwdEc);
+    if(!cwdEc)
+    {
+        paths.emplace_back((cwd / "build").string());
+        paths.emplace_back(cwd.string());
+    }
     if(const char* env = std::getenv("MLANG_STDLIB_LIB_PATH"))
     {
         for(const auto& p : split_env_paths(env))
@@ -910,6 +919,30 @@ find_mlang_frontend_source(const char* argv0)
     return std::nullopt;
 }
 
+static int decode_system_exit_code(int rc);
+
+static std::optional<std::filesystem::path>
+find_bootstrap_manifest(const char* argv0)
+{
+    namespace fs = std::filesystem;
+    std::vector<fs::path> candidates;
+    candidates.push_back(fs::current_path() / "bootstrap" / "mlang.toml");
+
+    fs::path exePath(argv0 ? argv0 : "mlang");
+    fs::path exeDir = exePath.has_parent_path() ? exePath.parent_path()
+                                                : fs::current_path();
+    candidates.push_back(exeDir / ".." / "bootstrap" / "mlang.toml");
+    candidates.push_back(exeDir / "bootstrap" / "mlang.toml");
+
+    for(const auto& c : candidates)
+    {
+        std::error_code ec;
+        if(fs::exists(c, ec))
+            return fs::weakly_canonical(c, ec);
+    }
+    return std::nullopt;
+}
+
 static std::filesystem::path resolve_backend_compiler_path(const char* argv0)
 {
     namespace fs = std::filesystem;
@@ -1051,6 +1084,41 @@ static std::optional<int> run_mlang_frontend(int argc, char** argv)
         return std::nullopt;
     }
     return std::nullopt;
+}
+
+static int run_force_bootstrap(const char* argv0)
+{
+    namespace fs = std::filesystem;
+    auto manifestOpt = find_bootstrap_manifest(argv0);
+    if(!manifestOpt.has_value())
+    {
+        std::cerr << "Error: --force requires bootstrap/mlang.toml from an "
+                     "mlang repository checkout"
+                  << std::endl;
+        return 1;
+    }
+
+    const char* home = std::getenv("HOME");
+    if(home == nullptr || home[0] == '\0')
+    {
+        std::cerr << "Error: --force requires HOME to be set so install "
+                     "targets can be resolved"
+                  << std::endl;
+        return 1;
+    }
+
+    fs::path compilerBin = resolve_backend_compiler_path(argv0);
+    const std::string installPrefix = (fs::path(home) / ".local").string();
+    const std::string binDir = (fs::path(home) / ".local" / "bin").string();
+
+    std::string cmd = "MLANG_FRONTEND_IMPL=cpp MLANG_PKG_IMPL=cpp " +
+                      shell_quote(compilerBin.string()) + " pkg --config " +
+                      shell_quote(manifestOpt->string()) +
+                      " run build-and-install --option " +
+                      shell_quote("install_prefix=" + installPrefix) +
+                      " --option " + shell_quote("bin_dir=" + binDir);
+    const int rc = std::system(cmd.c_str());
+    return decode_system_exit_code(rc);
 }
 
 static bool manifest_requires_cpp_pkg_frontend()
@@ -1542,6 +1610,36 @@ int main(int argc, char** argv)
 #define MLANG_VERSION "0.1.0"
 #endif
 
+    std::vector<std::string> filteredArgStorage;
+    filteredArgStorage.reserve(static_cast<std::size_t>(argc));
+    filteredArgStorage.emplace_back(argv[0] ? argv[0] : "mlang");
+    bool forceBootstrap = false;
+    for(int i = 1; i < argc; ++i)
+    {
+        const std::string arg = argv[i] ? argv[i] : "";
+        if(arg == "--force")
+        {
+            forceBootstrap = true;
+            continue;
+        }
+        filteredArgStorage.push_back(arg);
+    }
+    std::vector<char*> filteredArgv;
+    filteredArgv.reserve(filteredArgStorage.size());
+    for(auto& arg : filteredArgStorage)
+        filteredArgv.push_back(arg.data());
+    argc = static_cast<int>(filteredArgv.size());
+    argv = filteredArgv.data();
+
+    if(forceBootstrap)
+    {
+        const int forceRc = run_force_bootstrap(argv[0]);
+        if(forceRc != 0)
+            return forceRc;
+        if(argc == 1)
+            return 0;
+    }
+
     if(argc >= 2 && std::string(argv[1]) == "--version")
     {
         std::cout << "mlang " << MLANG_VERSION << "\n";
@@ -1681,6 +1779,10 @@ int main(int argc, char** argv)
         {
             std::cout << "mlang " << MLANG_VERSION << "\n";
             return 0;
+        }
+        else if(arg == "--force")
+        {
+            continue;
         }
         else if(arg == "-o" && i + 1 < argc)
         {
