@@ -9,6 +9,23 @@ Use the launcher:
 ./bootstrap/run-bootstrap.sh run <task>
 ```
 
+Prerequisite: the launcher delegates to `mlang pkg`, so a clean checkout must
+first build a seed compiler:
+
+```sh
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target mlang mlang_std
+```
+
+Or build and install it to `~/.local/bin` in one line:
+
+```sh
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release; cmake --build build --target mlang mlang_std; cmake --install build --prefix "$HOME/.local"
+```
+
+After that, `run-bootstrap.sh` uses `./build/mlang` automatically. You can also
+install `mlang` on `PATH` or set `MLANG_BOOTSTRAP_BIN=/path/to/mlang`.
+
 Current task entrypoints:
 
 - `configure`

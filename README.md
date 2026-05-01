@@ -38,12 +38,6 @@ In practice, the main pieces are:
 - `mlangd-mla`: MLang language-server binary
 
 ## Install From Scratch
-If you are starting from a fresh checkout, first inspect the bootstrap tasks:
-
-```sh
-./bootstrap/run-bootstrap.sh run build-all --tasks
-```
-
 Install the required host dependencies first:
 - `cmake`
 - LLVM development tools and libraries
@@ -63,6 +57,21 @@ Then build the compiler itself with CMake:
 ```sh
 cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target mlang mlang_std
+```
+
+Or build and install it to `~/.local/bin` in one line:
+
+```sh
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release; cmake --build build --target mlang mlang_std; cmake --install build --prefix "$HOME/.local"
+```
+
+The bootstrap launcher uses `mlang pkg`, so a clean checkout cannot run
+`./bootstrap/run-bootstrap.sh` until this seed compiler exists at
+`./build/mlang`, on `PATH`, or via `MLANG_BOOTSTRAP_BIN=/path/to/mlang`.
+After the seed compiler is built, inspect the bootstrap tasks:
+
+```sh
+./bootstrap/run-bootstrap.sh run build-all --tasks
 ```
 
 Install `mlang` to a custom location such as `~/.local`:
