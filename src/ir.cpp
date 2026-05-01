@@ -6263,7 +6263,65 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
-    if(testMode && !testFunctions.empty())
+    // Collect fixture-test methods from #[fixture] impl blocks. Each #[test]
+    // method inside a #[fixture] impl gets a fresh stack-allocated, zero-
+    // initialized instance via its &mut Self parameter.
+    std::vector<FixtureTestEntry> fixtureTests;
+    if(program->implList)
+    {
+        for(auto* impl : program->implList->impls)
+        {
+            if(!impl || !impl->isFixture)
+                continue;
+            if(!impl->traitName.empty())
+            {
+                reportError(impl->line,
+                            "#[fixture] is only valid on inherent impl blocks");
+                continue;
+            }
+            for(auto* method : impl->methods)
+            {
+                if(!method || !method->isTest)
+                    continue;
+                if(method->isStatic)
+                {
+                    reportError(method->line,
+                                "fixture #[test] methods must take 'self: "
+                                "&mut Self' (got static method)");
+                    continue;
+                }
+                bool selfOnly = true;
+                for(auto* p : method->parameters->parameters)
+                {
+                    if(p && p->name != "self")
+                    {
+                        selfOnly = false;
+                        break;
+                    }
+                }
+                if(!selfOnly)
+                {
+                    reportError(method->line,
+                                "fixture #[test] methods must take only "
+                                "'self: &mut Self' as parameter");
+                    continue;
+                }
+                if(method->returnType &&
+                   !(method->returnType->kind == TypeNode::TYPE_VOID ||
+                     method->returnType->kind == TypeNode::TYPE_INT ||
+                     method->returnType->kind == TypeNode::TYPE_I32))
+                {
+                    reportError(method->line,
+                                "fixture #[test] methods must return void or "
+                                "i32");
+                    continue;
+                }
+                fixtureTests.push_back({impl, method});
+            }
+        }
+    }
+
+    if(testMode && (!testFunctions.empty() || !fixtureTests.empty()))
     {
         for(auto* testFn : testFunctions)
         {
@@ -6288,7 +6346,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
         if(benchmarkMode)
             generateBenchmarkMain(testFunctions);
         else
-            generateTestMain(testFunctions);
+            generateTestMain(testFunctions, fixtureTests);
     }
 
     // Generate a C-compatible main wrapper if needed.
@@ -6400,7 +6458,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 }
 
-void CodeGenerator::generateTestMain(const std::vector<FunctionDefNode*>& tests)
+void CodeGenerator::generateTestMain(
+    const std::vector<FunctionDefNode*>& tests,
+    const std::vector<FixtureTestEntry>& fixtureTests)
 {
     initializeStdioFunctions();
 
@@ -6513,6 +6573,138 @@ void CodeGenerator::generateTestMain(const std::vector<FunctionDefNode*>& tests)
             llvm::BasicBlock::Create(context, "test.fail");
         llvm::BasicBlock* contBB =
             llvm::BasicBlock::Create(context, "test.cont");
+        builder.CreateCondBr(isFail, failBB, passBB);
+
+        builder.SetInsertPoint(passBB);
+        builder.CreateCall(reportTestFunc,
+                           {testIndex, totalNext, passStatus, testName,
+                            llvm::ConstantInt::get(i32Type, 0)});
+        builder.CreateBr(contBB);
+
+        failBB->insertInto(mainFn);
+        builder.SetInsertPoint(failBB);
+        builder.CreateCall(reportTestFunc, {testIndex, totalNext, failStatus,
+                                            testName, resultI32});
+        builder.CreateBr(contBB);
+
+        contBB->insertInto(mainFn);
+        builder.SetInsertPoint(contBB);
+    }
+
+    // Fixture-test methods: each runs against a fresh stack-allocated,
+    // zero-initialized instance. We call <Struct>_setup, then the test method
+    // (passing the instance pointer as self), then <Struct>_teardown.
+    for(const auto& fxEntry : fixtureTests)
+    {
+        ImplBlockNode* impl = fxEntry.implBlock;
+        StructMethodNode* method = fxEntry.method;
+        if(!impl || !method)
+            continue;
+
+        const std::string& structName = impl->structName;
+        llvm::StructType* structType = getStructType(structName);
+        if(!structType)
+        {
+            reportError(method->line,
+                        "fixture struct '" + structName +
+                            "' is not defined or has no fields");
+            continue;
+        }
+
+        std::string testMangled = structName + "_" + method->name;
+        llvm::Function* methodFn = module->getFunction(testMangled);
+        if(!methodFn)
+        {
+            reportError(method->line,
+                        "fixture test method '" + structName +
+                            "::" + method->name + "' was not generated");
+            continue;
+        }
+
+        std::string suiteName =
+            !method->sourceModule.empty()
+                ? normalizeTestSuiteName(method->sourceModule)
+                : defaultSuite;
+        std::string displayName =
+            suiteName + "." + structName + "_" +
+            humanizeTestCaseName(method->name);
+
+        if(!testFilter.empty() &&
+           displayName.find(testFilter) == std::string::npos &&
+           method->name.find(testFilter) == std::string::npos)
+            continue;
+
+        llvm::Value* totalCur =
+            builder.CreateLoad(i32Type, totalTests, "tests.cur");
+        llvm::Value* totalNext = builder.CreateAdd(
+            totalCur, llvm::ConstantInt::get(i32Type, 1), "tests.next");
+        builder.CreateStore(totalNext, totalTests);
+        llvm::Value* testName = make_cstr(displayName, "fxtest.name");
+        llvm::Value* testIndex = totalNext;
+        builder.CreateCall(setCurrentTestFunc,
+                           {testIndex, totalNext, testName});
+
+        // Fresh, zero-initialized fixture instance per test.
+        llvm::AllocaInst* fxAlloca =
+            builder.CreateAlloca(structType, nullptr, "fixture");
+        builder.CreateStore(llvm::Constant::getNullValue(structType), fxAlloca);
+
+        // Optional setup hook.
+        if(llvm::Function* setupFn =
+               module->getFunction(structName + "_setup"))
+        {
+            builder.CreateCall(setupFn, {fxAlloca});
+        }
+
+        // Run the test method.
+        llvm::Value* result = builder.CreateCall(methodFn, {fxAlloca});
+
+        // Optional teardown hook (always runs, even when test fails non-fatally).
+        llvm::Function* teardownFn =
+            module->getFunction(structName + "_teardown");
+
+        if(methodFn->getReturnType()->isVoidTy())
+        {
+            if(teardownFn)
+                builder.CreateCall(teardownFn, {fxAlloca});
+            builder.CreateCall(reportTestFunc,
+                               {testIndex, totalNext, passStatus, testName,
+                                llvm::ConstantInt::get(i32Type, 0)});
+            continue;
+        }
+
+        llvm::Value* resultI32 = result;
+        if(resultI32->getType() != i32Type)
+        {
+            if(resultI32->getType()->isIntegerTy())
+            {
+                resultI32 = builder.CreateIntCast(resultI32, i32Type, true,
+                                                  "fxtest.rc.cast");
+            }
+            else
+            {
+                resultI32 = llvm::ConstantInt::get(i32Type, 1);
+            }
+        }
+
+        if(teardownFn)
+            builder.CreateCall(teardownFn, {fxAlloca});
+
+        llvm::Value* isFail = builder.CreateICmpNE(
+            resultI32, llvm::ConstantInt::get(i32Type, 0), "fxtestfail");
+        llvm::Value* failInc = builder.CreateZExt(isFail, i32Type, "fxfailinc");
+        llvm::Value* cur =
+            builder.CreateLoad(i32Type, failures, "fxfailures.cur");
+        llvm::Value* next =
+            builder.CreateAdd(cur, failInc, "fxfailures.next");
+        builder.CreateStore(next, failures);
+
+        llvm::BasicBlock* passBB =
+            llvm::BasicBlock::Create(context, "fxtest.pass", mainFn);
+        llvm::BasicBlock* failBB =
+            llvm::BasicBlock::Create(context, "fxtest.fail");
+        llvm::BasicBlock* contBB =
+            llvm::BasicBlock::Create(context, "fxtest.cont");
         builder.CreateCondBr(isFail, failBB, passBB);
 
         builder.SetInsertPoint(passBB);

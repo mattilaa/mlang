@@ -129,6 +129,60 @@ fn bench_counter() -> i32 {
 See:
 - [`tests/test_sample.mla`](../../../tests/test_sample.mla) — basic unit test example
 - [`tests/bench_stdlib.mla`](../../../tests/bench_stdlib.mla) — benchmark example
+- [`tests/fixture_tests.mla`](../../../tests/fixture_tests.mla) — test fixture example
+
+## `#[fixture]`
+
+Applies to inherent `impl` blocks. Marks the impl as a *test fixture*: every
+`#[test]` method inside runs against a **fresh, stack-allocated, zero-initialized
+instance** of the struct, mirroring GoogleTest's `TEST_F` semantics.
+
+Hooks (both optional, looked up by name on the struct):
+- `setup(self: &mut Self) -> void` — runs before each `#[test]` method.
+- `teardown(self: &mut Self) -> void` — runs after each `#[test]` method.
+
+Rules for `#[test]` methods inside a `#[fixture] impl`:
+- Must take exactly `self: &mut Self` (no extra parameters).
+- Must return `void` or `i32`.
+- May not be `static`; trait impls (`impl Trait for Struct`) are not eligible.
+
+Example:
+
+```mla
+mod std::testing;
+use std::testing::*;
+
+struct Counter {
+    var value: i32;
+};
+
+#[fixture]
+impl Counter {
+    fn setup(self: &mut Self) -> void {
+        self.value = 100;
+    }
+
+    fn teardown(self: &mut Self) -> void {
+        // close handles, free buffers, etc.
+    }
+
+    #[test]
+    fn test_setup_runs(self: &mut Self) -> void {
+        expect_eq_i32(100, self.value);
+    }
+
+    #[test]
+    fn test_isolation(self: &mut Self) -> void {
+        // Fresh instance — value is 100 again, not whatever the previous
+        // test left behind.
+        expect_eq_i32(100, self.value);
+        self.value = 999;
+    }
+}
+```
+
+Test reports use the form `suite.Struct_<case>`, e.g.
+`fixture_tests.Counter_setup runs`.
 
 ## `#[inline]`
 

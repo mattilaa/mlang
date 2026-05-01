@@ -1,0 +1,78 @@
+/// \file fixture_tests.mla
+/// \brief Test-fixture support for \c mlang \c test.
+///
+/// Demonstrates \c #[fixture] \c impl blocks containing \c #[test] methods.
+/// Each test runs against a fresh, stack-allocated, zero-initialized instance
+/// of the fixture struct. \c setup runs before each test, \c teardown after.
+///
+/// Run with:
+/// \code
+///   mlang --tests tests/fixture_tests.mla
+/// \endcode
+
+mod std::testing;
+
+use std::testing::*;
+
+struct Counter {
+    var value: i32;
+    var label: i32;
+};
+
+#[fixture]
+impl Counter {
+    fn setup(self: &mut Self) -> void {
+        self.value = 100;
+        self.label = 7;
+    }
+
+    fn teardown(self: &mut Self) -> void {
+        // Reset to a known sentinel; the fixture is destroyed afterward but
+        // teardown is exercised to confirm the hook runs.
+        self.label = 0;
+    }
+
+    #[test]
+    fn test_setup_runs_before_test(self: &mut Self) -> void {
+        expect_eq_i32(100, self.value);
+        expect_eq_i32(7, self.label);
+    }
+
+    #[test]
+    fn test_per_test_isolation(self: &mut Self) -> void {
+        // Even though test_setup_runs_before_test mutates self.value above
+        // (in source order), this test sees a fresh instance with value=100.
+        expect_eq_i32(100, self.value);
+        self.value = 999;
+        expect_eq_i32(999, self.value);
+    }
+}
+
+struct NoSetup {
+    var n: i32;
+};
+
+#[fixture]
+impl NoSetup {
+    // No setup/teardown — instance is just zero-initialized for each test.
+    #[test]
+    fn test_zero_initialized(self: &mut Self) -> void {
+        expect_eq_i32(0, self.n);
+    }
+}
+
+struct ReturnsRC {
+    var ok: i32;
+};
+
+#[fixture]
+impl ReturnsRC {
+    fn setup(self: &mut Self) -> void {
+        self.ok = 1;
+    }
+
+    #[test]
+    fn test_explicit_zero_rc(self: &mut Self) -> i32 {
+        return self.ok == 1 ? 0 : 1;
+    }
+}

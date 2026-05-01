@@ -1568,6 +1568,7 @@ enum UpdatePosition
 %token VEC_MACRO
 %token DERIVE_DEBUG
 %token TEST_ATTR
+%token FIXTURE_ATTR
 %token PROPERTY_ATTR
 %token X86_64_ATTR
 %token AARCH64_ATTR
@@ -1857,6 +1858,18 @@ impl_block
             }
             bind_impl_self_types(implBlock);
         }
+    | FIXTURE_ATTR IMPL IDENTIFIER LBRACE impl_method_list RBRACE
+        {
+            ASTNode* impl = mla_ast_impl_block($3, NULL, NULL);
+            auto* implBlock = static_cast<ImplBlockNode*>(impl);
+            auto* methodList = static_cast<ImplBlockNode*>($5);
+            if(methodList) {
+                implBlock->methods = methodList->methods;
+            }
+            implBlock->isFixture = true;
+            bind_impl_self_types(implBlock);
+            $$ = impl;
+        }
     | IMPL IDENTIFIER FOR IDENTIFIER LBRACE impl_method_list RBRACE
         {
             ASTNode* impl = mla_ast_impl_block($4, NULL, $2);
@@ -2029,6 +2042,18 @@ struct_method
         { $$ = mla_ast_struct_method($7, $2, $4, $9, 0, 0); }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         { $$ = mla_ast_struct_method($8, $3, $5, $10, 1, 0); }
+    | TEST_ATTR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        {
+            ASTNode* m = mla_ast_struct_method($8, $3, $5, $10, 0, 0);
+            static_cast<StructMethodNode*>(m)->isTest = true;
+            $$ = m;
+        }
+    | TEST_ATTR PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        {
+            ASTNode* m = mla_ast_struct_method($9, $4, $6, $11, 1, 0);
+            static_cast<StructMethodNode*>(m)->isTest = true;
+            $$ = m;
+        }
     ;
 
 function_def
