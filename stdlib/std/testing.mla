@@ -76,6 +76,50 @@ extern pub fn __mlang_std_testing_mock_reset(handle: i64) -> void;
 extern pub fn __mlang_std_testing_mock_expect_called(handle: i64,
                                                      name: str8,
                                                      expected_calls: i32) -> void;
+extern pub fn __mlang_std_testing_mock_expect_at_least(handle: i64,
+                                                       name: str8,
+                                                       n: i32) -> void;
+extern pub fn __mlang_std_testing_mock_expect_at_most(handle: i64,
+                                                      name: str8,
+                                                      n: i32) -> void;
+extern pub fn __mlang_std_testing_mock_expect_never(handle: i64,
+                                                    name: str8) -> void;
+extern pub fn __mlang_std_testing_mock_will_return_i32(handle: i64,
+                                                       name: str8,
+                                                       value: i32) -> void;
+extern pub fn __mlang_std_testing_mock_will_return_i64(handle: i64,
+                                                       name: str8,
+                                                       value: i64) -> void;
+extern pub fn __mlang_std_testing_mock_will_return_bool(handle: i64,
+                                                        name: str8,
+                                                        value: i32) -> void;
+extern pub fn __mlang_std_testing_mock_will_return_str8(handle: i64,
+                                                        name: str8,
+                                                        value: str8) -> void;
+extern pub fn __mlang_std_testing_mock_will_return_f32(handle: i64,
+                                                       name: str8,
+                                                       value: f32) -> void;
+extern pub fn __mlang_std_testing_mock_will_return_f64(handle: i64,
+                                                       name: str8,
+                                                       value: f64) -> void;
+extern pub fn __mlang_std_testing_mock_record_and_return_i32(handle: i64,
+                                                             name: str8,
+                                                             default_value: i32) -> i32;
+extern pub fn __mlang_std_testing_mock_record_and_return_i64(handle: i64,
+                                                             name: str8,
+                                                             default_value: i64) -> i64;
+extern pub fn __mlang_std_testing_mock_record_and_return_bool(handle: i64,
+                                                              name: str8,
+                                                              default_value: i32) -> i32;
+extern pub fn __mlang_std_testing_mock_record_and_return_str8(handle: i64,
+                                                              name: str8,
+                                                              default_value: str8) -> str8;
+extern pub fn __mlang_std_testing_mock_record_and_return_f32(handle: i64,
+                                                             name: str8,
+                                                             default_value: f32) -> f32;
+extern pub fn __mlang_std_testing_mock_record_and_return_f64(handle: i64,
+                                                             name: str8,
+                                                             default_value: f64) -> f64;
 extern pub fn __mlang_std_testing_mock_called(handle: i64,
                                               name: str8) -> void;
 extern pub fn __mlang_std_testing_mock_actual_calls(handle: i64,
@@ -620,4 +664,132 @@ pub fn mock_calls(handle: i64, name: str8) -> i32 {
 /// Returns true when all expected call counts match actual call counts.
 pub fn mock_verify(handle: i64) -> bool {
     return __mlang_std_testing_mock_verify(handle) != 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPECT_CALL-style mock cardinality and programmable return values.
+//
+// Typical usage:
+//
+//     let m: Mock = mock_new();
+//     mock_expect_times(m.handle, "send", 2);
+//     mock_will_return_i32(m.handle, "send", 42);
+//     mock_will_return_i32(m.handle, "send", 99);
+//     // ... call code under test that drives a hand-written mock body which
+//     //     calls mock_record_and_return_i32(m.handle, "send", 0) ...
+//     expect_true(mock_verify(m.handle));
+//     mock_free(m.handle);
+//
+// `mock_record_and_return_*` increments the call count AND returns the next
+// programmed value (or the supplied default if none is queued).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Require that a mocked call name be invoked exactly `n` times.
+/// @ingroup std_testing
+pub fn mock_expect_times(handle: i64, name: str8, n: i32) -> void {
+    __mlang_std_testing_mock_expect_called(handle, name, n);
+}
+
+/// Require that a mocked call name be invoked at least `n` times.
+/// @ingroup std_testing
+pub fn mock_expect_at_least(handle: i64, name: str8, n: i32) -> void {
+    __mlang_std_testing_mock_expect_at_least(handle, name, n);
+}
+
+/// Require that a mocked call name be invoked at most `n` times.
+/// @ingroup std_testing
+pub fn mock_expect_at_most(handle: i64, name: str8, n: i32) -> void {
+    __mlang_std_testing_mock_expect_at_most(handle, name, n);
+}
+
+/// Require that a mocked call name not be invoked.
+/// @ingroup std_testing
+pub fn mock_expect_never(handle: i64, name: str8) -> void {
+    __mlang_std_testing_mock_expect_never(handle, name);
+}
+
+/// Queue an i32 return value for the next consumer of `name`.
+/// @ingroup std_testing
+pub fn mock_will_return_i32(handle: i64, name: str8, value: i32) -> void {
+    __mlang_std_testing_mock_will_return_i32(handle, name, value);
+}
+
+/// Queue an i64 return value for the next consumer of `name`.
+/// @ingroup std_testing
+pub fn mock_will_return_i64(handle: i64, name: str8, value: i64) -> void {
+    __mlang_std_testing_mock_will_return_i64(handle, name, value);
+}
+
+/// Queue a bool return value for the next consumer of `name`.
+/// @ingroup std_testing
+pub fn mock_will_return_bool(handle: i64, name: str8, value: bool) -> void {
+    __mlang_std_testing_mock_will_return_bool(handle, name, bool_to_i32(value));
+}
+
+/// Queue a str8 return value for the next consumer of `name`.
+/// @ingroup std_testing
+pub fn mock_will_return_str8(handle: i64, name: str8, value: str8) -> void {
+    __mlang_std_testing_mock_will_return_str8(handle, name, value);
+}
+
+/// Queue an f32 return value for the next consumer of `name`.
+/// @ingroup std_testing
+pub fn mock_will_return_f32(handle: i64, name: str8, value: f32) -> void {
+    __mlang_std_testing_mock_will_return_f32(handle, name, value);
+}
+
+/// Queue an f64 return value for the next consumer of `name`.
+/// @ingroup std_testing
+pub fn mock_will_return_f64(handle: i64, name: str8, value: f64) -> void {
+    __mlang_std_testing_mock_will_return_f64(handle, name, value);
+}
+
+/// Inside a hand-written mock body: record one invocation of `name` AND return
+/// the next programmed i32 value. Falls back to `default_value` when the
+/// queue is empty or holds a different type.
+/// @ingroup std_testing
+pub fn mock_record_and_return_i32(handle: i64, name: str8,
+                                  default_value: i32) -> i32 {
+    return __mlang_std_testing_mock_record_and_return_i32(handle, name,
+                                                          default_value);
+}
+
+/// i64 variant of mock_record_and_return_i32.
+/// @ingroup std_testing
+pub fn mock_record_and_return_i64(handle: i64, name: str8,
+                                  default_value: i64) -> i64 {
+    return __mlang_std_testing_mock_record_and_return_i64(handle, name,
+                                                          default_value);
+}
+
+/// bool variant of mock_record_and_return_i32.
+/// @ingroup std_testing
+pub fn mock_record_and_return_bool(handle: i64, name: str8,
+                                   default_value: bool) -> bool {
+    return __mlang_std_testing_mock_record_and_return_bool(
+        handle, name, bool_to_i32(default_value)) != 0;
+}
+
+/// str8 variant of mock_record_and_return_i32.
+/// @ingroup std_testing
+pub fn mock_record_and_return_str8(handle: i64, name: str8,
+                                   default_value: str8) -> str8 {
+    return __mlang_std_testing_mock_record_and_return_str8(handle, name,
+                                                           default_value);
+}
+
+/// f32 variant of mock_record_and_return_i32.
+/// @ingroup std_testing
+pub fn mock_record_and_return_f32(handle: i64, name: str8,
+                                  default_value: f32) -> f32 {
+    return __mlang_std_testing_mock_record_and_return_f32(handle, name,
+                                                          default_value);
+}
+
+/// f64 variant of mock_record_and_return_i32.
+/// @ingroup std_testing
+pub fn mock_record_and_return_f64(handle: i64, name: str8,
+                                  default_value: f64) -> f64 {
+    return __mlang_std_testing_mock_record_and_return_f64(handle, name,
+                                                          default_value);
 }

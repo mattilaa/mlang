@@ -19,12 +19,51 @@ static void testing_set_current_name(const char* name);
 static void testing_record_failed_test(const char* name);
 static void testing_clear_failed_tests(void);
 
+/* Cardinality modes for EXPECT_CALL-style expectations.
+ * Kept stable since it crosses the mlang/C ABI boundary. */
+enum
+{
+    MOCK_CARD_NONE = 0,
+    MOCK_CARD_EXACT = 1,
+    MOCK_CARD_AT_LEAST = 2,
+    MOCK_CARD_AT_MOST = 3,
+    MOCK_CARD_NEVER = 4
+};
+
+/* Tagged union for programmed return values queued via will_return_*. */
+enum
+{
+    MOCK_RV_NONE = 0,
+    MOCK_RV_I32 = 1,
+    MOCK_RV_I64 = 2,
+    MOCK_RV_BOOL = 3,
+    MOCK_RV_STR8 = 4,
+    MOCK_RV_F32 = 5,
+    MOCK_RV_F64 = 6
+};
+
+typedef struct
+{
+    int32_t kind;
+    int32_t i32_val;
+    int64_t i64_val;
+    int32_t bool_val;
+    char* str8_val;
+    float f32_val;
+    double f64_val;
+} testing_mock_rv_t;
+
 typedef struct
 {
     char* name;
     int32_t expected_calls;
     int32_t actual_calls;
     int32_t has_expectation;
+    int32_t cardinality;
+    testing_mock_rv_t* return_queue;
+    int32_t return_queue_len;
+    int32_t return_queue_cap;
+    int32_t return_queue_pos;
 } testing_mock_entry_t;
 
 typedef struct
@@ -196,6 +235,25 @@ static void testing_record_failed_test(const char* name)
     g_testing_failed_tests[g_testing_failed_tests_len++] = dup;
 }
 
+static void testing_mock_free_return_queue(testing_mock_entry_t* entry)
+{
+    if(!entry || !entry->return_queue)
+        return;
+    for(int32_t i = 0; i < entry->return_queue_len; ++i)
+    {
+        if(entry->return_queue[i].kind == MOCK_RV_STR8)
+        {
+            free(entry->return_queue[i].str8_val);
+            entry->return_queue[i].str8_val = NULL;
+        }
+    }
+    free(entry->return_queue);
+    entry->return_queue = NULL;
+    entry->return_queue_len = 0;
+    entry->return_queue_cap = 0;
+    entry->return_queue_pos = 0;
+}
+
 static void testing_mock_clear_entries(testing_mock_t* mock)
 {
     if(!mock || !mock->entries)
@@ -204,6 +262,7 @@ static void testing_mock_clear_entries(testing_mock_t* mock)
     {
         free(mock->entries[i].name);
         mock->entries[i].name = NULL;
+        testing_mock_free_return_queue(&mock->entries[i]);
     }
     mock->len = 0;
 }
@@ -264,7 +323,76 @@ static testing_mock_entry_t* testing_get_or_create_entry(testing_mock_t* mock,
     out->expected_calls = 0;
     out->actual_calls = 0;
     out->has_expectation = 0;
+    out->cardinality = MOCK_CARD_NONE;
+    out->return_queue = NULL;
+    out->return_queue_len = 0;
+    out->return_queue_cap = 0;
+    out->return_queue_pos = 0;
     return out;
+}
+
+static testing_mock_rv_t*
+testing_mock_push_rv_slot(testing_mock_entry_t* entry)
+{
+    if(!entry)
+        return NULL;
+    if(entry->return_queue_len >= entry->return_queue_cap)
+    {
+        int32_t next = (entry->return_queue_cap == 0)
+                           ? 4
+                           : (entry->return_queue_cap * 2);
+        testing_mock_rv_t* grown = (testing_mock_rv_t*)realloc(
+            entry->return_queue, (size_t)next * sizeof(*grown));
+        if(!grown)
+            return NULL;
+        entry->return_queue = grown;
+        entry->return_queue_cap = next;
+    }
+    testing_mock_rv_t* slot = &entry->return_queue[entry->return_queue_len++];
+    slot->kind = MOCK_RV_NONE;
+    slot->i32_val = 0;
+    slot->i64_val = 0;
+    slot->bool_val = 0;
+    slot->str8_val = NULL;
+    slot->f32_val = 0.0f;
+    slot->f64_val = 0.0;
+    return slot;
+}
+
+static const char* testing_mock_card_label(int32_t cardinality)
+{
+    switch(cardinality)
+    {
+        case MOCK_CARD_EXACT:
+            return "expected";
+        case MOCK_CARD_AT_LEAST:
+            return "expected at least";
+        case MOCK_CARD_AT_MOST:
+            return "expected at most";
+        case MOCK_CARD_NEVER:
+            return "expected (never)";
+        default:
+            return "expected";
+    }
+}
+
+static int32_t testing_mock_cardinality_holds(int32_t cardinality,
+                                              int32_t expected,
+                                              int32_t actual)
+{
+    switch(cardinality)
+    {
+        case MOCK_CARD_EXACT:
+            return actual == expected;
+        case MOCK_CARD_AT_LEAST:
+            return actual >= expected;
+        case MOCK_CARD_AT_MOST:
+            return actual <= expected;
+        case MOCK_CARD_NEVER:
+            return actual == 0;
+        default:
+            return 1;
+    }
 }
 
 void __mlang_std_testing_reset(void)
@@ -357,6 +485,208 @@ void __mlang_std_testing_mock_expect_called(int64_t handle, const char* name,
         return;
     entry->expected_calls = expected_calls;
     entry->has_expectation = 1;
+    entry->cardinality = MOCK_CARD_EXACT;
+}
+
+void __mlang_std_testing_mock_expect_at_least(int64_t handle, const char* name,
+                                              int32_t n)
+{
+    testing_mock_t* mock = testing_find_mock(handle);
+    if(!mock)
+        return;
+    testing_mock_entry_t* entry = testing_get_or_create_entry(mock, name);
+    if(!entry)
+        return;
+    entry->expected_calls = n;
+    entry->has_expectation = 1;
+    entry->cardinality = MOCK_CARD_AT_LEAST;
+}
+
+void __mlang_std_testing_mock_expect_at_most(int64_t handle, const char* name,
+                                             int32_t n)
+{
+    testing_mock_t* mock = testing_find_mock(handle);
+    if(!mock)
+        return;
+    testing_mock_entry_t* entry = testing_get_or_create_entry(mock, name);
+    if(!entry)
+        return;
+    entry->expected_calls = n;
+    entry->has_expectation = 1;
+    entry->cardinality = MOCK_CARD_AT_MOST;
+}
+
+void __mlang_std_testing_mock_expect_never(int64_t handle, const char* name)
+{
+    testing_mock_t* mock = testing_find_mock(handle);
+    if(!mock)
+        return;
+    testing_mock_entry_t* entry = testing_get_or_create_entry(mock, name);
+    if(!entry)
+        return;
+    entry->expected_calls = 0;
+    entry->has_expectation = 1;
+    entry->cardinality = MOCK_CARD_NEVER;
+}
+
+void __mlang_std_testing_mock_will_return_i32(int64_t handle, const char* name,
+                                              int32_t value)
+{
+    testing_mock_t* mock = testing_find_mock(handle);
+    if(!mock)
+        return;
+    testing_mock_entry_t* entry = testing_get_or_create_entry(mock, name);
+    testing_mock_rv_t* slot = testing_mock_push_rv_slot(entry);
+    if(!slot)
+        return;
+    slot->kind = MOCK_RV_I32;
+    slot->i32_val = value;
+}
+
+void __mlang_std_testing_mock_will_return_i64(int64_t handle, const char* name,
+                                              int64_t value)
+{
+    testing_mock_t* mock = testing_find_mock(handle);
+    if(!mock)
+        return;
+    testing_mock_entry_t* entry = testing_get_or_create_entry(mock, name);
+    testing_mock_rv_t* slot = testing_mock_push_rv_slot(entry);
+    if(!slot)
+        return;
+    slot->kind = MOCK_RV_I64;
+    slot->i64_val = value;
+}
+
+void __mlang_std_testing_mock_will_return_bool(int64_t handle, const char* name,
+                                               int32_t value)
+{
+    testing_mock_t* mock = testing_find_mock(handle);
+    if(!mock)
+        return;
+    testing_mock_entry_t* entry = testing_get_or_create_entry(mock, name);
+    testing_mock_rv_t* slot = testing_mock_push_rv_slot(entry);
+    if(!slot)
+        return;
+    slot->kind = MOCK_RV_BOOL;
+    slot->bool_val = value ? 1 : 0;
+}
+
+void __mlang_std_testing_mock_will_return_str8(int64_t handle, const char* name,
+                                               const char* value)
+{
+    testing_mock_t* mock = testing_find_mock(handle);
+    if(!mock)
+        return;
+    testing_mock_entry_t* entry = testing_get_or_create_entry(mock, name);
+    testing_mock_rv_t* slot = testing_mock_push_rv_slot(entry);
+    if(!slot)
+        return;
+    slot->kind = MOCK_RV_STR8;
+    slot->str8_val = testing_strdup(value ? value : "");
+}
+
+void __mlang_std_testing_mock_will_return_f32(int64_t handle, const char* name,
+                                              float value)
+{
+    testing_mock_t* mock = testing_find_mock(handle);
+    if(!mock)
+        return;
+    testing_mock_entry_t* entry = testing_get_or_create_entry(mock, name);
+    testing_mock_rv_t* slot = testing_mock_push_rv_slot(entry);
+    if(!slot)
+        return;
+    slot->kind = MOCK_RV_F32;
+    slot->f32_val = value;
+}
+
+void __mlang_std_testing_mock_will_return_f64(int64_t handle, const char* name,
+                                              double value)
+{
+    testing_mock_t* mock = testing_find_mock(handle);
+    if(!mock)
+        return;
+    testing_mock_entry_t* entry = testing_get_or_create_entry(mock, name);
+    testing_mock_rv_t* slot = testing_mock_push_rv_slot(entry);
+    if(!slot)
+        return;
+    slot->kind = MOCK_RV_F64;
+    slot->f64_val = value;
+}
+
+static testing_mock_rv_t* testing_mock_consume_rv(int64_t handle,
+                                                  const char* name)
+{
+    testing_mock_t* mock = testing_find_mock(handle);
+    if(!mock)
+        return NULL;
+    testing_mock_entry_t* entry = testing_get_or_create_entry(mock, name);
+    if(!entry)
+        return NULL;
+    ++entry->actual_calls;
+    if(entry->return_queue_pos < entry->return_queue_len)
+        return &entry->return_queue[entry->return_queue_pos++];
+    return NULL;
+}
+
+int32_t __mlang_std_testing_mock_record_and_return_i32(int64_t handle,
+                                                       const char* name,
+                                                       int32_t default_value)
+{
+    testing_mock_rv_t* slot = testing_mock_consume_rv(handle, name);
+    if(!slot || slot->kind != MOCK_RV_I32)
+        return default_value;
+    return slot->i32_val;
+}
+
+int64_t __mlang_std_testing_mock_record_and_return_i64(int64_t handle,
+                                                       const char* name,
+                                                       int64_t default_value)
+{
+    testing_mock_rv_t* slot = testing_mock_consume_rv(handle, name);
+    if(!slot || slot->kind != MOCK_RV_I64)
+        return default_value;
+    return slot->i64_val;
+}
+
+int32_t __mlang_std_testing_mock_record_and_return_bool(int64_t handle,
+                                                        const char* name,
+                                                        int32_t default_value)
+{
+    testing_mock_rv_t* slot = testing_mock_consume_rv(handle, name);
+    if(!slot || slot->kind != MOCK_RV_BOOL)
+        return default_value ? 1 : 0;
+    return slot->bool_val ? 1 : 0;
+}
+
+const char*
+__mlang_std_testing_mock_record_and_return_str8(int64_t handle,
+                                                const char* name,
+                                                const char* default_value)
+{
+    testing_mock_rv_t* slot = testing_mock_consume_rv(handle, name);
+    if(!slot || slot->kind != MOCK_RV_STR8)
+        return default_value ? default_value : "";
+    return slot->str8_val ? slot->str8_val : "";
+}
+
+float __mlang_std_testing_mock_record_and_return_f32(int64_t handle,
+                                                     const char* name,
+                                                     float default_value)
+{
+    testing_mock_rv_t* slot = testing_mock_consume_rv(handle, name);
+    if(!slot || slot->kind != MOCK_RV_F32)
+        return default_value;
+    return slot->f32_val;
+}
+
+double __mlang_std_testing_mock_record_and_return_f64(int64_t handle,
+                                                     const char* name,
+                                                     double default_value)
+{
+    testing_mock_rv_t* slot = testing_mock_consume_rv(handle, name);
+    if(!slot || slot->kind != MOCK_RV_F64)
+        return default_value;
+    return slot->f64_val;
 }
 
 void __mlang_std_testing_mock_called(int64_t handle, const char* name)
@@ -394,15 +724,20 @@ int32_t __mlang_std_testing_mock_verify(int64_t handle)
         if(!e->has_expectation)
             continue;
         ++g_testing_checks;
-        if(e->actual_calls == e->expected_calls)
+        int32_t cardinality =
+            e->cardinality == 0 ? MOCK_CARD_EXACT : e->cardinality;
+        if(testing_mock_cardinality_holds(cardinality, e->expected_calls,
+                                          e->actual_calls))
             continue;
         ok = 0;
         ++g_testing_failures;
         if(!g_testing_quiet)
         {
             fprintf(stderr,
-                    "[  FAILED  ] mock_expect_call('%s'): expected=%d actual=%d\n",
-                    e->name ? e->name : "", e->expected_calls, e->actual_calls);
+                    "[  FAILED  ] mock_expect_call('%s'): %s=%d actual=%d\n",
+                    e->name ? e->name : "",
+                    testing_mock_card_label(cardinality), e->expected_calls,
+                    e->actual_calls);
         }
     }
     return ok;
