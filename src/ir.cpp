@@ -84,6 +84,27 @@ static bool isSynthesizedPropertyLockFieldName(const std::string& fieldName)
     return fieldName.compare(0, prefix.size(), prefix) == 0;
 }
 
+static bool trait_names_equivalent(const std::string& lhs,
+                                   const std::string& rhs)
+{
+    if(lhs == rhs)
+        return true;
+
+    auto suffixMatches = [](const std::string& qualified,
+                            const std::string& shortName) {
+        if(shortName.find("::") != std::string::npos)
+            return false;
+        if(qualified.size() <= shortName.size() + 2)
+            return false;
+        return qualified.compare(qualified.size() - shortName.size(),
+                                 shortName.size(), shortName) == 0 &&
+               qualified.compare(qualified.size() - shortName.size() - 2, 2,
+                                 "::") == 0;
+    };
+
+    return suffixMatches(lhs, rhs) || suffixMatches(rhs, lhs);
+}
+
 template <typename Enum, size_t N>
 static std::optional<std::string_view> find_enum_text(
     Enum key, const std::array<std::pair<Enum, std::string_view>, N>& mappings)
@@ -7198,7 +7219,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedClosureVariables = closureVariables;
     auto savedActiveInlineClosures = activeInlineClosures;
     auto savedCurrentFunctionExceptionFrame = currentFunctionExceptionFrame;
+    auto savedSemanticReturnType = currentSemanticReturnType;
     int savedUnsafeDepth = unsafeDepth;
+    currentSemanticReturnType = node->returnType;
 
     // Create a new basic block for the function
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
@@ -7477,6 +7500,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     closureVariables = std::move(savedClosureVariables);
     activeInlineClosures = std::move(savedActiveInlineClosures);
     currentFunctionExceptionFrame = savedCurrentFunctionExceptionFrame;
+    currentSemanticReturnType = savedSemanticReturnType;
     unsafeDepth = savedUnsafeDepth;
     currentModule = savedModule;
     builder.restoreIP(savedIP);
@@ -11712,7 +11736,35 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
         if(!validateNoEscapingBorrow(node->expression, node->line, "return"))
             return;
 
-        llvm::Value* returnValue = generateExpression(node->expression);
+        llvm::Value* returnValue = nullptr;
+        if(auto* traitObj =
+               dynamic_cast<TraitObjectTypeNode*>(currentSemanticReturnType))
+        {
+            llvm::Type* traitObjType = getLLVMTypeFromNode(traitObj);
+            TypeNode* exprType = getLValueType(node->expression, node->line);
+            if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+            {
+                returnValue = generateExpression(node->expression);
+                returnValue =
+                    coerceTraitObjectValue(returnValue, traitObjType,
+                                           node->line);
+            }
+            else if(exprType)
+                returnValue = buildTraitObjectValue(node->expression,
+                                                    traitObj->traitName,
+                                                    node->line, true);
+            else
+            {
+                returnValue = generateExpression(node->expression);
+                returnValue =
+                    coerceTraitObjectValue(returnValue, traitObjType,
+                                           node->line);
+            }
+        }
+        else
+        {
+            returnValue = generateExpression(node->expression);
+        }
         if(!returnValue)
             return;
         consumeMoveFromExpression(node->expression, node->line, "return");
@@ -12649,7 +12701,7 @@ llvm::GlobalVariable* CodeGenerator::ensureTraitVTable(
 
 llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
                                                   const std::string& traitName,
-                                                  int line)
+                                                  int line, bool heapCopy)
 {
     llvm::Value* dataPtr = getLValuePointer(expr, line);
     if(!dataPtr)
@@ -12694,6 +12746,24 @@ llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
     if(!vtable)
         return nullptr;
 
+    if(heapCopy)
+    {
+        llvm::Type* concreteType = getLLVMTypeFromNode(lvalueType);
+        if(!concreteType)
+            return nullptr;
+
+        const llvm::DataLayout& dl = module->getDataLayout();
+        auto sizeBytes = dl.getTypeAllocSize(concreteType).getFixedValue();
+        llvm::Value* sizeVal = llvm::ConstantInt::get(
+            llvm::Type::getInt64Ty(context), sizeBytes);
+        llvm::Value* heapPtr =
+            builder.CreateCall(mallocFunc, {sizeVal}, "trait.obj.heap");
+        llvm::Value* concreteValue =
+            builder.CreateLoad(concreteType, dataPtr, "trait.obj.copy");
+        builder.CreateStore(concreteValue, heapPtr);
+        dataPtr = heapPtr;
+    }
+
 #if LLVM_VERSION_MAJOR >= 15
     llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
 #else
@@ -12711,6 +12781,36 @@ llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
     obj = builder.CreateInsertValue(obj, dataPtrI8, 0, "trait.obj.data");
     obj = builder.CreateInsertValue(obj, vtablePtr, 1, "trait.obj.vtable");
     return obj;
+}
+
+llvm::Value* CodeGenerator::coerceTraitObjectValue(llvm::Value* value,
+                                                   llvm::Type* expectedType,
+                                                   int line)
+{
+    if(!value || !expectedType)
+        return nullptr;
+    if(value->getType() == expectedType)
+        return value;
+
+    auto* actualStruct = llvm::dyn_cast<llvm::StructType>(value->getType());
+    auto* expectedStruct = llvm::dyn_cast<llvm::StructType>(expectedType);
+    if(!actualStruct || !expectedStruct ||
+       actualStruct->getNumElements() != 2 ||
+       expectedStruct->getNumElements() != 2)
+    {
+        reportError(line, "trait object type mismatch");
+        return nullptr;
+    }
+
+    llvm::Value* dataPtr = builder.CreateExtractValue(value, 0, "trait.obj.data");
+    llvm::Value* vtablePtr =
+        builder.CreateExtractValue(value, 1, "trait.obj.vtable");
+    llvm::Value* coerced = llvm::Constant::getNullValue(expectedType);
+    coerced = builder.CreateInsertValue(coerced, dataPtr, 0,
+                                        "trait.obj.coerced.data");
+    coerced = builder.CreateInsertValue(coerced, vtablePtr, 1,
+                                        "trait.obj.coerced.vtable");
+    return coerced;
 }
 
 std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
@@ -14077,14 +14177,25 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         llvm::Value* storedValue = nullptr;
         if(node->expression)
         {
-            auto* exprType = dynamic_cast<TraitObjectTypeNode*>(
-                getLValueType(node->expression, node->line));
-            if(exprType && exprType->traitName == traitObj->traitName)
+            TypeNode* exprType = getLValueType(node->expression, node->line);
+            if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+            {
                 storedValue = generateExpression(node->expression);
-            else
+                storedValue =
+                    coerceTraitObjectValue(storedValue, traitObjType,
+                                           node->line);
+            }
+            else if(exprType)
                 storedValue = buildTraitObjectValue(node->expression,
                                                     traitObj->traitName,
                                                     node->line);
+            else
+            {
+                storedValue = generateExpression(node->expression);
+                storedValue =
+                    coerceTraitObjectValue(storedValue, traitObjType,
+                                           node->line);
+            }
             if(!storedValue)
                 return;
         }
@@ -14845,14 +14956,25 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         llvm::Value* storedValue = nullptr;
         if(node->initExpr)
         {
-            auto* exprType = dynamic_cast<TraitObjectTypeNode*>(
-                getLValueType(node->initExpr, node->line));
-            if(exprType && exprType->traitName == traitObj->traitName)
+            TypeNode* exprType = getLValueType(node->initExpr, node->line);
+            if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+            {
                 storedValue = generateExpression(node->initExpr);
-            else
+                storedValue =
+                    coerceTraitObjectValue(storedValue, traitObjType,
+                                           node->line);
+            }
+            else if(exprType)
                 storedValue = buildTraitObjectValue(node->initExpr,
                                                     traitObj->traitName,
                                                     node->line);
+            else
+            {
+                storedValue = generateExpression(node->initExpr);
+                storedValue =
+                    coerceTraitObjectValue(storedValue, traitObjType,
+                                           node->line);
+            }
             if(!storedValue)
                 return;
         }
@@ -18104,7 +18226,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 if(auto* actualTraitObj =
                        dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
                 {
-                    if(actualTraitObj->traitName == traitObj->traitName)
+                    if(trait_names_equivalent(actualTraitObj->traitName,
+                                              traitObj->traitName))
                         continue;
                     }
                     if(!concreteTypeImplementsTrait(actualSemantic,
@@ -18236,9 +18359,20 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     if(auto* traitObj =
                            dynamic_cast<TraitObjectTypeNode*>(declParam->type))
                     {
-                        llvm::Value* traitObjVal = buildTraitObjectValue(
-                            node->arguments[paramIdx], traitObj->traitName,
-                            node->line);
+                        llvm::Value* traitObjVal = nullptr;
+                        TypeNode* actualSemantic =
+                            semanticArgumentType(node->arguments[paramIdx]);
+                        if(dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
+                        {
+                            traitObjVal = coerceTraitObjectValue(
+                                argVal, expectedType, node->line);
+                        }
+                        else
+                        {
+                            traitObjVal = buildTraitObjectValue(
+                                node->arguments[paramIdx], traitObj->traitName,
+                                node->line);
+                        }
                         if(!traitObjVal)
                             return nullptr;
                         args.push_back(traitObjVal);
@@ -19626,9 +19760,12 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     auto savedPointerBorrowScopes = pointerBorrowScopes;
     auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
     auto savedTypeParamBindings = activeTypeParamBindings;
+    auto savedSemanticReturnType = currentSemanticReturnType;
+    currentSemanticReturnType = method->returnType;
     auto restoreMethodCodegenState = [&]()
     {
         activeTypeParamBindings = savedTypeParamBindings;
+        currentSemanticReturnType = savedSemanticReturnType;
         currentModule = savedModule;
         builder.restoreIP(savedIP);
         currentFunctionExceptionFrame = savedExceptionFrame;

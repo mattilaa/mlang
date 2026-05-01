@@ -16,9 +16,20 @@ pub fn show_score(item: dyn Summary) -> i32 {
     return item.score();
 }
 
+// A concrete struct can be returned through a dyn trait return type.
+pub fn make_summary(post: Post) -> dyn Summary {
+    return post;
+}
+
+// Existing dyn trait values can also be returned and passed along.
+pub fn pass_summary(item: dyn Summary) -> dyn Summary {
+    return item;
+}
+
 fn main() -> i32 {
     let post: Post = Post { score_value: 7 };
-    let item: dyn Summary = post;
-    show_score(item);
+    let item: dyn Summary = make_summary(post);
+    let item2: dyn Summary = pass_summary(item);
+    show_score(item2);
     return 0;
 }

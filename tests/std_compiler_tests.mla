@@ -1233,6 +1233,33 @@ fn test_compiler_dyn_trait_object_method_call_allowed() -> i32 {
 }
 
 #[test]
+fn test_compiler_dyn_trait_object_return_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_dyn_trait_object_return_ok/lib").is_err(): { return 1; }
+    let lib_path: str8 = "/tmp/mlang_dyn_trait_object_return_ok/lib/summary.mla";
+    let main_path: str8 = "/tmp/mlang_dyn_trait_object_return_ok/main.mla";
+    let bin_path: str8 = "/tmp/mlang_dyn_trait_object_return_ok/dyn_trait_object_return_bin";
+    let lib_src: str8 = "trait Summary {\n  fn score(self: Self) -> i32;\n}\npub struct Post { var score_value: i32; };\nimpl Summary for Post {\n  fn score(self: Post) -> i32 {\n    return self.score_value;\n  }\n}\npub fn make_summary(post: Post) -> dyn Summary {\n  return post;\n}\npub fn pass_summary(item: dyn Summary) -> dyn Summary {\n  return item;\n}\npub fn show_score(item: dyn Summary) -> i32 {\n  return item.score();\n}\n";
+    let main_src: str8 = "mod lib::summary;\nuse lib::summary::Post;\nfn main() -> i32 {\n  let post: Post = Post { score_value: 7 };\n  let item: dyn lib::summary::Summary = lib::summary::make_summary(post);\n  let item2: dyn lib::summary::Summary = lib::summary::pass_summary(item);\n  let score: i32 = lib::summary::show_score(item2);\n  return score == 7 ? 0 : 1;\n}\n";
+    let wr1: Result<i32, str8> = write_all_text(lib_path, lib_src);
+    if wr1.is_err(): { return 1; }
+    let wr2: Result<i32, str8> = write_all_text(main_path, main_src);
+    if wr2.is_err(): { return 1; }
+
+    let build: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-o", bin_path, main_path, "-L", "build", "-lmlang_std"]);
+    if build.rc != 0 { return 1; }
+
+    let run_cr: Result<Child, str8> = spawn(bin_path, []);
+    if run_cr.is_err(): { return 1; }
+    let child: Child = run_cr.unwrap();
+    let status_r: Result<ExitStatus, str8> = child.wait();
+    if status_r.is_err(): { return 1; }
+    let status: ExitStatus = status_r.unwrap();
+    let _ = child.close();
+    return status.code() == 0 ? 0 : 1;
+}
+
+#[test]
 fn test_compiler_generic_trait_bound_method_call_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_generic_trait_bound_method_call_ok").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_generic_trait_bound_method_call_ok/main.mla";

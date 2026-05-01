@@ -278,6 +278,7 @@ private:
     llvm::FunctionCallee exceptionsTakeMessageFunc;
     llvm::FunctionCallee exceptionsTakeSourceLineFunc;
     llvm::Value* currentFunctionExceptionFrame = nullptr;
+    TypeNode* currentSemanticReturnType = nullptr;
     // Pthread support
     bool pthreadInitialized;
     llvm::FunctionCallee pthreadCreateFunc;
@@ -602,7 +603,10 @@ private:
     llvm::GlobalVariable* ensureTraitVTable(const std::string& concreteTypeName,
                                             const std::string& traitName);
     llvm::Value* buildTraitObjectValue(ExpressionNode* expr,
-                                       const std::string& traitName, int line);
+                                       const std::string& traitName, int line,
+                                       bool heapCopy = false);
+    llvm::Value* coerceTraitObjectValue(llvm::Value* value,
+                                        llvm::Type* expectedType, int line);
     bool generateMutexPropertyMethodBody(const std::string& structName,
                                          StructMethodNode* method,
                                          llvm::Function* function);

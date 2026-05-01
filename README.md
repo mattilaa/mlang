@@ -1106,7 +1106,7 @@ follows a Doxygen-style structure: `@brief`, `@details`, `@code` (example),
 | Trait `impl` method signature validation | `643a182` | `tests/std_compiler_tests.mla` |
 | Generic trait bounds (`T: Trait`) | `24732cf` | `examples/generic_trait_bounds_demo/` |
 | Qualified generic static method calls | `7a423d9` | `examples/module_path_generic_static_demo/` |
-| Trait objects (`dyn Trait`) | `d80f52c` | `examples/dyn_trait_demo/` |
+| Trait objects (`dyn Trait`) | `d80f52c`+ | `examples/dyn_trait_demo/` |
 | Default methods on traits | (this branch) | `examples/trait_advanced_demo/` |
 | Super-traits (`trait Foo: Bar`) | (this branch) | `examples/trait_advanced_demo/` |
 | Multiple trait bounds (`T: A + B`) | (this branch) | `examples/trait_advanced_demo/` |
@@ -1344,12 +1344,14 @@ fn main() -> i32 {
 > **@brief** Pass values behind an explicit trait-object type so a function
 > can accept any concrete implementation of that trait.
 
-> **@details** A parameter typed `dyn Summary` stores the concrete value plus
-> the trait vtable. Inside the callee, trait-method calls like
-> `item.score()` dispatch through that vtable. This is intentionally narrower
-> than a full object system: it currently covers function parameters and
-> direct method calls on those parameters, but not owned trait-object fields
-> or wrapper-returned trait-object expressions.
+> **@details** A parameter or return value typed `dyn Summary` stores a data
+> pointer plus the trait vtable. Inside the callee, trait-method calls like
+> `item.score()` dispatch through that vtable. Concrete values can be returned
+> through a dyn return type, and existing dyn values can be passed through
+> wrapper functions. This is intentionally narrower than a full object system:
+> it currently covers function parameters, local dyn variables, dyn return
+> values, and direct method calls on dyn values, but not owned trait-object
+> fields.
 
 > **@code**
 ```mla
@@ -1367,7 +1369,11 @@ impl Summary for Post {
     }
 }
 
-pub fn wrap(item: dyn Summary) -> dyn Summary {
+pub fn make_summary(post: Post) -> dyn Summary {
+    return post;
+}
+
+pub fn pass_summary(item: dyn Summary) -> dyn Summary {
     return item;
 }
 
@@ -1376,17 +1382,23 @@ pub fn show_score(item: dyn Summary) -> i32 {
 }
 
 fn main() -> i32 {
-    // Callers pass a value that is lowered to a trait object at the
-    // function boundary; the callee dispatches through the vtable.
+    let post: Post = Post { score_value: 7 };
+    let item: dyn Summary = make_summary(post);
+    let item2: dyn Summary = pass_summary(item);
+    show_score(item2);
     return 0;
 }
 ```
 
 > **@note** Use `dyn Trait` when you want runtime dispatch at the function
 > boundary. Use `T: Trait` when the type should stay generic and monomorphized.
+> When returning a concrete value as `dyn Trait`, the compiler stores a durable
+> copy behind the trait object so the returned object does not point at callee
+> stack storage. Across modules, callers may annotate locals with a qualified
+> trait path such as `dyn lib::summary::Summary`.
 
 > **@see** `examples/dyn_trait_demo/`,
-> `tests/std_compiler_tests.mla` (trait object dispatch test).
+> `tests/std_compiler_tests.mla` (trait object dispatch and dyn return tests).
 
 ---
 
