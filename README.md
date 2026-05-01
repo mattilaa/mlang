@@ -1112,7 +1112,7 @@ follows a Doxygen-style structure: `@brief`, `@details`, `@code` (example),
 | Trait `impl` method signature validation | `643a182` | `tests/std_compiler_tests.mla` |
 | Generic trait bounds (`T: Trait`) | `24732cf` | `examples/generic_trait_bounds_demo/` |
 | Qualified generic static method calls | `7a423d9` | `examples/module_path_generic_static_demo/` |
-| Trait objects (`dyn Trait`) | `d80f52c`+ | `examples/dyn_trait_demo/` |
+| Trait objects (`dyn Trait`) | `d80f52c`+ | `examples/dyn_trait_demo/`, `examples/dyn_trait_field_demo/` |
 | Default methods on traits | (this branch) | `examples/trait_advanced_demo/` |
 | Super-traits (`trait Foo: Bar`) | (this branch) | `examples/trait_advanced_demo/` |
 | Multiple trait bounds (`T: A + B`) | (this branch) | `examples/trait_advanced_demo/` |
@@ -1356,8 +1356,8 @@ fn main() -> i32 {
 > through a dyn return type, and existing dyn values can be passed through
 > wrapper functions. This is intentionally narrower than a full object system:
 > it currently covers function parameters, local dyn variables, dyn return
-> values, and direct method calls on dyn values, but not owned trait-object
-> fields.
+> values, direct method calls on dyn values, and owned trait-object fields in
+> structs.
 
 > **@code**
 ```mla
@@ -1387,11 +1387,21 @@ pub fn show_score(item: dyn Summary) -> i32 {
     return item.score();
 }
 
+pub struct Holder {
+    var item: dyn Summary;
+};
+
+pub fn make_holder(post: Post) -> Holder {
+    return Holder { item: post };
+}
+
 fn main() -> i32 {
     let post: Post = Post { score_value: 7 };
     let item: dyn Summary = make_summary(post);
     let item2: dyn Summary = pass_summary(item);
     show_score(item2);
+    let held: Holder = make_holder(Post { score_value: 13 });
+    held.item.score();
     return 0;
 }
 ```
@@ -1401,9 +1411,12 @@ fn main() -> i32 {
 > When returning a concrete value as `dyn Trait`, the compiler stores a durable
 > copy behind the trait object so the returned object does not point at callee
 > stack storage. Across modules, callers may annotate locals with a qualified
-> trait path such as `dyn lib::summary::Summary`.
+> trait path such as `dyn lib::summary::Summary`. Concrete values stored into a
+> `dyn Trait` field are copied into durable storage before the trait object is
+> stored in the struct.
 
 > **@see** `examples/dyn_trait_demo/`,
+> `examples/dyn_trait_field_demo/`,
 > `tests/std_compiler_tests.mla` (trait object dispatch and dyn return tests).
 
 ---

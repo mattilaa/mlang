@@ -1,0 +1,29 @@
+trait Summary {
+    fn score(self: Self) -> i32;
+}
+
+pub struct Post {
+    var score_value: i32;
+};
+
+impl Summary for Post {
+    fn score(self: Post) -> i32 {
+        return self.score_value;
+    }
+}
+
+pub struct Holder {
+    var item: dyn Summary;
+};
+
+fn make_holder() -> Holder {
+    let post: Post = Post { score_value: 13 };
+    return Holder { item: post };
+}
+
+fn main() -> i32 {
+    let h: Holder = make_holder();
+    let score: i32 = h.item.score();
+    println!("dyn field score={}", score);
+    return score == 13 ? 0 : 1;
+}

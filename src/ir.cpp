@@ -12615,6 +12615,17 @@ llvm::Type* CodeGenerator::getTraitVTableType(const std::string& traitName)
         return it->second;
 
     auto traitIt = traitDefinitions.find(traitName);
+    if(traitIt == traitDefinitions.end())
+    {
+        for(auto it = traitDefinitions.begin(); it != traitDefinitions.end(); ++it)
+        {
+            if(trait_names_equivalent(it->first, traitName))
+            {
+                traitIt = it;
+                break;
+            }
+        }
+    }
     if(traitIt == traitDefinitions.end() || !traitIt->second)
         return nullptr;
 
@@ -12638,6 +12649,17 @@ llvm::GlobalVariable* CodeGenerator::ensureTraitVTable(
         return it->second;
 
     auto traitIt = traitDefinitions.find(traitName);
+    if(traitIt == traitDefinitions.end())
+    {
+        for(auto it = traitDefinitions.begin(); it != traitDefinitions.end(); ++it)
+        {
+            if(trait_names_equivalent(it->first, traitName))
+            {
+                traitIt = it;
+                break;
+            }
+        }
+    }
     if(traitIt == traitDefinitions.end() || !traitIt->second)
     {
         reportError(0, "unknown trait object type: '" + traitName + "'");
@@ -12733,8 +12755,19 @@ llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
         return nullptr;
     }
     auto implIt = structImplementedTraits.find(concreteTypeName);
-    if(implIt == structImplementedTraits.end() ||
-       implIt->second.find(traitName) == implIt->second.end())
+    std::string implementedTraitName;
+    if(implIt != structImplementedTraits.end())
+    {
+        for(const auto& candidate : implIt->second)
+        {
+            if(trait_names_equivalent(candidate, traitName))
+            {
+                implementedTraitName = candidate;
+                break;
+            }
+        }
+    }
+    if(implementedTraitName.empty())
     {
         reportError(line, "type '" + concreteTypeName +
                               "' does not implement trait '" + traitName +
@@ -12742,7 +12775,8 @@ llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
         return nullptr;
     }
 
-    llvm::GlobalVariable* vtable = ensureTraitVTable(concreteTypeName, traitName);
+    llvm::GlobalVariable* vtable =
+        ensureTraitVTable(concreteTypeName, implementedTraitName);
     if(!vtable)
         return nullptr;
 
@@ -16243,13 +16277,6 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         return;
     }
 
-    // Generate the value to assign
-    llvm::Value* value = generateExpression(node->expression);
-    if(!value)
-        return;
-    consumeMoveFromExpression(node->expression, node->line,
-                              "assigning to field '" + fieldName + "'");
-
     // Get struct type
     llvm::StructType* structType = getStructType(structTypeName);
     if(!structType)
@@ -16257,6 +16284,38 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
     // Convert value if needed
     llvm::Type* targetType = getLLVMTypeFromNode(fieldType);
+    llvm::Value* value = nullptr;
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(fieldType))
+    {
+        TypeNode* exprType = getLValueType(node->expression, node->line);
+        if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+        {
+            value = generateExpression(node->expression);
+            value = coerceTraitObjectValue(value, targetType, node->line);
+        }
+        else if(exprType)
+        {
+            value = buildTraitObjectValue(node->expression,
+                                          traitObj->traitName, node->line,
+                                          /*heapCopy=*/true);
+        }
+        else
+        {
+            value = generateExpression(node->expression);
+            value = coerceTraitObjectValue(value, targetType, node->line);
+        }
+        if(!value)
+            return;
+    }
+    else
+    {
+        value = generateExpression(node->expression);
+        if(!value)
+            return;
+    }
+    consumeMoveFromExpression(node->expression, node->line,
+                              "assigning to field '" + fieldName + "'");
+
     if(targetType->isPointerTy() && targetGlobalStorage &&
        !validateNoEscapingBorrow(node->expression, node->line,
                                  "store in global/static field '" + fieldName +
@@ -20636,6 +20695,188 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     std::string structTypeName;
 
     auto* objId = dynamic_cast<IdentifierNode*>(node->object);
+    if(!objId)
+    {
+        TypeNode* receiverSemanticType = getLValueType(node->object, node->line);
+        std::string traitName;
+        if(auto* traitObjType =
+               dynamic_cast<TraitObjectTypeNode*>(receiverSemanticType))
+        {
+            traitName = traitObjType->traitName;
+        }
+
+        if(!traitName.empty())
+        {
+            llvm::Value* receiverValue = generateExpression(node->object);
+            if(!receiverValue)
+                return nullptr;
+
+            llvm::Type* traitObjectType = getTraitObjectType(traitName);
+            if(!traitObjectType)
+                return nullptr;
+            if(receiverValue->getType()->isPointerTy() &&
+               traitObjectType->isStructTy())
+            {
+                receiverValue = builder.CreateLoad(
+                    traitObjectType, receiverValue, "traitobj.load");
+            }
+
+            auto traitIt = traitDefinitions.find(traitName);
+            if(traitIt == traitDefinitions.end())
+            {
+                for(auto it = traitDefinitions.begin();
+                    it != traitDefinitions.end(); ++it)
+                {
+                    if(trait_names_equivalent(it->first, traitName))
+                    {
+                        traitIt = it;
+                        break;
+                    }
+                }
+            }
+            if(traitIt == traitDefinitions.end() || !traitIt->second)
+            {
+                reportError(node->line,
+                            "unknown trait object type '" + traitName + "'");
+                return nullptr;
+            }
+
+            TraitDefNode* traitDef = traitIt->second;
+            StructMethodNode* traitMethod = nullptr;
+            size_t methodIndex = 0;
+            for(size_t i = 0; i < traitDef->methods.size(); ++i)
+            {
+                if(traitDef->methods[i] &&
+                   traitDef->methods[i]->name == node->methodName)
+                {
+                    traitMethod = traitDef->methods[i];
+                    methodIndex = i;
+                    break;
+                }
+            }
+            if(!traitMethod)
+            {
+                reportError(node->line, "trait '" + traitName +
+                                            "' has no method named '" +
+                                            node->methodName + "'");
+                return nullptr;
+            }
+            if(traitMethod->isStatic)
+            {
+                reportError(node->line, "static trait method '" + traitName +
+                                            "::" + node->methodName +
+                                            "' cannot be called on a trait object");
+                return nullptr;
+            }
+
+            llvm::Value* dataPtr =
+                builder.CreateExtractValue(receiverValue, 0, "traitobj.data");
+            llvm::Value* vtablePtr =
+                builder.CreateExtractValue(receiverValue, 1, "traitobj.vtable");
+            llvm::Type* vtableType = getTraitVTableType(traitName);
+            if(!vtableType)
+                return nullptr;
+            auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
+            llvm::Value* typedVtablePtr = builder.CreateBitCast(
+                vtablePtr, vtableStructType->getPointerTo(),
+                "traitobj.vtable.cast");
+            llvm::Value* slotPtr = builder.CreateStructGEP(
+                vtableStructType, typedVtablePtr,
+                static_cast<unsigned>(methodIndex), "traitobj.slot");
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::Type* opaquePtr = llvm::PointerType::get(context, 0);
+#else
+            llvm::Type* opaquePtr =
+                llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+            llvm::Value* fnPtr =
+                builder.CreateLoad(opaquePtr, slotPtr, "traitobj.fn");
+
+            std::vector<llvm::Type*> paramTypes;
+            paramTypes.push_back(opaquePtr);
+            if(traitMethod->parameters)
+            {
+                for(auto* param : traitMethod->parameters->parameters)
+                {
+                    if(!param || param->name == "self")
+                        continue;
+                    llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+                    if(!paramType)
+                    {
+                        reportError(node->line,
+                                    "unknown type: " +
+                                        type_name_for_error(param->type));
+                        return nullptr;
+                    }
+                    paramTypes.push_back(paramType);
+                }
+            }
+            llvm::Type* returnType = getLLVMTypeFromNode(traitMethod->returnType);
+            if(!returnType)
+            {
+                reportError(node->line,
+                            "unknown type: " +
+                                type_name_for_error(traitMethod->returnType));
+                return nullptr;
+            }
+            llvm::FunctionType* fnType =
+                llvm::FunctionType::get(returnType, paramTypes, false);
+            llvm::Value* fn = builder.CreateBitCast(
+                fnPtr, fnType->getPointerTo(), "traitobj.fn.cast");
+
+            std::vector<llvm::Value*> callArgs;
+            callArgs.push_back(dataPtr);
+            size_t argIndex = 0;
+            for(auto* argExpr : node->arguments)
+            {
+                llvm::Value* argVal = generateExpression(argExpr);
+                if(!argVal)
+                    return nullptr;
+                if(argIndex + 1 < paramTypes.size())
+                {
+                    llvm::Type* expectedType = paramTypes[argIndex + 1];
+                    if(argVal->getType() != expectedType)
+                    {
+                        if(argVal->getType()->isIntegerTy() &&
+                           expectedType->isIntegerTy())
+                        {
+                            argVal = builder.CreateIntCast(
+                                argVal, expectedType, true, "trait.arg.cast");
+                        }
+                        else if(argVal->getType()->isIntegerTy() &&
+                                expectedType->isFloatingPointTy())
+                        {
+                            argVal = builder.CreateSIToFP(
+                                argVal, expectedType, "trait.arg.sitofp");
+                        }
+                        else if(argVal->getType()->isFloatingPointTy() &&
+                                expectedType->isFloatingPointTy())
+                        {
+                            argVal = builder.CreateFPCast(
+                                argVal, expectedType, "trait.arg.fpcast");
+                        }
+                        else if(argVal->getType()->isPointerTy() &&
+                                expectedType->isPointerTy())
+                        {
+                            argVal = builder.CreateBitCast(
+                                argVal, expectedType, "trait.arg.ptrcast");
+                        }
+                        else
+                        {
+                            reportError(node->line,
+                                        "argument type mismatch for trait call '" +
+                                            node->methodName + "'");
+                            return nullptr;
+                        }
+                    }
+                }
+                callArgs.push_back(argVal);
+                ++argIndex;
+            }
+
+            return builder.CreateCall(fnType, fn, callArgs, "traitcall");
+        }
+    }
     if(objId)
     {
         if(!validateVariableAccessible(objId->name, node->line, objId->col))
@@ -20646,6 +20887,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         {
             const std::string& traitName = traitObjVarIt->second;
             auto traitIt = traitDefinitions.find(traitName);
+            if(traitIt == traitDefinitions.end())
+            {
+                for(auto it = traitDefinitions.begin();
+                    it != traitDefinitions.end(); ++it)
+                {
+                    if(trait_names_equivalent(it->first, traitName))
+                    {
+                        traitIt = it;
+                        break;
+                    }
+                }
+            }
             if(traitIt == traitDefinitions.end() || !traitIt->second)
             {
                 reportError(node->line,
@@ -20846,6 +21099,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 goto trait_object_receiver_fallback;
 
             auto traitIt = traitDefinitions.find(traitName);
+            if(traitIt == traitDefinitions.end())
+            {
+                for(auto it = traitDefinitions.begin();
+                    it != traitDefinitions.end(); ++it)
+                {
+                    if(trait_names_equivalent(it->first, traitName))
+                    {
+                        traitIt = it;
+                        break;
+                    }
+                }
+            }
             if(traitIt == traitDefinitions.end() || !traitIt->second)
             {
                 reportError(node->line,
@@ -23231,8 +23496,30 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
 
     auto convertStructLiteralFieldValue =
         [&](llvm::Value* fieldValue, llvm::Type* expectedType,
+            TypeNode* expectedSemanticType, ExpressionNode* valueExpr,
             const std::string& fullFieldName) -> llvm::Value*
     {
+        if(auto* traitObj =
+               dynamic_cast<TraitObjectTypeNode*>(expectedSemanticType))
+        {
+            llvm::Value* traitValue = nullptr;
+            TypeNode* exprType = valueExpr ? getLValueType(valueExpr, node->line)
+                                           : nullptr;
+            if(dynamic_cast<TraitObjectTypeNode*>(exprType))
+            {
+                traitValue = fieldValue ? fieldValue : generateExpression(valueExpr);
+                return coerceTraitObjectValue(traitValue, expectedType,
+                                              node->line);
+            }
+            if(exprType)
+                return buildTraitObjectValue(valueExpr, traitObj->traitName,
+                                             node->line,
+                                             /*heapCopy=*/true);
+
+            traitValue = fieldValue ? fieldValue : generateExpression(valueExpr);
+            return coerceTraitObjectValue(traitValue, expectedType, node->line);
+        }
+
         if(!fieldValue)
             return nullptr;
 
@@ -23402,8 +23689,9 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                                            ? llvm::Type::getInt1Ty(context)
                                            : currentStructType->getElementType(
                                                  layout->storageIndex);
-            fieldValue = convertStructLiteralFieldValue(fieldValue, expectedType,
-                                                        fullFieldName);
+            fieldValue = convertStructLiteralFieldValue(
+                fieldValue, expectedType, currentMembers[memberIndex].second,
+                valueExpr, fullFieldName);
             if(!fieldValue)
                 return nullptr;
 
