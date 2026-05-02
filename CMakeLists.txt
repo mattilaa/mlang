@@ -1,4 +1,45 @@
 cmake_minimum_required(VERSION 3.20)
+
+# On macOS, default the deployment target and SDK to match the host so the
+# link line is consistent with Homebrew LLVM (which is built against the
+# host's current macOS SDK). Without this, ld emits noisy "object file was
+# built for newer macOS version" warnings whenever Homebrew LLVM is newer
+# than the SDK Xcode picks by default. Both vars must be set before
+# project() to take effect; user-supplied values are respected.
+if(APPLE)
+    if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR
+       CMAKE_OSX_DEPLOYMENT_TARGET STREQUAL "")
+        execute_process(
+            COMMAND sw_vers -productVersion
+            OUTPUT_VARIABLE _mlang_host_macos_version
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET)
+        if(_mlang_host_macos_version MATCHES "^([0-9]+)")
+            set(CMAKE_OSX_DEPLOYMENT_TARGET "${CMAKE_MATCH_1}"
+                CACHE STRING "macOS deployment target" FORCE)
+            message(STATUS
+                "Auto-set CMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET} "
+                "to match host (${_mlang_host_macos_version})")
+        endif()
+    endif()
+
+    if((NOT DEFINED CMAKE_OSX_SYSROOT OR CMAKE_OSX_SYSROOT STREQUAL "") AND
+       DEFINED CMAKE_OSX_DEPLOYMENT_TARGET AND
+       NOT CMAKE_OSX_DEPLOYMENT_TARGET STREQUAL "")
+        # Prefer the CommandLineTools SDK that matches the host major version,
+        # since Xcode-shipped SDKs may lag behind the host OS.
+        string(REGEX MATCH "^[0-9]+" _mlang_target_major
+               "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+        set(_mlang_clt_sdk
+            "/Library/Developer/CommandLineTools/SDKs/MacOSX${_mlang_target_major}.sdk")
+        if(EXISTS "${_mlang_clt_sdk}")
+            set(CMAKE_OSX_SYSROOT "${_mlang_clt_sdk}"
+                CACHE STRING "macOS SDK" FORCE)
+            message(STATUS "Auto-set CMAKE_OSX_SYSROOT=${CMAKE_OSX_SYSROOT}")
+        endif()
+    endif()
+endif()
+
 set(MLANG_VERSION_MAJOR 0)
 set(MLANG_VERSION_MINOR 2)
 option(MLANG_AUTO_INCREMENT_BUILD "Auto-increment build number on each CMake configure" ON)
@@ -214,8 +255,22 @@ llvm_map_components_to_libnames(llvm_libs
     AllTargetsDescs
     AllTargetsInfos
 )
+# `native`/`nativecodegen` overlap with `AllTargets*` on the host arch (e.g.
+# AArch64 libs appear once via each), and helper components like Support/Core
+# are pulled in transitively after being listed explicitly. Deduplicate the
+# explicit list to keep what we control clean.
+list(REMOVE_DUPLICATES llvm_libs)
 
 target_link_libraries(mlang ${llvm_libs})
+
+# Apple ld65 still sees duplicates that come in via LLVM's transitive
+# INTERFACE_LINK_LIBRARIES (each LLVM*CodeGen has LLVMSupport/LLVMCore etc.
+# as INTERFACE deps), and prints "ignoring duplicate libraries" for each.
+# It already does the right thing — ignore — so silence the noise.
+if(APPLE)
+    target_link_options(mlang PRIVATE
+        "LINKER:-no_warn_duplicate_libraries")
+endif()
 
 add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
