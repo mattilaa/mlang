@@ -217,6 +217,21 @@ static std::string module_target_triple_string(llvm::Module* module)
 #endif
 }
 
+// LLVM 21 deprecated CreateGlobalStringPtr in favour of CreateGlobalString
+// (both produce a global cstring; the new variant returns the GlobalVariable
+// directly, the old returns a Constant pointer to it). Bridge the two so we
+// don't sprinkle #if blocks at every call site.
+static llvm::Value* create_global_cstring(llvm::IRBuilder<>& builder,
+                                          llvm::StringRef text,
+                                          const llvm::Twine& name = "")
+{
+#if LLVM_VERSION_MAJOR >= 21
+    return builder.CreateGlobalString(text, name);
+#else
+    return builder.CreateGlobalStringPtr(text, name);
+#endif
+}
+
 static bool is_same_module_family(const std::string& a, const std::string& b)
 {
     if(a.empty() || b.empty())
@@ -1074,6 +1089,10 @@ static std::string displayTypeName(TypeNode* type)
         out += ">";
         return out;
     }
+    if(auto* trait = dynamic_cast<TraitObjectTypeNode*>(type))
+    {
+        return "dyn " + trait->traitName;
+    }
 
     switch(type->kind)
     {
@@ -1124,6 +1143,10 @@ static std::string displayTypeName(TypeNode* type)
     case TypeNode::TYPE_REF:
     case TypeNode::TYPE_REF_MUT:
         return "reference";
+    case TypeNode::TYPE_TRAIT_OBJECT:
+        // Reached only if the typed TraitObjectTypeNode dynamic_cast above
+        // didn't hit (e.g. a bare TypeNode with kind set without the subtype).
+        return "dyn";
     }
 
     return "unknown";
@@ -4360,7 +4383,7 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
             {
                 reportError(line, "cannot debug-format unnamed struct");
                 cFormat += "%s";
-                argValues.push_back(builder.CreateGlobalStringPtr("<struct>"));
+                argValues.push_back(create_global_cstring(builder, "<struct>"));
                 return;
             }
             if(!debugStructs.count(structName))
@@ -4477,7 +4500,7 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
         reportError(line, "cannot print struct type '" + structName +
                               "' directly; use {:?} with #[derive(Debug)]");
         cFormat += "%s";
-        argValues.push_back(builder.CreateGlobalStringPtr("<struct>"));
+        argValues.push_back(create_global_cstring(builder, "<struct>"));
     }
     else
     {
@@ -4965,7 +4988,7 @@ llvm::Value* CodeGenerator::buildDebugString(ExpressionNode* expr, bool pretty,
 {
     llvm::Value* val = generateExpression(expr);
     if(!val)
-        return builder.CreateGlobalStringPtr("<null>");
+        return create_global_cstring(builder, "<null>");
     if(val->getType()->isStructTy())
     {
         std::string structName = val->getType()->getStructName().str();
@@ -5019,7 +5042,7 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
     if(it == structMembers.end())
     {
         reportError(line, "unknown struct for debug: " + structName);
-        return builder.CreateGlobalStringPtr("<struct>");
+        return create_global_cstring(builder, "<struct>");
     }
 
     std::string displayName = structName;
@@ -5205,7 +5228,7 @@ CodeGenerator::buildStructJsonString(llvm::Value* structVal,
     if(it == structMembers.end())
     {
         reportError(line, "unknown struct for json debug: " + structName);
-        return builder.CreateGlobalStringPtr("{}");
+        return create_global_cstring(builder, "{}");
     }
 
     std::string displayName = structName;
@@ -9142,7 +9165,9 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     llvm::Value* dataRaw =
         builder.CreateExtractValue(listVal, {1}, listId->name + ".fold.data");
 #if LLVM_VERSION_MAJOR >= 15
-    elemPtrTy = llvm::PointerType::get(elemType, 0);
+    // Opaque pointers (LLVM 15+): pointer type carries no pointee.
+    (void)elemType;
+    elemPtrTy = llvm::PointerType::get(context, 0);
 #endif
     llvm::Value* dataPtr =
         builder.CreateBitCast(dataRaw, elemPtrTy, listId->name + ".fold.ptr");
@@ -10246,7 +10271,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
             fnLabel = "main";
         std::string tryContext = fnLabel + ":" + std::to_string(node->line);
         llvm::Value* ctxStr =
-            builder.CreateGlobalStringPtr(tryContext, "try.ctx");
+            create_global_cstring(builder, tryContext, "try.ctx");
         errPayload = builder.CreateCall(addContextFn, {errPayload, ctxStr},
                                         "try.err.withctx");
     }
@@ -16959,7 +16984,7 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
                 tmp.line = node->line;
                 typeName = expressionTypeNameForLog(&tmp, node->line);
             }
-            return builder.CreateGlobalStringPtr(typeName, "type.name");
+            return create_global_cstring(builder, typeName, "type.name");
         }
     }
 
@@ -20970,7 +20995,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return nullptr;
             auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
             llvm::Value* typedVtablePtr = builder.CreateBitCast(
-                vtablePtr, vtableStructType->getPointerTo(),
+                vtablePtr, llvm::PointerType::get(context, 0),
                 "traitobj.vtable.cast");
             llvm::Value* slotPtr = builder.CreateStructGEP(
                 vtableStructType, typedVtablePtr,
@@ -21014,7 +21039,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::FunctionType* fnType =
                 llvm::FunctionType::get(returnType, paramTypes, false);
             llvm::Value* fn = builder.CreateBitCast(
-                fnPtr, fnType->getPointerTo(), "traitobj.fn.cast");
+                fnPtr, llvm::PointerType::get(context, 0), "traitobj.fn.cast");
 
             std::vector<llvm::Value*> callArgs;
             callArgs.push_back(dataPtr);
@@ -21143,7 +21168,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return nullptr;
             auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
             llvm::Value* typedVtablePtr = builder.CreateBitCast(
-                vtablePtr, vtableStructType->getPointerTo(),
+                vtablePtr, llvm::PointerType::get(context, 0),
                 objId->name + ".traitobj.vtable.cast");
             llvm::Value* slotPtr = builder.CreateStructGEP(
                 vtableStructType, typedVtablePtr, static_cast<unsigned>(methodIndex),
@@ -21187,7 +21212,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::FunctionType* fnType =
                 llvm::FunctionType::get(returnType, paramTypes, false);
             llvm::Value* fn = builder.CreateBitCast(
-                fnPtr, fnType->getPointerTo(), objId->name + ".traitobj.fn.cast");
+                fnPtr, llvm::PointerType::get(context, 0), objId->name + ".traitobj.fn.cast");
 
             if(!validateTemporaryBorrowArguments(node->arguments, node->methodName,
                                                  objId->name))
@@ -21346,7 +21371,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return nullptr;
             auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
             llvm::Value* typedVtablePtr = builder.CreateBitCast(
-                vtablePtr, vtableStructType->getPointerTo(),
+                vtablePtr, llvm::PointerType::get(context, 0),
                 "traitobj.vtable.cast");
             llvm::Value* slotPtr = builder.CreateStructGEP(
                 vtableStructType, typedVtablePtr, static_cast<unsigned>(methodIndex),
@@ -21390,7 +21415,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::FunctionType* fnType =
                 llvm::FunctionType::get(returnType, paramTypes, false);
             llvm::Value* fn = builder.CreateBitCast(
-                fnPtr, fnType->getPointerTo(), "traitobj.fn.cast");
+                fnPtr, llvm::PointerType::get(context, 0), "traitobj.fn.cast");
 
             std::vector<llvm::Value*> callArgs;
             callArgs.push_back(dataPtr);
@@ -25576,8 +25601,13 @@ bool Backend::initializeTarget()
 #endif
 
     std::string error;
+#if LLVM_VERSION_MAJOR >= 21
+    const llvm::Target* target =
+        llvm::TargetRegistry::lookupTarget(llvm::Triple(targetTriple), error);
+#else
     const llvm::Target* target =
         llvm::TargetRegistry::lookupTarget(targetTriple, error);
+#endif
 
     if(!target)
     {
