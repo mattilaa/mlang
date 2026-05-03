@@ -345,11 +345,19 @@ find_path(RAPIDJSON_INCLUDE_DIR rapidjson/document.h
         /usr
 )
 if(NOT RAPIDJSON_INCLUDE_DIR)
-    message(STATUS "RapidJSON not found in system paths; fetching v1.1.0")
+    # Pinned to a master commit, not v1.1.0 (Aug 2016), because v1.1.0 inherits
+    # iterator types from std::iterator — deprecated in C++17 and noisily
+    # diagnosed by libc++ in MacOSX26.sdk. Upstream fixed this in
+    # d75bb90a "Avoid inheritance from std::iterator" (Dec 2017).
+    set(MLANG_RAPIDJSON_REVISION
+        "24b5e7a8b27f42fa16b96fc70aade9106cf7102f"
+        CACHE STRING "RapidJSON git revision to fetch")
+    message(STATUS
+        "RapidJSON not found in system paths; fetching ${MLANG_RAPIDJSON_REVISION}")
     FetchContent_Declare(
         rapidjson
         GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
-        GIT_TAG v1.1.0
+        GIT_TAG ${MLANG_RAPIDJSON_REVISION}
         GIT_PROGRESS TRUE
     )
     FetchContent_GetProperties(rapidjson)
