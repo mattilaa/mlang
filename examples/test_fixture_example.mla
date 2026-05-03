@@ -1,0 +1,84 @@
+/// \file test_fixture_example.mla
+/// @ingroup examples
+/// \brief Test-fixture example using \c #[fixture] \c impl blocks.
+///
+/// Each \c #[test] method inside a \c #[fixture] \c impl runs against a
+/// fresh, stack-allocated, zero-initialized instance of the fixture struct
+/// — mirroring GoogleTest's \c TEST_F semantics. \c setup runs before each
+/// test, \c teardown after.
+///
+/// Run with:
+/// \code
+///   mlang --tests examples/test_fixture_example.mla -L ~/.local/lib -lmlang_std
+/// \endcode
+
+mod std::testing;
+
+use std::testing::*;
+
+// A small "in-memory cache" stand-in. In real code this could wrap a
+// database connection, a temporary directory handle, a logger, etc.
+struct CacheFixture {
+    var hits: i32;
+    var misses: i32;
+    var capacity: i32;
+};
+
+#[fixture]
+impl CacheFixture {
+    // setup runs once per test, against a freshly zero-initialized instance.
+    fn setup(self: &mut Self) -> void {
+        self.hits = 0;
+        self.misses = 0;
+        self.capacity = 64;
+    }
+
+    // teardown runs after each test; would close handles / free buffers /
+    // flush logs in a realistic fixture.
+    fn teardown(self: &mut Self) -> void {
+        // Nothing real to clean up here — the fixture is on the stack.
+        // Reset the capacity so any accidental re-use shows up as 0.
+        self.capacity = 0;
+    }
+
+    #[test]
+    fn test_starts_empty(self: &mut Self) -> void {
+        expect_eq_i32(0, self.hits);
+        expect_eq_i32(0, self.misses);
+        expect_eq_i32(64, self.capacity);
+    }
+
+    #[test]
+    fn test_record_hit(self: &mut Self) -> void {
+        self.hits += 1;
+        expect_eq_i32(1, self.hits);
+        expect_eq_i32(0, self.misses);
+    }
+
+    #[test]
+    fn test_record_miss(self: &mut Self) -> void {
+        self.misses += 1;
+        expect_eq_i32(0, self.hits);
+        expect_eq_i32(1, self.misses);
+    }
+
+    // Demonstrates per-test isolation: even though `test_record_hit` above
+    // mutated `self.hits` to 1 in source order, this test sees a freshly
+    // set-up fixture where hits is back to 0.
+    #[test]
+    fn test_isolation_between_tests(self: &mut Self) -> void {
+        expect_eq_i32(0, self.hits);
+        expect_eq_i32(0, self.misses);
+
+        // Mutating here is fine — the next test still gets a fresh fixture.
+        self.hits = 999;
+        self.misses = 999;
+    }
+
+    // A test method may return i32 to signal pass/fail explicitly.
+    // 0 == pass, non-zero is the test's "rc" reported in the FAIL line.
+    #[test]
+    fn test_explicit_rc(self: &mut Self) -> i32 {
+        return self.capacity == 64 ? 0 : 1;
+    }
+}

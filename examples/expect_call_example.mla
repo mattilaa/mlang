@@ -1,0 +1,84 @@
+/// \file expect_call_example.mla
+/// @ingroup examples
+/// \brief EXPECT_CALL-style mocking with cardinality and programmed returns.
+///
+/// Demonstrates the expanded \c std::testing mock API:
+/// - \c mock_expect_times / \c mock_expect_at_least / \c mock_expect_at_most
+///   / \c mock_expect_never for cardinality.
+/// - \c mock_will_return_* to queue typed return values (FIFO).
+/// - \c mock_record_and_return_* inside hand-written mock bodies — records
+///   one invocation AND returns the next queued value.
+///
+/// Run with:
+/// \code
+///   mlang examples/expect_call_example.mla -L ~/.local/lib -lmlang_std
+/// \endcode
+
+mod std::testing;
+
+use std::testing::*;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suppose the system under test depends on a tiny network/storage interface
+// with three calls: open(), send(), and ready(). We replace each with a
+// hand-written mock body that defers to the std::testing mock state.
+//
+// The mock_record_and_return_* helpers (a) increment the call count for the
+// named entry, and (b) consume the next queued return value (or fall back
+// to the supplied default if the queue is empty / a wrong type).
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn fake_open(handle: i64) -> i32 {
+    return mock_record_and_return_i32(handle, "open", -1);
+}
+
+fn fake_send(handle: i64) -> i32 {
+    return mock_record_and_return_i32(handle, "send", 0);
+}
+
+fn fake_ready(handle: i64) -> bool {
+    return mock_record_and_return_bool(handle, "ready", false);
+}
+
+// "System under test" — drives the dependency in a fixed pattern.
+fn run_session(handle: i64) -> i32 {
+    let _ = fake_open(handle);
+    let bytes_a: i32 = fake_send(handle);
+    let bytes_b: i32 = fake_send(handle);
+    if !fake_ready(handle) {
+        return -1;
+    }
+    return bytes_a + bytes_b;
+}
+
+fn main() -> i32 {
+    reset();
+
+    let m: Mock = mock_new();
+
+    // Cardinality: open() exactly once, send() at least twice, ready()
+    // somewhere in [1, 3] times. Any of these can fail mock_verify().
+    mock_expect_times(m.handle, "open", 1);
+    mock_expect_at_least(m.handle, "send", 2);
+    mock_expect_at_most(m.handle, "ready", 3);
+
+    // Programmed returns (FIFO): each consumer pulls one value per call.
+    mock_will_return_i32(m.handle, "open", 0);     // success
+    mock_will_return_i32(m.handle, "send", 100);   // first send → 100 bytes
+    mock_will_return_i32(m.handle, "send", 250);   // second send → 250 bytes
+    mock_will_return_bool(m.handle, "ready", true);
+
+    // Run the SUT once, then assert.
+    let total: i32 = run_session(m.handle);
+    expect_eq_i32(350, total);
+
+    // Cardinality verification — emits "[ FAILED ] mock_expect_call(...)"
+    // diagnostics on mismatch (with at_least/at_most/never aware messages).
+    expect_true(mock_verify(m.handle));
+
+    println!("checks={} failures={} total_bytes={}",
+             checks(), failures(), total);
+
+    mock_free(m.handle);
+    return result();
+}

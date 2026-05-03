@@ -177,9 +177,51 @@ static_assert!(sizeof(values) == sizeof(list<i32>));
 println!("size={}", sizeof(values));
 ```
 
+## Testing
+
+Mark functions with `#[test]` and run with `mlang --tests`:
+
+```mla
+mod std::testing;
+use std::testing::*;
+
+#[test]
+fn test_addition() -> void {
+    expect_eq_i32(4, 2 + 2);
+}
+```
+
+```sh
+mlang --tests path/to/file.mla            # one file
+mlang --tests tests/                      # all suites in a directory
+mlang --tests tests/ --filter "addition"  # filter by name
+```
+
+For tests that need shared setup, use a `#[fixture]` impl. Each `#[test]`
+method runs against a fresh, zero-initialized instance:
+
+```mla
+struct DbFixture { var conn: i64; };
+
+#[fixture]
+impl DbFixture {
+    fn setup(self: &mut Self) -> void { self.conn = 42; }
+    fn teardown(self: &mut Self) -> void { self.conn = 0; }
+
+    #[test]
+    fn test_uses_setup(self: &mut Self) -> void {
+        expect_eq_i64(42, self.conn);
+    }
+}
+```
+
+For mocks with cardinality and programmable return values, see the
+EXPECT_CALL section in [Stdlib Module API](stdlib_mlang_api.md#stdtesting).
+
 ## Where To Go Next
 
 - [Language Syntax](language_syntax.md) for language features and examples
-- [Language Attributes](language_attributes.md) for `#[test]` and related attributes
+- [Language Attributes](language_attributes.md) for `#[test]`, `#[fixture]`, and related attributes
 - [Stdlib Module API](stdlib_mlang_api.md) for module-by-module APIs
-- repository `examples/` for runnable programs
+- repository `examples/` for runnable programs (`test_fixture_example.mla`,
+  `expect_call_example.mla`, `testing_mock_example.mla`)
