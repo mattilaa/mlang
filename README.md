@@ -49,7 +49,7 @@ compiler. The bootstrap launcher in `bootstrap/` is a thin wrapper around
 | `mlang-format`        | `tools/mlang-format-mla/main.mla`   | bootstrap          | Source formatter (reads `.mlang-format`, applies via stdin/stdout or in-place).                    | Code style enforcement. Used standalone and by `mlangd-mla` to satisfy LSP `textDocument/formatting`.                                   |
 | `mlangd-mla`          | `tools/mlangd-mla/main.mla`         | bootstrap          | MLang language server (LSP-over-stdio): diagnostics, hover, definition, references, formatting.   | Editor integration. Drives features for VS Code, UVim, Helix, etc. via JSON-RPC.                                                        |
 | `mlangpkg` / `mlang-pkg-mla` | `tools/mlang-pkg-mla/main.mla` (MLang) **and** `src/package_manager.cpp` (C++) | seed compiler **or** bootstrap | Package manager: `init`, `add`, `fetch`, `build`, `clean`, plus a task runner for tasks declared in `mlang.toml`. | Drives dependency fetching, builds, and the bootstrap itself. The MLang implementation is preferred (`MLANG_PKG_IMPL=mla`); the C++ backend handles task trees and CMake/Ninja orchestration. Reachable as `mlang pkg ...`. |
-| `bootstrap/run-bootstrap.sh` | shell wrapper                | (no compile)       | Dispatches `mlang pkg run <task>` against `bootstrap/mlang.toml`. Tasks: `build-all`, `install-all`, `unit-tests`, etc. | The single command that knows the right order to build the self-hosted tools. Equivalent to running `mlang pkg --config bootstrap/mlang.toml run <task>` directly. |
+| `bootstrap/run-bootstrap.sh` | shell wrapper                | (no compile)       | Optional convenience shim that forwards to `mlang pkg --config bootstrap/mlang.toml run <task>`. | Pre-existing helper for users who prefer a shell entry point. Everything in this README uses `mlang pkg` directly so the build steps work the same way once `mlang` is installed. |
 
 A clean checkout produces these binaries under `./build/`:
 
@@ -75,15 +75,16 @@ build/mlang-format           ← formatter           (bootstrap, depends on seed
 | OpenSSL     | Required by `std::ssl` and TLS-using parts of the stdlib         |
 | `python3`   | Used by `scripts/generate_ast_bridge.py` and the docs runner     |
 | `c++` toolchain | Links the artifacts produced by the seed compiler            |
+| `doxygen`   | Required only if you build the docs (`run docs`)                 |
 
 macOS (Homebrew):
 ```sh
-brew install cmake llvm flex bison openssl@3 python
+brew install cmake llvm flex bison openssl@3 python doxygen
 ```
 
 Debian/Ubuntu:
 ```sh
-sudo apt install cmake llvm-dev libllvm15 clang flex bison libssl-dev python3 build-essential
+sudo apt install cmake llvm-dev libllvm15 clang flex bison libssl-dev python3 build-essential doxygen graphviz
 ```
 
 ### 1. Build the seed compiler and stdlib (CMake)
@@ -117,16 +118,13 @@ mlang --version
 export MLANG_BOOTSTRAP_BIN="$(pwd)/build/mlang"
 ```
 
-### 3. Build the MLang-native tools (bootstrap)
+### 3. Build the MLang-native tools
 
-The bootstrap orchestrates each MLang tool's compile in dependency order.
-Run all of them at once:
+Now that `mlang` (and therefore `mlang pkg`) is available, drive every
+remaining tool through the bootstrap manifest at `bootstrap/mlang.toml`.
+The package manager resolves the task graph and compiles each MLang
+source through the seed compiler in the right order.
 
-```sh
-./bootstrap/run-bootstrap.sh run build-all
-```
-
-This is equivalent to:
 ```sh
 mlang pkg --config bootstrap/mlang.toml run build-all
 ```
@@ -139,14 +137,14 @@ It produces, under `./build/`:
 
 To preview what `build-all` will do (lists tasks, no execution):
 ```sh
-./bootstrap/run-bootstrap.sh run build-all --tasks
+mlang pkg --config bootstrap/mlang.toml run build-all --tasks
 ```
 
 To build any one tool independently:
 ```sh
-./bootstrap/run-bootstrap.sh run build-mlangd-mla
-./bootstrap/run-bootstrap.sh run build-mlang-format
-./bootstrap/run-bootstrap.sh run build-mlang-frontend
+mlang pkg --config bootstrap/mlang.toml run build-mlangd-mla
+mlang pkg --config bootstrap/mlang.toml run build-mlang-format
+mlang pkg --config bootstrap/mlang.toml run build-mlang-frontend
 ```
 
 (All three depend on `build-mlang`, which `build-all` already covers.)
@@ -154,8 +152,8 @@ To build any one tool independently:
 ### 4. Run the test suite (optional, recommended)
 
 ```sh
-./bootstrap/run-bootstrap.sh run unit-tests
-./bootstrap/run-bootstrap.sh run robot-tests
+mlang pkg --config bootstrap/mlang.toml run unit-tests
+mlang pkg --config bootstrap/mlang.toml run robot-tests
 ```
 
 Or directly:
@@ -164,13 +162,29 @@ Or directly:
 ./build/mlang --tests tests/ --filter "addition"
 ```
 
-### 5. Install everything
+### 5. Build the documentation (optional)
 
-This installs `mlang`, `mlangd-mla`, `mlang-frontend`, and `mlang-format`
-to `~/.local/bin` (or wherever `install_prefix` points):
+Runs `doxygen docs/Doxyfile` and writes HTML to `docs/out/html/index.html`.
+Requires `doxygen` (and `graphviz` for diagrams on Linux) from step 0.
 
 ```sh
-./bootstrap/run-bootstrap.sh run install-all
+mlang pkg --config bootstrap/mlang.toml run docs
+open docs/out/html/index.html   # macOS; use xdg-open on Linux
+```
+
+### 6. Install everything
+
+This installs `mlangd-mla`, `mlang-frontend`, and `mlang-format` to
+`~/.local/bin` (or wherever `install_prefix` points). `mlang` itself was
+already installed by `cmake --install` in step 2.
+
+```sh
+mlang pkg --config bootstrap/mlang.toml run install-all
+```
+
+To do build + install in one shot (after step 2):
+```sh
+mlang pkg --config bootstrap/mlang.toml run build-and-install
 ```
 
 Custom prefix:
@@ -192,21 +206,22 @@ mlangd-mla --stdio < /dev/null
 ### Build order at a glance
 
 ```
-step 0:  install host deps                              (system pkg manager)
-step 1:  cmake → mlang + libmlang_std.a                 (CMake)
-step 2:  install / export PATH                          (cmake --install or PATH)
-step 3:  bootstrap build-all
+step 0:  install host deps                                            (system pkg manager)
+step 1:  cmake → mlang + libmlang_std.a                               (CMake)
+step 2:  install / export PATH                                        (cmake --install)
+step 3:  mlang pkg ... run build-all
             ├── mlangd-mla         (uses build/mlang + build/libmlang_std.a)
             ├── mlang-frontend-mla (uses build/mlang + build/libmlang_std.a)
             ├── mlang-frontend     (shell shim writer)
             └── mlang-format       (uses build/mlang + build/libmlang_std.a)
-step 4:  unit-tests / robot-tests                       (optional)
-step 5:  install-all                                    (copies to ~/.local/bin)
+step 4:  mlang pkg ... run unit-tests / robot-tests                   (optional)
+step 5:  mlang pkg ... run docs                                       (optional, doxygen)
+step 6:  mlang pkg ... run install-all                                (copies to ~/.local/bin)
 ```
 
 The bootstrap phases are intentionally split, so you can run only what you
-need:
-- `build-mlang` — just the seed compiler (CMake-driven, equivalent to step 1)
+need (each is `mlang pkg --config bootstrap/mlang.toml run <name>`):
+- `build-mlang` — just the seed compiler (delegates to CMake; equivalent to step 1)
 - `build-mlangd-mla` — just the LSP server
 - `build-mlang-format` — just the formatter
 - `build-mlang-frontend` — the MLang frontend CLI + shell shim
@@ -214,9 +229,12 @@ need:
 - `robot-tests` — Robot Framework end-to-end tests
 - `docs` — Doxygen + custom doc generators
 - `install-mlang`, `install-mlangd-mla`, `install-mlang-format`, `install-mlang-frontend` — install one tool at a time
+- `build-and-install` — `build-all` + `install-all` chained together
 
 `mlang pkg --config bootstrap/mlang.toml --help` lists every task with its
-description and dependencies.
+description and dependencies. A thin shell convenience wrapper exists at
+`bootstrap/run-bootstrap.sh` that forwards to the same `mlang pkg run`
+calls; the commands above are what it runs internally.
 
 ## LSP
 Primary LSP servers:
@@ -617,15 +635,8 @@ which mlang
 mlang --help
 ```
 
-Once `mlang` is available on `PATH`, build the remaining bootstrap-managed
-components either through the helper script:
-
-```sh
-./bootstrap/run-bootstrap.sh run build-all
-./bootstrap/run-bootstrap.sh run install-tooling
-```
-
-or directly with `mlang pkg` if you want to skip the helper:
+Once `mlang` is available on `PATH`, build and install the remaining
+bootstrap-managed components through `mlang pkg`:
 
 ```sh
 mlang pkg --config bootstrap/mlang.toml run build-all
