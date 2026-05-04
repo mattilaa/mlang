@@ -166,3 +166,45 @@ Run:
 ./build/mlang examples/testing_mock_example.mla -o /tmp/testing_mock_example
 /tmp/testing_mock_example
 ```
+
+### `examples/test_fixture_example.mla`
+
+`#[fixture]` impl example. Each `#[test]` method runs against a fresh,
+stack-allocated, zero-initialized instance of the fixture struct (similar
+to GoogleTest `TEST_F`).
+
+It demonstrates:
+
+- `#[fixture]` on an `impl` block
+- `setup(self: &mut Self)` running before every test
+- `teardown(self: &mut Self)` running after every test
+- per-test isolation (mutations in one test don't bleed into the next)
+- mixing `void` and `i32`-returning test methods
+
+Run:
+
+```sh
+./build/mlang --tests examples/test_fixture_example.mla
+```
+
+### `examples/expect_call_example.mla`
+
+EXPECT_CALL-style mock example. Builds on `examples/testing_mock_example.mla`
+with cardinality variants and programmable return values.
+
+It demonstrates:
+
+- `mock_expect_times` (exact count) / `mock_expect_at_least`
+  / `mock_expect_at_most` / `mock_expect_never`
+- queueing typed return values with `mock_will_return_i32` /
+  `mock_will_return_bool` (and i64/str8/f32/f64 variants)
+- writing a mock body with `mock_record_and_return_*`, which records the
+  invocation AND returns the next queued value (or a default fallback)
+- driving a "system under test" through the mocked interface
+
+Run:
+
+```sh
+./build/mlang examples/expect_call_example.mla -o /tmp/expect_call_example
+/tmp/expect_call_example
+```

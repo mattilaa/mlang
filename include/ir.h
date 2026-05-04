@@ -363,7 +363,19 @@ private:
     /// \see \ref test_sample.mla — unit test example
     /// \see \ref mlang_attributes.mla — \c #[test] with \c #[derive(Debug)]
     /// \see \ref testing_mock_example.mla — mock-based testing
-    void generateTestMain(const std::vector<FunctionDefNode*>& tests);
+    /// \brief A test method declared inside a \c #[fixture] \c impl block.
+    ///
+    /// Each fixture-test runs against a fresh, stack-allocated, zero-initialized
+    /// instance of \c implBlock->structName. The method receives a pointer to
+    /// that instance via \c self, mirroring GoogleTest's \c TEST_F semantics.
+    struct FixtureTestEntry
+    {
+        ImplBlockNode* implBlock;
+        StructMethodNode* method;
+    };
+
+    void generateTestMain(const std::vector<FunctionDefNode*>& tests,
+                          const std::vector<FixtureTestEntry>& fixtureTests);
 
     /// \brief Generate a synthetic \c main() that benchmarks every collected
     ///        \c #[test] function.

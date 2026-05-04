@@ -510,6 +510,71 @@ fn test_demo() {
 }
 ```
 
+### Mocks (EXPECT_CALL-style)
+
+`Mock` carries an opaque handle that names a per-mock bag of call entries.
+Each entry tracks its actual call count, an optional cardinality expectation,
+and a FIFO queue of programmed return values. The user writes the mock
+function body by hand; `mock_record_and_return_*` records the invocation and
+returns the next queued value (or the supplied default when the queue is
+empty).
+
+Mock construction and lifetime:
+- `mock_new() -> Mock`
+- `mock_free(handle: i64)`
+- `mock_reset(handle: i64)`
+
+Cardinality expectations (one per call name; later calls overwrite):
+- `mock_expect_times(handle, name, n: i32)` — call must happen exactly `n` times
+- `mock_expect_at_least(handle, name, n: i32)`
+- `mock_expect_at_most(handle, name, n: i32)`
+- `mock_expect_never(handle, name)`
+- `mock_expect_call(handle, name, expected_calls: i32)` — alias of `mock_expect_times`
+
+Programmable return values (queued, FIFO):
+- `mock_will_return_i32(handle, name, value)`
+- `mock_will_return_i64(handle, name, value)`
+- `mock_will_return_bool(handle, name, value)`
+- `mock_will_return_str8(handle, name, value)`
+- `mock_will_return_f32(handle, name, value)`
+- `mock_will_return_f64(handle, name, value)`
+
+Used inside hand-written mock bodies (records the invocation AND returns the
+next programmed value, or `default_value` if the queue is empty):
+- `mock_record_and_return_i32(handle, name, default_value) -> i32`
+- `mock_record_and_return_i64(handle, name, default_value) -> i64`
+- `mock_record_and_return_bool(handle, name, default_value: bool) -> bool`
+- `mock_record_and_return_str8(handle, name, default_value: str8) -> str8`
+- `mock_record_and_return_f32(handle, name, default_value: f32) -> f32`
+- `mock_record_and_return_f64(handle, name, default_value: f64) -> f64`
+
+Inspection / verification:
+- `mock_called(handle, name)` — record an invocation manually (no return value)
+- `mock_calls(handle, name) -> i32` — current count
+- `mock_verify(handle) -> bool` — checks all cardinalities; logs failures
+  with `expected=N actual=M` (or `expected at least=…`, etc.)
+
+Worked example:
+
+```mla
+fn fake_send(handle: i64) -> i32 {
+    return mock_record_and_return_i32(handle, "send", -1);
+}
+
+#[test]
+fn test_send_called_twice_with_programmed_returns() {
+    let m: Mock = mock_new();
+    mock_expect_times(m.handle, "send", 2);
+    mock_will_return_i32(m.handle, "send", 42);
+    mock_will_return_i32(m.handle, "send", 99);
+
+    expect_eq_i32(42, fake_send(m.handle));
+    expect_eq_i32(99, fake_send(m.handle));
+    expect_true(mock_verify(m.handle));
+    mock_free(m.handle);
+}
+```
+
 ## std::esc
 
 Module file: `stdlib/std/esc.mla`

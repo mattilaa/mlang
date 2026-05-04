@@ -217,6 +217,21 @@ static std::string module_target_triple_string(llvm::Module* module)
 #endif
 }
 
+// LLVM 21 deprecated CreateGlobalStringPtr in favour of CreateGlobalString
+// (both produce a global cstring; the new variant returns the GlobalVariable
+// directly, the old returns a Constant pointer to it). Bridge the two so we
+// don't sprinkle #if blocks at every call site.
+static llvm::Value* create_global_cstring(llvm::IRBuilder<>& builder,
+                                          llvm::StringRef text,
+                                          const llvm::Twine& name = "")
+{
+#if LLVM_VERSION_MAJOR >= 21
+    return builder.CreateGlobalString(text, name);
+#else
+    return builder.CreateGlobalStringPtr(text, name);
+#endif
+}
+
 static bool is_same_module_family(const std::string& a, const std::string& b)
 {
     if(a.empty() || b.empty())
@@ -1074,6 +1089,10 @@ static std::string displayTypeName(TypeNode* type)
         out += ">";
         return out;
     }
+    if(auto* trait = dynamic_cast<TraitObjectTypeNode*>(type))
+    {
+        return "dyn " + trait->traitName;
+    }
 
     switch(type->kind)
     {
@@ -1124,6 +1143,10 @@ static std::string displayTypeName(TypeNode* type)
     case TypeNode::TYPE_REF:
     case TypeNode::TYPE_REF_MUT:
         return "reference";
+    case TypeNode::TYPE_TRAIT_OBJECT:
+        // Reached only if the typed TraitObjectTypeNode dynamic_cast above
+        // didn't hit (e.g. a bare TypeNode with kind set without the subtype).
+        return "dyn";
     }
 
     return "unknown";
@@ -4360,7 +4383,7 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
             {
                 reportError(line, "cannot debug-format unnamed struct");
                 cFormat += "%s";
-                argValues.push_back(builder.CreateGlobalStringPtr("<struct>"));
+                argValues.push_back(create_global_cstring(builder, "<struct>"));
                 return;
             }
             if(!debugStructs.count(structName))
@@ -4477,7 +4500,7 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
         reportError(line, "cannot print struct type '" + structName +
                               "' directly; use {:?} with #[derive(Debug)]");
         cFormat += "%s";
-        argValues.push_back(builder.CreateGlobalStringPtr("<struct>"));
+        argValues.push_back(create_global_cstring(builder, "<struct>"));
     }
     else
     {
@@ -4965,7 +4988,7 @@ llvm::Value* CodeGenerator::buildDebugString(ExpressionNode* expr, bool pretty,
 {
     llvm::Value* val = generateExpression(expr);
     if(!val)
-        return builder.CreateGlobalStringPtr("<null>");
+        return create_global_cstring(builder, "<null>");
     if(val->getType()->isStructTy())
     {
         std::string structName = val->getType()->getStructName().str();
@@ -5019,7 +5042,7 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
     if(it == structMembers.end())
     {
         reportError(line, "unknown struct for debug: " + structName);
-        return builder.CreateGlobalStringPtr("<struct>");
+        return create_global_cstring(builder, "<struct>");
     }
 
     std::string displayName = structName;
@@ -5205,7 +5228,7 @@ CodeGenerator::buildStructJsonString(llvm::Value* structVal,
     if(it == structMembers.end())
     {
         reportError(line, "unknown struct for json debug: " + structName);
-        return builder.CreateGlobalStringPtr("{}");
+        return create_global_cstring(builder, "{}");
     }
 
     std::string displayName = structName;
@@ -6263,7 +6286,65 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
-    if(testMode && !testFunctions.empty())
+    // Collect fixture-test methods from #[fixture] impl blocks. Each #[test]
+    // method inside a #[fixture] impl gets a fresh stack-allocated, zero-
+    // initialized instance via its &mut Self parameter.
+    std::vector<FixtureTestEntry> fixtureTests;
+    if(program->implList)
+    {
+        for(auto* impl : program->implList->impls)
+        {
+            if(!impl || !impl->isFixture)
+                continue;
+            if(!impl->traitName.empty())
+            {
+                reportError(impl->line,
+                            "#[fixture] is only valid on inherent impl blocks");
+                continue;
+            }
+            for(auto* method : impl->methods)
+            {
+                if(!method || !method->isTest)
+                    continue;
+                if(method->isStatic)
+                {
+                    reportError(method->line,
+                                "fixture #[test] methods must take 'self: "
+                                "&mut Self' (got static method)");
+                    continue;
+                }
+                bool selfOnly = true;
+                for(auto* p : method->parameters->parameters)
+                {
+                    if(p && p->name != "self")
+                    {
+                        selfOnly = false;
+                        break;
+                    }
+                }
+                if(!selfOnly)
+                {
+                    reportError(method->line,
+                                "fixture #[test] methods must take only "
+                                "'self: &mut Self' as parameter");
+                    continue;
+                }
+                if(method->returnType &&
+                   !(method->returnType->kind == TypeNode::TYPE_VOID ||
+                     method->returnType->kind == TypeNode::TYPE_INT ||
+                     method->returnType->kind == TypeNode::TYPE_I32))
+                {
+                    reportError(method->line,
+                                "fixture #[test] methods must return void or "
+                                "i32");
+                    continue;
+                }
+                fixtureTests.push_back({impl, method});
+            }
+        }
+    }
+
+    if(testMode && (!testFunctions.empty() || !fixtureTests.empty()))
     {
         for(auto* testFn : testFunctions)
         {
@@ -6288,7 +6369,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
         if(benchmarkMode)
             generateBenchmarkMain(testFunctions);
         else
-            generateTestMain(testFunctions);
+            generateTestMain(testFunctions, fixtureTests);
     }
 
     // Generate a C-compatible main wrapper if needed.
@@ -6400,7 +6481,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 }
 
-void CodeGenerator::generateTestMain(const std::vector<FunctionDefNode*>& tests)
+void CodeGenerator::generateTestMain(
+    const std::vector<FunctionDefNode*>& tests,
+    const std::vector<FixtureTestEntry>& fixtureTests)
 {
     initializeStdioFunctions();
 
@@ -6513,6 +6596,138 @@ void CodeGenerator::generateTestMain(const std::vector<FunctionDefNode*>& tests)
             llvm::BasicBlock::Create(context, "test.fail");
         llvm::BasicBlock* contBB =
             llvm::BasicBlock::Create(context, "test.cont");
+        builder.CreateCondBr(isFail, failBB, passBB);
+
+        builder.SetInsertPoint(passBB);
+        builder.CreateCall(reportTestFunc,
+                           {testIndex, totalNext, passStatus, testName,
+                            llvm::ConstantInt::get(i32Type, 0)});
+        builder.CreateBr(contBB);
+
+        failBB->insertInto(mainFn);
+        builder.SetInsertPoint(failBB);
+        builder.CreateCall(reportTestFunc, {testIndex, totalNext, failStatus,
+                                            testName, resultI32});
+        builder.CreateBr(contBB);
+
+        contBB->insertInto(mainFn);
+        builder.SetInsertPoint(contBB);
+    }
+
+    // Fixture-test methods: each runs against a fresh stack-allocated,
+    // zero-initialized instance. We call <Struct>_setup, then the test method
+    // (passing the instance pointer as self), then <Struct>_teardown.
+    for(const auto& fxEntry : fixtureTests)
+    {
+        ImplBlockNode* impl = fxEntry.implBlock;
+        StructMethodNode* method = fxEntry.method;
+        if(!impl || !method)
+            continue;
+
+        const std::string& structName = impl->structName;
+        llvm::StructType* structType = getStructType(structName);
+        if(!structType)
+        {
+            reportError(method->line,
+                        "fixture struct '" + structName +
+                            "' is not defined or has no fields");
+            continue;
+        }
+
+        std::string testMangled = structName + "_" + method->name;
+        llvm::Function* methodFn = module->getFunction(testMangled);
+        if(!methodFn)
+        {
+            reportError(method->line,
+                        "fixture test method '" + structName +
+                            "::" + method->name + "' was not generated");
+            continue;
+        }
+
+        std::string suiteName =
+            !method->sourceModule.empty()
+                ? normalizeTestSuiteName(method->sourceModule)
+                : defaultSuite;
+        std::string displayName =
+            suiteName + "." + structName + "_" +
+            humanizeTestCaseName(method->name);
+
+        if(!testFilter.empty() &&
+           displayName.find(testFilter) == std::string::npos &&
+           method->name.find(testFilter) == std::string::npos)
+            continue;
+
+        llvm::Value* totalCur =
+            builder.CreateLoad(i32Type, totalTests, "tests.cur");
+        llvm::Value* totalNext = builder.CreateAdd(
+            totalCur, llvm::ConstantInt::get(i32Type, 1), "tests.next");
+        builder.CreateStore(totalNext, totalTests);
+        llvm::Value* testName = make_cstr(displayName, "fxtest.name");
+        llvm::Value* testIndex = totalNext;
+        builder.CreateCall(setCurrentTestFunc,
+                           {testIndex, totalNext, testName});
+
+        // Fresh, zero-initialized fixture instance per test.
+        llvm::AllocaInst* fxAlloca =
+            builder.CreateAlloca(structType, nullptr, "fixture");
+        builder.CreateStore(llvm::Constant::getNullValue(structType), fxAlloca);
+
+        // Optional setup hook.
+        if(llvm::Function* setupFn =
+               module->getFunction(structName + "_setup"))
+        {
+            builder.CreateCall(setupFn, {fxAlloca});
+        }
+
+        // Run the test method.
+        llvm::Value* result = builder.CreateCall(methodFn, {fxAlloca});
+
+        // Optional teardown hook (always runs, even when test fails non-fatally).
+        llvm::Function* teardownFn =
+            module->getFunction(structName + "_teardown");
+
+        if(methodFn->getReturnType()->isVoidTy())
+        {
+            if(teardownFn)
+                builder.CreateCall(teardownFn, {fxAlloca});
+            builder.CreateCall(reportTestFunc,
+                               {testIndex, totalNext, passStatus, testName,
+                                llvm::ConstantInt::get(i32Type, 0)});
+            continue;
+        }
+
+        llvm::Value* resultI32 = result;
+        if(resultI32->getType() != i32Type)
+        {
+            if(resultI32->getType()->isIntegerTy())
+            {
+                resultI32 = builder.CreateIntCast(resultI32, i32Type, true,
+                                                  "fxtest.rc.cast");
+            }
+            else
+            {
+                resultI32 = llvm::ConstantInt::get(i32Type, 1);
+            }
+        }
+
+        if(teardownFn)
+            builder.CreateCall(teardownFn, {fxAlloca});
+
+        llvm::Value* isFail = builder.CreateICmpNE(
+            resultI32, llvm::ConstantInt::get(i32Type, 0), "fxtestfail");
+        llvm::Value* failInc = builder.CreateZExt(isFail, i32Type, "fxfailinc");
+        llvm::Value* cur =
+            builder.CreateLoad(i32Type, failures, "fxfailures.cur");
+        llvm::Value* next =
+            builder.CreateAdd(cur, failInc, "fxfailures.next");
+        builder.CreateStore(next, failures);
+
+        llvm::BasicBlock* passBB =
+            llvm::BasicBlock::Create(context, "fxtest.pass", mainFn);
+        llvm::BasicBlock* failBB =
+            llvm::BasicBlock::Create(context, "fxtest.fail");
+        llvm::BasicBlock* contBB =
+            llvm::BasicBlock::Create(context, "fxtest.cont");
         builder.CreateCondBr(isFail, failBB, passBB);
 
         builder.SetInsertPoint(passBB);
@@ -8950,7 +9165,9 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     llvm::Value* dataRaw =
         builder.CreateExtractValue(listVal, {1}, listId->name + ".fold.data");
 #if LLVM_VERSION_MAJOR >= 15
-    elemPtrTy = llvm::PointerType::get(elemType, 0);
+    // Opaque pointers (LLVM 15+): pointer type carries no pointee.
+    (void)elemType;
+    elemPtrTy = llvm::PointerType::get(context, 0);
 #endif
     llvm::Value* dataPtr =
         builder.CreateBitCast(dataRaw, elemPtrTy, listId->name + ".fold.ptr");
@@ -10054,7 +10271,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
             fnLabel = "main";
         std::string tryContext = fnLabel + ":" + std::to_string(node->line);
         llvm::Value* ctxStr =
-            builder.CreateGlobalStringPtr(tryContext, "try.ctx");
+            create_global_cstring(builder, tryContext, "try.ctx");
         errPayload = builder.CreateCall(addContextFn, {errPayload, ctxStr},
                                         "try.err.withctx");
     }
@@ -16767,7 +16984,7 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
                 tmp.line = node->line;
                 typeName = expressionTypeNameForLog(&tmp, node->line);
             }
-            return builder.CreateGlobalStringPtr(typeName, "type.name");
+            return create_global_cstring(builder, typeName, "type.name");
         }
     }
 
@@ -20778,7 +20995,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return nullptr;
             auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
             llvm::Value* typedVtablePtr = builder.CreateBitCast(
-                vtablePtr, vtableStructType->getPointerTo(),
+                vtablePtr, llvm::PointerType::get(context, 0),
                 "traitobj.vtable.cast");
             llvm::Value* slotPtr = builder.CreateStructGEP(
                 vtableStructType, typedVtablePtr,
@@ -20822,7 +21039,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::FunctionType* fnType =
                 llvm::FunctionType::get(returnType, paramTypes, false);
             llvm::Value* fn = builder.CreateBitCast(
-                fnPtr, fnType->getPointerTo(), "traitobj.fn.cast");
+                fnPtr, llvm::PointerType::get(context, 0), "traitobj.fn.cast");
 
             std::vector<llvm::Value*> callArgs;
             callArgs.push_back(dataPtr);
@@ -20951,7 +21168,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return nullptr;
             auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
             llvm::Value* typedVtablePtr = builder.CreateBitCast(
-                vtablePtr, vtableStructType->getPointerTo(),
+                vtablePtr, llvm::PointerType::get(context, 0),
                 objId->name + ".traitobj.vtable.cast");
             llvm::Value* slotPtr = builder.CreateStructGEP(
                 vtableStructType, typedVtablePtr, static_cast<unsigned>(methodIndex),
@@ -20995,7 +21212,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::FunctionType* fnType =
                 llvm::FunctionType::get(returnType, paramTypes, false);
             llvm::Value* fn = builder.CreateBitCast(
-                fnPtr, fnType->getPointerTo(), objId->name + ".traitobj.fn.cast");
+                fnPtr, llvm::PointerType::get(context, 0), objId->name + ".traitobj.fn.cast");
 
             if(!validateTemporaryBorrowArguments(node->arguments, node->methodName,
                                                  objId->name))
@@ -21154,7 +21371,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return nullptr;
             auto* vtableStructType = llvm::cast<llvm::StructType>(vtableType);
             llvm::Value* typedVtablePtr = builder.CreateBitCast(
-                vtablePtr, vtableStructType->getPointerTo(),
+                vtablePtr, llvm::PointerType::get(context, 0),
                 "traitobj.vtable.cast");
             llvm::Value* slotPtr = builder.CreateStructGEP(
                 vtableStructType, typedVtablePtr, static_cast<unsigned>(methodIndex),
@@ -21198,7 +21415,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::FunctionType* fnType =
                 llvm::FunctionType::get(returnType, paramTypes, false);
             llvm::Value* fn = builder.CreateBitCast(
-                fnPtr, fnType->getPointerTo(), "traitobj.fn.cast");
+                fnPtr, llvm::PointerType::get(context, 0), "traitobj.fn.cast");
 
             std::vector<llvm::Value*> callArgs;
             callArgs.push_back(dataPtr);
@@ -25384,8 +25601,13 @@ bool Backend::initializeTarget()
 #endif
 
     std::string error;
+#if LLVM_VERSION_MAJOR >= 21
+    const llvm::Target* target =
+        llvm::TargetRegistry::lookupTarget(llvm::Triple(targetTriple), error);
+#else
     const llvm::Target* target =
         llvm::TargetRegistry::lookupTarget(targetTriple, error);
+#endif
 
     if(!target)
     {

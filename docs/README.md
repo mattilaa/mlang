@@ -139,12 +139,15 @@ Use this section as a map into the existing documentation.
 - [Language Attributes](language_attributes.md)
   Covers:
   - `#[test]`
+  - `#[fixture]` impl blocks with per-test `setup` / `teardown` hooks
   - `mlang bench`
   - `--filter` for running individual tests
   - `#[derive(Debug)]`
   - `#[inline]`, `#[inline(always)]`, `#[inline(never)]`
 - Example files:
   - [`tests/test_sample.mla`](../../../tests/test_sample.mla) — unit test example
+  - [`tests/fixture_tests.mla`](../../../tests/fixture_tests.mla) — `#[fixture]` impl with `setup` / `teardown`
+  - [`tests/expect_call_tests.mla`](../../../tests/expect_call_tests.mla) — EXPECT_CALL-style mock cardinality and return queues
   - [`tests/bench_stdlib.mla`](../../../tests/bench_stdlib.mla) — benchmark example
 
 ### Standard Library
@@ -178,7 +181,9 @@ Relevant example files in the repository:
 - [`tests/test_sample.mla`](../../../tests/test_sample.mla) — unit test example
 - [`tests/bench_stdlib.mla`](../../../tests/bench_stdlib.mla) — benchmark example
 - [`examples/mlang_attributes.mla`](../../../examples/mlang_attributes.mla) — `#[test]` and `#[derive(Debug)]` in one file
+- [`examples/test_fixture_example.mla`](../../../examples/test_fixture_example.mla) — `#[fixture]` impl with per-test `setup` / `teardown`
 - [`examples/testing_mock_example.mla`](../../../examples/testing_mock_example.mla) — mock-based testing with `std::testing`
+- [`examples/expect_call_example.mla`](../../../examples/expect_call_example.mla) — EXPECT_CALL cardinality + programmed return values
 - [`examples/uml_ui_generator`](../../../examples/uml_ui_generator) — TOML-driven UML PNG renderer example
 
 ## Design Direction

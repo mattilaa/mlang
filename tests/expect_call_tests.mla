@@ -1,0 +1,152 @@
+/// \file expect_call_tests.mla
+/// \brief EXPECT_CALL-style mocking: cardinality + programmable return values.
+///
+/// Run with:
+/// \code
+///   mlang --tests tests/expect_call_tests.mla
+/// \endcode
+
+mod std::testing;
+
+use std::testing::*;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cardinality: exact / at_least / at_most / never
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_expect_times_exact_passes() {
+    let m: Mock = mock_new();
+    mock_expect_times(m.handle, "send", 2);
+    mock_called(m.handle, "send");
+    mock_called(m.handle, "send");
+    expect_true(mock_verify(m.handle));
+    mock_free(m.handle);
+}
+
+#[test]
+fn test_expect_times_exact_fails_when_too_few() {
+    let m: Mock = mock_new();
+    set_quiet(true);          // suppress diagnostic emission for the failure
+    mock_expect_times(m.handle, "send", 2);
+    mock_called(m.handle, "send");   // only 1 of 2
+    expect_false(mock_verify(m.handle));
+    set_quiet(false);
+    // Roll back the failure that mock_verify recorded — the test's "expect"
+    // is that the verify reported a failure, and we already accounted for it.
+    reset();
+    mock_free(m.handle);
+}
+
+#[test]
+fn test_expect_at_least_passes() {
+    let m: Mock = mock_new();
+    mock_expect_at_least(m.handle, "send", 2);
+    mock_called(m.handle, "send");
+    mock_called(m.handle, "send");
+    mock_called(m.handle, "send");      // more than the minimum is fine
+    expect_true(mock_verify(m.handle));
+    mock_free(m.handle);
+}
+
+#[test]
+fn test_expect_at_most_passes() {
+    let m: Mock = mock_new();
+    mock_expect_at_most(m.handle, "send", 3);
+    mock_called(m.handle, "send");
+    mock_called(m.handle, "send");      // <= 3 is fine
+    expect_true(mock_verify(m.handle));
+    mock_free(m.handle);
+}
+
+#[test]
+fn test_expect_never_passes_when_unused() {
+    let m: Mock = mock_new();
+    mock_expect_never(m.handle, "fatal");
+    expect_true(mock_verify(m.handle));
+    mock_free(m.handle);
+}
+
+#[test]
+fn test_expect_never_fails_when_called() {
+    let m: Mock = mock_new();
+    set_quiet(true);
+    mock_expect_never(m.handle, "fatal");
+    mock_called(m.handle, "fatal");
+    expect_false(mock_verify(m.handle));
+    set_quiet(false);
+    reset();
+    mock_free(m.handle);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Programmable return values via mock_record_and_return_*
+//
+// The "mock body" below is the pattern users write themselves: a small fn
+// that records the invocation and returns the next queued value. The code
+// under test would call it instead of the real dependency.
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn fake_send(handle: i64) -> i32 {
+    return mock_record_and_return_i32(handle, "send", -1);
+}
+
+fn fake_format(handle: i64) -> str8 {
+    return mock_record_and_return_str8(handle, "format", "default");
+}
+
+fn fake_ready(handle: i64) -> bool {
+    return mock_record_and_return_bool(handle, "ready", false);
+}
+
+#[test]
+fn test_will_return_i32_queue_consumed_in_order() {
+    let m: Mock = mock_new();
+    mock_will_return_i32(m.handle, "send", 42);
+    mock_will_return_i32(m.handle, "send", 99);
+
+    expect_eq_i32(42, fake_send(m.handle));
+    expect_eq_i32(99, fake_send(m.handle));
+    // Queue empty — falls back to the default supplied by the mock body
+    expect_eq_i32(-1, fake_send(m.handle));
+
+    expect_eq_i32(3, mock_calls(m.handle, "send"));
+    mock_free(m.handle);
+}
+
+#[test]
+fn test_will_return_str8_queue() {
+    let m: Mock = mock_new();
+    mock_will_return_str8(m.handle, "format", "first");
+    mock_will_return_str8(m.handle, "format", "second");
+
+    expect_eq("first", fake_format(m.handle));
+    expect_eq("second", fake_format(m.handle));
+    expect_eq("default", fake_format(m.handle));
+    mock_free(m.handle);
+}
+
+#[test]
+fn test_will_return_bool_queue() {
+    let m: Mock = mock_new();
+    mock_will_return_bool(m.handle, "ready", true);
+    mock_will_return_bool(m.handle, "ready", false);
+
+    expect_true(fake_ready(m.handle));
+    expect_false(fake_ready(m.handle));
+    expect_false(fake_ready(m.handle));   // default is false
+    mock_free(m.handle);
+}
+
+#[test]
+fn test_will_return_combines_with_cardinality() {
+    let m: Mock = mock_new();
+    mock_expect_times(m.handle, "send", 2);
+    mock_will_return_i32(m.handle, "send", 7);
+    mock_will_return_i32(m.handle, "send", 8);
+
+    expect_eq_i32(7, fake_send(m.handle));
+    expect_eq_i32(8, fake_send(m.handle));
+    expect_true(mock_verify(m.handle));
+    mock_free(m.handle);
+}

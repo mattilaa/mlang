@@ -1108,6 +1108,9 @@ static LayoutInfo computeTypeLayout(TypeNode* type,
     case TypeNode::TYPE_REF:
     case TypeNode::TYPE_REF_MUT:
         return {8, 8, true};
+    case TypeNode::TYPE_TRAIT_OBJECT:
+        // dyn Trait is lowered to a fat pointer { data_ptr, vtable_ptr }.
+        return {16, 8, true};
     case TypeNode::TYPE_STRUCT:
     case TypeNode::TYPE_LIST:
     case TypeNode::TYPE_MAP:

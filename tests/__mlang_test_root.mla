@@ -100,3 +100,7 @@ mod std_gps_tests;
 use std_gps_tests::*;
 mod arch_attr_inline_asm_tests;
 use arch_attr_inline_asm_tests::*;
+mod fixture_tests;
+use fixture_tests::*;
+mod expect_call_tests;
+use expect_call_tests::*;

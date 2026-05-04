@@ -1069,6 +1069,7 @@ public:
     StatementListNode* body;
     bool isPublic;
     bool isStatic; // static methods don't have 'self' parameter
+    bool isTest = false; // method carries #[test] inside #[fixture] impl
     bool isSynthesizedPropertyAccessor = false;
     bool isAtomicPropertyAccessor = false;
     bool isMutexPropertyAccessor = false;
@@ -1251,6 +1252,8 @@ public:
     std::vector<std::string> typeParams; // Generic type parameters
     std::map<std::string, std::string> typeParamTraitBounds;
     std::vector<StructMethodNode*> methods;
+    bool isFixture = false; // marked via #[fixture] — provides per-test
+                            // stack-allocated instances for #[test] methods
 
     ImplBlockNode(const std::string& name) : structName(name) {}
     std::string toString() const override;

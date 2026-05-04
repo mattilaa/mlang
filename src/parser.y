@@ -1568,6 +1568,7 @@ enum UpdatePosition
 %token VEC_MACRO
 %token DERIVE_DEBUG
 %token TEST_ATTR
+%token FIXTURE_ATTR
 %token PROPERTY_ATTR
 %token X86_64_ATTR
 %token AARCH64_ATTR
@@ -1583,11 +1584,10 @@ enum UpdatePosition
 %type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
 %type <ast> switch_subject_expression switch_case_value
-%type <ast> condition_expression condition_logical_or condition_logical_and
 %type <ast> block_condition_expression block_condition_logical_or block_condition_logical_and
 %type <ast> block_condition_bitor block_condition_bitxor block_condition_bitand
 %type <ast> block_condition_equality block_condition_relational block_condition_shift
-%type <ast> condition_equality condition_relational condition_additive
+%type <ast> condition_additive
 %type <ast> condition_multiplicative condition_unary condition_postfix
 %type <ast> condition_primary
 %type <ast> if_statement else_if_list else_if optional_else
@@ -1597,7 +1597,7 @@ enum UpdatePosition
 %type <ast> return_statement block_statement colon_block_statement colon_statement for_statement while_statement range_expression
 %type <ast> throw_statement try_catch_statement switch_statement switch_case_list switch_case switch_default_case
 %type <ast> break_statement continue_statement
-%type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression asm_expression pipe_expression
+%type <ast> primary_expression postfix_expression function_call fold_expression asm_expression pipe_expression
 %type <ast> mod_declaration use_declaration
 %type <sval> module_path trait_bound_chain
 %type <ast> print_statement argument_list format_argument format_argument_list assert_eq_statement assert_statement static_assert_statement
@@ -1857,6 +1857,18 @@ impl_block
             }
             bind_impl_self_types(implBlock);
         }
+    | FIXTURE_ATTR IMPL IDENTIFIER LBRACE impl_method_list RBRACE
+        {
+            ASTNode* impl = mla_ast_impl_block($3, NULL, NULL);
+            auto* implBlock = static_cast<ImplBlockNode*>(impl);
+            auto* methodList = static_cast<ImplBlockNode*>($5);
+            if(methodList) {
+                implBlock->methods = methodList->methods;
+            }
+            implBlock->isFixture = true;
+            bind_impl_self_types(implBlock);
+            $$ = impl;
+        }
     | IMPL IDENTIFIER FOR IDENTIFIER LBRACE impl_method_list RBRACE
         {
             ASTNode* impl = mla_ast_impl_block($4, NULL, $2);
@@ -2029,6 +2041,18 @@ struct_method
         { $$ = mla_ast_struct_method($7, $2, $4, $9, 0, 0); }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         { $$ = mla_ast_struct_method($8, $3, $5, $10, 1, 0); }
+    | TEST_ATTR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        {
+            ASTNode* m = mla_ast_struct_method($8, $3, $5, $10, 0, 0);
+            static_cast<StructMethodNode*>(m)->isTest = true;
+            $$ = m;
+        }
+    | TEST_ATTR PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        {
+            ASTNode* m = mla_ast_struct_method($9, $4, $6, $11, 1, 0);
+            static_cast<StructMethodNode*>(m)->isTest = true;
+            $$ = m;
+        }
     ;
 
 function_def
@@ -2682,10 +2706,6 @@ else_if
         { ASTNode* __init = mla_ast_var_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, $9); }
     ;
 
-condition_expression
-    : condition_logical_or
-    ;
-
 block_condition_expression
     : block_condition_logical_or
     ;
@@ -2767,40 +2787,6 @@ block_condition_shift
         { $$ = mla_ast_binary_op(SHL, $1, $3); }
     | block_condition_shift SHR condition_additive
         { $$ = mla_ast_binary_op(SHR, $1, $3); }
-    | condition_additive
-    ;
-
-condition_logical_or
-    : condition_logical_or PIPE_PIPE condition_logical_and
-        { $$ = mla_ast_binary_op(PIPE_PIPE, $1, $3); }
-    | condition_logical_and
-    ;
-
-condition_logical_and
-    : condition_logical_and AMP_AMP condition_equality
-        { $$ = mla_ast_binary_op(AMP_AMP, $1, $3); }
-    | condition_equality
-    ;
-
-condition_equality
-    : condition_equality EQ condition_relational
-        { $$ = mla_ast_binary_op(EQ, $1, $3); }
-    | condition_equality NE condition_relational
-        { $$ = mla_ast_binary_op(NE, $1, $3); }
-    | condition_relational
-    ;
-
-condition_relational
-    : condition_relational LT condition_additive
-        { $$ = mla_ast_binary_op(LT, $1, $3); }
-    | condition_relational GT condition_additive
-        { $$ = mla_ast_binary_op(GT, $1, $3); }
-    | condition_relational LE condition_additive
-        { $$ = mla_ast_binary_op(LE, $1, $3); }
-    | condition_relational GE condition_additive
-        { $$ = mla_ast_binary_op(GE, $1, $3); }
-    | condition_relational SPACESHIP condition_additive
-        { $$ = mla_ast_binary_op(SPACESHIP, $1, $3); }
     | condition_additive
     ;
 
@@ -3004,39 +2990,6 @@ ternary_expression
         { $$ = $1; }
     | block_condition_expression
         { $$ = materialize_builder_expression(static_cast<ExpressionNode*>($1), yylineno); }
-    ;
-
-unary_expression
-    : PLUS_PLUS unary_expression
-        { $$ = mla_ast_update_expression(UPDATE_INCREMENT, UPDATE_PREFIX, $2, yylineno); }
-    | MINUS_MINUS unary_expression
-        { $$ = mla_ast_update_expression(UPDATE_DECREMENT, UPDATE_PREFIX, $2, yylineno); }
-    | MINUS unary_expression
-        { $$ = create_unary_op(MINUS, $2); if($$) $$->line = yylineno; }
-    | NOT unary_expression
-        { $$ = create_unary_op(NOT, $2); if($$) $$->line = yylineno; }
-    | TILDE unary_expression
-        { $$ = create_unary_op(TILDE, $2); if($$) $$->line = yylineno; }
-    | AMP unary_expression
-        { $$ = create_unary_op(AMP, $2); if($$) $$->line = yylineno; }
-    | AMP_MUT unary_expression
-        { $$ = create_unary_op(AMP_MUT, $2); if($$) $$->line = yylineno; }
-    | MULTIPLY unary_expression
-        { $$ = create_unary_op(MULTIPLY, $2); if($$) $$->line = yylineno; }
-    | postfix_expression TRY_QUESTION
-        { $$ = mla_ast_try_expression($1, yylineno); }
-    | function_call TRY_QUESTION
-        { $$ = mla_ast_try_expression($1, yylineno); }
-    | postfix_expression
-    | function_call
-    | cast_expression
-    | list_literal
-    | map_literal
-    | index_expression
-    | tuple_literal
-    | map_iterator
-    | struct_literal
-    | asm_expression
     ;
 
 asm_expression
@@ -3243,28 +3196,6 @@ postfix_expression
         { $$ = mla_ast_index_expression($1, $3, yylineno); }
     | postfix_expression PLUS_PLUS { $$ = mla_ast_update_expression(UPDATE_INCREMENT, UPDATE_POSTFIX, $1, yylineno); }
     | postfix_expression MINUS_MINUS { $$ = mla_ast_update_expression(UPDATE_DECREMENT, UPDATE_POSTFIX, $1, yylineno); }
-    ;
-
-binary_expression
-    : expression PLUS expression { $$ = mla_ast_binary_op(PLUS, $1, $3); }
-    | expression MINUS expression { $$ = mla_ast_binary_op(MINUS, $1, $3); }
-    | expression MULTIPLY expression { $$ = mla_ast_binary_op(MULTIPLY, $1, $3); }
-    | expression DIVIDE expression { $$ = mla_ast_binary_op(DIVIDE, $1, $3); }
-    | expression MODULO expression { $$ = mla_ast_binary_op(MODULO, $1, $3); }
-    | expression LT expression { $$ = mla_ast_binary_op(LT, $1, $3); }
-    | expression GT expression { $$ = mla_ast_binary_op(GT, $1, $3); }
-    | expression LE expression { $$ = mla_ast_binary_op(LE, $1, $3); }
-    | expression GE expression { $$ = mla_ast_binary_op(GE, $1, $3); }
-    | expression EQ expression { $$ = mla_ast_binary_op(EQ, $1, $3); }
-    | expression NE expression { $$ = mla_ast_binary_op(NE, $1, $3); }
-    | expression SPACESHIP expression { $$ = mla_ast_binary_op(SPACESHIP, $1, $3); }
-    | expression AMP expression { $$ = mla_ast_binary_op(AMP, $1, $3); }
-    | expression PIPE expression { $$ = mla_ast_binary_op(PIPE, $1, $3); }
-    | expression CARET expression { $$ = mla_ast_binary_op(CARET, $1, $3); }
-    | expression SHL expression { $$ = mla_ast_binary_op(SHL, $1, $3); }
-    | expression SHR expression { $$ = mla_ast_binary_op(SHR, $1, $3); }
-    | expression AMP_AMP expression { $$ = mla_ast_binary_op(AMP_AMP, $1, $3); }
-    | expression PIPE_PIPE expression { $$ = mla_ast_binary_op(PIPE_PIPE, $1, $3); }
     ;
 
 function_call
