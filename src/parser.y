@@ -1534,6 +1534,7 @@ enum UpdatePosition
 
 %token <sval> IDENTIFIER STRING_LITERAL
 %token <ival> INT_LITERAL
+%token <ast> TYPED_INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL BIT FLOAT DOUBLE STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM FIELD
@@ -2855,6 +2856,7 @@ condition_postfix
 
 condition_primary
     : INT_LITERAL { $$ = mla_ast_literal_int($1); }
+    | TYPED_INT_LITERAL { $$ = $1; }
     | FLOAT_LITERAL { $$ = mla_ast_literal_float($1); }
     | DOUBLE_LITERAL { $$ = mla_ast_literal_double($1); }
     | STRING_LITERAL { $$ = mla_ast_literal_string($1); }
@@ -2905,7 +2907,7 @@ condition_primary
     | function_call { $$ = $1; }
     | module_path
         { $$ = create_enum_or_ident_from_path($1, yylineno); }
-    | LPAREN block_condition_expression RPAREN { $$ = $2; }
+    | LPAREN ternary_expression RPAREN { $$ = $2; }
     | match_expression { $$ = $1; }
     | list_literal { $$ = $1; }
     | map_literal { $$ = $1; }
@@ -3070,6 +3072,8 @@ match_pattern
         }
     | INT_LITERAL
         { $$ = mla_ast_match_literal_pattern(mla_ast_literal_int($1), yylineno); }
+    | TYPED_INT_LITERAL
+        { $$ = mla_ast_match_literal_pattern($1, yylineno); }
     | FLOAT_LITERAL
         { $$ = mla_ast_match_literal_pattern(mla_ast_literal_float($1), yylineno); }
     | DOUBLE_LITERAL
@@ -3084,6 +3088,7 @@ match_pattern
 
 primary_expression
     : INT_LITERAL { $$ = mla_ast_literal_int($1); }
+    | TYPED_INT_LITERAL { $$ = $1; }
     | FLOAT_LITERAL { $$ = mla_ast_literal_float($1); }
     | DOUBLE_LITERAL { $$ = mla_ast_literal_double($1); }
     | STRING_LITERAL { $$ = mla_ast_literal_string($1); }

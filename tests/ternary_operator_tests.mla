@@ -4,6 +4,7 @@ mod std::strbuf;
 use std::strbuf::eq;
 use std::testing::verify;
 use std::testing::verify_eq_i32;
+use std::testing::verify_eq_i64;
 
 struct TernaryObj {
     var id: i32;
@@ -78,4 +79,24 @@ fn test_ternary_condition_nested_logical_parenthesized() {
     let someOtherCondition: i32 = 1;
     let on_r: i32 = ((full_r == 1 || half_r == 1) || someCondition == 1) && someOtherCondition == 1 ? 1 : 0;
     verify_eq_i32(1, on_r);
+}
+
+// Parenthesized inner ternary expression must be accepted as the
+// true-branch (or false-branch) of an outer ternary. Regression cover for
+// the `(... ? ... : ...)` form, which previously could not appear inside
+// another expression because the parenthesized-primary rule only accepted
+// a bool-or-arithmetic expression, not a ternary.
+#[test]
+fn test_ternary_nested_parenthesized_true_branch() {
+    let a: i64 = 0i64;
+    let blink: i32 = 1;
+    let face: i64 = a <= 0 ? (blink == 1 ? 1i64 : 6i64) : a;
+    verify_eq_i64(1, face);
+}
+
+#[test]
+fn test_typed_int_literal_in_list() {
+    var dice: list<i64> = [3i64, 0i64];
+    verify_eq_i64(3, dice[0]);
+    verify_eq_i64(0, dice[1]);
 }

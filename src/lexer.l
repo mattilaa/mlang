@@ -1,12 +1,46 @@
 %{
 #include "parser.hpp"
 #include "diagnostics.h"
+#include "ast.h"
 #include <string.h>
 #include <cctype>
+#include <cstdlib>
 #include <string>
 
 extern bool parseHadError;
 extern const char* g_sourceFile;
+
+// Parse the type-suffix portion of a typed integer literal (e.g. "i64",
+// "u8") into a TypeNode::TypeKind. Returns TYPE_VOID for unrecognized
+// suffixes so the caller can decide how to fail. The pointer passed in
+// must point at the leading 'i' or 'u'.
+static int mla_lex_int_suffix_kind(const char* suffix)
+{
+    if(!suffix || (suffix[0] != 'i' && suffix[0] != 'u'))
+        return TypeNode::TYPE_VOID;
+    bool isUnsigned = (suffix[0] == 'u');
+    int bits = std::atoi(suffix + 1);
+    switch(bits)
+    {
+        case 8:  return isUnsigned ? TypeNode::TYPE_U8  : TypeNode::TYPE_I8;
+        case 16: return isUnsigned ? TypeNode::TYPE_U16 : TypeNode::TYPE_I16;
+        case 32: return isUnsigned ? TypeNode::TYPE_U32 : TypeNode::TYPE_I32;
+        case 64: return isUnsigned ? TypeNode::TYPE_U64 : TypeNode::TYPE_I64;
+        default: return TypeNode::TYPE_VOID;
+    }
+}
+
+// Build a typed-integer-literal AST node from a parsed value plus the
+// suffix start in yytext. Returns the node as a generic ASTNode* so the
+// parser's <ast> yylval slot can hold it.
+static ASTNode* mla_lex_make_typed_int(int64_t value, const char* suffix)
+{
+    auto* node = new IntLiteralNode(value);
+    int kind = mla_lex_int_suffix_kind(suffix);
+    if(kind != TypeNode::TYPE_VOID)
+        node->explicitType = static_cast<TypeNode::TypeKind>(kind);
+    return node;
+}
 
 int yycolumn = 1;       // current column (end of last-consumed token)
 int yycolumn_token = 1; // column at start of the current token
@@ -309,6 +343,35 @@ static int is_try_question_context()
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.sval = strdup(yytext); return IDENTIFIER; }
 [0-9]+\.[0-9]+f { yylval.fval = atof(yytext); return FLOAT_LITERAL; }
 [0-9]+\.[0-9]+  { yylval.dval = atof(yytext); return DOUBLE_LITERAL; }
+0[bB][01]+(i|u)(8|16|32|64) {
+                  // Typed binary literal, e.g. 0b1010i64
+                  const char* suffix = yytext + 2;
+                  while(*suffix == '0' || *suffix == '1') suffix++;
+                  int64_t value = strtoll(yytext + 2, NULL, 2);
+                  yylval.ast = mla_lex_make_typed_int(value, suffix);
+                  return TYPED_INT_LITERAL;
+                }
+0[xX][0-9a-fA-F]+(i|u)(8|16|32|64) {
+                  // Typed hex literal, e.g. 0xFFi64. The suffix begins at
+                  // the first 'i' or 'u' that isn't a hex digit; locate it
+                  // by scanning past hex chars.
+                  const char* suffix = yytext + 2;
+                  while((*suffix >= '0' && *suffix <= '9') ||
+                        (*suffix >= 'a' && *suffix <= 'f') ||
+                        (*suffix >= 'A' && *suffix <= 'F'))
+                      suffix++;
+                  int64_t value = strtoll(yytext + 2, NULL, 16);
+                  yylval.ast = mla_lex_make_typed_int(value, suffix);
+                  return TYPED_INT_LITERAL;
+                }
+[0-9]+(i|u)(8|16|32|64) {
+                  // Typed decimal literal, e.g. 3i64, 255u8.
+                  const char* suffix = yytext;
+                  while(*suffix >= '0' && *suffix <= '9') suffix++;
+                  int64_t value = strtoll(yytext, NULL, 10);
+                  yylval.ast = mla_lex_make_typed_int(value, suffix);
+                  return TYPED_INT_LITERAL;
+                }
 0[bB][01]+      { yylval.ival = strtoll(yytext + 2, NULL, 2); return INT_LITERAL; }
 0[xX][0-9a-fA-F]+ { yylval.ival = strtoll(yytext + 2, NULL, 16); return INT_LITERAL; }
 [0-9]+          { yylval.ival = strtoll(yytext, NULL, 10); return INT_LITERAL; }

@@ -254,6 +254,11 @@ class IntLiteralNode : public ExpressionNode
 {
 public:
     int64_t value;
+    // When the literal carries an explicit type suffix (e.g. 3i64, 255u8),
+    // this is the resolved typed-integer kind (TYPE_I8…TYPE_I64 / TYPE_U8…
+    // TYPE_U64). TYPE_VOID means "untyped" — the historical default, where
+    // the destination context picks the type.
+    TypeNode::TypeKind explicitType = TypeNode::TYPE_VOID;
     IntLiteralNode(int64_t v) : value(v) {}
     std::string toString() const override;
 };
