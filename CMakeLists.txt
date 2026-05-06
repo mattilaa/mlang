@@ -343,6 +343,7 @@ add_custom_command(
     OUTPUT ${MLANGD_MLA_OUTPUT}
     COMMAND $<TARGET_FILE:mlang> ${MLANGD_MLA_SOURCE}
             --no-tests
+            -Wno-unwrap
             -O0
             -L ${CMAKE_CURRENT_BINARY_DIR}
             -lmlang_std
