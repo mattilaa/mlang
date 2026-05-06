@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <unordered_map>
 
 static bool is_same_module_family(const std::string& a, const std::string& b)
 {
@@ -170,8 +171,8 @@ extern "C"
 typedef size_t yy_size_t;
 struct yy_buffer_state;
 typedef yy_buffer_state* YY_BUFFER_STATE;
-extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
-extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
+extern YY_BUFFER_STATE mlang_scan_bytes(const char* bytes, size_t len);
+extern void mlang_delete_buffer(YY_BUFFER_STATE buffer);
 
 ModuleLoader::ModuleLoader(const std::string& basePath,
                            const std::vector<std::string>& extraPaths)
@@ -240,10 +241,10 @@ ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
     parseHadError = false;
     g_sourceFile = filePath.c_str();
     g_targetArchForParse = targetArchOverride.c_str();
-    YY_BUFFER_STATE buffer = yy_scan_bytes(
-        filteredText.data(), static_cast<yy_size_t>(filteredText.size()));
+    YY_BUFFER_STATE buffer =
+        mlang_scan_bytes(filteredText.data(), filteredText.size());
     int result = yyparse();
-    yy_delete_buffer(buffer);
+    mlang_delete_buffer(buffer);
 
     ProgramNode* parsedProgram = nullptr;
     if(result == 0 && !parseHadError && programRoot)
@@ -455,7 +456,8 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
 
     for(auto* useDecl : program->imports)
     {
-        std::string resolvedModuleName = resolveModuleAlias(useDecl->moduleName);
+        std::string resolvedModuleName =
+            resolveModuleAlias(useDecl->moduleName);
         bool skipSpecificImportCheck = false;
 
         auto bindModuleAlias = [&](const std::string& targetModuleName) -> bool
@@ -489,7 +491,8 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                     bool alreadyAdded = false;
                     for(auto* existing : program->functionList->functions)
                     {
-                        if(existing && function_signature_key(existing) == sigKey)
+                        if(existing &&
+                           function_signature_key(existing) == sigKey)
                         {
                             alreadyAdded = true;
                             break;
@@ -511,11 +514,12 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
 
         // Ambiguous parse fallback:
         // `use a::b as x;` may be parsed as item alias from module `a`.
-        // If `a` is not a loaded module but `a::b` is, treat it as module alias.
+        // If `a` is not a loaded module but `a::b` is, treat it as module
+        // alias.
         if(!useDecl->importAll && !useDecl->aliasName.empty())
         {
-            std::string combinedModuleName =
-                resolveModuleAlias(useDecl->moduleName + "::" + useDecl->itemName);
+            std::string combinedModuleName = resolveModuleAlias(
+                useDecl->moduleName + "::" + useDecl->itemName);
             if(!getModule(resolvedModuleName) && getModule(combinedModuleName))
             {
                 if(!bindModuleAlias(combinedModuleName))
@@ -556,16 +560,17 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 // Check if function already added (avoid duplicates)
                 std::string sigKey = function_signature_key(func);
                 bool alreadyAdded = false;
-                for(size_t i = 0; i < program->functionList->functions.size(); ++i)
+                for(size_t i = 0; i < program->functionList->functions.size();
+                    ++i)
                 {
                     auto* existing = program->functionList->functions[i];
                     if(!existing)
                         continue;
                     if(function_signature_key(existing) == sigKey)
                     {
-                        // Prefer the more visible symbol when signatures collide
-                        // across modules (e.g. private detail binding vs public
-                        // facade declaration).
+                        // Prefer the more visible symbol when signatures
+                        // collide across modules (e.g. private detail binding
+                        // vs public facade declaration).
                         if(!existing->isPublic && func->isPublic)
                         {
                             program->functionList->functions[i] = func;
@@ -641,7 +646,8 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                         bool same = true;
                         for(size_t i = 0; i < impl->methods.size(); ++i)
                         {
-                            if(existing->methods[i]->name != impl->methods[i]->name)
+                            if(existing->methods[i]->name !=
+                               impl->methods[i]->name)
                             {
                                 same = false;
                                 break;
@@ -870,10 +876,11 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
 
                         std::string sigKey = function_signature_key(aliasFn);
                         bool alreadyAdded = false;
-                        for(size_t i = 0; i < program->functionList->functions.size();
-                            ++i)
+                        for(size_t i = 0;
+                            i < program->functionList->functions.size(); ++i)
                         {
-                            auto* existing = program->functionList->functions[i];
+                            auto* existing =
+                                program->functionList->functions[i];
                             if(!existing)
                                 continue;
                             if(function_signature_key(existing) == sigKey)
@@ -905,10 +912,9 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                         }
                         if(!exists)
                         {
-                            auto* aliasType =
-                                new TypeAliasNode(useDecl->aliasName,
-                                                  new StructTypeRefNode(
-                                                      useDecl->itemName));
+                            auto* aliasType = new TypeAliasNode(
+                                useDecl->aliasName,
+                                new StructTypeRefNode(useDecl->itemName));
                             program->typeAliases.push_back(aliasType);
                         }
                         aliasBound = true;
@@ -916,7 +922,8 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                     }
                 }
 
-                if(!aliasBound && module->enumList && !module->enumList->enums.empty())
+                if(!aliasBound && module->enumList &&
+                   !module->enumList->enums.empty())
                 {
                     for(auto* enumDef : module->enumList->enums)
                     {
@@ -933,10 +940,9 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                         }
                         if(!exists)
                         {
-                            auto* aliasType =
-                                new TypeAliasNode(useDecl->aliasName,
-                                                  new StructTypeRefNode(
-                                                      useDecl->itemName));
+                            auto* aliasType = new TypeAliasNode(
+                                useDecl->aliasName,
+                                new StructTypeRefNode(useDecl->itemName));
                             program->typeAliases.push_back(aliasType);
                         }
                         aliasBound = true;

@@ -1,28 +1,29 @@
 #include "package_manager.h"
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cctype>
 #include <chrono>
-#include <cstdlib>
+#include <cmath>
+#include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <future>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
-#include <condition_variable>
-#include <sys/wait.h>
 #include <unordered_set>
 #include <vector>
 
@@ -30,7 +31,8 @@
 #define MLANG_VERSION "0.1.0"
 #endif
 
-namespace {
+namespace
+{
 
 struct PackageManifest;
 struct BuildConfig;
@@ -49,8 +51,8 @@ static std::string format_task_elapsed(std::chrono::milliseconds elapsed);
 static std::string shorten_progress_description(const std::string& description);
 static std::string sanitize_progress_output(std::string text);
 static std::string shorten_progress_output(const std::string& text);
-static std::vector<std::string> parse_workspace_members(
-    const std::string& content);
+static std::vector<std::string>
+parse_workspace_members(const std::string& content);
 static std::string current_host_name();
 static void append_toml_string_list_value(const std::string& value,
                                           std::vector<std::string>& out);
@@ -62,8 +64,9 @@ static int run_task_for_manifest(const PackageManifest& pkg,
                                  const BuildConfig& buildConfig);
 static bool task_list_contains_name(const std::vector<TaskSpec>& tasks,
                                     const std::string& name);
-static void append_toml_string_list_value_preserve(const std::string& value,
-                                                   std::vector<std::string>& out);
+static void
+append_toml_string_list_value_preserve(const std::string& value,
+                                       std::vector<std::string>& out);
 
 enum class TaskTomlKey
 {
@@ -153,8 +156,9 @@ find_enum_key(std::string_view key,
 }
 
 template <typename Enum, size_t N>
-static std::optional<std::string_view> find_enum_text(
-    Enum key, const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+static std::optional<std::string_view>
+find_enum_text(Enum key,
+               const std::array<std::pair<Enum, std::string_view>, N>& mappings)
 {
     const auto it =
         std::find_if(mappings.begin(), mappings.end(),
@@ -182,93 +186,92 @@ enum class TaskLanguage
 };
 
 static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 39>
-    kTaskTomlKeys {{{ TaskTomlKey::Name, "name" },
-                    { TaskTomlKey::Message, "message" },
-                    { TaskTomlKey::Print, "print" },
-                    { TaskTomlKey::SupportedHosts, "supported_hosts" },
-                    { TaskTomlKey::UnsupportedMessage,
-                      "unsupported_message" },
-                    { TaskTomlKey::Phase, "phase" },
-                    { TaskTomlKey::Workdir, "workdir" },
-                    { TaskTomlKey::Language, "language" },
-                    { TaskTomlKey::Source, "source" },
-                    { TaskTomlKey::Output, "output" },
-                    { TaskTomlKey::Inputs, "inputs" },
-                    { TaskTomlKey::CompileOnly, "compile_only" },
-                    { TaskTomlKey::Parallel, "parallel" },
-                    { TaskTomlKey::LogOutput, "log_output" },
-                    { TaskTomlKey::InlineOutput, "inline_output" },
-                    { TaskTomlKey::DependsOn, "depends_on" },
-                    { TaskTomlKey::PhaseDependsOn, "phase_depends_on" },
-                    { TaskTomlKey::JoinOn, "join_on" },
-                    { TaskTomlKey::PhaseJoinOn, "phase_join_on" },
-                    { TaskTomlKey::Next, "next" },
-                    { TaskTomlKey::NextPhases, "next_phases" },
-                    { TaskTomlKey::Command, "command" },
-                    { TaskTomlKey::Env, "env" },
-                    { TaskTomlKey::Script, "script" },
-                    { TaskTomlKey::Shell, "shell" },
-                    { TaskTomlKey::Commands, "commands" },
-                    { TaskTomlKey::Chmod, "chmod" },
-                    { TaskTomlKey::ChmodPath, "chmod_path" },
-                    { TaskTomlKey::ChmodPaths, "chmod_paths" },
-                    { TaskTomlKey::OptLevel, "opt_level" },
-                    { TaskTomlKey::TargetArch, "target_arch" },
-                    { TaskTomlKey::PathEntries, "path_entries" },
-                    { TaskTomlKey::CompilerFlags, "compiler_flags" },
-                    { TaskTomlKey::LinkerFlags, "linker_flags" },
-                    { TaskTomlKey::LibPaths, "lib_paths" },
-                    { TaskTomlKey::Libs, "libs" },
-                    { TaskTomlKey::StaticDeps, "static_deps" },
-                    { TaskTomlKey::StaticCppRuntime, "static_cpp_runtime" },
-                    { TaskTomlKey::Sign, "sign" } }};
+    kTaskTomlKeys{{{TaskTomlKey::Name, "name"},
+                   {TaskTomlKey::Message, "message"},
+                   {TaskTomlKey::Print, "print"},
+                   {TaskTomlKey::SupportedHosts, "supported_hosts"},
+                   {TaskTomlKey::UnsupportedMessage, "unsupported_message"},
+                   {TaskTomlKey::Phase, "phase"},
+                   {TaskTomlKey::Workdir, "workdir"},
+                   {TaskTomlKey::Language, "language"},
+                   {TaskTomlKey::Source, "source"},
+                   {TaskTomlKey::Output, "output"},
+                   {TaskTomlKey::Inputs, "inputs"},
+                   {TaskTomlKey::CompileOnly, "compile_only"},
+                   {TaskTomlKey::Parallel, "parallel"},
+                   {TaskTomlKey::LogOutput, "log_output"},
+                   {TaskTomlKey::InlineOutput, "inline_output"},
+                   {TaskTomlKey::DependsOn, "depends_on"},
+                   {TaskTomlKey::PhaseDependsOn, "phase_depends_on"},
+                   {TaskTomlKey::JoinOn, "join_on"},
+                   {TaskTomlKey::PhaseJoinOn, "phase_join_on"},
+                   {TaskTomlKey::Next, "next"},
+                   {TaskTomlKey::NextPhases, "next_phases"},
+                   {TaskTomlKey::Command, "command"},
+                   {TaskTomlKey::Env, "env"},
+                   {TaskTomlKey::Script, "script"},
+                   {TaskTomlKey::Shell, "shell"},
+                   {TaskTomlKey::Commands, "commands"},
+                   {TaskTomlKey::Chmod, "chmod"},
+                   {TaskTomlKey::ChmodPath, "chmod_path"},
+                   {TaskTomlKey::ChmodPaths, "chmod_paths"},
+                   {TaskTomlKey::OptLevel, "opt_level"},
+                   {TaskTomlKey::TargetArch, "target_arch"},
+                   {TaskTomlKey::PathEntries, "path_entries"},
+                   {TaskTomlKey::CompilerFlags, "compiler_flags"},
+                   {TaskTomlKey::LinkerFlags, "linker_flags"},
+                   {TaskTomlKey::LibPaths, "lib_paths"},
+                   {TaskTomlKey::Libs, "libs"},
+                   {TaskTomlKey::StaticDeps, "static_deps"},
+                   {TaskTomlKey::StaticCppRuntime, "static_cpp_runtime"},
+                   {TaskTomlKey::Sign, "sign"}}};
 
 static constexpr std::array<std::pair<TaskLanguageAlias, std::string_view>, 6>
-    kTaskLanguageAliases {{{ TaskLanguageAlias::Mlang, "mlang" },
-                            { TaskLanguageAlias::C, "c" },
-                            { TaskLanguageAlias::Cpp, "cpp" },
-                            { TaskLanguageAlias::Cxx, "cxx" },
-                            { TaskLanguageAlias::CPlusPlus, "c++" },
-                            { TaskLanguageAlias::CC, "cc" } }};
+    kTaskLanguageAliases{{{TaskLanguageAlias::Mlang, "mlang"},
+                          {TaskLanguageAlias::C, "c"},
+                          {TaskLanguageAlias::Cpp, "cpp"},
+                          {TaskLanguageAlias::Cxx, "cxx"},
+                          {TaskLanguageAlias::CPlusPlus, "c++"},
+                          {TaskLanguageAlias::CC, "cc"}}};
 
 static constexpr std::array<std::pair<TaskLanguage, std::string_view>, 3>
-    kTaskLanguageNames {{{ TaskLanguage::Mlang, "mlang" },
-                          { TaskLanguage::C, "c" },
-                          { TaskLanguage::Cpp, "c++" } }};
+    kTaskLanguageNames{{{TaskLanguage::Mlang, "mlang"},
+                        {TaskLanguage::C, "c"},
+                        {TaskLanguage::Cpp, "c++"}}};
 
 static constexpr std::array<std::pair<TargetArchAlias, std::string_view>, 9>
-    kTargetArchAliases {{{ TargetArchAlias::X86, "x86" },
-                          { TargetArchAlias::I386, "i386" },
-                          { TargetArchAlias::I686, "i686" },
-                          { TargetArchAlias::X64, "x64" },
-                          { TargetArchAlias::X86_64, "x86_64" },
-                          { TargetArchAlias::Amd64, "amd64" },
-                          { TargetArchAlias::X86Dash64, "x86-64" },
-                          { TargetArchAlias::Aarch64, "aarch64" },
-                          { TargetArchAlias::Arm64, "arm64" } }};
+    kTargetArchAliases{{{TargetArchAlias::X86, "x86"},
+                        {TargetArchAlias::I386, "i386"},
+                        {TargetArchAlias::I686, "i686"},
+                        {TargetArchAlias::X64, "x64"},
+                        {TargetArchAlias::X86_64, "x86_64"},
+                        {TargetArchAlias::Amd64, "amd64"},
+                        {TargetArchAlias::X86Dash64, "x86-64"},
+                        {TargetArchAlias::Aarch64, "aarch64"},
+                        {TargetArchAlias::Arm64, "arm64"}}};
 
 static constexpr std::array<std::pair<TargetArchValue, std::string_view>, 3>
-    kTargetArchNames {{{ TargetArchValue::X86, "x86" },
-                        { TargetArchValue::X64, "x64" },
-                        { TargetArchValue::Aarch64, "aarch64" } }};
+    kTargetArchNames{{{TargetArchValue::X86, "x86"},
+                      {TargetArchValue::X64, "x64"},
+                      {TargetArchValue::Aarch64, "aarch64"}}};
 
 static constexpr std::array<std::pair<OptLevelAlias, std::string_view>, 7>
-    kOptLevelAliases {{{ OptLevelAlias::O0, "-O0" },
-                        { OptLevelAlias::Og, "-Og" },
-                        { OptLevelAlias::O1, "-O1" },
-                        { OptLevelAlias::O2, "-O2" },
-                        { OptLevelAlias::O3, "-O3" },
-                        { OptLevelAlias::Os, "-Os" },
-                        { OptLevelAlias::Oz, "-Oz" } }};
+    kOptLevelAliases{{{OptLevelAlias::O0, "-O0"},
+                      {OptLevelAlias::Og, "-Og"},
+                      {OptLevelAlias::O1, "-O1"},
+                      {OptLevelAlias::O2, "-O2"},
+                      {OptLevelAlias::O3, "-O3"},
+                      {OptLevelAlias::Os, "-Os"},
+                      {OptLevelAlias::Oz, "-Oz"}}};
 
 static std::string trim(std::string_view s)
 {
     size_t start = 0;
-    while(start < s.size() && std::isspace(static_cast<unsigned char>(s[start])))
+    while(start < s.size() &&
+          std::isspace(static_cast<unsigned char>(s[start])))
         ++start;
     size_t end = s.size();
-    while(end > start &&
-          std::isspace(static_cast<unsigned char>(s[end - 1])))
+    while(end > start && std::isspace(static_cast<unsigned char>(s[end - 1])))
         --end;
     return std::string(s.substr(start, end - start));
 }
@@ -319,8 +322,7 @@ static std::string strip_toml_comment(std::string_view line)
     return trim(line);
 }
 
-static bool is_section_line(const std::string& line,
-                            const std::string& section)
+static bool is_section_line(const std::string& line, const std::string& section)
 {
     std::string t = strip_toml_comment(line);
     return t == ("[" + section + "]");
@@ -337,10 +339,8 @@ static bool line_has_dep(const std::string& line, const std::string& name)
     return pos != std::string::npos;
 }
 
-static bool add_dep_to_section(std::string& content,
-                               const std::string& section,
-                               const std::string& name,
-                               const std::string& line)
+static bool add_dep_to_section(std::string& content, const std::string& section,
+                               const std::string& name, const std::string& line)
 {
     std::istringstream in(content);
     std::vector<std::string> lines;
@@ -496,8 +496,8 @@ static bool append_unique_quoted_list_entry(std::string& content,
     return true;
 }
 
-static std::optional<std::string> find_toml_string(
-    const std::string& content, const std::string& key)
+static std::optional<std::string> find_toml_string(const std::string& content,
+                                                   const std::string& key)
 {
     std::string needle = key + " = \"";
     size_t pos = content.find(needle);
@@ -510,9 +510,9 @@ static std::optional<std::string> find_toml_string(
     return content.substr(pos, end - pos);
 }
 
-static std::optional<std::string> find_section_toml_string(
-    const std::string& content, const std::string& section,
-    const std::string& key)
+static std::optional<std::string>
+find_section_toml_string(const std::string& content, const std::string& section,
+                         const std::string& key)
 {
     std::istringstream in(content);
     std::string line;
@@ -741,8 +741,8 @@ struct ParsedTomlAssignment
     bool append = false;
 };
 
-static std::optional<ParsedTomlAssignment> parse_toml_assignment(
-    const std::string& line, std::istream& in)
+static std::optional<ParsedTomlAssignment>
+parse_toml_assignment(const std::string& line, std::istream& in)
 {
     bool inDoubleQuotes = false;
     bool inSingleQuotes = false;
@@ -853,9 +853,8 @@ static std::string normalize_task_language(std::string language)
     if(language.empty())
         return "";
     std::transform(language.begin(), language.end(), language.begin(),
-                   [](unsigned char c) {
-                       return static_cast<char>(std::tolower(c));
-                   });
+                   [](unsigned char c)
+                   { return static_cast<char>(std::tolower(c)); });
     const auto languageKey = find_enum_key(language, kTaskLanguageAliases);
     if(!languageKey.has_value())
         return "";
@@ -991,8 +990,9 @@ static void pkg_warn_line(const std::string& text);
 static std::string expand_task_text(const std::string& text,
                                     const PackageManifest& pkg,
                                     const BuildConfig& buildConfig);
-static BuildConfig materialize_build_config_for_package(
-    const PackageManifest& pkg, BuildConfig buildConfig);
+static BuildConfig
+materialize_build_config_for_package(const PackageManifest& pkg,
+                                     BuildConfig buildConfig);
 
 static bool apply_task_build_config_key_value(BuildConfig& cfg,
                                               TaskTomlKey taskKeyKind,
@@ -1057,9 +1057,8 @@ static void append_toml_string_list_value(const std::string& value,
 static bool parse_toml_bool_value(const std::string& value)
 {
     std::string t = trim(value);
-    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
+    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c)
+                   { return static_cast<char>(std::tolower(c)); });
     return t == "true" || t == "1" || t == "\"true\"";
 }
 
@@ -1107,8 +1106,8 @@ static std::string build_config_cmake_build_type(const BuildConfig& buildConfig)
     return "Release";
 }
 
-static std::string build_config_asan_compile_flags(
-    const BuildConfig& buildConfig)
+static std::string
+build_config_asan_compile_flags(const BuildConfig& buildConfig)
 {
     if(!build_config_asan_enabled(buildConfig))
         return "";
@@ -1137,9 +1136,8 @@ find_opt_flag_in_fragments(const std::vector<std::string>& flags)
 static void remove_opt_flags(std::vector<std::string>& flags)
 {
     flags.erase(std::remove_if(flags.begin(), flags.end(),
-                               [](const std::string& flag) {
-                                   return is_opt_flag(trim(flag));
-                               }),
+                               [](const std::string& flag)
+                               { return is_opt_flag(trim(flag)); }),
                 flags.end());
 }
 
@@ -1150,20 +1148,18 @@ static void append_unique_flag(std::vector<std::string>& flags,
         flags.push_back(flag);
 }
 
-static void apply_asan_overrides(BuildConfig& buildConfig,
-                                 const std::string& contextLabel,
-                                 const std::optional<std::string>& cliOptFlag =
-                                     std::nullopt)
+static void apply_asan_overrides(
+    BuildConfig& buildConfig, const std::string& contextLabel,
+    const std::optional<std::string>& cliOptFlag = std::nullopt)
 {
     if(!buildConfig.asan.value_or(false))
         return;
 
     const std::optional<std::string> existingCompilerOpt =
         find_opt_flag_in_fragments(buildConfig.compilerFlags);
-    const std::string explicitOpt = cliOptFlag.has_value() &&
-                                            !cliOptFlag->empty()
-                                        ? *cliOptFlag
-                                        : buildConfig.optLevel;
+    const std::string explicitOpt =
+        cliOptFlag.has_value() && !cliOptFlag->empty() ? *cliOptFlag
+                                                       : buildConfig.optLevel;
     std::string warnedOpt;
     if(is_release_opt_flag(explicitOpt))
         warnedOpt = explicitOpt;
@@ -1173,8 +1169,8 @@ static void apply_asan_overrides(BuildConfig& buildConfig,
 
     if(!warnedOpt.empty())
     {
-        pkg_warn_line("warning: " + contextLabel + " requested release optimization " +
-                      warnedOpt +
+        pkg_warn_line("warning: " + contextLabel +
+                      " requested release optimization " + warnedOpt +
                       ", but --asan forces a debug-friendly build (-O0).");
     }
 
@@ -1187,11 +1183,11 @@ static void apply_asan_overrides(BuildConfig& buildConfig,
     append_unique_flag(buildConfig.linkerFlags, "-fno-omit-frame-pointer");
 }
 
-static std::filesystem::perms
-directory_perms_from_file_mode(unsigned int mode)
+static std::filesystem::perms directory_perms_from_file_mode(unsigned int mode)
 {
     std::filesystem::perms perms = std::filesystem::perms::none;
-    auto add_if = [&](bool enabled, std::filesystem::perms bit) {
+    auto add_if = [&](bool enabled, std::filesystem::perms bit)
+    {
         if(enabled)
             perms |= bit;
     };
@@ -1221,7 +1217,8 @@ directory_perms_from_file_mode(unsigned int mode)
 static std::filesystem::perms file_perms_from_mode(unsigned int mode)
 {
     std::filesystem::perms perms = std::filesystem::perms::none;
-    auto add_if = [&](bool enabled, std::filesystem::perms bit) {
+    auto add_if = [&](bool enabled, std::filesystem::perms bit)
+    {
         if(enabled)
             perms |= bit;
     };
@@ -1237,8 +1234,8 @@ static std::filesystem::perms file_perms_from_mode(unsigned int mode)
     return perms;
 }
 
-static bool apply_recursive_permissions(
-    const std::filesystem::path& path, unsigned int mode, std::string& error)
+static bool apply_recursive_permissions(const std::filesystem::path& path,
+                                        unsigned int mode, std::string& error)
 {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -1250,7 +1247,8 @@ static bool apply_recursive_permissions(
 
     const fs::perms filePerms = file_perms_from_mode(mode);
     const fs::perms dirPerms = directory_perms_from_file_mode(mode);
-    auto apply_one = [&](const fs::path& current) -> bool {
+    auto apply_one = [&](const fs::path& current) -> bool
+    {
         std::error_code statusEc;
         const fs::file_status status = fs::symlink_status(current, statusEc);
         if(statusEc)
@@ -1261,8 +1259,7 @@ static bool apply_recursive_permissions(
         }
         if(fs::is_symlink(status))
             return true;
-        const fs::perms perms =
-            fs::is_directory(status) ? dirPerms : filePerms;
+        const fs::perms perms = fs::is_directory(status) ? dirPerms : filePerms;
         std::error_code permsEc;
         fs::permissions(current, perms, fs::perm_options::replace, permsEc);
         if(permsEc)
@@ -1316,8 +1313,7 @@ task_names_for_phases(const std::vector<TaskSpec>& tasks,
     {
         std::string effectivePhase = task.phase;
         auto hostIt = task.hostOverrides.find(hostName);
-        if(hostIt != task.hostOverrides.end() &&
-           !hostIt->second.phase.empty())
+        if(hostIt != task.hostOverrides.end() && !hostIt->second.phase.empty())
         {
             effectivePhase = hostIt->second.phase;
         }
@@ -1340,8 +1336,7 @@ task_roots_for_phase(const std::vector<TaskSpec>& tasks,
                      const std::vector<std::string>& fallbackNames = {})
 {
     std::vector<std::string> roots =
-        task_names_for_phases(tasks, std::vector<std::string> { phase },
-                              hostName);
+        task_names_for_phases(tasks, std::vector<std::string>{phase}, hostName);
     if(roots.empty())
     {
         for(const auto& fallback : fallbackNames)
@@ -1361,40 +1356,44 @@ static void print_pkg_usage(const std::string& programName)
     const std::string tool = programName.empty() ? "mlang" : programName;
     std::cerr
         << "Usage: " << tool
-        << " pkg [--config FILE] <init|add|fetch|build|run|clean> [options...]\n"
+        << " pkg [--config FILE] <init|add|fetch|build|run|clean> "
+           "[options...]\n"
         << "       " << tool
         << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
-        << "       " << tool
-        << " pkg [--tasks] [--color] <manifest.toml>...\n"
+        << "       " << tool << " pkg [--tasks] [--color] <manifest.toml>...\n"
         << "\nNote: --config, --tasks, --color and per-subcommand flags may\n"
         << "appear in any order. `--color` alone implies task-tree output.\n"
         << "\nCommands:\n"
         << "  " << tool << " pkg init\n"
         << "      Scaffold mlang.toml and src/main.mla in the current dir.\n"
         << "  " << tool
-        << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] [--submodules]\n"
+        << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] "
+           "[--submodules]\n"
         << "  " << tool
-        << " pkg add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
+        << " pkg add <name> --url URL [--archive tar.gz] [--strip-components "
+           "N] [--subdir DIR]\n"
+        << "  " << tool << " pkg add <name> [--pkg-config NAME] [--system]\n"
         << "  " << tool
-        << " pkg add <name> [--pkg-config NAME] [--system]\n"
-        << "  " << tool
-        << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n"
+        << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir "
+           "DIR]\n"
         << "      Append a dependency entry to the manifest.\n"
         << "  " << tool
         << " pkg fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
-        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log "
+           "FILE]\n"
         << "           [--task-print-to-stdout-log]\n"
         << "      Fetch dependencies without building.\n"
         << "  " << tool
         << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]\n"
         << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
-        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log "
+           "FILE]\n"
         << "           [--task-print-to-stdout-log]\n"
         << "      Build all configured targets.\n"
-        << "  " << tool
-        << " pkg run <task> [--tasks] [--color] [--asan]\n"
+        << "  " << tool << " pkg run <task> [--tasks] [--color] [--asan]\n"
         << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
-        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log "
+           "FILE]\n"
         << "           [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
         << "      Run a named task (fetches dependencies first if needed).\n"
         << "      With --tasks, print the dependency/execution tree instead.\n"
@@ -1402,15 +1401,16 @@ static void print_pkg_usage(const std::string& programName)
         << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
         << "      Compile and execute phase=\"test\" tasks in the given\n"
         << "      manifests. With --tasks, print the test-task tree instead.\n"
-        << "  " << tool
-        << " pkg [--tasks] [--color] <manifest.toml>...\n"
+        << "  " << tool << " pkg [--tasks] [--color] <manifest.toml>...\n"
         << "      Show runnable task entrypoints for one or more manifests\n"
         << "      (no commands are executed).\n"
         << "  " << tool
         << " pkg clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
-        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log "
+           "FILE]\n"
         << "           [--task-print-to-stdout-log] [--deps]\n"
-        << "      Remove build artifacts (add --deps to also remove fetched deps).\n"
+        << "      Remove build artifacts (add --deps to also remove fetched "
+           "deps).\n"
         << "\nWorkflows:\n"
         << "  Separate:   " << tool << " pkg fetch ; " << tool
         << " pkg build ; " << tool << " pkg run <task>\n"
@@ -1420,13 +1420,15 @@ static void print_pkg_usage(const std::string& programName)
         << "  cd examples/package_manager_vst3_coreaudio_synth && \\\n"
         << "      ../../build/mlang pkg run preview-square --tasks --color\n"
         << "  " << tool
-        << " pkg examples/package_manager_vst3_coreaudio_synth/mlang.toml --tasks --color\n"
+        << " pkg examples/package_manager_vst3_coreaudio_synth/mlang.toml "
+           "--tasks --color\n"
         << "  " << tool
         << " pkg --color tests/mla_tests.toml            # implies --tasks\n"
         << "  " << tool
         << " pkg fetch --config examples/foo/mlang.toml  # --config anywhere\n"
         << "  " << tool
-        << " pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin\n";
+        << " pkg --config bootstrap/mlang.toml run build-and-install --option "
+           "install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin\n";
 }
 
 static BuildConfig merge_build_config(const BuildConfig& base,
@@ -1447,7 +1449,8 @@ static BuildConfig merge_build_config(const BuildConfig& base,
         out.buildDir = overrideCfg.buildDir;
     if(!overrideCfg.depsDir.empty())
         out.depsDir = overrideCfg.depsDir;
-    out.pathEntries.insert(out.pathEntries.end(), overrideCfg.pathEntries.begin(),
+    out.pathEntries.insert(out.pathEntries.end(),
+                           overrideCfg.pathEntries.begin(),
                            overrideCfg.pathEntries.end());
     out.compilerFlags.insert(out.compilerFlags.end(),
                              overrideCfg.compilerFlags.begin(),
@@ -1573,9 +1576,10 @@ static BuildConfig parse_build_config(const std::string& content)
     return cfg;
 }
 
-static std::filesystem::path resolve_package_path(
-    const std::filesystem::path& packageDir, const std::string& configured,
-    const std::filesystem::path& fallback)
+static std::filesystem::path
+resolve_package_path(const std::filesystem::path& packageDir,
+                     const std::string& configured,
+                     const std::filesystem::path& fallback)
 {
     std::filesystem::path path =
         configured.empty() ? fallback : std::filesystem::path(configured);
@@ -1584,14 +1588,16 @@ static std::filesystem::path resolve_package_path(
     return path.lexically_normal();
 }
 
-static std::filesystem::path package_build_dir(const std::filesystem::path& packageDir,
-                                               const BuildConfig& config)
+static std::filesystem::path
+package_build_dir(const std::filesystem::path& packageDir,
+                  const BuildConfig& config)
 {
     return resolve_package_path(packageDir, config.buildDir, "build");
 }
 
-static std::filesystem::path package_deps_dir(const std::filesystem::path& packageDir,
-                                              const BuildConfig& config)
+static std::filesystem::path
+package_deps_dir(const std::filesystem::path& packageDir,
+                 const BuildConfig& config)
 {
     if(!config.depsDir.empty())
         return resolve_package_path(packageDir, config.depsDir, "build/deps");
@@ -1613,16 +1619,17 @@ static PackageLogState& current_package_log_state()
     return state;
 }
 
-static std::optional<std::filesystem::path> resolve_log_path(
-    const std::filesystem::path& packageDir, const BuildConfig& config,
-    const std::string& configured, const char* defaultName = nullptr)
+static std::optional<std::filesystem::path>
+resolve_log_path(const std::filesystem::path& packageDir,
+                 const BuildConfig& config, const std::string& configured,
+                 const char* defaultName = nullptr)
 {
     if(configured.empty() && defaultName == nullptr)
         return std::nullopt;
 
-    std::filesystem::path path =
-        configured.empty() ? std::filesystem::path(defaultName)
-                           : std::filesystem::path(configured);
+    std::filesystem::path path = configured.empty()
+                                     ? std::filesystem::path(defaultName)
+                                     : std::filesystem::path(configured);
     if(path.is_absolute())
         return path.lexically_normal();
 
@@ -1631,22 +1638,26 @@ static std::optional<std::filesystem::path> resolve_log_path(
     return (packageDir / path).lexically_normal();
 }
 
-static PackageLogState make_package_log_state(const std::filesystem::path& packageDir,
-                                              const BuildConfig& config)
+static PackageLogState
+make_package_log_state(const std::filesystem::path& packageDir,
+                       const BuildConfig& config)
 {
     PackageLogState state;
     if(!config.enableLogs)
         return state;
 
-    const char* defaultStdoutLog = config.logDir.empty() ? nullptr : "pkg.stdout.log";
-    const char* defaultStderrLog = config.logDir.empty() ? nullptr : "pkg.stderr.log";
-    const char* defaultWarnLog = config.logDir.empty() ? nullptr : "pkg.warn.log";
+    const char* defaultStdoutLog =
+        config.logDir.empty() ? nullptr : "pkg.stdout.log";
+    const char* defaultStderrLog =
+        config.logDir.empty() ? nullptr : "pkg.stderr.log";
+    const char* defaultWarnLog =
+        config.logDir.empty() ? nullptr : "pkg.warn.log";
     state.stdoutLog = resolve_log_path(packageDir, config, config.stdoutLog,
                                        defaultStdoutLog);
     state.stderrLog = resolve_log_path(packageDir, config, config.stderrLog,
                                        defaultStderrLog);
-    state.warnLog = resolve_log_path(packageDir, config, config.warnLog,
-                                     defaultWarnLog);
+    state.warnLog =
+        resolve_log_path(packageDir, config, config.warnLog, defaultWarnLog);
     state.taskPrintToStdoutLog = config.taskPrintToStdoutLog.value_or(false);
     state.logsEnabled = true;
     return state;
@@ -1673,8 +1684,9 @@ static void append_log_line(const std::optional<std::filesystem::path>& path,
 
 class ScopedPackageLogState
 {
-  public:
-    explicit ScopedPackageLogState(PackageLogState next) : previous_(current_package_log_state())
+public:
+    explicit ScopedPackageLogState(PackageLogState next)
+        : previous_(current_package_log_state())
     {
         current_package_log_state() = std::move(next);
     }
@@ -1684,7 +1696,7 @@ class ScopedPackageLogState
         current_package_log_state() = previous_;
     }
 
-  private:
+private:
     PackageLogState previous_;
 };
 
@@ -1721,7 +1733,8 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
     std::vector<BuildTarget> targets;
     std::optional<BuildTarget> current;
 
-    auto flush_current = [&]() {
+    auto flush_current = [&]()
+    {
         if(current.has_value())
             targets.push_back(*current);
         current.reset();
@@ -1735,7 +1748,7 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
         if(t == "[[bin]]")
         {
             flush_current();
-            current = BuildTarget {};
+            current = BuildTarget{};
             continue;
         }
         if(t.front() == '[' && t.back() == ']')
@@ -1776,7 +1789,8 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
     std::optional<TaskSpec> current;
     std::string currentHostSection;
 
-    auto flush_current = [&]() {
+    auto flush_current = [&]()
+    {
         if(current.has_value())
             tasks.push_back(*current);
         current.reset();
@@ -1791,14 +1805,13 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         if(t == "[[task]]")
         {
             flush_current();
-            current = TaskSpec {};
+            current = TaskSpec{};
             continue;
         }
         if(t.front() == '[' && t.back() == ']')
         {
             std::string section = t.substr(1, t.size() - 2);
-            if(current.has_value() &&
-               section.rfind("task.host.", 0) == 0 &&
+            if(current.has_value() && section.rfind("task.host.", 0) == 0 &&
                section.size() > std::string("task.host.").size())
             {
                 currentHostSection =
@@ -1823,7 +1836,8 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         const std::string& value = assignment->value;
 
         auto apply_common_task_kv = [&](auto& target, TaskTomlKey taskKeyKind,
-                                        const std::string& taskValue) {
+                                        const std::string& taskValue)
+        {
             switch(taskKeyKind)
             {
             case TaskTomlKey::Message:
@@ -1872,8 +1886,7 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                 append_toml_string_list_value(taskValue, target.dependsOn);
                 break;
             case TaskTomlKey::PhaseDependsOn:
-                append_toml_string_list_value(taskValue,
-                                              target.phaseDependsOn);
+                append_toml_string_list_value(taskValue, target.phaseDependsOn);
                 break;
             case TaskTomlKey::JoinOn:
                 append_toml_string_list_value(taskValue, target.joinOn);
@@ -1887,7 +1900,8 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             case TaskTomlKey::NextPhases:
                 append_toml_string_list_value(taskValue, target.nextPhases);
                 break;
-            case TaskTomlKey::Command: {
+            case TaskTomlKey::Command:
+            {
                 append_toml_command_value(taskValue, target.commands);
                 break;
             }
@@ -1930,7 +1944,8 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         };
 
         auto apply_task_kv = [&](TaskSpec& task, const std::string& taskKey,
-                                 const std::string& taskValue) {
+                                 const std::string& taskValue)
+        {
             const auto taskKeyKind = find_enum_key(taskKey, kTaskTomlKeys);
             if(!taskKeyKind.has_value())
                 return;
@@ -1944,7 +1959,8 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
 
         auto apply_override_kv = [&](TaskSpec::HostOverride& ov,
                                      const std::string& taskKey,
-                                     const std::string& taskValue) {
+                                     const std::string& taskValue)
+        {
             const auto taskKeyKind = find_enum_key(taskKey, kTaskTomlKeys);
             if(!taskKeyKind.has_value() || *taskKeyKind == TaskTomlKey::Name)
                 return;
@@ -2070,8 +2086,8 @@ struct LinkFlags
     std::vector<std::string> staticArchives;
 };
 
-static std::filesystem::path dep_source_dir(const std::filesystem::path& depsDir,
-                                            const DepSpec& dep);
+static std::filesystem::path
+dep_source_dir(const std::filesystem::path& depsDir, const DepSpec& dep);
 
 static std::vector<std::string> split_csv(std::string_view input)
 {
@@ -2318,8 +2334,8 @@ static std::string unquote_preserve(std::string_view v)
     return t;
 }
 
-static std::optional<std::string> parse_toml_command_tokens(
-    const std::string& value)
+static std::optional<std::string>
+parse_toml_command_tokens(const std::string& value)
 {
     std::string t = trim(value);
     if(t.empty() || t.front() != '[' || t.back() != ']')
@@ -2381,8 +2397,9 @@ static void append_toml_commands_value(const std::string& value,
     append_toml_command_value(t, out);
 }
 
-static void append_toml_string_list_value_preserve(const std::string& value,
-                                                   std::vector<std::string>& out)
+static void
+append_toml_string_list_value_preserve(const std::string& value,
+                                       std::vector<std::string>& out)
 {
     std::string t = trim(value);
     if(t.empty())
@@ -2403,8 +2420,8 @@ static void append_toml_string_list_value_preserve(const std::string& value,
         out.push_back(v);
 }
 
-static std::map<std::string, std::string> parse_inline_table(
-    const std::string& line)
+static std::map<std::string, std::string>
+parse_inline_table(const std::string& line)
 {
     std::map<std::string, std::string> kv;
     size_t l = line.find('{');
@@ -2511,8 +2528,8 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
     return deps;
 }
 
-static std::vector<std::string> parse_workspace_members(
-    const std::string& content)
+static std::vector<std::string>
+parse_workspace_members(const std::string& content)
 {
     std::istringstream in(content);
     std::string line;
@@ -2541,8 +2558,8 @@ static std::vector<std::string> parse_workspace_members(
             return out;
         if(value.front() == '[' && value.back() == ']')
         {
-            for(const auto& part : split_toml_array(
-                    value.substr(1, value.size() - 2)))
+            for(const auto& part :
+                split_toml_array(value.substr(1, value.size() - 2)))
             {
                 std::string v = unquote(part);
                 if(!v.empty())
@@ -2603,15 +2620,11 @@ static bool write_text_file_if_missing(const std::filesystem::path& path,
     return true;
 }
 
-static std::string make_dependency_manifest_line(const std::string& name,
-                                                 const std::string& gitUrl,
-                                                 const std::string& archiveUrl,
-                                                 const std::string& archiveType,
-                                                 const std::string& rev,
-                                                 const std::string& tag,
-                                                 bool gitSubmodules,
-                                                 const std::string& depSubdir,
-                                                 int stripComponents)
+static std::string make_dependency_manifest_line(
+    const std::string& name, const std::string& gitUrl,
+    const std::string& archiveUrl, const std::string& archiveType,
+    const std::string& rev, const std::string& tag, bool gitSubmodules,
+    const std::string& depSubdir, int stripComponents)
 {
     std::string line;
     if(!archiveUrl.empty())
@@ -2659,7 +2672,8 @@ static std::string relative_path_string(const std::filesystem::path& fromDir,
 static std::string package_stub_source(const std::string& depName)
 {
     return "fn main() {\n"
-           "    println!(\"" + depName +
+           "    println!(\"" +
+           depName +
            " subproject scaffold ready\");\n"
            "}\n";
 }
@@ -2673,8 +2687,8 @@ static bool ensure_package_entry_stub(const std::filesystem::path& manifestPath,
         return true;
 
     std::string entry = "src/main.mla";
-    if(auto entryOpt = find_section_toml_string(manifestContent, "package",
-                                                "entry");
+    if(auto entryOpt =
+           find_section_toml_string(manifestContent, "package", "entry");
        entryOpt.has_value() && !entryOpt->empty())
     {
         entry = *entryOpt;
@@ -2707,12 +2721,10 @@ static bool task_list_contains_name(const std::vector<TaskSpec>& tasks,
     return false;
 }
 
-static bool scaffold_added_package(const std::filesystem::path& rootManifestPath,
-                                   const std::filesystem::path& packageDir,
-                                   const std::string& packageName,
-                                   const std::string& depLine,
-                                   const std::string& depName,
-                                   std::string& error)
+static bool scaffold_added_package(
+    const std::filesystem::path& rootManifestPath,
+    const std::filesystem::path& packageDir, const std::string& packageName,
+    const std::string& depLine, const std::string& depName, std::string& error)
 {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -2760,8 +2772,8 @@ static bool scaffold_added_package(const std::filesystem::path& rootManifestPath
     std::ofstream out(packageManifest, std::ios::binary | std::ios::trunc);
     if(!out)
     {
-        error = "Failed to write subproject manifest: " +
-                packageManifest.string();
+        error =
+            "Failed to write subproject manifest: " + packageManifest.string();
         return false;
     }
     out << packageContent;
@@ -2834,9 +2846,8 @@ static void scan_lib_dir(const std::filesystem::path& dir,
     }
 }
 
-static LinkFlags collect_dep_link_flags(
-    const std::vector<DepSpec>& deps,
-    const std::filesystem::path& depsDir)
+static LinkFlags collect_dep_link_flags(const std::vector<DepSpec>& deps,
+                                        const std::filesystem::path& depsDir)
 {
     std::unordered_set<std::string> libDirs;
     std::unordered_set<std::string> libs;
@@ -2865,9 +2876,9 @@ struct PackageManifest
     std::string content;
 };
 
-static std::vector<std::filesystem::path> discover_workspace_manifests(
-    const std::filesystem::path& manifestPath,
-    const std::string& content)
+static std::vector<std::filesystem::path>
+discover_workspace_manifests(const std::filesystem::path& manifestPath,
+                             const std::string& content)
 {
     namespace fs = std::filesystem;
     std::vector<std::filesystem::path> out;
@@ -2881,9 +2892,8 @@ static std::vector<std::filesystem::path> discover_workspace_manifests(
         std::error_code ec;
         if(fs::is_regular_file(base, ec))
         {
-            fs::path candidate = base.filename() == "mlang.toml"
-                                     ? base
-                                     : (base / "mlang.toml");
+            fs::path candidate =
+                base.filename() == "mlang.toml" ? base : (base / "mlang.toml");
             if(fs::exists(candidate, ec))
             {
                 std::string key = candidate.lexically_normal().string();
@@ -2919,8 +2929,8 @@ static std::vector<std::filesystem::path> discover_workspace_manifests(
     return out;
 }
 
-static std::vector<PackageManifest> collect_target_manifests(
-    const std::filesystem::path& manifestPath)
+static std::vector<PackageManifest>
+collect_target_manifests(const std::filesystem::path& manifestPath)
 {
     namespace fs = std::filesystem;
     std::vector<PackageManifest> out;
@@ -2935,8 +2945,8 @@ static std::vector<PackageManifest> collect_target_manifests(
 
     if(has_section(content, "package"))
     {
-        out.push_back(PackageManifest { manifestAbs, manifestAbs.parent_path(),
-                                        content });
+        out.push_back(
+            PackageManifest{manifestAbs, manifestAbs.parent_path(), content});
     }
     for(const auto& child : discover_workspace_manifests(manifestAbs, content))
     {
@@ -2948,8 +2958,8 @@ static std::vector<PackageManifest> collect_target_manifests(
                                  std::istreambuf_iterator<char>());
         if(childContent.empty() || !has_section(childContent, "package"))
             continue;
-        out.push_back(PackageManifest { childAbs, childAbs.parent_path(),
-                                        childContent });
+        out.push_back(
+            PackageManifest{childAbs, childAbs.parent_path(), childContent});
     }
     return out;
 }
@@ -2978,33 +2988,37 @@ static int run_command(const std::string& cmd, bool logCommand = true,
                        bool logChildOutput = true)
 {
     pkg_info_line(cmd, logCommand);
-    return std::system(command_with_log_redirection(cmd, logChildOutput).c_str());
+    return std::system(
+        command_with_log_redirection(cmd, logChildOutput).c_str());
 }
 
 class ProgressSpinner
 {
-  public:
+public:
     explicit ProgressSpinner(std::string label) : label_(std::move(label))
     {
         hideCursor_ = ::isatty(fileno(stderr)) != 0;
         if(hideCursor_)
             std::cerr << "\033[?25l" << std::flush;
-        worker_ = std::thread([this]() {
-            static constexpr char frames[] = { '|', '/', '-', '\\' };
-            size_t idx = 0;
-            while(!done_.load())
+        worker_ = std::thread(
+            [this]()
             {
-                std::string detail;
+                static constexpr char frames[] = {'|', '/', '-', '\\'};
+                size_t idx = 0;
+                while(!done_.load())
                 {
-                    std::lock_guard<std::mutex> lock(detailMutex_);
-                    detail = detail_;
+                    std::string detail;
+                    {
+                        std::lock_guard<std::mutex> lock(detailMutex_);
+                        detail = detail_;
+                    }
+                    std::cerr << "\r\033[2K"
+                              << live_line(frames[idx % 4], detail)
+                              << std::flush;
+                    idx++;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(120));
                 }
-                std::cerr << "\r\033[2K"
-                          << live_line(frames[idx % 4], detail) << std::flush;
-                idx++;
-                std::this_thread::sleep_for(std::chrono::milliseconds(120));
-            }
-        });
+            });
     }
 
     ~ProgressSpinner()
@@ -3034,7 +3048,7 @@ class ProgressSpinner
         detail_ = sanitize_progress_output(std::move(detail));
     }
 
-  private:
+private:
     std::string live_line(char frame, const std::string& detail) const
     {
         if(!label_.empty() && label_.front() == '[')
@@ -3066,15 +3080,14 @@ class ProgressSpinner
     std::string label_;
     std::string detail_;
     std::mutex detailMutex_;
-    std::atomic<bool> done_ { false };
+    std::atomic<bool> done_{false};
     std::thread worker_;
     bool stopped_ = false;
     bool hideCursor_ = false;
 };
 
 static int run_progress_command(const std::string& label,
-                                const std::string& cmd,
-                                bool logCommand = true,
+                                const std::string& cmd, bool logCommand = true,
                                 bool logChildOutput = true)
 {
     const auto start = std::chrono::steady_clock::now();
@@ -3083,7 +3096,8 @@ static int run_progress_command(const std::string& label,
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start);
     std::string suffix;
-    if(label.size() > 4 && label.front() == '[' && label.find('/') != std::string::npos &&
+    if(label.size() > 4 && label.front() == '[' &&
+       label.find('/') != std::string::npos &&
        label.find(']') != std::string::npos)
     {
         if(rc == 0)
@@ -3106,8 +3120,7 @@ static int run_progress_command(const std::string& label,
 }
 
 static int run_status_command(const std::string& label, const std::string& cmd,
-                              bool useSpinner,
-                              bool logCommand = true,
+                              bool useSpinner, bool logCommand = true,
                               bool logChildOutput = true)
 {
     if(useSpinner && !pkg_logs_active())
@@ -3117,12 +3130,13 @@ static int run_status_command(const std::string& label, const std::string& cmd,
     int rc = run_command(cmd, logCommand, logChildOutput);
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start);
-    if(label.size() > 4 && label.front() == '[' && label.find('/') != std::string::npos &&
+    if(label.size() > 4 && label.front() == '[' &&
+       label.find('/') != std::string::npos &&
        label.find(']') != std::string::npos && rc == 0)
     {
         const size_t close = label.find(']');
-        std::cerr << label.substr(0, close + 1) << " Completed: "
-                  << trim(label.substr(close + 1)) << " - "
+        std::cerr << label.substr(0, close + 1)
+                  << " Completed: " << trim(label.substr(close + 1)) << " - "
                   << format_task_elapsed(elapsed) << std::endl;
     }
     else
@@ -3173,8 +3187,9 @@ static std::string join_path_entries(const std::vector<std::string>& entries)
     return out;
 }
 
-static std::string command_with_path_entries(const std::string& cmd,
-                                             const std::vector<std::string>& entries)
+static std::string
+command_with_path_entries(const std::string& cmd,
+                          const std::vector<std::string>& entries)
 {
     const std::string joined = join_path_entries(entries);
     if(joined.empty())
@@ -3199,19 +3214,19 @@ static int run_command_with_paths(const std::string& cmd,
     return run_command(command_with_path_entries(cmd, entries));
 }
 
-static int run_progress_command_with_paths(const std::string& label,
-                                           const std::string& cmd,
-                                           const std::vector<std::string>& entries)
+static int
+run_progress_command_with_paths(const std::string& label,
+                                const std::string& cmd,
+                                const std::vector<std::string>& entries)
 {
     return run_progress_command(label, command_with_path_entries(cmd, entries));
 }
 
-static int run_status_command_with_paths(const std::string& label,
-                                         const std::string& cmd,
-                                         const std::vector<std::string>& entries,
-                                         bool useSpinner,
-                                         bool logCommand = true,
-                                         bool logChildOutput = true)
+static int
+run_status_command_with_paths(const std::string& label, const std::string& cmd,
+                              const std::vector<std::string>& entries,
+                              bool useSpinner, bool logCommand = true,
+                              bool logChildOutput = true)
 {
     return run_status_command(label, command_with_path_entries(cmd, entries),
                               useSpinner, logCommand, logChildOutput);
@@ -3223,11 +3238,10 @@ static int run_command_in_dir(const std::filesystem::path& dir,
     return run_command("cd " + shell_quote(dir.string()) + " && " + cmd);
 }
 
-static int run_command_in_dir_with_paths(const std::filesystem::path& dir,
-                                         const std::string& cmd,
-                                         const std::vector<std::string>& entries,
-                                         bool logCommand = true,
-                                         bool logChildOutput = true)
+static int run_command_in_dir_with_paths(
+    const std::filesystem::path& dir, const std::string& cmd,
+    const std::vector<std::string>& entries, bool logCommand = true,
+    bool logChildOutput = true)
 {
     return run_command("cd " + shell_quote(dir.string()) + " && " +
                            command_with_path_entries(cmd, entries),
@@ -3238,16 +3252,15 @@ static int run_progress_command_in_dir_with_paths(
     const std::string& label, const std::filesystem::path& dir,
     const std::string& cmd, const std::vector<std::string>& entries)
 {
-    return run_progress_command(label, "cd " + shell_quote(dir.string()) +
-                                           " && " +
-                                           command_with_path_entries(cmd, entries));
+    return run_progress_command(label,
+                                "cd " + shell_quote(dir.string()) + " && " +
+                                    command_with_path_entries(cmd, entries));
 }
 
 static int run_status_command_in_dir_with_paths(
     const std::string& label, const std::filesystem::path& dir,
     const std::string& cmd, const std::vector<std::string>& entries,
-    bool useSpinner, bool logCommand = true,
-    bool logChildOutput = true)
+    bool useSpinner, bool logCommand = true, bool logChildOutput = true)
 {
     return run_status_command(label,
                               "cd " + shell_quote(dir.string()) + " && " +
@@ -3318,8 +3331,7 @@ static std::vector<std::string> split_shell_tokens(std::string_view input)
     return out;
 }
 
-static void append_shell_fragment(std::string& cmd,
-                                  const std::string& fragment)
+static void append_shell_fragment(std::string& cmd, const std::string& fragment)
 {
     const auto tokens = split_shell_tokens(fragment);
     if(tokens.empty())
@@ -3331,14 +3343,14 @@ static void append_shell_fragment(std::string& cmd,
         cmd += " " + shell_quote(token);
 }
 
-static std::filesystem::path dep_checkout_dir(
-    const std::filesystem::path& depsDir, const DepSpec& dep)
+static std::filesystem::path
+dep_checkout_dir(const std::filesystem::path& depsDir, const DepSpec& dep)
 {
     return depsDir / dep.name;
 }
 
-static std::filesystem::path dep_source_dir(const std::filesystem::path& depsDir,
-                                            const DepSpec& dep)
+static std::filesystem::path
+dep_source_dir(const std::filesystem::path& depsDir, const DepSpec& dep)
 {
     std::filesystem::path path = dep_checkout_dir(depsDir, dep);
     if(!dep.subdir.empty())
@@ -3349,7 +3361,7 @@ static std::filesystem::path dep_source_dir(const std::filesystem::path& depsDir
 struct ExecutionProgressState
 {
     size_t totalSteps = 0;
-    std::atomic<size_t> nextStep { 1 };
+    std::atomic<size_t> nextStep{1};
     bool active = false;
 };
 
@@ -3361,7 +3373,7 @@ static ExecutionProgressState& current_execution_progress_state()
 
 class ScopedExecutionProgressState
 {
-  public:
+public:
     explicit ScopedExecutionProgressState(size_t totalSteps)
     {
         auto& current = current_execution_progress_state();
@@ -3381,7 +3393,7 @@ class ScopedExecutionProgressState
         current.active = previousActive_;
     }
 
-  private:
+private:
     size_t previousTotalSteps_ = 0;
     size_t previousNextStep_ = 1;
     bool previousActive_ = false;
@@ -3453,18 +3465,19 @@ static int fetch_git_dep(const DepSpec& dep,
         if(run_status_command_with_paths(
                execution_step_label("Fetching git dependency '" + dep.name +
                                     "' from " + dep.git),
-                                         cloneCmd, pathEntries, dep.spinner,
-                                         dep.spinner, dep.spinner) != 0)
+               cloneCmd, pathEntries, dep.spinner, dep.spinner,
+               dep.spinner) != 0)
             return 1;
     }
     else if(updateExisting)
     {
-        std::string fetchCmd = "git -C " + shell_quote(path.string()) +
-                               " fetch --all --tags";
+        std::string fetchCmd =
+            "git -C " + shell_quote(path.string()) + " fetch --all --tags";
         if(run_status_command_with_paths(
-               execution_step_label("Updating git dependency '" + dep.name + "'"),
-                                         fetchCmd, pathEntries, dep.spinner,
-                                         dep.spinner, dep.spinner) != 0)
+               execution_step_label("Updating git dependency '" + dep.name +
+                                    "'"),
+               fetchCmd, pathEntries, dep.spinner, dep.spinner,
+               dep.spinner) != 0)
             return 1;
     }
 
@@ -3490,20 +3503,19 @@ static int fetch_git_dep(const DepSpec& dep,
         if(run_status_command_with_paths(
                execution_step_label("Checking out '" + dep.name +
                                     "' revision " + dep.rev),
-                                         checkout, pathEntries, dep.spinner,
-                                         dep.spinner, dep.spinner) != 0)
+               checkout, pathEntries, dep.spinner, dep.spinner,
+               dep.spinner) != 0)
             return 1;
     }
     else if(!dep.tag.empty())
     {
         std::string checkout = "git -C " + shell_quote(path.string()) +
-                               " checkout " +
-                               shell_quote("tags/" + dep.tag);
+                               " checkout " + shell_quote("tags/" + dep.tag);
         if(run_status_command_with_paths(
                execution_step_label("Checking out '" + dep.name + "' tag " +
                                     dep.tag),
-                                         checkout, pathEntries, dep.spinner,
-                                         dep.spinner, dep.spinner) != 0)
+               checkout, pathEntries, dep.spinner, dep.spinner,
+               dep.spinner) != 0)
             return 1;
     }
     return 0;
@@ -3555,23 +3567,21 @@ static int fetch_archive_dep(const DepSpec& dep,
     if(run_status_command_with_paths(
            execution_step_label("Downloading archive dependency '" + dep.name +
                                 "' from " + dep.url),
-                                     downloadCmd,
-                                     pathEntries, dep.spinner, dep.spinner,
-                                     dep.spinner) != 0)
+           downloadCmd, pathEntries, dep.spinner, dep.spinner,
+           dep.spinner) != 0)
         return 1;
 
     std::string extractCmd = "tar -xzf " + shell_quote(archivePath.string()) +
                              " -C " + shell_quote(extractDir.string());
     if(dep.stripComponents > 0)
     {
-        extractCmd += " --strip-components=" +
-                      std::to_string(dep.stripComponents);
+        extractCmd +=
+            " --strip-components=" + std::to_string(dep.stripComponents);
     }
     if(run_status_command_with_paths(
            execution_step_label("Unpacking " + archivePath.filename().string() +
                                 " into " + checkoutDir.string()),
-                                     extractCmd,
-                                     pathEntries, true, true, true) != 0)
+           extractCmd, pathEntries, true, true, true) != 0)
         return 1;
     std::filesystem::rename(extractDir, checkoutDir, ec);
     if(ec)
@@ -3598,8 +3608,7 @@ static int fetch_dep(const DepSpec& dep, const std::filesystem::path& depsDir,
 }
 
 static int build_git_dep(const DepSpec& dep,
-                         const std::filesystem::path& depsDir,
-                         bool useNinja,
+                         const std::filesystem::path& depsDir, bool useNinja,
                          const std::string& makeProgram,
                          const std::vector<std::string>& pathEntries)
 {
@@ -3630,17 +3639,15 @@ static int build_git_dep(const DepSpec& dep,
             }
         }
         if(run_status_command_with_paths(
-               execution_step_label("Configuring CMake dependency '" + dep.name +
-                                    "' in " + buildDir.string()),
-                                         cfg, pathEntries, dep.spinner,
-                                         dep.spinner, dep.spinner) != 0)
+               execution_step_label("Configuring CMake dependency '" +
+                                    dep.name + "' in " + buildDir.string()),
+               cfg, pathEntries, dep.spinner, dep.spinner, dep.spinner) != 0)
             return 1;
-        std::string build =
-            "cmake --build " + shell_quote(buildDir.string());
+        std::string build = "cmake --build " + shell_quote(buildDir.string());
         return run_status_command_with_paths(
-            execution_step_label("Building CMake dependency '" + dep.name + "'"),
-                                             build, pathEntries, dep.spinner,
-                                             dep.spinner, dep.spinner);
+            execution_step_label("Building CMake dependency '" + dep.name +
+                                 "'"),
+            build, pathEntries, dep.spinner, dep.spinner, dep.spinner);
     }
     if(dep.build == "meson")
     {
@@ -3652,29 +3659,26 @@ static int build_git_dep(const DepSpec& dep,
                                 shell_quote(path.string());
             if(run_status_command_with_paths(
                    execution_step_label("Configuring Meson dependency '" +
-                                        dep.name + "' in " +
-                                        buildDir.string()),
-                                             setup, pathEntries, dep.spinner,
-                                             dep.spinner, dep.spinner) != 0)
+                                        dep.name + "' in " + buildDir.string()),
+                   setup, pathEntries, dep.spinner, dep.spinner,
+                   dep.spinner) != 0)
                 return 1;
         }
         std::string compile =
             "meson compile -C " + shell_quote(buildDir.string());
         return run_status_command_with_paths(
-            execution_step_label("Building Meson dependency '" + dep.name + "'"),
-                                             compile, pathEntries, dep.spinner,
-                                             dep.spinner, dep.spinner);
+            execution_step_label("Building Meson dependency '" + dep.name +
+                                 "'"),
+            compile, pathEntries, dep.spinner, dep.spinner, dep.spinner);
     }
     if(dep.build == "make")
     {
         std::string effectiveMake = makeProgram.empty() ? "make" : makeProgram;
-        std::string cmd = shell_quote(effectiveMake) + " -C " +
-                          shell_quote(path.string());
+        std::string cmd =
+            shell_quote(effectiveMake) + " -C " + shell_quote(path.string());
         return run_status_command_with_paths(
             execution_step_label("Building make dependency '" + dep.name + "'"),
-                                             cmd,
-                                             pathEntries, dep.spinner,
-                                             dep.spinner, dep.spinner);
+            cmd, pathEntries, dep.spinner, dep.spinner, dep.spinner);
     }
 
     pkg_error_line("Unknown build system: " + dep.build);
@@ -3723,7 +3727,8 @@ static std::vector<CDepSpec> parse_c_deps(const std::string& content)
                 dep.pkgConfig = it->second;
                 dep.usePkgConfig = true;
             }
-            else if(auto it = kv.find("system"); it != kv.end() &&
+            else if(auto it = kv.find("system");
+                    it != kv.end() &&
                     (it->second == "true" || it->second == "1"))
             {
                 dep.pkgConfig = name;
@@ -3762,9 +3767,8 @@ static bool append_pkg_config_flags(const CDepSpec& dep,
 
 static bool ensure_ninja_available(const std::vector<std::string>& pathEntries)
 {
-    auto ninjaPath =
-        run_command_capture_with_paths("command -v ninja || command -v ninja-build",
-                                       pathEntries);
+    auto ninjaPath = run_command_capture_with_paths(
+        "command -v ninja || command -v ninja-build", pathEntries);
     if(ninjaPath.has_value() && !trim(*ninjaPath).empty())
         return true;
     std::cerr << "Ninja build requested, but neither 'ninja' nor 'ninja-build'"
@@ -3772,10 +3776,9 @@ static bool ensure_ninja_available(const std::vector<std::string>& pathEntries)
     return false;
 }
 
-static bool validate_declared_libraries(const std::filesystem::path& manifestPath,
-                                        const std::string& targetName,
-                                        const BuildConfig& buildConfig,
-                                        const LinkFlags& linkFlags)
+static bool validate_declared_libraries(
+    const std::filesystem::path& manifestPath, const std::string& targetName,
+    const BuildConfig& buildConfig, const LinkFlags& linkFlags)
 {
     if(buildConfig.libs.empty())
         return true;
@@ -3795,8 +3798,9 @@ static bool validate_declared_libraries(const std::filesystem::path& manifestPat
         std::ofstream out(srcPath, std::ios::binary);
         if(!out)
         {
-            std::cerr << "Failed to create temporary file for library validation"
-                      << " while checking " << manifestPath.string() << "\n";
+            std::cerr
+                << "Failed to create temporary file for library validation"
+                << " while checking " << manifestPath.string() << "\n";
             return false;
         }
         out << "int main(){return 0;}\n";
@@ -3840,9 +3844,10 @@ static bool validate_declared_libraries(const std::filesystem::path& manifestPat
     return true;
 }
 
-static int validate_mlang_version_requirement(const std::filesystem::path& manifestPath,
-                                              const BuildConfig& buildConfig,
-                                              const std::string& targetName)
+static int
+validate_mlang_version_requirement(const std::filesystem::path& manifestPath,
+                                   const BuildConfig& buildConfig,
+                                   const std::string& targetName)
 {
     if(buildConfig.minMlangVersion.empty())
         return 0;
@@ -3907,8 +3912,9 @@ static int fetch_for_manifest(const PackageManifest& pkg,
     return 0;
 }
 
-static std::string default_task_compiler_for_language(
-    std::string_view language, const BuildConfig& buildConfig)
+static std::string
+default_task_compiler_for_language(std::string_view language,
+                                   const BuildConfig& buildConfig)
 {
     if(language == "mlang")
     {
@@ -3935,20 +3941,21 @@ static std::optional<std::string> build_task_language_command(
         return std::nullopt;
     if(output.empty())
     {
-        error = "Task '" + taskName + "' in " + pkg.manifestPath.string() +
-                " is missing required 'output' for language-driven task execution.";
+        error =
+            "Task '" + taskName + "' in " + pkg.manifestPath.string() +
+            " is missing required 'output' for language-driven task execution.";
         return std::nullopt;
     }
     if(source.empty() && inputs.empty())
     {
-        error = "Task '" + taskName + "' in " + pkg.manifestPath.string() +
-                " needs 'source' or 'inputs' for language-driven task execution.";
+        error =
+            "Task '" + taskName + "' in " + pkg.manifestPath.string() +
+            " needs 'source' or 'inputs' for language-driven task execution.";
         return std::nullopt;
     }
 
-    if(!compileOnly &&
-       !validate_declared_libraries(pkg.manifestPath, taskName, taskBuildConfig,
-                                    linkFlags))
+    if(!compileOnly && !validate_declared_libraries(pkg.manifestPath, taskName,
+                                                    taskBuildConfig, linkFlags))
     {
         error = "";
         return std::nullopt;
@@ -4039,7 +4046,8 @@ static std::optional<std::string> build_task_language_command(
             for(const auto& dir : linkFlags.libDirs)
                 cmd += " -Wl,-rpath," + shell_quote(dir);
         }
-        if(language == "c++" && taskBuildConfig.staticCppRuntime.value_or(false))
+        if(language == "c++" &&
+           taskBuildConfig.staticCppRuntime.value_or(false))
             cmd += " -static-libstdc++ -static-libgcc";
         for(const auto& flag : taskBuildConfig.linkerFlags)
             append_shell_fragment(cmd, flag);
@@ -4049,9 +4057,9 @@ static std::optional<std::string> build_task_language_command(
     return cmd;
 }
 
-static int build_for_manifest(const PackageManifest& pkg, const std::string& argv0,
-                              const std::string& optFlagOverride,
-                              bool useNinja,
+static int build_for_manifest(const PackageManifest& pkg,
+                              const std::string& argv0,
+                              const std::string& optFlagOverride, bool useNinja,
                               const BuildConfig& packageBuildConfig)
 {
     const BuildConfig effectivePackageBuildConfig =
@@ -4101,15 +4109,15 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         targets.push_back(defaultTarget);
     }
 
-    bool effectiveUseNinja = useNinja || packageBuildConfig.useNinja.value_or(false);
+    bool effectiveUseNinja =
+        useNinja || packageBuildConfig.useNinja.value_or(false);
     const auto tasks = parse_task_specs(pkg.content);
     const std::string hostName = current_host_name();
     std::vector<std::string> buildTaskRoots;
     if(targets.empty())
     {
-        buildTaskRoots =
-            task_names_for_phases(tasks, std::vector<std::string> { "build" },
-                                  hostName);
+        buildTaskRoots = task_names_for_phases(
+            tasks, std::vector<std::string>{"build"}, hostName);
         if(buildTaskRoots.empty() && task_list_contains_name(tasks, "build"))
             buildTaskRoots.push_back("build");
     }
@@ -4117,12 +4125,12 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     {
         BuildConfig mergedConfig =
             merge_build_config(effectivePackageBuildConfig, target.config);
-        apply_asan_overrides(
-            mergedConfig,
-            "package target '" + target.name + "' in " +
-                pkg.manifestPath.string(),
-            optFlagOverride.empty() ? std::nullopt
-                                    : std::optional<std::string>(optFlagOverride));
+        apply_asan_overrides(mergedConfig,
+                             "package target '" + target.name + "' in " +
+                                 pkg.manifestPath.string(),
+                             optFlagOverride.empty()
+                                 ? std::nullopt
+                                 : std::optional<std::string>(optFlagOverride));
         mergedConfig = materialize_build_config_for_package(pkg, mergedConfig);
         if(mergedConfig.useNinja.value_or(false))
             effectiveUseNinja = true;
@@ -4141,13 +4149,15 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     std::filesystem::create_directories(depsDir);
     size_t totalSteps = 0;
     for(const auto& dep : deps)
-        totalSteps += count_fetch_dep_steps(dep, depsDir, /*updateExisting=*/false);
+        totalSteps +=
+            count_fetch_dep_steps(dep, depsDir, /*updateExisting=*/false);
     for(const auto& dep : deps)
         totalSteps += count_build_dep_steps(dep, depsDir);
     if(!targets.empty())
         totalSteps += targets.size();
     else
-        totalSteps += count_reachable_task_steps(tasks, hostName, buildTaskRoots);
+        totalSteps +=
+            count_reachable_task_steps(tasks, hostName, buildTaskRoots);
     ScopedExecutionProgressState scopedProgress(totalSteps);
     for(const auto& dep : deps)
     {
@@ -4178,14 +4188,16 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         {
             for(const auto& taskName : buildTaskRoots)
             {
-                if(run_task_for_manifest(pkg, taskName, effectivePackageBuildConfig) != 0)
+                if(run_task_for_manifest(pkg, taskName,
+                                         effectivePackageBuildConfig) != 0)
                     return 1;
             }
             return 0;
         }
 
         pkg_error_line("No package entry, [[bin]] targets, or phase=\"build\" "
-                       "tasks found for " + pkg.manifestPath.string());
+                       "tasks found for " +
+                       pkg.manifestPath.string());
         return 1;
     }
 
@@ -4213,12 +4225,12 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
 
         BuildConfig buildConfig =
             merge_build_config(effectivePackageBuildConfig, target.config);
-        apply_asan_overrides(
-            buildConfig,
-            "package target '" + target.name + "' in " +
-                pkg.manifestPath.string(),
-            optFlagOverride.empty() ? std::nullopt
-                                    : std::optional<std::string>(optFlagOverride));
+        apply_asan_overrides(buildConfig,
+                             "package target '" + target.name + "' in " +
+                                 pkg.manifestPath.string(),
+                             optFlagOverride.empty()
+                                 ? std::nullopt
+                                 : std::optional<std::string>(optFlagOverride));
         buildConfig = materialize_build_config_for_package(pkg, buildConfig);
         if(!validate_declared_libraries(pkg.manifestPath, target.name,
                                         buildConfig, linkFlags))
@@ -4265,13 +4277,13 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
             cmd += " " + shell_quote(flag);
 
         int rc = run_status_command_in_dir_with_paths(
-            execution_step_label("Compiling target '" + target.name + "' from " +
-                                 target.entry + " -> " + output),
-            pkg.packageDir, cmd,
-            buildConfig.pathEntries, true);
+            execution_step_label("Compiling target '" + target.name +
+                                 "' from " + target.entry + " -> " + output),
+            pkg.packageDir, cmd, buildConfig.pathEntries, true);
         if(rc != 0)
         {
-            std::string message = "Build failed for " + pkg.manifestPath.string();
+            std::string message =
+                "Build failed for " + pkg.manifestPath.string();
             if(!target.name.empty())
                 message += " target '" + target.name + "'";
             message += ".";
@@ -4333,9 +4345,9 @@ static std::string expand_task_text(const std::string& text,
     out = replace_all(out, "{{manifest}}", pkg.manifestPath.string());
     out = replace_all(out, "{{build_dir}}", buildDir.string());
     out = replace_all(out, "{{deps_dir}}", depsDir.string());
-    out = replace_all(out, "{{make}}",
-                      buildConfig.makeProgram.empty() ? "make"
-                                                      : buildConfig.makeProgram);
+    out = replace_all(
+        out, "{{make}}",
+        buildConfig.makeProgram.empty() ? "make" : buildConfig.makeProgram);
     out = replace_all(out, "{{cmake_build_type}}",
                       build_config_cmake_build_type(buildConfig));
     out = replace_all(out, "{{asan_enabled}}",
@@ -4362,9 +4374,10 @@ static std::string expand_build_config_fragment(const PackageManifest& pkg,
     return expand_task_text(text, pkg, buildConfig);
 }
 
-static std::string resolve_build_config_path_entry(
-    const PackageManifest& pkg, const BuildConfig& buildConfig,
-    const std::string& text)
+static std::string
+resolve_build_config_path_entry(const PackageManifest& pkg,
+                                const BuildConfig& buildConfig,
+                                const std::string& text)
 {
     const std::string expanded =
         expand_build_config_fragment(pkg, buildConfig, text);
@@ -4376,11 +4389,12 @@ static std::string resolve_build_config_path_entry(
     return path.string();
 }
 
-static BuildConfig materialize_build_config_for_package(
-    const PackageManifest& pkg, BuildConfig buildConfig)
+static BuildConfig
+materialize_build_config_for_package(const PackageManifest& pkg,
+                                     BuildConfig buildConfig)
 {
-    buildConfig.compilerProgram =
-        expand_build_config_fragment(pkg, buildConfig, buildConfig.compilerProgram);
+    buildConfig.compilerProgram = expand_build_config_fragment(
+        pkg, buildConfig, buildConfig.compilerProgram);
     buildConfig.makeProgram =
         expand_build_config_fragment(pkg, buildConfig, buildConfig.makeProgram);
 
@@ -4424,8 +4438,7 @@ struct TaskRunState
     Status status = not_started;
 };
 
-static std::string format_task_elapsed(
-    std::chrono::milliseconds elapsed)
+static std::string format_task_elapsed(std::chrono::milliseconds elapsed)
 {
     const auto totalMs = elapsed.count();
     const long long hours = totalMs / (1000LL * 60LL * 60LL);
@@ -4434,14 +4447,14 @@ static std::string format_task_elapsed(
     const long long milliseconds = totalMs % 1000LL;
     std::ostringstream out;
     out << "[" << std::setw(2) << std::setfill('0') << hours << "/"
-        << std::setw(2) << std::setfill('0') << minutes << "/"
-        << std::setw(2) << std::setfill('0') << seconds << "/"
-        << std::setw(3) << std::setfill('0') << milliseconds << "]";
+        << std::setw(2) << std::setfill('0') << minutes << "/" << std::setw(2)
+        << std::setfill('0') << seconds << "/" << std::setw(3)
+        << std::setfill('0') << milliseconds << "]";
     return out.str();
 }
 
-static std::string format_task_elapsed_compact(
-    std::chrono::milliseconds elapsed)
+static std::string
+format_task_elapsed_compact(std::chrono::milliseconds elapsed)
 {
     const auto totalMs = elapsed.count();
     const long long hours = totalMs / (1000LL * 60LL * 60LL);
@@ -4449,15 +4462,15 @@ static std::string format_task_elapsed_compact(
     const long long seconds = (totalMs / 1000LL) % 60LL;
     const long long milliseconds = totalMs % 1000LL;
     std::ostringstream out;
-    out << std::setw(2) << std::setfill('0') << hours << ":"
-        << std::setw(2) << std::setfill('0') << minutes << ":"
-        << std::setw(2) << std::setfill('0') << seconds << ":"
-        << std::setw(3) << std::setfill('0') << milliseconds;
+    out << std::setw(2) << std::setfill('0') << hours << ":" << std::setw(2)
+        << std::setfill('0') << minutes << ":" << std::setw(2)
+        << std::setfill('0') << seconds << ":" << std::setw(3)
+        << std::setfill('0') << milliseconds;
     return out.str();
 }
 
-static std::optional<TaskSpec> find_task_spec(const std::vector<TaskSpec>& tasks,
-                                              const std::string& taskName)
+static std::optional<TaskSpec>
+find_task_spec(const std::vector<TaskSpec>& tasks, const std::string& taskName)
 {
     for(const auto& task : tasks)
     {
@@ -4517,7 +4530,8 @@ write_task_script(const PackageManifest& pkg, const std::string& taskName,
     std::string safeName = taskName;
     for(char& c : safeName)
     {
-        if(!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-'))
+        if(!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' ||
+             c == '-'))
             c = '_';
     }
 
@@ -4534,16 +4548,15 @@ write_task_script(const PackageManifest& pkg, const std::string& taskName,
         out << expand_task_text(line, pkg, buildConfig) << "\n";
     out.close();
 
-    std::filesystem::permissions(
-        scriptPath,
-        std::filesystem::perms::owner_read |
-            std::filesystem::perms::owner_write |
-            std::filesystem::perms::owner_exec |
-            std::filesystem::perms::group_read |
-            std::filesystem::perms::group_exec |
-            std::filesystem::perms::others_read |
-            std::filesystem::perms::others_exec,
-        std::filesystem::perm_options::replace, ec);
+    std::filesystem::permissions(scriptPath,
+                                 std::filesystem::perms::owner_read |
+                                     std::filesystem::perms::owner_write |
+                                     std::filesystem::perms::owner_exec |
+                                     std::filesystem::perms::group_read |
+                                     std::filesystem::perms::group_exec |
+                                     std::filesystem::perms::others_read |
+                                     std::filesystem::perms::others_exec,
+                                 std::filesystem::perm_options::replace, ec);
     if(ec)
     {
         std::cerr << "Failed to make task script executable "
@@ -4574,7 +4587,8 @@ static size_t count_fetch_dep_steps(const DepSpec& dep,
 
     if(!dep.url.empty())
     {
-        const std::filesystem::path checkoutDir = dep_checkout_dir(depsDir, dep);
+        const std::filesystem::path checkoutDir =
+            dep_checkout_dir(depsDir, dep);
         std::error_code ec;
         if(std::filesystem::exists(checkoutDir, ec))
         {
@@ -4621,9 +4635,10 @@ struct EffectiveTaskEdges
     bool parallel = false;
 };
 
-static EffectiveTaskEdges resolve_effective_task_edges(
-    const TaskSpec& task, const std::vector<TaskSpec>& tasks,
-    const std::string& hostName)
+static EffectiveTaskEdges
+resolve_effective_task_edges(const TaskSpec& task,
+                             const std::vector<TaskSpec>& tasks,
+                             const std::string& hostName)
 {
     EffectiveTaskEdges edges;
     auto hostIt = task.hostOverrides.find(hostName);
@@ -4681,7 +4696,8 @@ static EffectiveTaskEdges resolve_effective_task_edges(
                                    hostOverride->nextPhases.end());
     }
     append_unique_strings(
-        edges.next, task_names_for_phases(tasks, effectiveNextPhases, hostName));
+        edges.next,
+        task_names_for_phases(tasks, effectiveNextPhases, hostName));
 
     edges.parallel = hostOverride && hostOverride->parallel.has_value()
                          ? hostOverride->parallel.value()
@@ -4753,12 +4769,13 @@ struct BranchColorInfo
     double brightnessScale = 1.0;
 };
 
-static BranchColorInfo make_child_branch_color(
-    std::optional<BranchColorInfo> parentColor, bool isParallelGroup,
-    size_t childIndex, size_t childCount)
+static BranchColorInfo
+make_child_branch_color(std::optional<BranchColorInfo> parentColor,
+                        bool isParallelGroup, size_t childIndex,
+                        size_t childCount)
 {
     const BranchColorInfo parent =
-        parentColor.value_or(BranchColorInfo{ 0, 1, 0, 1, true, 1.0 });
+        parentColor.value_or(BranchColorInfo{0, 1, 0, 1, true, 1.0});
     BranchColorInfo child = parent;
     child.brightnessScale = std::max(0.42, parent.brightnessScale * 0.75);
 
@@ -4781,49 +4798,48 @@ static bool terminal_supports_truecolor()
         return false;
     std::string value = colorTerm;
     std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char ch) {
-                       return static_cast<char>(std::tolower(ch));
-                   });
-    return value.find("truecolor") != std::string::npos
-           || value.find("24bit") != std::string::npos;
+                   [](unsigned char ch)
+                   { return static_cast<char>(std::tolower(ch)); });
+    return value.find("truecolor") != std::string::npos ||
+           value.find("24bit") != std::string::npos;
 }
 
 static std::string branch_color_code(const BranchColorInfo& colorInfo)
 {
     const size_t total = std::max<size_t>(colorInfo.total, 1);
     const size_t last = total > 0 ? total - 1 : 0;
-    const double t = last == 0
-                         ? 0.0
-                         : static_cast<double>(std::min(colorInfo.position, last))
-                               / static_cast<double>(last);
+    const double t =
+        last == 0 ? 0.0
+                  : static_cast<double>(std::min(colorInfo.position, last)) /
+                        static_cast<double>(last);
     const size_t shadeTotal = std::max<size_t>(colorInfo.shadeTotal, 1);
     const size_t shadeLast = shadeTotal > 0 ? shadeTotal - 1 : 0;
     const double shadeT =
-        shadeLast == 0
-            ? 0.5
-            : static_cast<double>(
-                  std::min(colorInfo.shadePosition, shadeLast))
-                  / static_cast<double>(shadeLast);
+        shadeLast == 0 ? 0.5
+                       : static_cast<double>(
+                             std::min(colorInfo.shadePosition, shadeLast)) /
+                             static_cast<double>(shadeLast);
     const double shadeFactor = 0.92 + (shadeT * 0.08);
     const double brightness = colorInfo.brightnessScale * shadeFactor;
 
     double baseRed = colorInfo.useNeutralHue ? 0.0 : 255.0 * (1.0 - t);
     double baseGreen = colorInfo.useNeutralHue ? 200.0 : 255.0 * t;
     double baseBlue = colorInfo.useNeutralHue ? 200.0 : 0.0;
-    const int red =
-        static_cast<int>(std::clamp(std::lround(baseRed * brightness), 0L, 255L));
+    const int red = static_cast<int>(
+        std::clamp(std::lround(baseRed * brightness), 0L, 255L));
     const int green = static_cast<int>(
         std::clamp(std::lround(baseGreen * brightness), 0L, 255L));
     const int blue = static_cast<int>(
         std::clamp(std::lround(baseBlue * brightness), 0L, 255L));
     if(terminal_supports_truecolor())
     {
-        return "\033[38;2;" + std::to_string(red) + ";"
-               + std::to_string(green) + ";" + std::to_string(blue) + "m";
+        return "\033[38;2;" + std::to_string(red) + ";" +
+               std::to_string(green) + ";" + std::to_string(blue) + "m";
     }
 
-    const auto toCube = [](int channel) {
-        static const int kLevels[] = { 0, 95, 135, 175, 215, 255 };
+    const auto toCube = [](int channel)
+    {
+        static const int kLevels[] = {0, 95, 135, 175, 215, 255};
         size_t bestIndex = 0;
         int bestDistance = std::abs(channel - kLevels[0]);
         for(size_t i = 1; i < sizeof(kLevels) / sizeof(kLevels[0]); ++i)
@@ -4865,9 +4881,10 @@ static std::string colorize_host_label(const std::string& hostName,
     return std::string("\033[38;5;208m") + hostName + "\033[0m";
 }
 
-static std::string build_task_tree_prefix(
-    const std::vector<bool>& ancestorHasMore, bool isLast, bool isRoot,
-    bool enableColor, std::optional<BranchColorInfo> colorInfo)
+static std::string
+build_task_tree_prefix(const std::vector<bool>& ancestorHasMore, bool isLast,
+                       bool isRoot, bool enableColor,
+                       std::optional<BranchColorInfo> colorInfo)
 {
     if(isRoot)
         return "";
@@ -4935,22 +4952,20 @@ static void print_task_tree_ascii_node(
         const std::string prefix = build_task_tree_prefix(
             ancestorHasMore, isLast, isRoot, enableColor, colorInfo);
         std::cout << prefix
-                  << format_task_tree_numbered_label(taskName, orderMap,
-                                                     edges.parallel,
-                                                     unpredictableParallelOrder,
-                                                     enableColor)
+                  << format_task_tree_numbered_label(
+                         taskName, orderMap, edges.parallel,
+                         unpredictableParallelOrder, enableColor)
                   << "\n";
     }
 
     std::vector<std::pair<std::string, bool>> children;
     children.reserve(edges.dependsOn.size() + edges.next.size());
-    const bool parallelDepends =
-        edges.parallel && edges.dependsOn.size() > 1;
+    const bool parallelDepends = edges.parallel && edges.dependsOn.size() > 1;
     for(const auto& dep : edges.dependsOn)
-        children.push_back({ dep, parallelDepends });
+        children.push_back({dep, parallelDepends});
     const bool parallelNext = edges.parallel && edges.next.size() > 1;
     for(const auto& nextTask : edges.next)
-        children.push_back({ nextTask, parallelNext });
+        children.push_back({nextTask, parallelNext});
 
     stack.push_back(taskName);
     for(size_t i = 0; i < children.size(); ++i)
@@ -4989,9 +5004,9 @@ static void print_task_tree_ascii_node(
 
         std::vector<bool> nestedAncestors = childAncestors;
         nestedAncestors.push_back(!childIsLast);
-        print_task_tree_ascii_node(tasks, hostName, children[i].first,
-                                   orderMap, nestedAncestors, true, false,
-                                   enableColor, childColorInfo, stack, false,
+        print_task_tree_ascii_node(tasks, hostName, children[i].first, orderMap,
+                                   nestedAncestors, true, false, enableColor,
+                                   childColorInfo, stack, false,
                                    children[i].second);
     }
     stack.pop_back();
@@ -5025,8 +5040,8 @@ static int print_task_plan_for_manifest(const PackageManifest& pkg,
 
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, buildConfig));
-    pkg_info_line("Task tree for '" + taskName + "' ("
-                  + colorize_host_label(hostName, enableColor) + "):");
+    pkg_info_line("Task tree for '" + taskName + "' (" +
+                  colorize_host_label(hostName, enableColor) + "):");
     std::vector<std::string> treeStack;
     print_task_tree_ascii_node(tasks, hostName, taskName, orderMap, {}, true,
                                true, enableColor, std::nullopt, treeStack);
@@ -5040,9 +5055,8 @@ static int print_task_plan_for_manifest(const PackageManifest& pkg,
         {
             line = colorize_tree_text(
                 line, true,
-                BranchColorInfo{ i, std::max<size_t>(order.size(), 1),
-                                 i, std::max<size_t>(order.size(), 1),
-                                 false, 1.0 });
+                BranchColorInfo{i, std::max<size_t>(order.size(), 1), i,
+                                std::max<size_t>(order.size(), 1), false, 1.0});
         }
         pkg_info_line(line);
     }
@@ -5094,13 +5108,14 @@ static int print_task_overview_for_manifest(const PackageManifest& pkg,
     const auto entrypoints = find_manifest_task_entrypoints(tasks, hostName);
     if(entrypoints.empty())
     {
-        pkg_info_line("No runnable tasks for host '"
-                      + colorize_host_label(hostName, enableColor) + "'.");
+        pkg_info_line("No runnable tasks for host '" +
+                      colorize_host_label(hostName, enableColor) + "'.");
         return 0;
     }
 
-    pkg_info_line("Runnable task entrypoints for '" + pkg.manifestPath.string() +
-                  "' (" + colorize_host_label(hostName, enableColor) + "):");
+    pkg_info_line("Runnable task entrypoints for '" +
+                  pkg.manifestPath.string() + "' (" +
+                  colorize_host_label(hostName, enableColor) + "):");
     for(size_t i = 0; i < entrypoints.size(); ++i)
     {
         if(i > 0)
@@ -5230,8 +5245,8 @@ static int run_task_for_manifest_impl(
             continue;
         if(!host_supported_by_task(task, hostName))
         {
-            std::cerr << task_unsupported_host_message(task, hostName)
-                      << " in " << pkg.manifestPath.string() << "\n";
+            std::cerr << task_unsupported_host_message(task, hostName) << " in "
+                      << pkg.manifestPath.string() << "\n";
             return 1;
         }
         auto hostIt = task.hostOverrides.find(hostName);
@@ -5259,7 +5274,8 @@ static int run_task_for_manifest_impl(
             (hostOverride && !hostOverride->commands.empty())
                 ? hostOverride->commands
                 : task.commands;
-        const std::string effectiveMessage = [&]() -> std::string {
+        const std::string effectiveMessage = [&]() -> std::string
+        {
             if(hostOverride && !hostOverride->print.empty())
                 return hostOverride->print;
             if(hostOverride && !hostOverride->message.empty())
@@ -5323,9 +5339,9 @@ static int run_task_for_manifest_impl(
             effectiveTaskBuildConfig = merge_build_config(
                 effectiveTaskBuildConfig, hostOverride->buildConfig);
         }
-        apply_asan_overrides(
-            effectiveTaskBuildConfig,
-            "task '" + taskName + "' in " + pkg.manifestPath.string());
+        apply_asan_overrides(effectiveTaskBuildConfig,
+                             "task '" + taskName + "' in " +
+                                 pkg.manifestPath.string());
         effectiveTaskBuildConfig =
             materialize_build_config_for_package(pkg, effectiveTaskBuildConfig);
 
@@ -5340,7 +5356,8 @@ static int run_task_for_manifest_impl(
                 futures.push_back(std::async(
                     std::launch::async,
                     [&pkg, &tasks, &buildConfig, &hostName, &taskStates,
-                     &taskMutex, &taskCv, dep, childStack]() mutable {
+                     &taskMutex, &taskCv, dep, childStack]() mutable
+                    {
                         return run_task_for_manifest_impl(
                             pkg, tasks, buildConfig, hostName, taskStates,
                             taskMutex, taskCv, dep, childStack);
@@ -5350,9 +5367,8 @@ static int run_task_for_manifest_impl(
             {
                 if(futures[i].get() != 0)
                 {
-                    std::cerr << "Task '" << taskName
-                              << "' dependency '" << effectiveDependsOn[i]
-                              << "' failed for "
+                    std::cerr << "Task '" << taskName << "' dependency '"
+                              << effectiveDependsOn[i] << "' failed for "
                               << pkg.manifestPath.string() << ".\n";
                     taskStack.pop_back();
                     return 1;
@@ -5364,13 +5380,12 @@ static int run_task_for_manifest_impl(
             for(const auto& dep : effectiveDependsOn)
             {
                 if(run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
-                                             taskStates, taskMutex, taskCv,
-                                             dep, taskStack) != 0)
+                                              taskStates, taskMutex, taskCv,
+                                              dep, taskStack) != 0)
                 {
-                    std::cerr << "Task '" << taskName
-                              << "' dependency '" << dep
-                              << "' failed for "
-                              << pkg.manifestPath.string() << ".\n";
+                    std::cerr << "Task '" << taskName << "' dependency '" << dep
+                              << "' failed for " << pkg.manifestPath.string()
+                              << ".\n";
                     taskStack.pop_back();
                     return 1;
                 }
@@ -5378,10 +5393,10 @@ static int run_task_for_manifest_impl(
         }
 
         std::filesystem::path workdir =
-            effectiveWorkdir.empty() ? pkg.packageDir
-                                 : std::filesystem::path(
-                                       expand_task_text(effectiveWorkdir, pkg,
-                                                        effectiveTaskBuildConfig));
+            effectiveWorkdir.empty()
+                ? pkg.packageDir
+                : std::filesystem::path(expand_task_text(
+                      effectiveWorkdir, pkg, effectiveTaskBuildConfig));
         if(!workdir.is_absolute())
             workdir = pkg.packageDir / workdir;
 
@@ -5402,16 +5417,16 @@ static int run_task_for_manifest_impl(
 
         if(!effectiveShell.empty())
         {
-            auto scriptPathOpt =
-                write_task_script(pkg, taskName, effectiveShell,
-                                  effectiveTaskBuildConfig);
+            auto scriptPathOpt = write_task_script(
+                pkg, taskName, effectiveShell, effectiveTaskBuildConfig);
             if(!scriptPathOpt.has_value())
             {
                 taskStack.pop_back();
                 return 1;
             }
             effectiveCommands.insert(effectiveCommands.begin(),
-                                     "sh " + shell_quote(scriptPathOpt->string()));
+                                     "sh " +
+                                         shell_quote(scriptPathOpt->string()));
         }
 
         if(!effectiveLanguage.empty())
@@ -5424,8 +5439,8 @@ static int run_task_for_manifest_impl(
             std::vector<std::string> pkgFlags;
             for(const auto& dep : cdeps)
             {
-                if(!append_pkg_config_flags(dep, pkgFlags,
-                                            effectiveTaskBuildConfig.pathEntries))
+                if(!append_pkg_config_flags(
+                       dep, pkgFlags, effectiveTaskBuildConfig.pathEntries))
                 {
                     taskStack.pop_back();
                     return 1;
@@ -5438,14 +5453,14 @@ static int run_task_for_manifest_impl(
                                  effectiveTaskBuildConfig),
                 expand_task_text(effectiveOutput, pkg,
                                  effectiveTaskBuildConfig),
-                [&]() {
+                [&]()
+                {
                     std::vector<std::string> expandedInputs;
                     expandedInputs.reserve(effectiveInputs.size());
                     for(const auto& input : effectiveInputs)
                     {
-                        expandedInputs.push_back(
-                            expand_task_text(input, pkg,
-                                             effectiveTaskBuildConfig));
+                        expandedInputs.push_back(expand_task_text(
+                            input, pkg, effectiveTaskBuildConfig));
                     }
                     return expandedInputs;
                 }(),
@@ -5465,7 +5480,8 @@ static int run_task_for_manifest_impl(
         {
             std::cerr << "Task '" << taskName << "' in "
                       << pkg.manifestPath.string()
-                      << " has no commands, script, or language-driven build configuration.\n";
+                      << " has no commands, script, or language-driven build "
+                         "configuration.\n";
             taskStack.pop_back();
             return 1;
         }
@@ -5489,12 +5505,11 @@ static int run_task_for_manifest_impl(
                 "cd " + shell_quote(workdir.string()) + " && " +
                 command_with_path_entries(expanded,
                                           effectiveTaskBuildConfig.pathEntries);
-            const int rc = inlineSpinner
-                               ? stream_inline_output_command(
-                                     *inlineSpinner, fullCommand, false,
-                                     effectiveLogOutput)
-                               : run_command(fullCommand, true,
-                                             effectiveLogOutput);
+            const int rc =
+                inlineSpinner
+                    ? stream_inline_output_command(*inlineSpinner, fullCommand,
+                                                   false, effectiveLogOutput)
+                    : run_command(fullCommand, true, effectiveLogOutput);
             if(rc != 0)
             {
                 if(inlineSpinner)
@@ -5543,9 +5558,8 @@ static int run_task_for_manifest_impl(
             }
             for(const auto& chmodPathText : effectiveChmodPaths)
             {
-                const std::filesystem::path chmodPath =
-                    expand_task_text(chmodPathText, pkg,
-                                     effectiveTaskBuildConfig);
+                const std::filesystem::path chmodPath = expand_task_text(
+                    chmodPathText, pkg, effectiveTaskBuildConfig);
                 std::string chmodError;
                 if(!apply_recursive_permissions(chmodPath, *mode, chmodError))
                 {
@@ -5573,7 +5587,8 @@ static int run_task_for_manifest_impl(
                 futures.push_back(std::async(
                     std::launch::async,
                     [&pkg, &tasks, &buildConfig, &hostName, &taskStates,
-                     &taskMutex, &taskCv, nextTask, childStack]() mutable {
+                     &taskMutex, &taskCv, nextTask, childStack]() mutable
+                    {
                         return run_task_for_manifest_impl(
                             pkg, tasks, buildConfig, hostName, taskStates,
                             taskMutex, taskCv, nextTask, childStack);
@@ -5601,8 +5616,8 @@ static int run_task_for_manifest_impl(
             for(const auto& nextTask : effectiveNext)
             {
                 if(run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
-                                             taskStates, taskMutex, taskCv,
-                                             nextTask, taskStack) != 0)
+                                              taskStates, taskMutex, taskCv,
+                                              nextTask, taskStack) != 0)
                 {
                     std::cerr << "Task '" << taskName << "' next task '"
                               << nextTask << "' failed for "
@@ -5618,8 +5633,9 @@ static int run_task_for_manifest_impl(
             }
         }
         taskStack.pop_back();
-        const auto taskElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - taskStart);
+        const auto taskElapsed =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - taskStart);
         if(inlineSpinner)
             inlineSpinner->stop("");
         if(const int signRc = codesign_task_outputs(
@@ -5633,8 +5649,7 @@ static int run_task_for_manifest_impl(
             taskCv.notify_all();
             return signRc;
         }
-        pkg_task_print_line(taskPrefix + " " + taskName +
-                            " Completed, time " +
+        pkg_task_print_line(taskPrefix + " " + taskName + " Completed, time " +
                             format_task_elapsed_compact(taskElapsed) + " - " +
                             taskDescription);
         {
@@ -5665,7 +5680,7 @@ static int run_task_for_manifest(const PackageManifest& pkg,
     if(ownProgress)
     {
         scopedProgress.emplace(count_reachable_task_steps(
-            tasks, hostName, std::vector<std::string> { taskName }));
+            tasks, hostName, std::vector<std::string>{taskName}));
     }
     std::map<std::string, TaskRunState> taskStates;
     std::mutex taskMutex;
@@ -5679,7 +5694,8 @@ static int run_task_for_manifest(const PackageManifest& pkg,
 static int run_task_for_manifest(const PackageManifest& pkg,
                                  const std::string& taskName)
 {
-    return run_task_for_manifest(pkg, taskName, parse_build_config(pkg.content));
+    return run_task_for_manifest(pkg, taskName,
+                                 parse_build_config(pkg.content));
 }
 
 struct PkgCliOverrides
@@ -5699,11 +5715,10 @@ struct PkgCliOverrides
 static void apply_cli_overrides(BuildConfig& buildConfig,
                                 const PkgCliOverrides& overrides)
 {
-    const bool enableLogs = overrides.logDir.has_value() ||
-                            overrides.stdoutLog.has_value() ||
-                            overrides.stderrLog.has_value() ||
-                            overrides.warnLog.has_value() ||
-                            overrides.taskPrintToStdoutLog.has_value();
+    const bool enableLogs =
+        overrides.logDir.has_value() || overrides.stdoutLog.has_value() ||
+        overrides.stderrLog.has_value() || overrides.warnLog.has_value() ||
+        overrides.taskPrintToStdoutLog.has_value();
     if(overrides.buildDir.has_value())
         buildConfig.buildDir = *overrides.buildDir;
     if(overrides.depsDir.has_value())
@@ -5728,8 +5743,7 @@ static void apply_cli_overrides(BuildConfig& buildConfig,
         buildConfig.enableLogs = true;
 }
 
-static bool parse_pkg_option_argument(const std::string& text,
-                                      std::string& key,
+static bool parse_pkg_option_argument(const std::string& text, std::string& key,
                                       std::string& value)
 {
     const size_t eq = text.find('=');
@@ -5744,8 +5758,7 @@ static bool parse_pkg_option_argument(const std::string& text,
 
 int PackageManager::run(int argc, char** argv)
 {
-    const std::string programName =
-        argv[0] ? std::string(argv[0]) : "mlang";
+    const std::string programName = argv[0] ? std::string(argv[0]) : "mlang";
     if(argc < 3)
     {
         print_pkg_usage(programName);
@@ -5754,7 +5767,8 @@ int PackageManager::run(int argc, char** argv)
 
     std::filesystem::path manifestPath = "mlang.toml";
     std::string compilerProgram = argv[0] ? std::string(argv[0]) : "mlang";
-    if(!compilerProgram.empty() && compilerProgram.find('/') != std::string::npos)
+    if(!compilerProgram.empty() &&
+       compilerProgram.find('/') != std::string::npos)
         compilerProgram = std::filesystem::absolute(compilerProgram).string();
 
     // Extract `--config FILE` / `--config=FILE` from any position in the pkg
@@ -5809,7 +5823,8 @@ int PackageManager::run(int argc, char** argv)
     std::string sub = argv[subIndex];
     const std::string manifestLabel = manifestPath.string();
 
-    const auto is_pkg_subcommand = [](const std::string& value) {
+    const auto is_pkg_subcommand = [](const std::string& value)
+    {
         return value == "--help" || value == "-h" || value == "help" ||
                value == "--tests" || value == "init" || value == "add" ||
                value == "fetch" || value == "build" || value == "run" ||
@@ -5852,8 +5867,9 @@ int PackageManager::run(int argc, char** argv)
                 auto manifests = collect_target_manifests(manifestPath);
                 if(manifests.empty())
                 {
-                    std::cerr << "No package manifests found for task overview in "
-                              << manifestPath.string() << ".\n";
+                    std::cerr
+                        << "No package manifests found for task overview in "
+                        << manifestPath.string() << ".\n";
                     return 1;
                 }
                 for(const auto& pkg : manifests)
@@ -5881,8 +5897,9 @@ int PackageManager::run(int argc, char** argv)
     {
         if(subIndex + 1 >= argc)
         {
-            std::cerr << "Usage: " << argv[0]
-                      << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
+            std::cerr
+                << "Usage: " << argv[0]
+                << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
             return 1;
         }
 
@@ -5898,10 +5915,10 @@ int PackageManager::run(int argc, char** argv)
                 colorTasks = true;
             else if(!arg.empty() && arg[0] == '-')
             {
-                std::cerr << "Unknown option for 'pkg --tests': " << arg
-                          << "\n"
-                          << "Usage: " << argv[0]
-                          << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
+                std::cerr
+                    << "Unknown option for 'pkg --tests': " << arg << "\n"
+                    << "Usage: " << argv[0]
+                    << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
                 return 1;
             }
             else
@@ -5912,8 +5929,9 @@ int PackageManager::run(int argc, char** argv)
 
         if(testManifestPaths.empty())
         {
-            std::cerr << "Usage: " << argv[0]
-                      << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
+            std::cerr
+                << "Usage: " << argv[0]
+                << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
             return 1;
         }
 
@@ -5941,10 +5959,9 @@ int PackageManager::run(int argc, char** argv)
                 buildConfig.compilerProgram = compilerProgram;
                 const auto tasks = parse_task_specs(pkg.content);
                 const std::string hostName = current_host_name();
-                const std::vector<std::string> testRoots =
-                    task_roots_for_phase(tasks, hostName, "test",
-                                         std::vector<std::string> { "tests",
-                                                                    "test" });
+                const std::vector<std::string> testRoots = task_roots_for_phase(
+                    tasks, hostName, "test",
+                    std::vector<std::string>{"tests", "test"});
                 if(testRoots.empty())
                     continue;
 
@@ -6015,8 +6032,7 @@ int PackageManager::run(int argc, char** argv)
             return 1;
         }
 
-        std::string name =
-            std::filesystem::current_path().filename().string();
+        std::string name = std::filesystem::current_path().filename().string();
         if(name.empty())
             name = "app";
 
@@ -6033,7 +6049,8 @@ int PackageManager::run(int argc, char** argv)
             << "[dependencies]\n\n"
             << "[c-dependencies]\n";
 
-        if(!write_text_file_if_missing(std::filesystem::path("src") / "main.mla",
+        if(!write_text_file_if_missing(std::filesystem::path("src") /
+                                           "main.mla",
                                        package_stub_source(name)))
         {
             std::cerr << "Failed to write src/main.mla\n";
@@ -6047,13 +6064,17 @@ int PackageManager::run(int argc, char** argv)
         if(subIndex + 1 >= argc)
         {
             std::cerr << "Usage: " << argv[0]
-                      << " pkg [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG] [--submodules]\n"
+                      << " pkg [--config FILE] add <name> [--git URL] [--rev "
+                         "REV] [--tag TAG] [--submodules]\n"
                       << "       " << argv[0]
-                      << " pkg [--config FILE] add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
+                      << " pkg [--config FILE] add <name> --url URL [--archive "
+                         "tar.gz] [--strip-components N] [--subdir DIR]\n"
                       << "       " << argv[0]
-                      << " pkg [--config FILE] add <name> [--pkg-config NAME] [--system]\n"
+                      << " pkg [--config FILE] add <name> [--pkg-config NAME] "
+                         "[--system]\n"
                       << "       " << argv[0]
-                      << " pkg [--config FILE] add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n";
+                      << " pkg [--config FILE] add <name> [--git URL|--url "
+                         "URL] --add-lib [--project-dir DIR]\n";
             return 1;
         }
 
@@ -6140,10 +6161,9 @@ int PackageManager::run(int argc, char** argv)
         }
         else
         {
-            line = make_dependency_manifest_line(name, gitUrl, archiveUrl,
-                                                archiveType, rev, tag,
-                                                 gitSubmodules,
-                                                 depSubdir, stripComponents);
+            line = make_dependency_manifest_line(
+                name, gitUrl, archiveUrl, archiveType, rev, tag, gitSubmodules,
+                depSubdir, stripComponents);
         }
 
         if(addLib)
@@ -6162,8 +6182,8 @@ int PackageManager::run(int argc, char** argv)
                 std::cerr << error << "\n";
                 return 1;
             }
-            if(!ensure_package_entry_stub(manifestPath, content, "workspace_root",
-                                          error))
+            if(!ensure_package_entry_stub(manifestPath, content,
+                                          "workspace_root", error))
             {
                 std::cerr << error << "\n";
                 return 1;
@@ -6179,8 +6199,7 @@ int PackageManager::run(int argc, char** argv)
                                   std::ios::binary | std::ios::trunc);
             if(!rootOut)
             {
-                std::cerr << "Failed to update root " << manifestLabel
-                          << "\n";
+                std::cerr << "Failed to update root " << manifestLabel << "\n";
                 return 1;
             }
             rootOut << content;
@@ -6245,7 +6264,8 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg fetch': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg [--config FILE] fetch [--build-dir DIR] [--deps-dir DIR]"
+                          << " pkg [--config FILE] fetch [--build-dir DIR] "
+                             "[--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
                           << " [--task-print-to-stdout-log]\n";
@@ -6291,9 +6311,8 @@ int PackageManager::run(int argc, char** argv)
         for(int i = subIndex + 1; i < argc; ++i)
         {
             std::string arg = argv[i];
-            if(arg == "-O0" || arg == "-Og" || arg == "-O1" ||
-               arg == "-O2" || arg == "-O3" || arg == "-Os" ||
-               arg == "-Oz")
+            if(arg == "-O0" || arg == "-Og" || arg == "-O1" || arg == "-O2" ||
+               arg == "-O3" || arg == "-Os" || arg == "-Oz")
             {
                 optFlag = arg;
             }
@@ -6349,7 +6368,8 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]"
+                          << " pkg [--config FILE] build "
+                             "[-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]"
                           << " [--sign|--force-sign|--no-sign]"
                           << " [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
@@ -6398,7 +6418,9 @@ int PackageManager::run(int argc, char** argv)
         if(subIndex + 1 >= argc)
         {
             std::cerr << "Usage: " << argv[0]
-                      << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
+                      << " pkg [--config FILE] run <task> [--tasks] [--color] "
+                         "[--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] "
+                         "[--stdout-log FILE]"
                       << " [--stderr-log FILE] [--warn-log FILE]"
                       << " [--task-print-to-stdout-log] [--asan]"
                       << " [--sign|--force-sign|--no-sign]"
@@ -6479,7 +6501,8 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg run': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR]"
+                          << " pkg [--config FILE] run <task> [--tasks] "
+                             "[--color] [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
                           << " [--task-print-to-stdout-log] [--asan]"
@@ -6496,9 +6519,8 @@ int PackageManager::run(int argc, char** argv)
             apply_cli_overrides(buildConfig, overrides);
             if(printTasks)
             {
-                const int rc =
-                    print_task_plan_for_manifest(pkg, taskName, buildConfig,
-                                                 colorTasks);
+                const int rc = print_task_plan_for_manifest(
+                    pkg, taskName, buildConfig, colorTasks);
                 if(rc == -1)
                     continue;
                 found = true;
@@ -6518,11 +6540,11 @@ int PackageManager::run(int argc, char** argv)
                     package_deps_dir(pkg.packageDir, buildConfig);
                 for(const auto& dep : deps)
                 {
-                    totalSteps +=
-                        count_fetch_dep_steps(dep, depsDir, /*updateExisting=*/true);
+                    totalSteps += count_fetch_dep_steps(
+                        dep, depsDir, /*updateExisting=*/true);
                 }
                 totalSteps += count_reachable_task_steps(
-                    tasks, hostName, std::vector<std::string> { taskName });
+                    tasks, hostName, std::vector<std::string>{taskName});
                 ScopedExecutionProgressState scopedProgress(totalSteps);
                 if(fetch_for_manifest(pkg, buildConfig) != 0)
                     return 1;
@@ -6530,9 +6552,9 @@ int PackageManager::run(int argc, char** argv)
                 std::mutex taskMutex;
                 std::condition_variable taskCv;
                 std::vector<std::string> taskStack;
-                rc = run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
-                                                taskStates, taskMutex, taskCv,
-                                                taskName, taskStack);
+                rc = run_task_for_manifest_impl(pkg, tasks, buildConfig,
+                                                hostName, taskStates, taskMutex,
+                                                taskCv, taskName, taskStack);
             }
             if(rc == -1)
                 continue;
@@ -6591,7 +6613,8 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg clean': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg [--config FILE] clean [--build-dir DIR] [--deps-dir DIR]"
+                          << " pkg [--config FILE] clean [--build-dir DIR] "
+                             "[--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
                           << " [--task-print-to-stdout-log] [--deps]\n";
@@ -6603,9 +6626,8 @@ int PackageManager::run(int argc, char** argv)
         {
             BuildConfig buildConfig;
             apply_cli_overrides(buildConfig, overrides);
-            ScopedPackageLogState scopedLogs(
-                make_package_log_state(std::filesystem::current_path(),
-                                       buildConfig));
+            ScopedPackageLogState scopedLogs(make_package_log_state(
+                std::filesystem::current_path(), buildConfig));
             const std::filesystem::path buildDir =
                 package_build_dir(std::filesystem::current_path(), buildConfig);
             if(!std::filesystem::exists(buildDir))

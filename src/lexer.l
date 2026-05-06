@@ -408,3 +408,13 @@ static int is_try_question_context()
                             mlang::diag::format_message_with_code("MLANG-E1100", msg).c_str());
                 }
 %%
+
+YY_BUFFER_STATE mlang_scan_bytes(const char* bytes, size_t len)
+{
+    return yy_scan_bytes(bytes, static_cast<yy_size_t>(len));
+}
+
+void mlang_delete_buffer(YY_BUFFER_STATE buffer)
+{
+    yy_delete_buffer(buffer);
+}
