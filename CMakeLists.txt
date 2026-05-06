@@ -342,6 +342,7 @@ set(MLANGD_MLA_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla)
 add_custom_command(
     OUTPUT ${MLANGD_MLA_OUTPUT}
     COMMAND $<TARGET_FILE:mlang> ${MLANGD_MLA_SOURCE}
+            -O0
             -L ${CMAKE_CURRENT_BINARY_DIR}
             -lmlang_std
             -o ${MLANGD_MLA_OUTPUT}
