@@ -1252,6 +1252,13 @@ static int validate_property_flags(int flags)
         yyerror("@property(atomic) cannot be combined with mutex");
         return PROPERTY_FLAG_NONE;
     }
+    if((flags & PROPERTY_FLAG_HIDDEN) &&
+       (flags & PROPERTY_FLAG_PROTECTED))
+    {
+        parseHadError = true;
+        yyerror("@property(hidden) cannot be combined with protected");
+        return PROPERTY_FLAG_NONE;
+    }
     return flags;
 }
 
@@ -2028,6 +2035,10 @@ property_option
                 $$ = PROPERTY_FLAG_MUTEX;
             else if(strcmp($1, "recursive") == 0)
                 $$ = PROPERTY_FLAG_RECURSIVE;
+            else if(strcmp($1, "hidden") == 0)
+                $$ = PROPERTY_FLAG_HIDDEN;
+            else if(strcmp($1, "protected") == 0)
+                $$ = PROPERTY_FLAG_PROTECTED;
             else
             {
                 parseHadError = true;

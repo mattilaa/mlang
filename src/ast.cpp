@@ -991,6 +991,9 @@ ASTNode* create_struct_member_with_property_impl(int is_var, ASTNode* type,
     node->isMutexProperty = (property_flags & PROPERTY_FLAG_MUTEX) != 0;
     node->isRecursiveProperty =
         (property_flags & PROPERTY_FLAG_RECURSIVE) != 0;
+    node->isHiddenProperty = (property_flags & PROPERTY_FLAG_HIDDEN) != 0;
+    node->isProtectedProperty =
+        (property_flags & PROPERTY_FLAG_PROTECTED) != 0;
     return node;
 }
 

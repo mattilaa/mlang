@@ -840,6 +840,34 @@ fn main() -> i32 {
 See @ref examples/builder_object_field_demo.mla
 "builder_object_field_demo.mla".
 
+## Property Fields (`@property`) {#property_fields}
+
+Struct fields may be annotated with `@property` to synthesize getter/setter
+methods and optionally constrain direct backing-field access.
+
+Examples:
+
+```mla
+struct Device {
+    @property(hidden) var value: i32;
+};
+```
+
+```mla
+struct Base {
+    @property(protected) var value: i32;
+};
+
+struct Child : Base {
+    fn read(self: Child) -> i32 {
+        return self.value;
+    }
+};
+```
+
+See @ref language_attributes "@property(...)" in the attributes guide for the
+full option list: `atomic`, `mutex`, `recursive`, `hidden`, and `protected`.
+
 ### Diagnostics
 
 The compiler rejects ill-formed builders at parse time. Common mistakes:

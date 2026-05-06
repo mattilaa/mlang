@@ -151,11 +151,24 @@ private:
         bool packedBit = false;
         unsigned bitOffset = 0;
     };
+    enum class FieldEncapsulation
+    {
+        Public,
+        Hidden,
+        Protected
+    };
+    struct StructFieldAccessInfo
+    {
+        FieldEncapsulation encapsulation = FieldEncapsulation::Public;
+        std::string ownerStructName;
+    };
     // Store struct member info: struct name -> vector of (member name, member
     // type)
     std::map<std::string, std::vector<std::pair<std::string, TypeNode*>>>
         structMembers;
     std::map<std::string, std::vector<StructFieldLayout>> structFieldLayouts;
+    std::map<std::string, std::vector<StructFieldAccessInfo>>
+        structFieldAccessInfo;
     // Per-struct member default initializers (from `var x: T{expr};` /
     // `let x: T = expr;` field declarations). Missing entries mean the field
     // is zero-initialized at struct-literal construction.
@@ -243,6 +256,7 @@ private:
     std::map<std::string, std::string> traitObjectVariableTypes;
     // Current module being compiled (empty string for main module)
     std::string currentModule;
+    std::string currentStructContext;
     ModuleLoader* moduleLoader = nullptr;
     struct TypeAliasInfo
     {
@@ -438,9 +452,17 @@ private:
     llvm::StructType* getStructType(const std::string& name);
     const StructFieldLayout* getStructFieldLayout(const std::string& structName,
                                                   int fieldIndex) const;
+    const StructFieldAccessInfo*
+    getStructFieldAccessInfo(const std::string& structName,
+                             int fieldIndex) const;
+    bool isStructSameOrDerivedFrom(const std::string& candidateStruct,
+                                   const std::string& baseStruct) const;
+    bool canAccessStructField(const std::string& accessedThroughStruct,
+                              int fieldIndex, int line,
+                              const std::string& fieldName) const;
     llvm::Value* loadStructFieldValue(const std::string& structTypeName,
-                                      llvm::Value* structPtr, int fieldIndex,
-                                      TypeNode* fieldType,
+                                     llvm::Value* structPtr, int fieldIndex,
+                                     TypeNode* fieldType,
                                       const std::string& fieldName);
     void storeStructFieldValue(const std::string& structTypeName,
                                llvm::Value* structPtr, int fieldIndex,

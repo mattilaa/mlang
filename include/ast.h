@@ -1034,6 +1034,8 @@ enum PropertyFlags
     PROPERTY_FLAG_ATOMIC = 1 << 0,
     PROPERTY_FLAG_MUTEX = 1 << 1,
     PROPERTY_FLAG_RECURSIVE = 1 << 2,
+    PROPERTY_FLAG_HIDDEN = 1 << 3,
+    PROPERTY_FLAG_PROTECTED = 1 << 4,
 };
 
 // Struct-related nodes
@@ -1049,6 +1051,8 @@ public:
     bool isAtomicProperty = false; // @property(atomic)
     bool isMutexProperty = false; // @property(mutex)
     bool isRecursiveProperty = false; // @property(mutex, recursive)
+    bool isHiddenProperty = false; // @property(hidden)
+    bool isProtectedProperty = false; // @property(protected)
     bool isSynthesizedPropertyStorage = false;
     std::string propertyLockFieldName;
 

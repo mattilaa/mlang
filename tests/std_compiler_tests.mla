@@ -905,6 +905,50 @@ fn test_compiler_private_method_same_module_allowed() -> i32 {
 }
 
 #[test]
+fn test_compiler_hidden_property_accessor_allowed() -> i32 {
+    if mkdir_p("/tmp/mlang_hidden_property_accessor").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_hidden_property_accessor/main.mla";
+    let src: str8 = "struct Device {\n  @property(hidden) var value: i32;\n};\nfn main() -> i32 {\n  var d: Device = Device {};\n  d.setValue(7);\n  return d.getValue();\n}\n";
+    if write_all_text(src_path, src).is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_hidden_property_direct_access_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_hidden_property_direct_access").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_hidden_property_direct_access/main.mla";
+    let src: str8 = "struct Device {\n  @property(hidden) var value: i32;\n};\nfn main() -> i32 {\n  var d: Device = Device {};\n  d.setValue(7);\n  return d.value;\n}\n";
+    if write_all_text(src_path, src).is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "field 'value' of struct 'Device' is hidden") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_protected_property_visible_through_derive_chain() -> i32 {
+    if mkdir_p("/tmp/mlang_protected_property_chain").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_protected_property_chain/main.mla";
+    let src: str8 = "struct Base {\n  @property(protected) var value: i32;\n};\nstruct Mid : Base {\n  var mid: i32;\n};\nstruct Leaf : Mid {\n  fn read(self: Leaf) -> i32 {\n    return self.value;\n  }\n  fn write(self: &mut Leaf, value: i32) -> void {\n    self.value = value;\n  }\n};\nfn main() -> i32 {\n  var leaf: Leaf = Leaf {};\n  leaf.write(9);\n  return leaf.read();\n}\n";
+    if write_all_text(src_path, src).is_err(): { return 1; }
+    let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_compiler_protected_property_external_access_rejected() -> i32 {
+    if mkdir_p("/tmp/mlang_protected_property_external").is_err(): { return 1; }
+    let src_path: str8 = "/tmp/mlang_protected_property_external/main.mla";
+    let src: str8 = "struct Base {\n  @property(protected) var value: i32;\n};\nstruct Mid : Base {\n  var mid: i32;\n};\nstruct Leaf : Mid {\n  fn read(self: Leaf) -> i32 {\n    return self.value;\n  }\n};\nfn main() -> i32 {\n  var leaf: Leaf = Leaf {};\n  leaf.setValue(3);\n  return leaf.value;\n}\n";
+    if write_all_text(src_path, src).is_err(): { return 1; }
+    let run: CompilerRunCapture =
+        run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
+    if run.rc == 0 { return 1; }
+    return contains(run.stderr_text, "field 'value' of struct 'Base' is protected") == 1 ? 0 : 1;
+}
+
+#[test]
 fn test_compiler_private_method_cross_module_rejected() -> i32 {
     if mkdir_p("/tmp/mlang_private_method_cross_module/lib").is_err(): { return 1; }
     let lib_path: str8 = "/tmp/mlang_private_method_cross_module/lib/counter_private.mla";

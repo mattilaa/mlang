@@ -294,6 +294,84 @@ See:
 - `examples/platform_region_demo.mla`
 - `tests/std_platform_tests.mla`
 
+## `@property(...)`
+
+Applies to struct fields and synthesizes accessor methods for the field:
+- `get<Field>() -> T`
+- `set<Field>(value: T) -> void` for mutable `var` fields
+
+Basic example:
+
+```mla
+struct Device {
+    @property var value: i32;
+};
+
+fn main() -> i32 {
+    var d: Device = Device {};
+    d.setValue(7);
+    return d.getValue();
+}
+```
+
+Supported options:
+- `@property(atomic)`:
+  Generates atomic load/store accessors for integer and `bool` fields.
+- `@property(mutex)`:
+  Protects accessor bodies with a synthesized mutex.
+- `@property(mutex, recursive)`:
+  Uses a recursive mutex. `recursive` requires `mutex`.
+- `@property(hidden)`:
+  Hides the backing field from direct access outside the declaring struct's own
+  methods. External code must use synthesized accessors or explicit methods on
+  the struct.
+- `@property(protected)`:
+  Allows direct field access only inside the declaring struct and structs in
+  its full derive chain. If `Derived : Base` and `Leaf : Derived`, then a
+  protected property declared in `Base` is directly accessible from `Base`,
+  `Derived`, and `Leaf`, but not from unrelated code.
+
+Example with `hidden`:
+
+```mla
+struct SecretBox {
+    @property(hidden) var code: i32;
+
+    fn reveal(self: SecretBox) -> i32 {
+        return self.code;
+    }
+};
+
+fn main() -> i32 {
+    var box: SecretBox = SecretBox {};
+    box.setCode(42);
+    return box.reveal();
+}
+```
+
+Example with `protected` across a derive chain:
+
+```mla
+struct Base {
+    @property(protected) var value: i32;
+};
+
+struct Mid : Base {
+    var tag: i32;
+};
+
+struct Leaf : Mid {
+    fn read(self: Leaf) -> i32 {
+        return self.value;
+    }
+};
+```
+
+Constraints:
+- `recursive` requires `mutex`.
+- `atomic` cannot be combined with `mutex`.
+- `hidden` and `protected` are mutually exclusive.
+
 ## Adding a New Rust-like Attribute
 
 To add a new attribute such as `#[derive(Clone)]`, update these compiler stages:

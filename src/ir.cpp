@@ -3351,6 +3351,89 @@ CodeGenerator::getStructFieldLayout(const std::string& structName,
     return &it->second[static_cast<size_t>(fieldIndex)];
 }
 
+const CodeGenerator::StructFieldAccessInfo*
+CodeGenerator::getStructFieldAccessInfo(const std::string& structName,
+                                        int fieldIndex) const
+{
+    auto it = structFieldAccessInfo.find(structName);
+    if(it == structFieldAccessInfo.end())
+        return nullptr;
+    if(fieldIndex < 0 ||
+       static_cast<size_t>(fieldIndex) >= it->second.size())
+        return nullptr;
+    return &it->second[static_cast<size_t>(fieldIndex)];
+}
+
+bool CodeGenerator::isStructSameOrDerivedFrom(
+    const std::string& candidateStruct, const std::string& baseStruct) const
+{
+    if(candidateStruct.empty() || baseStruct.empty())
+        return false;
+    if(candidateStruct == baseStruct)
+        return true;
+
+    std::string current = candidateStruct;
+    std::set<std::string> seen;
+    while(!current.empty() && seen.insert(current).second)
+    {
+        auto it = structBases.find(current);
+        if(it == structBases.end())
+            return false;
+        current = it->second;
+        if(current == baseStruct)
+            return true;
+    }
+    return false;
+}
+
+bool CodeGenerator::canAccessStructField(const std::string& accessedThroughStruct,
+                                         int fieldIndex, int line,
+                                         const std::string& fieldName) const
+{
+    const StructFieldAccessInfo* accessInfo =
+        getStructFieldAccessInfo(accessedThroughStruct, fieldIndex);
+    if(!accessInfo)
+        return true;
+
+    switch(accessInfo->encapsulation)
+    {
+    case FieldEncapsulation::Public:
+        return true;
+    case FieldEncapsulation::Hidden:
+        if(currentStructContext == accessInfo->ownerStructName)
+            return true;
+        break;
+    case FieldEncapsulation::Protected:
+        if(isStructSameOrDerivedFrom(currentStructContext,
+                                     accessInfo->ownerStructName))
+            return true;
+        break;
+    }
+
+    std::string message = "field '" + fieldName + "' of struct '" +
+                          accessInfo->ownerStructName + "'";
+    if(accessInfo->encapsulation == FieldEncapsulation::Hidden)
+    {
+        message += " is hidden";
+    }
+    else
+    {
+        message += " is protected";
+    }
+
+    if(currentStructContext.empty())
+    {
+        message += " and cannot be accessed here";
+    }
+    else
+    {
+        message += " and cannot be accessed from struct '" +
+                   currentStructContext + "'";
+    }
+    const_cast<CodeGenerator*>(this)->reportError(line, message);
+    return false;
+}
+
 llvm::Value* CodeGenerator::loadStructFieldValue(const std::string& structTypeName,
                                                  llvm::Value* structPtr,
                                                  int fieldIndex,
@@ -3754,6 +3837,9 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
                                   fieldAccess->fieldName + "'");
             return nullptr;
         }
+        if(!canAccessStructField(structTypeName, fieldIndex, line,
+                                 fieldAccess->fieldName))
+            return nullptr;
 
         llvm::StructType* structType = getStructType(structTypeName);
         if(!structType)
@@ -12483,6 +12569,7 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
     std::vector<llvm::Type*> memberTypes;
     std::vector<std::pair<std::string, TypeNode*>> members;
     std::vector<StructFieldLayout> layouts;
+    std::vector<StructFieldAccessInfo> accessInfo;
 
     // If this struct has a base, include base struct's fields first
     if(!node->baseName.empty())
@@ -12494,6 +12581,11 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
             auto baseLayoutIt = structFieldLayouts.find(node->baseName);
             for(const auto& baseMember : baseMemIt->second)
                 members.push_back(baseMember);
+            auto baseAccessIt = structFieldAccessInfo.find(node->baseName);
+            if(baseAccessIt != structFieldAccessInfo.end())
+                accessInfo.insert(accessInfo.end(),
+                                  baseAccessIt->second.begin(),
+                                  baseAccessIt->second.end());
             if(baseLayoutIt != structFieldLayouts.end())
                 layouts.insert(layouts.end(), baseLayoutIt->second.begin(),
                                baseLayoutIt->second.end());
@@ -12517,6 +12609,13 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
     for(auto member : node->members->members)
     {
         members.push_back({member->name, member->type});
+        StructFieldAccessInfo fieldAccess;
+        fieldAccess.ownerStructName = node->name;
+        if(member->isHiddenProperty || member->isSynthesizedPropertyStorage)
+            fieldAccess.encapsulation = FieldEncapsulation::Hidden;
+        else if(member->isProtectedProperty)
+            fieldAccess.encapsulation = FieldEncapsulation::Protected;
+        accessInfo.push_back(fieldAccess);
         StructFieldLayout layout;
         if(isBitFieldTypeNode(member->type))
         {
@@ -12546,6 +12645,7 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
     structTypes[node->name] = structType;
     structMembers[node->name] = members;
     structFieldLayouts[node->name] = layouts;
+    structFieldAccessInfo[node->name] = accessInfo;
     if(!node->debugDisplayName.empty())
         structDebugDisplayNames[node->name] = node->debugDisplayName;
 
@@ -16493,6 +16593,9 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                                     "' has no field named '" + fieldName + "'");
         return;
     }
+    if(!canAccessStructField(structTypeName, fieldIndex, node->line,
+                             fieldName))
+        return;
 
     // Get struct type
     llvm::StructType* structType = getStructType(structTypeName);
@@ -16824,6 +16927,9 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
                                   fieldAccess->fieldName + "'");
             return {nullptr, ""};
         }
+        if(!canAccessStructField(objTypeName, fieldIndex, line,
+                                 fieldAccess->fieldName))
+            return {nullptr, ""};
 
         // Check if the field is a struct type
         if(fieldType->kind == TypeNode::TYPE_STRUCT)
@@ -17078,6 +17184,9 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
                                     "'");
         return nullptr;
     }
+    if(!canAccessStructField(structTypeName, fieldIndex, node->line,
+                             node->fieldName))
+        return nullptr;
 
     return loadStructFieldValue(structTypeName, structPtr, fieldIndex,
                                 fieldType, node->fieldName);
@@ -20008,8 +20117,10 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     }
 
     std::string savedModule = currentModule;
+    std::string savedStructContext = currentStructContext;
     if(!method->sourceModule.empty())
         currentModule = method->sourceModule;
+    currentStructContext = structName;
     auto savedIP = builder.saveIP();
     llvm::Value* savedExceptionFrame = currentFunctionExceptionFrame;
     currentFunctionExceptionFrame = nullptr;
@@ -20043,6 +20154,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         activeTypeParamBindings = savedTypeParamBindings;
         currentSemanticReturnType = savedSemanticReturnType;
         currentModule = savedModule;
+        currentStructContext = savedStructContext;
         builder.restoreIP(savedIP);
         currentFunctionExceptionFrame = savedExceptionFrame;
         unsafeDepth = savedUnsafeDepth;
@@ -23825,7 +23937,8 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     std::function<llvm::Value*(const std::string&, llvm::StructType*,
                                const std::vector<std::pair<std::string, TypeNode*>>&,
                                llvm::Value*, const std::vector<std::string>&,
-                               size_t, ExpressionNode*, const std::string&)>
+                               size_t, ExpressionNode*, const std::string&,
+                               bool)>
         applyNestedFieldInit =
             [&](const std::string& currentStructName,
                 llvm::StructType* currentStructType,
@@ -23833,7 +23946,8 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                 llvm::Value* currentStructVal,
                 const std::vector<std::string>& fieldParts, size_t partIndex,
                 ExpressionNode* valueExpr,
-                const std::string& fullFieldName) -> llvm::Value*
+                const std::string& fullFieldName,
+                bool enforceAccess) -> llvm::Value*
     {
         if(partIndex >= fieldParts.size())
             return currentStructVal;
@@ -23852,6 +23966,12 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
         {
             reportError(node->line, "unknown field '" + fieldParts[partIndex] +
                                         "' in struct '" + currentStructName + "'");
+            return nullptr;
+        }
+        if(enforceAccess &&
+           !canAccessStructField(currentStructName, memberIndex, node->line,
+                                 fieldParts[partIndex]))
+        {
             return nullptr;
         }
 
@@ -23990,7 +24110,8 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
         nestedValue =
             applyNestedFieldInit(nestedStructName, nestedStructType,
                                  nestedMembersIt->second, nestedValue, fieldParts,
-                                 partIndex + 1, valueExpr, fullFieldName);
+                                 partIndex + 1, valueExpr, fullFieldName,
+                                 enforceAccess);
         if(!nestedValue)
             return nullptr;
 
@@ -24016,7 +24137,7 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             {
                 structVal = applyNestedFieldInit(
                     structTypeName, structType, members, structVal,
-                    {kv.first}, 0, kv.second, kv.first);
+                    {kv.first}, 0, kv.second, kv.first, false);
                 if(!structVal)
                     return nullptr;
             }
@@ -24050,7 +24171,7 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
 
         structVal = applyNestedFieldInit(structTypeName, structType, members,
                                          structVal, fieldParts, 0, valueExpr,
-                                         fieldName);
+                                         fieldName, true);
         if(!structVal)
             return nullptr;
     }
@@ -25287,6 +25408,7 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     std::vector<llvm::Type*> memberTypes;
     std::vector<std::pair<std::string, TypeNode*>> members;
     std::vector<StructFieldLayout> layouts;
+    std::vector<StructFieldAccessInfo> accessInfo;
 
     // Process each member, substituting type parameters
     bool packingBitRun = false;
@@ -25300,6 +25422,13 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
                 substituteTypeParams(member->type, typeParams, typeArgs);
 
             members.push_back({member->name, substitutedType});
+            StructFieldAccessInfo fieldAccess;
+            fieldAccess.ownerStructName = mangledName;
+            if(member->isHiddenProperty || member->isSynthesizedPropertyStorage)
+                fieldAccess.encapsulation = FieldEncapsulation::Hidden;
+            else if(member->isProtectedProperty)
+                fieldAccess.encapsulation = FieldEncapsulation::Protected;
+            accessInfo.push_back(fieldAccess);
             StructFieldLayout layout;
             if(isBitFieldTypeNode(substitutedType))
             {
@@ -25342,6 +25471,7 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     structTypes[mangledName] = structType;
     structMembers[mangledName] = members;
     structFieldLayouts[mangledName] = layouts;
+    structFieldAccessInfo[mangledName] = accessInfo;
     monomorphizedTypes.insert(mangledName);
     mangledToGenericName[mangledName] = genericName;
     std::vector<TypeNode*> storedTypeArgs;
