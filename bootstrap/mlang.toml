@@ -47,7 +47,7 @@ print = "[bootstrap] Building mlangd-mla with the freshly built compiler"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang"]
 commands = [
-  "{{build_dir}}/mlang tools/mlangd-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlangd-mla"
+  "{{build_dir}}/mlang tools/mlangd-mla/main.mla --no-tests -O0 -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlangd-mla"
 ]
 sign = ["{{build_dir}}/mlangd-mla"]
 
@@ -77,7 +77,7 @@ print = "[bootstrap] Building mlang-frontend-mla with the freshly built compiler
 workdir = "{{root}}/.."
 depends_on = ["build-mlang"]
 commands = [
-  "{{build_dir}}/mlang tools/mlang-frontend-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlang-frontend-mla"
+  "{{build_dir}}/mlang tools/mlang-frontend-mla/main.mla --no-tests -O0 -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlang-frontend-mla"
 ]
 
 [[task]]
@@ -86,7 +86,7 @@ print = "[bootstrap] Building mlang-format with the freshly built compiler"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang"]
 commands = [
-  "{{build_dir}}/mlang tools/mlang-format-mla/main.mla -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlang-format"
+  "{{build_dir}}/mlang tools/mlang-format-mla/main.mla --no-tests -O0 -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlang-format"
 ]
 
 [[task]]
