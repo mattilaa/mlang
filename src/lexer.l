@@ -171,6 +171,7 @@ static int is_try_question_context()
 "pub"           { return PUB; }
 "extern"        { return EXTERN; }
 "static"        { return STATIC; }
+"cexpr"         { return CEXPR; }
 "fn"            { return FUNCTION; }
 "impl"          { return IMPL; }
 "trait"         { return TRAIT; }

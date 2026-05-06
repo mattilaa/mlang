@@ -532,6 +532,11 @@ static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
         collectUsedIdents(sizeofExpr->expressionTarget, out);
         return;
     }
+    if(auto* cexprExpr = dynamic_cast<CexprExpressionNode*>(node))
+    {
+        collectUsedIdents(cexprExpr->expression, out);
+        return;
+    }
     if(auto* es = dynamic_cast<ExpressionStatementNode*>(node))
     {
         collectUsedIdents(es->expression, out);
@@ -2110,197 +2115,13 @@ bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
 
 bool CodeGenerator::evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out)
 {
-    if(!expr)
+    ConstexprValue value;
+    if(!evalConstexprExpression(expr, value, nullptr, nullptr, 0))
         return false;
-    if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))
-    {
-        TypeNode* targetType = nullptr;
-        if(sizeofExpr->typeTarget)
-            targetType = cloneTypeNode(sizeofExpr->typeTarget);
-        else
-        {
-            if(auto* id =
-                   dynamic_cast<IdentifierNode*>(sizeofExpr->expressionTarget))
-            {
-                auto it = variableTypes.find(id->name);
-                if(it != variableTypes.end())
-                {
-                    switch(it->second)
-                    {
-                    case TypeNode::TYPE_STRUCT:
-                    {
-                        auto sit = structVariableTypes.find(id->name);
-                        if(sit != structVariableTypes.end())
-                            targetType = new StructTypeRefNode(sit->second);
-                        break;
-                    }
-                    case TypeNode::TYPE_LIST:
-                    {
-                        auto lit = listElementTypes.find(id->name);
-                        if(lit != listElementTypes.end())
-                            targetType =
-                                new GenericListTypeNode(cloneTypeNode(lit->second));
-                        break;
-                    }
-                    case TypeNode::TYPE_MAP:
-                    {
-                        auto mit = mapKeyValueTypes.find(id->name);
-                        if(mit != mapKeyValueTypes.end())
-                            targetType = new MapTypeNode(
-                                cloneTypeNode(mit->second.first),
-                                cloneTypeNode(mit->second.second));
-                        break;
-                    }
-                    case TypeNode::TYPE_TUPLE:
-                    {
-                        auto tit = tupleElementTypes.find(id->name);
-                        if(tit != tupleElementTypes.end())
-                        {
-                            auto* types = new TypeListNode();
-                            for(auto* elem : tit->second)
-                                types->addType(cloneTypeNode(elem));
-                            targetType = new TupleTypeNode(types);
-                        }
-                        break;
-                    }
-                    case TypeNode::TYPE_PTR:
-                    {
-                        auto pit = pointerElementTypes.find(id->name);
-                        if(pit != pointerElementTypes.end())
-                            targetType =
-                                new PointerTypeNode(cloneTypeNode(pit->second));
-                        break;
-                    }
-                    default:
-                        targetType = new TypeNode(it->second);
-                        break;
-                    }
-                }
-            }
-            if(!targetType)
-                targetType = inferExpressionTypeNode(sizeofExpr->expressionTarget,
-                                                    sizeofExpr->line);
-        }
-        if(!targetType)
-            return false;
-        llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
-        if(!llvmType)
-            return false;
-        const llvm::DataLayout& dl = module->getDataLayout();
-        out = static_cast<int64_t>(
-            dl.getTypeAllocSize(llvmType).getFixedValue());
-        return true;
-    }
-    if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
-    {
-        out = i->value;
-        return true;
-    }
-    if(auto* b = dynamic_cast<BoolLiteralNode*>(expr))
-    {
-        out = b->value ? 1 : 0;
-        return true;
-    }
-    if(auto* un = dynamic_cast<UnaryOpNode*>(expr))
-    {
-        int64_t v = 0;
-        if(!evaluateCompileTimeInt(un->operand, v))
-            return false;
-        switch(un->op)
-        {
-        case UnaryOpNode::OP_NEG:
-            out = -v;
-            return true;
-        case UnaryOpNode::OP_NOT:
-            out = (v == 0) ? 1 : 0;
-            return true;
-        case UnaryOpNode::OP_BITNOT:
-            out = ~v;
-            return true;
-        default:
-            return false;
-        }
-    }
-    if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
-    {
-        int64_t lhs = 0;
-        int64_t rhs = 0;
-        if(!evaluateCompileTimeInt(bin->left, lhs) ||
-           !evaluateCompileTimeInt(bin->right, rhs))
-            return false;
-        switch(bin->op)
-        {
-        case BinaryOpNode::OP_PLUS:
-            out = lhs + rhs;
-            return true;
-        case BinaryOpNode::OP_MINUS:
-            out = lhs - rhs;
-            return true;
-        case BinaryOpNode::OP_MULTIPLY:
-            out = lhs * rhs;
-            return true;
-        case BinaryOpNode::OP_DIVIDE:
-            if(rhs == 0)
-                return false;
-            out = lhs / rhs;
-            return true;
-        case BinaryOpNode::OP_MODULO:
-            if(rhs == 0)
-                return false;
-            out = lhs % rhs;
-            return true;
-        case BinaryOpNode::OP_BITAND:
-            out = lhs & rhs;
-            return true;
-        case BinaryOpNode::OP_BITOR:
-            out = lhs | rhs;
-            return true;
-        case BinaryOpNode::OP_BITXOR:
-            out = lhs ^ rhs;
-            return true;
-        case BinaryOpNode::OP_SHL:
-            out = lhs << rhs;
-            return true;
-        case BinaryOpNode::OP_SHR:
-            out = lhs >> rhs;
-            return true;
-        case BinaryOpNode::OP_LT:
-            out = lhs < rhs ? 1 : 0;
-            return true;
-        case BinaryOpNode::OP_GT:
-            out = lhs > rhs ? 1 : 0;
-            return true;
-        case BinaryOpNode::OP_LE:
-            out = lhs <= rhs ? 1 : 0;
-            return true;
-        case BinaryOpNode::OP_GE:
-            out = lhs >= rhs ? 1 : 0;
-            return true;
-        case BinaryOpNode::OP_EQ:
-            out = lhs == rhs ? 1 : 0;
-            return true;
-        case BinaryOpNode::OP_NE:
-            out = lhs != rhs ? 1 : 0;
-            return true;
-        case BinaryOpNode::OP_AND:
-            out = (lhs != 0 && rhs != 0) ? 1 : 0;
-            return true;
-        case BinaryOpNode::OP_OR:
-            out = (lhs != 0 || rhs != 0) ? 1 : 0;
-            return true;
-        default:
-            return false;
-        }
-    }
-    if(auto* tern = dynamic_cast<TernaryNode*>(expr))
-    {
-        bool cond = false;
-        if(!evaluateCompileTimeBool(tern->condition, cond))
-            return false;
-        return evaluateCompileTimeInt(cond ? tern->trueExpr : tern->falseExpr,
-                                      out);
-    }
-    return false;
+    out = value.kind == ConstexprValue::Kind::Bool
+              ? (value.boolValue ? 1 : 0)
+              : value.intValue;
+    return true;
 }
 
 bool CodeGenerator::evaluateCompileTimeBool(ExpressionNode* expr, bool& out)
@@ -4388,6 +4209,8 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
 
     if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))
         return new TypeNode(TypeNode::TYPE_I64);
+    if(auto* cexprExpr = dynamic_cast<CexprExpressionNode*>(expr))
+        return inferExpressionTypeNode(cexprExpr->expression, line);
 
     return nullptr;
 }
@@ -4429,6 +4252,690 @@ llvm::Value* CodeGenerator::generateSizeofExpression(SizeofExpressionNode* node)
     const llvm::DataLayout& dl = module->getDataLayout();
     uint64_t sizeBytes = dl.getTypeAllocSize(llvmType).getFixedValue();
     return llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), sizeBytes);
+}
+
+llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(
+    const ConstexprValue& value, TypeNode* targetType, int line)
+{
+    TypeNode::TypeKind kind =
+        targetType ? normalizeInferredKind(targetType->kind) : value.typeKind;
+    if(kind == TypeNode::TYPE_BOOL)
+    {
+        const bool boolValue =
+            value.kind == ConstexprValue::Kind::Bool ? value.boolValue
+                                                     : (value.intValue != 0);
+        return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
+                                      boolValue ? 1 : 0, false);
+    }
+
+    llvm::Type* llvmType = getLLVMType(kind);
+    if(!llvmType || !llvmType->isIntegerTy())
+    {
+        reportError(line, "cexpr currently supports only integer and bool values");
+        return nullptr;
+    }
+    const int64_t intValue =
+        value.kind == ConstexprValue::Kind::Bool ? (value.boolValue ? 1 : 0)
+                                                 : value.intValue;
+    return llvm::ConstantInt::get(llvmType, intValue, !isUnsignedType(kind));
+}
+
+bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
+                                      ConstexprValue& out,
+                                      std::string* errorMessage,
+                                      ConstexprEnv* env,
+                                      int depth)
+{
+    if(!call)
+        return false;
+    if(depth > 64)
+    {
+        if(errorMessage)
+            *errorMessage = "cexpr recursion depth exceeded";
+        return false;
+    }
+
+    auto overloadIt = functionOverloads.find(call->name);
+    if(overloadIt == functionOverloads.end())
+    {
+        if(errorMessage)
+            *errorMessage = "unknown function in cexpr call: '" + call->name + "'";
+        return false;
+    }
+
+    for(const auto& overload : overloadIt->second)
+    {
+        FunctionDefNode* fn = overload.node;
+        if(!fn || !fn->isCexpr || !fn->body || !fn->parameters)
+            continue;
+        if(fn->parameters->isVarArg)
+            continue;
+        if(fn->parameters->parameters.size() != call->arguments.size())
+            continue;
+
+        ConstexprEnv localEnv;
+        bool argsOk = true;
+        for(size_t i = 0; i < call->arguments.size(); ++i)
+        {
+            auto* param = fn->parameters->parameters[i];
+            ConstexprValue argValue;
+            if(!evalConstexprExpression(call->arguments[i], argValue,
+                                        errorMessage, env, depth + 1))
+            {
+                argsOk = false;
+                break;
+            }
+
+            TypeNode::TypeKind paramKind =
+                param ? normalizeInferredKind(param->type->kind)
+                      : TypeNode::TYPE_I64;
+            if(paramKind == TypeNode::TYPE_BOOL)
+            {
+                const bool boolValue =
+                    argValue.kind == ConstexprValue::Kind::Bool
+                        ? argValue.boolValue
+                        : (argValue.intValue != 0);
+                argValue.kind = ConstexprValue::Kind::Bool;
+                argValue.boolValue = boolValue;
+                argValue.intValue = boolValue ? 1 : 0;
+                argValue.typeKind = TypeNode::TYPE_BOOL;
+            }
+            else if(!isIntegerInferKind(paramKind))
+            {
+                if(errorMessage)
+                {
+                    *errorMessage =
+                        "cexpr fn parameters currently support only integer and bool types";
+                }
+                return false;
+            }
+            else
+            {
+                if(argValue.kind == ConstexprValue::Kind::Bool)
+                    argValue.intValue = argValue.boolValue ? 1 : 0;
+                argValue.kind = ConstexprValue::Kind::Int;
+                argValue.typeKind = paramKind;
+            }
+
+            localEnv[param->name] = argValue;
+        }
+        if(!argsOk)
+            return false;
+
+        ConstexprValue returnValue;
+        bool didReturn = false;
+        if(!evalConstexprStatementList(fn->body, localEnv, returnValue,
+                                       didReturn, errorMessage, depth + 1))
+            return false;
+        if(!didReturn)
+        {
+            if(errorMessage)
+                *errorMessage = "cexpr fn '" + call->name + "' must return a value";
+            return false;
+        }
+        out = returnValue;
+        if(fn->returnType)
+            out.typeKind = normalizeInferredKind(fn->returnType->kind);
+        return true;
+    }
+
+    if(errorMessage)
+        *errorMessage =
+            "cexpr call requires a matching 'cexpr fn' overload: '" +
+            call->name + "'";
+    return false;
+}
+
+bool CodeGenerator::evalConstexprStatementList(StatementListNode* body,
+                                               ConstexprEnv& env,
+                                               ConstexprValue& returnValue,
+                                               bool& didReturn,
+                                               std::string* errorMessage,
+                                               int depth)
+{
+    if(!body)
+        return true;
+
+    for(auto* stmt : body->statements)
+    {
+        if(!stmt)
+            continue;
+        if(auto* ret = dynamic_cast<ReturnNode*>(stmt))
+        {
+            if(!ret->expression)
+            {
+                if(errorMessage)
+                    *errorMessage = "cexpr fn does not support bare return";
+                return false;
+            }
+            if(!evalConstexprExpression(ret->expression, returnValue,
+                                        errorMessage, &env, depth + 1))
+                return false;
+            didReturn = true;
+            return true;
+        }
+        if(auto* letDecl = dynamic_cast<LetDeclNode*>(stmt))
+        {
+            if(!letDecl->expression)
+            {
+                if(errorMessage)
+                    *errorMessage =
+                        "cexpr fn let declarations require an initializer";
+                return false;
+            }
+            ConstexprValue value;
+            if(!evalConstexprExpression(letDecl->expression, value, errorMessage,
+                                        &env, depth + 1))
+                return false;
+            if(letDecl->type &&
+               normalizeInferredKind(letDecl->type->kind) == TypeNode::TYPE_BOOL)
+            {
+                const bool boolValue =
+                    value.kind == ConstexprValue::Kind::Bool
+                        ? value.boolValue
+                        : (value.intValue != 0);
+                value.kind = ConstexprValue::Kind::Bool;
+                value.boolValue = boolValue;
+                value.intValue = boolValue ? 1 : 0;
+                value.typeKind = TypeNode::TYPE_BOOL;
+            }
+            env[letDecl->name] = value;
+            continue;
+        }
+        if(auto* varDecl = dynamic_cast<VarDeclNode*>(stmt))
+        {
+            ConstexprValue value;
+            if(varDecl->initExpr)
+            {
+                if(!evalConstexprExpression(varDecl->initExpr, value,
+                                            errorMessage, &env, depth + 1))
+                    return false;
+            }
+            else
+            {
+                TypeNode::TypeKind kind = varDecl->type
+                                              ? normalizeInferredKind(
+                                                    varDecl->type->kind)
+                                              : TypeNode::TYPE_I64;
+                if(kind == TypeNode::TYPE_BOOL)
+                {
+                    value.kind = ConstexprValue::Kind::Bool;
+                    value.boolValue = false;
+                    value.intValue = 0;
+                    value.typeKind = TypeNode::TYPE_BOOL;
+                }
+                else if(isIntegerInferKind(kind))
+                {
+                    value.kind = ConstexprValue::Kind::Int;
+                    value.intValue = 0;
+                    value.boolValue = false;
+                    value.typeKind = kind;
+                }
+                else
+                {
+                    if(errorMessage)
+                    {
+                        *errorMessage =
+                            "cexpr fn zero-initialization currently supports only integer and bool vars";
+                    }
+                    return false;
+                }
+            }
+            env[varDecl->name] = value;
+            continue;
+        }
+        if(auto* assign = dynamic_cast<AssignmentNode*>(stmt))
+        {
+            auto it = env.find(assign->name);
+            if(it == env.end())
+            {
+                if(errorMessage)
+                    *errorMessage =
+                        "unknown variable in cexpr fn assignment: '" +
+                        assign->name + "'";
+                return false;
+            }
+            ConstexprValue value;
+            if(!evalConstexprExpression(assign->expression, value, errorMessage,
+                                        &env, depth + 1))
+                return false;
+            it->second = value;
+            continue;
+        }
+        if(auto* exprStmt = dynamic_cast<ExpressionStatementNode*>(stmt))
+        {
+            ConstexprValue ignored;
+            if(!evalConstexprExpression(exprStmt->expression, ignored,
+                                        errorMessage, &env, depth + 1))
+                return false;
+            continue;
+        }
+        if(auto* block = dynamic_cast<BlockStatementNode*>(stmt))
+        {
+            ConstexprEnv nestedEnv = env;
+            if(!evalConstexprStatementList(block->statements, nestedEnv,
+                                           returnValue, didReturn, errorMessage,
+                                           depth + 1))
+                return false;
+            if(didReturn)
+                return true;
+            continue;
+        }
+        if(auto* ifNode = dynamic_cast<IfNode*>(stmt))
+        {
+            if(ifNode->conditionInit)
+            {
+                if(errorMessage)
+                    *errorMessage =
+                        "cexpr fn does not support if let/if var initializers";
+                return false;
+            }
+            bool cond = false;
+            if(!evalConstexprExpression(ifNode->condition, returnValue,
+                                        errorMessage, &env, depth + 1))
+                return false;
+            cond = returnValue.kind == ConstexprValue::Kind::Bool
+                       ? returnValue.boolValue
+                       : (returnValue.intValue != 0);
+            if(cond)
+            {
+                ConstexprEnv nestedEnv = env;
+                if(!evalConstexprStatementList(ifNode->thenBranch, nestedEnv,
+                                               returnValue, didReturn,
+                                               errorMessage, depth + 1))
+                    return false;
+                if(didReturn)
+                    return true;
+                continue;
+            }
+            if(ifNode->elseIfBranch)
+            {
+                StatementListNode nestedList;
+                nestedList.statements.push_back(ifNode->elseIfBranch);
+                ConstexprEnv nestedEnv = env;
+                if(!evalConstexprStatementList(&nestedList, nestedEnv,
+                                               returnValue, didReturn,
+                                               errorMessage, depth + 1))
+                    return false;
+                if(didReturn)
+                    return true;
+                continue;
+            }
+            if(ifNode->elseBranch)
+            {
+                ConstexprEnv nestedEnv = env;
+                if(!evalConstexprStatementList(ifNode->elseBranch, nestedEnv,
+                                               returnValue, didReturn,
+                                               errorMessage, depth + 1))
+                    return false;
+                if(didReturn)
+                    return true;
+            }
+            continue;
+        }
+
+        if(errorMessage)
+            *errorMessage = "statement is not supported in cexpr fn";
+        return false;
+    }
+    return true;
+}
+
+bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
+                                            ConstexprValue& out,
+                                            std::string* errorMessage,
+                                            ConstexprEnv* env,
+                                            int depth)
+{
+    if(!expr)
+        return false;
+    if(depth > 64)
+    {
+        if(errorMessage)
+            *errorMessage = "cexpr recursion depth exceeded";
+        return false;
+    }
+    if(auto* cexprExpr = dynamic_cast<CexprExpressionNode*>(expr))
+        return evalConstexprExpression(cexprExpr->expression, out, errorMessage,
+                                       env, depth + 1);
+    if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))
+    {
+        TypeNode* targetType = nullptr;
+        if(sizeofExpr->typeTarget)
+            targetType = cloneTypeNode(sizeofExpr->typeTarget);
+        else
+        {
+            if(auto* id =
+                   dynamic_cast<IdentifierNode*>(sizeofExpr->expressionTarget))
+            {
+                auto it = variableTypes.find(id->name);
+                if(it != variableTypes.end())
+                {
+                    switch(it->second)
+                    {
+                    case TypeNode::TYPE_STRUCT:
+                    {
+                        auto sit = structVariableTypes.find(id->name);
+                        if(sit != structVariableTypes.end())
+                            targetType = new StructTypeRefNode(sit->second);
+                        break;
+                    }
+                    case TypeNode::TYPE_LIST:
+                    {
+                        auto lit = listElementTypes.find(id->name);
+                        if(lit != listElementTypes.end())
+                            targetType = new GenericListTypeNode(
+                                cloneTypeNode(lit->second));
+                        break;
+                    }
+                    case TypeNode::TYPE_MAP:
+                    {
+                        auto mit = mapKeyValueTypes.find(id->name);
+                        if(mit != mapKeyValueTypes.end())
+                            targetType = new MapTypeNode(
+                                cloneTypeNode(mit->second.first),
+                                cloneTypeNode(mit->second.second));
+                        break;
+                    }
+                    case TypeNode::TYPE_TUPLE:
+                    {
+                        auto tit = tupleElementTypes.find(id->name);
+                        if(tit != tupleElementTypes.end())
+                        {
+                            auto* types = new TypeListNode();
+                            for(auto* elem : tit->second)
+                                types->addType(cloneTypeNode(elem));
+                            targetType = new TupleTypeNode(types);
+                        }
+                        break;
+                    }
+                    case TypeNode::TYPE_PTR:
+                    {
+                        auto pit = pointerElementTypes.find(id->name);
+                        if(pit != pointerElementTypes.end())
+                            targetType =
+                                new PointerTypeNode(cloneTypeNode(pit->second));
+                        break;
+                    }
+                    default:
+                        targetType = new TypeNode(it->second);
+                        break;
+                    }
+                }
+            }
+            if(!targetType)
+                targetType = inferExpressionTypeNode(sizeofExpr->expressionTarget,
+                                                     sizeofExpr->line);
+        }
+        if(!targetType)
+            return false;
+        llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
+        if(!llvmType)
+            return false;
+        const llvm::DataLayout& dl = module->getDataLayout();
+        out.kind = ConstexprValue::Kind::Int;
+        out.intValue = static_cast<int64_t>(
+            dl.getTypeAllocSize(llvmType).getFixedValue());
+        out.boolValue = out.intValue != 0;
+        out.typeKind = TypeNode::TYPE_I64;
+        return true;
+    }
+    if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
+    {
+        out.kind = ConstexprValue::Kind::Int;
+        out.intValue = i->value;
+        out.boolValue = i->value != 0;
+        out.typeKind = TypeNode::TYPE_I64;
+        return true;
+    }
+    if(auto* b = dynamic_cast<BoolLiteralNode*>(expr))
+    {
+        out.kind = ConstexprValue::Kind::Bool;
+        out.boolValue = b->value;
+        out.intValue = b->value ? 1 : 0;
+        out.typeKind = TypeNode::TYPE_BOOL;
+        return true;
+    }
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        if(env)
+        {
+            auto it = env->find(id->name);
+            if(it != env->end())
+            {
+                out = it->second;
+                return true;
+            }
+        }
+        return false;
+    }
+    if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
+    {
+        if(!evalConstexprExpression(castExpr->expression, out, errorMessage, env,
+                                    depth + 1))
+            return false;
+        TypeNode::TypeKind targetKind =
+            normalizeInferredKind(castExpr->targetType);
+        if(targetKind == TypeNode::TYPE_BOOL)
+        {
+            const bool boolValue = out.kind == ConstexprValue::Kind::Bool
+                                       ? out.boolValue
+                                       : (out.intValue != 0);
+            out.kind = ConstexprValue::Kind::Bool;
+            out.boolValue = boolValue;
+            out.intValue = boolValue ? 1 : 0;
+            out.typeKind = TypeNode::TYPE_BOOL;
+            return true;
+        }
+        if(!isIntegerInferKind(targetKind))
+        {
+            if(errorMessage)
+                *errorMessage =
+                    "cexpr casts currently support only integer and bool targets";
+            return false;
+        }
+        if(out.kind == ConstexprValue::Kind::Bool)
+            out.intValue = out.boolValue ? 1 : 0;
+        out.kind = ConstexprValue::Kind::Int;
+        out.typeKind = targetKind;
+        out.boolValue = out.intValue != 0;
+        return true;
+    }
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+        return evalConstexprCall(call, out, errorMessage, env, depth + 1);
+    if(auto* un = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        ConstexprValue operand;
+        if(!evalConstexprExpression(un->operand, operand, errorMessage, env,
+                                    depth + 1))
+            return false;
+        const int64_t value = operand.kind == ConstexprValue::Kind::Bool
+                                  ? (operand.boolValue ? 1 : 0)
+                                  : operand.intValue;
+        switch(un->op)
+        {
+        case UnaryOpNode::OP_NEG:
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = -value;
+            out.boolValue = out.intValue != 0;
+            out.typeKind = operand.typeKind;
+            return true;
+        case UnaryOpNode::OP_NOT:
+            out.kind = ConstexprValue::Kind::Bool;
+            out.boolValue = (value == 0);
+            out.intValue = out.boolValue ? 1 : 0;
+            out.typeKind = TypeNode::TYPE_BOOL;
+            return true;
+        case UnaryOpNode::OP_BITNOT:
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = ~value;
+            out.boolValue = out.intValue != 0;
+            out.typeKind = operand.typeKind;
+            return true;
+        default:
+            return false;
+        }
+    }
+    if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        ConstexprValue lhsValue;
+        ConstexprValue rhsValue;
+        if(!evalConstexprExpression(bin->left, lhsValue, errorMessage, env,
+                                    depth + 1) ||
+           !evalConstexprExpression(bin->right, rhsValue, errorMessage, env,
+                                    depth + 1))
+            return false;
+        const int64_t lhs = lhsValue.kind == ConstexprValue::Kind::Bool
+                                ? (lhsValue.boolValue ? 1 : 0)
+                                : lhsValue.intValue;
+        const int64_t rhs = rhsValue.kind == ConstexprValue::Kind::Bool
+                                ? (rhsValue.boolValue ? 1 : 0)
+                                : rhsValue.intValue;
+        switch(bin->op)
+        {
+        case BinaryOpNode::OP_PLUS:
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = lhs + rhs;
+            out.typeKind = lhsValue.typeKind;
+            break;
+        case BinaryOpNode::OP_MINUS:
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = lhs - rhs;
+            out.typeKind = lhsValue.typeKind;
+            break;
+        case BinaryOpNode::OP_MULTIPLY:
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = lhs * rhs;
+            out.typeKind = lhsValue.typeKind;
+            break;
+        case BinaryOpNode::OP_DIVIDE:
+            if(rhs == 0)
+            {
+                if(errorMessage)
+                    *errorMessage = "division by zero in cexpr";
+                return false;
+            }
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = lhs / rhs;
+            out.typeKind = lhsValue.typeKind;
+            break;
+        case BinaryOpNode::OP_MODULO:
+            if(rhs == 0)
+            {
+                if(errorMessage)
+                    *errorMessage = "modulo by zero in cexpr";
+                return false;
+            }
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = lhs % rhs;
+            out.typeKind = lhsValue.typeKind;
+            break;
+        case BinaryOpNode::OP_BITAND:
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = lhs & rhs;
+            out.typeKind = lhsValue.typeKind;
+            break;
+        case BinaryOpNode::OP_BITOR:
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = lhs | rhs;
+            out.typeKind = lhsValue.typeKind;
+            break;
+        case BinaryOpNode::OP_BITXOR:
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = lhs ^ rhs;
+            out.typeKind = lhsValue.typeKind;
+            break;
+        case BinaryOpNode::OP_SHL:
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = lhs << rhs;
+            out.typeKind = lhsValue.typeKind;
+            break;
+        case BinaryOpNode::OP_SHR:
+            out.kind = ConstexprValue::Kind::Int;
+            out.intValue = lhs >> rhs;
+            out.typeKind = lhsValue.typeKind;
+            break;
+        case BinaryOpNode::OP_LT:
+            out.kind = ConstexprValue::Kind::Bool;
+            out.boolValue = lhs < rhs;
+            out.typeKind = TypeNode::TYPE_BOOL;
+            break;
+        case BinaryOpNode::OP_GT:
+            out.kind = ConstexprValue::Kind::Bool;
+            out.boolValue = lhs > rhs;
+            out.typeKind = TypeNode::TYPE_BOOL;
+            break;
+        case BinaryOpNode::OP_LE:
+            out.kind = ConstexprValue::Kind::Bool;
+            out.boolValue = lhs <= rhs;
+            out.typeKind = TypeNode::TYPE_BOOL;
+            break;
+        case BinaryOpNode::OP_GE:
+            out.kind = ConstexprValue::Kind::Bool;
+            out.boolValue = lhs >= rhs;
+            out.typeKind = TypeNode::TYPE_BOOL;
+            break;
+        case BinaryOpNode::OP_EQ:
+            out.kind = ConstexprValue::Kind::Bool;
+            out.boolValue = lhs == rhs;
+            out.typeKind = TypeNode::TYPE_BOOL;
+            break;
+        case BinaryOpNode::OP_NE:
+            out.kind = ConstexprValue::Kind::Bool;
+            out.boolValue = lhs != rhs;
+            out.typeKind = TypeNode::TYPE_BOOL;
+            break;
+        case BinaryOpNode::OP_AND:
+            out.kind = ConstexprValue::Kind::Bool;
+            out.boolValue = (lhs != 0 && rhs != 0);
+            out.typeKind = TypeNode::TYPE_BOOL;
+            break;
+        case BinaryOpNode::OP_OR:
+            out.kind = ConstexprValue::Kind::Bool;
+            out.boolValue = (lhs != 0 || rhs != 0);
+            out.typeKind = TypeNode::TYPE_BOOL;
+            break;
+        default:
+            return false;
+        }
+        if(out.kind == ConstexprValue::Kind::Bool)
+            out.intValue = out.boolValue ? 1 : 0;
+        else
+            out.boolValue = out.intValue != 0;
+        return true;
+    }
+    if(auto* tern = dynamic_cast<TernaryNode*>(expr))
+    {
+        ConstexprValue condValue;
+        if(!evalConstexprExpression(tern->condition, condValue, errorMessage,
+                                    env, depth + 1))
+            return false;
+        const bool cond = condValue.kind == ConstexprValue::Kind::Bool
+                              ? condValue.boolValue
+                              : (condValue.intValue != 0);
+        return evalConstexprExpression(cond ? tern->trueExpr : tern->falseExpr,
+                                       out, errorMessage, env, depth + 1);
+    }
+    return false;
+}
+
+llvm::Value* CodeGenerator::generateCexprExpression(CexprExpressionNode* node)
+{
+    if(!node || !node->expression)
+        return nullptr;
+    ConstexprValue value;
+    std::string errorMessage;
+    if(!evalConstexprExpression(node->expression, value, &errorMessage, nullptr,
+                                0))
+    {
+        reportError(node->line,
+                    errorMessage.empty()
+                        ? "cexpr(...) requires a compile-time expression"
+                        : errorMessage);
+        return nullptr;
+    }
+    TypeNode* targetType = inferExpressionTypeNode(node->expression, node->line);
+    return buildLLVMConstantFromConstexprValue(value, targetType, node->line);
 }
 
 void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
@@ -4853,207 +5360,14 @@ void CodeGenerator::generateAssertEq(AssertEqNode* node)
 
 void CodeGenerator::generateStaticAssert(StaticAssertNode* node)
 {
-    auto resolveStaticAssertType = [&](SizeofExpressionNode* sizeofExpr)
-        -> TypeNode*
-    {
-        if(!sizeofExpr)
-            return nullptr;
-        if(sizeofExpr->typeTarget)
-            return cloneTypeNode(sizeofExpr->typeTarget);
-        if(auto* id =
-               dynamic_cast<IdentifierNode*>(sizeofExpr->expressionTarget))
-        {
-            auto it = variableTypes.find(id->name);
-            if(it != variableTypes.end())
-            {
-                switch(it->second)
-                {
-                case TypeNode::TYPE_STRUCT:
-                {
-                    auto sit = structVariableTypes.find(id->name);
-                    if(sit != structVariableTypes.end())
-                        return new StructTypeRefNode(sit->second);
-                    break;
-                }
-                case TypeNode::TYPE_LIST:
-                {
-                    auto lit = listElementTypes.find(id->name);
-                    if(lit != listElementTypes.end())
-                        return new GenericListTypeNode(cloneTypeNode(lit->second));
-                    break;
-                }
-                case TypeNode::TYPE_MAP:
-                {
-                    auto mit = mapKeyValueTypes.find(id->name);
-                    if(mit != mapKeyValueTypes.end())
-                        return new MapTypeNode(cloneTypeNode(mit->second.first),
-                                               cloneTypeNode(mit->second.second));
-                    break;
-                }
-                case TypeNode::TYPE_TUPLE:
-                {
-                    auto tit = tupleElementTypes.find(id->name);
-                    if(tit != tupleElementTypes.end())
-                    {
-                        auto* types = new TypeListNode();
-                        for(auto* elem : tit->second)
-                            types->addType(cloneTypeNode(elem));
-                        return new TupleTypeNode(types);
-                    }
-                    break;
-                }
-                case TypeNode::TYPE_PTR:
-                {
-                    auto pit = pointerElementTypes.find(id->name);
-                    if(pit != pointerElementTypes.end())
-                        return new PointerTypeNode(cloneTypeNode(pit->second));
-                    break;
-                }
-                default:
-                    return new TypeNode(it->second);
-                }
-            }
-        }
-        return inferExpressionTypeNode(sizeofExpr->expressionTarget,
-                                       sizeofExpr->line);
-    };
-
-    std::function<bool(ExpressionNode*, int64_t&)> evalConstInt =
-        [&](ExpressionNode* expr, int64_t& out) -> bool
-    {
-        if(!expr)
-            return false;
-        if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))
-        {
-            TypeNode* targetType = resolveStaticAssertType(sizeofExpr);
-            if(!targetType)
-                return false;
-            llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
-            if(!llvmType)
-                return false;
-            out = static_cast<int64_t>(
-                module->getDataLayout().getTypeAllocSize(llvmType).getFixedValue());
-            return true;
-        }
-        if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
-        {
-            out = i->value;
-            return true;
-        }
-        if(auto* b = dynamic_cast<BoolLiteralNode*>(expr))
-        {
-            out = b->value ? 1 : 0;
-            return true;
-        }
-        if(auto* un = dynamic_cast<UnaryOpNode*>(expr))
-        {
-            int64_t v = 0;
-            if(!evalConstInt(un->operand, v))
-                return false;
-            switch(un->op)
-            {
-            case UnaryOpNode::OP_NEG:
-                out = -v;
-                return true;
-            case UnaryOpNode::OP_NOT:
-                out = (v == 0) ? 1 : 0;
-                return true;
-            case UnaryOpNode::OP_BITNOT:
-                out = ~v;
-                return true;
-            default:
-                return false;
-            }
-        }
-        if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
-        {
-            int64_t lhs = 0;
-            int64_t rhs = 0;
-            if(!evalConstInt(bin->left, lhs) || !evalConstInt(bin->right, rhs))
-                return false;
-            switch(bin->op)
-            {
-            case BinaryOpNode::OP_PLUS:
-                out = lhs + rhs;
-                return true;
-            case BinaryOpNode::OP_MINUS:
-                out = lhs - rhs;
-                return true;
-            case BinaryOpNode::OP_MULTIPLY:
-                out = lhs * rhs;
-                return true;
-            case BinaryOpNode::OP_DIVIDE:
-                if(rhs == 0)
-                    return false;
-                out = lhs / rhs;
-                return true;
-            case BinaryOpNode::OP_MODULO:
-                if(rhs == 0)
-                    return false;
-                out = lhs % rhs;
-                return true;
-            case BinaryOpNode::OP_BITAND:
-                out = lhs & rhs;
-                return true;
-            case BinaryOpNode::OP_BITOR:
-                out = lhs | rhs;
-                return true;
-            case BinaryOpNode::OP_BITXOR:
-                out = lhs ^ rhs;
-                return true;
-            case BinaryOpNode::OP_SHL:
-                out = lhs << rhs;
-                return true;
-            case BinaryOpNode::OP_SHR:
-                out = lhs >> rhs;
-                return true;
-            case BinaryOpNode::OP_LT:
-                out = lhs < rhs ? 1 : 0;
-                return true;
-            case BinaryOpNode::OP_GT:
-                out = lhs > rhs ? 1 : 0;
-                return true;
-            case BinaryOpNode::OP_LE:
-                out = lhs <= rhs ? 1 : 0;
-                return true;
-            case BinaryOpNode::OP_GE:
-                out = lhs >= rhs ? 1 : 0;
-                return true;
-            case BinaryOpNode::OP_EQ:
-                out = lhs == rhs ? 1 : 0;
-                return true;
-            case BinaryOpNode::OP_NE:
-                out = lhs != rhs ? 1 : 0;
-                return true;
-            case BinaryOpNode::OP_AND:
-                out = (lhs != 0 && rhs != 0) ? 1 : 0;
-                return true;
-            case BinaryOpNode::OP_OR:
-                out = (lhs != 0 || rhs != 0) ? 1 : 0;
-                return true;
-            default:
-                return false;
-            }
-        }
-        if(auto* tern = dynamic_cast<TernaryNode*>(expr))
-        {
-            int64_t cond = 0;
-            if(!evalConstInt(tern->condition, cond))
-                return false;
-            return evalConstInt(cond != 0 ? tern->trueExpr : tern->falseExpr,
-                                out);
-        }
-        return false;
-    };
-
-    int64_t condInt = 0;
-    if(!evalConstInt(node->condition, condInt))
+    bool cond = false;
+    if(!evaluateCompileTimeBool(node->condition, cond))
     {
         llvm::Value* folded = node->condition ? generateExpression(node->condition)
                                               : nullptr;
         if(auto* foldedInt = llvm::dyn_cast_or_null<llvm::ConstantInt>(folded))
         {
-            condInt = foldedInt->isZero() ? 0 : 1;
+            cond = !foldedInt->isZero();
         }
         else
         {
@@ -5063,7 +5377,7 @@ void CodeGenerator::generateStaticAssert(StaticAssertNode* node)
             return;
         }
     }
-    if(condInt == 0)
+    if(!cond)
     {
         reportError(node->line, "static_assert! failed");
     }
@@ -7986,6 +8300,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     else if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(node))
     {
         return generateSizeofExpression(sizeofExpr);
+    }
+    else if(auto* cexprExpr = dynamic_cast<CexprExpressionNode*>(node))
+    {
+        return generateCexprExpression(cexprExpr);
     }
     else if(auto* inlineAsm = dynamic_cast<InlineAsmNode*>(node))
     {

@@ -253,6 +253,40 @@ var copy: PairStamp {};  // no warning
 
 Use `{}` when you want the zero-initialization intent to be explicit in source.
 
+## `cexpr` Compile-Time Evaluation
+
+MLang supports explicit compile-time evaluation with the `cexpr` keyword.
+
+Use `cexpr(expr)` when an expression must be folded during compilation:
+
+```mla
+fn main() -> i32 {
+    let mask: i64 = cexpr((1 << 5) | 3);
+    return mask == 35 ? 0 : 1;
+}
+```
+
+Functions can opt in to compile-time calls with `cexpr fn`:
+
+```mla
+cexpr fn square(x: i64) -> i64 {
+    return x * x;
+}
+
+fn main() -> i32 {
+    static_assert!(square(6) == 36);
+    let value: i64 = cexpr(square(7));
+    return value == 49 ? 0 : 1;
+}
+```
+
+Current first-version constraints:
+- `cexpr` currently supports integer and `bool` values.
+- `cexpr fn` bodies support compile-time-evaluable expressions, local
+  `let`/`var` declarations, assignment, `if`/`else`, nested blocks, and
+  `return`.
+- Calling a non-`cexpr fn` from `cexpr(...)` is rejected.
+
 ## `if` / `else if` Syntax
 
 Plain block form (preferred):

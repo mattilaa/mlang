@@ -1312,6 +1312,7 @@ ASTNode* mla_ast_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int l
 ASTNode* mla_ast_try_expression(ASTNode* expr, int line);
 ASTNode* mla_ast_sizeof_type_expression(ASTNode* type, int line);
 ASTNode* mla_ast_sizeof_value_expression(ASTNode* expr, int line);
+ASTNode* mla_ast_cexpr_expression(ASTNode* expr, int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
 ASTNode* mla_argument_list_create(ASTNode* arg);
@@ -1550,7 +1551,7 @@ enum UpdatePosition
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
 %token PUB IMPL TRAIT DYN
 %token EXTERN
-%token STATIC
+%token STATIC CEXPR
 %token ASM VOLATILE SIZEOF
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
@@ -2072,6 +2073,20 @@ function_def
         { auto* node = mla_ast_function_def($7, $2, $4, $9, 0, 0); node->line = yylineno; $$ = node; }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         { auto* node = mla_ast_function_def($8, $3, $5, $10, 1, 0); node->line = yylineno; $$ = node; }
+    | CEXPR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        {
+            auto* node = mla_ast_function_def($8, $3, $5, $10, 0, 0);
+            node->line = yylineno;
+            static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            $$ = node;
+        }
+    | PUB CEXPR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        {
+            auto* node = mla_ast_function_def($9, $4, $6, $11, 1, 0);
+            node->line = yylineno;
+            static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            $$ = node;
+        }
     | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
         {
             TypeNode* inferred = nullptr;
@@ -2088,6 +2103,26 @@ function_def
                 inferred = static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_I32));
             auto* node = mla_ast_function_def(inferred, $3, $5, $8, 1, 0);
             node->line = yylineno;
+            $$ = node;
+        }
+    | CEXPR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
+        {
+            TypeNode* inferred = nullptr;
+            if(strcmp($3, "main") == 0)
+                inferred = static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_I32));
+            auto* node = mla_ast_function_def(inferred, $3, $5, $8, 0, 0);
+            node->line = yylineno;
+            static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            $$ = node;
+        }
+    | PUB CEXPR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
+        {
+            TypeNode* inferred = nullptr;
+            if(strcmp($4, "main") == 0)
+                inferred = static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_I32));
+            auto* node = mla_ast_function_def(inferred, $4, $6, $9, 1, 0);
+            node->line = yylineno;
+            static_cast<FunctionDefNode*>(node)->isCexpr = true;
             $$ = node;
         }
     | EXTERN FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
@@ -2971,6 +3006,8 @@ condition_primary
         }
     | SIZEOF LPAREN block_condition_expression RPAREN
         { $$ = mla_ast_sizeof_value_expression($3, yylineno); }
+    | CEXPR LPAREN expression RPAREN
+        { $$ = mla_ast_cexpr_expression($3, yylineno); }
     | OBJECT LBRACE struct_field_init_list RBRACE
         {
             auto* lit = static_cast<StructLiteralNode*>(
@@ -3168,6 +3205,8 @@ primary_expression
         { $$ = mla_ast_sizeof_type_expression($3, yylineno); }
     | SIZEOF LPAREN expression RPAREN
         { $$ = mla_ast_sizeof_value_expression($3, yylineno); }
+    | CEXPR LPAREN expression RPAREN
+        { $$ = mla_ast_cexpr_expression($3, yylineno); }
     | asm_expression { $$ = $1; }
     | OBJECT LBRACE struct_field_init_list RBRACE
         {

@@ -673,6 +673,11 @@ ASTNode* mla_ast_sizeof_value_expression(ASTNode* expr, int line)
     return create_sizeof_value_expression(expr, line);
 }
 
+ASTNode* mla_ast_cexpr_expression(ASTNode* expr, int line)
+{
+    return create_cexpr_expression(expr, line);
+}
+
 ASTNode* mla_ast_inline_asm(ASTNode* type, char* asm_text, char* arch_name,
                             ASTNode* args, int is_volatile, int line)
 {

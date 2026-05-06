@@ -432,6 +432,15 @@ public:
     std::string toString() const override;
 };
 
+class CexprExpressionNode : public ExpressionNode
+{
+public:
+    ExpressionNode* expression;
+
+    explicit CexprExpressionNode(ExpressionNode* e) : expression(e) {}
+    std::string toString() const override;
+};
+
 /// \brief Inline assembly expression lowered directly to LLVM inline asm.
 ///
 /// Supported first-version source forms are:
@@ -1353,6 +1362,7 @@ public:
     bool isPublic;
     bool isExtern;
     bool isTest = false;
+    bool isCexpr = false;
     bool isInline = false;
     bool isInlineAlways = false;
     bool isInlineNever = false;
@@ -1495,6 +1505,7 @@ ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f,
 ASTNode* create_try_expression(ASTNode* expr, int line);
 ASTNode* create_sizeof_type_expression(ASTNode* type, int line);
 ASTNode* create_sizeof_value_expression(ASTNode* expr, int line);
+ASTNode* create_cexpr_expression(ASTNode* expr, int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2,
                               int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);

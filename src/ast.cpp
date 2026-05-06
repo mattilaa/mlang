@@ -459,6 +459,13 @@ ASTNode* create_sizeof_value_expression_impl(ASTNode* expr, int line)
     return node;
 }
 
+ASTNode* create_cexpr_expression_impl(ASTNode* expr, int line)
+{
+    auto* node = new CexprExpressionNode(static_cast<ExpressionNode*>(expr));
+    node->line = line;
+    return node;
+}
+
 ASTNode* create_inline_asm_impl(ASTNode* type, char* asm_text, char* arch_name,
                                 ASTNode* args, int is_volatile, int line)
 {
@@ -1470,7 +1477,11 @@ std::string FunctionDefNode::toString() const
     {
         result += "extern ";
     }
-    result += isPublic ? "pub fn " : "fn ";
+    if(isPublic)
+        result += "pub ";
+    if(isCexpr)
+        result += "cexpr ";
+    result += "fn ";
     result += name + "(" + parameters->toString() + ") -> ";
     result += returnType->toString();
     if(isExtern)
@@ -1782,6 +1793,12 @@ std::string SizeofExpressionNode::toString() const
     return "sizeof(" +
            (expressionTarget ? expressionTarget->toString() : "<unknown>") +
            ")";
+}
+
+std::string CexprExpressionNode::toString() const
+{
+    return "cexpr(" +
+           (expression ? expression->toString() : "<unknown>") + ")";
 }
 
 std::string InlineAsmNode::toString() const

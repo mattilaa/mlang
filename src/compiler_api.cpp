@@ -2708,6 +2708,10 @@ static bool fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemant
             return true;
         };
 
+        if (out.name == "cexpr" && builtin_property_def("cexpr")) {
+            return true;
+        }
+
         if (startsWith(line_trim, "@property")) {
             if (out.name == "property") {
                 if (builtin_property_def("property")) {
@@ -3394,7 +3398,7 @@ static const std::vector<std::string>& builtinMemberNames(std::string_view owner
 
 static bool isKeywordToken(std::string_view token) {
     static constexpr std::string_view kKeywords[] = {
-        "fn", "let", "var", "struct", "mod", "use", "if", "else", "while",
+        "fn", "cexpr", "let", "var", "struct", "mod", "use", "if", "else", "while",
         "for", "return",
     };
     for (const auto kw : kKeywords) {
@@ -3475,7 +3479,7 @@ static std::vector<std::string> computeSemanticCompletions(
     int line,
     int column) {
     static constexpr std::string_view kKeywords[] = {
-        "fn", "let", "var", "struct", "mod", "use", "if", "else", "while",
+        "fn", "cexpr", "let", "var", "struct", "mod", "use", "if", "else", "while",
         "for", "return",
     };
 

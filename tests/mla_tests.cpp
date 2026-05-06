@@ -3224,6 +3224,57 @@ TEST_F(MLATest, StaticAssertNonConstExpressionFails)
               std::string::npos);
 }
 
+TEST_F(MLATest, CexprExpressionInitializesRuntimeValue)
+{
+    std::string code = R"(
+        cexpr fn add(a: i64, b: i64) -> i64 {
+            return a + b;
+        }
+
+        fn main() -> i32 {
+            let value: i64 = cexpr(add(2, 5) * 3);
+            return value == 21 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StaticAssertAcceptsCexprFunctionCall)
+{
+    std::string code = R"(
+        cexpr fn square(x: i64) -> i64 {
+            return x * x;
+        }
+
+        fn main() -> i32 {
+            static_assert!(square(6) == 36);
+            static_assert!(cexpr(square(3) + 1) == 10);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, CexprRejectsNonCexprFunctionCall)
+{
+    std::string code = R"(
+        fn runtime_add(a: i64, b: i64) -> i64 {
+            return a + b;
+        }
+
+        fn main() -> i32 {
+            let value: i64 = cexpr(runtime_add(1, 2));
+            return value == 3 ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cexpr call requires a matching 'cexpr fn' overload"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, RawPointerDereferenceOutsideUnsafeFails)
 {
     std::string code = R"(

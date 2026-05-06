@@ -46,6 +46,7 @@ ASTNode* create_ternary_expression_impl(ASTNode* cond, ASTNode* t, ASTNode* f, i
 ASTNode* create_try_expression_impl(ASTNode* expr, int line);
 ASTNode* create_sizeof_type_expression_impl(ASTNode* type, int line);
 ASTNode* create_sizeof_value_expression_impl(ASTNode* expr, int line);
+ASTNode* create_cexpr_expression_impl(ASTNode* expr, int line);
 ASTNode* create_inline_asm_impl(ASTNode* type, char* asm_text, char* arch_name,
                                 ASTNode* args, int is_volatile, int line);
 ASTNode* create_function_call_impl(char* name, ASTNode* arg1, ASTNode* arg2, int line);

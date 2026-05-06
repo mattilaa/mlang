@@ -128,6 +128,7 @@ ASTNode* mla_ast_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int l
 ASTNode* mla_ast_try_expression(ASTNode* expr, int line);
 ASTNode* mla_ast_sizeof_type_expression(ASTNode* type, int line);
 ASTNode* mla_ast_sizeof_value_expression(ASTNode* expr, int line);
+ASTNode* mla_ast_cexpr_expression(ASTNode* expr, int line);
 ASTNode* mla_ast_inline_asm(ASTNode* type, char* asm_text, char* arch_name,
                             ASTNode* args, int is_volatile, int line);
 ASTNode* mla_ast_update_expression(int kind, int is_prefix, ASTNode* operand, int line);

@@ -258,6 +258,33 @@ private:
     };
     std::map<std::string, std::vector<FunctionOverloadInfo>> functionOverloads;
     std::vector<FunctionDefNode*> deferredModuleFunctionDefs;
+    struct ConstexprValue
+    {
+        enum class Kind
+        {
+            Int,
+            Bool
+        };
+
+        Kind kind = Kind::Int;
+        int64_t intValue = 0;
+        bool boolValue = false;
+        TypeNode::TypeKind typeKind = TypeNode::TYPE_I64;
+    };
+    using ConstexprEnv = std::map<std::string, ConstexprValue>;
+    bool evalConstexprExpression(ExpressionNode* expr, ConstexprValue& out,
+                                 std::string* errorMessage = nullptr,
+                                 ConstexprEnv* env = nullptr,
+                                 int depth = 0);
+    bool evalConstexprCall(FunctionCallNode* call, ConstexprValue& out,
+                           std::string* errorMessage, ConstexprEnv* env,
+                           int depth);
+    bool evalConstexprStatementList(StatementListNode* body, ConstexprEnv& env,
+                                    ConstexprValue& returnValue,
+                                    bool& didReturn,
+                                    std::string* errorMessage, int depth);
+    llvm::Constant* buildLLVMConstantFromConstexprValue(
+        const ConstexprValue& value, TypeNode* targetType, int line);
     // Maps struct name -> (isPublic, sourceModule)
     std::map<std::string, std::pair<bool, std::string>> structVisibility;
     // Trait-object lvalues tracked by variable name -> trait name.
@@ -545,6 +572,7 @@ private:
     llvm::Value* generateTernaryExpression(TernaryNode* node);
     llvm::Value* generateTryExpression(TryExpressionNode* node);
     llvm::Value* generateSizeofExpression(SizeofExpressionNode* node);
+    llvm::Value* generateCexprExpression(CexprExpressionNode* node);
     /// \brief Lower an inline asm expression to LLVM inline asm.
     ///
     /// Current constraints are intentionally narrow so optimization behavior

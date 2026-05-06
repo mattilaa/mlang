@@ -38,6 +38,28 @@ binaries are produced by feeding their `.mla` source through the seed
 compiler. The bootstrap launcher in `bootstrap/` is a thin wrapper around
 `mlang pkg` that orchestrates this in the right order.
 
+## Compile-Time Evaluation With `cexpr`
+
+MLang supports explicit compile-time evaluation with `cexpr(expr)` and
+`cexpr fn`.
+
+```mla
+cexpr fn square(x: i64) -> i64 {
+    return x * x;
+}
+
+fn main() -> i32 {
+    static_assert!(square(8) == 64);
+    let mask: i64 = cexpr(square(3) + 1);
+    return mask == 10 ? 0 : 1;
+}
+```
+
+Current first-version scope:
+- `cexpr(...)` folds integer and `bool` expressions during compilation.
+- `cexpr fn` marks functions that may be called from compile-time contexts.
+- Calling a normal runtime `fn` from `cexpr(...)` is rejected.
+
 ## Tools Shipped In This Repository
 
 | Binary                | Source                              | Built By           | What It Does                                                                                       | Why It Exists                                                                                                                           |

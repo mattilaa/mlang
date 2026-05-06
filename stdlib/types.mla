@@ -49,6 +49,8 @@
 /// - This page documents language built-ins, not importable stdlib modules.
 /// - The `?` operator propagates `Err` values and enriches
 ///   `Result<_, str8>` error stacks with call-site context.
+/// - `cexpr(...)` and `cexpr fn` provide explicit compile-time evaluation for
+///   integer and `bool` expressions.
 /// - Property attributes such as `@property(hidden)` and
 ///   `@property(protected)` are documented here so IDE go-to-definition can
 ///   jump to a stable builtin reference page.
@@ -204,6 +206,14 @@
 // Property option: `@property(protected)`.
 // Allows direct backing-field access from the declaring struct and the full
 // derive chain from that base down to the lowest derived struct.
+
+// @builtin cexpr
+// Compile-time evaluation keyword.
+// Use `cexpr(expr)` to require compile-time folding of an integer or bool
+// expression.
+// Use `cexpr fn name(...) -> T { ... }` to mark a function as callable from
+// compile-time evaluation contexts such as `static_assert!` and `cexpr(...)`.
+// Current first-version support is limited to integer and bool values.
 
 // @builtin asm
 /// Inline assembly expression keyword.

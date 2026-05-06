@@ -54,6 +54,7 @@ def main() -> int:
         doc = root / "internal_def.mla"
         text = (
             "fn test_defs() -> i32 {\n"
+            "  let folded: i64 = cexpr(1 + 2);\n"
             "  let iv: i32 = 1;\n"
             "  let value: string = String::new();\n"
             "  let cap: string = String::with_capacity(16);\n"
@@ -228,6 +229,24 @@ def main() -> int:
             assert int_target_line >= 0, f"int target line missing: {int_res!r}"
             int_line_text = int_target.read_text().splitlines()[int_target_line]
             assert "@builtin i32" in int_line_text, f"int target text mismatch: {int_line_text!r}"
+
+            cexpr_line, cexpr_char = position_of(text, "cexpr(1 + 2)")
+            cexpr_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": cexpr_line, "character": cexpr_char},
+                },
+            )
+            assert isinstance(cexpr_res, list) and cexpr_res, f"cexpr definition missing: {cexpr_res!r}"
+            cexpr_uri = cexpr_res[0].get("uri", "")
+            assert cexpr_uri.endswith("/stdlib/types.mla"), f"cexpr uri mismatch: {cexpr_res!r}"
+            cexpr_target = Path(cexpr_uri.removeprefix("file://"))
+            cexpr_start = cexpr_res[0].get("range", {}).get("start", {})
+            cexpr_target_line = int(cexpr_start.get("line", -1))
+            assert cexpr_target_line >= 0, f"cexpr target line missing: {cexpr_res!r}"
+            cexpr_line_text = cexpr_target.read_text().splitlines()[cexpr_target_line]
+            assert "@builtin cexpr" in cexpr_line_text, f"cexpr target text mismatch: {cexpr_line_text!r}"
 
             hidden_line, hidden_char = position_of(text, "@property(hidden)")
             hidden_char += len("@property(")
