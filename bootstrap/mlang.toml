@@ -47,7 +47,8 @@ print = "[bootstrap] Building mlangd-mla with the freshly built compiler"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang"]
 commands = [
-  "{{build_dir}}/mlang tools/mlangd-mla/main.mla --no-tests -Wno-unwrap -O0 -L {{build_dir}} -lmlang_std -o {{build_dir}}/mlangd-mla"
+  "{{build_dir}}/mlang -c tools/mlangd-mla/main.mla --no-tests -Wno-unwrap -O0 -o {{build_dir}}/mlangd-mla.o",
+  "c++ -o {{build_dir}}/mlangd-mla {{build_dir}}/mlangd-mla.o -L{{build_dir}} -lmlang_std -lm"
 ]
 sign = ["{{build_dir}}/mlangd-mla"]
 

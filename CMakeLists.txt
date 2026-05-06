@@ -341,23 +341,33 @@ endif()
 set(MLANGD_MLA_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/main.mla)
 set(MLANGD_MLA_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla)
 set(MLANGD_ALIAS_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd)
+set(MLANGD_OBJECT_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.o)
 set(MLANGD_STAMP ${CMAKE_CURRENT_BINARY_DIR}/mlangd.stamp)
 
 add_custom_command(
     OUTPUT ${MLANGD_STAMP}
-    COMMAND $<TARGET_FILE:mlang> ${MLANGD_MLA_SOURCE}
+    COMMAND $<TARGET_FILE:mlang> -c ${MLANGD_MLA_SOURCE}
             --no-tests
             -Wno-unwrap
             -O0
-            -L ${CMAKE_CURRENT_BINARY_DIR}
-            -lmlang_std
+            -o ${MLANGD_OBJECT_OUTPUT}
+    COMMAND ${CMAKE_CXX_COMPILER}
             -o ${MLANGD_MLA_OUTPUT}
+            ${MLANGD_OBJECT_OUTPUT}
+            -L${CMAKE_CURRENT_BINARY_DIR}
+            -lmlang_std
+            -lm
+            ${OPENSSL_SSL_LIBRARY}
+            ${OPENSSL_CRYPTO_LIBRARY}
+            $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreFoundation>
+            $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreGraphics>
+            $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:ImageIO>
     COMMAND ${CMAKE_COMMAND} -E copy ${MLANGD_MLA_OUTPUT} ${MLANGD_ALIAS_OUTPUT}
     COMMAND ${CMAKE_COMMAND} -E touch ${MLANGD_STAMP}
     DEPENDS mlang mlang_std ${MLANGD_MLA_SOURCE}
             ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMENT "Building mlangd-mla with the seed compiler and mirroring to mlangd"
+    COMMENT "Building mlangd-mla via object compile + host link, then mirroring to mlangd"
     VERBATIM
 )
 
