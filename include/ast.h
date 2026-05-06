@@ -811,6 +811,7 @@ public:
     TypeNode* type;
     std::string name;
     ExpressionNode* initExpr;
+    bool isExplicitZeroInit = false;
     bool isStaticStorage = false;
     bool isGlobalStorage = false;
 

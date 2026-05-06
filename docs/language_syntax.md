@@ -206,6 +206,53 @@ For collection values, the returned name includes inner types when available:
 If a struct defines a real field named `name`, normal field access is used
 instead of the synthetic type-name property.
 
+## Typed `var` Declarations Without Initializers
+
+A typed `var` declaration with no initializer is zero-initialized.
+
+Examples:
+
+```mla
+var count: i32;          // 0
+var count2: i32 {};      // 0
+var ready: bool;         // false
+var ready2: bool {};     // false
+var next: ptr<i32>;      // null
+var next2: ptr<i32> {};  // null
+```
+
+Struct values follow the same rule: every field starts at its zero value.
+The explicit `{}` form requests zero-initialized storage in the same style as
+C++ value-initialization.
+
+```mla
+struct PairStamp {
+    var left: i64;
+    var right: i64;
+};
+
+fn main() -> i32 {
+    var stamp: PairStamp;
+    var copy: PairStamp {};
+    return (stamp.left == 0 && copy.right == 0) ? 0 : 1;
+}
+```
+
+For derived structs, zero-initialization covers both the derived fields and the
+inherited base fields.
+
+This is equivalent to explicit zero/default construction for the declared
+storage. `let` declarations are different: they still require an initializer.
+
+The compiler warns when zero-initialization is implicit:
+
+```mla
+var stamp: PairStamp;    // warning: implicit zero-initialization
+var copy: PairStamp {};  // no warning
+```
+
+Use `{}` when you want the zero-initialization intent to be explicit in source.
+
 ## `if` / `else if` Syntax
 
 Plain block form (preferred):

@@ -2331,6 +2331,12 @@ var_statement
         { $$ = mla_ast_var_declaration(NULL, $2, $4); }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = mla_ast_var_declaration($4, $2, NULL); }
+    | VAR IDENTIFIER COLON type LBRACE RBRACE SEMICOLON
+        {
+            $$ = mla_ast_var_declaration($4, $2, NULL);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isExplicitZeroInit = true;
+        }
     | VAR IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
         { $$ = mla_ast_var_declaration($4, $2, $6); }
     | VAR IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
@@ -2360,6 +2366,15 @@ global_var_statement
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
                 n->isGlobalStorage = true;
         }
+    | VAR IDENTIFIER COLON type LBRACE RBRACE SEMICOLON
+        {
+            $$ = mla_ast_var_declaration($4, $2, NULL);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+            {
+                n->isGlobalStorage = true;
+                n->isExplicitZeroInit = true;
+            }
+        }
     ;
 
 static_var_statement
@@ -2380,6 +2395,15 @@ static_var_statement
             $$ = mla_ast_var_declaration($5, $3, NULL);
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
                 n->isStaticStorage = true;
+        }
+    | STATIC VAR IDENTIFIER COLON type LBRACE RBRACE SEMICOLON
+        {
+            $$ = mla_ast_var_declaration($5, $3, NULL);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+            {
+                n->isStaticStorage = true;
+                n->isExplicitZeroInit = true;
+            }
         }
     ;
 

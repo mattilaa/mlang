@@ -112,6 +112,13 @@ public:
         warnResultUnwrap = enabled;
     }
 
+    /// \brief Enable or disable the warning for implicit zero-initialization
+    ///        of typed \c var declarations.
+    void setWarnImplicitZeroInit(bool enabled)
+    {
+        warnImplicitZeroInit = enabled;
+    }
+
     /// \brief Set a substring filter for test execution.
     ///
     /// When non-empty, only \c #[test] functions whose display name
@@ -228,6 +235,7 @@ private:
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
     bool warnResultUnwrap = true;
+    bool warnImplicitZeroInit = true;
     std::string sourceFileName;        ///< Source file path for default suite name derivation.
     /// \brief Substring filter for selecting individual tests.
     ///

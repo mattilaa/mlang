@@ -1263,6 +1263,117 @@ TEST_F(MLATest, ZeroValue)
     EXPECT_EQ(compileAndRun(code), "0\n");
 }
 
+TEST_F(MLATest, TypedVarStructWithoutInitializerIsZeroInitialized)
+{
+    std::string code = R"(
+        struct PairStamp {
+            var left: i64;
+            var right: i64;
+        };
+
+        fn main() -> i32 {
+            var stamp: PairStamp;
+            return (stamp.left == 0 && stamp.right == 0) ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0);
+    EXPECT_NE(out.find("implicit zero-initialization for typed var 'stamp'"),
+              std::string::npos);
+    EXPECT_EQ(runExitCode(), 0);
+}
+
+TEST_F(MLATest, TypedVarScalarBraceZeroInit)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i64 {};
+            return value == 0 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, TypedVarDerivedStructBraceZeroInit)
+{
+    std::string code = R"(
+        struct BaseStamp {
+            var left: i64;
+        };
+
+        struct PairStamp : BaseStamp {
+            var right: i64;
+        };
+
+        fn main() -> i32 {
+            var stamp: PairStamp {};
+            return (stamp.left == 0 && stamp.right == 0) ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0);
+    EXPECT_EQ(out.find("implicit zero-initialization"), std::string::npos);
+    EXPECT_EQ(runExitCode(), 0);
+}
+
+TEST_F(MLATest, TypedVarGenericStructBraceZeroInit)
+{
+    std::string code = R"(
+        struct Pair<T, U> {
+            var left: T;
+            var right: U;
+        };
+
+        fn main() -> i32 {
+            var pair: Pair<i64, i64> {};
+            return (pair.left == 0 && pair.right == 0) ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0);
+    EXPECT_EQ(out.find("implicit zero-initialization"), std::string::npos);
+    EXPECT_EQ(runExitCode(), 0);
+}
+
+TEST_F(MLATest, TypedVarScalarImplicitZeroInitWarns)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i64;
+            return value == 0 ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0);
+    EXPECT_NE(out.find("implicit zero-initialization for typed var 'value'"),
+              std::string::npos);
+    EXPECT_EQ(runExitCode(), 0);
+}
+
+TEST_F(MLATest, TypedVarScalarBraceZeroInitDoesNotWarn)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var value: i64 {};
+            return value == 0 ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0);
+    EXPECT_EQ(out.find("implicit zero-initialization"), std::string::npos);
+    EXPECT_EQ(runExitCode(), 0);
+}
+
 TEST_F(MLATest, LargeExpression)
 {
     std::string code = R"(

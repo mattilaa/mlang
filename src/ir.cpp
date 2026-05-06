@@ -15354,6 +15354,14 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     clearMovedVariable(node->name);
     if(node->isStaticStorage || node->isGlobalStorage)
     {
+        if(node->type && !node->initExpr && !node->isExplicitZeroInit &&
+           warnImplicitZeroInit)
+        {
+            reportWarning(node->line, node->col,
+                          "implicit zero-initialization for typed var '" +
+                              node->name +
+                              "'; use '{}' to make zero-init explicit");
+        }
         std::string storageName = node->name;
         if(node->isStaticStorage)
         {
@@ -15571,6 +15579,23 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             return;
         }
     }
+
+    auto storeZeroInitializedValue = [&](llvm::AllocaInst* alloca,
+                                         llvm::Type* storageType) -> void
+    {
+        if(!alloca || !storageType || node->initExpr)
+            return;
+        builder.CreateStore(llvm::Constant::getNullValue(storageType), alloca);
+    };
+    auto emitImplicitZeroInitWarning = [&]() -> void
+    {
+        if(node->initExpr || node->isExplicitZeroInit ||
+           !this->warnImplicitZeroInit)
+            return;
+        reportWarning(node->line, node->col,
+                      "implicit zero-initialization for typed var '" +
+                          node->name + "'; use '{}' to make zero-init explicit");
+    };
 
     if(!node->type)
     {
@@ -15855,6 +15880,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 builder.CreateStore(initValue, alloca);
             }
         }
+        else
+        {
+            storeZeroInitializedValue(alloca, structType);
+            emitImplicitZeroInitWarning();
+        }
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
@@ -15898,6 +15928,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 builder.CreateStore(initValue, alloca);
             }
         }
+        else
+        {
+            storeZeroInitializedValue(alloca, listStructType);
+            emitImplicitZeroInitWarning();
+        }
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_LIST;
@@ -15932,6 +15967,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 builder.CreateStore(initValue, alloca);
             }
         }
+        else
+        {
+            storeZeroInitializedValue(alloca, mapStructType);
+            emitImplicitZeroInitWarning();
+        }
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_MAP;
@@ -15957,6 +15997,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             {
                 builder.CreateStore(initValue, alloca);
             }
+        }
+        else
+        {
+            storeZeroInitializedValue(alloca, llvmPtrType);
+            emitImplicitZeroInitWarning();
         }
 
         namedValues[node->name] = alloca;
@@ -16080,6 +16125,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 }
             }
         }
+        else
+        {
+            storeZeroInitializedValue(alloca, tupleStructType);
+            emitImplicitZeroInitWarning();
+        }
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_TUPLE;
@@ -16135,6 +16185,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     builder.CreateStore(initValue, alloca);
                 }
             }
+            else
+            {
+                storeZeroInitializedValue(alloca, targetType);
+                emitImplicitZeroInitWarning();
+            }
 
             namedValues[node->name] = alloca;
             variableTypes[node->name] = baseKind;
@@ -16160,6 +16215,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             {
                 builder.CreateStore(initValue, alloca);
             }
+        }
+        else
+        {
+            storeZeroInitializedValue(alloca, structType);
+            emitImplicitZeroInitWarning();
         }
 
         namedValues[node->name] = alloca;
@@ -16229,6 +16289,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             }
             builder.CreateStore(initValue, alloca);
         }
+    }
+    else
+    {
+        storeZeroInitializedValue(alloca, targetType);
+        emitImplicitZeroInitWarning();
     }
 
     namedValues[node->name] = alloca;

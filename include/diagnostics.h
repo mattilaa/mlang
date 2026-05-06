@@ -32,6 +32,8 @@ inline std::string classify_warning_code(const std::string& message)
         return "MLANG-W0003";
     if(contains_text(message, "empty block"))
         return "MLANG-W0004";
+    if(contains_text(message, "implicit zero-initialization"))
+        return "MLANG-W0005";
     return "MLANG-W9999";
 }
 
