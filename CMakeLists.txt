@@ -333,14 +333,18 @@ if(APPLE)
     )
 endif()
 
-# Bootstrap-built MLang language server target. This keeps CI and local
-# `cmake --build ... --target mlangd` workflows working even though the
-# server itself is written in MLang and compiled by the seed compiler.
+# Bootstrap-built MLang language server target. The repo still has many
+# references to `build/mlangd` as the primary LSP binary, but the actual
+# checked-in implementation lives in tools/mlangd-mla/main.mla. Build the
+# MLang implementation once, then mirror it to `build/mlangd` so existing
+# CI/test workflows can consume a stable executable path.
 set(MLANGD_MLA_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/main.mla)
 set(MLANGD_MLA_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla)
+set(MLANGD_ALIAS_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd)
+set(MLANGD_STAMP ${CMAKE_CURRENT_BINARY_DIR}/mlangd.stamp)
 
 add_custom_command(
-    OUTPUT ${MLANGD_MLA_OUTPUT}
+    OUTPUT ${MLANGD_STAMP}
     COMMAND $<TARGET_FILE:mlang> ${MLANGD_MLA_SOURCE}
             --no-tests
             -Wno-unwrap
@@ -348,13 +352,16 @@ add_custom_command(
             -L ${CMAKE_CURRENT_BINARY_DIR}
             -lmlang_std
             -o ${MLANGD_MLA_OUTPUT}
+    COMMAND ${CMAKE_COMMAND} -E copy ${MLANGD_MLA_OUTPUT} ${MLANGD_ALIAS_OUTPUT}
+    COMMAND ${CMAKE_COMMAND} -E touch ${MLANGD_STAMP}
     DEPENDS mlang mlang_std ${MLANGD_MLA_SOURCE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMENT "Building mlangd-mla with the seed compiler"
+    COMMENT "Building mlangd-mla with the seed compiler and mirroring to mlangd"
     VERBATIM
 )
 
-add_custom_target(mlangd DEPENDS ${MLANGD_MLA_OUTPUT})
+add_custom_target(mlangd DEPENDS ${MLANGD_STAMP})
 
 # RapidJSON for std::json backend (header-only).
 include(FetchContent)

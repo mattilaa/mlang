@@ -21,12 +21,9 @@ jobs:
       - name: Build
         run: |
           cmake --build build --target mlang mlangd mlang_std
-      - name: Build mlangd_mla
-        run: |
-          ./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
       - name: Mlangd MLA transcript suite
         run: |
-          python3 tests/lsp_mlangd_mla_transcripts.py --mlangd /tmp/mlangd_mla
+          python3 tests/lsp_mlangd-mla_transcripts.py --mlangd build/mlangd-mla
       - name: LSP integration transcript
         run: |
           python3 tests/lsp_integration_transcript.py --mlangd build/mlangd
