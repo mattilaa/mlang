@@ -333,6 +333,26 @@ if(APPLE)
     )
 endif()
 
+# Bootstrap-built MLang language server target. This keeps CI and local
+# `cmake --build ... --target mlangd` workflows working even though the
+# server itself is written in MLang and compiled by the seed compiler.
+set(MLANGD_MLA_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/main.mla)
+set(MLANGD_MLA_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla)
+
+add_custom_command(
+    OUTPUT ${MLANGD_MLA_OUTPUT}
+    COMMAND $<TARGET_FILE:mlang> ${MLANGD_MLA_SOURCE}
+            -L ${CMAKE_CURRENT_BINARY_DIR}
+            -lmlang_std
+            -o ${MLANGD_MLA_OUTPUT}
+    DEPENDS mlang mlang_std ${MLANGD_MLA_SOURCE}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Building mlangd-mla with the seed compiler"
+    VERBATIM
+)
+
+add_custom_target(mlangd DEPENDS ${MLANGD_MLA_OUTPUT})
+
 # RapidJSON for std::json backend (header-only).
 include(FetchContent)
 find_path(RAPIDJSON_INCLUDE_DIR rapidjson/document.h
