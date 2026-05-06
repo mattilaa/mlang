@@ -58,6 +58,11 @@ def main() -> int:
             "  let value: string = String::new();\n"
             "  let cap: string = String::with_capacity(16);\n"
             "  String::free(cap);\n"
+            "  struct Device {\n"
+            "    @property(hidden) var value: i32;\n"
+            "    @property(mutex, recursive) var guard: i32;\n"
+            "    @property(protected) var scope: i32;\n"
+            "  };\n"
             "  let letters: list<string> = [\"alpha\", \"beta\"];\n"
             "  let num: int = 1;\n"
             "  return 0;\n"
@@ -223,6 +228,63 @@ def main() -> int:
             assert int_target_line >= 0, f"int target line missing: {int_res!r}"
             int_line_text = int_target.read_text().splitlines()[int_target_line]
             assert "@builtin i32" in int_line_text, f"int target text mismatch: {int_line_text!r}"
+
+            hidden_line, hidden_char = position_of(text, "@property(hidden)")
+            hidden_char += len("@property(")
+            hidden_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": hidden_line, "character": hidden_char},
+                },
+            )
+            assert isinstance(hidden_res, list) and hidden_res, f"hidden property definition missing: {hidden_res!r}"
+            hidden_uri = hidden_res[0].get("uri", "")
+            assert hidden_uri.endswith("/stdlib/types.mla"), f"hidden property uri mismatch: {hidden_res!r}"
+            hidden_target = Path(hidden_uri.removeprefix("file://"))
+            hidden_start = hidden_res[0].get("range", {}).get("start", {})
+            hidden_target_line = int(hidden_start.get("line", -1))
+            assert hidden_target_line >= 0, f"hidden property line missing: {hidden_res!r}"
+            hidden_line_text = hidden_target.read_text().splitlines()[hidden_target_line]
+            assert "@builtin hidden" in hidden_line_text, f"hidden property target text mismatch: {hidden_line_text!r}"
+
+            recursive_line, recursive_char = position_of(text, "@property(mutex, recursive)")
+            recursive_char += len("@property(mutex, ")
+            recursive_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": recursive_line, "character": recursive_char},
+                },
+            )
+            assert isinstance(recursive_res, list) and recursive_res, f"recursive property definition missing: {recursive_res!r}"
+            recursive_uri = recursive_res[0].get("uri", "")
+            assert recursive_uri.endswith("/stdlib/types.mla"), f"recursive property uri mismatch: {recursive_res!r}"
+            recursive_target = Path(recursive_uri.removeprefix("file://"))
+            recursive_start = recursive_res[0].get("range", {}).get("start", {})
+            recursive_target_line = int(recursive_start.get("line", -1))
+            assert recursive_target_line >= 0, f"recursive property line missing: {recursive_res!r}"
+            recursive_line_text = recursive_target.read_text().splitlines()[recursive_target_line]
+            assert "@builtin recursive" in recursive_line_text, f"recursive property target text mismatch: {recursive_line_text!r}"
+
+            protected_line, protected_char = position_of(text, "@property(protected)")
+            protected_char += len("@property(")
+            protected_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": protected_line, "character": protected_char},
+                },
+            )
+            assert isinstance(protected_res, list) and protected_res, f"protected property definition missing: {protected_res!r}"
+            protected_uri = protected_res[0].get("uri", "")
+            assert protected_uri.endswith("/stdlib/types.mla"), f"protected property uri mismatch: {protected_res!r}"
+            protected_target = Path(protected_uri.removeprefix("file://"))
+            protected_start = protected_res[0].get("range", {}).get("start", {})
+            protected_target_line = int(protected_start.get("line", -1))
+            assert protected_target_line >= 0, f"protected property line missing: {protected_res!r}"
+            protected_line_text = protected_target.read_text().splitlines()[protected_target_line]
+            assert "@builtin protected" in protected_line_text, f"protected property target text mismatch: {protected_line_text!r}"
         finally:
             client.close()
 

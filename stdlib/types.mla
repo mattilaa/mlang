@@ -49,6 +49,9 @@
 /// - This page documents language built-ins, not importable stdlib modules.
 /// - The `?` operator propagates `Err` values and enriches
 ///   `Result<_, str8>` error stacks with call-site context.
+/// - Property attributes such as `@property(hidden)` and
+///   `@property(protected)` are documented here so IDE go-to-definition can
+///   jump to a stable builtin reference page.
 
 // MLang built-in types
 // This module is documentation-only and is used by editor tooling.
@@ -174,6 +177,33 @@
 
 // @builtin None
 // Option constructor for absent values: None<T>().
+
+// @builtin property
+// Property field attribute: `@property ...` or `@property(...)`.
+// Synthesizes getter/setter methods for struct fields and supports options such
+// as `atomic`, `mutex`, `recursive`, `hidden`, and `protected`.
+
+// @builtin atomic
+// Property option: `@property(atomic)`.
+// Generates atomic load/store accessors for integer and bool fields.
+
+// @builtin mutex
+// Property option: `@property(mutex)`.
+// Protects synthesized property accessors with a compiler-managed mutex.
+
+// @builtin recursive
+// Property option: `@property(mutex, recursive)`.
+// Requests a recursive mutex for the synthesized property lock.
+
+// @builtin hidden
+// Property option: `@property(hidden)`.
+// Hides the backing field from direct access outside methods on the declaring
+// struct. Access must go through synthesized accessors or explicit methods.
+
+// @builtin protected
+// Property option: `@property(protected)`.
+// Allows direct backing-field access from the declaring struct and the full
+// derive chain from that base down to the lowest derived struct.
 
 // @builtin asm
 /// Inline assembly expression keyword.

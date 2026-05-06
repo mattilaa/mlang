@@ -798,6 +798,8 @@ static std::optional<std::string> resolveModuleFilePath(std::string_view request
     return std::nullopt;
 }
 
+static std::string fileUriFromPath(const std::string& path);
+
 static std::string fileUriFromPath(const std::string& path) {
     std::error_code ec;
     std::filesystem::path abs = std::filesystem::absolute(path, ec);
@@ -2209,6 +2211,59 @@ struct ImportDefinitionFallback {
     std::string uri;
 };
 
+static std::optional<std::string> resolveBuiltinTypesFilePath(std::string_view requester_uri) {
+    namespace fs = std::filesystem;
+    const std::vector<std::string> roots = moduleSearchPathsForUri(requester_uri);
+    for (const auto& root : roots) {
+        std::error_code ec;
+        fs::path p = fs::path(root) / "types.mla";
+        if (!fs::exists(p, ec)) {
+            continue;
+        }
+        fs::path abs = fs::absolute(p, ec);
+        if (!ec) {
+            return abs.lexically_normal().string();
+        }
+        return p.string();
+    }
+    return std::nullopt;
+}
+
+static std::optional<ImportDefinitionFallback> builtinDefinitionFromTypesFile(
+    std::string_view requester_uri,
+    std::string_view builtin_name) {
+    const std::optional<std::string> file_path =
+        resolveBuiltinTypesFilePath(requester_uri);
+    if (!file_path.has_value()) {
+        return std::nullopt;
+    }
+
+    std::ifstream in(*file_path);
+    if (!in) {
+        return std::nullopt;
+    }
+
+    const std::string marker = "// @builtin " + std::string(builtin_name);
+    std::string line;
+    int line_no = 0;
+    while (std::getline(in, line)) {
+        ++line_no;
+        if (line != marker) {
+            continue;
+        }
+        ImportDefinitionFallback out;
+        out.name = std::string(builtin_name);
+        out.uri = fileUriFromPath(*file_path);
+        out.line = line_no;
+        out.column = static_cast<int>(line.find(std::string(builtin_name))) + 1;
+        if (out.column <= 0) {
+            out.column = 1;
+        }
+        return out;
+    }
+    return std::nullopt;
+}
+
 static bool moduleHasSegment(std::string_view module_name, std::string_view token) {
     if (module_name.empty() || token.empty()) {
         return false;
@@ -2636,6 +2691,43 @@ static bool fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemant
         return false;
     }
     out.name = token_span->token;
+    const std::vector<std::string_view> lines = splitLines(current.text);
+    const size_t line_idx = static_cast<size_t>(line - 1);
+    if (line_idx < lines.size()) {
+        const std::string line_trim = trimWs(lines[line_idx]);
+        const auto builtin_property_def =
+            [&](std::string_view builtin_name) -> bool {
+            const std::optional<ImportDefinitionFallback> def =
+                builtinDefinitionFromTypesFile(current.uri, builtin_name);
+            if (!def.has_value()) {
+                return false;
+            }
+            out.name = def->name;
+            out.line = def->line;
+            out.column = def->column;
+            return true;
+        };
+
+        if (startsWith(line_trim, "@property")) {
+            if (out.name == "property") {
+                if (builtin_property_def("property")) {
+                    return true;
+                }
+            }
+            if (line_trim.find("@property(") != std::string::npos) {
+                static const std::array<std::string_view, 5> property_options = {
+                    "atomic", "mutex", "recursive", "hidden", "protected"};
+                for (std::string_view option : property_options) {
+                    if (out.name == option) {
+                        if (builtin_property_def(option)) {
+                            return true;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
 
     bool member_access = false;
     std::string member_object;
@@ -2663,7 +2755,6 @@ static bool fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemant
     }
 
     if (member_access && member_object == "self") {
-        const std::vector<std::string_view> lines = splitLines(current.text);
         std::string owner;
         for (int y = std::min(line - 1, static_cast<int>(lines.size()) - 1);
              y >= 0; --y) {
