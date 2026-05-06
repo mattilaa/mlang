@@ -30,6 +30,7 @@ Current task entrypoints:
 
 - `configure`
 - `build-mlang`
+- `build-mlangd` (alias)
 - `build-mlangd-mla`
 - `build-mlang-format`
 - `build-mlang-frontend-mla`
@@ -42,6 +43,7 @@ Current task entrypoints:
 - `docs`
 - `install-mlang`
 - `install-all`
+- `install-mlangd` (alias)
 - `install-mlangd-mla`
 - `install-mlang-format`
 - `install-mlang-frontend`
@@ -51,6 +53,7 @@ Examples:
 
 ```sh
 ./bootstrap/run-bootstrap.sh run build-mlang
+./bootstrap/run-bootstrap.sh run build-mlangd
 ./bootstrap/run-bootstrap.sh run build-mlangd-mla
 ./bootstrap/run-bootstrap.sh run build-mlang-format
 ./bootstrap/run-bootstrap.sh run build-mlang-frontend
@@ -60,6 +63,7 @@ Examples:
 ./bootstrap/run-bootstrap.sh run unit-tests
 ./bootstrap/run-bootstrap.sh run robot-tests
 ./bootstrap/run-bootstrap.sh run docs
+./bootstrap/run-bootstrap.sh run install-mlangd
 ./bootstrap/run-bootstrap.sh run install-tooling
 ```
 

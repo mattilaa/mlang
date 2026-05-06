@@ -52,6 +52,15 @@ commands = [
 sign = ["{{build_dir}}/mlangd-mla"]
 
 [[task]]
+name = "build-mlangd"
+print = "[bootstrap] Alias: build-mlangd -> build-mlangd-mla"
+workdir = "{{root}}/.."
+depends_on = ["build-mlangd-mla"]
+commands = [
+  "echo bootstrap build-mlangd completed"
+]
+
+[[task]]
 name = "build-mlangd-mla-existing"
 print = "[bootstrap] Building mlangd-mla with the current package-manager compiler"
 workdir = "{{root}}/.."
@@ -198,6 +207,15 @@ shell = [
   "chmod +x \"$bin_dir/mlangd-mla\""
 ]
 sign = ["{{option.bin_dir}}/mlangd-mla"]
+
+[[task]]
+name = "install-mlangd"
+print = "[bootstrap] Alias: install-mlangd -> install-mlangd-mla"
+workdir = "{{root}}/.."
+depends_on = ["install-mlangd-mla"]
+commands = [
+  "echo bootstrap install-mlangd completed"
+]
 
 [[task]]
 name = "install-mlangd-mla-existing"

@@ -23,6 +23,8 @@ Optional install step, if you want `mlang` available on PATH:
 Then rerun, for example:
   ./bootstrap/run-bootstrap.sh run build-all --tasks
   ./bootstrap/run-bootstrap.sh run build-all
+  ./bootstrap/run-bootstrap.sh run build-mlangd
+  ./bootstrap/run-bootstrap.sh run install-mlangd
   ./bootstrap/run-bootstrap.sh run install-tooling
 
 You can also point the launcher at a specific compiler:
