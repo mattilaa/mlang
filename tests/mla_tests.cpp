@@ -3255,6 +3255,22 @@ TEST_F(MLATest, StaticAssertAcceptsCexprFunctionCall)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, StaticAssertAcceptsPostfixCexprFunctionForm)
+{
+    std::string code = R"(
+        fn square(x: i64) cexpr -> i64 {
+            return x * x;
+        }
+
+        fn main() -> i32 {
+            static_assert!(square(7) == 49);
+            let value: i64 = cexpr(square(4) + 1);
+            return value == 17 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, CexprRejectsNonCexprFunctionCall)
 {
     std::string code = R"(

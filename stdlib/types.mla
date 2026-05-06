@@ -211,7 +211,8 @@
 // Compile-time evaluation keyword.
 // Use `cexpr(expr)` to require compile-time folding of an integer or bool
 // expression.
-// Use `cexpr fn name(...) -> T { ... }` to mark a function as callable from
+// Use `cexpr fn name(...) -> T { ... }` or
+// `fn name(...) cexpr -> T { ... }` to mark a function as callable from
 // compile-time evaluation contexts such as `static_assert!` and `cexpr(...)`.
 // Current first-version support is limited to integer and bool values.
 

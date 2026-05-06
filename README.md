@@ -55,6 +55,14 @@ fn main() -> i32 {
 }
 ```
 
+The equivalent postfix declaration form is also accepted:
+
+```mla
+fn square(x: i64) cexpr -> i64 {
+    return x * x;
+}
+```
+
 Current first-version scope:
 - `cexpr(...)` folds integer and `bool` expressions during compilation.
 - `cexpr fn` marks functions that may be called from compile-time contexts.

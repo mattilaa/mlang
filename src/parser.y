@@ -2073,6 +2073,20 @@ function_def
         { auto* node = mla_ast_function_def($7, $2, $4, $9, 0, 0); node->line = yylineno; $$ = node; }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         { auto* node = mla_ast_function_def($8, $3, $5, $10, 1, 0); node->line = yylineno; $$ = node; }
+    | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN CEXPR ARROW type LBRACE statement_list RBRACE
+        {
+            auto* node = mla_ast_function_def($8, $2, $4, $10, 0, 0);
+            node->line = yylineno;
+            static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            $$ = node;
+        }
+    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN CEXPR ARROW type LBRACE statement_list RBRACE
+        {
+            auto* node = mla_ast_function_def($9, $3, $5, $11, 1, 0);
+            node->line = yylineno;
+            static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            $$ = node;
+        }
     | CEXPR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         {
             auto* node = mla_ast_function_def($8, $3, $5, $10, 0, 0);
@@ -2103,6 +2117,26 @@ function_def
                 inferred = static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_I32));
             auto* node = mla_ast_function_def(inferred, $3, $5, $8, 1, 0);
             node->line = yylineno;
+            $$ = node;
+        }
+    | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN CEXPR LBRACE statement_list RBRACE
+        {
+            TypeNode* inferred = nullptr;
+            if(strcmp($2, "main") == 0)
+                inferred = static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_I32));
+            auto* node = mla_ast_function_def(inferred, $2, $4, $8, 0, 0);
+            node->line = yylineno;
+            static_cast<FunctionDefNode*>(node)->isCexpr = true;
+            $$ = node;
+        }
+    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN CEXPR LBRACE statement_list RBRACE
+        {
+            TypeNode* inferred = nullptr;
+            if(strcmp($3, "main") == 0)
+                inferred = static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_I32));
+            auto* node = mla_ast_function_def(inferred, $3, $5, $9, 1, 0);
+            node->line = yylineno;
+            static_cast<FunctionDefNode*>(node)->isCexpr = true;
             $$ = node;
         }
     | CEXPR FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE

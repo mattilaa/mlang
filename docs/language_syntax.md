@@ -280,6 +280,14 @@ fn main() -> i32 {
 }
 ```
 
+The same function may also be written with a postfix specifier:
+
+```mla
+fn square(x: i64) cexpr -> i64 {
+    return x * x;
+}
+```
+
 Current first-version constraints:
 - `cexpr` currently supports integer and `bool` values.
 - `cexpr fn` bodies support compile-time-evaluable expressions, local
