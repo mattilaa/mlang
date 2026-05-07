@@ -376,6 +376,47 @@ if(APPLE)
     )
 endif()
 
+# Bootstrap-built MLang formatter.
+set(MLANG_FORMAT_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlang-format-mla/main.mla)
+set(MLANG_FORMAT_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlang-format)
+set(MLANG_FORMAT_LL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlang-format.ll)
+set(MLANG_FORMAT_IR_OBJECT_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlang-format-ir.o)
+set(MLANG_FORMAT_STAMP ${CMAKE_CURRENT_BINARY_DIR}/mlang-format.stamp)
+
+add_custom_command(
+    OUTPUT ${MLANG_FORMAT_STAMP}
+    COMMAND $<TARGET_FILE:mlang> -emit-llvm ${MLANG_FORMAT_SOURCE}
+            --no-tests
+            -Wno-unwrap
+            -O0
+            -o ${MLANG_FORMAT_LL_OUTPUT}
+    COMMAND ${MLANG_CLANGXX_EXE}
+            -x ir
+            -c
+            ${MLANG_FORMAT_LL_OUTPUT}
+            -o ${MLANG_FORMAT_IR_OBJECT_OUTPUT}
+    COMMAND ${MLANG_CLANGXX_EXE}
+            -o ${MLANG_FORMAT_OUTPUT}
+            ${MLANG_FORMAT_IR_OBJECT_OUTPUT}
+            -L${CMAKE_CURRENT_BINARY_DIR}
+            -lmlang_std
+            -lm
+            ${OPENSSL_SSL_LIBRARY}
+            ${OPENSSL_CRYPTO_LIBRARY}
+            $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreFoundation>
+            $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreGraphics>
+            $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:ImageIO>
+    COMMAND ${CMAKE_COMMAND} -E touch ${MLANG_FORMAT_STAMP}
+    DEPENDS mlang mlang_std ${MLANG_FORMAT_SOURCE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Building mlang-format via LLVM IR + clang++ host link"
+    VERBATIM
+)
+
+add_custom_target(mlang_format DEPENDS ${MLANG_FORMAT_STAMP})
+add_dependencies(mlangd mlang_format)
+
 # Bootstrap-built MLang language server scaffold.
 set(MLANGD_MLA_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/main.mla)
 set(MLANGD_MLA_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla)
@@ -485,6 +526,9 @@ install(TARGETS mlang
 
 install(TARGETS mlangd
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+install(PROGRAMS ${MLANG_FORMAT_OUTPUT}
+        DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 install(TARGETS mlang_std
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang

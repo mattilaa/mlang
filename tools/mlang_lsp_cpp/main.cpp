@@ -454,6 +454,22 @@ static std::string type_name(TypeNode* node)
 class LspServer
 {
 public:
+    explicit LspServer(std::string executableArg = {})
+    {
+        if(executableArg.empty())
+            return;
+        std::error_code ec;
+        std::filesystem::path raw(executableArg);
+        if(raw.is_relative())
+            raw = std::filesystem::absolute(raw, ec);
+        std::filesystem::path resolved =
+            std::filesystem::weakly_canonical(raw, ec);
+        if(ec)
+            executablePath = raw.string();
+        else
+            executablePath = resolved.string();
+    }
+
     ~LspServer()
     {
         if(compilerSession)
@@ -510,6 +526,7 @@ private:
     int compilerCacheClearInterval = 256;
     std::uint64_t telemetryCacheClears = 0;
     std::uint64_t telemetryEvictions = 0;
+    std::string executablePath;
 
     llvm::json::Value make_position_value(int line, int character)
     {
@@ -5723,16 +5740,34 @@ private:
             }
         }
 
-        // Preferred path: use installed mlang-format from PATH.
-        std::string mlangFormatCmd = "mlang-format -i --style=file";
-        mlangFormatCmd += " --assume-filename " + shell_quote(sourcePath.string());
-        if(!rootPath.empty())
-            mlangFormatCmd += " --root " + shell_quote(rootPath);
-        mlangFormatCmd += " " + shell_quote(tmpPath.string());
-        if(auto formatted = run_formatter(mlangFormatCmd))
+        std::vector<std::string> formatterCommands;
+        auto append_formatter_command = [&](const std::string& formatterProgram) {
+            std::string cmd = formatterProgram + " -i --style=file";
+            cmd += " --assume-filename " + shell_quote(sourcePath.string());
+            if(!rootPath.empty())
+                cmd += " --root " + shell_quote(rootPath);
+            cmd += " " + shell_quote(tmpPath.string());
+            formatterCommands.push_back(std::move(cmd));
+        };
+
+        if(!executablePath.empty())
         {
-            std::filesystem::remove(tmpPath);
-            return *formatted;
+            std::error_code ec;
+            std::filesystem::path siblingFormatter =
+                std::filesystem::path(executablePath).parent_path() / "mlang-format";
+            if(std::filesystem::exists(siblingFormatter, ec) && !ec)
+                append_formatter_command(shell_quote(siblingFormatter.string()));
+        }
+
+        append_formatter_command("mlang-format");
+
+        for(const auto& formatterCmd : formatterCommands)
+        {
+            if(auto formatted = run_formatter(formatterCmd))
+            {
+                std::filesystem::remove(tmpPath);
+                return *formatted;
+            }
         }
 
         std::filesystem::remove(tmpPath);
@@ -5753,7 +5788,7 @@ int main(int argc, char** argv)
         std::cerr << "Only --stdio is supported.\n";
         return 2;
     }
-    LspServer server;
+    LspServer server(argc > 0 ? argv[0] : "");
     server.run();
     return 0;
 }
