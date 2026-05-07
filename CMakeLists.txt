@@ -145,6 +145,7 @@ add_definitions(${LLVM_DEFINITIONS_LIST})
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_program(MLANG_CLANGXX_EXE NAMES clang++-17 clang++ REQUIRED)
 
 get_filename_component(MLANG_OPENSSL_SSL_DIR "${OPENSSL_SSL_LIBRARY}" DIRECTORY)
 get_filename_component(MLANG_OPENSSL_CRYPTO_DIR "${OPENSSL_CRYPTO_LIBRARY}" DIRECTORY)
@@ -341,19 +342,25 @@ endif()
 set(MLANGD_MLA_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/main.mla)
 set(MLANGD_MLA_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla)
 set(MLANGD_ALIAS_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd)
-set(MLANGD_OBJECT_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.o)
+set(MLANGD_LL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.ll)
+set(MLANGD_IR_OBJECT_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla-ir.o)
 set(MLANGD_STAMP ${CMAKE_CURRENT_BINARY_DIR}/mlangd.stamp)
 
 add_custom_command(
     OUTPUT ${MLANGD_STAMP}
-    COMMAND $<TARGET_FILE:mlang> -c ${MLANGD_MLA_SOURCE}
+    COMMAND $<TARGET_FILE:mlang> -emit-llvm ${MLANGD_MLA_SOURCE}
             --no-tests
             -Wno-unwrap
             -O0
-            -o ${MLANGD_OBJECT_OUTPUT}
-    COMMAND ${CMAKE_CXX_COMPILER}
+            -o ${MLANGD_LL_OUTPUT}
+    COMMAND ${MLANG_CLANGXX_EXE}
+            -x ir
+            -c
+            ${MLANGD_LL_OUTPUT}
+            -o ${MLANGD_IR_OBJECT_OUTPUT}
+    COMMAND ${MLANG_CLANGXX_EXE}
             -o ${MLANGD_MLA_OUTPUT}
-            ${MLANGD_OBJECT_OUTPUT}
+            ${MLANGD_IR_OBJECT_OUTPUT}
             -L${CMAKE_CURRENT_BINARY_DIR}
             -lmlang_std
             -lm
@@ -367,7 +374,7 @@ add_custom_command(
     DEPENDS mlang mlang_std ${MLANGD_MLA_SOURCE}
             ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMENT "Building mlangd-mla via object compile + host link, then mirroring to mlangd"
+    COMMENT "Building mlangd-mla via LLVM IR + clang++ host link, then mirroring to mlangd"
     VERBATIM
 )
 

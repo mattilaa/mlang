@@ -47,8 +47,8 @@ print = "[bootstrap] Building mlangd-mla with the freshly built compiler"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang"]
 commands = [
-  "{{build_dir}}/mlang -c tools/mlangd-mla/main.mla --no-tests -Wno-unwrap -O0 -o {{build_dir}}/mlangd-mla.o",
-  "c++ -o {{build_dir}}/mlangd-mla {{build_dir}}/mlangd-mla.o -L{{build_dir}} -lmlang_std -lm"
+  "{{build_dir}}/mlang -emit-llvm tools/mlangd-mla/main.mla --no-tests -Wno-unwrap -O0 -o {{build_dir}}/mlangd-mla.ll",
+  "sh -c 'if command -v clang++-17 >/dev/null 2>&1; then CXX=clang++-17; elif command -v clang++ >/dev/null 2>&1; then CXX=clang++; else CXX=c++; fi; \"$CXX\" -x ir -c \"{{build_dir}}/mlangd-mla.ll\" -o \"{{build_dir}}/mlangd-mla-ir.o\" && exec \"$CXX\" -o \"{{build_dir}}/mlangd-mla\" \"{{build_dir}}/mlangd-mla-ir.o\" -L\"{{build_dir}}\" -lmlang_std -lm'"
 ]
 sign = ["{{build_dir}}/mlangd-mla"]
 
