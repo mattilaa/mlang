@@ -124,9 +124,9 @@ static StructDefNode* find_hoisted_inline_struct_def(const std::string& name)
     return nullptr;
 }
 
-static void propagate_derive_debug_to_inline_structs(StructDefNode* def)
+static void propagate_derive_attributes_to_inline_structs(StructDefNode* def)
 {
-    if(!def || !def->deriveDebug || !def->members)
+    if(!def || (!def->deriveDebug && !def->deriveJson) || !def->members)
         return;
 
     std::vector<std::string> pending;
@@ -158,7 +158,10 @@ static void propagate_derive_debug_to_inline_structs(StructDefNode* def)
         if(!nested)
             continue;
 
-        nested->deriveDebug = true;
+        if(def->deriveDebug)
+            nested->deriveDebug = true;
+        if(def->deriveJson)
+            nested->deriveJson = true;
         if(!nested->members)
             continue;
 
@@ -188,7 +191,7 @@ static ASTNode* append_hoisted_nested_functions(ASTNode* topLevelList)
 
 static ASTNode* create_inline_struct_type(char* name, ASTNode* members, int line)
 {
-    ASTNode* def = mla_ast_struct_def(name, NULL, members, 0, 0);
+    ASTNode* def = mla_ast_struct_def(name, NULL, members, 0, 0, 0);
     if(def)
         def->line = line;
     g_hoistedInlineStructs.push_back(def);
@@ -371,7 +374,7 @@ static TypeNode* hoist_anonymous_object_shape(AnonymousObjectShape* shape,
 {
     char* name = make_anonymous_object_name(line);
     StructMemberListNode* members = build_anonymous_object_members(shape, line);
-    ASTNode* def = mla_ast_struct_def(name, NULL, members, 0, 0);
+    ASTNode* def = mla_ast_struct_def(name, NULL, members, 0, 0, 0);
     if(auto* structDef = dynamic_cast<StructDefNode*>(def))
     {
         structDef->deriveDebug = true;
@@ -492,7 +495,7 @@ static ASTNode* finalize_struct_def_ast(ASTNode* node, int line)
     node->line = line;
     if(auto* def = dynamic_cast<StructDefNode*>(node))
     {
-        propagate_derive_debug_to_inline_structs(def);
+        propagate_derive_attributes_to_inline_structs(def);
         register_parsed_struct_def(def);
     }
     return node;
@@ -1332,7 +1335,9 @@ ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* mla_ast_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* mla_ast_cast_expression(int type, ASTNode* expr);
 ASTNode* mla_ast_field_access_expr(ASTNode* object, char* field_name, int line);
-ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug);
+ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members,
+                            int is_public, int derive_debug,
+                            int derive_json);
 ASTNode* mla_ast_struct_member_list(ASTNode* member);
 ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
 ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
@@ -1422,7 +1427,10 @@ ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
 ASTNode* create_bounded_type_param_list(char* param, char* trait_name);
 ASTNode* add_bounded_type_param(ASTNode* list, char* param, char* trait_name);
-ASTNode* mla_ast_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
+ASTNode* mla_ast_generic_struct_def(char* name, char* base_name,
+                                    ASTNode* type_params, ASTNode* members,
+                                    int is_public, int derive_debug,
+                                    int derive_json);
 ASTNode* mla_ast_trait_def(char* name, int line);
 ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
 ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
@@ -1576,7 +1584,7 @@ enum UpdatePosition
 %token ITER_ENUMERATE_METHOD INTO_ITER_ENUMERATE_METHOD
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
 %token VEC_MACRO
-%token DERIVE_DEBUG
+%token DERIVE_DEBUG DERIVE_JSON
 %token TEST_ATTR
 %token FIXTURE_ATTR
 %token PROPERTY_ATTR
@@ -1704,43 +1712,79 @@ field_def
             ASTNode* member = mla_ast_struct_member(1, $4, strdup("value"), NULL);
             ASTNode* memberList = mla_ast_struct_member_list(member);
             $$ = finalize_struct_def_ast(
-                mla_ast_struct_def($2, NULL, memberList, 0, 1), yylineno);
+                mla_ast_struct_def($2, NULL, memberList, 0, 1, 0), yylineno);
         }
     | PUB FIELD IDENTIFIER COLON type SEMICOLON
         {
             ASTNode* member = mla_ast_struct_member(1, $5, strdup("value"), NULL);
             ASTNode* memberList = mla_ast_struct_member_list(member);
             $$ = finalize_struct_def_ast(
-                mla_ast_struct_def($3, NULL, memberList, 1, 1), yylineno);
+                mla_ast_struct_def($3, NULL, memberList, 1, 1, 0), yylineno);
         }
     ;
 
 struct_def
     : STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_struct_def($2, NULL, $4, 0, 0), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($2, NULL, $4, 0, 0, 0), yylineno); }
     | STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_struct_def($2, $4, $6, 0, 0), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($2, $4, $6, 0, 0, 0), yylineno); }
     | PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, NULL, $5, 1, 0), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, NULL, $5, 1, 0, 0), yylineno); }
     | PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, $5, $7, 1, 0), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, $5, $7, 1, 0, 0), yylineno); }
     | DERIVE_DEBUG STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, NULL, $5, 0, 1), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, NULL, $5, 0, 1, 0), yylineno); }
     | DERIVE_DEBUG STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, $5, $7, 0, 1), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, $5, $7, 0, 1, 0), yylineno); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, NULL, $6, 1, 1), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, NULL, $6, 1, 1, 0), yylineno); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, $6, $8, 1, 1), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, $6, $8, 1, 1, 0), yylineno); }
+    | DERIVE_JSON STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, NULL, $5, 0, 0, 1), yylineno); }
+    | DERIVE_JSON STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, $5, $7, 0, 0, 1), yylineno); }
+    | DERIVE_JSON PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, NULL, $6, 1, 0, 1), yylineno); }
+    | DERIVE_JSON PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, $6, $8, 1, 0, 1), yylineno); }
+    | DERIVE_DEBUG DERIVE_JSON STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, NULL, $6, 0, 1, 1), yylineno); }
+    | DERIVE_DEBUG DERIVE_JSON STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, $6, $8, 0, 1, 1), yylineno); }
+    | DERIVE_DEBUG DERIVE_JSON PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($5, NULL, $7, 1, 1, 1), yylineno); }
+    | DERIVE_DEBUG DERIVE_JSON PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($5, $7, $9, 1, 1, 1), yylineno); }
+    | DERIVE_JSON DERIVE_DEBUG STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, NULL, $6, 0, 1, 1), yylineno); }
+    | DERIVE_JSON DERIVE_DEBUG STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, $6, $8, 0, 1, 1), yylineno); }
+    | DERIVE_JSON DERIVE_DEBUG PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($5, NULL, $7, 1, 1, 1), yylineno); }
+    | DERIVE_JSON DERIVE_DEBUG PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($5, $7, $9, 1, 1, 1), yylineno); }
     /* Generic struct definitions */
     | STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($2, NULL, $4, $7, 0, 0), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($2, NULL, $4, $7, 0, 0, 0), yylineno); }
     | PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($3, NULL, $5, $8, 1, 0), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($3, NULL, $5, $8, 1, 0, 0), yylineno); }
     | DERIVE_DEBUG STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($3, NULL, $5, $8, 0, 1), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($3, NULL, $5, $8, 0, 1, 0), yylineno); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($4, NULL, $6, $9, 1, 1), yylineno); }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($4, NULL, $6, $9, 1, 1, 0), yylineno); }
+    | DERIVE_JSON STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($3, NULL, $5, $8, 0, 0, 1), yylineno); }
+    | DERIVE_JSON PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($4, NULL, $6, $9, 1, 0, 1), yylineno); }
+    | DERIVE_DEBUG DERIVE_JSON STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($4, NULL, $6, $9, 0, 1, 1), yylineno); }
+    | DERIVE_DEBUG DERIVE_JSON PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($5, NULL, $7, $10, 1, 1, 1), yylineno); }
+    | DERIVE_JSON DERIVE_DEBUG STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($4, NULL, $6, $9, 0, 1, 1), yylineno); }
+    | DERIVE_JSON DERIVE_DEBUG PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($5, NULL, $7, $10, 1, 1, 1), yylineno); }
     ;
 
 enum_def

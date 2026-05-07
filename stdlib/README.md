@@ -7,7 +7,8 @@ These files are installed to the user prefix on `make install`.
 Currently provided:
 - `types.mla`: built-in primitive and generic types.
 - `macros.mla`: built-in macros (println!, format!, assert_eq!, ...).
-- `attributes.mla`: built-in attributes (`#[derive(Debug)]`, `#[test]`).
+- `attributes.mla`: built-in attributes (`#[derive(Debug)]`,
+  `#[derive(Json)]`, `#[test]`).
 - `test.mla`: test framework helpers (test::assert, test::run_all).
 
 - `std/math.mla`: generic math helpers (backed by libmlang_std).
@@ -56,7 +57,9 @@ Currently provided:
 - `std/json.mla`: JSON parse/stringify + object/array navigation and iterators
   (`JsonDoc::parse/from_file`, `JsonDoc::stringify`,
    `JsonValue::get/index/as_*`, `iter_array`, `iter_object`),
-  backed by RapidJSON.
+  backed by RapidJSON. `#[derive(Json)]` also synthesizes
+  `value.to_json()` / `Type::from_json(text)` for supported structs,
+  including inherited fields and `@property(...)` metadata.
 - `std/net.mla`: TCP client/server over libc sockets
   (`TcpListener::bind/accept/local_port`, `TcpStream::connect/read/write`,
    `set_nonblocking`, `set_read_timeout_ms`, `set_write_timeout_ms`,

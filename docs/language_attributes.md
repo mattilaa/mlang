@@ -5,6 +5,12 @@ how to extend them.
 
 ## Supported Attributes
 
+| Attribute | Target | Purpose |
+|---|---|---|
+| `#[derive(Debug)]` | `struct` definitions | Enables debug formatting for structs. |
+| `#[derive(Json)]` | `struct` definitions | Synthesizes JSON serialization/deserialization helpers for supported structs. |
+| `#[test]` | `fn` definitions | Marks a function as a test case. |
+
 ## `#[derive(Debug)]`
 
 Applies to `struct` definitions (including `pub struct` and generic structs).
@@ -29,6 +35,75 @@ fn main() -> i32 {
     return 0;
 }
 ```
+
+## `#[derive(Json)]`
+
+Applies to `struct` definitions, including derived structs and generic
+structs.
+
+What it enables:
+- `value.to_json() -> str8`
+- `StructName::from_json(text) -> Result<StructName, str8>`
+- JSON output that includes inherited base fields directly in the object
+- A sibling `@property` metadata object for fields declared with
+  `@property(...)`
+
+Current `from_json(...)` field support:
+- `bool`
+- signed and unsigned integer primitives
+- `f32` and `f64`
+- `str8`
+- nested structs that also derive `Json`
+
+Example:
+
+```mla
+#[derive(Json)]
+struct Base {
+    @property(hidden) var secret: i32;
+    var x: i32;
+};
+
+#[derive(Json)]
+struct Leaf : Base {
+    var name: str8;
+};
+
+fn main() -> i32 {
+    var leaf: Leaf {};
+    leaf.setSecret(7);
+    leaf.x = 3;
+    leaf.name = String::from("ok");
+
+    let text: str8 = leaf.to_json();
+    let parsed: Result<Leaf, str8> = Leaf::from_json(text);
+    return parsed.is_ok() ? 0 : 1;
+}
+```
+
+Generated JSON shape:
+
+```json
+{
+  "type": "Leaf",
+  "secret": 7,
+  "x": 3,
+  "name": "ok",
+  "@property": {
+    "secret": {
+      "hidden": true,
+      "protected": false,
+      "atomic": false,
+      "mutex": false,
+      "recursive": false
+    }
+  }
+}
+```
+
+`from_json(...)` reads field values from the normal object keys. The
+`@property` subtree is emitted for tooling and inspection and is not required
+for deserialization.
 
 ## `#[test]`
 

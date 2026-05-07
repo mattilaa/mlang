@@ -1374,6 +1374,75 @@ TEST_F(MLATest, TypedVarScalarBraceZeroInitDoesNotWarn)
     EXPECT_EQ(runExitCode(), 0);
 }
 
+TEST_F(MLATest, DeriveJsonRoundTripsDerivedStructAndPropertyMetadata)
+{
+    std::string code = R"(
+        #[derive(Json)]
+        struct Base {
+            @property(hidden) var secret: i32;
+            var x: i32;
+        };
+
+        #[derive(Json)]
+        struct Leaf : Base {
+            var name: str8;
+        };
+
+        fn main() -> i32 {
+            var leaf: Leaf {};
+            leaf.setSecret(7);
+            leaf.x = 3;
+            leaf.name = String::from("ok");
+
+            let text: str8 = leaf.to_json();
+            let decoded_r: Result<Leaf, str8> = Leaf::from_json(text);
+            if decoded_r.is_err() {
+                return 11;
+            }
+
+            let decoded: Leaf = decoded_r.unwrap();
+            if decoded.getSecret() != 7 {
+                return 12;
+            }
+            if decoded.x != 3 {
+                return 13;
+            }
+            if decoded.name != "ok" {
+                return 14;
+            }
+
+            print!(text);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    EXPECT_TRUE(compile());
+    std::string out = run();
+    EXPECT_EQ(runExitCode(), 0);
+    EXPECT_NE(out.find("\"type\": \"Leaf\""), std::string::npos);
+    EXPECT_NE(out.find("\"secret\": 7"), std::string::npos);
+    EXPECT_NE(out.find("\"@property\""), std::string::npos);
+    EXPECT_NE(out.find("\"hidden\": true"), std::string::npos);
+}
+
+TEST_F(MLATest, DeriveJsonMissingFieldReturnsErr)
+{
+    std::string code = R"(
+        #[derive(Json)]
+        struct Packet {
+            var id: i32;
+            var name: str8;
+        };
+
+        fn main() -> i32 {
+            let parsed: Result<Packet, str8> =
+                Packet::from_json("{\"type\":\"Packet\",\"id\":5}");
+            return parsed.is_err() ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, LargeExpression)
 {
     std::string code = R"(

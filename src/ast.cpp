@@ -753,6 +753,19 @@ static TypeNode* cloneMemberType(TypeNode* t)
     return new TypeNode(t->kind);
 }
 
+static bool structHasMethodNamed(const StructDefNode* def,
+                                 const std::string& methodName)
+{
+    if(!def || !def->members)
+        return false;
+    for(auto* method : def->members->methods)
+    {
+        if(method && method->name == methodName)
+            return true;
+    }
+    return false;
+}
+
 static void copyPropertyAccessorMetadata(StructMethodNode* method,
                                          StructMemberNode* member)
 {
@@ -866,13 +879,71 @@ static void synthesizePropertyMethods(StructDefNode* def)
     }
 }
 
+static void synthesizeJsonSerdeMethods(StructDefNode* def)
+{
+    if(!def || !def->deriveJson || !def->members)
+        return;
+
+    if(!structHasMethodNamed(def, "to_json"))
+    {
+        auto* params = new ParameterListNode();
+        params->parameters.push_back(
+            new ParameterNode(new StructTypeRefNode(def->name), "self"));
+        auto* method = new StructMethodNode(
+            new TypeNode(TypeNode::TYPE_STR8), "to_json", params,
+            new StatementListNode(), /*isPublic=*/true, /*isStatic=*/false);
+        method->sourceModule = def->sourceModule;
+        method->isSynthesizedJsonSerializer = true;
+        method->line = def->line;
+        def->members->methods.push_back(method);
+    }
+
+    if(!structHasMethodNamed(def, "from_json"))
+    {
+        auto* resultType = new GenericStructTypeRefNode("Result");
+        resultType->typeArgs.push_back(new StructTypeRefNode(def->name));
+        resultType->typeArgs.push_back(new TypeNode(TypeNode::TYPE_STR8));
+
+        auto* params = new ParameterListNode();
+        params->parameters.push_back(
+            new ParameterNode(new TypeNode(TypeNode::TYPE_STR8), "json_text"));
+        auto* method = new StructMethodNode(
+            resultType, "from_json", params, new StatementListNode(),
+            /*isPublic=*/true, /*isStatic=*/true);
+        method->sourceModule = def->sourceModule;
+        method->isSynthesizedJsonTextDeserializer = true;
+        method->line = def->line;
+        def->members->methods.push_back(method);
+    }
+
+    const std::string helperName = "__mlang_from_json_value";
+    if(!structHasMethodNamed(def, helperName))
+    {
+        auto* resultType = new GenericStructTypeRefNode("Result");
+        resultType->typeArgs.push_back(new StructTypeRefNode(def->name));
+        resultType->typeArgs.push_back(new TypeNode(TypeNode::TYPE_STR8));
+
+        auto* params = new ParameterListNode();
+        params->parameters.push_back(
+            new ParameterNode(new TypeNode(TypeNode::TYPE_I64), "json_value"));
+        auto* method = new StructMethodNode(
+            resultType, helperName, params, new StatementListNode(),
+            /*isPublic=*/false, /*isStatic=*/true);
+        method->sourceModule = def->sourceModule;
+        method->isSynthesizedJsonValueDeserializer = true;
+        method->line = def->line;
+        def->members->methods.push_back(method);
+    }
+}
+
 ASTNode* create_struct_def_impl(char* name, char* base_name, ASTNode* members,
-                                int is_public, int derive_debug)
+                                int is_public, int derive_debug,
+                                int derive_json)
 {
     auto* def = new StructDefNode(
         std::string(name), base_name ? std::string(base_name) : "",
         static_cast<StructMemberListNode*>(members), is_public != 0,
-        derive_debug != 0);
+        derive_debug != 0, derive_json != 0);
 
     // Qualify nested enum names as Struct::Enum for type/literal resolution.
     if(def->members)
@@ -887,6 +958,7 @@ ASTNode* create_struct_def_impl(char* name, char* base_name, ASTNode* members,
     }
 
     synthesizePropertyMethods(def);
+    synthesizeJsonSerdeMethods(def);
 
     return def;
 }
@@ -2022,6 +2094,8 @@ std::string StructDefNode::toString() const
     std::string result;
     if(deriveDebug)
         result += "#[derive(Debug)]\n";
+    if(deriveJson)
+        result += "#[derive(Json)]\n";
     result += isPublic ? "pub struct " : "struct ";
     result += name;
     if(!typeParams.empty())
@@ -2993,12 +3067,14 @@ ASTNode* add_bounded_type_param_impl(ASTNode* list, char* param, char* trait_nam
 
 ASTNode* create_generic_struct_def_impl(char* name, char* base_name,
                                    ASTNode* type_params, ASTNode* members,
-                                   int is_public, int derive_debug)
+                                   int is_public, int derive_debug,
+                                   int derive_json)
 {
     std::string baseName = base_name ? std::string(base_name) : "";
     auto* node = new StructDefNode(std::string(name), baseName,
                                    static_cast<StructMemberListNode*>(members),
-                                   is_public != 0, derive_debug != 0);
+                                   is_public != 0, derive_debug != 0,
+                                   derive_json != 0);
 
     if(type_params)
     {
@@ -3008,6 +3084,7 @@ ASTNode* create_generic_struct_def_impl(char* name, char* base_name,
     }
 
     synthesizePropertyMethods(node);
+    synthesizeJsonSerdeMethods(node);
 
     return node;
 }

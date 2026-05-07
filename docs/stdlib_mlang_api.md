@@ -819,6 +819,15 @@ Module file: `stdlib/std/io.mla`
 
 Module file: `stdlib/std/json.mla`
 
+Compiler-synthesized JSON serde is also available for supported structs via
+`#[derive(Json)]`. This generates:
+- `value.to_json() -> str8`
+- `StructName::from_json(text) -> Result<StructName, str8>`
+
+For derived structs, base fields are emitted directly in the JSON object. For
+fields declared with `@property(...)`, serialization also emits a sibling
+`@property` metadata object describing the active property flags.
+
 ### Types
 - `JsonDoc`
 - `JsonValue`
@@ -865,6 +874,14 @@ Module file: `stdlib/std/json.mla`
 - `JsonObjectIter::current_key(self: JsonObjectIter) -> Result<str8, str8>`
 - `JsonObjectIter::current_value(self: JsonObjectIter) -> Result<JsonValue, str8>`
 - `JsonObjectIter::advance(self: JsonObjectIter) -> JsonObjectIter`
+
+### `#[derive(Json)]` decode support
+- `bool`
+- signed and unsigned integer primitives
+- `f32`
+- `f64`
+- `str8`
+- nested structs that also derive `Json`
 
 ## std::jsonrpc
 

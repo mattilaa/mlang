@@ -168,6 +168,11 @@ private:
     {
         FieldEncapsulation encapsulation = FieldEncapsulation::Public;
         std::string ownerStructName;
+        bool isProperty = false;
+        bool isAtomicProperty = false;
+        bool isMutexProperty = false;
+        bool isRecursiveProperty = false;
+        bool isSynthesizedPropertyStorage = false;
     };
     // Store struct member info: struct name -> vector of (member name, member
     // type)
@@ -223,6 +228,7 @@ private:
     // Track enum backing integer kind per enum name.
     std::map<std::string, TypeNode::TypeKind> enumBaseTypes;
     std::set<std::string> debugStructs;
+    std::set<std::string> jsonStructs;
     std::map<std::string, std::string> structDebugDisplayNames;
     bool hasError;
     bool debugEnabled;
@@ -316,6 +322,18 @@ private:
     llvm::FunctionCallee freeFunc;
     llvm::FunctionCallee strcmpFunc;
     llvm::FunctionCallee jsonEscapeFunc;
+    llvm::FunctionCallee jsonParseFunc;
+    llvm::FunctionCallee jsonDocFreeFunc;
+    llvm::FunctionCallee jsonLastErrorFunc;
+    llvm::FunctionCallee jsonDocRootFunc;
+    llvm::FunctionCallee jsonValueFreeFunc;
+    llvm::FunctionCallee jsonValueKindFunc;
+    llvm::FunctionCallee jsonObjectGetFunc;
+    llvm::FunctionCallee jsonArrayGetFunc;
+    llvm::FunctionCallee jsonAsBoolFunc;
+    llvm::FunctionCallee jsonAsI64Func;
+    llvm::FunctionCallee jsonAsF64Func;
+    llvm::FunctionCallee jsonAsStringFunc;
     llvm::FunctionCallee abortFunc;
     llvm::FunctionCallee exceptionsPushFrameFunc;
     llvm::FunctionCallee exceptionsFrameEnvFunc;
@@ -633,6 +651,10 @@ private:
                                        const std::string& structName,
                                        bool pretty, int line,
                                        int indentLevel = 0);
+    llvm::Value* buildStructSerdeJsonString(llvm::Value* structVal,
+                                            const std::string& structName,
+                                            int line,
+                                            int indentLevel = 0);
     bool isStringExpression(ExpressionNode* expr) const;
     std::string getStructTypeName(ExpressionNode* expr) const;
     std::string getEnumTypeName(ExpressionNode* expr, int line);
@@ -683,6 +705,25 @@ private:
     bool generateAtomicPropertyMethodBody(const std::string& structName,
                                           StructMethodNode* method,
                                           llvm::Function* function);
+    bool generateJsonSerializerMethodBody(const std::string& structName,
+                                          StructMethodNode* method,
+                                          llvm::Function* function);
+    bool generateJsonTextDeserializerMethodBody(const std::string& structName,
+                                                StructMethodNode* method,
+                                                llvm::Function* function);
+    bool generateJsonValueDeserializerMethodBody(const std::string& structName,
+                                                 StructMethodNode* method,
+                                                 llvm::Function* function);
+    llvm::Value* getJsonLastErrorString();
+    llvm::Value* buildJsonResultValue(llvm::Function* function, bool isOk,
+                                      llvm::Value* payload,
+                                      int payloadIndexOverride = -1);
+    bool populateStructFromJsonValue(const std::string& structName,
+                                     llvm::Value* jsonValueHandle,
+                                     llvm::Value* outStructAlloca,
+                                     llvm::Function* function,
+                                     llvm::BasicBlock* failBB,
+                                     llvm::AllocaInst* errorSlot);
     llvm::Value* createInternalMutexHandle(bool recursive,
                                            const std::string& namePrefix);
     llvm::Value* ensurePropertyMutexHandle(llvm::Value* handleSlotPtr,

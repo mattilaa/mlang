@@ -52,7 +52,8 @@ If you are new to MLang, read these pages in this order:
   Language features such as `switch`, exceptions, pipe syntax, inline asm,
   conditional regions, lambdas/folds, and `bit`/`sizeof`.
 - [Language Attributes](language_attributes.md)
-  Attribute syntax such as `#[test]`, `#[derive(Debug)]`, and `#[inline]`.
+  Attribute syntax such as `#[test]`, `#[derive(Debug)]`,
+  `#[derive(Json)]`, and `#[inline]`.
 - [Stdlib Module API](stdlib_mlang_api.md)
   Module-by-module API documentation for the MLang standard library.
 - [Package Manager](package_manager.md)
@@ -143,6 +144,7 @@ Use this section as a map into the existing documentation.
   - `mlang bench`
   - `--filter` for running individual tests
   - `#[derive(Debug)]`
+  - `#[derive(Json)]`
   - `#[inline]`, `#[inline(always)]`, `#[inline(never)]`
 - Example files:
   - [`tests/test_sample.mla`](../../../tests/test_sample.mla) — unit test example

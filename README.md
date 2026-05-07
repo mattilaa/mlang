@@ -966,6 +966,9 @@ Advanced framed protocol stack examples (isolated in subdirectory):
 with runner script `examples/protocol_mt/run_demo.sh`.
 JSON API (`std::json::JsonDoc` parse/stringify/object-array navigation, iterators, and `from_file`) example:
 `examples/std_json_demo.mla`.
+Compiler-synthesized struct JSON serde (`#[derive(Json)]`, `to_json()`,
+`Type::from_json(text)`, inherited fields, `@property` metadata) example:
+`examples/std_json_derive_demo.mla`.
 JSON-RPC/LSP transport runtime (`std::jsonrpc` Content-Length framing, timeout reads, cancellation registry, queue runtime) example:
 `examples/std_jsonrpc_runtime_demo.mla`.
 Manual stdio JSON-RPC worker runtime demo (`run_stdio_loop`, built-in `$/cancelRequest` routing):
@@ -1095,6 +1098,9 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/std_regex_demo.mla`
 - JSON parse/stringify, navigation, iterators, and `from_file` (`JsonDoc`, `JsonValue`):
   `examples/std_json_demo.mla`
+- Struct JSON serde via `#[derive(Json)]` (`to_json()`, `from_json(...)`,
+  inherited fields, `@property` metadata):
+  `examples/std_json_derive_demo.mla`
 - JSON-RPC/LSP stdio transport + cancellation/runtime queues (`std::jsonrpc`):
   `examples/std_jsonrpc_runtime_demo.mla`
 - JSON-RPC stdio worker runtime loop (`std::jsonrpc::run_stdio_loop`):
@@ -1771,6 +1777,7 @@ Mlang currently supports these Rust-like attributes:
 | Attribute | Target | Purpose |
 |---|---|---|
 | `#[derive(Debug)]` | `struct` definitions | Enables debug formatting (`{:?}`/`{:#?}` and `println!(value)` for structs). |
+| `#[derive(Json)]` | `struct` definitions | Synthesizes `to_json()` / `from_json(...)` for supported structs, including inherited fields and `@property` metadata. |
 | `#[test]` | `fn` definitions | Marks test functions discoverable by `mlang test` / `mlang run tests`. |
 
 ### `#[derive(Debug)]`
@@ -1792,6 +1799,42 @@ fn main() -> i32 {
     return 0;
 }
 ```
+
+### `#[derive(Json)]`
+
+```mla
+#[derive(Json)]
+struct Base {
+    @property(hidden) var secret: i32;
+    var x: i32;
+};
+
+#[derive(Json)]
+struct Leaf : Base {
+    var name: str8;
+};
+
+fn main() -> i32 {
+    var leaf: Leaf {};
+    leaf.setSecret(7);
+    leaf.x = 3;
+    leaf.name = String::from("ok");
+
+    let text: str8 = leaf.to_json();
+    let parsed: Result<Leaf, str8> = Leaf::from_json(text);
+    if parsed.is_err() {
+        return 1;
+    }
+    println!("{}", text);
+    return 0;
+}
+```
+
+`#[derive(Json)]` currently supports JSON round-tripping for structs whose
+fields are `bool`, integer primitives, `f32`/`f64`, `str8`, or nested structs
+that also derive `Json`. For derived structs, base fields are serialized
+directly into the object. Fields declared with `@property(...)` are also
+described in a sibling `@property` metadata tree in the emitted JSON.
 
 ### `#[test]`
 Test functions should take no parameters and return `void` or `i32`:

@@ -957,6 +957,11 @@ struct Child : Base {
 See @ref language_attributes "@property(...)" in the attributes guide for the
 full option list: `atomic`, `mutex`, `recursive`, `hidden`, and `protected`.
 
+If the enclosing struct also uses `#[derive(Json)]`, property-backed fields are
+serialized as normal object fields and a sibling `@property` metadata subtree
+is emitted to describe the active property options (`hidden`, `protected`,
+`atomic`, `mutex`, `recursive`).
+
 ### Diagnostics
 
 The compiler rejects ill-formed builders at parse time. Common mistakes:
