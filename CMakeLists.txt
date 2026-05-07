@@ -273,6 +273,48 @@ if(APPLE)
         "LINKER:-no_warn_duplicate_libraries")
 endif()
 
+# ============================================================================
+# mlangd (C++ LSP server)
+# ============================================================================
+add_executable(mlangd
+    tools/mlang_lsp_cpp/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_handle_helpers.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_bridge.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/incremental_compiler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ide_query.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/workspace_graph.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_concurrency.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
+    ${LEXER_OUT}
+    ${PARSER_OUT}
+)
+
+add_dependencies(mlangd ParserTarget LexerTarget)
+target_compile_features(mlangd PRIVATE cxx_std_20)
+set_target_properties(mlangd PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+)
+target_include_directories(mlangd PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(mlangd PRIVATE ${llvm_libs} OpenSSL::SSL OpenSSL::Crypto)
+target_compile_definitions(mlangd PRIVATE
+    MLANG_VERSION="${PROJECT_VERSION}"
+    MLANG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+if(APPLE)
+    target_link_libraries(mlangd PRIVATE
+        ${COREFOUNDATION_FRAMEWORK}
+        ${COREGRAPHICS_FRAMEWORK}
+        ${IMAGEIO_FRAMEWORK}
+    )
+    target_link_options(mlangd PRIVATE
+        "LINKER:-no_warn_duplicate_libraries")
+endif()
+
 add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_handle_helpers.cpp
@@ -334,20 +376,15 @@ if(APPLE)
     )
 endif()
 
-# Bootstrap-built MLang language server target. The repo still has many
-# references to `build/mlangd` as the primary LSP binary, but the actual
-# checked-in implementation lives in tools/mlangd-mla/main.mla. Build the
-# MLang implementation once, then mirror it to `build/mlangd` so existing
-# CI/test workflows can consume a stable executable path.
+# Bootstrap-built MLang language server scaffold.
 set(MLANGD_MLA_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/main.mla)
 set(MLANGD_MLA_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla)
-set(MLANGD_ALIAS_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd)
 set(MLANGD_LL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.ll)
 set(MLANGD_IR_OBJECT_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla-ir.o)
-set(MLANGD_STAMP ${CMAKE_CURRENT_BINARY_DIR}/mlangd.stamp)
+set(MLANGD_MLA_STAMP ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.stamp)
 
 add_custom_command(
-    OUTPUT ${MLANGD_STAMP}
+    OUTPUT ${MLANGD_MLA_STAMP}
     COMMAND $<TARGET_FILE:mlang> -emit-llvm ${MLANGD_MLA_SOURCE}
             --no-tests
             -Wno-unwrap
@@ -369,16 +406,15 @@ add_custom_command(
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreFoundation>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreGraphics>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:ImageIO>
-    COMMAND ${CMAKE_COMMAND} -E copy ${MLANGD_MLA_OUTPUT} ${MLANGD_ALIAS_OUTPUT}
-    COMMAND ${CMAKE_COMMAND} -E touch ${MLANGD_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E touch ${MLANGD_MLA_STAMP}
     DEPENDS mlang mlang_std ${MLANGD_MLA_SOURCE}
             ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMENT "Building mlangd-mla via LLVM IR + clang++ host link, then mirroring to mlangd"
+    COMMENT "Building mlangd-mla via LLVM IR + clang++ host link"
     VERBATIM
 )
 
-add_custom_target(mlangd DEPENDS ${MLANGD_STAMP})
+add_custom_target(mlangd-mla DEPENDS ${MLANGD_MLA_STAMP})
 
 # RapidJSON for std::json backend (header-only).
 include(FetchContent)
@@ -445,6 +481,9 @@ if(BUILD_TESTS)
 endif()
 
 install(TARGETS mlang
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+install(TARGETS mlangd
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 install(TARGETS mlang_std
