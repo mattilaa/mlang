@@ -57,7 +57,9 @@ ASTNode* create_if_statement_with_init_impl(ASTNode* condition_init, ASTNode* co
 ASTNode* create_let_declaration_impl(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration_impl(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression_impl(int type, ASTNode* expr);
-ASTNode* create_struct_def_impl(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug);
+ASTNode* create_struct_def_impl(char* name, char* base_name, ASTNode* members,
+                                int is_public, int derive_debug,
+                                int derive_json);
 ASTNode* create_struct_member_list_impl(ASTNode* member);
 ASTNode* add_struct_member_impl(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member_impl(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
@@ -146,7 +148,10 @@ ASTNode* create_type_param_list_impl(char* param);
 ASTNode* add_type_param_impl(ASTNode* list, char* param);
 ASTNode* create_bounded_type_param_list_impl(char* param, char* trait_name);
 ASTNode* add_bounded_type_param_impl(ASTNode* list, char* param, char* trait_name);
-ASTNode* create_generic_struct_def_impl(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
+ASTNode* create_generic_struct_def_impl(char* name, char* base_name,
+                                        ASTNode* type_params,
+                                        ASTNode* members, int is_public,
+                                        int derive_debug, int derive_json);
 ASTNode* create_trait_def_impl(char* name, int line);
 ASTNode* add_trait_method_impl(ASTNode* trait, ASTNode* method);
 ASTNode* create_impl_block_impl(char* struct_name, ASTNode* type_params, char* trait_name);

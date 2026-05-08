@@ -108,8 +108,13 @@ ASTNode* mla_ast_use_declaration_alias(char* module_name, char* item_name,
 ASTNode* mla_ast_use_module_alias_declaration(char* module_name,
                                               char* alias_name, int line);
 ASTNode* mla_ast_use_all_declaration(char* module_name, int line);
-    ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug);
-    ASTNode* mla_ast_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
+    ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members,
+                                int is_public, int derive_debug,
+                                int derive_json);
+    ASTNode* mla_ast_generic_struct_def(char* name, char* base_name,
+                                        ASTNode* type_params,
+                                        ASTNode* members, int is_public,
+                                        int derive_debug, int derive_json);
     ASTNode* mla_ast_enum_def(char* name, ASTNode* variants, int is_public, int backing_type);
     ASTNode* mla_ast_assignment(char* name, ASTNode* expr, int line);
     ASTNode* mla_ast_field_access(char* struct_name, char* field_name, int line);

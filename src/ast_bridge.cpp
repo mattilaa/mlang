@@ -258,9 +258,12 @@ ASTNode* create_cast_expression(int type, ASTNode* expr)
     return create_cast_expression_impl(type, expr);
 }
 
-ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug)
+ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
+                           int is_public, int derive_debug,
+                           int derive_json)
 {
-    return create_struct_def_impl(name, base_name, members, is_public, derive_debug);
+    return create_struct_def_impl(name, base_name, members, is_public,
+                                  derive_debug, derive_json);
 }
 
 ASTNode* create_struct_member_list(ASTNode* member)
@@ -656,9 +659,14 @@ ASTNode* add_bounded_type_param(ASTNode* list, char* param, char* trait_name)
     return add_bounded_type_param_impl(list, param, trait_name);
 }
 
-ASTNode* create_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug)
+ASTNode* create_generic_struct_def(char* name, char* base_name,
+                                   ASTNode* type_params, ASTNode* members,
+                                   int is_public, int derive_debug,
+                                   int derive_json)
 {
-    return create_generic_struct_def_impl(name, base_name, type_params, members, is_public, derive_debug);
+    return create_generic_struct_def_impl(name, base_name, type_params,
+                                          members, is_public, derive_debug,
+                                          derive_json);
 }
 
 ASTNode* create_trait_def(char* name, int line)

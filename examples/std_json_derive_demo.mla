@@ -1,0 +1,56 @@
+/// \file std_json_derive_demo.mla
+/// @ingroup examples
+/// \brief Compiler-synthesized JSON serde for derived structs.
+///
+/// Demonstrates `#[derive(Json)]` with:
+/// - inherited base fields
+/// - a `@property(hidden)` field
+/// - `to_json()` serialization
+/// - `Type::from_json(text)` round-tripping
+///
+/// Run with:
+/// `mlang examples/std_json_derive_demo.mla -L build -lmlang_std`
+///
+
+#[derive(Json)]
+struct Base {
+    @property(hidden) var secret: i32;
+    var x: i32;
+};
+
+#[derive(Json)]
+struct Leaf : Base {
+    var name: str8;
+};
+
+fn run_demo() -> Result<i32, str8> {
+    var leaf: Leaf {};
+    leaf.setSecret(7);
+    leaf.x = 3;
+    leaf.name = String::from("ok");
+
+    let text: str8 = leaf.to_json();
+    println!("{}", text);
+
+    let decoded: Leaf = Leaf::from_json(text)?;
+    if decoded.getSecret() != 7 {
+        return Err<i32, str8>("secret mismatch after JSON round-trip");
+    }
+    if decoded.x != 3 {
+        return Err<i32, str8>("x mismatch after JSON round-trip");
+    }
+    if decoded.name != "ok" {
+        return Err<i32, str8>("name mismatch after JSON round-trip");
+    }
+
+    return Ok<i32, str8>(0);
+}
+
+fn main() -> i32 {
+    let r: Result<i32, str8> = run_demo();
+    if r.is_err() {
+        println!("demo failed: {}", r.unwrap_err());
+        return 1;
+    }
+    return 0;
+}

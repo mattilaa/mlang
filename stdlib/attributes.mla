@@ -3,10 +3,17 @@
 // It is not meant to be imported at runtime.
 
 // @builtin_attribute derive
-// Enables debug formatting support for structs.
+// Enables compiler-synthesized struct helpers such as debug formatting and
+// JSON serde.
 // Usage:
 // #[derive(Debug)]
 // struct Point { var x: i32; var y: i32; };
+//
+// #[derive(Json)]
+// struct Packet { var id: i32; var name: str8; };
+// Packet gains:
+// - packet.to_json() -> str8
+// - Packet::from_json(text) -> Result<Packet, str8>
 
 // @builtin_attribute test
 // Marks a function as a test callable by `mlang test`.

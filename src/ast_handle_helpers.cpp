@@ -548,14 +548,21 @@ ASTNode* mla_ast_reference_type(ASTNode* element_type, int is_mutable)
     return create_reference_type(element_type, is_mutable);
 }
 
-ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug)
+ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members,
+                            int is_public, int derive_debug,
+                            int derive_json)
 {
-    return create_struct_def(name, base_name, members, is_public, derive_debug);
+    return create_struct_def(name, base_name, members, is_public,
+                             derive_debug, derive_json);
 }
 
-ASTNode* mla_ast_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug)
+ASTNode* mla_ast_generic_struct_def(char* name, char* base_name,
+                                    ASTNode* type_params, ASTNode* members,
+                                    int is_public, int derive_debug,
+                                    int derive_json)
 {
-    return create_generic_struct_def(name, base_name, type_params, members, is_public, derive_debug);
+    return create_generic_struct_def(name, base_name, type_params, members,
+                                     is_public, derive_debug, derive_json);
 }
 
 ASTNode* mla_ast_enum_def(char* name, ASTNode* variants, int is_public, int backing_type)

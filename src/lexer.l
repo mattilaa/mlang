@@ -245,6 +245,7 @@ static int is_try_question_context()
 "static_assert!" { return STATIC_ASSERT; }
 "vec!"          { return VEC_MACRO; }
 "#[derive(Debug)]"    { return DERIVE_DEBUG; }
+"#[derive(Json)]"     { return DERIVE_JSON; }
 "#[test]"             { return TEST_ATTR; }
 "#[fixture]"          { return FIXTURE_ATTR; }
 "@property"           { return PROPERTY_ATTR; }

@@ -31,3 +31,6 @@ mlang <path> -L ~/.local/lib -lmlang_std
 - `examples/builder_object_field_demo.mla` — @ref builder_syntax "builder
   syntax" (Option B): clause keys declared with the compact `field Name:
   Type;` form; shop-order domain covering `str8`, `i32`, and `f64` values.
+- `examples/std_json_derive_demo.mla` — `#[derive(Json)]` round-trip for a
+  derived struct, including inherited fields and `@property(...)` metadata in
+  the emitted JSON tree.

@@ -3,6 +3,13 @@
  * @brief JSON parse/stringify/navigation helpers for MLang (std::json).
  *
  * Backed by RapidJSON in libmlang_std.
+ *
+ * `#[derive(Json)]` on a struct synthesizes:
+ * - `value.to_json() -> str8`
+ * - `StructName::from_json(text) -> Result<StructName, str8>`
+ *
+ * The emitted JSON includes inherited base fields directly in the object and,
+ * for `@property(...)` members, a sibling `@property` metadata subtree.
  */
 
 /// \cond INTERNAL_IMPORTS

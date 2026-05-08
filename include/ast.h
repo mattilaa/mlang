@@ -1093,6 +1093,9 @@ public:
     bool isAtomicPropertyAccessor = false;
     bool isMutexPropertyAccessor = false;
     bool isRecursiveMutexPropertyAccessor = false;
+    bool isSynthesizedJsonSerializer = false;
+    bool isSynthesizedJsonTextDeserializer = false;
+    bool isSynthesizedJsonValueDeserializer = false;
     bool isPropertySetter = false;
     std::string sourceModule;
     std::string propertyFieldName;
@@ -1138,6 +1141,7 @@ public:
     StructMemberListNode* members;
     bool isPublic;
     bool deriveDebug = false;
+    bool deriveJson = false;
     std::string sourceModule; // Module this struct was defined in (for
                               // visibility checks)
     std::vector<std::string>
@@ -1146,9 +1150,9 @@ public:
 
     StructDefNode(const std::string& n, const std::string& b,
                   StructMemberListNode* m, bool pub = false,
-                  bool derive = false)
+                  bool derive = false, bool deriveJsonFlag = false)
         : name(n), baseName(b), members(m), isPublic(pub),
-          deriveDebug(derive)
+          deriveDebug(derive), deriveJson(deriveJsonFlag)
     {
     }
     std::string toString() const override;
@@ -1522,7 +1526,8 @@ ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
 ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
-                           int is_public, int derive_debug);
+                           int is_public, int derive_debug,
+                           int derive_json);
 ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name,
@@ -1625,7 +1630,8 @@ ASTNode* create_bounded_type_param_list(char* param, char* trait_name);
 ASTNode* add_bounded_type_param(ASTNode* list, char* param, char* trait_name);
 ASTNode* create_generic_struct_def(char* name, char* base_name,
                                    ASTNode* type_params, ASTNode* members,
-                                   int is_public, int derive_debug);
+                                   int is_public, int derive_debug,
+                                   int derive_json);
 ASTNode* create_trait_def(char* name, int line);
 ASTNode* add_trait_method(ASTNode* trait, ASTNode* method);
 ASTNode* create_impl_block(char* struct_name, ASTNode* type_params,

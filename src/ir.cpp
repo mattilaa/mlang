@@ -2670,6 +2670,69 @@ void CodeGenerator::initializeStdlibFunctions()
     jsonEscapeFunc = module->getOrInsertFunction(
         "__mlang_std_strbuf_json_escape", jsonEscapeType);
 
+    llvm::FunctionType* jsonParseType =
+        llvm::FunctionType::get(int64Type, {ptrType}, false);
+    jsonParseFunc = module->getOrInsertFunction("__mlang_std_json_parse",
+                                                jsonParseType);
+
+    llvm::FunctionType* jsonDocFreeType =
+        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {int64Type},
+                                false);
+    jsonDocFreeFunc = module->getOrInsertFunction("__mlang_std_json_doc_free",
+                                                  jsonDocFreeType);
+
+    llvm::FunctionType* jsonLastErrorType =
+        llvm::FunctionType::get(ptrType, {}, false);
+    jsonLastErrorFunc = module->getOrInsertFunction(
+        "__mlang_std_json_last_error", jsonLastErrorType);
+
+    llvm::FunctionType* jsonDocRootType =
+        llvm::FunctionType::get(int64Type, {int64Type}, false);
+    jsonDocRootFunc = module->getOrInsertFunction("__mlang_std_json_doc_root",
+                                                  jsonDocRootType);
+
+    llvm::FunctionType* jsonValueFreeType =
+        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {int64Type},
+                                false);
+    jsonValueFreeFunc = module->getOrInsertFunction(
+        "__mlang_std_json_value_free", jsonValueFreeType);
+
+    llvm::FunctionType* jsonValueKindType =
+        llvm::FunctionType::get(intType, {int64Type}, false);
+    jsonValueKindFunc = module->getOrInsertFunction(
+        "__mlang_std_json_value_kind", jsonValueKindType);
+
+    llvm::FunctionType* jsonObjectGetType =
+        llvm::FunctionType::get(int64Type, {int64Type, ptrType}, false);
+    jsonObjectGetFunc = module->getOrInsertFunction(
+        "__mlang_std_json_object_get", jsonObjectGetType);
+
+    llvm::FunctionType* jsonArrayGetType =
+        llvm::FunctionType::get(int64Type, {int64Type, int64Type}, false);
+    jsonArrayGetFunc = module->getOrInsertFunction(
+        "__mlang_std_json_array_get", jsonArrayGetType);
+
+    llvm::FunctionType* jsonAsBoolType =
+        llvm::FunctionType::get(intType, {int64Type}, false);
+    jsonAsBoolFunc = module->getOrInsertFunction(
+        "__mlang_std_json_value_as_bool", jsonAsBoolType);
+
+    llvm::FunctionType* jsonAsI64Type =
+        llvm::FunctionType::get(int64Type, {int64Type}, false);
+    jsonAsI64Func = module->getOrInsertFunction(
+        "__mlang_std_json_value_as_i64", jsonAsI64Type);
+
+    llvm::FunctionType* jsonAsF64Type =
+        llvm::FunctionType::get(llvm::Type::getDoubleTy(context), {int64Type},
+                                false);
+    jsonAsF64Func = module->getOrInsertFunction(
+        "__mlang_std_json_value_as_f64", jsonAsF64Type);
+
+    llvm::FunctionType* jsonAsStringType =
+        llvm::FunctionType::get(ptrType, {int64Type}, false);
+    jsonAsStringFunc = module->getOrInsertFunction(
+        "__mlang_std_json_value_as_string", jsonAsStringType);
+
     llvm::FunctionType* abortType =
         llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
     abortFunc = module->getOrInsertFunction("abort", abortType);
@@ -5785,6 +5848,248 @@ llvm::Value* CodeGenerator::buildStructJsonString(llvm::Value* structVal,
     llvm::Value* size = builder.CreateAdd(
         len64, llvm::ConstantInt::get(int64Type, 1), "jsondbgsz");
     llvm::Value* buffer = builder.CreateCall(mallocFunc, {size}, "jsondbgbuf");
+    std::vector<llvm::Value*> writeArgs = {buffer, size, formatStr};
+    writeArgs.insert(writeArgs.end(), argValues.begin(), argValues.end());
+    builder.CreateCall(snprintfFunc, writeArgs);
+    return buffer;
+}
+
+llvm::Value* CodeGenerator::buildStructSerdeJsonString(
+    llvm::Value* structVal, const std::string& structName, int line,
+    int indentLevel)
+{
+    initializeFormatFunctions();
+
+    auto escapeJsonStringValue = [&](llvm::Value* strVal) -> llvm::Value*
+    { return builder.CreateCall(jsonEscapeFunc, {strVal}, "json.escape"); };
+
+    auto it = structMembers.find(structName);
+    if(it == structMembers.end())
+    {
+        reportError(line, "unknown struct for json serde: " + structName);
+        return create_global_cstring(builder, "{}");
+    }
+
+    std::string displayName = structName;
+    if(auto dit = structDebugDisplayNames.find(structName);
+       dit != structDebugDisplayNames.end())
+    {
+        displayName = dit->second;
+    }
+    if(auto mit = mangledToGenericName.find(structName);
+       mit != mangledToGenericName.end())
+    {
+        displayName = mit->second;
+    }
+
+    std::string currentIndent(indentLevel * 2, ' ');
+    std::string childIndent((indentLevel + 1) * 2, ' ');
+    std::string innerSep = ",\n" + childIndent;
+    std::string fmt = "{\n" + childIndent + "\"type\": \"" + displayName + "\"";
+    std::vector<llvm::Value*> argValues;
+
+    std::string propFmt;
+    std::vector<llvm::Value*> propArgs;
+    bool hasPropertyMetadata = false;
+
+    for(size_t idx = 0; idx < it->second.size(); ++idx)
+    {
+        const auto* access = getStructFieldAccessInfo(structName,
+                                                      static_cast<int>(idx));
+        if(access && access->isSynthesizedPropertyStorage)
+            continue;
+
+        const auto& member = it->second[idx];
+        const std::string& memberName = member.first;
+        TypeNode* memberType = member.second;
+        llvm::Value* fieldVal = builder.CreateExtractValue(
+            structVal, static_cast<unsigned>(idx), "jsonserde.field");
+
+        fmt += innerSep + "\"" + memberName + "\": ";
+
+        bool handled = false;
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(memberType))
+        {
+            std::string resolvedEnumName =
+                resolveVisibleEnumName(structRef->structName);
+            if(!resolvedEnumName.empty())
+            {
+                fmt += "\"%s\"";
+                llvm::Value* enumStr =
+                    buildEnumString(fieldVal, resolvedEnumName, line);
+                argValues.push_back(escapeJsonStringValue(enumStr));
+                handled = true;
+            }
+            else
+            {
+                std::string fieldStruct = structRef->structName;
+                if(!jsonStructs.count(fieldStruct))
+                {
+                    reportError(line, "struct '" + fieldStruct +
+                                          "' does not derive Json");
+                    return create_global_cstring(builder, "{}");
+                }
+                llvm::Value* fieldStr = buildStructSerdeJsonString(
+                    fieldVal, fieldStruct, line, indentLevel + 1);
+                fmt += "%s";
+                argValues.push_back(fieldStr);
+                handled = true;
+            }
+        }
+
+        if(handled)
+            goto append_property_metadata;
+
+        switch(memberType ? memberType->kind : TypeNode::TYPE_VOID)
+        {
+        case TypeNode::TYPE_BOOL:
+        {
+#if LLVM_VERSION_MAJOR >= 21
+            llvm::Value* trueStr =
+                builder.CreateGlobalString("true", "json.true");
+            llvm::Value* falseStr =
+                builder.CreateGlobalString("false", "json.false");
+#else
+            llvm::Value* trueStr =
+                builder.CreateGlobalStringPtr("true", "json.true");
+            llvm::Value* falseStr =
+                builder.CreateGlobalStringPtr("false", "json.false");
+#endif
+            fmt += "%s";
+            argValues.push_back(builder.CreateSelect(
+                fieldVal, trueStr, falseStr, "jsonserde.bool"));
+            break;
+        }
+        case TypeNode::TYPE_I8:
+        case TypeNode::TYPE_I16:
+        case TypeNode::TYPE_INT:
+        case TypeNode::TYPE_I32:
+            fmt += "%d";
+            argValues.push_back(fieldVal);
+            break;
+        case TypeNode::TYPE_I64:
+            fmt += "%lld";
+            argValues.push_back(fieldVal);
+            break;
+        case TypeNode::TYPE_U8:
+        case TypeNode::TYPE_U16:
+        case TypeNode::TYPE_U32:
+            fmt += "%u";
+            argValues.push_back(fieldVal);
+            break;
+        case TypeNode::TYPE_U64:
+            fmt += "%llu";
+            argValues.push_back(fieldVal);
+            break;
+        case TypeNode::TYPE_FLOAT:
+        {
+            fmt += "%f";
+            llvm::Value* doubleVal = builder.CreateFPExt(
+                fieldVal, llvm::Type::getDoubleTy(context),
+                "jsonserde.float");
+            argValues.push_back(doubleVal);
+            break;
+        }
+        case TypeNode::TYPE_DOUBLE:
+            fmt += "%f";
+            argValues.push_back(fieldVal);
+            break;
+        case TypeNode::TYPE_STR8:
+            fmt += "\"%s\"";
+            argValues.push_back(escapeJsonStringValue(fieldVal));
+            break;
+        default:
+            reportError(line, "field '" + memberName + "' of struct '" +
+                                  structName +
+                                  "' has unsupported Json derive type");
+            return create_global_cstring(builder, "{}");
+        }
+
+append_property_metadata:
+        if(access && access->isProperty)
+        {
+            if(!hasPropertyMetadata)
+            {
+                propFmt = "\"@property\": {";
+                hasPropertyMetadata = true;
+            }
+            else
+            {
+                propFmt += ",";
+            }
+
+            propFmt += "\"" + memberName + "\": {"
+                       "\"hidden\": %s,"
+                       "\"protected\": %s,"
+                       "\"atomic\": %s,"
+                       "\"mutex\": %s,"
+                       "\"recursive\": %s}";
+
+#if LLVM_VERSION_MAJOR >= 21
+            llvm::Value* trueStr =
+                builder.CreateGlobalString("true", "json.meta.true");
+            llvm::Value* falseStr =
+                builder.CreateGlobalString("false", "json.meta.false");
+#else
+            llvm::Value* trueStr =
+                builder.CreateGlobalStringPtr("true", "json.meta.true");
+            llvm::Value* falseStr =
+                builder.CreateGlobalStringPtr("false", "json.meta.false");
+#endif
+
+            auto boolStr = [&](bool flag, const char* name) -> llvm::Value* {
+                return flag ? trueStr : falseStr;
+            };
+
+            propArgs.push_back(boolStr(
+                access->encapsulation == FieldEncapsulation::Hidden,
+                "hidden"));
+            propArgs.push_back(boolStr(
+                access->encapsulation == FieldEncapsulation::Protected,
+                "protected"));
+            propArgs.push_back(
+                boolStr(access->isAtomicProperty, "atomic"));
+            propArgs.push_back(boolStr(access->isMutexProperty, "mutex"));
+            propArgs.push_back(
+                boolStr(access->isRecursiveProperty, "recursive"));
+        }
+    }
+
+    if(hasPropertyMetadata)
+    {
+        propFmt += "}";
+        fmt += innerSep + propFmt;
+        argValues.insert(argValues.end(), propArgs.begin(), propArgs.end());
+    }
+
+    fmt += "\n" + currentIndent + "}";
+
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(fmt, "jsonserdefmt");
+#else
+    llvm::Value* formatStr = builder.CreateGlobalStringPtr(fmt, "jsonserdefmt");
+#endif
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* nullPtr =
+        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptrType));
+    llvm::Value* zero = llvm::ConstantInt::get(int64Type, 0);
+    std::vector<llvm::Value*> sizeArgs = {nullPtr, zero, formatStr};
+    sizeArgs.insert(sizeArgs.end(), argValues.begin(), argValues.end());
+    llvm::Value* len32 =
+        builder.CreateCall(snprintfFunc, sizeArgs, "jsonserde.len");
+    llvm::Value* len64 = builder.CreateSExt(len32, int64Type, "jsonserde.len64");
+    llvm::Value* size = builder.CreateAdd(
+        len64, llvm::ConstantInt::get(int64Type, 1), "jsonserde.size");
+    llvm::Value* buffer =
+        builder.CreateCall(mallocFunc, {size}, "jsonserde.buf");
     std::vector<llvm::Value*> writeArgs = {buffer, size, formatStr};
     writeArgs.insert(writeArgs.end(), argValues.begin(), argValues.end());
     builder.CreateCall(snprintfFunc, writeArgs);
@@ -12931,6 +13236,12 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         members.push_back({member->name, member->type});
         StructFieldAccessInfo fieldAccess;
         fieldAccess.ownerStructName = node->name;
+        fieldAccess.isProperty = member->isProperty;
+        fieldAccess.isAtomicProperty = member->isAtomicProperty;
+        fieldAccess.isMutexProperty = member->isMutexProperty;
+        fieldAccess.isRecursiveProperty = member->isRecursiveProperty;
+        fieldAccess.isSynthesizedPropertyStorage =
+            member->isSynthesizedPropertyStorage;
         if(member->isHiddenProperty || member->isSynthesizedPropertyStorage)
             fieldAccess.encapsulation = FieldEncapsulation::Hidden;
         else if(member->isProtectedProperty)
@@ -12982,6 +13293,8 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
     }
     if(node->deriveDebug)
         debugStructs.insert(node->name);
+    if(node->deriveJson)
+        jsonStructs.insert(node->name);
 
     // Track base name for inheritance lookups
     if(!node->baseName.empty())
@@ -20748,6 +21061,29 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         return ok ? function : nullptr;
     }
 
+    if(method->isSynthesizedJsonSerializer)
+    {
+        bool ok = generateJsonSerializerMethodBody(structName, method, function);
+        restoreMethodCodegenState();
+        return ok ? function : nullptr;
+    }
+
+    if(method->isSynthesizedJsonTextDeserializer)
+    {
+        bool ok = generateJsonTextDeserializerMethodBody(structName, method,
+                                                         function);
+        restoreMethodCodegenState();
+        return ok ? function : nullptr;
+    }
+
+    if(method->isSynthesizedJsonValueDeserializer)
+    {
+        bool ok = generateJsonValueDeserializerMethodBody(structName, method,
+                                                          function);
+        restoreMethodCodegenState();
+        return ok ? function : nullptr;
+    }
+
     // Generate body
     for(auto stmt : method->body->statements)
     {
@@ -21078,6 +21414,568 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
         builder.CreateCall(exceptionsPopFrameFunc,
                            {currentFunctionExceptionFrame});
     builder.CreateRetVoid();
+    llvm::verifyFunction(*function);
+    return true;
+}
+
+llvm::Value* CodeGenerator::getJsonLastErrorString()
+{
+    initializeStdlibFunctions();
+    return builder.CreateCall(jsonLastErrorFunc, {}, "json.last_error");
+}
+
+llvm::Value* CodeGenerator::buildJsonResultValue(llvm::Function* function,
+                                                 bool isOk,
+                                                 llvm::Value* payload,
+                                                 int payloadIndexOverride)
+{
+    if(!function || !function->getReturnType()->isStructTy())
+        return nullptr;
+
+    auto* retStruct = llvm::cast<llvm::StructType>(function->getReturnType());
+    std::string retName = retStruct->getName().str();
+    auto membersIt = structMembers.find(retName);
+    if(membersIt == structMembers.end())
+        return nullptr;
+
+    int isOkIndex = -1;
+    int okIndex = -1;
+    int errIndex = -1;
+    for(size_t i = 0; i < membersIt->second.size(); ++i)
+    {
+        const auto& mem = membersIt->second[i];
+        if(mem.first == "is_ok")
+            isOkIndex = static_cast<int>(i);
+        else if(mem.first == "ok")
+            okIndex = static_cast<int>(i);
+        else if(mem.first == "err")
+            errIndex = static_cast<int>(i);
+    }
+
+    int payloadIndex = payloadIndexOverride >= 0
+                           ? payloadIndexOverride
+                           : (isOk ? okIndex : errIndex);
+    if(isOkIndex < 0 || payloadIndex < 0)
+        return nullptr;
+
+    llvm::Value* result = llvm::Constant::getNullValue(retStruct);
+    result = builder.CreateInsertValue(
+        result, llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
+                                       isOk ? 1 : 0),
+        static_cast<unsigned>(isOkIndex), "json.result.flag");
+
+    llvm::Type* expectedType =
+        retStruct->getStructElementType(static_cast<unsigned>(payloadIndex));
+    if(payload && payload->getType() != expectedType)
+    {
+        if(payload->getType()->isIntegerTy() && expectedType->isIntegerTy())
+        {
+            payload = builder.CreateIntCast(payload, expectedType, true,
+                                            "json.result.intcast");
+        }
+        else if(payload->getType()->isIntegerTy() &&
+                expectedType->isFloatingPointTy())
+        {
+            payload = builder.CreateSIToFP(payload, expectedType,
+                                           "json.result.sitofp");
+        }
+        else if(payload->getType()->isFloatingPointTy() &&
+                expectedType->isIntegerTy())
+        {
+            payload = builder.CreateFPToSI(payload, expectedType,
+                                           "json.result.fptosi");
+        }
+        else if(payload->getType()->isFloatingPointTy() &&
+                expectedType->isFloatingPointTy())
+        {
+            payload = builder.CreateFPCast(payload, expectedType,
+                                           "json.result.fpcast");
+        }
+        else if(payload->getType()->isPointerTy() &&
+                expectedType->isPointerTy())
+        {
+            payload = builder.CreateBitCast(payload, expectedType,
+                                            "json.result.ptrcast");
+        }
+    }
+
+    if(payload)
+    {
+        result = builder.CreateInsertValue(
+            result, payload, static_cast<unsigned>(payloadIndex),
+            "json.result.payload");
+    }
+    return result;
+}
+
+bool CodeGenerator::populateStructFromJsonValue(
+    const std::string& structName, llvm::Value* jsonValueHandle,
+    llvm::Value* outStructAlloca, llvm::Function* function,
+    llvm::BasicBlock* failBB, llvm::AllocaInst* errorSlot)
+{
+    initializeStdlibFunctions();
+    if(!jsonValueHandle || !outStructAlloca || !function || !failBB ||
+       !errorSlot)
+    {
+        return false;
+    }
+
+    auto membersIt = structMembers.find(structName);
+    if(membersIt == structMembers.end())
+    {
+        reportError(0, "unknown struct for json serde: " + structName);
+        return false;
+    }
+
+    auto* structType = getStructType(structName);
+    if(!structType)
+        return false;
+
+    auto branchToFailWithError = [&](llvm::Value* errVal) {
+        builder.CreateStore(errVal, errorSlot);
+        builder.CreateBr(failBB);
+    };
+
+    llvm::BasicBlock* objectOkBB =
+        llvm::BasicBlock::Create(context, "json.object.ok", function);
+    llvm::BasicBlock* objectFailBB =
+        llvm::BasicBlock::Create(context, "json.object.fail", function);
+    llvm::Value* rootKind =
+        builder.CreateCall(jsonValueKindFunc, {jsonValueHandle}, "json.kind");
+    llvm::Value* isObject = builder.CreateICmpEQ(
+        rootKind, llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 6),
+        "json.is_object");
+    builder.CreateCondBr(isObject, objectOkBB, objectFailBB);
+
+    builder.SetInsertPoint(objectFailBB);
+    branchToFailWithError(
+        create_global_cstring(builder, "std::json from_json: expected object",
+                              "json.expected_object"));
+
+    builder.SetInsertPoint(objectOkBB);
+
+    for(size_t idx = 0; idx < membersIt->second.size(); ++idx)
+    {
+        const auto* accessInfo =
+            getStructFieldAccessInfo(structName, static_cast<int>(idx));
+        if(accessInfo && accessInfo->isSynthesizedPropertyStorage)
+            continue;
+
+        const auto& member = membersIt->second[idx];
+        const std::string& memberName = member.first;
+        TypeNode* memberType = member.second;
+        const StructFieldLayout* layout =
+            getStructFieldLayout(structName, static_cast<int>(idx));
+        if(!layout || layout->packedBit)
+        {
+            reportError(0, "field '" + memberName + "' of struct '" +
+                               structName +
+                               "' is not supported for Json derive");
+            return false;
+        }
+
+        llvm::Value* keyVal =
+            create_global_cstring(builder, memberName, "json.field.key");
+        llvm::Value* childHandle = builder.CreateCall(
+            jsonObjectGetFunc, {jsonValueHandle, keyVal}, "json.field.handle");
+
+        llvm::BasicBlock* childOkBB =
+            llvm::BasicBlock::Create(context, "json.field.ok", function);
+        llvm::BasicBlock* childMissingBB =
+            llvm::BasicBlock::Create(context, "json.field.missing", function);
+        llvm::Value* childExists = builder.CreateICmpNE(
+            childHandle, llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), 0),
+            "json.field.exists");
+        builder.CreateCondBr(childExists, childOkBB, childMissingBB);
+
+        builder.SetInsertPoint(childMissingBB);
+        branchToFailWithError(getJsonLastErrorString());
+
+        builder.SetInsertPoint(childOkBB);
+        llvm::Value* fieldPtr = builder.CreateStructGEP(
+            structType, outStructAlloca, layout->storageIndex,
+            memberName + ".json.ptr");
+
+        auto* structRef = dynamic_cast<StructTypeRefNode*>(memberType);
+        if(structRef)
+        {
+            std::string enumName =
+                resolveVisibleEnumName(structRef->structName);
+            if(!enumName.empty())
+            {
+                reportError(0, "field '" + memberName + "' of struct '" +
+                                   structName +
+                                   "' has unsupported Json derive type");
+                return false;
+            }
+
+            std::string childStruct = structRef->structName;
+            if(!jsonStructs.count(childStruct))
+            {
+                reportError(0, "struct '" + childStruct +
+                                   "' does not derive Json");
+                return false;
+            }
+
+            llvm::Type* childStructType = getLLVMTypeFromNode(memberType);
+            if(!childStructType)
+                return false;
+            auto* nestedAlloca = builder.CreateAlloca(
+                childStructType, nullptr, memberName + ".json.tmp");
+            builder.CreateStore(llvm::Constant::getNullValue(childStructType),
+                                nestedAlloca);
+
+            llvm::BasicBlock* nestedFailBB =
+                llvm::BasicBlock::Create(context, "json.nested.fail",
+                                         function);
+            if(!populateStructFromJsonValue(childStruct, childHandle,
+                                            nestedAlloca, function,
+                                            nestedFailBB, errorSlot))
+            {
+                return false;
+            }
+
+            llvm::Value* nestedValue = builder.CreateLoad(
+                childStructType, nestedAlloca, memberName + ".json.value");
+            builder.CreateCall(jsonValueFreeFunc, {childHandle});
+            builder.CreateStore(nestedValue, fieldPtr);
+
+            llvm::BasicBlock* nestedContBB =
+                llvm::BasicBlock::Create(context, "json.nested.cont", function);
+            builder.CreateBr(nestedContBB);
+
+            builder.SetInsertPoint(nestedFailBB);
+            builder.CreateCall(jsonValueFreeFunc, {childHandle});
+            builder.CreateBr(failBB);
+
+            builder.SetInsertPoint(nestedContBB);
+            continue;
+        }
+
+        llvm::Type* llvmFieldType = getLLVMTypeFromNode(memberType);
+        if(!llvmFieldType)
+            return false;
+
+        int expectedKind = -1;
+        switch(memberType ? memberType->kind : TypeNode::TYPE_VOID)
+        {
+        case TypeNode::TYPE_BOOL:
+            expectedKind = 2;
+            break;
+        case TypeNode::TYPE_I8:
+        case TypeNode::TYPE_I16:
+        case TypeNode::TYPE_INT:
+        case TypeNode::TYPE_I32:
+        case TypeNode::TYPE_I64:
+        case TypeNode::TYPE_U8:
+        case TypeNode::TYPE_U16:
+        case TypeNode::TYPE_U32:
+        case TypeNode::TYPE_U64:
+        case TypeNode::TYPE_FLOAT:
+        case TypeNode::TYPE_DOUBLE:
+            expectedKind = 3;
+            break;
+        case TypeNode::TYPE_STR8:
+            expectedKind = 4;
+            break;
+        default:
+            reportError(0, "field '" + memberName + "' of struct '" +
+                               structName +
+                               "' has unsupported Json derive type");
+            return false;
+        }
+
+        llvm::Value* childKind = builder.CreateCall(jsonValueKindFunc,
+                                                    {childHandle},
+                                                    "json.field.kind");
+        llvm::BasicBlock* kindOkBB =
+            llvm::BasicBlock::Create(context, "json.kind.ok", function);
+        llvm::BasicBlock* kindFailBB =
+            llvm::BasicBlock::Create(context, "json.kind.fail", function);
+        llvm::Value* kindMatches = builder.CreateICmpEQ(
+            childKind,
+            llvm::ConstantInt::get(llvm::Type::getInt32Ty(context),
+                                   expectedKind),
+            "json.kind.match");
+        builder.CreateCondBr(kindMatches, kindOkBB, kindFailBB);
+
+        builder.SetInsertPoint(kindFailBB);
+        builder.CreateCall(jsonValueFreeFunc, {childHandle});
+        branchToFailWithError(create_global_cstring(
+            builder, "std::json from_json: field type mismatch",
+            "json.type_mismatch"));
+
+        builder.SetInsertPoint(kindOkBB);
+
+        switch(memberType ? memberType->kind : TypeNode::TYPE_VOID)
+        {
+        case TypeNode::TYPE_BOOL:
+        {
+            llvm::Value* rawBool = builder.CreateCall(jsonAsBoolFunc,
+                                                      {childHandle},
+                                                      "json.bool");
+            llvm::Value* boolVal = builder.CreateICmpNE(
+                rawBool, llvm::ConstantInt::get(rawBool->getType(), 0),
+                "json.bool.i1");
+            builder.CreateStore(boolVal, fieldPtr);
+            break;
+        }
+        case TypeNode::TYPE_I8:
+        case TypeNode::TYPE_I16:
+        case TypeNode::TYPE_INT:
+        case TypeNode::TYPE_I32:
+        case TypeNode::TYPE_I64:
+        case TypeNode::TYPE_U8:
+        case TypeNode::TYPE_U16:
+        case TypeNode::TYPE_U32:
+        case TypeNode::TYPE_U64:
+        {
+            llvm::Value* rawInt = builder.CreateCall(jsonAsI64Func,
+                                                     {childHandle},
+                                                     "json.i64");
+            bool isUnsigned =
+                memberType->kind == TypeNode::TYPE_U8 ||
+                memberType->kind == TypeNode::TYPE_U16 ||
+                memberType->kind == TypeNode::TYPE_U32 ||
+                memberType->kind == TypeNode::TYPE_U64;
+            llvm::Value* castInt =
+                builder.CreateIntCast(rawInt, llvmFieldType, !isUnsigned,
+                                      "json.int.cast");
+            builder.CreateStore(castInt, fieldPtr);
+            break;
+        }
+        case TypeNode::TYPE_FLOAT:
+        {
+            llvm::Value* rawFloat = builder.CreateCall(jsonAsF64Func,
+                                                       {childHandle},
+                                                       "json.f64");
+            builder.CreateStore(
+                builder.CreateFPTrunc(rawFloat, llvmFieldType, "json.f32"),
+                fieldPtr);
+            break;
+        }
+        case TypeNode::TYPE_DOUBLE:
+        {
+            llvm::Value* rawFloat = builder.CreateCall(jsonAsF64Func,
+                                                       {childHandle},
+                                                       "json.f64");
+            builder.CreateStore(rawFloat, fieldPtr);
+            break;
+        }
+        case TypeNode::TYPE_STR8:
+        {
+            llvm::Value* rawString = builder.CreateCall(jsonAsStringFunc,
+                                                        {childHandle},
+                                                        "json.str");
+            builder.CreateStore(rawString, fieldPtr);
+            break;
+        }
+        default:
+            break;
+        }
+
+        builder.CreateCall(jsonValueFreeFunc, {childHandle});
+    }
+
+    return true;
+}
+
+bool CodeGenerator::generateJsonSerializerMethodBody(
+    const std::string& structName, StructMethodNode* method,
+    llvm::Function* function)
+{
+    auto memberIt = structMembers.find(structName);
+    if(memberIt == structMembers.end())
+        return false;
+
+    llvm::StructType* structType = getStructType(structName);
+    if(!structType)
+        return false;
+
+    llvm::Value* selfStorage = namedValues["self"];
+    if(!selfStorage)
+        return false;
+
+    llvm::Value* selfPtr = selfStorage;
+    if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(selfStorage))
+    {
+        llvm::Type* allocaType = alloca->getAllocatedType();
+        if(allocaType->isPointerTy())
+            selfPtr = builder.CreateLoad(allocaType, alloca,
+                                         "self.json.ptr");
+    }
+
+    llvm::Value* selfValue =
+        builder.CreateLoad(structType, selfPtr, "self.json.value");
+    llvm::Value* jsonValue =
+        buildStructSerdeJsonString(selfValue, structName, method->line);
+    exitCleanupScope();
+    if(currentFunctionExceptionFrame)
+        builder.CreateCall(exceptionsPopFrameFunc,
+                           {currentFunctionExceptionFrame});
+    builder.CreateRet(jsonValue);
+    llvm::verifyFunction(*function);
+    return true;
+}
+
+bool CodeGenerator::generateJsonTextDeserializerMethodBody(
+    const std::string& structName, StructMethodNode* method,
+    llvm::Function* function)
+{
+    initializeStdlibFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+    llvm::StructType* structType = getStructType(structName);
+    if(!structType)
+        return false;
+
+    llvm::Value* jsonTextStorage = namedValues["json_text"];
+    if(!jsonTextStorage)
+        return false;
+    llvm::Value* jsonText =
+        builder.CreateLoad(ptrType, jsonTextStorage, "json.text");
+
+    auto* docSlot = builder.CreateAlloca(int64Type, nullptr, "json.doc.slot");
+    auto* rootSlot = builder.CreateAlloca(int64Type, nullptr, "json.root.slot");
+    auto* errorSlot = builder.CreateAlloca(ptrType, nullptr, "json.err.slot");
+    builder.CreateStore(llvm::ConstantInt::get(int64Type, 0), docSlot);
+    builder.CreateStore(llvm::ConstantInt::get(int64Type, 0), rootSlot);
+    builder.CreateStore(create_global_cstring(builder, "std::json from_json failed",
+                                              "json.default.err"),
+                        errorSlot);
+
+    llvm::BasicBlock* failBB =
+        llvm::BasicBlock::Create(context, "json.text.fail", function);
+    llvm::BasicBlock* parseOkBB =
+        llvm::BasicBlock::Create(context, "json.parse.ok", function);
+    llvm::BasicBlock* parseFailBB =
+        llvm::BasicBlock::Create(context, "json.parse.fail", function);
+    llvm::Value* docHandle =
+        builder.CreateCall(jsonParseFunc, {jsonText}, "json.doc");
+    builder.CreateStore(docHandle, docSlot);
+    llvm::Value* parseOk = builder.CreateICmpNE(
+        docHandle, llvm::ConstantInt::get(int64Type, 0), "json.parse.ok");
+    builder.CreateCondBr(parseOk, parseOkBB, parseFailBB);
+
+    builder.SetInsertPoint(parseFailBB);
+    builder.CreateStore(getJsonLastErrorString(), errorSlot);
+    builder.CreateBr(failBB);
+
+    builder.SetInsertPoint(parseOkBB);
+    llvm::Value* rootHandle =
+        builder.CreateCall(jsonDocRootFunc, {docHandle}, "json.root");
+    builder.CreateStore(rootHandle, rootSlot);
+    llvm::BasicBlock* rootOkBB =
+        llvm::BasicBlock::Create(context, "json.root.ok", function);
+    llvm::BasicBlock* rootFailBB =
+        llvm::BasicBlock::Create(context, "json.root.fail", function);
+    llvm::Value* rootOk = builder.CreateICmpNE(
+        rootHandle, llvm::ConstantInt::get(int64Type, 0), "json.root.exists");
+    builder.CreateCondBr(rootOk, rootOkBB, rootFailBB);
+
+    builder.SetInsertPoint(rootFailBB);
+    builder.CreateStore(getJsonLastErrorString(), errorSlot);
+    builder.CreateBr(failBB);
+
+    builder.SetInsertPoint(rootOkBB);
+    auto* outAlloca =
+        builder.CreateAlloca(structType, nullptr, "json.struct.tmp");
+    builder.CreateStore(llvm::Constant::getNullValue(structType), outAlloca);
+    if(!populateStructFromJsonValue(structName, rootHandle, outAlloca, function,
+                                    failBB, errorSlot))
+    {
+        return false;
+    }
+
+    llvm::Value* outValue =
+        builder.CreateLoad(structType, outAlloca, "json.struct.value");
+    builder.CreateCall(jsonValueFreeFunc, {rootHandle});
+    builder.CreateCall(jsonDocFreeFunc, {docHandle});
+    exitCleanupScope();
+    if(currentFunctionExceptionFrame)
+        builder.CreateCall(exceptionsPopFrameFunc,
+                           {currentFunctionExceptionFrame});
+    builder.CreateRet(buildJsonResultValue(function, true, outValue));
+
+    builder.SetInsertPoint(failBB);
+    llvm::Value* failDoc =
+        builder.CreateLoad(int64Type, docSlot, "json.fail.doc");
+    llvm::Value* failRoot =
+        builder.CreateLoad(int64Type, rootSlot, "json.fail.root");
+    llvm::Value* storedErr =
+        builder.CreateLoad(ptrType, errorSlot, "json.fail.err");
+    builder.CreateCall(jsonValueFreeFunc, {failRoot});
+    builder.CreateCall(jsonDocFreeFunc, {failDoc});
+    exitCleanupScope();
+    if(currentFunctionExceptionFrame)
+        builder.CreateCall(exceptionsPopFrameFunc,
+                           {currentFunctionExceptionFrame});
+    builder.CreateRet(buildJsonResultValue(function, false, storedErr));
+    llvm::verifyFunction(*function);
+    return true;
+}
+
+bool CodeGenerator::generateJsonValueDeserializerMethodBody(
+    const std::string& structName, StructMethodNode* method,
+    llvm::Function* function)
+{
+    initializeStdlibFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+    llvm::StructType* structType = getStructType(structName);
+    if(!structType)
+        return false;
+
+    llvm::Value* jsonValueStorage = namedValues["json_value"];
+    if(!jsonValueStorage)
+        return false;
+    llvm::Value* jsonValue =
+        builder.CreateLoad(int64Type, jsonValueStorage, "json.value.handle");
+
+    auto* errorSlot = builder.CreateAlloca(ptrType, nullptr, "json.err.slot");
+    builder.CreateStore(create_global_cstring(builder, "std::json from_json failed",
+                                              "json.default.err"),
+                        errorSlot);
+    auto* outAlloca =
+        builder.CreateAlloca(structType, nullptr, "json.struct.tmp");
+    builder.CreateStore(llvm::Constant::getNullValue(structType), outAlloca);
+
+    llvm::BasicBlock* failBB =
+        llvm::BasicBlock::Create(context, "json.value.fail", function);
+    if(!populateStructFromJsonValue(structName, jsonValue, outAlloca, function,
+                                    failBB, errorSlot))
+    {
+        return false;
+    }
+
+    llvm::Value* outValue =
+        builder.CreateLoad(structType, outAlloca, "json.struct.value");
+    exitCleanupScope();
+    if(currentFunctionExceptionFrame)
+        builder.CreateCall(exceptionsPopFrameFunc,
+                           {currentFunctionExceptionFrame});
+    builder.CreateRet(buildJsonResultValue(function, true, outValue));
+
+    builder.SetInsertPoint(failBB);
+    llvm::Value* storedErr =
+        builder.CreateLoad(ptrType, errorSlot, "json.fail.err");
+    exitCleanupScope();
+    if(currentFunctionExceptionFrame)
+        builder.CreateCall(exceptionsPopFrameFunc,
+                           {currentFunctionExceptionFrame});
+    builder.CreateRet(buildJsonResultValue(function, false, storedErr));
     llvm::verifyFunction(*function);
     return true;
 }
@@ -25822,6 +26720,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
             members.push_back({member->name, substitutedType});
             StructFieldAccessInfo fieldAccess;
             fieldAccess.ownerStructName = mangledName;
+            fieldAccess.isProperty = member->isProperty;
+            fieldAccess.isAtomicProperty = member->isAtomicProperty;
+            fieldAccess.isMutexProperty = member->isMutexProperty;
+            fieldAccess.isRecursiveProperty = member->isRecursiveProperty;
+            fieldAccess.isSynthesizedPropertyStorage =
+                member->isSynthesizedPropertyStorage;
             if(member->isHiddenProperty || member->isSynthesizedPropertyStorage)
                 fieldAccess.encapsulation = FieldEncapsulation::Hidden;
             else if(member->isProtectedProperty)
@@ -25880,6 +26784,8 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     monomorphizedTypeArgs[mangledName] = std::move(storedTypeArgs);
     if(templateStruct->deriveDebug)
         debugStructs.insert(mangledName);
+    if(templateStruct->deriveJson)
+        jsonStructs.insert(mangledName);
 
     // Copy visibility from template
     structVisibility[mangledName] =
@@ -25933,6 +26839,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
                     method->isMutexPropertyAccessor;
                 newMethod->isRecursiveMutexPropertyAccessor =
                     method->isRecursiveMutexPropertyAccessor;
+                newMethod->isSynthesizedJsonSerializer =
+                    method->isSynthesizedJsonSerializer;
+                newMethod->isSynthesizedJsonTextDeserializer =
+                    method->isSynthesizedJsonTextDeserializer;
+                newMethod->isSynthesizedJsonValueDeserializer =
+                    method->isSynthesizedJsonValueDeserializer;
                 newMethod->isPropertySetter = method->isPropertySetter;
                 newMethod->propertyFieldName = method->propertyFieldName;
                 newMethod->propertyLockFieldName =
@@ -25979,6 +26891,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
                 method->isMutexPropertyAccessor;
             newMethod->isRecursiveMutexPropertyAccessor =
                 method->isRecursiveMutexPropertyAccessor;
+            newMethod->isSynthesizedJsonSerializer =
+                method->isSynthesizedJsonSerializer;
+            newMethod->isSynthesizedJsonTextDeserializer =
+                method->isSynthesizedJsonTextDeserializer;
+            newMethod->isSynthesizedJsonValueDeserializer =
+                method->isSynthesizedJsonValueDeserializer;
             newMethod->isPropertySetter = method->isPropertySetter;
             newMethod->propertyFieldName = method->propertyFieldName;
             newMethod->propertyLockFieldName = method->propertyLockFieldName;
@@ -26031,6 +26949,12 @@ void CodeGenerator::monomorphizeImplBlock(
         newMethod->isMutexPropertyAccessor = method->isMutexPropertyAccessor;
         newMethod->isRecursiveMutexPropertyAccessor =
             method->isRecursiveMutexPropertyAccessor;
+        newMethod->isSynthesizedJsonSerializer =
+            method->isSynthesizedJsonSerializer;
+        newMethod->isSynthesizedJsonTextDeserializer =
+            method->isSynthesizedJsonTextDeserializer;
+        newMethod->isSynthesizedJsonValueDeserializer =
+            method->isSynthesizedJsonValueDeserializer;
         newMethod->isPropertySetter = method->isPropertySetter;
         newMethod->propertyFieldName = method->propertyFieldName;
         newMethod->propertyLockFieldName = method->propertyLockFieldName;
