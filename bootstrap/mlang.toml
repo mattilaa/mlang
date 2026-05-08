@@ -202,10 +202,14 @@ print = "[bootstrap] Installing mlangd-mla"
 workdir = "{{root}}/.."
 depends_on = ["build-mlangd-mla", "install-mlang"]
 shell = [
+  "prefix={{option.install_prefix}}",
+  "man_dir=\"$prefix/share/man/man1\"",
   "bin_dir={{option.bin_dir}}",
   "mkdir -p \"$bin_dir\"",
+  "mkdir -p \"$man_dir\"",
   "cp -f {{build_dir}}/mlangd-mla \"$bin_dir/mlangd-mla\"",
-  "chmod +x \"$bin_dir/mlangd-mla\""
+  "chmod +x \"$bin_dir/mlangd-mla\"",
+  "cp -f docs/man/mlangd-mla.1 \"$man_dir/mlangd-mla.1\""
 ]
 sign = ["{{option.bin_dir}}/mlangd-mla"]
 
@@ -224,10 +228,14 @@ print = "[bootstrap] Installing mlangd-mla"
 workdir = "{{root}}/.."
 depends_on = ["build-mlangd-mla-existing"]
 shell = [
+  "prefix={{option.install_prefix}}",
+  "man_dir=\"$prefix/share/man/man1\"",
   "bin_dir={{option.bin_dir}}",
   "mkdir -p \"$bin_dir\"",
+  "mkdir -p \"$man_dir\"",
   "cp -f {{build_dir}}/mlangd-mla \"$bin_dir/mlangd-mla\"",
-  "chmod +x \"$bin_dir/mlangd-mla\""
+  "chmod +x \"$bin_dir/mlangd-mla\"",
+  "cp -f docs/man/mlangd-mla.1 \"$man_dir/mlangd-mla.1\""
 ]
 sign = ["{{option.bin_dir}}/mlangd-mla"]
 
@@ -237,12 +245,17 @@ print = "[bootstrap] Installing mlang-frontend and mlang-frontend-mla"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang-frontend", "install-mlang"]
 shell = [
+  "prefix={{option.install_prefix}}",
+  "man_dir=\"$prefix/share/man/man1\"",
   "bin_dir={{option.bin_dir}}",
   "mkdir -p \"$bin_dir\"",
+  "mkdir -p \"$man_dir\"",
   "cp -f {{build_dir}}/mlang-frontend-mla \"$bin_dir/mlang-frontend-mla\"",
   "chmod +x \"$bin_dir/mlang-frontend-mla\"",
   "cp -f {{build_dir}}/mlang-frontend \"$bin_dir/mlang-frontend\"",
-  "chmod +x \"$bin_dir/mlang-frontend\""
+  "chmod +x \"$bin_dir/mlang-frontend\"",
+  "cp -f docs/man/mlang-frontend.1 \"$man_dir/mlang-frontend.1\"",
+  "cp -f docs/man/mlang-frontend-mla.1 \"$man_dir/mlang-frontend-mla.1\""
 ]
 
 [[task]]
@@ -251,12 +264,17 @@ print = "[bootstrap] Installing mlang-frontend and mlang-frontend-mla"
 workdir = "{{root}}/.."
 depends_on = ["build-mlang-frontend-existing"]
 shell = [
+  "prefix={{option.install_prefix}}",
+  "man_dir=\"$prefix/share/man/man1\"",
   "bin_dir={{option.bin_dir}}",
   "mkdir -p \"$bin_dir\"",
+  "mkdir -p \"$man_dir\"",
   "cp -f {{build_dir}}/mlang-frontend-mla \"$bin_dir/mlang-frontend-mla\"",
   "chmod +x \"$bin_dir/mlang-frontend-mla\"",
   "cp -f {{build_dir}}/mlang-frontend \"$bin_dir/mlang-frontend\"",
-  "chmod +x \"$bin_dir/mlang-frontend\""
+  "chmod +x \"$bin_dir/mlang-frontend\"",
+  "cp -f docs/man/mlang-frontend.1 \"$man_dir/mlang-frontend.1\"",
+  "cp -f docs/man/mlang-frontend-mla.1 \"$man_dir/mlang-frontend-mla.1\""
 ]
 
 [[task]]
@@ -287,7 +305,7 @@ shell = [
 name = "install-all"
 print = "[bootstrap] Installing bootstrap-managed tooling into {{option.bin_dir}}"
 workdir = "{{root}}/.."
-depends_on = ["install-mlangd-mla-existing", "install-mlang-format-existing", "install-mlang-frontend-existing"]
+depends_on = ["install-mlang", "install-mlangd-mla-existing", "install-mlang-format-existing", "install-mlang-frontend-existing"]
 commands = [
   "echo bootstrap install-all completed"
 ]

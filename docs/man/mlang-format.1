@@ -1,0 +1,91 @@
+.TH MLANG-FORMAT 1 "May 2026" "MLang" "User Commands"
+.SH NAME
+mlang-format \- source formatter for MLang code
+.SH SYNOPSIS
+.B mlang-format
+[\fB\-i\fR|\fB\-\-in\-place\fR]
+[\fB\-\-style\fR file]
+[\fB\-\-root\fR \fIDIR\fR]
+[\fB\-\-assume\-filename\fR \fIPATH\fR]
+[\fIPATH\fR]
+.SH DESCRIPTION
+.B mlang-format
+formats MLang source code. When a path is given it reads that file, formats
+it, and writes the result to standard output unless in-place rewriting is
+requested. Without a path it reads from standard input and writes the formatted
+result to standard output.
+.PP
+Configuration is discovered from a
+.I .mlang-format
+file. The current implementation supports a
+.B file
+style mode and accepts
+.B \-\-fallback-style
+for compatibility, but only file-based formatting rules are currently applied.
+.SH OPTIONS
+.TP
+.BR \-i ", " \-\-in\-place
+Rewrite the target file in place. A path argument is required.
+.TP
+.B \-\-style file
+Use file-based configuration lookup. This is the supported style mode.
+.TP
+.B \-\-fallback-style \fISTYLE\fR
+Accepted for compatibility with formatter-oriented tooling. The current
+implementation ignores the fallback style value and still uses file-based
+configuration.
+.TP
+.B \-\-root \fIDIR\fR
+Limit
+.I .mlang-format
+config discovery to the given root directory.
+.TP
+.B \-\-assume\-filename \fIPATH\fR
+Use
+.I PATH
+as the source path when searching for configuration.
+.TP
+.BR \-v ", " \-\-version
+Print the formatter version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print a short usage line and exit.
+.SH CONFIGURATION
+The formatter reads
+.I .mlang-format
+files with keys including:
+.TP
+.B IndentWidth
+Indent width in spaces.
+.TP
+.B EnsureTrailingNewline
+Whether the formatter should ensure a final newline.
+.TP
+.B SpaceAfterComma
+Whether a space is emitted after commas.
+.TP
+.B SpaceAfterColon
+Whether a space is emitted after colons.
+.TP
+.B SpaceAroundOperators
+Whether arithmetic and assignment operators are surrounded by spaces.
+.TP
+.B SpaceAroundRelationalOperators
+Whether relational operators are surrounded by spaces.
+.TP
+.B SpaceInsideBracesSingleLine
+Whether single-line brace forms include interior spacing.
+.TP
+.B CompactFatArrow
+Whether fat-arrow spacing is compacted in supported forms.
+.SH EXAMPLES
+.nf
+mlang-format hello.mla
+mlang-format -i hello.mla
+cat hello.mla | mlang-format --assume-filename hello.mla
+mlang-format --root . --style file src/main.mla
+.fi
+.SH SEE ALSO
+.BR mlang (1),
+.BR mlangd (1),
+.BR mlangd-mla (1)
