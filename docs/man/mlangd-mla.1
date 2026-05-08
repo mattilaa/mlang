@@ -1,0 +1,58 @@
+.TH MLANGD-MLA 1 "May 2026" "MLang" "User Commands"
+.SH NAME
+mlangd-mla \- self-hosted MLang Language Server Protocol scaffold
+.SH SYNOPSIS
+.B mlangd-mla
+[\fB\-v\fR|\fB\-\-version\fR]
+[\fB\-\-enable\-log\fR]
+[\fB\-\-log\-level\fR \fILEVEL\fR]
+[\fB\-\-log\-dir\fR \fIDIR\fR]
+[\fB\-\-log\-color\fR|\fB\-\-log\-colors\fR]
+.SH DESCRIPTION
+.B mlangd-mla
+is the self-hosted MLang implementation of the language server scaffold. It
+speaks LSP over stdio and is primarily intended for bootstrap, parity work,
+and experimentation alongside the native
+.BR mlangd (1)
+server.
+.PP
+When started without
+.BR \-\-version ,
+the process immediately enters its stdio JSON-RPC loop.
+.SH OPTIONS
+.TP
+.BR \-v ", " \-\-version
+Print the tool version and exit.
+.TP
+.B \-\-enable\-log
+Enable internal file logging.
+.TP
+.B \-\-log\-level \fILEVEL\fR
+Select the log level. Supported values are
+.BR DEBUG ,
+.BR INFO ,
+.BR ERROR ,
+.BR WARN ,
+and
+.BR VERBOSE .
+.TP
+.B \-\-log\-dir \fIDIR\fR
+Write the log file below
+.IR DIR .
+The default log directory is
+.IR /tmp ,
+and the file name is
+.IR mlangd-mla.log .
+.TP
+.BR \-\-log\-color ", " \-\-log\-colors
+Enable colored log-level tags in the log file output.
+.SH EXAMPLES
+.nf
+mlangd-mla --version
+mlangd-mla --enable-log --log-level INFO --log-dir /tmp
+mlangd-mla --enable-log --log-level VERBOSE --log-colors
+.fi
+.SH SEE ALSO
+.BR mlangd (1),
+.BR mlang-format (1),
+.BR mlang (1)

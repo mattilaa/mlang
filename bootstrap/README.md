@@ -23,6 +23,23 @@ Or build and install it to `~/.local/bin` in one line:
 cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release; cmake --build build --target mlang mlang_std; cmake --install build --prefix "$HOME/.local"
 ```
 
+That install step also installs native man pages such as `man mlang`,
+`man mlang-pkg`, `man mlangd`, and `man mlang-format` under
+`$HOME/.local/share/man/man1`.
+
+The repository also ships checked-in roff sources under `docs/man/`. Stage
+them into the build tree with:
+
+```sh
+cmake --build build --target manpages
+```
+
+Preview one directly with:
+
+```sh
+man -l docs/man/mlang.1
+```
+
 After that, `run-bootstrap.sh` uses `./build/mlang` automatically. You can also
 install `mlang` on `PATH` or set `MLANG_BOOTSTRAP_BIN=/path/to/mlang`.
 
@@ -73,6 +90,9 @@ Notes:
   time instead of always running the full installer.
 - Install defaults come from `[tool.mlang.options]`:
   `install_prefix = "$HOME/.local"` and `bin_dir = "$HOME/.local/bin"`.
+- Bootstrap installs also copy man pages for `mlangd-mla`,
+  `mlang-frontend`, and `mlang-frontend-mla` into
+  `$install_prefix/share/man/man1`.
 - Override them on one command line with
   `mlang pkg --config bootstrap/mlang.toml run build-and-install --option install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin`.
 - `--asan` also applies to `build-mlangd-mla`, `build-mlang-format`, and

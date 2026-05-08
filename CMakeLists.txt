@@ -530,6 +530,31 @@ install(TARGETS mlangd
 install(PROGRAMS ${MLANG_FORMAT_OUTPUT}
         DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+set(MLANG_MANPAGE_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang.1
+    ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-pkg.1
+    ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd.1
+    ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd-mla.1
+    ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-format.1
+    ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-frontend.1
+    ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-frontend-mla.1)
+set(MLANG_MANPAGE_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/man/man1)
+
+add_custom_target(manpages
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${MLANG_MANPAGE_BUILD_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${MLANG_MANPAGE_FILES}
+            ${MLANG_MANPAGE_BUILD_DIR}
+    COMMENT "Staging POSIX man pages in ${MLANG_MANPAGE_BUILD_DIR}"
+)
+
+install(FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang.1
+        ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-pkg.1
+        ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd.1
+        ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-format.1
+        DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+
 install(TARGETS mlang_std
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang)

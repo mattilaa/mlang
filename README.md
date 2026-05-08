@@ -202,11 +202,40 @@ mlang pkg --config bootstrap/mlang.toml run docs
 open docs/out/html/index.html   # macOS; use xdg-open on Linux
 ```
 
+### 5b. Build the man pages (optional)
+
+The POSIX man pages are checked into the repository as roff sources under
+`docs/man/`. There is no extra generator step.
+
+Stage them into the build tree:
+
+```sh
+cmake --build build --target manpages
+find build/man/man1 -maxdepth 1 -type f | sort
+```
+
+Preview one directly from the source tree or staged build output:
+
+```sh
+man -l docs/man/mlang.1
+man -l build/man/man1/mlang-format.1
+```
+
+Install them together with the tools:
+- `cmake --install build --prefix "$HOME/.local"` installs the native pages
+  for `mlang`, `mlang-pkg`, `mlangd`, and `mlang-format`
+- `mlang pkg --config bootstrap/mlang.toml run install-all ...` also installs
+  the bootstrap-managed pages for `mlangd-mla`, `mlang-frontend`, and
+  `mlang-frontend-mla`
+
 ### 6. Install everything
 
 This installs `mlangd-mla`, `mlang-frontend`, and `mlang-format` to
 `~/.local/bin` (or wherever `install_prefix` points). `mlang` itself was
-already installed by `cmake --install` in step 2.
+already installed by `cmake --install` in step 2. Man pages are installed under
+`$install_prefix/share/man/man1`, so commands such as `man mlang`,
+`man mlang-pkg`, `man mlangd`, `man mlang-format`, `man mlangd-mla`, and
+`man mlang-frontend` work after installation.
 
 ```sh
 mlang pkg --config bootstrap/mlang.toml run install-all
@@ -231,6 +260,8 @@ mlang --version
 mlang-frontend --help
 mlang-format --help
 mlangd-mla --stdio < /dev/null
+man mlang
+man mlang-format
 ```
 
 ### Build order at a glance
@@ -686,7 +717,8 @@ ls "$HOME/.local/bin"
 ```
 
 That install step places tools such as `mlangd-mla`, `mlang-format`,
-`mlang-frontend-mla`, and `mlang-frontend` under `~/.local/bin`.
+`mlang-frontend-mla`, and `mlang-frontend` under `~/.local/bin`, and installs
+matching manual pages under `~/.local/share/man/man1`.
 
 You can also run individual steps instead of the whole chain:
 
