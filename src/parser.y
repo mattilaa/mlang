@@ -516,14 +516,37 @@ static ASTNode* make_nested_fn_noop_statement()
     return mla_ast_expression_statement(mla_ast_literal_int(0));
 }
 
+extern "C" {
+    extern bool parseHadError;
+}
+
+static void report_brace_list_initializer_suggestion(TypeNode* type, int line,
+                                                     int col)
+{
+    const std::string typeStr = type ? type->toString() : "unknown";
+    std::string msg;
+    if(dynamic_cast<GenericListTypeNode*>(type) != nullptr ||
+       (type && type->kind == TypeNode::TYPE_LIST))
+    {
+        msg = "list initializer for type '" + typeStr +
+              "' uses braces; use '[' and ']' instead of '{' and '}'";
+    }
+    else
+    {
+        msg = "braced comma initializer is not valid for type '" + typeStr +
+              "'";
+    }
+    fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+            col > 0 ? col : 1,
+            mlang::diag::format_message_with_code("MLANG-E1016", msg).c_str());
+    parseHadError = true;
+}
+
 extern int yylex();
 extern int yylineno;
 extern int yycolumn_token;
 extern char* yytext;
 void yyerror(const char* s);
-extern "C" {
-    extern bool parseHadError;
-}
 extern const char* g_targetArchForParse;
 
 class SwitchCaseParseNode : public ASTNode
@@ -2426,6 +2449,12 @@ nested_function_statement
 let_statement
     : LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = create_let_declaration($4, $2, $6); }
+    | LET IDENTIFIER COLON type ASSIGN LBRACE list_elements RBRACE SEMICOLON
+        {
+            report_brace_list_initializer_suggestion(
+                static_cast<TypeNode*>($4), yylineno, yycolumn_token);
+            $$ = create_let_declaration($4, $2, mla_ast_list_literal($7));
+        }
     | LET IDENTIFIER ASSIGN expression SEMICOLON
         { $$ = create_let_declaration(NULL, $2, $4); }
     | LET IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
@@ -2441,6 +2470,12 @@ let_statement
 var_statement
     : VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = mla_ast_var_declaration($4, $2, $6); }
+    | VAR IDENTIFIER COLON type ASSIGN LBRACE list_elements RBRACE SEMICOLON
+        {
+            report_brace_list_initializer_suggestion(
+                static_cast<TypeNode*>($4), yylineno, yycolumn_token);
+            $$ = mla_ast_var_declaration($4, $2, mla_ast_list_literal($7));
+        }
     | VAR IDENTIFIER ASSIGN expression SEMICOLON
         { $$ = mla_ast_var_declaration(NULL, $2, $4); }
     | VAR IDENTIFIER COLON type SEMICOLON
@@ -2465,6 +2500,14 @@ global_var_statement
     : VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
         {
             $$ = mla_ast_var_declaration($4, $2, $6);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isGlobalStorage = true;
+        }
+    | VAR IDENTIFIER COLON type ASSIGN LBRACE list_elements RBRACE SEMICOLON
+        {
+            report_brace_list_initializer_suggestion(
+                static_cast<TypeNode*>($4), yylineno, yycolumn_token);
+            $$ = mla_ast_var_declaration($4, $2, mla_ast_list_literal($7));
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
                 n->isGlobalStorage = true;
         }
@@ -2495,6 +2538,14 @@ static_var_statement
     : STATIC VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
         {
             $$ = mla_ast_var_declaration($5, $3, $7);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isStaticStorage = true;
+        }
+    | STATIC VAR IDENTIFIER COLON type ASSIGN LBRACE list_elements RBRACE SEMICOLON
+        {
+            report_brace_list_initializer_suggestion(
+                static_cast<TypeNode*>($5), yylineno, yycolumn_token);
+            $$ = mla_ast_var_declaration($5, $3, mla_ast_list_literal($8));
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
                 n->isStaticStorage = true;
         }

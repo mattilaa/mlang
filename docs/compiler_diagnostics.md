@@ -60,6 +60,9 @@ A builder expression referenced a type that is either undeclared, not a single-f
 ### `MLANG-E1015`
 A builder root was missing an explicit type argument or a builder clause was missing its type name. Write `add<Type>()` / `Name{value}` with a concrete identifier.
 
+### `MLANG-E1016`
+A typed `list<T>` declaration used `{...}` after `=`. Use `[...]` for list literals, for example `let xs: list<i32> = [1, 2, 3];`.
+
 ### `MLANG-E1100`
 Unexpected character produced by the lexer before parsing could continue.
 
