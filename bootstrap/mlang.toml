@@ -12,6 +12,7 @@ deps_dir = "../build/deps"
 min_mlang_version = "0.2.0"
 
 [tool.mlang.options]
+cmake_build_type = "Release"
 install_prefix = "~/.local"
 bin_dir = "~/.local/bin"
 

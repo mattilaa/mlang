@@ -72,6 +72,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(GNUInstallDirs)
 
+add_executable(mlang-config tools/mlang_config.cpp)
+target_compile_features(mlang-config PRIVATE cxx_std_17)
+target_compile_definitions(mlang-config PRIVATE
+    MLANG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
 # Install location for stdlib modules.
 set(MLANG_STDLIB_INSTALL_DIR "${CMAKE_INSTALL_FULL_DATADIR}/mlang/stdlib")
 add_compile_definitions(MLANG_STDLIB_INSTALL_DIR="${MLANG_STDLIB_INSTALL_DIR}")
@@ -530,6 +535,9 @@ install(TARGETS mlangd
 
 install(PROGRAMS ${MLANG_FORMAT_OUTPUT}
         DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+install(TARGETS mlang-config
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 set(MLANG_MANPAGE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang.1

@@ -20,7 +20,7 @@ cmake --build build --target mlang mlang_std
 Or build and install it to `~/.local/bin` in one line:
 
 ```sh
-cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release; cmake --build build --target mlang mlang_std; cmake --install build --prefix "$HOME/.local"
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release; cmake --build build --target mlang mlang_std; cmake --install build --prefix "$HOME/.local" --component mlang-core
 ```
 
 That install step also installs native man pages such as `man mlang`,
@@ -42,6 +42,38 @@ man -l docs/man/mlang.1
 
 After that, `run-bootstrap.sh` uses `./build/mlang` automatically. You can also
 install `mlang` on `PATH` or set `MLANG_BOOTSTRAP_BIN=/path/to/mlang`.
+
+## Config Menu
+
+`mlang-config` is a small menu tool for common bootstrap settings. It does not
+disable language features; MLang language behavior is always built in. It only
+selects workflow paths and optional test runs. Unit tests and Robot tests
+default to `OFF`.
+
+Build and run it through bootstrap:
+
+```sh
+./bootstrap/run-bootstrap.sh config
+```
+
+The menu writes:
+
+- `build/mlang-config.conf` for bootstrap defaults.
+- `build/mlang_config_cache.cmake` for direct CMake use.
+
+After saving, normal bootstrap commands automatically import saved
+`install_prefix`, `bin_dir`, and `build_type` unless you pass explicit
+`--option` overrides:
+
+```sh
+./bootstrap/run-bootstrap.sh run install-tooling
+```
+
+Non-interactive config generation is also supported:
+
+```sh
+./build/mlang-config --install-prefix ~/.local --bin-dir ~/.local/bin --unit-tests off --robot-tests off --write
+```
 
 Current task entrypoints:
 
