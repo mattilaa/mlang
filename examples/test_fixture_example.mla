@@ -9,7 +9,7 @@
 ///
 /// Run with:
 /// \code
-///   mlang --tests examples/test_fixture_example.mla -L ~/.local/lib -lmlang_std
+///   mlang --tests examples/test_fixture_example.mla -L ~/.local/lib/mlang -lmlang_std
 /// \endcode
 
 mod std::testing;

@@ -5,7 +5,7 @@
 /// Shows how a struct with \c #[derive(Debug)] can be used inside a
 /// \c #[test] function.  Run the test with:
 /// \code
-///   mlang test examples/mlang_attributes.mla -L ~/.local/lib -lmlang_std
+///   mlang test examples/mlang_attributes.mla -L ~/.local/lib/mlang -lmlang_std
 /// \endcode
 
 #[derive(Debug)]

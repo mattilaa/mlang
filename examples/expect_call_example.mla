@@ -11,7 +11,7 @@
 ///
 /// Run with:
 /// \code
-///   mlang examples/expect_call_example.mla -L ~/.local/lib -lmlang_std
+///   mlang examples/expect_call_example.mla -L ~/.local/lib/mlang -lmlang_std
 /// \endcode
 
 mod std::testing;

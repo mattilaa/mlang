@@ -640,13 +640,13 @@ When using stdlib modules backed by native code (e.g. `std::math`), link
 against the stdlib library just like GCC/Clang:
 
 ```sh
-mlang main.mla -L ~/.local/lib -lmlang_std
+mlang main.mla -L ~/.local/lib/mlang -lmlang_std
 ```
 
 You can also set a default search path:
 
 ```sh
-export MLANG_STDLIB_LIB_PATH=~/.local/lib
+export MLANG_STDLIB_LIB_PATH=~/.local/lib/mlang
 ```
 
 The stdlib module search path is controlled by `MLANG_STDLIB_PATH` and defaults

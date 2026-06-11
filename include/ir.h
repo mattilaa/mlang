@@ -60,6 +60,12 @@ public:
         includeTests = enabled;
     }
 
+    /// \brief Require a non-extern \c main function for executable builds.
+    void setRequireMain(bool enabled)
+    {
+        requireMain = enabled;
+    }
+
     /// \brief Enable benchmark mode.
     ///
     /// When enabled the compiler generates a benchmark harness
@@ -236,6 +242,7 @@ private:
     bool benchmarkMode = false;        ///< Generate benchmark harness instead of test harness.
     int benchmarkIterations = 100000;  ///< Number of timed benchmark iterations.
     int benchmarkWarmupIterations = 10000; ///< Number of warm-up iterations before timing.
+    bool requireMain = false;          ///< Normal executable builds require \c main.
     bool includeTests = true;          ///< Whether to compile \c #[test] functions at all.
     int unsafeDepth = 0;
     bool warnPlainColonIf = true;

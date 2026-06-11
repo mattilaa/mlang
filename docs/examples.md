@@ -7,7 +7,7 @@ navigation tree instead of appearing alongside top-level stdlib documentation.
 Run any example with:
 
 ```
-mlang <path> -L ~/.local/lib -lmlang_std
+mlang <path> -L ~/.local/lib/mlang -lmlang_std
 ```
 
 (Add any extra flags the example's header documents.)
