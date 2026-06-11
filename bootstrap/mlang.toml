@@ -193,7 +193,7 @@ workdir = "{{root}}/.."
 depends_on = ["build-mlang"]
 shell = [
   "prefix={{option.install_prefix}}",
-  "cmake --install {{build_dir}} --prefix \"$prefix\""
+  "cmake --install {{build_dir}} --prefix \"$prefix\" --component mlang-core"
 ]
 
 [[task]]

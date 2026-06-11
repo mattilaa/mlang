@@ -522,7 +522,8 @@ if(BUILD_TESTS)
 endif()
 
 install(TARGETS mlang
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT mlang-core)
 
 install(TARGETS mlangd
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -557,11 +558,14 @@ install(FILES
 
 install(TARGETS mlang_std
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang)
+                COMPONENT mlang-core
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang
+                COMPONENT mlang-core)
 
 # Install stdlib modules for editor tooling and go-to-definition.
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/
         DESTINATION ${CMAKE_INSTALL_DATADIR}/mlang/stdlib
+        COMPONENT mlang-core
         FILES_MATCHING PATTERN "*.mla" PATTERN "*.md")
 
 # ============================================================================
