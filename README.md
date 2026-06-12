@@ -5,6 +5,7 @@ MLang - Programming Language
 - [What Is Mlang](#what-is-mlang)
 - [Tools Shipped In This Repository](#tools-shipped-in-this-repository)
 - [Build From Scratch (Step By Step)](#build-from-scratch-step-by-step)
+- [Scripted Bootstrap And Build](#scripted-bootstrap-and-build)
 - [LSP](#lsp)
 - [C++ LSP](#c-lsp)
 - [Mlangd (Mlang Scaffold)](#mlangd-mlang-scaffold)
@@ -116,6 +117,50 @@ Debian/Ubuntu:
 ```sh
 sudo apt install cmake llvm-dev libllvm15 clang flex bison libssl-dev python3 build-essential doxygen graphviz
 ```
+
+## Scripted Bootstrap And Build
+
+The root scripts mirror the `uvim` workflow and keep the full build explicit:
+first build the C++ seed compiler/runtime and `mlang-config`, then compile the
+MLang-native tools from their `.mla` sources with that freshly built compiler.
+There is no prebuilt compiler or hidden bootstrap binary.
+
+POSIX/macOS:
+```sh
+./bootstrap.sh
+./build.sh --install
+```
+
+Windows PowerShell:
+```powershell
+./bootstrap.ps1
+./build.ps1 --install
+```
+
+What the scripts do:
+- `bootstrap.sh` / `bootstrap.ps1` run CMake and build `mlang`,
+  `mlang_std`, and `mlang-config`.
+- `mlang-config` writes `build/mlang-config.conf` and
+  `build/mlang_config_cache.cmake`.
+- `build.sh` / `build.ps1` reconfigure from that cache, rebuild the seed
+  compiler/runtime, then explicitly compile:
+  `tools/mlangd-mla/main.mla`, `tools/mlang-format-mla/main.mla`,
+  `tools/mlang-frontend-mla/main.mla`, and `tools/mlangpkg/mlangpkg.mla`.
+
+Useful non-interactive forms:
+```sh
+./bootstrap.sh --build-dir build -j 8
+./build/mlang-config --build-dir build --install-prefix ~/.local --bin-dir ~/.local/bin --unit-tests off --robot-tests off --write
+./build.sh --build-dir build --install
+```
+
+```powershell
+./bootstrap.ps1 --build-dir build -j 8
+./build/mlang-config.exe --build-dir build --install-prefix "$HOME/.local" --bin-dir "$HOME/.local/bin" --unit-tests off --robot-tests off --write
+./build.ps1 --build-dir build --install
+```
+
+The lower-level manual commands below are the same stages written out by hand.
 
 ### 1. Build the seed compiler and stdlib (CMake)
 
