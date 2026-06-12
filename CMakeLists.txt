@@ -536,6 +536,9 @@ install(TARGETS mlangd
 install(PROGRAMS ${MLANG_FORMAT_OUTPUT}
         DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+install(PROGRAMS ${MLANGD_MLA_OUTPUT}
+        DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 install(TARGETS mlang-config
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -561,6 +564,7 @@ install(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang.1
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-pkg.1
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd.1
+        ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd-mla.1
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-format.1
         DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 

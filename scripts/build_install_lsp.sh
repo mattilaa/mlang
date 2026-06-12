@@ -5,7 +5,7 @@ usage() {
   cat <<'USAGE'
 Usage: build_install_lsp.sh [--install] [--no-install] [--prefix <path>] [--system] [--sudo] [--build-dir <dir>] [--use-make] [--help]
 
-Builds the C++ mlangd target and optionally installs it.
+Builds the LSP targets and optionally installs them.
 
 Options:
   --install          Install after build (default)
@@ -77,7 +77,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 cmake -S . -B "$build_dir" -G "$generator" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
-cmake --build "$build_dir" --target mlangd
+cmake --build "$build_dir" --target mlangd mlangd-mla mlang-config
 
 if $install_after_build; then
   if $use_sudo; then

@@ -1855,16 +1855,40 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "impl") == 1 { return 14; }
     if eq(label, "extern") == 1 { return 14; }
     if eq(label, "pub") == 1 { return 14; }
+    if eq(label, "void") == 1 { return 22; }
+    if eq(label, "bit") == 1 { return 22; }
+    if eq(label, "i8") == 1 { return 22; }
+    if eq(label, "i16") == 1 { return 22; }
     if eq(label, "i32") == 1 { return 22; }
     if eq(label, "i64") == 1 { return 22; }
+    if eq(label, "u8") == 1 { return 22; }
+    if eq(label, "u16") == 1 { return 22; }
     if eq(label, "u32") == 1 { return 22; }
     if eq(label, "u64") == 1 { return 22; }
     if eq(label, "bool") == 1 { return 22; }
     if eq(label, "f32") == 1 { return 22; }
     if eq(label, "f64") == 1 { return 22; }
-    if eq(label, "f32") == 1 { return 22; }
-    if eq(label, "f64") == 1 { return 22; }
     if eq(label, "string") == 1 { return 22; }
+    if eq(label, "str8") == 1 { return 22; }
+    if eq(label, "str16") == 1 { return 22; }
+    if eq(label, "list") == 1 { return 22; }
+    if eq(label, "map") == 1 { return 22; }
+    if eq(label, "tuple") == 1 { return 22; }
+    if eq(label, "ptr") == 1 { return 22; }
+    if eq(label, "Handle") == 1 { return 22; }
+    if eq(label, "Thread") == 1 { return 22; }
+    if eq(label, "Mutex") == 1 { return 22; }
+    if eq(label, "Atomic64") == 1 { return 22; }
+    if eq(label, "Result") == 1 { return 22; }
+    if eq(label, "Option") == 1 { return 22; }
+    if eq(label, "Vec") == 1 { return 22; }
+    if eq(label, "Span") == 1 { return 22; }
+    if eq(label, "span") == 1 { return 22; }
+    if eq(label, "Ok") == 1 { return 3; }
+    if eq(label, "Err") == 1 { return 3; }
+    if eq(label, "Some") == 1 { return 3; }
+    if eq(label, "None") == 1 { return 3; }
+    if eq(label, "sizeof") == 1 { return 3; }
     return 6;
 }
 
@@ -1887,20 +1911,47 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "impl") == 1 { return "keyword: implementation block"; }
     if eq(label, "extern") == 1 { return "keyword: external symbol declaration"; }
     if eq(label, "pub") == 1 { return "keyword: public visibility"; }
+    if eq(label, "void") == 1 { return "builtin void return type"; }
+    if eq(label, "bit") == 1 { return "builtin one-bit logical type"; }
+    if eq(label, "i8") == 1 { return "builtin 8-bit signed integer"; }
+    if eq(label, "i16") == 1 { return "builtin 16-bit signed integer"; }
     if eq(label, "i32") == 1 { return "builtin 32-bit signed integer"; }
     if eq(label, "i64") == 1 { return "builtin 64-bit signed integer"; }
+    if eq(label, "u8") == 1 { return "builtin 8-bit unsigned integer"; }
+    if eq(label, "u16") == 1 { return "builtin 16-bit unsigned integer"; }
     if eq(label, "u32") == 1 { return "builtin 32-bit unsigned integer"; }
     if eq(label, "u64") == 1 { return "builtin 64-bit unsigned integer"; }
     if eq(label, "bool") == 1 { return "builtin boolean type"; }
     if eq(label, "f32") == 1 { return "builtin 32-bit floating point"; }
     if eq(label, "f64") == 1 { return "builtin 64-bit floating point"; }
-    if eq(label, "f32") == 1 { return "alias of f32"; }
-    if eq(label, "f64") == 1 { return "alias of f64"; }
+    if eq(label, "str8") == 1 { return "builtin UTF-8 string type"; }
+    if eq(label, "str16") == 1 { return "builtin UTF-16 string type"; }
+    if eq(label, "list") == 1 { return "builtin generic list type"; }
+    if eq(label, "map") == 1 { return "builtin generic map type"; }
+    if eq(label, "tuple") == 1 { return "builtin tuple type"; }
+    if eq(label, "ptr") == 1 { return "builtin pointer type"; }
     if eq(label, "Handle") == 1 { return "builtin generic runtime handle type"; }
     if eq(label, "Thread") == 1 { return "builtin thread handle payload marker type"; }
     if eq(label, "Mutex") == 1 { return "builtin mutex handle payload marker type"; }
     if eq(label, "Atomic64") == 1 { return "builtin 64-bit atomic handle payload marker type"; }
     if eq(label, "string") == 1 { return "builtin UTF-8 string type"; }
+    if eq(label, "Result") == 1 { return "builtin generic result type"; }
+    if eq(label, "Ok") == 1 { return "builtin Result constructor"; }
+    if eq(label, "Err") == 1 { return "builtin Result constructor"; }
+    if eq(label, "Option") == 1 { return "builtin generic optional type"; }
+    if eq(label, "Some") == 1 { return "builtin Option constructor"; }
+    if eq(label, "None") == 1 { return "builtin Option constructor"; }
+    if eq(label, "Vec") == 1 { return "stdlib alias for list<T>"; }
+    if eq(label, "Span") == 1 { return "stdlib alias for list<T>"; }
+    if eq(label, "span") == 1 { return "stdlib alias for list<T>"; }
+    if eq(label, "sizeof") == 1 { return "builtin ABI size query"; }
+    if eq(label, "property") == 1 { return "builtin property attribute"; }
+    if eq(label, "atomic") == 1 { return "property option"; }
+    if eq(label, "mutex") == 1 { return "property option"; }
+    if eq(label, "recursive") == 1 { return "property option"; }
+    if eq(label, "hidden") == 1 { return "property option"; }
+    if eq(label, "protected") == 1 { return "property option"; }
+    if eq(label, "cexpr") == 1 { return "compile-time evaluation keyword"; }
     if eq(label, "is_ok") == 1 { return "builtin Result method"; }
     if eq(label, "is_err") == 1 { return "builtin Result method"; }
     if eq(label, "unwrap") == 1 { return "builtin Result/Option method"; }
@@ -1926,23 +1977,128 @@ fn completion_detail(label: str8) -> str8 {
 }
 
 fn completion_documentation(label: str8) -> str8 {
+    if eq(label, "void") == 1 {
+        return "No value. Use void as the return type for functions that do not return a value.";
+    }
+    if eq(label, "bit") == 1 {
+        return "One-bit logical value with domain 0 or 1. Use bit(expr) to convert integer or bool expressions.";
+    }
+    if eq(label, "i8") == 1 {
+        return "Signed 8-bit integer type. Range: -128..127.";
+    }
+    if eq(label, "i16") == 1 {
+        return "Signed 16-bit integer type. Range: -32768..32767.";
+    }
     if eq(label, "i32") == 1 {
         return "Signed 32-bit integer type for arithmetic and integer APIs.";
     }
     if eq(label, "i64") == 1 {
         return "Signed 64-bit integer type for larger integer values.";
     }
+    if eq(label, "u8") == 1 {
+        return "Unsigned 8-bit integer type. Range: 0..255.";
+    }
+    if eq(label, "u16") == 1 {
+        return "Unsigned 16-bit integer type. Range: 0..65535.";
+    }
+    if eq(label, "u32") == 1 {
+        return "Unsigned 32-bit integer type. Range: 0..4294967295.";
+    }
+    if eq(label, "u64") == 1 {
+        return "Unsigned 64-bit integer type for large non-negative values.";
+    }
     if eq(label, "f32") == 1 {
         return "32-bit floating point type (single precision).";
     }
     if eq(label, "f64") == 1 {
-        return "64-bit floating point type (f64 precision).";
+        return "64-bit floating point type (double precision).";
     }
-    if eq(label, "f32") == 1 {
-        return "Alias for f32.";
+    if eq(label, "bool") == 1 {
+        return "Boolean type with true/false values.";
     }
-    if eq(label, "f64") == 1 {
-        return "Alias for f64.";
+    if eq(label, "str8") == 1 {
+        return "UTF-8 string type. String::new, String::with_capacity, and String::free are compiler-provided helpers for str8.";
+    }
+    if eq(label, "str16") == 1 {
+        return "UTF-16 string type.";
+    }
+    if eq(label, "string") == 1 {
+        return "UTF-8 string type alias used by stdlib and formatting macros.";
+    }
+    if eq(label, "list") == 1 {
+        return "Generic growable sequence container: list<T>. Use [a, b, c] for list literals. Methods include len(), is_empty(), push(value), pop(), clear(), contains(value), index_of(value), sort(), reverse(), first(), and last().";
+    }
+    if eq(label, "Vec") == 1 {
+        return "Vec<T> is a stdlib alias for list<T>. It has the same method surface and runtime representation as list<T>.";
+    }
+    if eq(label, "Span") == 1 {
+        return "Span<T> is a stdlib alias for list<T> used as a span/view spelling. It has the same size, indexing, and bounds behavior as list<T>.";
+    }
+    if eq(label, "span") == 1 {
+        return "span<T> is the lowercase alias for Span<T>, backed by list<T>.";
+    }
+    if eq(label, "map") == 1 {
+        return "Generic associative container: map<K, V>. Provides len(), keys(), values(), and entries() iteration.";
+    }
+    if eq(label, "tuple") == 1 {
+        return "Fixed-size heterogeneous product type: tuple<T1, T2, ...>. Tuple fields are accessed with .0, .1, and so on.";
+    }
+    if eq(label, "ptr") == 1 {
+        return "Pointer type: ptr<T>. Take an address with &value and dereference with *ptr.";
+    }
+    if eq(label, "Handle") == 1 {
+        return "Generic runtime handle wrapper: Handle<T>. Used by thread and sync intrinsics such as Handle<Thread>, Handle<Mutex>, and Handle<Atomic64>.";
+    }
+    if eq(label, "Thread") == 1 {
+        return "Opaque payload marker used with Handle<Thread> for spawned threads.";
+    }
+    if eq(label, "Mutex") == 1 {
+        return "Opaque payload marker used with Handle<Mutex> for mutex intrinsics.";
+    }
+    if eq(label, "Atomic64") == 1 {
+        return "Opaque payload marker used with Handle<Atomic64> for 64-bit atomic intrinsics.";
+    }
+    if eq(label, "Result") == 1 {
+        return "Result<T, E> represents success Ok(T) or failure Err(E). Construct with Ok<T, E>(value) or Err<T, E>(error). Methods include is_ok(), is_err(), unwrap(), and unwrap_err(). The ? operator propagates Err values.";
+    }
+    if eq(label, "Ok") == 1 {
+        return "Result success constructor: Ok<T, E>(value).";
+    }
+    if eq(label, "Err") == 1 {
+        return "Result failure constructor: Err<T, E>(error).";
+    }
+    if eq(label, "Option") == 1 {
+        return "Option<T> represents either Some(value) or None. Use it for optional values without a separate error payload.";
+    }
+    if eq(label, "Some") == 1 {
+        return "Option constructor for present values: Some<T>(value).";
+    }
+    if eq(label, "None") == 1 {
+        return "Option constructor for absent values: None<T>().";
+    }
+    if eq(label, "sizeof") == 1 {
+        return "Builtin size query: sizeof(Type) or sizeof(expr). Returns the ABI size in bytes as i64.";
+    }
+    if eq(label, "property") == 1 {
+        return "Property field attribute: @property or @property(...). Synthesizes getter/setter methods for struct fields.";
+    }
+    if eq(label, "atomic") == 1 {
+        return "Property option for @property(atomic). Generates atomic load/store accessors for integer and bool fields.";
+    }
+    if eq(label, "mutex") == 1 {
+        return "Property option for @property(mutex). Protects synthesized property accessors with a compiler-managed mutex.";
+    }
+    if eq(label, "recursive") == 1 {
+        return "Property option for @property(mutex, recursive). Requests a recursive mutex for synthesized property locking.";
+    }
+    if eq(label, "hidden") == 1 {
+        return "Property option for @property(hidden). Hides the backing field from direct access outside methods on the declaring struct.";
+    }
+    if eq(label, "protected") == 1 {
+        return "Property option for @property(protected). Allows backing-field access from the declaring struct and its derive chain.";
+    }
+    if eq(label, "cexpr") == 1 {
+        return "Compile-time evaluation keyword. Use cexpr(expr) to require compile-time folding, or mark functions callable from compile-time contexts.";
     }
     if eq(label, "is_ok") == 1 {
         return "Result<T, E>.is_ok() returns true when the value is Ok.";
@@ -2006,24 +2162,6 @@ fn completion_documentation(label: str8) -> str8 {
     }
     if eq(label, "close") == 1 {
         return "BitSet.close() releases the underlying packed bitset storage.";
-    }
-    if eq(label, "bool") == 1 {
-        return "Boolean type with true/false values.";
-    }
-    if eq(label, "Handle") == 1 {
-        return "Generic runtime handle wrapper used by thread/sync intrinsics (Handle<T>).";
-    }
-    if eq(label, "Thread") == 1 {
-        return "Opaque payload marker used with Handle<Thread> for spawned threads.";
-    }
-    if eq(label, "Mutex") == 1 {
-        return "Opaque payload marker used with Handle<Mutex> for mutex intrinsics.";
-    }
-    if eq(label, "Atomic64") == 1 {
-        return "Opaque payload marker used with Handle<Atomic64> for 64-bit atomic intrinsics.";
-    }
-    if eq(label, "string") == 1 {
-        return "UTF-8 string type used by stdlib and formatting macros.";
     }
     if eq(label, "println!") == 1 {
         return "Print formatted text to stdout and append a newline.";

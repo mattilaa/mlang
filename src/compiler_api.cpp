@@ -4292,6 +4292,15 @@ lexicalIdentifiersBeforeOffset(std::string_view text, size_t offset)
     return out;
 }
 
+static constexpr std::string_view kBuiltinCompletionLabels[] = {
+    "void",   "bool",   "bit",    "i8",     "i16",    "i32",
+    "i64",    "u8",     "u16",    "u32",    "u64",    "f32",
+    "f64",    "str8",   "str16",  "string", "list",   "map",
+    "tuple",  "ptr",    "Handle", "Thread", "Mutex",  "Atomic64",
+    "Result", "Option", "Ok",     "Err",    "Some",   "None",
+    "sizeof", "Vec",    "Span",   "span",
+};
+
 static std::vector<std::string>
 computeSemanticCompletions(const DocumentSemantic& current,
                            const std::vector<DocumentSemantic>& all_docs,
@@ -4490,6 +4499,10 @@ computeSemanticCompletions(const DocumentSemantic& current,
     for(const std::string_view kw : kKeywords)
     {
         consider(kw);
+    }
+    for(const std::string_view builtin : kBuiltinCompletionLabels)
+    {
+        consider(builtin);
     }
 
     const int query_depth = lineDepthAt(current, line);
