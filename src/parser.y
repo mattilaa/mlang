@@ -542,6 +542,16 @@ static void report_brace_list_initializer_suggestion(TypeNode* type, int line,
     parseHadError = true;
 }
 
+static void report_colon_semicolon_typo(int line, int col)
+{
+    const std::string msg =
+        "expected ';' to terminate statement, found ':'; use ';' instead of ':'";
+    fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+            col > 0 ? col : 1,
+            mlang::diag::format_message_with_code("MLANG-E1017", msg).c_str());
+    parseHadError = true;
+}
+
 extern int yylex();
 extern int yylineno;
 extern int yycolumn_token;
@@ -3640,6 +3650,11 @@ void yyerror(const char* s) {
                     "%s:%d:%d: error: %s\n",
                     g_sourceFile, yylineno, col,
                     mlang::diag::format_message_with_code("MLANG-E1007", msg).c_str());
+            return;
+        }
+        if(yytext && strcmp(yytext, ":") == 0)
+        {
+            report_colon_semicolon_typo(yylineno, col);
             return;
         }
     }

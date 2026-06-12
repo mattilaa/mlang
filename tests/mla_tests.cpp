@@ -494,6 +494,22 @@ TEST_F(MLATest, StringConcatenationRejectsMismatchedStringKinds)
               std::string::npos);
 }
 
+TEST_F(MLATest, ColonInsteadOfSemicolonSuggestsSemicolon)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 1:
+            return x;
+        }
+    )";
+    writeSource(code);
+    int exitCode = 0;
+    std::string out = compileCapture(exitCode);
+    EXPECT_NE(exitCode, 0);
+    EXPECT_NE(out.find("MLANG-E1017"), std::string::npos);
+    EXPECT_NE(out.find("use ';' instead of ':'"), std::string::npos);
+}
+
 // ============================================================================
 // Print Macro Tests
 // ============================================================================

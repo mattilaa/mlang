@@ -63,6 +63,9 @@ A builder root was missing an explicit type argument or a builder clause was mis
 ### `MLANG-E1016`
 A typed `list<T>` declaration used `{...}` after `=`. Use `[...]` for list literals, for example `let xs: list<i32> = [1, 2, 3];`.
 
+### `MLANG-E1017`
+A statement ended with `:` where `;` was expected. Use `;` to terminate ordinary statements; `:` is only valid in syntax forms that explicitly use colon blocks or labels.
+
 ### `MLANG-E1100`
 Unexpected character produced by the lexer before parsing could continue.
 
