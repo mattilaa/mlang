@@ -60,6 +60,12 @@ A builder expression referenced a type that is either undeclared, not a single-f
 ### `MLANG-E1015`
 A builder root was missing an explicit type argument or a builder clause was missing its type name. Write `add<Type>()` / `Name{value}` with a concrete identifier.
 
+### `MLANG-E1016`
+A typed `list<T>` declaration used `{...}` after `=`. Use `[...]` for list literals, for example `let xs: list<i32> = [1, 2, 3];`.
+
+### `MLANG-E1017`
+A statement ended with `:` where `;` was expected. Use `;` to terminate ordinary statements; `:` is only valid in syntax forms that explicitly use colon blocks or labels.
+
 ### `MLANG-E1100`
 Unexpected character produced by the lexer before parsing could continue.
 
@@ -88,6 +94,9 @@ Ownership or borrowing violation, including moved-value use and invalid borrow o
 
 ### `MLANG-E2007`
 Invalid `match` structure or incompatible `match` arm typing.
+
+### `MLANG-E2008`
+Missing executable entry point. Normal executable builds require a non-extern `fn main() -> i32`; object, assembly, LLVM IR, bitcode, and test-mode builds can omit it.
 
 ### `MLANG-E2999`
 Generic semantic/codegen error that does not yet have a narrower code.

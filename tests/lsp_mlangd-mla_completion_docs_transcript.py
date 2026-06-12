@@ -46,6 +46,7 @@ def main() -> int:
             "fn main() -> i32 {\n"
             "  if\n"
             "  i32\n"
+            "  lis\n"
             "  return 0;\n"
             "}\n"
         )
@@ -80,6 +81,33 @@ def main() -> int:
             )
             assert "32-bit" in int_doc.get("value", ""), (
                 f"i32 documentation should describe the type: {int_item!r}"
+            )
+
+            list_line, list_char = position_of(text, "  lis")
+            list_char += len("  lis")
+            res_list = client.request(
+                "textDocument/completion",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": list_line, "character": list_char},
+                },
+            )
+            list_item = find_item(res_list, "list")
+            assert list_item.get("kind") == 22, (
+                f"list completion should be a type/struct kind: {list_item!r}"
+            )
+            assert isinstance(list_item.get("detail"), str) and list_item.get("detail"), (
+                f"list completion should include detail: {list_item!r}"
+            )
+            list_doc = list_item.get("documentation", {})
+            assert isinstance(list_doc, dict) and isinstance(list_doc.get("value"), str), (
+                f"list completion should include documentation: {list_item!r}"
+            )
+            assert "list<T>" in list_doc.get("value", ""), (
+                f"list documentation should describe the generic type: {list_item!r}"
+            )
+            assert "push(value)" in list_doc.get("value", ""), (
+                f"list documentation should mention common methods: {list_item!r}"
             )
 
             if_line, if_char = position_of(text, "if\n")

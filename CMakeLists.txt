@@ -72,6 +72,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(GNUInstallDirs)
 
+add_executable(mlang-config tools/mlang_config.cpp)
+target_compile_features(mlang-config PRIVATE cxx_std_17)
+target_compile_definitions(mlang-config PRIVATE
+    MLANG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
 # Install location for stdlib modules.
 set(MLANG_STDLIB_INSTALL_DIR "${CMAKE_INSTALL_FULL_DATADIR}/mlang/stdlib")
 add_compile_definitions(MLANG_STDLIB_INSTALL_DIR="${MLANG_STDLIB_INSTALL_DIR}")
@@ -522,13 +527,20 @@ if(BUILD_TESTS)
 endif()
 
 install(TARGETS mlang
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT mlang-core)
 
 install(TARGETS mlangd
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 install(PROGRAMS ${MLANG_FORMAT_OUTPUT}
         DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+install(PROGRAMS ${MLANGD_MLA_OUTPUT}
+        DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+install(TARGETS mlang-config
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 set(MLANG_MANPAGE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang.1
@@ -552,16 +564,20 @@ install(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang.1
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-pkg.1
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd.1
+        ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd-mla.1
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-format.1
         DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 
 install(TARGETS mlang_std
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang)
+                COMPONENT mlang-core
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang
+                COMPONENT mlang-core)
 
 # Install stdlib modules for editor tooling and go-to-definition.
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/
         DESTINATION ${CMAKE_INSTALL_DATADIR}/mlang/stdlib
+        COMPONENT mlang-core
         FILES_MATCHING PATTERN "*.mla" PATTERN "*.md")
 
 # ============================================================================

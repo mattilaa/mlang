@@ -4,8 +4,8 @@
 /// Demonstrates basic \c #[test] functions using \c std::testing::verify.
 /// Run with:
 /// \code
-///   mlang test tests/test_sample.mla -L ~/.local/lib -lmlang_std
-///   mlang test tests/test_sample.mla --filter "addition" -L ~/.local/lib -lmlang_std
+///   mlang test tests/test_sample.mla -L ~/.local/lib/mlang -lmlang_std
+///   mlang test tests/test_sample.mla --filter "addition" -L ~/.local/lib/mlang -lmlang_std
 /// \endcode
 
 mod std::testing;

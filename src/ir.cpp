@@ -6141,6 +6141,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
     };
 
     FunctionDefNode* mainDef = nullptr;
+    FunctionDefNode* firstUserFunction = nullptr;
     MainArgMode mainArgMode = MainArgMode::None;
     GenericListTypeNode* mainArgsListType = nullptr;
     TypeNode::TypeKind mainArgcKind = TypeNode::TYPE_VOID;
@@ -6150,6 +6151,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
     {
         for(auto* fn : program->functionList->functions)
         {
+            if(fn && !fn->isExtern && !firstUserFunction)
+                firstUserFunction = fn;
             if(fn && fn->name == "main" && !fn->isExtern)
             {
                 mainDef = fn;
@@ -6303,6 +6306,19 @@ void CodeGenerator::generateCode(ProgramNode* program)
     {
         reportError(mainDef->line,
                     "main is not allowed in test mode; use #[test] functions");
+    }
+    else if(requireMain && !mainDef)
+    {
+        std::string msg =
+            "missing entry point: executable builds require 'fn main() -> i32'";
+        if(firstUserFunction)
+        {
+            msg += "; found function '" + firstUserFunction->name +
+                   "' instead";
+            if(firstUserFunction->name != "main")
+                msg += " (did you mean 'main'?)";
+        }
+        reportError(firstUserFunction ? firstUserFunction->line : 1, msg);
     }
 
     if(mainDef)

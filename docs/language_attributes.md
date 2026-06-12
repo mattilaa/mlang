@@ -123,13 +123,13 @@ Rules:
 Run all tests in a single file:
 
 ```sh
-mlang test tests/test_sample.mla -L ~/.local/lib -lmlang_std
+mlang test tests/test_sample.mla -L ~/.local/lib/mlang -lmlang_std
 ```
 
 Run all test suites in a directory:
 
 ```sh
-mlang test tests/ -L ~/.local/lib -lmlang_std
+mlang test tests/ -L ~/.local/lib/mlang -lmlang_std
 ```
 
 ### Filtering individual tests
@@ -151,7 +151,7 @@ mlang test tests/test_sample.mla --filter "test_sample.result ok"
 The filter is also forwarded in directory mode, so it works across all suites:
 
 ```sh
-mlang test tests/ --filter "addition" -L ~/.local/lib -lmlang_std
+mlang test tests/ --filter "addition" -L ~/.local/lib/mlang -lmlang_std
 ```
 
 ### Test naming

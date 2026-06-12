@@ -141,8 +141,8 @@ void printUsage(const char* programName)
               << "  " << programName
               << " -emit-llvm test.mla   # Emit LLVM IR\n"
               << "\nStdlib linking:\n"
-              << "  " << programName << " main.mla -L ~/.local/lib -lmlang_std\n"
-              << "  (or set MLANG_STDLIB_LIB_PATH=~/.local/lib)\n"
+              << "  " << programName << " main.mla -L ~/.local/lib/mlang -lmlang_std\n"
+              << "  (or set MLANG_STDLIB_LIB_PATH=~/.local/lib/mlang)\n"
               << std::endl;
 }
 
@@ -504,6 +504,26 @@ static void append_framework_link_args(std::vector<std::string>& linkArgs,
     linkArgs.push_back(framework);
 }
 
+static bool link_args_include_stdlib_dir(const std::vector<std::string>& linkArgs)
+{
+    for(std::size_t i = 0; i < linkArgs.size(); ++i)
+    {
+        const auto& arg = linkArgs[i];
+        if(arg.rfind("-L", 0) == 0 && arg.size() > 2)
+        {
+            if(stdlib_lib_exists(arg.substr(2)))
+                return true;
+        }
+        else if(arg == "-L" && i + 1 < linkArgs.size())
+        {
+            if(stdlib_lib_exists(linkArgs[i + 1]))
+                return true;
+            ++i;
+        }
+    }
+    return false;
+}
+
 static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
                                     std::string_view exePath)
 {
@@ -518,6 +538,7 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
     }
 
     std::string foundDir;
+    const bool hasStdlibDir = link_args_include_stdlib_dir(linkArgs);
     if(!hasStdlib && !exePath.empty())
     {
         std::error_code ec;
@@ -533,7 +554,7 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
 
     for(const auto& dir : default_stdlib_lib_paths())
     {
-        if(hasStdlib)
+        if(hasStdlibDir)
             break;
         if(!foundDir.empty())
             break;
@@ -555,7 +576,7 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
             break;
         }
     }
-    if(!hasStdlib && !hasDir)
+    if(!foundDir.empty() && !hasDir)
         linkArgs.push_back(std::string("-L") + foundDir);
     if(!hasStdlib)
         linkArgs.push_back("-lmlang_std");
@@ -2174,6 +2195,9 @@ int main(int argc, char** argv)
         generator.setWarnPlainColonIf(warnPlainColonIf);
         generator.setWarnPlainColonWhile(warnPlainColonWhile);
         generator.setWarnResultUnwrap(warnResultUnwrap);
+        generator.setRequireMain(!testMode && !emitObjectOnly &&
+                                 !emitAssembly && !emitLLVMIR &&
+                                 !emitBitcode);
         generator.setModuleLoader(moduleLoader.get());
         if(!testMode)
             generator.setIncludeTests(includeTests);

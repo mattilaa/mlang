@@ -56,6 +56,8 @@ inline std::string classify_error_code(const std::string& message)
         return "MLANG-E2006";
     if(contains_text(message, "match "))
         return "MLANG-E2007";
+    if(contains_text(message, "missing entry point"))
+        return "MLANG-E2008";
     if(contains_text(message, "internal error"))
         return "MLANG-E9000";
     return "MLANG-E2999";
