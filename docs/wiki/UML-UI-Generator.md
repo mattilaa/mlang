@@ -1,0 +1,174 @@
+# UML UI Generator Example {#uml_ui_generator}
+
+This page documents the TOML input format used by
+`examples/uml_ui_generator`.
+
+The example renders PNG output for:
+
+- activity/control-flow diagrams
+- sequence diagrams
+- class diagrams
+- package diagrams
+
+The implementation lives under:
+
+- `examples/uml_ui_generator/`
+
+## File Structure
+
+Each input file is a TOML document with:
+
+- `[settings]`
+- `[properties]`
+- one or more item arrays for the selected diagram kind
+
+Common settings:
+
+- `diagram = "activity" | "sequence" | "class" | "package"`
+- `title`
+- `title_size`
+- `title_bold`
+- `scale`
+- `box_radius`
+
+Additional settings:
+
+- activity: `edge_radius`
+- sequence: `arrow_size`
+- package: `edge_radius`
+
+## Activity Diagrams
+
+Tables:
+
+- `[[nodes]]`
+- `[[edges]]`
+
+`[[nodes]]`:
+
+- required: `id`, `type`
+- optional: `label`, `fill`, `stroke`, `text`
+- `type` is one of `start`, `action`, `decision`, `end`
+
+`[[edges]]`:
+
+- required: `from`, `to`
+- optional: `label`, `color`
+
+Activity property defaults:
+
+- `action_fill`, `action_stroke`, `action_text`, `action_bold`
+- `decision_fill`, `decision_stroke`, `decision_text`, `decision_bold`
+- `start_fill`, `start_stroke`, `start_text`, `start_radius`, `start_bold`
+- `end_fill`, `end_stroke`, `end_text`, `end_radius`, `end_bold`
+- `edge_color`
+
+## Sequence Diagrams
+
+Tables:
+
+- `[[participants]]`
+- `[[messages]]`
+
+`[[participants]]`:
+
+- required: `id`
+- optional: `label`, `fill`, `stroke`, `text`
+
+`[[messages]]`:
+
+- required: `from`, `to`
+- optional: `label`, `color`
+
+Sequence property defaults:
+
+- `participant_fill`, `participant_stroke`, `participant_text`,
+  `participant_bold`
+- `message_color`, `message_bold`
+
+## Class Diagrams
+
+Tables:
+
+- `[[classes]]`
+- `[[associations]]`
+
+`[[classes]]`:
+
+- required: `id`
+- optional: `name`, `x`, `y`, `attributes`, `methods`
+- optional styling: `fill`, `header_fill`, `stroke`, `text`, `bold`
+
+`[[associations]]`:
+
+- required: `from`, `to`
+- optional: `kind`, `from_multiplicity`, `to_multiplicity`, `label`, `color`,
+  `bold`
+- `kind` supports:
+  `association`, `aggregation`, `composition`, `generalization`,
+  `inheritance`, `realization`, `dependency`
+
+Class property defaults:
+
+- `class_fill`, `class_header_fill`, `class_stroke`, `class_text`,
+  `class_bold`
+- `association_color`, `association_bold`
+
+## Package Diagrams
+
+Tables:
+
+- `[[elements]]`
+- `[[dependencies]]`
+
+`[[elements]]`:
+
+- required: `id`, `kind`
+- optional structure: `parent`, `label`, `stereotype`, `x`, `y`, `width`,
+  `height`
+- optional styling: `fill`, `header_fill`, `stroke`, `text`, `bold`
+- `kind` supports: `container`, `package`, `model`
+
+`[[dependencies]]`:
+
+- required: `from`, `to`
+- optional: `label`, `color`, `bold`
+- optional routing: `from_side`, `to_side`, `waypoints`, `corner_radius`
+- side values: `auto`, `top`, `right`, `bottom`, `left`
+- `waypoints` format: `["375,245", "375,405"]`
+
+Package property defaults:
+
+- `container_fill`, `container_header_fill`, `container_stroke`,
+  `container_text`, `container_bold`
+- `package_fill`, `package_header_fill`, `package_stroke`, `package_text`,
+  `package_bold`
+- `model_fill`, `model_header_fill`, `model_stroke`, `model_text`,
+  `model_bold`
+- `dependency_color`, `dependency_bold`
+
+## Samples
+
+The repository includes complete examples:
+
+- `examples/uml_ui_generator/samples/basic_control_flow.toml`
+- `examples/uml_ui_generator/samples/multi_path_control_flow.toml`
+- `examples/uml_ui_generator/samples/https_auth_sequence.toml`
+- `examples/uml_ui_generator/samples/online_golf_store_class.toml`
+- `examples/uml_ui_generator/samples/layered_application_package.toml`
+
+## Build And Run
+
+From `examples/uml_ui_generator/`:
+
+```sh
+mlang pkg fetch
+mlang pkg build
+mlang pkg run render-package-sample
+```
+
+Or run the binary directly:
+
+```sh
+./build/uml_ui_generator samples/layered_application_package.toml build/generated/layered_application_package.png
+```

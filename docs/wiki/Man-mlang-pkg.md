@@ -1,0 +1,193 @@
+# `mlang-pkg` manual
+
+```roff
+.TH MLANG-PKG 1 "May 2026" "MLang" "User Commands"
+.SH NAME
+mlang-pkg \- package manager and task runner interface exposed as \fBmlang pkg\fR
+.SH SYNOPSIS
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] init
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] add \fINAME\fR [\fIdependency options\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] fetch [\fIpath and log options\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] build [\fIbuild options\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] run \fITASK\fR [\fIrun options\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] clean [\fIclean options\fR]
+.br
+.B mlang
+.B pkg
+.B \-\-tests
+[\fB\-\-tasks\fR] [\fB\-\-color\fR] \fIMANIFEST\fR ...
+.br
+.B mlang
+.B pkg
+[\fB\-\-tasks\fR] [\fB\-\-color\fR] \fIMANIFEST\fR ...
+.SH DESCRIPTION
+.B mlang pkg
+is the package-manager interface for MLang projects. It manages dependency
+fetching, builds package targets declared in
+.IR mlang.toml ,
+and runs named tasks from manifest files. It also powers the repository's own
+bootstrap flow.
+.PP
+The command is invoked as a subcommand of
+.BR mlang ,
+but this manual page documents it separately because its interface is
+substantial enough to use on its own.
+.SH PRIMARY COMMANDS
+.TP
+.B init
+Create a new package manifest plus starter
+.I src/main.mla
+content.
+.TP
+.B add
+Add a dependency declaration. Supported sources include Git repositories, URL
+archives, pkg-config packages, and system dependencies.
+.TP
+.B fetch
+Resolve and download dependencies without building project outputs.
+.TP
+.B build
+Build package targets. Supports optimization selection and optional Ninja or
+AddressSanitizer flows.
+.TP
+.B run
+Execute a named manifest task, honoring declared task dependencies.
+.TP
+.B clean
+Remove build outputs and, with
+.BR \-\-deps ,
+dependency artifacts.
+.SH COMMON OPTIONS
+.TP
+.B \-\-config \fIFILE\fR
+Use an alternate manifest file instead of the default
+.IR mlang.toml .
+.TP
+.B \-\-build\-dir \fIDIR\fR
+Override the build output directory.
+.TP
+.B \-\-deps\-dir \fIDIR\fR
+Override the dependency checkout/cache directory.
+.TP
+.B \-\-log\-dir \fIDIR\fR
+Write task logs below
+.IR DIR .
+.TP
+.B \-\-stdout\-log \fIFILE\fR
+Write captured stdout for task execution to
+.IR FILE .
+.TP
+.B \-\-stderr\-log \fIFILE\fR
+Write captured stderr for task execution to
+.IR FILE .
+.TP
+.B \-\-warn\-log \fIFILE\fR
+Write warning output to
+.IR FILE .
+.TP
+.B \-\-task\-print\-to\-stdout\-log
+Mirror task-print output into the configured stdout log.
+.TP
+.B \-\-tasks
+Show the expanded task tree instead of executing silently.
+.TP
+.B \-\-color
+Enable colored task-tree output. When a manifest file is passed directly,
+.B \-\-color
+also implies
+.BR \-\-tasks .
+.TP
+.B \-\-option \fIKEY=VALUE\fR
+Pass a task option override to
+.BR run .
+.TP
+.B \-\-asan
+Request AddressSanitizer build settings when supported by the selected task or
+build flow.
+.SH ADD COMMAND SOURCES
+.TP
+.B \-\-git \fIURL\fR
+Add a Git-based dependency.
+.TP
+.B \-\-rev \fIREV\fR
+Pin a Git dependency to a revision.
+.TP
+.B \-\-tag \fITAG\fR
+Pin a Git dependency to a tag.
+.TP
+.B \-\-submodules
+Fetch Git submodules for the added dependency.
+.TP
+.B \-\-url \fIURL\fR
+Add an archive or downloadable dependency source.
+.TP
+.B \-\-archive \fITYPE\fR
+Set the archive type, such as
+.BR tar.gz .
+.TP
+.B \-\-strip\-components \fIN\fR
+Strip archive path components when unpacking.
+.TP
+.B \-\-subdir \fIDIR\fR
+Select a subdirectory inside the fetched source tree.
+.TP
+.B \-\-pkg\-config \fINAME\fR
+Declare a pkg-config-provided dependency.
+.TP
+.B \-\-system
+Declare a dependency as system-provided.
+.TP
+.B \-\-add\-lib
+Also add the dependency as a linkable package library entry.
+.SH MANIFEST MODES
+When one or more manifest paths are passed directly instead of a primary
+subcommand,
+.B mlang pkg
+enters overview mode:
+.TP
+.B mlang pkg \-\-tasks manifest.toml
+Print the manifest task tree.
+.TP
+.B mlang pkg \-\-tests manifest.toml
+Run test-phase tasks from dedicated test manifests.
+.SH ENVIRONMENT
+.TP
+.B MLANG_PKG_IMPL
+Select the package-manager implementation backend. Supported values are
+.B mla
+and
+.BR cpp .
+.TP
+.B MLANG_PKG_CACHE_KEY
+Influence the cache key used for compiled helper tool frontends.
+.SH EXAMPLES
+.nf
+mlang pkg init
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+mlang pkg fetch
+mlang pkg build -O3 --ninja
+mlang pkg run build-all --tasks
+mlang pkg run qemu-run --option userspace=gnu
+mlang pkg clean --deps
+.fi
+.SH SEE ALSO
+.BR mlang (1),
+.BR mlang-frontend (1)
+```

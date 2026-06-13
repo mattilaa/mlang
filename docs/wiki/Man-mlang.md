@@ -1,0 +1,210 @@
+# `mlang` manual
+
+```roff
+.TH MLANG 1 "May 2026" "MLang" "User Commands"
+.SH NAME
+mlang \- compiler driver, test runner, benchmark runner, and package manager frontend for MLang
+.SH SYNOPSIS
+.B mlang
+[\fIoptions\fR] \fIinput.mla\fR
+.br
+.B mlang
+.B --tests
+[\fIpath\fR]
+.br
+.B mlang
+.B test
+[\fIpath\fR] [\fB\-\-filter\fR \fIname\fR] [\fB\-\-no\-run\fR]
+.br
+.B mlang
+.B bench
+[\fIpath\fR] [\fB\-\-bench\-iters\fR \fIN\fR] [\fB\-\-bench\-warmup\fR \fIN\fR] [\fB\-\-no\-run\fR]
+.br
+.B mlang
+.B pkg
+\&...
+.br
+.B mlang
+.B run
+.B docs
+[\fB\-\-doxyfile\fR \fIFILE\fR]
+.SH DESCRIPTION
+.B mlang
+is the main command-line entry point for the MLang toolchain. It compiles
+.I .mla
+source files, can emit objects, assembly, LLVM IR, or executables, and also
+dispatches test, benchmark, documentation, and package-manager workflows.
+.PP
+The same binary is also the public frontend for
+.BR "mlang pkg" ,
+so users normally install one command and reach the rest of the toolchain from
+there.
+.SH COMPILATION OPTIONS
+.TP
+.B \-o \fIFILE\fR
+Write the output executable, object, assembly, or IR to
+.IR FILE .
+.TP
+.B \-c
+Compile to an object file only and skip the final link step.
+.TP
+.B \-S
+Emit assembly instead of an executable.
+.TP
+.B \-emit\-llvm
+Emit LLVM IR to a
+.I .ll
+file.
+.TP
+.B \-emit\-bc
+Emit LLVM bitcode to a
+.I .bc
+file.
+.TP
+.B \-\-target\-arch \fIARCH\fR
+Override the target architecture. Supported values are
+.BR x86 ,
+.BR x64 ,
+and
+.BR aarch64 .
+.TP
+.BR \-O0 ", " \-Og ", " \-O1 ", " \-O2 ", " \-O3 ", " \-Os ", " \-Oz
+Select the optimization level. The default is
+.BR \-O2 .
+.TP
+.B \-\-no\-tests
+Skip compiling functions marked with
+.BR #[test] .
+.TP
+.B \-L \fIDIR\fR
+Add
+.I DIR
+to the library search path used during linking.
+.TP
+.B \-l \fINAME\fR
+Link against library
+.IR NAME .
+Typical programs that use the standard library also pass
+.BR \-lmlang_std .
+.TP
+.B \-Wl,\fIARGS\fR
+Pass raw linker arguments through to the final link invocation.
+.TP
+.B \-v
+Enable verbose compiler output.
+.TP
+.B \-\-debug
+Enable debug-only logging paths in the compiler.
+.TP
+.B \-\-force
+Rebuild and install the bootstrap toolchain into
+.I ~/.local
+before running the requested command.
+.TP
+.B \-\-version
+Print the compiler version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print command-line help and exit.
+.SH TESTING AND BENCHMARKING
+.TP
+.B \-\-tests
+Compile and run
+.BR #[test]
+functions from the given file or directory.
+.TP
+.B test
+Explicit test mode. A path may be a single suite file or a directory scanned
+for
+.I test_*.mla
+and
+.I *_tests.mla
+files.
+.TP
+.B \-\-filter \fINAME\fR
+Run only tests whose suite.case display name or raw test function name contains
+.IR NAME .
+.TP
+.B \-\-no\-run
+Compile test or benchmark targets but do not execute them.
+.TP
+.B bench
+Run benchmark suites. Directory mode scans
+.I bench_*.mla
+files.
+.TP
+.B \-\-bench\-iters \fIN\fR
+Use
+.I N
+measured iterations per benchmark.
+.TP
+.B \-\-bench\-warmup \fIN\fR
+Use
+.I N
+warmup iterations before benchmark timing starts.
+.SH PACKAGE MANAGER
+The package-manager interface is available as
+.BR "mlang pkg" .
+Common forms are:
+.TP
+.B mlang pkg init
+Create a new package manifest and starter source tree.
+.TP
+.B mlang pkg add
+Add dependency declarations to a manifest.
+.TP
+.B mlang pkg fetch
+Resolve and fetch dependencies into the configured dependency directory.
+.TP
+.B mlang pkg build
+Build package targets declared in
+.IR mlang.toml .
+.TP
+.B mlang pkg run
+Run a named task from the package manifest.
+.TP
+.B mlang pkg clean
+Remove build outputs and optionally dependency artifacts.
+.PP
+For the package-manager forms and options, see
+.BR mlang-pkg (1).
+.SH ENVIRONMENT
+.TP
+.B MLANG_STDLIB_PATH
+Override the standard-library module search path.
+.TP
+.B MLANG_STDLIB_LIB_PATH
+Override the search path used to locate
+.BR libmlang_std .
+.TP
+.B MLANG_PKG_IMPL
+Select the package-manager implementation backend. The MLang frontend uses
+.B mla
+by default and can be forced to the C++ backend with
+.BR cpp .
+.SH EXAMPLES
+.nf
+mlang hello.mla
+mlang -o hello hello.mla
+mlang -emit-llvm hello.mla
+mlang --tests tests/
+mlang test tests/ --filter serde
+mlang bench benches/ --bench-iters 50000 --bench-warmup 5000
+mlang pkg build
+mlang main.mla -L ~/.local/lib/mlang -lmlang_std
+.fi
+.SH FILES
+.TP
+.I ~/.local/lib/mlang/libmlang_std.a
+Typical installation location for the MLang standard library archive.
+.TP
+.I ~/.local/share/mlang/stdlib/
+Typical installation location for standard-library
+.I .mla
+modules.
+.SH SEE ALSO
+.BR mlang-pkg (1),
+.BR mlang-format (1),
+.BR mlangd (1),
+.BR mlang-frontend (1)
+```

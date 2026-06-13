@@ -1,0 +1,358 @@
+# UML UI Generator Example
+
+This example builds a small `mlang` CLI that reads a TOML diagram definition
+and renders a PNG for:
+
+- UML activity/control-flow diagrams
+- UML sequence diagrams
+- UML class diagrams
+- UML package diagrams
+
+The renderer is implemented in C and writes PNGs directly with `stb`. No Java
+runtime is used.
+
+## Overview
+
+Each diagram file uses the same high-level structure:
+
+- `[settings]` for diagram-wide options
+- `[properties]` for default styling
+- one or more item arrays such as `[[nodes]]`, `[[messages]]`, `[[classes]]`,
+  or `[[elements]]`
+
+Per-item styling overrides values from `[properties]`.
+
+## Common TOML Keys
+
+### `[settings]`
+
+Keys supported by every diagram:
+
+- `diagram = "activity" | "sequence" | "class" | "package"`
+- `title = "Text"`
+- `title_size = 22`
+- `title_bold = true`
+- `scale = 1.0`
+- `box_radius = 8`
+
+Diagram-specific keys:
+
+- activity: `edge_radius`
+- sequence: `arrow_size`
+- package: `edge_radius`
+
+### `[properties]`
+
+Defaults are grouped by diagram family.
+
+Activity defaults:
+
+- `action_fill`, `action_stroke`, `action_text`, `action_bold`
+- `decision_fill`, `decision_stroke`, `decision_text`, `decision_bold`
+- `start_fill`, `start_stroke`, `start_text`, `start_radius`, `start_bold`
+- `end_fill`, `end_stroke`, `end_text`, `end_radius`, `end_bold`
+- `edge_color`
+
+Sequence defaults:
+
+- `participant_fill`, `participant_stroke`, `participant_text`,
+  `participant_bold`
+- `message_color`, `message_bold`
+
+Class defaults:
+
+- `class_fill`, `class_header_fill`, `class_stroke`, `class_text`,
+  `class_bold`
+- `association_color`, `association_bold`
+
+Package defaults:
+
+- `container_fill`, `container_header_fill`, `container_stroke`,
+  `container_text`, `container_bold`
+- `package_fill`, `package_header_fill`, `package_stroke`, `package_text`,
+  `package_bold`
+- `model_fill`, `model_header_fill`, `model_stroke`, `model_text`,
+  `model_bold`
+- `dependency_color`, `dependency_bold`
+
+## Activity Diagrams
+
+Tables:
+
+- `[[nodes]]`
+- `[[edges]]`
+
+`[[nodes]]` keys:
+
+- required: `id`, `type`
+- optional: `label`, `fill`, `stroke`, `text`
+- supported `type`: `"start"`, `"action"`, `"decision"`, `"end"`
+
+`[[edges]]` keys:
+
+- required: `from`, `to`
+- optional: `label`, `color`
+
+Example:
+
+```toml
+[settings]
+diagram = "activity"
+title = "Basic order approval flow"
+title_size = 22
+title_bold = true
+scale = 1.0
+box_radius = 8
+edge_radius = 5
+
+[properties]
+action_fill = "#bfdbfe"
+action_stroke = "#2563eb"
+action_text = "#0f172a"
+decision_fill = "#fde68a"
+decision_stroke = "#d97706"
+decision_text = "#111827"
+start_fill = "#22c55e"
+start_stroke = "#166534"
+end_fill = "#c084fc"
+end_stroke = "#7c3aed"
+edge_color = "#334155"
+
+[[nodes]]
+id = "review"
+type = "decision"
+label = "Approved?"
+
+[[edges]]
+from = "review"
+to = "ship"
+label = "yes"
+color = "#16a34a"
+```
+
+Full sample:
+
+- [basic_control_flow.toml](https://github.com/mattilaa/mlang/blob/main//Users/matti.laamanen/projects/mlang/examples/uml_ui_generator/samples/basic_control_flow.toml)
+- [multi_path_control_flow.toml](https://github.com/mattilaa/mlang/blob/main//Users/matti.laamanen/projects/mlang/examples/uml_ui_generator/samples/multi_path_control_flow.toml)
+
+## Sequence Diagrams
+
+Tables:
+
+- `[[participants]]`
+- `[[messages]]`
+
+`[[participants]]` keys:
+
+- required: `id`
+- optional: `label`, `fill`, `stroke`, `text`
+
+`[[messages]]` keys:
+
+- required: `from`, `to`
+- optional: `label`, `color`
+
+Example:
+
+```toml
+[settings]
+diagram = "sequence"
+title = "HTTPS authentication sequence"
+title_size = 22
+title_bold = true
+scale = 1.0
+box_radius = 8
+arrow_size = 12
+
+[properties]
+participant_fill = "#dbeafe"
+participant_stroke = "#2563eb"
+participant_text = "#0f172a"
+message_color = "#334155"
+
+[[participants]]
+id = "gateway"
+label = "HTTPS API Gateway"
+fill = "#fde68a"
+stroke = "#d97706"
+
+[[messages]]
+from = "browser"
+to = "gateway"
+label = "POST /login over TLS"
+color = "#2563eb"
+```
+
+Full sample:
+
+- [https_auth_sequence.toml](https://github.com/mattilaa/mlang/blob/main//Users/matti.laamanen/projects/mlang/examples/uml_ui_generator/samples/https_auth_sequence.toml)
+
+## Class Diagrams
+
+Tables:
+
+- `[[classes]]`
+- `[[associations]]`
+
+`[[classes]]` keys:
+
+- required: `id`
+- optional: `name`, `x`, `y`, `attributes`, `methods`
+- optional styling: `fill`, `header_fill`, `stroke`, `text`, `bold`
+
+`[[associations]]` keys:
+
+- required: `from`, `to`
+- optional: `kind`, `from_multiplicity`, `to_multiplicity`, `label`, `color`,
+  `bold`
+- supported `kind`:
+  `"association"`, `"aggregation"`, `"composition"`, `"generalization"`,
+  `"inheritance"`, `"realization"`, `"dependency"`
+
+Example:
+
+```toml
+[settings]
+diagram = "class"
+title = "Online Golf Store"
+title_size = 24
+title_bold = true
+scale = 1.0
+box_radius = 4
+
+[properties]
+class_fill = "#ffffff"
+class_header_fill = "#f4f4f5"
+class_stroke = "#111111"
+class_text = "#111111"
+association_color = "#444444"
+
+[[classes]]
+id = "customer"
+name = "Customer"
+x = 20
+y = 220
+attributes = ["id", "name"]
+methods = ["+ findById(id: Int): Customer"]
+fill = "#dbeafe"
+header_fill = "#bfdbfe"
+
+[[associations]]
+from = "customer"
+to = "order"
+kind = "association"
+from_multiplicity = "1"
+to_multiplicity = "*"
+```
+
+Full sample:
+
+- [online_golf_store_class.toml](https://github.com/mattilaa/mlang/blob/main//Users/matti.laamanen/projects/mlang/examples/uml_ui_generator/samples/online_golf_store_class.toml)
+
+## Package Diagrams
+
+Tables:
+
+- `[[elements]]`
+- `[[dependencies]]`
+
+`[[elements]]` keys:
+
+- required: `id`, `kind`
+- optional structure: `parent`, `label`, `stereotype`, `x`, `y`, `width`,
+  `height`
+- optional styling: `fill`, `header_fill`, `stroke`, `text`, `bold`
+- supported `kind`: `"container"`, `"package"`, `"model"`
+
+Notes:
+
+- `parent` lets package and container boxes size themselves around direct
+  children.
+- explicit `x`, `y`, `width`, and `height` are still accepted and work as the
+  starting geometry.
+
+`[[dependencies]]` keys:
+
+- required: `from`, `to`
+- optional: `label`, `color`, `bold`
+- optional routing: `from_side`, `to_side`, `waypoints`, `corner_radius`
+- supported sides: `"auto"`, `"top"`, `"right"`, `"bottom"`, `"left"`
+- `waypoints` uses string points such as `["375,245", "375,405"]`
+
+Example:
+
+```toml
+[settings]
+diagram = "package"
+title = "Layered Application"
+title_size = 24
+title_bold = true
+scale = 1.0
+box_radius = 4
+edge_radius = 0
+
+[properties]
+container_fill = "#ffffff"
+container_header_fill = "#e2e8f0"
+package_fill = "#ffffff"
+package_header_fill = "#f3f4f6"
+model_fill = "#ffffff"
+model_header_fill = "#f3f4f6"
+dependency_color = "#52525b"
+
+[[elements]]
+id = "business_layer"
+kind = "package"
+parent = "app"
+label = "Business Layer"
+
+[[dependencies]]
+from = "facade"
+to = "components"
+from_side = "bottom"
+to_side = "top"
+waypoints = ["375,405"]
+corner_radius = 0
+```
+
+Full sample:
+
+- [layered_application_package.toml](https://github.com/mattilaa/mlang/blob/main//Users/matti.laamanen/projects/mlang/examples/uml_ui_generator/samples/layered_application_package.toml)
+
+## Styling Rules
+
+- If an item defines its own `fill`, `header_fill`, `stroke`, `text`, or
+  `color`, that value wins.
+- Otherwise the renderer uses the matching default from `[properties]`.
+- If `[properties]` omits a value, the renderer falls back to built-in defaults.
+
+## Build
+
+From this directory:
+
+```sh
+../../build/mlang pkg fetch
+../../build/mlang pkg build
+```
+
+## Run
+
+Bundled tasks:
+
+```sh
+../../build/mlang pkg run render-sample
+../../build/mlang pkg run render-complex-sample
+../../build/mlang pkg run render-sequence-sample
+../../build/mlang pkg run render-class-sample
+../../build/mlang pkg run render-package-sample
+```
+
+Direct execution:
+
+```sh
+./build/uml_ui_generator samples/basic_control_flow.toml build/generated/basic_control_flow.png
+./build/uml_ui_generator samples/multi_path_control_flow.toml build/generated/multi_path_control_flow.png
+./build/uml_ui_generator samples/https_auth_sequence.toml build/generated/https_auth_sequence.png
+./build/uml_ui_generator samples/online_golf_store_class.toml build/generated/online_golf_store_class.png
+./build/uml_ui_generator samples/layered_application_package.toml build/generated/layered_application_package.png
+```

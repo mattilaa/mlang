@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUTPUT = REPO_ROOT / "build" / "github-wiki"
+DEFAULT_OUTPUT = REPO_ROOT / "docs" / "wiki"
 DEFAULT_REPO_URL = "https://github.com/mattilaa/mlang"
 
 
@@ -233,7 +233,8 @@ def main() -> int:
     out_dir = args.output if args.output.is_absolute() else REPO_ROOT / args.output
     generate(out_dir, args.repo_url, clean=not args.no_clean)
     print(f"Generated GitHub Wiki pages in: {out_dir}")
-    print("To publish, copy these files into a clone of the repository wiki and push.")
+    print("Commit this directory to keep the wiki source in the repository.")
+    print("To publish to GitHub Wiki, rerun with --output pointing at a mlang.wiki clone.")
     return 0
 
 

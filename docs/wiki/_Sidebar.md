@@ -1,0 +1,37 @@
+# MLang Wiki
+
+## Start Here
+- [MLang Documentation](Home)
+- [Project README](Project-README)
+
+## Language
+- [Quick Guide](Quick-Guide)
+- [Language Syntax](Language-Syntax)
+- [Language Attributes](Language-Attributes)
+- [Compiler Diagnostics](Compiler-Diagnostics)
+
+## Standard Library
+- [Stdlib Module API](Stdlib-Module-API)
+- [Stdlib Misc Modules](Stdlib-Misc-Modules)
+- [Stdlib Changes 2026-03-13](Stdlib-Changes-2026-03-13)
+- [Stdlib README](Stdlib-README)
+
+## Tooling
+- [Package Manager](Package-Manager)
+- [Bootstrap](Bootstrap)
+- [mlangpkg](Mlangpkg)
+- [Tests](Tests)
+
+## Examples
+- [Examples](Examples)
+- [UML UI Generator](UML-UI-Generator)
+- [UML UI Generator Example](UML-UI-Generator-Example)
+
+## Man Pages
+- [`mlang`](Man-mlang)
+- [`mlang-frontend`](Man-mlang-frontend)
+- [`mlang-frontend-mla`](Man-mlang-frontend-mla)
+- [`mlang-format`](Man-mlang-format)
+- [`mlang-pkg`](Man-mlang-pkg)
+- [`mlangd`](Man-mlangd)
+- [`mlangd-mla`](Man-mlangd-mla)

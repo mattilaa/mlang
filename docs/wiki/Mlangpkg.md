@@ -1,0 +1,73 @@
+# mlangpkg
+
+`mlangpkg` is a Cargo-like package manager prototype written in Mlang.
+
+Goal:
+- Cargo-like project flow (`init`, `build`, `run`, `add`, `clean`)
+- no CMake dependency
+- clear stdlib dependency surface so runtime features can be added
+  incrementally
+
+## Commands
+
+- `init <name>`: create a new package skeleton.
+- `build [--release]`: compile `src/main.mla` into `.mlangpkg/target/<bin>`.
+- `run [--release] [-- ...]`: build package and then execute the artifact
+  once runtime forwarding is implemented.
+- `add <name> --path <dir>`: add a local path dependency to
+  `mlangpkg.toml`.
+- `clean`: delete package build artifacts under `.mlangpkg`.
+
+## Layout
+
+- `mlangpkg.mla`: command entrypoint and orchestration
+- Root stdlib modules used by mlangpkg:
+  - `stdlib/std/fs.mla`
+  - `stdlib/std/path.mla`
+  - `stdlib/std/env.mla`
+  - `stdlib/std/process.mla`
+  - `stdlib/std/toml.mla`
+
+## Runtime binding contract
+
+`mlangpkg` uses root stdlib modules. Runtime/builtin support required by those
+modules includes these symbols:
+
+- `__env_args`, `__env_len`, `__env_get`, `__env_cwd`, `__env_println`, `__env_stderrln`
+- `__path_join`, `__path_normalize`, `__path_basename`, `__path_dirname`
+- `__fs_exists`, `__fs_mkdir_p`, `__fs_read_text`, `__fs_write_text`, `__fs_remove_tree`, `__fs_glob_recursive`
+- `__process_run`, `__process_run_build`
+- `__toml_parse`, `__toml_get_string`, `__toml_set_inline_table`, `__toml_stringify`
+
+This keeps package-manager logic in Mlang while allowing runtime features to be
+implemented incrementally.
+
+## Incremental runtime plan
+
+1. `env`:
+- argv
+- cwd
+- print/println
+
+2. `path`:
+- join
+- normalize
+- basename
+
+3. `fs`:
+- exists
+- mkdir_p
+- read_text
+- write_text
+- list recursive files
+
+4. `process`:
+- run command + exit code
+
+5. `toml`:
+- parse manifest
+- get/set strings/tables
+- write manifest back
+
+The `mlangpkg` command bodies already call stdlib wrappers; once runtime binds
+the extern symbols above, the tool becomes executable end-to-end.

@@ -1,0 +1,70 @@
+# `mlang-frontend` manual
+
+```roff
+.TH MLANG-FRONTEND 1 "May 2026" "MLang" "User Commands"
+.SH NAME
+mlang-frontend \- frontend wrapper that forwards MLang workflows to a backend compiler
+.SH SYNOPSIS
+.B mlang-frontend
+[\fB\-\-backend\fR \fIPATH\fR] [\fIcompiler and workflow arguments\fR]
+.SH DESCRIPTION
+.B mlang-frontend
+is a wrapper frontend that forwards compiler, test, benchmark, documentation,
+and package-manager requests to a backend compiler binary. By default the
+backend is
+.BR mlang .
+.PP
+The wrapper exposes the same user-facing workflows as
+.BR mlang (1) ,
+including:
+.BR test ,
+.BR bench ,
+.BR "run docs" ,
+and
+.BR "pkg" .
+It is primarily useful when a stable frontend command should drive a different
+compiler backend.
+.SH OPTIONS
+.TP
+.B \-\-backend \fIPATH\fR
+Use
+.I PATH
+as the backend compiler executable instead of
+.BR mlang .
+.TP
+.BR \-h ", " \-\-help
+Print the frontend help text.
+.TP
+.B \-\-version
+Print the frontend version and exit.
+.PP
+All other arguments are interpreted as normal MLang compiler, test, benchmark,
+documentation, or package-manager arguments and are forwarded to the backend.
+.SH ENVIRONMENT
+.TP
+.B MLANG_PKG_IMPL
+Select the package-manager backend when the
+.B pkg
+subcommand is used.
+.TP
+.B MLANG_STDLIB_PATH
+Override the standard-library module search path.
+.TP
+.B MLANG_STDLIB_LIB_PATH
+Override the search path used to locate
+.BR libmlang_std .
+.TP
+.B MLANG_PKG_CACHE_KEY
+Influence the cache key used for compiled helper tool frontends.
+.SH EXAMPLES
+.nf
+mlang-frontend hello.mla
+mlang-frontend --backend /path/to/mlang hello.mla
+mlang-frontend pkg build
+mlang-frontend test tests/ --filter json
+.fi
+.SH SEE ALSO
+.BR mlang (1),
+.BR mlang-pkg (1),
+.BR mlang-frontend-mla (1)
+```
