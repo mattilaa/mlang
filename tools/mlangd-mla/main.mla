@@ -422,6 +422,23 @@ fn line_text_at(text: str8, line0: i64) -> str8 {
     return sub(text, start, endi - start);
 }
 
+fn text_starts_with_at(text: str8, pos: i64, needle: str8) -> bool {
+    if pos < 0 { return false; }
+    let n: i64 = len(needle);
+    if pos + n > len(text) { return false; }
+    if eq(sub(text, pos, n), needle) == 1 { return true; }
+    return false;
+}
+
+fn whitespace_or_open_brace_at(text: str8, pos: i64) -> bool {
+    if pos >= len(text) { return false; }
+    let ch: str8 = sub(text, pos, 1);
+    if eq(ch, "{") == 1 { return true; }
+    if eq(ch, " ") == 1 { return true; }
+    if eq(ch, "\t") == 1 { return true; }
+    return false;
+}
+
 fn offset_to_line_col1(text: str8, off: i64) -> i64 {
     let n: i64 = len(text);
     var pos: i64 = off;
@@ -3311,40 +3328,8 @@ fn handle_diagnostic(payload: str8) -> str8 {
     let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "{\"kind\":\"full\",\"items\":[]}"; }
     let previous_result_id: str8 = extract_previous_result_id(payload);
-    let s: SessionRef = current_session();
-    let cr: Result<i32, str8> = s.syntax_diagnostic_count(uri);
-    if cr.is_err() { return "{\"kind\":\"full\",\"items\":[]}"; }
-    let n: i32 = match cr {
-        Ok(v) => v,
-        Err(_e) => 0
-    };
-    var items: str8 = String::new();
-    items = concat(items, "[");
-    var result_id: str8 = format!("v1|{}", n);
-    var j: i32 = 0;
-    for i in 0..n {
-        let dr: Result<SyntaxDiagnostic, str8> = s.syntax_diagnostic_get(uri, i);
-        if dr.is_err() { continue; }
-        let d: SyntaxDiagnostic = match dr {
-            Ok(v) => v,
-            Err(_e) => SyntaxDiagnostic { line: 0, column: 0, message: String::new() }
-        };
-        let msg: str8 = json_escape(d.message);
-        let sl: i32 = lsp_line(d.line);
-        let sc: i32 = lsp_col(d.column);
-        let item: str8 = format!(
-            "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"severity\":1,\"message\":\"{}\"}}",
-            sl, sc, sl, sc, msg
-        );
-        result_id = format!("{}|{}:{}:{}", result_id, d.line, d.column, d.message);
-        if j > 0 {
-            items = format!("{},{}", items, item);
-        } else {
-            items = format!("{}{}", items, item);
-        }
-        j = j + 1;
-    }
-    items = concat(items, "]");
+    let items: str8 = diagnostic_items_json(uri);
+    let result_id: str8 = format!("v2|{}", items);
     if len(previous_result_id) > 0 {
         if eq(previous_result_id, result_id) == 1 {
             let result_id_e: str8 = json_escape(result_id);
@@ -3359,6 +3344,151 @@ fn handle_diagnostic(payload: str8) -> str8 {
         "{{\"kind\":\"full\",\"resultId\":\"{}\",\"items\":{}}}",
         result_id_e, items
     );
+}
+
+fn diagnostic_items_json(uri: str8) -> str8 {
+    if ensure_session() != 0 { return "[]"; }
+    if len(uri) == 0 { return "[]"; }
+    let s: SessionRef = current_session();
+    let cr: Result<i32, str8> = s.syntax_diagnostic_count(uri);
+    if cr.is_err() { return "[]"; }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+    var items: str8 = String::new();
+    items = concat(items, "[");
+    var j: i32 = 0;
+    for i in 0..n {
+        let dr: Result<SyntaxDiagnostic, str8> = s.syntax_diagnostic_get(uri, i);
+        if dr.is_err() { continue; }
+        let d: SyntaxDiagnostic = match dr {
+            Ok(v) => v,
+            Err(_e) => SyntaxDiagnostic { line: 0, column: 0, message: String::new() }
+        };
+        let msg: str8 = json_escape(d.message);
+        let sl: i32 = lsp_line(d.line);
+        let sc: i32 = lsp_col(d.column);
+        let item: str8 = format!(
+            "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"severity\":1,\"source\":\"mlang\",\"message\":\"{}\"}}",
+            sl, sc, sl, sc, msg
+        );
+        if j > 0 {
+            items = format!("{},{}", items, item);
+        } else {
+            items = format!("{}{}", items, item);
+        }
+        j = j + 1;
+    }
+    if ensure_text_store() == 0 {
+        let text: str8 = text_store_get(g_text_store_handle, uri);
+        let text_len: i64 = len(text);
+        var line0: i64 = 0;
+        var line_start: i64 = 0;
+        var first_non_ws: i64 = -1;
+        var warning_kind: i32 = 0;
+        var saw_colon_brace: bool = false;
+        var i: i64 = 0;
+        while i <= text_len {
+            var ch: str8 = "\n";
+            if i < text_len {
+                ch = sub(text, i, 1);
+            }
+            if eq(ch, "\n") == 1 {
+                if warning_kind > 0 {
+                    if saw_colon_brace {
+                        var message: str8 = "plain if/else-if with ':' is discouraged; use 'if cond { ... }' and reserve ':' for guard forms";
+                        if warning_kind == 2 {
+                            message = "plain while with ':' is discouraged; use 'while cond { ... }' and reserve ':' for guard forms";
+                        }
+                        let msg: str8 = json_escape(message);
+                        let item: str8 = format!(
+                            "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"severity\":2,\"source\":\"mlang\",\"message\":\"{}\"}}",
+                            line0, first_non_ws, line0, first_non_ws, msg
+                        );
+                        if j > 0 {
+                            items = format!("{},{}", items, item);
+                        } else {
+                            items = format!("{}{}", items, item);
+                        }
+                        j = j + 1;
+                    }
+                }
+                line0 = line0 + 1;
+                line_start = i + 1;
+                first_non_ws = -1;
+                warning_kind = 0;
+                saw_colon_brace = false;
+                i = i + 1;
+                continue;
+            }
+
+            if first_non_ws < 0 {
+                if eq(ch, " ") == 1 {
+                    i = i + 1;
+                    continue;
+                }
+                if eq(ch, "\t") == 1 {
+                    i = i + 1;
+                    continue;
+                }
+                first_non_ws = i - line_start;
+                if text_starts_with_at(text, i, "if ") {
+                    warning_kind = 1;
+                } else {
+                    if text_starts_with_at(text, i, "else if ") {
+                        warning_kind = 1;
+                    } else {
+                        if text_starts_with_at(text, i, "while ") {
+                            warning_kind = 2;
+                        }
+                    }
+                }
+            }
+
+            if warning_kind > 0 {
+                if eq(ch, ":") == 1 {
+                    var p: i64 = i + 1;
+                    while p < text_len {
+                        let pch: str8 = sub(text, p, 1);
+                        if eq(pch, " ") == 1 {
+                            p = p + 1;
+                            continue;
+                        }
+                        if eq(pch, "\t") == 1 {
+                            p = p + 1;
+                            continue;
+                        }
+                        break;
+                    }
+                    if whitespace_or_open_brace_at(text, p) {
+                        if text_starts_with_at(text, p, "{") {
+                            saw_colon_brace = true;
+                        }
+                    }
+                }
+            }
+            i = i + 1;
+        }
+    }
+    items = concat(items, "]");
+    return items;
+}
+
+fn publish_diagnostics_notification(uri: str8, diagnostics: str8) -> str8 {
+    let uri_e: str8 = json_escape(uri);
+    return format!(
+        "{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{{\"uri\":\"{}\",\"diagnostics\":{}}}}}",
+        uri_e, diagnostics
+    );
+}
+
+fn publish_current_diagnostics_notification(uri: str8) -> str8 {
+    return publish_diagnostics_notification(uri, diagnostic_items_json(uri));
+}
+
+fn publish_clear_diagnostics_notification(uri: str8) -> str8 {
+    return publish_diagnostics_notification(uri, "[]");
 }
 
 fn handle_workspace_symbol(payload: str8) -> str8 {
@@ -3754,8 +3884,42 @@ fn run_server_stdio_loop(frame_capacity: i64) -> Result<i32, str8> {
         }
 
         let id: i64 = extract_request_id(frame);
+        let method: str8 = extract_method(frame);
+        let uri: str8 = extract_text_document_uri(frame);
         let result_json: str8 = dispatch_result_json(frame);
         if id < 0 {
+            if len(uri) > 0 {
+                if eq(method, "textDocument/didOpen") == 1 {
+                    let notification: str8 = publish_current_diagnostics_notification(uri);
+                    let wrn: Result<i32, str8> = transport.write_frame(notification);
+                    String::free(notification);
+                    if wrn.is_err() {
+                        let ew: str8 = wrn.unwrap_err();
+                        String::free(frame);
+                        return Err<i32, str8>(ew);
+                    }
+                }
+                if eq(method, "textDocument/didChange") == 1 {
+                    let notification: str8 = publish_current_diagnostics_notification(uri);
+                    let wrn: Result<i32, str8> = transport.write_frame(notification);
+                    String::free(notification);
+                    if wrn.is_err() {
+                        let ew: str8 = wrn.unwrap_err();
+                        String::free(frame);
+                        return Err<i32, str8>(ew);
+                    }
+                }
+                if eq(method, "textDocument/didClose") == 1 {
+                    let notification: str8 = publish_clear_diagnostics_notification(uri);
+                    let wrn: Result<i32, str8> = transport.write_frame(notification);
+                    String::free(notification);
+                    if wrn.is_err() {
+                        let ew: str8 = wrn.unwrap_err();
+                        String::free(frame);
+                        return Err<i32, str8>(ew);
+                    }
+                }
+            }
             continue;
         }
 

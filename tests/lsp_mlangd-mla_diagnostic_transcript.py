@@ -41,6 +41,12 @@ def main() -> int:
 
         text_ok = "fn ok() -> i32 { return 1; }\n"
         text_bad = "fn bad( -> i32 { return 1; }\n"
+        text_warn = (
+            "fn warn(queue_handle: i64) -> i32 {\n"
+            "    if queue_handle == 0: { return 1; }\n"
+            "    return 0;\n"
+            "}\n"
+        )
         file_path.write_text(text_ok)
 
         client = JsonRpcClient([str(mlangd), "--stdio"])
@@ -63,6 +69,11 @@ def main() -> int:
                     }
                 },
             )
+            open_push = client.read_until_notification("textDocument/publishDiagnostics")
+            assert open_push.get("uri") == uri, f"unexpected open diagnostic uri: {open_push!r}"
+            assert open_push.get("diagnostics") == [], (
+                f"valid document should publish empty diagnostics: {open_push!r}"
+            )
 
             res1 = client.request("textDocument/diagnostic", {"textDocument": {"uri": uri}})
             rid1, _items1 = require_full(res1)
@@ -80,6 +91,14 @@ def main() -> int:
                     "contentChanges": [{"text": text_bad}],
                 },
             )
+            change_push = client.read_until_notification("textDocument/publishDiagnostics")
+            assert change_push.get("uri") == uri, (
+                f"unexpected change diagnostic uri: {change_push!r}"
+            )
+            push_items = change_push.get("diagnostics")
+            assert isinstance(push_items, list) and push_items, (
+                f"invalid document should publish diagnostics: {change_push!r}"
+            )
 
             res3 = client.request(
                 "textDocument/diagnostic",
@@ -94,6 +113,49 @@ def main() -> int:
                 {"textDocument": {"uri": uri}, "previousResultId": rid2},
             )
             require_unchanged(res4, rid2)
+
+            client.notify(
+                "textDocument/didChange",
+                {
+                    "textDocument": {"uri": uri, "version": 3},
+                    "contentChanges": [{"text": text_warn}],
+                },
+            )
+            warn_push = client.read_until_notification("textDocument/publishDiagnostics")
+            assert warn_push.get("uri") == uri, (
+                f"unexpected warning diagnostic uri: {warn_push!r}"
+            )
+            warn_items = warn_push.get("diagnostics")
+            assert isinstance(warn_items, list) and warn_items, (
+                f"plain colon guard should publish warning: {warn_push!r}"
+            )
+            assert any(
+                item.get("severity") == 2
+                and "plain if/else-if with ':' is discouraged" in item.get("message", "")
+                for item in warn_items
+                if isinstance(item, dict)
+            ), f"plain colon warning missing from push diagnostics: {warn_push!r}"
+
+            res5 = client.request("textDocument/diagnostic", {"textDocument": {"uri": uri}})
+            _rid3, pull_warn_items = require_full(res5)
+            assert any(
+                item.get("severity") == 2
+                and "plain if/else-if with ':' is discouraged" in item.get("message", "")
+                for item in pull_warn_items
+                if isinstance(item, dict)
+            ), f"plain colon warning missing from pull diagnostics: {res5!r}"
+
+            client.notify(
+                "textDocument/didClose",
+                {"textDocument": {"uri": uri}},
+            )
+            close_push = client.read_until_notification("textDocument/publishDiagnostics")
+            assert close_push.get("uri") == uri, (
+                f"unexpected close diagnostic uri: {close_push!r}"
+            )
+            assert close_push.get("diagnostics") == [], (
+                f"closed document should clear diagnostics: {close_push!r}"
+            )
         finally:
             client.close()
 

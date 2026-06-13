@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import json
 import subprocess
 from pathlib import Path
@@ -71,6 +73,21 @@ class JsonRpcClient:
                 if "error" in msg:
                     raise AssertionError(f"LSP error for {method}: {msg['error']}")
                 return msg.get("result")
+
+    def read_until_notification(self, method: str) -> dict:
+        while True:
+            msg = self._read()
+            if msg is None:
+                raise AssertionError(
+                    f"mlangd-mla closed stdout while waiting for {method}"
+                )
+            if msg.get("method") == method:
+                params = msg.get("params")
+                if not isinstance(params, dict):
+                    raise AssertionError(
+                        f"notification {method} params must be object: {msg!r}"
+                    )
+                return params
 
     def notify(self, method: str, params: dict) -> None:
         self._write({"jsonrpc": "2.0", "method": method, "params": params})
