@@ -107,8 +107,13 @@ if (Confirm-YesNo "Do you want to run mlang-config? (y/n)") {
 
     if (Confirm-YesNo "Do you want to build the full MLang toolchain now? (y/n)") {
         $BuildScript = Join-Path "." "build.ps1"
-        Write-Host "$BuildScript --build-dir $BuildDir"
-        & $BuildScript --build-dir $BuildDir
+        if (Confirm-YesNo "Do you want to install the output binaries to the configured install location? (y/n)") {
+            Write-Host "$BuildScript --build-dir $BuildDir --install"
+            & $BuildScript --build-dir $BuildDir --install
+        } else {
+            Write-Host "$BuildScript --build-dir $BuildDir --no-install"
+            & $BuildScript --build-dir $BuildDir --no-install
+        }
         Stop-IfNativeCommandFailed "build.ps1"
     }
 }

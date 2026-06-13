@@ -108,7 +108,12 @@ if confirm_yes_no "Do you want to run mlang-config? (y/n)"; then
     "$mlang_config"
 
     if confirm_yes_no "Do you want to build the full MLang toolchain now? (y/n)"; then
-        echo "./build.sh --build-dir $build_dir"
-        ./build.sh --build-dir "$build_dir"
+        if confirm_yes_no "Do you want to install the output binaries to the configured install location? (y/n)"; then
+            echo "./build.sh --build-dir $build_dir --install"
+            ./build.sh --build-dir "$build_dir" --install
+        else
+            echo "./build.sh --build-dir $build_dir --no-install"
+            ./build.sh --build-dir "$build_dir" --no-install
+        fi
     fi
 fi

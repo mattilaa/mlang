@@ -146,6 +146,13 @@ What the scripts do:
   compiler/runtime, then explicitly compile:
   `tools/mlangd-mla/main.mla`, `tools/mlang-format-mla/main.mla`,
   `tools/mlang-frontend-mla/main.mla`, and `tools/mlangpkg/mlangpkg.mla`.
+- Install prefixes such as `~/.local` are expanded before they are written to
+  the CMake cache, so direct installs such as
+  `cmake --install build --config Release --prefix ~/.local` use an absolute
+  destination instead of a literal `~` directory.
+- When `bootstrap.sh` / `bootstrap.ps1` runs `mlang-config`, it also asks
+  whether to build and install the output binaries to the configured install
+  location.
 
 Useful non-interactive forms:
 ```sh

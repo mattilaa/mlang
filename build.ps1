@@ -45,6 +45,16 @@ function Get-ConfigValue($Path, $Key) {
     return $match.Substring($prefix.Length)
 }
 
+function Expand-UserPath($Value) {
+    if ([string]::IsNullOrEmpty($Value)) { return $Value }
+    $homeDir = if (![string]::IsNullOrEmpty($env:USERPROFILE)) { $env:USERPROFILE } else { $HOME }
+    if ($Value -eq "~") { return $homeDir }
+    if ($Value.StartsWith("~/") -or $Value.StartsWith("~\")) {
+        return (Join-Path $homeDir ($Value.Substring(2)))
+    }
+    return $Value
+}
+
 function Stop-IfNativeCommandFailed($CommandName) {
     if ($LASTEXITCODE -ne 0) {
         Write-Error "$CommandName failed with exit code $LASTEXITCODE"
@@ -131,8 +141,10 @@ if ([string]::IsNullOrEmpty($Prefix)) {
     $homeDir = if (![string]::IsNullOrEmpty($env:USERPROFILE)) { $env:USERPROFILE } else { $HOME }
     $Prefix = Join-Path $homeDir ".local"
 }
+$Prefix = Expand-UserPath $Prefix
 if ([string]::IsNullOrEmpty($BinDir)) { $BinDir = Get-ConfigValue $ConfigFile "bin_dir" }
 if ([string]::IsNullOrEmpty($BinDir)) { $BinDir = Join-Path $Prefix "bin" }
+$BinDir = Expand-UserPath $BinDir
 
 $CacheFile = Join-Path $BuildDir "mlang_config_cache.cmake"
 Write-Host "$MlangConfig --import $ConfigFile --build-dir $BuildDir --install-prefix $Prefix --bin-dir $BinDir --write"

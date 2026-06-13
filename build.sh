@@ -115,6 +115,20 @@ config_value() {
     sed -n "s/^$key=//p" "$file" | tail -n 1
 }
 
+expand_user_path() {
+    case "$1" in
+        "~")
+            printf "%s\n" "$HOME"
+            ;;
+        "~/"*)
+            printf "%s/%s\n" "$HOME" "${1#~/}"
+            ;;
+        *)
+            printf "%s\n" "$1"
+            ;;
+    esac
+}
+
 if [ -z "$config_file" ]; then
     config_file="$build_dir/mlang-config.conf"
 fi
@@ -145,12 +159,14 @@ fi
 if [ -z "$prefix" ]; then
     prefix="$HOME/.local"
 fi
+prefix="$(expand_user_path "$prefix")"
 if [ -z "$bin_dir" ]; then
     bin_dir="$(config_value bin_dir "$config_file")"
 fi
 if [ -z "$bin_dir" ]; then
     bin_dir="$prefix/bin"
 fi
+bin_dir="$(expand_user_path "$bin_dir")"
 
 echo "$mlang_config --import $config_file --build-dir $build_dir --install-prefix $prefix --bin-dir $bin_dir --write"
 "$mlang_config" --import "$config_file" --build-dir "$build_dir" --install-prefix "$prefix" --bin-dir "$bin_dir" --write
