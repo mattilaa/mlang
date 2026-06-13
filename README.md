@@ -824,6 +824,30 @@ The generated site mirrors the Markdown sources under `docs/`, stdlib sources
 Compiler diagnostic reference lives in `docs/compiler_diagnostics.md` and is
 published in the generated site as `docs/out/html/compiler_diagnostics.html`.
 
+### GitHub Wiki Export
+
+Generate GitHub Wiki-ready Markdown pages from the current repository
+documentation with:
+
+```sh
+python3 scripts/generate_github_wiki.py
+```
+
+The default output directory is `build/github-wiki`. The generated files can be
+copied into a clone of `mlang.wiki.git` and pushed:
+
+```sh
+git clone https://github.com/mattilaa/mlang.wiki.git /tmp/mlang.wiki
+python3 scripts/generate_github_wiki.py --output /tmp/mlang.wiki
+cd /tmp/mlang.wiki
+git add .
+git commit -m "Update MLang wiki documentation"
+git push
+```
+
+Use `--repo-url` if the GitHub repository owner or URL differs from
+`https://github.com/mattilaa/mlang`.
+
 ## AddressSanitizer Verification
 After a clean workspace, run the helper script that configures an AddressSanitizer build and runs the unit and robot test suites under ASan:
 
