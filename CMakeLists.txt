@@ -70,6 +70,35 @@ project(MLang VERSION ${MLANG_VERSION_MAJOR}.${MLANG_VERSION_MINOR}.${MLANG_VERS
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(_mlang_home_dir "$ENV{HOME}")
+if(WIN32 AND NOT "$ENV{USERPROFILE}" STREQUAL "")
+    set(_mlang_home_dir "$ENV{USERPROFILE}")
+endif()
+if(NOT _mlang_home_dir STREQUAL "")
+    if(CMAKE_INSTALL_PREFIX STREQUAL "~")
+        set(CMAKE_INSTALL_PREFIX "${_mlang_home_dir}" CACHE PATH
+            "Install path prefix, prepended onto install directories." FORCE)
+    elseif(CMAKE_INSTALL_PREFIX MATCHES "^~/")
+        string(SUBSTRING "${CMAKE_INSTALL_PREFIX}" 1 -1
+            _mlang_install_prefix_suffix)
+        set(_mlang_expanded_install_prefix
+            "${_mlang_home_dir}${_mlang_install_prefix_suffix}")
+        set(CMAKE_INSTALL_PREFIX "${_mlang_expanded_install_prefix}" CACHE PATH
+            "Install path prefix, prepended onto install directories." FORCE)
+    elseif(WIN32 AND CMAKE_INSTALL_PREFIX MATCHES "^~\\\\")
+        string(SUBSTRING "${CMAKE_INSTALL_PREFIX}" 1 -1
+            _mlang_install_prefix_suffix)
+        set(_mlang_expanded_install_prefix
+            "${_mlang_home_dir}${_mlang_install_prefix_suffix}")
+        set(CMAKE_INSTALL_PREFIX "${_mlang_expanded_install_prefix}" CACHE PATH
+            "Install path prefix, prepended onto install directories." FORCE)
+    endif()
+endif()
+unset(_mlang_home_dir)
+unset(_mlang_install_prefix_suffix)
+unset(_mlang_expanded_install_prefix)
+
 include(GNUInstallDirs)
 
 add_executable(mlang-config tools/mlang_config.cpp)
@@ -530,8 +559,12 @@ install(TARGETS mlang
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         COMPONENT mlang-core)
 
-install(TARGETS mlangd
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+option(MLANG_INSTALL_CPP_LSP
+       "Install the legacy C++ mlangd target with cmake --install" OFF)
+if(MLANG_INSTALL_CPP_LSP)
+    install(TARGETS mlangd
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 install(PROGRAMS ${MLANG_FORMAT_OUTPUT}
         DESTINATION ${CMAKE_INSTALL_BINDIR})
