@@ -19,6 +19,10 @@ GENERATED_NOTICE = (
     "Update the source documentation and rerun the script. "
     "The generator adds wiki links and code-fence languages. -->\n\n"
 )
+GITHUB_FENCE_LANGUAGE_ALIASES = {
+    "mla": "rust",
+    "mlang": "rust",
+}
 
 
 @dataclass(frozen=True)
@@ -282,7 +286,7 @@ def infer_fence_language(code_lines: list[str], page: Page) -> str:
     if not stripped:
         return ""
     if re.search(r"\b(fn|let|var|struct|enum|impl|mod|use|extern)\b", sample):
-        return "mla"
+        return "rust"
     if re.search(r"\b(mlang|cmake|git|python3|brew|sudo|export|open|cd|cp|mkdir|chmod)\b", sample):
         return "sh"
     if re.search(r"^\s*(\[.+\]|[A-Za-z0-9_.-]+\s*=)", sample, flags=re.MULTILINE):
@@ -290,6 +294,13 @@ def infer_fence_language(code_lines: list[str], page: Page) -> str:
     if page.source.suffix == ".md" and "README" in page.source.name and "test" in str(page.source).lower():
         return "text"
     return "text"
+
+
+def github_fence_language(language: str) -> str:
+    language = language.strip()
+    if not language:
+        return language
+    return GITHUB_FENCE_LANGUAGE_ALIASES.get(language.lower(), language)
 
 
 def add_missing_fence_languages(text: str, page: Page) -> str:
@@ -306,7 +317,8 @@ def add_missing_fence_languages(text: str, page: Page) -> str:
                 in_fence = True
                 fence_start_index = len(output)
                 fence_code_lines = []
-                output.append(line)
+                language = github_fence_language(match.group(1))
+                output.append(f"```{language}" if language else "```")
                 continue
 
             if output[fence_start_index] == "```":

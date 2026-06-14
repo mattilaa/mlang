@@ -5,7 +5,7 @@
 This page documents the **MLang-facing stdlib modules** under `stdlib/std/`.
 These are the APIs you import in Mlang source via:
 
-```mla
+```rust
 mod std::io;
 mod std::esc;
 mod std::argparser;
@@ -110,7 +110,7 @@ backing type such as [`u8`](Quick-Guide#types) or [`i64`](Quick-Guide#types), or
 
 Example:
 
-```mla
+```rust
 enum Status : u8 {
     Invalid = 1,
     Busy = 2,
@@ -128,7 +128,7 @@ for (i, value) in Status.enumerate() {
 
 String-backed example:
 
-```mla
+```rust
 enum HttpMethod : str8 {
     Get = "GET",
     Post = "POST",
@@ -179,7 +179,7 @@ Aliases also support generics, so `use type SomeMap = map<K, V>;` is equivalent 
 
 Example:
 
-```mla
+```rust
 use type Distance = f32;
 use type SomeMap = map<str8, i32>;
 
@@ -268,7 +268,7 @@ This module provides the runtime payload type used by the language-level
 
 Basic throw/catch:
 
-```mla
+```rust
 mod std::exceptions;
 use std::exceptions::*;
 
@@ -443,7 +443,7 @@ Google-benchmark style anti-optimization helpers:
 
 Typical benchmark usage:
 
-```mla
+```rust
 mod std::bench;
 
 #[test]
@@ -499,7 +499,7 @@ Counters/result helpers:
 
 Typical test usage:
 
-```mla
+```rust
 mod std::testing;
 use std::testing::*;
 
@@ -558,7 +558,7 @@ Inspection / verification:
 
 Worked example:
 
-```mla
+```rust
 fn fake_send(handle: i64) -> i32 {
     return mock_record_and_return_i32(handle, "send", -1);
 }
@@ -631,7 +631,7 @@ Ownership note:
 ### TUI Safety Helper (recommended for all terminal UIs)
 Use this pattern in every TUI example to avoid broken scrolling/cursor state:
 
-```mla
+```rust
 mod std::esc;
 mod std::term;
 use std::esc::alt_screen_off;
@@ -722,7 +722,7 @@ Builtin reference source: `stdlib/types.mla`
 
 Examples:
 
-```mla
+```rust
 var enabled: bit = 1;
 println!("bit={} bool={} list_header={}",
          sizeof(bit), sizeof(bool), sizeof(list<bool>));
@@ -1149,7 +1149,7 @@ Notes:
 
 Example:
 
-```mla
+```rust
 mod std::sed;
 mod std::strbuf;
 
@@ -1181,7 +1181,7 @@ Properties:
 
 Example:
 
-```mla
+```rust
 mod std::span;
 
 fn sum(values: Span<i32>) -> i32 {
@@ -1548,7 +1548,7 @@ above.
 
 ### Iteration
 
-```mlang
+```rust
 // for-in loop
 for x in v {
     println!("{}", x);
@@ -1586,7 +1586,7 @@ Stable 64-bit hashing helpers for cache keys, fingerprints, and combined IDs.
 
 Example:
 
-```mla
+```rust
 mod std::hash;
 use std::hash::*;
 
@@ -1647,7 +1647,7 @@ Typical GA/TSP flow:
 
 Example:
 
-```mla
+```rust
 mod std::gps;
 use std::gps::*;
 
@@ -1665,7 +1665,7 @@ println!("segment meters={}", distance_m(lats[0], lons[0], lats[1], lons[1]));
 
 Example:
 
-```mla
+```rust
 mod std::platform;
 use std::platform::*;
 
@@ -1710,7 +1710,7 @@ terminal font to contain the corresponding Unicode glyphs.
 | `9` | `SextantBlocks` | 2×3 | Unicode sextant blocks U+1FB00–U+1FB3B; 6 sub-pixels per cell |
 | `10` | `BrailleColor` | 2×4 | braille patterns with proper per-group FG/BG color averaging |
 
-```mla
+```rust
 pub enum ImageGlyphMode : i32 {
     UpperHalfBlocks = 0,
     FullBlocks      = 1,
@@ -1730,7 +1730,7 @@ pub enum ImageGlyphMode : i32 {
 
 Basic image metadata returned by `probe`.
 
-```mla
+```rust
 pub struct ImageInfo {
     var width:  i64;
     var height: i64;
@@ -1762,7 +1762,7 @@ pub struct ImageInfo {
 
 #### Minimal render
 
-```mla
+```rust
 mod std::image;
 mod std::term;
 use std::image::ImageGlyphMode;
@@ -1788,7 +1788,7 @@ fn main() -> i32 {
 
 #### Probe dimensions before rendering
 
-```mla
+```rust
 mod std::image;
 use std::image::ImageInfo;
 use std::image::probe;
@@ -1818,7 +1818,7 @@ fn main() -> i32 {
 
 #### Choosing a mode at runtime
 
-```mla
+```rust
 mod std::image;
 use std::image::ImageGlyphMode;
 use std::image::render_truecolor_with_mode;

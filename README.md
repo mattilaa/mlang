@@ -851,6 +851,9 @@ documentation changes and the refreshed `docs/wiki` files together.
 During generation, bare fenced code blocks get inferred language tags where
 possible, and inline MLang keywords, builtin types, and `std::...` references
 are linked to the language guide or stdlib reference in the wiki output.
+MLang examples are emitted with GitHub-supported `rust` fences so GitHub Wiki
+applies syntax highlighting; GitHub does not recognize `mla` as a highlight
+language.
 
 To publish those files to GitHub Wiki later, clone the wiki repository and use
 it as the output directory:

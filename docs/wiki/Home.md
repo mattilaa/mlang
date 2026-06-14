@@ -68,7 +68,7 @@ If you are new to MLang, read these pages in this order:
 
 ## First Example
 
-```mla
+```rust
 fn main() -> i32 {
     let values: list<i32> = [1, 2, 3, 4];
     var total: i32 = 0;
@@ -88,7 +88,7 @@ This shows the common MLang style:
 
 ## C Interop Example
 
-```mla
+```rust
 extern fn puts(text: str8) -> i32;
 
 fn main() -> i32 {

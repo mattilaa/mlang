@@ -46,7 +46,7 @@ compiler. The bootstrap launcher in `bootstrap/` is a thin wrapper around
 MLang supports explicit compile-time evaluation with `cexpr(expr)` and
 `cexpr fn`.
 
-```mla
+```rust
 cexpr fn square(x: i64) -> i64 {
     return x * x;
 }
@@ -60,7 +60,7 @@ fn main() -> i32 {
 
 The equivalent postfix declaration form is also accepted:
 
-```mla
+```rust
 fn square(x: i64) cexpr -> i64 {
     return x * x;
 }
@@ -461,7 +461,7 @@ lowers it straight to LLVM inline asm, so there is no extra C wrapper boundary.
 
 Supported forms:
 
-```mla
+```rust
 let value: i64 = 9;
 let copy: i64 = asm(i64, "", value);
 asm volatile(void, "", value);
@@ -853,6 +853,9 @@ documentation changes and the refreshed `docs/wiki` files together.
 During generation, bare fenced code blocks get inferred language tags where
 possible, and inline MLang keywords, builtin types, and `std::...` references
 are linked to the language guide or stdlib reference in the wiki output.
+MLang examples are emitted with GitHub-supported `rust` fences so GitHub Wiki
+applies syntax highlighting; GitHub does not recognize `mla` as a highlight
+language.
 
 To publish those files to GitHub Wiki later, clone the wiki repository and use
 it as the output directory:
@@ -1416,7 +1419,7 @@ follows a Doxygen-style structure: `@brief`, `@details`, `@code` (example),
 > that public entry point is itself called from a different module.
 
 > **@code**
-```mla
+```rust
 // lib/counter.mla
 pub struct Counter {
     var value: i32;
@@ -1439,7 +1442,7 @@ impl Counter {
 }
 ```
 
-```mla
+```rust
 // main.mla
 mod lib::counter;
 use lib::counter::Counter;
@@ -1474,7 +1477,7 @@ fn main() -> i32 {
 > specific instance.
 
 > **@code**
-```mla
+```rust
 pub struct Counter {
     var value: i32;
 };
@@ -1541,7 +1544,7 @@ method 'Post::summarize' does not match trait 'Summary': return type 'i32' does 
 method 'Post::summarize' does not match trait 'Summary': expected instance method
 ```
 
-```mla
+```rust
 trait Summary {
     fn summarize(self: Self) -> str8;
 }
@@ -1579,7 +1582,7 @@ impl Summary for Post {
 > compile error.
 
 > **@code**
-```mla
+```rust
 trait Summary {
     fn summarize(self: Self) -> str8;
 }
@@ -1643,7 +1646,7 @@ fn main() -> i32 {
 > structs.
 
 > **@code**
-```mla
+```rust
 trait Summary {
     fn score(self: Self) -> i32;
 }
@@ -1718,7 +1721,7 @@ fn main() -> i32 {
 > work whether the [`use`](Language-Syntax) import is present or not.
 
 > **@code**
-```mla
+```rust
 mod lib::summary;
 use lib::summary::Post;
 use lib::summary::Holder;
@@ -1764,7 +1767,7 @@ fn main() -> i32 {
 > high-level operations as defaults.
 
 > **@code**
-```mla
+```rust
 trait Greeter {
     fn name(self: Self) -> str8;
 
@@ -1818,7 +1821,7 @@ impl Greeter for Robot {
 > ```
 
 > **@code**
-```mla
+```rust
 trait Display {
     fn show(self: Self) -> str8;
 }
@@ -1866,7 +1869,7 @@ impl Loud for Word {
 > ```
 
 > **@code**
-```mla
+```rust
 trait A { fn a(self: Self) -> i32; }
 trait B { fn b(self: Self) -> i32; }
 
@@ -1911,7 +1914,7 @@ Mlang currently supports these Rust-like attributes:
 
 ### `#[derive(Debug)]`
 
-```mla
+```rust
 #[derive(Debug)]
 struct Point {
     var x: i32;
@@ -1931,7 +1934,7 @@ fn main() -> i32 {
 
 ### `#[derive(Json)]`
 
-```mla
+```rust
 #[derive(Json)]
 struct Base {
     @property(hidden) var secret: i32;
@@ -1968,7 +1971,7 @@ described in a sibling `@property` metadata tree in the emitted JSON.
 ### `#[test]`
 Test functions should take no parameters and return [`void`](Quick-Guide#types) or [`i32`](Quick-Guide#types):
 
-```mla
+```rust
 #[test]
 fn test_addition() -> i32 {
     let x: i32 = 2 + 2;
@@ -2588,7 +2591,7 @@ Workspace example:
 
 Inline asm can be pinned to a target architecture directly in source:
 
-```mla
+```rust
 let sum: i64 = asm aarch64(i64, "add $0, $1, $2", base, delta);
 asm volatile aarch64(void, "yield");
 ```

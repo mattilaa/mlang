@@ -23,7 +23,7 @@ What it enables:
 
 Example:
 
-```mla
+```rust
 #[derive(Debug)]
 struct Point {
     var x: i32;
@@ -59,7 +59,7 @@ Current `from_json(...)` field support:
 
 Example:
 
-```mla
+```rust
 #[derive(Json)]
 struct Base {
     @property(hidden) var secret: i32;
@@ -178,7 +178,7 @@ Each test is reported as `suite.case`:
 
 Example:
 
-```mla
+```rust
 #[test]
 fn test_addition() -> i32 {
     let x: i32 = 2 + 2;
@@ -191,7 +191,7 @@ fn test_addition() -> i32 {
 
 Benchmark example:
 
-```mla
+```rust
 mod std::bench;
 
 #[test]
@@ -225,7 +225,7 @@ Rules for `#[test]` methods inside a `#[fixture] impl`:
 
 Example:
 
-```mla
+```rust
 mod std::testing;
 use std::testing::*;
 
@@ -278,7 +278,7 @@ never be inlined (maps to LLVM `NoInline`).
 
 Example:
 
-```mla
+```rust
 #[inline]
 fn add(a: i32, b: i32) -> i32 {
     return a + b;
@@ -306,7 +306,7 @@ Typical use case:
 
 Example:
 
-```mla
+```rust
 #[x86-64]
 fn arch_sum(lhs: i64, rhs: i64) -> i64 {
     return asm x64(i64, "movq $1, $0\naddq $2, $0", lhs, rhs);
@@ -320,7 +320,7 @@ compiling/running on an AArch64 target/host.
 
 Example:
 
-```mla
+```rust
 #[aarch64]
 fn arch_sum(lhs: i64, rhs: i64) -> i64 {
     return asm aarch64(i64, "add $0, $1, $2", lhs, rhs);
@@ -349,7 +349,7 @@ Supported region tags:
 
 Example:
 
-```mla
+```rust
 [windows]
 fn platform_name() -> str8 {
     return "windows";
@@ -379,7 +379,7 @@ Applies to struct fields and synthesizes accessor methods for the field:
 
 Basic example:
 
-```mla
+```rust
 struct Device {
     @property var value: i32;
 };
@@ -410,7 +410,7 @@ Supported options:
 
 Example with `hidden`:
 
-```mla
+```rust
 struct SecretBox {
     @property(hidden) var code: i32;
 
@@ -428,7 +428,7 @@ fn main() -> i32 {
 
 Example with `protected` across a derive chain:
 
-```mla
+```rust
 struct Base {
     @property(protected) var value: i32;
 };

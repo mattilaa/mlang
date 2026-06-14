@@ -84,7 +84,7 @@ entry = "src/main.mla"
 
 Generated entry source:
 
-```mla
+```rust
 fn main() {
     println!("app subproject scaffold ready");
 }

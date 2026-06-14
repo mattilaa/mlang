@@ -11,7 +11,7 @@ For the full reference, see:
 
 ## Hello World
 
-```mla
+```rust
 fn main() -> i32 {
     println!("hello");
     return 0;
@@ -24,7 +24,7 @@ Notes:
 
 ## Variables
 
-```mla
+```rust
 fn main() -> i32 {
     let name: str8 = "mlang";
     var count: i32 = 3;
@@ -39,7 +39,7 @@ fn main() -> i32 {
 
 ## Common Types
 
-```mla
+```rust
 let n: i32 = 42;
 let ok: bool = true;
 let ch: bit = 1;
@@ -61,7 +61,7 @@ Common builtin/container types:
 
 ## Control Flow
 
-```mla
+```rust
 if count > 10 {
     println!("large");
 } else if count > 0 {
@@ -71,7 +71,7 @@ if count > 10 {
 }
 ```
 
-```mla
+```rust
 switch count {
 case 0: {
     println!("zero");
@@ -87,7 +87,7 @@ default: {
 
 ## Functions
 
-```mla
+```rust
 fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
@@ -98,7 +98,7 @@ cases. See [Language Syntax](Language-Syntax).
 
 ## Structs and Enums
 
-```mla
+```rust
 struct Point {
     var x: i32;
     var y: i32;
@@ -111,14 +111,14 @@ enum Color {
 }
 ```
 
-```mla
+```rust
 let p = Point { x: 10, y: 20 };
 println!("{} {}", p.x, p.y);
 ```
 
 ## Results and Match
 
-```mla
+```rust
 fn divide(a: i32, b: i32) -> Result<i32, str8> {
     if b == 0 {
         return Err("divide by zero");
@@ -141,7 +141,7 @@ fn main() -> i32 {
 
 ## Exceptions
 
-```mla
+```rust
 mod std::exceptions;
 
 fn run() {
@@ -160,7 +160,7 @@ fn main() -> i32 {
 
 ## C Interop
 
-```mla
+```rust
 extern fn puts(text: str8) -> i32;
 
 fn main() -> i32 {
@@ -173,7 +173,7 @@ Use `extern fn` when calling C APIs or wrapped native libraries.
 
 ## Sizes and Static Assertions
 
-```mla
+```rust
 let values: Span<i32> = [1, 2, 3];
 static_assert!(sizeof(values) == sizeof(list<i32>));
 println!("size={}", sizeof(values));
@@ -183,7 +183,7 @@ println!("size={}", sizeof(values));
 
 Mark functions with `#[test]` and run with `mlang --tests`:
 
-```mla
+```rust
 mod std::testing;
 use std::testing::*;
 
@@ -202,7 +202,7 @@ mlang --tests tests/ --filter "addition"  # filter by name
 For tests that need shared setup, use a `#[fixture]` impl. Each `#[test]`
 method runs against a fresh, zero-initialized instance:
 
-```mla
+```rust
 struct DbFixture { var conn: i64; };
 
 #[fixture]

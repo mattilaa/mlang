@@ -10,7 +10,7 @@ the compiler.
 MLang supports explicit trait-object types for runtime dispatch at function
 boundaries:
 
-```mla
+```rust
 trait Summary {
     fn score(self: Self) -> i32;
 }
@@ -28,7 +28,7 @@ impl Summary for Post {
 
 Concrete values can be passed to functions expecting `dyn Trait`:
 
-```mla
+```rust
 pub fn show_score(item: dyn Summary) -> i32 {
     return item.score();
 }
@@ -38,7 +38,7 @@ Concrete values can also be returned through a dyn return type. The compiler
 creates the trait-object pair and stores a durable copy of the concrete value
 behind it:
 
-```mla
+```rust
 pub fn make_summary(post: Post) -> dyn Summary {
     return post;
 }
@@ -46,7 +46,7 @@ pub fn make_summary(post: Post) -> dyn Summary {
 
 Existing dyn values can be passed through wrappers without losing dispatch:
 
-```mla
+```rust
 pub fn pass_summary(item: dyn Summary) -> dyn Summary {
     return item;
 }
@@ -54,7 +54,7 @@ pub fn pass_summary(item: dyn Summary) -> dyn Summary {
 
 Callers may use a fully-qualified trait path when crossing module boundaries:
 
-```mla
+```rust
 mod lib::summary;
 use lib::summary::Post;
 
@@ -74,14 +74,14 @@ known and monomorphized.
 
 Global alias:
 
-```mla
+```rust
 use type Distance = f32;
 use type SomeMap<K, V> = map<K, V>;
 ```
 
 Block-scoped alias (shadows outer aliases inside the block only):
 
-```mla
+```rust
 use type Distance = f32;
 
 fn main() -> i32 {
@@ -124,7 +124,7 @@ flow and in [`static_assert!`](Language-Syntax).
 
 Example:
 
-```mla
+```rust
 static_assert!(windows!() || posix!());
 
 if windows!() {
@@ -147,7 +147,7 @@ validation on the wrong target.
 
 Example:
 
-```mla
+```rust
 #[aarch64]
 fn arch_sum(lhs: i64, rhs: i64) -> i64 {
     return asm aarch64(i64, "add $0, $1, $2", lhs, rhs);
@@ -174,7 +174,7 @@ Supported region tags:
 
 Example:
 
-```mla
+```rust
 [windows]
 fn platform_name() -> str8 {
     return "windows";
@@ -196,7 +196,7 @@ compiler, for example with duplicate definitions or target-specific asm.
 Values expose a read-only synthetic `.name` property for logging static type
 names:
 
-```mla
+```rust
 let i: i32 = 12;
 println!("{}", i.name);  // i32
 ```
@@ -214,7 +214,7 @@ A typed [`var`](Language-Syntax) declaration with no initializer is zero-initial
 
 Examples:
 
-```mla
+```rust
 var count: i32;          // 0
 var count2: i32 {};      // 0
 var ready: bool;         // false
@@ -227,7 +227,7 @@ Struct values follow the same rule: every field starts at its zero value.
 The explicit `{}` form requests zero-initialized storage in the same style as
 C++ value-initialization.
 
-```mla
+```rust
 struct PairStamp {
     var left: i64;
     var right: i64;
@@ -248,7 +248,7 @@ storage. [`let`](Language-Syntax) declarations are different: they still require
 
 The compiler warns when zero-initialization is implicit:
 
-```mla
+```rust
 var stamp: PairStamp;    // warning: implicit zero-initialization
 var copy: PairStamp {};  // no warning
 ```
@@ -261,7 +261,7 @@ MLang supports explicit compile-time evaluation with the [`cexpr`](Language-Synt
 
 Use `cexpr(expr)` when an expression must be folded during compilation:
 
-```mla
+```rust
 fn main() -> i32 {
     let mask: i64 = cexpr((1 << 5) | 3);
     return mask == 35 ? 0 : 1;
@@ -270,7 +270,7 @@ fn main() -> i32 {
 
 Functions can opt in to compile-time calls with `cexpr fn`:
 
-```mla
+```rust
 cexpr fn square(x: i64) -> i64 {
     return x * x;
 }
@@ -284,7 +284,7 @@ fn main() -> i32 {
 
 The same function may also be written with a postfix specifier:
 
-```mla
+```rust
 fn square(x: i64) cexpr -> i64 {
     return x * x;
 }
@@ -301,7 +301,7 @@ Current first-version constraints:
 
 Plain block form (preferred):
 
-```mla
+```rust
 if x == 1 {
     println!("one");
 } else if x == 2 {
@@ -314,7 +314,7 @@ if x == 1 {
 Legacy plain-colon form remains accepted, but emits a warning when no guard is
 present:
 
-```mla
+```rust
 if x == 1: { println!("one"); } // warning: plain if/else-if with ':' is discouraged
 ```
 
@@ -322,7 +322,7 @@ if x == 1: { println!("one"); } // warning: plain if/else-if with ':' is discour
 
 Guard form with explicit condition + trailing guard expression:
 
-```mla
+```rust
 if x >= 0: (x < 10 || x > 100) {
     println!("guard passed");
 }
@@ -335,7 +335,7 @@ if x >= 0: (x < 10 || x > 100) {
 
 Examples:
 
-```mla
+```rust
 if let i: i32 = some(): i >= 0 && i < 10 {
     println!("i={}", i);
 }
@@ -355,7 +355,7 @@ Complex nested boolean guards are supported in [`if`](Language-Syntax) and `else
 
 Empty blocks are valid syntax, but emit a compiler warning:
 
-```mla
+```rust
 if flag {
 }
 ```
@@ -367,7 +367,7 @@ Diagnostic:
 
 Plain form (preferred):
 
-```mla
+```rust
 while i < n {
     i += 1;
 }
@@ -375,7 +375,7 @@ while i < n {
 
 Guarded form:
 
-```mla
+```rust
 while i < n: j < i && (n == m) {
     i += 1;
 }
@@ -389,7 +389,7 @@ Notes:
 
 Enums can declare explicit integer backing storage:
 
-```mla
+```rust
 enum Status : i64 {
     Invalid = 1,
     Success = 2,
@@ -398,7 +398,7 @@ enum Status : i64 {
 
 String-backed enums are also supported with [`str8`](Quick-Guide#types):
 
-```mla
+```rust
 enum HttpMethod : str8 {
     Get = "GET",
     Post = "POST",
@@ -418,7 +418,7 @@ Compatibility and diagnostics:
 
 Hex integer literals are accepted in expressions and enum values:
 
-```mla
+```rust
 enum ErrorMask : u32 {
     None = 0x00,
     Retry = 0x10,
@@ -437,7 +437,7 @@ syntax.
 
 Example:
 
-```mla
+```rust
 enum SwitchColor {
     Red,
     Green,
@@ -505,7 +505,7 @@ as the first argument of the function on the right.
 
 Examples:
 
-```mla
+```rust
 fn add1(x: i32) -> i32 { return x + 1; }
 fn mul2(x: i32) -> i32 { return x * 2; }
 fn add(x: i32, y: i32) -> i32 { return x + y; }
@@ -534,7 +534,7 @@ code without introducing a separate runtime abstraction.
 
 Example:
 
-```mla
+```rust
 fn choose(flag: bool) -> Option<i32> {
     if flag {
         return Some<i32>(42);
@@ -572,7 +572,7 @@ See also:
 
 Example:
 
-```mla
+```rust
 mod std::exceptions;
 use std::exceptions::*;
 
@@ -622,7 +622,7 @@ Supported source forms:
 
 Examples:
 
-```mla
+```rust
 fn main() -> i32 {
     let value: i64 = 41;
     let one: i64 = 1;
@@ -635,7 +635,7 @@ fn main() -> i32 {
 }
 ```
 
-```mla
+```rust
 fn main() -> i32 {
     let base: i64 = 40;
     let delta: i64 = 2;
@@ -673,13 +673,13 @@ Reference examples in the repository:
 
 Both forms are supported:
 
-```mla
+```rust
 fn main() {
     println!("hello");
 }
 ```
 
-```mla
+```rust
 fn main() -> i32 {
     return 0;
 }
@@ -693,7 +693,7 @@ is provided.
 Non-extern functions can omit `-> Type`, and the compiler infers the return
 type from [`return`](Language-Syntax) expressions.
 
-```mla
+```rust
 fn some() {
     return 1;         // inferred as i32
 }
@@ -712,7 +712,7 @@ an explicit return type.
 
 Inline typed lambda (captures outer variables, callable via bound name):
 
-```mla
+```rust
 var total: i32 = 0;
 var add = |x: i32| {
     total += x;
@@ -722,7 +722,7 @@ add(5);
 
 Fold expressions over list values (C++-style shape):
 
-```mla
+```rust
 let xs: list<i32> = [1, 2, 3];
 let sum: i32 = (... + xs);   // left fold
 let mul: i32 = (xs * ...);   // right fold
@@ -755,7 +755,7 @@ These demonstrate:
 
 MLang provides a builtin [`bit`](Quick-Guide#types) type for logical `0` / `1` values:
 
-```mla
+```rust
 var state: bit = 0;
 state = 1;
 state = bit(0);
@@ -767,7 +767,7 @@ readable aliases you can wrap the two values in helpers such as
 
 The builtin `sizeof(...)` returns the ABI byte size as [`i64`](Quick-Guide#types):
 
-```mla
+```rust
 println!("bit={} bool={} header={}",
          sizeof(bit), sizeof(bool), sizeof(list<bool>));
 ```
@@ -779,7 +779,7 @@ Both forms are supported:
 When the size can be resolved at compile time, `sizeof(...)` can also be used
 inside [`static_assert!`](Language-Syntax):
 
-```mla
+```rust
 let view: Span<i32> = [1, 2, 3];
 static_assert!(sizeof(view) == sizeof(list<i32>));
 ```
@@ -811,7 +811,7 @@ builder are real types with real fields.
 
 All three are chained together with `|`:
 
-```mla
+```rust
 add<Outer>()
     | ClauseA{valueA}
     | add<Inner>(ClauseB{valueB})
@@ -822,7 +822,7 @@ add<Outer>()
 **Option A — full [`struct`](Quick-Guide#types) declaration** (explicit, works for any number of
 fields):
 
-```mla
+```rust
 struct Method   { var value: str8; };
 struct Url      { var value: str8; };
 struct Priority { var value: i32;  };
@@ -831,7 +831,7 @@ struct Priority { var value: i32;  };
 **Option B — `field` keyword** (compact, desugars to a single-field struct
 named `value`):
 
-```mla
+```rust
 field Method:   str8;
 field Url:      str8;
 field Priority: i32;
@@ -858,7 +858,7 @@ is accepted), and string literals widen across string encodings.
 
 ### Worked example — full [`struct`](Quick-Guide#types) form
 
-```mla
+```rust
 struct Method   { var value: str8; };
 struct Url      { var value: str8; };
 struct Name     { var value: str8; };
@@ -894,7 +894,7 @@ for the complete runnable program.
 
 ### Worked example — `field` form
 
-```mla
+```rust
 field Id:       i32;
 field Customer: str8;
 field Notes:    str8;
@@ -938,13 +938,13 @@ methods and optionally constrain direct backing-field access.
 
 Examples:
 
-```mla
+```rust
 struct Device {
     @property(hidden) var value: i32;
 };
 ```
 
-```mla
+```rust
 struct Base {
     @property(protected) var value: i32;
 };
