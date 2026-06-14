@@ -848,6 +848,10 @@ git diff -- docs/wiki
 The script refreshes the generated files in place. Commit the source
 documentation changes and the refreshed `docs/wiki` files together.
 
+During generation, bare fenced code blocks get inferred language tags where
+possible, and inline MLang keywords, builtin types, and `std::...` references
+are linked to the language guide or stdlib reference in the wiki output.
+
 To publish those files to GitHub Wiki later, clone the wiki repository and use
 it as the output directory:
 
