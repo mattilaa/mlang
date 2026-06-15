@@ -1,15 +1,16 @@
 /// \file type_alias_demo.mla
 /// @ingroup examples
-/// \brief `use type` type-alias declaration demo.
+/// \brief `alias` / `use type` type-alias declaration demo.
 ///
 /// Demonstrates type aliases:
-/// - concrete alias: use type Distance = f32;
-/// - implicit generic alias: use type SomeMap = map<K, V>;
-/// - explicit generic alias: use type VecAlias<T> = list<T>;
+/// - concrete alias: alias Distance = f32;
+/// - implicit generic alias: alias SomeMap = map<K, V>;
+/// - explicit generic alias: alias VecAlias<T> = list<T>;
+/// - `use type Name = Type;` remains valid and equivalent.
 
-use type Distance = f32;
-use type SomeMap = map<K, V>;
-use type VecAlias<T> = list<T>;
+alias Distance = f32;
+alias SomeMap = map<K, V>;
+alias VecAlias<T> = list<T>;
 
 fn average(a: Distance, b: Distance) -> Distance {
     return (a + b) / 2.0f;
@@ -27,7 +28,7 @@ fn main() -> i32 {
     println!("ids.len={}", ids.len());
 
     {
-        use type Distance = i32;
+        alias Distance = i32;
         let grid: Distance = 42;
         println!("grid={}", grid);
     }

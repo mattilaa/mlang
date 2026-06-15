@@ -1563,6 +1563,7 @@ static void addSemanticSymbol(DocumentSemantic& out,
                 break;
             case 5:
                 kind_match =
+                    line.find("alias " + s.name) != std::string_view::npos ||
                     line.find("use type " + s.name) != std::string_view::npos ||
                     line.find("type " + s.name) != std::string_view::npos;
                 break;
@@ -4201,8 +4202,8 @@ builtinMemberNames(std::string_view owner)
 static bool isKeywordToken(std::string_view token)
 {
     static constexpr std::string_view kKeywords[] = {
-        "fn",  "cexpr", "let",  "var",   "struct", "mod",
-        "use", "if",    "else", "while", "for",    "return",
+        "fn",     "cexpr", "let",   "var", "struct", "mod", "use",
+        "alias",  "if",    "else",  "while", "for", "return",
     };
     for(const auto kw : kKeywords)
     {
@@ -4307,8 +4308,8 @@ computeSemanticCompletions(const DocumentSemantic& current,
                            int line, int column)
 {
     static constexpr std::string_view kKeywords[] = {
-        "fn",  "cexpr", "let",  "var",   "struct", "mod",
-        "use", "if",    "else", "while", "for",    "return",
+        "fn",     "cexpr", "let",   "var", "struct", "mod", "use",
+        "alias",  "if",    "else",  "while", "for", "return",
     };
 
     const std::optional<size_t> offset =

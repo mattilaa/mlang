@@ -169,22 +169,23 @@ for this builtin type, not a distinct type declaration.
 - `m.entries()` iterator for `for entry in m.entries() { ... }`
   where `entry` is a tuple `(K, V)` and can be accessed via `.0` / `.1`
 
-## Type Aliases (`use type`)
+## Type Aliases (`alias` / `use type`)
 
-`use type` lets you introduce readable names for builtin or generic types and the alias respects lexical scope.
+`alias` lets you introduce readable names for builtin or generic types and the alias respects lexical scope.
 These declarations can appear at the top level **or** inside blocks—the alias disappears once the block exits.
-Aliases also support generics, so `use type SomeMap = map<K, V>;` is equivalent to the C++ style `using`.
+Aliases also support generics, so `alias SomeMap<K, V> = map<K, V>;` is equivalent to the C++ style `using`.
+The older `use type SomeMap<K, V> = map<K, V>;` spelling remains valid and equivalent; prefer `alias` for ordinary type alias declarations.
 
 Example:
 
 ```mla
-use type Distance = f32;
-use type SomeMap = map<str8, i32>;
+alias Distance = f32;
+alias SomeMap = map<str8, i32>;
 
 let scores: SomeMap = {"Alice": 95, "Bob": 87};
 
 {
-    use type Distance = i32;
+    alias Distance = i32;
     let grid: Distance = 42;
     println!("grid={}", grid);
 }

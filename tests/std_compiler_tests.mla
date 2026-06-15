@@ -323,7 +323,7 @@ fn test_compiler_definition_type_alias() -> i32 {
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://definition_type_alias.mla";
-    let src: str8 = "use type SomeMap = map<str8, i32>;\nfn main() -> i32 {\n  let scores: SomeMap = {\"Alice\": 95, \"Bob\": 87};\n  return 0;\n}";
+    let src: str8 = "alias SomeMap = map<str8, i32>;\nfn main() -> i32 {\n  let scores: SomeMap = {\"Alice\": 95, \"Bob\": 87};\n  return 0;\n}";
 
     let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
@@ -348,7 +348,7 @@ fn test_compiler_definition_scoped_type_alias_shadowing() -> i32 {
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://definition_scoped_type_alias_shadowing.mla";
-    let src: str8 = "use type Distance = f32;\nfn main() -> i32 {\n  {\n    use type Distance = i32;\n    let grid: Distance = 42;\n    println!(\"grid={}\", grid);\n  }\n  return 0;\n}";
+    let src: str8 = "alias Distance = f32;\nfn main() -> i32 {\n  {\n    alias Distance = i32;\n    let grid: Distance = 42;\n    println!(\"grid={}\", grid);\n  }\n  return 0;\n}";
 
     let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
@@ -1145,7 +1145,7 @@ fn test_compiler_generic_impl_trait_bound_syntax_allowed() -> i32 {
 fn test_compiler_type_alias_trait_bound_syntax_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_type_alias_trait_bound").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_type_alias_trait_bound/main.mla";
-    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\nuse type Box<T: Summary> = T;\nfn main() -> i32 { return 0; }\n";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\nalias Box<T: Summary> = T;\nfn main() -> i32 { return 0; }\n";
     let wr: Result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
@@ -1180,7 +1180,7 @@ fn test_compiler_generic_struct_trait_bound_concrete_use_rejected() -> i32 {
 fn test_compiler_type_alias_trait_bound_concrete_use_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_type_alias_trait_bound_ok").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_type_alias_trait_bound_ok/main.mla";
-    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return \"ok\";\n  }\n}\nuse type Box<T: Summary> = T;\nfn main() -> i32 {\n  let p: Box<Post> = Post { id: 1 };\n  return p.id;\n}\n";
+    let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return \"ok\";\n  }\n}\nalias Box<T: Summary> = T;\nfn main() -> i32 {\n  let p: Box<Post> = Post { id: 1 };\n  return p.id;\n}\n";
     let wr: Result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);

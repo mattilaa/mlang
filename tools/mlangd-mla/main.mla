@@ -1868,6 +1868,7 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "enum") == 1 { return 14; }
     if eq(label, "mod") == 1 { return 14; }
     if eq(label, "use") == 1 { return 14; }
+    if eq(label, "alias") == 1 { return 14; }
     if eq(label, "match") == 1 { return 14; }
     if eq(label, "impl") == 1 { return 14; }
     if eq(label, "extern") == 1 { return 14; }
@@ -1924,6 +1925,7 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "enum") == 1 { return "keyword: enum type declaration"; }
     if eq(label, "mod") == 1 { return "keyword: module declaration"; }
     if eq(label, "use") == 1 { return "keyword: import symbol/module"; }
+    if eq(label, "alias") == 1 { return "keyword: type alias declaration"; }
     if eq(label, "match") == 1 { return "keyword: pattern matching"; }
     if eq(label, "impl") == 1 { return "keyword: implementation block"; }
     if eq(label, "extern") == 1 { return "keyword: external symbol declaration"; }
@@ -2212,6 +2214,9 @@ fn completion_documentation(label: str8) -> str8 {
     }
     if eq(label, "var") == 1 {
         return "Introduce a mutable local binding.";
+    }
+    if eq(label, "alias") == 1 {
+        return "Declare a type alias: alias Name = Type;. The older use type Name = Type; spelling remains valid and equivalent.";
     }
     if eq(label, "for") == 1 {
         return "Loop construct, commonly used with ranges: for i in 0..n { ... }";

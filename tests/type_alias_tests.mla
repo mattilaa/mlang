@@ -1,9 +1,10 @@
 mod std::testing;
 use type Distance = f32;
 use type SomeMap = map<K, V>;
-use type VecAlias<T> = list<T>;
-use type Name = str8;
+alias VecAlias<T> = list<T>;
+alias Name = str8;
 use type NameList = list<Name>;
+alias ExitCode = i32;
 use std::testing::verify;
 
 fn midpoint(a: Distance, b: Distance) -> Distance {
@@ -55,12 +56,22 @@ fn test_alias_of_alias() {
     verify(test_alias_of_alias_impl() == 0);
 }
 
+fn test_alias_keyword_top_level_impl() -> i32 {
+    let ok: ExitCode = 0;
+    return ok;
+}
+
+#[test]
+fn test_alias_keyword_top_level() {
+    verify(test_alias_keyword_top_level_impl() == 0);
+}
+
 fn test_scoped_type_alias_shadowing_impl() -> i32 {
     let outside: Distance = 3.5f;
     if outside < 3.4f: { return 1; }
 
     {
-        use type Distance = i32;
+        alias Distance = i32;
         let inside: Distance = 7;
         if inside != 7: { return 1; }
     }

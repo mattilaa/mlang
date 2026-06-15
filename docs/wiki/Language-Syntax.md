@@ -70,23 +70,23 @@ Use `dyn Trait` when the call boundary should use runtime dispatch. Use
 generic bounds such as `T: Trait` when the type should remain statically
 known and monomorphized.
 
-## Type Aliases (`use type`)
+## Type Aliases ([`alias`](Language-Syntax) / `use type`)
 
 Global alias:
 
 ```rust
-use type Distance = f32;
-use type SomeMap<K, V> = map<K, V>;
+alias Distance = f32;
+alias SomeMap<K, V> = map<K, V>;
 ```
 
 Block-scoped alias (shadows outer aliases inside the block only):
 
 ```rust
-use type Distance = f32;
+alias Distance = f32;
 
 fn main() -> i32 {
     {
-        use type Distance = i32;
+        alias Distance = i32;
         let grid: Distance = 42;
         println!("grid={}", grid);
     }
@@ -97,7 +97,9 @@ fn main() -> i32 {
 ```
 
 Notes:
-- Aliases can be generic (`use type Name<T> = ...;`).
+- Aliases can be generic (`alias Name<T> = ...;`).
+- `use type Name = Type;` remains valid and equivalent. Prefer [`alias`](Language-Syntax) for
+  ordinary type alias declarations; keep [`use`](Language-Syntax) for imports.
 - Alias overlap in the same scope is rejected with a location-based diagnostic
   (`file.mla:row:column`), pointing to both current and previous declarations.
 - Aliases are removed from scope when leaving the defining block.

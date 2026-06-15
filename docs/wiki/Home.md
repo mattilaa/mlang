@@ -25,7 +25,7 @@ where you want:
 - modern language features without giving up low-level control
 
 Examples of supported language/runtime features include:
-- structs, enums, generics, modules, and `use type` aliases
+- structs, enums, generics, modules, and [`alias`](Language-Syntax) / `use type` aliases
 - [`Option<T>`](Quick-Guide#types), [`Result<T, E>`](Quick-Guide#types), [`match`](Language-Syntax), and functional pipe `|>`
 - exceptions with `throw` and `try/catch`
 - RAII-style scope cleanup
@@ -127,7 +127,7 @@ Use this section as a map into the existing documentation.
 
 - [Language Syntax](Language-Syntax)
   Covers:
-  - `use type`
+  - [`alias`](Language-Syntax) / `use type`
   - [`if`](Language-Syntax), [`while`](Language-Syntax), guarded forms
   - [`switch`](Language-Syntax) / [`case`](Language-Syntax)
   - exceptions

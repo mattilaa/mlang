@@ -199,6 +199,7 @@ static int is_try_question_context()
 "mod"           { return MOD; }
 "use"           { return USE; }
 "as"            { return AS; }
+"alias"         { return ALIAS; }
 "type"          { return TYPE_KW; }
 "object"        { return OBJECT; }
 "let"           { return LET; }

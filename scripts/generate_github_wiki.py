@@ -83,6 +83,7 @@ LANGUAGE_TOKENS = {
     "use",
     "extern",
     "cexpr",
+    "alias",
     "static_assert!",
     "sizeof",
     "bit",

@@ -1241,7 +1241,7 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/esc_widgets/tracker_ui_demo.mla`
 - Terminal capabilities + termios helpers (`std::term`):
   `examples/std_term_demo.mla`
-- Type aliases (`use type Distance = f32;`, generic aliases):
+- Type aliases (`alias Distance = f32;` and equivalent `use type Distance = f32;`, generic aliases):
   `examples/type_alias_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):
   `examples/lambda_fold_demo.mla`
@@ -1875,7 +1875,7 @@ pub struct X { var v: i32; };
 impl A for X { fn a(self: X) -> i32 { return self.v; } }
 impl B for X { fn b(self: X) -> i32 { return self.v; } }
 
-// Bound chain accepted on struct, impl, and `use type` aliases.
+// Bound chain accepted on struct, impl, and `alias` / `use type` aliases.
 pub struct Box<T: A + B> { var inner: T; };
 impl<T: A + B> Box {
     pub fn new(inner: T) -> Box<T> {

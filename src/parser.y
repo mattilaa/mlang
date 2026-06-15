@@ -1599,7 +1599,7 @@ enum UpdatePosition
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR OBJECT
 %token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
-%token MOD USE AS TYPE_KW COLONCOLON
+%token MOD USE AS ALIAS TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT DEBUGJSONPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
 %token WINDOWS_MACRO POSIX_MACRO LINUX_MACRO MACOS_MACRO
 %token X64_MACRO AARCH64_MACRO
@@ -1737,6 +1737,10 @@ type_alias_def
         { auto* node = mla_ast_type_alias($3, NULL, $5); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
     | USE TYPE_KW IDENTIFIER GENERIC_LT type_param_list GT ASSIGN type SEMICOLON
         { auto* node = mla_ast_type_alias($3, $5, $8); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
+    | ALIAS IDENTIFIER ASSIGN type SEMICOLON
+        { auto* node = mla_ast_type_alias($2, NULL, $4); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
+    | ALIAS IDENTIFIER GENERIC_LT type_param_list GT ASSIGN type SEMICOLON
+        { auto* node = mla_ast_type_alias($2, $4, $7); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
     ;
 
 field_def
