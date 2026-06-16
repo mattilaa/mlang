@@ -21,6 +21,7 @@ def main() -> int:
         file_path = root / "semantic_case.mla"
         uri = to_uri(file_path)
         text = (
+            "alias Distance = f32;\n"
             "fn sem_fn(x: i32) -> i32 { return x; }\n"
         )
         file_path.write_text(text)
@@ -67,6 +68,7 @@ def main() -> int:
             token_types = [data[i + 3] for i in range(0, len(data), 5)]
             token_mods = [data[i + 4] for i in range(0, len(data), 5)]
             assert 2 in token_types, f"expected function token type (2): {token_types!r}"
+            assert 5 in token_types, f"expected type token type for alias (5): {token_types!r}"
             assert any(m > 0 for m in token_mods), f"expected non-zero token modifiers: {token_mods!r}"
         finally:
             client.close()

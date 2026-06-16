@@ -3616,7 +3616,22 @@ fn handle_workspace_symbol(payload: str8) -> str8 {
     return out;
 }
 
-fn semantic_token_type(sig: str8) -> i32 {
+fn semantic_token_type(sig: str8, kind: i32) -> i32 {
+    if kind == 1 {
+        return 2; // function
+    }
+    if kind == 3 {
+        return 5; // type
+    }
+    if kind == 4 {
+        return 0; // keyword/module
+    }
+    if kind == 5 {
+        return 5; // type alias
+    }
+    if kind == 2 {
+        return 4; // variable
+    }
     let kind_lsp: i32 = symbol_kind_lsp(sig);
     if kind_lsp == 12 {
         return 2; // function
@@ -3705,7 +3720,7 @@ fn handle_semantic_tokens_full(payload: str8) -> str8 {
             ds = col0 - prev_col;
         }
         let tlen: i32 = len(sym.name);
-        let ttype: i32 = semantic_token_type(sym.signature);
+        let ttype: i32 = semantic_token_type(sym.signature, sym.kind);
         let tmods: i32 = semantic_token_modifiers(sym.signature);
         let chunk: str8 = format!("{},{},{},{},{}", dl, ds, tlen, ttype, tmods);
         if j > 0 {
