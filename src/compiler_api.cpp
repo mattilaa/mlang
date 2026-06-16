@@ -322,6 +322,40 @@ static std::vector<std::string_view> splitLines(std::string_view text)
 
 static std::string trimTextWs(std::string_view s);
 
+static std::string stripDoxygenCommand(std::string body)
+{
+    body = trimTextWs(body);
+    static constexpr std::string_view kPrefixes[] = {"@brief", "\\brief"};
+    for(std::string_view prefix : kPrefixes)
+    {
+        if(startsWith(body, prefix))
+        {
+            body = trimTextWs(std::string_view(body).substr(prefix.size()));
+            break;
+        }
+    }
+    return body;
+}
+
+static std::string cleanBlockDocLine(std::string line)
+{
+    line = trimTextWs(line);
+    if(startsWith(line, "/**") || startsWith(line, "/*!"))
+    {
+        line = trimTextWs(std::string_view(line).substr(3));
+    }
+    const size_t end = line.find("*/");
+    if(end != std::string::npos)
+    {
+        line = trimTextWs(std::string_view(line).substr(0, end));
+    }
+    if(startsWith(line, "*"))
+    {
+        line = trimTextWs(std::string_view(line).substr(1));
+    }
+    return stripDoxygenCommand(std::move(line));
+}
+
 static std::string docCommentAboveLine(std::string_view text, int line_no)
 {
     if(line_no <= 1 || text.empty())
@@ -341,9 +375,10 @@ static std::string docCommentAboveLine(std::string_view text, int line_no)
     while(idx >= 0)
     {
         const std::string trimmed = trimTextWs(lines[static_cast<size_t>(idx)]);
-        if(startsWith(trimmed, "///"))
+        if(startsWith(trimmed, "///") || startsWith(trimmed, "//!"))
         {
-            std::string body = trimTextWs(std::string_view(trimmed).substr(3));
+            std::string body =
+                stripDoxygenCommand(std::string(std::string_view(trimmed).substr(3)));
             if(found)
             {
                 out = body + "\n" + out;
@@ -355,6 +390,41 @@ static std::string docCommentAboveLine(std::string_view text, int line_no)
             found = true;
             --idx;
             continue;
+        }
+        if(trimmed.find("*/") != std::string::npos)
+        {
+            std::string block;
+            bool found_block_start = false;
+            int bidx = idx;
+            while(bidx >= 0)
+            {
+                const std::string block_line =
+                    trimTextWs(lines[static_cast<size_t>(bidx)]);
+                const bool block_start =
+                    startsWith(block_line, "/**") || startsWith(block_line, "/*!");
+                std::string body = cleanBlockDocLine(block_line);
+                if(!body.empty())
+                {
+                    if(block.empty())
+                    {
+                        block = std::move(body);
+                    }
+                    else
+                    {
+                        block = body + "\n" + block;
+                    }
+                }
+                if(block_start)
+                {
+                    found_block_start = true;
+                    break;
+                }
+                --bidx;
+            }
+            if(found_block_start)
+            {
+                return block;
+            }
         }
         if(found)
         {

@@ -43,6 +43,12 @@ def main() -> int:
         root = Path(td)
         doc = root / "completion_symbol_docs.mla"
         text = (
+            "/**\n"
+            " * @brief Distance in meters.\n"
+            " * Used for physics and map measurements.\n"
+            " */\n"
+            "alias Distance = f32;\n"
+            "\n"
             "struct Session {\n"
             "  var id: i32;\n"
             "};\n"
@@ -50,6 +56,7 @@ def main() -> int:
             "fn run(s: Session) -> i32 {\n"
             "  let Sess: Session = s;\n"
             "  let x: Session = Ses;\n"
+            "  let d: Distance = Dis;\n"
             "  return 0;\n"
             "}\n"
         )
@@ -92,10 +99,36 @@ def main() -> int:
             assert sess_detail != "symbol", (
                 f"Sess detail must not be generic 'symbol': {sess_item!r}"
             )
+
+            alias_line, alias_char = position_of(text, "Dis;")
+            alias_char += len("Dis")
+            alias_res = client.request(
+                "textDocument/completion",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": alias_line, "character": alias_char},
+                },
+            )
+            distance_item = find_item(alias_res, "Distance")
+            distance_detail = distance_item.get("detail", "")
+            assert isinstance(distance_detail, str) and "f32" in distance_detail, (
+                f"Distance alias completion should include type detail: {distance_item!r}"
+            )
+            distance_doc = distance_item.get("documentation", {})
+            assert isinstance(distance_doc, dict), (
+                f"Distance completion should include documentation object: {distance_item!r}"
+            )
+            distance_doc_value = distance_doc.get("value", "")
+            assert "Distance in meters." in distance_doc_value, (
+                f"Distance documentation should include Doxygen brief text: {distance_item!r}"
+            )
+            assert "Used for physics" in distance_doc_value, (
+                f"Distance documentation should include full Doxygen body: {distance_item!r}"
+            )
         finally:
             client.close()
 
-    print("PASS: mlangd-mla completion transcript includes symbol details")
+    print("PASS: mlangd-mla completion transcript includes symbol details and alias docs")
     return 0
 
 

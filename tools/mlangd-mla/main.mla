@@ -2270,9 +2270,15 @@ fn doc_comment_above_symbol(text: str8, line1: i32) -> str8 {
     while y >= 0 {
         let raw: str8 = line_text_at(text, y);
         let line: str8 = trim_ascii_ws(raw);
-        if starts_with(line, "///") == 1 {
+        if starts_with(line, "///") == 1 || starts_with(line, "//!") == 1 {
             var body: str8 = sub(line, 3, len(line) - 3);
             body = trim_ascii_ws(body);
+            if starts_with(body, "@brief") == 1 {
+                body = trim_ascii_ws(sub(body, 6, len(body) - 6));
+            }
+            if starts_with(body, "\\brief") == 1 {
+                body = trim_ascii_ws(sub(body, 6, len(body) - 6));
+            }
             if found == 0 {
                 out = body;
             } else {
@@ -2281,6 +2287,47 @@ fn doc_comment_above_symbol(text: str8, line1: i32) -> str8 {
             found = 1;
             y = y - 1;
             continue;
+        }
+        if contains(line, "*/") == 1 {
+            var block: str8 = String::new();
+            var found_block_start: i32 = 0;
+            var by: i64 = y;
+            while by >= 0 {
+                let block_raw: str8 = line_text_at(text, by);
+                var block_line: str8 = trim_ascii_ws(block_raw);
+                let is_start: i32 = starts_with(block_line, "/**") == 1 || starts_with(block_line, "/*!") == 1 ? 1 : 0;
+                if is_start == 1 {
+                    block_line = trim_ascii_ws(sub(block_line, 3, len(block_line) - 3));
+                }
+                let end_idx: i64 = find(block_line, "*/");
+                if end_idx >= 0 {
+                    block_line = trim_ascii_ws(sub(block_line, 0, end_idx));
+                }
+                if starts_with(block_line, "*") == 1 {
+                    block_line = trim_ascii_ws(sub(block_line, 1, len(block_line) - 1));
+                }
+                if starts_with(block_line, "@brief") == 1 {
+                    block_line = trim_ascii_ws(sub(block_line, 6, len(block_line) - 6));
+                }
+                if starts_with(block_line, "\\brief") == 1 {
+                    block_line = trim_ascii_ws(sub(block_line, 6, len(block_line) - 6));
+                }
+                if len(block_line) > 0 {
+                    if len(block) == 0 {
+                        block = block_line;
+                    } else {
+                        block = format!("{}\n{}", block_line, block);
+                    }
+                }
+                if is_start == 1 {
+                    found_block_start = 1;
+                    break;
+                }
+                by = by - 1;
+            }
+            if found_block_start == 1 {
+                return block;
+            }
         }
         if found == 1 {
             break;
@@ -2306,6 +2353,10 @@ fn declaration_doc_in_text(text: str8, label: str8) -> str8 {
         if contains(line, format!("enum {}", label)) == 1 {            return doc_comment_above_symbol(text, i + 1);
         }
         if contains(line, format!("fn {}", label)) == 1 {            return doc_comment_above_symbol(text, i + 1);
+        }
+        if contains(line, format!("alias {}", label)) == 1 {            return doc_comment_above_symbol(text, i + 1);
+        }
+        if contains(line, format!("use type {}", label)) == 1 {            return doc_comment_above_symbol(text, i + 1);
         }
     }
     return String::new();
