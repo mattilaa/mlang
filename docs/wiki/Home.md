@@ -127,6 +127,7 @@ Use this section as a map into the existing documentation.
 
 - [Language Syntax](Language-Syntax)
   Covers:
+  - namespace blocks
   - [`alias`](Language-Syntax) / `use type`
   - [`if`](Language-Syntax), [`while`](Language-Syntax), guarded forms
   - [`switch`](Language-Syntax) / [`case`](Language-Syntax)

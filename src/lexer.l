@@ -197,6 +197,7 @@ static int is_try_question_context()
 "break"         { return BREAK; }
 "continue"      { return CONTINUE; }
 "mod"           { return MOD; }
+"namespace"     { return NAMESPACE; }
 "use"           { return USE; }
 "as"            { return AS; }
 "alias"         { return ALIAS; }

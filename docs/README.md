@@ -125,6 +125,7 @@ Use this section as a map into the existing documentation.
 
 - [Language Syntax](language_syntax.md)
   Covers:
+  - namespace blocks
   - `alias` / `use type`
   - `if`, `while`, guarded forms
   - `switch` / `case`

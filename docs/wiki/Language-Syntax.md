@@ -5,6 +5,39 @@
 This page documents recent language syntax/features that are now supported by
 the compiler.
 
+## Namespace Blocks
+
+MLang supports C++17-style namespace blocks for grouping declarations under a
+qualified path:
+
+```rust
+namespace geometry::units {
+    alias Distance = f32;
+
+    struct Reading {
+        let value: Distance = 0.0f;
+    };
+
+    fn average(a: Distance, b: Distance) -> Distance {
+        return (a + b) / 2.0f;
+    }
+}
+
+fn main() -> i32 {
+    let d: geometry::units::Distance = 10.0f;
+    let r: geometry::units::Reading = geometry::units::Reading {
+        value: geometry::units::average(d, 14.0f)
+    };
+    return r.value > 0.0f ? 0 : 1;
+}
+```
+
+Declarations inside the block are available by their fully qualified names, such
+as `geometry::units::Reading`. Inside the namespace block, local declarations can
+refer to each other by short name, so the `Reading.value` field above can use
+`Distance` directly. Namespace blocks currently flatten to qualified top-level
+declarations; they are for declaration ownership and naming, not separate files.
+
 ## Trait Objects (`dyn Trait`) {#trait_objects_dyn}
 
 MLang supports explicit trait-object types for runtime dispatch at function

@@ -125,14 +125,30 @@ ASTNode* create_program_impl(ASTNode* top_level_list)
 ASTNode* create_top_level_list_impl(ASTNode* item)
 {
     auto list = new TopLevelListNode();
-    list->items.push_back(item);
+    if(auto* nested = dynamic_cast<TopLevelListNode*>(item))
+    {
+        list->items.insert(list->items.end(), nested->items.begin(),
+                           nested->items.end());
+    }
+    else
+    {
+        list->items.push_back(item);
+    }
     return list;
 }
 
 ASTNode* add_to_top_level_list_impl(ASTNode* list, ASTNode* item)
 {
     auto topLevelList = static_cast<TopLevelListNode*>(list);
-    topLevelList->items.push_back(item);
+    if(auto* nested = dynamic_cast<TopLevelListNode*>(item))
+    {
+        topLevelList->items.insert(topLevelList->items.end(),
+                                   nested->items.begin(), nested->items.end());
+    }
+    else
+    {
+        topLevelList->items.push_back(item);
+    }
     return topLevelList;
 }
 

@@ -1,0 +1,31 @@
+/// \file namespace_demo.mla
+/// @ingroup examples
+/// \brief C++17-style namespace block demo.
+///
+/// Demonstrates:
+/// - nested namespace block syntax: namespace geometry::units { ... }
+/// - local type lookup inside a namespace block
+/// - qualified type names and qualified function calls outside the block
+
+namespace geometry::units {
+    alias Distance = f32;
+
+    struct Reading {
+        let value: Distance = 0.0f;
+    };
+
+    fn average(a: Distance, b: Distance) -> Distance {
+        return (a + b) / 2.0f;
+    }
+}
+
+fn main() -> i32 {
+    let start: geometry::units::Distance = 10.0f;
+    let end: geometry::units::Distance = 14.0f;
+    let reading: geometry::units::Reading = geometry::units::Reading {
+        value: geometry::units::average(start, end)
+    };
+
+    println!("average distance={}", reading.value);
+    return 0;
+}

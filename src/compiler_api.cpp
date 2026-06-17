@@ -4272,8 +4272,8 @@ builtinMemberNames(std::string_view owner)
 static bool isKeywordToken(std::string_view token)
 {
     static constexpr std::string_view kKeywords[] = {
-        "fn",     "cexpr", "let",   "var", "struct", "mod", "use",
-        "alias",  "if",    "else",  "while", "for", "return",
+        "fn",     "cexpr", "let",   "var", "struct", "mod", "namespace",
+        "use",    "alias", "if",    "else", "while",  "for", "return",
     };
     for(const auto kw : kKeywords)
     {
@@ -4378,8 +4378,8 @@ computeSemanticCompletions(const DocumentSemantic& current,
                            int line, int column)
 {
     static constexpr std::string_view kKeywords[] = {
-        "fn",     "cexpr", "let",   "var", "struct", "mod", "use",
-        "alias",  "if",    "else",  "while", "for", "return",
+        "fn",     "cexpr", "let",   "var", "struct", "mod", "namespace",
+        "use",    "alias", "if",    "else", "while",  "for", "return",
     };
 
     const std::optional<size_t> offset =

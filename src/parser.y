@@ -87,6 +87,9 @@ static std::vector<ASTNode*> g_hoistedNestedFunctions;
 static std::vector<ASTNode*> g_hoistedInlineStructs;
 static int g_anonymousObjectCounter = 0;
 static ASTNode* finalize_struct_def_ast(ASTNode* node, int line);
+static void bind_impl_self_types(ImplBlockNode* implBlock);
+static ASTNode* qualify_namespace_block(char* namespacePath,
+                                        ASTNode* topLevelList);
 
 // Registry of declared structs for builder validation. Every top-level
 // `struct` and desugared `field` definition is registered here by name so
@@ -104,6 +107,199 @@ static void register_parsed_struct_def(StructDefNode* def)
 {
     if(def && !def->name.empty())
         g_parsedStructDefs[def->name] = def;
+}
+
+static std::string qualify_name(const std::string& ns, const std::string& name)
+{
+    if(ns.empty() || name.empty() || name.find("::") != std::string::npos)
+        return name;
+    return ns + "::" + name;
+}
+
+static std::unordered_set<std::string>
+collect_namespace_decl_names(TopLevelListNode* list)
+{
+    std::unordered_set<std::string> names;
+    if(!list)
+        return names;
+
+    for(ASTNode* item : list->items)
+    {
+        if(auto* st = dynamic_cast<StructDefNode*>(item))
+            names.insert(st->name);
+        else if(auto* en = dynamic_cast<EnumDefNode*>(item))
+            names.insert(en->name);
+        else if(auto* tr = dynamic_cast<TraitDefNode*>(item))
+            names.insert(tr->name);
+        else if(auto* fn = dynamic_cast<FunctionDefNode*>(item))
+            names.insert(fn->name);
+        else if(auto* alias = dynamic_cast<TypeAliasNode*>(item))
+            names.insert(alias->name);
+    }
+    return names;
+}
+
+static void qualify_type_in_namespace(TypeNode* type, const std::string& ns,
+                                      const std::unordered_set<std::string>& names)
+{
+    if(!type)
+        return;
+
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+    {
+        if(names.count(structRef->structName) != 0)
+            structRef->structName = qualify_name(ns, structRef->structName);
+        return;
+    }
+
+    if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(type))
+    {
+        if(names.count(genRef->structName) != 0)
+            genRef->structName = qualify_name(ns, genRef->structName);
+        for(TypeNode* arg : genRef->typeArgs)
+            qualify_type_in_namespace(arg, ns, names);
+        return;
+    }
+
+    if(auto* listType = dynamic_cast<GenericListTypeNode*>(type))
+    {
+        qualify_type_in_namespace(listType->elementType, ns, names);
+        return;
+    }
+
+    if(auto* mapType = dynamic_cast<MapTypeNode*>(type))
+    {
+        qualify_type_in_namespace(mapType->keyType, ns, names);
+        qualify_type_in_namespace(mapType->valueType, ns, names);
+        return;
+    }
+
+    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(type))
+    {
+        if(tupleType->elementTypes)
+            for(TypeNode* elem : tupleType->elementTypes->types)
+                qualify_type_in_namespace(elem, ns, names);
+        return;
+    }
+
+    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(type))
+    {
+        qualify_type_in_namespace(ptrType->elementType, ns, names);
+        return;
+    }
+
+    if(auto* refType = dynamic_cast<ReferenceTypeNode*>(type))
+    {
+        qualify_type_in_namespace(refType->elementType, ns, names);
+        return;
+    }
+
+    if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(type))
+    {
+        if(names.count(traitObj->traitName) != 0)
+            traitObj->traitName = qualify_name(ns, traitObj->traitName);
+    }
+}
+
+static void qualify_params_in_namespace(ParameterListNode* params,
+                                        const std::string& ns,
+                                        const std::unordered_set<std::string>& names)
+{
+    if(!params)
+        return;
+    for(ParameterNode* param : params->parameters)
+        if(param)
+            qualify_type_in_namespace(param->type, ns, names);
+}
+
+static void qualify_method_in_namespace(StructMethodNode* method,
+                                        const std::string& ns,
+                                        const std::unordered_set<std::string>& names)
+{
+    if(!method)
+        return;
+    qualify_type_in_namespace(method->returnType, ns, names);
+    qualify_params_in_namespace(method->parameters, ns, names);
+}
+
+static void qualify_struct_members_in_namespace(StructMemberListNode* members,
+                                                const std::string& ns,
+                                                const std::unordered_set<std::string>& names)
+{
+    if(!members)
+        return;
+    for(StructMemberNode* member : members->members)
+        if(member)
+            qualify_type_in_namespace(member->type, ns, names);
+    for(StructMethodNode* method : members->methods)
+        qualify_method_in_namespace(method, ns, names);
+    for(EnumDefNode* nestedEnum : members->enums)
+        if(nestedEnum && names.count(nestedEnum->name) != 0)
+            nestedEnum->name = qualify_name(ns, nestedEnum->name);
+}
+
+static ASTNode* qualify_namespace_block(char* namespacePath,
+                                        ASTNode* topLevelList)
+{
+    auto* list = dynamic_cast<TopLevelListNode*>(topLevelList);
+    if(!list || !namespacePath)
+        return topLevelList;
+
+    const std::string ns(namespacePath);
+    const auto names = collect_namespace_decl_names(list);
+
+    for(ASTNode* item : list->items)
+    {
+        if(auto* st = dynamic_cast<StructDefNode*>(item))
+        {
+            if(names.count(st->baseName) != 0)
+                st->baseName = qualify_name(ns, st->baseName);
+            qualify_struct_members_in_namespace(st->members, ns, names);
+            st->name = qualify_name(ns, st->name);
+            register_parsed_struct_def(st);
+        }
+        else if(auto* en = dynamic_cast<EnumDefNode*>(item))
+        {
+            en->name = qualify_name(ns, en->name);
+        }
+        else if(auto* tr = dynamic_cast<TraitDefNode*>(item))
+        {
+            for(std::string& superTrait : tr->superTraits)
+                if(names.count(superTrait) != 0)
+                    superTrait = qualify_name(ns, superTrait);
+            for(StructMethodNode* method : tr->methods)
+                qualify_method_in_namespace(method, ns, names);
+            tr->name = qualify_name(ns, tr->name);
+        }
+        else if(auto* fn = dynamic_cast<FunctionDefNode*>(item))
+        {
+            qualify_type_in_namespace(fn->returnType, ns, names);
+            qualify_params_in_namespace(fn->parameters, ns, names);
+            fn->name = qualify_name(ns, fn->name);
+        }
+        else if(auto* alias = dynamic_cast<TypeAliasNode*>(item))
+        {
+            qualify_type_in_namespace(alias->aliasedType, ns, names);
+            for(auto& bound : alias->typeParamTraitBounds)
+                if(names.count(bound.second) != 0)
+                    bound.second = qualify_name(ns, bound.second);
+            alias->name = qualify_name(ns, alias->name);
+        }
+        else if(auto* impl = dynamic_cast<ImplBlockNode*>(item))
+        {
+            if(names.count(impl->structName) != 0)
+                impl->structName = qualify_name(ns, impl->structName);
+            if(names.count(impl->traitName) != 0)
+                impl->traitName = qualify_name(ns, impl->traitName);
+            for(auto& bound : impl->typeParamTraitBounds)
+                if(names.count(bound.second) != 0)
+                    bound.second = qualify_name(ns, bound.second);
+            for(StructMethodNode* method : impl->methods)
+                qualify_method_in_namespace(method, ns, names);
+            bind_impl_self_types(impl);
+        }
+    }
+    return list;
 }
 
 class AnonymousObjectShape
@@ -1599,7 +1795,7 @@ enum UpdatePosition
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR OBJECT
 %token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
-%token MOD USE AS ALIAS TYPE_KW COLONCOLON
+%token MOD NAMESPACE USE AS ALIAS TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT DEBUGJSONPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
 %token WINDOWS_MACRO POSIX_MACRO LINUX_MACRO MACOS_MACRO
 %token X64_MACRO AARCH64_MACRO
@@ -1630,7 +1826,7 @@ enum UpdatePosition
 %type <ast> program top_level_list top_level_item test_function_def
 %type <ast> inline_function_def
 %type <ast> arch_gated_function_def arch_gated_test_function_def arch_gated_inline_function_def
-%type <ast> type_alias_def
+%type <ast> type_alias_def namespace_block
 %type <ast> struct_def field_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
@@ -1705,6 +1901,7 @@ top_level_item
     | mod_declaration
     | use_declaration
     | type_alias_def
+    | namespace_block
     | impl_block
     | global_var_statement
     ;
@@ -1719,6 +1916,11 @@ module_path
 mod_declaration
     : MOD module_path SEMICOLON
         { $$ = mla_ast_mod_declaration($2, yylineno); }
+    ;
+
+namespace_block
+    : NAMESPACE module_path LBRACE top_level_list RBRACE
+        { $$ = qualify_namespace_block($2, $4); }
     ;
 
 use_declaration
@@ -3384,6 +3586,10 @@ struct_literal
         { $$ = mla_ast_struct_literal($1, NULL, $3, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LBRACE struct_field_init_list RBRACE
         { $$ = mla_ast_struct_literal($1, $3, $6, yylineno); }
+    | module_path COLONCOLON IDENTIFIER LBRACE struct_field_init_list RBRACE
+        { $$ = mla_ast_struct_literal(join_module_path($1, $3), NULL, $5, yylineno); }
+    | module_path COLONCOLON IDENTIFIER GENERIC_LT type_list GT LBRACE struct_field_init_list RBRACE
+        { $$ = mla_ast_struct_literal(join_module_path($1, $3), $5, $8, yylineno); }
     ;
 
 field_path

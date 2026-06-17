@@ -3445,6 +3445,35 @@ TEST_F(MLATest, BorrowedPointerDereferenceOutsideUnsafeStillAllowed)
     EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
+TEST_F(MLATest, NamespaceBlockQualifiesDeclarationsAndLocalTypes)
+{
+    std::string code = R"(
+        namespace geometry::units {
+            alias Distance = f32;
+
+            struct Reading {
+                let value: Distance = 0.0f;
+            };
+
+            fn average(a: Distance, b: Distance) -> Distance {
+                return (a + b) / 2.0f;
+            }
+        }
+
+        fn main() -> i32 {
+            let a: geometry::units::Distance = 10.0f;
+            let r: geometry::units::Reading =
+                geometry::units::Reading {
+                    value: geometry::units::average(a, 14.0f)
+                };
+            if r.value < 11.9f { return 1; }
+            if r.value > 12.1f { return 1; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // ============================================================================
 // Main
 // ============================================================================

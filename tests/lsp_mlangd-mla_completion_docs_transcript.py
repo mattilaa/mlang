@@ -45,6 +45,7 @@ def main() -> int:
         text = (
             "fn main() -> i32 {\n"
             "  if\n"
+            "  names\n"
             "  i32\n"
             "  lis\n"
             "  return 0;\n"
@@ -129,6 +130,27 @@ def main() -> int:
             )
             assert "Conditional" in pdoc.get("value", ""), (
                 f"if documentation should describe behavior: {if_item!r}"
+            )
+
+            ns_line, ns_char = position_of(text, "  names")
+            ns_char += len("  names")
+            res_ns = client.request(
+                "textDocument/completion",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": ns_line, "character": ns_char},
+                },
+            )
+            ns_item = find_item(res_ns, "namespace")
+            assert ns_item.get("kind") == 14, (
+                f"namespace completion should be a keyword kind: {ns_item!r}"
+            )
+            ns_doc = ns_item.get("documentation", {})
+            assert isinstance(ns_doc, dict) and isinstance(ns_doc.get("value"), str), (
+                f"namespace completion should include documentation: {ns_item!r}"
+            )
+            assert "qualified namespace block" in ns_doc.get("value", ""), (
+                f"namespace documentation should describe namespace blocks: {ns_item!r}"
             )
         finally:
             client.close()
