@@ -2221,7 +2221,7 @@ fn completion_documentation(label: str8) -> str8 {
         return "Declare a type alias: alias Name = Type;. The older use type Name = Type; spelling remains valid and equivalent.";
     }
     if eq(label, "namespace") == 1 {
-        return "Declare a qualified namespace block: namespace path::to::scope { ... }. Declarations inside are named with that path.";
+        return "Declare a qualified namespace block: namespace path::to::scope { ... }, or a namespace alias: namespace short = path::to::scope;.";
     }
     if eq(label, "for") == 1 {
         return "Loop construct, commonly used with ranges: for i in 0..n { ... }";

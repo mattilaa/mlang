@@ -3474,6 +3474,47 @@ TEST_F(MLATest, NamespaceBlockQualifiesDeclarationsAndLocalTypes)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, NamespaceAliasShortensQualifiedPaths)
+{
+    std::string code = R"(
+        namespace geometry::units {
+            alias Distance = f32;
+
+            struct Reading {
+                let value: Distance = 0.0f;
+            };
+
+            fn average(a: Distance, b: Distance) -> Distance {
+                return (a + b) / 2.0f;
+            }
+        }
+
+        namespace gu = geometry::units;
+
+        fn main() -> i32 {
+            let a: gu::Distance = 10.0f;
+
+            namespace fn_units = geometry::units;
+            let direct: fn_units::Reading =
+                fn_units::Reading { value: fn_units::average(6.0f, 8.0f) };
+            if direct.value < 6.9f { return 1; }
+
+            {
+                namespace local = geometry::units;
+                let r: local::Reading =
+                    local::Reading { value: local::average(a, 14.0f) };
+                if r.value < 11.9f { return 1; }
+                if r.value > 12.1f { return 1; }
+            }
+
+            let b: gu::Reading =
+                gu::Reading { value: gu::average(2.0f, 4.0f) };
+            return b.value > 2.9f ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // ============================================================================
 // Main
 // ============================================================================

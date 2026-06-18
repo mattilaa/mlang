@@ -2489,6 +2489,11 @@ std::string UseDeclNode::toString() const
     return "use " + moduleName + "::" + itemName + ";";
 }
 
+std::string NamespaceAliasDeclNode::toString() const
+{
+    return "namespace " + aliasName + " = " + targetPath + ";";
+}
+
 std::string TypeAliasNode::toString() const
 {
     std::string out = "using " + name;

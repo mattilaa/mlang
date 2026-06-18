@@ -36,6 +36,32 @@ refer to each other by short name, so the `Reading.value` field above can use
 `Distance` directly. Namespace blocks currently flatten to qualified top-level
 declarations; they are for declaration ownership and naming, not separate files.
 
+Namespace aliases shorten long qualified paths:
+
+```mla
+namespace gu = geometry::units;
+
+fn main() -> i32 {
+    let d: gu::Distance = 10.0f;
+    let r: gu::Reading = gu::Reading {
+        value: gu::average(d, 14.0f)
+    };
+
+    {
+        namespace local_units = geometry::units;
+        let local: local_units::Reading = local_units::Reading {
+            value: local_units::average(2.0f, 4.0f)
+        };
+    }
+
+    return 0;
+}
+```
+
+`namespace alias = some::qualified::path;` can be declared at top level or
+inside a block/function. Aliases affect qualified names parsed after the
+declaration, so `gu::Reading` resolves as `geometry::units::Reading`.
+
 ## Trait Objects (`dyn Trait`) {#trait_objects_dyn}
 
 MLang supports explicit trait-object types for runtime dispatch at function

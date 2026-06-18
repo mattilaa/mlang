@@ -24,8 +24,8 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 - `examples/test_fixture_example.mla` — `#[fixture]` impl with per-test
   `setup` / `teardown` hooks (run via `mlang --tests`).
 - `examples/testing_mock_example.mla` — mock-based testing using [`std::testing`](Stdlib-Module-API#stdtesting).
-- `examples/namespace_demo.mla` — C++17-style namespace blocks with qualified
-  type names and local namespace type lookup.
+- `examples/namespace_demo.mla` — C++17-style namespace blocks and aliases with
+  qualified type names and local namespace type lookup.
 - `examples/expect_call_example.mla` — EXPECT_CALL-style cardinality
   (`mock_expect_times` / `mock_expect_at_least` / etc.) plus programmable
   return values (`mock_will_return_*` + `mock_record_and_return_*`).

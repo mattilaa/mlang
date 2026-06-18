@@ -28,6 +28,49 @@ static char* join_module_path(char* left, char* right)
     return out;
 }
 
+static std::vector<std::map<std::string, std::string>> g_namespaceAliasScopes(1);
+
+static void push_namespace_alias_scope()
+{
+    g_namespaceAliasScopes.emplace_back();
+}
+
+static void pop_namespace_alias_scope()
+{
+    if(g_namespaceAliasScopes.size() > 1)
+        g_namespaceAliasScopes.pop_back();
+}
+
+static std::string resolve_namespace_alias(const std::string& name)
+{
+    for(auto it = g_namespaceAliasScopes.rbegin();
+        it != g_namespaceAliasScopes.rend(); ++it)
+    {
+        auto found = it->find(name);
+        if(found != it->end())
+            return found->second;
+    }
+    return name;
+}
+
+static char* resolve_namespace_alias_cstr(char* name)
+{
+    std::string resolved = resolve_namespace_alias(name ? std::string(name)
+                                                       : std::string());
+    return strdup(resolved.c_str());
+}
+
+static ASTNode* create_namespace_alias(char* alias, char* target, int line)
+{
+    std::string aliasName = alias ? std::string(alias) : std::string();
+    std::string targetPath = target ? std::string(target) : std::string();
+    if(!aliasName.empty() && !targetPath.empty())
+        g_namespaceAliasScopes.back()[aliasName] = targetPath;
+    auto* node = new NamespaceAliasDeclNode(aliasName, targetPath);
+    node->line = line;
+    return node;
+}
+
 static ASTNode* create_enum_or_ident_from_path(char* path, int line)
 {
     const char* last = NULL;
@@ -1826,7 +1869,7 @@ enum UpdatePosition
 %type <ast> program top_level_list top_level_item test_function_def
 %type <ast> inline_function_def
 %type <ast> arch_gated_function_def arch_gated_test_function_def arch_gated_inline_function_def
-%type <ast> type_alias_def namespace_block
+%type <ast> type_alias_def namespace_block namespace_alias_def
 %type <ast> struct_def field_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
@@ -1900,6 +1943,7 @@ top_level_item
     | arch_gated_inline_function_def
     | mod_declaration
     | use_declaration
+    | namespace_alias_def
     | type_alias_def
     | namespace_block
     | impl_block
@@ -1908,7 +1952,7 @@ top_level_item
 
 module_path
     : IDENTIFIER
-        { $$ = $1; }
+        { $$ = resolve_namespace_alias_cstr($1); }
     | module_path COLONCOLON IDENTIFIER
         { $$ = join_module_path($1, $3); }
     ;
@@ -1921,6 +1965,11 @@ mod_declaration
 namespace_block
     : NAMESPACE module_path LBRACE top_level_list RBRACE
         { $$ = qualify_namespace_block($2, $4); }
+    ;
+
+namespace_alias_def
+    : NAMESPACE IDENTIFIER ASSIGN module_path SEMICOLON
+        { $$ = create_namespace_alias($2, $4, yylineno); }
     ;
 
 use_declaration
@@ -2611,6 +2660,7 @@ statement
     : let_statement
     | var_statement
     | type_alias_def
+    | namespace_alias_def
     | static_var_statement
     | assignment_statement
     | expression_statement
@@ -2636,6 +2686,7 @@ colon_statement
     : let_statement
     | var_statement
     | type_alias_def
+    | namespace_alias_def
     | static_var_statement
     | assignment_statement
     | expression_statement
@@ -2907,15 +2958,15 @@ switch_default_case
     ;
 
 block_statement
-    : LBRACE statement_list RBRACE { $$ = mla_ast_block_statement($2); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
-    | LBRACE RBRACE { $$ = mla_ast_block_statement(create_empty_statement_list()); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
+    : LBRACE { push_namespace_alias_scope(); } statement_list RBRACE { $$ = mla_ast_block_statement($3); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; pop_namespace_alias_scope(); }
+    | LBRACE { push_namespace_alias_scope(); } RBRACE { $$ = mla_ast_block_statement(create_empty_statement_list()); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; pop_namespace_alias_scope(); }
     | UNSAFE block_statement
         { $$ = mla_ast_unsafe_block($2, yylineno); }
     ;
 
 colon_block_statement
-    : COLON_BLOCK statement_list RBRACE { $$ = mla_ast_block_statement($2); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
-    | COLON_BLOCK RBRACE { $$ = mla_ast_block_statement(create_empty_statement_list()); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
+    : COLON_BLOCK { push_namespace_alias_scope(); } statement_list RBRACE { $$ = mla_ast_block_statement($3); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; pop_namespace_alias_scope(); }
+    | COLON_BLOCK { push_namespace_alias_scope(); } RBRACE { $$ = mla_ast_block_statement(create_empty_statement_list()); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; pop_namespace_alias_scope(); }
     ;
 
 for_statement

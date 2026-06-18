@@ -1422,6 +1422,20 @@ public:
     std::string toString() const override;
 };
 
+class NamespaceAliasDeclNode : public StatementNode
+{
+public:
+    std::string aliasName;
+    std::string targetPath;
+
+    NamespaceAliasDeclNode(const std::string& alias,
+                           const std::string& target)
+        : aliasName(alias), targetPath(target)
+    {
+    }
+    std::string toString() const override;
+};
+
 class TypeAliasNode : public StatementNode
 {
 public:
