@@ -71,6 +71,25 @@ static ASTNode* create_namespace_alias(char* alias, char* target, int line)
     return node;
 }
 
+static ASTNode* create_plain_alias_or_namespace_alias(char* alias, ASTNode* type,
+                                                      int line, int col)
+{
+    auto* aliasType = dynamic_cast<TypeNode*>(type);
+    auto* structRef = dynamic_cast<StructTypeRefNode*>(type);
+    if(alias && alias[0] >= 'a' && alias[0] <= 'z' && structRef &&
+       structRef->structName.find("::") != std::string::npos)
+    {
+        return create_namespace_alias(alias,
+                                      strdup(structRef->structName.c_str()),
+                                      line);
+    }
+
+    auto* node = mla_ast_type_alias(alias, NULL, aliasType);
+    node->line = line;
+    node->col = col;
+    return node;
+}
+
 static ASTNode* create_enum_or_ident_from_path(char* path, int line)
 {
     const char* last = NULL;
@@ -1989,7 +2008,7 @@ type_alias_def
     | USE TYPE_KW IDENTIFIER GENERIC_LT type_param_list GT ASSIGN type SEMICOLON
         { auto* node = mla_ast_type_alias($3, $5, $8); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
     | ALIAS IDENTIFIER ASSIGN type SEMICOLON
-        { auto* node = mla_ast_type_alias($2, NULL, $4); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
+        { $$ = create_plain_alias_or_namespace_alias($2, $4, yylineno, yycolumn_token); }
     | ALIAS IDENTIFIER GENERIC_LT type_param_list GT ASSIGN type SEMICOLON
         { auto* node = mla_ast_type_alias($2, $4, $7); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
     ;

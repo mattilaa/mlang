@@ -40,11 +40,15 @@ Namespace aliases shorten long qualified paths:
 
 ```mla
 namespace gu = geometry::units;
+alias ga = geometry::units;
 
 fn main() -> i32 {
     let d: gu::Distance = 10.0f;
     let r: gu::Reading = gu::Reading {
         value: gu::average(d, 14.0f)
+    };
+    let s: ga::Reading = ga::Reading {
+        value: ga::average(2.0f, 4.0f)
     };
 
     {
@@ -58,9 +62,11 @@ fn main() -> i32 {
 }
 ```
 
-`namespace alias = some::qualified::path;` can be declared at top level or
-inside a block/function. Aliases affect qualified names parsed after the
-declaration, so `gu::Reading` resolves as `geometry::units::Reading`.
+`alias alias_name = some::qualified::path;` is the preferred short spelling for
+namespace aliases. The explicit `namespace alias_name = some::qualified::path;`
+form is also accepted. Namespace aliases can be declared at top level or inside
+a block/function. They affect qualified names parsed after the declaration, so
+`ga::Reading` resolves as `geometry::units::Reading`.
 
 ## Trait Objects (`dyn Trait`) {#trait_objects_dyn}
 

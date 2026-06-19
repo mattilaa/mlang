@@ -5,6 +5,7 @@
 /// Demonstrates:
 /// - nested namespace block syntax: namespace geometry::units { ... }
 /// - C++-style namespace aliases: namespace gu = geometry::units;
+/// - short namespace aliases: alias ga = geometry::units;
 /// - local type lookup inside a namespace block
 /// - qualified type names and qualified function calls outside the block
 
@@ -21,6 +22,7 @@ namespace geometry::units {
 }
 
 namespace gu = geometry::units;
+alias ga = geometry::units;
 
 fn main() -> i32 {
     let start: gu::Distance = 10.0f;
@@ -28,8 +30,12 @@ fn main() -> i32 {
     let reading: gu::Reading = gu::Reading {
         value: gu::average(start, end)
     };
+    let aliased: ga::Reading = ga::Reading {
+        value: ga::average(2.0f, 4.0f)
+    };
 
     println!("average distance={}", reading.value);
+    println!("aliased average={}", aliased.value);
 
     {
         namespace local_units = geometry::units;

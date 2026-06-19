@@ -3505,6 +3505,7 @@ TEST_F(MLATest, NamespaceAliasShortensQualifiedPaths)
         }
 
         namespace gu = geometry::units;
+        alias ga = geometry::units;
 
         fn main() -> i32 {
             let a: gu::Distance = 10.0f;
@@ -3524,7 +3525,9 @@ TEST_F(MLATest, NamespaceAliasShortensQualifiedPaths)
 
             let b: gu::Reading =
                 gu::Reading { value: gu::average(2.0f, 4.0f) };
-            return b.value > 2.9f ? 0 : 1;
+            let c: ga::Reading =
+                ga::Reading { value: ga::average(8.0f, 10.0f) };
+            return b.value > 2.9f && c.value > 8.9f ? 0 : 1;
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 0);

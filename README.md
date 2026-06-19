@@ -1243,7 +1243,7 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/std_term_demo.mla`
 - Type aliases (`alias Distance = f32;` and equivalent `use type Distance = f32;`, generic aliases):
   `examples/type_alias_demo.mla`
-- Namespace blocks and aliases (`namespace geometry::units { ... }`, `namespace gu = geometry::units;`) with qualified names:
+- Namespace blocks and aliases (`namespace geometry::units { ... }`, `alias gu = geometry::units;`) with qualified names:
   `examples/namespace_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):
   `examples/lambda_fold_demo.mla`
