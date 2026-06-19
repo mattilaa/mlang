@@ -16,8 +16,8 @@
 /// - `f32`, `f64`: floating-point types.
 ///
 /// \section builtin_types_string String Types
-/// - `str8`: UTF-8 string type.
-/// - `str16`: UTF-16 string type.
+/// - `str8` / `utf8`: UTF-8 string type.
+/// - `str16` / `utf16`: UTF-16 string type.
 /// - `String` is the compiler-provided wrapper namespace for `str8` helpers and
 ///   is not a distinct runtime type.
 ///
@@ -107,8 +107,14 @@
 // (e.g. `String::new`, `String::with_capacity`, `String::free`).
 // It is not a separate runtime type.
 
+// @builtin utf8
+// Alias spelling for str8, the UTF-8 string type.
+
 // @builtin str16
 // UTF-16 string type.
+
+// @builtin utf16
+// Alias spelling for str16, the UTF-16 string type.
 
 // @builtin list
 // Generic list type: list<T>.

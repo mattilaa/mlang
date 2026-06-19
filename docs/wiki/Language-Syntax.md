@@ -169,6 +169,20 @@ Available primitive floating-point types:
 - [`f32`](Quick-Guide#types)
 - [`f64`](Quick-Guide#types)
 
+String type spellings:
+- [`str8`](Quick-Guide#types) and `utf8` are UTF-8 string types.
+- [`str16`](Quick-Guide#types) and `utf16` are UTF-16 string types.
+- [`string`](Quick-Guide#types) remains accepted as a UTF-8 spelling.
+
+String literals support common escapes plus byte-valued hexadecimal escapes:
+
+```rust
+let plain: utf8 = "hello\n";
+let colored: utf8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
+```
+
+Use `\xNN` for terminal escape bytes such as `\x1b` (`ESC`).
+
 ## Platform Macros
 
 MLang supports builtin platform macros for multiplatform source selection:

@@ -439,6 +439,21 @@ TEST_F(MLATest, StringEscapeTab)
     EXPECT_EQ(compileAndRun(code), "Col1\tCol2\n");
 }
 
+TEST_F(MLATest, StringEscapeHexAndUtfAliases)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let y: utf8 = "\x1b[38;2;164;255;82m\x1b[48;2;98;0;0mhello\x1b[0m world";
+            let z: utf16 = "wide";
+            println!("{}", y);
+            println!("{}", z);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code),
+              "\x1b[38;2;164;255;82m\x1b[48;2;98;0;0mhello\x1b[0m world\nwide\n");
+}
+
 TEST_F(MLATest, StringConcatenationPlus)
 {
     std::string code = R"(

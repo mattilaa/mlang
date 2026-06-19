@@ -42,6 +42,25 @@ static ASTNode* mla_lex_make_typed_int(int64_t value, const char* suffix)
     return node;
 }
 
+static void mla_lex_append_byte(char byte)
+{
+    size_t old_len = yylval.sval ? strlen(yylval.sval) : 0;
+    yylval.sval = (char*)realloc(yylval.sval, old_len + 2);
+    yylval.sval[old_len] = byte;
+    yylval.sval[old_len + 1] = '\0';
+}
+
+static int mla_lex_hex_value(char ch)
+{
+    if(ch >= '0' && ch <= '9')
+        return ch - '0';
+    if(ch >= 'a' && ch <= 'f')
+        return ch - 'a' + 10;
+    if(ch >= 'A' && ch <= 'F')
+        return ch - 'A' + 10;
+    return 0;
+}
+
 int yycolumn = 1;       // current column (end of last-consumed token)
 int yycolumn_token = 1; // column at start of the current token
 
@@ -151,6 +170,11 @@ static int is_try_question_context()
 \"              { yylval.sval = strdup(""); BEGIN(STRING_); }
 <STRING_>{
     \"          { BEGIN(INITIAL); return STRING_LITERAL; }
+    \\x[0-9a-fA-F]{2} {
+                  int value = (mla_lex_hex_value(yytext[2]) << 4) |
+                              mla_lex_hex_value(yytext[3]);
+                  mla_lex_append_byte(static_cast<char>(value));
+                }
     \\n         { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
                   strcat(yylval.sval, "\n"); }
     \\t         { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
@@ -215,6 +239,8 @@ static int is_try_question_context()
 "string"        { return STR8; }
 "str8"          { return STR8; }
 "str16"         { return STR16; }
+"utf8"          { return STR8; }
+"utf16"         { return STR16; }
 "list"          { return LIST; }
 "map"           { return MAP; }
 "tuple"         { return TUPLE; }

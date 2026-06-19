@@ -47,6 +47,7 @@ def main() -> int:
             "  if\n"
             "  names\n"
             "  i32\n"
+            "  utf\n"
             "  lis\n"
             "  return 0;\n"
             "}\n"
@@ -82,6 +83,27 @@ def main() -> int:
             )
             assert "32-bit" in int_doc.get("value", ""), (
                 f"i32 documentation should describe the type: {int_item!r}"
+            )
+
+            utf_line, utf_char = position_of(text, "  utf")
+            utf_char += len("  utf")
+            res_utf = client.request(
+                "textDocument/completion",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": utf_line, "character": utf_char},
+                },
+            )
+            utf_item = find_item(res_utf, "utf8")
+            assert utf_item.get("kind") == 22, (
+                f"utf8 completion should be a type/struct kind: {utf_item!r}"
+            )
+            utf_doc = utf_item.get("documentation", {})
+            assert isinstance(utf_doc, dict) and isinstance(utf_doc.get("value"), str), (
+                f"utf8 completion should include documentation: {utf_item!r}"
+            )
+            assert "Alias spelling for str8" in utf_doc.get("value", ""), (
+                f"utf8 documentation should describe the alias: {utf_item!r}"
             )
 
             list_line, list_char = position_of(text, "  lis")

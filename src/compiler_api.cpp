@@ -4366,8 +4366,9 @@ lexicalIdentifiersBeforeOffset(std::string_view text, size_t offset)
 static constexpr std::string_view kBuiltinCompletionLabels[] = {
     "void",   "bool",   "bit",    "i8",     "i16",    "i32",
     "i64",    "u8",     "u16",    "u32",    "u64",    "f32",
-    "f64",    "str8",   "str16",  "string", "list",   "map",
-    "tuple",  "ptr",    "Handle", "Thread", "Mutex",  "Atomic64",
+    "f64",    "str8",   "str16",  "utf8",   "utf16",  "string",
+    "list",   "map",    "tuple",  "ptr",    "Handle", "Thread",
+    "Mutex",  "Atomic64",
     "Result", "Option", "Ok",     "Err",    "Some",   "None",
     "sizeof", "Vec",    "Span",   "span",
 };

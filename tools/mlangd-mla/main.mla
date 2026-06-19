@@ -599,6 +599,12 @@ fn builtin_type_location(word: str8) -> str8 {
     if eq(lookup, "string") == 1 {
         lookup = "str8";
     }
+    if eq(lookup, "utf8") == 1 {
+        lookup = "str8";
+    }
+    if eq(lookup, "utf16") == 1 {
+        lookup = "str16";
+    }
     if eq(lookup, "int") == 1 {
         lookup = "i32";
     }
@@ -1890,6 +1896,8 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "string") == 1 { return 22; }
     if eq(label, "str8") == 1 { return 22; }
     if eq(label, "str16") == 1 { return 22; }
+    if eq(label, "utf8") == 1 { return 22; }
+    if eq(label, "utf16") == 1 { return 22; }
     if eq(label, "list") == 1 { return 22; }
     if eq(label, "map") == 1 { return 22; }
     if eq(label, "tuple") == 1 { return 22; }
@@ -1947,6 +1955,8 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "f64") == 1 { return "builtin 64-bit floating point"; }
     if eq(label, "str8") == 1 { return "builtin UTF-8 string type"; }
     if eq(label, "str16") == 1 { return "builtin UTF-16 string type"; }
+    if eq(label, "utf8") == 1 { return "builtin UTF-8 string type alias"; }
+    if eq(label, "utf16") == 1 { return "builtin UTF-16 string type alias"; }
     if eq(label, "list") == 1 { return "builtin generic list type"; }
     if eq(label, "map") == 1 { return "builtin generic map type"; }
     if eq(label, "tuple") == 1 { return "builtin tuple type"; }
@@ -2042,6 +2052,12 @@ fn completion_documentation(label: str8) -> str8 {
     }
     if eq(label, "str16") == 1 {
         return "UTF-16 string type.";
+    }
+    if eq(label, "utf8") == 1 {
+        return "Alias spelling for str8, the UTF-8 string type. String literals default to UTF-8 and support escapes such as \\n, \\t, and \\x1b.";
+    }
+    if eq(label, "utf16") == 1 {
+        return "Alias spelling for str16, the UTF-16 string type.";
     }
     if eq(label, "string") == 1 {
         return "UTF-8 string type alias used by stdlib and formatting macros.";

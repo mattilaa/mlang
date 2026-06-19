@@ -44,6 +44,7 @@ let n: i32 = 42;
 let ok: bool = true;
 let ch: bit = 1;
 let text: str8 = "hello";
+let colored: utf8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
 let utf16_text: str16 = String16::from(text);
 let values: list<i32> = [1, 2, 3];
 ```
@@ -52,7 +53,7 @@ Common builtin/container types:
 - [`i32`](Quick-Guide#types), [`i64`](Quick-Guide#types), [`u8`](Quick-Guide#types), [`u32`](Quick-Guide#types), [`u64`](Quick-Guide#types), [`f32`](Quick-Guide#types), [`f64`](Quick-Guide#types)
 - [`bool`](Quick-Guide#types)
 - [`bit`](Quick-Guide#types)
-- [`str8`](Quick-Guide#types), [`str16`](Quick-Guide#types)
+- [`str8`](Quick-Guide#types) / `utf8`, [`str16`](Quick-Guide#types) / `utf16`
 - [`list<T>`](Quick-Guide#types)
 - [`Vec<T>`](Stdlib-Module-API#stdvec)
 - [`span<T>`](Stdlib-Module-API#stdspan) / [`Span<T>`](Stdlib-Module-API#stdspan)
