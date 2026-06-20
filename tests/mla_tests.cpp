@@ -3373,6 +3373,27 @@ TEST_F(MLATest, CexprFunctionTwiceI32EvaluatesAtCompileTime)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, CexprFunctionEvaluatesFloatArithmeticAtCompileTime)
+{
+    std::string code = R"(
+        cexpr fn midpoint(a: f32, b: f32) -> f32 {
+            return (a + b) / 2.0f;
+        }
+
+        cexpr fn wide_scale(x: f64) -> f64 {
+            return x * 1.5;
+        }
+
+        fn main() -> i32 {
+            static_assert!(midpoint(2.0f, 4.0f) == 3.0f);
+            static_assert!(wide_scale(4.0) == 6.0);
+            let value: f32 = cexpr(midpoint(8.0f, 10.0f));
+            return value > 8.9f && value < 9.1f ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, StaticAssertAcceptsCexprFunctionCall)
 {
     std::string code = R"(
@@ -3422,6 +3443,39 @@ TEST_F(MLATest, CexprRejectsNonCexprFunctionCall)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("cexpr call requires a matching 'cexpr fn' overload"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, CexprReportsRuntimeVariableName)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 1;
+            let value: i32 = cexpr(x);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("runtime variable is not available in cexpr: 'x'"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, CexprReportsUnsupportedExpressionKind)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let value: str8 = cexpr("hello");
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("unsupported expression in cexpr"),
               std::string::npos);
 }
 

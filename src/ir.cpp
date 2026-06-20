@@ -2120,17 +2120,24 @@ bool CodeGenerator::evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out)
     ConstexprValue value;
     if(!evalConstexprExpression(expr, value, nullptr, nullptr, 0))
         return false;
-    out = value.kind == ConstexprValue::Kind::Bool ? (value.boolValue ? 1 : 0)
-                                                   : value.intValue;
+    out = value.kind == ConstexprValue::Kind::Bool
+              ? (value.boolValue ? 1 : 0)
+              : value.kind == ConstexprValue::Kind::Float
+                    ? static_cast<int64_t>(value.floatValue)
+                    : value.intValue;
     return true;
 }
 
 bool CodeGenerator::evaluateCompileTimeBool(ExpressionNode* expr, bool& out)
 {
-    int64_t value = 0;
-    if(!evaluateCompileTimeInt(expr, value))
+    ConstexprValue value;
+    if(!evalConstexprExpression(expr, value, nullptr, nullptr, 0))
         return false;
-    out = value != 0;
+    out = value.kind == ConstexprValue::Kind::Bool
+              ? value.boolValue
+              : value.kind == ConstexprValue::Kind::Float
+                    ? value.floatValue != 0.0
+                    : value.intValue != 0;
     return true;
 }
 
@@ -4321,10 +4328,26 @@ llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(
 {
     TypeNode::TypeKind kind =
         targetType ? normalizeInferredKind(targetType->kind) : value.typeKind;
+    if(isFloatInferKind(kind))
+    {
+        const double floatValue =
+            value.kind == ConstexprValue::Kind::Float
+                ? value.floatValue
+                : (value.kind == ConstexprValue::Kind::Bool
+                       ? (value.boolValue ? 1.0 : 0.0)
+                       : static_cast<double>(value.intValue));
+        if(kind == TypeNode::TYPE_FLOAT)
+            return llvm::ConstantFP::get(llvm::Type::getFloatTy(context),
+                                         floatValue);
+        return llvm::ConstantFP::get(llvm::Type::getDoubleTy(context),
+                                     floatValue);
+    }
     if(kind == TypeNode::TYPE_BOOL)
     {
         const bool boolValue = value.kind == ConstexprValue::Kind::Bool
                                    ? value.boolValue
+                                   : value.kind == ConstexprValue::Kind::Float
+                                         ? value.floatValue != 0.0
                                    : (value.intValue != 0);
         return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
                                       boolValue ? 1 : 0, false);
@@ -4334,13 +4357,96 @@ llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(
     if(!llvmType || !llvmType->isIntegerTy())
     {
         reportError(line,
-                    "cexpr currently supports only integer and bool values");
+                    "cexpr currently supports only integer, float, and bool "
+                    "values");
         return nullptr;
     }
-    const int64_t intValue = value.kind == ConstexprValue::Kind::Bool
-                                 ? (value.boolValue ? 1 : 0)
-                                 : value.intValue;
+    const int64_t intValue =
+        value.kind == ConstexprValue::Kind::Bool
+            ? (value.boolValue ? 1 : 0)
+            : value.kind == ConstexprValue::Kind::Float
+                  ? static_cast<int64_t>(value.floatValue)
+                  : value.intValue;
     return llvm::ConstantInt::get(llvmType, intValue, !isUnsignedType(kind));
+}
+
+bool CodeGenerator::coerceConstexprValueToKind(ConstexprValue& value,
+                                               TypeNode::TypeKind targetKind,
+                                               std::string* errorMessage,
+                                               const char* context)
+{
+    targetKind = normalizeInferredKind(targetKind);
+    if(targetKind == TypeNode::TYPE_BOOL)
+    {
+        const bool boolValue =
+            value.kind == ConstexprValue::Kind::Bool
+                ? value.boolValue
+                : value.kind == ConstexprValue::Kind::Float
+                      ? value.floatValue != 0.0
+                      : value.intValue != 0;
+        value.kind = ConstexprValue::Kind::Bool;
+        value.boolValue = boolValue;
+        value.intValue = boolValue ? 1 : 0;
+        value.floatValue = boolValue ? 1.0 : 0.0;
+        value.typeKind = TypeNode::TYPE_BOOL;
+        return true;
+    }
+    if(isFloatInferKind(targetKind))
+    {
+        const double floatValue =
+            value.kind == ConstexprValue::Kind::Float
+                ? value.floatValue
+                : value.kind == ConstexprValue::Kind::Bool
+                      ? (value.boolValue ? 1.0 : 0.0)
+                      : static_cast<double>(value.intValue);
+        value.kind = ConstexprValue::Kind::Float;
+        value.floatValue = floatValue;
+        value.boolValue = floatValue != 0.0;
+        value.intValue = static_cast<int64_t>(floatValue);
+        value.typeKind = targetKind;
+        return true;
+    }
+    if(isIntegerInferKind(targetKind))
+    {
+        const int64_t intValue =
+            value.kind == ConstexprValue::Kind::Bool
+                ? (value.boolValue ? 1 : 0)
+                : value.kind == ConstexprValue::Kind::Float
+                      ? static_cast<int64_t>(value.floatValue)
+                      : value.intValue;
+        value.kind = ConstexprValue::Kind::Int;
+        value.intValue = intValue;
+        value.boolValue = intValue != 0;
+        value.floatValue = static_cast<double>(intValue);
+        value.typeKind = targetKind;
+        return true;
+    }
+
+    if(errorMessage)
+    {
+        *errorMessage = std::string(context) +
+                        " currently supports only integer, float, and bool "
+                        "types";
+    }
+    return false;
+}
+
+double CodeGenerator::constexprValueAsDouble(const ConstexprValue& value) const
+{
+    if(value.kind == ConstexprValue::Kind::Float)
+        return value.floatValue;
+    if(value.kind == ConstexprValue::Kind::Bool)
+        return value.boolValue ? 1.0 : 0.0;
+    return static_cast<double>(value.intValue);
+}
+
+int64_t CodeGenerator::constexprValueAsInt(const ConstexprValue& value) const
+{
+    if(value.kind == ConstexprValue::Kind::Bool)
+        return value.boolValue ? 1 : 0;
+    if(value.kind == ConstexprValue::Kind::Float)
+        return static_cast<int64_t>(value.floatValue);
+    return value.intValue;
 }
 
 bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
@@ -4349,7 +4455,11 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
                                       ConstexprEnv* env, int depth)
 {
     if(!call)
+    {
+        if(errorMessage)
+            *errorMessage = "missing function call in cexpr";
         return false;
+    }
     if(depth > 64)
     {
         if(errorMessage)
@@ -4385,6 +4495,12 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             if(!evalConstexprExpression(call->arguments[i], argValue,
                                         errorMessage, env, depth + 1))
             {
+                if(errorMessage && errorMessage->empty())
+                {
+                    *errorMessage = "argument " + std::to_string(i + 1) +
+                                    " in cexpr call to '" + call->name +
+                                    "' is not compile-time evaluable";
+                }
                 argsOk = false;
                 break;
             }
@@ -4392,33 +4508,9 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
             TypeNode::TypeKind paramKind =
                 param ? normalizeInferredKind(param->type->kind)
                       : TypeNode::TYPE_I64;
-            if(paramKind == TypeNode::TYPE_BOOL)
-            {
-                const bool boolValue =
-                    argValue.kind == ConstexprValue::Kind::Bool
-                        ? argValue.boolValue
-                        : (argValue.intValue != 0);
-                argValue.kind = ConstexprValue::Kind::Bool;
-                argValue.boolValue = boolValue;
-                argValue.intValue = boolValue ? 1 : 0;
-                argValue.typeKind = TypeNode::TYPE_BOOL;
-            }
-            else if(!isIntegerInferKind(paramKind))
-            {
-                if(errorMessage)
-                {
-                    *errorMessage = "cexpr fn parameters currently support "
-                                    "only integer and bool types";
-                }
+            if(!coerceConstexprValueToKind(argValue, paramKind, errorMessage,
+                                           "cexpr fn parameters"))
                 return false;
-            }
-            else
-            {
-                if(argValue.kind == ConstexprValue::Kind::Bool)
-                    argValue.intValue = argValue.boolValue ? 1 : 0;
-                argValue.kind = ConstexprValue::Kind::Int;
-                argValue.typeKind = paramKind;
-            }
 
             localEnv[param->name] = argValue;
         }
@@ -4488,17 +4580,11 @@ bool CodeGenerator::evalConstexprStatementList(
             if(!evalConstexprExpression(letDecl->expression, value,
                                         errorMessage, &env, depth + 1))
                 return false;
-            if(letDecl->type && normalizeInferredKind(letDecl->type->kind) ==
-                                    TypeNode::TYPE_BOOL)
-            {
-                const bool boolValue = value.kind == ConstexprValue::Kind::Bool
-                                           ? value.boolValue
-                                           : (value.intValue != 0);
-                value.kind = ConstexprValue::Kind::Bool;
-                value.boolValue = boolValue;
-                value.intValue = boolValue ? 1 : 0;
-                value.typeKind = TypeNode::TYPE_BOOL;
-            }
+            if(letDecl->type &&
+               !coerceConstexprValueToKind(
+                   value, letDecl->type->kind, errorMessage,
+                   "cexpr fn let declarations"))
+                return false;
             env[letDecl->name] = value;
             continue;
         }
@@ -4509,6 +4595,11 @@ bool CodeGenerator::evalConstexprStatementList(
             {
                 if(!evalConstexprExpression(varDecl->initExpr, value,
                                             errorMessage, &env, depth + 1))
+                    return false;
+                if(varDecl->type &&
+                   !coerceConstexprValueToKind(
+                       value, varDecl->type->kind, errorMessage,
+                       "cexpr fn var declarations"))
                     return false;
             }
             else
@@ -4521,13 +4612,23 @@ bool CodeGenerator::evalConstexprStatementList(
                     value.kind = ConstexprValue::Kind::Bool;
                     value.boolValue = false;
                     value.intValue = 0;
+                    value.floatValue = 0.0;
                     value.typeKind = TypeNode::TYPE_BOOL;
+                }
+                else if(isFloatInferKind(kind))
+                {
+                    value.kind = ConstexprValue::Kind::Float;
+                    value.floatValue = 0.0;
+                    value.intValue = 0;
+                    value.boolValue = false;
+                    value.typeKind = kind;
                 }
                 else if(isIntegerInferKind(kind))
                 {
                     value.kind = ConstexprValue::Kind::Int;
                     value.intValue = 0;
                     value.boolValue = false;
+                    value.floatValue = 0.0;
                     value.typeKind = kind;
                 }
                 else
@@ -4536,7 +4637,7 @@ bool CodeGenerator::evalConstexprStatementList(
                     {
                         *errorMessage =
                             "cexpr fn zero-initialization currently supports "
-                            "only integer and bool vars";
+                            "only integer, float, and bool vars";
                     }
                     return false;
                 }
@@ -4596,7 +4697,7 @@ bool CodeGenerator::evalConstexprStatementList(
                 return false;
             cond = returnValue.kind == ConstexprValue::Kind::Bool
                        ? returnValue.boolValue
-                       : (returnValue.intValue != 0);
+                       : constexprValueAsDouble(returnValue) != 0.0;
             if(cond)
             {
                 ConstexprEnv nestedEnv = env;
@@ -4647,7 +4748,11 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                                             ConstexprEnv* env, int depth)
 {
     if(!expr)
+    {
+        if(errorMessage)
+            *errorMessage = "missing expression in cexpr";
         return false;
+    }
     if(depth > 64)
     {
         if(errorMessage)
@@ -4727,10 +4832,18 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                     sizeofExpr->expressionTarget, sizeofExpr->line);
         }
         if(!targetType)
+        {
+            if(errorMessage)
+                *errorMessage = "cannot infer sizeof target in cexpr";
             return false;
+        }
         llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
         if(!llvmType)
+        {
+            if(errorMessage)
+                *errorMessage = "cannot lower sizeof target type in cexpr";
             return false;
+        }
         const llvm::DataLayout& dl = module->getDataLayout();
         out.kind = ConstexprValue::Kind::Int;
         out.intValue =
@@ -4744,6 +4857,7 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         out.kind = ConstexprValue::Kind::Int;
         out.intValue = i->value;
         out.boolValue = i->value != 0;
+        out.floatValue = static_cast<double>(i->value);
         out.typeKind = TypeNode::TYPE_I64;
         return true;
     }
@@ -4752,7 +4866,26 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         out.kind = ConstexprValue::Kind::Bool;
         out.boolValue = b->value;
         out.intValue = b->value ? 1 : 0;
+        out.floatValue = b->value ? 1.0 : 0.0;
         out.typeKind = TypeNode::TYPE_BOOL;
+        return true;
+    }
+    if(auto* f = dynamic_cast<FloatLiteralNode*>(expr))
+    {
+        out.kind = ConstexprValue::Kind::Float;
+        out.floatValue = static_cast<double>(f->value);
+        out.intValue = static_cast<int64_t>(f->value);
+        out.boolValue = f->value != 0.0f;
+        out.typeKind = TypeNode::TYPE_FLOAT;
+        return true;
+    }
+    if(auto* d = dynamic_cast<DoubleLiteralNode*>(expr))
+    {
+        out.kind = ConstexprValue::Kind::Float;
+        out.floatValue = d->value;
+        out.intValue = static_cast<int64_t>(d->value);
+        out.boolValue = d->value != 0.0;
+        out.typeKind = TypeNode::TYPE_DOUBLE;
         return true;
     }
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
@@ -4766,6 +4899,14 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                 return true;
             }
         }
+        if(errorMessage)
+        {
+            *errorMessage =
+                env ? "unknown compile-time variable in cexpr: '" + id->name +
+                          "'"
+                    : "runtime variable is not available in cexpr: '" +
+                          id->name + "'";
+        }
         return false;
     }
     if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
@@ -4777,28 +4918,11 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             normalizeInferredKind(castExpr->targetType);
         if(targetKind == TypeNode::TYPE_BOOL)
         {
-            const bool boolValue = out.kind == ConstexprValue::Kind::Bool
-                                       ? out.boolValue
-                                       : (out.intValue != 0);
-            out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = boolValue;
-            out.intValue = boolValue ? 1 : 0;
-            out.typeKind = TypeNode::TYPE_BOOL;
-            return true;
+            return coerceConstexprValueToKind(out, targetKind, errorMessage,
+                                              "cexpr casts");
         }
-        if(!isIntegerInferKind(targetKind))
-        {
-            if(errorMessage)
-                *errorMessage = "cexpr casts currently support only integer "
-                                "and bool targets";
-            return false;
-        }
-        if(out.kind == ConstexprValue::Kind::Bool)
-            out.intValue = out.boolValue ? 1 : 0;
-        out.kind = ConstexprValue::Kind::Int;
-        out.typeKind = targetKind;
-        out.boolValue = out.intValue != 0;
-        return true;
+        return coerceConstexprValueToKind(out, targetKind, errorMessage,
+                                          "cexpr casts");
     }
     if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
         return evalConstexprCall(call, out, errorMessage, env, depth + 1);
@@ -4807,31 +4931,52 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         ConstexprValue operand;
         if(!evalConstexprExpression(un->operand, operand, errorMessage, env,
                                     depth + 1))
+        {
+            if(errorMessage && errorMessage->empty())
+                *errorMessage = "unary operand is not compile-time evaluable";
             return false;
-        const int64_t value = operand.kind == ConstexprValue::Kind::Bool
-                                  ? (operand.boolValue ? 1 : 0)
-                                  : operand.intValue;
+        }
         switch(un->op)
         {
         case UnaryOpNode::OP_NEG:
+            if(operand.kind == ConstexprValue::Kind::Float)
+            {
+                out.kind = ConstexprValue::Kind::Float;
+                out.floatValue = -operand.floatValue;
+                out.intValue = static_cast<int64_t>(out.floatValue);
+                out.boolValue = out.floatValue != 0.0;
+                out.typeKind = operand.typeKind;
+                return true;
+            }
             out.kind = ConstexprValue::Kind::Int;
-            out.intValue = -value;
+            out.intValue = -constexprValueAsInt(operand);
+            out.floatValue = static_cast<double>(out.intValue);
             out.boolValue = out.intValue != 0;
             out.typeKind = operand.typeKind;
             return true;
         case UnaryOpNode::OP_NOT:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = (value == 0);
+            out.boolValue = constexprValueAsDouble(operand) == 0.0;
             out.intValue = out.boolValue ? 1 : 0;
+            out.floatValue = out.boolValue ? 1.0 : 0.0;
             out.typeKind = TypeNode::TYPE_BOOL;
             return true;
         case UnaryOpNode::OP_BITNOT:
+            if(operand.kind == ConstexprValue::Kind::Float)
+            {
+                if(errorMessage)
+                    *errorMessage = "bitwise not in cexpr requires an integer";
+                return false;
+            }
             out.kind = ConstexprValue::Kind::Int;
-            out.intValue = ~value;
+            out.intValue = ~constexprValueAsInt(operand);
+            out.floatValue = static_cast<double>(out.intValue);
             out.boolValue = out.intValue != 0;
             out.typeKind = operand.typeKind;
             return true;
         default:
+            if(errorMessage)
+                *errorMessage = "unsupported unary operator in cexpr";
             return false;
         }
     }
@@ -4840,34 +4985,97 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         ConstexprValue lhsValue;
         ConstexprValue rhsValue;
         if(!evalConstexprExpression(bin->left, lhsValue, errorMessage, env,
-                                    depth + 1) ||
-           !evalConstexprExpression(bin->right, rhsValue, errorMessage, env,
                                     depth + 1))
+        {
+            if(errorMessage && errorMessage->empty())
+                *errorMessage =
+                    "left operand is not compile-time evaluable in cexpr";
             return false;
-        const int64_t lhs = lhsValue.kind == ConstexprValue::Kind::Bool
-                                ? (lhsValue.boolValue ? 1 : 0)
-                                : lhsValue.intValue;
-        const int64_t rhs = rhsValue.kind == ConstexprValue::Kind::Bool
-                                ? (rhsValue.boolValue ? 1 : 0)
-                                : rhsValue.intValue;
+        }
+        if(!evalConstexprExpression(bin->right, rhsValue, errorMessage, env,
+                                    depth + 1))
+        {
+            if(errorMessage && errorMessage->empty())
+                *errorMessage =
+                    "right operand is not compile-time evaluable in cexpr";
+            return false;
+        }
+        const bool anyFloat = lhsValue.kind == ConstexprValue::Kind::Float ||
+                              rhsValue.kind == ConstexprValue::Kind::Float;
+        const TypeNode::TypeKind floatResultKind =
+            lhsValue.typeKind == TypeNode::TYPE_DOUBLE ||
+                    rhsValue.typeKind == TypeNode::TYPE_DOUBLE
+                ? TypeNode::TYPE_DOUBLE
+                : TypeNode::TYPE_FLOAT;
+        const int64_t lhs = constexprValueAsInt(lhsValue);
+        const int64_t rhs = constexprValueAsInt(rhsValue);
+        const double lhsFloat = constexprValueAsDouble(lhsValue);
+        const double rhsFloat = constexprValueAsDouble(rhsValue);
         switch(bin->op)
         {
         case BinaryOpNode::OP_PLUS:
-            out.kind = ConstexprValue::Kind::Int;
-            out.intValue = lhs + rhs;
-            out.typeKind = lhsValue.typeKind;
+            if(anyFloat)
+            {
+                out.kind = ConstexprValue::Kind::Float;
+                out.floatValue = lhsFloat + rhsFloat;
+                out.intValue = static_cast<int64_t>(out.floatValue);
+                out.typeKind = floatResultKind;
+            }
+            else
+            {
+                out.kind = ConstexprValue::Kind::Int;
+                out.intValue = lhs + rhs;
+                out.floatValue = static_cast<double>(out.intValue);
+                out.typeKind = lhsValue.typeKind;
+            }
             break;
         case BinaryOpNode::OP_MINUS:
-            out.kind = ConstexprValue::Kind::Int;
-            out.intValue = lhs - rhs;
-            out.typeKind = lhsValue.typeKind;
+            if(anyFloat)
+            {
+                out.kind = ConstexprValue::Kind::Float;
+                out.floatValue = lhsFloat - rhsFloat;
+                out.intValue = static_cast<int64_t>(out.floatValue);
+                out.typeKind = floatResultKind;
+            }
+            else
+            {
+                out.kind = ConstexprValue::Kind::Int;
+                out.intValue = lhs - rhs;
+                out.floatValue = static_cast<double>(out.intValue);
+                out.typeKind = lhsValue.typeKind;
+            }
             break;
         case BinaryOpNode::OP_MULTIPLY:
-            out.kind = ConstexprValue::Kind::Int;
-            out.intValue = lhs * rhs;
-            out.typeKind = lhsValue.typeKind;
+            if(anyFloat)
+            {
+                out.kind = ConstexprValue::Kind::Float;
+                out.floatValue = lhsFloat * rhsFloat;
+                out.intValue = static_cast<int64_t>(out.floatValue);
+                out.typeKind = floatResultKind;
+            }
+            else
+            {
+                out.kind = ConstexprValue::Kind::Int;
+                out.intValue = lhs * rhs;
+                out.floatValue = static_cast<double>(out.intValue);
+                out.typeKind = lhsValue.typeKind;
+            }
             break;
         case BinaryOpNode::OP_DIVIDE:
+            if(anyFloat)
+            {
+                if(rhsFloat == 0.0)
+                {
+                    if(errorMessage)
+                        *errorMessage = "division by zero in cexpr";
+                    return false;
+                }
+                out.kind = ConstexprValue::Kind::Float;
+                out.floatValue = lhsFloat / rhsFloat;
+                out.intValue = static_cast<int64_t>(out.floatValue);
+                out.typeKind = floatResultKind;
+                break;
+            }
             if(rhs == 0)
             {
                 if(errorMessage)
@@ -4876,9 +5084,16 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             }
             out.kind = ConstexprValue::Kind::Int;
             out.intValue = lhs / rhs;
+            out.floatValue = static_cast<double>(out.intValue);
             out.typeKind = lhsValue.typeKind;
             break;
         case BinaryOpNode::OP_MODULO:
+            if(anyFloat)
+            {
+                if(errorMessage)
+                    *errorMessage = "modulo in cexpr requires integers";
+                return false;
+            }
             if(rhs == 0)
             {
                 if(errorMessage)
@@ -4887,80 +5102,125 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             }
             out.kind = ConstexprValue::Kind::Int;
             out.intValue = lhs % rhs;
+            out.floatValue = static_cast<double>(out.intValue);
             out.typeKind = lhsValue.typeKind;
             break;
         case BinaryOpNode::OP_BITAND:
+            if(anyFloat)
+            {
+                if(errorMessage)
+                    *errorMessage = "bitwise and in cexpr requires integers";
+                return false;
+            }
             out.kind = ConstexprValue::Kind::Int;
             out.intValue = lhs & rhs;
+            out.floatValue = static_cast<double>(out.intValue);
             out.typeKind = lhsValue.typeKind;
             break;
         case BinaryOpNode::OP_BITOR:
+            if(anyFloat)
+            {
+                if(errorMessage)
+                    *errorMessage = "bitwise or in cexpr requires integers";
+                return false;
+            }
             out.kind = ConstexprValue::Kind::Int;
             out.intValue = lhs | rhs;
+            out.floatValue = static_cast<double>(out.intValue);
             out.typeKind = lhsValue.typeKind;
             break;
         case BinaryOpNode::OP_BITXOR:
+            if(anyFloat)
+            {
+                if(errorMessage)
+                    *errorMessage = "bitwise xor in cexpr requires integers";
+                return false;
+            }
             out.kind = ConstexprValue::Kind::Int;
             out.intValue = lhs ^ rhs;
+            out.floatValue = static_cast<double>(out.intValue);
             out.typeKind = lhsValue.typeKind;
             break;
         case BinaryOpNode::OP_SHL:
+            if(anyFloat)
+            {
+                if(errorMessage)
+                    *errorMessage = "shift in cexpr requires integers";
+                return false;
+            }
             out.kind = ConstexprValue::Kind::Int;
             out.intValue = lhs << rhs;
+            out.floatValue = static_cast<double>(out.intValue);
             out.typeKind = lhsValue.typeKind;
             break;
         case BinaryOpNode::OP_SHR:
+            if(anyFloat)
+            {
+                if(errorMessage)
+                    *errorMessage = "shift in cexpr requires integers";
+                return false;
+            }
             out.kind = ConstexprValue::Kind::Int;
             out.intValue = lhs >> rhs;
+            out.floatValue = static_cast<double>(out.intValue);
             out.typeKind = lhsValue.typeKind;
             break;
         case BinaryOpNode::OP_LT:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = lhs < rhs;
+            out.boolValue = anyFloat ? lhsFloat < rhsFloat : lhs < rhs;
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_GT:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = lhs > rhs;
+            out.boolValue = anyFloat ? lhsFloat > rhsFloat : lhs > rhs;
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_LE:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = lhs <= rhs;
+            out.boolValue = anyFloat ? lhsFloat <= rhsFloat : lhs <= rhs;
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_GE:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = lhs >= rhs;
+            out.boolValue = anyFloat ? lhsFloat >= rhsFloat : lhs >= rhs;
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_EQ:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = lhs == rhs;
+            out.boolValue = anyFloat ? lhsFloat == rhsFloat : lhs == rhs;
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_NE:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = lhs != rhs;
+            out.boolValue = anyFloat ? lhsFloat != rhsFloat : lhs != rhs;
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_AND:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = (lhs != 0 && rhs != 0);
+            out.boolValue = (lhsFloat != 0.0 && rhsFloat != 0.0);
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         case BinaryOpNode::OP_OR:
             out.kind = ConstexprValue::Kind::Bool;
-            out.boolValue = (lhs != 0 || rhs != 0);
+            out.boolValue = (lhsFloat != 0.0 || rhsFloat != 0.0);
             out.typeKind = TypeNode::TYPE_BOOL;
             break;
         default:
+            if(errorMessage)
+                *errorMessage = "unsupported binary operator in cexpr";
             return false;
         }
         if(out.kind == ConstexprValue::Kind::Bool)
+        {
             out.intValue = out.boolValue ? 1 : 0;
+            out.floatValue = out.boolValue ? 1.0 : 0.0;
+        }
         else
+        {
             out.boolValue = out.intValue != 0;
+            if(out.kind == ConstexprValue::Kind::Float)
+                out.boolValue = out.floatValue != 0.0;
+        }
         return true;
     }
     if(auto* tern = dynamic_cast<TernaryNode*>(expr))
@@ -4968,13 +5228,20 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         ConstexprValue condValue;
         if(!evalConstexprExpression(tern->condition, condValue, errorMessage,
                                     env, depth + 1))
+        {
+            if(errorMessage && errorMessage->empty())
+                *errorMessage =
+                    "ternary condition is not compile-time evaluable in cexpr";
             return false;
+        }
         const bool cond = condValue.kind == ConstexprValue::Kind::Bool
                               ? condValue.boolValue
-                              : (condValue.intValue != 0);
+                              : constexprValueAsDouble(condValue) != 0.0;
         return evalConstexprExpression(cond ? tern->trueExpr : tern->falseExpr,
                                        out, errorMessage, env, depth + 1);
     }
+    if(errorMessage)
+        *errorMessage = "unsupported expression in cexpr: " + expr->toString();
     return false;
 }
 

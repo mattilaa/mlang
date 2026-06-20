@@ -276,12 +276,14 @@ private:
         enum class Kind
         {
             Int,
-            Bool
+            Bool,
+            Float
         };
 
         Kind kind = Kind::Int;
         int64_t intValue = 0;
         bool boolValue = false;
+        double floatValue = 0.0;
         TypeNode::TypeKind typeKind = TypeNode::TYPE_I64;
     };
     using ConstexprEnv = std::map<std::string, ConstexprValue>;
@@ -296,6 +298,12 @@ private:
                                     ConstexprValue& returnValue,
                                     bool& didReturn,
                                     std::string* errorMessage, int depth);
+    bool coerceConstexprValueToKind(ConstexprValue& value,
+                                    TypeNode::TypeKind targetKind,
+                                    std::string* errorMessage,
+                                    const char* context);
+    double constexprValueAsDouble(const ConstexprValue& value) const;
+    int64_t constexprValueAsInt(const ConstexprValue& value) const;
     llvm::Constant* buildLLVMConstantFromConstexprValue(
         const ConstexprValue& value, TypeNode* targetType, int line);
     // Maps struct name -> (isPublic, sourceModule)

@@ -369,8 +369,22 @@ fn twice(x: i32) cexpr -> i32 {
 }
 ```
 
+`cexpr fn` also supports first-version floating-point arithmetic:
+
+```mla
+cexpr fn midpoint(a: f32, b: f32) -> f32 {
+    return (a + b) / 2.0f;
+}
+
+fn main() -> i32 {
+    static_assert!(midpoint(2.0f, 4.0f) == 3.0f);
+    let value: f32 = cexpr(midpoint(8.0f, 10.0f));
+    return value > 8.9f && value < 9.1f ? 0 : 1;
+}
+```
+
 Current first-version constraints:
-- `cexpr` currently supports integer and `bool` values.
+- `cexpr` currently supports integer, floating-point, and `bool` values.
 - `cexpr fn` bodies support compile-time-evaluable expressions, local
   `let`/`var` declarations, assignment, `if`/`else`, nested blocks, and
   `return`.

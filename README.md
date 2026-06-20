@@ -64,8 +64,17 @@ fn twice(x: i32) cexpr -> i32 {
 }
 ```
 
+Floating-point compile-time functions are supported in the same first-version
+subset:
+
+```mla
+cexpr fn midpoint(a: f32, b: f32) -> f32 {
+    return (a + b) / 2.0f;
+}
+```
+
 Current first-version scope:
-- `cexpr(...)` folds integer and `bool` expressions during compilation.
+- `cexpr(...)` folds integer, floating-point, and `bool` expressions during compilation.
 - `cexpr fn` marks functions that may be called from compile-time contexts.
 - Calling a normal runtime `fn` from `cexpr(...)` is rejected.
 
@@ -1245,6 +1254,8 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/type_alias_demo.mla`
 - Compile-time `cexpr fn` evaluation:
   `examples/cexpr_twice_demo.mla`
+- Floating-point `cexpr fn` evaluation:
+  `examples/cexpr_float_demo.mla`
 - Namespace blocks and aliases (`namespace geometry::units { ... }`, `alias gu = geometry::units;`) with qualified names:
   `examples/namespace_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):

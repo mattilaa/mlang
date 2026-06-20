@@ -23,6 +23,8 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 - `examples/mlang_attributes.mla` — combining `#[test]` and `#[derive(Debug)]`.
 - `examples/cexpr_twice_demo.mla` — first-step `cexpr fn` compile-time
   evaluation with an [`i32`](Quick-Guide#types) function.
+- `examples/cexpr_float_demo.mla` — first-version floating-point `cexpr fn`
+  evaluation with [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types).
 - `examples/test_fixture_example.mla` — `#[fixture]` impl with per-test
   `setup` / `teardown` hooks (run via `mlang --tests`).
 - `examples/testing_mock_example.mla` — mock-based testing using [`std::testing`](Stdlib-Module-API#stdtesting).
