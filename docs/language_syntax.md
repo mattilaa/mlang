@@ -350,22 +350,22 @@ fn main() -> i32 {
 Functions can opt in to compile-time calls with `cexpr fn`:
 
 ```mla
-cexpr fn square(x: i64) -> i64 {
-    return x * x;
+cexpr fn twice(x: i32) -> i32 {
+    return x * 2;
 }
 
 fn main() -> i32 {
-    static_assert!(square(6) == 36);
-    let value: i64 = cexpr(square(7));
-    return value == 49 ? 0 : 1;
+    static_assert!(twice(21) == 42);
+    let value: i32 = cexpr(twice(21));
+    return value == 42 ? 0 : 1;
 }
 ```
 
 The same function may also be written with a postfix specifier:
 
 ```mla
-fn square(x: i64) cexpr -> i64 {
-    return x * x;
+fn twice(x: i32) cexpr -> i32 {
+    return x * 2;
 }
 ```
 

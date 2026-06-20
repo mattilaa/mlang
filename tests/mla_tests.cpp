@@ -3357,6 +3357,22 @@ TEST_F(MLATest, CexprExpressionInitializesRuntimeValue)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, CexprFunctionTwiceI32EvaluatesAtCompileTime)
+{
+    std::string code = R"(
+        cexpr fn twice(x: i32) -> i32 {
+            return x * 2;
+        }
+
+        fn main() -> i32 {
+            static_assert!(twice(21) == 42);
+            let value: i32 = cexpr(twice(21));
+            return value == 42 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, StaticAssertAcceptsCexprFunctionCall)
 {
     std::string code = R"(

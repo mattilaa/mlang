@@ -45,22 +45,22 @@ MLang supports explicit compile-time evaluation with `cexpr(expr)` and
 `cexpr fn`.
 
 ```mla
-cexpr fn square(x: i64) -> i64 {
-    return x * x;
+cexpr fn twice(x: i32) -> i32 {
+    return x * 2;
 }
 
 fn main() -> i32 {
-    static_assert!(square(8) == 64);
-    let mask: i64 = cexpr(square(3) + 1);
-    return mask == 10 ? 0 : 1;
+    static_assert!(twice(21) == 42);
+    let value: i32 = cexpr(twice(21));
+    return value == 42 ? 0 : 1;
 }
 ```
 
 The equivalent postfix declaration form is also accepted:
 
 ```mla
-fn square(x: i64) cexpr -> i64 {
-    return x * x;
+fn twice(x: i32) cexpr -> i32 {
+    return x * 2;
 }
 ```
 
@@ -1243,6 +1243,8 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/std_term_demo.mla`
 - Type aliases (`alias Distance = f32;` and equivalent `use type Distance = f32;`, generic aliases):
   `examples/type_alias_demo.mla`
+- Compile-time `cexpr fn` evaluation:
+  `examples/cexpr_twice_demo.mla`
 - Namespace blocks and aliases (`namespace geometry::units { ... }`, `alias gu = geometry::units;`) with qualified names:
   `examples/namespace_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):
