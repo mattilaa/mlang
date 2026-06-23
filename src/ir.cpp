@@ -25032,7 +25032,14 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
 
         // List indexing
         TypeNode* elemTypeNode = listIt->second;
-        llvm::Type* elementType = getLLVMType(elemTypeNode->kind);
+        llvm::Type* elementType = getLLVMTypeFromNode(elemTypeNode);
+        if(!elementType)
+        {
+            reportError(node->line,
+                        "cannot index list with unresolved element type '" +
+                            type_name_for_error(elemTypeNode) + "'");
+            return nullptr;
+        }
 
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
@@ -25108,8 +25115,16 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         // Map lookup - linear search for key
         TypeNode* keyTypeNode = mapIt->second.first;
         TypeNode* valTypeNode = mapIt->second.second;
-        llvm::Type* keyType = getLLVMType(keyTypeNode->kind);
-        llvm::Type* valueType = getLLVMType(valTypeNode->kind);
+        llvm::Type* keyType = getLLVMTypeFromNode(keyTypeNode);
+        llvm::Type* valueType = getLLVMTypeFromNode(valTypeNode);
+        if(!keyType || !valueType)
+        {
+            reportError(node->line,
+                        "cannot index map with unresolved key/value type '" +
+                            type_name_for_error(keyTypeNode) + "'/'" +
+                            type_name_for_error(valTypeNode) + "'");
+            return nullptr;
+        }
 
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
