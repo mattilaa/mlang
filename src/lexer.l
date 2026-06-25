@@ -196,6 +196,7 @@ static int is_try_question_context()
 "extern"        { return EXTERN; }
 "static"        { return STATIC; }
 "cexpr"         { return CEXPR; }
+"generic"       { return GENERIC; }
 "fn"            { return FUNCTION; }
 "impl"          { return IMPL; }
 "trait"         { return TRAIT; }

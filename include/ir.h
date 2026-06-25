@@ -277,13 +277,15 @@ private:
         {
             Int,
             Bool,
-            Float
+            Float,
+            Type
         };
 
         Kind kind = Kind::Int;
         int64_t intValue = 0;
         bool boolValue = false;
         double floatValue = 0.0;
+        std::string typeName;
         TypeNode::TypeKind typeKind = TypeNode::TYPE_I64;
     };
     using ConstexprEnv = std::map<std::string, ConstexprValue>;
@@ -305,6 +307,13 @@ private:
                                     const char* context);
     double constexprValueAsDouble(const ConstexprValue& value) const;
     int64_t constexprValueAsInt(const ConstexprValue& value) const;
+    std::string canonicalConstexprTypeName(TypeNode* type) const;
+    bool constexprTypeNameFromIdentifier(const std::string& name,
+                                         std::string& out) const;
+    bool bindConstexprGenericTypeParams(
+        TypeNode* pattern, TypeNode* concrete,
+        const std::set<std::string>& typeParams,
+        std::map<std::string, std::string>& bindings) const;
     llvm::Constant* buildLLVMConstantFromConstexprValue(
         const ConstexprValue& value, TypeNode* targetType, int line);
     // Maps struct name -> (isPublic, sourceModule)

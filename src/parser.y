@@ -1853,7 +1853,7 @@ enum UpdatePosition
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
 %token PUB IMPL TRAIT DYN
 %token EXTERN
-%token STATIC CEXPR
+%token STATIC CEXPR GENERIC
 %token ASM VOLATILE SIZEOF
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
@@ -2424,7 +2424,15 @@ struct_method
     ;
 
 function_def
-    : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+    : GENERIC LT type_param_list GT function_def
+        {
+            auto* fn = static_cast<FunctionDefNode*>($5);
+            auto* params = static_cast<TypeParamListNode*>($3);
+            fn->typeParams = params->params;
+            fn->typeParamTraitBounds = params->traitBounds;
+            $$ = fn;
+        }
+    | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         { auto* node = mla_ast_function_def($7, $2, $4, $9, 0, 0); node->line = yylineno; $$ = node; }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         { auto* node = mla_ast_function_def($8, $3, $5, $10, 1, 0); node->line = yylineno; $$ = node; }

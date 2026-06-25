@@ -102,9 +102,26 @@ fn main() -> i32 {
 }
 ```
 
+Compile-time functions can also be generic and dispatch on concrete argument
+types with `type_id(T)`:
+
+```rust
+alias SomeType = i64;
+
+generic<T, Y>
+cexpr fn pick(item: T, item2: Y) {
+    cexpr if type_id(T) == SomeType {
+        return item * 2;
+    } else {
+        return item2;
+    }
+}
+```
+
 Current first-version scope:
 - `cexpr(...)` folds integer, floating-point, and [`bool`](Quick-Guide#types) expressions during compilation.
 - `cexpr fn` marks functions that may be called from compile-time contexts.
+- `generic<T, ...> cexpr fn` supports one or more type parameters for compile-time calls.
 - `cexpr name: Type = expr;` declares a compile-time value.
 - `cexpr if` selects a branch during compilation.
 - Calling a normal runtime [`fn`](Language-Syntax) from `cexpr(...)` is rejected.

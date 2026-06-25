@@ -385,6 +385,26 @@ fn main() -> i32 {
 }
 ```
 
+Compile-time functions can be generic. Type parameters are declared with
+`generic<T, Y>` before `cexpr fn`, and `type_id(T)` can be used in `cexpr if`
+conditions to select branches by the concrete compile-time argument type:
+
+```rust
+alias SomeType = i64;
+alias SomeOtherType = f64;
+
+generic<T, Y>
+cexpr fn pick(item: T, item2: Y) {
+    cexpr if type_id(T) == SomeType {
+        return item * 2;
+    } else if type_id(T) == SomeOtherType {
+        return 30;
+    } else {
+        return item2;
+    }
+}
+```
+
 Compile-time values can be declared with `cexpr name: Type = expr;`. The
 initializer must be compile-time evaluable:
 
@@ -423,6 +443,8 @@ Current first-version constraints:
 - `cexpr fn` bodies support compile-time-evaluable expressions, local
   [`let`](Language-Syntax)/[`var`](Language-Syntax) declarations, assignment, [`if`](Language-Syntax)/[`else`](Language-Syntax), nested blocks, and
   [`return`](Language-Syntax).
+- `generic<T, ...> cexpr fn` supports one or more type parameters for
+  compile-time calls, with `type_id(T)` usable in compile-time conditions.
 - `cexpr if` currently supports block bodies, `else if` chains, and an
   optional [`else`](Language-Syntax) block.
 - Calling a non-`cexpr fn` from `cexpr(...)` is rejected.

@@ -1595,6 +1595,21 @@ std::string FunctionDefNode::toString() const
     }
     if(isPublic)
         result += "pub ";
+    if(!typeParams.empty())
+    {
+        result += "generic<";
+        for(size_t i = 0; i < typeParams.size(); ++i)
+        {
+            if(i > 0)
+                result += ", ";
+            result += typeParams[i];
+            auto boundIt = typeParamTraitBounds.find(typeParams[i]);
+            if(boundIt != typeParamTraitBounds.end() &&
+               !boundIt->second.empty())
+                result += ": " + boundIt->second;
+        }
+        result += "> ";
+    }
     if(isCexpr)
         result += "cexpr ";
     result += "fn ";

@@ -1396,6 +1396,8 @@ public:
     bool isInline = false;
     bool isInlineAlways = false;
     bool isInlineNever = false;
+    std::vector<std::string> typeParams;
+    std::map<std::string, std::string> typeParamTraitBounds;
     std::string sourceModule; // Module this function was defined in (for
                               // visibility checks)
 

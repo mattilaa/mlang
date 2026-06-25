@@ -3494,6 +3494,53 @@ TEST_F(MLATest, CexprElseIfSelectsCompileTimeBranchAndIgnoresOtherReturnTypes)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, GenericCexprFunctionDispatchesOnTypeId)
+{
+    std::string code = R"(
+        alias SomeType = i64;
+        alias SomeOtherType = f64;
+        alias SomeItemTypeY = i64;
+
+        cexpr fn for_i64(item: i64) -> i64 {
+            return item * 2;
+        }
+
+        cexpr fn for_f64(item: f64) -> i64 {
+            return item > 0.0 ? 30 : 0;
+        }
+
+        cexpr fn for_y(item: i64) -> i64 {
+            return item + 7;
+        }
+
+        cexpr fn fallback() -> i64 {
+            return 5;
+        }
+
+        generic<T, Y>
+        cexpr fn pick(item: T, item2: Y) {
+            cexpr if type_id(T) == SomeType {
+                return for_i64(item);
+            } else if type_id(T) == SomeOtherType {
+                return for_f64(item);
+            } else if type_id(T) != SomeType && type_id(Y) == SomeItemTypeY {
+                return for_y(item2);
+            } else {
+                return fallback();
+            }
+        }
+
+        fn main() -> i32 {
+            cexpr A: i64 = pick(21, 0);
+            cexpr B: i64 = pick(1.0, 0);
+            cexpr C: i64 = pick(1.0f, 8);
+            cexpr D: i64 = pick(1.0f, 2.0f);
+            return cexpr(A + B + C + D) == 92 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, CexprIfRejectsRuntimeCondition)
 {
     std::string code = R"(
