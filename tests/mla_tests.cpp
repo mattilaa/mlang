@@ -726,12 +726,51 @@ TEST_F(MLATest, FixedArrayExtendsFromVecWithinCapacity)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
-TEST_F(MLATest, FixedArrayRejectsRuntimeOverflow)
+TEST_F(MLATest, FixedArrayRejectsProvableExtendOverflowAtCompileTime)
 {
     std::string code = R"(
         fn main() -> i32 {
             var arr: array<int, 3> = {1, 2};
             arr.extend(vec![3, 4]);
+            return arr.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("extend() would exceed"), std::string::npos);
+    EXPECT_NE(out.find("capacity=3"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayRejectsProvablePushOverflowAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 2> = {};
+            arr.fill(9);
+            arr.push(10);
+            return arr.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("push() would exceed"), std::string::npos);
+    EXPECT_NE(out.find("capacity=2"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayKeepsRuntimeGuardForUnknownLengthOverflow)
+{
+    std::string code = R"(
+        fn values() -> list<int> {
+            return vec![3, 4];
+        }
+
+        fn main() -> i32 {
+            var arr: array<int, 3> = {1, 2};
+            arr.extend(values());
             return arr.len();
         }
     )";
@@ -767,6 +806,37 @@ TEST_F(MLATest, FixedArrayRejectsTooLargeFillCount)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("array initializer has 4 elements"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayRejectsConstantOutOfBoundsIndexAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let arr: array<int, 3> = {1, 2, 3};
+            return arr[3];
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array index out of bounds"), std::string::npos);
+    EXPECT_NE(out.find("capacity=3"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayKeepsRuntimeGuardForDynamicOutOfBoundsIndex)
+{
+    std::string code = R"(
+        fn get_index() -> i32 {
+            return 3;
+        }
+
+        fn main() -> i32 {
+            let arr: array<int, 3> = {1, 2, 3};
+            return arr[get_index()];
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, VarReassignment)

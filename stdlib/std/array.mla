@@ -21,16 +21,23 @@
 /// ```
 ///
 /// `extend(values)` appends a compatible `list<T>`, `vec![...]`, or another
-/// `array<T, M>` when the resulting length is at most `N`. If a runtime-sized
-/// source would exceed capacity, execution stops before reallocating or writing
-/// past the end.
+/// `array<T, M>` when the resulting length is at most `N`. If the compiler can
+/// prove the result would exceed `N`, it emits a compile-time error. Unknown
+/// runtime-sized sources keep a capacity guard that stops before reallocating
+/// or writing past the end.
+///
+/// Constant out-of-bounds indexes are rejected at compile time. Dynamic indexes
+/// are checked before loading.
 ///
 /// `size_of(array<T, N>)` reports fixed storage bytes: `N * size_of(T)`.
 
 // @builtin array
 // Fixed-capacity sequence type: array<T, N>.
 // Initializer element counts are checked at compile time where known.
-// push/extend/fill are runtime-checked so they never exceed N.
+// push/extend/fill are checked so they never exceed N. Provable overflows are
+// compile-time errors; unknown-sized sources keep runtime guards.
+// Indexing is also checked: constant bad indexes fail at compile time and
+// dynamic indexes keep runtime guards.
 
 // Documentation-only anchor for `mod std::array;`.
 extern fn array() -> void;

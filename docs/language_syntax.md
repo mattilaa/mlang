@@ -912,9 +912,14 @@ scratch.fill(1);
 let too_many: array<int, 3> = {1, 2, 3, 4};
 ```
 
-Runtime-sized mutations are checked before writing. `push` and `extend` stop
-execution if the resulting length would exceed `N`; `fill(value)` sets the
-array length to exactly `N`.
+Array growth is checked before writing. When the compiler can prove the current
+length and source length, `push` and `extend` overflow is a compile-time error.
+Unknown runtime-sized sources keep the runtime capacity guard. `fill(value)`
+sets the array length to exactly `N`.
+
+Indexing is checked too. Constant indexes that are known to be out of bounds are
+compile-time errors, while dynamic indexes keep a runtime bounds guard before
+loading.
 
 Supported fold operators:
 - `+`
