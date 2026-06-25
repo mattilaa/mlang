@@ -907,10 +907,16 @@ let fixed: array<int, 6> = {1, 3, 4, 5, 6, 7};
 var scratch: array<int, 6> = {};
 scratch.push(10);
 scratch.push(20);
+scratch.extend(vec![30, 40]);
+scratch.fill(1);
 
 // Compile-time error: initializer has 4 elements but capacity is 3.
 let too_many: array<int, 3> = {1, 2, 3, 4};
 ```
+
+Runtime-sized mutations are checked before writing. `push` and `extend` stop
+execution if the resulting length would exceed `N`; `fill(value)` sets the
+array length to exactly `N`.
 
 Supported fold operators:
 - `+`

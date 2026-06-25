@@ -3954,7 +3954,11 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                                       id->name + "'");
                 return nullptr;
             }
-            return new GenericListTypeNode(listIt->second);
+            auto capIt = arrayCapacities.find(id->name);
+            if(capIt != arrayCapacities.end())
+                return new ArrayTypeNode(cloneTypeNode(listIt->second),
+                                         capIt->second);
+            return new GenericListTypeNode(cloneTypeNode(listIt->second));
         }
         if(kind == TypeNode::TYPE_MAP)
         {
@@ -24263,6 +24267,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                   elemKind2 == TypeNode::TYPE_U64);
                 bool elemIsStr = (elemKind2 == TypeNode::TYPE_STRING ||
                                   elemKind2 == TypeNode::TYPE_STR8);
+                auto arrayCapIt2 = arrayCapacities.find(objId->name);
+                bool receiverIsArray2 = arrayCapIt2 != arrayCapacities.end();
+                llvm::Value* arrayCapacity2 =
+                    receiverIsArray2
+                        ? llvm::ConstantInt::get(i64Type2, arrayCapIt2->second)
+                        : nullptr;
 
                 auto callVecVoidFn = [&](const std::string& fnName)
                 {
@@ -24294,6 +24304,103 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     return builder.CreateICmpEQ(
                         cnt, llvm::ConstantInt::get(i64Type2, 0),
                         objId->name + ".is_empty");
+                }
+                // --- fill(val) ---
+                if(node->methodName == "fill")
+                {
+                    if(!receiverIsArray2)
+                    {
+                        reportError(node->line,
+                                    "fill() is only available for array<T, N>");
+                        return nullptr;
+                    }
+                    if(node->arguments.size() != 1)
+                    {
+                        reportError(node->line, "fill() takes one argument");
+                        return nullptr;
+                    }
+                    llvm::Value* val2 = generateExpression(node->arguments[0]);
+                    if(!val2)
+                        return nullptr;
+
+                    if(elemIsStr)
+                    {
+                        llvm::FunctionType* ft = llvm::FunctionType::get(
+                            voidType2,
+                            {opaquePtrType, opaquePtrType, i64Type2}, false);
+                        llvm::FunctionCallee fn =
+                            module->getOrInsertFunction(
+                                "__mlang_std_array_fill_str", ft);
+                        builder.CreateCall(
+                            fn, {allocaPtr2, val2, arrayCapacity2});
+                        return llvm::Constant::getNullValue(voidType2);
+                    }
+                    if(elemIsI64)
+                    {
+                        if(val2->getType() != i64Type2)
+                            val2 = builder.CreateSExt(val2, i64Type2);
+                        llvm::FunctionType* ft = llvm::FunctionType::get(
+                            voidType2,
+                            {opaquePtrType, i64Type2, i64Type2}, false);
+                        llvm::FunctionCallee fn =
+                            module->getOrInsertFunction(
+                                "__mlang_std_array_fill_i64", ft);
+                        builder.CreateCall(
+                            fn, {allocaPtr2, val2, arrayCapacity2});
+                        return llvm::Constant::getNullValue(voidType2);
+                    }
+                    if(elemKind2 == TypeNode::TYPE_INT ||
+                       elemKind2 == TypeNode::TYPE_I32 ||
+                       elemKind2 == TypeNode::TYPE_U32 ||
+                       elemKind2 == TypeNode::TYPE_I16 ||
+                       elemKind2 == TypeNode::TYPE_U16 ||
+                       elemKind2 == TypeNode::TYPE_I8 ||
+                       elemKind2 == TypeNode::TYPE_U8 ||
+                       elemKind2 == TypeNode::TYPE_BOOL)
+                    {
+                        if(val2->getType() != i32Type2)
+                            val2 = builder.CreateTrunc(val2, i32Type2);
+                        llvm::FunctionType* ft = llvm::FunctionType::get(
+                            voidType2,
+                            {opaquePtrType, i32Type2, i64Type2}, false);
+                        llvm::FunctionCallee fn =
+                            module->getOrInsertFunction(
+                                "__mlang_std_array_fill_i32", ft);
+                        builder.CreateCall(
+                            fn, {allocaPtr2, val2, arrayCapacity2});
+                        return llvm::Constant::getNullValue(voidType2);
+                    }
+
+                    llvm::Type* elemLlvmType =
+                        elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
+                                      : val2->getType();
+                    if(!elemLlvmType || val2->getType() != elemLlvmType)
+                    {
+                        reportError(node->line,
+                                    "fill() argument type mismatch for array "
+                                    "element");
+                        return nullptr;
+                    }
+                    llvm::AllocaInst* tmpElem = builder.CreateAlloca(
+                        elemLlvmType, nullptr, "array.fill.tmp");
+                    builder.CreateStore(val2, tmpElem);
+                    llvm::Value* elemPtrAsOpaque = builder.CreateBitCast(
+                        tmpElem, opaquePtrType, "array.fill.ptr");
+                    uint64_t elemSizeU =
+                        module->getDataLayout().getTypeAllocSize(elemLlvmType);
+                    llvm::Value* elemSize =
+                        llvm::ConstantInt::get(i64Type2, elemSizeU);
+                    llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                        voidType2,
+                        {opaquePtrType, opaquePtrType, i64Type2, i64Type2},
+                        false);
+                    llvm::FunctionCallee fnRaw =
+                        module->getOrInsertFunction(
+                            "__mlang_std_array_fill_raw", ftRaw);
+                    builder.CreateCall(fnRaw,
+                                       {allocaPtr2, elemPtrAsOpaque, elemSize,
+                                        arrayCapacity2});
+                    return llvm::Constant::getNullValue(voidType2);
                 }
                 // --- push(val) ---
                 if(node->methodName == "push")
@@ -24365,20 +24472,186 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         llvm::Value* elemSize = llvm::ConstantInt::get(
                             i64Type2, (uint64_t)elemSizeU);
                         llvm::FunctionType* ftRaw = llvm::FunctionType::get(
-                            voidType2, {opaquePtrType, opaquePtrType, i64Type2},
+                            voidType2,
+                            receiverIsArray2
+                                ? std::vector<llvm::Type*>{
+                                      opaquePtrType, opaquePtrType, i64Type2,
+                                      i64Type2}
+                                : std::vector<llvm::Type*>{
+                                      opaquePtrType, opaquePtrType, i64Type2},
                             false);
                         llvm::FunctionCallee fnRaw =
                             module->getOrInsertFunction(
-                                "__mlang_std_vec_push_raw", ftRaw);
-                        builder.CreateCall(
-                            fnRaw, {allocaPtr2, elemPtrAsOpaque, elemSize});
+                                receiverIsArray2
+                                    ? "__mlang_std_array_push_raw"
+                                    : "__mlang_std_vec_push_raw",
+                                ftRaw);
+                        if(receiverIsArray2)
+                            builder.CreateCall(fnRaw,
+                                               {allocaPtr2, elemPtrAsOpaque,
+                                                elemSize, arrayCapacity2});
+                        else
+                            builder.CreateCall(
+                                fnRaw, {allocaPtr2, elemPtrAsOpaque, elemSize});
                         return llvm::Constant::getNullValue(voidType2);
                     }
                     llvm::FunctionType* ft2 = llvm::FunctionType::get(
-                        voidType2, {opaquePtrType, valType2}, false);
+                        voidType2,
+                        receiverIsArray2
+                            ? std::vector<llvm::Type*>{
+                                  opaquePtrType, valType2, i64Type2}
+                            : std::vector<llvm::Type*>{opaquePtrType,
+                                                       valType2},
+                        false);
+                    if(receiverIsArray2)
+                    {
+                        if(fnName2 == "__mlang_std_vec_push_str")
+                            fnName2 = "__mlang_std_array_push_str";
+                        else if(fnName2 == "__mlang_std_vec_push_i64")
+                            fnName2 = "__mlang_std_array_push_i64";
+                        else
+                            fnName2 = "__mlang_std_array_push_i32";
+                    }
                     llvm::FunctionCallee fn2 =
                         module->getOrInsertFunction(fnName2, ft2);
-                    builder.CreateCall(fn2, {allocaPtr2, val2});
+                    if(receiverIsArray2)
+                        builder.CreateCall(
+                            fn2, {allocaPtr2, val2, arrayCapacity2});
+                    else
+                        builder.CreateCall(fn2, {allocaPtr2, val2});
+                    return llvm::Constant::getNullValue(voidType2);
+                }
+                // --- extend(list_or_array) ---
+                if(node->methodName == "extend")
+                {
+                    if(!receiverIsArray2)
+                    {
+                        reportError(node->line,
+                                    "extend() is only available for array<T, N>");
+                        return nullptr;
+                    }
+                    if(node->arguments.size() != 1)
+                    {
+                        reportError(node->line, "extend() takes one argument");
+                        return nullptr;
+                    }
+
+                    llvm::Type* elemLlvmType =
+                        elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
+                                      : getLLVMType(elemKind2);
+                    if(!elemLlvmType)
+                    {
+                        reportError(node->line,
+                                    "unsupported array element type for "
+                                    "extend()");
+                        return nullptr;
+                    }
+
+                    TypeNode* srcType =
+                        inferExpressionTypeNode(node->arguments[0],
+                                                node->line);
+                    TypeNode* srcElemType = nullptr;
+                    if(auto* srcArray = dynamic_cast<ArrayTypeNode*>(srcType))
+                        srcElemType = srcArray->elementType;
+                    else if(auto* srcList =
+                                dynamic_cast<GenericListTypeNode*>(srcType))
+                        srcElemType = srcList->elementType;
+                    else if(srcType && srcType->kind == TypeNode::TYPE_LIST)
+                        srcElemType = nullptr;
+                    else
+                    {
+                        reportError(node->line,
+                                    "extend() expects a list<T>, vec![...], or "
+                                    "array<T, N> argument");
+                        return nullptr;
+                    }
+                    if(srcElemType)
+                    {
+                        llvm::Type* srcElemLlvm =
+                            getLLVMTypeFromNode(srcElemType);
+                        bool sourceIsLiteral =
+                            dynamic_cast<ListLiteralNode*>(
+                                node->arguments[0]) ||
+                            dynamic_cast<ArrayFillNode*>(node->arguments[0]);
+                        bool literalIntegerCoercion =
+                            sourceIsLiteral && srcElemLlvm &&
+                            srcElemLlvm->isIntegerTy() &&
+                            elemLlvmType->isIntegerTy();
+                        if(srcElemLlvm && srcElemLlvm != elemLlvmType &&
+                           !literalIntegerCoercion)
+                        {
+                            reportError(node->line,
+                                        "extend() argument element type does "
+                                        "not match array element type");
+                            return nullptr;
+                        }
+                    }
+
+                    llvm::Value* srcPtr = nullptr;
+                    if(dynamic_cast<IdentifierNode*>(node->arguments[0]) ||
+                       dynamic_cast<FieldAccessNode*>(node->arguments[0]))
+                        srcPtr = getLValuePointer(node->arguments[0],
+                                                  node->line);
+
+                    if(!srcPtr)
+                    {
+                        llvm::Value* srcValue = nullptr;
+                        if(auto* listLit = dynamic_cast<ListLiteralNode*>(
+                               node->arguments[0]))
+                            srcValue = generateListLiteral(listLit,
+                                                           elemLlvmType);
+                        else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(
+                                    node->arguments[0]))
+                            srcValue = generateArrayFill(arrFill,
+                                                         elemLlvmType);
+                        else
+                            srcValue = generateExpression(node->arguments[0]);
+                        if(!srcValue)
+                            return nullptr;
+                        llvm::AllocaInst* tmpList = builder.CreateAlloca(
+                            srcValue->getType(), nullptr, "array.extend.tmp");
+                        builder.CreateStore(srcValue, tmpList);
+                        srcPtr = tmpList;
+                    }
+
+                    std::string fnName =
+                        elemIsStr   ? "__mlang_std_array_extend_str"
+                        : elemIsI64 ? "__mlang_std_array_extend_i64"
+                                    : "__mlang_std_array_extend_i32";
+                    if(!(elemIsStr || elemIsI64 ||
+                         elemKind2 == TypeNode::TYPE_INT ||
+                         elemKind2 == TypeNode::TYPE_I32 ||
+                         elemKind2 == TypeNode::TYPE_U32 ||
+                         elemKind2 == TypeNode::TYPE_I16 ||
+                         elemKind2 == TypeNode::TYPE_U16 ||
+                         elemKind2 == TypeNode::TYPE_I8 ||
+                         elemKind2 == TypeNode::TYPE_U8 ||
+                         elemKind2 == TypeNode::TYPE_BOOL))
+                    {
+                        uint64_t elemSizeU =
+                            module->getDataLayout().getTypeAllocSize(
+                                elemLlvmType);
+                        llvm::Value* elemSize = llvm::ConstantInt::get(
+                            i64Type2, (uint64_t)elemSizeU);
+                        llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                            voidType2,
+                            {opaquePtrType, opaquePtrType, i64Type2,
+                             i64Type2},
+                            false);
+                        llvm::FunctionCallee fnRaw =
+                            module->getOrInsertFunction(
+                                "__mlang_std_array_extend_raw", ftRaw);
+                        builder.CreateCall(fnRaw,
+                                           {allocaPtr2, srcPtr, elemSize,
+                                            arrayCapacity2});
+                        return llvm::Constant::getNullValue(voidType2);
+                    }
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        voidType2, {opaquePtrType, opaquePtrType, i64Type2},
+                        false);
+                    llvm::FunctionCallee fn =
+                        module->getOrInsertFunction(fnName, ft);
+                    builder.CreateCall(fn, {allocaPtr2, srcPtr, arrayCapacity2});
                     return llvm::Constant::getNullValue(voidType2);
                 }
                 // --- pop() ---
@@ -24806,10 +25079,24 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(!recvPtr)
                 return nullptr;
             TypeNode::TypeKind elemKind = TypeNode::TYPE_I32;
-            if(auto* gl = dynamic_cast<GenericListTypeNode*>(recvType))
+            TypeNode* recvElemTypeForList = nullptr;
+            int64_t arrayCapacityValue = 0;
+            bool receiverIsArray = false;
+            if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(recvType))
+            {
+                receiverIsArray = true;
+                arrayCapacityValue = arrayType->capacity;
+                recvElemTypeForList = arrayType->elementType;
+                if(arrayType->elementType)
+                    elemKind = arrayType->elementType->kind;
+            }
+            else if(auto* gl = dynamic_cast<GenericListTypeNode*>(recvType))
             {
                 if(gl->elementType)
+                {
+                    recvElemTypeForList = gl->elementType;
                     elemKind = gl->elementType->kind;
+                }
             }
             llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
             llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -24832,6 +25119,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                   elemKind == TypeNode::TYPE_I8 ||
                                   elemKind == TypeNode::TYPE_U8 ||
                                   elemKind == TypeNode::TYPE_BOOL);
+            llvm::Value* arrayCapacity =
+                receiverIsArray
+                    ? llvm::ConstantInt::get(i64Type, arrayCapacityValue)
+                    : nullptr;
 
             if(node->methodName == "len")
             {
@@ -24866,6 +25157,86 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                             llvm::ConstantInt::get(i64Type, 0),
                                             "fieldlist.is_empty");
             }
+            if(node->methodName == "fill")
+            {
+                if(!receiverIsArray)
+                {
+                    reportError(node->line,
+                                "fill() is only available for array<T, N>");
+                    return nullptr;
+                }
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "fill() takes one argument");
+                    return nullptr;
+                }
+                llvm::Value* val = generateExpression(node->arguments[0]);
+                if(!val)
+                    return nullptr;
+
+                if(elemIsStr)
+                {
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        voidType, {opaquePtrType, opaquePtrType, i64Type},
+                        false);
+                    llvm::FunctionCallee fn = module->getOrInsertFunction(
+                        "__mlang_std_array_fill_str", ft);
+                    builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                    return llvm::Constant::getNullValue(voidType);
+                }
+                if(elemIsI64)
+                {
+                    if(val->getType() != i64Type)
+                        val = builder.CreateSExt(val, i64Type);
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        voidType, {opaquePtrType, i64Type, i64Type}, false);
+                    llvm::FunctionCallee fn = module->getOrInsertFunction(
+                        "__mlang_std_array_fill_i64", ft);
+                    builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                    return llvm::Constant::getNullValue(voidType);
+                }
+                if(elemIsI32Like)
+                {
+                    if(val->getType() != i32Type)
+                        val = builder.CreateTrunc(val, i32Type);
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        voidType, {opaquePtrType, i32Type, i64Type}, false);
+                    llvm::FunctionCallee fn = module->getOrInsertFunction(
+                        "__mlang_std_array_fill_i32", ft);
+                    builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                    return llvm::Constant::getNullValue(voidType);
+                }
+
+                llvm::Type* elemLlvmType =
+                    recvElemTypeForList
+                        ? getLLVMTypeFromNode(recvElemTypeForList)
+                        : val->getType();
+                if(!elemLlvmType || val->getType() != elemLlvmType)
+                {
+                    reportError(node->line,
+                                "fill() argument type mismatch for array "
+                                "element");
+                    return nullptr;
+                }
+                llvm::AllocaInst* tmpElem = builder.CreateAlloca(
+                    elemLlvmType, nullptr, "array.fill.tmp");
+                builder.CreateStore(val, tmpElem);
+                llvm::Value* elemPtrAsOpaque = builder.CreateBitCast(
+                    tmpElem, opaquePtrType, "array.fill.ptr");
+                uint64_t elemSizeU =
+                    module->getDataLayout().getTypeAllocSize(elemLlvmType);
+                llvm::Value* elemSize =
+                    llvm::ConstantInt::get(i64Type, elemSizeU);
+                llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                    voidType,
+                    {opaquePtrType, opaquePtrType, i64Type, i64Type}, false);
+                llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
+                    "__mlang_std_array_fill_raw", ftRaw);
+                builder.CreateCall(fnRaw,
+                                   {recvPtr, elemPtrAsOpaque, elemSize,
+                                    arrayCapacity});
+                return llvm::Constant::getNullValue(voidType);
+            }
             if(node->methodName == "push")
             {
                 if(node->arguments.size() != 1)
@@ -24894,13 +25265,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(!elemIsI32Like)
                     {
-                        TypeNode* recvElemType = nullptr;
-                        if(auto* gl =
-                               dynamic_cast<GenericListTypeNode*>(recvType))
-                            recvElemType = gl->elementType;
                         llvm::Type* elemLlvmType =
-                            recvElemType ? getLLVMTypeFromNode(recvElemType)
-                                         : nullptr;
+                            recvElemTypeForList
+                                ? getLLVMTypeFromNode(recvElemTypeForList)
+                                : nullptr;
                         if(!elemLlvmType)
                         {
                             reportError(
@@ -24924,12 +25292,28 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                 i64Type, (uint64_t)elemSizeU);
                             llvm::FunctionType* ftRaw = llvm::FunctionType::get(
                                 voidType,
-                                {opaquePtrType, opaquePtrType, i64Type}, false);
+                                receiverIsArray
+                                    ? std::vector<llvm::Type*>{
+                                          opaquePtrType, opaquePtrType, i64Type,
+                                          i64Type}
+                                    : std::vector<llvm::Type*>{
+                                          opaquePtrType, opaquePtrType,
+                                          i64Type},
+                                false);
                             llvm::FunctionCallee fnRaw =
                                 module->getOrInsertFunction(
-                                    "__mlang_std_vec_push_raw", ftRaw);
-                            builder.CreateCall(
-                                fnRaw, {recvPtr, elemPtrAsOpaque, elemSize});
+                                    receiverIsArray
+                                        ? "__mlang_std_array_push_raw"
+                                        : "__mlang_std_vec_push_raw",
+                                    ftRaw);
+                            if(receiverIsArray)
+                                builder.CreateCall(fnRaw,
+                                                   {recvPtr, elemPtrAsOpaque,
+                                                    elemSize, arrayCapacity});
+                            else
+                                builder.CreateCall(fnRaw,
+                                                   {recvPtr, elemPtrAsOpaque,
+                                                    elemSize});
                             return llvm::Constant::getNullValue(voidType);
                         }
                     }
@@ -24938,11 +25322,145 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     if(val->getType() != i32Type)
                         val = builder.CreateTrunc(val, i32Type);
                 }
+                if(receiverIsArray)
+                {
+                    if(fnName == "__mlang_std_vec_push_str")
+                        fnName = "__mlang_std_array_push_str";
+                    else if(fnName == "__mlang_std_vec_push_i64")
+                        fnName = "__mlang_std_array_push_i64";
+                    else
+                        fnName = "__mlang_std_array_push_i32";
+                }
                 llvm::FunctionType* ft = llvm::FunctionType::get(
-                    voidType, {opaquePtrType, valType}, false);
+                    voidType,
+                    receiverIsArray
+                        ? std::vector<llvm::Type*>{opaquePtrType, valType,
+                                                   i64Type}
+                        : std::vector<llvm::Type*>{opaquePtrType, valType},
+                    false);
                 llvm::FunctionCallee fn =
                     module->getOrInsertFunction(fnName, ft);
-                builder.CreateCall(fn, {recvPtr, val});
+                if(receiverIsArray)
+                    builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                else
+                    builder.CreateCall(fn, {recvPtr, val});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "extend")
+            {
+                if(!receiverIsArray)
+                {
+                    reportError(node->line,
+                                "extend() is only available for array<T, N>");
+                    return nullptr;
+                }
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "extend() takes one argument");
+                    return nullptr;
+                }
+
+                llvm::Type* elemLlvmType =
+                    recvElemTypeForList
+                        ? getLLVMTypeFromNode(recvElemTypeForList)
+                        : getLLVMType(elemKind);
+                if(!elemLlvmType)
+                {
+                    reportError(node->line,
+                                "unsupported array element type for extend()");
+                    return nullptr;
+                }
+
+                TypeNode* srcType =
+                    inferExpressionTypeNode(node->arguments[0], node->line);
+                TypeNode* srcElemType = nullptr;
+                if(auto* srcArray = dynamic_cast<ArrayTypeNode*>(srcType))
+                    srcElemType = srcArray->elementType;
+                else if(auto* srcList =
+                            dynamic_cast<GenericListTypeNode*>(srcType))
+                    srcElemType = srcList->elementType;
+                else if(srcType && srcType->kind == TypeNode::TYPE_LIST)
+                    srcElemType = nullptr;
+                else
+                {
+                    reportError(node->line,
+                                "extend() expects a list<T>, vec![...], or "
+                                "array<T, N> argument");
+                    return nullptr;
+                }
+                if(srcElemType)
+                {
+                    llvm::Type* srcElemLlvm =
+                        getLLVMTypeFromNode(srcElemType);
+                    bool sourceIsLiteral =
+                        dynamic_cast<ListLiteralNode*>(node->arguments[0]) ||
+                        dynamic_cast<ArrayFillNode*>(node->arguments[0]);
+                    bool literalIntegerCoercion =
+                        sourceIsLiteral && srcElemLlvm &&
+                        srcElemLlvm->isIntegerTy() &&
+                        elemLlvmType->isIntegerTy();
+                    if(srcElemLlvm && srcElemLlvm != elemLlvmType &&
+                       !literalIntegerCoercion)
+                    {
+                        reportError(node->line,
+                                    "extend() argument element type does not "
+                                    "match array element type");
+                        return nullptr;
+                    }
+                }
+
+                llvm::Value* srcPtr = nullptr;
+                if(dynamic_cast<IdentifierNode*>(node->arguments[0]) ||
+                   dynamic_cast<FieldAccessNode*>(node->arguments[0]))
+                    srcPtr = getLValuePointer(node->arguments[0], node->line);
+
+                if(!srcPtr)
+                {
+                    llvm::Value* srcValue = nullptr;
+                    if(auto* listLit =
+                           dynamic_cast<ListLiteralNode*>(node->arguments[0]))
+                        srcValue = generateListLiteral(listLit, elemLlvmType);
+                    else if(auto* arrFill =
+                                dynamic_cast<ArrayFillNode*>(
+                                    node->arguments[0]))
+                        srcValue = generateArrayFill(arrFill, elemLlvmType);
+                    else
+                        srcValue = generateExpression(node->arguments[0]);
+                    if(!srcValue)
+                        return nullptr;
+                    llvm::AllocaInst* tmpList = builder.CreateAlloca(
+                        srcValue->getType(), nullptr, "array.extend.tmp");
+                    builder.CreateStore(srcValue, tmpList);
+                    srcPtr = tmpList;
+                }
+
+                std::string fnName =
+                    elemIsStr   ? "__mlang_std_array_extend_str"
+                    : elemIsI64 ? "__mlang_std_array_extend_i64"
+                                : "__mlang_std_array_extend_i32";
+                if(!(elemIsStr || elemIsI64 || elemIsI32Like))
+                {
+                    uint64_t elemSizeU =
+                        module->getDataLayout().getTypeAllocSize(
+                            elemLlvmType);
+                    llvm::Value* elemSize = llvm::ConstantInt::get(
+                        i64Type, (uint64_t)elemSizeU);
+                    llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                        voidType,
+                        {opaquePtrType, opaquePtrType, i64Type, i64Type},
+                        false);
+                    llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
+                        "__mlang_std_array_extend_raw", ftRaw);
+                    builder.CreateCall(fnRaw,
+                                       {recvPtr, srcPtr, elemSize,
+                                        arrayCapacity});
+                    return llvm::Constant::getNullValue(voidType);
+                }
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    voidType, {opaquePtrType, opaquePtrType, i64Type}, false);
+                llvm::FunctionCallee fn =
+                    module->getOrInsertFunction(fnName, ft);
+                builder.CreateCall(fn, {recvPtr, srcPtr, arrayCapacity});
                 return llvm::Constant::getNullValue(voidType);
             }
             if(node->methodName == "pop")

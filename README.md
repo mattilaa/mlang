@@ -146,7 +146,9 @@ let fixed: array<int, 6> = {1, 3, 4, 5, 6, 7};
 var scratch: array<int, 6> = {};
 scratch.push(10);
 scratch.push(20);
+scratch.extend(vec![30, 40]);
 scratch.pop();
+scratch.fill(1); // fills all 6 slots
 ```
 
 ## Tools Shipped In This Repository

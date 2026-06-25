@@ -741,7 +741,10 @@ Module file: `stdlib/std/array.mla`
 Documentation/navigation module for the compiler-provided [`array<T, N>`](Quick-Guide#types) type.
 
 - [`array<T, N>`](Quick-Guide#types) is a fixed-capacity, list-compatible sequence.
-- Literal and fill initializers are checked at compile time.
+- Literal and fill initializers are checked at compile time where known.
+- `push(value)` and `extend(values)` check at runtime before writing and stop
+  execution if the resulting length would exceed `N`.
+- `fill(value)` fills all `N` slots and sets `len()` to `N`.
 - `size_of(array<T, N>)` returns `N * size_of(T)`.
 
 ### [`list<bool>`](Quick-Guide#types) vs [`std::bitset::BitSet`](Stdlib-Module-API#stdbitset)

@@ -654,6 +654,23 @@ TEST_F(MLATest, FixedArrayAllowsBraceInitializerWithinCapacity)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, FixedArrayAllowsPartialBraceInitializer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let arr: array<int, 6> = {1, 3, 4};
+            if arr.len() != 3 {
+                return 1;
+            }
+            if arr[0] != 1 || arr[2] != 4 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, FixedArrayEmptyBraceInitializerIsMutable)
 {
     std::string code = R"(
@@ -671,6 +688,54 @@ TEST_F(MLATest, FixedArrayEmptyBraceInitializerIsMutable)
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayFillSetsAllSlots)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 4> = {};
+            arr.fill(7);
+            if arr.len() != 4 {
+                return 1;
+            }
+            if arr[0] != 7 || arr[3] != 7 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayExtendsFromVecWithinCapacity)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 6> = {1, 2};
+            arr.extend(vec![3, 4, 5]);
+            if arr.len() != 5 {
+                return 1;
+            }
+            if arr[4] != 5 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayRejectsRuntimeOverflow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 3> = {1, 2};
+            arr.extend(vec![3, 4]);
+            return arr.len();
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, FixedArrayRejectsTooManyBraceElements)

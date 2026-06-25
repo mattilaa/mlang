@@ -366,6 +366,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_serde.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_protocol.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_vec.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_array.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_error.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_compiler_api.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
