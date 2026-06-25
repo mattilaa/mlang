@@ -278,7 +278,8 @@ private:
             Int,
             Bool,
             Float,
-            Type
+            Type,
+            OpaqueStruct
         };
 
         Kind kind = Kind::Int;

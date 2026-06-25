@@ -228,12 +228,14 @@
 // parameters for a compile-time-only generic function.
 // Inside that function, `type_id(T)` can be compared in a `cexpr if`
 // condition to dispatch by the concrete compile-time argument type.
+// Struct arguments are allowed for this type-dispatch use case, but struct
+// fields and struct constants are not compile-time evaluable yet.
 
 // @builtin type_id
 // Compile-time type identity helper.
 // Use `type_id(T) == SomeType` or `type_id(T) != SomeType` inside `cexpr`
-// expressions. The result is a compile-time bool and can be combined with
-// `&&` or `||`.
+// expressions. `SomeType` may be a primitive alias or a struct type. The result
+// is a compile-time bool and can be combined with `&&` or `||`.
 
 // @builtin asm
 /// Inline assembly expression keyword.

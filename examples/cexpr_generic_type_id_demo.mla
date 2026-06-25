@@ -5,16 +5,24 @@ alias SomeType = i64;
 alias SomeOtherType = f64;
 alias SomeItemTypeY = i64;
 
+struct Marker {
+    var value: i32;
+};
+
 cexpr fn some_cexpr_function(item: i64) -> i64 {
     return item * 2;
 }
 
 cexpr fn some_other_cexpr_function(item: f64) -> i64 {
-    return item > 0.0 ? 30 : 0;
+    return item > 0.0 ? 30: 0;
 }
 
 cexpr fn some_other_cexpr_function_y(item: i64) -> i64 {
     return item + 7;
+}
+
+cexpr fn some_struct_type_function() -> i64 {
+    return 11;
 }
 
 cexpr fn something_else() -> i64 {
@@ -27,6 +35,8 @@ cexpr fn function(item: T, item2: Y) {
         return some_cexpr_function(item);
     } else if type_id(T) == SomeOtherType {
         return some_other_cexpr_function(item);
+    } else if type_id(T) == Marker {
+        return some_struct_type_function();
     } else if type_id(T) != SomeType && type_id(Y) == SomeItemTypeY {
         return some_other_cexpr_function_y(item2);
     } else {
@@ -39,8 +49,10 @@ fn main() -> i32 {
     cexpr B: i64 = function(1.0, 0);
     cexpr C: i64 = function(1.0f, 8);
     cexpr D: i64 = function(1.0f, 2.0f);
+    let marker: Marker = Marker { value: 3 };
+    cexpr E: i64 = function(marker, 0.0);
 
-    let total: i64 = cexpr(A + B + C + D);
-    println!("generic cexpr total={}", total);
-    return total == 92 ? 0 : 1;
+    let total: i64 = cexpr(A + B + C + D + E);
+    println!("Total: {}", total);
+    return total == 103 ? 0: 1;
 }

@@ -4220,7 +4220,12 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
     {
         auto constexprIt = constexprValues.find(id->name);
         if(constexprIt != constexprValues.end())
+        {
+            if(constexprIt->second.kind == ConstexprValue::Kind::OpaqueStruct &&
+               !constexprIt->second.typeName.empty())
+                return new StructTypeRefNode(constexprIt->second.typeName);
             return new TypeNode(constexprIt->second.typeKind);
+        }
     }
 
     if(TypeNode* lvalueType = getLValueType(expr, line))
@@ -4237,6 +4242,17 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
     if(dynamic_cast<StringLiteralNode*>(expr) ||
        dynamic_cast<FormatNode*>(expr))
         return new TypeNode(TypeNode::TYPE_STR8);
+
+    if(auto* structLit = dynamic_cast<StructLiteralNode*>(expr))
+    {
+        if(structLit->typeArgs.empty())
+            return new StructTypeRefNode(structLit->structName);
+
+        auto* generic = new GenericStructTypeRefNode(structLit->structName);
+        for(const auto& arg : structLit->typeArgs)
+            generic->typeArgs.push_back(new StructTypeRefNode(arg));
+        return generic;
+    }
 
     if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
         return new TypeNode(castExpr->targetType);
@@ -4425,6 +4441,22 @@ llvm::Value* CodeGenerator::generateSizeofExpression(SizeofExpressionNode* node)
 llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(
     const ConstexprValue& value, TypeNode* targetType, int line)
 {
+    if(value.kind == ConstexprValue::Kind::OpaqueStruct)
+    {
+        reportError(line,
+                    "struct values in cexpr are only supported for "
+                    "generic type dispatch with type_id(T); struct fields "
+                    "and struct constants are not compile-time evaluable yet");
+        return nullptr;
+    }
+    if(value.kind == ConstexprValue::Kind::Type)
+    {
+        reportError(line,
+                    "type_id values in cexpr can only be used in "
+                    "compile-time comparisons");
+        return nullptr;
+    }
+
     TypeNode::TypeKind kind =
         targetType ? normalizeInferredKind(targetType->kind) : value.typeKind;
     if(isFloatInferKind(kind))
@@ -4475,6 +4507,28 @@ bool CodeGenerator::coerceConstexprValueToKind(ConstexprValue& value,
                                                const char* context)
 {
     targetKind = normalizeInferredKind(targetKind);
+    if(value.kind == ConstexprValue::Kind::OpaqueStruct)
+    {
+        if(errorMessage)
+        {
+            *errorMessage =
+                "struct values in " + std::string(context) +
+                " are only supported for generic type dispatch with "
+                "type_id(T); struct fields and struct constants are not "
+                "compile-time evaluable yet";
+        }
+        return false;
+    }
+    if(value.kind == ConstexprValue::Kind::Type)
+    {
+        if(errorMessage)
+        {
+            *errorMessage =
+                "type_id values in " + std::string(context) +
+                " can only be used in compile-time comparisons";
+        }
+        return false;
+    }
     if(targetKind == TypeNode::TYPE_BOOL)
     {
         const bool boolValue =
@@ -4768,7 +4822,15 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
                     auto envIt = env->find(id->name);
                     if(envIt != env->end() &&
                        envIt->second.kind != ConstexprValue::Kind::Type)
-                        concreteType = new TypeNode(envIt->second.typeKind);
+                    {
+                        if(envIt->second.kind ==
+                               ConstexprValue::Kind::OpaqueStruct &&
+                           !envIt->second.typeName.empty())
+                            concreteType =
+                                new StructTypeRefNode(envIt->second.typeName);
+                        else
+                            concreteType = new TypeNode(envIt->second.typeKind);
+                    }
                 }
             }
             if(!concreteType)
@@ -4818,6 +4880,12 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
                     ? normalizeInferredKind(concreteArgTypes[i]->kind)
                     : param ? normalizeInferredKind(param->type->kind)
                             : TypeNode::TYPE_I64;
+            if(argValue.kind == ConstexprValue::Kind::OpaqueStruct &&
+               paramKind == TypeNode::TYPE_STRUCT)
+            {
+                localEnv[param->name] = argValue;
+                continue;
+            }
             if(!coerceConstexprValueToKind(argValue, paramKind, errorMessage,
                                            "cexpr fn parameters"))
                 return false;
@@ -4998,6 +5066,15 @@ bool CodeGenerator::evalConstexprStatementList(
             if(!evalConstexprExpression(cexprIf->condition, condValue,
                                         errorMessage, &env, depth + 1))
                 return false;
+            if(condValue.kind == ConstexprValue::Kind::OpaqueStruct ||
+               condValue.kind == ConstexprValue::Kind::Type)
+            {
+                if(errorMessage)
+                    *errorMessage =
+                        "cexpr if condition requires a bool or numeric value, "
+                        "not a struct or type_id placeholder";
+                return false;
+            }
             const bool cond = condValue.kind == ConstexprValue::Kind::Bool
                                   ? condValue.boolValue
                                   : constexprValueAsDouble(condValue) != 0.0;
@@ -5286,6 +5363,22 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             out.typeKind = TypeNode::TYPE_I64;
             return true;
         }
+        auto varTypeIt = variableTypes.find(id->name);
+        if(varTypeIt != variableTypes.end() &&
+           varTypeIt->second == TypeNode::TYPE_STRUCT)
+        {
+            auto structIt = structVariableTypes.find(id->name);
+            if(structIt != structVariableTypes.end())
+            {
+                out.kind = ConstexprValue::Kind::OpaqueStruct;
+                out.typeName = structIt->second;
+                out.typeKind = TypeNode::TYPE_STRUCT;
+                out.boolValue = true;
+                out.intValue = 1;
+                out.floatValue = 1.0;
+                return true;
+            }
+        }
         if(errorMessage)
         {
             *errorMessage =
@@ -5295,6 +5388,20 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                           id->name + "'";
         }
         return false;
+    }
+    if(auto* structLit = dynamic_cast<StructLiteralNode*>(expr))
+    {
+        TypeNode* structType = inferExpressionTypeNode(structLit, structLit->line);
+        std::string typeName = canonicalConstexprTypeName(structType);
+        if(typeName.empty())
+            typeName = structLit->structName;
+        out.kind = ConstexprValue::Kind::OpaqueStruct;
+        out.typeName = typeName;
+        out.typeKind = TypeNode::TYPE_STRUCT;
+        out.boolValue = true;
+        out.intValue = 1;
+        out.floatValue = 1.0;
+        return true;
     }
     if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
     {
@@ -5321,6 +5428,15 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         {
             if(errorMessage && errorMessage->empty())
                 *errorMessage = "unary operand is not compile-time evaluable";
+            return false;
+        }
+        if(operand.kind == ConstexprValue::Kind::OpaqueStruct ||
+           operand.kind == ConstexprValue::Kind::Type)
+        {
+            if(errorMessage)
+                *errorMessage =
+                    "cexpr unary operators require a value; struct and "
+                    "type_id placeholders are only available for type dispatch";
             return false;
         }
         switch(un->op)
@@ -5408,6 +5524,16 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             out.floatValue = out.boolValue ? 1.0 : 0.0;
             out.typeKind = TypeNode::TYPE_BOOL;
             return true;
+        }
+        if(lhsValue.kind == ConstexprValue::Kind::OpaqueStruct ||
+           rhsValue.kind == ConstexprValue::Kind::OpaqueStruct)
+        {
+            if(errorMessage)
+                *errorMessage =
+                    "struct values in cexpr are only supported for generic "
+                    "type dispatch with type_id(T); struct value operations "
+                    "are not compile-time evaluable yet";
+            return false;
         }
         const bool anyFloat = lhsValue.kind == ConstexprValue::Kind::Float ||
                               rhsValue.kind == ConstexprValue::Kind::Float;
@@ -5641,6 +5767,15 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
             if(errorMessage && errorMessage->empty())
                 *errorMessage =
                     "ternary condition is not compile-time evaluable in cexpr";
+            return false;
+        }
+        if(condValue.kind == ConstexprValue::Kind::OpaqueStruct ||
+           condValue.kind == ConstexprValue::Kind::Type)
+        {
+            if(errorMessage)
+                *errorMessage =
+                    "cexpr ternary condition requires a bool or numeric "
+                    "value, not a struct or type_id placeholder";
             return false;
         }
         const bool cond = condValue.kind == ConstexprValue::Kind::Bool
@@ -12029,6 +12164,15 @@ void CodeGenerator::generateCexprIfStatement(CexprIfNode* node)
                         ? "cexpr if condition requires a compile-time "
                           "expression"
                         : errorMessage);
+        return;
+    }
+
+    if(condValue.kind == ConstexprValue::Kind::OpaqueStruct ||
+       condValue.kind == ConstexprValue::Kind::Type)
+    {
+        reportError(node->line,
+                    "cexpr if condition requires a bool or numeric value, "
+                    "not a struct or type_id placeholder");
         return;
     }
 

@@ -3541,6 +3541,60 @@ TEST_F(MLATest, GenericCexprFunctionDispatchesOnTypeId)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, GenericCexprFunctionDispatchesOnStructTypeId)
+{
+    std::string code = R"(
+        struct Marker {
+            var value: i32;
+        };
+
+        struct Other {
+            var value: i32;
+        };
+
+        generic<T>
+        cexpr fn classify(item: T) -> i64 {
+            cexpr if type_id(T) == Marker {
+                return 7;
+            } else if type_id(T) == Other {
+                return 9;
+            } else {
+                return 1;
+            }
+        }
+
+        fn main() -> i32 {
+            let marker: Marker = Marker { value: 3 };
+            let other: Other = Other { value: 4 };
+            cexpr A: i64 = classify(marker);
+            cexpr B: i64 = classify(other);
+            return cexpr(A + B) == 16 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, CexprStructValueReportsUnsupportedValueEvaluation)
+{
+    std::string code = R"(
+        struct Marker {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            let marker: Marker = Marker { value: 3 };
+            let value: Marker = cexpr(marker);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("struct values in cexpr are only supported for generic type dispatch"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, CexprIfRejectsRuntimeCondition)
 {
     std::string code = R"(

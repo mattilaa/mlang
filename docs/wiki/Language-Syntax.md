@@ -393,17 +393,28 @@ conditions to select branches by the concrete compile-time argument type:
 alias SomeType = i64;
 alias SomeOtherType = f64;
 
+struct Marker {
+    var value: i32;
+};
+
 generic<T, Y>
 cexpr fn pick(item: T, item2: Y) {
     cexpr if type_id(T) == SomeType {
         return item * 2;
     } else if type_id(T) == SomeOtherType {
         return 30;
+    } else if type_id(T) == Marker {
+        return 7;
     } else {
         return item2;
     }
 }
 ```
+
+Struct arguments are supported for this type-dispatch use case: the compiler
+tracks the argument's type, not its fields. Trying to materialize a struct value
+with `cexpr(marker)` or read struct fields during compile-time evaluation is a
+compile-time error.
 
 Compile-time values can be declared with `cexpr name: Type = expr;`. The
 initializer must be compile-time evaluable:
@@ -445,6 +456,8 @@ Current first-version constraints:
   [`return`](Language-Syntax).
 - `generic<T, ...> cexpr fn` supports one or more type parameters for
   compile-time calls, with `type_id(T)` usable in compile-time conditions.
+- Struct arguments can participate in `type_id(T)` dispatch, but struct fields
+  and struct constants are not compile-time evaluable yet.
 - `cexpr if` currently supports block bodies, `else if` chains, and an
   optional [`else`](Language-Syntax) block.
 - Calling a non-`cexpr fn` from `cexpr(...)` is rejected.

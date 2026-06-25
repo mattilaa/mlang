@@ -106,10 +106,16 @@ types with `type_id(T)`:
 ```mla
 alias SomeType = i64;
 
+struct Marker {
+    var value: i32;
+};
+
 generic<T, Y>
 cexpr fn pick(item: T, item2: Y) {
     cexpr if type_id(T) == SomeType {
         return item * 2;
+    } else if type_id(T) == Marker {
+        return 7;
     } else {
         return item2;
     }
@@ -120,6 +126,9 @@ Current first-version scope:
 - `cexpr(...)` folds integer, floating-point, and `bool` expressions during compilation.
 - `cexpr fn` marks functions that may be called from compile-time contexts.
 - `generic<T, ...> cexpr fn` supports one or more type parameters for compile-time calls.
+- Struct arguments can participate in `generic<T> cexpr fn` type dispatch via
+  `type_id(T)`, but struct fields and struct constants are not compile-time
+  evaluable yet.
 - `cexpr name: Type = expr;` declares a compile-time value.
 - `cexpr if` selects a branch during compilation.
 - Calling a normal runtime `fn` from `cexpr(...)` is rejected.
