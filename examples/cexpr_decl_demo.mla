@@ -1,0 +1,17 @@
+/// \file cexpr_decl_demo.mla
+/// @ingroup examples
+/// \brief Compile-time value declaration demo.
+
+cexpr Steps: i32 = 21;
+cexpr Gain: f32 = 1.5f;
+
+fn main() -> i32 {
+    static_assert!(Steps * 2 == 42);
+    static_assert!(Gain > 1.4f && Gain < 1.6f);
+
+    cexpr Local: i32 = Steps * 2;
+    let value: i32 = cexpr(Local);
+
+    println!("compile-time value={}", value);
+    return value == 42 ? 0 : 1;
+}

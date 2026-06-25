@@ -1,0 +1,27 @@
+/// \file cexpr_if_demo.mla
+/// @ingroup examples
+/// \brief Compile-time branch selection demo.
+
+cexpr UseFastPath: bool = true;
+cexpr Base: i32 = 21;
+
+fn selected_value() {
+    cexpr if false {
+        return "wrong branch type";
+    } else if true {
+        return 42;
+    } else {
+        return "also wrong branch type";
+    }
+}
+
+fn main() -> i32 {
+    cexpr if UseFastPath {
+        let value: i32 = selected_value();
+        println!("fast path value={}", value);
+        return value == 42 ? 0 : 1;
+    } else {
+        println!("fallback path");
+        return 1;
+    }
+}

@@ -814,6 +814,16 @@ public:
     std::string toString() const override;
 };
 
+class CexprDeclNode : public LetDeclNode
+{
+public:
+    CexprDeclNode(TypeNode* t, const std::string& n, ExpressionNode* e)
+        : LetDeclNode(t, n, e)
+    {
+    }
+    std::string toString() const override;
+};
+
 class VarDeclNode : public StatementNode
 {
 public:
@@ -907,6 +917,22 @@ public:
            bool usesColonNoGuard = false)
         : conditionInit(ci), condition(c), thenBranch(t), elseIfBranch(ei),
           elseBranch(e), usesColonWithoutGuard(usesColonNoGuard)
+    {
+    }
+    std::string toString() const override;
+};
+
+class CexprIfNode : public StatementNode
+{
+public:
+    ExpressionNode* condition;
+    StatementListNode* thenBranch;
+    CexprIfNode* elseIfBranch;
+    StatementListNode* elseBranch;
+
+    CexprIfNode(ExpressionNode* c, StatementListNode* t,
+                CexprIfNode* ei = nullptr, StatementListNode* e = nullptr)
+        : condition(c), thenBranch(t), elseIfBranch(ei), elseBranch(e)
     {
     }
     std::string toString() const override;
@@ -1370,6 +1396,8 @@ public:
     bool isInline = false;
     bool isInlineAlways = false;
     bool isInlineNever = false;
+    std::vector<std::string> typeParams;
+    std::map<std::string, std::string> typeParamTraitBounds;
     std::string sourceModule; // Module this function was defined in (for
                               // visibility checks)
 
@@ -1470,6 +1498,7 @@ public:
     std::vector<ModDeclNode*> modules;
     std::vector<UseDeclNode*> imports;
     std::vector<VarDeclNode*> globalVars;
+    std::vector<CexprDeclNode*> cexprDecls;
     std::vector<TypeAliasNode*> typeAliases;
 
     std::string toString() const override;
@@ -1536,7 +1565,11 @@ ASTNode* create_if_statement_with_init(ASTNode* condition_init,
                                        ASTNode* then_branch,
                                        ASTNode* else_if_branch,
                                        ASTNode* else_branch);
+ASTNode* create_cexpr_if_statement(ASTNode* condition, ASTNode* then_branch,
+                                   ASTNode* else_if_branch,
+                                   ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
+ASTNode* create_cexpr_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
 ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,

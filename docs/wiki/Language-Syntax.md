@@ -352,30 +352,114 @@ fn main() -> i32 {
 Functions can opt in to compile-time calls with `cexpr fn`:
 
 ```rust
-cexpr fn square(x: i64) -> i64 {
-    return x * x;
+cexpr fn twice(x: i32) -> i32 {
+    return x * 2;
 }
 
 fn main() -> i32 {
-    static_assert!(square(6) == 36);
-    let value: i64 = cexpr(square(7));
-    return value == 49 ? 0 : 1;
+    static_assert!(twice(21) == 42);
+    let value: i32 = cexpr(twice(21));
+    return value == 42 ? 0 : 1;
 }
 ```
 
 The same function may also be written with a postfix specifier:
 
 ```rust
-fn square(x: i64) cexpr -> i64 {
-    return x * x;
+fn twice(x: i32) cexpr -> i32 {
+    return x * 2;
+}
+```
+
+`cexpr fn` also supports first-version floating-point arithmetic:
+
+```rust
+cexpr fn midpoint(a: f32, b: f32) -> f32 {
+    return (a + b) / 2.0f;
+}
+
+fn main() -> i32 {
+    static_assert!(midpoint(2.0f, 4.0f) == 3.0f);
+    let value: f32 = cexpr(midpoint(8.0f, 10.0f));
+    return value > 8.9f && value < 9.1f ? 0 : 1;
+}
+```
+
+Compile-time functions can be generic. Type parameters are declared with
+`generic<T, Y>` before `cexpr fn`, and `type_id(T)` can be used in `cexpr if`
+conditions to select branches by the concrete compile-time argument type:
+
+```rust
+alias SomeType = i64;
+alias SomeOtherType = f64;
+
+struct Marker {
+    var value: i32;
+};
+
+generic<T, Y>
+cexpr fn pick(item: T, item2: Y) {
+    cexpr if type_id(T) == SomeType {
+        return item * 2;
+    } else if type_id(T) == SomeOtherType {
+        return 30;
+    } else if type_id(T) == Marker {
+        return 7;
+    } else {
+        return item2;
+    }
+}
+```
+
+Struct arguments are supported for this type-dispatch use case: the compiler
+tracks the argument's type, not its fields. Trying to materialize a struct value
+with `cexpr(marker)` or read struct fields during compile-time evaluation is a
+compile-time error.
+
+Compile-time values can be declared with `cexpr name: Type = expr;`. The
+initializer must be compile-time evaluable:
+
+```rust
+cexpr Steps: i32 = 21;
+cexpr Gain: f32 = 1.5f;
+
+fn main() -> i32 {
+    static_assert!(Steps * 2 == 42);
+
+    cexpr Local: i32 = Steps * 2;
+    let value: i32 = cexpr(Local);
+    return value == 42 ? 0 : 1;
+}
+```
+
+`cexpr if` selects a branch during compilation. The condition must be
+compile-time evaluable, and only the selected branch is lowered:
+
+```rust
+cexpr UseFastPath: bool = true;
+
+fn main() -> i32 {
+    cexpr if UseFastPath {
+        return 0;
+    } else if false {
+        return missing_other_symbol();
+    } else {
+        return missing_runtime_symbol();
+    }
 }
 ```
 
 Current first-version constraints:
-- [`cexpr`](Language-Syntax) currently supports integer and [`bool`](Quick-Guide#types) values.
+- [`cexpr`](Language-Syntax) currently supports integer, floating-point, and [`bool`](Quick-Guide#types) values.
 - `cexpr fn` bodies support compile-time-evaluable expressions, local
   [`let`](Language-Syntax)/[`var`](Language-Syntax) declarations, assignment, [`if`](Language-Syntax)/[`else`](Language-Syntax), nested blocks, and
   [`return`](Language-Syntax).
+- `generic<T, ...> cexpr fn` supports one or more type parameters for
+  compile-time calls, with `type_id(T)` usable in compile-time conditions.
+- Struct arguments can participate in `type_id(T)` dispatch, but struct fields
+  and struct constants are not compile-time evaluable yet.
+- `cexpr if` currently supports block bodies, `else if` chains, and an
+  optional [`else`](Language-Syntax) block.
 - Calling a non-`cexpr fn` from `cexpr(...)` is rejected.
 
 ## [`if`](Language-Syntax) / `else if` Syntax

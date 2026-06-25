@@ -3357,6 +3357,263 @@ TEST_F(MLATest, CexprExpressionInitializesRuntimeValue)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, CexprFunctionTwiceI32EvaluatesAtCompileTime)
+{
+    std::string code = R"(
+        cexpr fn twice(x: i32) -> i32 {
+            return x * 2;
+        }
+
+        fn main() -> i32 {
+            static_assert!(twice(21) == 42);
+            let value: i32 = cexpr(twice(21));
+            return value == 42 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, CexprFunctionEvaluatesFloatArithmeticAtCompileTime)
+{
+    std::string code = R"(
+        cexpr fn midpoint(a: f32, b: f32) -> f32 {
+            return (a + b) / 2.0f;
+        }
+
+        cexpr fn wide_scale(x: f64) -> f64 {
+            return x * 1.5;
+        }
+
+        fn main() -> i32 {
+            static_assert!(midpoint(2.0f, 4.0f) == 3.0f);
+            static_assert!(wide_scale(4.0) == 6.0);
+            let value: f32 = cexpr(midpoint(8.0f, 10.0f));
+            return value > 8.9f && value < 9.1f ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, CexprDeclarationProvidesCompileTimeValue)
+{
+    std::string code = R"(
+        cexpr N: i32 = 21;
+        cexpr Scale: f32 = 1.5f;
+
+        fn main() -> i32 {
+            static_assert!(N * 2 == 42);
+            static_assert!(Scale > 1.4f && Scale < 1.6f);
+            let value: i32 = cexpr(N * 2);
+            let runtime_value: i32 = N;
+            return value == 42 && runtime_value == 21 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, LocalCexprDeclarationProvidesCompileTimeValue)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            cexpr Local: i32 = 7 * 6;
+            static_assert!(Local == 42);
+            let value: i32 = cexpr(Local);
+            return value == 42 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, CexprDeclarationRejectsRuntimeInitializer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 1;
+            cexpr Bad: i32 = x;
+            return Bad;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("runtime variable is not available in cexpr: 'x'"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, CexprIfSelectsCompileTimeBranch)
+{
+    std::string code = R"(
+        cexpr UseFast: bool = true;
+
+        fn main() -> i32 {
+            cexpr Value: i32 = 21;
+            cexpr if UseFast {
+                return cexpr(Value * 2);
+            } else {
+                return missing_runtime_symbol();
+            }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 42);
+}
+
+TEST_F(MLATest, CexprIfSupportsElseBranch)
+{
+    std::string code = R"(
+        cexpr UseFast: bool = false;
+
+        fn main() -> i32 {
+            cexpr if UseFast {
+                return missing_runtime_symbol();
+            } else {
+                return 7;
+            }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
+TEST_F(MLATest, CexprElseIfSelectsCompileTimeBranchAndIgnoresOtherReturnTypes)
+{
+    std::string code = R"(
+        fn selected_value() {
+            cexpr if false {
+                return "wrong branch type";
+            } else if true {
+                return 42;
+            } else {
+                return "also wrong branch type";
+            }
+        }
+
+        fn main() -> i32 {
+            return selected_value() == 42 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, GenericCexprFunctionDispatchesOnTypeId)
+{
+    std::string code = R"(
+        alias SomeType = i64;
+        alias SomeOtherType = f64;
+        alias SomeItemTypeY = i64;
+
+        cexpr fn for_i64(item: i64) -> i64 {
+            return item * 2;
+        }
+
+        cexpr fn for_f64(item: f64) -> i64 {
+            return item > 0.0 ? 30 : 0;
+        }
+
+        cexpr fn for_y(item: i64) -> i64 {
+            return item + 7;
+        }
+
+        cexpr fn fallback() -> i64 {
+            return 5;
+        }
+
+        generic<T, Y>
+        cexpr fn pick(item: T, item2: Y) {
+            cexpr if type_id(T) == SomeType {
+                return for_i64(item);
+            } else if type_id(T) == SomeOtherType {
+                return for_f64(item);
+            } else if type_id(T) != SomeType && type_id(Y) == SomeItemTypeY {
+                return for_y(item2);
+            } else {
+                return fallback();
+            }
+        }
+
+        fn main() -> i32 {
+            cexpr A: i64 = pick(21, 0);
+            cexpr B: i64 = pick(1.0, 0);
+            cexpr C: i64 = pick(1.0f, 8);
+            cexpr D: i64 = pick(1.0f, 2.0f);
+            return cexpr(A + B + C + D) == 92 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, GenericCexprFunctionDispatchesOnStructTypeId)
+{
+    std::string code = R"(
+        struct Marker {
+            var value: i32;
+        };
+
+        struct Other {
+            var value: i32;
+        };
+
+        generic<T>
+        cexpr fn classify(item: T) -> i64 {
+            cexpr if type_id(T) == Marker {
+                return 7;
+            } else if type_id(T) == Other {
+                return 9;
+            } else {
+                return 1;
+            }
+        }
+
+        fn main() -> i32 {
+            let marker: Marker = Marker { value: 3 };
+            let other: Other = Other { value: 4 };
+            cexpr A: i64 = classify(marker);
+            cexpr B: i64 = classify(other);
+            return cexpr(A + B) == 16 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, CexprStructValueReportsUnsupportedValueEvaluation)
+{
+    std::string code = R"(
+        struct Marker {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            let marker: Marker = Marker { value: 3 };
+            let value: Marker = cexpr(marker);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("struct values in cexpr are only supported for generic type dispatch"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, CexprIfRejectsRuntimeCondition)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let runtime_flag: bool = true;
+            cexpr if runtime_flag {
+                return 1;
+            }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("runtime variable is not available in cexpr: 'runtime_flag'"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, StaticAssertAcceptsCexprFunctionCall)
 {
     std::string code = R"(
@@ -3406,6 +3663,39 @@ TEST_F(MLATest, CexprRejectsNonCexprFunctionCall)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("cexpr call requires a matching 'cexpr fn' overload"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, CexprReportsRuntimeVariableName)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 1;
+            let value: i32 = cexpr(x);
+            return value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("runtime variable is not available in cexpr: 'x'"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, CexprReportsUnsupportedExpressionKind)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let value: str8 = cexpr("hello");
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("unsupported expression in cexpr"),
               std::string::npos);
 }
 

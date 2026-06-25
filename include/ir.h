@@ -276,15 +276,21 @@ private:
         enum class Kind
         {
             Int,
-            Bool
+            Bool,
+            Float,
+            Type,
+            OpaqueStruct
         };
 
         Kind kind = Kind::Int;
         int64_t intValue = 0;
         bool boolValue = false;
+        double floatValue = 0.0;
+        std::string typeName;
         TypeNode::TypeKind typeKind = TypeNode::TYPE_I64;
     };
     using ConstexprEnv = std::map<std::string, ConstexprValue>;
+    ConstexprEnv constexprValues;
     bool evalConstexprExpression(ExpressionNode* expr, ConstexprValue& out,
                                  std::string* errorMessage = nullptr,
                                  ConstexprEnv* env = nullptr,
@@ -296,6 +302,19 @@ private:
                                     ConstexprValue& returnValue,
                                     bool& didReturn,
                                     std::string* errorMessage, int depth);
+    bool coerceConstexprValueToKind(ConstexprValue& value,
+                                    TypeNode::TypeKind targetKind,
+                                    std::string* errorMessage,
+                                    const char* context);
+    double constexprValueAsDouble(const ConstexprValue& value) const;
+    int64_t constexprValueAsInt(const ConstexprValue& value) const;
+    std::string canonicalConstexprTypeName(TypeNode* type) const;
+    bool constexprTypeNameFromIdentifier(const std::string& name,
+                                         std::string& out) const;
+    bool bindConstexprGenericTypeParams(
+        TypeNode* pattern, TypeNode* concrete,
+        const std::set<std::string>& typeParams,
+        std::map<std::string, std::string>& bindings) const;
     llvm::Constant* buildLLVMConstantFromConstexprValue(
         const ConstexprValue& value, TypeNode* targetType, int line);
     // Maps struct name -> (isPublic, sourceModule)
@@ -568,11 +587,14 @@ private:
     void generateStatement(StatementNode* node);
     void generateReturnStatement(ReturnNode* node);
     void generateLetDeclaration(LetDeclNode* node);
+    void generateCexprDeclaration(CexprDeclNode* node,
+                                  bool emitRuntimeBinding = true);
     void generateVarDeclaration(VarDeclNode* node);
     void generateAssignment(AssignmentNode* node);
     void generateFieldAssignment(FieldAssignmentNode* node);
     void generateDerefAssignment(DerefAssignmentNode* node);
     void generateIfStatement(IfNode* node);
+    void generateCexprIfStatement(CexprIfNode* node);
     void generateForStatement(ForNode* node);
     void generateWhileStatement(WhileNode* node);
     void generatePrintStatement(PrintNode* node);

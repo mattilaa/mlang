@@ -47,28 +47,92 @@ MLang supports explicit compile-time evaluation with `cexpr(expr)` and
 `cexpr fn`.
 
 ```rust
-cexpr fn square(x: i64) -> i64 {
-    return x * x;
+cexpr fn twice(x: i32) -> i32 {
+    return x * 2;
 }
 
 fn main() -> i32 {
-    static_assert!(square(8) == 64);
-    let mask: i64 = cexpr(square(3) + 1);
-    return mask == 10 ? 0 : 1;
+    static_assert!(twice(21) == 42);
+    let value: i32 = cexpr(twice(21));
+    return value == 42 ? 0 : 1;
 }
 ```
 
 The equivalent postfix declaration form is also accepted:
 
 ```rust
-fn square(x: i64) cexpr -> i64 {
-    return x * x;
+fn twice(x: i32) cexpr -> i32 {
+    return x * 2;
+}
+```
+
+Floating-point compile-time functions are supported in the same first-version
+subset:
+
+```rust
+cexpr fn midpoint(a: f32, b: f32) -> f32 {
+    return (a + b) / 2.0f;
+}
+```
+
+Compile-time values use the same keyword:
+
+```rust
+cexpr Steps: i32 = 21;
+
+fn main() -> i32 {
+    cexpr Local: i32 = Steps * 2;
+    return cexpr(Local);
+}
+```
+
+Compile-time branches use `cexpr if`:
+
+```rust
+cexpr UseFastPath: bool = true;
+
+fn main() -> i32 {
+    cexpr if UseFastPath {
+        return 0;
+    } else if false {
+        return missing_other_symbol();
+    } else {
+        return missing_runtime_symbol();
+    }
+}
+```
+
+Compile-time functions can also be generic and dispatch on concrete argument
+types with `type_id(T)`:
+
+```rust
+alias SomeType = i64;
+
+struct Marker {
+    var value: i32;
+};
+
+generic<T, Y>
+cexpr fn pick(item: T, item2: Y) {
+    cexpr if type_id(T) == SomeType {
+        return item * 2;
+    } else if type_id(T) == Marker {
+        return 7;
+    } else {
+        return item2;
+    }
 }
 ```
 
 Current first-version scope:
-- `cexpr(...)` folds integer and [`bool`](Quick-Guide#types) expressions during compilation.
+- `cexpr(...)` folds integer, floating-point, and [`bool`](Quick-Guide#types) expressions during compilation.
 - `cexpr fn` marks functions that may be called from compile-time contexts.
+- `generic<T, ...> cexpr fn` supports one or more type parameters for compile-time calls.
+- Struct arguments can participate in `generic<T> cexpr fn` type dispatch via
+  `type_id(T)`, but struct fields and struct constants are not compile-time
+  evaluable yet.
+- `cexpr name: Type = expr;` declares a compile-time value.
+- `cexpr if` selects a branch during compilation.
 - Calling a normal runtime [`fn`](Language-Syntax) from `cexpr(...)` is rejected.
 
 ## Tools Shipped In This Repository
@@ -1245,6 +1309,14 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/std_term_demo.mla`
 - Type aliases (`alias Distance = f32;` and equivalent `use type Distance = f32;`, generic aliases):
   `examples/type_alias_demo.mla`
+- Compile-time `cexpr fn` evaluation:
+  `examples/cexpr_twice_demo.mla`
+- Floating-point `cexpr fn` evaluation:
+  `examples/cexpr_float_demo.mla`
+- Compile-time [`cexpr`](Language-Syntax) value declarations:
+  `examples/cexpr_decl_demo.mla`
+- Compile-time `cexpr if` branch selection:
+  `examples/cexpr_if_demo.mla`
 - Namespace blocks and aliases (`namespace geometry::units { ... }`, `alias gu = geometry::units;`) with qualified names:
   `examples/namespace_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):

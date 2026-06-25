@@ -158,6 +158,17 @@ fn test_for_in_list_of_struct_with_str8_traversal() {
 }
 
 #[test]
+fn test_list_of_struct_index_expression_returns_struct_value() {
+    var rows: list<LoopRow> = [];
+    rows.push(LoopRow { tag: "first", value: 17 });
+    rows.push(LoopRow { tag: "second", value: 29 });
+
+    let row: LoopRow = rows[1];
+    verify_true(eq(row.tag, "second") == 1);
+    verify_eq_i32(29, row.value);
+}
+
+#[test]
 fn test_nested_function_basic_call() {
     fn add_local(a: i32, b: i32) -> i32 {
         return a + b;

@@ -892,6 +892,24 @@ static bool is_linker_input_path(std::string_view arg)
             has_suffix(".o"));
 }
 
+static bool report_directory_input_argument(const std::string& arg)
+{
+    std::error_code ec;
+    if(!std::filesystem::is_directory(std::filesystem::path(arg), ec))
+        return false;
+
+    std::cerr << "Error: directory argument '" << arg
+              << "' was passed as an input file.\n";
+    std::cerr << "Hint: after the source file, bare paths are treated as "
+                 "inputs to compile. A library directory must be passed with "
+                 "-L; otherwise mlang may try to parse that directory as "
+                 "source and report a confusing syntax error.\n";
+    std::cerr << "Use: mlang <source.mla> -L " << arg
+              << " -lmlang_std\n";
+    std::cerr << "Also accepted: -L" << arg << "\n";
+    return true;
+}
+
 static std::optional<std::filesystem::path>
 find_mlang_pkg_frontend_source(const char* argv0)
 {
@@ -1933,6 +1951,10 @@ int main(int argc, char** argv)
             {
                 linkArgs.push_back(arg);
             }
+            else if(report_directory_input_argument(arg))
+            {
+                return 1;
+            }
             else
             {
                 inputFile = arg;
@@ -1979,6 +2001,9 @@ int main(int argc, char** argv)
             return 1;
         }
     }
+
+    if(report_directory_input_argument(inputFile))
+        return 1;
 
     std::string generatedTestRoot;
     const char* artifactDirEnv = std::getenv("MLANG_ARTIFACT_DIR");

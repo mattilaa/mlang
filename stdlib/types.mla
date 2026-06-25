@@ -215,12 +215,27 @@
 
 // @builtin cexpr
 // Compile-time evaluation keyword.
-// Use `cexpr(expr)` to require compile-time folding of an integer or bool
-// expression.
+// Use `cexpr(expr)` to require compile-time folding of an integer, floating
+// point, or bool expression.
 // Use `cexpr fn name(...) -> T { ... }` or
 // `fn name(...) cexpr -> T { ... }` to mark a function as callable from
 // compile-time evaluation contexts such as `static_assert!` and `cexpr(...)`.
-// Current first-version support is limited to integer and bool values.
+// Use `cexpr if` to select a branch during compilation.
+
+// @builtin generic
+// Compile-time generic function parameter introducer.
+// Use `generic<T, Y>` before `cexpr fn` to declare one or more type
+// parameters for a compile-time-only generic function.
+// Inside that function, `type_id(T)` can be compared in a `cexpr if`
+// condition to dispatch by the concrete compile-time argument type.
+// Struct arguments are allowed for this type-dispatch use case, but struct
+// fields and struct constants are not compile-time evaluable yet.
+
+// @builtin type_id
+// Compile-time type identity helper.
+// Use `type_id(T) == SomeType` or `type_id(T) != SomeType` inside `cexpr`
+// expressions. `SomeType` may be a primitive alias or a struct type. The result
+// is a compile-time bool and can be combined with `&&` or `||`.
 
 // @builtin asm
 /// Inline assembly expression keyword.

@@ -1,0 +1,16 @@
+/// \file cexpr_twice_demo.mla
+/// @ingroup examples
+/// \brief First-step compile-time function evaluation demo.
+
+cexpr fn twice(x: i32) -> i32 {
+    return x * 2;
+}
+
+fn main() -> i32 {
+    static_assert!(twice(21) == 42);
+
+    let value: i32 = cexpr(twice(21));
+    println!("twice(21)={}", value);
+
+    return value == 42 ? 0 : 1;
+}

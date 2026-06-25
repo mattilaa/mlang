@@ -109,6 +109,10 @@ ASTNode* create_program_impl(ASTNode* top_level_list)
         {
             program->globalVars.push_back(varDecl);
         }
+        else if(auto* cexprDecl = dynamic_cast<CexprDeclNode*>(item))
+        {
+            program->cexprDecls.push_back(cexprDecl);
+        }
         else if(auto* aliasDef = dynamic_cast<TypeAliasNode*>(item))
         {
             program->typeAliases.push_back(aliasDef);
@@ -662,7 +666,7 @@ ASTNode* create_if_statement_impl(ASTNode* condition, ASTNode* then_branch,
 }
 
 ASTNode* create_if_statement_with_init_impl(ASTNode* condition_init,
-                                       ASTNode* condition,
+                                            ASTNode* condition,
                                        ASTNode* then_branch,
                                        ASTNode* else_if_branch,
                                        ASTNode* else_branch)
@@ -695,10 +699,34 @@ ASTNode* create_if_statement_with_init_impl(ASTNode* condition_init,
     return ifNode;
 }
 
+ASTNode* create_cexpr_if_statement_impl(ASTNode* condition,
+                                        ASTNode* then_branch,
+                                        ASTNode* else_if_branch,
+                                        ASTNode* else_branch)
+{
+    auto* thenBlock = dynamic_cast<BlockStatementNode*>(then_branch);
+    auto* elseBlock = dynamic_cast<BlockStatementNode*>(else_branch);
+    StatementListNode* thenList =
+        thenBlock ? thenBlock->statements
+                  : dynamic_cast<StatementListNode*>(then_branch);
+    StatementListNode* elseList =
+        elseBlock ? elseBlock->statements
+                  : dynamic_cast<StatementListNode*>(else_branch);
+    return new CexprIfNode(static_cast<ExpressionNode*>(condition), thenList,
+                           static_cast<CexprIfNode*>(else_if_branch),
+                           elseList);
+}
+
 ASTNode* create_let_declaration_impl(ASTNode* type, char* name, ASTNode* expr)
 {
     return new LetDeclNode(static_cast<TypeNode*>(type), std::string(name),
                            static_cast<ExpressionNode*>(expr));
+}
+
+ASTNode* create_cexpr_declaration_impl(ASTNode* type, char* name, ASTNode* expr)
+{
+    return new CexprDeclNode(static_cast<TypeNode*>(type), std::string(name),
+                             static_cast<ExpressionNode*>(expr));
 }
 
 ASTNode* create_var_declaration_impl(ASTNode* type, char* name, ASTNode* expr)
@@ -1567,6 +1595,21 @@ std::string FunctionDefNode::toString() const
     }
     if(isPublic)
         result += "pub ";
+    if(!typeParams.empty())
+    {
+        result += "generic<";
+        for(size_t i = 0; i < typeParams.size(); ++i)
+        {
+            if(i > 0)
+                result += ", ";
+            result += typeParams[i];
+            auto boundIt = typeParamTraitBounds.find(typeParams[i]);
+            if(boundIt != typeParamTraitBounds.end() &&
+               !boundIt->second.empty())
+                result += ": " + boundIt->second;
+        }
+        result += "> ";
+    }
     if(isCexpr)
         result += "cexpr ";
     result += "fn ";
@@ -2014,6 +2057,19 @@ std::string IfNode::toString() const
     return result;
 }
 
+std::string CexprIfNode::toString() const
+{
+    std::string result = "cexpr if ";
+    result += condition ? condition->toString() : "<missing>";
+    result += " ";
+    result += thenBranch ? thenBranch->toString() : "{}";
+    if(elseIfBranch)
+        result += "else " + elseIfBranch->toString();
+    if(elseBranch)
+        result += "else " + elseBranch->toString();
+    return result;
+}
+
 std::string LetDeclNode::toString() const
 {
     if(type)
@@ -2022,6 +2078,16 @@ std::string LetDeclNode::toString() const
                expression->toString() + ";";
     }
     return "let " + name + " = " + expression->toString() + ";";
+}
+
+std::string CexprDeclNode::toString() const
+{
+    if(type)
+    {
+        return "cexpr " + name + ": " + type->toString() + " = " +
+               expression->toString() + ";";
+    }
+    return "cexpr " + name + " = " + expression->toString() + ";";
 }
 
 std::string VarDeclNode::toString() const

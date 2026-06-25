@@ -1,0 +1,58 @@
+/// \file cexpr_generic_type_id_demo.mla
+/// \brief Compile-time generic function dispatch with type_id(T).
+
+alias SomeType = i64;
+alias SomeOtherType = f64;
+alias SomeItemTypeY = i64;
+
+struct Marker {
+    var value: i32;
+};
+
+cexpr fn some_cexpr_function(item: i64) -> i64 {
+    return item * 2;
+}
+
+cexpr fn some_other_cexpr_function(item: f64) -> i64 {
+    return item > 0.0 ? 30: 0;
+}
+
+cexpr fn some_other_cexpr_function_y(item: i64) -> i64 {
+    return item + 7;
+}
+
+cexpr fn some_struct_type_function() -> i64 {
+    return 11;
+}
+
+cexpr fn something_else() -> i64 {
+    return 5;
+}
+
+generic<T, Y>
+cexpr fn function(item: T, item2: Y) {
+    cexpr if type_id(T) == SomeType {
+        return some_cexpr_function(item);
+    } else if type_id(T) == SomeOtherType {
+        return some_other_cexpr_function(item);
+    } else if type_id(T) == Marker {
+        return some_struct_type_function();
+    } else if type_id(T) != SomeType && type_id(Y) == SomeItemTypeY {
+        return some_other_cexpr_function_y(item2);
+    } else {
+        return something_else();
+    }
+}
+
+fn main() -> i32 {
+    cexpr A: i64 = function(21, 0);
+    cexpr B: i64 = function(1.0, 0);
+    cexpr C: i64 = function(1.0f, 8);
+    cexpr D: i64 = function(1.0f, 2.0f);
+    let marker: Marker = Marker { value: 3 };
+    cexpr E: i64 = function(marker, 0.0);
+
+    let total: i64 = cexpr(A + B + C + D + E);
+    println!("Total: {}", total);
+    return total == 103 ? 0: 1;
+}
