@@ -27,6 +27,7 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   evaluation with [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types).
 - `examples/cexpr_decl_demo.mla` — `cexpr name: Type = expr;` compile-time
   value declarations.
+- `examples/cexpr_if_demo.mla` — `cexpr if` compile-time branch selection.
 - `examples/test_fixture_example.mla` — `#[fixture]` impl with per-test
   `setup` / `teardown` hooks (run via `mlang --tests`).
 - `examples/testing_mock_example.mla` — mock-based testing using [`std::testing`](Stdlib-Module-API#stdtesting).

@@ -922,6 +922,22 @@ public:
     std::string toString() const override;
 };
 
+class CexprIfNode : public StatementNode
+{
+public:
+    ExpressionNode* condition;
+    StatementListNode* thenBranch;
+    CexprIfNode* elseIfBranch;
+    StatementListNode* elseBranch;
+
+    CexprIfNode(ExpressionNode* c, StatementListNode* t,
+                CexprIfNode* ei = nullptr, StatementListNode* e = nullptr)
+        : condition(c), thenBranch(t), elseIfBranch(ei), elseBranch(e)
+    {
+    }
+    std::string toString() const override;
+};
+
 class ForNode : public StatementNode
 {
 public:
@@ -1547,6 +1563,9 @@ ASTNode* create_if_statement_with_init(ASTNode* condition_init,
                                        ASTNode* then_branch,
                                        ASTNode* else_if_branch,
                                        ASTNode* else_branch);
+ASTNode* create_cexpr_if_statement(ASTNode* condition, ASTNode* then_branch,
+                                   ASTNode* else_if_branch,
+                                   ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cexpr_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);

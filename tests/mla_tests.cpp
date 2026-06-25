@@ -3441,6 +3441,78 @@ TEST_F(MLATest, CexprDeclarationRejectsRuntimeInitializer)
               std::string::npos);
 }
 
+TEST_F(MLATest, CexprIfSelectsCompileTimeBranch)
+{
+    std::string code = R"(
+        cexpr UseFast: bool = true;
+
+        fn main() -> i32 {
+            cexpr Value: i32 = 21;
+            cexpr if UseFast {
+                return cexpr(Value * 2);
+            } else {
+                return missing_runtime_symbol();
+            }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 42);
+}
+
+TEST_F(MLATest, CexprIfSupportsElseBranch)
+{
+    std::string code = R"(
+        cexpr UseFast: bool = false;
+
+        fn main() -> i32 {
+            cexpr if UseFast {
+                return missing_runtime_symbol();
+            } else {
+                return 7;
+            }
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
+TEST_F(MLATest, CexprElseIfSelectsCompileTimeBranchAndIgnoresOtherReturnTypes)
+{
+    std::string code = R"(
+        fn selected_value() {
+            cexpr if false {
+                return "wrong branch type";
+            } else if true {
+                return 42;
+            } else {
+                return "also wrong branch type";
+            }
+        }
+
+        fn main() -> i32 {
+            return selected_value() == 42 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, CexprIfRejectsRuntimeCondition)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let runtime_flag: bool = true;
+            cexpr if runtime_flag {
+                return 1;
+            }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("runtime variable is not available in cexpr: 'runtime_flag'"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, StaticAssertAcceptsCexprFunctionCall)
 {
     std::string code = R"(

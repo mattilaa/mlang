@@ -1441,6 +1441,45 @@ static void collectReturnKindsFromStmt(
     const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
     ReturnInferenceData& out);
 
+static bool tryEvalReturnInferenceBool(ExpressionNode* expr, bool& out)
+{
+    if(!expr)
+        return false;
+    if(auto* b = dynamic_cast<BoolLiteralNode*>(expr))
+    {
+        out = b->value;
+        return true;
+    }
+    if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
+    {
+        out = i->value != 0;
+        return true;
+    }
+    if(auto* f = dynamic_cast<FloatLiteralNode*>(expr))
+    {
+        out = f->value != 0.0f;
+        return true;
+    }
+    if(auto* d = dynamic_cast<DoubleLiteralNode*>(expr))
+    {
+        out = d->value != 0.0;
+        return true;
+    }
+    if(auto* un = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(un->op != UnaryOpNode::OP_NOT)
+            return false;
+        bool value = false;
+        if(!tryEvalReturnInferenceBool(un->operand, value))
+            return false;
+        out = !value;
+        return true;
+    }
+    if(auto* cexprExpr = dynamic_cast<CexprExpressionNode*>(expr))
+        return tryEvalReturnInferenceBool(cexprExpr->expression, out);
+    return false;
+}
+
 static void collectReturnKindsFromList(
     StatementListNode* body,
     std::unordered_map<std::string, TypeNode::TypeKind>& locals,
@@ -1534,6 +1573,49 @@ static void collectReturnKindsFromStmt(
         {
             auto elseLocals = ifScopeLocals;
             collectReturnKindsFromList(ifNode->elseBranch, elseLocals,
+                                       fnReturnKinds, out);
+        }
+        return;
+    }
+    if(auto* cexprIf = dynamic_cast<CexprIfNode*>(stmt))
+    {
+        bool takeThen = false;
+        if(tryEvalReturnInferenceBool(cexprIf->condition, takeThen))
+        {
+            if(takeThen)
+            {
+                auto thenLocals = locals;
+                collectReturnKindsFromList(cexprIf->thenBranch, thenLocals,
+                                           fnReturnKinds, out);
+            }
+            else if(cexprIf->elseIfBranch)
+            {
+                auto elseIfLocals = locals;
+                collectReturnKindsFromStmt(cexprIf->elseIfBranch,
+                                           elseIfLocals, fnReturnKinds, out);
+            }
+            else if(cexprIf->elseBranch)
+            {
+                auto elseLocals = locals;
+                collectReturnKindsFromList(cexprIf->elseBranch, elseLocals,
+                                           fnReturnKinds, out);
+            }
+            return;
+        }
+
+        auto thenLocals = locals;
+        collectReturnKindsFromList(cexprIf->thenBranch, thenLocals,
+                                   fnReturnKinds, out);
+        if(cexprIf->elseIfBranch)
+        {
+            auto elseIfLocals = locals;
+            collectReturnKindsFromStmt(cexprIf->elseIfBranch, elseIfLocals,
+                                       fnReturnKinds, out);
+        }
+        if(cexprIf->elseBranch)
+        {
+            auto elseLocals = locals;
+            collectReturnKindsFromList(cexprIf->elseBranch, elseLocals,
                                        fnReturnKinds, out);
         }
         return;
@@ -4134,6 +4216,13 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
     if(!expr)
         return nullptr;
 
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto constexprIt = constexprValues.find(id->name);
+        if(constexprIt != constexprValues.end())
+            return new TypeNode(constexprIt->second.typeKind);
+    }
+
     if(TypeNode* lvalueType = getLValueType(expr, line))
         return cloneTypeNode(lvalueType);
 
@@ -4278,7 +4367,17 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
     if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))
         return new TypeNode(TypeNode::TYPE_I64);
     if(auto* cexprExpr = dynamic_cast<CexprExpressionNode*>(expr))
-        return inferExpressionTypeNode(cexprExpr->expression, line);
+    {
+        if(TypeNode* inferred =
+               inferExpressionTypeNode(cexprExpr->expression, line))
+            return inferred;
+        ConstexprValue value;
+        std::string errorMessage;
+        if(evalConstexprExpression(cexprExpr->expression, value,
+                                   &errorMessage, nullptr, 0))
+            return new TypeNode(value.typeKind);
+        return nullptr;
+    }
 
     return nullptr;
 }
@@ -8767,6 +8866,10 @@ void CodeGenerator::generateStatement(StatementNode* node)
     {
         generateIfStatement(ifNode);
     }
+    else if(auto cexprIfNode = dynamic_cast<CexprIfNode*>(node))
+    {
+        generateCexprIfStatement(cexprIfNode);
+    }
     else if(auto forNode = dynamic_cast<ForNode*>(node))
     {
         generateForStatement(forNode);
@@ -11594,6 +11697,54 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         activeBorrowers = incomingActiveBorrowers;
         activeMutBorrower = incomingActiveMutBorrower;
     }
+}
+
+void CodeGenerator::generateCexprIfStatement(CexprIfNode* node)
+{
+    if(!node || !node->condition)
+        return;
+
+    ConstexprValue condValue;
+    std::string errorMessage;
+    if(!evalConstexprExpression(node->condition, condValue, &errorMessage,
+                                nullptr, 0))
+    {
+        reportError(node->line,
+                    errorMessage.empty()
+                        ? "cexpr if condition requires a compile-time "
+                          "expression"
+                        : errorMessage);
+        return;
+    }
+
+    const bool takeThen =
+        condValue.kind == ConstexprValue::Kind::Bool
+            ? condValue.boolValue
+            : constexprValueAsDouble(condValue) != 0.0;
+    if(!takeThen && node->elseIfBranch)
+    {
+        CexprIfNode* last = node->elseIfBranch;
+        while(last->elseIfBranch)
+            last = last->elseIfBranch;
+        StatementListNode* savedFinalElse = last->elseBranch;
+        if(!last->elseBranch)
+            last->elseBranch = node->elseBranch;
+        generateCexprIfStatement(node->elseIfBranch);
+        last->elseBranch = savedFinalElse;
+        return;
+    }
+
+    StatementListNode* selected = takeThen ? node->thenBranch
+                                           : node->elseBranch;
+    if(!selected)
+        return;
+
+    auto savedConstexprValues = constexprValues;
+    enterCleanupScope();
+    for(auto* stmt : selected->statements)
+        generateStatement(stmt);
+    exitCleanupScope();
+    constexprValues = std::move(savedConstexprValues);
 }
 
 // Strip .iter() / .into_iter() / .enumerate() method wrappers from a
@@ -14740,6 +14891,13 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
             scan_stmt_list(ifNode->elseBranch);
             return;
         }
+        if(auto* cexprIf = dynamic_cast<CexprIfNode*>(s))
+        {
+            scan_stmt_list(cexprIf->thenBranch);
+            scan_stmt(cexprIf->elseIfBranch);
+            scan_stmt_list(cexprIf->elseBranch);
+            return;
+        }
         if(auto* forNode = dynamic_cast<ForNode*>(s))
         {
             scan_stmt_list(forNode->body);
@@ -15093,6 +15251,14 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
             resolve_stmt_list(ifNode->thenBranch, scope);
             resolve_stmt(ifNode->elseIfBranch, scope);
             resolve_stmt_list(ifNode->elseBranch, scope);
+            return;
+        }
+        if(auto* cexprIf = dynamic_cast<CexprIfNode*>(s))
+        {
+            resolve_expr(cexprIf->condition, scope);
+            resolve_stmt_list(cexprIf->thenBranch, scope);
+            resolve_stmt(cexprIf->elseIfBranch, scope);
+            resolve_stmt_list(cexprIf->elseBranch, scope);
             return;
         }
         if(auto* forNode = dynamic_cast<ForNode*>(s))

@@ -54,6 +54,10 @@ ASTNode* create_function_call_multi_impl(char* name, ASTNode* args, int line);
 ASTNode* create_result_constructor_impl(char* variant, ASTNode* type_args, ASTNode* args, int line);
 ASTNode* create_if_statement_impl(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_if_statement_with_init_impl(ASTNode* condition_init, ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
+ASTNode* create_cexpr_if_statement_impl(ASTNode* condition,
+                                        ASTNode* then_branch,
+                                        ASTNode* else_if_branch,
+                                        ASTNode* else_branch);
 ASTNode* create_let_declaration_impl(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cexpr_declaration_impl(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration_impl(ASTNode* type, char* name, ASTNode* expr);

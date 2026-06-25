@@ -84,10 +84,27 @@ fn main() -> i32 {
 }
 ```
 
+Compile-time branches use `cexpr if`:
+
+```mla
+cexpr UseFastPath: bool = true;
+
+fn main() -> i32 {
+    cexpr if UseFastPath {
+        return 0;
+    } else if false {
+        return missing_other_symbol();
+    } else {
+        return missing_runtime_symbol();
+    }
+}
+```
+
 Current first-version scope:
 - `cexpr(...)` folds integer, floating-point, and `bool` expressions during compilation.
 - `cexpr fn` marks functions that may be called from compile-time contexts.
 - `cexpr name: Type = expr;` declares a compile-time value.
+- `cexpr if` selects a branch during compilation.
 - Calling a normal runtime `fn` from `cexpr(...)` is rejected.
 
 ## Tools Shipped In This Repository
@@ -1270,6 +1287,8 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/cexpr_float_demo.mla`
 - Compile-time `cexpr` value declarations:
   `examples/cexpr_decl_demo.mla`
+- Compile-time `cexpr if` branch selection:
+  `examples/cexpr_if_demo.mla`
 - Namespace blocks and aliases (`namespace geometry::units { ... }`, `alias gu = geometry::units;`) with qualified names:
   `examples/namespace_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):

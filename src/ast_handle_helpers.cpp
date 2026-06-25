@@ -364,6 +364,14 @@ ASTNode* mla_ast_if_statement_with_init(ASTNode* condition_init, ASTNode* condit
                                               else_if_branch, else_branch);
 }
 
+ASTNode* mla_ast_cexpr_if_statement(ASTNode* condition, ASTNode* then_branch,
+                                    ASTNode* else_if_branch,
+                                    ASTNode* else_branch)
+{
+    return create_cexpr_if_statement_impl(condition, then_branch,
+                                          else_if_branch, else_branch);
+}
+
 ASTNode* mla_ast_else_if(ASTNode* condition, ASTNode* body)
 {
     return create_else_if_impl(condition, body);

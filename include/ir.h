@@ -584,6 +584,7 @@ private:
     void generateFieldAssignment(FieldAssignmentNode* node);
     void generateDerefAssignment(DerefAssignmentNode* node);
     void generateIfStatement(IfNode* node);
+    void generateCexprIfStatement(CexprIfNode* node);
     void generateForStatement(ForNode* node);
     void generateWhileStatement(WhileNode* node);
     void generatePrintStatement(PrintNode* node);

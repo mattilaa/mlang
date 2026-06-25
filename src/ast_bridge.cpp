@@ -243,6 +243,14 @@ ASTNode* create_if_statement_with_init(ASTNode* condition_init, ASTNode* conditi
     return create_if_statement_with_init_impl(condition_init, condition, then_branch, else_if_branch, else_branch);
 }
 
+ASTNode* create_cexpr_if_statement(ASTNode* condition, ASTNode* then_branch,
+                                   ASTNode* else_if_branch,
+                                   ASTNode* else_branch)
+{
+    return create_cexpr_if_statement_impl(condition, then_branch,
+                                          else_if_branch, else_branch);
+}
+
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr)
 {
     return create_let_declaration_impl(type, name, expr);

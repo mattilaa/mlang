@@ -666,7 +666,7 @@ ASTNode* create_if_statement_impl(ASTNode* condition, ASTNode* then_branch,
 }
 
 ASTNode* create_if_statement_with_init_impl(ASTNode* condition_init,
-                                       ASTNode* condition,
+                                            ASTNode* condition,
                                        ASTNode* then_branch,
                                        ASTNode* else_if_branch,
                                        ASTNode* else_branch)
@@ -697,6 +697,24 @@ ASTNode* create_if_statement_with_init_impl(ASTNode* condition_init,
         }
     }
     return ifNode;
+}
+
+ASTNode* create_cexpr_if_statement_impl(ASTNode* condition,
+                                        ASTNode* then_branch,
+                                        ASTNode* else_if_branch,
+                                        ASTNode* else_branch)
+{
+    auto* thenBlock = dynamic_cast<BlockStatementNode*>(then_branch);
+    auto* elseBlock = dynamic_cast<BlockStatementNode*>(else_branch);
+    StatementListNode* thenList =
+        thenBlock ? thenBlock->statements
+                  : dynamic_cast<StatementListNode*>(then_branch);
+    StatementListNode* elseList =
+        elseBlock ? elseBlock->statements
+                  : dynamic_cast<StatementListNode*>(else_branch);
+    return new CexprIfNode(static_cast<ExpressionNode*>(condition), thenList,
+                           static_cast<CexprIfNode*>(else_if_branch),
+                           elseList);
 }
 
 ASTNode* create_let_declaration_impl(ASTNode* type, char* name, ASTNode* expr)
@@ -2021,6 +2039,19 @@ std::string IfNode::toString() const
         result += "else: " + elseBranch->toString();
     }
 
+    return result;
+}
+
+std::string CexprIfNode::toString() const
+{
+    std::string result = "cexpr if ";
+    result += condition ? condition->toString() : "<missing>";
+    result += " ";
+    result += thenBranch ? thenBranch->toString() : "{}";
+    if(elseIfBranch)
+        result += "else " + elseIfBranch->toString();
+    if(elseBranch)
+        result += "else " + elseBranch->toString();
     return result;
 }
 

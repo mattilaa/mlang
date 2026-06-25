@@ -1622,6 +1622,7 @@ ASTNode* mla_ast_array_fill(ASTNode* value, ASTNode* count);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* mla_ast_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* mla_ast_if_statement_with_init(ASTNode* condition_init, ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
+ASTNode* mla_ast_cexpr_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cexpr_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* mla_ast_var_declaration(ASTNode* type, char* name, ASTNode* expr);
@@ -1900,7 +1901,7 @@ enum UpdatePosition
 %type <ast> condition_additive
 %type <ast> condition_multiplicative condition_unary condition_postfix
 %type <ast> condition_primary
-%type <ast> if_statement else_if_list else_if optional_else
+%type <ast> if_statement cexpr_if_statement cexpr_else_if_list cexpr_else_if else_if_list else_if optional_else cexpr_optional_else
 %type <ast> struct_member_list struct_member struct_method struct_init
 %type <ast> list_literal list_elements
 %type <ast> let_statement cexpr_declaration var_statement assignment_statement expression_statement nested_function_statement
@@ -2688,6 +2689,7 @@ statement
     | expression_statement
     | return_statement
     | if_statement
+    | cexpr_if_statement
     | for_statement
     | while_statement
     | block_statement
@@ -3168,6 +3170,38 @@ if_statement
         { ASTNode* __init = mla_ast_var_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = mla_ast_if_statement_with_init(__init, $7, $8, $9, $10); }
     | IF VAR IDENTIFIER ASSIGN expression COLON block_condition_expression COLON colon_statement else_if_list optional_else
         { ASTNode* __init = mla_ast_var_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = mla_ast_if_statement_with_init(__init, $7, mla_ast_statement_list_create($9), $10, $11); }
+    ;
+
+cexpr_if_statement
+    : CEXPR IF block_condition_expression block_statement cexpr_else_if_list cexpr_optional_else
+        { $$ = mla_ast_cexpr_if_statement($3, $4, $5, $6); $$->line = yylineno; $$->col = yycolumn_token; }
+    ;
+
+cexpr_else_if_list
+    : /* empty */ { $$ = NULL; }
+    | cexpr_else_if_list cexpr_else_if
+        {
+            if(!$1)
+                $$ = $2;
+            else
+            {
+                CexprIfNode* current = static_cast<CexprIfNode*>($1);
+                while(current->elseIfBranch)
+                    current = current->elseIfBranch;
+                current->elseIfBranch = static_cast<CexprIfNode*>($2);
+                $$ = $1;
+            }
+        }
+    ;
+
+cexpr_else_if
+    : ELSE IF block_condition_expression block_statement
+        { $$ = mla_ast_cexpr_if_statement($3, $4, NULL, NULL); $$->line = yylineno; $$->col = yycolumn_token; }
+    ;
+
+cexpr_optional_else
+    : /* empty */ { $$ = NULL; }
+    | ELSE block_statement { $$ = $2; }
     ;
 
 else_if_list

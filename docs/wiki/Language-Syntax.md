@@ -401,11 +401,30 @@ fn main() -> i32 {
 }
 ```
 
+`cexpr if` selects a branch during compilation. The condition must be
+compile-time evaluable, and only the selected branch is lowered:
+
+```rust
+cexpr UseFastPath: bool = true;
+
+fn main() -> i32 {
+    cexpr if UseFastPath {
+        return 0;
+    } else if false {
+        return missing_other_symbol();
+    } else {
+        return missing_runtime_symbol();
+    }
+}
+```
+
 Current first-version constraints:
 - [`cexpr`](Language-Syntax) currently supports integer, floating-point, and [`bool`](Quick-Guide#types) values.
 - `cexpr fn` bodies support compile-time-evaluable expressions, local
   [`let`](Language-Syntax)/[`var`](Language-Syntax) declarations, assignment, [`if`](Language-Syntax)/[`else`](Language-Syntax), nested blocks, and
   [`return`](Language-Syntax).
+- `cexpr if` currently supports block bodies, `else if` chains, and an
+  optional [`else`](Language-Syntax) block.
 - Calling a non-`cexpr fn` from `cexpr(...)` is rejected.
 
 ## [`if`](Language-Syntax) / `else if` Syntax
