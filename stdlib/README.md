@@ -14,6 +14,8 @@ Currently provided:
 - `std/math.mla`: generic math helpers (backed by libmlang_std).
 - `std/bench.mla`: benchmark helpers for anti-optimization barriers
   (`do_not_optimize_i64`, `do_not_optimize_i32`, `clobber_memory`).
+- `std/array.mla`: documentation/navigation anchors for the compiler-provided
+  fixed-capacity `array<T, N>` type.
 - `std/testing.mla`: GoogleTest-like expectation helpers
   (`expect_true`, `expect_false`, `expect_eq`, `expect_not_eq`,
   `expect_array_eq`, `expect_array_not_eq`; and fatal

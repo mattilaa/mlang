@@ -136,6 +136,18 @@ public:
     std::string toString() const override;
 };
 
+// Fixed-capacity array type: array<T, N>. Runtime layout is list-compatible.
+class ArrayTypeNode : public GenericListTypeNode
+{
+public:
+    int64_t capacity;
+    ArrayTypeNode(TypeNode* elemType, int64_t cap)
+        : GenericListTypeNode(elemType), capacity(cap)
+    {
+    }
+    std::string toString() const override;
+};
+
 // Map type node: map<K, V>
 class MapTypeNode : public TypeNode
 {

@@ -28,7 +28,7 @@ Examples of supported language/runtime features include:
 - exceptions with `throw` and `try/catch`
 - RAII-style scope cleanup
 - `switch` / `case`
-- `bit`, `sizeof(Type)`, and `sizeof(expr)`
+- `bit`, `size_of(Type)`, and `size_of(expr)`
 - inline assembly
 - `Vec`, `list<T>`, `span<T>`, `HashMap`, regex, JSON, IO, networking, threads
 - direct C interop through `extern fn`
@@ -50,7 +50,7 @@ If you are new to MLang, read these pages in this order:
   language?” answers.
 - [Language Syntax](language_syntax.md)
   Language features such as `switch`, exceptions, pipe syntax, inline asm,
-  conditional regions, lambdas/folds, and `bit`/`sizeof`.
+  conditional regions, lambdas/folds, and `bit`/`size_of`.
 - [Language Attributes](language_attributes.md)
   Attribute syntax such as `#[test]`, `#[derive(Debug)]`,
   `#[derive(Json)]`, and `#[inline]`.
@@ -134,7 +134,7 @@ Use this section as a map into the existing documentation.
   - inline assembly
   - conditional source regions
   - lambdas and folds
-  - `bit` and `sizeof`
+  - `bit` and `size_of`
 
 ### Testing and Benchmarking
 

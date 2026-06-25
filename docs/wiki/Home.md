@@ -30,7 +30,7 @@ Examples of supported language/runtime features include:
 - exceptions with `throw` and `try/catch`
 - RAII-style scope cleanup
 - [`switch`](Language-Syntax) / [`case`](Language-Syntax)
-- [`bit`](Quick-Guide#types), `sizeof(Type)`, and `sizeof(expr)`
+- [`bit`](Quick-Guide#types), `size_of(Type)`, and `size_of(expr)`
 - inline assembly
 - [`Vec`](Stdlib-Module-API#stdvec), [`list<T>`](Quick-Guide#types), [`span<T>`](Stdlib-Module-API#stdspan), [`HashMap`](Stdlib-Module-API#stdunordered), regex, JSON, IO, networking, threads
 - direct C interop through `extern fn`
@@ -52,7 +52,7 @@ If you are new to MLang, read these pages in this order:
   language?” answers.
 - [Language Syntax](Language-Syntax)
   Language features such as [`switch`](Language-Syntax), exceptions, pipe syntax, inline asm,
-  conditional regions, lambdas/folds, and [`bit`](Quick-Guide#types)/[`sizeof`](Language-Syntax).
+  conditional regions, lambdas/folds, and [`bit`](Quick-Guide#types)/[`size_of`](Language-Syntax).
 - [Language Attributes](Language-Attributes)
   Attribute syntax such as `#[test]`, `#[derive(Debug)]`,
   `#[derive(Json)]`, and `#[inline]`.
@@ -136,7 +136,7 @@ Use this section as a map into the existing documentation.
   - inline assembly
   - conditional source regions
   - lambdas and folds
-  - [`bit`](Quick-Guide#types) and [`sizeof`](Language-Syntax)
+  - [`bit`](Quick-Guide#types) and [`size_of`](Language-Syntax)
 
 ### Testing and Benchmarking
 

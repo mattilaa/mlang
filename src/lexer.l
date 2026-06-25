@@ -215,7 +215,7 @@ static int is_try_question_context()
 "for"           { return FOR; }
 "while"         { return WHILE; }
 "unsafe"        { return UNSAFE; }
-"sizeof"        { return SIZEOF; }
+"size_of"       { return SIZEOF; }
 "asm"           { return ASM; }
 "volatile"      { return VOLATILE; }
 "in"            { return IN; }
@@ -242,6 +242,7 @@ static int is_try_question_context()
 "str16"         { return STR16; }
 "utf8"          { return STR8; }
 "utf16"         { return STR16; }
+"array"         { return ARRAY; }
 "list"          { return LIST; }
 "map"           { return MAP; }
 "tuple"         { return TUPLE; }

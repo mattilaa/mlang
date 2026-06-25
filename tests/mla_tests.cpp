@@ -637,6 +637,208 @@ TEST_F(MLATest, ListInitializerWithBracesSuggestsBrackets)
               std::string::npos);
 }
 
+TEST_F(MLATest, FixedArrayAllowsBraceInitializerWithinCapacity)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let arr: array<int, 6> = {1, 3, 4, 5, 6, 7};
+            if arr.len() != 6 {
+                return 1;
+            }
+            if arr[0] != 1 || arr[5] != 7 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayAllowsPartialBraceInitializer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let arr: array<int, 6> = {1, 3, 4};
+            if arr.len() != 3 {
+                return 1;
+            }
+            if arr[0] != 1 || arr[2] != 4 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayEmptyBraceInitializerIsMutable)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 6> = {};
+            arr.push(10);
+            arr.push(20);
+            if arr.len() != 2 {
+                return 1;
+            }
+            if arr[1] != 20 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayFillSetsAllSlots)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 4> = {};
+            arr.fill(7);
+            if arr.len() != 4 {
+                return 1;
+            }
+            if arr[0] != 7 || arr[3] != 7 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayExtendsFromVecWithinCapacity)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 6> = {1, 2};
+            arr.extend(vec![3, 4, 5]);
+            if arr.len() != 5 {
+                return 1;
+            }
+            if arr[4] != 5 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayRejectsProvableExtendOverflowAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 3> = {1, 2};
+            arr.extend(vec![3, 4]);
+            return arr.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("extend() would exceed"), std::string::npos);
+    EXPECT_NE(out.find("capacity=3"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayRejectsProvablePushOverflowAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 2> = {};
+            arr.fill(9);
+            arr.push(10);
+            return arr.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("push() would exceed"), std::string::npos);
+    EXPECT_NE(out.find("capacity=2"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayKeepsRuntimeGuardForUnknownLengthOverflow)
+{
+    std::string code = R"(
+        fn values() -> list<int> {
+            return vec![3, 4];
+        }
+
+        fn main() -> i32 {
+            var arr: array<int, 3> = {1, 2};
+            arr.extend(values());
+            return arr.len();
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayRejectsTooManyBraceElements)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let arr: array<int, 3> = {1, 2, 3, 4};
+            return arr.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer has 4 elements"), std::string::npos);
+    EXPECT_NE(out.find("array<i32, 3> capacity is 3"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayRejectsTooLargeFillCount)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let arr: array<int, 3> = [0; 4];
+            return arr.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer has 4 elements"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayRejectsConstantOutOfBoundsIndexAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let arr: array<int, 3> = {1, 2, 3};
+            return arr[3];
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array index out of bounds"), std::string::npos);
+    EXPECT_NE(out.find("capacity=3"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayKeepsRuntimeGuardForDynamicOutOfBoundsIndex)
+{
+    std::string code = R"(
+        fn get_index() -> i32 {
+            return 3;
+        }
+
+        fn main() -> i32 {
+            let arr: array<int, 3> = {1, 2, 3};
+            return arr[get_index()];
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, VarReassignment)
 {
     std::string code = R"(

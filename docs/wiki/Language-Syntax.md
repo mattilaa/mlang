@@ -284,6 +284,7 @@ println!("{}", i.name);  // i32
 
 For collection values, the returned name includes inner types when available:
 - [`list<i32>`](Quick-Guide#types)
+- [`array<i32, 4>`](Quick-Guide#types)
 - `map<str8, i32>`
 
 If a struct defines a real field named `name`, normal field access is used
@@ -897,6 +898,31 @@ let all_true: bool = (... && bs);
 let any_true: bool = (... || bs);
 ```
 
+Fixed-capacity arrays use [`array<T, N>`](Quick-Guide#types). They use the same
+list-compatible runtime operations, but literal and fill initializers are
+checked against `N` at compile time:
+
+```mla
+let fixed: array<int, 6> = {1, 3, 4, 5, 6, 7};
+var scratch: array<int, 6> = {};
+scratch.push(10);
+scratch.push(20);
+scratch.extend(vec![30, 40]);
+scratch.fill(1);
+
+// Compile-time error: initializer has 4 elements but capacity is 3.
+let too_many: array<int, 3> = {1, 2, 3, 4};
+```
+
+Array growth is checked before writing. When the compiler can prove the current
+length and source length, `push` and `extend` overflow is a compile-time error.
+Unknown runtime-sized sources keep the runtime capacity guard. `fill(value)`
+sets the array length to exactly `N`.
+
+Indexing is checked too. Constant indexes that are known to be out of bounds are
+compile-time errors, while dynamic indexes keep a runtime bounds guard before
+loading.
+
 Supported fold operators:
 - `+`
 - `*`
@@ -916,7 +942,7 @@ These demonstrate:
 - left/right folds over numeric and boolean lists
 - empty-list identity behavior for folds
 
-## [`bit`](Quick-Guide#types) and [`sizeof`](Language-Syntax)
+## [`bit`](Quick-Guide#types) and [`size_of`](Language-Syntax)
 
 MLang provides a builtin [`bit`](Quick-Guide#types) type for logical `0` / `1` values:
 
@@ -930,23 +956,27 @@ state = bit(0);
 readable aliases you can wrap the two values in helpers such as
 [`std::bits::ON()`](Stdlib-Module-API#stdbits) and [`std::bits::OFF()`](Stdlib-Module-API#stdbits).
 
-The builtin `sizeof(...)` returns the ABI byte size as [`i64`](Quick-Guide#types):
+The builtin `size_of(...)` returns byte sizes as [`i64`](Quick-Guide#types):
 
 ```rust
 println!("bit={} bool={} header={}",
-         sizeof(bit), sizeof(bool), sizeof(list<bool>));
+         size_of(bit), size_of(bool), size_of(list<bool>));
 ```
 
-Both forms are supported:
-- `sizeof(Type)`
-- `sizeof(expr)`
+Supported forms:
+- `size_of(Type)`
+- `size_of(expr)`
 
-When the size can be resolved at compile time, `sizeof(...)` can also be used
+For [`array<T, N>`](Quick-Guide#types), `size_of` returns fixed storage bytes:
+`N * size_of(T)`.
+
+When the size can be resolved at compile time, `size_of` can also be used
 inside [`static_assert!`](Language-Syntax):
 
 ```rust
 let view: Span<i32> = [1, 2, 3];
-static_assert!(sizeof(view) == sizeof(list<i32>));
+static_assert!(size_of(view) == size_of(list<i32>));
+static_assert!(size_of(array<int, 6>) == 24);
 ```
 
 Important distinction:

@@ -16,13 +16,13 @@ fn weighted_sum(values: Span<i32>) -> i32 {
 fn main() -> i32 {
     let readings: list<i32> = [4, 8, 15, 16, 23, 42];
     let view: Span<i32> = readings;
-    static_assert!(sizeof(view) == sizeof(list<i32>));
-    println!("sizeof(Span<i32>)={}", sizeof(view));
+    static_assert!(size_of(view) == size_of(list<i32>));
+    println!("size_of(Span<i32>)={}", size_of(view));
     println!("len={} first={} last={}", view.len(), view[0], view[view.len() - 1]);
     println!("weighted_sum={}", weighted_sum(view));
 
     let fill_view: span<i32> = [3; 5];
-    static_assert!(sizeof(fill_view) == sizeof(list<i32>));
+    static_assert!(size_of(fill_view) == size_of(list<i32>));
     println!("fill_len={} fill_mid={}", fill_view.len(), fill_view[2]);
 
     let vec_view: Span<i32> = vec![9, 8, 7];

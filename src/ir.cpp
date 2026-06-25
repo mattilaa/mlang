@@ -2223,6 +2223,90 @@ bool CodeGenerator::evaluateCompileTimeBool(ExpressionNode* expr, bool& out)
     return true;
 }
 
+std::optional<uint64_t> CodeGenerator::fixedArrayByteSize(TypeNode* typeNode)
+{
+    auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode);
+    if(!arrayType)
+        return std::nullopt;
+
+    llvm::Type* elemType = getLLVMTypeFromNode(arrayType->elementType);
+    if(!elemType)
+        return std::nullopt;
+
+    const llvm::DataLayout& dl = module->getDataLayout();
+    uint64_t elemBytes = dl.getTypeAllocSize(elemType).getFixedValue();
+    return elemBytes * static_cast<uint64_t>(arrayType->capacity);
+}
+
+std::optional<int64_t>
+CodeGenerator::fixedArrayInitializerSize(ExpressionNode* expr)
+{
+    if(auto* listLit = dynamic_cast<ListLiteralNode*>(expr))
+    {
+        if(!listLit->elements)
+            return 0;
+        return static_cast<int64_t>(listLit->elements->elements.size());
+    }
+
+    if(auto* fill = dynamic_cast<ArrayFillNode*>(expr))
+    {
+        int64_t count = 0;
+        if(evaluateCompileTimeInt(fill->count, count))
+            return count;
+    }
+
+    return std::nullopt;
+}
+
+std::optional<int64_t>
+CodeGenerator::fixedArrayExpressionKnownLength(ExpressionNode* expr)
+{
+    if(!expr)
+        return 0;
+
+    if(auto size = fixedArrayInitializerSize(expr))
+        return size;
+
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto lenIt = arrayKnownLengths.find(id->name);
+        if(lenIt != arrayKnownLengths.end())
+            return lenIt->second;
+    }
+
+    return std::nullopt;
+}
+
+bool CodeGenerator::validateFixedArrayInitializer(TypeNode* declaredType,
+                                                  ExpressionNode* expr,
+                                                  int line)
+{
+    auto* arrayType = dynamic_cast<ArrayTypeNode*>(declaredType);
+    if(!arrayType || !expr)
+        return true;
+
+    std::optional<int64_t> size = fixedArrayInitializerSize(expr);
+    if(!size)
+        return true;
+
+    if(*size < 0)
+    {
+        reportError(line, "array initializer size must be non-negative");
+        return false;
+    }
+
+    if(*size > arrayType->capacity)
+    {
+        reportError(line, "array initializer has " + std::to_string(*size) +
+                              " elements but " + arrayType->toString() +
+                              " capacity is " +
+                              std::to_string(arrayType->capacity));
+        return false;
+    }
+
+    return true;
+}
+
 bool CodeGenerator::convertValueToRuntimeBool(llvm::Value* value, int line,
                                               const std::string& context,
                                               llvm::Value*& outBool)
@@ -3889,7 +3973,11 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                                       id->name + "'");
                 return nullptr;
             }
-            return new GenericListTypeNode(listIt->second);
+            auto capIt = arrayCapacities.find(id->name);
+            if(capIt != arrayCapacities.end())
+                return new ArrayTypeNode(cloneTypeNode(listIt->second),
+                                         capIt->second);
+            return new GenericListTypeNode(cloneTypeNode(listIt->second));
         }
         if(kind == TypeNode::TYPE_MAP)
         {
@@ -4413,28 +4501,60 @@ llvm::Value* CodeGenerator::generateSizeofExpression(SizeofExpressionNode* node)
                 IdentifierNode idExpr(namedTarget->structName);
                 idExpr.line = node->line;
                 targetType = inferExpressionTypeNode(&idExpr, node->line);
+                if(auto* listType =
+                       dynamic_cast<GenericListTypeNode*>(targetType))
+                {
+                    auto capIt = arrayCapacities.find(namedTarget->structName);
+                    if(capIt != arrayCapacities.end())
+                    {
+                        targetType =
+                            new ArrayTypeNode(cloneTypeNode(listType->elementType),
+                                              capIt->second);
+                    }
+                }
             }
         }
     }
     else
+    {
         targetType =
             inferExpressionTypeNode(node->expressionTarget, node->line);
+        if(auto* id = dynamic_cast<IdentifierNode*>(node->expressionTarget))
+        {
+            if(auto* listType = dynamic_cast<GenericListTypeNode*>(targetType))
+            {
+                auto capIt = arrayCapacities.find(id->name);
+                if(capIt != arrayCapacities.end())
+                {
+                    targetType =
+                        new ArrayTypeNode(cloneTypeNode(listType->elementType),
+                                          capIt->second);
+                }
+            }
+        }
+    }
 
     if(!targetType)
     {
-        reportError(node->line, "cannot infer type for sizeof expression");
+        reportError(node->line, "cannot infer type for size_of expression");
         return nullptr;
     }
 
     llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
     if(!llvmType)
     {
-        reportError(node->line, "cannot lower sizeof target type");
+        reportError(node->line, "cannot lower size_of target type");
         return nullptr;
     }
 
-    const llvm::DataLayout& dl = module->getDataLayout();
-    uint64_t sizeBytes = dl.getTypeAllocSize(llvmType).getFixedValue();
+    uint64_t sizeBytes = 0;
+    if(std::optional<uint64_t> arrayBytes = fixedArrayByteSize(targetType))
+        sizeBytes = *arrayBytes;
+    else
+    {
+        const llvm::DataLayout& dl = module->getDataLayout();
+        sizeBytes = dl.getTypeAllocSize(llvmType).getFixedValue();
+    }
     return llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), sizeBytes);
 }
 
@@ -5228,8 +5348,15 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                     {
                         auto lit = listElementTypes.find(id->name);
                         if(lit != listElementTypes.end())
-                            targetType = new GenericListTypeNode(
-                                cloneTypeNode(lit->second));
+                        {
+                            auto capIt = arrayCapacities.find(id->name);
+                            if(capIt != arrayCapacities.end())
+                                targetType = new ArrayTypeNode(
+                                    cloneTypeNode(lit->second), capIt->second);
+                            else
+                                targetType = new GenericListTypeNode(
+                                    cloneTypeNode(lit->second));
+                        }
                         break;
                     }
                     case TypeNode::TYPE_MAP:
@@ -5274,20 +5401,25 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         if(!targetType)
         {
             if(errorMessage)
-                *errorMessage = "cannot infer sizeof target in cexpr";
+                *errorMessage = "cannot infer size_of target in cexpr";
             return false;
         }
         llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
         if(!llvmType)
         {
             if(errorMessage)
-                *errorMessage = "cannot lower sizeof target type in cexpr";
+                *errorMessage = "cannot lower size_of target type in cexpr";
             return false;
         }
-        const llvm::DataLayout& dl = module->getDataLayout();
         out.kind = ConstexprValue::Kind::Int;
-        out.intValue =
-            static_cast<int64_t>(dl.getTypeAllocSize(llvmType).getFixedValue());
+        if(std::optional<uint64_t> arrayBytes = fixedArrayByteSize(targetType))
+            out.intValue = static_cast<int64_t>(*arrayBytes);
+        else
+        {
+            const llvm::DataLayout& dl = module->getDataLayout();
+            out.intValue = static_cast<int64_t>(
+                dl.getTypeAllocSize(llvmType).getFixedValue());
+        }
         out.boolValue = out.intValue != 0;
         out.typeKind = TypeNode::TYPE_I64;
         return true;
@@ -6913,6 +7045,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
     globalConstantVariables.clear();
     globalVariableTypes.clear();
     globalStructVariableTypes.clear();
+    arrayCapacities.clear();
+    arrayKnownLengths.clear();
     constexprValues.clear();
     deferredModuleFunctionDefs.clear();
 
@@ -9011,6 +9145,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     variableTypes.clear();
     structVariableTypes.clear();
     enumVariableTypes.clear();
+    arrayCapacities.clear();
+    arrayKnownLengths.clear();
     unsafeDepth = 0;
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
@@ -14737,6 +14873,12 @@ std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
     if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
         return "ptr_" + typeMangle(ptrType->elementType);
 
+    if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode))
+    {
+        return "array_" + typeMangle(arrayType->elementType) + "_" +
+               std::to_string(arrayType->capacity);
+    }
+
     if(auto* genList = dynamic_cast<GenericListTypeNode*>(typeNode))
         return "list_" + typeMangle(genList->elementType);
 
@@ -14841,6 +14983,12 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
 
     if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(typeNode))
         return new TraitObjectTypeNode(traitObj->traitName);
+
+    if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode))
+    {
+        return new ArrayTypeNode(cloneTypeNode(arrayType->elementType),
+                                 arrayType->capacity);
+    }
 
     if(auto* listType = dynamic_cast<GenericListTypeNode*>(typeNode))
         return new GenericListTypeNode(cloneTypeNode(listType->elementType));
@@ -16062,6 +16210,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);
 
+    if(!validateFixedArrayInitializer(node->type, node->expression,
+                                      node->line))
+        return;
+
     // Inline closure: let inc = || { ... }
     if(auto* closureInit = dynamic_cast<ClosureNode*>(node->expression))
     {
@@ -16314,6 +16466,16 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             auto lit = listElementTypes.find(id->name);
             if(lit != listElementTypes.end())
                 listElementTypes[node->name] = lit->second;
+            auto capIt = arrayCapacities.find(id->name);
+            if(capIt != arrayCapacities.end())
+            {
+                arrayCapacities[node->name] = capIt->second;
+                auto lenIt = arrayKnownLengths.find(id->name);
+                if(lenIt != arrayKnownLengths.end())
+                    arrayKnownLengths[node->name] = lenIt->second;
+                else
+                    arrayKnownLengths.erase(node->name);
+            }
             auto mit = mapKeyValueTypes.find(id->name);
             if(mit != mapKeyValueTypes.end())
                 mapKeyValueTypes[node->name] = mit->second;
@@ -16365,6 +16527,16 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             {
                 variableTypes[node->name] = TypeNode::TYPE_LIST;
                 listElementTypes[node->name] = genListType->elementType;
+                if(auto* arrayType =
+                       dynamic_cast<ArrayTypeNode*>(genListType))
+                {
+                    arrayCapacities[node->name] = arrayType->capacity;
+                    if(auto size =
+                           fixedArrayExpressionKnownLength(node->expression))
+                        arrayKnownLengths[node->name] = *size;
+                    else
+                        arrayKnownLengths.erase(node->name);
+                }
             }
             else if(auto* mapType =
                         dynamic_cast<MapTypeNode*>(inferredExprType))
@@ -16525,6 +16697,14 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     {
         // Store element type for iteration
         listElementTypes[node->name] = genListType->elementType;
+        if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(genListType))
+        {
+            arrayCapacities[node->name] = arrayType->capacity;
+            if(auto size = fixedArrayExpressionKnownLength(node->expression))
+                arrayKnownLengths[node->name] = *size;
+            else
+                arrayKnownLengths.erase(node->name);
+        }
 
         // List struct type: { i64, ptr }
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -16914,6 +17094,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     clearPointerBorrow(node->name);
     // `var` is always mutable, including when shadowing a previous `let`.
     constantVariables.erase(node->name);
+
+    if(!validateFixedArrayInitializer(node->type, node->initExpr, node->line))
+        return;
 
     if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(node->type))
     {
@@ -17364,6 +17547,16 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             auto lit = listElementTypes.find(id->name);
             if(lit != listElementTypes.end())
                 listElementTypes[node->name] = lit->second;
+            auto capIt = arrayCapacities.find(id->name);
+            if(capIt != arrayCapacities.end())
+            {
+                arrayCapacities[node->name] = capIt->second;
+                auto lenIt = arrayKnownLengths.find(id->name);
+                if(lenIt != arrayKnownLengths.end())
+                    arrayKnownLengths[node->name] = lenIt->second;
+                else
+                    arrayKnownLengths.erase(node->name);
+            }
             auto mit = mapKeyValueTypes.find(id->name);
             if(mit != mapKeyValueTypes.end())
                 mapKeyValueTypes[node->name] = mit->second;
@@ -17518,6 +17711,14 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     if(auto* genListType = dynamic_cast<GenericListTypeNode*>(node->type))
     {
         listElementTypes[node->name] = genListType->elementType;
+        if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(genListType))
+        {
+            arrayCapacities[node->name] = arrayType->capacity;
+            if(auto size = fixedArrayExpressionKnownLength(node->initExpr))
+                arrayKnownLengths[node->name] = *size;
+            else
+                arrayKnownLengths.erase(node->name);
+        }
 
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
@@ -20620,6 +20821,8 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     variableTypes.clear();
     structVariableTypes.clear();
     enumVariableTypes.clear();
+    arrayCapacities.clear();
+    arrayKnownLengths.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
@@ -21894,6 +22097,8 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     traitObjectVariableTypes.clear();
     enumVariableTypes.clear();
     listElementTypes.clear();
+    arrayCapacities.clear();
+    arrayKnownLengths.clear();
     mapKeyValueTypes.clear();
     tupleElementTypes.clear();
     pointerElementTypes.clear();
@@ -24118,6 +24323,61 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                   elemKind2 == TypeNode::TYPE_U64);
                 bool elemIsStr = (elemKind2 == TypeNode::TYPE_STRING ||
                                   elemKind2 == TypeNode::TYPE_STR8);
+                auto arrayCapIt2 = arrayCapacities.find(objId->name);
+                bool receiverIsArray2 = arrayCapIt2 != arrayCapacities.end();
+                llvm::Value* arrayCapacity2 =
+                    receiverIsArray2
+                        ? llvm::ConstantInt::get(i64Type2, arrayCapIt2->second)
+                        : nullptr;
+                auto checkKnownArrayGrowth2 =
+                    [&](int64_t add, const std::string& methodName) -> bool
+                {
+                    if(!receiverIsArray2)
+                        return true;
+                    if(add < 0)
+                    {
+                        reportError(node->line, methodName +
+                                                    "() source length must be "
+                                                    "non-negative");
+                        return false;
+                    }
+                    if(add > arrayCapIt2->second)
+                    {
+                        reportError(
+                            node->line,
+                            methodName + "() would exceed " +
+                                std::string("array<T, N> capacity: add=") +
+                                std::to_string(add) + " capacity=" +
+                                std::to_string(arrayCapIt2->second));
+                        return false;
+                    }
+                    auto lenIt = arrayKnownLengths.find(objId->name);
+                    if(lenIt == arrayKnownLengths.end())
+                        return true;
+                    if(lenIt->second > arrayCapIt2->second - add)
+                    {
+                        reportError(
+                            node->line,
+                            methodName + "() would exceed " +
+                                std::string("array<T, N> capacity: len=") +
+                                std::to_string(lenIt->second) +
+                                " add=" + std::to_string(add) +
+                                " capacity=" +
+                                std::to_string(arrayCapIt2->second));
+                        return false;
+                    }
+                    return true;
+                };
+                auto updateKnownArrayLength2 =
+                    [&](std::optional<int64_t> nextLength)
+                {
+                    if(!receiverIsArray2)
+                        return;
+                    if(nextLength)
+                        arrayKnownLengths[objId->name] = *nextLength;
+                    else
+                        arrayKnownLengths.erase(objId->name);
+                };
 
                 auto callVecVoidFn = [&](const std::string& fnName)
                 {
@@ -24150,6 +24410,107 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         cnt, llvm::ConstantInt::get(i64Type2, 0),
                         objId->name + ".is_empty");
                 }
+                // --- fill(val) ---
+                if(node->methodName == "fill")
+                {
+                    if(!receiverIsArray2)
+                    {
+                        reportError(node->line,
+                                    "fill() is only available for array<T, N>");
+                        return nullptr;
+                    }
+                    if(node->arguments.size() != 1)
+                    {
+                        reportError(node->line, "fill() takes one argument");
+                        return nullptr;
+                    }
+                    llvm::Value* val2 = generateExpression(node->arguments[0]);
+                    if(!val2)
+                        return nullptr;
+
+                    if(elemIsStr)
+                    {
+                        llvm::FunctionType* ft = llvm::FunctionType::get(
+                            voidType2,
+                            {opaquePtrType, opaquePtrType, i64Type2}, false);
+                        llvm::FunctionCallee fn =
+                            module->getOrInsertFunction(
+                                "__mlang_std_array_fill_str", ft);
+                        builder.CreateCall(
+                            fn, {allocaPtr2, val2, arrayCapacity2});
+                        updateKnownArrayLength2(arrayCapIt2->second);
+                        return llvm::Constant::getNullValue(voidType2);
+                    }
+                    if(elemIsI64)
+                    {
+                        if(val2->getType() != i64Type2)
+                            val2 = builder.CreateSExt(val2, i64Type2);
+                        llvm::FunctionType* ft = llvm::FunctionType::get(
+                            voidType2,
+                            {opaquePtrType, i64Type2, i64Type2}, false);
+                        llvm::FunctionCallee fn =
+                            module->getOrInsertFunction(
+                                "__mlang_std_array_fill_i64", ft);
+                        builder.CreateCall(
+                            fn, {allocaPtr2, val2, arrayCapacity2});
+                        updateKnownArrayLength2(arrayCapIt2->second);
+                        return llvm::Constant::getNullValue(voidType2);
+                    }
+                    if(elemKind2 == TypeNode::TYPE_INT ||
+                       elemKind2 == TypeNode::TYPE_I32 ||
+                       elemKind2 == TypeNode::TYPE_U32 ||
+                       elemKind2 == TypeNode::TYPE_I16 ||
+                       elemKind2 == TypeNode::TYPE_U16 ||
+                       elemKind2 == TypeNode::TYPE_I8 ||
+                       elemKind2 == TypeNode::TYPE_U8 ||
+                       elemKind2 == TypeNode::TYPE_BOOL)
+                    {
+                        if(val2->getType() != i32Type2)
+                            val2 = builder.CreateTrunc(val2, i32Type2);
+                        llvm::FunctionType* ft = llvm::FunctionType::get(
+                            voidType2,
+                            {opaquePtrType, i32Type2, i64Type2}, false);
+                        llvm::FunctionCallee fn =
+                            module->getOrInsertFunction(
+                                "__mlang_std_array_fill_i32", ft);
+                        builder.CreateCall(
+                            fn, {allocaPtr2, val2, arrayCapacity2});
+                        updateKnownArrayLength2(arrayCapIt2->second);
+                        return llvm::Constant::getNullValue(voidType2);
+                    }
+
+                    llvm::Type* elemLlvmType =
+                        elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
+                                      : val2->getType();
+                    if(!elemLlvmType || val2->getType() != elemLlvmType)
+                    {
+                        reportError(node->line,
+                                    "fill() argument type mismatch for array "
+                                    "element");
+                        return nullptr;
+                    }
+                    llvm::AllocaInst* tmpElem = builder.CreateAlloca(
+                        elemLlvmType, nullptr, "array.fill.tmp");
+                    builder.CreateStore(val2, tmpElem);
+                    llvm::Value* elemPtrAsOpaque = builder.CreateBitCast(
+                        tmpElem, opaquePtrType, "array.fill.ptr");
+                    uint64_t elemSizeU =
+                        module->getDataLayout().getTypeAllocSize(elemLlvmType);
+                    llvm::Value* elemSize =
+                        llvm::ConstantInt::get(i64Type2, elemSizeU);
+                    llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                        voidType2,
+                        {opaquePtrType, opaquePtrType, i64Type2, i64Type2},
+                        false);
+                    llvm::FunctionCallee fnRaw =
+                        module->getOrInsertFunction(
+                            "__mlang_std_array_fill_raw", ftRaw);
+                    builder.CreateCall(fnRaw,
+                                       {allocaPtr2, elemPtrAsOpaque, elemSize,
+                                        arrayCapacity2});
+                    updateKnownArrayLength2(arrayCapIt2->second);
+                    return llvm::Constant::getNullValue(voidType2);
+                }
                 // --- push(val) ---
                 if(node->methodName == "push")
                 {
@@ -24158,6 +24519,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         reportError(node->line, "push() takes one argument");
                         return nullptr;
                     }
+                    if(!checkKnownArrayGrowth2(1, "push"))
+                        return nullptr;
                     llvm::Value* val2 = generateExpression(node->arguments[0]);
                     if(!val2)
                         return nullptr;
@@ -24176,7 +24539,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         if(val2->getType() != i64Type2)
                             val2 = builder.CreateSExt(val2, i64Type2);
                     }
-                    else if(elemKind2 == TypeNode::TYPE_I32 ||
+                    else if(elemKind2 == TypeNode::TYPE_INT ||
+                            elemKind2 == TypeNode::TYPE_I32 ||
                             elemKind2 == TypeNode::TYPE_U32 ||
                             elemKind2 == TypeNode::TYPE_I16 ||
                             elemKind2 == TypeNode::TYPE_U16 ||
@@ -24219,20 +24583,223 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         llvm::Value* elemSize = llvm::ConstantInt::get(
                             i64Type2, (uint64_t)elemSizeU);
                         llvm::FunctionType* ftRaw = llvm::FunctionType::get(
-                            voidType2, {opaquePtrType, opaquePtrType, i64Type2},
+                            voidType2,
+                            receiverIsArray2
+                                ? std::vector<llvm::Type*>{
+                                      opaquePtrType, opaquePtrType, i64Type2,
+                                      i64Type2}
+                                : std::vector<llvm::Type*>{
+                                      opaquePtrType, opaquePtrType, i64Type2},
                             false);
                         llvm::FunctionCallee fnRaw =
                             module->getOrInsertFunction(
-                                "__mlang_std_vec_push_raw", ftRaw);
-                        builder.CreateCall(
-                            fnRaw, {allocaPtr2, elemPtrAsOpaque, elemSize});
+                                receiverIsArray2
+                                    ? "__mlang_std_array_push_raw"
+                                    : "__mlang_std_vec_push_raw",
+                                ftRaw);
+                        if(receiverIsArray2)
+                            builder.CreateCall(fnRaw,
+                                               {allocaPtr2, elemPtrAsOpaque,
+                                                elemSize, arrayCapacity2});
+                        else
+                            builder.CreateCall(
+                                fnRaw, {allocaPtr2, elemPtrAsOpaque, elemSize});
+                        if(receiverIsArray2)
+                        {
+                            auto lenIt = arrayKnownLengths.find(objId->name);
+                            if(lenIt != arrayKnownLengths.end())
+                                updateKnownArrayLength2(lenIt->second + 1);
+                        }
                         return llvm::Constant::getNullValue(voidType2);
                     }
                     llvm::FunctionType* ft2 = llvm::FunctionType::get(
-                        voidType2, {opaquePtrType, valType2}, false);
+                        voidType2,
+                        receiverIsArray2
+                            ? std::vector<llvm::Type*>{
+                                  opaquePtrType, valType2, i64Type2}
+                            : std::vector<llvm::Type*>{opaquePtrType,
+                                                       valType2},
+                        false);
+                    if(receiverIsArray2)
+                    {
+                        if(fnName2 == "__mlang_std_vec_push_str")
+                            fnName2 = "__mlang_std_array_push_str";
+                        else if(fnName2 == "__mlang_std_vec_push_i64")
+                            fnName2 = "__mlang_std_array_push_i64";
+                        else
+                            fnName2 = "__mlang_std_array_push_i32";
+                    }
                     llvm::FunctionCallee fn2 =
                         module->getOrInsertFunction(fnName2, ft2);
-                    builder.CreateCall(fn2, {allocaPtr2, val2});
+                    if(receiverIsArray2)
+                        builder.CreateCall(
+                            fn2, {allocaPtr2, val2, arrayCapacity2});
+                    else
+                        builder.CreateCall(fn2, {allocaPtr2, val2});
+                    if(receiverIsArray2)
+                    {
+                        auto lenIt = arrayKnownLengths.find(objId->name);
+                        if(lenIt != arrayKnownLengths.end())
+                            updateKnownArrayLength2(lenIt->second + 1);
+                    }
+                    return llvm::Constant::getNullValue(voidType2);
+                }
+                // --- extend(list_or_array) ---
+                if(node->methodName == "extend")
+                {
+                    if(!receiverIsArray2)
+                    {
+                        reportError(node->line,
+                                    "extend() is only available for array<T, N>");
+                        return nullptr;
+                    }
+                    if(node->arguments.size() != 1)
+                    {
+                        reportError(node->line, "extend() takes one argument");
+                        return nullptr;
+                    }
+                    std::optional<int64_t> sourceKnownLength =
+                        fixedArrayExpressionKnownLength(node->arguments[0]);
+                    if(sourceKnownLength &&
+                       !checkKnownArrayGrowth2(*sourceKnownLength, "extend"))
+                        return nullptr;
+
+                    llvm::Type* elemLlvmType =
+                        elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
+                                      : getLLVMType(elemKind2);
+                    if(!elemLlvmType)
+                    {
+                        reportError(node->line,
+                                    "unsupported array element type for "
+                                    "extend()");
+                        return nullptr;
+                    }
+
+                    TypeNode* srcType =
+                        inferExpressionTypeNode(node->arguments[0],
+                                                node->line);
+                    TypeNode* srcElemType = nullptr;
+                    if(auto* srcArray = dynamic_cast<ArrayTypeNode*>(srcType))
+                        srcElemType = srcArray->elementType;
+                    else if(auto* srcList =
+                                dynamic_cast<GenericListTypeNode*>(srcType))
+                        srcElemType = srcList->elementType;
+                    else if(srcType && srcType->kind == TypeNode::TYPE_LIST)
+                        srcElemType = nullptr;
+                    else
+                    {
+                        reportError(node->line,
+                                    "extend() expects a list<T>, vec![...], or "
+                                    "array<T, N> argument");
+                        return nullptr;
+                    }
+                    if(srcElemType)
+                    {
+                        llvm::Type* srcElemLlvm =
+                            getLLVMTypeFromNode(srcElemType);
+                        bool sourceIsLiteral =
+                            dynamic_cast<ListLiteralNode*>(
+                                node->arguments[0]) ||
+                            dynamic_cast<ArrayFillNode*>(node->arguments[0]);
+                        bool literalIntegerCoercion =
+                            sourceIsLiteral && srcElemLlvm &&
+                            srcElemLlvm->isIntegerTy() &&
+                            elemLlvmType->isIntegerTy();
+                        if(srcElemLlvm && srcElemLlvm != elemLlvmType &&
+                           !literalIntegerCoercion)
+                        {
+                            reportError(node->line,
+                                        "extend() argument element type does "
+                                        "not match array element type");
+                            return nullptr;
+                        }
+                    }
+
+                    llvm::Value* srcPtr = nullptr;
+                    if(dynamic_cast<IdentifierNode*>(node->arguments[0]) ||
+                       dynamic_cast<FieldAccessNode*>(node->arguments[0]))
+                        srcPtr = getLValuePointer(node->arguments[0],
+                                                  node->line);
+
+                    if(!srcPtr)
+                    {
+                        llvm::Value* srcValue = nullptr;
+                        if(auto* listLit = dynamic_cast<ListLiteralNode*>(
+                               node->arguments[0]))
+                            srcValue = generateListLiteral(listLit,
+                                                           elemLlvmType);
+                        else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(
+                                    node->arguments[0]))
+                            srcValue = generateArrayFill(arrFill,
+                                                         elemLlvmType);
+                        else
+                            srcValue = generateExpression(node->arguments[0]);
+                        if(!srcValue)
+                            return nullptr;
+                        llvm::AllocaInst* tmpList = builder.CreateAlloca(
+                            srcValue->getType(), nullptr, "array.extend.tmp");
+                        builder.CreateStore(srcValue, tmpList);
+                        srcPtr = tmpList;
+                    }
+
+                    std::string fnName =
+                        elemIsStr   ? "__mlang_std_array_extend_str"
+                        : elemIsI64 ? "__mlang_std_array_extend_i64"
+                                    : "__mlang_std_array_extend_i32";
+                    if(!(elemIsStr || elemIsI64 ||
+                         elemKind2 == TypeNode::TYPE_INT ||
+                         elemKind2 == TypeNode::TYPE_I32 ||
+                         elemKind2 == TypeNode::TYPE_U32 ||
+                         elemKind2 == TypeNode::TYPE_I16 ||
+                         elemKind2 == TypeNode::TYPE_U16 ||
+                         elemKind2 == TypeNode::TYPE_I8 ||
+                         elemKind2 == TypeNode::TYPE_U8 ||
+                         elemKind2 == TypeNode::TYPE_BOOL))
+                    {
+                        uint64_t elemSizeU =
+                            module->getDataLayout().getTypeAllocSize(
+                                elemLlvmType);
+                        llvm::Value* elemSize = llvm::ConstantInt::get(
+                            i64Type2, (uint64_t)elemSizeU);
+                        llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                            voidType2,
+                            {opaquePtrType, opaquePtrType, i64Type2,
+                             i64Type2},
+                            false);
+                        llvm::FunctionCallee fnRaw =
+                            module->getOrInsertFunction(
+                                "__mlang_std_array_extend_raw", ftRaw);
+                        builder.CreateCall(fnRaw,
+                                           {allocaPtr2, srcPtr, elemSize,
+                                            arrayCapacity2});
+                        if(receiverIsArray2)
+                        {
+                            auto lenIt = arrayKnownLengths.find(objId->name);
+                            if(lenIt != arrayKnownLengths.end() &&
+                               sourceKnownLength)
+                                updateKnownArrayLength2(lenIt->second +
+                                                        *sourceKnownLength);
+                            else
+                                updateKnownArrayLength2(std::nullopt);
+                        }
+                        return llvm::Constant::getNullValue(voidType2);
+                    }
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        voidType2, {opaquePtrType, opaquePtrType, i64Type2},
+                        false);
+                    llvm::FunctionCallee fn =
+                        module->getOrInsertFunction(fnName, ft);
+                    builder.CreateCall(fn, {allocaPtr2, srcPtr, arrayCapacity2});
+                    if(receiverIsArray2)
+                    {
+                        auto lenIt = arrayKnownLengths.find(objId->name);
+                        if(lenIt != arrayKnownLengths.end() &&
+                           sourceKnownLength)
+                            updateKnownArrayLength2(lenIt->second +
+                                                    *sourceKnownLength);
+                        else
+                            updateKnownArrayLength2(std::nullopt);
+                    }
                     return llvm::Constant::getNullValue(voidType2);
                 }
                 // --- pop() ---
@@ -24244,6 +24811,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         return nullptr;
                     }
                     if(elemIsStr || elemIsI64 ||
+                       elemKind2 == TypeNode::TYPE_INT ||
                        elemKind2 == TypeNode::TYPE_I32 ||
                        elemKind2 == TypeNode::TYPE_U32 ||
                        elemKind2 == TypeNode::TYPE_I16 ||
@@ -24273,8 +24841,16 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             retType3, {opaquePtrType}, false);
                         llvm::FunctionCallee fn3 =
                             module->getOrInsertFunction(fnName3, ft3);
-                        return builder.CreateCall(fn3, {allocaPtr2},
-                                                  objId->name + ".pop");
+                        llvm::Value* popped = builder.CreateCall(
+                            fn3, {allocaPtr2}, objId->name + ".pop");
+                        if(receiverIsArray2)
+                        {
+                            auto lenIt = arrayKnownLengths.find(objId->name);
+                            if(lenIt != arrayKnownLengths.end() &&
+                               lenIt->second > 0)
+                                updateKnownArrayLength2(lenIt->second - 1);
+                        }
+                        return popped;
                     }
                     llvm::Type* elemLlvmType =
                         elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
@@ -24300,6 +24876,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         "__mlang_std_vec_pop_raw", ftRaw);
                     builder.CreateCall(fnRaw,
                                        {allocaPtr2, tmpElemPtr, elemSize});
+                    if(receiverIsArray2)
+                    {
+                        auto lenIt = arrayKnownLengths.find(objId->name);
+                        if(lenIt != arrayKnownLengths.end() &&
+                           lenIt->second > 0)
+                            updateKnownArrayLength2(lenIt->second - 1);
+                    }
                     return builder.CreateLoad(elemLlvmType, tmpElem,
                                               objId->name + ".pop");
                 }
@@ -24311,7 +24894,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         reportError(node->line, "clear() takes no arguments");
                         return nullptr;
                     }
-                    return callVecVoidFn("__mlang_std_vec_clear");
+                    llvm::Value* result = callVecVoidFn("__mlang_std_vec_clear");
+                    updateKnownArrayLength2(0);
+                    return result;
                 }
                 // --- contains(val) ---
                 if(node->methodName == "contains")
@@ -24660,10 +25245,24 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(!recvPtr)
                 return nullptr;
             TypeNode::TypeKind elemKind = TypeNode::TYPE_I32;
-            if(auto* gl = dynamic_cast<GenericListTypeNode*>(recvType))
+            TypeNode* recvElemTypeForList = nullptr;
+            int64_t arrayCapacityValue = 0;
+            bool receiverIsArray = false;
+            if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(recvType))
+            {
+                receiverIsArray = true;
+                arrayCapacityValue = arrayType->capacity;
+                recvElemTypeForList = arrayType->elementType;
+                if(arrayType->elementType)
+                    elemKind = arrayType->elementType->kind;
+            }
+            else if(auto* gl = dynamic_cast<GenericListTypeNode*>(recvType))
             {
                 if(gl->elementType)
+                {
+                    recvElemTypeForList = gl->elementType;
                     elemKind = gl->elementType->kind;
+                }
             }
             llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
             llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -24678,13 +25277,18 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                               elemKind == TypeNode::TYPE_U64);
             bool elemIsStr = (elemKind == TypeNode::TYPE_STRING ||
                               elemKind == TypeNode::TYPE_STR8);
-            bool elemIsI32Like = (elemKind == TypeNode::TYPE_I32 ||
+            bool elemIsI32Like = (elemKind == TypeNode::TYPE_INT ||
+                                  elemKind == TypeNode::TYPE_I32 ||
                                   elemKind == TypeNode::TYPE_U32 ||
                                   elemKind == TypeNode::TYPE_I16 ||
                                   elemKind == TypeNode::TYPE_U16 ||
                                   elemKind == TypeNode::TYPE_I8 ||
                                   elemKind == TypeNode::TYPE_U8 ||
                                   elemKind == TypeNode::TYPE_BOOL);
+            llvm::Value* arrayCapacity =
+                receiverIsArray
+                    ? llvm::ConstantInt::get(i64Type, arrayCapacityValue)
+                    : nullptr;
 
             if(node->methodName == "len")
             {
@@ -24719,6 +25323,86 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                             llvm::ConstantInt::get(i64Type, 0),
                                             "fieldlist.is_empty");
             }
+            if(node->methodName == "fill")
+            {
+                if(!receiverIsArray)
+                {
+                    reportError(node->line,
+                                "fill() is only available for array<T, N>");
+                    return nullptr;
+                }
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "fill() takes one argument");
+                    return nullptr;
+                }
+                llvm::Value* val = generateExpression(node->arguments[0]);
+                if(!val)
+                    return nullptr;
+
+                if(elemIsStr)
+                {
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        voidType, {opaquePtrType, opaquePtrType, i64Type},
+                        false);
+                    llvm::FunctionCallee fn = module->getOrInsertFunction(
+                        "__mlang_std_array_fill_str", ft);
+                    builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                    return llvm::Constant::getNullValue(voidType);
+                }
+                if(elemIsI64)
+                {
+                    if(val->getType() != i64Type)
+                        val = builder.CreateSExt(val, i64Type);
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        voidType, {opaquePtrType, i64Type, i64Type}, false);
+                    llvm::FunctionCallee fn = module->getOrInsertFunction(
+                        "__mlang_std_array_fill_i64", ft);
+                    builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                    return llvm::Constant::getNullValue(voidType);
+                }
+                if(elemIsI32Like)
+                {
+                    if(val->getType() != i32Type)
+                        val = builder.CreateTrunc(val, i32Type);
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        voidType, {opaquePtrType, i32Type, i64Type}, false);
+                    llvm::FunctionCallee fn = module->getOrInsertFunction(
+                        "__mlang_std_array_fill_i32", ft);
+                    builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                    return llvm::Constant::getNullValue(voidType);
+                }
+
+                llvm::Type* elemLlvmType =
+                    recvElemTypeForList
+                        ? getLLVMTypeFromNode(recvElemTypeForList)
+                        : val->getType();
+                if(!elemLlvmType || val->getType() != elemLlvmType)
+                {
+                    reportError(node->line,
+                                "fill() argument type mismatch for array "
+                                "element");
+                    return nullptr;
+                }
+                llvm::AllocaInst* tmpElem = builder.CreateAlloca(
+                    elemLlvmType, nullptr, "array.fill.tmp");
+                builder.CreateStore(val, tmpElem);
+                llvm::Value* elemPtrAsOpaque = builder.CreateBitCast(
+                    tmpElem, opaquePtrType, "array.fill.ptr");
+                uint64_t elemSizeU =
+                    module->getDataLayout().getTypeAllocSize(elemLlvmType);
+                llvm::Value* elemSize =
+                    llvm::ConstantInt::get(i64Type, elemSizeU);
+                llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                    voidType,
+                    {opaquePtrType, opaquePtrType, i64Type, i64Type}, false);
+                llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
+                    "__mlang_std_array_fill_raw", ftRaw);
+                builder.CreateCall(fnRaw,
+                                   {recvPtr, elemPtrAsOpaque, elemSize,
+                                    arrayCapacity});
+                return llvm::Constant::getNullValue(voidType);
+            }
             if(node->methodName == "push")
             {
                 if(node->arguments.size() != 1)
@@ -24747,13 +25431,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(!elemIsI32Like)
                     {
-                        TypeNode* recvElemType = nullptr;
-                        if(auto* gl =
-                               dynamic_cast<GenericListTypeNode*>(recvType))
-                            recvElemType = gl->elementType;
                         llvm::Type* elemLlvmType =
-                            recvElemType ? getLLVMTypeFromNode(recvElemType)
-                                         : nullptr;
+                            recvElemTypeForList
+                                ? getLLVMTypeFromNode(recvElemTypeForList)
+                                : nullptr;
                         if(!elemLlvmType)
                         {
                             reportError(
@@ -24777,12 +25458,28 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                 i64Type, (uint64_t)elemSizeU);
                             llvm::FunctionType* ftRaw = llvm::FunctionType::get(
                                 voidType,
-                                {opaquePtrType, opaquePtrType, i64Type}, false);
+                                receiverIsArray
+                                    ? std::vector<llvm::Type*>{
+                                          opaquePtrType, opaquePtrType, i64Type,
+                                          i64Type}
+                                    : std::vector<llvm::Type*>{
+                                          opaquePtrType, opaquePtrType,
+                                          i64Type},
+                                false);
                             llvm::FunctionCallee fnRaw =
                                 module->getOrInsertFunction(
-                                    "__mlang_std_vec_push_raw", ftRaw);
-                            builder.CreateCall(
-                                fnRaw, {recvPtr, elemPtrAsOpaque, elemSize});
+                                    receiverIsArray
+                                        ? "__mlang_std_array_push_raw"
+                                        : "__mlang_std_vec_push_raw",
+                                    ftRaw);
+                            if(receiverIsArray)
+                                builder.CreateCall(fnRaw,
+                                                   {recvPtr, elemPtrAsOpaque,
+                                                    elemSize, arrayCapacity});
+                            else
+                                builder.CreateCall(fnRaw,
+                                                   {recvPtr, elemPtrAsOpaque,
+                                                    elemSize});
                             return llvm::Constant::getNullValue(voidType);
                         }
                     }
@@ -24791,11 +25488,167 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     if(val->getType() != i32Type)
                         val = builder.CreateTrunc(val, i32Type);
                 }
+                if(receiverIsArray)
+                {
+                    if(fnName == "__mlang_std_vec_push_str")
+                        fnName = "__mlang_std_array_push_str";
+                    else if(fnName == "__mlang_std_vec_push_i64")
+                        fnName = "__mlang_std_array_push_i64";
+                    else
+                        fnName = "__mlang_std_array_push_i32";
+                }
                 llvm::FunctionType* ft = llvm::FunctionType::get(
-                    voidType, {opaquePtrType, valType}, false);
+                    voidType,
+                    receiverIsArray
+                        ? std::vector<llvm::Type*>{opaquePtrType, valType,
+                                                   i64Type}
+                        : std::vector<llvm::Type*>{opaquePtrType, valType},
+                    false);
                 llvm::FunctionCallee fn =
                     module->getOrInsertFunction(fnName, ft);
-                builder.CreateCall(fn, {recvPtr, val});
+                if(receiverIsArray)
+                    builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
+                else
+                    builder.CreateCall(fn, {recvPtr, val});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "extend")
+            {
+                if(!receiverIsArray)
+                {
+                    reportError(node->line,
+                                "extend() is only available for array<T, N>");
+                    return nullptr;
+                }
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "extend() takes one argument");
+                    return nullptr;
+                }
+                std::optional<int64_t> sourceKnownLength =
+                    fixedArrayExpressionKnownLength(node->arguments[0]);
+                if(sourceKnownLength)
+                {
+                    if(*sourceKnownLength < 0)
+                    {
+                        reportError(node->line,
+                                    "extend() source length must be "
+                                    "non-negative");
+                        return nullptr;
+                    }
+                    if(*sourceKnownLength > arrayCapacityValue)
+                    {
+                        reportError(node->line,
+                                    "extend() would exceed array<T, N> "
+                                    "capacity: add=" +
+                                        std::to_string(*sourceKnownLength) +
+                                        " capacity=" +
+                                        std::to_string(arrayCapacityValue));
+                        return nullptr;
+                    }
+                }
+
+                llvm::Type* elemLlvmType =
+                    recvElemTypeForList
+                        ? getLLVMTypeFromNode(recvElemTypeForList)
+                        : getLLVMType(elemKind);
+                if(!elemLlvmType)
+                {
+                    reportError(node->line,
+                                "unsupported array element type for extend()");
+                    return nullptr;
+                }
+
+                TypeNode* srcType =
+                    inferExpressionTypeNode(node->arguments[0], node->line);
+                TypeNode* srcElemType = nullptr;
+                if(auto* srcArray = dynamic_cast<ArrayTypeNode*>(srcType))
+                    srcElemType = srcArray->elementType;
+                else if(auto* srcList =
+                            dynamic_cast<GenericListTypeNode*>(srcType))
+                    srcElemType = srcList->elementType;
+                else if(srcType && srcType->kind == TypeNode::TYPE_LIST)
+                    srcElemType = nullptr;
+                else
+                {
+                    reportError(node->line,
+                                "extend() expects a list<T>, vec![...], or "
+                                "array<T, N> argument");
+                    return nullptr;
+                }
+                if(srcElemType)
+                {
+                    llvm::Type* srcElemLlvm =
+                        getLLVMTypeFromNode(srcElemType);
+                    bool sourceIsLiteral =
+                        dynamic_cast<ListLiteralNode*>(node->arguments[0]) ||
+                        dynamic_cast<ArrayFillNode*>(node->arguments[0]);
+                    bool literalIntegerCoercion =
+                        sourceIsLiteral && srcElemLlvm &&
+                        srcElemLlvm->isIntegerTy() &&
+                        elemLlvmType->isIntegerTy();
+                    if(srcElemLlvm && srcElemLlvm != elemLlvmType &&
+                       !literalIntegerCoercion)
+                    {
+                        reportError(node->line,
+                                    "extend() argument element type does not "
+                                    "match array element type");
+                        return nullptr;
+                    }
+                }
+
+                llvm::Value* srcPtr = nullptr;
+                if(dynamic_cast<IdentifierNode*>(node->arguments[0]) ||
+                   dynamic_cast<FieldAccessNode*>(node->arguments[0]))
+                    srcPtr = getLValuePointer(node->arguments[0], node->line);
+
+                if(!srcPtr)
+                {
+                    llvm::Value* srcValue = nullptr;
+                    if(auto* listLit =
+                           dynamic_cast<ListLiteralNode*>(node->arguments[0]))
+                        srcValue = generateListLiteral(listLit, elemLlvmType);
+                    else if(auto* arrFill =
+                                dynamic_cast<ArrayFillNode*>(
+                                    node->arguments[0]))
+                        srcValue = generateArrayFill(arrFill, elemLlvmType);
+                    else
+                        srcValue = generateExpression(node->arguments[0]);
+                    if(!srcValue)
+                        return nullptr;
+                    llvm::AllocaInst* tmpList = builder.CreateAlloca(
+                        srcValue->getType(), nullptr, "array.extend.tmp");
+                    builder.CreateStore(srcValue, tmpList);
+                    srcPtr = tmpList;
+                }
+
+                std::string fnName =
+                    elemIsStr   ? "__mlang_std_array_extend_str"
+                    : elemIsI64 ? "__mlang_std_array_extend_i64"
+                                : "__mlang_std_array_extend_i32";
+                if(!(elemIsStr || elemIsI64 || elemIsI32Like))
+                {
+                    uint64_t elemSizeU =
+                        module->getDataLayout().getTypeAllocSize(
+                            elemLlvmType);
+                    llvm::Value* elemSize = llvm::ConstantInt::get(
+                        i64Type, (uint64_t)elemSizeU);
+                    llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                        voidType,
+                        {opaquePtrType, opaquePtrType, i64Type, i64Type},
+                        false);
+                    llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
+                        "__mlang_std_array_extend_raw", ftRaw);
+                    builder.CreateCall(fnRaw,
+                                       {recvPtr, srcPtr, elemSize,
+                                        arrayCapacity});
+                    return llvm::Constant::getNullValue(voidType);
+                }
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    voidType, {opaquePtrType, opaquePtrType, i64Type}, false);
+                llvm::FunctionCallee fn =
+                    module->getOrInsertFunction(fnName, ft);
+                builder.CreateCall(fn, {recvPtr, srcPtr, arrayCapacity});
                 return llvm::Constant::getNullValue(voidType);
             }
             if(node->methodName == "pop")
@@ -25738,6 +26591,46 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
     auto listIt = listElementTypes.find(baseId->name);
     if(listIt != listElementTypes.end())
     {
+        auto arrayCapIt = arrayCapacities.find(baseId->name);
+        if(arrayCapIt != arrayCapacities.end())
+        {
+            int64_t knownIndex = 0;
+            if(evaluateCompileTimeInt(node->index, knownIndex))
+            {
+                auto knownLenIt = arrayKnownLengths.find(baseId->name);
+                if(knownIndex < 0)
+                {
+                    reportError(node->line,
+                                "array index out of bounds: index=" +
+                                    std::to_string(knownIndex) +
+                                    " capacity=" +
+                                    std::to_string(arrayCapIt->second));
+                    return nullptr;
+                }
+                if(knownLenIt != arrayKnownLengths.end() &&
+                   knownIndex >= knownLenIt->second)
+                {
+                    reportError(node->line,
+                                "array index out of bounds: index=" +
+                                    std::to_string(knownIndex) +
+                                    " len=" +
+                                    std::to_string(knownLenIt->second) +
+                                    " capacity=" +
+                                    std::to_string(arrayCapIt->second));
+                    return nullptr;
+                }
+                if(knownIndex >= arrayCapIt->second)
+                {
+                    reportError(node->line,
+                                "array index out of bounds: index=" +
+                                    std::to_string(knownIndex) +
+                                    " capacity=" +
+                                    std::to_string(arrayCapIt->second));
+                    return nullptr;
+                }
+            }
+        }
+
         initializeFormatFunctions();
 
         // List indexing
@@ -27546,6 +28439,8 @@ CodeGenerator::substituteTypeParams(TypeNode* type,
     {
         TypeNode* newElemType =
             substituteTypeParams(listType->elementType, typeParams, typeArgs);
+        if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(type))
+            return new ArrayTypeNode(newElemType, arrayType->capacity);
         return new GenericListTypeNode(newElemType);
     }
 

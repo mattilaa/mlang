@@ -41,7 +41,7 @@ fn main() -> i32 {
         ready: true
     };
 
-    println!("sizeof(DeviceFlags)={}", sizeof(DeviceFlags));
+    println!("size_of(DeviceFlags)={}", size_of(DeviceFlags));
     println!("rx={} tx={} ready={}", i32(flags.rx), i32(flags.tx), flags.ready ? 1 : 0);
 
     flags.tx = ON();
@@ -57,7 +57,7 @@ fn main() -> i32 {
         b6: ON(),
         b7: OFF()
     };
-    println!("sizeof(PackedByteFlags)={}", sizeof(PackedByteFlags));
+    println!("size_of(PackedByteFlags)={}", size_of(PackedByteFlags));
     println!("packed bits={}{}{}{}{}{}{}{}",
              i32(packed.b0), i32(packed.b1), i32(packed.b2), i32(packed.b3),
              i32(packed.b4), i32(packed.b5), i32(packed.b6), i32(packed.b7));
@@ -79,7 +79,7 @@ fn main() -> i32 {
         b5: OFF(),
         ready: true
     };
-    println!("sizeof(MixedPackedFlags)={}", sizeof(MixedPackedFlags));
+    println!("size_of(MixedPackedFlags)={}", size_of(MixedPackedFlags));
     println!("mixed bits={}{}{}{}{}{} ready={}",
              i32(mixed.b0), i32(mixed.b1), i32(mixed.b2), i32(mixed.b3),
              i32(mixed.b4), i32(mixed.b5), mixed.ready ? 1 : 0);

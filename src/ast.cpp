@@ -1920,8 +1920,8 @@ std::string TryExpressionNode::toString() const
 std::string SizeofExpressionNode::toString() const
 {
     if(typeTarget)
-        return "sizeof(" + typeTarget->toString() + ")";
-    return "sizeof(" +
+        return "size_of(" + typeTarget->toString() + ")";
+    return "size_of(" +
            (expressionTarget ? expressionTarget->toString() : "<unknown>") +
            ")";
 }
@@ -2716,6 +2716,12 @@ ASTNode* create_generic_list_type_impl(ASTNode* element_type)
 std::string GenericListTypeNode::toString() const
 {
     return "list<" + elementType->toString() + ">";
+}
+
+std::string ArrayTypeNode::toString() const
+{
+    return "array<" + elementType->toString() + ", " +
+           std::to_string(capacity) + ">";
 }
 
 // Map type

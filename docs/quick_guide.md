@@ -174,8 +174,9 @@ Use `extern fn` when calling C APIs or wrapped native libraries.
 
 ```mla
 let values: Span<i32> = [1, 2, 3];
-static_assert!(sizeof(values) == sizeof(list<i32>));
-println!("size={}", sizeof(values));
+static_assert!(size_of(values) == size_of(list<i32>));
+static_assert!(size_of(array<int, 6>) == 24);
+println!("size={}", size_of(values));
 ```
 
 ## Testing

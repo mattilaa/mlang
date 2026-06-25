@@ -24,16 +24,16 @@ fn all_true(values: &span<bool>) -> bool {
 }
 
 #[test]
-fn test_span_sizeof_and_static_asserts() {
+fn test_span_size_of_and_static_asserts() {
     let ints: Span<i32> = [1, 2, 3];
     let flags: span<bool> = [true, false];
-    static_assert!(sizeof(list<i32>) == 16);
-    static_assert!(sizeof(ints) == sizeof(list<i32>));
-    static_assert!(sizeof(flags) == sizeof(list<bool>));
+    static_assert!(size_of(list<i32>) == 16);
+    static_assert!(size_of(ints) == size_of(list<i32>));
+    static_assert!(size_of(flags) == size_of(list<bool>));
 
-    verify_eq_i64(sizeof(ints), sizeof(list<i32>));
-    verify_eq_i64(sizeof(flags), sizeof(list<bool>));
-    verify_eq_i64(16, sizeof(ints));
+    verify_eq_i64(size_of(ints), size_of(list<i32>));
+    verify_eq_i64(size_of(flags), size_of(list<bool>));
+    verify_eq_i64(16, size_of(ints));
 }
 
 #[test]
