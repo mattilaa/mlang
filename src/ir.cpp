@@ -1974,6 +1974,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 return false;
             }
             pointerBorrowTarget[pointerVar] = ownerName;
+            pointerKnownNull[pointerVar] = false;
             activeMutBorrower[ownerName] = pointerVar;
             return true;
         }
@@ -2006,6 +2007,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         }
 
         pointerBorrowTarget[pointerVar] = ownerName;
+        pointerKnownNull[pointerVar] = false;
         activeBorrowers[ownerName].insert(pointerVar);
         return true;
     };
@@ -2171,9 +2173,91 @@ CodeGenerator::getBorrowedOwnerForPointerExpression(ExpressionNode* expr) const
     return borrowIt->second;
 }
 
+std::optional<bool>
+CodeGenerator::pointerExpressionKnownNull(ExpressionNode* expr) const
+{
+    if(!expr)
+        return true;
+
+    if(auto* idExpr = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = pointerKnownNull.find(idExpr->name);
+        if(it != pointerKnownNull.end())
+            return it->second;
+        return std::nullopt;
+    }
+
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_ADDR ||
+           unary->op == UnaryOpNode::OP_ADDR_MUT)
+            return false;
+    }
+
+    return std::nullopt;
+}
+
+bool CodeGenerator::emitRuntimeNullPointerCheck(llvm::Value* ptrValue, int line)
+{
+    if(!ptrValue || !ptrValue->getType()->isPointerTy())
+        return false;
+
+    if(llvm::isa<llvm::ConstantPointerNull>(ptrValue))
+    {
+        reportError(line, "cannot dereference null pointer");
+        return false;
+    }
+
+    initializeFormatFunctions();
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* okBB =
+        llvm::BasicBlock::Create(context, "ptr.not_null", function);
+    llvm::BasicBlock* failBB =
+        llvm::BasicBlock::Create(context, "ptr.null", function);
+    llvm::Value* nullPtr =
+        llvm::ConstantPointerNull::get(
+            llvm::cast<llvm::PointerType>(ptrValue->getType()));
+    llvm::Value* isNull =
+        builder.CreateICmpEQ(ptrValue, nullPtr, "ptr.is_null");
+    builder.CreateCondBr(isNull, failBB, okBB);
+
+    builder.SetInsertPoint(failBB);
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(
+        "null pointer dereference\n", "ptr.null.msg");
+#else
+    llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+        "null pointer dereference\n", "ptr.null.msg");
+#endif
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* opaquePtrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Value* stderrVal =
+        builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+    builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+    builder.CreateCall(abortFunc, {});
+    builder.CreateUnreachable();
+
+    builder.SetInsertPoint(okBB);
+    return true;
+}
+
 bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
                                                int line)
 {
+    if(auto knownNull = pointerExpressionKnownNull(pointerExpr))
+    {
+        if(*knownNull)
+        {
+            reportError(line, "cannot dereference null pointer");
+            return false;
+        }
+    }
+
     std::string ownerName = getBorrowedOwnerForPointerExpression(pointerExpr);
     if(ownerName.empty())
     {
@@ -3919,6 +4003,8 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
                 reportError(line, "dereference requires a pointer value");
                 return nullptr;
             }
+            if(!emitRuntimeNullPointerCheck(ptrVal, line))
+                return nullptr;
             return ptrVal;
         }
     }
@@ -9118,6 +9204,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedMapKeyValueTypes = mapKeyValueTypes;
     auto savedTupleElementTypes = tupleElementTypes;
     auto savedPointerElementTypes = pointerElementTypes;
+    auto savedPointerKnownNull = pointerKnownNull;
     auto savedCleanupScopes = cleanupScopes;
     auto savedPointerBorrowScopes = pointerBorrowScopes;
     auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
@@ -9139,6 +9226,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     closureVariables.clear();
     activeInlineClosures.clear();
     pointerBorrowTarget.clear();
+    pointerKnownNull.clear();
     activeBorrowers.clear();
     activeMutBorrower.clear();
     variableScopeDepth.clear();
@@ -9401,6 +9489,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     mapKeyValueTypes = std::move(savedMapKeyValueTypes);
     tupleElementTypes = std::move(savedTupleElementTypes);
     pointerElementTypes = std::move(savedPointerElementTypes);
+    pointerKnownNull = std::move(savedPointerKnownNull);
     cleanupScopes = std::move(savedCleanupScopes);
     pointerBorrowScopes = std::move(savedPointerBorrowScopes);
     variableScopeDepthScopes = std::move(savedVariableScopeDepthScopes);
@@ -9915,6 +10004,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                         auto savedMapKeyValueTypes = mapKeyValueTypes;
                         auto savedTupleElementTypes = tupleElementTypes;
                         auto savedPointerElementTypes = pointerElementTypes;
+                        auto savedPointerKnownNull = pointerKnownNull;
                         auto savedMovedVariables = movedVariables;
                         auto savedPointerBorrowTarget = pointerBorrowTarget;
                         auto savedActiveBorrowers = activeBorrowers;
@@ -9938,6 +10028,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                         mapKeyValueTypes = savedMapKeyValueTypes;
                         tupleElementTypes = savedTupleElementTypes;
                         pointerElementTypes = savedPointerElementTypes;
+                        pointerKnownNull = savedPointerKnownNull;
                         movedVariables = savedMovedVariables;
                         pointerBorrowTarget = savedPointerBorrowTarget;
                         activeBorrowers = savedActiveBorrowers;
@@ -11272,6 +11363,8 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
             reportError(node->line, "dereference requires a pointer value");
             return nullptr;
         }
+        if(!emitRuntimeNullPointerCheck(ptrVal, node->line))
+            return nullptr;
 
         TypeNode* elemTypeNode =
             getPointerElementType(node->operand, node->line);
@@ -16485,6 +16578,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             auto pit = pointerElementTypes.find(id->name);
             if(pit != pointerElementTypes.end())
                 pointerElementTypes[node->name] = pit->second;
+            auto pnit = pointerKnownNull.find(id->name);
+            if(pnit != pointerKnownNull.end())
+                pointerKnownNull[node->name] = pnit->second;
+            else
+                pointerKnownNull.erase(node->name);
         }
 
         if(TypeNode* inferredExprType =
@@ -16562,6 +16660,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             {
                 variableTypes[node->name] = TypeNode::TYPE_PTR;
                 pointerElementTypes[node->name] = ptrType->elementType;
+                if(auto knownNull =
+                       pointerExpressionKnownNull(node->expression))
+                    pointerKnownNull[node->name] = *knownNull;
+                else
+                    pointerKnownNull.erase(node->name);
             }
         }
 
@@ -16652,6 +16755,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         {
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
+            if(auto knownNull = pointerExpressionKnownNull(node->expression))
+                pointerKnownNull[node->name] = *knownNull;
+            else
+                pointerKnownNull.erase(node->name);
         }
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
@@ -16769,6 +16876,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_PTR;
+        if(auto knownNull = pointerExpressionKnownNull(node->expression))
+            pointerKnownNull[node->name] = *knownNull;
+        else
+            pointerKnownNull.erase(node->name);
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
             bool _is_mut_borrow =
@@ -17655,6 +17766,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         {
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
+            if(auto knownNull = pointerExpressionKnownNull(node->initExpr))
+                pointerKnownNull[node->name] = *knownNull;
+            else
+                pointerKnownNull.erase(node->name);
         }
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->initExpr);
@@ -17819,11 +17934,16 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             {
                 builder.CreateStore(initValue, alloca);
             }
+            if(auto knownNull = pointerExpressionKnownNull(node->initExpr))
+                pointerKnownNull[node->name] = *knownNull;
+            else
+                pointerKnownNull.erase(node->name);
         }
         else
         {
             storeZeroInitializedValue(alloca, llvmPtrType);
             emitImplicitZeroInitWarning();
+            pointerKnownNull[node->name] = true;
         }
 
         namedValues[node->name] = alloca;
@@ -18256,10 +18376,15 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
             registerPointerBorrow(node->name, node->expression, node->line,
                                   _is_mut_borrow);
         }
+        if(auto knownNull = pointerExpressionKnownNull(node->expression))
+            pointerKnownNull[node->name] = *knownNull;
+        else
+            pointerKnownNull.erase(node->name);
     }
     else
     {
         clearPointerBorrow(node->name);
+        pointerKnownNull.erase(node->name);
     }
 }
 
@@ -18626,6 +18751,8 @@ void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
         reportError(node->line, "dereference requires a pointer value");
         return;
     }
+    if(!emitRuntimeNullPointerCheck(ptrVal, node->line))
+        return;
 
     TypeNode* elemTypeNode =
         getPointerElementType(node->pointerExpr, node->line);
@@ -20815,6 +20942,7 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     closureVariables.clear();
     activeInlineClosures.clear();
     pointerBorrowTarget.clear();
+    pointerKnownNull.clear();
     activeBorrowers.clear();
     activeMutBorrower.clear();
     variableScopeDepth.clear();
@@ -22102,6 +22230,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     mapKeyValueTypes.clear();
     tupleElementTypes.clear();
     pointerElementTypes.clear();
+    pointerKnownNull.clear();
     closureVariables.clear();
     activeInlineClosures.clear();
     cleanupScopes.clear();

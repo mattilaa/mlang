@@ -218,6 +218,7 @@ private:
     std::map<std::string, std::pair<TypeNode*, TypeNode*>> mapKeyValueTypes;
     // Track element types for pointers
     std::map<std::string, TypeNode*> pointerElementTypes;
+    std::map<std::string, bool> pointerKnownNull;
     // Track tuple element types
     std::map<std::string, std::vector<TypeNode*>> tupleElementTypes;
     // Track struct variable types (var name -> struct type name)
@@ -521,6 +522,8 @@ private:
     std::string getBorrowedOwnerForPointerExpression(
         ExpressionNode* expr) const;
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
+    std::optional<bool> pointerExpressionKnownNull(ExpressionNode* expr) const;
+    bool emitRuntimeNullPointerCheck(llvm::Value* ptrValue, int line);
     bool evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out);
     bool evaluateCompileTimeBool(ExpressionNode* expr, bool& out);
     std::optional<uint64_t> fixedArrayByteSize(TypeNode* typeNode);

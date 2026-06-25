@@ -303,6 +303,10 @@ var next: ptr<i32>;      // null
 var next2: ptr<i32> {};  // null
 ```
 
+Dereferencing a raw pointer requires `unsafe`, but `unsafe` does not disable
+null checks. A pointer known to be null is rejected at compile time; unknown raw
+pointers are checked at runtime before load or store.
+
 Struct values follow the same rule: every field starts at its zero value.
 The explicit `{}` form requests zero-initialized storage in the same style as
 C++ value-initialization.

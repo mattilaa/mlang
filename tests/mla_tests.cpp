@@ -3938,6 +3938,41 @@ TEST_F(MLATest, RawPointerDereferenceInsideUnsafeCompiles)
     EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
+TEST_F(MLATest, KnownNullPointerDereferenceFailsAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var p: ptr<i32>;
+            unsafe {
+                return *p;
+            }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot dereference null pointer"), std::string::npos);
+}
+
+TEST_F(MLATest, UnsafeRawPointerDereferenceChecksNullAtRuntime)
+{
+    std::string code = R"(
+        fn maybe_null() -> ptr<i32> {
+            var p: ptr<i32>;
+            return p;
+        }
+
+        fn main() -> i32 {
+            let p: ptr<i32> = maybe_null();
+            unsafe {
+                return *p;
+            }
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, BorrowedPointerDereferenceOutsideUnsafeStillAllowed)
 {
     std::string code = R"(
