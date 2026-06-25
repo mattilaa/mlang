@@ -284,6 +284,7 @@ println!("{}", i.name);  // i32
 
 For collection values, the returned name includes inner types when available:
 - [`list<i32>`](Quick-Guide#types)
+- [`array<i32, 4>`](Quick-Guide#types)
 - `map<str8, i32>`
 
 If a struct defines a real field named `name`, normal field access is used
@@ -895,6 +896,20 @@ let mul: i32 = (xs * ...);   // right fold
 let bs: list<bool> = [true, false];
 let all_true: bool = (... && bs);
 let any_true: bool = (... || bs);
+```
+
+Fixed-capacity arrays use [`array<T, N>`](Quick-Guide#types). They use the same
+list-compatible runtime operations, but literal and fill initializers are
+checked against `N` at compile time:
+
+```mla
+let fixed: array<int, 6> = {1, 3, 4, 5, 6, 7};
+var scratch: array<int, 6> = {};
+scratch.push(10);
+scratch.push(20);
+
+// Compile-time error: initializer has 4 elements but capacity is 3.
+let too_many: array<int, 3> = {1, 2, 3, 4};
 ```
 
 Supported fold operators:

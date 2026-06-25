@@ -2718,6 +2718,12 @@ std::string GenericListTypeNode::toString() const
     return "list<" + elementType->toString() + ">";
 }
 
+std::string ArrayTypeNode::toString() const
+{
+    return "array<" + elementType->toString() + ", " +
+           std::to_string(capacity) + ">";
+}
+
 // Map type
 ASTNode* create_map_type_impl(ASTNode* key_type, ASTNode* value_type)
 {

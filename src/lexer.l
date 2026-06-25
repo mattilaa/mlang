@@ -242,6 +242,7 @@ static int is_try_question_context()
 "str16"         { return STR16; }
 "utf8"          { return STR8; }
 "utf16"         { return STR16; }
+"array"         { return ARRAY; }
 "list"          { return LIST; }
 "map"           { return MAP; }
 "tuple"         { return TUPLE; }

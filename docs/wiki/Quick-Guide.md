@@ -47,6 +47,7 @@ let text: str8 = "hello";
 let colored: utf8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
 let utf16_text: str16 = String16::from(text);
 let values: list<i32> = [1, 2, 3];
+let fixed: array<int, 6> = {1, 3, 4, 5, 6, 7};
 ```
 
 Common builtin/container types:
@@ -55,6 +56,7 @@ Common builtin/container types:
 - [`bit`](Quick-Guide#types)
 - [`str8`](Quick-Guide#types) / `utf8`, [`str16`](Quick-Guide#types) / `utf16`
 - [`list<T>`](Quick-Guide#types)
+- [`array<T, N>`](Quick-Guide#types)
 - [`Vec<T>`](Stdlib-Module-API#stdvec)
 - [`span<T>`](Stdlib-Module-API#stdspan) / [`Span<T>`](Stdlib-Module-API#stdspan)
 - [`Option<T>`](Quick-Guide#types)

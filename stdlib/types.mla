@@ -23,6 +23,8 @@
 ///
 /// \section builtin_types_generic Generic Built-ins
 /// - `list<T>`: growable sequence container.
+/// - `array<T, N>`: fixed-capacity, list-compatible sequence. Literal
+///   initializers are checked at compile time so they cannot exceed `N`.
 /// - `map<K, V>`: associative container.
 /// - `tuple<T1, T2, ...>`: fixed-size heterogeneous product type.
 /// - `ptr<T>`: pointer type.

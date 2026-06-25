@@ -2223,6 +2223,56 @@ bool CodeGenerator::evaluateCompileTimeBool(ExpressionNode* expr, bool& out)
     return true;
 }
 
+std::optional<int64_t>
+CodeGenerator::fixedArrayInitializerSize(ExpressionNode* expr)
+{
+    if(auto* listLit = dynamic_cast<ListLiteralNode*>(expr))
+    {
+        if(!listLit->elements)
+            return 0;
+        return static_cast<int64_t>(listLit->elements->elements.size());
+    }
+
+    if(auto* fill = dynamic_cast<ArrayFillNode*>(expr))
+    {
+        int64_t count = 0;
+        if(evaluateCompileTimeInt(fill->count, count))
+            return count;
+    }
+
+    return std::nullopt;
+}
+
+bool CodeGenerator::validateFixedArrayInitializer(TypeNode* declaredType,
+                                                  ExpressionNode* expr,
+                                                  int line)
+{
+    auto* arrayType = dynamic_cast<ArrayTypeNode*>(declaredType);
+    if(!arrayType || !expr)
+        return true;
+
+    std::optional<int64_t> size = fixedArrayInitializerSize(expr);
+    if(!size)
+        return true;
+
+    if(*size < 0)
+    {
+        reportError(line, "array initializer size must be non-negative");
+        return false;
+    }
+
+    if(*size > arrayType->capacity)
+    {
+        reportError(line, "array initializer has " + std::to_string(*size) +
+                              " elements but " + arrayType->toString() +
+                              " capacity is " +
+                              std::to_string(arrayType->capacity));
+        return false;
+    }
+
+    return true;
+}
+
 bool CodeGenerator::convertValueToRuntimeBool(llvm::Value* value, int line,
                                               const std::string& context,
                                               llvm::Value*& outBool)
@@ -14737,6 +14787,12 @@ std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
     if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
         return "ptr_" + typeMangle(ptrType->elementType);
 
+    if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode))
+    {
+        return "array_" + typeMangle(arrayType->elementType) + "_" +
+               std::to_string(arrayType->capacity);
+    }
+
     if(auto* genList = dynamic_cast<GenericListTypeNode*>(typeNode))
         return "list_" + typeMangle(genList->elementType);
 
@@ -14841,6 +14897,12 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
 
     if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(typeNode))
         return new TraitObjectTypeNode(traitObj->traitName);
+
+    if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode))
+    {
+        return new ArrayTypeNode(cloneTypeNode(arrayType->elementType),
+                                 arrayType->capacity);
+    }
 
     if(auto* listType = dynamic_cast<GenericListTypeNode*>(typeNode))
         return new GenericListTypeNode(cloneTypeNode(listType->elementType));
@@ -16062,6 +16124,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);
 
+    if(!validateFixedArrayInitializer(node->type, node->expression,
+                                      node->line))
+        return;
+
     // Inline closure: let inc = || { ... }
     if(auto* closureInit = dynamic_cast<ClosureNode*>(node->expression))
     {
@@ -16914,6 +16980,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     clearPointerBorrow(node->name);
     // `var` is always mutable, including when shadowing a previous `let`.
     constantVariables.erase(node->name);
+
+    if(!validateFixedArrayInitializer(node->type, node->initExpr, node->line))
+        return;
 
     if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(node->type))
     {
@@ -24176,7 +24245,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         if(val2->getType() != i64Type2)
                             val2 = builder.CreateSExt(val2, i64Type2);
                     }
-                    else if(elemKind2 == TypeNode::TYPE_I32 ||
+                    else if(elemKind2 == TypeNode::TYPE_INT ||
+                            elemKind2 == TypeNode::TYPE_I32 ||
                             elemKind2 == TypeNode::TYPE_U32 ||
                             elemKind2 == TypeNode::TYPE_I16 ||
                             elemKind2 == TypeNode::TYPE_U16 ||
@@ -24678,7 +24748,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                               elemKind == TypeNode::TYPE_U64);
             bool elemIsStr = (elemKind == TypeNode::TYPE_STRING ||
                               elemKind == TypeNode::TYPE_STR8);
-            bool elemIsI32Like = (elemKind == TypeNode::TYPE_I32 ||
+            bool elemIsI32Like = (elemKind == TypeNode::TYPE_INT ||
+                                  elemKind == TypeNode::TYPE_I32 ||
                                   elemKind == TypeNode::TYPE_U32 ||
                                   elemKind == TypeNode::TYPE_I16 ||
                                   elemKind == TypeNode::TYPE_U16 ||
@@ -27546,6 +27617,8 @@ CodeGenerator::substituteTypeParams(TypeNode* type,
     {
         TypeNode* newElemType =
             substituteTypeParams(listType->elementType, typeParams, typeArgs);
+        if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(type))
+            return new ArrayTypeNode(newElemType, arrayType->capacity);
         return new GenericListTypeNode(newElemType);
     }
 

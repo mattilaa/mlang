@@ -637,6 +637,73 @@ TEST_F(MLATest, ListInitializerWithBracesSuggestsBrackets)
               std::string::npos);
 }
 
+TEST_F(MLATest, FixedArrayAllowsBraceInitializerWithinCapacity)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let arr: array<int, 6> = {1, 3, 4, 5, 6, 7};
+            if arr.len() != 6 {
+                return 1;
+            }
+            if arr[0] != 1 || arr[5] != 7 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayEmptyBraceInitializerIsMutable)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 6> = {};
+            arr.push(10);
+            arr.push(20);
+            if arr.len() != 2 {
+                return 1;
+            }
+            if arr[1] != 20 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayRejectsTooManyBraceElements)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let arr: array<int, 3> = {1, 2, 3, 4};
+            return arr.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer has 4 elements"), std::string::npos);
+    EXPECT_NE(out.find("array<i32, 3> capacity is 3"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayRejectsTooLargeFillCount)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let arr: array<int, 3> = [0; 4];
+            return arr.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer has 4 elements"), std::string::npos);
+}
+
 TEST_F(MLATest, VarReassignment)
 {
     std::string code = R"(

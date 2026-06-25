@@ -521,6 +521,9 @@ private:
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
     bool evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out);
     bool evaluateCompileTimeBool(ExpressionNode* expr, bool& out);
+    std::optional<int64_t> fixedArrayInitializerSize(ExpressionNode* expr);
+    bool validateFixedArrayInitializer(TypeNode* declaredType,
+                                       ExpressionNode* expr, int line);
     bool convertValueToRuntimeBool(llvm::Value* value, int line,
                                    const std::string& context,
                                    llvm::Value*& outBool);

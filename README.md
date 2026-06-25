@@ -3,6 +3,8 @@ MLang - Programming Language
 
 ## Table Of Contents
 - [What Is Mlang](#what-is-mlang)
+- [Compile-Time Evaluation With `cexpr`](#compile-time-evaluation-with-cexpr)
+- [Fixed-Capacity Arrays](#fixed-capacity-arrays)
 - [Tools Shipped In This Repository](#tools-shipped-in-this-repository)
 - [Build From Scratch (Step By Step)](#build-from-scratch-step-by-step)
 - [Scripted Bootstrap And Build](#scripted-bootstrap-and-build)
@@ -132,6 +134,20 @@ Current first-version scope:
 - `cexpr name: Type = expr;` declares a compile-time value.
 - `cexpr if` selects a branch during compilation.
 - Calling a normal runtime `fn` from `cexpr(...)` is rejected.
+
+## Fixed-Capacity Arrays
+
+`array<T, N>` is a fixed-capacity, list-compatible sequence type. Literal and
+fill initializers are checked at compile time, so the compiler rejects
+initializers with more than `N` elements.
+
+```mla
+let fixed: array<int, 6> = {1, 3, 4, 5, 6, 7};
+var scratch: array<int, 6> = {};
+scratch.push(10);
+scratch.push(20);
+scratch.pop();
+```
 
 ## Tools Shipped In This Repository
 
