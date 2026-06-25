@@ -213,6 +213,7 @@ private:
     std::map<std::string, TypeNode::TypeKind> globalVariableTypes;
     // Track element types for generic lists and maps
     std::map<std::string, TypeNode*> listElementTypes;
+    std::map<std::string, int64_t> arrayCapacities;
     std::map<std::string, std::pair<TypeNode*, TypeNode*>> mapKeyValueTypes;
     // Track element types for pointers
     std::map<std::string, TypeNode*> pointerElementTypes;
@@ -521,6 +522,7 @@ private:
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
     bool evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out);
     bool evaluateCompileTimeBool(ExpressionNode* expr, bool& out);
+    std::optional<uint64_t> fixedArrayByteSize(TypeNode* typeNode);
     std::optional<int64_t> fixedArrayInitializerSize(ExpressionNode* expr);
     bool validateFixedArrayInitializer(TypeNode* declaredType,
                                        ExpressionNode* expr, int line);

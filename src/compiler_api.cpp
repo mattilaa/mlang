@@ -4370,7 +4370,7 @@ static constexpr std::string_view kBuiltinCompletionLabels[] = {
     "list",   "map",    "tuple",  "ptr",    "Handle", "Thread",
     "Mutex",  "Atomic64",
     "Result", "Option", "Ok",     "Err",    "Some",   "None",
-    "sizeof", "Vec",    "Span",   "span",
+    "array",  "size_of", "Vec",   "Span",  "span",
 };
 
 static std::vector<std::string>

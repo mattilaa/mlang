@@ -1,6 +1,6 @@
 /// \file bit_sizeof_demo.mla
 /// @ingroup examples
-/// \brief Bit-level sizeof() queries on primitive types.
+/// \brief Bit-level size_of() queries on primitive types.
 ///
 mod std::bits;
 mod std::bitset;
@@ -33,15 +33,15 @@ fn main() -> i32 {
         power: OFF(),
         fault: 0
     };
-    println!("sizeof(bit)={}", sizeof(bit));
-    println!("sizeof(bool)={}", sizeof(bool));
-    println!("sizeof(u8)={}", sizeof(u8));
-    println!("sizeof(u16)={}", sizeof(u16));
-    println!("sizeof(DeviceFlags)={}", sizeof(DeviceFlags));
-    println!("sizeof(DeviceFlags2)={}", sizeof(DeviceFlags2));
-    println!("sizeof(flags)={}", sizeof(flags));
-    println!("sizeof(flags2)={}", sizeof(flags2));
-    println!("sizeof(list<bool>)={}", sizeof(list<bool>));
+    println!("size_of(bit)={}", size_of(bit));
+    println!("size_of(bool)={}", size_of(bool));
+    println!("size_of(u8)={}", size_of(u8));
+    println!("size_of(u16)={}", size_of(u16));
+    println!("size_of(DeviceFlags)={}", size_of(DeviceFlags));
+    println!("size_of(DeviceFlags2)={}", size_of(DeviceFlags2));
+    println!("size_of(flags)={}", size_of(flags));
+    println!("size_of(flags2)={}", size_of(flags2));
+    println!("size_of(list<bool>)={}", size_of(list<bool>));
 
     println!("power={}", i32(flags.power));
     flags.power = 1;

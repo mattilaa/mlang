@@ -71,35 +71,41 @@ fn test_bit_values_and_struct_field_updates() {
 }
 
 #[test]
-fn test_sizeof_builtin_and_container_sizes() {
-    verify_eq_i64(1, sizeof(bool));
-    verify_eq_i64(1, sizeof(bit));
-    verify_eq_i64(1, sizeof(u8));
-    verify_eq_i64(2, sizeof(u16));
-    verify_eq_i64(8, sizeof(i64));
-    verify(sizeof(Lamp) >= 2);
+fn test_size_of_builtin_and_container_sizes() {
+    verify_eq_i64(1, size_of(bool));
+    verify_eq_i64(1, size_of(bit));
+    verify_eq_i64(1, size_of(u8));
+    verify_eq_i64(2, size_of(u16));
+    verify_eq_i64(8, size_of(i64));
+    verify(size_of(Lamp) >= 2);
 
     let count: i64 = 7;
     let lamp: Lamp = Lamp { state: ON(), ready: false };
-    verify_eq_i64(8, sizeof(count));
-    verify_eq_i64(sizeof(Lamp), sizeof(lamp));
+    verify_eq_i64(8, size_of(count));
+    verify_eq_i64(size_of(Lamp), size_of(lamp));
 
     let bools: list<bool> = [true, false, true, false];
     let ints: list<i32> = [1, 2, 3, 4];
-    verify_eq_i64(16, sizeof(bools));
-    verify_eq_i64(16, sizeof(ints));
-    verify_eq_i64(sizeof(list<bool>), sizeof(list<i32>));
+    verify_eq_i64(16, size_of(bools));
+    verify_eq_i64(16, size_of(ints));
+    verify_eq_i64(size_of(list<bool>), size_of(list<i32>));
+
+    let fixed: array<int, 6> = {1, 2, 3, 4, 5, 6};
+    verify_eq_i64(24, size_of(array<int, 6>));
+    verify_eq_i64(24, size_of(fixed));
+    static_assert!(size_of(array<int, 6>) == 24);
+    static_assert!(size_of(fixed) == size_of(array<int, 6>));
 }
 
 #[test]
-fn test_packed_bit_struct_sizeof_is_two_bytes() {
-    verify_eq_i64(2, sizeof(DeviceFlags));
-    verify_eq_i64(2, sizeof(DeviceFlags2));
+fn test_packed_bit_struct_size_of_is_two_bytes() {
+    verify_eq_i64(2, size_of(DeviceFlags));
+    verify_eq_i64(2, size_of(DeviceFlags2));
 
     let a: DeviceFlags = DeviceFlags { rx: ON(), tx: OFF(), ready: true };
     let b: DeviceFlags2 = DeviceFlags2 { first: OFF(), second: ON(), enabled: false };
-    verify_eq_i64(2, sizeof(a));
-    verify_eq_i64(2, sizeof(b));
+    verify_eq_i64(2, size_of(a));
+    verify_eq_i64(2, size_of(b));
 
     verify_eq_i32(1, i32(a.rx));
     verify_eq_i32(0, i32(a.tx));
@@ -111,7 +117,7 @@ fn test_packed_bit_struct_sizeof_is_two_bytes() {
 
 #[test]
 fn test_eight_bits_pack_into_one_byte() {
-    verify_eq_i64(1, sizeof(PackedByteFlags));
+    verify_eq_i64(1, size_of(PackedByteFlags));
 
     var bits: PackedByteFlags = PackedByteFlags {
         b0: ON(),
@@ -123,7 +129,7 @@ fn test_eight_bits_pack_into_one_byte() {
         b6: ON(),
         b7: OFF()
     };
-    verify_eq_i64(1, sizeof(bits));
+    verify_eq_i64(1, size_of(bits));
 
     verify_eq_i32(1, i32(bits.b0));
     verify_eq_i32(0, i32(bits.b1));
@@ -151,7 +157,7 @@ fn test_eight_bits_pack_into_one_byte() {
 
 #[test]
 fn test_six_bits_and_one_bool_take_two_bytes() {
-    verify_eq_i64(2, sizeof(MixedPackedFlags));
+    verify_eq_i64(2, size_of(MixedPackedFlags));
 
     var flags: MixedPackedFlags = MixedPackedFlags {
         b0: ON(),
@@ -162,7 +168,7 @@ fn test_six_bits_and_one_bool_take_two_bytes() {
         b5: OFF(),
         ready: true
     };
-    verify_eq_i64(2, sizeof(flags));
+    verify_eq_i64(2, size_of(flags));
 
     verify_eq_i32(1, i32(flags.b0));
     verify_eq_i32(0, i32(flags.b1));

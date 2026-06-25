@@ -43,6 +43,7 @@ mod std::protocol;
 mod std::testing;
 mod std::thread;
 mod std::unordered;
+mod std::array;
 mod std::vec;
 ```
 
@@ -86,6 +87,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/testing.mla`
 - `stdlib/std/thread.mla`
 - `stdlib/std/unordered.mla`
+- `stdlib/std/array.mla`
 - `stdlib/std/vec.mla`
 
 ## Built-in Collection Methods (Compiler Intrinsics)
@@ -704,19 +706,20 @@ Module file: `stdlib/std/fs.mla`
 - `File::write(self: File, s: str8) -> Result<i64, str8>`
 - `File::write_line(self: File, s: str8) -> Result<i64, str8>`
 
-## Builtin `bit` and `sizeof`
+## Builtin `bit` and `size_of`
 
 Builtin reference source: `stdlib/types.mla`
 
 ### `bit`
 - `bit` is a builtin logical 0/1 type
 - Use `bit(expr)` to convert an integer or bool expression
-- `sizeof(bit)` reports the ABI byte size
+- `size_of(bit)` reports the ABI byte size
 
-### `sizeof`
-- `sizeof(Type) -> i64`
-- `sizeof(expr) -> i64`
-- Returns the ABI byte size in bytes
+### `size_of`
+- `size_of(Type) -> i64`
+- `size_of(expr) -> i64`
+- Returns the ABI byte size in bytes; for `array<T, N>`, returns
+  `N * size_of(T)`
 - Can be used in `static_assert!` when the target size is known at compile time
 
 Examples:
@@ -724,9 +727,20 @@ Examples:
 ```mla
 var enabled: bit = 1;
 println!("bit={} bool={} list_header={}",
-         sizeof(bit), sizeof(bool), sizeof(list<bool>));
-static_assert!(sizeof(enabled) == sizeof(bit));
+         size_of(bit), size_of(bool), size_of(list<bool>));
+static_assert!(size_of(enabled) == size_of(bit));
+static_assert!(size_of(array<int, 6>) == 24);
 ```
+
+## std::array
+
+Module file: `stdlib/std/array.mla`
+
+Documentation/navigation module for the compiler-provided `array<T, N>` type.
+
+- `array<T, N>` is a fixed-capacity, list-compatible sequence.
+- Literal and fill initializers are checked at compile time.
+- `size_of(array<T, N>)` returns `N * size_of(T)`.
 
 ### `list<bool>` vs `std::bitset::BitSet`
 - `list<bool>` is a normal list container, not a packed `std::vector<bool>`-style specialization
@@ -1171,11 +1185,11 @@ shape.
 - `span<T>` is the lowercase alias for the same type
 
 Properties:
-- `sizeof(Span<T>) == sizeof(list<T>)`
+- `size_of(Span<T>) == size_of(list<T>)`
 - indexing uses the same compile-time and runtime bounds checks as `list<T>`
 - values can be initialized from normal lists, `Vec<T>`, and array-fill forms
   like `[value; N]`
-- `sizeof(spanValue)` is accepted in `static_assert!` when the span value type
+- `size_of(spanValue)` is accepted in `static_assert!` when the span value type
   is known at compile time
 
 Example:
@@ -1191,9 +1205,9 @@ fn sum(values: Span<i32>) -> i32 {
     return total;
 }
 
-static_assert!(sizeof(Span<i32>) == sizeof(list<i32>));
+static_assert!(size_of(Span<i32>) == size_of(list<i32>));
 let view: Span<i32> = [1, 2, 3];
-static_assert!(sizeof(view) == sizeof(list<i32>));
+static_assert!(size_of(view) == size_of(list<i32>));
 ```
 
 ## std::sync

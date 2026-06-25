@@ -19,7 +19,7 @@
 /// fn main() -> i32 {
 ///     let data: list<i32> = [10, 20, 30];
 ///     let view: Span<i32> = data;
-///     static_assert!(sizeof(Span<i32>) == sizeof(list<i32>));
+///     static_assert!(size_of(Span<i32>) == size_of(list<i32>));
 ///     println!("sum={}", sum(view));
 ///     return 0;
 /// }

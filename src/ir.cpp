@@ -2223,6 +2223,21 @@ bool CodeGenerator::evaluateCompileTimeBool(ExpressionNode* expr, bool& out)
     return true;
 }
 
+std::optional<uint64_t> CodeGenerator::fixedArrayByteSize(TypeNode* typeNode)
+{
+    auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode);
+    if(!arrayType)
+        return std::nullopt;
+
+    llvm::Type* elemType = getLLVMTypeFromNode(arrayType->elementType);
+    if(!elemType)
+        return std::nullopt;
+
+    const llvm::DataLayout& dl = module->getDataLayout();
+    uint64_t elemBytes = dl.getTypeAllocSize(elemType).getFixedValue();
+    return elemBytes * static_cast<uint64_t>(arrayType->capacity);
+}
+
 std::optional<int64_t>
 CodeGenerator::fixedArrayInitializerSize(ExpressionNode* expr)
 {
@@ -4463,28 +4478,60 @@ llvm::Value* CodeGenerator::generateSizeofExpression(SizeofExpressionNode* node)
                 IdentifierNode idExpr(namedTarget->structName);
                 idExpr.line = node->line;
                 targetType = inferExpressionTypeNode(&idExpr, node->line);
+                if(auto* listType =
+                       dynamic_cast<GenericListTypeNode*>(targetType))
+                {
+                    auto capIt = arrayCapacities.find(namedTarget->structName);
+                    if(capIt != arrayCapacities.end())
+                    {
+                        targetType =
+                            new ArrayTypeNode(cloneTypeNode(listType->elementType),
+                                              capIt->second);
+                    }
+                }
             }
         }
     }
     else
+    {
         targetType =
             inferExpressionTypeNode(node->expressionTarget, node->line);
+        if(auto* id = dynamic_cast<IdentifierNode*>(node->expressionTarget))
+        {
+            if(auto* listType = dynamic_cast<GenericListTypeNode*>(targetType))
+            {
+                auto capIt = arrayCapacities.find(id->name);
+                if(capIt != arrayCapacities.end())
+                {
+                    targetType =
+                        new ArrayTypeNode(cloneTypeNode(listType->elementType),
+                                          capIt->second);
+                }
+            }
+        }
+    }
 
     if(!targetType)
     {
-        reportError(node->line, "cannot infer type for sizeof expression");
+        reportError(node->line, "cannot infer type for size_of expression");
         return nullptr;
     }
 
     llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
     if(!llvmType)
     {
-        reportError(node->line, "cannot lower sizeof target type");
+        reportError(node->line, "cannot lower size_of target type");
         return nullptr;
     }
 
-    const llvm::DataLayout& dl = module->getDataLayout();
-    uint64_t sizeBytes = dl.getTypeAllocSize(llvmType).getFixedValue();
+    uint64_t sizeBytes = 0;
+    if(std::optional<uint64_t> arrayBytes = fixedArrayByteSize(targetType))
+        sizeBytes = *arrayBytes;
+    else
+    {
+        const llvm::DataLayout& dl = module->getDataLayout();
+        sizeBytes = dl.getTypeAllocSize(llvmType).getFixedValue();
+    }
     return llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), sizeBytes);
 }
 
@@ -5278,8 +5325,15 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                     {
                         auto lit = listElementTypes.find(id->name);
                         if(lit != listElementTypes.end())
-                            targetType = new GenericListTypeNode(
-                                cloneTypeNode(lit->second));
+                        {
+                            auto capIt = arrayCapacities.find(id->name);
+                            if(capIt != arrayCapacities.end())
+                                targetType = new ArrayTypeNode(
+                                    cloneTypeNode(lit->second), capIt->second);
+                            else
+                                targetType = new GenericListTypeNode(
+                                    cloneTypeNode(lit->second));
+                        }
                         break;
                     }
                     case TypeNode::TYPE_MAP:
@@ -5324,20 +5378,25 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
         if(!targetType)
         {
             if(errorMessage)
-                *errorMessage = "cannot infer sizeof target in cexpr";
+                *errorMessage = "cannot infer size_of target in cexpr";
             return false;
         }
         llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
         if(!llvmType)
         {
             if(errorMessage)
-                *errorMessage = "cannot lower sizeof target type in cexpr";
+                *errorMessage = "cannot lower size_of target type in cexpr";
             return false;
         }
-        const llvm::DataLayout& dl = module->getDataLayout();
         out.kind = ConstexprValue::Kind::Int;
-        out.intValue =
-            static_cast<int64_t>(dl.getTypeAllocSize(llvmType).getFixedValue());
+        if(std::optional<uint64_t> arrayBytes = fixedArrayByteSize(targetType))
+            out.intValue = static_cast<int64_t>(*arrayBytes);
+        else
+        {
+            const llvm::DataLayout& dl = module->getDataLayout();
+            out.intValue = static_cast<int64_t>(
+                dl.getTypeAllocSize(llvmType).getFixedValue());
+        }
         out.boolValue = out.intValue != 0;
         out.typeKind = TypeNode::TYPE_I64;
         return true;
@@ -6963,6 +7022,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
     globalConstantVariables.clear();
     globalVariableTypes.clear();
     globalStructVariableTypes.clear();
+    arrayCapacities.clear();
     constexprValues.clear();
     deferredModuleFunctionDefs.clear();
 
@@ -9061,6 +9121,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     variableTypes.clear();
     structVariableTypes.clear();
     enumVariableTypes.clear();
+    arrayCapacities.clear();
     unsafeDepth = 0;
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
@@ -16380,6 +16441,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             auto lit = listElementTypes.find(id->name);
             if(lit != listElementTypes.end())
                 listElementTypes[node->name] = lit->second;
+            auto capIt = arrayCapacities.find(id->name);
+            if(capIt != arrayCapacities.end())
+                arrayCapacities[node->name] = capIt->second;
             auto mit = mapKeyValueTypes.find(id->name);
             if(mit != mapKeyValueTypes.end())
                 mapKeyValueTypes[node->name] = mit->second;
@@ -16431,6 +16495,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             {
                 variableTypes[node->name] = TypeNode::TYPE_LIST;
                 listElementTypes[node->name] = genListType->elementType;
+                if(auto* arrayType =
+                       dynamic_cast<ArrayTypeNode*>(genListType))
+                    arrayCapacities[node->name] = arrayType->capacity;
             }
             else if(auto* mapType =
                         dynamic_cast<MapTypeNode*>(inferredExprType))
@@ -16591,6 +16658,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     {
         // Store element type for iteration
         listElementTypes[node->name] = genListType->elementType;
+        if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(genListType))
+            arrayCapacities[node->name] = arrayType->capacity;
 
         // List struct type: { i64, ptr }
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -17433,6 +17502,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             auto lit = listElementTypes.find(id->name);
             if(lit != listElementTypes.end())
                 listElementTypes[node->name] = lit->second;
+            auto capIt = arrayCapacities.find(id->name);
+            if(capIt != arrayCapacities.end())
+                arrayCapacities[node->name] = capIt->second;
             auto mit = mapKeyValueTypes.find(id->name);
             if(mit != mapKeyValueTypes.end())
                 mapKeyValueTypes[node->name] = mit->second;
@@ -17587,6 +17659,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     if(auto* genListType = dynamic_cast<GenericListTypeNode*>(node->type))
     {
         listElementTypes[node->name] = genListType->elementType;
+        if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(genListType))
+            arrayCapacities[node->name] = arrayType->capacity;
 
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
@@ -20689,6 +20763,7 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     variableTypes.clear();
     structVariableTypes.clear();
     enumVariableTypes.clear();
+    arrayCapacities.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
@@ -21963,6 +22038,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     traitObjectVariableTypes.clear();
     enumVariableTypes.clear();
     listElementTypes.clear();
+    arrayCapacities.clear();
     mapKeyValueTypes.clear();
     tupleElementTypes.clear();
     pointerElementTypes.clear();

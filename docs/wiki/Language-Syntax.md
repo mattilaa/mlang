@@ -931,7 +931,7 @@ These demonstrate:
 - left/right folds over numeric and boolean lists
 - empty-list identity behavior for folds
 
-## [`bit`](Quick-Guide#types) and [`sizeof`](Language-Syntax)
+## [`bit`](Quick-Guide#types) and [`size_of`](Language-Syntax)
 
 MLang provides a builtin [`bit`](Quick-Guide#types) type for logical `0` / `1` values:
 
@@ -945,23 +945,27 @@ state = bit(0);
 readable aliases you can wrap the two values in helpers such as
 [`std::bits::ON()`](Stdlib-Module-API#stdbits) and [`std::bits::OFF()`](Stdlib-Module-API#stdbits).
 
-The builtin `sizeof(...)` returns the ABI byte size as [`i64`](Quick-Guide#types):
+The builtin `size_of(...)` returns byte sizes as [`i64`](Quick-Guide#types):
 
 ```rust
 println!("bit={} bool={} header={}",
-         sizeof(bit), sizeof(bool), sizeof(list<bool>));
+         size_of(bit), size_of(bool), size_of(list<bool>));
 ```
 
-Both forms are supported:
-- `sizeof(Type)`
-- `sizeof(expr)`
+Supported forms:
+- `size_of(Type)`
+- `size_of(expr)`
 
-When the size can be resolved at compile time, `sizeof(...)` can also be used
+For [`array<T, N>`](Quick-Guide#types), `size_of` returns fixed storage bytes:
+`N * size_of(T)`.
+
+When the size can be resolved at compile time, `size_of` can also be used
 inside [`static_assert!`](Language-Syntax):
 
 ```rust
 let view: Span<i32> = [1, 2, 3];
-static_assert!(sizeof(view) == sizeof(list<i32>));
+static_assert!(size_of(view) == size_of(list<i32>));
+static_assert!(size_of(array<int, 6>) == 24);
 ```
 
 Important distinction:

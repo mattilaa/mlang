@@ -1920,8 +1920,8 @@ std::string TryExpressionNode::toString() const
 std::string SizeofExpressionNode::toString() const
 {
     if(typeTarget)
-        return "sizeof(" + typeTarget->toString() + ")";
-    return "sizeof(" +
+        return "size_of(" + typeTarget->toString() + ")";
+    return "size_of(" +
            (expressionTarget ? expressionTarget->toString() : "<unknown>") +
            ")";
 }

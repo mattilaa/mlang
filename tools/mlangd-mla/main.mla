@@ -608,6 +608,27 @@ fn builtin_type_location(word: str8) -> str8 {
     if eq(lookup, "int") == 1 {
         lookup = "i32";
     }
+    if eq(lookup, "array") == 1 {
+        let root_a: str8 = root_path_from_store();
+        let here_a: str8 = cwd();
+        var a1: str8 = String::new();
+        var a2: str8 = concat(here_a, "/stdlib/std/array.mla");
+        if len(root_a) > 0 {
+            a1 = concat(root_a, "/stdlib/std/array.mla");
+        }
+        var array_path: str8 = String::new();
+        if len(a1) > 0 {
+            if file_exists(a1) == 1 { array_path = a1; }
+        }
+        if len(array_path) == 0 {
+            if file_exists(a2) == 1 { array_path = a2; }
+        }
+        if len(array_path) == 0 { return String::new(); }
+        let array_text_r: Result<str8, str8> = read_all_text(array_path);
+        if array_text_r.is_err() { return String::new(); }
+        return first_match_location(array_path, array_text_r.unwrap(),
+                                    "@builtin array");
+    }
     let root: str8 = root_path_from_store();
     let here: str8 = cwd();
     var p1: str8 = String::new();
@@ -1899,6 +1920,7 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "utf8") == 1 { return 22; }
     if eq(label, "utf16") == 1 { return 22; }
     if eq(label, "list") == 1 { return 22; }
+    if eq(label, "array") == 1 { return 22; }
     if eq(label, "map") == 1 { return 22; }
     if eq(label, "tuple") == 1 { return 22; }
     if eq(label, "ptr") == 1 { return 22; }
@@ -1915,7 +1937,7 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "Err") == 1 { return 3; }
     if eq(label, "Some") == 1 { return 3; }
     if eq(label, "None") == 1 { return 3; }
-    if eq(label, "sizeof") == 1 { return 3; }
+    if eq(label, "size_of") == 1 { return 3; }
     return 6;
 }
 
@@ -1958,6 +1980,7 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "utf8") == 1 { return "builtin UTF-8 string type alias"; }
     if eq(label, "utf16") == 1 { return "builtin UTF-16 string type alias"; }
     if eq(label, "list") == 1 { return "builtin generic list type"; }
+    if eq(label, "array") == 1 { return "builtin fixed-capacity array type"; }
     if eq(label, "map") == 1 { return "builtin generic map type"; }
     if eq(label, "tuple") == 1 { return "builtin tuple type"; }
     if eq(label, "ptr") == 1 { return "builtin pointer type"; }
@@ -1975,7 +1998,7 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "Vec") == 1 { return "stdlib alias for list<T>"; }
     if eq(label, "Span") == 1 { return "stdlib alias for list<T>"; }
     if eq(label, "span") == 1 { return "stdlib alias for list<T>"; }
-    if eq(label, "sizeof") == 1 { return "builtin ABI size query"; }
+    if eq(label, "size_of") == 1 { return "builtin ABI size query"; }
     if eq(label, "property") == 1 { return "builtin property attribute"; }
     if eq(label, "atomic") == 1 { return "property option"; }
     if eq(label, "mutex") == 1 { return "property option"; }
@@ -2065,6 +2088,9 @@ fn completion_documentation(label: str8) -> str8 {
     if eq(label, "list") == 1 {
         return "Generic growable sequence container: list<T>. Use [a, b, c] for list literals. Methods include len(), is_empty(), push(value), pop(), clear(), contains(value), index_of(value), sort(), reverse(), first(), and last().";
     }
+    if eq(label, "array") == 1 {
+        return "Fixed-capacity sequence type: array<T, N>. Initializer element counts are checked at compile time. size_of(array<T, N>) returns N * size_of(T).";
+    }
     if eq(label, "Vec") == 1 {
         return "Vec<T> is a stdlib alias for list<T>. It has the same method surface and runtime representation as list<T>.";
     }
@@ -2113,8 +2139,8 @@ fn completion_documentation(label: str8) -> str8 {
     if eq(label, "None") == 1 {
         return "Option constructor for absent values: None<T>().";
     }
-    if eq(label, "sizeof") == 1 {
-        return "Builtin size query: sizeof(Type) or sizeof(expr). Returns the ABI size in bytes as i64.";
+    if eq(label, "size_of") == 1 {
+        return "Builtin size query: size_of(Type) or size_of(expr). Returns the ABI size in bytes as i64.";
     }
     if eq(label, "property") == 1 {
         return "Property field attribute: @property or @property(...). Synthesizes getter/setter methods for struct fields.";

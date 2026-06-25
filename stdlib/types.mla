@@ -29,7 +29,7 @@
 /// - `tuple<T1, T2, ...>`: fixed-size heterogeneous product type.
 /// - `ptr<T>`: pointer type.
 /// - `Handle<T>`: opaque runtime handle wrapper.
-/// - `sizeof(Type)` / `sizeof(expr)`: ABI size query returning `i64`.
+/// - `size_of(Type)` / `size_of(expr)`: ABI size query returning `i64`.
 ///
 /// \section builtin_types_runtime Runtime Marker Types
 /// - `Thread`: opaque payload marker used with `Handle<Thread>`.
@@ -70,7 +70,7 @@
 // @builtin bit
 // Logical one-bit value with domain 0 or 1.
 // Use `bit(expr)` to convert an integer/bool expression to `bit`.
-// `sizeof(bit)` follows normal ABI byte sizing even though the value domain is
+// `size_of(bit)` follows normal ABI byte sizing even though the value domain is
 // a single logical bit.
 
 // @builtin i8
@@ -129,8 +129,8 @@
 // @builtin tuple
 // Tuple type: tuple<T1, T2, ...>.
 
-// @builtin sizeof
-// Builtin size query: `sizeof(Type)` or `sizeof(expr)`.
+// @builtin size_of
+// Builtin size query: `size_of(Type)` or `size_of(expr)`.
 // Returns the ABI size in bytes as `i64`.
 
 // @builtin ptr
