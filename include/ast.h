@@ -814,6 +814,16 @@ public:
     std::string toString() const override;
 };
 
+class CexprDeclNode : public LetDeclNode
+{
+public:
+    CexprDeclNode(TypeNode* t, const std::string& n, ExpressionNode* e)
+        : LetDeclNode(t, n, e)
+    {
+    }
+    std::string toString() const override;
+};
+
 class VarDeclNode : public StatementNode
 {
 public:
@@ -1470,6 +1480,7 @@ public:
     std::vector<ModDeclNode*> modules;
     std::vector<UseDeclNode*> imports;
     std::vector<VarDeclNode*> globalVars;
+    std::vector<CexprDeclNode*> cexprDecls;
     std::vector<TypeAliasNode*> typeAliases;
 
     std::string toString() const override;
@@ -1537,6 +1548,7 @@ ASTNode* create_if_statement_with_init(ASTNode* condition_init,
                                        ASTNode* else_if_branch,
                                        ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
+ASTNode* create_cexpr_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
 ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,

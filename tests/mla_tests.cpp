@@ -3394,6 +3394,53 @@ TEST_F(MLATest, CexprFunctionEvaluatesFloatArithmeticAtCompileTime)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, CexprDeclarationProvidesCompileTimeValue)
+{
+    std::string code = R"(
+        cexpr N: i32 = 21;
+        cexpr Scale: f32 = 1.5f;
+
+        fn main() -> i32 {
+            static_assert!(N * 2 == 42);
+            static_assert!(Scale > 1.4f && Scale < 1.6f);
+            let value: i32 = cexpr(N * 2);
+            let runtime_value: i32 = N;
+            return value == 42 && runtime_value == 21 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, LocalCexprDeclarationProvidesCompileTimeValue)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            cexpr Local: i32 = 7 * 6;
+            static_assert!(Local == 42);
+            let value: i32 = cexpr(Local);
+            return value == 42 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, CexprDeclarationRejectsRuntimeInitializer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 1;
+            cexpr Bad: i32 = x;
+            return Bad;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("runtime variable is not available in cexpr: 'x'"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, StaticAssertAcceptsCexprFunctionCall)
 {
     std::string code = R"(

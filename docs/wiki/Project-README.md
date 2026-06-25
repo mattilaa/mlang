@@ -75,9 +75,21 @@ cexpr fn midpoint(a: f32, b: f32) -> f32 {
 }
 ```
 
+Compile-time values use the same keyword:
+
+```rust
+cexpr Steps: i32 = 21;
+
+fn main() -> i32 {
+    cexpr Local: i32 = Steps * 2;
+    return cexpr(Local);
+}
+```
+
 Current first-version scope:
 - `cexpr(...)` folds integer, floating-point, and [`bool`](Quick-Guide#types) expressions during compilation.
 - `cexpr fn` marks functions that may be called from compile-time contexts.
+- `cexpr name: Type = expr;` declares a compile-time value.
 - Calling a normal runtime [`fn`](Language-Syntax) from `cexpr(...)` is rejected.
 
 ## Tools Shipped In This Repository
@@ -1258,6 +1270,8 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/cexpr_twice_demo.mla`
 - Floating-point `cexpr fn` evaluation:
   `examples/cexpr_float_demo.mla`
+- Compile-time [`cexpr`](Language-Syntax) value declarations:
+  `examples/cexpr_decl_demo.mla`
 - Namespace blocks and aliases (`namespace geometry::units { ... }`, `alias gu = geometry::units;`) with qualified names:
   `examples/namespace_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):

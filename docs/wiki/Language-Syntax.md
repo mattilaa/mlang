@@ -385,6 +385,22 @@ fn main() -> i32 {
 }
 ```
 
+Compile-time values can be declared with `cexpr name: Type = expr;`. The
+initializer must be compile-time evaluable:
+
+```rust
+cexpr Steps: i32 = 21;
+cexpr Gain: f32 = 1.5f;
+
+fn main() -> i32 {
+    static_assert!(Steps * 2 == 42);
+
+    cexpr Local: i32 = Steps * 2;
+    let value: i32 = cexpr(Local);
+    return value == 42 ? 0 : 1;
+}
+```
+
 Current first-version constraints:
 - [`cexpr`](Language-Syntax) currently supports integer, floating-point, and [`bool`](Quick-Guide#types) values.
 - `cexpr fn` bodies support compile-time-evaluable expressions, local

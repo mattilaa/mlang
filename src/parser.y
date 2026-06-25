@@ -1623,6 +1623,7 @@ ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* 
 ASTNode* mla_ast_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* mla_ast_if_statement_with_init(ASTNode* condition_init, ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
+ASTNode* create_cexpr_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* mla_ast_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* mla_ast_cast_expression(int type, ASTNode* expr);
 ASTNode* mla_ast_field_access_expr(ASTNode* object, char* field_name, int line);
@@ -1902,7 +1903,7 @@ enum UpdatePosition
 %type <ast> if_statement else_if_list else_if optional_else
 %type <ast> struct_member_list struct_member struct_method struct_init
 %type <ast> list_literal list_elements
-%type <ast> let_statement var_statement assignment_statement expression_statement nested_function_statement
+%type <ast> let_statement cexpr_declaration var_statement assignment_statement expression_statement nested_function_statement
 %type <ast> return_statement block_statement colon_block_statement colon_statement for_statement while_statement range_expression
 %type <ast> throw_statement try_catch_statement switch_statement switch_case_list switch_case switch_default_case
 %type <ast> break_statement continue_statement
@@ -1966,6 +1967,7 @@ top_level_item
     | type_alias_def
     | namespace_block
     | impl_block
+    | cexpr_declaration
     | global_var_statement
     ;
 
@@ -2677,6 +2679,7 @@ statement_list
 
 statement
     : let_statement
+    | cexpr_declaration
     | var_statement
     | type_alias_def
     | namespace_alias_def
@@ -2703,6 +2706,7 @@ statement
 
 colon_statement
     : let_statement
+    | cexpr_declaration
     | var_statement
     | type_alias_def
     | namespace_alias_def
@@ -2751,6 +2755,11 @@ let_statement
             ASTNode* typeRef = mla_ast_struct_type_ref($4);
             $$ = create_let_declaration(typeRef, $2, lit);
         }
+    ;
+
+cexpr_declaration
+    : CEXPR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        { auto* node = create_cexpr_declaration($4, $2, $6); node->line = yylineno; $$ = node; }
     ;
 
 var_statement

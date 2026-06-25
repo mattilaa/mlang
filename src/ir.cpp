@@ -4899,6 +4899,12 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                 return true;
             }
         }
+        auto constexprIt = constexprValues.find(id->name);
+        if(constexprIt != constexprValues.end())
+        {
+            out = constexprIt->second;
+            return true;
+        }
         if(errorMessage)
         {
             *errorMessage =
@@ -6369,6 +6375,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
     globalConstantVariables.clear();
     globalVariableTypes.clear();
     globalStructVariableTypes.clear();
+    constexprValues.clear();
     deferredModuleFunctionDefs.clear();
 
     ensureHandleBuiltin(program);
@@ -6399,6 +6406,12 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 
     resolveTypeAliasesInProgram(program);
+
+    for(auto* cexprDecl : program->cexprDecls)
+    {
+        if(cexprDecl)
+            generateCexprDeclaration(cexprDecl, false);
+    }
 
     enum class MainArgMode
     {
@@ -8408,6 +8421,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedIP = builder.saveIP();
     auto savedNamedValues = namedValues;
     auto savedConstantVariables = constantVariables;
+    auto savedConstexprValues = constexprValues;
     auto savedMovedVariables = movedVariables;
     auto savedPointerBorrowTarget = pointerBorrowTarget;
     auto savedActiveBorrowers = activeBorrowers;
@@ -8711,6 +8725,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     currentSemanticReturnType = savedSemanticReturnType;
     unsafeDepth = savedUnsafeDepth;
     currentModule = savedModule;
+    constexprValues = std::move(savedConstexprValues);
     builder.restoreIP(savedIP);
 
     // Verify the function
@@ -8723,6 +8738,10 @@ void CodeGenerator::generateStatement(StatementNode* node)
     if(auto returnNode = dynamic_cast<ReturnNode*>(node))
     {
         generateReturnStatement(returnNode);
+    }
+    else if(auto cexprNode = dynamic_cast<CexprDeclNode*>(node))
+    {
+        generateCexprDeclaration(cexprNode);
     }
     else if(auto letNode = dynamic_cast<LetDeclNode*>(node))
     {
@@ -8762,6 +8781,7 @@ void CodeGenerator::generateStatement(StatementNode* node)
     }
     else if(auto blockNode = dynamic_cast<BlockStatementNode*>(node))
     {
+        auto savedConstexprValues = constexprValues;
         enterCleanupScope();
         if(blockNode->isUnsafe)
             unsafeDepth++;
@@ -8801,6 +8821,7 @@ void CodeGenerator::generateStatement(StatementNode* node)
         if(blockNode->isUnsafe)
             unsafeDepth--;
         exitCleanupScope();
+        constexprValues = std::move(savedConstexprValues);
     }
     else if(auto printNode = dynamic_cast<PrintNode*>(node))
     {
@@ -13452,6 +13473,11 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
 
 llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
 {
+    auto constexprIt = constexprValues.find(node->name);
+    if(constexprIt != constexprValues.end())
+        return buildLLVMConstantFromConstexprValue(constexprIt->second, nullptr,
+                                                   node->line);
+
     if(!validateVariableAccessible(node->name, node->line, node->col))
         return nullptr;
 
@@ -16197,6 +16223,62 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
     // Mark this variable as constant (declared with 'let')
     constantVariables.insert(node->name);
+}
+
+void CodeGenerator::generateCexprDeclaration(CexprDeclNode* node,
+                                             bool emitRuntimeBinding)
+{
+    if(!node)
+        return;
+    if(!node->type)
+    {
+        reportError(node->line,
+                    "cexpr declaration requires an explicit type");
+        return;
+    }
+    if(!node->expression)
+    {
+        reportError(node->line,
+                    "cexpr declaration requires an initializer");
+        return;
+    }
+
+    ConstexprValue value;
+    std::string errorMessage;
+    if(!evalConstexprExpression(node->expression, value, &errorMessage,
+                                nullptr, 0))
+    {
+        reportError(node->line,
+                    errorMessage.empty()
+                        ? "cexpr declaration requires a compile-time "
+                          "expression"
+                        : errorMessage);
+        return;
+    }
+    if(!coerceConstexprValueToKind(value, node->type->kind, &errorMessage,
+                                   "cexpr declarations"))
+    {
+        reportError(node->line, errorMessage);
+        return;
+    }
+
+    constexprValues[node->name] = value;
+    if(!emitRuntimeBinding)
+        return;
+
+    llvm::Constant* initValue =
+        buildLLVMConstantFromConstexprValue(value, node->type, node->line);
+    if(!initValue)
+        return;
+    llvm::Function* currentFunction = builder.GetInsertBlock()->getParent();
+    llvm::AllocaInst* alloca =
+        createEntryBlockAlloca(currentFunction, initValue->getType(),
+                               node->name);
+    builder.CreateStore(initValue, alloca);
+    namedValues[node->name] = alloca;
+    variableTypes[node->name] = normalizeInferredKind(node->type->kind);
+    constantVariables.insert(node->name);
+    recordVariableScopeDepth(node->name);
 }
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)

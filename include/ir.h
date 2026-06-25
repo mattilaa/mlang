@@ -287,6 +287,7 @@ private:
         TypeNode::TypeKind typeKind = TypeNode::TYPE_I64;
     };
     using ConstexprEnv = std::map<std::string, ConstexprValue>;
+    ConstexprEnv constexprValues;
     bool evalConstexprExpression(ExpressionNode* expr, ConstexprValue& out,
                                  std::string* errorMessage = nullptr,
                                  ConstexprEnv* env = nullptr,
@@ -576,6 +577,8 @@ private:
     void generateStatement(StatementNode* node);
     void generateReturnStatement(ReturnNode* node);
     void generateLetDeclaration(LetDeclNode* node);
+    void generateCexprDeclaration(CexprDeclNode* node,
+                                  bool emitRuntimeBinding = true);
     void generateVarDeclaration(VarDeclNode* node);
     void generateAssignment(AssignmentNode* node);
     void generateFieldAssignment(FieldAssignmentNode* node);

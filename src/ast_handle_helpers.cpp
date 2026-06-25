@@ -379,6 +379,11 @@ ASTNode* mla_ast_let_declaration(ASTNode* type, char* name, ASTNode* expr)
     return create_let_declaration_impl(type, name, expr);
 }
 
+ASTNode* mla_ast_cexpr_declaration(ASTNode* type, char* name, ASTNode* expr)
+{
+    return create_cexpr_declaration_impl(type, name, expr);
+}
+
 ASTNode* mla_ast_var_declaration(ASTNode* type, char* name, ASTNode* expr)
 {
     return create_var_declaration_impl(type, name, expr);

@@ -109,6 +109,10 @@ ASTNode* create_program_impl(ASTNode* top_level_list)
         {
             program->globalVars.push_back(varDecl);
         }
+        else if(auto* cexprDecl = dynamic_cast<CexprDeclNode*>(item))
+        {
+            program->cexprDecls.push_back(cexprDecl);
+        }
         else if(auto* aliasDef = dynamic_cast<TypeAliasNode*>(item))
         {
             program->typeAliases.push_back(aliasDef);
@@ -699,6 +703,12 @@ ASTNode* create_let_declaration_impl(ASTNode* type, char* name, ASTNode* expr)
 {
     return new LetDeclNode(static_cast<TypeNode*>(type), std::string(name),
                            static_cast<ExpressionNode*>(expr));
+}
+
+ASTNode* create_cexpr_declaration_impl(ASTNode* type, char* name, ASTNode* expr)
+{
+    return new CexprDeclNode(static_cast<TypeNode*>(type), std::string(name),
+                             static_cast<ExpressionNode*>(expr));
 }
 
 ASTNode* create_var_declaration_impl(ASTNode* type, char* name, ASTNode* expr)
@@ -2022,6 +2032,16 @@ std::string LetDeclNode::toString() const
                expression->toString() + ";";
     }
     return "let " + name + " = " + expression->toString() + ";";
+}
+
+std::string CexprDeclNode::toString() const
+{
+    if(type)
+    {
+        return "cexpr " + name + ": " + type->toString() + " = " +
+               expression->toString() + ";";
+    }
+    return "cexpr " + name + " = " + expression->toString() + ";";
 }
 
 std::string VarDeclNode::toString() const
