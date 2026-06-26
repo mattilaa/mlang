@@ -85,7 +85,7 @@ static std::string type_mangle(TypeNode* typeNode)
     case TypeNode::TYPE_DOUBLE:
         return "f64";
     case TypeNode::TYPE_STRING:
-        return "string";
+        return "str8";
     case TypeNode::TYPE_STR8:
         return "str8";
     case TypeNode::TYPE_STR16:

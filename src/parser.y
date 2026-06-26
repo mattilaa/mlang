@@ -1060,7 +1060,7 @@ static std::string builder_type_description(TypeNode* type)
     case TypeNode::TYPE_INT:    return "i32";
     case TypeNode::TYPE_FLOAT:  return "f32";
     case TypeNode::TYPE_DOUBLE: return "f64";
-    case TypeNode::TYPE_STRING: return "string";
+    case TypeNode::TYPE_STRING: return "str8";
     case TypeNode::TYPE_STR8:   return "str8";
     case TypeNode::TYPE_STR16:  return "str16";
     case TypeNode::TYPE_LIST:   return "list";
@@ -3956,7 +3956,6 @@ static bool is_reserved_type_keyword(const char* s)
     return strcmp(s, "void") == 0 || strcmp(s, "bool") == 0 ||
            strcmp(s, "f32") == 0 ||
            strcmp(s, "f64") == 0 ||
-           strcmp(s, "string") == 0 ||
            strcmp(s, "str8") == 0 || strcmp(s, "str16") == 0 ||
            strcmp(s, "list") == 0 || strcmp(s, "map") == 0 ||
            strcmp(s, "tuple") == 0 || strcmp(s, "i8") == 0 ||

@@ -42,7 +42,7 @@ let n: i32 = 42;
 let ok: bool = true;
 let ch: bit = 1;
 let text: str8 = "hello";
-let colored: utf8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
+let colored: str8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
 let utf16_text: str16 = String16::from(text);
 let values: list<i32> = [1, 2, 3];
 ```
@@ -51,7 +51,7 @@ Common builtin/container types:
 - `i32`, `i64`, `u8`, `u32`, `u64`, `f32`, `f64`
 - `bool`
 - `bit`
-- `str8` / `utf8`, `str16` / `utf16`
+- `str8`, `str16`
 - `list<T>`
 - `Vec<T>`
 - `span<T>` / `Span<T>`

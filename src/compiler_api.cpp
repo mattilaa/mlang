@@ -638,7 +638,7 @@ computeTextTypeLayout(std::string_view type_text,
         return {4, 4, true};
     }
     if(ty == "i64" || ty == "u64" || ty == "f64" || ty == "str8" ||
-       ty == "str16" || ty == "string")
+       ty == "str16")
     {
         return {8, 8, true};
     }
@@ -1347,7 +1347,7 @@ static LayoutInfo computeTypeLayout(TypeNode* type, ProgramNode* program,
             return {4, 4, true};
         }
         if(name == "i64" || name == "u64" || name == "f64" || name == "str8" ||
-           name == "str16" || name == "string")
+           name == "str16")
         {
             return {8, 8, true};
         }
@@ -4366,9 +4366,8 @@ lexicalIdentifiersBeforeOffset(std::string_view text, size_t offset)
 static constexpr std::string_view kBuiltinCompletionLabels[] = {
     "void",   "bool",   "bit",    "i8",     "i16",    "i32",
     "i64",    "u8",     "u16",    "u32",    "u64",    "f32",
-    "f64",    "str8",   "str16",  "utf8",   "utf16",  "string",
-    "list",   "map",    "tuple",  "ptr",    "Handle", "Thread",
-    "Mutex",  "Atomic64",
+    "f64",    "str8",   "str16",  "list",   "map",    "tuple",
+    "ptr",    "Handle", "Thread", "Mutex",  "Atomic64",
     "Result", "Option", "Ok",     "Err",    "Some",   "None",
     "array",  "size_of", "Vec",   "Span",  "span",
 };

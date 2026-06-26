@@ -214,7 +214,7 @@ impl File {
     /// ```
     ///
     /// @param path  Path to the file.
-    /// @return `Ok(File)` on success, `Err(string)` on failure.
+    /// @return `Ok(File)` on success, `Err(str8)` on failure.
     pub fn open(path: str8) -> Result<File, str8> {
         let h = __mlang_std_fs_open_read(path);
         if h == 0 {
@@ -238,7 +238,7 @@ impl File {
     /// ```
     ///
     /// @param path  Destination file path.
-    /// @return `Ok(File)` on success, `Err(string)` on failure.
+    /// @return `Ok(File)` on success, `Err(str8)` on failure.
     pub fn create(path: str8) -> Result<File, str8> {
         let h = __mlang_std_fs_open_write(path);
         if h == 0 {
@@ -263,7 +263,7 @@ impl File {
     /// ```
     ///
     /// @param path  Path to the file.
-    /// @return `Ok(File)` on success, `Err(string)` on failure.
+    /// @return `Ok(File)` on success, `Err(str8)` on failure.
     pub fn append(path: str8) -> Result<File, str8> {
         let h = __mlang_std_fs_open_append(path);
         if h == 0 {
@@ -290,7 +290,7 @@ impl File {
     /// ```
     ///
     /// @param path  Path to an existing file.
-    /// @return `Ok(File)` on success, `Err(string)` on failure.
+    /// @return `Ok(File)` on success, `Err(str8)` on failure.
     pub fn open_rw(path: str8) -> Result<File, str8> {
         let h = __mlang_std_fs_open_read_write(path);
         if h == 0 {
@@ -327,7 +327,7 @@ impl File {
     /// ```
     ///
     /// @param s  Text to write (NUL-terminated string).
-    /// @return `Ok(i64)` — bytes written; `Err(string)` on I/O error.
+    /// @return `Ok(i64)` — bytes written; `Err(str8)` on I/O error.
     pub fn write(self: File, s: str8) -> Result<i64, str8> {
         let n = __mlang_std_fs_write(self.handle, s);
         if n < 0 {
@@ -347,7 +347,7 @@ impl File {
     /// ```
     ///
     /// @param s  Text to write (newline is appended automatically).
-    /// @return `Ok(i64)` — total bytes written including newline; `Err(string)` on error.
+    /// @return `Ok(i64)` — total bytes written including newline; `Err(str8)` on error.
     pub fn write_line(self: File, s: str8) -> Result<i64, str8> {
         let n1: Result<i64, str8> = self.write(s);
         if n1.is_err() {
@@ -380,7 +380,7 @@ impl File {
     /// ```
     ///
     /// @param sf  Seek anchor — construct with `SeekFrom::start/current/end`.
-    /// @return `Ok(i64)` — new byte offset from file start; `Err(string)` on failure.
+    /// @return `Ok(i64)` — new byte offset from file start; `Err(str8)` on failure.
     pub fn seek(self: File, sf: SeekFrom) -> Result<i64, str8> {
         let pos: i64 = __mlang_std_fs_seek(self.handle, sf.offset, sf.whence);
         if pos < 0 {
@@ -399,7 +399,7 @@ impl File {
     /// println!("cursor at byte {}", t.unwrap());
     /// ```
     ///
-    /// @return `Ok(i64)` — current position in bytes; `Err(string)` on failure.
+    /// @return `Ok(i64)` — current position in bytes; `Err(str8)` on failure.
     pub fn tell(self: File) -> Result<i64, str8> {
         let pos: i64 = __mlang_std_fs_tell(self.handle);
         if pos < 0 {
@@ -418,7 +418,7 @@ impl File {
     /// println!("file is {} bytes", sz.unwrap());
     /// ```
     ///
-    /// @return `Ok(i64)` — file size in bytes; `Err(string)` on failure.
+    /// @return `Ok(i64)` — file size in bytes; `Err(str8)` on failure.
     pub fn size(self: File) -> Result<i64, str8> {
         let sz: i64 = __mlang_std_fs_file_size(self.handle);
         if sz < 0 {
@@ -450,7 +450,7 @@ impl File {
     ///
     /// @param buf  Pre-allocated mutable string buffer (capacity >= n + 1).
     /// @param n    Maximum number of bytes to read.
-    /// @return `Ok(i64)` — bytes actually read (0 at EOF); `Err(string)` on I/O error.
+    /// @return `Ok(i64)` — bytes actually read (0 at EOF); `Err(str8)` on I/O error.
     pub fn read_bytes(self: File, buf: str8, n: i64) -> Result<i64, str8> {
         let got: i64 = __mlang_std_fs_read_bytes(self.handle, buf, n);
         if got < 0 {
@@ -479,7 +479,7 @@ impl File {
     ///
     /// @param buf  Source buffer (at least `n` bytes of valid data).
     /// @param n    Number of bytes to write.
-    /// @return `Ok(i64)` — bytes written; `Err(string)` on I/O error.
+    /// @return `Ok(i64)` — bytes written; `Err(str8)` on I/O error.
     pub fn write_bytes(self: File, buf: str8, n: i64) -> Result<i64, str8> {
         let w: i64 = __mlang_std_fs_write_bytes(self.handle, buf, n);
         if w < 0 {
@@ -537,7 +537,7 @@ impl BufReader {
     /// ```
     ///
     /// @param buf  Caller-allocated buffer; capacity set by `with_capacity` (default 4096).
-    /// @return `Ok(i64)` — bytes read without newline; `Err(string)` at EOF or on error.
+    /// @return `Ok(i64)` — bytes read without newline; `Err(str8)` at EOF or on error.
     pub fn read_line(self: BufReader, buf: str8) -> Result<i64, str8> {
         let n = __mlang_std_fs_read_line(self.file.handle, buf, self.line_capacity);
         if n < 0 {
@@ -673,7 +673,7 @@ pub fn chdir(path: str8) -> i32 {
 /// ```
 ///
 /// @param path  Path to the file to read.
-/// @return `Ok(string)` — full file contents; `Err(string)` if the file
+/// @return `Ok(str8)` — full file contents; `Err(str8)` if the file
 ///         cannot be opened or read.
 pub fn read_all_text(path: str8) -> Result<str8, str8> {
     let text: str8 = __mlang_std_fs_read_all_text(path);
@@ -696,7 +696,7 @@ pub fn read_all_text(path: str8) -> Result<str8, str8> {
 ///
 /// @param path  Destination file path (created or truncated).
 /// @param text  String to write.
-/// @return `Ok(0)` on success; `Err(string)` on failure.
+/// @return `Ok(0)` on success; `Err(str8)` on failure.
 pub fn write_all_text(path: str8, text: str8) -> Result<i32, str8> {
     let rc: i32 = __mlang_std_fs_write_all_text(path, text);
     if rc != 0 {

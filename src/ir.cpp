@@ -9291,7 +9291,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                    dynamic_cast<ReferenceTypeNode*>(paramNode->type))
             {
                 // Store inner element kind so the borrow checker treats the
-                // param as the inner type (e.g. &string -> TYPE_STRING).
+                // param as the inner type (e.g. &str8 -> TYPE_STRING).
                 variableTypes[std::string(arg.getName())] =
                     refType->elementType->kind;
                 // Preserve container element typing for borrowed params so
@@ -27779,7 +27779,7 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     if(node->structName == "Result" && node->typeArgs.empty())
     {
         reportError(node->line, "Result literals require type arguments (e.g. "
-                                "Ok<i32, string>(...))");
+                                "Ok<i32, str8>(...))");
         return nullptr;
     }
     if(node->structName == "Option" && node->typeArgs.empty())

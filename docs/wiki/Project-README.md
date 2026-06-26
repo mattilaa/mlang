@@ -1966,7 +1966,7 @@ fn main() -> i32 {
 ```
 
 > **@note** Bounds are stored internally as a `+`-joined string (e.g.
-> `"A+B"`) so the existing `map<string, string>` AST field accommodates
+> `"A+B"`) so the existing `map<str8, str8>` AST field accommodates
 > multiple bounds without a schema change. The split-and-check is done on
 > the consumer side in `validateTypeArgumentTraitBounds`. Whitespace
 > around `+` is allowed: `<T: A + B>` and `<T:A+B>` parse identically.
@@ -1997,7 +1997,7 @@ struct Point {
 
 fn main() -> i32 {
     let origin: Point = Point { x: 0, y: 0 };
-    let expected: string = "The origin is: Point { x: 0, y: 0 }";
+    let expected: str8 = "The origin is: Point { x: 0, y: 0 }";
 
     assert_eq!(format!("The origin is: {origin}"), expected);
     println!(origin);

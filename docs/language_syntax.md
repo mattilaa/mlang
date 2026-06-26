@@ -174,15 +174,14 @@ Available primitive floating-point types:
 - `f64`
 
 String type spellings:
-- `str8` and `utf8` are UTF-8 string types.
-- `str16` and `utf16` are UTF-16 string types.
-- `string` remains accepted as a UTF-8 spelling.
+- `str8` is the UTF-8 string type.
+- `str16` is the UTF-16 string type.
 
 String literals support common escapes plus byte-valued hexadecimal escapes:
 
 ```mla
-let plain: utf8 = "hello\n";
-let colored: utf8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
+let plain: str8 = "hello\n";
+let colored: str8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
 ```
 
 Use `\xNN` for terminal escape bytes such as `\x1b` (`ESC`).
@@ -1043,7 +1042,7 @@ Builder clause values are not limited to strings. The compiler checks the
 supplied value against the clause's declared field type. The following are
 supported:
 
-- Strings (`str8` / `str16` / `string`).
+- Strings (`str8` / `str16`).
 - All integer widths (`i8`..`i64`, `u8`..`u64`).
 - Floats (`f32`, `f64`).
 - Declared structs — e.g. passing an `add<Inner>(...)` or a struct literal

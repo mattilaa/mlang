@@ -329,12 +329,12 @@ pub fn rtrim(s: str8) -> str8 {
     return __mlang_std_strbuf_rtrim(s);
 }
 
-/// @brief Convert UTF-8 (`string`) to UTF-16 (`str16`).
+/// @brief Convert UTF-8 (`str8`) to UTF-16 (`str16`).
 pub fn to_utf16(s: str8) -> str16 {
     return __mlang_std_strbuf_utf8_to_utf16(s);
 }
 
-/// @brief Convert UTF-16 (`str16`) to UTF-8 (`string`).
+/// @brief Convert UTF-16 (`str16`) to UTF-8 (`str8`).
 pub fn from_utf16(s: str16) -> str8 {
     return __mlang_std_strbuf_utf16_to_utf8(s);
 }

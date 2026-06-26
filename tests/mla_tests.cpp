@@ -445,12 +445,12 @@ TEST_F(MLATest, StringEscapeTab)
     EXPECT_EQ(compileAndRun(code), "Col1\tCol2\n");
 }
 
-TEST_F(MLATest, StringEscapeHexAndUtfAliases)
+TEST_F(MLATest, StringEscapeHexAndStrTypes)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let y: utf8 = "\x1b[38;2;164;255;82m\x1b[48;2;98;0;0mhello\x1b[0m world";
-            let z: utf16 = "wide";
+            let y: str8 = "\x1b[38;2;164;255;82m\x1b[48;2;98;0;0mhello\x1b[0m world";
+            let z: str16 = "wide";
             println!("{}", y);
             println!("{}", z);
             return 0;
@@ -1791,18 +1791,18 @@ TEST_F(MLATest, TraitImplWithRefSelf)
 {
     std::string code = R"(
         trait Summary {
-            fn summarize(&self) -> string;
+            fn summarize(&self) -> str8;
         }
 
         struct SocialPost {
-            var username: string;
-            var content: string;
+            var username: str8;
+            var content: str8;
             var reply: bool;
             var repost: bool;
         };
 
         impl Summary for SocialPost {
-            fn summarize(&self) -> string {
+            fn summarize(&self) -> str8 {
                 return format!("{}: {}", self.username, self.content);
             }
         }
@@ -1884,7 +1884,8 @@ TEST_F(MLATest, F32F64Casts)
 
 TEST_F(MLATest, LegacyBuiltinTypeAliasesAreRejected)
 {
-    for(const char* typeName : {"int", "float", "double", "char"})
+    for(const char* typeName :
+        {"int", "float", "double", "char", "string", "utf8", "utf16"})
     {
         std::string code = std::string(R"(
             fn main() -> i32 {
@@ -2196,7 +2197,7 @@ TEST_F(MLATest, TernaryWithFunctionCallCondition)
         mod std::strbuf;
         use std::strbuf::eq;
         fn main() -> i32 {
-            let s: string = "ok";
+            let s: str8 = "ok";
             return eq(s, "ok") == 1 ? 0 : 1;
         }
     )";
@@ -2221,7 +2222,7 @@ TEST_F(MLATest, ResultIsOkAndUnwrap)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let r: Result<i32, string> = Ok<i32, string>(123);
+            let r: Result<i32, str8> = Ok<i32, str8>(123);
             if r.is_ok(): {
                 let v: i32 = r.unwrap();
                 println!("{}", v);
@@ -2238,7 +2239,7 @@ TEST_F(MLATest, ResultUnwrapWarns)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let r: Result<i32, string> = Ok<i32, string>(1);
+            let r: Result<i32, str8> = Ok<i32, str8>(1);
             let v: i32 = r.unwrap();
             return v;
         }
@@ -2518,13 +2519,13 @@ TEST_F(MLATest, OwnershipMatchArmMoveMakesValueUnavailableAfterMatch)
 TEST_F(MLATest, OwnershipTernaryBranchMovesArePathSensitiveDuringEvaluation)
 {
     std::string code = R"(
-        fn take_msg(s: string) -> i32 {
+        fn take_msg(s: str8) -> i32 {
             return 5;
         }
 
         fn main() -> i32 {
             let flag: i32 = 0;
-            let msg: string = "hello";
+            let msg: str8 = "hello";
             let x: i32 = flag > 0 ? take_msg(msg) : take_msg(msg);
             return x;
         }
@@ -2587,7 +2588,7 @@ TEST_F(MLATest, OwnershipStringDoubleFreeReportsError)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let s: string = String::from("hello");
+            let s: str8 = String::from("hello");
             String::free(s);
             String::free(s);
             return 0;
@@ -2604,7 +2605,7 @@ TEST_F(MLATest, OwnershipStringUseAfterFreeReportsError)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let s: string = String::from("hello");
+            let s: str8 = String::from("hello");
             String::free(s);
             println!("{}", s);
             return 0;
@@ -2635,12 +2636,12 @@ TEST_F(MLATest, OwnershipStringLiteralFreeReportsError)
 TEST_F(MLATest, OwnershipFreeAliasDoubleFreeReportsError)
 {
     std::string code = R"(
-        fn free(s: string) {
+        fn free(s: str8) {
             String::free(s);
         }
 
         fn main() -> i32 {
-            let s: string = String::from("hello");
+            let s: str8 = String::from("hello");
             free(s);
             free(s);
             return 0;
@@ -2686,7 +2687,7 @@ TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
     std::string code = R"(
         fn main() -> i32 {
             {
-                let s: string = String::from("hello");
+                let s: str8 = String::from("hello");
                 println!("{}", s);
             }
             println!("{}", s);
@@ -3219,18 +3220,18 @@ TEST_F(MLATest, OwnershipCannotCallMethodWhileObjectBorrowed)
 {
     std::string code = R"(
         trait Summary {
-            fn summarize(&self) -> string;
+            fn summarize(&self) -> str8;
         }
 
         struct SocialPost {
-            var username: string;
-            var content: string;
+            var username: str8;
+            var content: str8;
             var reply: bool;
             var repost: bool;
         };
 
         impl Summary for SocialPost {
-            fn summarize(&self) -> string {
+            fn summarize(&self) -> str8 {
                 return format!("{}: {}", self.username, self.content);
             }
         }
