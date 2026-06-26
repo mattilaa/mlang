@@ -808,6 +808,75 @@ TEST_F(MLATest, FixedArrayRejectsTooLargeFillCount)
     EXPECT_NE(out.find("array initializer has 4 elements"), std::string::npos);
 }
 
+TEST_F(MLATest, StructArrayFieldRejectsTooManyListElements)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: array<int, 3>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: [1, 2, 3, 4] };
+            return bag.items.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer for field 'items' has 4 elements"),
+              std::string::npos);
+    EXPECT_NE(out.find("array<i32, 3> capacity is 3"), std::string::npos);
+}
+
+TEST_F(MLATest, StructArrayFieldAllowsListInitializerWithinCapacity)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: array<int, 4>;
+        };
+
+        fn main() -> i32 {
+            var bag: Bag = Bag { items: [1, 2, 3] };
+            bag.items.push(4);
+            return bag.items[3] == 4 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ListLiteralBackedStorageCanGrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<int> = [1, 2, 3];
+            values.push(4);
+            return values[3] == 4 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructArrayFieldRejectsTooLargeFillCount)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: array<int, 3>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: [0; 4] };
+            return bag.items.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer for field 'items' has 4 elements"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, FixedArrayRejectsConstantOutOfBoundsIndexAtCompileTime)
 {
     std::string code = R"(

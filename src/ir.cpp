@@ -26790,6 +26790,8 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
 llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
                                                 llvm::Type* declaredElemType)
 {
+    initializeStdlibFunctions();
+
     // List structure: { i64 size, ptr data }
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
@@ -26851,10 +26853,16 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
 
     int64_t listSize = static_cast<int64_t>(elementValues.size());
 
-    // Allocate array for elements
+    // Allocate heap storage for elements. List/array mutation grows this
+    // buffer with realloc, so stack-backed alloca storage would be invalid.
     llvm::Value* arraySizeVal = llvm::ConstantInt::get(i64Type, listSize);
+    uint64_t elemSizeU =
+        module->getDataLayout().getTypeAllocSize(elementType);
+    llvm::Value* elemSize = llvm::ConstantInt::get(i64Type, elemSizeU);
+    llvm::Value* byteSize =
+        builder.CreateMul(arraySizeVal, elemSize, "list.bytes");
     llvm::Value* dataAlloc =
-        builder.CreateAlloca(elementType, arraySizeVal, "listdata");
+        builder.CreateCall(mallocFunc, {byteSize}, "listdata");
 
     // Store each element
     for(size_t i = 0; i < elementValues.size(); ++i)
@@ -27820,6 +27828,36 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                        dynamic_cast<GenericListTypeNode*>(
                            currentMembers[memberIndex].second))
                 {
+                    if(auto* expectedArray =
+                           dynamic_cast<ArrayTypeNode*>(
+                               currentMembers[memberIndex].second))
+                    {
+                        if(auto size = fixedArrayInitializerSize(valueExpr))
+                        {
+                            if(*size < 0)
+                            {
+                                reportError(
+                                    node->line,
+                                    "array initializer size must be "
+                                    "non-negative");
+                                return nullptr;
+                            }
+                            if(*size > expectedArray->capacity)
+                            {
+                                reportError(
+                                    node->line,
+                                    "array initializer for field '" +
+                                        fullFieldName + "' has " +
+                                        std::to_string(*size) +
+                                        " elements but " +
+                                        expectedArray->toString() +
+                                        " capacity is " +
+                                        std::to_string(
+                                            expectedArray->capacity));
+                                return nullptr;
+                            }
+                        }
+                    }
                     llvm::Type* expectedElemType =
                         getLLVMTypeFromNode(expectedList->elementType);
                     if(auto* listLit =
