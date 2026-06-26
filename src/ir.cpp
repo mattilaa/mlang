@@ -26082,6 +26082,138 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 builder.CreateCall(fn, {recvPtr});
                 return llvm::Constant::getNullValue(voidType);
             }
+            if(node->methodName == "contains")
+            {
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "contains() takes one argument");
+                    return nullptr;
+                }
+                llvm::Value* val = generateExpression(node->arguments[0]);
+                if(!val)
+                    return nullptr;
+
+                std::string fnName;
+                llvm::Type* valType = nullptr;
+                if(elemIsI64)
+                {
+                    fnName = "__mlang_std_vec_contains_i64";
+                    valType = i64Type;
+                    if(val->getType() != i64Type)
+                        val = builder.CreateSExt(val, i64Type);
+                }
+                else
+                {
+                    fnName = "__mlang_std_vec_contains_i32";
+                    valType = i32Type;
+                    if(val->getType() != i32Type)
+                        val = builder.CreateTrunc(val, i32Type);
+                }
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    i32Type, {opaquePtrType, valType}, false);
+                llvm::FunctionCallee fn =
+                    module->getOrInsertFunction(fnName, ft);
+                return builder.CreateCall(fn, {recvPtr, val},
+                                          "fieldlist.contains");
+            }
+            if(node->methodName == "index_of")
+            {
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "index_of() takes one argument");
+                    return nullptr;
+                }
+                llvm::Value* val = generateExpression(node->arguments[0]);
+                if(!val)
+                    return nullptr;
+
+                std::string fnName;
+                llvm::Type* valType = nullptr;
+                if(elemIsI64)
+                {
+                    fnName = "__mlang_std_vec_index_of_i64";
+                    valType = i64Type;
+                    if(val->getType() != i64Type)
+                        val = builder.CreateSExt(val, i64Type);
+                }
+                else
+                {
+                    fnName = "__mlang_std_vec_index_of_i32";
+                    valType = i32Type;
+                    if(val->getType() != i32Type)
+                        val = builder.CreateTrunc(val, i32Type);
+                }
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    i64Type, {opaquePtrType, valType}, false);
+                llvm::FunctionCallee fn =
+                    module->getOrInsertFunction(fnName, ft);
+                return builder.CreateCall(fn, {recvPtr, val},
+                                          "fieldlist.index_of");
+            }
+            if(node->methodName == "sort")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "sort() takes no arguments");
+                    return nullptr;
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(voidType, {opaquePtrType}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(
+                    elemIsI64 ? "__mlang_std_vec_sort_i64"
+                              : "__mlang_std_vec_sort_i32",
+                    ft);
+                builder.CreateCall(fn, {recvPtr});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "sort_desc")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line,
+                                "sort_desc() takes no arguments");
+                    return nullptr;
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(voidType, {opaquePtrType}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(
+                    elemIsI64 ? "__mlang_std_vec_sort_desc_i64"
+                              : "__mlang_std_vec_sort_desc_i32",
+                    ft);
+                builder.CreateCall(fn, {recvPtr});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "reverse")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "reverse() takes no arguments");
+                    return nullptr;
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(voidType, {opaquePtrType}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(
+                    elemIsStr   ? "__mlang_std_vec_reverse_str"
+                    : elemIsI64 ? "__mlang_std_vec_reverse_i64"
+                                : "__mlang_std_vec_reverse_i32",
+                    ft);
+                builder.CreateCall(fn, {recvPtr});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "dedup")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "dedup() takes no arguments");
+                    return nullptr;
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(voidType, {opaquePtrType}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(
+                    "__mlang_std_vec_dedup_i32", ft);
+                builder.CreateCall(fn, {recvPtr});
+                return llvm::Constant::getNullValue(voidType);
+            }
             reportError(node->line,
                         "Vec has no method named '" + node->methodName + "'");
             return nullptr;

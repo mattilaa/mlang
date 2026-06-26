@@ -906,6 +906,52 @@ TEST_F(MLATest, StructListFieldFirstKeepsRuntimeGuardForEmptyList)
     EXPECT_NE(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, StructListFieldSearchMethodsWork)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn main() -> i32 {
+            var bag: Bag = Bag { items: vec![10, 20, 30] };
+            if bag.items.contains(20) == false {
+                return 1;
+            }
+            return bag.items.index_of(30) == 2 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructListFieldOrderingMethodsWork)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn main() -> i32 {
+            var bag: Bag = Bag { items: vec![3, 1, 2, 2] };
+            bag.items.sort();
+            if bag.items.first() != 1 || bag.items.last() != 3 {
+                return 1;
+            }
+            bag.items.dedup();
+            if bag.items.len() != 3 {
+                return 2;
+            }
+            bag.items.reverse();
+            if bag.items.first() != 3 || bag.items.last() != 1 {
+                return 3;
+            }
+            bag.items.sort_desc();
+            return bag.items.first() == 3 ? 0 : 4;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, FixedArrayRejectsKnownEmptyFirstAtCompileTime)
 {
     std::string code = R"(
