@@ -24,7 +24,7 @@
 ///   - `v.len()`            — i64 element count
 ///   - `v.is_empty()`       — bool
 ///   - `v.push(val)`        — append element (mutates in-place)
-///   - `v.pop()`            — remove & return last element
+///   - `v.pop()`            — remove & return last element (checked non-empty)
 ///   - `v.clear()`          — reset count to 0
 ///   - `v.contains(val)`    — bool membership test
 ///   - `v.index_of(val)`    — i64 first index, -1 if absent

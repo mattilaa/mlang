@@ -870,6 +870,36 @@ TEST_F(MLATest, ListFirstKeepsRuntimeGuardForEmptyList)
     EXPECT_NE(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, FixedArrayRejectsKnownEmptyPopAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 3> = {};
+            return arr.pop();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("pop() requires a non-empty array"), std::string::npos);
+}
+
+TEST_F(MLATest, ListPopKeepsRuntimeGuardForEmptyList)
+{
+    std::string code = R"(
+        fn values() -> list<int> {
+            return vec![];
+        }
+
+        fn main() -> i32 {
+            let xs: list<int> = values();
+            return xs.pop();
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, MapIndexReturnsValueForExistingKey)
 {
     std::string code = R"(

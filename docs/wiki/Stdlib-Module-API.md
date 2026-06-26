@@ -155,7 +155,7 @@ for this builtin type, not a distinct type declaration.
 - `v.len() -> i64`
 - `v.is_empty() -> bool`
 - `v.push(value) -> void`
-- `v.pop() -> T`
+- `v.pop() -> T` (checked non-empty)
 - `v.clear() -> void`
 - `v.contains(value) -> bool`
 - `v.index_of(value) -> i64`
@@ -1548,7 +1548,8 @@ above.
 ### Mutation
 
 - `v.push(val)` — append `val` to the end (grows the Vec by one)
-- `v.pop() -> T` — remove and return the last element; panics if empty
+- `v.pop() -> T` — remove and return the last element; known-empty arrays are
+  rejected at compile time, otherwise empty containers abort at runtime
 - `v.clear()` — remove all elements (Vec remains valid for further pushes)
 
 ### Search

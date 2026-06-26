@@ -24989,6 +24989,15 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         reportError(node->line, "pop() takes no arguments");
                         return nullptr;
                     }
+                    std::vector<llvm::Type*> lsTypes = {i64Type2,
+                                                        opaquePtrType};
+                    llvm::StructType* lsType =
+                        llvm::StructType::get(context, lsTypes);
+                    llvm::Value* ls = builder.CreateLoad(lsType, allocaPtr2,
+                                                         objId->name + ".load");
+                    llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
+                    if(!emitNonEmptyCheck2(cnt, "pop"))
+                        return nullptr;
                     if(elemIsStr || elemIsI64 ||
                        elemKind2 == TypeNode::TYPE_INT ||
                        elemKind2 == TypeNode::TYPE_I32 ||
@@ -25843,6 +25852,41 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     reportError(node->line, "pop() takes no arguments");
                     return nullptr;
                 }
+                std::vector<llvm::Type*> lsTypes = {i64Type, opaquePtrType};
+                llvm::StructType* lsType =
+                    llvm::StructType::get(context, lsTypes);
+                llvm::Value* ls =
+                    builder.CreateLoad(lsType, recvPtr, "fieldlist.load");
+                llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
+                initializeFormatFunctions();
+                llvm::Function* function =
+                    builder.GetInsertBlock()->getParent();
+                llvm::BasicBlock* okBB = llvm::BasicBlock::Create(
+                    context, "fieldlist.pop.non_empty", function);
+                llvm::BasicBlock* failBB = llvm::BasicBlock::Create(
+                    context, "fieldlist.pop.empty", function);
+                llvm::Value* nonEmpty = builder.CreateICmpSGT(
+                    cnt, llvm::ConstantInt::get(i64Type, 0),
+                    "fieldlist.pop.has_items");
+                builder.CreateCondBr(nonEmpty, okBB, failBB);
+
+                builder.SetInsertPoint(failBB);
+#if LLVM_VERSION_MAJOR >= 21
+                llvm::Value* formatStr = builder.CreateGlobalString(
+                    "pop() requires a non-empty list/array\n",
+                    "fieldlist.pop.empty.msg");
+#else
+                llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+                    "pop() requires a non-empty list/array\n",
+                    "fieldlist.pop.empty.msg");
+#endif
+                llvm::Value* stderrVal =
+                    builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+                builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+                builder.CreateCall(abortFunc, {});
+                builder.CreateUnreachable();
+                builder.SetInsertPoint(okBB);
+
                 if(elemIsStr || elemIsI64 || elemIsI32Like)
                 {
                     std::string fnName;
