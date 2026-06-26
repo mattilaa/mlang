@@ -1974,6 +1974,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                 return false;
             }
             pointerBorrowTarget[pointerVar] = ownerName;
+            pointerKnownNull[pointerVar] = false;
             activeMutBorrower[ownerName] = pointerVar;
             return true;
         }
@@ -2006,6 +2007,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         }
 
         pointerBorrowTarget[pointerVar] = ownerName;
+        pointerKnownNull[pointerVar] = false;
         activeBorrowers[ownerName].insert(pointerVar);
         return true;
     };
@@ -2171,9 +2173,91 @@ CodeGenerator::getBorrowedOwnerForPointerExpression(ExpressionNode* expr) const
     return borrowIt->second;
 }
 
+std::optional<bool>
+CodeGenerator::pointerExpressionKnownNull(ExpressionNode* expr) const
+{
+    if(!expr)
+        return true;
+
+    if(auto* idExpr = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = pointerKnownNull.find(idExpr->name);
+        if(it != pointerKnownNull.end())
+            return it->second;
+        return std::nullopt;
+    }
+
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_ADDR ||
+           unary->op == UnaryOpNode::OP_ADDR_MUT)
+            return false;
+    }
+
+    return std::nullopt;
+}
+
+bool CodeGenerator::emitRuntimeNullPointerCheck(llvm::Value* ptrValue, int line)
+{
+    if(!ptrValue || !ptrValue->getType()->isPointerTy())
+        return false;
+
+    if(llvm::isa<llvm::ConstantPointerNull>(ptrValue))
+    {
+        reportError(line, "cannot dereference null pointer");
+        return false;
+    }
+
+    initializeFormatFunctions();
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* okBB =
+        llvm::BasicBlock::Create(context, "ptr.not_null", function);
+    llvm::BasicBlock* failBB =
+        llvm::BasicBlock::Create(context, "ptr.null", function);
+    llvm::Value* nullPtr =
+        llvm::ConstantPointerNull::get(
+            llvm::cast<llvm::PointerType>(ptrValue->getType()));
+    llvm::Value* isNull =
+        builder.CreateICmpEQ(ptrValue, nullPtr, "ptr.is_null");
+    builder.CreateCondBr(isNull, failBB, okBB);
+
+    builder.SetInsertPoint(failBB);
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(
+        "null pointer dereference\n", "ptr.null.msg");
+#else
+    llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+        "null pointer dereference\n", "ptr.null.msg");
+#endif
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* opaquePtrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Value* stderrVal =
+        builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+    builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+    builder.CreateCall(abortFunc, {});
+    builder.CreateUnreachable();
+
+    builder.SetInsertPoint(okBB);
+    return true;
+}
+
 bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
                                                int line)
 {
+    if(auto knownNull = pointerExpressionKnownNull(pointerExpr))
+    {
+        if(*knownNull)
+        {
+            reportError(line, "cannot dereference null pointer");
+            return false;
+        }
+    }
+
     std::string ownerName = getBorrowedOwnerForPointerExpression(pointerExpr);
     if(ownerName.empty())
     {
@@ -3919,6 +4003,8 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
                 reportError(line, "dereference requires a pointer value");
                 return nullptr;
             }
+            if(!emitRuntimeNullPointerCheck(ptrVal, line))
+                return nullptr;
             return ptrVal;
         }
     }
@@ -4032,6 +4118,12 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
     {
+        TypeNode* baseType = getLValueType(index->base, line);
+        if(auto* listType = dynamic_cast<GenericListTypeNode*>(baseType))
+            return cloneTypeNode(listType->elementType);
+        if(auto* mapType = dynamic_cast<MapTypeNode*>(baseType))
+            return cloneTypeNode(mapType->valueType);
+
         if(auto* baseId = dynamic_cast<IdentifierNode*>(index->base))
         {
             auto listIt = listElementTypes.find(baseId->name);
@@ -9118,6 +9210,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedMapKeyValueTypes = mapKeyValueTypes;
     auto savedTupleElementTypes = tupleElementTypes;
     auto savedPointerElementTypes = pointerElementTypes;
+    auto savedPointerKnownNull = pointerKnownNull;
     auto savedCleanupScopes = cleanupScopes;
     auto savedPointerBorrowScopes = pointerBorrowScopes;
     auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
@@ -9139,6 +9232,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     closureVariables.clear();
     activeInlineClosures.clear();
     pointerBorrowTarget.clear();
+    pointerKnownNull.clear();
     activeBorrowers.clear();
     activeMutBorrower.clear();
     variableScopeDepth.clear();
@@ -9401,6 +9495,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     mapKeyValueTypes = std::move(savedMapKeyValueTypes);
     tupleElementTypes = std::move(savedTupleElementTypes);
     pointerElementTypes = std::move(savedPointerElementTypes);
+    pointerKnownNull = std::move(savedPointerKnownNull);
     cleanupScopes = std::move(savedCleanupScopes);
     pointerBorrowScopes = std::move(savedPointerBorrowScopes);
     variableScopeDepthScopes = std::move(savedVariableScopeDepthScopes);
@@ -9915,6 +10010,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                         auto savedMapKeyValueTypes = mapKeyValueTypes;
                         auto savedTupleElementTypes = tupleElementTypes;
                         auto savedPointerElementTypes = pointerElementTypes;
+                        auto savedPointerKnownNull = pointerKnownNull;
                         auto savedMovedVariables = movedVariables;
                         auto savedPointerBorrowTarget = pointerBorrowTarget;
                         auto savedActiveBorrowers = activeBorrowers;
@@ -9938,6 +10034,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                         mapKeyValueTypes = savedMapKeyValueTypes;
                         tupleElementTypes = savedTupleElementTypes;
                         pointerElementTypes = savedPointerElementTypes;
+                        pointerKnownNull = savedPointerKnownNull;
                         movedVariables = savedMovedVariables;
                         pointerBorrowTarget = savedPointerBorrowTarget;
                         activeBorrowers = savedActiveBorrowers;
@@ -11272,6 +11369,8 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
             reportError(node->line, "dereference requires a pointer value");
             return nullptr;
         }
+        if(!emitRuntimeNullPointerCheck(ptrVal, node->line))
+            return nullptr;
 
         TypeNode* elemTypeNode =
             getPointerElementType(node->operand, node->line);
@@ -12750,20 +12849,10 @@ void CodeGenerator::generateForStatement(ForNode* node)
             builder.CreateAlloca(listType, nullptr, "arrtmp");
         builder.CreateStore(listVal, tmpList);
 
-        // Determine element type from ArrayFillNode.value
-        llvm::Value* fillVal = generateExpression(arrFill->value);
-        if(!fillVal)
+        TypeNode* elemTypeNode =
+            inferExpressionTypeNode(arrFill->value, node->line);
+        if(!elemTypeNode)
             return;
-        // Build a synthetic element TypeNode (i64 for integer fill values)
-        auto* elemTypeNode = new TypeNode(TypeNode::TYPE_I64);
-        if(fillVal->getType()->isIntegerTy(32))
-            elemTypeNode = new TypeNode(TypeNode::TYPE_I32);
-        else if(fillVal->getType()->isIntegerTy(1))
-            elemTypeNode = new TypeNode(TypeNode::TYPE_BOOL);
-        else if(fillVal->getType()->isFloatTy())
-            elemTypeNode = new TypeNode(TypeNode::TYPE_FLOAT);
-        else if(fillVal->getType()->isDoubleTy())
-            elemTypeNode = new TypeNode(TypeNode::TYPE_DOUBLE);
 
         std::string tmpName = "__arr_fill_tmp";
         listElementTypes[tmpName] = elemTypeNode;
@@ -12825,9 +12914,26 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         return;
     }
 
+    TypeNode* elemTypeNode =
+        inferExpressionTypeNode(listLit->elements->elements.front(),
+                                node->line);
+    if(!elemTypeNode)
+    {
+        reportError(node->line, "cannot infer list literal element type");
+        return;
+    }
+
+    llvm::Type* elementType = getLLVMTypeFromNode(elemTypeNode);
+    if(!elementType)
+    {
+        reportError(node->line,
+                    "list literal iteration has unsupported element type");
+        delete elemTypeNode;
+        return;
+    }
+
     // Generate all list elements first
     std::vector<llvm::Value*> elementValues;
-    llvm::Type* elementType = nullptr;
 
     for(auto* elem : listLit->elements->elements)
     {
@@ -12835,11 +12941,8 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         if(!val)
         {
             reportError(node->line, "failed to generate list element");
+            delete elemTypeNode;
             return;
-        }
-        if(!elementType)
-        {
-            elementType = val->getType();
         }
         elementValues.push_back(val);
     }
@@ -12871,13 +12974,89 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     bool hadOldEnumType = oldEnumIt != enumVariableTypes.end();
     std::string oldEnumType =
         hadOldEnumType ? oldEnumIt->second : std::string();
+    auto oldListIt = listElementTypes.find(node->varName);
+    bool hadOldListType = oldListIt != listElementTypes.end();
+    TypeNode* oldListType =
+        hadOldListType ? oldListIt->second : nullptr;
+    auto oldMapIt = mapKeyValueTypes.find(node->varName);
+    bool hadOldMapType = oldMapIt != mapKeyValueTypes.end();
+    std::pair<TypeNode*, TypeNode*> oldMapType =
+        hadOldMapType ? oldMapIt->second
+                      : std::make_pair(nullptr, nullptr);
+    auto oldPointerIt = pointerElementTypes.find(node->varName);
+    bool hadOldPointerType = oldPointerIt != pointerElementTypes.end();
+    TypeNode* oldPointerType =
+        hadOldPointerType ? oldPointerIt->second : nullptr;
+    auto oldTupleIt = tupleElementTypes.find(node->varName);
+    bool hadOldTupleType = oldTupleIt != tupleElementTypes.end();
+    std::vector<TypeNode*> oldTupleType =
+        hadOldTupleType ? oldTupleIt->second : std::vector<TypeNode*>();
     bool hadOldMoved = isVariableMoved(node->varName);
     auto oldDepthIt = variableScopeDepth.find(node->varName);
     bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
     int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
 
     namedValues[node->varName] = loopVar;
-    variableTypes[node->varName] = TypeNode::TYPE_I64; // Placeholder
+    variableTypes[node->varName] = elemTypeNode->kind;
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(elemTypeNode))
+    {
+        std::string resolvedEnumName =
+            resolveVisibleEnumName(structRef->structName);
+        if(!resolvedEnumName.empty())
+        {
+            variableTypes[node->varName] = TypeNode::TYPE_INT;
+            enumVariableTypes[node->varName] = resolvedEnumName;
+            structVariableTypes.erase(node->varName);
+        }
+        else
+        {
+            variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
+            structVariableTypes[node->varName] = structRef->structName;
+            enumVariableTypes.erase(node->varName);
+        }
+    }
+    else if(auto* genRef =
+                dynamic_cast<GenericStructTypeRefNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
+        structVariableTypes[node->varName] = getOrCreateMonomorphizedStruct(
+            genRef->structName, genRef->typeArgs);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* listType = dynamic_cast<GenericListTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_LIST;
+        listElementTypes[node->varName] = listType->elementType;
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* mapType = dynamic_cast<MapTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_MAP;
+        mapKeyValueTypes[node->varName] =
+            std::make_pair(mapType->keyType, mapType->valueType);
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* tupleType = dynamic_cast<TupleTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_TUPLE;
+        tupleElementTypes[node->varName] = tupleType->elementTypes->types;
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* ptrType = dynamic_cast<PointerTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_PTR;
+        pointerElementTypes[node->varName] = ptrType->elementType;
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else
+    {
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
     clearMovedVariable(node->varName);
     recordVariableScopeDepth(node->varName);
 
@@ -13002,6 +13181,36 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     else
         variableTypes.erase(node->varName);
 
+    if(hadOldStructType)
+        structVariableTypes[node->varName] = oldStructType;
+    else
+        structVariableTypes.erase(node->varName);
+
+    if(hadOldEnumType)
+        enumVariableTypes[node->varName] = oldEnumType;
+    else
+        enumVariableTypes.erase(node->varName);
+
+    if(hadOldListType)
+        listElementTypes[node->varName] = oldListType;
+    else
+        listElementTypes.erase(node->varName);
+
+    if(hadOldMapType)
+        mapKeyValueTypes[node->varName] = oldMapType;
+    else
+        mapKeyValueTypes.erase(node->varName);
+
+    if(hadOldPointerType)
+        pointerElementTypes[node->varName] = oldPointerType;
+    else
+        pointerElementTypes.erase(node->varName);
+
+    if(hadOldTupleType)
+        tupleElementTypes[node->varName] = oldTupleType;
+    else
+        tupleElementTypes.erase(node->varName);
+
     if(hadOldDepth)
         variableScopeDepth[node->varName] = oldDepth;
     else
@@ -13011,6 +13220,8 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         movedVariables.insert(node->varName);
     else
         clearMovedVariable(node->varName);
+
+    delete elemTypeNode;
 }
 
 void CodeGenerator::generateForListVariableIteration(ForNode* node,
@@ -13090,6 +13301,23 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     bool hadOldEnumType = oldEnumIt != enumVariableTypes.end();
     std::string oldEnumType =
         hadOldEnumType ? oldEnumIt->second : std::string();
+    auto oldListIt = listElementTypes.find(node->varName);
+    bool hadOldListType = oldListIt != listElementTypes.end();
+    TypeNode* oldListType =
+        hadOldListType ? oldListIt->second : nullptr;
+    auto oldMapIt = mapKeyValueTypes.find(node->varName);
+    bool hadOldMapType = oldMapIt != mapKeyValueTypes.end();
+    std::pair<TypeNode*, TypeNode*> oldMapType =
+        hadOldMapType ? oldMapIt->second
+                      : std::make_pair(nullptr, nullptr);
+    auto oldPointerIt = pointerElementTypes.find(node->varName);
+    bool hadOldPointerType = oldPointerIt != pointerElementTypes.end();
+    TypeNode* oldPointerType =
+        hadOldPointerType ? oldPointerIt->second : nullptr;
+    auto oldTupleIt = tupleElementTypes.find(node->varName);
+    bool hadOldTupleType = oldTupleIt != tupleElementTypes.end();
+    std::vector<TypeNode*> oldTupleType =
+        hadOldTupleType ? oldTupleIt->second : std::vector<TypeNode*>();
     bool hadOldMoved = isVariableMoved(node->varName);
     auto oldDepthIt = variableScopeDepth.find(node->varName);
     bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
@@ -13120,6 +13348,35 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
         structVariableTypes[node->varName] = getOrCreateMonomorphizedStruct(
             genRef->structName, genRef->typeArgs);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* listType = dynamic_cast<GenericListTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_LIST;
+        listElementTypes[node->varName] = listType->elementType;
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* mapType = dynamic_cast<MapTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_MAP;
+        mapKeyValueTypes[node->varName] =
+            std::make_pair(mapType->keyType, mapType->valueType);
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* tupleType = dynamic_cast<TupleTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_TUPLE;
+        tupleElementTypes[node->varName] = tupleType->elementTypes->types;
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* ptrType = dynamic_cast<PointerTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_PTR;
+        pointerElementTypes[node->varName] = ptrType->elementType;
+        structVariableTypes.erase(node->varName);
         enumVariableTypes.erase(node->varName);
     }
     else
@@ -13253,6 +13510,26 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         enumVariableTypes[node->varName] = oldEnumType;
     else
         enumVariableTypes.erase(node->varName);
+
+    if(hadOldListType)
+        listElementTypes[node->varName] = oldListType;
+    else
+        listElementTypes.erase(node->varName);
+
+    if(hadOldMapType)
+        mapKeyValueTypes[node->varName] = oldMapType;
+    else
+        mapKeyValueTypes.erase(node->varName);
+
+    if(hadOldPointerType)
+        pointerElementTypes[node->varName] = oldPointerType;
+    else
+        pointerElementTypes.erase(node->varName);
+
+    if(hadOldTupleType)
+        tupleElementTypes[node->varName] = oldTupleType;
+    else
+        tupleElementTypes.erase(node->varName);
 
     if(hadOldDepth)
         variableScopeDepth[node->varName] = oldDepth;
@@ -13741,7 +14018,45 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
         }
         else
         {
-            returnValue = generateExpression(node->expression);
+            if(auto* returnList =
+                   dynamic_cast<GenericListTypeNode*>(
+                       currentSemanticReturnType))
+            {
+                if(auto* returnArray =
+                       dynamic_cast<ArrayTypeNode*>(
+                           currentSemanticReturnType))
+                {
+                    if(!validateFixedArrayInitializer(
+                           returnArray, node->expression, node->line))
+                        return;
+                }
+
+                llvm::Type* elemType =
+                    getLLVMTypeFromNode(returnList->elementType);
+                if(auto* listLit =
+                       dynamic_cast<ListLiteralNode*>(node->expression))
+                    returnValue = generateListLiteral(listLit, elemType);
+                else if(auto* arrFill =
+                            dynamic_cast<ArrayFillNode*>(node->expression))
+                    returnValue = generateArrayFill(arrFill, elemType);
+            }
+            else if(auto* returnMap =
+                        dynamic_cast<MapTypeNode*>(currentSemanticReturnType))
+            {
+                if(auto* mapLit =
+                       dynamic_cast<MapLiteralNode*>(node->expression))
+                {
+                    llvm::Type* keyType =
+                        getLLVMTypeFromNode(returnMap->keyType);
+                    llvm::Type* valueType =
+                        getLLVMTypeFromNode(returnMap->valueType);
+                    returnValue =
+                        generateMapLiteral(mapLit, keyType, valueType);
+                }
+            }
+
+            if(!returnValue)
+                returnValue = generateExpression(node->expression);
         }
         if(!returnValue)
             return;
@@ -16485,6 +16800,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             auto pit = pointerElementTypes.find(id->name);
             if(pit != pointerElementTypes.end())
                 pointerElementTypes[node->name] = pit->second;
+            auto pnit = pointerKnownNull.find(id->name);
+            if(pnit != pointerKnownNull.end())
+                pointerKnownNull[node->name] = pnit->second;
+            else
+                pointerKnownNull.erase(node->name);
         }
 
         if(TypeNode* inferredExprType =
@@ -16562,6 +16882,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             {
                 variableTypes[node->name] = TypeNode::TYPE_PTR;
                 pointerElementTypes[node->name] = ptrType->elementType;
+                if(auto knownNull =
+                       pointerExpressionKnownNull(node->expression))
+                    pointerKnownNull[node->name] = *knownNull;
+                else
+                    pointerKnownNull.erase(node->name);
             }
         }
 
@@ -16652,6 +16977,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         {
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
+            if(auto knownNull = pointerExpressionKnownNull(node->expression))
+                pointerKnownNull[node->name] = *knownNull;
+            else
+                pointerKnownNull.erase(node->name);
         }
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
@@ -16769,6 +17098,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_PTR;
+        if(auto knownNull = pointerExpressionKnownNull(node->expression))
+            pointerKnownNull[node->name] = *knownNull;
+        else
+            pointerKnownNull.erase(node->name);
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
             bool _is_mut_borrow =
@@ -17655,6 +17988,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         {
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
+            if(auto knownNull = pointerExpressionKnownNull(node->initExpr))
+                pointerKnownNull[node->name] = *knownNull;
+            else
+                pointerKnownNull.erase(node->name);
         }
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->initExpr);
@@ -17819,11 +18156,16 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             {
                 builder.CreateStore(initValue, alloca);
             }
+            if(auto knownNull = pointerExpressionKnownNull(node->initExpr))
+                pointerKnownNull[node->name] = *knownNull;
+            else
+                pointerKnownNull.erase(node->name);
         }
         else
         {
             storeZeroInitializedValue(alloca, llvmPtrType);
             emitImplicitZeroInitWarning();
+            pointerKnownNull[node->name] = true;
         }
 
         namedValues[node->name] = alloca;
@@ -18256,10 +18598,15 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
             registerPointerBorrow(node->name, node->expression, node->line,
                                   _is_mut_borrow);
         }
+        if(auto knownNull = pointerExpressionKnownNull(node->expression))
+            pointerKnownNull[node->name] = *knownNull;
+        else
+            pointerKnownNull.erase(node->name);
     }
     else
     {
         clearPointerBorrow(node->name);
+        pointerKnownNull.erase(node->name);
     }
 }
 
@@ -18626,6 +18973,8 @@ void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
         reportError(node->line, "dereference requires a pointer value");
         return;
     }
+    if(!emitRuntimeNullPointerCheck(ptrVal, node->line))
+        return;
 
     TypeNode* elemTypeNode =
         getPointerElementType(node->pointerExpr, node->line);
@@ -20815,6 +21164,7 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     closureVariables.clear();
     activeInlineClosures.clear();
     pointerBorrowTarget.clear();
+    pointerKnownNull.clear();
     activeBorrowers.clear();
     activeMutBorrower.clear();
     variableScopeDepth.clear();
@@ -22102,6 +22452,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     mapKeyValueTypes.clear();
     tupleElementTypes.clear();
     pointerElementTypes.clear();
+    pointerKnownNull.clear();
     closureVariables.clear();
     activeInlineClosures.clear();
     cleanupScopes.clear();
@@ -24388,6 +24739,56 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     builder.CreateCall(fn, {allocaPtr2});
                     return llvm::Constant::getNullValue(voidType2);
                 };
+                auto emitNonEmptyCheck2 =
+                    [&](llvm::Value* count,
+                        const std::string& methodName) -> bool
+                {
+                    if(receiverIsArray2)
+                    {
+                        auto lenIt = arrayKnownLengths.find(objId->name);
+                        if(lenIt != arrayKnownLengths.end() &&
+                           lenIt->second <= 0)
+                        {
+                            reportError(node->line,
+                                        methodName +
+                                            "() requires a non-empty array");
+                            return false;
+                        }
+                    }
+
+                    initializeFormatFunctions();
+                    llvm::Function* function =
+                        builder.GetInsertBlock()->getParent();
+                    llvm::BasicBlock* okBB = llvm::BasicBlock::Create(
+                        context, methodName + ".non_empty", function);
+                    llvm::BasicBlock* failBB = llvm::BasicBlock::Create(
+                        context, methodName + ".empty", function);
+                    llvm::Value* nonEmpty = builder.CreateICmpSGT(
+                        count, llvm::ConstantInt::get(i64Type2, 0),
+                        methodName + ".has_items");
+                    builder.CreateCondBr(nonEmpty, okBB, failBB);
+
+                    builder.SetInsertPoint(failBB);
+#if LLVM_VERSION_MAJOR >= 21
+                    llvm::Value* formatStr = builder.CreateGlobalString(
+                        (methodName + "() requires a non-empty list/array\n")
+                            .c_str(),
+                        methodName + ".empty.msg");
+#else
+                    llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+                        (methodName + "() requires a non-empty list/array\n")
+                            .c_str(),
+                        methodName + ".empty.msg");
+#endif
+                    llvm::Value* stderrVal =
+                        builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+                    builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+                    builder.CreateCall(abortFunc, {});
+                    builder.CreateUnreachable();
+
+                    builder.SetInsertPoint(okBB);
+                    return true;
+                };
 
                 // --- is_empty() ---
                 if(node->methodName == "is_empty")
@@ -24810,6 +25211,15 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         reportError(node->line, "pop() takes no arguments");
                         return nullptr;
                     }
+                    std::vector<llvm::Type*> lsTypes = {i64Type2,
+                                                        opaquePtrType};
+                    llvm::StructType* lsType =
+                        llvm::StructType::get(context, lsTypes);
+                    llvm::Value* ls = builder.CreateLoad(lsType, allocaPtr2,
+                                                         objId->name + ".load");
+                    llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
+                    if(!emitNonEmptyCheck2(cnt, "pop"))
+                        return nullptr;
                     if(elemIsStr || elemIsI64 ||
                        elemKind2 == TypeNode::TYPE_INT ||
                        elemKind2 == TypeNode::TYPE_I32 ||
@@ -25033,9 +25443,22 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         llvm::StructType::get(context, lsTypes5);
                     llvm::Value* ls5 = builder.CreateLoad(
                         lsType5, allocaPtr2, objId->name + ".load");
+                    llvm::Value* cnt5 =
+                        builder.CreateExtractValue(ls5, 0, "count");
+                    if(!emitNonEmptyCheck2(cnt5, "first"))
+                        return nullptr;
                     llvm::Value* dataPtr5 =
                         builder.CreateExtractValue(ls5, 1, "dataptr");
-                    llvm::Type* elemType5 = getLLVMType(elemKind2);
+                    llvm::Type* elemType5 =
+                        elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
+                                      : getLLVMType(elemKind2);
+                    if(!elemType5)
+                    {
+                        reportError(node->line,
+                                    "unsupported list element type for "
+                                    "first()");
+                        return nullptr;
+                    }
                     llvm::Value* zero5 = llvm::ConstantInt::get(i64Type2, 0);
                     llvm::Value* gep5 = builder.CreateGEP(elemType5, dataPtr5,
                                                           zero5, "first.ptr");
@@ -25059,6 +25482,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         lsType6, allocaPtr2, objId->name + ".load");
                     llvm::Value* cnt6 =
                         builder.CreateExtractValue(ls6, 0, "count");
+                    if(!emitNonEmptyCheck2(cnt6, "last"))
+                        return nullptr;
                     llvm::Value* lastIdx = builder.CreateSub(
                         cnt6, llvm::ConstantInt::get(i64Type2, 1), "lastIdx");
                     // Generate via list indexing using lastIdx directly
@@ -25066,7 +25491,16 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     // literal
                     llvm::Value* dataPtr6 =
                         builder.CreateExtractValue(ls6, 1, "dataptr");
-                    llvm::Type* elemType6 = getLLVMType(elemKind2);
+                    llvm::Type* elemType6 =
+                        elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
+                                      : getLLVMType(elemKind2);
+                    if(!elemType6)
+                    {
+                        reportError(node->line,
+                                    "unsupported list element type for "
+                                    "last()");
+                        return nullptr;
+                    }
                     llvm::Value* gep6 = builder.CreateGEP(elemType6, dataPtr6,
                                                           lastIdx, "last.ptr");
                     return builder.CreateLoad(elemType6, gep6,
@@ -25289,6 +25723,44 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 receiverIsArray
                     ? llvm::ConstantInt::get(i64Type, arrayCapacityValue)
                     : nullptr;
+            auto emitFieldListNonEmptyCheck =
+                [&](llvm::Value* count,
+                    const std::string& methodName) -> bool
+            {
+                initializeFormatFunctions();
+                llvm::Function* function =
+                    builder.GetInsertBlock()->getParent();
+                llvm::BasicBlock* okBB = llvm::BasicBlock::Create(
+                    context, "fieldlist." + methodName + ".non_empty",
+                    function);
+                llvm::BasicBlock* failBB = llvm::BasicBlock::Create(
+                    context, "fieldlist." + methodName + ".empty", function);
+                llvm::Value* nonEmpty = builder.CreateICmpSGT(
+                    count, llvm::ConstantInt::get(i64Type, 0),
+                    "fieldlist." + methodName + ".has_items");
+                builder.CreateCondBr(nonEmpty, okBB, failBB);
+
+                builder.SetInsertPoint(failBB);
+#if LLVM_VERSION_MAJOR >= 21
+                llvm::Value* formatStr = builder.CreateGlobalString(
+                    (methodName + "() requires a non-empty list/array\n")
+                        .c_str(),
+                    "fieldlist." + methodName + ".empty.msg");
+#else
+                llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+                    (methodName + "() requires a non-empty list/array\n")
+                        .c_str(),
+                    "fieldlist." + methodName + ".empty.msg");
+#endif
+                llvm::Value* stderrVal =
+                    builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+                builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+                builder.CreateCall(abortFunc, {});
+                builder.CreateUnreachable();
+
+                builder.SetInsertPoint(okBB);
+                return true;
+            };
 
             if(node->methodName == "len")
             {
@@ -25651,6 +26123,73 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 builder.CreateCall(fn, {recvPtr, srcPtr, arrayCapacity});
                 return llvm::Constant::getNullValue(voidType);
             }
+            if(node->methodName == "first")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "first() takes no arguments");
+                    return nullptr;
+                }
+                std::vector<llvm::Type*> lsTypes = {i64Type, opaquePtrType};
+                llvm::StructType* lsType =
+                    llvm::StructType::get(context, lsTypes);
+                llvm::Value* ls =
+                    builder.CreateLoad(lsType, recvPtr, "fieldlist.load");
+                llvm::Value* cnt = builder.CreateExtractValue(ls, 0, "count");
+                if(!emitFieldListNonEmptyCheck(cnt, "first"))
+                    return nullptr;
+                llvm::Value* dataPtr =
+                    builder.CreateExtractValue(ls, 1, "dataptr");
+                llvm::Type* elemLlvmType =
+                    recvElemTypeForList
+                        ? getLLVMTypeFromNode(recvElemTypeForList)
+                        : getLLVMType(elemKind);
+                if(!elemLlvmType)
+                {
+                    reportError(node->line,
+                                "unsupported list element type for first()");
+                    return nullptr;
+                }
+                llvm::Value* zero = llvm::ConstantInt::get(i64Type, 0);
+                llvm::Value* elemPtr = builder.CreateGEP(
+                    elemLlvmType, dataPtr, zero, "fieldlist.first.ptr");
+                return builder.CreateLoad(elemLlvmType, elemPtr,
+                                          "fieldlist.first");
+            }
+            if(node->methodName == "last")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "last() takes no arguments");
+                    return nullptr;
+                }
+                std::vector<llvm::Type*> lsTypes = {i64Type, opaquePtrType};
+                llvm::StructType* lsType =
+                    llvm::StructType::get(context, lsTypes);
+                llvm::Value* ls =
+                    builder.CreateLoad(lsType, recvPtr, "fieldlist.load");
+                llvm::Value* cnt = builder.CreateExtractValue(ls, 0, "count");
+                if(!emitFieldListNonEmptyCheck(cnt, "last"))
+                    return nullptr;
+                llvm::Value* lastIdx = builder.CreateSub(
+                    cnt, llvm::ConstantInt::get(i64Type, 1), "lastIdx");
+                llvm::Value* dataPtr =
+                    builder.CreateExtractValue(ls, 1, "dataptr");
+                llvm::Type* elemLlvmType =
+                    recvElemTypeForList
+                        ? getLLVMTypeFromNode(recvElemTypeForList)
+                        : getLLVMType(elemKind);
+                if(!elemLlvmType)
+                {
+                    reportError(node->line,
+                                "unsupported list element type for last()");
+                    return nullptr;
+                }
+                llvm::Value* elemPtr = builder.CreateGEP(
+                    elemLlvmType, dataPtr, lastIdx, "fieldlist.last.ptr");
+                return builder.CreateLoad(elemLlvmType, elemPtr,
+                                          "fieldlist.last");
+            }
             if(node->methodName == "pop")
             {
                 if(!node->arguments.empty())
@@ -25658,6 +26197,41 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     reportError(node->line, "pop() takes no arguments");
                     return nullptr;
                 }
+                std::vector<llvm::Type*> lsTypes = {i64Type, opaquePtrType};
+                llvm::StructType* lsType =
+                    llvm::StructType::get(context, lsTypes);
+                llvm::Value* ls =
+                    builder.CreateLoad(lsType, recvPtr, "fieldlist.load");
+                llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
+                initializeFormatFunctions();
+                llvm::Function* function =
+                    builder.GetInsertBlock()->getParent();
+                llvm::BasicBlock* okBB = llvm::BasicBlock::Create(
+                    context, "fieldlist.pop.non_empty", function);
+                llvm::BasicBlock* failBB = llvm::BasicBlock::Create(
+                    context, "fieldlist.pop.empty", function);
+                llvm::Value* nonEmpty = builder.CreateICmpSGT(
+                    cnt, llvm::ConstantInt::get(i64Type, 0),
+                    "fieldlist.pop.has_items");
+                builder.CreateCondBr(nonEmpty, okBB, failBB);
+
+                builder.SetInsertPoint(failBB);
+#if LLVM_VERSION_MAJOR >= 21
+                llvm::Value* formatStr = builder.CreateGlobalString(
+                    "pop() requires a non-empty list/array\n",
+                    "fieldlist.pop.empty.msg");
+#else
+                llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+                    "pop() requires a non-empty list/array\n",
+                    "fieldlist.pop.empty.msg");
+#endif
+                llvm::Value* stderrVal =
+                    builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+                builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+                builder.CreateCall(abortFunc, {});
+                builder.CreateUnreachable();
+                builder.SetInsertPoint(okBB);
+
                 if(elemIsStr || elemIsI64 || elemIsI32Like)
                 {
                     std::string fnName;
@@ -25721,6 +26295,138 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionType::get(voidType, {opaquePtrType}, false);
                 llvm::FunctionCallee fn =
                     module->getOrInsertFunction("__mlang_std_vec_clear", ft);
+                builder.CreateCall(fn, {recvPtr});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "contains")
+            {
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "contains() takes one argument");
+                    return nullptr;
+                }
+                llvm::Value* val = generateExpression(node->arguments[0]);
+                if(!val)
+                    return nullptr;
+
+                std::string fnName;
+                llvm::Type* valType = nullptr;
+                if(elemIsI64)
+                {
+                    fnName = "__mlang_std_vec_contains_i64";
+                    valType = i64Type;
+                    if(val->getType() != i64Type)
+                        val = builder.CreateSExt(val, i64Type);
+                }
+                else
+                {
+                    fnName = "__mlang_std_vec_contains_i32";
+                    valType = i32Type;
+                    if(val->getType() != i32Type)
+                        val = builder.CreateTrunc(val, i32Type);
+                }
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    i32Type, {opaquePtrType, valType}, false);
+                llvm::FunctionCallee fn =
+                    module->getOrInsertFunction(fnName, ft);
+                return builder.CreateCall(fn, {recvPtr, val},
+                                          "fieldlist.contains");
+            }
+            if(node->methodName == "index_of")
+            {
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "index_of() takes one argument");
+                    return nullptr;
+                }
+                llvm::Value* val = generateExpression(node->arguments[0]);
+                if(!val)
+                    return nullptr;
+
+                std::string fnName;
+                llvm::Type* valType = nullptr;
+                if(elemIsI64)
+                {
+                    fnName = "__mlang_std_vec_index_of_i64";
+                    valType = i64Type;
+                    if(val->getType() != i64Type)
+                        val = builder.CreateSExt(val, i64Type);
+                }
+                else
+                {
+                    fnName = "__mlang_std_vec_index_of_i32";
+                    valType = i32Type;
+                    if(val->getType() != i32Type)
+                        val = builder.CreateTrunc(val, i32Type);
+                }
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    i64Type, {opaquePtrType, valType}, false);
+                llvm::FunctionCallee fn =
+                    module->getOrInsertFunction(fnName, ft);
+                return builder.CreateCall(fn, {recvPtr, val},
+                                          "fieldlist.index_of");
+            }
+            if(node->methodName == "sort")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "sort() takes no arguments");
+                    return nullptr;
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(voidType, {opaquePtrType}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(
+                    elemIsI64 ? "__mlang_std_vec_sort_i64"
+                              : "__mlang_std_vec_sort_i32",
+                    ft);
+                builder.CreateCall(fn, {recvPtr});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "sort_desc")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line,
+                                "sort_desc() takes no arguments");
+                    return nullptr;
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(voidType, {opaquePtrType}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(
+                    elemIsI64 ? "__mlang_std_vec_sort_desc_i64"
+                              : "__mlang_std_vec_sort_desc_i32",
+                    ft);
+                builder.CreateCall(fn, {recvPtr});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "reverse")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "reverse() takes no arguments");
+                    return nullptr;
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(voidType, {opaquePtrType}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(
+                    elemIsStr   ? "__mlang_std_vec_reverse_str"
+                    : elemIsI64 ? "__mlang_std_vec_reverse_i64"
+                                : "__mlang_std_vec_reverse_i32",
+                    ft);
+                builder.CreateCall(fn, {recvPtr});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "dedup")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "dedup() takes no arguments");
+                    return nullptr;
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(voidType, {opaquePtrType}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(
+                    "__mlang_std_vec_dedup_i32", ft);
                 builder.CreateCall(fn, {recvPtr});
                 return llvm::Constant::getNullValue(voidType);
             }
@@ -26300,6 +27006,8 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
 llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
                                                 llvm::Type* declaredElemType)
 {
+    initializeStdlibFunctions();
+
     // List structure: { i64 size, ptr data }
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
@@ -26361,10 +27069,16 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
 
     int64_t listSize = static_cast<int64_t>(elementValues.size());
 
-    // Allocate array for elements
+    // Allocate heap storage for elements. List/array mutation grows this
+    // buffer with realloc, so stack-backed alloca storage would be invalid.
     llvm::Value* arraySizeVal = llvm::ConstantInt::get(i64Type, listSize);
+    uint64_t elemSizeU =
+        module->getDataLayout().getTypeAllocSize(elementType);
+    llvm::Value* elemSize = llvm::ConstantInt::get(i64Type, elemSizeU);
+    llvm::Value* byteSize =
+        builder.CreateMul(arraySizeVal, elemSize, "list.bytes");
     llvm::Value* dataAlloc =
-        builder.CreateAlloca(elementType, arraySizeVal, "listdata");
+        builder.CreateCall(mallocFunc, {byteSize}, "listdata");
 
     // Store each element
     for(size_t i = 0; i < elementValues.size(); ++i)
@@ -26391,6 +27105,8 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
 llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
                                               llvm::Type* declaredElemType)
 {
+    initializeStdlibFunctions();
+
     // [val; N] — a list of N copies of val
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
@@ -26425,9 +27141,14 @@ llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
     if(countVal->getType() != i64Type)
         countVal = builder.CreateSExt(countVal, i64Type, "fill.count");
 
-    // Allocate storage for count elements
+    // Allocate heap storage for count elements. Filled lists/arrays can escape
+    // or later grow with realloc, so stack-backed storage would be invalid.
+    uint64_t elemSizeU = module->getDataLayout().getTypeAllocSize(elemType);
+    llvm::Value* elemSize = llvm::ConstantInt::get(i64Type, elemSizeU);
+    llvm::Value* byteSize =
+        builder.CreateMul(countVal, elemSize, "fill.bytes");
     llvm::Value* dataAlloc =
-        builder.CreateAlloca(elemType, countVal, "filldata");
+        builder.CreateCall(mallocFunc, {byteSize}, "filldata");
 
     // Loop to store the fill value at each index
     llvm::Function* function = builder.GetInsertBlock()->getParent();
@@ -26470,8 +27191,12 @@ llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
     return listStruct;
 }
 
-llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node)
+llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
+                                               llvm::Type* declaredKeyType,
+                                               llvm::Type* declaredValueType)
 {
+    initializeStdlibFunctions();
+
     // Map structure: { i64 size, ptr keys, ptr values }
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
@@ -26507,8 +27232,43 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node)
     // Generate all key-value pairs
     std::vector<llvm::Value*> keyValues;
     std::vector<llvm::Value*> valueValues;
-    llvm::Type* keyType = nullptr;
-    llvm::Type* valueType = nullptr;
+    llvm::Type* keyType = declaredKeyType;
+    llvm::Type* valueType = declaredValueType;
+
+    auto coerceMapLiteralValue =
+        [&](llvm::Value* value, llvm::Type* targetType,
+            const char* label) -> llvm::Value*
+    {
+        if(!value || !targetType || value->getType() == targetType)
+            return value;
+        llvm::Type* actualType = value->getType();
+        if(actualType->isIntegerTy() && targetType->isIntegerTy())
+        {
+            unsigned actualBits = actualType->getIntegerBitWidth();
+            unsigned targetBits = targetType->getIntegerBitWidth();
+            if(actualBits > targetBits)
+                return builder.CreateTrunc(value, targetType,
+                                           std::string(label) + ".trunc");
+            if(actualBits < targetBits)
+                return builder.CreateSExt(value, targetType,
+                                          std::string(label) + ".ext");
+            return value;
+        }
+        if(actualType->isFloatingPointTy() && targetType->isFloatingPointTy())
+            return builder.CreateFPCast(value, targetType,
+                                        std::string(label) + ".fpcast");
+        if(actualType->isIntegerTy() && targetType->isFloatingPointTy())
+            return builder.CreateSIToFP(value, targetType,
+                                        std::string(label) + ".sitofp");
+        if(actualType->isFloatingPointTy() && targetType->isIntegerTy())
+            return builder.CreateFPToSI(value, targetType,
+                                        std::string(label) + ".fptosi");
+
+        reportError(node->line,
+                    std::string("map literal ") + label +
+                        " type does not match declared map type");
+        return nullptr;
+    };
 
     for(auto* entry : node->entries->entries)
     {
@@ -26522,6 +27282,10 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node)
             keyType = keyVal->getType();
             valueType = valVal->getType();
         }
+        keyVal = coerceMapLiteralValue(keyVal, keyType, "key");
+        valVal = coerceMapLiteralValue(valVal, valueType, "value");
+        if(!keyVal || !valVal)
+            return nullptr;
 
         keyValues.push_back(keyVal);
         valueValues.push_back(valVal);
@@ -26529,11 +27293,22 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node)
 
     int64_t mapSize = static_cast<int64_t>(keyValues.size());
 
-    // Allocate arrays for keys and values
+    // Allocate heap storage for keys and values. Map values can escape the
+    // current stack frame, so stack-backed alloca arrays would dangle.
     llvm::Value* sizeVal = llvm::ConstantInt::get(i64Type, mapSize);
-    llvm::Value* keysAlloc = builder.CreateAlloca(keyType, sizeVal, "mapkeys");
+    uint64_t keySizeU = module->getDataLayout().getTypeAllocSize(keyType);
+    uint64_t valueSizeU =
+        module->getDataLayout().getTypeAllocSize(valueType);
+    llvm::Value* keyBytes = builder.CreateMul(
+        sizeVal, llvm::ConstantInt::get(i64Type, keySizeU), "map.key.bytes");
+    llvm::Value* valueBytes =
+        builder.CreateMul(sizeVal,
+                          llvm::ConstantInt::get(i64Type, valueSizeU),
+                          "map.value.bytes");
+    llvm::Value* keysAlloc =
+        builder.CreateCall(mallocFunc, {keyBytes}, "mapkeys");
     llvm::Value* valsAlloc =
-        builder.CreateAlloca(valueType, sizeVal, "mapvals");
+        builder.CreateCall(mallocFunc, {valueBytes}, "mapvals");
 
     // Store each key-value pair
     for(size_t i = 0; i < keyValues.size(); ++i)
@@ -26568,64 +27343,66 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         return nullptr;
     }
 
-    // Get the base (list or map variable)
     auto* baseId = dynamic_cast<IdentifierNode*>(node->base);
-    if(!baseId)
-    {
-        reportError(node->line, "index expression requires an identifier");
-        return nullptr;
-    }
-
-    llvm::Value* basePtr = namedValues[baseId->name];
+    TypeNode* baseType = getLValueType(node->base, node->line);
+    llvm::Value* basePtr = getLValuePointer(node->base, node->line);
     if(!basePtr)
-    {
-        reportError(node->line, "unknown variable: " + baseId->name);
         return nullptr;
-    }
 
     llvm::Value* indexVal = generateExpression(node->index);
     if(!indexVal)
         return nullptr;
 
-    // Check if it's a list
-    auto listIt = listElementTypes.find(baseId->name);
-    if(listIt != listElementTypes.end())
+    auto* listType = dynamic_cast<GenericListTypeNode*>(baseType);
+    if(listType)
     {
-        auto arrayCapIt = arrayCapacities.find(baseId->name);
-        if(arrayCapIt != arrayCapacities.end())
+        auto* arrayType = dynamic_cast<ArrayTypeNode*>(baseType);
+        std::optional<int64_t> arrayCapacity;
+        std::optional<int64_t> knownArrayLength;
+        if(arrayType)
+            arrayCapacity = arrayType->capacity;
+        if(baseId)
+        {
+            auto arrayCapIt = arrayCapacities.find(baseId->name);
+            if(arrayCapIt != arrayCapacities.end())
+                arrayCapacity = arrayCapIt->second;
+            auto knownLenIt = arrayKnownLengths.find(baseId->name);
+            if(knownLenIt != arrayKnownLengths.end())
+                knownArrayLength = knownLenIt->second;
+        }
+
+        if(arrayCapacity)
         {
             int64_t knownIndex = 0;
             if(evaluateCompileTimeInt(node->index, knownIndex))
             {
-                auto knownLenIt = arrayKnownLengths.find(baseId->name);
                 if(knownIndex < 0)
                 {
                     reportError(node->line,
                                 "array index out of bounds: index=" +
                                     std::to_string(knownIndex) +
                                     " capacity=" +
-                                    std::to_string(arrayCapIt->second));
+                                    std::to_string(*arrayCapacity));
                     return nullptr;
                 }
-                if(knownLenIt != arrayKnownLengths.end() &&
-                   knownIndex >= knownLenIt->second)
+                if(knownArrayLength && knownIndex >= *knownArrayLength)
                 {
                     reportError(node->line,
                                 "array index out of bounds: index=" +
                                     std::to_string(knownIndex) +
                                     " len=" +
-                                    std::to_string(knownLenIt->second) +
+                                    std::to_string(*knownArrayLength) +
                                     " capacity=" +
-                                    std::to_string(arrayCapIt->second));
+                                    std::to_string(*arrayCapacity));
                     return nullptr;
                 }
-                if(knownIndex >= arrayCapIt->second)
+                if(knownIndex >= *arrayCapacity)
                 {
                     reportError(node->line,
                                 "array index out of bounds: index=" +
                                     std::to_string(knownIndex) +
                                     " capacity=" +
-                                    std::to_string(arrayCapIt->second));
+                                    std::to_string(*arrayCapacity));
                     return nullptr;
                 }
             }
@@ -26634,7 +27411,7 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         initializeFormatFunctions();
 
         // List indexing
-        TypeNode* elemTypeNode = listIt->second;
+        TypeNode* elemTypeNode = listType->elementType;
         llvm::Type* elementType = getLLVMTypeFromNode(elemTypeNode);
         if(!elementType)
         {
@@ -26712,12 +27489,27 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
     }
 
     // Check if it's a map
-    auto mapIt = mapKeyValueTypes.find(baseId->name);
-    if(mapIt != mapKeyValueTypes.end())
+    TypeNode* mapKeyTypeNode = nullptr;
+    TypeNode* mapValueTypeNode = nullptr;
+    if(auto* mapType = dynamic_cast<MapTypeNode*>(baseType))
+    {
+        mapKeyTypeNode = mapType->keyType;
+        mapValueTypeNode = mapType->valueType;
+    }
+    else if(baseId)
+    {
+        auto mapIt = mapKeyValueTypes.find(baseId->name);
+        if(mapIt != mapKeyValueTypes.end())
+        {
+            mapKeyTypeNode = mapIt->second.first;
+            mapValueTypeNode = mapIt->second.second;
+        }
+    }
+    if(mapKeyTypeNode && mapValueTypeNode)
     {
         // Map lookup - linear search for key
-        TypeNode* keyTypeNode = mapIt->second.first;
-        TypeNode* valTypeNode = mapIt->second.second;
+        TypeNode* keyTypeNode = mapKeyTypeNode;
+        TypeNode* valTypeNode = mapValueTypeNode;
         llvm::Type* keyType = getLLVMTypeFromNode(keyTypeNode);
         llvm::Type* valueType = getLLVMTypeFromNode(valTypeNode);
         if(!keyType || !valueType)
@@ -26727,6 +27519,23 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
                             type_name_for_error(keyTypeNode) + "'/'" +
                             type_name_for_error(valTypeNode) + "'");
             return nullptr;
+        }
+        if(indexVal->getType() != keyType)
+        {
+            llvm::Type* indexType = indexVal->getType();
+            if(indexType->isIntegerTy() && keyType->isIntegerTy())
+                indexVal = builder.CreateSExtOrTrunc(indexVal, keyType,
+                                                     "map.key.cast");
+            else if(indexType->isFloatingPointTy() &&
+                    keyType->isFloatingPointTy())
+                indexVal =
+                    builder.CreateFPCast(indexVal, keyType, "map.key.cast");
+            else if(indexType->isIntegerTy() && keyType->isFloatingPointTy())
+                indexVal =
+                    builder.CreateSIToFP(indexVal, keyType, "map.key.cast");
+            else if(indexType->isFloatingPointTy() && keyType->isIntegerTy())
+                indexVal =
+                    builder.CreateFPToSI(indexVal, keyType, "map.key.cast");
         }
 
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -26758,6 +27567,10 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
             builder.CreateAlloca(valueType, nullptr, "mapresult");
         // Initialize with default value
         builder.CreateStore(llvm::Constant::getNullValue(valueType), resultVar);
+        llvm::Type* i1Type = llvm::Type::getInt1Ty(context);
+        llvm::AllocaInst* foundVar =
+            builder.CreateAlloca(i1Type, nullptr, "mapfound");
+        builder.CreateStore(llvm::ConstantInt::getFalse(context), foundVar);
 
         llvm::BasicBlock* condBB =
             llvm::BasicBlock::Create(context, "map.cond", function);
@@ -26807,6 +27620,7 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         llvm::Value* foundVal =
             builder.CreateLoad(valueType, valPtr, "foundval");
         builder.CreateStore(foundVal, resultVar);
+        builder.CreateStore(llvm::ConstantInt::getTrue(context), foundVar);
         builder.CreateBr(endBB);
 
         incBB->insertInto(function);
@@ -26820,11 +27634,42 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         endBB->insertInto(function);
         builder.SetInsertPoint(endBB);
 
+        initializeFormatFunctions();
+        llvm::BasicBlock* okBB =
+            llvm::BasicBlock::Create(context, "map.lookup.ok", function);
+        llvm::BasicBlock* missingBB =
+            llvm::BasicBlock::Create(context, "map.lookup.missing", function);
+        llvm::Value* found =
+            builder.CreateLoad(i1Type, foundVar, "map.found");
+        builder.CreateCondBr(found, okBB, missingBB);
+
+        builder.SetInsertPoint(missingBB);
+#if LLVM_VERSION_MAJOR >= 21
+        llvm::Value* formatStr = builder.CreateGlobalString(
+            "map key not found\n", "map.lookup.missing.msg");
+#else
+        llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+            "map key not found\n", "map.lookup.missing.msg");
+#endif
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* opaquePtrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        llvm::Value* stderrVal =
+            builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+        builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+        builder.CreateCall(abortFunc, {});
+        builder.CreateUnreachable();
+
+        builder.SetInsertPoint(okBB);
         return builder.CreateLoad(valueType, resultVar, "mapval");
     }
 
+    std::string baseName = baseId ? baseId->name : "expression";
     reportError(node->line,
-                "cannot index non-list/non-map variable: " + baseId->name);
+                "cannot index non-list/non-map variable: " + baseName);
     return nullptr;
 }
 
@@ -27210,6 +28055,70 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                     contextual.fields = nestedLit->fields;
                     contextual.typeArgs = nestedLit->typeArgs;
                     fieldValue = generateStructLiteral(&contextual);
+                }
+            }
+
+            if(!fieldValue)
+            {
+                if(auto* expectedList =
+                       dynamic_cast<GenericListTypeNode*>(
+                           currentMembers[memberIndex].second))
+                {
+                    if(auto* expectedArray =
+                           dynamic_cast<ArrayTypeNode*>(
+                               currentMembers[memberIndex].second))
+                    {
+                        if(auto size = fixedArrayInitializerSize(valueExpr))
+                        {
+                            if(*size < 0)
+                            {
+                                reportError(
+                                    node->line,
+                                    "array initializer size must be "
+                                    "non-negative");
+                                return nullptr;
+                            }
+                            if(*size > expectedArray->capacity)
+                            {
+                                reportError(
+                                    node->line,
+                                    "array initializer for field '" +
+                                        fullFieldName + "' has " +
+                                        std::to_string(*size) +
+                                        " elements but " +
+                                        expectedArray->toString() +
+                                        " capacity is " +
+                                        std::to_string(
+                                            expectedArray->capacity));
+                                return nullptr;
+                            }
+                        }
+                    }
+                    llvm::Type* expectedElemType =
+                        getLLVMTypeFromNode(expectedList->elementType);
+                    if(auto* listLit =
+                           dynamic_cast<ListLiteralNode*>(valueExpr))
+                        fieldValue =
+                            generateListLiteral(listLit, expectedElemType);
+                    else if(auto* arrFill =
+                                dynamic_cast<ArrayFillNode*>(valueExpr))
+                        fieldValue =
+                            generateArrayFill(arrFill, expectedElemType);
+                }
+                else if(auto* expectedMap =
+                            dynamic_cast<MapTypeNode*>(
+                                currentMembers[memberIndex].second))
+                {
+                    llvm::Type* expectedKeyType =
+                        getLLVMTypeFromNode(expectedMap->keyType);
+                    llvm::Type* expectedValueType =
+                        getLLVMTypeFromNode(expectedMap->valueType);
+                    if(auto* mapLit =
+                           dynamic_cast<MapLiteralNode*>(valueExpr))
+                    {
+                        fieldValue = generateMapLiteral(
+                            mapLit, expectedKeyType, expectedValueType);
+                    }
                 }
             }
 

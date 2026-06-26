@@ -808,6 +808,184 @@ TEST_F(MLATest, FixedArrayRejectsTooLargeFillCount)
     EXPECT_NE(out.find("array initializer has 4 elements"), std::string::npos);
 }
 
+TEST_F(MLATest, StructArrayFieldRejectsTooManyListElements)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: array<int, 3>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: [1, 2, 3, 4] };
+            return bag.items.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer for field 'items' has 4 elements"),
+              std::string::npos);
+    EXPECT_NE(out.find("array<i32, 3> capacity is 3"), std::string::npos);
+}
+
+TEST_F(MLATest, StructArrayFieldAllowsListInitializerWithinCapacity)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: array<int, 4>;
+        };
+
+        fn main() -> i32 {
+            var bag: Bag = Bag { items: [1, 2, 3] };
+            bag.items.push(4);
+            return bag.items[3] == 4 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ListLiteralBackedStorageCanGrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<int> = [1, 2, 3];
+            values.push(4);
+            return values[3] == 4 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ReturnedListLiteralUsesDeclaredElementWidthAndCanGrow)
+{
+    std::string code = R"(
+        fn values() -> list<int> {
+            return [1, 2, 3];
+        }
+
+        fn main() -> i32 {
+            var xs: list<int> = values();
+            xs.push(4);
+            return xs[3] == 4 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ArrayFillBackedStorageCanGrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<int> = [7; 3];
+            values.push(9);
+            return values[3] == 9 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ReturnedArrayFillUsesDeclaredElementWidthAndCanGrow)
+{
+    std::string code = R"(
+        fn values() -> list<int> {
+            return [7; 3];
+        }
+
+        fn main() -> i32 {
+            var xs: list<int> = values();
+            xs.push(9);
+            return xs[3] == 9 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ArrayFillForLoopEvaluatesFillExpressionOnce)
+{
+    std::string code = R"(
+        var calls: i32 = 0;
+
+        fn next() -> i32 {
+            calls += 1;
+            return 7;
+        }
+
+        fn main() -> i32 {
+            var sum: i32 = 0;
+            for value in [next(); 3] {
+                sum += value;
+            }
+            if sum != 21 {
+                return 1;
+            }
+            return calls == 1 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ListLiteralForLoopKeepsStructElementType)
+{
+    std::string code = R"(
+        struct Item {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            var sum: i32 = 0;
+            let item: Item = Item { value: 10 };
+            for item in [Item { value: 2 }, Item { value: 3 }] {
+                sum += item.value;
+            }
+            if item.value != 10 {
+                return 1;
+            }
+            return sum == 5 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ReturnedArrayLiteralRejectsTooManyElements)
+{
+    std::string code = R"(
+        fn values() -> array<int, 3> {
+            return [1, 2, 3, 4];
+        }
+
+        fn main() -> i32 {
+            let xs: array<int, 3> = values();
+            return xs.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer has 4 elements"), std::string::npos);
+}
+
+TEST_F(MLATest, StructArrayFieldRejectsTooLargeFillCount)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: array<int, 3>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: [0; 4] };
+            return bag.items.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer for field 'items' has 4 elements"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, FixedArrayRejectsConstantOutOfBoundsIndexAtCompileTime)
 {
     std::string code = R"(
@@ -837,6 +1015,247 @@ TEST_F(MLATest, FixedArrayKeepsRuntimeGuardForDynamicOutOfBoundsIndex)
         }
     )";
     EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructListFieldIndexingReadsInBounds)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: vec![10, 20, 30] };
+            return bag.items[1] == 20 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructListFieldIndexingKeepsRuntimeBoundsGuard)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn get_index() -> i32 {
+            return 3;
+        }
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: vec![10, 20, 30] };
+            return bag.items[get_index()];
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructListFieldFirstLastReadInBounds)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: vec![10, 20, 30] };
+            if bag.items.first() != 10 {
+                return 1;
+            }
+            return bag.items.last() == 30 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructListFieldFirstKeepsRuntimeGuardForEmptyList)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: vec![] };
+            return bag.items.first();
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructListFieldSearchMethodsWork)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn main() -> i32 {
+            var bag: Bag = Bag { items: vec![10, 20, 30] };
+            if bag.items.contains(20) == false {
+                return 1;
+            }
+            return bag.items.index_of(30) == 2 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructListFieldOrderingMethodsWork)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn main() -> i32 {
+            var bag: Bag = Bag { items: vec![3, 1, 2, 2] };
+            bag.items.sort();
+            if bag.items.first() != 1 || bag.items.last() != 3 {
+                return 1;
+            }
+            bag.items.dedup();
+            if bag.items.len() != 3 {
+                return 2;
+            }
+            bag.items.reverse();
+            if bag.items.first() != 3 || bag.items.last() != 1 {
+                return 3;
+            }
+            bag.items.sort_desc();
+            return bag.items.first() == 3 ? 0 : 4;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayRejectsKnownEmptyFirstAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 3> = {};
+            return arr.first();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("first() requires a non-empty array"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, ListFirstKeepsRuntimeGuardForEmptyList)
+{
+    std::string code = R"(
+        fn values() -> list<int> {
+            return vec![];
+        }
+
+        fn main() -> i32 {
+            let xs: list<int> = values();
+            return xs.first();
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayRejectsKnownEmptyPopAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var arr: array<int, 3> = {};
+            return arr.pop();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("pop() requires a non-empty array"), std::string::npos);
+}
+
+TEST_F(MLATest, ListPopKeepsRuntimeGuardForEmptyList)
+{
+    std::string code = R"(
+        fn values() -> list<int> {
+            return vec![];
+        }
+
+        fn main() -> i32 {
+            let xs: list<int> = values();
+            return xs.pop();
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MapIndexReturnsValueForExistingKey)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let scores: map<i32, i32> = {1: 95, 2: 87};
+            return scores[1] == 95 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MapIndexMissingKeyAbortsInsteadOfDefaultValue)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let scores: map<i32, i32> = {1: 95, 2: 87};
+            return scores[3];
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructMapFieldIndexReturnsValueForExistingKey)
+{
+    std::string code = R"(
+        struct Bag {
+            var scores: map<int, int>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { scores: {1: 95, 2: 87} };
+            return bag.scores[2] == 87 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructMapFieldIndexMissingKeyAborts)
+{
+    std::string code = R"(
+        struct Bag {
+            var scores: map<int, int>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { scores: {1: 95, 2: 87} };
+            return bag.scores[3];
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ReturnedMapLiteralBackedStorageSurvivesCallerLookup)
+{
+    std::string code = R"(
+        fn scores() -> map<int, int> {
+            return {1: 95, 2: 87};
+        }
+
+        fn main() -> i32 {
+            let m: map<int, int> = scores();
+            return m[2] == 87 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, VarReassignment)
@@ -3936,6 +4355,41 @@ TEST_F(MLATest, RawPointerDereferenceInsideUnsafeCompiles)
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
+TEST_F(MLATest, KnownNullPointerDereferenceFailsAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var p: ptr<i32>;
+            unsafe {
+                return *p;
+            }
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot dereference null pointer"), std::string::npos);
+}
+
+TEST_F(MLATest, UnsafeRawPointerDereferenceChecksNullAtRuntime)
+{
+    std::string code = R"(
+        fn maybe_null() -> ptr<i32> {
+            var p: ptr<i32>;
+            return p;
+        }
+
+        fn main() -> i32 {
+            let p: ptr<i32> = maybe_null();
+            unsafe {
+                return *p;
+            }
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, BorrowedPointerDereferenceOutsideUnsafeStillAllowed)

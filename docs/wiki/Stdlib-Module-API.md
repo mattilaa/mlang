@@ -155,7 +155,7 @@ for this builtin type, not a distinct type declaration.
 - `v.len() -> i64`
 - `v.is_empty() -> bool`
 - `v.push(value) -> void`
-- `v.pop() -> T`
+- `v.pop() -> T` (checked non-empty)
 - `v.clear() -> void`
 - `v.contains(value) -> bool`
 - `v.index_of(value) -> i64`
@@ -168,6 +168,7 @@ for this builtin type, not a distinct type declaration.
 
 ### `map<K, V>`
 - `m.len() -> i64`
+- `m[key] -> V`; aborts with `map key not found` if the key is absent
 - `m.keys()` iterator for `for key in m.keys() { ... }`
 - `m.values()` iterator for `for val in m.values() { ... }`
 - `m.entries()` iterator for `for entry in m.entries() { ... }`
@@ -1547,7 +1548,8 @@ above.
 ### Mutation
 
 - `v.push(val)` — append `val` to the end (grows the Vec by one)
-- `v.pop() -> T` — remove and return the last element; panics if empty
+- `v.pop() -> T` — remove and return the last element; known-empty arrays are
+  rejected at compile time, otherwise empty containers abort at runtime
 - `v.clear()` — remove all elements (Vec remains valid for further pushes)
 
 ### Search
@@ -1564,8 +1566,10 @@ above.
 
 ### Access
 
-- `v.first() -> T` — return the first element; panics if empty
-- `v.last() -> T` — return the last element; panics if empty
+- `v.first() -> T` — return the first element; known-empty arrays are rejected
+  at compile time, otherwise emptiness is checked before loading
+- `v.last() -> T` — return the last element; known-empty arrays are rejected at
+  compile time, otherwise emptiness is checked before loading
 
 ### Iteration
 
