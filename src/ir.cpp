@@ -4118,6 +4118,12 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
     {
+        TypeNode* baseType = getLValueType(index->base, line);
+        if(auto* listType = dynamic_cast<GenericListTypeNode*>(baseType))
+            return cloneTypeNode(listType->elementType);
+        if(auto* mapType = dynamic_cast<MapTypeNode*>(baseType))
+            return cloneTypeNode(mapType->valueType);
+
         if(auto* baseId = dynamic_cast<IdentifierNode*>(index->base))
         {
             auto listIt = listElementTypes.find(baseId->name);
@@ -26797,64 +26803,66 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         return nullptr;
     }
 
-    // Get the base (list or map variable)
     auto* baseId = dynamic_cast<IdentifierNode*>(node->base);
-    if(!baseId)
-    {
-        reportError(node->line, "index expression requires an identifier");
-        return nullptr;
-    }
-
-    llvm::Value* basePtr = namedValues[baseId->name];
+    TypeNode* baseType = getLValueType(node->base, node->line);
+    llvm::Value* basePtr = getLValuePointer(node->base, node->line);
     if(!basePtr)
-    {
-        reportError(node->line, "unknown variable: " + baseId->name);
         return nullptr;
-    }
 
     llvm::Value* indexVal = generateExpression(node->index);
     if(!indexVal)
         return nullptr;
 
-    // Check if it's a list
-    auto listIt = listElementTypes.find(baseId->name);
-    if(listIt != listElementTypes.end())
+    auto* listType = dynamic_cast<GenericListTypeNode*>(baseType);
+    if(listType)
     {
-        auto arrayCapIt = arrayCapacities.find(baseId->name);
-        if(arrayCapIt != arrayCapacities.end())
+        auto* arrayType = dynamic_cast<ArrayTypeNode*>(baseType);
+        std::optional<int64_t> arrayCapacity;
+        std::optional<int64_t> knownArrayLength;
+        if(arrayType)
+            arrayCapacity = arrayType->capacity;
+        if(baseId)
+        {
+            auto arrayCapIt = arrayCapacities.find(baseId->name);
+            if(arrayCapIt != arrayCapacities.end())
+                arrayCapacity = arrayCapIt->second;
+            auto knownLenIt = arrayKnownLengths.find(baseId->name);
+            if(knownLenIt != arrayKnownLengths.end())
+                knownArrayLength = knownLenIt->second;
+        }
+
+        if(arrayCapacity)
         {
             int64_t knownIndex = 0;
             if(evaluateCompileTimeInt(node->index, knownIndex))
             {
-                auto knownLenIt = arrayKnownLengths.find(baseId->name);
                 if(knownIndex < 0)
                 {
                     reportError(node->line,
                                 "array index out of bounds: index=" +
                                     std::to_string(knownIndex) +
                                     " capacity=" +
-                                    std::to_string(arrayCapIt->second));
+                                    std::to_string(*arrayCapacity));
                     return nullptr;
                 }
-                if(knownLenIt != arrayKnownLengths.end() &&
-                   knownIndex >= knownLenIt->second)
+                if(knownArrayLength && knownIndex >= *knownArrayLength)
                 {
                     reportError(node->line,
                                 "array index out of bounds: index=" +
                                     std::to_string(knownIndex) +
                                     " len=" +
-                                    std::to_string(knownLenIt->second) +
+                                    std::to_string(*knownArrayLength) +
                                     " capacity=" +
-                                    std::to_string(arrayCapIt->second));
+                                    std::to_string(*arrayCapacity));
                     return nullptr;
                 }
-                if(knownIndex >= arrayCapIt->second)
+                if(knownIndex >= *arrayCapacity)
                 {
                     reportError(node->line,
                                 "array index out of bounds: index=" +
                                     std::to_string(knownIndex) +
                                     " capacity=" +
-                                    std::to_string(arrayCapIt->second));
+                                    std::to_string(*arrayCapacity));
                     return nullptr;
                 }
             }
@@ -26863,7 +26871,7 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         initializeFormatFunctions();
 
         // List indexing
-        TypeNode* elemTypeNode = listIt->second;
+        TypeNode* elemTypeNode = listType->elementType;
         llvm::Type* elementType = getLLVMTypeFromNode(elemTypeNode);
         if(!elementType)
         {
@@ -26941,6 +26949,12 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
     }
 
     // Check if it's a map
+    if(!baseId)
+    {
+        reportError(node->line,
+                    "map index expression requires an identifier");
+        return nullptr;
+    }
     auto mapIt = mapKeyValueTypes.find(baseId->name);
     if(mapIt != mapKeyValueTypes.end())
     {
@@ -27474,6 +27488,25 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                     contextual.fields = nestedLit->fields;
                     contextual.typeArgs = nestedLit->typeArgs;
                     fieldValue = generateStructLiteral(&contextual);
+                }
+            }
+
+            if(!fieldValue)
+            {
+                if(auto* expectedList =
+                       dynamic_cast<GenericListTypeNode*>(
+                           currentMembers[memberIndex].second))
+                {
+                    llvm::Type* expectedElemType =
+                        getLLVMTypeFromNode(expectedList->elementType);
+                    if(auto* listLit =
+                           dynamic_cast<ListLiteralNode*>(valueExpr))
+                        fieldValue =
+                            generateListLiteral(listLit, expectedElemType);
+                    else if(auto* arrFill =
+                                dynamic_cast<ArrayFillNode*>(valueExpr))
+                        fieldValue =
+                            generateArrayFill(arrFill, expectedElemType);
                 }
             }
 

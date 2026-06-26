@@ -839,6 +839,40 @@ TEST_F(MLATest, FixedArrayKeepsRuntimeGuardForDynamicOutOfBoundsIndex)
     EXPECT_NE(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, StructListFieldIndexingReadsInBounds)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: vec![10, 20, 30] };
+            return bag.items[1] == 20 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructListFieldIndexingKeepsRuntimeBoundsGuard)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn get_index() -> i32 {
+            return 3;
+        }
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: vec![10, 20, 30] };
+            return bag.items[get_index()];
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, FixedArrayRejectsKnownEmptyFirstAtCompileTime)
 {
     std::string code = R"(
