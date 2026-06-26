@@ -857,6 +857,41 @@ TEST_F(MLATest, ListLiteralBackedStorageCanGrow)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, ReturnedListLiteralUsesDeclaredElementWidthAndCanGrow)
+{
+    std::string code = R"(
+        fn values() -> list<int> {
+            return [1, 2, 3];
+        }
+
+        fn main() -> i32 {
+            var xs: list<int> = values();
+            xs.push(4);
+            return xs[3] == 4 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ReturnedArrayLiteralRejectsTooManyElements)
+{
+    std::string code = R"(
+        fn values() -> array<int, 3> {
+            return [1, 2, 3, 4];
+        }
+
+        fn main() -> i32 {
+            let xs: array<int, 3> = values();
+            return xs.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer has 4 elements"), std::string::npos);
+}
+
 TEST_F(MLATest, StructArrayFieldRejectsTooLargeFillCount)
 {
     std::string code = R"(
@@ -1132,6 +1167,21 @@ TEST_F(MLATest, StructMapFieldIndexMissingKeyAborts)
         }
     )";
     EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ReturnedMapLiteralBackedStorageSurvivesCallerLookup)
+{
+    std::string code = R"(
+        fn scores() -> map<int, int> {
+            return {1: 95, 2: 87};
+        }
+
+        fn main() -> i32 {
+            let m: map<int, int> = scores();
+            return m[2] == 87 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 TEST_F(MLATest, VarReassignment)

@@ -13840,7 +13840,45 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
         }
         else
         {
-            returnValue = generateExpression(node->expression);
+            if(auto* returnList =
+                   dynamic_cast<GenericListTypeNode*>(
+                       currentSemanticReturnType))
+            {
+                if(auto* returnArray =
+                       dynamic_cast<ArrayTypeNode*>(
+                           currentSemanticReturnType))
+                {
+                    if(!validateFixedArrayInitializer(
+                           returnArray, node->expression, node->line))
+                        return;
+                }
+
+                llvm::Type* elemType =
+                    getLLVMTypeFromNode(returnList->elementType);
+                if(auto* listLit =
+                       dynamic_cast<ListLiteralNode*>(node->expression))
+                    returnValue = generateListLiteral(listLit, elemType);
+                else if(auto* arrFill =
+                            dynamic_cast<ArrayFillNode*>(node->expression))
+                    returnValue = generateArrayFill(arrFill, elemType);
+            }
+            else if(auto* returnMap =
+                        dynamic_cast<MapTypeNode*>(currentSemanticReturnType))
+            {
+                if(auto* mapLit =
+                       dynamic_cast<MapLiteralNode*>(node->expression))
+                {
+                    llvm::Type* keyType =
+                        getLLVMTypeFromNode(returnMap->keyType);
+                    llvm::Type* valueType =
+                        getLLVMTypeFromNode(returnMap->valueType);
+                    returnValue =
+                        generateMapLiteral(mapLit, keyType, valueType);
+                }
+            }
+
+            if(!returnValue)
+                returnValue = generateExpression(node->expression);
         }
         if(!returnValue)
             return;
@@ -26972,6 +27010,8 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
                                                llvm::Type* declaredKeyType,
                                                llvm::Type* declaredValueType)
 {
+    initializeStdlibFunctions();
+
     // Map structure: { i64 size, ptr keys, ptr values }
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
@@ -27068,11 +27108,22 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
 
     int64_t mapSize = static_cast<int64_t>(keyValues.size());
 
-    // Allocate arrays for keys and values
+    // Allocate heap storage for keys and values. Map values can escape the
+    // current stack frame, so stack-backed alloca arrays would dangle.
     llvm::Value* sizeVal = llvm::ConstantInt::get(i64Type, mapSize);
-    llvm::Value* keysAlloc = builder.CreateAlloca(keyType, sizeVal, "mapkeys");
+    uint64_t keySizeU = module->getDataLayout().getTypeAllocSize(keyType);
+    uint64_t valueSizeU =
+        module->getDataLayout().getTypeAllocSize(valueType);
+    llvm::Value* keyBytes = builder.CreateMul(
+        sizeVal, llvm::ConstantInt::get(i64Type, keySizeU), "map.key.bytes");
+    llvm::Value* valueBytes =
+        builder.CreateMul(sizeVal,
+                          llvm::ConstantInt::get(i64Type, valueSizeU),
+                          "map.value.bytes");
+    llvm::Value* keysAlloc =
+        builder.CreateCall(mallocFunc, {keyBytes}, "mapkeys");
     llvm::Value* valsAlloc =
-        builder.CreateAlloca(valueType, sizeVal, "mapvals");
+        builder.CreateCall(mallocFunc, {valueBytes}, "mapvals");
 
     // Store each key-value pair
     for(size_t i = 0; i < keyValues.size(); ++i)
