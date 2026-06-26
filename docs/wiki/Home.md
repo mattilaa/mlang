@@ -52,7 +52,7 @@ If you are new to MLang, read these pages in this order:
   language?” answers.
 - [Language Syntax](Language-Syntax)
   Language features such as [`switch`](Language-Syntax), exceptions, pipe syntax, inline asm,
-  conditional regions, lambdas/folds, and [`bit`](Quick-Guide#types)/[`size_of`](Language-Syntax).
+  conditional regions, lambdas/folds, and [`bit`](Quick-Guide#types)/`size_of`.
 - [Language Attributes](Language-Attributes)
   Attribute syntax such as `#[test]`, `#[derive(Debug)]`,
   `#[derive(Json)]`, and `#[inline]`.
@@ -136,7 +136,7 @@ Use this section as a map into the existing documentation.
   - inline assembly
   - conditional source regions
   - lambdas and folds
-  - [`bit`](Quick-Guide#types) and [`size_of`](Language-Syntax)
+  - [`bit`](Quick-Guide#types) and `size_of`
 
 ### Testing and Benchmarking
 

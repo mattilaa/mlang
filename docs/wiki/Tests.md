@@ -194,8 +194,8 @@ The test suite covers the following language features:
 - Min/max value tests for each type
 
 ### Floating Point
-- `f32` literals (e.g., `3.14f`)
-- `f64` literals (e.g., `3.14159`)
+- [`f32`](Quick-Guide#types) literals (e.g., `3.14f`)
+- [`f64`](Quick-Guide#types) literals (e.g., `3.14159`)
 
 ### Strings
 - String literals

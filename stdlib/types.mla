@@ -11,8 +11,10 @@
 /// - `void`: no value; primarily used as a function return type.
 /// - `bool`: boolean truth value (`true` or `false`).
 /// - `bit`: one-bit logical domain (`0` or `1`), with normal ABI byte sizing.
-/// - `i8`, `i16`, `i32`, `i64`: signed integer types.
-/// - `u8`, `u16`, `u32`, `u64`: unsigned integer types.
+/// - `i8`, `i16`, `i32`, `i64`: signed integer types. The suffix is the bit
+///   width, so `i8` is 8 bits (1 byte) and `i64` is 64 bits (8 bytes).
+/// - `u8`, `u16`, `u32`, `u64`: unsigned integer types. The suffix is the bit
+///   width, so `u8` is 8 bits (1 byte) and `u64` is 64 bits (8 bytes).
 /// - `f32`, `f64`: floating-point types.
 ///
 /// \section builtin_types_string String Types

@@ -48,7 +48,7 @@ let values: list<i32> = [1, 2, 3];
 ```
 
 Common builtin/container types:
-- `i32`, `i64`, `u8`, `u32`, `u64`, `f32`, `f64`
+- `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`
 - `bool`
 - `bit`
 - `str8`, `str16`
@@ -57,6 +57,20 @@ Common builtin/container types:
 - `span<T>` / `Span<T>`
 - `Option<T>`
 - `Result<T, E>`
+
+Integer type names use bit width, not byte width. For example, `i8` is an
+8-bit signed integer (1 byte), while `i64` is a 64-bit signed integer (8 bytes).
+
+| Type | Meaning | Range |
+|---|---|---|
+| `i8` | signed 8-bit integer | -128 to 127 |
+| `i16` | signed 16-bit integer | -32768 to 32767 |
+| `i32` | signed 32-bit integer | -2147483648 to 2147483647 |
+| `i64` | signed 64-bit integer | -9223372036854775808 to 9223372036854775807 |
+| `u8` | unsigned 8-bit integer | 0 to 255 |
+| `u16` | unsigned 16-bit integer | 0 to 65535 |
+| `u32` | unsigned 32-bit integer | 0 to 4294967295 |
+| `u64` | unsigned 64-bit integer | 0 to 18446744073709551615 |
 
 ## Control Flow
 

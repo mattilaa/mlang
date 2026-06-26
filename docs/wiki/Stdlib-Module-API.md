@@ -709,7 +709,7 @@ Module file: `stdlib/std/fs.mla`
 - `File::write(self: File, s: str8) -> Result<i64, str8>`
 - `File::write_line(self: File, s: str8) -> Result<i64, str8>`
 
-## Builtin [`bit`](Quick-Guide#types) and [`size_of`](Language-Syntax)
+## Builtin [`bit`](Quick-Guide#types) and `size_of`
 
 Builtin reference source: `stdlib/types.mla`
 
@@ -718,11 +718,11 @@ Builtin reference source: `stdlib/types.mla`
 - Use `bit(expr)` to convert an integer or bool expression
 - `size_of(bit)` reports the ABI byte size
 
-### [`size_of`](Language-Syntax)
+### `size_of`
 - `size_of(Type) -> i64`
 - `size_of(expr) -> i64`
-- Returns the ABI byte size in bytes; for [`array<T, N>`](Quick-Guide#types),
-  returns `N * size_of(T)`
+- Returns the ABI byte size in bytes; for `array<T, N>`, returns
+  `N * size_of(T)`
 - Can be used in [`static_assert!`](Language-Syntax) when the target size is known at compile time
 
 Examples:
@@ -739,9 +739,9 @@ static_assert!(size_of(array<i32, 6>) == 24);
 
 Module file: `stdlib/std/array.mla`
 
-Documentation/navigation module for the compiler-provided [`array<T, N>`](Quick-Guide#types) type.
+Documentation/navigation module for the compiler-provided `array<T, N>` type.
 
-- [`array<T, N>`](Quick-Guide#types) is a fixed-capacity, list-compatible sequence.
+- `array<T, N>` is a fixed-capacity, list-compatible sequence.
 - Literal and fill initializers are checked at compile time where known.
 - `push(value)` and `extend(values)` are rejected at compile time when the
   compiler can prove the resulting length would exceed `N`; unknown-sized

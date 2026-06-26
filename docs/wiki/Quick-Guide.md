@@ -47,20 +47,32 @@ let text: str8 = "hello";
 let colored: str8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
 let utf16_text: str16 = String16::from(text);
 let values: list<i32> = [1, 2, 3];
-let fixed: array<i32, 6> = {1, 3, 4, 5, 6, 7};
 ```
 
 Common builtin/container types:
-- [`i32`](Quick-Guide#types), [`i64`](Quick-Guide#types), [`u8`](Quick-Guide#types), [`u32`](Quick-Guide#types), [`u64`](Quick-Guide#types), [`f32`](Quick-Guide#types), [`f64`](Quick-Guide#types)
+- [`i8`](Quick-Guide#types), [`i16`](Quick-Guide#types), [`i32`](Quick-Guide#types), [`i64`](Quick-Guide#types), [`u8`](Quick-Guide#types), [`u16`](Quick-Guide#types), [`u32`](Quick-Guide#types), [`u64`](Quick-Guide#types), [`f32`](Quick-Guide#types), [`f64`](Quick-Guide#types)
 - [`bool`](Quick-Guide#types)
 - [`bit`](Quick-Guide#types)
 - [`str8`](Quick-Guide#types), [`str16`](Quick-Guide#types)
 - [`list<T>`](Quick-Guide#types)
-- [`array<T, N>`](Quick-Guide#types)
 - [`Vec<T>`](Stdlib-Module-API#stdvec)
 - [`span<T>`](Stdlib-Module-API#stdspan) / [`Span<T>`](Stdlib-Module-API#stdspan)
 - [`Option<T>`](Quick-Guide#types)
 - [`Result<T, E>`](Quick-Guide#types)
+
+Integer type names use bit width, not byte width. For example, [`i8`](Quick-Guide#types) is an
+8-bit signed integer (1 byte), while [`i64`](Quick-Guide#types) is a 64-bit signed integer (8 bytes).
+
+| Type | Meaning | Range |
+|---|---|---|
+| [`i8`](Quick-Guide#types) | signed 8-bit integer | -128 to 127 |
+| [`i16`](Quick-Guide#types) | signed 16-bit integer | -32768 to 32767 |
+| [`i32`](Quick-Guide#types) | signed 32-bit integer | -2147483648 to 2147483647 |
+| [`i64`](Quick-Guide#types) | signed 64-bit integer | -9223372036854775808 to 9223372036854775807 |
+| [`u8`](Quick-Guide#types) | unsigned 8-bit integer | 0 to 255 |
+| [`u16`](Quick-Guide#types) | unsigned 16-bit integer | 0 to 65535 |
+| [`u32`](Quick-Guide#types) | unsigned 32-bit integer | 0 to 4294967295 |
+| [`u64`](Quick-Guide#types) | unsigned 64-bit integer | 0 to 18446744073709551615 |
 
 ## Control Flow
 
