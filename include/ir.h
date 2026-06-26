@@ -678,7 +678,9 @@ private:
                                     llvm::Type* declaredElemType = nullptr);
     llvm::Value* generateArrayFill(ArrayFillNode* node,
                                    llvm::Type* declaredElemType = nullptr);
-    llvm::Value* generateMapLiteral(MapLiteralNode* node);
+    llvm::Value* generateMapLiteral(MapLiteralNode* node,
+                                    llvm::Type* declaredKeyType = nullptr,
+                                    llvm::Type* declaredValueType = nullptr);
     llvm::Value* generateIndexExpression(IndexExpressionNode* node);
     llvm::Value* generateTupleLiteral(TupleLiteralNode* node);
     llvm::Value* generateTupleAccess(TupleAccessNode* node);

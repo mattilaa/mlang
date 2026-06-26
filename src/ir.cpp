@@ -26960,7 +26960,9 @@ llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
     return listStruct;
 }
 
-llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node)
+llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
+                                               llvm::Type* declaredKeyType,
+                                               llvm::Type* declaredValueType)
 {
     // Map structure: { i64 size, ptr keys, ptr values }
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -26997,8 +26999,43 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node)
     // Generate all key-value pairs
     std::vector<llvm::Value*> keyValues;
     std::vector<llvm::Value*> valueValues;
-    llvm::Type* keyType = nullptr;
-    llvm::Type* valueType = nullptr;
+    llvm::Type* keyType = declaredKeyType;
+    llvm::Type* valueType = declaredValueType;
+
+    auto coerceMapLiteralValue =
+        [&](llvm::Value* value, llvm::Type* targetType,
+            const char* label) -> llvm::Value*
+    {
+        if(!value || !targetType || value->getType() == targetType)
+            return value;
+        llvm::Type* actualType = value->getType();
+        if(actualType->isIntegerTy() && targetType->isIntegerTy())
+        {
+            unsigned actualBits = actualType->getIntegerBitWidth();
+            unsigned targetBits = targetType->getIntegerBitWidth();
+            if(actualBits > targetBits)
+                return builder.CreateTrunc(value, targetType,
+                                           std::string(label) + ".trunc");
+            if(actualBits < targetBits)
+                return builder.CreateSExt(value, targetType,
+                                          std::string(label) + ".ext");
+            return value;
+        }
+        if(actualType->isFloatingPointTy() && targetType->isFloatingPointTy())
+            return builder.CreateFPCast(value, targetType,
+                                        std::string(label) + ".fpcast");
+        if(actualType->isIntegerTy() && targetType->isFloatingPointTy())
+            return builder.CreateSIToFP(value, targetType,
+                                        std::string(label) + ".sitofp");
+        if(actualType->isFloatingPointTy() && targetType->isIntegerTy())
+            return builder.CreateFPToSI(value, targetType,
+                                        std::string(label) + ".fptosi");
+
+        reportError(node->line,
+                    std::string("map literal ") + label +
+                        " type does not match declared map type");
+        return nullptr;
+    };
 
     for(auto* entry : node->entries->entries)
     {
@@ -27012,6 +27049,10 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node)
             keyType = keyVal->getType();
             valueType = valVal->getType();
         }
+        keyVal = coerceMapLiteralValue(keyVal, keyType, "key");
+        valVal = coerceMapLiteralValue(valVal, valueType, "value");
+        if(!keyVal || !valVal)
+            return nullptr;
 
         keyValues.push_back(keyVal);
         valueValues.push_back(valVal);
@@ -27204,18 +27245,27 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
     }
 
     // Check if it's a map
-    if(!baseId)
+    TypeNode* mapKeyTypeNode = nullptr;
+    TypeNode* mapValueTypeNode = nullptr;
+    if(auto* mapType = dynamic_cast<MapTypeNode*>(baseType))
     {
-        reportError(node->line,
-                    "map index expression requires an identifier");
-        return nullptr;
+        mapKeyTypeNode = mapType->keyType;
+        mapValueTypeNode = mapType->valueType;
     }
-    auto mapIt = mapKeyValueTypes.find(baseId->name);
-    if(mapIt != mapKeyValueTypes.end())
+    else if(baseId)
+    {
+        auto mapIt = mapKeyValueTypes.find(baseId->name);
+        if(mapIt != mapKeyValueTypes.end())
+        {
+            mapKeyTypeNode = mapIt->second.first;
+            mapValueTypeNode = mapIt->second.second;
+        }
+    }
+    if(mapKeyTypeNode && mapValueTypeNode)
     {
         // Map lookup - linear search for key
-        TypeNode* keyTypeNode = mapIt->second.first;
-        TypeNode* valTypeNode = mapIt->second.second;
+        TypeNode* keyTypeNode = mapKeyTypeNode;
+        TypeNode* valTypeNode = mapValueTypeNode;
         llvm::Type* keyType = getLLVMTypeFromNode(keyTypeNode);
         llvm::Type* valueType = getLLVMTypeFromNode(valTypeNode);
         if(!keyType || !valueType)
@@ -27225,6 +27275,23 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
                             type_name_for_error(keyTypeNode) + "'/'" +
                             type_name_for_error(valTypeNode) + "'");
             return nullptr;
+        }
+        if(indexVal->getType() != keyType)
+        {
+            llvm::Type* indexType = indexVal->getType();
+            if(indexType->isIntegerTy() && keyType->isIntegerTy())
+                indexVal = builder.CreateSExtOrTrunc(indexVal, keyType,
+                                                     "map.key.cast");
+            else if(indexType->isFloatingPointTy() &&
+                    keyType->isFloatingPointTy())
+                indexVal =
+                    builder.CreateFPCast(indexVal, keyType, "map.key.cast");
+            else if(indexType->isIntegerTy() && keyType->isFloatingPointTy())
+                indexVal =
+                    builder.CreateSIToFP(indexVal, keyType, "map.key.cast");
+            else if(indexType->isFloatingPointTy() && keyType->isIntegerTy())
+                indexVal =
+                    builder.CreateFPToSI(indexVal, keyType, "map.key.cast");
         }
 
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -27356,8 +27423,9 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         return builder.CreateLoad(valueType, resultVar, "mapval");
     }
 
+    std::string baseName = baseId ? baseId->name : "expression";
     reportError(node->line,
-                "cannot index non-list/non-map variable: " + baseId->name);
+                "cannot index non-list/non-map variable: " + baseName);
     return nullptr;
 }
 
@@ -27762,6 +27830,21 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                                 dynamic_cast<ArrayFillNode*>(valueExpr))
                         fieldValue =
                             generateArrayFill(arrFill, expectedElemType);
+                }
+                else if(auto* expectedMap =
+                            dynamic_cast<MapTypeNode*>(
+                                currentMembers[memberIndex].second))
+                {
+                    llvm::Type* expectedKeyType =
+                        getLLVMTypeFromNode(expectedMap->keyType);
+                    llvm::Type* expectedValueType =
+                        getLLVMTypeFromNode(expectedMap->valueType);
+                    if(auto* mapLit =
+                           dynamic_cast<MapLiteralNode*>(valueExpr))
+                    {
+                        fieldValue = generateMapLiteral(
+                            mapLit, expectedKeyType, expectedValueType);
+                    }
                 }
             }
 

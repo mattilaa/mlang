@@ -1035,6 +1035,36 @@ TEST_F(MLATest, MapIndexMissingKeyAbortsInsteadOfDefaultValue)
     EXPECT_NE(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, StructMapFieldIndexReturnsValueForExistingKey)
+{
+    std::string code = R"(
+        struct Bag {
+            var scores: map<int, int>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { scores: {1: 95, 2: 87} };
+            return bag.scores[2] == 87 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructMapFieldIndexMissingKeyAborts)
+{
+    std::string code = R"(
+        struct Bag {
+            var scores: map<int, int>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { scores: {1: 95, 2: 87} };
+            return bag.scores[3];
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, VarReassignment)
 {
     std::string code = R"(
