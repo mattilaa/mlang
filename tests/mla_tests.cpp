@@ -196,7 +196,13 @@ protected:
     {
         std::string cmd = outputExe;
         int status = system(cmd.c_str());
-        return WEXITSTATUS(status);
+        if(status == -1)
+            return -1;
+        if(WIFEXITED(status))
+            return WEXITSTATUS(status);
+        if(WIFSIGNALED(status))
+            return 128 + WTERMSIG(status);
+        return -1;
     }
 
     // Compile and run, returning stdout
@@ -2398,7 +2404,7 @@ TEST_F(MLATest, OwnershipUseAfterMoveReportsError)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn take_post(p: Post) -> i32 {
@@ -2406,7 +2412,7 @@ TEST_F(MLATest, OwnershipUseAfterMoveReportsError)
         }
 
         fn main() -> i32 {
-            let a: Post = Post { content: "hello" };
+            let a: Post = Post { content: [1] };
             let b: Post = a;
             return take_post(a);
         }
@@ -2438,7 +2444,7 @@ TEST_F(MLATest, OwnershipAddressOfIsNonConsumingRead)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn borrow_ptr(p: ptr<Post>) -> i32 {
@@ -2446,7 +2452,7 @@ TEST_F(MLATest, OwnershipAddressOfIsNonConsumingRead)
         }
 
         fn main() -> i32 {
-            let a: Post = Post { content: "hello" };
+            let a: Post = Post { content: [1] };
             let p: ptr<Post> = &a;
             let _ok: i32 = borrow_ptr(p);
             return 0;
@@ -2459,7 +2465,7 @@ TEST_F(MLATest, OwnershipIfBranchMoveMakesValueUnavailableAfterIf)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn take_post(p: Post) -> i32 {
@@ -2467,7 +2473,7 @@ TEST_F(MLATest, OwnershipIfBranchMoveMakesValueUnavailableAfterIf)
         }
 
         fn main() -> i32 {
-            let a: Post = Post { content: "hello" };
+            let a: Post = Post { content: [1] };
             if 1: {
                 let b: Post = a;
             }
@@ -2485,7 +2491,7 @@ TEST_F(MLATest, OwnershipMatchArmMoveMakesValueUnavailableAfterMatch)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn take_post(p: Post) -> i32 {
@@ -2493,7 +2499,7 @@ TEST_F(MLATest, OwnershipMatchArmMoveMakesValueUnavailableAfterMatch)
         }
 
         fn main() -> i32 {
-            let a: Post = Post { content: "hello" };
+            let a: Post = Post { content: [1] };
             let flag: i32 = 1;
             let x: i32 = match flag {
                 1 => take_post(a),
@@ -2534,7 +2540,7 @@ TEST_F(MLATest, OwnershipTernaryMoveStillConsumesAfterMerge)
     // would not trigger move semantics.
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn take_post(p: Post) -> i32 {
@@ -2543,7 +2549,7 @@ TEST_F(MLATest, OwnershipTernaryMoveStillConsumesAfterMerge)
 
         fn main() -> i32 {
             let flag: i32 = 1;
-            let msg: Post = Post { content: "hello" };
+            let msg: Post = Post { content: [1] };
             let x: i32 = flag > 0 ? take_post(msg) : 0;
             return take_post(msg) + x;
         }
@@ -2559,11 +2565,11 @@ TEST_F(MLATest, OwnershipCannotMoveWhileBorrowedByPointer)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn main() -> i32 {
-            let a: Post = Post { content: "hello" };
+            let a: Post = Post { content: [1] };
             let p: ptr<Post> = &a;
             let moved: Post = a;
             return 0;
@@ -2715,7 +2721,7 @@ TEST_F(MLATest, OwnershipPointerReassignReleasesPreviousBorrow)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn take_post(p: Post) -> i32 {
@@ -2723,8 +2729,8 @@ TEST_F(MLATest, OwnershipPointerReassignReleasesPreviousBorrow)
         }
 
         fn main() -> i32 {
-            let a: Post = Post { content: "a" };
-            let b: Post = Post { content: "b" };
+            let a: Post = Post { content: [1] };
+            let b: Post = Post { content: [1] };
             var p: ptr<Post> = &a;
             p = &b;
             return take_post(a);
@@ -2737,7 +2743,7 @@ TEST_F(MLATest, OwnershipIfReturnBranchBorrowDoesNotLeak)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn take_post(p: Post) -> i32 {
@@ -2745,8 +2751,8 @@ TEST_F(MLATest, OwnershipIfReturnBranchBorrowDoesNotLeak)
         }
 
         fn main() -> i32 {
-            let a: Post = Post { content: "a" };
-            let b: Post = Post { content: "b" };
+            let a: Post = Post { content: [1] };
+            let b: Post = Post { content: [1] };
             var p: ptr<Post> = &b;
             let cond: i32 = 1;
             if cond: {
@@ -2764,11 +2770,11 @@ TEST_F(MLATest, OwnershipCannotCreateSecondActiveBorrow)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn main() -> i32 {
-            let a: Post = Post { content: "a" };
+            let a: Post = Post { content: [1] };
             var p: ptr<Post> = &a;
             var q: ptr<Post> = &a;
             return 0;
@@ -2785,11 +2791,11 @@ TEST_F(MLATest, OwnershipRebindingSamePointerBorrowAllowed)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn main() -> i32 {
-            let a: Post = Post { content: "a" };
+            let a: Post = Post { content: [1] };
             var p: ptr<Post> = &a;
             p = &a;
             return 0;
@@ -2802,12 +2808,12 @@ TEST_F(MLATest, OwnershipCannotAliasBorrowFromPointerVariable)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn main() -> i32 {
-            let a: Post = Post { content: "a" };
-            let b: Post = Post { content: "b" };
+            let a: Post = Post { content: [1] };
+            let b: Post = Post { content: [1] };
             var p: ptr<Post> = &a;
             var q: ptr<Post> = &b;
             q = p;
@@ -2825,11 +2831,11 @@ TEST_F(MLATest, OwnershipBorrowEndsWhenPointerGoesOutOfScope)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn main() -> i32 {
-            let a: Post = Post { content: "a" };
+            let a: Post = Post { content: [1] };
             if 1: {
                 let p: ptr<Post> = &a;
             }
@@ -2844,12 +2850,12 @@ TEST_F(MLATest, OwnershipOuterPointerBorrowRestoredAfterShadowedPointerScope)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn main() -> i32 {
-            let a: Post = Post { content: "a" };
-            let b: Post = Post { content: "b" };
+            let a: Post = Post { content: [1] };
+            let b: Post = Post { content: [1] };
             let p: ptr<Post> = &a;
             if 1: {
                 let p: ptr<Post> = &b;
@@ -2870,11 +2876,11 @@ TEST_F(MLATest, OwnershipLoopLocalPointerBorrowDoesNotLeakAfterLoop)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn main() -> i32 {
-            let a: Post = Post { content: "a" };
+            let a: Post = Post { content: [1] };
             for i in 0..1 {
                 let p: ptr<Post> = &a;
             }
@@ -2889,7 +2895,7 @@ TEST_F(MLATest, OwnershipEmptyRangeLoopDoesNotMoveOuterValue)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn take_post(p: Post) -> i32 {
@@ -2897,7 +2903,7 @@ TEST_F(MLATest, OwnershipEmptyRangeLoopDoesNotMoveOuterValue)
         }
 
         fn main() -> i32 {
-            let a: Post = Post { content: "x" };
+            let a: Post = Post { content: [1] };
             for i in 0..0 {
                 let b: Post = a;
             }
@@ -2911,7 +2917,7 @@ TEST_F(MLATest, OwnershipNonEmptyRangeLoopStillMovesOuterValue)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn take_post(p: Post) -> i32 {
@@ -2919,7 +2925,7 @@ TEST_F(MLATest, OwnershipNonEmptyRangeLoopStillMovesOuterValue)
         }
 
         fn main() -> i32 {
-            let a: Post = Post { content: "x" };
+            let a: Post = Post { content: [1] };
             for i in 0..1 {
                 let b: Post = a;
             }
@@ -2937,12 +2943,12 @@ TEST_F(MLATest, OwnershipOuterPointerBorrowSurvivesLoopLocalPointer)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn main() -> i32 {
-            let a: Post = Post { content: "a" };
-            let b: Post = Post { content: "b" };
+            let a: Post = Post { content: [1] };
+            let b: Post = Post { content: [1] };
             let p: ptr<Post> = &a;
             for i in 0..1 {
                 let q: ptr<Post> = &b;
@@ -3068,7 +3074,7 @@ TEST_F(MLATest, OwnershipCannotBorrowSameOwnerTwiceInSingleCall)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn inspect(a: ptr<Post>, b: ptr<Post>) -> i32 {
@@ -3076,7 +3082,7 @@ TEST_F(MLATest, OwnershipCannotBorrowSameOwnerTwiceInSingleCall)
         }
 
         fn main() -> i32 {
-            let p: Post = Post { content: "x" };
+            let p: Post = Post { content: [1] };
             return inspect(&p, &p);
         }
     )";
@@ -3091,7 +3097,7 @@ TEST_F(MLATest, OwnershipCannotBorrowCallArgWhenOwnerAlreadyBorrowed)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn inspect(a: ptr<Post>) -> i32 {
@@ -3099,7 +3105,7 @@ TEST_F(MLATest, OwnershipCannotBorrowCallArgWhenOwnerAlreadyBorrowed)
         }
 
         fn main() -> i32 {
-            let p: Post = Post { content: "x" };
+            let p: Post = Post { content: [1] };
             let q: ptr<Post> = &p;
             return inspect(&p);
         }
@@ -3305,7 +3311,7 @@ TEST_F(MLATest, OwnershipCannotMixBorrowAndMoveSameCall)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn consume_two(a: ptr<Post>, b: Post) -> i32 {
@@ -3313,7 +3319,7 @@ TEST_F(MLATest, OwnershipCannotMixBorrowAndMoveSameCall)
         }
 
         fn main() -> i32 {
-            let p: Post = Post { content: "x" };
+            let p: Post = Post { content: [1] };
             return consume_two(&p, p);
         }
     )";
@@ -3329,7 +3335,7 @@ TEST_F(MLATest, OwnershipCannotMixMoveAndBorrowSameCall)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         fn consume_two(a: Post, b: ptr<Post>) -> i32 {
@@ -3337,7 +3343,7 @@ TEST_F(MLATest, OwnershipCannotMixMoveAndBorrowSameCall)
         }
 
         fn main() -> i32 {
-            let p: Post = Post { content: "x" };
+            let p: Post = Post { content: [1] };
             return consume_two(p, &p);
         }
     )";
@@ -3353,7 +3359,7 @@ TEST_F(MLATest, OwnershipCannotMoveMethodReceiverAndPassAsArg)
 {
     std::string code = R"(
         struct Post {
-            var content: string;
+            var content: list<i32>;
         };
 
         impl Post {
@@ -3363,7 +3369,7 @@ TEST_F(MLATest, OwnershipCannotMoveMethodReceiverAndPassAsArg)
         }
 
         fn main() -> i32 {
-            let p: Post = Post { content: "x" };
+            let p: Post = Post { content: [1] };
             return p.consume_with(p);
         }
     )";
@@ -3379,7 +3385,7 @@ TEST_F(MLATest, OwnershipCannotMixBorrowPointerVarAndMoveSameCall)
 {
     std::string code = R"(
         struct Post {
-            var content: str8;
+            var content: list<i32>;
         };
 
         fn consume_two(a: ptr<Post>, b: Post) -> i32 {
@@ -3387,7 +3393,7 @@ TEST_F(MLATest, OwnershipCannotMixBorrowPointerVarAndMoveSameCall)
         }
 
         fn main() -> i32 {
-            let p: Post = Post { content: "x" };
+            let p: Post = Post { content: [1] };
             let q: ptr<Post> = &p;
             return consume_two(q, p);
         }
@@ -3404,7 +3410,7 @@ TEST_F(MLATest, OwnershipCannotBorrowPointerVarAndAddressSameOwnerInCall)
 {
     std::string code = R"(
         struct Post {
-            var content: str8;
+            var content: list<i32>;
         };
 
         fn inspect_two(a: ptr<Post>, b: ptr<Post>) -> i32 {
@@ -3412,7 +3418,7 @@ TEST_F(MLATest, OwnershipCannotBorrowPointerVarAndAddressSameOwnerInCall)
         }
 
         fn main() -> i32 {
-            let p: Post = Post { content: "x" };
+            let p: Post = Post { content: [1] };
             let q: ptr<Post> = &p;
             return inspect_two(q, &p);
         }
@@ -3429,7 +3435,7 @@ TEST_F(MLATest, OwnershipCannotBorrowMutInCallWhenSharedBorrowActive)
 {
     std::string code = R"(
         struct Post {
-            var content: str8;
+            var content: list<i32>;
         };
 
         fn inspect_one(a: ptr<Post>) -> i32 {
@@ -3437,7 +3443,7 @@ TEST_F(MLATest, OwnershipCannotBorrowMutInCallWhenSharedBorrowActive)
         }
 
         fn main() -> i32 {
-            var p: Post = Post { content: "x" };
+            var p: Post = Post { content: [1] };
             let q: ptr<Post> = &p;
             return inspect_one(&mut p);
         }
