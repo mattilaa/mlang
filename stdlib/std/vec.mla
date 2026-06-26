@@ -32,8 +32,8 @@
 ///   - `v.sort_desc()`      — descending in-place sort
 ///   - `v.reverse()`        — in-place reversal
 ///   - `v.dedup()`          — remove consecutive duplicates
-///   - `v.first()`          — first element (panics if empty)
-///   - `v.last()`           — last element  (panics if empty)
+///   - `v.first()`          — first element (checked non-empty)
+///   - `v.last()`           — last element  (checked non-empty)
 ///
 /// All methods above are compiler intrinsics backed by libmlang_std.
 /// The `extern fn` declarations below are for documentation only —

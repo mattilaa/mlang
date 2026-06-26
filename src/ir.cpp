@@ -24517,6 +24517,56 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     builder.CreateCall(fn, {allocaPtr2});
                     return llvm::Constant::getNullValue(voidType2);
                 };
+                auto emitNonEmptyCheck2 =
+                    [&](llvm::Value* count,
+                        const std::string& methodName) -> bool
+                {
+                    if(receiverIsArray2)
+                    {
+                        auto lenIt = arrayKnownLengths.find(objId->name);
+                        if(lenIt != arrayKnownLengths.end() &&
+                           lenIt->second <= 0)
+                        {
+                            reportError(node->line,
+                                        methodName +
+                                            "() requires a non-empty array");
+                            return false;
+                        }
+                    }
+
+                    initializeFormatFunctions();
+                    llvm::Function* function =
+                        builder.GetInsertBlock()->getParent();
+                    llvm::BasicBlock* okBB = llvm::BasicBlock::Create(
+                        context, methodName + ".non_empty", function);
+                    llvm::BasicBlock* failBB = llvm::BasicBlock::Create(
+                        context, methodName + ".empty", function);
+                    llvm::Value* nonEmpty = builder.CreateICmpSGT(
+                        count, llvm::ConstantInt::get(i64Type2, 0),
+                        methodName + ".has_items");
+                    builder.CreateCondBr(nonEmpty, okBB, failBB);
+
+                    builder.SetInsertPoint(failBB);
+#if LLVM_VERSION_MAJOR >= 21
+                    llvm::Value* formatStr = builder.CreateGlobalString(
+                        (methodName + "() requires a non-empty list/array\n")
+                            .c_str(),
+                        methodName + ".empty.msg");
+#else
+                    llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+                        (methodName + "() requires a non-empty list/array\n")
+                            .c_str(),
+                        methodName + ".empty.msg");
+#endif
+                    llvm::Value* stderrVal =
+                        builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+                    builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+                    builder.CreateCall(abortFunc, {});
+                    builder.CreateUnreachable();
+
+                    builder.SetInsertPoint(okBB);
+                    return true;
+                };
 
                 // --- is_empty() ---
                 if(node->methodName == "is_empty")
@@ -25162,6 +25212,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         llvm::StructType::get(context, lsTypes5);
                     llvm::Value* ls5 = builder.CreateLoad(
                         lsType5, allocaPtr2, objId->name + ".load");
+                    llvm::Value* cnt5 =
+                        builder.CreateExtractValue(ls5, 0, "count");
+                    if(!emitNonEmptyCheck2(cnt5, "first"))
+                        return nullptr;
                     llvm::Value* dataPtr5 =
                         builder.CreateExtractValue(ls5, 1, "dataptr");
                     llvm::Type* elemType5 = getLLVMType(elemKind2);
@@ -25188,6 +25242,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         lsType6, allocaPtr2, objId->name + ".load");
                     llvm::Value* cnt6 =
                         builder.CreateExtractValue(ls6, 0, "count");
+                    if(!emitNonEmptyCheck2(cnt6, "last"))
+                        return nullptr;
                     llvm::Value* lastIdx = builder.CreateSub(
                         cnt6, llvm::ConstantInt::get(i64Type2, 1), "lastIdx");
                     // Generate via list indexing using lastIdx directly

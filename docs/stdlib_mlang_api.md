@@ -1562,8 +1562,10 @@ above.
 
 ### Access
 
-- `v.first() -> T` — return the first element; panics if empty
-- `v.last() -> T` — return the last element; panics if empty
+- `v.first() -> T` — return the first element; known-empty arrays are rejected
+  at compile time, otherwise emptiness is checked before loading
+- `v.last() -> T` — return the last element; known-empty arrays are rejected at
+  compile time, otherwise emptiness is checked before loading
 
 ### Iteration
 
