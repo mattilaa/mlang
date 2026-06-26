@@ -925,6 +925,28 @@ TEST_F(MLATest, ArrayFillForLoopEvaluatesFillExpressionOnce)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, ListLiteralForLoopKeepsStructElementType)
+{
+    std::string code = R"(
+        struct Item {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            var sum: i32 = 0;
+            let item: Item = Item { value: 10 };
+            for item in [Item { value: 2 }, Item { value: 3 }] {
+                sum += item.value;
+            }
+            if item.value != 10 {
+                return 1;
+            }
+            return sum == 5 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, ReturnedArrayLiteralRejectsTooManyElements)
 {
     std::string code = R"(

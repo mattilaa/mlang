@@ -12914,9 +12914,26 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         return;
     }
 
+    TypeNode* elemTypeNode =
+        inferExpressionTypeNode(listLit->elements->elements.front(),
+                                node->line);
+    if(!elemTypeNode)
+    {
+        reportError(node->line, "cannot infer list literal element type");
+        return;
+    }
+
+    llvm::Type* elementType = getLLVMTypeFromNode(elemTypeNode);
+    if(!elementType)
+    {
+        reportError(node->line,
+                    "list literal iteration has unsupported element type");
+        delete elemTypeNode;
+        return;
+    }
+
     // Generate all list elements first
     std::vector<llvm::Value*> elementValues;
-    llvm::Type* elementType = nullptr;
 
     for(auto* elem : listLit->elements->elements)
     {
@@ -12924,11 +12941,8 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         if(!val)
         {
             reportError(node->line, "failed to generate list element");
+            delete elemTypeNode;
             return;
-        }
-        if(!elementType)
-        {
-            elementType = val->getType();
         }
         elementValues.push_back(val);
     }
@@ -12960,13 +12974,89 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     bool hadOldEnumType = oldEnumIt != enumVariableTypes.end();
     std::string oldEnumType =
         hadOldEnumType ? oldEnumIt->second : std::string();
+    auto oldListIt = listElementTypes.find(node->varName);
+    bool hadOldListType = oldListIt != listElementTypes.end();
+    TypeNode* oldListType =
+        hadOldListType ? oldListIt->second : nullptr;
+    auto oldMapIt = mapKeyValueTypes.find(node->varName);
+    bool hadOldMapType = oldMapIt != mapKeyValueTypes.end();
+    std::pair<TypeNode*, TypeNode*> oldMapType =
+        hadOldMapType ? oldMapIt->second
+                      : std::make_pair(nullptr, nullptr);
+    auto oldPointerIt = pointerElementTypes.find(node->varName);
+    bool hadOldPointerType = oldPointerIt != pointerElementTypes.end();
+    TypeNode* oldPointerType =
+        hadOldPointerType ? oldPointerIt->second : nullptr;
+    auto oldTupleIt = tupleElementTypes.find(node->varName);
+    bool hadOldTupleType = oldTupleIt != tupleElementTypes.end();
+    std::vector<TypeNode*> oldTupleType =
+        hadOldTupleType ? oldTupleIt->second : std::vector<TypeNode*>();
     bool hadOldMoved = isVariableMoved(node->varName);
     auto oldDepthIt = variableScopeDepth.find(node->varName);
     bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
     int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
 
     namedValues[node->varName] = loopVar;
-    variableTypes[node->varName] = TypeNode::TYPE_I64; // Placeholder
+    variableTypes[node->varName] = elemTypeNode->kind;
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(elemTypeNode))
+    {
+        std::string resolvedEnumName =
+            resolveVisibleEnumName(structRef->structName);
+        if(!resolvedEnumName.empty())
+        {
+            variableTypes[node->varName] = TypeNode::TYPE_INT;
+            enumVariableTypes[node->varName] = resolvedEnumName;
+            structVariableTypes.erase(node->varName);
+        }
+        else
+        {
+            variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
+            structVariableTypes[node->varName] = structRef->structName;
+            enumVariableTypes.erase(node->varName);
+        }
+    }
+    else if(auto* genRef =
+                dynamic_cast<GenericStructTypeRefNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
+        structVariableTypes[node->varName] = getOrCreateMonomorphizedStruct(
+            genRef->structName, genRef->typeArgs);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* listType = dynamic_cast<GenericListTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_LIST;
+        listElementTypes[node->varName] = listType->elementType;
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* mapType = dynamic_cast<MapTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_MAP;
+        mapKeyValueTypes[node->varName] =
+            std::make_pair(mapType->keyType, mapType->valueType);
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* tupleType = dynamic_cast<TupleTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_TUPLE;
+        tupleElementTypes[node->varName] = tupleType->elementTypes->types;
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* ptrType = dynamic_cast<PointerTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_PTR;
+        pointerElementTypes[node->varName] = ptrType->elementType;
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else
+    {
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
     clearMovedVariable(node->varName);
     recordVariableScopeDepth(node->varName);
 
@@ -13091,6 +13181,36 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     else
         variableTypes.erase(node->varName);
 
+    if(hadOldStructType)
+        structVariableTypes[node->varName] = oldStructType;
+    else
+        structVariableTypes.erase(node->varName);
+
+    if(hadOldEnumType)
+        enumVariableTypes[node->varName] = oldEnumType;
+    else
+        enumVariableTypes.erase(node->varName);
+
+    if(hadOldListType)
+        listElementTypes[node->varName] = oldListType;
+    else
+        listElementTypes.erase(node->varName);
+
+    if(hadOldMapType)
+        mapKeyValueTypes[node->varName] = oldMapType;
+    else
+        mapKeyValueTypes.erase(node->varName);
+
+    if(hadOldPointerType)
+        pointerElementTypes[node->varName] = oldPointerType;
+    else
+        pointerElementTypes.erase(node->varName);
+
+    if(hadOldTupleType)
+        tupleElementTypes[node->varName] = oldTupleType;
+    else
+        tupleElementTypes.erase(node->varName);
+
     if(hadOldDepth)
         variableScopeDepth[node->varName] = oldDepth;
     else
@@ -13100,6 +13220,8 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         movedVariables.insert(node->varName);
     else
         clearMovedVariable(node->varName);
+
+    delete elemTypeNode;
 }
 
 void CodeGenerator::generateForListVariableIteration(ForNode* node,
@@ -13179,6 +13301,23 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     bool hadOldEnumType = oldEnumIt != enumVariableTypes.end();
     std::string oldEnumType =
         hadOldEnumType ? oldEnumIt->second : std::string();
+    auto oldListIt = listElementTypes.find(node->varName);
+    bool hadOldListType = oldListIt != listElementTypes.end();
+    TypeNode* oldListType =
+        hadOldListType ? oldListIt->second : nullptr;
+    auto oldMapIt = mapKeyValueTypes.find(node->varName);
+    bool hadOldMapType = oldMapIt != mapKeyValueTypes.end();
+    std::pair<TypeNode*, TypeNode*> oldMapType =
+        hadOldMapType ? oldMapIt->second
+                      : std::make_pair(nullptr, nullptr);
+    auto oldPointerIt = pointerElementTypes.find(node->varName);
+    bool hadOldPointerType = oldPointerIt != pointerElementTypes.end();
+    TypeNode* oldPointerType =
+        hadOldPointerType ? oldPointerIt->second : nullptr;
+    auto oldTupleIt = tupleElementTypes.find(node->varName);
+    bool hadOldTupleType = oldTupleIt != tupleElementTypes.end();
+    std::vector<TypeNode*> oldTupleType =
+        hadOldTupleType ? oldTupleIt->second : std::vector<TypeNode*>();
     bool hadOldMoved = isVariableMoved(node->varName);
     auto oldDepthIt = variableScopeDepth.find(node->varName);
     bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
@@ -13209,6 +13348,35 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
         structVariableTypes[node->varName] = getOrCreateMonomorphizedStruct(
             genRef->structName, genRef->typeArgs);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* listType = dynamic_cast<GenericListTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_LIST;
+        listElementTypes[node->varName] = listType->elementType;
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* mapType = dynamic_cast<MapTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_MAP;
+        mapKeyValueTypes[node->varName] =
+            std::make_pair(mapType->keyType, mapType->valueType);
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* tupleType = dynamic_cast<TupleTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_TUPLE;
+        tupleElementTypes[node->varName] = tupleType->elementTypes->types;
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
+    else if(auto* ptrType = dynamic_cast<PointerTypeNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_PTR;
+        pointerElementTypes[node->varName] = ptrType->elementType;
+        structVariableTypes.erase(node->varName);
         enumVariableTypes.erase(node->varName);
     }
     else
@@ -13342,6 +13510,26 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         enumVariableTypes[node->varName] = oldEnumType;
     else
         enumVariableTypes.erase(node->varName);
+
+    if(hadOldListType)
+        listElementTypes[node->varName] = oldListType;
+    else
+        listElementTypes.erase(node->varName);
+
+    if(hadOldMapType)
+        mapKeyValueTypes[node->varName] = oldMapType;
+    else
+        mapKeyValueTypes.erase(node->varName);
+
+    if(hadOldPointerType)
+        pointerElementTypes[node->varName] = oldPointerType;
+    else
+        pointerElementTypes.erase(node->varName);
+
+    if(hadOldTupleType)
+        tupleElementTypes[node->varName] = oldTupleType;
+    else
+        tupleElementTypes.erase(node->varName);
 
     if(hadOldDepth)
         variableScopeDepth[node->varName] = oldDepth;
