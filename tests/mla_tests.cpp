@@ -870,6 +870,28 @@ TEST_F(MLATest, ListFirstKeepsRuntimeGuardForEmptyList)
     EXPECT_NE(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, MapIndexReturnsValueForExistingKey)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let scores: map<i32, i32> = {1: 95, 2: 87};
+            return scores[1] == 95 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MapIndexMissingKeyAbortsInsteadOfDefaultValue)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let scores: map<i32, i32> = {1: 95, 2: 87};
+            return scores[3];
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, VarReassignment)
 {
     std::string code = R"(

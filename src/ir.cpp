@@ -26943,6 +26943,10 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
             builder.CreateAlloca(valueType, nullptr, "mapresult");
         // Initialize with default value
         builder.CreateStore(llvm::Constant::getNullValue(valueType), resultVar);
+        llvm::Type* i1Type = llvm::Type::getInt1Ty(context);
+        llvm::AllocaInst* foundVar =
+            builder.CreateAlloca(i1Type, nullptr, "mapfound");
+        builder.CreateStore(llvm::ConstantInt::getFalse(context), foundVar);
 
         llvm::BasicBlock* condBB =
             llvm::BasicBlock::Create(context, "map.cond", function);
@@ -26992,6 +26996,7 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         llvm::Value* foundVal =
             builder.CreateLoad(valueType, valPtr, "foundval");
         builder.CreateStore(foundVal, resultVar);
+        builder.CreateStore(llvm::ConstantInt::getTrue(context), foundVar);
         builder.CreateBr(endBB);
 
         incBB->insertInto(function);
@@ -27005,6 +27010,36 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         endBB->insertInto(function);
         builder.SetInsertPoint(endBB);
 
+        initializeFormatFunctions();
+        llvm::BasicBlock* okBB =
+            llvm::BasicBlock::Create(context, "map.lookup.ok", function);
+        llvm::BasicBlock* missingBB =
+            llvm::BasicBlock::Create(context, "map.lookup.missing", function);
+        llvm::Value* found =
+            builder.CreateLoad(i1Type, foundVar, "map.found");
+        builder.CreateCondBr(found, okBB, missingBB);
+
+        builder.SetInsertPoint(missingBB);
+#if LLVM_VERSION_MAJOR >= 21
+        llvm::Value* formatStr = builder.CreateGlobalString(
+            "map key not found\n", "map.lookup.missing.msg");
+#else
+        llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+            "map key not found\n", "map.lookup.missing.msg");
+#endif
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* opaquePtrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        llvm::Value* stderrVal =
+            builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+        builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+        builder.CreateCall(abortFunc, {});
+        builder.CreateUnreachable();
+
+        builder.SetInsertPoint(okBB);
         return builder.CreateLoad(valueType, resultVar, "mapval");
     }
 

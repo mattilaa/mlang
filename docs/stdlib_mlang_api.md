@@ -166,6 +166,7 @@ for this builtin type, not a distinct type declaration.
 
 ### `map<K, V>`
 - `m.len() -> i64`
+- `m[key] -> V`; aborts with `map key not found` if the key is absent
 - `m.keys()` iterator for `for key in m.keys() { ... }`
 - `m.values()` iterator for `for val in m.values() { ... }`
 - `m.entries()` iterator for `for entry in m.entries() { ... }`
