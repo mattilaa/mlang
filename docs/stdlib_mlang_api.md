@@ -730,7 +730,7 @@ var enabled: bit = 1;
 println!("bit={} bool={} list_header={}",
          size_of(bit), size_of(bool), size_of(list<bool>));
 static_assert!(size_of(enabled) == size_of(bit));
-static_assert!(size_of(array<int, 6>) == 24);
+static_assert!(size_of(array<i32, 6>) == 24);
 ```
 
 ## std::array

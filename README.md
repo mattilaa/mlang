@@ -142,8 +142,8 @@ fill initializers are checked at compile time, so the compiler rejects
 initializers with more than `N` elements.
 
 ```mla
-let fixed: array<int, 6> = {1, 3, 4, 5, 6, 7};
-var scratch: array<int, 6> = {};
+let fixed: array<i32, 6> = {1, 3, 4, 5, 6, 7};
+var scratch: array<i32, 6> = {};
 scratch.push(10);
 scratch.push(20);
 scratch.extend(vec![30, 40]);

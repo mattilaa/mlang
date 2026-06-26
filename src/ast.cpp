@@ -746,6 +746,30 @@ ASTNode* create_cast_expression_impl(int type, ASTNode* expr)
     case TypeNode::TYPE_INT:
         targetType = TypeNode::TYPE_INT;
         break;
+    case TypeNode::TYPE_I8:
+        targetType = TypeNode::TYPE_I8;
+        break;
+    case TypeNode::TYPE_I16:
+        targetType = TypeNode::TYPE_I16;
+        break;
+    case TypeNode::TYPE_I32:
+        targetType = TypeNode::TYPE_I32;
+        break;
+    case TypeNode::TYPE_I64:
+        targetType = TypeNode::TYPE_I64;
+        break;
+    case TypeNode::TYPE_U8:
+        targetType = TypeNode::TYPE_U8;
+        break;
+    case TypeNode::TYPE_U16:
+        targetType = TypeNode::TYPE_U16;
+        break;
+    case TypeNode::TYPE_U32:
+        targetType = TypeNode::TYPE_U32;
+        break;
+    case TypeNode::TYPE_U64:
+        targetType = TypeNode::TYPE_U64;
+        break;
     case TypeNode::TYPE_FLOAT:
         targetType = TypeNode::TYPE_FLOAT;
         break;

@@ -12635,9 +12635,9 @@ void CodeGenerator::generateForStatement(ForNode* node)
         {
             std::string typeStr;
             if(startVal->getType()->isFloatTy())
-                typeStr = "float";
+                typeStr = "f32";
             else if(startVal->getType()->isDoubleTy())
-                typeStr = "double";
+                typeStr = "f64";
             else if(startVal->getType()->isStructTy())
                 typeStr = startVal->getType()->getStructName().str().empty()
                               ? "struct"
@@ -12655,9 +12655,9 @@ void CodeGenerator::generateForStatement(ForNode* node)
         {
             std::string typeStr;
             if(endVal->getType()->isFloatTy())
-                typeStr = "float";
+                typeStr = "f32";
             else if(endVal->getType()->isDoubleTy())
-                typeStr = "double";
+                typeStr = "f64";
             else if(endVal->getType()->isStructTy())
                 typeStr = endVal->getType()->getStructName().str().empty()
                               ? "struct"
@@ -14123,9 +14123,9 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
                     actualStr =
                         "i" + std::to_string(actualType->getIntegerBitWidth());
                 else if(actualType->isFloatTy())
-                    actualStr = "float";
+                    actualStr = "f32";
                 else if(actualType->isDoubleTy())
-                    actualStr = "double";
+                    actualStr = "f64";
                 else if(actualType->isPointerTy())
                     actualStr = "pointer/string";
                 else
@@ -14140,9 +14140,9 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
                         "i" +
                         std::to_string(expectedRetType->getIntegerBitWidth());
                 else if(expectedRetType->isFloatTy())
-                    expectedStr = "float";
+                    expectedStr = "f32";
                 else if(expectedRetType->isDoubleTy())
-                    expectedStr = "double";
+                    expectedStr = "f64";
                 else if(expectedRetType->isPointerTy())
                     expectedStr = "pointer/string";
                 else
@@ -18919,9 +18919,9 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                 valueTypeStr =
                     "i" + std::to_string(valueType->getIntegerBitWidth());
             else if(valueType->isFloatTy())
-                valueTypeStr = "float";
+                valueTypeStr = "f32";
             else if(valueType->isDoubleTy())
-                valueTypeStr = "double";
+                valueTypeStr = "f64";
             else if(valueType->isPointerTy())
                 valueTypeStr = "pointer";
             else if(valueType->isStructTy())
@@ -18935,9 +18935,9 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                 targetTypeStr =
                     "i" + std::to_string(targetType->getIntegerBitWidth());
             else if(targetType->isFloatTy())
-                targetTypeStr = "float";
+                targetTypeStr = "f32";
             else if(targetType->isDoubleTy())
-                targetTypeStr = "double";
+                targetTypeStr = "f64";
             else if(targetType->isPointerTy())
                 targetTypeStr = "pointer";
             else if(targetType->isStructTy())
@@ -21025,9 +21025,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         actualStr = "i" + std::to_string(
                                               actualType->getIntegerBitWidth());
                     else if(actualType->isFloatTy())
-                        actualStr = "float";
+                        actualStr = "f32";
                     else if(actualType->isDoubleTy())
-                        actualStr = "double";
+                        actualStr = "f64";
                     else
                         actualStr = "unknown";
 
@@ -21041,9 +21041,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             "i" +
                             std::to_string(expectedType->getIntegerBitWidth());
                     else if(expectedType->isFloatTy())
-                        expectedStr = "float";
+                        expectedStr = "f32";
                     else if(expectedType->isDoubleTy())
-                        expectedStr = "double";
+                        expectedStr = "f64";
                     else
                         expectedStr = "unknown";
 
@@ -26850,9 +26850,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         actualStr = "i" + std::to_string(
                                               actualType->getIntegerBitWidth());
                     else if(actualType->isFloatTy())
-                        actualStr = "float";
+                        actualStr = "f32";
                     else if(actualType->isDoubleTy())
-                        actualStr = "double";
+                        actualStr = "f64";
                     else
                         actualStr = "unknown";
 
@@ -26866,9 +26866,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             "i" +
                             std::to_string(expectedType->getIntegerBitWidth());
                     else if(expectedType->isFloatTy())
-                        expectedStr = "float";
+                        expectedStr = "f32";
                     else if(expectedType->isDoubleTy())
-                        expectedStr = "double";
+                        expectedStr = "f64";
                     else
                         expectedStr = "unknown";
 
@@ -27928,9 +27928,9 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             actualTypeStr =
                 "i" + std::to_string(actualType->getIntegerBitWidth());
         else if(actualType->isFloatTy())
-            actualTypeStr = "float";
+            actualTypeStr = "f32";
         else if(actualType->isDoubleTy())
-            actualTypeStr = "double";
+            actualTypeStr = "f64";
         else if(actualType->isPointerTy())
             actualTypeStr = "pointer";
         else if(actualType->isStructTy())
@@ -27944,9 +27944,9 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             expectedTypeStr =
                 "i" + std::to_string(expectedType->getIntegerBitWidth());
         else if(expectedType->isFloatTy())
-            expectedTypeStr = "float";
+            expectedTypeStr = "f32";
         else if(expectedType->isDoubleTy())
-            expectedTypeStr = "double";
+            expectedTypeStr = "f64";
         else if(expectedType->isPointerTy())
             expectedTypeStr = "pointer";
         else if(expectedType->isStructTy())

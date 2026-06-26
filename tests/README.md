@@ -192,8 +192,8 @@ The test suite covers the following language features:
 - Min/max value tests for each type
 
 ### Floating Point
-- `float` literals (e.g., `3.14f`)
-- `double` literals (e.g., `3.14159`)
+- `f32` literals (e.g., `3.14f`)
+- `f64` literals (e.g., `3.14159`)
 
 ### Strings
 - String literals
@@ -238,9 +238,9 @@ The test suite covers the following language features:
 - Multiple functions
 
 ### Type Casts
-- `int()` cast
-- `float()` cast
-- `double()` cast
+- `i32()` cast
+- `f32()` cast
+- `f64()` cast
 
 ### Comments
 - Single-line comments (`//`)

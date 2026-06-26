@@ -907,15 +907,15 @@ list-compatible runtime operations, but literal and fill initializers are
 checked against `N` at compile time:
 
 ```mla
-let fixed: array<int, 6> = {1, 3, 4, 5, 6, 7};
-var scratch: array<int, 6> = {};
+let fixed: array<i32, 6> = {1, 3, 4, 5, 6, 7};
+var scratch: array<i32, 6> = {};
 scratch.push(10);
 scratch.push(20);
 scratch.extend(vec![30, 40]);
 scratch.fill(1);
 
 // Compile-time error: initializer has 4 elements but capacity is 3.
-let too_many: array<int, 3> = {1, 2, 3, 4};
+let too_many: array<i32, 3> = {1, 2, 3, 4};
 ```
 
 Array growth is checked before writing. When the compiler can prove the current
@@ -980,7 +980,7 @@ inside [`static_assert!`](Language-Syntax):
 ```rust
 let view: Span<i32> = [1, 2, 3];
 static_assert!(size_of(view) == size_of(list<i32>));
-static_assert!(size_of(array<int, 6>) == 24);
+static_assert!(size_of(array<i32, 6>) == 24);
 ```
 
 Important distinction:

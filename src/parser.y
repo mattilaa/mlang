@@ -474,9 +474,9 @@ static TypeNode* type_node_from_simple_name(const std::string& name)
         return new TypeNode(TypeNode::TYPE_BOOL);
     if(name == "bit")
         return new TypeNode(TypeNode::TYPE_BIT);
-    if(name == "float" || name == "f32")
+    if(name == "f32")
         return new TypeNode(TypeNode::TYPE_FLOAT);
-    if(name == "double" || name == "f64")
+    if(name == "f64")
         return new TypeNode(TypeNode::TYPE_DOUBLE);
     if(name == "str8")
         return new TypeNode(TypeNode::TYPE_STR8);
@@ -805,8 +805,6 @@ static void report_brace_list_initializer_suggestion(TypeNode* type, int line,
 
 static TypeNode* make_type_from_module_path(char* path)
 {
-    if(path && strcmp(path, "int") == 0)
-        return static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_INT));
     return static_cast<TypeNode*>(mla_ast_struct_type_ref(path));
 }
 
@@ -1059,7 +1057,7 @@ static std::string builder_type_description(TypeNode* type)
     case TypeNode::TYPE_U16:    return "u16";
     case TypeNode::TYPE_U32:    return "u32";
     case TypeNode::TYPE_U64:    return "u64";
-    case TypeNode::TYPE_INT:    return "int";
+    case TypeNode::TYPE_INT:    return "i32";
     case TypeNode::TYPE_FLOAT:  return "f32";
     case TypeNode::TYPE_DOUBLE: return "f64";
     case TypeNode::TYPE_STRING: return "string";
@@ -3887,7 +3885,7 @@ builder_arg
     ;
 
 cast_expression
-    : CAST_INT expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_INT, $2); }
+    : CAST_INT expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_I32, $2); }
     | BIT LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_BIT, $3); }
     | CAST_FLOAT expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_FLOAT, $2); }
     | CAST_DOUBLE expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_DOUBLE, $2); }

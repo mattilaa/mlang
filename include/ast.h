@@ -1339,7 +1339,7 @@ class StructLiteralNode : public ExpressionNode
 public:
     std::string structName;
     std::string displayTypeName;
-    std::vector<std::string> typeArgs; // For generic types like Box<int>
+    std::vector<std::string> typeArgs; // For generic types like Box<i32>
     std::vector<std::pair<std::string, ExpressionNode*>> fields;
 
     StructLiteralNode(const std::string& name) : structName(name) {}

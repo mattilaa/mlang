@@ -633,7 +633,7 @@ computeTextTypeLayout(std::string_view type_text,
     {
         return {2, 2, true};
     }
-    if(ty == "int" || ty == "i32" || ty == "u32" || ty == "f32")
+    if(ty == "i32" || ty == "u32" || ty == "f32")
     {
         return {4, 4, true};
     }
@@ -1342,7 +1342,7 @@ static LayoutInfo computeTypeLayout(TypeNode* type, ProgramNode* program,
         {
             return {2, 2, true};
         }
-        if(name == "int" || name == "i32" || name == "u32" || name == "f32")
+        if(name == "i32" || name == "u32" || name == "f32")
         {
             return {4, 4, true};
         }

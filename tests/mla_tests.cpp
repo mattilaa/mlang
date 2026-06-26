@@ -641,7 +641,7 @@ TEST_F(MLATest, FixedArrayAllowsBraceInitializerWithinCapacity)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let arr: array<int, 6> = {1, 3, 4, 5, 6, 7};
+            let arr: array<i32, 6> = {1, 3, 4, 5, 6, 7};
             if arr.len() != 6 {
                 return 1;
             }
@@ -658,7 +658,7 @@ TEST_F(MLATest, FixedArrayAllowsPartialBraceInitializer)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let arr: array<int, 6> = {1, 3, 4};
+            let arr: array<i32, 6> = {1, 3, 4};
             if arr.len() != 3 {
                 return 1;
             }
@@ -675,7 +675,7 @@ TEST_F(MLATest, FixedArrayEmptyBraceInitializerIsMutable)
 {
     std::string code = R"(
         fn main() -> i32 {
-            var arr: array<int, 6> = {};
+            var arr: array<i32, 6> = {};
             arr.push(10);
             arr.push(20);
             if arr.len() != 2 {
@@ -694,7 +694,7 @@ TEST_F(MLATest, FixedArrayFillSetsAllSlots)
 {
     std::string code = R"(
         fn main() -> i32 {
-            var arr: array<int, 4> = {};
+            var arr: array<i32, 4> = {};
             arr.fill(7);
             if arr.len() != 4 {
                 return 1;
@@ -712,7 +712,7 @@ TEST_F(MLATest, FixedArrayExtendsFromVecWithinCapacity)
 {
     std::string code = R"(
         fn main() -> i32 {
-            var arr: array<int, 6> = {1, 2};
+            var arr: array<i32, 6> = {1, 2};
             arr.extend(vec![3, 4, 5]);
             if arr.len() != 5 {
                 return 1;
@@ -730,7 +730,7 @@ TEST_F(MLATest, FixedArrayRejectsProvableExtendOverflowAtCompileTime)
 {
     std::string code = R"(
         fn main() -> i32 {
-            var arr: array<int, 3> = {1, 2};
+            var arr: array<i32, 3> = {1, 2};
             arr.extend(vec![3, 4]);
             return arr.len();
         }
@@ -747,7 +747,7 @@ TEST_F(MLATest, FixedArrayRejectsProvablePushOverflowAtCompileTime)
 {
     std::string code = R"(
         fn main() -> i32 {
-            var arr: array<int, 2> = {};
+            var arr: array<i32, 2> = {};
             arr.fill(9);
             arr.push(10);
             return arr.len();
@@ -764,12 +764,12 @@ TEST_F(MLATest, FixedArrayRejectsProvablePushOverflowAtCompileTime)
 TEST_F(MLATest, FixedArrayKeepsRuntimeGuardForUnknownLengthOverflow)
 {
     std::string code = R"(
-        fn values() -> list<int> {
+        fn values() -> list<i32> {
             return vec![3, 4];
         }
 
         fn main() -> i32 {
-            var arr: array<int, 3> = {1, 2};
+            var arr: array<i32, 3> = {1, 2};
             arr.extend(values());
             return arr.len();
         }
@@ -781,7 +781,7 @@ TEST_F(MLATest, FixedArrayRejectsTooManyBraceElements)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let arr: array<int, 3> = {1, 2, 3, 4};
+            let arr: array<i32, 3> = {1, 2, 3, 4};
             return arr.len();
         }
     )";
@@ -797,7 +797,7 @@ TEST_F(MLATest, FixedArrayRejectsTooLargeFillCount)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let arr: array<int, 3> = [0; 4];
+            let arr: array<i32, 3> = [0; 4];
             return arr.len();
         }
     )";
@@ -812,7 +812,7 @@ TEST_F(MLATest, StructArrayFieldRejectsTooManyListElements)
 {
     std::string code = R"(
         struct Bag {
-            var items: array<int, 3>;
+            var items: array<i32, 3>;
         };
 
         fn main() -> i32 {
@@ -833,7 +833,7 @@ TEST_F(MLATest, StructArrayFieldAllowsListInitializerWithinCapacity)
 {
     std::string code = R"(
         struct Bag {
-            var items: array<int, 4>;
+            var items: array<i32, 4>;
         };
 
         fn main() -> i32 {
@@ -849,7 +849,7 @@ TEST_F(MLATest, ListLiteralBackedStorageCanGrow)
 {
     std::string code = R"(
         fn main() -> i32 {
-            var values: list<int> = [1, 2, 3];
+            var values: list<i32> = [1, 2, 3];
             values.push(4);
             return values[3] == 4 ? 0 : 1;
         }
@@ -860,12 +860,12 @@ TEST_F(MLATest, ListLiteralBackedStorageCanGrow)
 TEST_F(MLATest, ReturnedListLiteralUsesDeclaredElementWidthAndCanGrow)
 {
     std::string code = R"(
-        fn values() -> list<int> {
+        fn values() -> list<i32> {
             return [1, 2, 3];
         }
 
         fn main() -> i32 {
-            var xs: list<int> = values();
+            var xs: list<i32> = values();
             xs.push(4);
             return xs[3] == 4 ? 0 : 1;
         }
@@ -877,7 +877,7 @@ TEST_F(MLATest, ArrayFillBackedStorageCanGrow)
 {
     std::string code = R"(
         fn main() -> i32 {
-            var values: list<int> = [7; 3];
+            var values: list<i32> = [7; 3];
             values.push(9);
             return values[3] == 9 ? 0 : 1;
         }
@@ -888,12 +888,12 @@ TEST_F(MLATest, ArrayFillBackedStorageCanGrow)
 TEST_F(MLATest, ReturnedArrayFillUsesDeclaredElementWidthAndCanGrow)
 {
     std::string code = R"(
-        fn values() -> list<int> {
+        fn values() -> list<i32> {
             return [7; 3];
         }
 
         fn main() -> i32 {
-            var xs: list<int> = values();
+            var xs: list<i32> = values();
             xs.push(9);
             return xs[3] == 9 ? 0 : 1;
         }
@@ -950,12 +950,12 @@ TEST_F(MLATest, ListLiteralForLoopKeepsStructElementType)
 TEST_F(MLATest, ReturnedArrayLiteralRejectsTooManyElements)
 {
     std::string code = R"(
-        fn values() -> array<int, 3> {
+        fn values() -> array<i32, 3> {
             return [1, 2, 3, 4];
         }
 
         fn main() -> i32 {
-            let xs: array<int, 3> = values();
+            let xs: array<i32, 3> = values();
             return xs.len();
         }
     )";
@@ -970,7 +970,7 @@ TEST_F(MLATest, StructArrayFieldRejectsTooLargeFillCount)
 {
     std::string code = R"(
         struct Bag {
-            var items: array<int, 3>;
+            var items: array<i32, 3>;
         };
 
         fn main() -> i32 {
@@ -990,7 +990,7 @@ TEST_F(MLATest, FixedArrayRejectsConstantOutOfBoundsIndexAtCompileTime)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let arr: array<int, 3> = {1, 2, 3};
+            let arr: array<i32, 3> = {1, 2, 3};
             return arr[3];
         }
     )";
@@ -1010,7 +1010,7 @@ TEST_F(MLATest, FixedArrayKeepsRuntimeGuardForDynamicOutOfBoundsIndex)
         }
 
         fn main() -> i32 {
-            let arr: array<int, 3> = {1, 2, 3};
+            let arr: array<i32, 3> = {1, 2, 3};
             return arr[get_index()];
         }
     )";
@@ -1021,7 +1021,7 @@ TEST_F(MLATest, StructListFieldIndexingReadsInBounds)
 {
     std::string code = R"(
         struct Bag {
-            var items: list<int>;
+            var items: list<i32>;
         };
 
         fn main() -> i32 {
@@ -1036,7 +1036,7 @@ TEST_F(MLATest, StructListFieldIndexingKeepsRuntimeBoundsGuard)
 {
     std::string code = R"(
         struct Bag {
-            var items: list<int>;
+            var items: list<i32>;
         };
 
         fn get_index() -> i32 {
@@ -1055,7 +1055,7 @@ TEST_F(MLATest, StructListFieldFirstLastReadInBounds)
 {
     std::string code = R"(
         struct Bag {
-            var items: list<int>;
+            var items: list<i32>;
         };
 
         fn main() -> i32 {
@@ -1073,7 +1073,7 @@ TEST_F(MLATest, StructListFieldFirstKeepsRuntimeGuardForEmptyList)
 {
     std::string code = R"(
         struct Bag {
-            var items: list<int>;
+            var items: list<i32>;
         };
 
         fn main() -> i32 {
@@ -1088,7 +1088,7 @@ TEST_F(MLATest, StructListFieldSearchMethodsWork)
 {
     std::string code = R"(
         struct Bag {
-            var items: list<int>;
+            var items: list<i32>;
         };
 
         fn main() -> i32 {
@@ -1106,7 +1106,7 @@ TEST_F(MLATest, StructListFieldOrderingMethodsWork)
 {
     std::string code = R"(
         struct Bag {
-            var items: list<int>;
+            var items: list<i32>;
         };
 
         fn main() -> i32 {
@@ -1134,7 +1134,7 @@ TEST_F(MLATest, FixedArrayRejectsKnownEmptyFirstAtCompileTime)
 {
     std::string code = R"(
         fn main() -> i32 {
-            var arr: array<int, 3> = {};
+            var arr: array<i32, 3> = {};
             return arr.first();
         }
     )";
@@ -1149,12 +1149,12 @@ TEST_F(MLATest, FixedArrayRejectsKnownEmptyFirstAtCompileTime)
 TEST_F(MLATest, ListFirstKeepsRuntimeGuardForEmptyList)
 {
     std::string code = R"(
-        fn values() -> list<int> {
+        fn values() -> list<i32> {
             return vec![];
         }
 
         fn main() -> i32 {
-            let xs: list<int> = values();
+            let xs: list<i32> = values();
             return xs.first();
         }
     )";
@@ -1165,7 +1165,7 @@ TEST_F(MLATest, FixedArrayRejectsKnownEmptyPopAtCompileTime)
 {
     std::string code = R"(
         fn main() -> i32 {
-            var arr: array<int, 3> = {};
+            var arr: array<i32, 3> = {};
             return arr.pop();
         }
     )";
@@ -1179,12 +1179,12 @@ TEST_F(MLATest, FixedArrayRejectsKnownEmptyPopAtCompileTime)
 TEST_F(MLATest, ListPopKeepsRuntimeGuardForEmptyList)
 {
     std::string code = R"(
-        fn values() -> list<int> {
+        fn values() -> list<i32> {
             return vec![];
         }
 
         fn main() -> i32 {
-            let xs: list<int> = values();
+            let xs: list<i32> = values();
             return xs.pop();
         }
     )";
@@ -1217,7 +1217,7 @@ TEST_F(MLATest, StructMapFieldIndexReturnsValueForExistingKey)
 {
     std::string code = R"(
         struct Bag {
-            var scores: map<int, int>;
+            var scores: map<i32, i32>;
         };
 
         fn main() -> i32 {
@@ -1232,7 +1232,7 @@ TEST_F(MLATest, StructMapFieldIndexMissingKeyAborts)
 {
     std::string code = R"(
         struct Bag {
-            var scores: map<int, int>;
+            var scores: map<i32, i32>;
         };
 
         fn main() -> i32 {
@@ -1246,12 +1246,12 @@ TEST_F(MLATest, StructMapFieldIndexMissingKeyAborts)
 TEST_F(MLATest, ReturnedMapLiteralBackedStorageSurvivesCallerLookup)
 {
     std::string code = R"(
-        fn scores() -> map<int, int> {
+        fn scores() -> map<i32, i32> {
             return {1: 95, 2: 87};
         }
 
         fn main() -> i32 {
-            let m: map<int, int> = scores();
+            let m: map<i32, i32> = scores();
             return m[2] == 87 ? 0 : 1;
         }
     )";
@@ -1861,7 +1861,7 @@ TEST_F(MLATest, F32F64TypeKeywords)
     EXPECT_TRUE(output.find("2.250000") != std::string::npos);
 }
 
-TEST_F(MLATest, F32F64CastAliases)
+TEST_F(MLATest, F32F64Casts)
 {
     std::string code = R"(
         fn main() -> i32 {
@@ -1874,6 +1874,26 @@ TEST_F(MLATest, F32F64CastAliases)
     )";
     std::string output = compileAndRun(code);
     EXPECT_TRUE(output.find("7.000000 7.000000") != std::string::npos);
+}
+
+TEST_F(MLATest, LegacyBuiltinTypeAliasesAreRejected)
+{
+    for(const char* typeName : {"int", "float", "double", "char"})
+    {
+        std::string code = std::string(R"(
+            fn main() -> i32 {
+                let value: )") + typeName + R"( = 0;
+                return 0;
+            }
+        )";
+        writeSource(code);
+        int rc = 0;
+        std::string out = compileCapture(rc);
+        EXPECT_NE(rc, 0) << typeName;
+        EXPECT_NE(out.find(std::string("unknown struct type: ") + typeName),
+                  std::string::npos)
+            << out;
+    }
 }
 
 // ============================================================================
