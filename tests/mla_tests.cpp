@@ -873,6 +873,39 @@ TEST_F(MLATest, StructListFieldIndexingKeepsRuntimeBoundsGuard)
     EXPECT_NE(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, StructListFieldFirstLastReadInBounds)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: vec![10, 20, 30] };
+            if bag.items.first() != 10 {
+                return 1;
+            }
+            return bag.items.last() == 30 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructListFieldFirstKeepsRuntimeGuardForEmptyList)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<int>;
+        };
+
+        fn main() -> i32 {
+            let bag: Bag = Bag { items: vec![] };
+            return bag.items.first();
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, FixedArrayRejectsKnownEmptyFirstAtCompileTime)
 {
     std::string code = R"(

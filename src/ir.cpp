@@ -25233,7 +25233,16 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         return nullptr;
                     llvm::Value* dataPtr5 =
                         builder.CreateExtractValue(ls5, 1, "dataptr");
-                    llvm::Type* elemType5 = getLLVMType(elemKind2);
+                    llvm::Type* elemType5 =
+                        elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
+                                      : getLLVMType(elemKind2);
+                    if(!elemType5)
+                    {
+                        reportError(node->line,
+                                    "unsupported list element type for "
+                                    "first()");
+                        return nullptr;
+                    }
                     llvm::Value* zero5 = llvm::ConstantInt::get(i64Type2, 0);
                     llvm::Value* gep5 = builder.CreateGEP(elemType5, dataPtr5,
                                                           zero5, "first.ptr");
@@ -25266,7 +25275,16 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     // literal
                     llvm::Value* dataPtr6 =
                         builder.CreateExtractValue(ls6, 1, "dataptr");
-                    llvm::Type* elemType6 = getLLVMType(elemKind2);
+                    llvm::Type* elemType6 =
+                        elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
+                                      : getLLVMType(elemKind2);
+                    if(!elemType6)
+                    {
+                        reportError(node->line,
+                                    "unsupported list element type for "
+                                    "last()");
+                        return nullptr;
+                    }
                     llvm::Value* gep6 = builder.CreateGEP(elemType6, dataPtr6,
                                                           lastIdx, "last.ptr");
                     return builder.CreateLoad(elemType6, gep6,
@@ -25489,6 +25507,44 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 receiverIsArray
                     ? llvm::ConstantInt::get(i64Type, arrayCapacityValue)
                     : nullptr;
+            auto emitFieldListNonEmptyCheck =
+                [&](llvm::Value* count,
+                    const std::string& methodName) -> bool
+            {
+                initializeFormatFunctions();
+                llvm::Function* function =
+                    builder.GetInsertBlock()->getParent();
+                llvm::BasicBlock* okBB = llvm::BasicBlock::Create(
+                    context, "fieldlist." + methodName + ".non_empty",
+                    function);
+                llvm::BasicBlock* failBB = llvm::BasicBlock::Create(
+                    context, "fieldlist." + methodName + ".empty", function);
+                llvm::Value* nonEmpty = builder.CreateICmpSGT(
+                    count, llvm::ConstantInt::get(i64Type, 0),
+                    "fieldlist." + methodName + ".has_items");
+                builder.CreateCondBr(nonEmpty, okBB, failBB);
+
+                builder.SetInsertPoint(failBB);
+#if LLVM_VERSION_MAJOR >= 21
+                llvm::Value* formatStr = builder.CreateGlobalString(
+                    (methodName + "() requires a non-empty list/array\n")
+                        .c_str(),
+                    "fieldlist." + methodName + ".empty.msg");
+#else
+                llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+                    (methodName + "() requires a non-empty list/array\n")
+                        .c_str(),
+                    "fieldlist." + methodName + ".empty.msg");
+#endif
+                llvm::Value* stderrVal =
+                    builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+                builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+                builder.CreateCall(abortFunc, {});
+                builder.CreateUnreachable();
+
+                builder.SetInsertPoint(okBB);
+                return true;
+            };
 
             if(node->methodName == "len")
             {
@@ -25850,6 +25906,73 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     module->getOrInsertFunction(fnName, ft);
                 builder.CreateCall(fn, {recvPtr, srcPtr, arrayCapacity});
                 return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "first")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "first() takes no arguments");
+                    return nullptr;
+                }
+                std::vector<llvm::Type*> lsTypes = {i64Type, opaquePtrType};
+                llvm::StructType* lsType =
+                    llvm::StructType::get(context, lsTypes);
+                llvm::Value* ls =
+                    builder.CreateLoad(lsType, recvPtr, "fieldlist.load");
+                llvm::Value* cnt = builder.CreateExtractValue(ls, 0, "count");
+                if(!emitFieldListNonEmptyCheck(cnt, "first"))
+                    return nullptr;
+                llvm::Value* dataPtr =
+                    builder.CreateExtractValue(ls, 1, "dataptr");
+                llvm::Type* elemLlvmType =
+                    recvElemTypeForList
+                        ? getLLVMTypeFromNode(recvElemTypeForList)
+                        : getLLVMType(elemKind);
+                if(!elemLlvmType)
+                {
+                    reportError(node->line,
+                                "unsupported list element type for first()");
+                    return nullptr;
+                }
+                llvm::Value* zero = llvm::ConstantInt::get(i64Type, 0);
+                llvm::Value* elemPtr = builder.CreateGEP(
+                    elemLlvmType, dataPtr, zero, "fieldlist.first.ptr");
+                return builder.CreateLoad(elemLlvmType, elemPtr,
+                                          "fieldlist.first");
+            }
+            if(node->methodName == "last")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "last() takes no arguments");
+                    return nullptr;
+                }
+                std::vector<llvm::Type*> lsTypes = {i64Type, opaquePtrType};
+                llvm::StructType* lsType =
+                    llvm::StructType::get(context, lsTypes);
+                llvm::Value* ls =
+                    builder.CreateLoad(lsType, recvPtr, "fieldlist.load");
+                llvm::Value* cnt = builder.CreateExtractValue(ls, 0, "count");
+                if(!emitFieldListNonEmptyCheck(cnt, "last"))
+                    return nullptr;
+                llvm::Value* lastIdx = builder.CreateSub(
+                    cnt, llvm::ConstantInt::get(i64Type, 1), "lastIdx");
+                llvm::Value* dataPtr =
+                    builder.CreateExtractValue(ls, 1, "dataptr");
+                llvm::Type* elemLlvmType =
+                    recvElemTypeForList
+                        ? getLLVMTypeFromNode(recvElemTypeForList)
+                        : getLLVMType(elemKind);
+                if(!elemLlvmType)
+                {
+                    reportError(node->line,
+                                "unsupported list element type for last()");
+                    return nullptr;
+                }
+                llvm::Value* elemPtr = builder.CreateGEP(
+                    elemLlvmType, dataPtr, lastIdx, "fieldlist.last.ptr");
+                return builder.CreateLoad(elemLlvmType, elemPtr,
+                                          "fieldlist.last");
             }
             if(node->methodName == "pop")
             {
