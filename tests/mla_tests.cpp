@@ -873,6 +873,34 @@ TEST_F(MLATest, ReturnedListLiteralUsesDeclaredElementWidthAndCanGrow)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, ArrayFillBackedStorageCanGrow)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<int> = [7; 3];
+            values.push(9);
+            return values[3] == 9 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ReturnedArrayFillUsesDeclaredElementWidthAndCanGrow)
+{
+    std::string code = R"(
+        fn values() -> list<int> {
+            return [7; 3];
+        }
+
+        fn main() -> i32 {
+            var xs: list<int> = values();
+            xs.push(9);
+            return xs[3] == 9 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, ReturnedArrayLiteralRejectsTooManyElements)
 {
     std::string code = R"(

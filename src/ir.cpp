@@ -26927,6 +26927,8 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
 llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
                                               llvm::Type* declaredElemType)
 {
+    initializeStdlibFunctions();
+
     // [val; N] — a list of N copies of val
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
@@ -26961,9 +26963,14 @@ llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
     if(countVal->getType() != i64Type)
         countVal = builder.CreateSExt(countVal, i64Type, "fill.count");
 
-    // Allocate storage for count elements
+    // Allocate heap storage for count elements. Filled lists/arrays can escape
+    // or later grow with realloc, so stack-backed storage would be invalid.
+    uint64_t elemSizeU = module->getDataLayout().getTypeAllocSize(elemType);
+    llvm::Value* elemSize = llvm::ConstantInt::get(i64Type, elemSizeU);
+    llvm::Value* byteSize =
+        builder.CreateMul(countVal, elemSize, "fill.bytes");
     llvm::Value* dataAlloc =
-        builder.CreateAlloca(elemType, countVal, "filldata");
+        builder.CreateCall(mallocFunc, {byteSize}, "filldata");
 
     // Loop to store the fill value at each index
     llvm::Function* function = builder.GetInsertBlock()->getParent();
