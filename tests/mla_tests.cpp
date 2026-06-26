@@ -901,6 +901,30 @@ TEST_F(MLATest, ReturnedArrayFillUsesDeclaredElementWidthAndCanGrow)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, ArrayFillForLoopEvaluatesFillExpressionOnce)
+{
+    std::string code = R"(
+        var calls: i32 = 0;
+
+        fn next() -> i32 {
+            calls += 1;
+            return 7;
+        }
+
+        fn main() -> i32 {
+            var sum: i32 = 0;
+            for value in [next(); 3] {
+                sum += value;
+            }
+            if sum != 21 {
+                return 1;
+            }
+            return calls == 1 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, ReturnedArrayLiteralRejectsTooManyElements)
 {
     std::string code = R"(

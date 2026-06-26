@@ -12849,20 +12849,10 @@ void CodeGenerator::generateForStatement(ForNode* node)
             builder.CreateAlloca(listType, nullptr, "arrtmp");
         builder.CreateStore(listVal, tmpList);
 
-        // Determine element type from ArrayFillNode.value
-        llvm::Value* fillVal = generateExpression(arrFill->value);
-        if(!fillVal)
+        TypeNode* elemTypeNode =
+            inferExpressionTypeNode(arrFill->value, node->line);
+        if(!elemTypeNode)
             return;
-        // Build a synthetic element TypeNode (i64 for integer fill values)
-        auto* elemTypeNode = new TypeNode(TypeNode::TYPE_I64);
-        if(fillVal->getType()->isIntegerTy(32))
-            elemTypeNode = new TypeNode(TypeNode::TYPE_I32);
-        else if(fillVal->getType()->isIntegerTy(1))
-            elemTypeNode = new TypeNode(TypeNode::TYPE_BOOL);
-        else if(fillVal->getType()->isFloatTy())
-            elemTypeNode = new TypeNode(TypeNode::TYPE_FLOAT);
-        else if(fillVal->getType()->isDoubleTy())
-            elemTypeNode = new TypeNode(TypeNode::TYPE_DOUBLE);
 
         std::string tmpName = "__arr_fill_tmp";
         listElementTypes[tmpName] = elemTypeNode;
