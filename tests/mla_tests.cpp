@@ -677,6 +677,44 @@ TEST_F(MLATest, FixedArrayAllowsPartialBraceInitializer)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, FixedArrayAllowsListElementsFromArrayFirstLast)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let xs: list<i32> = [1, 2];
+            let ys: list<i32> = [3, 4];
+            let source: array<list<i32>, 2> = {xs, ys};
+            let arr: array<list<i32>, 2> = {source.first(), source.last()};
+            let first_list: list<i32> = arr[0];
+            let last_list: list<i32> = arr[1];
+            if first_list.first() != 1 {
+                return 1;
+            }
+            return last_list.last() == 4 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayAllowsMapElementsFromArrayFirstLast)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let first: map<str8, i32> = {"a": 1};
+            let second: map<str8, i32> = {"b": 2};
+            let source: array<map<str8, i32>, 2> = {first, second};
+            let arr: array<map<str8, i32>, 2> = {source.first(), source.last()};
+            let first_map: map<str8, i32> = arr[0];
+            let last_map: map<str8, i32> = arr[1];
+            if first_map["a"] != 1 {
+                return 1;
+            }
+            return last_map["b"] == 2 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, FixedArrayEmptyBraceInitializerIsMutable)
 {
     std::string code = R"(
@@ -797,6 +835,26 @@ TEST_F(MLATest, FixedArrayRejectsTooManyBraceElements)
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("array initializer has 4 elements"), std::string::npos);
     EXPECT_NE(out.find("array<i32, 3> capacity is 3"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayRejectsTooManyListElementsFromArrayFirstLast)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let xs: list<i32> = [1, 2];
+            let ys: list<i32> = [3, 4];
+            let source: array<list<i32>, 2> = {xs, ys};
+            let arr: array<list<i32>, 1> = {source.first(), source.last()};
+            return arr.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer has 2 elements"), std::string::npos);
+    EXPECT_NE(out.find("array<list<i32>, 1> capacity is 1"),
+              std::string::npos);
 }
 
 TEST_F(MLATest, FixedArrayRejectsTooLargeFillCount)
