@@ -25048,12 +25048,6 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 // --- extend(list_or_array) ---
                 if(node->methodName == "extend")
                 {
-                    if(!receiverIsArray2)
-                    {
-                        reportError(node->line,
-                                    "extend() is only available for array<T, N>");
-                        return nullptr;
-                    }
                     if(node->arguments.size() != 1)
                     {
                         reportError(node->line, "extend() takes one argument");
@@ -25061,7 +25055,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     }
                     std::optional<int64_t> sourceKnownLength =
                         fixedArrayExpressionKnownLength(node->arguments[0]);
-                    if(sourceKnownLength &&
+                    if(receiverIsArray2 && sourceKnownLength &&
                        !checkKnownArrayGrowth2(*sourceKnownLength, "extend"))
                         return nullptr;
 
@@ -25071,7 +25065,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     if(!elemLlvmType)
                     {
                         reportError(node->line,
-                                    "unsupported array element type for "
+                                    "unsupported container element type for "
                                     "extend()");
                         return nullptr;
                     }
@@ -25144,9 +25138,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     }
 
                     std::string fnName =
-                        elemIsStr   ? "__mlang_std_array_extend_str"
-                        : elemIsI64 ? "__mlang_std_array_extend_i64"
-                                    : "__mlang_std_array_extend_i32";
+                        elemIsStr
+                            ? (receiverIsArray2 ? "__mlang_std_array_extend_str"
+                                                : "__mlang_std_vec_extend_str")
+                        : elemIsI64
+                            ? (receiverIsArray2 ? "__mlang_std_array_extend_i64"
+                                                : "__mlang_std_vec_extend_i64")
+                            : (receiverIsArray2 ? "__mlang_std_array_extend_i32"
+                                                : "__mlang_std_vec_extend_i32");
                     if(!(elemIsStr || elemIsI64 ||
                          elemKind2 == TypeNode::TYPE_INT ||
                          elemKind2 == TypeNode::TYPE_I32 ||
@@ -25164,15 +25163,26 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             i64Type2, (uint64_t)elemSizeU);
                         llvm::FunctionType* ftRaw = llvm::FunctionType::get(
                             voidType2,
-                            {opaquePtrType, opaquePtrType, i64Type2,
-                             i64Type2},
+                            receiverIsArray2
+                                ? std::vector<llvm::Type*>{
+                                      opaquePtrType, opaquePtrType, i64Type2,
+                                      i64Type2}
+                                : std::vector<llvm::Type*>{
+                                      opaquePtrType, opaquePtrType, i64Type2},
                             false);
                         llvm::FunctionCallee fnRaw =
                             module->getOrInsertFunction(
-                                "__mlang_std_array_extend_raw", ftRaw);
-                        builder.CreateCall(fnRaw,
-                                           {allocaPtr2, srcPtr, elemSize,
-                                            arrayCapacity2});
+                                receiverIsArray2
+                                    ? "__mlang_std_array_extend_raw"
+                                    : "__mlang_std_vec_extend_raw",
+                                ftRaw);
+                        if(receiverIsArray2)
+                            builder.CreateCall(fnRaw,
+                                               {allocaPtr2, srcPtr, elemSize,
+                                                arrayCapacity2});
+                        else
+                            builder.CreateCall(fnRaw,
+                                               {allocaPtr2, srcPtr, elemSize});
                         if(receiverIsArray2)
                         {
                             auto lenIt = arrayKnownLengths.find(objId->name);
@@ -25186,11 +25196,20 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         return llvm::Constant::getNullValue(voidType2);
                     }
                     llvm::FunctionType* ft = llvm::FunctionType::get(
-                        voidType2, {opaquePtrType, opaquePtrType, i64Type2},
+                        voidType2,
+                        receiverIsArray2
+                            ? std::vector<llvm::Type*>{
+                                  opaquePtrType, opaquePtrType, i64Type2}
+                            : std::vector<llvm::Type*>{
+                                  opaquePtrType, opaquePtrType},
                         false);
                     llvm::FunctionCallee fn =
                         module->getOrInsertFunction(fnName, ft);
-                    builder.CreateCall(fn, {allocaPtr2, srcPtr, arrayCapacity2});
+                    if(receiverIsArray2)
+                        builder.CreateCall(fn,
+                                           {allocaPtr2, srcPtr, arrayCapacity2});
+                    else
+                        builder.CreateCall(fn, {allocaPtr2, srcPtr});
                     if(receiverIsArray2)
                     {
                         auto lenIt = arrayKnownLengths.find(objId->name);
@@ -25518,6 +25537,118 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(mapTypeIt != variableTypes.end() &&
                mapTypeIt->second == TypeNode::TYPE_MAP)
             {
+                if(node->methodName == "extend")
+                {
+                    if(node->arguments.size() != 1)
+                    {
+                        reportError(node->line, "extend() takes one argument");
+                        return nullptr;
+                    }
+                    llvm::Value* allocaPtr = namedValues[objId->name];
+                    if(!allocaPtr)
+                    {
+                        reportError(node->line,
+                                    "unknown variable: " + objId->name);
+                        return nullptr;
+                    }
+                    auto dstMapIt = mapKeyValueTypes.find(objId->name);
+                    if(dstMapIt == mapKeyValueTypes.end() ||
+                       !dstMapIt->second.first || !dstMapIt->second.second)
+                    {
+                        reportError(node->line,
+                                    "map.extend() requires known map key and "
+                                    "value types");
+                        return nullptr;
+                    }
+                    llvm::Type* dstKeyType =
+                        getLLVMTypeFromNode(dstMapIt->second.first);
+                    llvm::Type* dstValueType =
+                        getLLVMTypeFromNode(dstMapIt->second.second);
+                    if(!dstKeyType || !dstValueType)
+                    {
+                        reportError(node->line,
+                                    "unsupported map key/value type for "
+                                    "extend()");
+                        return nullptr;
+                    }
+
+                    TypeNode* srcType =
+                        inferExpressionTypeNode(node->arguments[0],
+                                                node->line);
+                    MapTypeNode* srcMapType =
+                        dynamic_cast<MapTypeNode*>(srcType);
+                    if(!srcMapType && (!srcType ||
+                                       srcType->kind != TypeNode::TYPE_MAP))
+                    {
+                        reportError(node->line,
+                                    "map.extend() expects a map<K, V> "
+                                    "argument");
+                        return nullptr;
+                    }
+                    if(srcMapType &&
+                       !dynamic_cast<MapLiteralNode*>(node->arguments[0]))
+                    {
+                        llvm::Type* srcKeyType =
+                            getLLVMTypeFromNode(srcMapType->keyType);
+                        llvm::Type* srcValueType =
+                            getLLVMTypeFromNode(srcMapType->valueType);
+                        if(srcKeyType != dstKeyType ||
+                           srcValueType != dstValueType)
+                        {
+                            reportError(node->line,
+                                        "map.extend() argument key/value "
+                                        "types do not match destination map");
+                            return nullptr;
+                        }
+                    }
+
+                    llvm::Value* srcPtr = nullptr;
+                    if(dynamic_cast<IdentifierNode*>(node->arguments[0]) ||
+                       dynamic_cast<FieldAccessNode*>(node->arguments[0]))
+                        srcPtr = getLValuePointer(node->arguments[0],
+                                                  node->line);
+                    if(!srcPtr)
+                    {
+                        llvm::Value* srcValue = nullptr;
+                        if(auto* mapLit = dynamic_cast<MapLiteralNode*>(
+                               node->arguments[0]))
+                            srcValue = generateMapLiteral(mapLit, dstKeyType,
+                                                          dstValueType);
+                        else
+                            srcValue = generateExpression(node->arguments[0]);
+                        if(!srcValue)
+                            return nullptr;
+                        llvm::AllocaInst* tmpMap = builder.CreateAlloca(
+                            srcValue->getType(), nullptr, "map.extend.tmp");
+                        builder.CreateStore(srcValue, tmpMap);
+                        srcPtr = tmpMap;
+                    }
+
+                    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+                    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+                    llvm::Type* ptrType = llvm::PointerType::get(
+                        llvm::Type::getInt8Ty(context), 0);
+#endif
+                    uint64_t keySizeU =
+                        module->getDataLayout().getTypeAllocSize(dstKeyType);
+                    uint64_t valueSizeU =
+                        module->getDataLayout().getTypeAllocSize(dstValueType);
+                    llvm::Value* keySize =
+                        llvm::ConstantInt::get(i64Type, keySizeU);
+                    llvm::Value* valueSize =
+                        llvm::ConstantInt::get(i64Type, valueSizeU);
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        llvm::Type::getVoidTy(context),
+                        {ptrType, ptrType, i64Type, i64Type}, false);
+                    llvm::FunctionCallee fn = module->getOrInsertFunction(
+                        "__mlang_std_map_extend_raw", ft);
+                    builder.CreateCall(
+                        fn, {allocaPtr, srcPtr, keySize, valueSize});
+                    return llvm::Constant::getNullValue(
+                        llvm::Type::getVoidTy(context));
+                }
                 if(node->methodName == "len")
                 {
                     if(!node->arguments.empty())
@@ -25986,12 +26117,6 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
             if(node->methodName == "extend")
             {
-                if(!receiverIsArray)
-                {
-                    reportError(node->line,
-                                "extend() is only available for array<T, N>");
-                    return nullptr;
-                }
                 if(node->arguments.size() != 1)
                 {
                     reportError(node->line, "extend() takes one argument");
@@ -25999,7 +26124,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 }
                 std::optional<int64_t> sourceKnownLength =
                     fixedArrayExpressionKnownLength(node->arguments[0]);
-                if(sourceKnownLength)
+                if(receiverIsArray && sourceKnownLength)
                 {
                     if(*sourceKnownLength < 0)
                     {
@@ -26027,7 +26152,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 if(!elemLlvmType)
                 {
                     reportError(node->line,
-                                "unsupported array element type for extend()");
+                                "unsupported container element type for "
+                                "extend()");
                     return nullptr;
                 }
 
@@ -26095,9 +26221,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 }
 
                 std::string fnName =
-                    elemIsStr   ? "__mlang_std_array_extend_str"
-                    : elemIsI64 ? "__mlang_std_array_extend_i64"
-                                : "__mlang_std_array_extend_i32";
+                    elemIsStr
+                        ? (receiverIsArray ? "__mlang_std_array_extend_str"
+                                           : "__mlang_std_vec_extend_str")
+                    : elemIsI64
+                        ? (receiverIsArray ? "__mlang_std_array_extend_i64"
+                                           : "__mlang_std_vec_extend_i64")
+                        : (receiverIsArray ? "__mlang_std_array_extend_i32"
+                                           : "__mlang_std_vec_extend_i32");
                 if(!(elemIsStr || elemIsI64 || elemIsI32Like))
                 {
                     uint64_t elemSizeU =
@@ -26107,20 +26238,40 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         i64Type, (uint64_t)elemSizeU);
                     llvm::FunctionType* ftRaw = llvm::FunctionType::get(
                         voidType,
-                        {opaquePtrType, opaquePtrType, i64Type, i64Type},
+                        receiverIsArray
+                            ? std::vector<llvm::Type*>{
+                                  opaquePtrType, opaquePtrType, i64Type,
+                                  i64Type}
+                            : std::vector<llvm::Type*>{
+                                  opaquePtrType, opaquePtrType, i64Type},
                         false);
-                    llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
-                        "__mlang_std_array_extend_raw", ftRaw);
-                    builder.CreateCall(fnRaw,
-                                       {recvPtr, srcPtr, elemSize,
-                                        arrayCapacity});
+                    llvm::FunctionCallee fnRaw =
+                        module->getOrInsertFunction(
+                            receiverIsArray ? "__mlang_std_array_extend_raw"
+                                            : "__mlang_std_vec_extend_raw",
+                            ftRaw);
+                    if(receiverIsArray)
+                        builder.CreateCall(fnRaw,
+                                           {recvPtr, srcPtr, elemSize,
+                                            arrayCapacity});
+                    else
+                        builder.CreateCall(fnRaw, {recvPtr, srcPtr, elemSize});
                     return llvm::Constant::getNullValue(voidType);
                 }
                 llvm::FunctionType* ft = llvm::FunctionType::get(
-                    voidType, {opaquePtrType, opaquePtrType, i64Type}, false);
+                    voidType,
+                    receiverIsArray
+                        ? std::vector<llvm::Type*>{
+                              opaquePtrType, opaquePtrType, i64Type}
+                        : std::vector<llvm::Type*>{
+                              opaquePtrType, opaquePtrType},
+                    false);
                 llvm::FunctionCallee fn =
                     module->getOrInsertFunction(fnName, ft);
-                builder.CreateCall(fn, {recvPtr, srcPtr, arrayCapacity});
+                if(receiverIsArray)
+                    builder.CreateCall(fn, {recvPtr, srcPtr, arrayCapacity});
+                else
+                    builder.CreateCall(fn, {recvPtr, srcPtr});
                 return llvm::Constant::getNullValue(voidType);
             }
             if(node->methodName == "first")
@@ -26436,6 +26587,113 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         }
         if(recvType && recvType->kind == TypeNode::TYPE_MAP)
         {
+            if(node->methodName == "extend")
+            {
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "extend() takes one argument");
+                    return nullptr;
+                }
+                auto* dstMapType = dynamic_cast<MapTypeNode*>(recvType);
+                if(!dstMapType || !dstMapType->keyType ||
+                   !dstMapType->valueType)
+                {
+                    reportError(node->line,
+                                "map.extend() requires known map key and "
+                                "value types");
+                    return nullptr;
+                }
+                llvm::Value* recvPtr =
+                    getLValuePointer(node->object, node->line);
+                if(!recvPtr)
+                    return nullptr;
+                llvm::Type* dstKeyType =
+                    getLLVMTypeFromNode(dstMapType->keyType);
+                llvm::Type* dstValueType =
+                    getLLVMTypeFromNode(dstMapType->valueType);
+                if(!dstKeyType || !dstValueType)
+                {
+                    reportError(node->line,
+                                "unsupported map key/value type for "
+                                "extend()");
+                    return nullptr;
+                }
+
+                TypeNode* srcType =
+                    inferExpressionTypeNode(node->arguments[0], node->line);
+                MapTypeNode* srcMapType = dynamic_cast<MapTypeNode*>(srcType);
+                if(!srcMapType && (!srcType ||
+                                   srcType->kind != TypeNode::TYPE_MAP))
+                {
+                    reportError(node->line,
+                                "map.extend() expects a map<K, V> argument");
+                    return nullptr;
+                }
+                if(srcMapType &&
+                   !dynamic_cast<MapLiteralNode*>(node->arguments[0]))
+                {
+                    llvm::Type* srcKeyType =
+                        getLLVMTypeFromNode(srcMapType->keyType);
+                    llvm::Type* srcValueType =
+                        getLLVMTypeFromNode(srcMapType->valueType);
+                    if(srcKeyType != dstKeyType ||
+                       srcValueType != dstValueType)
+                    {
+                        reportError(node->line,
+                                    "map.extend() argument key/value types do "
+                                    "not match destination map");
+                        return nullptr;
+                    }
+                }
+
+                llvm::Value* srcPtr = nullptr;
+                if(dynamic_cast<IdentifierNode*>(node->arguments[0]) ||
+                   dynamic_cast<FieldAccessNode*>(node->arguments[0]))
+                    srcPtr =
+                        getLValuePointer(node->arguments[0], node->line);
+                if(!srcPtr)
+                {
+                    llvm::Value* srcValue = nullptr;
+                    if(auto* mapLit =
+                           dynamic_cast<MapLiteralNode*>(node->arguments[0]))
+                        srcValue =
+                            generateMapLiteral(mapLit, dstKeyType,
+                                               dstValueType);
+                    else
+                        srcValue = generateExpression(node->arguments[0]);
+                    if(!srcValue)
+                        return nullptr;
+                    llvm::AllocaInst* tmpMap = builder.CreateAlloca(
+                        srcValue->getType(), nullptr, "map.extend.tmp");
+                    builder.CreateStore(srcValue, tmpMap);
+                    srcPtr = tmpMap;
+                }
+
+                llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+                llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+                llvm::Type* ptrType =
+                    llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+                uint64_t keySizeU =
+                    module->getDataLayout().getTypeAllocSize(dstKeyType);
+                uint64_t valueSizeU =
+                    module->getDataLayout().getTypeAllocSize(dstValueType);
+                llvm::Value* keySize =
+                    llvm::ConstantInt::get(i64Type, keySizeU);
+                llvm::Value* valueSize =
+                    llvm::ConstantInt::get(i64Type, valueSizeU);
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    llvm::Type::getVoidTy(context),
+                    {ptrType, ptrType, i64Type, i64Type}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(
+                    "__mlang_std_map_extend_raw", ft);
+                builder.CreateCall(fn,
+                                   {recvPtr, srcPtr, keySize, valueSize});
+                return llvm::Constant::getNullValue(
+                    llvm::Type::getVoidTy(context));
+            }
             if(node->methodName == "len")
             {
                 if(!node->arguments.empty())

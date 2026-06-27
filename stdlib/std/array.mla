@@ -24,7 +24,8 @@
 /// `array<T, M>` when the resulting length is at most `N`. If the compiler can
 /// prove the result would exceed `N`, it emits a compile-time error. Unknown
 /// runtime-sized sources keep a capacity guard that stops before reallocating
-/// or writing past the end.
+/// or writing past the end. Element types can also be containers, such as
+/// `array<list<i32>, N>` or `array<map<str8, i32>, N>`.
 ///
 /// Constant out-of-bounds indexes are rejected at compile time. Dynamic indexes
 /// are checked before loading.

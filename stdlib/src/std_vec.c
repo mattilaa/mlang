@@ -17,6 +17,12 @@ typedef struct {
     void*   data;
 } mlang_vec_t;
 
+typedef struct {
+    int64_t count;
+    void*   keys;
+    void*   values;
+} mlang_map_t;
+
 /* ------------------------------------------------------------------ */
 /* push                                                                 */
 /* ------------------------------------------------------------------ */
@@ -57,6 +63,91 @@ void __mlang_std_vec_push_raw(void* vec_ptr, const void* val_ptr, int64_t elem_s
     char* dst = (char*)v->data + ((size_t)v->count * (size_t)elem_size);
     memcpy(dst, val_ptr, (size_t)elem_size);
     v->count++;
+}
+
+/* ------------------------------------------------------------------ */
+/* extend                                                              */
+/* ------------------------------------------------------------------ */
+
+static void vec_extend_bytes(void* dst_ptr, const void* src_ptr, size_t elem_size) {
+    mlang_vec_t* dst = (mlang_vec_t*)dst_ptr;
+    const mlang_vec_t* src = (const mlang_vec_t*)src_ptr;
+    if (!dst || !src || elem_size == 0) return;
+    if (src->count <= 0) return;
+    if (!src->data) return;
+
+    int64_t old_count = dst->count;
+    int64_t add_count = src->count;
+    void* new_data = realloc(dst->data, (size_t)(old_count + add_count) * elem_size);
+    if (!new_data) return;
+    dst->data = new_data;
+
+    char* dst_bytes = (char*)dst->data;
+    const char* src_bytes = (dst == src) ? dst_bytes : (const char*)src->data;
+    memmove(dst_bytes + ((size_t)old_count * elem_size),
+            src_bytes,
+            (size_t)add_count * elem_size);
+    dst->count = old_count + add_count;
+}
+
+/** Append all i32 elements from another list/array. */
+void __mlang_std_vec_extend_i32(void* dst_ptr, const void* src_ptr) {
+    vec_extend_bytes(dst_ptr, src_ptr, sizeof(int32_t));
+}
+
+/** Append all i64 elements from another list/array. */
+void __mlang_std_vec_extend_i64(void* dst_ptr, const void* src_ptr) {
+    vec_extend_bytes(dst_ptr, src_ptr, sizeof(int64_t));
+}
+
+/** Append all string pointer elements from another list/array. */
+void __mlang_std_vec_extend_str(void* dst_ptr, const void* src_ptr) {
+    vec_extend_bytes(dst_ptr, src_ptr, sizeof(char*));
+}
+
+/** Append all raw elements from another list/array. */
+void __mlang_std_vec_extend_raw(void* dst_ptr, const void* src_ptr, int64_t elem_size) {
+    if (elem_size <= 0) return;
+    vec_extend_bytes(dst_ptr, src_ptr, (size_t)elem_size);
+}
+
+void __mlang_std_map_extend_raw(void* dst_ptr,
+                                const void* src_ptr,
+                                int64_t key_size,
+                                int64_t value_size) {
+    mlang_map_t* dst = (mlang_map_t*)dst_ptr;
+    const mlang_map_t* src = (const mlang_map_t*)src_ptr;
+    if (!dst || !src || key_size <= 0 || value_size <= 0) return;
+    if (src->count <= 0) return;
+    if (!src->keys || !src->values) return;
+
+    int64_t old_count = dst->count;
+    int64_t add_count = src->count;
+
+    void* next_keys =
+        realloc(dst->keys, (size_t)(old_count + add_count) * (size_t)key_size);
+    if (!next_keys) return;
+    dst->keys = next_keys;
+
+    void* next_values = realloc(dst->values,
+                                (size_t)(old_count + add_count) *
+                                    (size_t)value_size);
+    if (!next_values) return;
+    dst->values = next_values;
+
+    char* dst_keys = (char*)dst->keys;
+    char* dst_values = (char*)dst->values;
+    const char* src_keys = (dst == src) ? dst_keys : (const char*)src->keys;
+    const char* src_values =
+        (dst == src) ? dst_values : (const char*)src->values;
+
+    memmove(dst_keys + ((size_t)old_count * (size_t)key_size),
+            src_keys,
+            (size_t)add_count * (size_t)key_size);
+    memmove(dst_values + ((size_t)old_count * (size_t)value_size),
+            src_values,
+            (size_t)add_count * (size_t)value_size);
+    dst->count = old_count + add_count;
 }
 
 /* ------------------------------------------------------------------ */

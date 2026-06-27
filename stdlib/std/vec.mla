@@ -23,7 +23,8 @@
 /// ## Methods (called on the variable, do not move it)
 ///   - `v.len()`            — i64 element count
 ///   - `v.is_empty()`       — bool
-///   - `v.push(val)`        — append element (mutates in-place)
+///   - `v.push(val)`        — append one element (mutates in-place)
+///   - `v.extend(values)`   — append compatible list/array/literal elements
 ///   - `v.pop()`            — remove & return last element (checked non-empty)
 ///   - `v.clear()`          — reset count to 0
 ///   - `v.contains(val)`    — bool membership test

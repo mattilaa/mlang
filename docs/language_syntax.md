@@ -140,6 +140,8 @@ Global alias:
 ```mla
 alias Distance = f32;
 alias SomeMap<K, V> = map<K, V>;
+
+var distances: SomeMap<i32, str8> = {1: "near", 2: "far"};
 ```
 
 Block-scoped alias (shadows outer aliases inside the block only):
@@ -899,6 +901,29 @@ let all_true: bool = (... && bs);
 let any_true: bool = (... || bs);
 ```
 
+Mutable lists can append another compatible `list<T>`, `array<T, N>`, or
+literal/fill list source:
+
+```mla
+var values: list<i32> = [1];
+values.extend([2, 3]);
+
+let fixed_more: array<i32, 2> = {4, 5};
+values.extend(fixed_more);
+```
+
+Mutable maps can append entries from another compatible `map<K, V>` or a map
+literal. Keys and values must match the destination map types:
+
+```mla
+alias Labels<K, V> = map<K, V>;
+
+var labels: Labels<i32, str8> = {1: "one"};
+let more: map<i32, str8> = {2: "two"};
+labels.extend(more);
+labels.extend({3: "three"});
+```
+
 Fixed-capacity arrays use `array<T, N>`. They use the same list-compatible
 runtime operations, but literal and fill initializers are checked against `N` at
 compile time:
@@ -919,6 +944,11 @@ Array growth is checked before writing. When the compiler can prove the current
 length and source length, `push` and `extend` overflow is a compile-time error.
 Unknown runtime-sized sources keep the runtime capacity guard. `fill(value)`
 sets the array length to exactly `N`.
+
+`extend` copies the source elements into the destination container. For maps,
+it copies key/value entries. The element type may itself be a container, for
+example `list<array<i32, 4>>`, `array<list<i32>, N>`, or
+`list<map<str8, i32>>`.
 
 Indexing is checked too. Constant indexes that are known to be out of bounds are
 compile-time errors, while dynamic indexes keep a runtime bounds guard before

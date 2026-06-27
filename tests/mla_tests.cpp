@@ -770,6 +770,38 @@ TEST_F(MLATest, FixedArrayExtendsFromVecWithinCapacity)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, FixedArrayExtendsWithNestedListElements)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let xs: list<i32> = [1, 2];
+            let ys: list<i32> = [3, 4];
+            let source: array<list<i32>, 2> = {xs, ys};
+            var arr: array<list<i32>, 3> = {};
+            arr.extend(source);
+            let last_list: list<i32> = arr[1];
+            return last_list.last() == 4 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FixedArrayExtendsWithNestedMapElements)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let first: map<str8, i32> = {"a": 1};
+            let second: map<str8, i32> = {"b": 2};
+            let source: array<map<str8, i32>, 2> = {first, second};
+            var arr: array<map<str8, i32>, 3> = {};
+            arr.extend(source);
+            let last_map: map<str8, i32> = arr[1];
+            return last_map["b"] == 2 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, FixedArrayRejectsProvableExtendOverflowAtCompileTime)
 {
     std::string code = R"(
@@ -785,6 +817,26 @@ TEST_F(MLATest, FixedArrayRejectsProvableExtendOverflowAtCompileTime)
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("extend() would exceed"), std::string::npos);
     EXPECT_NE(out.find("capacity=3"), std::string::npos);
+}
+
+TEST_F(MLATest, FixedArrayRejectsNestedMapExtendOverflowAtCompileTime)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let first: map<str8, i32> = {"a": 1};
+            let second: map<str8, i32> = {"b": 2};
+            let source: array<map<str8, i32>, 2> = {first, second};
+            var arr: array<map<str8, i32>, 1> = {};
+            arr.extend(source);
+            return arr.len();
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("extend() would exceed"), std::string::npos);
+    EXPECT_NE(out.find("capacity=1"), std::string::npos);
 }
 
 TEST_F(MLATest, FixedArrayRejectsProvablePushOverflowAtCompileTime)
@@ -932,6 +984,89 @@ TEST_F(MLATest, ReturnedListLiteralUsesDeclaredElementWidthAndCanGrow)
             var xs: list<i32> = values();
             xs.push(4);
             return xs[3] == 4 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ListExtendsFromList)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<i32> = [1];
+            let more: list<i32> = [2, 3];
+            values.extend(more);
+            if values.len() != 3 {
+                return 1;
+            }
+            return values[2] == 3 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ListExtendsFromArray)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var values: list<i32> = [1];
+            let more: array<i32, 2> = {2, 3};
+            values.extend(more);
+            if values.len() != 3 {
+                return 1;
+            }
+            return values[1] == 2 && values[2] == 3 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructListFieldExtendsFromLiteral)
+{
+    std::string code = R"(
+        struct Bag {
+            var items: list<i32>;
+        };
+
+        fn main() -> i32 {
+            var bag: Bag = Bag { items: [1] };
+            bag.items.extend([2, 3]);
+            if bag.items.len() != 3 {
+                return 1;
+            }
+            return bag.items[2] == 3 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ListExtendsWithNestedListElements)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let xs: list<i32> = [1, 2];
+            let ys: list<i32> = [3, 4];
+            let source: array<list<i32>, 2> = {xs, ys};
+            var values: list<list<i32>> = [];
+            values.extend(source);
+            let last_list: list<i32> = values[1];
+            return last_list.last() == 4 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ListExtendsWithNestedMapElements)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let first: map<str8, i32> = {"a": 1};
+            let second: map<str8, i32> = {"b": 2};
+            let source: array<map<str8, i32>, 2> = {first, second};
+            var values: list<map<str8, i32>> = [];
+            values.extend(source);
+            let last_map: map<str8, i32> = values[1];
+            return last_map["b"] == 2 ? 0 : 1;
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 0);
@@ -1264,6 +1399,76 @@ TEST_F(MLATest, MapIndexReturnsValueForExistingKey)
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MapExtendsFromMap)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var scores: map<str8, i32> = {"a": 1};
+            let more: map<str8, i32> = {"b": 2};
+            scores.extend(more);
+            if scores.len() != 2 {
+                return 1;
+            }
+            return scores["b"] == 2 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MapExtendsFromLiteral)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var scores: map<str8, i32> = {"a": 1};
+            scores.extend({"b": 2, "c": 3});
+            if scores.len() != 3 {
+                return 1;
+            }
+            return scores["c"] == 3 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StructMapFieldExtendsFromMap)
+{
+    std::string code = R"(
+        struct Bag {
+            var scores: map<str8, i32>;
+        };
+
+        fn main() -> i32 {
+            var bag: Bag = Bag { scores: {"a": 1} };
+            let more: map<str8, i32> = {"b": 2};
+            bag.scores.extend(more);
+            if bag.scores.len() != 2 {
+                return 1;
+            }
+            return bag.scores["b"] == 2 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MapExtendRejectsMismatchedKeyValueTypes)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var scores: map<str8, i32> = {"a": 1};
+            let more: map<str8, i64> = {"b": 2};
+            scores.extend(more);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("map.extend() argument key/value types do not match "
+                       "destination map"),
+              std::string::npos);
 }
 
 TEST_F(MLATest, MapIndexMissingKeyAbortsInsteadOfDefaultValue)
