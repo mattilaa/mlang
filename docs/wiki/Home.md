@@ -40,16 +40,20 @@ Examples of supported language/runtime features include:
 If you are new to MLang, read these pages in this order:
 
 1. [Quick Guide](Quick-Guide)
-2. [Language Syntax](Language-Syntax)
-3. [Language Attributes](Language-Attributes)
-4. [Package Manager](Package-Manager)
-5. [Stdlib Module API](Stdlib-Module-API)
+2. [New Features Guide](New-Features)
+3. [Language Syntax](Language-Syntax)
+4. [Language Attributes](Language-Attributes)
+5. [Package Manager](Package-Manager)
+6. [Stdlib Module API](Stdlib-Module-API)
 
 ## Quick Links
 
 - [Quick Guide](Quick-Guide)
   A short introduction with small examples and “how do I write code in this
   language?” answers.
+- [New Features Guide](New-Features)
+  Wiki-ready index of recently added language, safety, stdlib, package, and
+  tooling features with links to examples and focused regression tests.
 - [Language Syntax](Language-Syntax)
   Language features such as [`switch`](Language-Syntax), exceptions, pipe syntax, inline asm,
   conditional regions, lambdas/folds, and [`bit`](Quick-Guide#types)/`size_of`.
@@ -207,6 +211,7 @@ The language is intentionally pragmatic rather than ideological.
 ## See Also
 
 - [Quick Guide](Quick-Guide)
+- [New Features Guide](New-Features)
 - [Language Syntax](Language-Syntax)
 - [Language Attributes](Language-Attributes)
 - [Package Manager](Package-Manager)
