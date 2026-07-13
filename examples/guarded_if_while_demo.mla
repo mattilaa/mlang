@@ -1,0 +1,28 @@
+/// \file guarded_if_while_demo.mla
+/// @ingroup examples
+/// \brief Guarded `if let` / `if var` and `while` syntax demo.
+
+fn next_value(seed: i32) -> i32 {
+    return seed + 1;
+}
+
+fn main() -> i32 {
+    let candidate: i32 = next_value(4);
+
+    if let value: i32 = candidate: value > 0 && value < 10: {
+        println!("guarded if let value={}", value);
+    }
+
+    if var editable: i32 = candidate: editable == 5: {
+        editable = editable + 10;
+        println!("guarded if var editable={}", editable);
+    }
+
+    var i: i32 = 0;
+    while i < 8: (i % 2) == 0 {
+        println!("guarded while i={}", i);
+        i = i + 2;
+    }
+
+    return 0;
+}

@@ -71,18 +71,29 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 - `examples/package_manager_task_graph` — package task graph configuration.
 - `examples/package_manager_multilanguage_example` — package build combining
   MLang, C, and C++ sources.
+- `examples/type_name_property_demo.mla` — synthetic `.name` type-name
+  property for values and containers.
+- `examples/zero_init_demo.mla` — typed `var` zero-initialization and explicit
+  `{}` initialization.
+- `examples/guarded_if_while_demo.mla` — guarded `if let`, guarded `if var`,
+  and guarded `while`.
+- `examples/function_return_inference_demo.mla` — inferred return types for
+  non-extern functions.
+- `examples/container_extend_demo.mla` — `.extend(...)` across lists, maps,
+  arrays, literals, and nested containers.
+- `examples/property_fields_demo.mla` — `@property(...)` generated accessors,
+  hidden/protected fields, and JSON metadata.
+- `examples/literal_storage_safety_demo.mla` — returned literals, fill
+  literals, loop literals, and nested literal-backed containers.
 
 ## Focused regression examples
 
 Some new features are best represented by compact compiler regression tests
 instead of standalone example programs:
 
-- `tests/mla_tests.cpp` — container-to-container `.extend(...)`,
-  fixed-capacity array overflow checks, nested container transfer, and
-  array-fill storage behavior.
-- `tests/function_return_inference_tests.mla` — inferred return types.
-- `tests/type_name_property_tests.mla` — synthetic `.name` type-name property.
-- `tests/if_let_var_combinations_tests.mla` — guarded `if let` / `if var`
-  combinations.
-- `tests/while_guard_tests.mla` — guarded `while` forms.
+- `tests/mla_tests.cpp` — fixed-capacity array overflow checks and additional
+  `.extend(...)` regression cases.
+- `tests/if_let_var_combinations_tests.mla` — additional guarded `if let` /
+  `if var` combinations.
+- `tests/while_guard_tests.mla` — additional guarded `while` forms.
 - `tests/borrow_checker_tests.mla` — ownership and borrow diagnostics.
