@@ -90,6 +90,13 @@ DEFINE_BINARY_OP(multiply, i32, int32_t, v4i32, 4, *)
 DEFINE_BINARY_OP(add, i64, int64_t, v2i64, 2, +)
 DEFINE_BINARY_OP(subtract, i64, int64_t, v2i64, 2, -)
 DEFINE_BINARY_OP(multiply, i64, int64_t, v2i64, 2, *)
+DEFINE_BINARY_OP(bit_and, i32, int32_t, v4i32, 4, &)
+DEFINE_BINARY_OP(bit_or, i32, int32_t, v4i32, 4, |)
+DEFINE_BINARY_OP(bit_xor, i32, int32_t, v4i32, 4, ^)
+
+DEFINE_BINARY_OP(bit_and, i64, int64_t, v2i64, 2, &)
+DEFINE_BINARY_OP(bit_or, i64, int64_t, v2i64, 2, |)
+DEFINE_BINARY_OP(bit_xor, i64, int64_t, v2i64, 2, ^)
 
 DEFINE_BINARY_OP(add, f32, float, v4f32, 4, +)
 DEFINE_BINARY_OP(subtract, f32, float, v4f32, 4, -)
@@ -100,6 +107,97 @@ DEFINE_BINARY_OP(subtract, f64, double, v2f64, 2, -)
 DEFINE_BINARY_OP(multiply, f64, double, v2f64, 2, *)
 
 #undef DEFINE_BINARY_OP
+
+#if MLANG_SIMD_VECTOR_EXT
+#define DEFINE_UNARY_OP(NAME, SUFFIX, TYPE, VTYPE, LANES, OP)                  \
+    mlang_list_t __mlang_std_simd_##NAME##_##SUFFIX(mlang_list_t values)       \
+    {                                                                          \
+        if(values.size <= 0 || !values.data)                                   \
+            return empty_list();                                               \
+        mlang_list_t out = alloc_list(values.size, sizeof(TYPE));              \
+        if(!out.data)                                                          \
+            return out;                                                        \
+        const TYPE* src = (const TYPE*)values.data;                            \
+        TYPE* dst = (TYPE*)out.data;                                           \
+        int64_t i = 0;                                                         \
+        for(; i + (LANES) <= values.size; i += (LANES))                        \
+        {                                                                      \
+            VTYPE v;                                                           \
+            __builtin_memcpy(&v, src + i, sizeof(v));                          \
+            VTYPE r = OP v;                                                    \
+            __builtin_memcpy(dst + i, &r, sizeof(r));                          \
+        }                                                                      \
+        for(; i < values.size; ++i)                                             \
+            dst[i] = OP src[i];                                                \
+        return out;                                                            \
+    }
+
+#define DEFINE_SHIFT_OP(NAME, SUFFIX, TYPE, VTYPE, LANES, OP)                  \
+    mlang_list_t __mlang_std_simd_##NAME##_##SUFFIX(mlang_list_t values,       \
+                                                    int32_t amount)            \
+    {                                                                          \
+        if(values.size <= 0 || !values.data || amount < 0)                     \
+            return empty_list();                                               \
+        mlang_list_t out = alloc_list(values.size, sizeof(TYPE));              \
+        if(!out.data)                                                          \
+            return out;                                                        \
+        const TYPE* src = (const TYPE*)values.data;                            \
+        TYPE* dst = (TYPE*)out.data;                                           \
+        int64_t i = 0;                                                         \
+        for(; i + (LANES) <= values.size; i += (LANES))                        \
+        {                                                                      \
+            VTYPE v;                                                           \
+            __builtin_memcpy(&v, src + i, sizeof(v));                          \
+            VTYPE r = v OP amount;                                             \
+            __builtin_memcpy(dst + i, &r, sizeof(r));                          \
+        }                                                                      \
+        for(; i < values.size; ++i)                                             \
+            dst[i] = src[i] OP amount;                                         \
+        return out;                                                            \
+    }
+#else
+#define DEFINE_UNARY_OP(NAME, SUFFIX, TYPE, VTYPE, LANES, OP)                  \
+    mlang_list_t __mlang_std_simd_##NAME##_##SUFFIX(mlang_list_t values)       \
+    {                                                                          \
+        if(values.size <= 0 || !values.data)                                   \
+            return empty_list();                                               \
+        mlang_list_t out = alloc_list(values.size, sizeof(TYPE));              \
+        if(!out.data)                                                          \
+            return out;                                                        \
+        const TYPE* src = (const TYPE*)values.data;                            \
+        TYPE* dst = (TYPE*)out.data;                                           \
+        for(int64_t i = 0; i < values.size; ++i)                               \
+            dst[i] = OP src[i];                                                \
+        return out;                                                            \
+    }
+
+#define DEFINE_SHIFT_OP(NAME, SUFFIX, TYPE, VTYPE, LANES, OP)                  \
+    mlang_list_t __mlang_std_simd_##NAME##_##SUFFIX(mlang_list_t values,       \
+                                                    int32_t amount)            \
+    {                                                                          \
+        if(values.size <= 0 || !values.data || amount < 0)                     \
+            return empty_list();                                               \
+        mlang_list_t out = alloc_list(values.size, sizeof(TYPE));              \
+        if(!out.data)                                                          \
+            return out;                                                        \
+        const TYPE* src = (const TYPE*)values.data;                            \
+        TYPE* dst = (TYPE*)out.data;                                           \
+        for(int64_t i = 0; i < values.size; ++i)                               \
+            dst[i] = src[i] OP amount;                                         \
+        return out;                                                            \
+    }
+#endif
+
+DEFINE_UNARY_OP(bit_not, i32, int32_t, v4i32, 4, ~)
+DEFINE_UNARY_OP(bit_not, i64, int64_t, v2i64, 2, ~)
+
+DEFINE_SHIFT_OP(shift_left, i32, int32_t, v4i32, 4, <<)
+DEFINE_SHIFT_OP(shift_right, i32, int32_t, v4i32, 4, >>)
+DEFINE_SHIFT_OP(shift_left, i64, int64_t, v2i64, 2, <<)
+DEFINE_SHIFT_OP(shift_right, i64, int64_t, v2i64, 2, >>)
+
+#undef DEFINE_UNARY_OP
+#undef DEFINE_SHIFT_OP
 
 int32_t __mlang_std_simd_sum_i32(mlang_list_t values)
 {

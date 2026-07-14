@@ -53,6 +53,50 @@ fn test_simd_i64_ops() {
 }
 
 #[test]
+fn test_simd_i32_bitwise_ops() {
+    let a: list<i32> = [1, 2, 3, 12];
+    let b: list<i32> = [3, 1, 5, 10];
+
+    let anded: list<i32> = bit_and(a, b);
+    let ored: list<i32> = bit_or(a, b);
+    let xored: list<i32> = bit_xor(a, b);
+    let inverted: list<i32> = bit_not(a);
+    let left: list<i32> = shift_left(a, 2);
+    let right: list<i32> = shift_right(left, 1);
+    let bad_shift: list<i32> = shift_left(a, 0 - 1);
+
+    verify(anded[0] == 1);
+    verify(anded[1] == 0);
+    verify(ored[2] == 7);
+    verify(xored[3] == 6);
+    verify(inverted[0] == 0 - 2);
+    verify(left[2] == 12);
+    verify(right[3] == 24);
+    verify(bad_shift.len() == 0);
+}
+
+#[test]
+fn test_simd_i64_bitwise_ops() {
+    let a: list<i64> = [1, 2, 3, 12];
+    let b: list<i64> = [3, 1, 5, 10];
+
+    let anded: list<i64> = bit_and(a, b);
+    let ored: list<i64> = bit_or(a, b);
+    let xored: list<i64> = bit_xor(a, b);
+    let inverted: list<i64> = bit_not(a);
+    let left: list<i64> = shift_left(a, 3);
+    let right: list<i64> = shift_right(left, 2);
+
+    verify(anded[0] == 1);
+    verify(anded[1] == 0);
+    verify(ored[2] == 7);
+    verify(xored[3] == 6);
+    verify(inverted[0] == 0 - 2);
+    verify(left[2] == 24);
+    verify(right[3] == 24);
+}
+
+#[test]
 fn test_simd_f32_ops() {
     let eps: f32 = 0.0001f;
     let a: list<f32> = [1.0f, 2.5f, 3.0f];

@@ -1040,6 +1040,17 @@ If input lengths differ, they return an empty list.
 - `multiply(lhs: &list<T>, rhs: &list<T>) -> list<T>`
 - `sum(values: &list<T>) -> T`
 
+Integer-only gate logic and bit shifts:
+- `bit_and(lhs: &list<T>, rhs: &list<T>) -> list<T>`
+- `bit_or(lhs: &list<T>, rhs: &list<T>) -> list<T>`
+- `bit_xor(lhs: &list<T>, rhs: &list<T>) -> list<T>`
+- `bit_not(values: &list<T>) -> list<T>`
+- `shift_left(values: &list<T>, amount: i32) -> list<T>`
+- `shift_right(values: &list<T>, amount: i32) -> list<T>`
+
+Bitwise operations support `i32` and `i64`. Shift counts are applied uniformly
+to every lane. Negative shift counts return an empty list.
+
 Example:
 
 ```mla
@@ -1052,6 +1063,11 @@ let rhs: list<f32> = [10.0f, 20.0f, 30.0f, 40.0f];
 let added: list<f32> = add(lhs, rhs);
 let product: list<f32> = multiply(lhs, rhs);
 let total: f32 = sum(added);
+
+let masks: list<i32> = [1, 2, 3, 12];
+let flags: list<i32> = [3, 1, 5, 10];
+let both: list<i32> = bit_and(masks, flags);
+let shifted: list<i32> = shift_left(masks, 2);
 ```
 
 See [`examples/std_simd_demo.mla`](../examples/std_simd_demo.mla).

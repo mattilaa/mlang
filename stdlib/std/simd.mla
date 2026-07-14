@@ -9,11 +9,23 @@
 extern pub fn __mlang_std_simd_add_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
 extern pub fn __mlang_std_simd_subtract_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
 extern pub fn __mlang_std_simd_multiply_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
+extern pub fn __mlang_std_simd_bit_and_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
+extern pub fn __mlang_std_simd_bit_or_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
+extern pub fn __mlang_std_simd_bit_xor_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
+extern pub fn __mlang_std_simd_bit_not_i32(values: &list<i32>) -> list<i32>;
+extern pub fn __mlang_std_simd_shift_left_i32(values: &list<i32>, amount: i32) -> list<i32>;
+extern pub fn __mlang_std_simd_shift_right_i32(values: &list<i32>, amount: i32) -> list<i32>;
 extern pub fn __mlang_std_simd_sum_i32(values: &list<i32>) -> i32;
 
 extern pub fn __mlang_std_simd_add_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
 extern pub fn __mlang_std_simd_subtract_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
 extern pub fn __mlang_std_simd_multiply_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
+extern pub fn __mlang_std_simd_bit_and_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
+extern pub fn __mlang_std_simd_bit_or_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
+extern pub fn __mlang_std_simd_bit_xor_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
+extern pub fn __mlang_std_simd_bit_not_i64(values: &list<i64>) -> list<i64>;
+extern pub fn __mlang_std_simd_shift_left_i64(values: &list<i64>, amount: i32) -> list<i64>;
+extern pub fn __mlang_std_simd_shift_right_i64(values: &list<i64>, amount: i32) -> list<i64>;
 extern pub fn __mlang_std_simd_sum_i64(values: &list<i64>) -> i64;
 
 extern pub fn __mlang_std_simd_add_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32>;
@@ -108,6 +120,86 @@ pub fn multiply(lhs: &list<f32>, rhs: &list<f32>) -> list<f32> {
 /// Returns an empty list when input lengths differ.
 pub fn multiply(lhs: &list<f64>, rhs: &list<f64>) -> list<f64> {
     return __mlang_std_simd_multiply_f64(lhs, rhs);
+}
+
+/// @brief Element-wise bitwise AND.
+///
+/// Returns an empty list when input lengths differ.
+pub fn bit_and(lhs: &list<i32>, rhs: &list<i32>) -> list<i32> {
+    return __mlang_std_simd_bit_and_i32(lhs, rhs);
+}
+
+/// @brief Element-wise bitwise AND.
+///
+/// Returns an empty list when input lengths differ.
+pub fn bit_and(lhs: &list<i64>, rhs: &list<i64>) -> list<i64> {
+    return __mlang_std_simd_bit_and_i64(lhs, rhs);
+}
+
+/// @brief Element-wise bitwise OR.
+///
+/// Returns an empty list when input lengths differ.
+pub fn bit_or(lhs: &list<i32>, rhs: &list<i32>) -> list<i32> {
+    return __mlang_std_simd_bit_or_i32(lhs, rhs);
+}
+
+/// @brief Element-wise bitwise OR.
+///
+/// Returns an empty list when input lengths differ.
+pub fn bit_or(lhs: &list<i64>, rhs: &list<i64>) -> list<i64> {
+    return __mlang_std_simd_bit_or_i64(lhs, rhs);
+}
+
+/// @brief Element-wise bitwise XOR.
+///
+/// Returns an empty list when input lengths differ.
+pub fn bit_xor(lhs: &list<i32>, rhs: &list<i32>) -> list<i32> {
+    return __mlang_std_simd_bit_xor_i32(lhs, rhs);
+}
+
+/// @brief Element-wise bitwise XOR.
+///
+/// Returns an empty list when input lengths differ.
+pub fn bit_xor(lhs: &list<i64>, rhs: &list<i64>) -> list<i64> {
+    return __mlang_std_simd_bit_xor_i64(lhs, rhs);
+}
+
+/// @brief Element-wise bitwise NOT.
+pub fn bit_not(values: &list<i32>) -> list<i32> {
+    return __mlang_std_simd_bit_not_i32(values);
+}
+
+/// @brief Element-wise bitwise NOT.
+pub fn bit_not(values: &list<i64>) -> list<i64> {
+    return __mlang_std_simd_bit_not_i64(values);
+}
+
+/// @brief Shift every lane left by `amount` bits.
+///
+/// Returns an empty list when `amount` is negative.
+pub fn shift_left(values: &list<i32>, amount: i32) -> list<i32> {
+    return __mlang_std_simd_shift_left_i32(values, amount);
+}
+
+/// @brief Shift every lane left by `amount` bits.
+///
+/// Returns an empty list when `amount` is negative.
+pub fn shift_left(values: &list<i64>, amount: i32) -> list<i64> {
+    return __mlang_std_simd_shift_left_i64(values, amount);
+}
+
+/// @brief Shift every lane right by `amount` bits.
+///
+/// Returns an empty list when `amount` is negative.
+pub fn shift_right(values: &list<i32>, amount: i32) -> list<i32> {
+    return __mlang_std_simd_shift_right_i32(values, amount);
+}
+
+/// @brief Shift every lane right by `amount` bits.
+///
+/// Returns an empty list when `amount` is negative.
+pub fn shift_right(values: &list<i64>, amount: i32) -> list<i64> {
+    return __mlang_std_simd_shift_right_i64(values, amount);
 }
 
 /// @brief Horizontal sum of all vector elements.

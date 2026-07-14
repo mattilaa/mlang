@@ -14,9 +14,20 @@ fn main() -> i32 {
     let multiplied: list<f32> = multiply(lhs, rhs);
     let total: f32 = sum(added);
 
+    let mask_a: list<i32> = [1, 2, 3, 12];
+    let mask_b: list<i32> = [3, 1, 5, 10];
+    let anded: list<i32> = bit_and(mask_a, mask_b);
+    let ored: list<i32> = bit_or(mask_a, mask_b);
+    let xored: list<i32> = bit_xor(mask_a, mask_b);
+    let shifted: list<i32> = shift_left(mask_a, 2);
+
     println!("added[0]={}", added[0]);
     println!("subbed[1]={}", subbed[1]);
     println!("multiplied[2]={}", multiplied[2]);
     println!("sum(added)={}", total);
+    println!("and[0]={}", anded[0]);
+    println!("or[2]={}", ored[2]);
+    println!("xor[3]={}", xored[3]);
+    println!("shifted[2]={}", shifted[2]);
     return 0;
 }
