@@ -1,0 +1,143 @@
+/// \file bench_simd.mla
+/// \brief SIMD vs scalar benchmark pairs for `mlang bench`.
+///
+/// Run with:
+/// \code
+///   ./build/mlang bench tests/bench_simd.mla --bench-iters 2000 --bench-warmup 200 -L ./build -lmlang_std
+/// \endcode
+
+mod std::bench;
+mod std::bitset;
+mod std::simd;
+mod std::testing;
+
+use std::bench::clobber_memory;
+use std::bench::do_not_optimize_i64;
+use std::bitset::BitSet;
+use std::simd::*;
+use std::testing::verify;
+
+fn make_i64_values(n: i64, offset: i64) -> list<i64> {
+    var out: list<i64> = [];
+    for i in 0..n {
+        out.push((i % 97) + offset);
+    }
+    return out;
+}
+
+fn scalar_sum_i64(values: &list<i64>) -> i64 {
+    var total: i64 = 0;
+    for i in 0..values.len() {
+        total = total + values[i];
+    }
+    return total;
+}
+
+fn scalar_add_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    for i in 0..lhs.len() {
+        out.push(lhs[i] + rhs[i]);
+    }
+    return out;
+}
+
+fn make_bitset(n: i64) -> BitSet {
+    let r: Result<BitSet, str8> = BitSet::new(n);
+    verify(!r.is_err());
+    let bits: BitSet = r.unwrap();
+    verify(bits.resize(n, false) == 0);
+    for i in 0..n {
+        if (i % 3) == 0 || (i % 17) == 0 {
+            verify(bits.set_fast(i, true) == 0);
+        }
+    }
+    return bits;
+}
+
+fn scalar_count_ones(bits: BitSet) -> i64 {
+    var total: i64 = 0;
+    for i in 0..bits.len() {
+        if bits.get_fast(i) == 1 {
+            total = total + 1;
+        }
+    }
+    return total;
+}
+
+#[test]
+fn bench_scalar_sum_i64_1024x16() {
+    let values: list<i64> = make_i64_values(1024, 1);
+    var checksum: i64 = 0;
+    for _repeat in 0..16 {
+        checksum = checksum + scalar_sum_i64(values);
+    }
+    do_not_optimize_i64(checksum);
+    clobber_memory();
+    verify(checksum == 784240);
+}
+
+#[test]
+fn bench_simd_sum_i64_1024x16() {
+    let values: list<i64> = make_i64_values(1024, 1);
+    var checksum: i64 = 0;
+    for _repeat in 0..16 {
+        checksum = checksum + sum(values);
+    }
+    do_not_optimize_i64(checksum);
+    clobber_memory();
+    verify(checksum == 784240);
+}
+
+#[test]
+fn bench_scalar_add_i64_1024x8() {
+    let lhs: list<i64> = make_i64_values(1024, 1);
+    let rhs: list<i64> = make_i64_values(1024, 3);
+    var checksum: i64 = 0;
+    for _repeat in 0..8 {
+        let out: list<i64> = scalar_add_i64(lhs, rhs);
+        checksum = checksum + scalar_sum_i64(out);
+    }
+    do_not_optimize_i64(checksum);
+    clobber_memory();
+    verify(checksum == 800624);
+}
+
+#[test]
+fn bench_simd_add_i64_1024x8() {
+    let lhs: list<i64> = make_i64_values(1024, 1);
+    let rhs: list<i64> = make_i64_values(1024, 3);
+    var checksum: i64 = 0;
+    for _repeat in 0..8 {
+        let out: list<i64> = add(lhs, rhs);
+        checksum = checksum + sum(out);
+    }
+    do_not_optimize_i64(checksum);
+    clobber_memory();
+    verify(checksum == 800624);
+}
+
+#[test]
+fn bench_scalar_bitset_count_ones_4096x8() {
+    let bits: BitSet = make_bitset(4096);
+    var checksum: i64 = 0;
+    for _repeat in 0..8 {
+        checksum = checksum + scalar_count_ones(bits);
+    }
+    do_not_optimize_i64(checksum);
+    clobber_memory();
+    verify(checksum == 12208);
+    bits.close();
+}
+
+#[test]
+fn bench_simd_bitset_count_ones_4096x8() {
+    let bits: BitSet = make_bitset(4096);
+    var checksum: i64 = 0;
+    for _repeat in 0..8 {
+        checksum = checksum + count_ones(bits);
+    }
+    do_not_optimize_i64(checksum);
+    clobber_memory();
+    verify(checksum == 12208);
+    bits.close();
+}

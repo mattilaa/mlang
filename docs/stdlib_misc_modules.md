@@ -149,6 +149,22 @@ Run:
 ./build/mlang bench tests/bench_stdlib.mla --bench-iters 50000 -L ./build -lmlang_std
 ```
 
+### `tests/bench_simd.mla`
+
+SIMD benchmark pairs for comparing scalar loops against `std::simd`.
+
+It demonstrates:
+
+- scalar sum vs `std::simd::sum`
+- scalar element-wise add vs `std::simd::add`
+- per-bit `BitSet` scanning vs packed `std::simd::count_ones`
+
+Run:
+
+```sh
+./build/mlang bench tests/bench_simd.mla --bench-iters 2000 --bench-warmup 200 -L ./build -lmlang_std
+```
+
 ### `examples/testing_mock_example.mla`
 
 Simple mock-based example built on `std::testing`.

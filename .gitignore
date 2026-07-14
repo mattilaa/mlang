@@ -32,6 +32,7 @@ CMakeUserPresets.json
 fake_*.sh
 fake_*.log
 bench_*.mla
+!tests/bench_simd.mla
 compile_*.mla
 frontend_*.mla
 frontend_*_suite/

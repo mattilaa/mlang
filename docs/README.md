@@ -156,6 +156,7 @@ Use this section as a map into the existing documentation.
   - [`tests/fixture_tests.mla`](../../../tests/fixture_tests.mla) — `#[fixture]` impl with `setup` / `teardown`
   - [`tests/expect_call_tests.mla`](../../../tests/expect_call_tests.mla) — EXPECT_CALL-style mock cardinality and return queues
   - [`tests/bench_stdlib.mla`](../../../tests/bench_stdlib.mla) — benchmark example
+  - [`tests/bench_simd.mla`](../../../tests/bench_simd.mla) — scalar vs `std::simd` benchmark pairs
 
 ### Standard Library
 

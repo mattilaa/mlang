@@ -207,6 +207,7 @@ fn bench_counter() -> i32 {
 See:
 - [`tests/test_sample.mla`](https://github.com/mattilaa/mlang/blob/main/tests/test_sample.mla) — basic unit test example
 - [`tests/bench_stdlib.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_stdlib.mla) — benchmark example
+- [`tests/bench_simd.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_simd.mla) — scalar vs [`std::simd`](Stdlib-Module-API#stdsimd) benchmark pairs
 - [`tests/fixture_tests.mla`](https://github.com/mattilaa/mlang/blob/main/tests/fixture_tests.mla) — test fixture example
 
 ## `#[fixture]`

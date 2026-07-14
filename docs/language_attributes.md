@@ -204,6 +204,7 @@ fn bench_counter() -> i32 {
 See:
 - [`tests/test_sample.mla`](../../../tests/test_sample.mla) — basic unit test example
 - [`tests/bench_stdlib.mla`](../../../tests/bench_stdlib.mla) — benchmark example
+- [`tests/bench_simd.mla`](../../../tests/bench_simd.mla) — scalar vs `std::simd` benchmark pairs
 - [`tests/fixture_tests.mla`](../../../tests/fixture_tests.mla) — test fixture example
 
 ## `#[fixture]`
