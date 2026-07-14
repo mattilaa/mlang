@@ -361,6 +361,7 @@ Module file: `stdlib/std/date.mla`
 ### Types
 - `DateTime`
 - `UtcOffset`
+- `TimeZone`
 
 ### API
 - `now() -> DateTime`
@@ -373,8 +374,12 @@ Module file: `stdlib/std/date.mla`
 - `from_unix(timestamp: i64, offset: UtcOffset) -> DateTime`
 - `from_unix_utc(timestamp: i64) -> DateTime`
 - `from_unix_local(timestamp: i64) -> DateTime`
+- `load_timezone(name: str8) -> Result<TimeZone, str8>`
+- `from_unix_tz(timestamp: i64, zone: TimeZone) -> DateTime`
 - `to_unix(dt: DateTime, offset: UtcOffset) -> i64`
 - `to_unix_utc(dt: DateTime) -> i64`
+- `to_unix_tz(dt: DateTime, zone: TimeZone) -> i64`
+- `timezone_offset_at(zone: TimeZone, timestamp: i64) -> UtcOffset`
 - `format_iso8601(dt: DateTime) -> str8`
 - `format_iso8601_offset(dt: DateTime, offset: UtcOffset) -> str8`
 - `format_offset(offset: UtcOffset) -> str8`
@@ -382,8 +387,10 @@ Module file: `stdlib/std/date.mla`
 - `format_time(dt: DateTime) -> str8`
 
 `std::date` supports Unix UTC timestamps in whole seconds. Timezone support is
-provided as fixed UTC offsets (`UtcOffset`) and system-local conversions. Named
-IANA timezone database IDs are not bundled.
+provided as fixed UTC offsets (`UtcOffset`), system-local conversions, and named
+system timezones (`TimeZone`). Unix-like platforms load IANA/zoneinfo names such
+as `Europe/Helsinki` from the OS timezone database. Windows uses Windows system
+timezone IDs such as `FLE Standard Time`.
 
 Example:
 
@@ -397,6 +404,14 @@ let local_dt: DateTime = from_unix(0, helsinki);
 
 let ts: i64 = to_unix(local_dt, helsinki);
 let s: str8 = format_iso8601_offset(local_dt, helsinki);
+
+let zone_r: Result<TimeZone, str8> = load_timezone("Europe/Helsinki");
+if !zone_r.is_err() {
+    let zone: TimeZone = zone_r.unwrap();
+    let zoned: DateTime = from_unix_tz(1704067200, zone);
+    let zone_offset: UtcOffset = timezone_offset_at(zone, 1704067200);
+    let zoned_text: str8 = format_iso8601_offset(zoned, zone_offset);
+}
 ```
 
 ## std::env

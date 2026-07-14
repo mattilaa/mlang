@@ -7,6 +7,11 @@
 #include <string.h>
 #include <stdatomic.h>
 #include <time.h>
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 extern int __mlang_std_sync_lfqueue_send(int64_t queue_handle, const char* s);
 
@@ -30,6 +35,10 @@ typedef struct
     atomic_int running;
     atomic_int started;
 } mlang_async_ticker_t;
+
+#if !defined(_WIN32)
+static pthread_mutex_t g_timezone_lock = PTHREAD_MUTEX_INITIALIZER;
+#endif
 
 static int64_t now_ns_internal(void)
 {
@@ -570,6 +579,274 @@ int __mlang_std_date_local_offset_seconds_at(int64_t timestamp)
                            (int64_t)local_tm.tm_hour * 3600LL +
                            (int64_t)local_tm.tm_min * 60LL +
                            (int64_t)local_tm.tm_sec;
+    int64_t diff = local_as_utc - timestamp;
+    if(diff < INT_MIN || diff > INT_MAX)
+        return 0;
+    return (int)diff;
+}
+
+#if defined(_WIN32)
+static int systemtime_to_unix_seconds(const SYSTEMTIME* st, int64_t* out)
+{
+    if(!st || !out)
+        return 0;
+    FILETIME ft;
+    if(!SystemTimeToFileTime(st, &ft))
+        return 0;
+    ULARGE_INTEGER uli;
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
+    *out = (int64_t)((uli.QuadPart - 116444736000000000ULL) / 10000000ULL);
+    return 1;
+}
+
+static int unix_seconds_to_systemtime(int64_t timestamp, SYSTEMTIME* out)
+{
+    if(!out)
+        return 0;
+    ULARGE_INTEGER uli;
+    uli.QuadPart = (uint64_t)(timestamp + 11644473600LL) * 10000000ULL;
+    FILETIME ft;
+    ft.dwLowDateTime = uli.LowPart;
+    ft.dwHighDateTime = uli.HighPart;
+    return FileTimeToSystemTime(&ft, out) != 0;
+}
+
+static int utf8_to_wide(const char* s, wchar_t* out, int cap)
+{
+    if(!s || !out || cap <= 0)
+        return 0;
+    int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, out, cap);
+    return n > 0 && n <= cap;
+}
+
+static int load_windows_timezone(const char* name, DYNAMIC_TIME_ZONE_INFORMATION* out)
+{
+    if(!name || !name[0] || !out)
+        return 0;
+    wchar_t wanted[256];
+    if(!utf8_to_wide(name, wanted, 256))
+        return 0;
+    DWORD index = 0;
+    DYNAMIC_TIME_ZONE_INFORMATION current;
+    while(EnumDynamicTimeZoneInformation(index, &current) != ERROR_NO_MORE_ITEMS)
+    {
+        if(wcscmp(current.TimeZoneKeyName, wanted) == 0 ||
+           wcscmp(current.StandardName, wanted) == 0 ||
+           wcscmp(current.DaylightName, wanted) == 0)
+        {
+            *out = current;
+            return 1;
+        }
+        index += 1;
+    }
+    return 0;
+}
+
+static int windows_tz_part_from_unix(const char* name, int64_t timestamp, int part)
+{
+    DYNAMIC_TIME_ZONE_INFORMATION tz;
+    SYSTEMTIME utc_st;
+    SYSTEMTIME local_st;
+    if(!load_windows_timezone(name, &tz) || !unix_seconds_to_systemtime(timestamp, &utc_st))
+        return date_part_from_unix_offset(timestamp, 0, part);
+    if(!SystemTimeToTzSpecificLocalTimeEx(&tz, &utc_st, &local_st))
+        return date_part_from_unix_offset(timestamp, 0, part);
+    switch(part)
+    {
+        case 0: return (int)local_st.wYear;
+        case 1: return (int)local_st.wMonth;
+        case 2: return (int)local_st.wDay;
+        case 3: return (int)local_st.wHour;
+        case 4: return (int)local_st.wMinute;
+        case 5: return (int)local_st.wSecond;
+        default: return 0;
+    }
+}
+#else
+static int timezone_name_is_safe(const char* name)
+{
+    if(!name || !name[0] || name[0] == '/' || strstr(name, "..") != NULL)
+        return 0;
+    for(const char* p = name; *p; ++p)
+    {
+        char c = *p;
+        if(!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+             (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '+' ||
+             c == '/'))
+            return 0;
+    }
+    return 1;
+}
+
+static int timezone_name_exists(const char* name)
+{
+    if(!timezone_name_is_safe(name))
+        return 0;
+    if(strcmp(name, "UTC") == 0 || strcmp(name, "Etc/UTC") == 0)
+        return 1;
+    char path[512];
+    int n = snprintf(path, sizeof(path), "/usr/share/zoneinfo/%s", name);
+    if(n > 0 && (size_t)n < sizeof(path) && access(path, R_OK) == 0)
+        return 1;
+    n = snprintf(path, sizeof(path), "/var/db/timezone/zoneinfo/%s", name);
+    if(n > 0 && (size_t)n < sizeof(path) && access(path, R_OK) == 0)
+        return 1;
+    return 0;
+}
+
+static void restore_timezone_env(char* old_tz, int had_tz)
+{
+    if(had_tz)
+        setenv("TZ", old_tz ? old_tz : "", 1);
+    else
+        unsetenv("TZ");
+    tzset();
+    free(old_tz);
+}
+
+static int unix_tz_part_from_unix(const char* name, int64_t timestamp, int part)
+{
+    if(!timezone_name_exists(name))
+        return date_part_from_unix_offset(timestamp, 0, part);
+    pthread_mutex_lock(&g_timezone_lock);
+    const char* current_tz = getenv("TZ");
+    int had_tz = current_tz != NULL;
+    char* old_tz = current_tz ? strdup(current_tz) : NULL;
+    setenv("TZ", name, 1);
+    tzset();
+    time_t t = (time_t)timestamp;
+    struct tm tmv;
+    int ok = localtime_r(&t, &tmv) != NULL;
+    restore_timezone_env(old_tz, had_tz);
+    pthread_mutex_unlock(&g_timezone_lock);
+    if(!ok)
+        return date_part_from_unix_offset(timestamp, 0, part);
+    switch(part)
+    {
+        case 0: return tmv.tm_year + 1900;
+        case 1: return tmv.tm_mon + 1;
+        case 2: return tmv.tm_mday;
+        case 3: return tmv.tm_hour;
+        case 4: return tmv.tm_min;
+        case 5: return tmv.tm_sec;
+        default: return 0;
+    }
+}
+#endif
+
+int __mlang_std_date_timezone_valid(const char* name)
+{
+#if defined(_WIN32)
+    DYNAMIC_TIME_ZONE_INFORMATION tz;
+    return load_windows_timezone(name, &tz) ? 1 : 0;
+#else
+    return timezone_name_exists(name) ? 1 : 0;
+#endif
+}
+
+static int timezone_part_from_unix(const char* name, int64_t timestamp, int part)
+{
+#if defined(_WIN32)
+    return windows_tz_part_from_unix(name, timestamp, part);
+#else
+    return unix_tz_part_from_unix(name, timestamp, part);
+#endif
+}
+
+int __mlang_std_date_from_unix_tz_year(const char* name, int64_t timestamp)
+{
+    return timezone_part_from_unix(name, timestamp, 0);
+}
+
+int __mlang_std_date_from_unix_tz_month(const char* name, int64_t timestamp)
+{
+    return timezone_part_from_unix(name, timestamp, 1);
+}
+
+int __mlang_std_date_from_unix_tz_day(const char* name, int64_t timestamp)
+{
+    return timezone_part_from_unix(name, timestamp, 2);
+}
+
+int __mlang_std_date_from_unix_tz_hour(const char* name, int64_t timestamp)
+{
+    return timezone_part_from_unix(name, timestamp, 3);
+}
+
+int __mlang_std_date_from_unix_tz_minute(const char* name, int64_t timestamp)
+{
+    return timezone_part_from_unix(name, timestamp, 4);
+}
+
+int __mlang_std_date_from_unix_tz_second(const char* name, int64_t timestamp)
+{
+    return timezone_part_from_unix(name, timestamp, 5);
+}
+
+int64_t __mlang_std_date_to_unix_tz(const char* name, int32_t year, int32_t month,
+                                    int32_t day, int32_t hour, int32_t minute,
+                                    int32_t second)
+{
+    if(!valid_datetime(year, month, day, hour, minute, second) ||
+       __mlang_std_date_timezone_valid(name) == 0)
+        return INT64_MIN;
+#if defined(_WIN32)
+    DYNAMIC_TIME_ZONE_INFORMATION tz;
+    SYSTEMTIME local_st;
+    SYSTEMTIME utc_st;
+    memset(&local_st, 0, sizeof(local_st));
+    if(!load_windows_timezone(name, &tz))
+        return INT64_MIN;
+    local_st.wYear = (WORD)year;
+    local_st.wMonth = (WORD)month;
+    local_st.wDay = (WORD)day;
+    local_st.wHour = (WORD)hour;
+    local_st.wMinute = (WORD)minute;
+    local_st.wSecond = (WORD)second;
+    if(!TzSpecificLocalTimeToSystemTimeEx(&tz, &local_st, &utc_st))
+        return INT64_MIN;
+    int64_t out = INT64_MIN;
+    return systemtime_to_unix_seconds(&utc_st, &out) ? out : INT64_MIN;
+#else
+    pthread_mutex_lock(&g_timezone_lock);
+    const char* current_tz = getenv("TZ");
+    int had_tz = current_tz != NULL;
+    char* old_tz = current_tz ? strdup(current_tz) : NULL;
+    setenv("TZ", name, 1);
+    tzset();
+    struct tm tmv;
+    memset(&tmv, 0, sizeof(tmv));
+    tmv.tm_year = year - 1900;
+    tmv.tm_mon = month - 1;
+    tmv.tm_mday = day;
+    tmv.tm_hour = hour;
+    tmv.tm_min = minute;
+    tmv.tm_sec = second;
+    tmv.tm_isdst = -1;
+    time_t t = mktime(&tmv);
+    restore_timezone_env(old_tz, had_tz);
+    pthread_mutex_unlock(&g_timezone_lock);
+    if(t == (time_t)-1)
+        return INT64_MIN;
+    return (int64_t)t;
+#endif
+}
+
+int __mlang_std_date_tz_offset_seconds_at(const char* name, int64_t timestamp)
+{
+    if(__mlang_std_date_timezone_valid(name) == 0)
+        return 0;
+    int y = timezone_part_from_unix(name, timestamp, 0);
+    int m = timezone_part_from_unix(name, timestamp, 1);
+    int d = timezone_part_from_unix(name, timestamp, 2);
+    int hh = timezone_part_from_unix(name, timestamp, 3);
+    int mm = timezone_part_from_unix(name, timestamp, 4);
+    int ss = timezone_part_from_unix(name, timestamp, 5);
+    int64_t local_as_utc = days_from_civil((int64_t)y, (unsigned)m, (unsigned)d) *
+                               86400LL +
+                           (int64_t)hh * 3600LL + (int64_t)mm * 60LL +
+                           (int64_t)ss;
     int64_t diff = local_as_utc - timestamp;
     if(diff < INT_MIN || diff > INT_MAX)
         return 0;

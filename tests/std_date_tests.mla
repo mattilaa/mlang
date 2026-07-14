@@ -3,6 +3,7 @@ mod std::date;
 mod std::strbuf;
 
 use std::date::DateTime;
+use std::date::TimeZone;
 use std::date::UtcOffset;
 use std::date::format_date;
 use std::date::format_iso8601;
@@ -13,11 +14,15 @@ use std::date::from_unix;
 use std::date::from_unix_local;
 use std::date::from_unix_utc;
 use std::date::local_offset_at;
+use std::date::load_timezone;
 use std::date::now;
 use std::date::offset_hours_minutes;
 use std::date::offset_seconds;
 use std::date::to_unix;
+use std::date::to_unix_tz;
 use std::date::to_unix_utc;
+use std::date::from_unix_tz;
+use std::date::timezone_offset_at;
 use std::date::utc;
 use std::strbuf::eq;
 use std::strbuf::len;
@@ -123,4 +128,33 @@ fn test_local_timezone_matches_fixed_offset_at_timestamp() {
     verify(local_dt.minute == offset_dt.minute);
     verify(local_dt.second == offset_dt.second);
     verify(to_unix(local_dt, local_offset) == timestamp);
+}
+
+#[test]
+fn test_named_timezone_utc_roundtrip() {
+    let zr: Result<TimeZone, str8> = load_timezone("UTC");
+    verify(!zr.is_err());
+    let z: TimeZone = zr.unwrap();
+    let dt: DateTime = from_unix_tz(0, z);
+    verify(eq(format_iso8601(dt), "1970-01-01T00:00:00") == 1);
+    verify(eq(format_offset(timezone_offset_at(z, 0)), "Z") == 1);
+    verify(to_unix_tz(dt, z) == 0);
+}
+
+#[test]
+fn test_named_timezone_iana_when_available() {
+    let hr: Result<TimeZone, str8> = load_timezone("Europe/Helsinki");
+    if hr.is_err() {
+        verify(true);
+        return;
+    }
+
+    let helsinki: TimeZone = hr.unwrap();
+    let winter: DateTime = from_unix_tz(1704067200, helsinki);
+    let summer: DateTime = from_unix_tz(1719792000, helsinki);
+
+    verify(eq(format_iso8601_offset(winter, timezone_offset_at(helsinki, 1704067200)), "2024-01-01T02:00:00+02:00") == 1);
+    verify(eq(format_iso8601_offset(summer, timezone_offset_at(helsinki, 1719792000)), "2024-07-01T03:00:00+03:00") == 1);
+    verify(to_unix_tz(winter, helsinki) == 1704067200);
+    verify(to_unix_tz(summer, helsinki) == 1719792000);
 }

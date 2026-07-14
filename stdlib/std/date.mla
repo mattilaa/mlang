@@ -22,6 +22,15 @@ extern pub fn __mlang_std_date_from_unix_local_minute(timestamp: i64) -> i32;
 extern pub fn __mlang_std_date_from_unix_local_second(timestamp: i64) -> i32;
 extern pub fn __mlang_std_date_to_unix(year: i32, month: i32, day: i32, hour: i32, minute: i32, second: i32, offset_seconds: i32) -> i64;
 extern pub fn __mlang_std_date_local_offset_seconds_at(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_timezone_valid(name: str8) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_year(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_month(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_day(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_hour(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_minute(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_second(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_to_unix_tz(name: str8, year: i32, month: i32, day: i32, hour: i32, minute: i32, second: i32) -> i64;
+extern pub fn __mlang_std_date_tz_offset_seconds_at(name: str8, timestamp: i64) -> i32;
 
 /// @brief Local date-time components.
 pub struct DateTime {
@@ -36,6 +45,15 @@ pub struct DateTime {
 /// @brief Fixed UTC offset in seconds, for example `+02:00` is `7200`.
 pub struct UtcOffset {
     var seconds: i32;
+};
+
+/// @brief Named system timezone.
+///
+/// Unix-like platforms use system zoneinfo/IANA names such as
+/// `Europe/Helsinki`. Windows uses Windows timezone IDs such as
+/// `FLE Standard Time`.
+pub struct TimeZone {
+    var name: str8;
 };
 
 /// @brief Return current local date-time.
@@ -86,6 +104,16 @@ pub fn local_offset() -> UtcOffset {
     return local_offset_at(unix_now());
 }
 
+/// @brief Load a named system timezone.
+///
+/// Returns `Err` when the operating system does not know the timezone name.
+pub fn load_timezone(name: str8) -> Result<TimeZone, str8> {
+    if __mlang_std_date_timezone_valid(name) == 0 {
+        return Err<TimeZone, str8>(format!("unknown timezone: {}", name));
+    }
+    return Ok<TimeZone, str8>(TimeZone { name: name });
+}
+
 /// @brief Convert Unix UTC seconds to date-time in a fixed UTC offset.
 pub fn from_unix(timestamp: i64, offset: UtcOffset) -> DateTime {
     return DateTime {
@@ -115,6 +143,18 @@ pub fn from_unix_local(timestamp: i64) -> DateTime {
     };
 }
 
+/// @brief Convert Unix UTC seconds to date-time in a named system timezone.
+pub fn from_unix_tz(timestamp: i64, zone: TimeZone) -> DateTime {
+    return DateTime {
+        year: __mlang_std_date_from_unix_tz_year(zone.name, timestamp),
+        month: __mlang_std_date_from_unix_tz_month(zone.name, timestamp),
+        day: __mlang_std_date_from_unix_tz_day(zone.name, timestamp),
+        hour: __mlang_std_date_from_unix_tz_hour(zone.name, timestamp),
+        minute: __mlang_std_date_from_unix_tz_minute(zone.name, timestamp),
+        second: __mlang_std_date_from_unix_tz_second(zone.name, timestamp)
+    };
+}
+
 /// @brief Convert date-time in a fixed UTC offset to Unix UTC seconds.
 ///
 /// Returns the minimum `i64` value when components are invalid.
@@ -127,6 +167,18 @@ pub fn to_unix(dt: DateTime, offset: UtcOffset) -> i64 {
 /// Returns the minimum `i64` value when components are invalid.
 pub fn to_unix_utc(dt: DateTime) -> i64 {
     return to_unix(dt, utc());
+}
+
+/// @brief Convert date-time in a named system timezone to Unix UTC seconds.
+///
+/// Returns the minimum `i64` value when components are invalid.
+pub fn to_unix_tz(dt: DateTime, zone: TimeZone) -> i64 {
+    return __mlang_std_date_to_unix_tz(zone.name, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
+}
+
+/// @brief UTC offset used by a named system timezone at a Unix timestamp.
+pub fn timezone_offset_at(zone: TimeZone, timestamp: i64) -> UtcOffset {
+    return UtcOffset { seconds: __mlang_std_date_tz_offset_seconds_at(zone.name, timestamp) };
 }
 
 /// @brief Format as `YYYY-MM-DDTHH:MM:SS`.
