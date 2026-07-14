@@ -1,0 +1,88 @@
+mod std::testing;
+mod std::simd;
+
+use std::testing::verify;
+use std::simd::*;
+
+fn approx_f32(a: f32, b: f32, eps: f32) -> bool {
+    var diff: f32 = a - b;
+    if diff < 0.0f: {
+        diff = 0.0f - diff;
+    }
+    return diff <= eps;
+}
+
+fn approx_f64(a: f64, b: f64, eps: f64) -> bool {
+    var diff: f64 = a - b;
+    if diff < 0.0: {
+        diff = 0.0 - diff;
+    }
+    return diff <= eps;
+}
+
+#[test]
+fn test_simd_i32_ops() {
+    let a: list<i32> = [1, 2, 3, 4, 5];
+    let b: list<i32> = [10, 20, 30, 40, 50];
+
+    let added: list<i32> = add(a, b);
+    let subbed: list<i32> = subtract(b, a);
+    let multiplied: list<i32> = multiply(a, b);
+
+    verify(added.len() == 5);
+    verify(added[0] == 11);
+    verify(added[4] == 55);
+    verify(subbed[1] == 18);
+    verify(multiplied[2] == 90);
+    verify(sum(a) == 15);
+}
+
+#[test]
+fn test_simd_i64_ops() {
+    let a: list<i64> = [1, 2, 3, 4];
+    let b: list<i64> = [5, 6, 7, 8];
+
+    let added: list<i64> = add(a, b);
+    let subbed: list<i64> = subtract(b, a);
+    let multiplied: list<i64> = multiply(a, b);
+
+    verify(added[3] == 12);
+    verify(subbed[0] == 4);
+    verify(multiplied[3] == 32);
+    verify(sum(b) == 26);
+}
+
+#[test]
+fn test_simd_f32_ops() {
+    let eps: f32 = 0.0001f;
+    let a: list<f32> = [1.0f, 2.5f, 3.0f];
+    let b: list<f32> = [4.0f, 1.5f, 2.0f];
+
+    let added: list<f32> = add(a, b);
+    let subbed: list<f32> = subtract(a, b);
+    let multiplied: list<f32> = multiply(a, b);
+
+    verify(approx_f32(added[1], 4.0f, eps));
+    verify(approx_f32(subbed[0], 0.0f - 3.0f, eps));
+    verify(approx_f32(multiplied[2], 6.0f, eps));
+    verify(approx_f32(sum(a), 6.5f, eps));
+}
+
+#[test]
+fn test_simd_f64_ops_and_length_mismatch() {
+    let eps: f64 = 0.0000001;
+    let a: list<f64> = [1.0, 2.0, 3.0, 4.0];
+    let b: list<f64> = [0.5, 1.5, 2.5, 3.5];
+    let short: list<f64> = [1.0];
+
+    let added: list<f64> = add(a, b);
+    let subbed: list<f64> = subtract(a, b);
+    let multiplied: list<f64> = multiply(a, b);
+    let mismatch: list<f64> = add(a, short);
+
+    verify(approx_f64(added[3], 7.5, eps));
+    verify(approx_f64(subbed[0], 0.5, eps));
+    verify(approx_f64(multiplied[2], 7.5, eps));
+    verify(approx_f64(sum(b), 8.0, eps));
+    verify(mismatch.len() == 0);
+}

@@ -88,6 +88,8 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   hidden/protected fields, and JSON metadata.
 - `examples/literal_storage_safety_demo.mla` — returned literals, fill
   literals, loop literals, and nested literal-backed containers.
+- `examples/std_simd_demo.mla` — SIMD-friendly vector add/subtract/multiply
+  and horizontal sum over numeric lists.
 
 ## Focused regression examples
 

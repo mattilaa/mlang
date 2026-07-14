@@ -19,6 +19,7 @@ mod std::bench;
 mod std::chat;
 mod std::exceptions;
 mod std::math;
+mod std::simd;
 mod std::algorithm::order;
 mod std::algorithm::numeric;
 mod std::algorithm::ranges;
@@ -64,6 +65,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/chat.mla`
 - `stdlib/std/exceptions.mla`
 - `stdlib/std/math.mla`
+- `stdlib/std/simd.mla`
 - `stdlib/std/algorithm/order.mla`
 - `stdlib/std/algorithm/numeric.mla`
 - `stdlib/std/algorithm/ranges.mla`
@@ -1018,6 +1020,44 @@ Module file: `stdlib/std/math.mla`
 ### Integer-specific
 - `sum_range(start: i32, end: i32) -> i32`
 - `factorial(n: i32) -> i32`
+
+## std::simd
+
+Module file: `stdlib/std/simd.mla`
+
+SIMD-friendly vector math helpers over normal numeric [`list<T>`](Quick-Guide#types) values.
+The native implementation uses fixed-width vector operations where the host C
+compiler supports them and scalar tails for remaining elements.
+
+Supported element types:
+- [`i32`](Quick-Guide#types)
+- [`i64`](Quick-Guide#types)
+- [`f32`](Quick-Guide#types)
+- [`f64`](Quick-Guide#types)
+
+Element-wise operations return a new list with the same length as the inputs.
+If input lengths differ, they return an empty list.
+
+- `add(lhs: &list<T>, rhs: &list<T>) -> list<T>`
+- `subtract(lhs: &list<T>, rhs: &list<T>) -> list<T>`
+- `multiply(lhs: &list<T>, rhs: &list<T>) -> list<T>`
+- `sum(values: &list<T>) -> T`
+
+Example:
+
+```rust
+mod std::simd;
+use std::simd::*;
+
+let lhs: list<f32> = [1.0f, 2.0f, 3.0f, 4.0f];
+let rhs: list<f32> = [10.0f, 20.0f, 30.0f, 40.0f];
+
+let added: list<f32> = add(lhs, rhs);
+let product: list<f32> = multiply(lhs, rhs);
+let total: f32 = sum(added);
+```
+
+See [`examples/std_simd_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/std_simd_demo.mla).
 
 ## std::algorithm::fft
 

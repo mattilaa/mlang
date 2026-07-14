@@ -1,0 +1,131 @@
+/// \file simd.mla
+/// \brief SIMD-friendly vector math helpers for MLang (std::simd).
+///
+/// The public API operates on normal `list<T>` values and returns new lists.
+/// Implementations are backed by native code that uses fixed-width vector
+/// operations where the host compiler supports them, with scalar tails for
+/// lengths that are not a multiple of the vector lane count.
+
+extern pub fn __mlang_std_simd_add_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
+extern pub fn __mlang_std_simd_subtract_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
+extern pub fn __mlang_std_simd_multiply_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
+extern pub fn __mlang_std_simd_sum_i32(values: &list<i32>) -> i32;
+
+extern pub fn __mlang_std_simd_add_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
+extern pub fn __mlang_std_simd_subtract_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
+extern pub fn __mlang_std_simd_multiply_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
+extern pub fn __mlang_std_simd_sum_i64(values: &list<i64>) -> i64;
+
+extern pub fn __mlang_std_simd_add_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32>;
+extern pub fn __mlang_std_simd_subtract_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32>;
+extern pub fn __mlang_std_simd_multiply_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32>;
+extern pub fn __mlang_std_simd_sum_f32(values: &list<f32>) -> f32;
+
+extern pub fn __mlang_std_simd_add_f64(lhs: &list<f64>, rhs: &list<f64>) -> list<f64>;
+extern pub fn __mlang_std_simd_subtract_f64(lhs: &list<f64>, rhs: &list<f64>) -> list<f64>;
+extern pub fn __mlang_std_simd_multiply_f64(lhs: &list<f64>, rhs: &list<f64>) -> list<f64>;
+extern pub fn __mlang_std_simd_sum_f64(values: &list<f64>) -> f64;
+
+/// @brief Element-wise vector addition.
+///
+/// Returns an empty list when input lengths differ.
+pub fn add(lhs: &list<i32>, rhs: &list<i32>) -> list<i32> {
+    return __mlang_std_simd_add_i32(lhs, rhs);
+}
+
+/// @brief Element-wise vector addition.
+///
+/// Returns an empty list when input lengths differ.
+pub fn add(lhs: &list<i64>, rhs: &list<i64>) -> list<i64> {
+    return __mlang_std_simd_add_i64(lhs, rhs);
+}
+
+/// @brief Element-wise vector addition.
+///
+/// Returns an empty list when input lengths differ.
+pub fn add(lhs: &list<f32>, rhs: &list<f32>) -> list<f32> {
+    return __mlang_std_simd_add_f32(lhs, rhs);
+}
+
+/// @brief Element-wise vector addition.
+///
+/// Returns an empty list when input lengths differ.
+pub fn add(lhs: &list<f64>, rhs: &list<f64>) -> list<f64> {
+    return __mlang_std_simd_add_f64(lhs, rhs);
+}
+
+/// @brief Element-wise vector subtraction.
+///
+/// Returns an empty list when input lengths differ.
+pub fn subtract(lhs: &list<i32>, rhs: &list<i32>) -> list<i32> {
+    return __mlang_std_simd_subtract_i32(lhs, rhs);
+}
+
+/// @brief Element-wise vector subtraction.
+///
+/// Returns an empty list when input lengths differ.
+pub fn subtract(lhs: &list<i64>, rhs: &list<i64>) -> list<i64> {
+    return __mlang_std_simd_subtract_i64(lhs, rhs);
+}
+
+/// @brief Element-wise vector subtraction.
+///
+/// Returns an empty list when input lengths differ.
+pub fn subtract(lhs: &list<f32>, rhs: &list<f32>) -> list<f32> {
+    return __mlang_std_simd_subtract_f32(lhs, rhs);
+}
+
+/// @brief Element-wise vector subtraction.
+///
+/// Returns an empty list when input lengths differ.
+pub fn subtract(lhs: &list<f64>, rhs: &list<f64>) -> list<f64> {
+    return __mlang_std_simd_subtract_f64(lhs, rhs);
+}
+
+/// @brief Element-wise vector multiplication.
+///
+/// Returns an empty list when input lengths differ.
+pub fn multiply(lhs: &list<i32>, rhs: &list<i32>) -> list<i32> {
+    return __mlang_std_simd_multiply_i32(lhs, rhs);
+}
+
+/// @brief Element-wise vector multiplication.
+///
+/// Returns an empty list when input lengths differ.
+pub fn multiply(lhs: &list<i64>, rhs: &list<i64>) -> list<i64> {
+    return __mlang_std_simd_multiply_i64(lhs, rhs);
+}
+
+/// @brief Element-wise vector multiplication.
+///
+/// Returns an empty list when input lengths differ.
+pub fn multiply(lhs: &list<f32>, rhs: &list<f32>) -> list<f32> {
+    return __mlang_std_simd_multiply_f32(lhs, rhs);
+}
+
+/// @brief Element-wise vector multiplication.
+///
+/// Returns an empty list when input lengths differ.
+pub fn multiply(lhs: &list<f64>, rhs: &list<f64>) -> list<f64> {
+    return __mlang_std_simd_multiply_f64(lhs, rhs);
+}
+
+/// @brief Horizontal sum of all vector elements.
+pub fn sum(values: &list<i32>) -> i32 {
+    return __mlang_std_simd_sum_i32(values);
+}
+
+/// @brief Horizontal sum of all vector elements.
+pub fn sum(values: &list<i64>) -> i64 {
+    return __mlang_std_simd_sum_i64(values);
+}
+
+/// @brief Horizontal sum of all vector elements.
+pub fn sum(values: &list<f32>) -> f32 {
+    return __mlang_std_simd_sum_f32(values);
+}
+
+/// @brief Horizontal sum of all vector elements.
+pub fn sum(values: &list<f64>) -> f64 {
+    return __mlang_std_simd_sum_f64(values);
+}
