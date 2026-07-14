@@ -159,6 +159,7 @@ Use this section as a map into the existing documentation.
   - [`tests/expect_call_tests.mla`](https://github.com/mattilaa/mlang/blob/main/tests/expect_call_tests.mla) — EXPECT_CALL-style mock cardinality and return queues
   - [`tests/bench_stdlib.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_stdlib.mla) — benchmark example
   - [`tests/bench_simd.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_simd.mla) — scalar vs [`std::simd`](Stdlib-Module-API#stdsimd) benchmark pairs
+  - [`tests/bench_simd_threads.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_simd_threads.mla) — multi-threaded scalar vs [`std::simd`](Stdlib-Module-API#stdsimd) benchmark pairs
 
 ### Standard Library
 

@@ -168,6 +168,23 @@ Run:
 ./build/mlang bench tests/bench_simd.mla --bench-iters 2000 --bench-warmup 200 -L ./build -lmlang_std
 ```
 
+### `tests/bench_simd_threads.mla`
+
+Multi-threaded SIMD benchmark pairs for comparing four scalar workers against
+four [`std::simd`](Stdlib-Module-API#stdsimd) workers.
+
+It demonstrates:
+
+- four-thread scalar sum vs four-thread [`std::simd::sum`](Stdlib-Module-API#stdsimd)
+- four-thread scalar element-wise add vs four-thread [`std::simd::add`](Stdlib-Module-API#stdsimd)
+- four-thread per-bit [`BitSet`](Stdlib-Module-API#stdbits) scanning vs packed [`std::simd::count_ones`](Stdlib-Module-API#stdsimd)
+
+Run:
+
+```sh
+./build/mlang bench tests/bench_simd_threads.mla --bench-iters 200 --bench-warmup 20 -L ./build -lmlang_std
+```
+
 ### `examples/testing_mock_example.mla`
 
 Simple mock-based example built on [`std::testing`](Stdlib-Module-API#stdtesting).

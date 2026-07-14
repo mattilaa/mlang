@@ -33,6 +33,7 @@ fake_*.sh
 fake_*.log
 bench_*.mla
 !tests/bench_simd.mla
+!tests/bench_simd_threads.mla
 compile_*.mla
 frontend_*.mla
 frontend_*_suite/

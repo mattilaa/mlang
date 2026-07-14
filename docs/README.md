@@ -157,6 +157,7 @@ Use this section as a map into the existing documentation.
   - [`tests/expect_call_tests.mla`](../../../tests/expect_call_tests.mla) — EXPECT_CALL-style mock cardinality and return queues
   - [`tests/bench_stdlib.mla`](../../../tests/bench_stdlib.mla) — benchmark example
   - [`tests/bench_simd.mla`](../../../tests/bench_simd.mla) — scalar vs `std::simd` benchmark pairs
+  - [`tests/bench_simd_threads.mla`](../../../tests/bench_simd_threads.mla) — multi-threaded scalar vs `std::simd` benchmark pairs
 
 ### Standard Library
 
