@@ -3,10 +3,22 @@ mod std::date;
 mod std::strbuf;
 
 use std::date::DateTime;
+use std::date::UtcOffset;
 use std::date::format_date;
 use std::date::format_iso8601;
+use std::date::format_iso8601_offset;
+use std::date::format_offset;
 use std::date::format_time;
+use std::date::from_unix;
+use std::date::from_unix_local;
+use std::date::from_unix_utc;
+use std::date::local_offset_at;
 use std::date::now;
+use std::date::offset_hours_minutes;
+use std::date::offset_seconds;
+use std::date::to_unix;
+use std::date::to_unix_utc;
+use std::date::utc;
 use std::strbuf::eq;
 use std::strbuf::len;
 use std::testing::verify;
@@ -55,4 +67,60 @@ fn test_format_iso8601_shape() {
     let s: str8 = format_iso8601(dt);
     verify(!(len(s) != 19));
     verify(eq(s, "2026-12-31T23:59:58") == 1);
+}
+
+#[test]
+fn test_unix_epoch_utc_roundtrip() {
+    let dt: DateTime = from_unix_utc(0);
+    verify(dt.year == 1970);
+    verify(dt.month == 1);
+    verify(dt.day == 1);
+    verify(dt.hour == 0);
+    verify(dt.minute == 0);
+    verify(dt.second == 0);
+    verify(to_unix_utc(dt) == 0);
+    verify(eq(format_iso8601_offset(dt, utc()), "1970-01-01T00:00:00Z") == 1);
+}
+
+#[test]
+fn test_unix_leap_day_utc_roundtrip() {
+    let dt: DateTime = from_unix_utc(1709164800);
+    verify(eq(format_iso8601(dt), "2024-02-29T00:00:00") == 1);
+    verify(to_unix_utc(dt) == 1709164800);
+}
+
+#[test]
+fn test_fixed_timezone_offset_conversion() {
+    let plus_two: UtcOffset = offset_hours_minutes(2, 0);
+    let local_dt: DateTime = from_unix(0, plus_two);
+    verify(eq(format_iso8601_offset(local_dt, plus_two), "1970-01-01T02:00:00+02:00") == 1);
+    verify(to_unix(local_dt, plus_two) == 0);
+
+    let minus_five_thirty: UtcOffset = offset_hours_minutes(0 - 5, 30);
+    let west_dt: DateTime = from_unix(0, minus_five_thirty);
+    verify(eq(format_iso8601_offset(west_dt, minus_five_thirty), "1969-12-31T18:30:00-05:30") == 1);
+    verify(to_unix(west_dt, minus_five_thirty) == 0);
+}
+
+#[test]
+fn test_offset_seconds_and_formatting() {
+    verify(eq(format_offset(offset_seconds(0)), "Z") == 1);
+    verify(eq(format_offset(offset_seconds(19800)), "+05:30") == 1);
+    verify(eq(format_offset(offset_seconds(0 - 12600)), "-03:30") == 1);
+}
+
+#[test]
+fn test_local_timezone_matches_fixed_offset_at_timestamp() {
+    let timestamp: i64 = 1704067200;
+    let local_offset: UtcOffset = local_offset_at(timestamp);
+    let local_dt: DateTime = from_unix_local(timestamp);
+    let offset_dt: DateTime = from_unix(timestamp, local_offset);
+
+    verify(local_dt.year == offset_dt.year);
+    verify(local_dt.month == offset_dt.month);
+    verify(local_dt.day == offset_dt.day);
+    verify(local_dt.hour == offset_dt.hour);
+    verify(local_dt.minute == offset_dt.minute);
+    verify(local_dt.second == offset_dt.second);
+    verify(to_unix(local_dt, local_offset) == timestamp);
 }

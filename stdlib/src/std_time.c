@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdatomic.h>
@@ -348,6 +349,231 @@ int __mlang_std_date_now_second(void)
     if(load_local_tm(&tmv) != 0)
         return 0;
     return tmv.tm_sec;
+}
+
+static int64_t floor_div_i64(int64_t a, int64_t b)
+{
+    int64_t q = a / b;
+    int64_t r = a % b;
+    if(r != 0 && ((r > 0) != (b > 0)))
+        q -= 1;
+    return q;
+}
+
+static int64_t days_from_civil(int64_t y, unsigned m, unsigned d)
+{
+    y -= m <= 2u;
+    const int64_t era = (y >= 0 ? y : y - 399) / 400;
+    const unsigned yoe = (unsigned)(y - era * 400);
+    const unsigned doy = (153u * (m + (m > 2u ? -3u : 9u)) + 2u) / 5u + d - 1u;
+    const unsigned doe = yoe * 365u + yoe / 4u - yoe / 100u + doy;
+    return era * 146097 + (int64_t)doe - 719468;
+}
+
+static void civil_from_days(int64_t z, int* y, int* m, int* d)
+{
+    z += 719468;
+    const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+    const unsigned doe = (unsigned)(z - era * 146097);
+    const unsigned yoe = (doe - doe / 1460u + doe / 36524u - doe / 146096u) / 365u;
+    int64_t yy = (int64_t)yoe + era * 400;
+    const unsigned doy = doe - (365u * yoe + yoe / 4u - yoe / 100u);
+    const unsigned mp = (5u * doy + 2u) / 153u;
+    const unsigned dd = doy - (153u * mp + 2u) / 5u + 1u;
+    const unsigned mm = mp + (mp < 10u ? 3u : -9u);
+    yy += mm <= 2u;
+    if(y)
+        *y = (int)yy;
+    if(m)
+        *m = (int)mm;
+    if(d)
+        *d = (int)dd;
+}
+
+static int is_leap_year(int y)
+{
+    return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
+}
+
+static int days_in_month(int y, int m)
+{
+    static const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if(m < 1 || m > 12)
+        return 0;
+    if(m == 2 && is_leap_year(y))
+        return 29;
+    return days[m - 1];
+}
+
+static int valid_datetime(int year, int month, int day, int hour, int minute, int second)
+{
+    if(month < 1 || month > 12)
+        return 0;
+    if(day < 1 || day > days_in_month(year, month))
+        return 0;
+    if(hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59)
+        return 0;
+    return 1;
+}
+
+static void datetime_from_unix_offset(int64_t timestamp, int32_t offset_seconds,
+                                      int* year, int* month, int* day,
+                                      int* hour, int* minute, int* second)
+{
+    int64_t adjusted = timestamp + (int64_t)offset_seconds;
+    int64_t days = floor_div_i64(adjusted, 86400);
+    int64_t sod = adjusted - days * 86400;
+    civil_from_days(days, year, month, day);
+    if(hour)
+        *hour = (int)(sod / 3600);
+    if(minute)
+        *minute = (int)((sod % 3600) / 60);
+    if(second)
+        *second = (int)(sod % 60);
+}
+
+static int date_part_from_unix_offset(int64_t timestamp, int32_t offset_seconds, int part)
+{
+    int y = 1970;
+    int m = 1;
+    int d = 1;
+    int hh = 0;
+    int mm = 0;
+    int ss = 0;
+    datetime_from_unix_offset(timestamp, offset_seconds, &y, &m, &d, &hh, &mm, &ss);
+    switch(part)
+    {
+        case 0: return y;
+        case 1: return m;
+        case 2: return d;
+        case 3: return hh;
+        case 4: return mm;
+        case 5: return ss;
+        default: return 0;
+    }
+}
+
+int64_t __mlang_std_date_unix_now(void)
+{
+    return (int64_t)time(NULL);
+}
+
+int __mlang_std_date_from_unix_year(int64_t timestamp, int32_t offset_seconds)
+{
+    return date_part_from_unix_offset(timestamp, offset_seconds, 0);
+}
+
+int __mlang_std_date_from_unix_month(int64_t timestamp, int32_t offset_seconds)
+{
+    return date_part_from_unix_offset(timestamp, offset_seconds, 1);
+}
+
+int __mlang_std_date_from_unix_day(int64_t timestamp, int32_t offset_seconds)
+{
+    return date_part_from_unix_offset(timestamp, offset_seconds, 2);
+}
+
+int __mlang_std_date_from_unix_hour(int64_t timestamp, int32_t offset_seconds)
+{
+    return date_part_from_unix_offset(timestamp, offset_seconds, 3);
+}
+
+int __mlang_std_date_from_unix_minute(int64_t timestamp, int32_t offset_seconds)
+{
+    return date_part_from_unix_offset(timestamp, offset_seconds, 4);
+}
+
+int __mlang_std_date_from_unix_second(int64_t timestamp, int32_t offset_seconds)
+{
+    return date_part_from_unix_offset(timestamp, offset_seconds, 5);
+}
+
+static int local_part_from_unix(int64_t timestamp, int part)
+{
+    time_t t = (time_t)timestamp;
+    struct tm tmv;
+#if defined(_WIN32)
+    if(localtime_s(&tmv, &t) != 0)
+        return date_part_from_unix_offset(timestamp, 0, part);
+#else
+    if(localtime_r(&t, &tmv) == NULL)
+        return date_part_from_unix_offset(timestamp, 0, part);
+#endif
+    switch(part)
+    {
+        case 0: return tmv.tm_year + 1900;
+        case 1: return tmv.tm_mon + 1;
+        case 2: return tmv.tm_mday;
+        case 3: return tmv.tm_hour;
+        case 4: return tmv.tm_min;
+        case 5: return tmv.tm_sec;
+        default: return 0;
+    }
+}
+
+int __mlang_std_date_from_unix_local_year(int64_t timestamp)
+{
+    return local_part_from_unix(timestamp, 0);
+}
+
+int __mlang_std_date_from_unix_local_month(int64_t timestamp)
+{
+    return local_part_from_unix(timestamp, 1);
+}
+
+int __mlang_std_date_from_unix_local_day(int64_t timestamp)
+{
+    return local_part_from_unix(timestamp, 2);
+}
+
+int __mlang_std_date_from_unix_local_hour(int64_t timestamp)
+{
+    return local_part_from_unix(timestamp, 3);
+}
+
+int __mlang_std_date_from_unix_local_minute(int64_t timestamp)
+{
+    return local_part_from_unix(timestamp, 4);
+}
+
+int __mlang_std_date_from_unix_local_second(int64_t timestamp)
+{
+    return local_part_from_unix(timestamp, 5);
+}
+
+int64_t __mlang_std_date_to_unix(int32_t year, int32_t month, int32_t day,
+                                 int32_t hour, int32_t minute, int32_t second,
+                                 int32_t offset_seconds)
+{
+    if(!valid_datetime(year, month, day, hour, minute, second))
+        return INT64_MIN;
+    int64_t days = days_from_civil((int64_t)year, (unsigned)month, (unsigned)day);
+    return days * 86400LL + (int64_t)hour * 3600LL + (int64_t)minute * 60LL +
+           (int64_t)second - (int64_t)offset_seconds;
+}
+
+int __mlang_std_date_local_offset_seconds_at(int64_t timestamp)
+{
+    time_t t = (time_t)timestamp;
+    struct tm local_tm;
+#if defined(_WIN32)
+    if(localtime_s(&local_tm, &t) != 0)
+        return 0;
+#else
+    if(localtime_r(&t, &local_tm) == NULL)
+        return 0;
+#endif
+    int64_t local_as_utc = days_from_civil((int64_t)local_tm.tm_year + 1900,
+                                           (unsigned)local_tm.tm_mon + 1u,
+                                           (unsigned)local_tm.tm_mday) *
+                               86400LL +
+                           (int64_t)local_tm.tm_hour * 3600LL +
+                           (int64_t)local_tm.tm_min * 60LL +
+                           (int64_t)local_tm.tm_sec;
+    int64_t diff = local_as_utc - timestamp;
+    if(diff < INT_MIN || diff > INT_MAX)
+        return 0;
+    return (int)diff;
 }
 
 const char* __mlang_std_time_local_datetime(void)

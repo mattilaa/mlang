@@ -363,12 +363,44 @@ Module file: `stdlib/std/date.mla`
 
 ### Types
 - `DateTime`
+- `UtcOffset`
 
 ### API
 - `now() -> DateTime`
+- `unix_now() -> i64`
+- `utc() -> UtcOffset`
+- `offset_seconds(seconds: i32) -> UtcOffset`
+- `offset_hours_minutes(hours: i32, minutes: i32) -> UtcOffset`
+- `local_offset() -> UtcOffset`
+- `local_offset_at(timestamp: i64) -> UtcOffset`
+- `from_unix(timestamp: i64, offset: UtcOffset) -> DateTime`
+- `from_unix_utc(timestamp: i64) -> DateTime`
+- `from_unix_local(timestamp: i64) -> DateTime`
+- `to_unix(dt: DateTime, offset: UtcOffset) -> i64`
+- `to_unix_utc(dt: DateTime) -> i64`
 - `format_iso8601(dt: DateTime) -> str8`
+- `format_iso8601_offset(dt: DateTime, offset: UtcOffset) -> str8`
+- `format_offset(offset: UtcOffset) -> str8`
 - `format_date(dt: DateTime) -> str8`
 - `format_time(dt: DateTime) -> str8`
+
+[`std::date`](Stdlib-Module-API#stddate) supports Unix UTC timestamps in whole seconds. Timezone support is
+provided as fixed UTC offsets (`UtcOffset`) and system-local conversions. Named
+IANA timezone database IDs are not bundled.
+
+Example:
+
+```rust
+mod std::date;
+use std::date::*;
+
+let utc_dt: DateTime = from_unix_utc(0);
+let helsinki: UtcOffset = offset_hours_minutes(2, 0);
+let local_dt: DateTime = from_unix(0, helsinki);
+
+let ts: i64 = to_unix(local_dt, helsinki);
+let s: str8 = format_iso8601_offset(local_dt, helsinki);
+```
 
 ## std::env
 

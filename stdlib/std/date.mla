@@ -7,6 +7,21 @@ extern pub fn __mlang_std_date_now_day() -> i32;
 extern pub fn __mlang_std_date_now_hour() -> i32;
 extern pub fn __mlang_std_date_now_minute() -> i32;
 extern pub fn __mlang_std_date_now_second() -> i32;
+extern pub fn __mlang_std_date_unix_now() -> i64;
+extern pub fn __mlang_std_date_from_unix_year(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_month(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_day(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_hour(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_minute(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_second(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_year(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_month(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_day(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_hour(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_minute(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_second(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_to_unix(year: i32, month: i32, day: i32, hour: i32, minute: i32, second: i32, offset_seconds: i32) -> i64;
+extern pub fn __mlang_std_date_local_offset_seconds_at(timestamp: i64) -> i32;
 
 /// @brief Local date-time components.
 pub struct DateTime {
@@ -16,6 +31,11 @@ pub struct DateTime {
     var hour: i32;
     var minute: i32;
     var second: i32;
+};
+
+/// @brief Fixed UTC offset in seconds, for example `+02:00` is `7200`.
+pub struct UtcOffset {
+    var seconds: i32;
 };
 
 /// @brief Return current local date-time.
@@ -30,6 +50,85 @@ pub fn now() -> DateTime {
     };
 }
 
+/// @brief Current Unix UTC timestamp in whole seconds since 1970-01-01T00:00:00Z.
+pub fn unix_now() -> i64 {
+    return __mlang_std_date_unix_now();
+}
+
+/// @brief Zero UTC offset.
+pub fn utc() -> UtcOffset {
+    return UtcOffset { seconds: 0 };
+}
+
+/// @brief Construct a fixed UTC offset from seconds.
+pub fn offset_seconds(seconds: i32) -> UtcOffset {
+    return UtcOffset { seconds: seconds };
+}
+
+/// @brief Construct a fixed UTC offset from hours and minutes.
+///
+/// The sign of `hours` applies to `minutes`, so `offset_hours_minutes(-5, 30)`
+/// returns `-05:30`.
+pub fn offset_hours_minutes(hours: i32, minutes: i32) -> UtcOffset {
+    let sign: i32 = hours < 0 ? -1 : 1;
+    let abs_hours: i32 = hours < 0 ? 0 - hours : hours;
+    let abs_minutes: i32 = minutes < 0 ? 0 - minutes : minutes;
+    return UtcOffset { seconds: sign * ((abs_hours * 3600) + (abs_minutes * 60)) };
+}
+
+/// @brief System local UTC offset for the given Unix timestamp.
+pub fn local_offset_at(timestamp: i64) -> UtcOffset {
+    return UtcOffset { seconds: __mlang_std_date_local_offset_seconds_at(timestamp) };
+}
+
+/// @brief System local UTC offset for the current instant.
+pub fn local_offset() -> UtcOffset {
+    return local_offset_at(unix_now());
+}
+
+/// @brief Convert Unix UTC seconds to date-time in a fixed UTC offset.
+pub fn from_unix(timestamp: i64, offset: UtcOffset) -> DateTime {
+    return DateTime {
+        year: __mlang_std_date_from_unix_year(timestamp, offset.seconds),
+        month: __mlang_std_date_from_unix_month(timestamp, offset.seconds),
+        day: __mlang_std_date_from_unix_day(timestamp, offset.seconds),
+        hour: __mlang_std_date_from_unix_hour(timestamp, offset.seconds),
+        minute: __mlang_std_date_from_unix_minute(timestamp, offset.seconds),
+        second: __mlang_std_date_from_unix_second(timestamp, offset.seconds)
+    };
+}
+
+/// @brief Convert Unix UTC seconds to UTC date-time.
+pub fn from_unix_utc(timestamp: i64) -> DateTime {
+    return from_unix(timestamp, utc());
+}
+
+/// @brief Convert Unix UTC seconds to system local date-time.
+pub fn from_unix_local(timestamp: i64) -> DateTime {
+    return DateTime {
+        year: __mlang_std_date_from_unix_local_year(timestamp),
+        month: __mlang_std_date_from_unix_local_month(timestamp),
+        day: __mlang_std_date_from_unix_local_day(timestamp),
+        hour: __mlang_std_date_from_unix_local_hour(timestamp),
+        minute: __mlang_std_date_from_unix_local_minute(timestamp),
+        second: __mlang_std_date_from_unix_local_second(timestamp)
+    };
+}
+
+/// @brief Convert date-time in a fixed UTC offset to Unix UTC seconds.
+///
+/// Returns the minimum `i64` value when components are invalid.
+pub fn to_unix(dt: DateTime, offset: UtcOffset) -> i64 {
+    return __mlang_std_date_to_unix(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, offset.seconds);
+}
+
+/// @brief Convert UTC date-time to Unix UTC seconds.
+///
+/// Returns the minimum `i64` value when components are invalid.
+pub fn to_unix_utc(dt: DateTime) -> i64 {
+    return to_unix(dt, utc());
+}
+
 /// @brief Format as `YYYY-MM-DDTHH:MM:SS`.
 pub fn format_iso8601(dt: DateTime) -> str8 {
     let mm: str8 = dt.month < 10 ? format!("0{}", dt.month) : format!("{}", dt.month);
@@ -38,6 +137,27 @@ pub fn format_iso8601(dt: DateTime) -> str8 {
     let mi: str8 = dt.minute < 10 ? format!("0{}", dt.minute) : format!("{}", dt.minute);
     let ss: str8 = dt.second < 10 ? format!("0{}", dt.second) : format!("{}", dt.second);
     return format!("{}-{}-{}T{}:{}:{}", dt.year, mm, dd, hh, mi, ss);
+}
+
+fn two_digits(v: i32) -> str8 {
+    return v < 10 ? format!("0{}", v) : format!("{}", v);
+}
+
+/// @brief Format a UTC offset as `Z`, `+HH:MM`, or `-HH:MM`.
+pub fn format_offset(offset: UtcOffset) -> str8 {
+    if offset.seconds == 0 {
+        return "Z";
+    }
+    let sign: str8 = offset.seconds < 0 ? "-" : "+";
+    let abs_seconds: i32 = offset.seconds < 0 ? 0 - offset.seconds : offset.seconds;
+    let hours: i32 = abs_seconds / 3600;
+    let minutes: i32 = (abs_seconds % 3600) / 60;
+    return format!("{}{}:{}", sign, two_digits(hours), two_digits(minutes));
+}
+
+/// @brief Format as ISO-8601 with timezone offset, e.g. `2026-02-09T21:11:06+02:00`.
+pub fn format_iso8601_offset(dt: DateTime, offset: UtcOffset) -> str8 {
+    return format!("{}{}", format_iso8601(dt), format_offset(offset));
 }
 
 /// @brief Format as `MM/DD/YYYY`.
