@@ -90,7 +90,8 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   literals, loop literals, and nested literal-backed containers.
 - `examples/std_simd_demo.mla` — SIMD-friendly vector add/subtract/multiply,
   horizontal reductions, running sums, min/max searches, boolean checks,
-  integer gate logic, and uniform shifts over numeric lists.
+  integer gate logic, uniform shifts over numeric lists, and packed BitSet
+  operations.
 
 ## Focused regression examples
 

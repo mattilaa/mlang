@@ -1060,6 +1060,21 @@ Boolean reductions:
 when every element is true. For empty boolean lists, `any` returns `false` and
 `all` returns `true`.
 
+Packed bitset operations:
+- `bit_and_eq(lhs: BitSet, rhs: BitSet) -> i32`
+- `bit_or_eq(lhs: BitSet, rhs: BitSet) -> i32`
+- `bit_xor_eq(lhs: BitSet, rhs: BitSet) -> i32`
+- `bit_not_eq(values: BitSet) -> i32`
+- `count_ones(values: BitSet) -> i64`
+- `any(values: BitSet) -> bool`
+- `all(values: BitSet) -> bool`
+
+The `BitSet` overloads operate on packed one-bit-per-entry storage from
+`std::bitset::BitSet`. The `_eq` functions mutate the left-hand bitset in
+place and return `0` on success. Binary bitset operations require matching
+active bit lengths. Tail bits outside `BitSet::len()` are masked after writes.
+For empty bitsets, `any` returns `false` and `all` returns `true`.
+
 Integer-only gate logic and bit shifts:
 - `bit_and(lhs: &list<T>, rhs: &list<T>) -> list<T>`
 - `bit_or(lhs: &list<T>, rhs: &list<T>) -> list<T>`
@@ -1075,6 +1090,9 @@ Example:
 
 ```mla
 mod std::simd;
+mod std::bitset;
+
+use std::bitset::BitSet;
 use std::simd::*;
 
 let lhs: list<f32> = [1.0f, 2.0f, 3.0f, 4.0f];
@@ -1097,6 +1115,13 @@ let checks: list<bool> = [true, false, true];
 let has_true: bool = any(checks);
 let all_true: bool = all(checks);
 let has_mask: bool = any_nonzero(masks);
+
+let bitset_result: Result<BitSet, str8> = BitSet::new(128);
+let bitset: BitSet = bitset_result.unwrap();
+bitset.resize(128, false);
+bitset.set(64, true);
+let packed_has_bits: bool = any(bitset);
+let packed_count: i64 = count_ones(bitset);
 ```
 
 See [`examples/std_simd_demo.mla`](../examples/std_simd_demo.mla).

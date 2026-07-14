@@ -7,6 +7,13 @@ typedef struct
     void* data;
 } mlang_list_t;
 
+typedef struct
+{
+    uint64_t* words;
+    size_t len_bits;
+    size_t cap_bits;
+} mlang_bitset_t;
+
 static mlang_list_t empty_list(void)
 {
     mlang_list_t out;
@@ -30,6 +37,7 @@ static mlang_list_t alloc_list(int64_t count, size_t elem_size)
 #if defined(__clang__) || defined(__GNUC__)
 typedef int32_t v4i32 __attribute__((vector_size(16)));
 typedef int64_t v2i64 __attribute__((vector_size(16)));
+typedef uint64_t v2u64 __attribute__((vector_size(16)));
 typedef float v4f32 __attribute__((vector_size(16)));
 typedef double v2f64 __attribute__((vector_size(16)));
 #define MLANG_SIMD_VECTOR_EXT 1
@@ -453,3 +461,143 @@ DEFINE_NONZERO(f32, float)
 DEFINE_NONZERO(f64, double)
 
 #undef DEFINE_NONZERO
+
+static size_t bitset_words_for_bits(size_t bits)
+{
+    return bits == 0u ? 0u : (bits + 63u) / 64u;
+}
+
+static uint64_t bitset_tail_mask(size_t len_bits)
+{
+    size_t rem = len_bits % 64u;
+    if(rem == 0u)
+        return UINT64_MAX;
+    return ((uint64_t)1u << rem) - 1u;
+}
+
+static void bitset_mask_tail(mlang_bitset_t* b)
+{
+    if(!b || b->len_bits == 0u)
+        return;
+    size_t rem = b->len_bits % 64u;
+    if(rem == 0u)
+        return;
+    size_t last = bitset_words_for_bits(b->len_bits) - 1u;
+    b->words[last] &= bitset_tail_mask(b->len_bits);
+}
+
+#if MLANG_SIMD_VECTOR_EXT
+#define DEFINE_BITSET_BINARY_EQ(NAME, OP)                                      \
+    int32_t __mlang_std_simd_bitset_##NAME##_eq(int64_t lhs_handle,           \
+                                                int64_t rhs_handle)            \
+    {                                                                          \
+        mlang_bitset_t* lhs = (mlang_bitset_t*)(intptr_t)lhs_handle;           \
+        mlang_bitset_t* rhs = (mlang_bitset_t*)(intptr_t)rhs_handle;           \
+        if(!lhs || !rhs || lhs->len_bits != rhs->len_bits)                     \
+            return -1;                                                         \
+        size_t words = bitset_words_for_bits(lhs->len_bits);                   \
+        size_t i = 0u;                                                         \
+        for(; i + 2u <= words; i += 2u)                                        \
+        {                                                                      \
+            v2u64 a;                                                           \
+            v2u64 b;                                                           \
+            __builtin_memcpy(&a, lhs->words + i, sizeof(a));                   \
+            __builtin_memcpy(&b, rhs->words + i, sizeof(b));                   \
+            v2u64 r = a OP b;                                                  \
+            __builtin_memcpy(lhs->words + i, &r, sizeof(r));                   \
+        }                                                                      \
+        for(; i < words; ++i)                                                  \
+            lhs->words[i] = lhs->words[i] OP rhs->words[i];                    \
+        bitset_mask_tail(lhs);                                                 \
+        return 0;                                                              \
+    }
+#else
+#define DEFINE_BITSET_BINARY_EQ(NAME, OP)                                      \
+    int32_t __mlang_std_simd_bitset_##NAME##_eq(int64_t lhs_handle,           \
+                                                int64_t rhs_handle)            \
+    {                                                                          \
+        mlang_bitset_t* lhs = (mlang_bitset_t*)(intptr_t)lhs_handle;           \
+        mlang_bitset_t* rhs = (mlang_bitset_t*)(intptr_t)rhs_handle;           \
+        if(!lhs || !rhs || lhs->len_bits != rhs->len_bits)                     \
+            return -1;                                                         \
+        size_t words = bitset_words_for_bits(lhs->len_bits);                   \
+        for(size_t i = 0u; i < words; ++i)                                     \
+            lhs->words[i] = lhs->words[i] OP rhs->words[i];                    \
+        bitset_mask_tail(lhs);                                                 \
+        return 0;                                                              \
+    }
+#endif
+
+DEFINE_BITSET_BINARY_EQ(and, &)
+DEFINE_BITSET_BINARY_EQ(or, |)
+DEFINE_BITSET_BINARY_EQ(xor, ^)
+
+#undef DEFINE_BITSET_BINARY_EQ
+
+int32_t __mlang_std_simd_bitset_not_eq(int64_t handle)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b)
+        return -1;
+    size_t words = bitset_words_for_bits(b->len_bits);
+#if MLANG_SIMD_VECTOR_EXT
+    size_t i = 0u;
+    for(; i + 2u <= words; i += 2u)
+    {
+        v2u64 chunk;
+        __builtin_memcpy(&chunk, b->words + i, sizeof(chunk));
+        chunk = ~chunk;
+        __builtin_memcpy(b->words + i, &chunk, sizeof(chunk));
+    }
+    for(; i < words; ++i)
+        b->words[i] = ~b->words[i];
+#else
+    for(size_t i = 0u; i < words; ++i)
+        b->words[i] = ~b->words[i];
+#endif
+    bitset_mask_tail(b);
+    return 0;
+}
+
+int64_t __mlang_std_simd_bitset_count_ones(int64_t handle)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b)
+        return -1;
+    size_t words = bitset_words_for_bits(b->len_bits);
+    uint64_t total = 0u;
+    for(size_t i = 0u; i < words; ++i)
+        total += (uint64_t)__builtin_popcountll((unsigned long long)b->words[i]);
+    return (int64_t)total;
+}
+
+int32_t __mlang_std_simd_bitset_any(int64_t handle)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b)
+        return 0;
+    size_t words = bitset_words_for_bits(b->len_bits);
+    for(size_t i = 0u; i < words; ++i)
+    {
+        if(b->words[i] != 0u)
+            return 1;
+    }
+    return 0;
+}
+
+int32_t __mlang_std_simd_bitset_all(int64_t handle)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b || b->len_bits == 0u)
+        return 1;
+    size_t words = bitset_words_for_bits(b->len_bits);
+    for(size_t i = 0u; i < words; ++i)
+    {
+        uint64_t expected = UINT64_MAX;
+        if(i + 1u == words)
+            expected = bitset_tail_mask(b->len_bits);
+        if((b->words[i] & expected) != expected)
+            return 0;
+    }
+    return 1;
+}

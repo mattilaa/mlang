@@ -1,6 +1,8 @@
 mod std::testing;
 mod std::simd;
+mod std::bitset;
 
+use std::bitset::BitSet;
 use std::testing::verify;
 use std::simd::*;
 
@@ -195,4 +197,60 @@ fn test_simd_boolean_reductions() {
     verify(all_nonzero(nonzeros));
     verify(!any_nonzero(empty_numbers));
     verify(all_nonzero(empty_numbers));
+}
+
+#[test]
+fn test_simd_bitset_ops_and_reductions() {
+    let ar: Result<BitSet, str8> = BitSet::new(130);
+    let br: Result<BitSet, str8> = BitSet::new(130);
+    verify(!ar.is_err());
+    verify(!br.is_err());
+
+    let a: BitSet = ar.unwrap();
+    let b: BitSet = br.unwrap();
+    verify(a.resize(130, false) == 0);
+    verify(b.resize(130, false) == 0);
+
+    verify(a.set(0, true) == 0);
+    verify(a.set(64, true) == 0);
+    verify(a.set(129, true) == 0);
+    verify(b.set(64, true) == 0);
+    verify(b.set(65, true) == 0);
+    verify(b.set(129, true) == 0);
+
+    verify(any(a));
+    verify(!all(a));
+    verify(count_ones(a) == 3);
+
+    verify(bit_and_eq(a, b) == 0);
+    verify(count_ones(a) == 2);
+    verify(a.get_fast(64) == 1);
+    verify(a.get_fast(129) == 1);
+    verify(a.get_fast(0) == 0);
+
+    verify(bit_xor_eq(a, b) == 0);
+    verify(count_ones(a) == 1);
+    verify(a.get_fast(65) == 1);
+
+    verify(bit_or_eq(a, b) == 0);
+    verify(count_ones(a) == 3);
+
+    verify(bit_not_eq(a) == 0);
+    verify(count_ones(a) == 127);
+    let after_not_64: Result<bool, str8> = a.get(64);
+    let after_not_65: Result<bool, str8> = a.get(65);
+    let after_not_129: Result<bool, str8> = a.get(129);
+    verify(!after_not_64.is_err() && !after_not_64.unwrap());
+    verify(!after_not_65.is_err() && !after_not_65.unwrap());
+    verify(!after_not_129.is_err() && !after_not_129.unwrap());
+    verify(any(a));
+    verify(!all(a));
+
+    verify(a.set(64, true) == 0);
+    verify(a.set(65, true) == 0);
+    verify(a.set(129, true) == 0);
+    verify(all(a));
+
+    a.close();
+    b.close();
 }

@@ -6,6 +6,10 @@
 /// operations where the host compiler supports them, with scalar tails for
 /// lengths that are not a multiple of the vector lane count.
 
+mod std::bitset;
+
+use std::bitset::BitSet;
+
 extern pub fn __mlang_std_simd_add_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
 extern pub fn __mlang_std_simd_subtract_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
 extern pub fn __mlang_std_simd_multiply_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
@@ -64,6 +68,14 @@ extern pub fn __mlang_std_simd_all_nonzero_f64(values: &list<f64>) -> i32;
 
 extern pub fn __mlang_std_simd_any_bool(values: &list<bool>) -> i32;
 extern pub fn __mlang_std_simd_all_bool(values: &list<bool>) -> i32;
+
+extern pub fn __mlang_std_simd_bitset_and_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
+extern pub fn __mlang_std_simd_bitset_or_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
+extern pub fn __mlang_std_simd_bitset_xor_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
+extern pub fn __mlang_std_simd_bitset_not_eq(handle: i64) -> i32;
+extern pub fn __mlang_std_simd_bitset_count_ones(handle: i64) -> i64;
+extern pub fn __mlang_std_simd_bitset_any(handle: i64) -> i32;
+extern pub fn __mlang_std_simd_bitset_all(handle: i64) -> i32;
 
 /// @brief Element-wise vector addition.
 ///
@@ -377,4 +389,45 @@ pub fn all_nonzero(values: &list<f32>) -> bool {
 /// @brief True when every numeric element is non-zero.
 pub fn all_nonzero(values: &list<f64>) -> bool {
     return __mlang_std_simd_all_nonzero_f64(values) != 0;
+}
+
+/// @brief In-place packed BitSet AND. Returns 0 on success.
+///
+/// The input bitsets must have the same active bit length.
+pub fn bit_and_eq(lhs: BitSet, rhs: BitSet) -> i32 {
+    return __mlang_std_simd_bitset_and_eq(lhs.raw_handle(), rhs.raw_handle());
+}
+
+/// @brief In-place packed BitSet OR. Returns 0 on success.
+///
+/// The input bitsets must have the same active bit length.
+pub fn bit_or_eq(lhs: BitSet, rhs: BitSet) -> i32 {
+    return __mlang_std_simd_bitset_or_eq(lhs.raw_handle(), rhs.raw_handle());
+}
+
+/// @brief In-place packed BitSet XOR. Returns 0 on success.
+///
+/// The input bitsets must have the same active bit length.
+pub fn bit_xor_eq(lhs: BitSet, rhs: BitSet) -> i32 {
+    return __mlang_std_simd_bitset_xor_eq(lhs.raw_handle(), rhs.raw_handle());
+}
+
+/// @brief In-place packed BitSet NOT over the active bit length.
+pub fn bit_not_eq(values: BitSet) -> i32 {
+    return __mlang_std_simd_bitset_not_eq(values.raw_handle());
+}
+
+/// @brief Count set bits in a packed BitSet.
+pub fn count_ones(values: BitSet) -> i64 {
+    return __mlang_std_simd_bitset_count_ones(values.raw_handle());
+}
+
+/// @brief True when at least one packed BitSet bit is set.
+pub fn any(values: BitSet) -> bool {
+    return __mlang_std_simd_bitset_any(values.raw_handle()) != 0;
+}
+
+/// @brief True when every active packed BitSet bit is set.
+pub fn all(values: BitSet) -> bool {
+    return __mlang_std_simd_bitset_all(values.raw_handle()) != 0;
 }
