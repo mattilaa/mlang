@@ -1,0 +1,26 @@
+/// \file type_name_property_demo.mla
+/// @ingroup examples
+/// \brief Synthetic `.name` type-name property demo.
+///
+/// Values expose a read-only `.name` property that reports the static type
+/// name. A real struct field named `name` takes precedence over the synthetic
+/// property.
+
+struct Named {
+    var name: str8;
+};
+
+fn main() -> i32 {
+    let value: i32 = 12;
+    let labels: list<str8> = ["red", "green"];
+    let table: map<str8, i32> = {"answer": 42};
+    let fixed: array<i32, 3> = {1, 2, 3};
+    let item: Named = Named { name: "real field" };
+
+    println!("value type: {}", value.name);
+    println!("labels type: {}", labels.name);
+    println!("table type: {}", table.name);
+    println!("fixed type: {}", fixed.name);
+    println!("struct field: {}", item.name);
+    return 0;
+}

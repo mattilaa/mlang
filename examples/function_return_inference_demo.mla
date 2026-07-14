@@ -1,0 +1,28 @@
+/// \file function_return_inference_demo.mla
+/// @ingroup examples
+/// \brief Function return type inference demo.
+///
+/// Non-extern functions can omit `-> Type` when all return paths infer the
+/// same type. Functions with no returned value infer `void`.
+
+fn answer() {
+    return 42;
+}
+
+fn label(ok: bool) {
+    if ok {
+        return "ok";
+    }
+    return "not-ok";
+}
+
+fn say(text: str8) {
+    println!("{}", text);
+}
+
+fn main() -> i32 {
+    let value: i32 = answer();
+    let text: str8 = label(value == 42);
+    say(text);
+    return 0;
+}

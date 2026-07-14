@@ -4,6 +4,7 @@
 ## Start Here
 - [MLang Documentation](Home)
 - [Project README](Project-README)
+- [New Features Guide](New-Features)
 
 ## Language
 - [Quick Guide](Quick-Guide)

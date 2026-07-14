@@ -1,0 +1,34 @@
+/// \file container_extend_demo.mla
+/// @ingroup examples
+/// \brief Container-to-container `.extend(...)` demo for lists, maps, arrays,
+/// and nested containers.
+
+fn main() -> i32 {
+    var values: list<i32> = [1];
+    let more_values: array<i32, 2> = {2, 3};
+    values.extend(more_values);
+    values.extend([4, 5]);
+
+    var scores: map<str8, i32> = {"a": 1};
+    let more_scores: map<str8, i32> = {"b": 2};
+    scores.extend(more_scores);
+    scores.extend({"c": 3});
+
+    var fixed: array<i32, 6> = {10, 20};
+    fixed.extend(vec![30, 40]);
+    fixed.extend([50, 60]);
+
+    let first: list<i32> = [1, 2];
+    let second: list<i32> = [3, 4];
+    let nested_source: array<list<i32>, 2> = {first, second};
+    var nested: list<list<i32>> = [];
+    nested.extend(nested_source);
+
+    let last_nested: list<i32> = nested[1];
+
+    println!("values.len={}", values.len());
+    println!("scores.c={}", scores["c"]);
+    println!("fixed.len={}", fixed.len());
+    println!("nested[1].last={}", last_nested.last());
+    return 0;
+}

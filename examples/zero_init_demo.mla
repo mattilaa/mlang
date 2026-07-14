@@ -1,0 +1,27 @@
+/// \file zero_init_demo.mla
+/// @ingroup examples
+/// \brief Typed `var` zero-initialization demo.
+///
+/// A typed mutable declaration without an initializer is zero-initialized.
+/// Use `{}` when the zero-initialization is intentional and should not warn.
+
+struct PairStamp {
+    var left: i64;
+    var right: i64;
+};
+
+fn main() -> i32 {
+    var implicit_count: i32;
+    var explicit_count: i32 {};
+    var ready: bool {};
+    var stamp: PairStamp {};
+    var values: list<i32> {};
+
+    values.push(7);
+    println!("implicit_count={}", implicit_count);
+    println!("explicit_count={}", explicit_count);
+    println!("ready={}", ready);
+    println!("stamp=({}, {})", stamp.left, stamp.right);
+    println!("values.len={}", values.len());
+    return 0;
+}

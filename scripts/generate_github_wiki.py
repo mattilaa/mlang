@@ -36,6 +36,7 @@ class Page:
 PAGES: list[Page] = [
     Page(Path("docs/README.md"), "MLang Documentation", "Home", "Start Here"),
     Page(Path("README.md"), "Project README", "Project-README", "Start Here"),
+    Page(Path("docs/new_features.md"), "New Features Guide", "New-Features", "Start Here"),
     Page(Path("docs/quick_guide.md"), "Quick Guide", "Quick-Guide", "Language"),
     Page(Path("docs/language_syntax.md"), "Language Syntax", "Language-Syntax", "Language"),
     Page(Path("docs/language_attributes.md"), "Language Attributes", "Language-Attributes", "Language"),
@@ -337,6 +338,16 @@ def add_missing_fence_languages(text: str, page: Page) -> str:
     return "\n".join(output) + ("\n" if text.endswith("\n") else "")
 
 
+def convert_doxygen_heading_ids(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        prefix = match.group(1)
+        title = match.group(2).rstrip()
+        anchor = match.group(3)
+        return f'<a id="{anchor}"></a>\n\n{prefix}{title}'
+
+    return re.sub(r"^(#{1,6}\s+)(.*?)\s+\{#([A-Za-z0-9_-]+)\}\s*$", replace, text, flags=re.MULTILINE)
+
+
 def link_inline_code_tokens(text: str) -> str:
     def replace_code(match: re.Match[str]) -> str:
         token = match.group(1)
@@ -355,6 +366,7 @@ def link_inline_code_tokens(text: str) -> str:
 
 
 def enhance_markdown(text: str, page: Page) -> str:
+    text = convert_doxygen_heading_ids(text)
     text = add_missing_fence_languages(text, page)
     parts = re.split(r"(^```.*?^```[ \t]*$)", text, flags=re.MULTILINE | re.DOTALL)
     for index, part in enumerate(parts):

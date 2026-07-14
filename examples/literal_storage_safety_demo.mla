@@ -1,0 +1,34 @@
+/// \file literal_storage_safety_demo.mla
+/// @ingroup examples
+/// \brief Array/list literal storage safety across returns, loops, and nested
+/// containers.
+
+fn make_values() -> list<i32> {
+    return [1, 2, 3];
+}
+
+fn main() -> i32 {
+    var values: list<i32> = make_values();
+    values.push(4);
+
+    var repeated: list<i32> = [7; 3];
+    repeated.push(9);
+
+    var total: i32 = 0;
+    for value in [1, 2, 3] {
+        total = total + value;
+    }
+
+    let first: map<str8, i32> = {"a": 1};
+    let second: map<str8, i32> = {"b": 2};
+    let source: array<map<str8, i32>, 2> = {first, second};
+    var nested: list<map<str8, i32>> = [];
+    nested.extend(source);
+    let second_map: map<str8, i32> = nested[1];
+
+    println!("values.last={}", values.last());
+    println!("repeated.last={}", repeated.last());
+    println!("total={}", total);
+    println!("nested second={}", second_map["b"]);
+    return 0;
+}
