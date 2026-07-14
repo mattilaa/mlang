@@ -16,6 +16,12 @@ extern pub fn __mlang_std_simd_bit_not_i32(values: &list<i32>) -> list<i32>;
 extern pub fn __mlang_std_simd_shift_left_i32(values: &list<i32>, amount: i32) -> list<i32>;
 extern pub fn __mlang_std_simd_shift_right_i32(values: &list<i32>, amount: i32) -> list<i32>;
 extern pub fn __mlang_std_simd_sum_i32(values: &list<i32>) -> i32;
+extern pub fn __mlang_std_simd_product_i32(values: &list<i32>) -> i32;
+extern pub fn __mlang_std_simd_prefix_sum_i32(values: &list<i32>) -> list<i32>;
+extern pub fn __mlang_std_simd_min_i32(values: &list<i32>) -> i32;
+extern pub fn __mlang_std_simd_max_i32(values: &list<i32>) -> i32;
+extern pub fn __mlang_std_simd_any_nonzero_i32(values: &list<i32>) -> i32;
+extern pub fn __mlang_std_simd_all_nonzero_i32(values: &list<i32>) -> i32;
 
 extern pub fn __mlang_std_simd_add_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
 extern pub fn __mlang_std_simd_subtract_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
@@ -27,16 +33,37 @@ extern pub fn __mlang_std_simd_bit_not_i64(values: &list<i64>) -> list<i64>;
 extern pub fn __mlang_std_simd_shift_left_i64(values: &list<i64>, amount: i32) -> list<i64>;
 extern pub fn __mlang_std_simd_shift_right_i64(values: &list<i64>, amount: i32) -> list<i64>;
 extern pub fn __mlang_std_simd_sum_i64(values: &list<i64>) -> i64;
+extern pub fn __mlang_std_simd_product_i64(values: &list<i64>) -> i64;
+extern pub fn __mlang_std_simd_prefix_sum_i64(values: &list<i64>) -> list<i64>;
+extern pub fn __mlang_std_simd_min_i64(values: &list<i64>) -> i64;
+extern pub fn __mlang_std_simd_max_i64(values: &list<i64>) -> i64;
+extern pub fn __mlang_std_simd_any_nonzero_i64(values: &list<i64>) -> i32;
+extern pub fn __mlang_std_simd_all_nonzero_i64(values: &list<i64>) -> i32;
 
 extern pub fn __mlang_std_simd_add_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32>;
 extern pub fn __mlang_std_simd_subtract_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32>;
 extern pub fn __mlang_std_simd_multiply_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32>;
 extern pub fn __mlang_std_simd_sum_f32(values: &list<f32>) -> f32;
+extern pub fn __mlang_std_simd_product_f32(values: &list<f32>) -> f32;
+extern pub fn __mlang_std_simd_prefix_sum_f32(values: &list<f32>) -> list<f32>;
+extern pub fn __mlang_std_simd_min_f32(values: &list<f32>) -> f32;
+extern pub fn __mlang_std_simd_max_f32(values: &list<f32>) -> f32;
+extern pub fn __mlang_std_simd_any_nonzero_f32(values: &list<f32>) -> i32;
+extern pub fn __mlang_std_simd_all_nonzero_f32(values: &list<f32>) -> i32;
 
 extern pub fn __mlang_std_simd_add_f64(lhs: &list<f64>, rhs: &list<f64>) -> list<f64>;
 extern pub fn __mlang_std_simd_subtract_f64(lhs: &list<f64>, rhs: &list<f64>) -> list<f64>;
 extern pub fn __mlang_std_simd_multiply_f64(lhs: &list<f64>, rhs: &list<f64>) -> list<f64>;
 extern pub fn __mlang_std_simd_sum_f64(values: &list<f64>) -> f64;
+extern pub fn __mlang_std_simd_product_f64(values: &list<f64>) -> f64;
+extern pub fn __mlang_std_simd_prefix_sum_f64(values: &list<f64>) -> list<f64>;
+extern pub fn __mlang_std_simd_min_f64(values: &list<f64>) -> f64;
+extern pub fn __mlang_std_simd_max_f64(values: &list<f64>) -> f64;
+extern pub fn __mlang_std_simd_any_nonzero_f64(values: &list<f64>) -> i32;
+extern pub fn __mlang_std_simd_all_nonzero_f64(values: &list<f64>) -> i32;
+
+extern pub fn __mlang_std_simd_any_bool(values: &list<bool>) -> i32;
+extern pub fn __mlang_std_simd_all_bool(values: &list<bool>) -> i32;
 
 /// @brief Element-wise vector addition.
 ///
@@ -220,4 +247,134 @@ pub fn sum(values: &list<f32>) -> f32 {
 /// @brief Horizontal sum of all vector elements.
 pub fn sum(values: &list<f64>) -> f64 {
     return __mlang_std_simd_sum_f64(values);
+}
+
+/// @brief Horizontal product of all vector elements.
+pub fn product(values: &list<i32>) -> i32 {
+    return __mlang_std_simd_product_i32(values);
+}
+
+/// @brief Horizontal product of all vector elements.
+pub fn product(values: &list<i64>) -> i64 {
+    return __mlang_std_simd_product_i64(values);
+}
+
+/// @brief Horizontal product of all vector elements.
+pub fn product(values: &list<f32>) -> f32 {
+    return __mlang_std_simd_product_f32(values);
+}
+
+/// @brief Horizontal product of all vector elements.
+pub fn product(values: &list<f64>) -> f64 {
+    return __mlang_std_simd_product_f64(values);
+}
+
+/// @brief Running sum across vector elements.
+pub fn prefix_sum(values: &list<i32>) -> list<i32> {
+    return __mlang_std_simd_prefix_sum_i32(values);
+}
+
+/// @brief Running sum across vector elements.
+pub fn prefix_sum(values: &list<i64>) -> list<i64> {
+    return __mlang_std_simd_prefix_sum_i64(values);
+}
+
+/// @brief Running sum across vector elements.
+pub fn prefix_sum(values: &list<f32>) -> list<f32> {
+    return __mlang_std_simd_prefix_sum_f32(values);
+}
+
+/// @brief Running sum across vector elements.
+pub fn prefix_sum(values: &list<f64>) -> list<f64> {
+    return __mlang_std_simd_prefix_sum_f64(values);
+}
+
+/// @brief Minimum element in the vector, or zero for an empty list.
+pub fn min(values: &list<i32>) -> i32 {
+    return __mlang_std_simd_min_i32(values);
+}
+
+/// @brief Minimum element in the vector, or zero for an empty list.
+pub fn min(values: &list<i64>) -> i64 {
+    return __mlang_std_simd_min_i64(values);
+}
+
+/// @brief Minimum element in the vector, or zero for an empty list.
+pub fn min(values: &list<f32>) -> f32 {
+    return __mlang_std_simd_min_f32(values);
+}
+
+/// @brief Minimum element in the vector, or zero for an empty list.
+pub fn min(values: &list<f64>) -> f64 {
+    return __mlang_std_simd_min_f64(values);
+}
+
+/// @brief Maximum element in the vector, or zero for an empty list.
+pub fn max(values: &list<i32>) -> i32 {
+    return __mlang_std_simd_max_i32(values);
+}
+
+/// @brief Maximum element in the vector, or zero for an empty list.
+pub fn max(values: &list<i64>) -> i64 {
+    return __mlang_std_simd_max_i64(values);
+}
+
+/// @brief Maximum element in the vector, or zero for an empty list.
+pub fn max(values: &list<f32>) -> f32 {
+    return __mlang_std_simd_max_f32(values);
+}
+
+/// @brief Maximum element in the vector, or zero for an empty list.
+pub fn max(values: &list<f64>) -> f64 {
+    return __mlang_std_simd_max_f64(values);
+}
+
+/// @brief True when at least one boolean element is true.
+pub fn any(values: &list<bool>) -> bool {
+    return __mlang_std_simd_any_bool(values) != 0;
+}
+
+/// @brief True when every boolean element is true.
+pub fn all(values: &list<bool>) -> bool {
+    return __mlang_std_simd_all_bool(values) != 0;
+}
+
+/// @brief True when at least one numeric element is non-zero.
+pub fn any_nonzero(values: &list<i32>) -> bool {
+    return __mlang_std_simd_any_nonzero_i32(values) != 0;
+}
+
+/// @brief True when at least one numeric element is non-zero.
+pub fn any_nonzero(values: &list<i64>) -> bool {
+    return __mlang_std_simd_any_nonzero_i64(values) != 0;
+}
+
+/// @brief True when at least one numeric element is non-zero.
+pub fn any_nonzero(values: &list<f32>) -> bool {
+    return __mlang_std_simd_any_nonzero_f32(values) != 0;
+}
+
+/// @brief True when at least one numeric element is non-zero.
+pub fn any_nonzero(values: &list<f64>) -> bool {
+    return __mlang_std_simd_any_nonzero_f64(values) != 0;
+}
+
+/// @brief True when every numeric element is non-zero.
+pub fn all_nonzero(values: &list<i32>) -> bool {
+    return __mlang_std_simd_all_nonzero_i32(values) != 0;
+}
+
+/// @brief True when every numeric element is non-zero.
+pub fn all_nonzero(values: &list<i64>) -> bool {
+    return __mlang_std_simd_all_nonzero_i64(values) != 0;
+}
+
+/// @brief True when every numeric element is non-zero.
+pub fn all_nonzero(values: &list<f32>) -> bool {
+    return __mlang_std_simd_all_nonzero_f32(values) != 0;
+}
+
+/// @brief True when every numeric element is non-zero.
+pub fn all_nonzero(values: &list<f64>) -> bool {
+    return __mlang_std_simd_all_nonzero_f64(values) != 0;
 }

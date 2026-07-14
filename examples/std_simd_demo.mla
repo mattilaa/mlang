@@ -1,6 +1,6 @@
 /// \file std_simd_demo.mla
 /// @ingroup examples
-/// \brief SIMD-friendly vector add/subtract/multiply/sum helpers.
+/// \brief SIMD-friendly vector math, reductions, searches, and boolean checks.
 
 mod std::simd;
 use std::simd::*;
@@ -13,6 +13,10 @@ fn main() -> i32 {
     let subbed: list<f32> = subtract(rhs, lhs);
     let multiplied: list<f32> = multiply(lhs, rhs);
     let total: f32 = sum(added);
+    let multiplied_total: f32 = product(lhs);
+    let running: list<f32> = prefix_sum(lhs);
+    let smallest: f32 = min(rhs);
+    let largest: f32 = max(rhs);
 
     let mask_a: list<i32> = [1, 2, 3, 12];
     let mask_b: list<i32> = [3, 1, 5, 10];
@@ -20,14 +24,39 @@ fn main() -> i32 {
     let ored: list<i32> = bit_or(mask_a, mask_b);
     let xored: list<i32> = bit_xor(mask_a, mask_b);
     let shifted: list<i32> = shift_left(mask_a, 2);
+    let mask_running: list<i32> = prefix_sum(mask_a);
+    let mask_product: i32 = product(mask_a);
+    let mask_min: i32 = min(mask_a);
+    let mask_max: i32 = max(mask_a);
+
+    let flags: list<bool> = [true, false, true, true];
+    let all_enabled: list<bool> = [true, true, true];
+    let any_flag: bool = any(flags);
+    let all_flag: bool = all(flags);
+    let all_enabled_flag: bool = all(all_enabled);
+    let has_mask: bool = any_nonzero(mask_a);
+    let all_masks_set: bool = all_nonzero(mask_a);
 
     println!("added[0]={}", added[0]);
     println!("subbed[1]={}", subbed[1]);
     println!("multiplied[2]={}", multiplied[2]);
     println!("sum(added)={}", total);
+    println!("product(lhs)={}", multiplied_total);
+    println!("prefix_sum(lhs)[3]={}", running[3]);
+    println!("min(rhs)={}", smallest);
+    println!("max(rhs)={}", largest);
     println!("and[0]={}", anded[0]);
     println!("or[2]={}", ored[2]);
     println!("xor[3]={}", xored[3]);
     println!("shifted[2]={}", shifted[2]);
+    println!("prefix_sum(mask_a)[3]={}", mask_running[3]);
+    println!("product(mask_a)={}", mask_product);
+    println!("min(mask_a)={}", mask_min);
+    println!("max(mask_a)={}", mask_max);
+    println!("any(flags)={}", any_flag);
+    println!("all(flags)={}", all_flag);
+    println!("all(all_enabled)={}", all_enabled_flag);
+    println!("any_nonzero(mask_a)={}", has_mask);
+    println!("all_nonzero(mask_a)={}", all_masks_set);
     return 0;
 }

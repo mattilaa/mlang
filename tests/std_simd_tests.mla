@@ -35,6 +35,18 @@ fn test_simd_i32_ops() {
     verify(subbed[1] == 18);
     verify(multiplied[2] == 90);
     verify(sum(a) == 15);
+    verify(product(a) == 120);
+
+    let running: list<i32> = prefix_sum(a);
+    verify(running.len() == 5);
+    verify(running[0] == 1);
+    verify(running[4] == 15);
+
+    let mixed: list<i32> = [4, 0 - 2, 0, 9];
+    verify(min(mixed) == 0 - 2);
+    verify(max(mixed) == 9);
+    verify(any_nonzero(mixed));
+    verify(!all_nonzero(mixed));
 }
 
 #[test]
@@ -50,6 +62,17 @@ fn test_simd_i64_ops() {
     verify(subbed[0] == 4);
     verify(multiplied[3] == 32);
     verify(sum(b) == 26);
+    verify(product(a) == 24);
+
+    let running: list<i64> = prefix_sum(b);
+    verify(running[0] == 5);
+    verify(running[3] == 26);
+
+    let mixed: list<i64> = [0, 40, 0 - 5, 9];
+    verify(min(mixed) == 0 - 5);
+    verify(max(mixed) == 40);
+    verify(any_nonzero(mixed));
+    verify(!all_nonzero(mixed));
 }
 
 #[test]
@@ -110,6 +133,17 @@ fn test_simd_f32_ops() {
     verify(approx_f32(subbed[0], 0.0f - 3.0f, eps));
     verify(approx_f32(multiplied[2], 6.0f, eps));
     verify(approx_f32(sum(a), 6.5f, eps));
+    verify(approx_f32(product(a), 7.5f, eps));
+
+    let running: list<f32> = prefix_sum(a);
+    verify(approx_f32(running[0], 1.0f, eps));
+    verify(approx_f32(running[2], 6.5f, eps));
+
+    let mixed: list<f32> = [2.0f, 0.0f - 4.5f, 0.0f, 8.0f];
+    verify(approx_f32(min(mixed), 0.0f - 4.5f, eps));
+    verify(approx_f32(max(mixed), 8.0f, eps));
+    verify(any_nonzero(mixed));
+    verify(!all_nonzero(mixed));
 }
 
 #[test]
@@ -128,5 +162,37 @@ fn test_simd_f64_ops_and_length_mismatch() {
     verify(approx_f64(subbed[0], 0.5, eps));
     verify(approx_f64(multiplied[2], 7.5, eps));
     verify(approx_f64(sum(b), 8.0, eps));
+    verify(approx_f64(product(a), 24.0, eps));
     verify(mismatch.len() == 0);
+
+    let running: list<f64> = prefix_sum(b);
+    verify(approx_f64(running[0], 0.5, eps));
+    verify(approx_f64(running[3], 8.0, eps));
+
+    let mixed: list<f64> = [0.0, 12.0, 0.0 - 2.0, 5.0];
+    verify(approx_f64(min(mixed), 0.0 - 2.0, eps));
+    verify(approx_f64(max(mixed), 12.0, eps));
+    verify(any_nonzero(mixed));
+    verify(!all_nonzero(mixed));
+}
+
+#[test]
+fn test_simd_boolean_reductions() {
+    let all_flags: list<bool> = [true, true, true];
+    let mixed_flags: list<bool> = [true, false, true];
+    let empty_flags: list<bool> = [];
+    let zeros: list<i32> = [0, 0, 0];
+    let nonzeros: list<i32> = [1, 2, 3];
+    let empty_numbers: list<i32> = [];
+
+    verify(any(all_flags));
+    verify(all(all_flags));
+    verify(any(mixed_flags));
+    verify(!all(mixed_flags));
+    verify(!any(empty_flags));
+    verify(all(empty_flags));
+    verify(!any_nonzero(zeros));
+    verify(all_nonzero(nonzeros));
+    verify(!any_nonzero(empty_numbers));
+    verify(all_nonzero(empty_numbers));
 }

@@ -1042,6 +1042,26 @@ If input lengths differ, they return an empty list.
 - `subtract(lhs: &list<T>, rhs: &list<T>) -> list<T>`
 - `multiply(lhs: &list<T>, rhs: &list<T>) -> list<T>`
 - `sum(values: &list<T>) -> T`
+- `product(values: &list<T>) -> T`
+- `prefix_sum(values: &list<T>) -> list<T>`
+- `min(values: &list<T>) -> T`
+- `max(values: &list<T>) -> T`
+- `any_nonzero(values: &list<T>) -> bool`
+- `all_nonzero(values: &list<T>) -> bool`
+
+`sum`, `product`, `min`, `max`, `any_nonzero`, and `all_nonzero` are
+horizontal reductions over a whole list. Empty numeric lists return `0` for
+`sum`, `min`, and `max`; `1` for `product`; `false` for `any_nonzero`; and
+`true` for `all_nonzero`. `prefix_sum` returns the running sum at each element
+and returns an empty list for empty input.
+
+Boolean reductions:
+- `any(values: &list<bool>) -> bool`
+- `all(values: &list<bool>) -> bool`
+
+`any` returns `true` when at least one element is true. `all` returns `true`
+when every element is true. For empty boolean lists, `any` returns `false` and
+`all` returns `true`.
 
 Integer-only gate logic and bit shifts:
 - `bit_and(lhs: &list<T>, rhs: &list<T>) -> list<T>`
@@ -1064,13 +1084,22 @@ let lhs: list<f32> = [1.0f, 2.0f, 3.0f, 4.0f];
 let rhs: list<f32> = [10.0f, 20.0f, 30.0f, 40.0f];
 
 let added: list<f32> = add(lhs, rhs);
-let product: list<f32> = multiply(lhs, rhs);
+let multiplied: list<f32> = multiply(lhs, rhs);
 let total: f32 = sum(added);
+let total_product: f32 = product(lhs);
+let running: list<f32> = prefix_sum(lhs);
+let lo: f32 = min(rhs);
+let hi: f32 = max(rhs);
 
 let masks: list<i32> = [1, 2, 3, 12];
 let flags: list<i32> = [3, 1, 5, 10];
 let both: list<i32> = bit_and(masks, flags);
 let shifted: list<i32> = shift_left(masks, 2);
+
+let checks: list<bool> = [true, false, true];
+let has_true: bool = any(checks);
+let all_true: bool = all(checks);
+let has_mask: bool = any_nonzero(masks);
 ```
 
 See [`examples/std_simd_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/std_simd_demo.mla).
