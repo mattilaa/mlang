@@ -1,0 +1,10 @@
+/// \file detail.mla
+/// \brief Native bindings for std::hash.
+
+extern pub fn __mlang_std_hash_init() -> i64;
+extern pub fn __mlang_std_hash_i64(value: i64) -> i64;
+extern pub fn __mlang_std_hash_bool(value: i32) -> i64;
+extern pub fn __mlang_std_hash_str(text: str8) -> i64;
+extern pub fn __mlang_std_hash_str16(text: str16) -> i64;
+extern pub fn __mlang_std_hash_combine(seed: i64, value_hash: i64) -> i64;
+extern pub fn __mlang_std_hash_to_hex(value: i64) -> str8;

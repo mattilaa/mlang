@@ -1,0 +1,9 @@
+/// \file detail.mla
+/// \brief Native bindings for std::algorithm::rand.
+
+extern pub fn __mlang_std_rand_seed_i64(seed: i64) -> void;
+extern pub fn __mlang_std_rand_next_u64() -> u64;
+extern pub fn __mlang_std_rand_next_i64() -> i64;
+extern pub fn __mlang_std_rand_range_i64(min_value: i64, max_value: i64) -> i64;
+extern pub fn __mlang_std_rand_next_f64() -> f64;
+extern pub fn __mlang_std_rand_range_f64(min_value: f64, max_value: f64) -> f64;

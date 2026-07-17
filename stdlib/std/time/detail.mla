@@ -1,0 +1,13 @@
+/// \file detail.mla
+/// \brief Native bindings for std::time.
+
+extern pub fn __mlang_std_time_now_ms() -> i64;
+extern pub fn __mlang_std_time_now_ns() -> i64;
+extern pub fn __mlang_std_time_sleep_ms(ms: i64) -> void;
+extern pub fn __mlang_std_time_format_local(pattern: str8) -> str8;
+extern pub fn __mlang_std_time_timer_new(timeout_ms: i64) -> i64;
+extern pub fn __mlang_std_time_timer_reset(handle: i64, timeout_ms: i64) -> i32;
+extern pub fn __mlang_std_time_timer_elapsed(handle: i64) -> i32;
+extern pub fn __mlang_std_time_timer_remaining_ms(handle: i64) -> i64;
+extern pub fn __mlang_std_time_timer_wait(handle: i64) -> i32;
+extern pub fn __mlang_std_time_timer_free(handle: i64) -> i32;

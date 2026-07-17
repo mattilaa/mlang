@@ -1,0 +1,4 @@
+/// \file detail.mla
+/// \brief Native bindings for std::exceptions.
+
+extern pub fn __mlang_std_exceptions_string_free(s: str8) -> void;

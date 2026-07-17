@@ -1,0 +1,33 @@
+/// \file detail.mla
+/// \brief Native bindings for std::date.
+
+extern pub fn __mlang_std_date_now_year() -> i32;
+extern pub fn __mlang_std_date_now_month() -> i32;
+extern pub fn __mlang_std_date_now_day() -> i32;
+extern pub fn __mlang_std_date_now_hour() -> i32;
+extern pub fn __mlang_std_date_now_minute() -> i32;
+extern pub fn __mlang_std_date_now_second() -> i32;
+extern pub fn __mlang_std_date_unix_now() -> i64;
+extern pub fn __mlang_std_date_from_unix_year(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_month(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_day(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_hour(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_minute(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_second(timestamp: i64, offset_seconds: i32) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_year(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_month(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_day(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_hour(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_minute(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_local_second(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_to_unix(year: i32, month: i32, day: i32, hour: i32, minute: i32, second: i32, offset_seconds: i32) -> i64;
+extern pub fn __mlang_std_date_local_offset_seconds_at(timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_timezone_valid(name: str8) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_year(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_month(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_day(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_hour(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_minute(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_from_unix_tz_second(name: str8, timestamp: i64) -> i32;
+extern pub fn __mlang_std_date_to_unix_tz(name: str8, year: i32, month: i32, day: i32, hour: i32, minute: i32, second: i32) -> i64;
+extern pub fn __mlang_std_date_tz_offset_seconds_at(name: str8, timestamp: i64) -> i32;

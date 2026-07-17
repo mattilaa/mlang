@@ -1,0 +1,14 @@
+/// \file detail.mla
+/// \brief Native bindings for std::ssl.
+
+extern pub fn __mlang_std_ssl_last_error() -> str8;
+extern pub fn __mlang_std_ssl_client_connect(host: str8, port: i64, server_name: str8, ca_file: str8, verify_peer: i32) -> i64;
+extern pub fn __mlang_std_ssl_listener_bind(addr: str8, port: i64, cert_file: str8, key_file: str8) -> i64;
+extern pub fn __mlang_std_ssl_listener_local_port(handle: i64) -> i64;
+extern pub fn __mlang_std_ssl_listener_accept(handle: i64) -> i64;
+extern pub fn __mlang_std_ssl_listener_close(handle: i64) -> i32;
+extern pub fn __mlang_std_ssl_stream_read(handle: i64, buf: str8, capacity: i64) -> i64;
+extern pub fn __mlang_std_ssl_stream_write(handle: i64, s: str8) -> i64;
+extern pub fn __mlang_std_ssl_stream_set_read_timeout_ms(handle: i64, timeout_ms: i64) -> i32;
+extern pub fn __mlang_std_ssl_stream_set_write_timeout_ms(handle: i64, timeout_ms: i64) -> i32;
+extern pub fn __mlang_std_ssl_stream_close(handle: i64) -> i32;

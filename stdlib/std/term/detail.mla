@@ -1,0 +1,21 @@
+/// \file detail.mla
+/// \brief Native bindings for std::term.
+
+extern pub fn __mlang_std_term_term_name() -> str8;
+extern pub fn __mlang_std_term_stdin_is_tty() -> i32;
+extern pub fn __mlang_std_term_stdout_is_tty() -> i32;
+extern pub fn __mlang_std_term_stderr_is_tty() -> i32;
+extern pub fn __mlang_std_term_stdout_rows() -> i32;
+extern pub fn __mlang_std_term_stdout_cols() -> i32;
+extern pub fn __mlang_std_term_stderr_rows() -> i32;
+extern pub fn __mlang_std_term_stderr_cols() -> i32;
+extern pub fn __mlang_std_term_stdout_color_level() -> i32;
+extern pub fn __mlang_std_term_stderr_color_level() -> i32;
+extern pub fn __mlang_std_term_stdout_truecolor() -> i32;
+extern pub fn __mlang_std_term_stderr_truecolor() -> i32;
+extern pub fn __mlang_std_term_stdout_supports_ansi() -> i32;
+extern pub fn __mlang_std_term_stdin_enable_raw() -> i32;
+extern pub fn __mlang_std_term_stdin_enable_cbreak() -> i32;
+extern pub fn __mlang_std_term_stdin_restore() -> i32;
+extern pub fn __mlang_std_term_stdin_make_sane() -> i32;
+extern pub fn __mlang_std_term_stdin_flush_input() -> i32;

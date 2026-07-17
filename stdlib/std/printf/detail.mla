@@ -1,0 +1,6 @@
+/// \file detail.mla
+/// \brief Native bindings for std::printf.
+
+extern pub fn __mlang_std_io_printf(s: str8) -> void;
+extern pub fn __mlang_std_io_eprintf(s: str8) -> void;
+extern pub fn __mlang_std_io_fprintf(fd: i32, s: str8) -> void;

@@ -1,4 +1,9 @@
 /// \file chat.mla
+/// \cond INTERNAL_IMPORTS
+mod std::chat::detail;
+use std::chat::detail::*;
+/// \endcond
+
 /// \brief Full-screen chat-style terminal UI state and renderer (std::chat).
 ///
 /// This module provides an opaque, handle-backed chat UI model designed for
@@ -11,25 +16,6 @@ mod std::strbuf;
 use std::strbuf::from_utf16;
 use std::strbuf::to_utf16;
 
-extern pub fn __mlang_std_chat_last_error() -> str8;
-extern pub fn __mlang_std_chat_new(max_lines: i64) -> i64;
-extern pub fn __mlang_std_chat_free(handle: i64) -> i32;
-extern pub fn __mlang_std_chat_set_title(handle: i64, title: str8) -> i32;
-extern pub fn __mlang_std_chat_set_server(handle: i64, server: str8) -> i32;
-extern pub fn __mlang_std_chat_set_channel(handle: i64, channel: str8) -> i32;
-extern pub fn __mlang_std_chat_set_nick(handle: i64, nick: str8) -> i32;
-extern pub fn __mlang_std_chat_set_status(handle: i64, status: str8) -> i32;
-extern pub fn __mlang_std_chat_set_prompt(handle: i64, prompt: str8) -> i32;
-extern pub fn __mlang_std_chat_set_input(handle: i64, input: str8) -> i32;
-extern pub fn __mlang_std_chat_input(handle: i64) -> str8;
-extern pub fn __mlang_std_chat_push_line(handle: i64, prefix: str8, text: str8, kind: i32) -> i32;
-extern pub fn __mlang_std_chat_feed_keycode(handle: i64, keycode: i32) -> i32;
-extern pub fn __mlang_std_chat_scroll(handle: i64, delta: i64) -> i32;
-extern pub fn __mlang_std_chat_scroll_pos(handle: i64) -> i64;
-extern pub fn __mlang_std_chat_scroll_max(handle: i64) -> i64;
-extern pub fn __mlang_std_chat_scroll_to_bottom(handle: i64) -> i32;
-extern pub fn __mlang_std_chat_take_submitted(handle: i64) -> str8;
-extern pub fn __mlang_std_chat_render(handle: i64, rows: i32, cols: i32) -> str8;
 
 /// @brief Opaque handle wrapping a native chat UI state.
 pub struct ChatUi {

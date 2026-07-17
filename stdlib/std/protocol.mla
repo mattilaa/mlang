@@ -1,4 +1,10 @@
 /// \file protocol.mla
+/// \cond INTERNAL_IMPORTS
+/// \cond INTERNAL_IMPORTS
+mod std::protocol::detail;
+use std::protocol::detail::*;
+/// \endcond
+
 /// \brief Base framed TCP protocol helpers for project-level protocol stacks (std::protocol).
 ///
 /// Frame wire format:
@@ -10,7 +16,6 @@
 /// This module provides a reusable base transport with opcode dispatch so
 /// projects can implement derived protocols on top.
 
-/// \cond INTERNAL_IMPORTS
 mod std::net;
 mod std::strbuf;
 
@@ -18,10 +23,6 @@ use std::net::TcpStream;
 use std::strbuf::sub;
 /// \endcond
 
-extern pub fn __mlang_std_protocol_last_error() -> str8;
-extern pub fn __mlang_std_protocol_last_opcode() -> i32;
-extern pub fn __mlang_std_protocol_stream_write_text(socket_handle: i64, opcode: i32, payload: str8) -> i64;
-extern pub fn __mlang_std_protocol_stream_read_text(socket_handle: i64, out: str8, capacity: i64, max_payload_bytes: i64) -> i64;
 
 /// @brief One decoded protocol frame.
 pub struct ProtocolFrame {

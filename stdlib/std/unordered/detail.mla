@@ -1,0 +1,28 @@
+/// \file detail.mla
+/// \brief Native bindings for std::unordered.
+
+extern pub fn __mlang_std_unordered_map_i64_i64_new() -> i64;
+extern pub fn __mlang_std_unordered_map_i64_i64_free(handle: i64) -> i32;
+extern pub fn __mlang_std_unordered_map_i64_i64_insert(handle: i64, key: i64, value: i64) -> i32;
+extern pub fn __mlang_std_unordered_map_i64_i64_contains(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_map_i64_i64_get_or(handle: i64, key: i64, default_value: i64) -> i64;
+extern pub fn __mlang_std_unordered_map_i64_i64_remove(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_map_i64_i64_len(handle: i64) -> i64;
+extern pub fn __mlang_std_unordered_map_i64_i64_keys(handle: i64) -> list<i64>;
+extern pub fn __mlang_std_unordered_map_i64_i64_values(handle: i64) -> list<i64>;
+extern pub fn __mlang_std_unordered_set_i64_new() -> i64;
+extern pub fn __mlang_std_unordered_set_i64_free(handle: i64) -> i32;
+extern pub fn __mlang_std_unordered_set_i64_insert(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_set_i64_contains(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_set_i64_remove(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_set_i64_len(handle: i64) -> i64;
+extern pub fn __mlang_std_unordered_set_i64_keys(handle: i64) -> list<i64>;
+extern pub fn __mlang_std_unordered_vecmap_i64_i64_new() -> i64;
+extern pub fn __mlang_std_unordered_vecmap_i64_i64_free(handle: i64) -> i32;
+extern pub fn __mlang_std_unordered_vecmap_i64_i64_set(handle: i64, key: i64, value: i64) -> i32;
+extern pub fn __mlang_std_unordered_vecmap_i64_i64_has(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_vecmap_i64_i64_get_or(handle: i64, key: i64, default_value: i64) -> i64;
+extern pub fn __mlang_std_unordered_vecmap_i64_i64_del(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_vecmap_i64_i64_len(handle: i64) -> i64;
+extern pub fn __mlang_std_unordered_vecmap_i64_i64_keys(handle: i64) -> list<i64>;
+extern pub fn __mlang_std_unordered_vecmap_i64_i64_values(handle: i64) -> list<i64>;

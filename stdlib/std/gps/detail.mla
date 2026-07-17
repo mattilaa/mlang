@@ -1,0 +1,4 @@
+/// \file detail.mla
+/// \brief Native bindings for std::gps.
+
+extern pub fn llround(value: f64) -> i64;

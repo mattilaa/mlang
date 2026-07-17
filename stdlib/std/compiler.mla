@@ -4,53 +4,11 @@
 /// This module exposes compiler session/document/query APIs to MLang code.
 /// It wraps the compiler C ABI with MLang-friendly handles and Result values.
 
-extern pub fn __mlang_std_compiler_last_error() -> str8;
-extern pub fn __mlang_std_compiler_last_status() -> i32;
-extern pub fn __mlang_std_compiler_status_name(status: i32) -> str8;
-extern pub fn __mlang_std_compiler_version() -> str8;
-extern pub fn __mlang_std_compiler_session_create() -> i64;
-extern pub fn __mlang_std_compiler_session_destroy(handle: i64) -> i32;
-extern pub fn __mlang_std_compiler_document_open(handle: i64, uri: str8, language_id: str8, text: str8, version: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_change(handle: i64, uri: str8, text: str8, version: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_close(handle: i64, uri: str8) -> i32;
-extern pub fn __mlang_std_compiler_document_syntax_diagnostic_count(handle: i64, uri: str8) -> i32;
-extern pub fn __mlang_std_compiler_document_syntax_diagnostic_line(handle: i64, uri: str8, index: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_syntax_diagnostic_column(handle: i64, uri: str8, index: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_syntax_diagnostic_message(handle: i64, uri: str8, index: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_hover(handle: i64, uri: str8, line: i32, column: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_completion_count(handle: i64, uri: str8, line: i32, column: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_completion_get(handle: i64, uri: str8, line: i32, column: i32, index: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_symbol_count(handle: i64, uri: str8) -> i32;
-extern pub fn __mlang_std_compiler_document_symbol_name(handle: i64, uri: str8, index: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_symbol_kind(handle: i64, uri: str8, index: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_symbol_line(handle: i64, uri: str8, index: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_symbol_column(handle: i64, uri: str8, index: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_symbol_id(handle: i64, uri: str8, index: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_symbol_type(handle: i64, uri: str8, index: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_symbol_signature(handle: i64, uri: str8, index: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_symbol_documentation(handle: i64, uri: str8, index: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_definition_line(handle: i64, uri: str8, line: i32, column: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_definition_column(handle: i64, uri: str8, line: i32, column: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_definition_name(handle: i64, uri: str8, line: i32, column: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_definition_uri(handle: i64, uri: str8, line: i32, column: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_definition_id(handle: i64, uri: str8, line: i32, column: i32) -> str8;
-extern pub fn __mlang_std_compiler_resolve_symbol_name(handle: i64, uri: str8, line: i32, column: i32) -> str8;
-extern pub fn __mlang_std_compiler_resolve_symbol_kind(handle: i64, uri: str8, line: i32, column: i32) -> i32;
-extern pub fn __mlang_std_compiler_resolve_symbol_line(handle: i64, uri: str8, line: i32, column: i32) -> i32;
-extern pub fn __mlang_std_compiler_resolve_symbol_column(handle: i64, uri: str8, line: i32, column: i32) -> i32;
-extern pub fn __mlang_std_compiler_resolve_symbol_uri(handle: i64, uri: str8, line: i32, column: i32) -> str8;
-extern pub fn __mlang_std_compiler_resolve_symbol_id(handle: i64, uri: str8, line: i32, column: i32) -> str8;
-extern pub fn __mlang_std_compiler_resolve_symbol_type(handle: i64, uri: str8, line: i32, column: i32) -> str8;
-extern pub fn __mlang_std_compiler_resolve_symbol_signature(handle: i64, uri: str8, line: i32, column: i32) -> str8;
-extern pub fn __mlang_std_compiler_resolve_symbol_overload_count(handle: i64, uri: str8, line: i32, column: i32) -> i32;
-extern pub fn __mlang_std_compiler_resolve_symbol_from_current_document(handle: i64, uri: str8, line: i32, column: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_reference_count(handle: i64, uri: str8, line: i32, column: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_reference_uri(handle: i64, uri: str8, line: i32, column: i32, index: i32) -> str8;
-extern pub fn __mlang_std_compiler_document_reference_line(handle: i64, uri: str8, line: i32, column: i32, index: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_reference_column(handle: i64, uri: str8, line: i32, column: i32, index: i32) -> i32;
-extern pub fn __mlang_std_compiler_document_rename_is_safe(handle: i64, uri: str8, line: i32, column: i32, new_name: str8) -> i32;
-extern pub fn __mlang_std_compiler_semantic_cache_warm(handle: i64, uri: str8) -> i32;
-extern pub fn __mlang_std_compiler_semantic_cache_clear(handle: i64) -> i32;
+
+/// \cond INTERNAL_IMPORTS
+mod std::compiler::detail;
+use std::compiler::detail::*;
+/// \endcond
 
 /// @brief Opaque compiler session handle.
 pub struct Session {

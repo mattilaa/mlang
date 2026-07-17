@@ -1,0 +1,4 @@
+/// \file detail.mla
+/// \brief Native bindings for std::ascii.
+
+extern pub fn __mlang_std_ascii_braille_mask(mask: i32) -> str8;

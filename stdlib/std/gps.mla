@@ -1,4 +1,9 @@
 /// \file gps.mla
+/// \cond INTERNAL_IMPORTS
+mod std::gps::detail;
+use std::gps::detail::*;
+/// \endcond
+
 /// \brief GPS/latitude-longitude helpers for routing and TSP-style algorithms.
 ///
 /// This module is intended to convert latitude/longitude lists into local
@@ -9,7 +14,6 @@ mod std::math;
 use std::math::cos;
 use std::math::sqrt;
 
-extern fn llround(value: f64) -> i64;
 
 /// @brief Degrees-to-radians conversion factor.
 pub fn pi() -> f64 {

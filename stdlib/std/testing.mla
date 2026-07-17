@@ -2,6 +2,11 @@
 /// \brief GoogleTest-like non-fatal expectation helpers for MLang tests.
 ///
 /// @defgroup std_testing std::testing
+/// \cond INTERNAL_IMPORTS
+mod std::testing::detail;
+use std::testing::detail::*;
+/// \endcond
+
 /// @brief Test assertions, counters, and mock helpers.
 ///
 /// Includes:
@@ -13,118 +18,6 @@
 /// - counters: `reset`, `checks`, `failures`, `result`
 /// - lightweight mocks: `mock_*`
 
-extern pub fn __mlang_std_testing_reset() -> void;
-extern pub fn __mlang_std_testing_checks() -> i32;
-extern pub fn __mlang_std_testing_failures() -> i32;
-extern pub fn __mlang_std_testing_result() -> i32;
-extern pub fn __mlang_std_testing_set_quiet(enabled: i32) -> void;
-extern pub fn __mlang_std_testing_expect_true(cond: i32) -> void;
-extern pub fn __mlang_std_testing_expect_false(cond: i32) -> void;
-extern pub fn __mlang_std_testing_expect_eq_i32(expected: i32,
-                                                actual: i32) -> void;
-extern pub fn __mlang_std_testing_expect_not_eq_i32(expected: i32,
-                                                    actual: i32) -> void;
-extern pub fn __mlang_std_testing_expect_eq_i64(expected: i64,
-                                                actual: i64) -> void;
-extern pub fn __mlang_std_testing_expect_not_eq_i64(expected: i64,
-                                                    actual: i64) -> void;
-extern pub fn __mlang_std_testing_expect_eq_bool(expected: i32,
-                                                 actual: i32) -> void;
-extern pub fn __mlang_std_testing_expect_not_eq_bool(expected: i32,
-                                                     actual: i32) -> void;
-extern pub fn __mlang_std_testing_expect_eq_string(expected: str8,
-                                                   actual: str8) -> void;
-extern pub fn __mlang_std_testing_expect_not_eq_string(expected: str8,
-                                                       actual: str8) -> void;
-extern pub fn __mlang_std_testing_expect_eq_f32(expected: f32,
-                                                actual: f32) -> void;
-extern pub fn __mlang_std_testing_expect_not_eq_f32(expected: f32,
-                                                    actual: f32) -> void;
-extern pub fn __mlang_std_testing_expect_eq_f64(expected: f64,
-                                                actual: f64) -> void;
-extern pub fn __mlang_std_testing_expect_not_eq_f64(expected: f64,
-                                                    actual: f64) -> void;
-extern pub fn __mlang_std_testing_verify_true(cond: i32) -> void;
-extern pub fn __mlang_std_testing_verify_false(cond: i32) -> void;
-extern pub fn __mlang_std_testing_verify_eq_i32(expected: i32,
-                                                actual: i32) -> void;
-extern pub fn __mlang_std_testing_verify_not_eq_i32(expected: i32,
-                                                    actual: i32) -> void;
-extern pub fn __mlang_std_testing_verify_eq_i64(expected: i64,
-                                                actual: i64) -> void;
-extern pub fn __mlang_std_testing_verify_not_eq_i64(expected: i64,
-                                                    actual: i64) -> void;
-extern pub fn __mlang_std_testing_verify_eq_bool(expected: i32,
-                                                 actual: i32) -> void;
-extern pub fn __mlang_std_testing_verify_not_eq_bool(expected: i32,
-                                                     actual: i32) -> void;
-extern pub fn __mlang_std_testing_verify_eq_string(expected: str8,
-                                                   actual: str8) -> void;
-extern pub fn __mlang_std_testing_verify_not_eq_string(expected: str8,
-                                                       actual: str8) -> void;
-extern pub fn __mlang_std_testing_verify_eq_f32(expected: f32,
-                                                actual: f32) -> void;
-extern pub fn __mlang_std_testing_verify_not_eq_f32(expected: f32,
-                                                    actual: f32) -> void;
-extern pub fn __mlang_std_testing_verify_eq_f64(expected: f64,
-                                                actual: f64) -> void;
-extern pub fn __mlang_std_testing_verify_not_eq_f64(expected: f64,
-                                                    actual: f64) -> void;
-extern pub fn __mlang_std_testing_mock_create() -> i64;
-extern pub fn __mlang_std_testing_mock_destroy(handle: i64) -> void;
-extern pub fn __mlang_std_testing_mock_reset(handle: i64) -> void;
-extern pub fn __mlang_std_testing_mock_expect_called(handle: i64,
-                                                     name: str8,
-                                                     expected_calls: i32) -> void;
-extern pub fn __mlang_std_testing_mock_expect_at_least(handle: i64,
-                                                       name: str8,
-                                                       n: i32) -> void;
-extern pub fn __mlang_std_testing_mock_expect_at_most(handle: i64,
-                                                      name: str8,
-                                                      n: i32) -> void;
-extern pub fn __mlang_std_testing_mock_expect_never(handle: i64,
-                                                    name: str8) -> void;
-extern pub fn __mlang_std_testing_mock_will_return_i32(handle: i64,
-                                                       name: str8,
-                                                       value: i32) -> void;
-extern pub fn __mlang_std_testing_mock_will_return_i64(handle: i64,
-                                                       name: str8,
-                                                       value: i64) -> void;
-extern pub fn __mlang_std_testing_mock_will_return_bool(handle: i64,
-                                                        name: str8,
-                                                        value: i32) -> void;
-extern pub fn __mlang_std_testing_mock_will_return_str8(handle: i64,
-                                                        name: str8,
-                                                        value: str8) -> void;
-extern pub fn __mlang_std_testing_mock_will_return_f32(handle: i64,
-                                                       name: str8,
-                                                       value: f32) -> void;
-extern pub fn __mlang_std_testing_mock_will_return_f64(handle: i64,
-                                                       name: str8,
-                                                       value: f64) -> void;
-extern pub fn __mlang_std_testing_mock_record_and_return_i32(handle: i64,
-                                                             name: str8,
-                                                             default_value: i32) -> i32;
-extern pub fn __mlang_std_testing_mock_record_and_return_i64(handle: i64,
-                                                             name: str8,
-                                                             default_value: i64) -> i64;
-extern pub fn __mlang_std_testing_mock_record_and_return_bool(handle: i64,
-                                                              name: str8,
-                                                              default_value: i32) -> i32;
-extern pub fn __mlang_std_testing_mock_record_and_return_str8(handle: i64,
-                                                              name: str8,
-                                                              default_value: str8) -> str8;
-extern pub fn __mlang_std_testing_mock_record_and_return_f32(handle: i64,
-                                                             name: str8,
-                                                             default_value: f32) -> f32;
-extern pub fn __mlang_std_testing_mock_record_and_return_f64(handle: i64,
-                                                             name: str8,
-                                                             default_value: f64) -> f64;
-extern pub fn __mlang_std_testing_mock_called(handle: i64,
-                                              name: str8) -> void;
-extern pub fn __mlang_std_testing_mock_actual_calls(handle: i64,
-                                                    name: str8) -> i32;
-extern pub fn __mlang_std_testing_mock_verify(handle: i64) -> i32;
 
 fn bool_to_i32(v: bool) -> i32 {
     return i32(v);

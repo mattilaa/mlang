@@ -8,90 +8,9 @@
 /// - Channel-backed runtime queues for concurrent request/response pipelines
 
 /// \cond INTERNAL_IMPORTS
-extern pub fn __mlang_std_strbuf_contains(s: str8, needle: str8) -> i32;
-extern pub fn __mlang_std_strbuf_len(s: str8) -> i64;
+mod std::jsonrpc::detail;
+use std::jsonrpc::detail::*;
 /// \endcond
-
-extern pub fn __mlang_std_jsonrpc_last_error() -> str8;
-extern pub fn __mlang_std_jsonrpc_stdio_read_frame(buf: str8, capacity: i64) -> i64;
-extern pub fn __mlang_std_jsonrpc_stdio_read_frame_timeout(buf: str8, capacity: i64, timeout_ms: i64) -> i64;
-extern pub fn __mlang_std_jsonrpc_stdio_write_frame(payload: str8) -> i32;
-extern pub fn __mlang_std_jsonrpc_build_frame(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_parse_frame(frame: str8, out: str8, capacity: i64) -> i64;
-extern pub fn __mlang_std_jsonrpc_cancel_mark(request_id: i64) -> i32;
-extern pub fn __mlang_std_jsonrpc_cancel_is_marked(request_id: i64) -> i32;
-extern pub fn __mlang_std_jsonrpc_cancel_take(request_id: i64) -> i32;
-extern pub fn __mlang_std_jsonrpc_cancel_clear(request_id: i64) -> i32;
-extern pub fn __mlang_std_jsonrpc_cancel_clear_all() -> i32;
-extern pub fn __mlang_std_jsonrpc_extract_cancel_id(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_request_id(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_method(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_text_document_uri(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_position_line(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_position_character(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_include_declaration(payload: str8) -> i32;
-extern pub fn __mlang_std_jsonrpc_extract_previous_result_id(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_range_start_line(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_range_start_character(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_range_end_line(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_range_end_character(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_text_document_version(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_format_tab_size(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_format_insert_spaces(payload: str8) -> i32;
-extern pub fn __mlang_std_jsonrpc_extract_text_document_language_id(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_text_document_text(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_first_change_text(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_new_name(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_workspace_query(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_root_uri(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_message(payload: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_start_line(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_start_character(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_end_line(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_end_character(payload: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_should_insert_semicolon(text: str8, line: i64, column: i64) -> i32;
-extern pub fn __mlang_std_jsonrpc_signature_help_callee(text: str8, line: i64, column: i64) -> str8;
-extern pub fn __mlang_std_jsonrpc_workspace_symbol_search(root_uri: str8, query: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_workspace_c_definition_search(root_uri: str8, symbol: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_text_store_new() -> i64;
-extern pub fn __mlang_std_jsonrpc_text_store_free(handle: i64) -> i32;
-extern pub fn __mlang_std_jsonrpc_text_store_upsert(handle: i64, key: str8, value: str8) -> i32;
-extern pub fn __mlang_std_jsonrpc_text_store_remove(handle: i64, key: str8) -> i32;
-extern pub fn __mlang_std_jsonrpc_text_store_get(handle: i64, key: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_line_count(text: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_line_length(text: str8, line: i64) -> i64;
-extern pub fn __mlang_std_jsonrpc_extract_lines_text(text: str8, start_line: i64, end_line: i64) -> str8;
-extern pub fn __mlang_std_jsonrpc_extract_range_text(text: str8, start_line: i64, start_char: i64, end_line: i64, end_char: i64) -> str8;
-extern pub fn __mlang_std_jsonrpc_format_text_basic(text: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_format_text_with_options(text: str8, tab_size: i64, insert_spaces: i32) -> str8;
-extern pub fn __mlang_std_jsonrpc_format_text_with_style_options(
-    text: str8,
-    tab_size: i64,
-    insert_spaces: i32,
-    space_after_comma: i32,
-    space_after_colon: i32,
-    space_around_operators: i32,
-    space_inside_braces_single_line: i32,
-    compact_fat_arrow: i32,
-    space_around_relational_operators: i32
-) -> str8;
-extern pub fn __mlang_std_jsonrpc_organize_imports_line_count(text: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_organize_imports_text(text: str8) -> str8;
-extern pub fn __mlang_std_jsonrpc_find_implementation_pos(query_text: str8, line: i64, column: i64, candidate_text: str8) -> i64;
-extern pub fn __mlang_std_jsonrpc_uri_store_new() -> i64;
-extern pub fn __mlang_std_jsonrpc_uri_store_free(handle: i64) -> i32;
-extern pub fn __mlang_std_jsonrpc_uri_store_add(handle: i64, uri: str8) -> i32;
-extern pub fn __mlang_std_jsonrpc_uri_store_remove(handle: i64, uri: str8) -> i32;
-extern pub fn __mlang_std_jsonrpc_uri_store_count(handle: i64) -> i64;
-extern pub fn __mlang_std_jsonrpc_uri_store_get(handle: i64, index: i64) -> str8;
-extern pub fn __mlang_std_sync_channel_new(capacity: i64) -> i64;
-extern pub fn __mlang_std_sync_channel_send(channel_handle: i64, s: str8) -> i32;
-extern pub fn __mlang_std_sync_channel_recv(channel_handle: i64, buf: str8, capacity: i64) -> i64;
-extern pub fn __mlang_std_sync_channel_try_recv(channel_handle: i64, buf: str8, capacity: i64) -> i64;
-extern pub fn __mlang_std_sync_channel_close(channel_handle: i64) -> i32;
-extern pub fn __mlang_std_sync_channel_free(channel_handle: i64) -> i32;
-extern pub fn __mlang_std_sync_last_error() -> str8;
-extern pub fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: str8) -> str8;
 
 /// @brief Stdio transport marker.
 pub struct StdioTransport {

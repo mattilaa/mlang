@@ -4,15 +4,11 @@
 /// Designed for async loops where you want periodic wake-ups without
 /// calling `sleep_ms` directly in user code.
 
-extern pub fn __mlang_std_timer_interval_new(interval_ms: i64) -> i64;
-extern pub fn __mlang_std_timer_interval_reset(handle: i64) -> i32;
-extern pub fn __mlang_std_timer_interval_remaining_ms(handle: i64) -> i64;
-extern pub fn __mlang_std_timer_interval_wait_next(handle: i64) -> i32;
-extern pub fn __mlang_std_timer_interval_poll(handle: i64) -> i32;
-extern pub fn __mlang_std_timer_interval_free(handle: i64) -> i32;
-extern pub fn __mlang_std_timer_async_ticker_new(queue_handle: i64, interval_ms: i64, event_name: str8) -> i64;
-extern pub fn __mlang_std_timer_async_ticker_stop(handle: i64) -> i32;
-extern pub fn __mlang_std_timer_async_ticker_free(handle: i64) -> i32;
+
+/// \cond INTERNAL_IMPORTS
+mod std::timer::detail;
+use std::timer::detail::*;
+/// \endcond
 
 /// @brief Owned handle for periodic interval ticks.
 pub struct IntervalTimer {

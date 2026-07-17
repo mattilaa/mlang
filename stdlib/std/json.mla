@@ -11,8 +11,9 @@
  * The emitted JSON includes inherited base fields directly in the object and,
  * for `@property(...)` members, a sibling `@property` metadata subtree.
  */
-
 /// \cond INTERNAL_IMPORTS
+mod std::json::detail;
+use std::json::detail::*;
 mod std::fs;
 mod std::strbuf;
 
@@ -22,21 +23,7 @@ use std::fs::free_lines;
 use std::strbuf::concat;
 /// \endcond
 
-extern pub fn __mlang_std_json_parse(text: str8) -> i64;
-extern pub fn __mlang_std_json_doc_free(doc_handle: i64) -> void;
-extern pub fn __mlang_std_json_last_error() -> str8;
-extern pub fn __mlang_std_json_doc_root(doc_handle: i64) -> i64;
-extern pub fn __mlang_std_json_value_free(value_handle: i64) -> void;
-extern pub fn __mlang_std_json_value_kind(value_handle: i64) -> i32;
-extern pub fn __mlang_std_json_value_size(value_handle: i64) -> i64;
-extern pub fn __mlang_std_json_object_get(value_handle: i64, key: str8) -> i64;
-extern pub fn __mlang_std_json_array_get(value_handle: i64, index: i64) -> i64;
-extern pub fn __mlang_std_json_value_as_bool(value_handle: i64) -> i32;
-extern pub fn __mlang_std_json_value_as_i64(value_handle: i64) -> i64;
-extern pub fn __mlang_std_json_value_as_f64(value_handle: i64) -> f64;
-extern pub fn __mlang_std_json_value_as_string(value_handle: i64) -> str8;
-extern pub fn __mlang_std_json_stringify(doc_handle: i64, pretty: i32) -> str8;
-extern pub fn __mlang_std_json_object_key_at(value_handle: i64, index: i64) -> str8;
+
 
 /// @brief Owned handle to a parsed JSON document tree.
 pub struct JsonDoc {
@@ -50,14 +37,14 @@ pub struct JsonValue {
 
 /// @brief Index-based iterator over the elements of a JSON array value.
 pub struct JsonArrayIter {
-    var array: JsonValue;
+    var source: JsonValue;
     var index: i64;
     var len: i64;
 };
 
 /// @brief Index-based iterator over the members of a JSON object value.
 pub struct JsonObjectIter {
-    var object: JsonValue;
+    var source: JsonValue;
     var index: i64;
     var len: i64;
 };
@@ -242,7 +229,7 @@ impl JsonValue {
             return Err<JsonArrayIter, str8>(n.unwrap_err());
         }
         return Ok<JsonArrayIter, str8>(JsonArrayIter {
-            array: JsonValue { handle: self.handle },
+            source: JsonValue { handle: self.handle },
             index: 0,
             len: n.unwrap()
         });
@@ -258,7 +245,7 @@ impl JsonValue {
             return Err<JsonObjectIter, str8>(n.unwrap_err());
         }
         return Ok<JsonObjectIter, str8>(JsonObjectIter {
-            object: JsonValue { handle: self.handle },
+            source: JsonValue { handle: self.handle },
             index: 0,
             len: n.unwrap()
         });
@@ -281,12 +268,12 @@ impl JsonArrayIter {
         if self.has_next() != 1 {
             return Err<JsonValue, str8>("std::json array iter: out of range");
         }
-        return self.array.index(self.index);
+        return self.source.index(self.index);
     }
 
     pub fn advance(self: JsonArrayIter) -> JsonArrayIter {
         return JsonArrayIter {
-            array: JsonValue { handle: self.array.handle },
+            source: JsonValue { handle: self.source.handle },
             index: self.index + 1,
             len: self.len
         };
@@ -302,7 +289,7 @@ impl JsonObjectIter {
         if self.has_next() != 1 {
             return Err<str8, str8>("std::json object iter: out of range");
         }
-        return self.object.key_at(self.index);
+        return self.source.key_at(self.index);
     }
 
     pub fn current_value(self: JsonObjectIter) -> Result<JsonValue, str8> {
@@ -314,14 +301,14 @@ impl JsonObjectIter {
             return Err<JsonValue, str8>(key_r.unwrap_err());
         }
         let key: str8 = key_r.unwrap();
-        let out: Result<JsonValue, str8> = self.object.get(key);
+        let out: Result<JsonValue, str8> = self.source.get(key);
         String::free(key);
         return out;
     }
 
     pub fn advance(self: JsonObjectIter) -> JsonObjectIter {
         return JsonObjectIter {
-            object: JsonValue { handle: self.object.handle },
+            source: JsonValue { handle: self.source.handle },
             index: self.index + 1,
             len: self.len
         };

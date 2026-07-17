@@ -1,0 +1,12 @@
+/// \file detail.mla
+/// \brief Native bindings for std::env.
+
+extern pub fn __env_args() -> list<str8>;
+extern pub fn __env_len(values: list<str8>) -> i64;
+extern pub fn __env_get(values: list<str8>, index: i64) -> str8;
+extern pub fn __env_cwd() -> str8;
+extern pub fn __env_get_var(name: str8) -> str8;
+extern pub fn __env_set_var(name: str8, value: str8) -> i32;
+extern pub fn __env_unset_var(name: str8) -> i32;
+extern pub fn __env_println(msg: str8) -> void;
+extern pub fn __env_stderrln(msg: str8) -> void;

@@ -1,0 +1,6 @@
+/// \file detail.mla
+/// \brief Native bindings for std::event_loop.
+
+extern pub fn __mlang_std_timer_async_ticker_new(queue_handle: i64, interval_ms: i64, event_name: str8) -> i64;
+extern pub fn __mlang_std_timer_async_ticker_stop(handle: i64) -> i32;
+extern pub fn __mlang_std_timer_async_ticker_free(handle: i64) -> i32;

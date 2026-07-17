@@ -1,4 +1,9 @@
 /// \file esc.mla
+/// \cond INTERNAL_IMPORTS
+mod std::esc::detail;
+use std::esc::detail::*;
+/// \endcond
+
 /// \brief ANSI terminal escape helpers for MLang (std::esc).
 ///
 /// Provides named value-sets for:
@@ -16,17 +21,6 @@ mod std::ascii;
 use std::ascii::unicode_box_glyph;
 use std::ascii::UnicodeBoxGlyph;
 
-extern pub fn __mlang_std_esc_reset() -> str8;
-extern pub fn __mlang_std_esc_sgr_code(code: i32) -> str8;
-extern pub fn __mlang_std_esc_sgr_palette(is_bg: i32, idx: i32) -> str8;
-extern pub fn __mlang_std_esc_sgr_rgb(is_bg: i32, r: i32, g: i32, b: i32) -> str8;
-extern pub fn __mlang_std_esc_cursor_code(code: i32) -> str8;
-extern pub fn __mlang_std_esc_cursor_move(dir: i32, amount: i32) -> str8;
-extern pub fn __mlang_std_esc_cursor_pos(row1: i32, col1: i32) -> str8;
-extern pub fn __mlang_std_esc_cursor_style(style: i32) -> str8;
-extern pub fn __mlang_std_esc_cursor_color_rgb(r: i32, g: i32, b: i32) -> str8;
-extern pub fn __mlang_std_esc_cursor_color_reset() -> str8;
-extern pub fn __mlang_std_term_stdout_supports_ansi() -> i32;
 
 use type Color = i32;
 use type CursorCommand = i32;

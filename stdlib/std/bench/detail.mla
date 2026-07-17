@@ -1,0 +1,6 @@
+/// \file detail.mla
+/// \brief Native bindings for std::bench.
+
+extern pub fn __mlang_std_bench_do_not_optimize_i64(v: i64) -> void;
+extern pub fn __mlang_std_bench_do_not_optimize_i32(v: i32) -> void;
+extern pub fn __mlang_std_bench_clobber_memory() -> void;
