@@ -8,12 +8,11 @@
 /// - `Regex::match_end(text, group)`
 /// - `Regex::find_start(text)` / `Regex::find_end(text)` (group 0 helpers)
 
-extern pub fn __mlang_std_regex_last_error() -> str8;
-extern pub fn __mlang_std_regex_compile(pattern: str8) -> i64;
-extern pub fn __mlang_std_regex_free(handle: i64) -> i32;
-extern pub fn __mlang_std_regex_is_match(handle: i64, text: str8) -> i32;
-extern pub fn __mlang_std_regex_match_start(handle: i64, text: str8, group_index: i64) -> i64;
-extern pub fn __mlang_std_regex_match_end(handle: i64, text: str8, group_index: i64) -> i64;
+
+/// \cond INTERNAL_IMPORTS
+mod std::regex::detail;
+use std::regex::detail::*;
+/// \endcond
 
 /// @brief Handle to a compiled POSIX regular expression.
 pub struct Regex {

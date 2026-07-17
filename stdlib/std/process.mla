@@ -6,28 +6,11 @@
 /// - optional stdin/stdout/stderr pipe access
 /// - wait + exit status decoding
 
-extern pub fn __mlang_std_process_last_error() -> str8;
-extern pub fn __mlang_std_process_spawn(program: str8, args: list<str8>, pipe_stdin: i32, pipe_stdout: i32, pipe_stderr: i32) -> i64;
-extern pub fn __mlang_std_process_spawn_foreground_inherit(program: str8, args: list<str8>) -> i64;
-extern pub fn __mlang_std_process_spawn_pty(program: str8, args: list<str8>) -> i64;
-extern pub fn __mlang_std_process_take_stdin(child_handle: i64) -> i64;
-extern pub fn __mlang_std_process_take_stdout(child_handle: i64) -> i64;
-extern pub fn __mlang_std_process_take_stderr(child_handle: i64) -> i64;
-extern pub fn __mlang_std_process_take_pty(child_handle: i64) -> i64;
-extern pub fn __mlang_std_process_wait_pty_events(pipe_handle: i64, timeout_ms: i32) -> i32;
-extern pub fn __mlang_std_process_pipe_write(pipe_handle: i64, s: str8) -> i64;
-extern pub fn __mlang_std_process_pipe_read(pipe_handle: i64, buf: str8, capacity: i64) -> i64;
-extern pub fn __mlang_std_process_pipe_read_nonblocking(pipe_handle: i64, buf: str8, capacity: i64) -> i64;
-extern pub fn __mlang_std_process_pipe_close(pipe_handle: i64) -> i32;
-extern pub fn __mlang_std_process_wait_raw(child_handle: i64) -> i32;
-extern pub fn __mlang_std_process_try_wait_raw(child_handle: i64) -> i32;
-extern pub fn __mlang_std_process_status_exited(raw_status: i32) -> i32;
-extern pub fn __mlang_std_process_status_code(raw_status: i32) -> i32;
-extern pub fn __mlang_std_process_status_signaled(raw_status: i32) -> i32;
-extern pub fn __mlang_std_process_status_signal(raw_status: i32) -> i32;
-extern pub fn __mlang_std_process_kill(child_handle: i64, sig: i32) -> i32;
-extern pub fn __mlang_std_process_child_close(child_handle: i64) -> i32;
-extern pub fn __mlang_std_process_pty_resize(pipe_handle: i64, rows: i32, cols: i32) -> i32;
+
+/// \cond INTERNAL_IMPORTS
+mod std::process::detail;
+use std::process::detail::*;
+/// \endcond
 
 /// @brief Nonblocking pipe read result.
 pub struct PipeRead {

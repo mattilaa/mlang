@@ -41,4 +41,8 @@
 // dynamic indexes keep runtime guards.
 
 // Documentation-only anchor for `mod std::array;`.
-extern fn array() -> void;
+/// \cond INTERNAL_IMPORTS
+mod std::array::detail;
+use std::array::detail::*;
+/// \endcond
+

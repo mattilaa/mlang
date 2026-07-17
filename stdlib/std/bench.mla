@@ -3,9 +3,11 @@
 ///
 /// These helpers reduce risk that optimizer removes benchmarked work.
 
-extern pub fn __mlang_std_bench_do_not_optimize_i64(v: i64) -> void;
-extern pub fn __mlang_std_bench_do_not_optimize_i32(v: i32) -> void;
-extern pub fn __mlang_std_bench_clobber_memory() -> void;
+
+/// \cond INTERNAL_IMPORTS
+mod std::bench::detail;
+use std::bench::detail::*;
+/// \endcond
 
 /// Prevent optimizer from eliding i64 value flow.
 pub fn do_not_optimize_i64(v: i64) -> void {

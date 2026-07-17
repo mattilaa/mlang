@@ -45,32 +45,6 @@
 // C ABI (not part of the public API)                                  //
 // ------------------------------------------------------------------ //
 
-extern pub fn __mlang_std_fs_open_read(path: str8) -> i64;
-extern pub fn __mlang_std_fs_open_write(path: str8) -> i64;
-extern pub fn __mlang_std_fs_open_append(path: str8) -> i64;
-extern pub fn __mlang_std_fs_open_read_write(path: str8) -> i64;
-extern pub fn __mlang_std_fs_close(handle: i64) -> i32;
-extern pub fn __mlang_std_fs_read_line(handle: i64, buf: str8, capacity: i64) -> i64;
-extern pub fn __mlang_std_fs_write(handle: i64, s: str8) -> i64;
-extern pub fn __mlang_std_fs_read_all_lines(handle: i64) -> list<str8>;
-extern pub fn __mlang_std_fs_free_lines(lines: list<str8>) -> void;
-extern pub fn __mlang_std_fs_list_dir(path: str8) -> list<str8>;
-extern pub fn __mlang_std_fs_file_exists(path: str8) -> i32;
-extern pub fn __mlang_std_fs_is_dir(path: str8) -> i32;
-extern pub fn __mlang_std_fs_parent_dir(path: str8) -> str8;
-extern pub fn __mlang_std_fs_cwd() -> str8;
-extern pub fn __mlang_std_fs_chdir(path: str8) -> i32;
-extern pub fn __mlang_std_fs_read_all_text(path: str8) -> str8;
-extern pub fn __mlang_std_fs_write_all_text(path: str8, text: str8) -> i32;
-extern pub fn __mlang_std_fs_mkdir_p(path: str8) -> i32;
-extern pub fn __mlang_std_fs_remove_tree(path: str8) -> i32;
-extern pub fn __mlang_std_fs_glob_recursive(root: str8, pattern: str8) -> list<str8>;
-extern pub fn __mlang_std_strbuf_len(s: str8) -> i64;
-extern pub fn __mlang_std_fs_seek(handle: i64, offset: i64, whence: i32) -> i64;
-extern pub fn __mlang_std_fs_tell(handle: i64) -> i64;
-extern pub fn __mlang_std_fs_file_size(handle: i64) -> i64;
-extern pub fn __mlang_std_fs_read_bytes(handle: i64, buf: str8, n: i64) -> i64;
-extern pub fn __mlang_std_fs_write_bytes(handle: i64, buf: str8, n: i64) -> i64;
 
 // ------------------------------------------------------------------ //
 // SeekFrom                                                             //
@@ -81,6 +55,11 @@ extern pub fn __mlang_std_fs_write_bytes(handle: i64, buf: str8, n: i64) -> i64;
 
 /// @brief Seek position anchor — describes where a seek is measured from.
 /// @ingroup seekfrom
+/// \cond INTERNAL_IMPORTS
+mod std::fs::detail;
+use std::fs::detail::*;
+/// \endcond
+
 ///
 /// MLang's equivalent of Rust's `std::io::SeekFrom` enum.
 /// Construct with one of the three static factories and pass to `File::seek`:

@@ -1,0 +1,7 @@
+/// \file detail.mla
+/// \brief Native bindings for std::protocol.
+
+extern pub fn __mlang_std_protocol_last_error() -> str8;
+extern pub fn __mlang_std_protocol_last_opcode() -> i32;
+extern pub fn __mlang_std_protocol_stream_write_text(socket_handle: i64, opcode: i32, payload: str8) -> i64;
+extern pub fn __mlang_std_protocol_stream_read_text(socket_handle: i64, out: str8, capacity: i64, max_payload_bytes: i64) -> i64;

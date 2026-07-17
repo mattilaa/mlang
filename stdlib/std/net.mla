@@ -1,19 +1,11 @@
 /// \file net.mla
 /// \brief Minimal TCP networking over libc sockets (std::net).
 
-extern pub fn __mlang_std_net_last_error() -> str8;
-extern pub fn __mlang_std_net_tcp_bind(addr: str8, port: i64) -> i64;
-extern pub fn __mlang_std_net_tcp_local_port(handle: i64) -> i64;
-extern pub fn __mlang_std_net_tcp_accept(listener: i64) -> i64;
-extern pub fn __mlang_std_net_tcp_connect(addr: str8, port: i64) -> i64;
-extern pub fn __mlang_std_net_tcp_read(handle: i64, buf: str8, capacity: i64) -> i64;
-extern pub fn __mlang_std_net_tcp_write(handle: i64, s: str8) -> i64;
-extern pub fn __mlang_std_net_tcp_close(handle: i64) -> i32;
-extern pub fn __mlang_std_net_tcp_set_nonblocking(handle: i64, enabled: i32) -> i32;
-extern pub fn __mlang_std_net_tcp_set_read_timeout_ms(handle: i64, timeout_ms: i64) -> i32;
-extern pub fn __mlang_std_net_tcp_set_write_timeout_ms(handle: i64, timeout_ms: i64) -> i32;
-extern pub fn __mlang_std_net_tcp_try_clone(handle: i64) -> i64;
-extern pub fn __mlang_std_net_tcp_set_listener_backlog(handle: i64, backlog: i64) -> i32;
+
+/// \cond INTERNAL_IMPORTS
+mod std::net::detail;
+use std::net::detail::*;
+/// \endcond
 
 /// @brief Owned handle to a bound/listening TCP socket.
 pub struct TcpListener {

@@ -1,0 +1,4 @@
+/// \file detail.mla
+/// \brief Native bindings for std::array.
+
+extern pub fn array() -> void;

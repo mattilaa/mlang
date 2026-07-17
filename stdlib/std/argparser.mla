@@ -67,30 +67,17 @@
 // Extern C functions                                                   //
 // ------------------------------------------------------------------- //
 
-extern pub fn __mlang_std_argparser_new(prog: str8, desc: str8) -> i64;
-extern pub fn __mlang_std_argparser_free(handle: i64) -> void;
-extern pub fn __mlang_std_argparser_add_flag(handle: i64, long_name: str8, short_name: str8, help: str8) -> void;
-extern pub fn __mlang_std_argparser_add_option(handle: i64, long_name: str8, short_name: str8, help: str8, default_val: str8) -> void;
-extern pub fn __mlang_std_argparser_add_positional(handle: i64, name: str8, help: str8) -> void;
-extern pub fn __mlang_std_argparser_print_help(handle: i64) -> void;
 
-extern pub fn __mlang_std_argparser_parse_begin(parser_handle: i64) -> i64;
-extern pub fn __mlang_std_argparser_parse_add(result_handle: i64, arg: str8) -> void;
-extern pub fn __mlang_std_argparser_parse_finish(parser_handle: i64, result_handle: i64) -> void;
 
-extern pub fn __mlang_std_parseresult_free(handle: i64) -> void;
-extern pub fn __mlang_std_parseresult_ok(handle: i64) -> i32;
-extern pub fn __mlang_std_parseresult_help_requested(handle: i64) -> i32;
-extern pub fn __mlang_std_parseresult_error(handle: i64) -> str8;
-extern pub fn __mlang_std_parseresult_flag(handle: i64, name: str8) -> i32;
-extern pub fn __mlang_std_parseresult_get(handle: i64, name: str8) -> str8;
-extern pub fn __mlang_std_parseresult_get_i64(handle: i64, name: str8) -> i64;
-extern pub fn __mlang_std_parseresult_positional(handle: i64, idx: i64) -> str8;
-extern pub fn __mlang_std_parseresult_positional_count(handle: i64) -> i64;
 
 // ------------------------------------------------------------------- //
 // ArgParser struct and impl                                            //
 // ------------------------------------------------------------------- //
+
+/// \cond INTERNAL_IMPORTS
+mod std::argparser::detail;
+use std::argparser::detail::*;
+/// \endcond
 
 /// @brief Opaque argument parser handle.
 pub struct ArgParser {

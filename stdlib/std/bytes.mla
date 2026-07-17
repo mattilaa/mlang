@@ -8,21 +8,11 @@
 /// - `to_hex()` is binary-safe and always preserves full payload.
 /// - `to_string()` returns a UTF-8/C-string view and is best for text payloads.
 
-extern pub fn __mlang_std_bytes_last_error() -> str8;
-extern pub fn __mlang_std_bytes_new(initial_capacity: i64) -> i64;
-extern pub fn __mlang_std_bytes_from_string(s: str8) -> i64;
-extern pub fn __mlang_std_bytes_free(handle: i64) -> i32;
-extern pub fn __mlang_std_bytes_len(handle: i64) -> i64;
-extern pub fn __mlang_std_bytes_capacity(handle: i64) -> i64;
-extern pub fn __mlang_std_bytes_clear(handle: i64) -> i32;
-extern pub fn __mlang_std_bytes_reserve(handle: i64, min_capacity: i64) -> i32;
-extern pub fn __mlang_std_bytes_append_byte(handle: i64, value: i32) -> i32;
-extern pub fn __mlang_std_bytes_append_string(handle: i64, s: str8) -> i64;
-extern pub fn __mlang_std_bytes_append_bytes(handle: i64, other_handle: i64) -> i64;
-extern pub fn __mlang_std_bytes_get(handle: i64, index: i64) -> i32;
-extern pub fn __mlang_std_bytes_set(handle: i64, index: i64, value: i32) -> i32;
-extern pub fn __mlang_std_bytes_to_string(handle: i64) -> str8;
-extern pub fn __mlang_std_bytes_to_hex(handle: i64) -> str8;
+
+/// \cond INTERNAL_IMPORTS
+mod std::bytes::detail;
+use std::bytes::detail::*;
+/// \endcond
 
 /// @brief Owned dynamic byte container handle.
 pub struct Bytes {

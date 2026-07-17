@@ -1,0 +1,18 @@
+/// \file detail.mla
+/// \brief Native bindings for std::json.
+
+extern pub fn __mlang_std_json_parse(text: str8) -> i64;
+extern pub fn __mlang_std_json_doc_free(doc_handle: i64) -> void;
+extern pub fn __mlang_std_json_last_error() -> str8;
+extern pub fn __mlang_std_json_doc_root(doc_handle: i64) -> i64;
+extern pub fn __mlang_std_json_value_free(value_handle: i64) -> void;
+extern pub fn __mlang_std_json_value_kind(value_handle: i64) -> i32;
+extern pub fn __mlang_std_json_value_size(value_handle: i64) -> i64;
+extern pub fn __mlang_std_json_object_get(value_handle: i64, key: str8) -> i64;
+extern pub fn __mlang_std_json_array_get(value_handle: i64, index: i64) -> i64;
+extern pub fn __mlang_std_json_value_as_bool(value_handle: i64) -> i32;
+extern pub fn __mlang_std_json_value_as_i64(value_handle: i64) -> i64;
+extern pub fn __mlang_std_json_value_as_f64(value_handle: i64) -> f64;
+extern pub fn __mlang_std_json_value_as_string(value_handle: i64) -> str8;
+extern pub fn __mlang_std_json_stringify(doc_handle: i64, pretty: i32) -> str8;
+extern pub fn __mlang_std_json_object_key_at(value_handle: i64, index: i64) -> str8;

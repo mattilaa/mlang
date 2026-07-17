@@ -7,7 +7,11 @@
 ///
 ///   if keycode == AsciiKey::Esc { ... }
 
-extern pub fn __mlang_std_ascii_braille_mask(mask: i32) -> str8;
+
+/// \cond INTERNAL_IMPORTS
+mod std::ascii::detail;
+use std::ascii::detail::*;
+/// \endcond
 
 /// @brief ASCII keycode enum values 0..127 for use in keyboard handlers.
 pub enum AsciiKey : i32 {

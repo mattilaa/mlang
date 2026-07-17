@@ -3,10 +3,11 @@
 ///
 /// This is a compact facade over host/runtime TOML functions.
 
-extern pub fn __toml_parse(text: str8) -> i64;
-extern pub fn __toml_get_string(obj: i64, key: str8, fallback: str8) -> str8;
-extern pub fn __toml_set_inline_table(obj: i64, key: str8, field_name: str8, value: str8) -> void;
-extern pub fn __toml_stringify(obj: i64) -> str8;
+
+/// \cond INTERNAL_IMPORTS
+mod std::toml::detail;
+use std::toml::detail::*;
+/// \endcond
 
 /// @brief Opaque TOML document handle.
 pub struct TomlDoc {

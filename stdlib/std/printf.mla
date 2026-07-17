@@ -18,9 +18,11 @@
 ///   - `eprintf(s)`        write `s` to stderr (no implicit newline)
 ///   - `fprintf(fd, s)`    write `s` to fd 1 (stdout) or 2 (stderr)
 
-extern pub fn __mlang_std_io_printf(s: str8) -> void;
-extern pub fn __mlang_std_io_eprintf(s: str8) -> void;
-extern pub fn __mlang_std_io_fprintf(fd: i32, s: str8) -> void;
+
+/// \cond INTERNAL_IMPORTS
+mod std::printf::detail;
+use std::printf::detail::*;
+/// \endcond
 
 /// @brief Write a pre-formatted string to stdout (no implicit newline).
 ///

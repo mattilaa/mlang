@@ -1,0 +1,10 @@
+/// \file detail.mla
+/// \brief Native bindings for std::algorithm::fft.
+
+extern pub fn __mlang_std_fft_is_power_of_two(n: i64) -> i32;
+extern pub fn __mlang_std_fft_forward_i64(data: list<i64>) -> list<i64>;
+extern pub fn __mlang_std_fft_inverse_i64(data: list<i64>) -> list<i64>;
+extern pub fn __mlang_std_fft_forward_f32(data: list<f32>) -> list<f32>;
+extern pub fn __mlang_std_fft_inverse_f32(data: list<f32>) -> list<f32>;
+extern pub fn __mlang_std_fft_forward_f64(data: list<f64>) -> list<f64>;
+extern pub fn __mlang_std_fft_inverse_f64(data: list<f64>) -> list<f64>;

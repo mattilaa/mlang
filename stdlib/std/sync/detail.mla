@@ -1,0 +1,25 @@
+/// \file detail.mla
+/// \brief Native bindings for std::sync.
+
+extern pub fn __mlang_std_sync_last_error() -> str8;
+extern pub fn __mlang_std_sync_mutex_new() -> i64;
+extern pub fn __mlang_std_sync_mutex_lock(handle: i64) -> i32;
+extern pub fn __mlang_std_sync_mutex_unlock(handle: i64) -> i32;
+extern pub fn __mlang_std_sync_mutex_free(handle: i64) -> i32;
+extern pub fn __mlang_std_sync_condvar_new() -> i64;
+extern pub fn __mlang_std_sync_condvar_wait(cond_handle: i64, mutex_handle: i64) -> i32;
+extern pub fn __mlang_std_sync_condvar_wait_timeout_ms(cond_handle: i64, mutex_handle: i64, timeout_ms: i64) -> i32;
+extern pub fn __mlang_std_sync_condvar_notify_one(cond_handle: i64) -> i32;
+extern pub fn __mlang_std_sync_condvar_notify_all(cond_handle: i64) -> i32;
+extern pub fn __mlang_std_sync_condvar_free(cond_handle: i64) -> i32;
+extern pub fn __mlang_std_sync_channel_new(capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_channel_send(channel_handle: i64, s: str8) -> i32;
+extern pub fn __mlang_std_sync_channel_recv(channel_handle: i64, buf: str8, capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_channel_try_recv(channel_handle: i64, buf: str8, capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_channel_close(channel_handle: i64) -> i32;
+extern pub fn __mlang_std_sync_channel_free(channel_handle: i64) -> i32;
+extern pub fn __mlang_std_sync_lfqueue_new(capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_lfqueue_send(queue_handle: i64, s: str8) -> i32;
+extern pub fn __mlang_std_sync_lfqueue_try_recv(queue_handle: i64, buf: str8, capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_lfqueue_close(queue_handle: i64) -> i32;
+extern pub fn __mlang_std_sync_lfqueue_free(queue_handle: i64) -> i32;

@@ -1,4 +1,9 @@
 /// \file simd.mla
+/// \cond INTERNAL_IMPORTS
+mod std::simd::detail;
+use std::simd::detail::*;
+/// \endcond
+
 /// \brief SIMD-friendly vector math helpers for MLang (std::simd).
 ///
 /// The public API operates on normal `list<T>` values and returns new lists.
@@ -10,72 +15,11 @@ mod std::bitset;
 
 use std::bitset::BitSet;
 
-extern pub fn __mlang_std_simd_add_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
-extern pub fn __mlang_std_simd_subtract_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
-extern pub fn __mlang_std_simd_multiply_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
-extern pub fn __mlang_std_simd_bit_and_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
-extern pub fn __mlang_std_simd_bit_or_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
-extern pub fn __mlang_std_simd_bit_xor_i32(lhs: &list<i32>, rhs: &list<i32>) -> list<i32>;
-extern pub fn __mlang_std_simd_bit_not_i32(values: &list<i32>) -> list<i32>;
-extern pub fn __mlang_std_simd_shift_left_i32(values: &list<i32>, amount: i32) -> list<i32>;
-extern pub fn __mlang_std_simd_shift_right_i32(values: &list<i32>, amount: i32) -> list<i32>;
-extern pub fn __mlang_std_simd_sum_i32(values: &list<i32>) -> i32;
-extern pub fn __mlang_std_simd_product_i32(values: &list<i32>) -> i32;
-extern pub fn __mlang_std_simd_prefix_sum_i32(values: &list<i32>) -> list<i32>;
-extern pub fn __mlang_std_simd_min_i32(values: &list<i32>) -> i32;
-extern pub fn __mlang_std_simd_max_i32(values: &list<i32>) -> i32;
-extern pub fn __mlang_std_simd_any_nonzero_i32(values: &list<i32>) -> i32;
-extern pub fn __mlang_std_simd_all_nonzero_i32(values: &list<i32>) -> i32;
 
-extern pub fn __mlang_std_simd_add_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
-extern pub fn __mlang_std_simd_subtract_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
-extern pub fn __mlang_std_simd_multiply_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
-extern pub fn __mlang_std_simd_bit_and_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
-extern pub fn __mlang_std_simd_bit_or_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
-extern pub fn __mlang_std_simd_bit_xor_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64>;
-extern pub fn __mlang_std_simd_bit_not_i64(values: &list<i64>) -> list<i64>;
-extern pub fn __mlang_std_simd_shift_left_i64(values: &list<i64>, amount: i32) -> list<i64>;
-extern pub fn __mlang_std_simd_shift_right_i64(values: &list<i64>, amount: i32) -> list<i64>;
-extern pub fn __mlang_std_simd_sum_i64(values: &list<i64>) -> i64;
-extern pub fn __mlang_std_simd_product_i64(values: &list<i64>) -> i64;
-extern pub fn __mlang_std_simd_prefix_sum_i64(values: &list<i64>) -> list<i64>;
-extern pub fn __mlang_std_simd_min_i64(values: &list<i64>) -> i64;
-extern pub fn __mlang_std_simd_max_i64(values: &list<i64>) -> i64;
-extern pub fn __mlang_std_simd_any_nonzero_i64(values: &list<i64>) -> i32;
-extern pub fn __mlang_std_simd_all_nonzero_i64(values: &list<i64>) -> i32;
 
-extern pub fn __mlang_std_simd_add_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32>;
-extern pub fn __mlang_std_simd_subtract_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32>;
-extern pub fn __mlang_std_simd_multiply_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32>;
-extern pub fn __mlang_std_simd_sum_f32(values: &list<f32>) -> f32;
-extern pub fn __mlang_std_simd_product_f32(values: &list<f32>) -> f32;
-extern pub fn __mlang_std_simd_prefix_sum_f32(values: &list<f32>) -> list<f32>;
-extern pub fn __mlang_std_simd_min_f32(values: &list<f32>) -> f32;
-extern pub fn __mlang_std_simd_max_f32(values: &list<f32>) -> f32;
-extern pub fn __mlang_std_simd_any_nonzero_f32(values: &list<f32>) -> i32;
-extern pub fn __mlang_std_simd_all_nonzero_f32(values: &list<f32>) -> i32;
 
-extern pub fn __mlang_std_simd_add_f64(lhs: &list<f64>, rhs: &list<f64>) -> list<f64>;
-extern pub fn __mlang_std_simd_subtract_f64(lhs: &list<f64>, rhs: &list<f64>) -> list<f64>;
-extern pub fn __mlang_std_simd_multiply_f64(lhs: &list<f64>, rhs: &list<f64>) -> list<f64>;
-extern pub fn __mlang_std_simd_sum_f64(values: &list<f64>) -> f64;
-extern pub fn __mlang_std_simd_product_f64(values: &list<f64>) -> f64;
-extern pub fn __mlang_std_simd_prefix_sum_f64(values: &list<f64>) -> list<f64>;
-extern pub fn __mlang_std_simd_min_f64(values: &list<f64>) -> f64;
-extern pub fn __mlang_std_simd_max_f64(values: &list<f64>) -> f64;
-extern pub fn __mlang_std_simd_any_nonzero_f64(values: &list<f64>) -> i32;
-extern pub fn __mlang_std_simd_all_nonzero_f64(values: &list<f64>) -> i32;
 
-extern pub fn __mlang_std_simd_any_bool(values: &list<bool>) -> i32;
-extern pub fn __mlang_std_simd_all_bool(values: &list<bool>) -> i32;
 
-extern pub fn __mlang_std_simd_bitset_and_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
-extern pub fn __mlang_std_simd_bitset_or_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
-extern pub fn __mlang_std_simd_bitset_xor_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
-extern pub fn __mlang_std_simd_bitset_not_eq(handle: i64) -> i32;
-extern pub fn __mlang_std_simd_bitset_count_ones(handle: i64) -> i64;
-extern pub fn __mlang_std_simd_bitset_any(handle: i64) -> i32;
-extern pub fn __mlang_std_simd_bitset_all(handle: i64) -> i32;
 
 /// @brief Element-wise vector addition.
 ///

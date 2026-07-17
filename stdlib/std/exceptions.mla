@@ -1,7 +1,11 @@
 /// \file exceptions.mla
 /// \brief Basic exception support for `throw` and `try/catch`.
 
-extern pub fn __mlang_std_exceptions_string_free(s: str8) -> void;
+
+/// \cond INTERNAL_IMPORTS
+mod std::exceptions::detail;
+use std::exceptions::detail::*;
+/// \endcond
 
 /// @brief Payload carried by a thrown exception.
 ///
