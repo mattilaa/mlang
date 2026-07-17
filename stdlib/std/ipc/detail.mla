@@ -1,0 +1,10 @@
+/// \file detail.mla
+/// \brief Native bindings for std::ipc.
+
+extern pub fn __mlang_std_ipc_last_error() -> str8;
+extern pub fn __mlang_std_ipc_named_pipe_create(name: str8) -> i64;
+extern pub fn __mlang_std_ipc_named_pipe_connect(name: str8) -> i64;
+extern pub fn __mlang_std_ipc_named_pipe_read(handle: i64, buf: str8, capacity: i64) -> i64;
+extern pub fn __mlang_std_ipc_named_pipe_write(handle: i64, s: str8) -> i64;
+extern pub fn __mlang_std_ipc_named_pipe_close(handle: i64) -> i32;
+extern pub fn __mlang_std_ipc_named_pipe_remove(name: str8) -> i32;

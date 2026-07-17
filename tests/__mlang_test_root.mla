@@ -38,6 +38,8 @@ mod std_jsonrpc_tests;
 use std_jsonrpc_tests::*;
 mod std_process_tests;
 use std_process_tests::*;
+mod std_ipc_tests;
+use std_ipc_tests::*;
 mod std_fs_tests;
 use std_fs_tests::*;
 mod std_string_tests;

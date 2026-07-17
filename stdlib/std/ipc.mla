@@ -1,0 +1,87 @@
+/// \file ipc.mla
+/// \brief Inter-process communication helpers for MLang (std::ipc).
+///
+/// Named pipes use system IPC:
+/// - Unix-like platforms: FIFO paths created with `mkfifo`.
+/// - Windows: named pipes. Simple names are expanded to `\\.\pipe\<name>`.
+
+/// \cond INTERNAL_IMPORTS
+mod std::ipc::detail;
+use std::ipc::detail::*;
+/// \endcond
+
+/// @brief Nonblocking named-pipe read result.
+pub struct PipeRead {
+    var ready: i32;
+    var len: i64;
+};
+
+/// @brief Owned named-pipe handle.
+pub struct NamedPipe {
+    var handle: i64;
+};
+
+/// @brief Return last std::ipc backend error string.
+pub fn last_error() -> str8 {
+    return __mlang_std_ipc_last_error();
+}
+
+impl NamedPipe {
+    /// @brief Create/open a named pipe endpoint.
+    ///
+    /// On Unix this creates the FIFO if needed and opens it read/write
+    /// nonblocking. On Windows this creates a named-pipe server endpoint.
+    pub fn create(name: str8) -> Result<NamedPipe, str8> {
+        let h: i64 = __mlang_std_ipc_named_pipe_create(name);
+        if h == 0 {
+            return Err<NamedPipe, str8>(last_error());
+        }
+        return Ok<NamedPipe, str8>(NamedPipe { handle: h });
+    }
+
+    /// @brief Connect/open an existing named pipe endpoint.
+    pub fn connect(name: str8) -> Result<NamedPipe, str8> {
+        let h: i64 = __mlang_std_ipc_named_pipe_connect(name);
+        if h == 0 {
+            return Err<NamedPipe, str8>(last_error());
+        }
+        return Ok<NamedPipe, str8>(NamedPipe { handle: h });
+    }
+
+    /// @brief Read up to `capacity` bytes into `buf`.
+    ///
+    /// Returns `PipeRead { ready: 0, len: 0 }` when no data is currently
+    /// available on a nonblocking pipe.
+    pub fn read(self: NamedPipe, buf: str8, capacity: i64) -> Result<PipeRead, str8> {
+        let n: i64 = __mlang_std_ipc_named_pipe_read(self.handle, buf, capacity);
+        if n == -2 {
+            return Ok<PipeRead, str8>(PipeRead { ready: 0, len: 0 });
+        }
+        if n < 0 {
+            return Err<PipeRead, str8>(last_error());
+        }
+        return Ok<PipeRead, str8>(PipeRead { ready: 1, len: n });
+    }
+
+    /// @brief Write bytes to the named pipe.
+    pub fn write(self: NamedPipe, s: str8) -> Result<i64, str8> {
+        let n: i64 = __mlang_std_ipc_named_pipe_write(self.handle, s);
+        if n < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(n);
+    }
+
+    /// @brief Close this named-pipe handle.
+    pub fn close(self: NamedPipe) -> i32 {
+        return __mlang_std_ipc_named_pipe_close(self.handle);
+    }
+}
+
+/// @brief Remove a named pipe path.
+///
+/// On Unix this unlinks the FIFO path. On Windows named-pipe instances are
+/// removed when all handles close, so this is a no-op success for valid names.
+pub fn remove_named_pipe(name: str8) -> i32 {
+    return __mlang_std_ipc_named_pipe_remove(name);
+}

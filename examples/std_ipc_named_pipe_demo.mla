@@ -1,0 +1,69 @@
+/// \file std_ipc_named_pipe_demo.mla
+/// @ingroup examples
+/// \brief Named-pipe roundtrip using std::ipc.
+///
+mod std::ipc;
+mod std::strbuf;
+
+use std::ipc::NamedPipe;
+use std::ipc::PipeRead;
+use std::ipc::remove_named_pipe;
+use std::strbuf::contains;
+
+fn main() -> i32 {
+    let name: str8 = "mlang-std-ipc-demo";
+    remove_named_pipe(name);
+
+    let server_r: Result<NamedPipe, str8> = NamedPipe::create(name);
+    if server_r.is_err() {
+        println!("named pipe create failed: {}", server_r.unwrap_err());
+        return 1;
+    }
+    let server: NamedPipe = server_r.unwrap();
+
+    let client_r: Result<NamedPipe, str8> = NamedPipe::connect(name);
+    if client_r.is_err() {
+        println!("named pipe connect failed: {}", client_r.unwrap_err());
+        server.close();
+        remove_named_pipe(name);
+        return 1;
+    }
+    let client: NamedPipe = client_r.unwrap();
+
+    let w_r: Result<i64, str8> = client.write("hello from std::ipc");
+    if w_r.is_err() {
+        println!("named pipe write failed: {}", w_r.unwrap_err());
+        client.close();
+        server.close();
+        remove_named_pipe(name);
+        return 1;
+    }
+
+    var buf = String::with_capacity(128);
+    let read_r: Result<PipeRead, str8> = server.read(buf, 128);
+    if read_r.is_err() {
+        println!("named pipe read failed: {}", read_r.unwrap_err());
+        String::free(buf);
+        client.close();
+        server.close();
+        remove_named_pipe(name);
+        return 1;
+    }
+
+    let read: PipeRead = read_r.unwrap();
+    if read.ready != 1 || contains(buf, "hello from std::ipc") != 1 {
+        println!("unexpected named pipe data: {}", buf);
+        String::free(buf);
+        client.close();
+        server.close();
+        remove_named_pipe(name);
+        return 1;
+    }
+
+    println!("named pipe received: {}", buf);
+    String::free(buf);
+    client.close();
+    server.close();
+    remove_named_pipe(name);
+    return 0;
+}

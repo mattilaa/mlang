@@ -89,6 +89,8 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   horizontal reductions, running sums, min/max searches, boolean checks,
   integer gate logic, uniform shifts over numeric lists, and packed BitSet
   operations.
+- `examples/std_ipc_named_pipe_demo.mla` — named-pipe IPC roundtrip using
+  `std::ipc::NamedPipe` over Unix FIFOs or Windows named pipes.
 
 ## Focused regression examples
 

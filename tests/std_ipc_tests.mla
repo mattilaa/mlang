@@ -1,0 +1,42 @@
+mod std::ipc;
+mod std::strbuf;
+mod std::testing;
+
+use std::ipc::NamedPipe;
+use std::ipc::PipeRead;
+use std::ipc::remove_named_pipe;
+use std::strbuf::contains;
+use std::testing::verify;
+use std::testing::verify_eq;
+
+#[test]
+fn test_named_pipe_create_connect_write_read() {
+    let name: str8 = "mlang-std-ipc-test";
+    remove_named_pipe(name);
+
+    let server_r: Result<NamedPipe, str8> = NamedPipe::create(name);
+    verify(!(server_r.is_err()));
+    let server: NamedPipe = server_r.unwrap();
+
+    let client_r: Result<NamedPipe, str8> = NamedPipe::connect(name);
+    verify(!(client_r.is_err()));
+    let client: NamedPipe = client_r.unwrap();
+
+    let w_r: Result<i64, str8> = client.write("hello-ipc");
+    verify(!(w_r.is_err()));
+    let written: i64 = w_r.unwrap();
+    verify(written > 0);
+
+    var buf = String::with_capacity(128);
+    let read_r: Result<PipeRead, str8> = server.read(buf, 128);
+    verify(!(read_r.is_err()));
+    let read: PipeRead = read_r.unwrap();
+    verify_eq(read.ready, 1);
+    verify(read.len > 0);
+    verify(contains(buf, "hello-ipc") == 1);
+
+    String::free(buf);
+    client.close();
+    server.close();
+    remove_named_pipe(name);
+}

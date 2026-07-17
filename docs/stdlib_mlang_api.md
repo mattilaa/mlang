@@ -24,6 +24,7 @@ mod std::algorithm::fft;
 mod std::net;
 mod std::printf;
 mod std::process;
+mod std::ipc;
 mod std::rand;
 mod std::regex;
 mod std::sed;
@@ -70,6 +71,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/net.mla`
 - `stdlib/std/printf.mla`
 - `stdlib/std/process.mla`
+- `stdlib/std/ipc.mla`
 - `stdlib/std/rand.mla`
 - `stdlib/std/regex.mla`
 - `stdlib/std/sed.mla`
@@ -1273,6 +1275,29 @@ Module file: `stdlib/std/process.mla`
 - `ExitStatus::code(self: ExitStatus) -> i32`
 - `ExitStatus::signaled(self: ExitStatus) -> i32`
 - `ExitStatus::signal(self: ExitStatus) -> i32`
+
+## std::ipc
+
+Module file: `stdlib/std/ipc.mla`
+
+System IPC helpers. The initial backend exposes named pipes:
+- Unix-like platforms use FIFO paths created with `mkfifo`.
+- Windows uses native named pipes; simple names expand to `\\.\pipe\<name>`.
+
+Example: `examples/std_ipc_named_pipe_demo.mla`
+
+### Types
+- `NamedPipe`
+- `PipeRead`
+
+### API
+- `NamedPipe::create(name: str8) -> Result<NamedPipe, str8>`
+- `NamedPipe::connect(name: str8) -> Result<NamedPipe, str8>`
+- `NamedPipe::read(self: NamedPipe, buf: str8, capacity: i64) -> Result<PipeRead, str8>`
+- `NamedPipe::write(self: NamedPipe, s: str8) -> Result<i64, str8>`
+- `NamedPipe::close(self: NamedPipe) -> i32`
+- `remove_named_pipe(name: str8) -> i32`
+- `last_error() -> str8`
 
 ## std::rand
 
