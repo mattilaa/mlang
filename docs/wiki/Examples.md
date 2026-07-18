@@ -94,6 +94,8 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   operations.
 - `examples/std_ipc_named_pipe_demo.mla` — named-pipe IPC roundtrip using
   [`std::ipc::NamedPipe`](Stdlib-Module-API#stdipc) over Unix FIFOs or Windows named pipes.
+- `examples/std_ipc_local_socket_demo.mla` — local stream socket IPC roundtrip
+  using [`std::ipc::LocalListener`](Stdlib-Module-API#stdipc) and [`std::ipc::LocalStream`](Stdlib-Module-API#stdipc).
 
 ## Focused regression examples
 

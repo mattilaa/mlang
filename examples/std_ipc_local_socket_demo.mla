@@ -1,0 +1,82 @@
+/// \file std_ipc_local_socket_demo.mla
+/// @ingroup examples
+/// \brief Local stream socket roundtrip using std::ipc.
+///
+mod std::ipc;
+mod std::strbuf;
+
+use std::ipc::LocalListener;
+use std::ipc::LocalStream;
+use std::ipc::remove_local_socket;
+use std::strbuf::contains;
+
+fn main() -> i32 {
+    let path: str8 = "/tmp/mlang-std-ipc-local-demo.sock";
+    remove_local_socket(path);
+
+    let listener_r: Result<LocalListener, str8> = LocalListener::bind(path);
+    if listener_r.is_err() {
+        println!("local socket bind failed: {}", listener_r.unwrap_err());
+        return 1;
+    }
+    let listener: LocalListener = listener_r.unwrap();
+
+    let client_r: Result<LocalStream, str8> = LocalStream::connect(path);
+    if client_r.is_err() {
+        println!("local socket connect failed: {}", client_r.unwrap_err());
+        listener.close();
+        remove_local_socket(path);
+        return 1;
+    }
+    let client: LocalStream = client_r.unwrap();
+
+    let server_r: Result<LocalStream, str8> = listener.accept();
+    if server_r.is_err() {
+        println!("local socket accept failed: {}", server_r.unwrap_err());
+        client.close();
+        listener.close();
+        remove_local_socket(path);
+        return 1;
+    }
+    let server: LocalStream = server_r.unwrap();
+
+    let w_r: Result<i64, str8> = client.write("hello from std::ipc local socket");
+    if w_r.is_err() {
+        println!("local socket write failed: {}", w_r.unwrap_err());
+        server.close();
+        client.close();
+        listener.close();
+        remove_local_socket(path);
+        return 1;
+    }
+
+    var buf = String::with_capacity(128);
+    let read_r: Result<i64, str8> = server.read(buf, 128);
+    if read_r.is_err() {
+        println!("local socket read failed: {}", read_r.unwrap_err());
+        String::free(buf);
+        server.close();
+        client.close();
+        listener.close();
+        remove_local_socket(path);
+        return 1;
+    }
+
+    if contains(buf, "hello from std::ipc local socket") != 1 {
+        println!("unexpected local socket data: {}", buf);
+        String::free(buf);
+        server.close();
+        client.close();
+        listener.close();
+        remove_local_socket(path);
+        return 1;
+    }
+
+    println!("local socket received: {}", buf);
+    String::free(buf);
+    server.close();
+    client.close();
+    listener.close();
+    remove_local_socket(path);
+    return 0;
+}

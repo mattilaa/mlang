@@ -8,3 +8,10 @@ extern pub fn __mlang_std_ipc_named_pipe_read(handle: i64, buf: str8, capacity: 
 extern pub fn __mlang_std_ipc_named_pipe_write(handle: i64, s: str8) -> i64;
 extern pub fn __mlang_std_ipc_named_pipe_close(handle: i64) -> i32;
 extern pub fn __mlang_std_ipc_named_pipe_remove(name: str8) -> i32;
+extern pub fn __mlang_std_ipc_local_socket_bind(path: str8) -> i64;
+extern pub fn __mlang_std_ipc_local_socket_accept(listener: i64) -> i64;
+extern pub fn __mlang_std_ipc_local_socket_connect(path: str8) -> i64;
+extern pub fn __mlang_std_ipc_local_socket_read(handle: i64, buf: str8, capacity: i64) -> i64;
+extern pub fn __mlang_std_ipc_local_socket_write(handle: i64, s: str8) -> i64;
+extern pub fn __mlang_std_ipc_local_socket_close(handle: i64) -> i32;
+extern pub fn __mlang_std_ipc_local_socket_remove(path: str8) -> i32;

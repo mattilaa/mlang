@@ -4,6 +4,9 @@ mod std::testing;
 
 use std::ipc::NamedPipe;
 use std::ipc::PipeRead;
+use std::ipc::LocalListener;
+use std::ipc::LocalStream;
+use std::ipc::remove_local_socket;
 use std::ipc::remove_named_pipe;
 use std::strbuf::contains;
 use std::testing::verify;
@@ -39,4 +42,38 @@ fn test_named_pipe_create_connect_write_read() {
     client.close();
     server.close();
     remove_named_pipe(name);
+}
+
+#[test]
+fn test_local_socket_connect_accept_write_read() {
+    let path: str8 = "/tmp/mlang-std-ipc-local-test.sock";
+    remove_local_socket(path);
+
+    let listener_r: Result<LocalListener, str8> = LocalListener::bind(path);
+    verify(!(listener_r.is_err()));
+    let listener: LocalListener = listener_r.unwrap();
+
+    let client_r: Result<LocalStream, str8> = LocalStream::connect(path);
+    verify(!(client_r.is_err()));
+    let client: LocalStream = client_r.unwrap();
+
+    let server_r: Result<LocalStream, str8> = listener.accept();
+    verify(!(server_r.is_err()));
+    let server: LocalStream = server_r.unwrap();
+
+    let w_r: Result<i64, str8> = client.write("hello-local-socket");
+    verify(!(w_r.is_err()));
+    verify(w_r.unwrap() > 0);
+
+    var buf = String::with_capacity(128);
+    let read_r: Result<i64, str8> = server.read(buf, 128);
+    verify(!(read_r.is_err()));
+    verify(read_r.unwrap() > 0);
+    verify(contains(buf, "hello-local-socket") == 1);
+
+    String::free(buf);
+    server.close();
+    client.close();
+    listener.close();
+    remove_local_socket(path);
 }

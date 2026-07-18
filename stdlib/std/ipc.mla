@@ -21,6 +21,16 @@ pub struct NamedPipe {
     var handle: i64;
 };
 
+/// @brief Owned listener for local stream sockets.
+pub struct LocalListener {
+    var handle: i64;
+};
+
+/// @brief Owned connected local stream socket.
+pub struct LocalStream {
+    var handle: i64;
+};
+
 /// @brief Return last std::ipc backend error string.
 pub fn last_error() -> str8 {
     return __mlang_std_ipc_last_error();
@@ -84,4 +94,74 @@ impl NamedPipe {
 /// removed when all handles close, so this is a no-op success for valid names.
 pub fn remove_named_pipe(name: str8) -> i32 {
     return __mlang_std_ipc_named_pipe_remove(name);
+}
+
+impl LocalListener {
+    /// @brief Bind a local stream socket and start listening.
+    ///
+    /// On Unix-like platforms this is an `AF_UNIX` path socket. On Windows this
+    /// uses Winsock `AF_UNIX` support when available.
+    pub fn bind(path: str8) -> Result<LocalListener, str8> {
+        let h: i64 = __mlang_std_ipc_local_socket_bind(path);
+        if h == 0 {
+            return Err<LocalListener, str8>(last_error());
+        }
+        return Ok<LocalListener, str8>(LocalListener { handle: h });
+    }
+
+    /// @brief Accept one incoming local socket connection.
+    pub fn accept(self: LocalListener) -> Result<LocalStream, str8> {
+        let h: i64 = __mlang_std_ipc_local_socket_accept(self.handle);
+        if h == 0 {
+            return Err<LocalStream, str8>(last_error());
+        }
+        return Ok<LocalStream, str8>(LocalStream { handle: h });
+    }
+
+    /// @brief Close the local socket listener.
+    pub fn close(self: LocalListener) -> i32 {
+        return __mlang_std_ipc_local_socket_close(self.handle);
+    }
+}
+
+impl LocalStream {
+    /// @brief Connect to a local stream socket path.
+    pub fn connect(path: str8) -> Result<LocalStream, str8> {
+        let h: i64 = __mlang_std_ipc_local_socket_connect(path);
+        if h == 0 {
+            return Err<LocalStream, str8>(last_error());
+        }
+        return Ok<LocalStream, str8>(LocalStream { handle: h });
+    }
+
+    /// @brief Read up to `capacity` bytes into `buf`.
+    pub fn read(self: LocalStream, buf: str8, capacity: i64) -> Result<i64, str8> {
+        let n: i64 = __mlang_std_ipc_local_socket_read(self.handle, buf, capacity);
+        if n < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(n);
+    }
+
+    /// @brief Write bytes to the local socket.
+    pub fn write(self: LocalStream, s: str8) -> Result<i64, str8> {
+        let n: i64 = __mlang_std_ipc_local_socket_write(self.handle, s);
+        if n < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(n);
+    }
+
+    /// @brief Close the local socket stream.
+    pub fn close(self: LocalStream) -> i32 {
+        return __mlang_std_ipc_local_socket_close(self.handle);
+    }
+}
+
+/// @brief Remove a local socket path.
+///
+/// On Unix-like platforms this unlinks the socket path. On Windows this removes
+/// the filesystem socket path when present.
+pub fn remove_local_socket(path: str8) -> i32 {
+    return __mlang_std_ipc_local_socket_remove(path);
 }
