@@ -1,0 +1,70 @@
+/// \file std_audio_vst3_style_preview.mla
+/// @ingroup examples
+/// \brief VST3-style note preview through the common std::audio hardware API.
+///
+/// The full VST3 plug-in/CoreAudio integration lives in
+/// `examples/package_manager_vst3_coreaudio_synth`. This stdlib example keeps
+/// the same note-to-oscillator preview idea, but routes hardware output through
+/// `std::audio` so the same source can use CoreAudio on macOS or JACK2 on Linux.
+///
+mod std::audio;
+mod std::time;
+
+use std::audio::AudioDevice;
+use std::audio::backend_name;
+use std::time::sleep_ms;
+
+extern fn pow(x: f64, y: f64) -> f64;
+
+fn midi_note_to_frequency(note: i32) -> f64 {
+    let semitones: f64 = f64(note - 69) / 12.0;
+    return 440.0 * pow(2.0, semitones);
+}
+
+fn play_note(dev: AudioDevice, note: i32, velocity: f64, duration_ms: i64) -> i32 {
+    let hz: f64 = midi_note_to_frequency(note);
+    let tone_r: Result<i32, str8> = dev.play_sine(hz, 0.20 * velocity, duration_ms);
+    if tone_r.is_err() {
+        println!("note preview failed: {}", tone_r.unwrap_err());
+        return 1;
+    }
+    sleep_ms(duration_ms + 80);
+    return 0;
+}
+
+fn main() -> i32 {
+    println!("std::audio backend: {}", backend_name());
+    println!("related full plugin demo: examples/package_manager_vst3_coreaudio_synth");
+
+    let dev_r: Result<AudioDevice, str8> = AudioDevice::open_default("mlang_vst3_style_preview");
+    if dev_r.is_err() {
+        println!("audio open failed: {}", dev_r.unwrap_err());
+        return 1;
+    }
+    let dev: AudioDevice = dev_r.unwrap();
+
+    let start_r: Result<i32, str8> = dev.start();
+    if start_r.is_err() {
+        println!("audio start failed: {}", start_r.unwrap_err());
+        dev.close();
+        return 1;
+    }
+
+    println!("sample_rate={} buffer_frames={}", dev.sample_rate(), dev.buffer_frames());
+    if play_note(dev, 69, 1.0, 300) != 0 {
+        dev.close();
+        return 1;
+    }
+    if play_note(dev, 72, 0.8, 300) != 0 {
+        dev.close();
+        return 1;
+    }
+    if play_note(dev, 76, 0.8, 450) != 0 {
+        dev.close();
+        return 1;
+    }
+
+    dev.stop();
+    dev.close();
+    return 0;
+}

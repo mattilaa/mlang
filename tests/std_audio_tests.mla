@@ -1,0 +1,16 @@
+mod std::audio;
+mod std::strbuf;
+mod std::testing;
+
+use std::audio::backend_name;
+use std::audio::last_error;
+use std::strbuf::len;
+use std::testing::verify;
+
+#[test]
+fn test_audio_backend_metadata() {
+    let backend: str8 = backend_name();
+    verify(len(backend) > 0);
+    let err: str8 = last_error();
+    verify(len(err) >= 0);
+}

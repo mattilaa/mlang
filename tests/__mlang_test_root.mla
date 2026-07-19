@@ -40,6 +40,8 @@ mod std_process_tests;
 use std_process_tests::*;
 mod std_ipc_tests;
 use std_ipc_tests::*;
+mod std_audio_tests;
+use std_audio_tests::*;
 mod std_fs_tests;
 use std_fs_tests::*;
 mod std_string_tests;
