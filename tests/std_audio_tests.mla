@@ -3,6 +3,8 @@ mod std::strbuf;
 mod std::testing;
 
 use std::audio::backend_name;
+use std::audio::default_output_device_id;
+use std::audio::device_count;
 use std::audio::last_error;
 use std::strbuf::len;
 use std::testing::verify;
@@ -11,6 +13,8 @@ use std::testing::verify;
 fn test_audio_backend_metadata() {
     let backend: str8 = backend_name();
     verify(len(backend) > 0);
+    verify(device_count() >= 0);
+    verify(default_output_device_id() >= -1);
     let err: str8 = last_error();
     verify(len(err) >= 0);
 }

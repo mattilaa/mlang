@@ -5,6 +5,7 @@
 #include <string.h>
 
 #if defined(__APPLE__)
+#include <CoreAudio/CoreAudio.h>
 #include <AudioToolbox/AudioToolbox.h>
 #elif defined(__linux__)
 #include <dlfcn.h>
@@ -18,6 +19,7 @@ struct mlang_audio_device
 {
     int backend;
     int running;
+    int64_t device_id;
     double sample_rate;
     int64_t buffer_frames;
     double phase;
@@ -36,6 +38,7 @@ struct mlang_audio_device
 };
 
 static char g_audio_last_error[512];
+static char g_audio_device_name[512];
 
 static void audio_set_error(const char* msg)
 {
@@ -84,6 +87,167 @@ static float audio_next_sample(mlang_audio_device_t* d)
 }
 
 #if defined(__APPLE__)
+static int coreaudio_device_has_output(AudioDeviceID id)
+{
+    AudioObjectPropertyAddress addr;
+    addr.mSelector = kAudioDevicePropertyStreamConfiguration;
+    addr.mScope = kAudioDevicePropertyScopeOutput;
+    addr.mElement = kAudioObjectPropertyElementMain;
+
+    UInt32 size = 0;
+    if(AudioObjectGetPropertyDataSize(id, &addr, 0, NULL, &size) != noErr || size == 0)
+        return 0;
+
+    AudioBufferList* list = (AudioBufferList*)malloc(size);
+    if(!list)
+        return 0;
+    if(AudioObjectGetPropertyData(id, &addr, 0, NULL, &size, list) != noErr)
+    {
+        free(list);
+        return 0;
+    }
+
+    UInt32 channels = 0;
+    for(UInt32 i = 0; i < list->mNumberBuffers; ++i)
+        channels += list->mBuffers[i].mNumberChannels;
+    free(list);
+    return channels > 0 ? 1 : 0;
+}
+
+static int coreaudio_all_devices(AudioDeviceID** out_ids, UInt32* out_count)
+{
+    *out_ids = NULL;
+    *out_count = 0;
+    AudioObjectPropertyAddress addr;
+    addr.mSelector = kAudioHardwarePropertyDevices;
+    addr.mScope = kAudioObjectPropertyScopeGlobal;
+    addr.mElement = kAudioObjectPropertyElementMain;
+
+    UInt32 size = 0;
+    if(AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &addr, 0, NULL, &size) != noErr || size == 0)
+        return -1;
+
+    AudioDeviceID* ids = (AudioDeviceID*)malloc(size);
+    if(!ids)
+        return -1;
+    if(AudioObjectGetPropertyData(kAudioObjectSystemObject, &addr, 0, NULL, &size, ids) != noErr)
+    {
+        free(ids);
+        return -1;
+    }
+    *out_ids = ids;
+    *out_count = size / (UInt32)sizeof(AudioDeviceID);
+    return 0;
+}
+
+static AudioDeviceID coreaudio_device_for_index(int64_t device_id)
+{
+    AudioDeviceID* ids = NULL;
+    UInt32 count = 0;
+    if(coreaudio_all_devices(&ids, &count) != 0)
+        return kAudioObjectUnknown;
+
+    int64_t out_index = 0;
+    AudioDeviceID selected = kAudioObjectUnknown;
+    for(UInt32 i = 0; i < count; ++i)
+    {
+        if(!coreaudio_device_has_output(ids[i]))
+            continue;
+        if(out_index == device_id)
+        {
+            selected = ids[i];
+            break;
+        }
+        ++out_index;
+    }
+    free(ids);
+    return selected;
+}
+
+static int64_t coreaudio_index_for_device(AudioDeviceID wanted)
+{
+    AudioDeviceID* ids = NULL;
+    UInt32 count = 0;
+    if(coreaudio_all_devices(&ids, &count) != 0)
+        return -1;
+
+    int64_t out_index = 0;
+    for(UInt32 i = 0; i < count; ++i)
+    {
+        if(!coreaudio_device_has_output(ids[i]))
+            continue;
+        if(ids[i] == wanted)
+        {
+            free(ids);
+            return out_index;
+        }
+        ++out_index;
+    }
+    free(ids);
+    return -1;
+}
+
+static int64_t coreaudio_default_output_index(void)
+{
+    AudioDeviceID device = kAudioObjectUnknown;
+    UInt32 size = sizeof(device);
+    AudioObjectPropertyAddress addr;
+    addr.mSelector = kAudioHardwarePropertyDefaultOutputDevice;
+    addr.mScope = kAudioObjectPropertyScopeGlobal;
+    addr.mElement = kAudioObjectPropertyElementMain;
+    if(AudioObjectGetPropertyData(kAudioObjectSystemObject, &addr, 0, NULL, &size, &device) != noErr)
+        return -1;
+    return coreaudio_index_for_device(device);
+}
+
+static int coreaudio_device_name(int64_t device_id, char* out, size_t out_size)
+{
+    AudioDeviceID id = coreaudio_device_for_index(device_id);
+    if(id == kAudioObjectUnknown)
+        return -1;
+
+    CFStringRef name = NULL;
+    UInt32 size = sizeof(name);
+    AudioObjectPropertyAddress addr;
+    addr.mSelector = kAudioObjectPropertyName;
+    addr.mScope = kAudioObjectPropertyScopeGlobal;
+    addr.mElement = kAudioObjectPropertyElementMain;
+    if(AudioObjectGetPropertyData(id, &addr, 0, NULL, &size, &name) != noErr || !name)
+        return -1;
+    Boolean ok = CFStringGetCString(name, out, out_size, kCFStringEncodingUTF8);
+    CFRelease(name);
+    return ok ? 0 : -1;
+}
+
+static void coreaudio_apply_nominal_sample_rate(mlang_audio_device_t* d, AudioDeviceID id)
+{
+    Float64 sr = 0.0;
+    UInt32 size = sizeof(sr);
+    AudioObjectPropertyAddress addr;
+    addr.mSelector = kAudioDevicePropertyNominalSampleRate;
+    addr.mScope = kAudioObjectPropertyScopeGlobal;
+    addr.mElement = kAudioObjectPropertyElementMain;
+    if(AudioObjectGetPropertyData(id, &addr, 0, NULL, &size, &sr) == noErr && sr > 1000.0)
+        d->sample_rate = (double)sr;
+}
+
+static int coreaudio_set_queue_device(AudioQueueRef queue, AudioDeviceID id)
+{
+    if(id == kAudioObjectUnknown)
+        return 0;
+    CFStringRef uid = NULL;
+    UInt32 size = sizeof(uid);
+    AudioObjectPropertyAddress addr;
+    addr.mSelector = kAudioDevicePropertyDeviceUID;
+    addr.mScope = kAudioObjectPropertyScopeGlobal;
+    addr.mElement = kAudioObjectPropertyElementMain;
+    if(AudioObjectGetPropertyData(id, &addr, 0, NULL, &size, &uid) != noErr || !uid)
+        return -1;
+    OSStatus rc = AudioQueueSetProperty(queue, kAudioQueueProperty_CurrentDevice, &uid, sizeof(uid));
+    CFRelease(uid);
+    return rc == noErr ? 0 : -1;
+}
+
 static void audioqueue_fill(mlang_audio_device_t* d, AudioQueueBufferRef buffer)
 {
     if(!d || !buffer)
@@ -106,11 +270,24 @@ static void audioqueue_callback(void* user_data, AudioQueueRef queue, AudioQueue
     (void)AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
 }
 
-static int audio_coreaudio_open(mlang_audio_device_t* d)
+static int audio_coreaudio_open(mlang_audio_device_t* d, int64_t device_id)
 {
     d->backend = 1;
     d->sample_rate = 48000.0;
     d->buffer_frames = 512;
+    d->device_id = device_id;
+
+    AudioDeviceID selected = kAudioObjectUnknown;
+    if(device_id >= 0)
+    {
+        selected = coreaudio_device_for_index(device_id);
+        if(selected == kAudioObjectUnknown)
+        {
+            audio_set_error("std::audio CoreAudio output device id is invalid");
+            return -1;
+        }
+        coreaudio_apply_nominal_sample_rate(d, selected);
+    }
 
     AudioStreamBasicDescription fmt;
     memset(&fmt, 0, sizeof(fmt));
@@ -128,6 +305,12 @@ static int audio_coreaudio_open(mlang_audio_device_t* d)
     {
         (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
                        "std::audio CoreAudio AudioQueueNewOutput failed: %d", (int)rc);
+        return -1;
+    }
+
+    if(selected != kAudioObjectUnknown && coreaudio_set_queue_device(d->queue, selected) != 0)
+    {
+        audio_set_error("std::audio CoreAudio failed to select output device");
         return -1;
     }
 
@@ -282,18 +465,167 @@ static void audio_jack_autoconnect(mlang_audio_device_t* d)
         return;
     const char* l = p_jack_port_name(d->out_l);
     const char* r = p_jack_port_name(d->out_r);
-    if(ports[0] && l)
-        (void)p_jack_connect(d->jack_client, l, ports[0]);
-    if(ports[1] && r)
-        (void)p_jack_connect(d->jack_client, r, ports[1]);
-    else if(ports[0] && r)
-        (void)p_jack_connect(d->jack_client, r, ports[0]);
+    int64_t first = d->device_id > 0 ? d->device_id * 2 : 0;
+    if(ports[first] && l)
+        (void)p_jack_connect(d->jack_client, l, ports[first]);
+    if(ports[first + 1] && r)
+        (void)p_jack_connect(d->jack_client, r, ports[first + 1]);
+    else if(ports[first] && r)
+        (void)p_jack_connect(d->jack_client, r, ports[first]);
     if(p_jack_free)
         p_jack_free((void*)ports);
 }
+
+static void* audio_jack_load_query_lib(void)
+{
+    void* lib = dlopen("libjack.so.0", RTLD_NOW | RTLD_LOCAL);
+    if(!lib)
+        lib = dlopen("libjack.so", RTLD_NOW | RTLD_LOCAL);
+    return lib;
+}
+
+static int audio_jack_query_ports(const char* client_name, void** out_lib, void** out_client, const char*** out_ports)
+{
+    *out_lib = NULL;
+    *out_client = NULL;
+    *out_ports = NULL;
+    void* lib = audio_jack_load_query_lib();
+    if(!lib)
+    {
+        audio_set_error("std::audio JACK2 libjack not found");
+        return -1;
+    }
+    jack_client_open_fn open_fn = (jack_client_open_fn)dlsym(lib, "jack_client_open");
+    jack_client_close_fn close_fn = (jack_client_close_fn)dlsym(lib, "jack_client_close");
+    jack_get_ports_fn ports_fn = (jack_get_ports_fn)dlsym(lib, "jack_get_ports");
+    if(!open_fn || !close_fn || !ports_fn)
+    {
+        dlclose(lib);
+        audio_set_error("std::audio JACK2 query symbols unavailable");
+        return -1;
+    }
+    jack_status_t status = 0;
+    void* client = open_fn(client_name ? client_name : "mlang_audio_query", MLANG_JACK_NULL_OPTION, &status);
+    if(!client)
+    {
+        dlclose(lib);
+        audio_set_error("std::audio JACK2 jack_client_open failed; is jackd running?");
+        return -1;
+    }
+    const char** ports = ports_fn(client, NULL, MLANG_JACK_DEFAULT_AUDIO_TYPE,
+                                  MLANG_JACK_PORT_IS_PHYSICAL | MLANG_JACK_PORT_IS_INPUT);
+    *out_lib = lib;
+    *out_client = client;
+    *out_ports = ports;
+    return 0;
+}
+
+static void audio_jack_query_close(void* lib, void* client, const char** ports)
+{
+    if(lib)
+    {
+        jack_free_fn free_fn = (jack_free_fn)dlsym(lib, "jack_free");
+        jack_client_close_fn close_fn = (jack_client_close_fn)dlsym(lib, "jack_client_close");
+        if(ports && free_fn)
+            free_fn((void*)ports);
+        if(client && close_fn)
+            (void)close_fn(client);
+        dlclose(lib);
+    }
+}
 #endif
 
-int64_t __mlang_std_audio_open_default_output(const char* client_name)
+int64_t __mlang_std_audio_device_count(void)
+{
+#if defined(__APPLE__)
+    AudioDeviceID* ids = NULL;
+    UInt32 count = 0;
+    if(coreaudio_all_devices(&ids, &count) != 0)
+        return 0;
+    int64_t out = 0;
+    for(UInt32 i = 0; i < count; ++i)
+    {
+        if(coreaudio_device_has_output(ids[i]))
+            ++out;
+    }
+    free(ids);
+    return out;
+#elif defined(__linux__)
+    void* lib = NULL;
+    void* client = NULL;
+    const char** ports = NULL;
+    if(audio_jack_query_ports("mlang_audio_query", &lib, &client, &ports) != 0 || !ports)
+    {
+        audio_jack_query_close(lib, client, ports);
+        return 0;
+    }
+    int64_t n = 0;
+    while(ports[n])
+        ++n;
+    audio_jack_query_close(lib, client, ports);
+    return (n + 1) / 2;
+#else
+    return 0;
+#endif
+}
+
+int64_t __mlang_std_audio_default_output_device_id(void)
+{
+#if defined(__APPLE__)
+    return coreaudio_default_output_index();
+#elif defined(__linux__)
+    return __mlang_std_audio_device_count() > 0 ? 0 : -1;
+#else
+    return -1;
+#endif
+}
+
+const char* __mlang_std_audio_device_name(int64_t device_id)
+{
+    g_audio_device_name[0] = '\0';
+    if(device_id < 0)
+    {
+        audio_set_error("std::audio device_name: invalid device id");
+        return g_audio_device_name;
+    }
+#if defined(__APPLE__)
+    if(coreaudio_device_name(device_id, g_audio_device_name, sizeof(g_audio_device_name)) != 0)
+    {
+        audio_set_error("std::audio CoreAudio device name lookup failed");
+        return g_audio_device_name;
+    }
+    audio_clear_error();
+    return g_audio_device_name;
+#elif defined(__linux__)
+    void* lib = NULL;
+    void* client = NULL;
+    const char** ports = NULL;
+    if(audio_jack_query_ports("mlang_audio_query", &lib, &client, &ports) != 0 || !ports)
+    {
+        audio_jack_query_close(lib, client, ports);
+        return g_audio_device_name;
+    }
+    int64_t first = device_id * 2;
+    if(!ports[first])
+    {
+        audio_jack_query_close(lib, client, ports);
+        audio_set_error("std::audio JACK2 device id is invalid");
+        return g_audio_device_name;
+    }
+    if(ports[first + 1])
+        (void)snprintf(g_audio_device_name, sizeof(g_audio_device_name), "%s / %s", ports[first], ports[first + 1]);
+    else
+        (void)snprintf(g_audio_device_name, sizeof(g_audio_device_name), "%s", ports[first]);
+    audio_jack_query_close(lib, client, ports);
+    audio_clear_error();
+    return g_audio_device_name;
+#else
+    audio_set_error("std::audio backend unsupported on this platform");
+    return g_audio_device_name;
+#endif
+}
+
+int64_t __mlang_std_audio_open_output_device(int64_t device_id, const char* client_name)
 {
     mlang_audio_device_t* d = (mlang_audio_device_t*)calloc(1u, sizeof(*d));
     if(!d)
@@ -306,15 +638,26 @@ int64_t __mlang_std_audio_open_default_output(const char* client_name)
     d->frequency_hz = 440.0;
     d->gain = 0.15;
     d->frames_left = 0;
+    d->device_id = device_id;
 
 #if defined(__APPLE__)
     (void)client_name;
-    if(audio_coreaudio_open(d) != 0)
+    if(device_id < 0)
+        d->device_id = coreaudio_default_output_index();
+    if(audio_coreaudio_open(d, d->device_id) != 0)
     {
         __mlang_std_audio_close((int64_t)(intptr_t)d);
         return 0;
     }
 #elif defined(__linux__)
+    if(device_id < 0)
+        d->device_id = __mlang_std_audio_default_output_device_id();
+    if(d->device_id < 0)
+    {
+        __mlang_std_audio_close((int64_t)(intptr_t)d);
+        audio_set_error("std::audio JACK2 no output devices available");
+        return 0;
+    }
     if(audio_jack_open(d, client_name) != 0)
     {
         __mlang_std_audio_close((int64_t)(intptr_t)d);
@@ -328,6 +671,11 @@ int64_t __mlang_std_audio_open_default_output(const char* client_name)
 #endif
     audio_clear_error();
     return (int64_t)(intptr_t)d;
+}
+
+int64_t __mlang_std_audio_open_default_output(const char* client_name)
+{
+    return __mlang_std_audio_open_output_device(-1, client_name);
 }
 
 int32_t __mlang_std_audio_start(int64_t handle)

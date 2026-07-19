@@ -14,6 +14,8 @@ mod std::time;
 
 use std::audio::AudioDevice;
 use std::audio::backend_name;
+use std::audio::default_output_device_id;
+use std::audio::device_name;
 use std::simd::add;
 use std::simd::max;
 use std::simd::multiply;
@@ -54,8 +56,14 @@ fn main() -> i32 {
 
     println!("std::audio backend: {}", backend_name());
     println!("simd dsp block: peak={} energy={}", peak, energy);
+    let default_id: i64 = default_output_device_id();
+    if default_id >= 0 {
+        println!("selected output: [{}] {}", default_id, device_name(default_id));
+    }
 
-    let dev_r: Result<AudioDevice, str8> = AudioDevice::open_default("mlang_audio_simd_dsp");
+    let dev_r: Result<AudioDevice, str8> = default_id >= 0
+        ? AudioDevice::open(default_id, "mlang_audio_simd_dsp")
+        : AudioDevice::open_default("mlang_audio_simd_dsp");
     if dev_r.is_err() {
         println!("audio open failed: {}", dev_r.unwrap_err());
         return 1;

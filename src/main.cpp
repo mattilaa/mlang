@@ -616,6 +616,7 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
     append_framework_link_args(linkArgs, "CoreFoundation");
     append_framework_link_args(linkArgs, "CoreGraphics");
     append_framework_link_args(linkArgs, "ImageIO");
+    append_framework_link_args(linkArgs, "CoreAudio");
     append_framework_link_args(linkArgs, "AudioToolbox");
 #endif
 }
@@ -1063,7 +1064,7 @@ static bool ensure_compiled_mla_tool(const char* argv0,
     for(const auto& arg : filteredToolLinkArgs)
         compileCmd += " " + shell_quote(arg);
     compileCmd += " -o " + shell_quote(outBin.string());
-    // The mlang compiler auto-adds CoreFoundation/CoreGraphics/ImageIO/AudioToolbox on
+    // The mlang compiler auto-adds CoreFoundation/CoreGraphics/ImageIO/CoreAudio/AudioToolbox on
     // macOS when assembling default link args, so they do not need to be
     // forwarded here. Forwarding them as `-framework` CLI args would be
     // rejected as unknown options.

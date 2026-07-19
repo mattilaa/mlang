@@ -411,11 +411,13 @@ if(APPLE)
     find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
     find_library(COREGRAPHICS_FRAMEWORK CoreGraphics)
     find_library(IMAGEIO_FRAMEWORK ImageIO)
+    find_library(COREAUDIO_FRAMEWORK CoreAudio)
     find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox)
     target_link_libraries(mlang_std PUBLIC
         ${COREFOUNDATION_FRAMEWORK}
         ${COREGRAPHICS_FRAMEWORK}
         ${IMAGEIO_FRAMEWORK}
+        ${COREAUDIO_FRAMEWORK}
         ${AUDIOTOOLBOX_FRAMEWORK}
     )
 endif()
@@ -450,6 +452,7 @@ add_custom_command(
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreFoundation>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreGraphics>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:ImageIO>
+            $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreAudio>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:AudioToolbox>
     COMMAND ${CMAKE_COMMAND} -E touch ${MLANG_FORMAT_STAMP}
     DEPENDS mlang mlang_std ${MLANG_FORMAT_SOURCE}
@@ -492,6 +495,7 @@ add_custom_command(
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreFoundation>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreGraphics>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:ImageIO>
+            $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreAudio>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:AudioToolbox>
     COMMAND ${CMAKE_COMMAND} -E touch ${MLANGD_MLA_STAMP}
     DEPENDS mlang mlang_std ${MLANGD_MLA_SOURCE}

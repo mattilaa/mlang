@@ -25,10 +25,37 @@ pub fn last_error() -> str8 {
     return __mlang_std_audio_last_error();
 }
 
+/// @brief Return the number of selectable output devices.
+pub fn device_count() -> i64 {
+    return __mlang_std_audio_device_count();
+}
+
+/// @brief Return the default output device id, or `-1` if unavailable.
+pub fn default_output_device_id() -> i64 {
+    return __mlang_std_audio_default_output_device_id();
+}
+
+/// @brief Return a printable output device name for an integer device id.
+pub fn device_name(device_id: i64) -> str8 {
+    return __mlang_std_audio_device_name(device_id);
+}
+
 impl AudioDevice {
     /// @brief Open the default stereo output device.
     pub fn open_default(client_name: str8) -> Result<AudioDevice, str8> {
         let h: i64 = __mlang_std_audio_open_default_output(client_name);
+        if h == 0 {
+            return Err<AudioDevice, str8>(last_error());
+        }
+        return Ok<AudioDevice, str8>(AudioDevice { handle: h });
+    }
+
+    /// @brief Open a selected stereo output device by integer device id.
+    ///
+    /// Pass an id from `0..device_count()-1`; use `default_output_device_id()`
+    /// to select the system default.
+    pub fn open(device_id: i64, client_name: str8) -> Result<AudioDevice, str8> {
+        let h: i64 = __mlang_std_audio_open_output_device(device_id, client_name);
         if h == 0 {
             return Err<AudioDevice, str8>(last_error());
         }

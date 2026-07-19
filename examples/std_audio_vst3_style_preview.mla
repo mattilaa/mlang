@@ -12,6 +12,9 @@ mod std::time;
 
 use std::audio::AudioDevice;
 use std::audio::backend_name;
+use std::audio::default_output_device_id;
+use std::audio::device_count;
+use std::audio::device_name;
 use std::time::sleep_ms;
 
 extern fn pow(x: f64, y: f64) -> f64;
@@ -35,8 +38,16 @@ fn play_note(dev: AudioDevice, note: i32, velocity: f64, duration_ms: i64) -> i3
 fn main() -> i32 {
     println!("std::audio backend: {}", backend_name());
     println!("related full plugin demo: examples/package_manager_vst3_coreaudio_synth");
+    let count: i64 = device_count();
+    let default_id: i64 = default_output_device_id();
+    println!("output devices: count={} default_id={}", count, default_id);
+    if default_id >= 0 {
+        println!("selected output: [{}] {}", default_id, device_name(default_id));
+    }
 
-    let dev_r: Result<AudioDevice, str8> = AudioDevice::open_default("mlang_vst3_style_preview");
+    let dev_r: Result<AudioDevice, str8> = default_id >= 0
+        ? AudioDevice::open(default_id, "mlang_vst3_style_preview")
+        : AudioDevice::open_default("mlang_vst3_style_preview");
     if dev_r.is_err() {
         println!("audio open failed: {}", dev_r.unwrap_err());
         return 1;

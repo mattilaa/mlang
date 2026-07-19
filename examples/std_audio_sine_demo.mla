@@ -7,12 +7,26 @@ mod std::time;
 
 use std::audio::AudioDevice;
 use std::audio::backend_name;
+use std::audio::default_output_device_id;
+use std::audio::device_count;
+use std::audio::device_name;
 use std::time::sleep_ms;
 
 fn main() -> i32 {
     println!("std::audio backend: {}", backend_name());
+    let count: i64 = device_count();
+    let default_id: i64 = default_output_device_id();
+    println!("output devices: count={} default_id={}", count, default_id);
 
-    let dev_r: Result<AudioDevice, str8> = AudioDevice::open_default("mlang_audio_demo");
+    var i: i64 = 0;
+    while i < count {
+        println!("  [{}] {}", i, device_name(i));
+        i = i + 1;
+    }
+
+    let dev_r: Result<AudioDevice, str8> = default_id >= 0
+        ? AudioDevice::open(default_id, "mlang_audio_demo")
+        : AudioDevice::open_default("mlang_audio_demo");
     if dev_r.is_err() {
         println!("audio open failed: {}", dev_r.unwrap_err());
         return 1;
