@@ -100,6 +100,9 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   [`std::audio`](Stdlib-Module-API#stdaudio), using CoreAudio on macOS or JACK2 on Linux.
 - `examples/std_audio_vst3_style_preview.mla` — VST3-style note preview through
   [`std::audio`](Stdlib-Module-API#stdaudio), cross-linked with `examples/package_manager_vst3_coreaudio_synth`.
+- `examples/std_audio_simd_dsp_demo.mla` — SIMD-shaped DSP block using
+  [`std::simd`](Stdlib-Module-API#stdsimd) for vector gain/mix/envelope math before previewing through
+  [`std::audio`](Stdlib-Module-API#stdaudio).
 
 ## Focused regression examples
 

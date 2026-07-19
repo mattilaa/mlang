@@ -1328,6 +1328,7 @@ Common audio hardware output helpers:
 Examples:
 - `examples/std_audio_sine_demo.mla`
 - `examples/std_audio_vst3_style_preview.mla`
+- `examples/std_audio_simd_dsp_demo.mla`
 - Full VST3/CoreAudio package demo: `examples/package_manager_vst3_coreaudio_synth`
 
 ### Types
