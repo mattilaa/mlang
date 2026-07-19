@@ -1,0 +1,12 @@
+/// \file detail.mla
+/// \brief Native bindings for std::audio.
+
+extern pub fn __mlang_std_audio_last_error() -> str8;
+extern pub fn __mlang_std_audio_backend_name() -> str8;
+extern pub fn __mlang_std_audio_open_default_output(client_name: str8) -> i64;
+extern pub fn __mlang_std_audio_start(handle: i64) -> i32;
+extern pub fn __mlang_std_audio_stop(handle: i64) -> i32;
+extern pub fn __mlang_std_audio_close(handle: i64) -> i32;
+extern pub fn __mlang_std_audio_sample_rate(handle: i64) -> i64;
+extern pub fn __mlang_std_audio_buffer_frames(handle: i64) -> i64;
+extern pub fn __mlang_std_audio_play_sine(handle: i64, frequency_hz: f64, gain: f64, duration_ms: i64) -> i32;

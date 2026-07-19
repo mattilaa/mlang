@@ -27,6 +27,11 @@ example in a practical way, this example builds:
 Both targets call into the same compiled MLang oscillator object through
 `src/mlang_osc_bridge.cpp`.
 
+For a stdlib-level hardware-output version of the same note-preview idea, see
+`examples/std_audio_vst3_style_preview.mla`. That example does not build a VST3
+bundle; it uses `std::audio` to open the default output device through CoreAudio
+on macOS or JACK2 on Linux.
+
 ## Official References Used
 
 Steinberg:

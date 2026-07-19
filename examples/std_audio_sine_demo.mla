@@ -1,0 +1,41 @@
+/// \file std_audio_sine_demo.mla
+/// @ingroup examples
+/// \brief Open default audio output and play a short sine tone.
+///
+mod std::audio;
+mod std::time;
+
+use std::audio::AudioDevice;
+use std::audio::backend_name;
+use std::time::sleep_ms;
+
+fn main() -> i32 {
+    println!("std::audio backend: {}", backend_name());
+
+    let dev_r: Result<AudioDevice, str8> = AudioDevice::open_default("mlang_audio_demo");
+    if dev_r.is_err() {
+        println!("audio open failed: {}", dev_r.unwrap_err());
+        return 1;
+    }
+    let dev: AudioDevice = dev_r.unwrap();
+
+    let start_r: Result<i32, str8> = dev.start();
+    if start_r.is_err() {
+        println!("audio start failed: {}", start_r.unwrap_err());
+        dev.close();
+        return 1;
+    }
+
+    println!("sample_rate={} buffer_frames={}", dev.sample_rate(), dev.buffer_frames());
+    let tone_r: Result<i32, str8> = dev.play_sine(440.0, 0.15, 750);
+    if tone_r.is_err() {
+        println!("tone failed: {}", tone_r.unwrap_err());
+        dev.close();
+        return 1;
+    }
+
+    sleep_ms(900);
+    dev.stop();
+    dev.close();
+    return 0;
+}
