@@ -355,24 +355,37 @@ static void ap_print_help(ArgParser_t* p)
 
     if(has_opts) {
         printf("\nOptions:\n");
-        /* --help always present */
-        printf("  -h, --help        Show this help message\n");
+        int label_width = (int)strlen("-h, --help");
         for(int i = 0; i < p->def_count; i++) {
             ArgDef* d = &p->defs[i];
             if(d->kind == AP_ARG_POSITIONAL) continue;
-            char short_buf[8] = "  ";
+            char label[160];
             if(d->short_name && d->short_name[0])
-                snprintf(short_buf, sizeof(short_buf), "-%s,", d->short_name);
-            if(d->kind == AP_ARG_FLAG) {
-                printf("  %-4s --%-16s %s\n", short_buf, d->long_name, d->help ? d->help : "");
-            } else {
-                char long_buf[64];
-                snprintf(long_buf, sizeof(long_buf), "%s <val>", d->long_name);
-                printf("  %-4s --%-16s %s", short_buf, long_buf, d->help ? d->help : "");
-                if(d->default_val && d->default_val[0])
-                    printf(" [default: %s]", d->default_val);
-                printf("\n");
-            }
+                snprintf(label, sizeof(label), "-%s, --%s%s", d->short_name, d->long_name,
+                         d->kind == AP_ARG_OPTION ? " <val>" : "");
+            else
+                snprintf(label, sizeof(label), "    --%s%s", d->long_name,
+                         d->kind == AP_ARG_OPTION ? " <val>" : "");
+            int n = (int)strlen(label);
+            if(n > label_width)
+                label_width = n;
+        }
+
+        printf("  %-*s  %s\n", label_width, "-h, --help", "Show this help message");
+        for(int i = 0; i < p->def_count; i++) {
+            ArgDef* d = &p->defs[i];
+            if(d->kind == AP_ARG_POSITIONAL) continue;
+            char label[160];
+            if(d->short_name && d->short_name[0])
+                snprintf(label, sizeof(label), "-%s, --%s%s", d->short_name, d->long_name,
+                         d->kind == AP_ARG_OPTION ? " <val>" : "");
+            else
+                snprintf(label, sizeof(label), "    --%s%s", d->long_name,
+                         d->kind == AP_ARG_OPTION ? " <val>" : "");
+            printf("  %-*s  %s", label_width, label, d->help ? d->help : "");
+            if(d->kind == AP_ARG_OPTION && d->default_val && d->default_val[0])
+                printf(" [default: %s]", d->default_val);
+            printf("\n");
         }
     }
 
