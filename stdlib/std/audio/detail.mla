@@ -8,6 +8,8 @@ extern pub fn __mlang_std_audio_default_output_device_id() -> i64;
 extern pub fn __mlang_std_audio_device_name(device_id: i64) -> str8;
 extern pub fn __mlang_std_audio_open_default_output(client_name: str8) -> i64;
 extern pub fn __mlang_std_audio_open_output_device(device_id: i64, client_name: str8) -> i64;
+extern pub fn __mlang_std_audio_open_default_output_config(client_name: str8, sample_rate: i64, buffer_frames: i64) -> i64;
+extern pub fn __mlang_std_audio_open_output_device_config(device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> i64;
 extern pub fn __mlang_std_audio_start(handle: i64) -> i32;
 extern pub fn __mlang_std_audio_stop(handle: i64) -> i32;
 extern pub fn __mlang_std_audio_close(handle: i64) -> i32;

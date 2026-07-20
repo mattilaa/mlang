@@ -8,13 +8,21 @@
 /// realtime user callback, so the SIMD block is used here for DSP analysis and
 /// control values before previewing an equivalent tone.
 ///
+/// Run:
+///   ./build/mlang examples/std_audio_simd_dsp_demo.mla -L ./build -lmlang_std -- --help
+///   ./build/mlang examples/std_audio_simd_dsp_demo.mla -L ./build -lmlang_std -- --device 0 --sample-rate 48000 --buffer 256
+///
+mod std::argparser;
 mod std::audio;
 mod std::simd;
 mod std::time;
 
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
 use std::audio::AudioDevice;
 use std::audio::backend_name;
 use std::audio::default_output_device_id;
+use std::audio::device_count;
 use std::audio::device_name;
 use std::simd::add;
 use std::simd::max;
@@ -22,7 +30,32 @@ use std::simd::multiply;
 use std::simd::sum;
 use std::time::sleep_ms;
 
-fn main() -> i32 {
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new("std_audio_simd_dsp_demo", "Use std::simd for DSP math before previewing through std::audio.");
+    ap.option("device", "d", "Output device id; -1 uses the default device", "-1");
+    ap.option("sample-rate", "r", "Requested sample rate in Hz; 0 uses backend default", "0");
+    ap.option("buffer", "b", "Requested latency buffer size in frames; 0 uses backend default", "0");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        println!("Error: {}", parsed.error());
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let requested_device: i64 = parsed.get_i64("device");
+    let requested_sample_rate: i64 = parsed.get_i64("sample-rate");
+    let requested_buffer_frames: i64 = parsed.get_i64("buffer");
+    parsed.free();
+    ap.free();
+
     let osc_a: list<f32> = [
         0.0000f, 0.1305f, 0.2588f, 0.3827f,
         0.5000f, 0.6088f, 0.7071f, 0.7934f
@@ -56,14 +89,22 @@ fn main() -> i32 {
 
     println!("std::audio backend: {}", backend_name());
     println!("simd dsp block: peak={} energy={}", peak, energy);
+    let count: i64 = device_count();
     let default_id: i64 = default_output_device_id();
-    if default_id >= 0 {
-        println!("selected output: [{}] {}", default_id, device_name(default_id));
+    println!("output devices: count={} default_id={}", count, default_id);
+    var i: i64 = 0;
+    while i < count {
+        println!("  [{}] {}", i, device_name(i));
+        i = i + 1;
     }
 
-    let dev_r: Result<AudioDevice, str8> = default_id >= 0
-        ? AudioDevice::open(default_id, "mlang_audio_simd_dsp")
-        : AudioDevice::open_default("mlang_audio_simd_dsp");
+    let selected_id: i64 = requested_device >= 0 ? requested_device : default_id;
+    if selected_id >= 0 {
+        println!("selected output: [{}] {}", selected_id, device_name(selected_id));
+    }
+    let dev_r: Result<AudioDevice, str8> = selected_id >= 0
+        ? AudioDevice::open_with_config(selected_id, "mlang_audio_simd_dsp", requested_sample_rate, requested_buffer_frames)
+        : AudioDevice::open_default_with_config("mlang_audio_simd_dsp", requested_sample_rate, requested_buffer_frames);
     if dev_r.is_err() {
         println!("audio open failed: {}", dev_r.unwrap_err());
         return 1;

@@ -1341,7 +1341,9 @@ Examples:
 - `default_output_device_id() -> i64`
 - `device_name(device_id: i64) -> str8`
 - `AudioDevice::open_default(client_name: str8) -> Result<AudioDevice, str8>`
+- `AudioDevice::open_default_with_config(client_name: str8, sample_rate: i64, buffer_frames: i64) -> Result<AudioDevice, str8>`
 - `AudioDevice::open(device_id: i64, client_name: str8) -> Result<AudioDevice, str8>`
+- `AudioDevice::open_with_config(device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> Result<AudioDevice, str8>`
 - `AudioDevice::start(self: AudioDevice) -> Result<i32, str8>`
 - `AudioDevice::stop(self: AudioDevice) -> i32`
 - `AudioDevice::close(self: AudioDevice) -> i32`

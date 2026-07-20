@@ -93,13 +93,14 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   `std::ipc::NamedPipe` over Unix FIFOs or Windows named pipes.
 - `examples/std_ipc_local_socket_demo.mla` — local stream socket IPC roundtrip
   using `std::ipc::LocalListener` and `std::ipc::LocalStream`.
-- `examples/std_audio_sine_demo.mla` — list/select output device IDs and play
-  through `std::audio`, using CoreAudio on macOS or JACK2 on Linux.
+- `examples/std_audio_sine_demo.mla` — list/select output device IDs from the
+  command line and play through `std::audio`, using CoreAudio on macOS or JACK2
+  on Linux.
 - `examples/std_audio_vst3_style_preview.mla` — VST3-style note preview through
   `std::audio`, cross-linked with `examples/package_manager_vst3_coreaudio_synth`.
 - `examples/std_audio_simd_dsp_demo.mla` — SIMD-shaped DSP block using
   `std::simd` for vector gain/mix/envelope math before previewing through
-  `std::audio`.
+  `std::audio`, with command-line device/sample-rate/buffer selection.
 
 ## Focused regression examples
 
