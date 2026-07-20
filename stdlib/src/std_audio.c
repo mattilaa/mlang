@@ -67,6 +67,28 @@ const char* __mlang_std_audio_backend_name(void)
 #endif
 }
 
+static int64_t audio_normalize_sample_rate(int64_t sample_rate)
+{
+    if(sample_rate <= 0)
+        return 48000;
+    if(sample_rate < 8000)
+        return 8000;
+    if(sample_rate > 384000)
+        return 384000;
+    return sample_rate;
+}
+
+static int64_t audio_normalize_buffer_frames(int64_t buffer_frames)
+{
+    if(buffer_frames <= 0)
+        return 512;
+    if(buffer_frames < 16)
+        return 16;
+    if(buffer_frames > 32768)
+        return 32768;
+    return buffer_frames;
+}
+
 static float audio_next_sample(mlang_audio_device_t* d)
 {
     if(!d || !d->running || d->frames_left == 0)
@@ -270,11 +292,9 @@ static void audioqueue_callback(void* user_data, AudioQueueRef queue, AudioQueue
     (void)AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
 }
 
-static int audio_coreaudio_open(mlang_audio_device_t* d, int64_t device_id)
+static int audio_coreaudio_open(mlang_audio_device_t* d, int64_t device_id, int requested_sample_rate)
 {
     d->backend = 1;
-    d->sample_rate = 48000.0;
-    d->buffer_frames = 512;
     d->device_id = device_id;
 
     AudioDeviceID selected = kAudioObjectUnknown;
@@ -286,7 +306,8 @@ static int audio_coreaudio_open(mlang_audio_device_t* d, int64_t device_id)
             audio_set_error("std::audio CoreAudio output device id is invalid");
             return -1;
         }
-        coreaudio_apply_nominal_sample_rate(d, selected);
+        if(!requested_sample_rate)
+            coreaudio_apply_nominal_sample_rate(d, selected);
     }
 
     AudioStreamBasicDescription fmt;
@@ -357,6 +378,7 @@ typedef void* (*jack_port_register_fn)(void*, const char*, const char*, unsigned
 typedef int (*jack_set_process_callback_fn)(void*, JackProcessCallback, void*);
 typedef jack_nframes_t (*jack_get_sample_rate_fn)(void*);
 typedef jack_nframes_t (*jack_get_buffer_size_fn)(void*);
+typedef int (*jack_set_buffer_size_fn)(void*, jack_nframes_t);
 typedef void* (*jack_port_get_buffer_fn)(void*, jack_nframes_t);
 typedef const char* (*jack_port_name_fn)(const void*);
 typedef const char** (*jack_get_ports_fn)(void*, const char*, const char*, unsigned long);
@@ -419,6 +441,7 @@ static int audio_jack_open(mlang_audio_device_t* d, const char* client_name)
     jack_set_process_callback_fn p_jack_set_process_callback = (jack_set_process_callback_fn)jack_sym(d->jack_lib, "jack_set_process_callback");
     jack_get_sample_rate_fn p_jack_get_sample_rate = (jack_get_sample_rate_fn)jack_sym(d->jack_lib, "jack_get_sample_rate");
     jack_get_buffer_size_fn p_jack_get_buffer_size = (jack_get_buffer_size_fn)jack_sym(d->jack_lib, "jack_get_buffer_size");
+    jack_set_buffer_size_fn p_jack_set_buffer_size = (jack_set_buffer_size_fn)dlsym(d->jack_lib, "jack_set_buffer_size");
     p_jack_port_get_buffer = (jack_port_get_buffer_fn)jack_sym(d->jack_lib, "jack_port_get_buffer");
     p_jack_port_name = (jack_port_name_fn)jack_sym(d->jack_lib, "jack_port_name");
     p_jack_get_ports = (jack_get_ports_fn)jack_sym(d->jack_lib, "jack_get_ports");
@@ -438,6 +461,8 @@ static int audio_jack_open(mlang_audio_device_t* d, const char* client_name)
         return -1;
     }
 
+    if(d->buffer_frames > 0 && p_jack_set_buffer_size)
+        (void)p_jack_set_buffer_size(d->jack_client, (jack_nframes_t)d->buffer_frames);
     d->sample_rate = (double)p_jack_get_sample_rate(d->jack_client);
     d->buffer_frames = (int64_t)p_jack_get_buffer_size(d->jack_client);
     d->out_l = p_jack_port_register(d->jack_client, "out_l", MLANG_JACK_DEFAULT_AUDIO_TYPE, MLANG_JACK_PORT_IS_OUTPUT, 0);
@@ -625,7 +650,7 @@ const char* __mlang_std_audio_device_name(int64_t device_id)
 #endif
 }
 
-int64_t __mlang_std_audio_open_output_device(int64_t device_id, const char* client_name)
+int64_t __mlang_std_audio_open_output_device_config(int64_t device_id, const char* client_name, int64_t sample_rate, int64_t buffer_frames)
 {
     mlang_audio_device_t* d = (mlang_audio_device_t*)calloc(1u, sizeof(*d));
     if(!d)
@@ -633,8 +658,9 @@ int64_t __mlang_std_audio_open_output_device(int64_t device_id, const char* clie
         audio_set_error("std::audio allocation failed");
         return 0;
     }
-    d->sample_rate = 48000.0;
-    d->buffer_frames = 512;
+    int requested_sample_rate = sample_rate > 0 ? 1 : 0;
+    d->sample_rate = (double)audio_normalize_sample_rate(sample_rate);
+    d->buffer_frames = audio_normalize_buffer_frames(buffer_frames);
     d->frequency_hz = 440.0;
     d->gain = 0.15;
     d->frames_left = 0;
@@ -644,7 +670,7 @@ int64_t __mlang_std_audio_open_output_device(int64_t device_id, const char* clie
     (void)client_name;
     if(device_id < 0)
         d->device_id = coreaudio_default_output_index();
-    if(audio_coreaudio_open(d, d->device_id) != 0)
+    if(audio_coreaudio_open(d, d->device_id, requested_sample_rate) != 0)
     {
         __mlang_std_audio_close((int64_t)(intptr_t)d);
         return 0;
@@ -673,9 +699,19 @@ int64_t __mlang_std_audio_open_output_device(int64_t device_id, const char* clie
     return (int64_t)(intptr_t)d;
 }
 
+int64_t __mlang_std_audio_open_output_device(int64_t device_id, const char* client_name)
+{
+    return __mlang_std_audio_open_output_device_config(device_id, client_name, 0, 0);
+}
+
+int64_t __mlang_std_audio_open_default_output_config(const char* client_name, int64_t sample_rate, int64_t buffer_frames)
+{
+    return __mlang_std_audio_open_output_device_config(-1, client_name, sample_rate, buffer_frames);
+}
+
 int64_t __mlang_std_audio_open_default_output(const char* client_name)
 {
-    return __mlang_std_audio_open_output_device(-1, client_name);
+    return __mlang_std_audio_open_default_output_config(client_name, 0, 0);
 }
 
 int32_t __mlang_std_audio_start(int64_t handle)

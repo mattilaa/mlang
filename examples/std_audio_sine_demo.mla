@@ -24,9 +24,11 @@ fn main() -> i32 {
         i = i + 1;
     }
 
+    let requested_sample_rate: i64 = 48000;
+    let requested_buffer_frames: i64 = 256;
     let dev_r: Result<AudioDevice, str8> = default_id >= 0
-        ? AudioDevice::open(default_id, "mlang_audio_demo")
-        : AudioDevice::open_default("mlang_audio_demo");
+        ? AudioDevice::open_with_config(default_id, "mlang_audio_demo", requested_sample_rate, requested_buffer_frames)
+        : AudioDevice::open_default_with_config("mlang_audio_demo", requested_sample_rate, requested_buffer_frames);
     if dev_r.is_err() {
         println!("audio open failed: {}", dev_r.unwrap_err());
         return 1;

@@ -46,8 +46,8 @@ fn main() -> i32 {
     }
 
     let dev_r: Result<AudioDevice, str8> = default_id >= 0
-        ? AudioDevice::open(default_id, "mlang_vst3_style_preview")
-        : AudioDevice::open_default("mlang_vst3_style_preview");
+        ? AudioDevice::open_with_config(default_id, "mlang_vst3_style_preview", 48000, 256)
+        : AudioDevice::open_default_with_config("mlang_vst3_style_preview", 48000, 256);
     if dev_r.is_err() {
         println!("audio open failed: {}", dev_r.unwrap_err());
         return 1;
