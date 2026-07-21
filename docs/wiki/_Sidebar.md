@@ -3,25 +3,25 @@
 
 ## Start Here
 - [MLang Documentation](Home)
-- [Project README](Project-README)
 - [New Features Guide](New-Features)
+- [Project README](Project-README)
 
 ## Language
-- [Quick Guide](Quick-Guide)
-- [Language Syntax](Language-Syntax)
-- [Language Attributes](Language-Attributes)
 - [Compiler Diagnostics](Compiler-Diagnostics)
+- [Language Attributes](Language-Attributes)
+- [Language Syntax](Language-Syntax)
+- [Quick Guide](Quick-Guide)
 
 ## Standard Library
-- [Stdlib Module API](Stdlib-Module-API)
-- [Stdlib Misc Modules](Stdlib-Misc-Modules)
 - [Stdlib Changes 2026-03-13](Stdlib-Changes-2026-03-13)
+- [Stdlib Misc Modules](Stdlib-Misc-Modules)
+- [Stdlib Module API](Stdlib-Module-API)
 - [Stdlib README](Stdlib-README)
 
 ## Tooling
-- [Package Manager](Package-Manager)
 - [Bootstrap](Bootstrap)
 - [mlangpkg](Mlangpkg)
+- [Package Manager](Package-Manager)
 - [Tests](Tests)
 
 ## Examples
