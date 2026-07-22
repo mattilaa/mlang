@@ -1,0 +1,54 @@
+# std::gps
+
+Module file: `stdlib/std/gps.mla`
+
+Latitude/longitude helpers intended for route planning, map projection, and
+feeding local XY coordinates into algorithms such as GA/TSP.
+
+### Free functions
+- `pi() -> f64`
+- `earth_radius_m() -> f64`
+- `deg_to_rad(deg: f64) -> f64`
+- `project_x(origin_lon_deg: f64, lon_deg: f64, ref_lat_deg: f64, meters_per_unit: f64) -> i64`
+- `project_y(origin_lat_deg: f64, lat_deg: f64, meters_per_unit: f64) -> i64`
+- `project_xs(lats_deg: &list<f64>, lons_deg: &list<f64>, meters_per_unit: f64) -> list<i64>`
+- `project_ys(lats_deg: &list<f64>, lons_deg: &list<f64>, meters_per_unit: f64) -> list<i64>`
+- `distance_m(lat_a_deg: f64, lon_a_deg: f64, lat_b_deg: f64, lon_b_deg: f64) -> i64`
+
+Typical GA/TSP flow:
+- keep original city coordinates as parallel latitude/longitude lists
+- call `project_xs(..., 1000.0)` / `project_ys(..., 1000.0)` to get integer kilometer-scale axes
+- feed those integer lists into existing route-cost logic
+
+Example:
+
+```mla
+mod std::gps;
+use std::gps::*;
+
+let lats: list<f64> = [60.1699, 61.4978, 62.8924];
+let lons: list<f64> = [24.9384, 23.7610, 27.6782];
+let xs: list<i64> = project_xs(lats, lons, 1000.0);
+let ys: list<i64> = project_ys(lats, lons, 1000.0);
+println!("x0={} y0={}", xs[0], ys[0]);
+println!("segment meters={}", distance_m(lats[0], lons[0], lats[1], lons[1]));
+```
+- `is_x64() -> bool`
+- `is_aarch64() -> bool`
+- `family() -> str8`
+- `arch() -> str8`
+
+Example:
+
+```mla
+mod std::platform;
+use std::platform::*;
+
+static_assert!(windows!() || posix!());
+
+if windows!() {
+    println!("win32 path");
+} else if posix!() {
+    println!("posix path");
+}
+```

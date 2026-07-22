@@ -1,0 +1,16 @@
+# std::bits
+
+Module file: `stdlib/std/bits.mla`
+
+### Helpers
+- `ON() -> bit`
+- `OFF() -> bit`
+
+These helpers provide readable aliases for the two builtin `bit` values.
+
+### Reader API
+- `BufReader::new(file: File) -> BufReader`
+- `BufReader::with_capacity(file: File, capacity: i64) -> BufReader`
+- `BufReader::read_line(self: BufReader, buf: str8) -> Result<i64, str8>`
+- `BufReader::lines(self: BufReader) -> list<str8>`
+- `free_lines(lines: list<str8>) -> void`

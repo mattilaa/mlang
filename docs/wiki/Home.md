@@ -32,7 +32,7 @@ Examples of supported language/runtime features include:
 - [`switch`](Language-Syntax) / [`case`](Language-Syntax)
 - [`bit`](Quick-Guide#types), `size_of(Type)`, and `size_of(expr)`
 - inline assembly
-- [`Vec`](Stdlib-Module-API#stdvec), [`list<T>`](Quick-Guide#types), [`span<T>`](Stdlib-Module-API#stdspan), [`HashMap`](Stdlib-Module-API#stdunordered), regex, JSON, IO, networking, threads
+- [`Vec`](Stdlib-std-vec), [`list<T>`](Quick-Guide#types), [`span<T>`](Stdlib-std-span), [`HashMap`](Stdlib-std-unordered), regex, JSON, IO, networking, threads
 - direct C interop through `extern fn`
 
 ## Start Here
@@ -60,8 +60,11 @@ If you are new to MLang, read these pages in this order:
 - [Language Attributes](Language-Attributes)
   Attribute syntax such as `#[test]`, `#[derive(Debug)]`,
   `#[derive(Json)]`, and `#[inline]`.
+- [Language Built-ins](Language-Built-ins)
+  Compiler-provided collection methods, enum behavior, aliases, [`bit`](Quick-Guide#types), and
+  `size_of`.
 - [Stdlib Module API](Stdlib-Module-API)
-  Module-by-module API documentation for the MLang standard library.
+  Standard library index with each module split into its own topic page.
 - [Package Manager](Package-Manager)
   `mlang pkg` workflow, subcommands, manifest layout, and package build
   configuration keys.
@@ -158,8 +161,8 @@ Use this section as a map into the existing documentation.
   - [`tests/fixture_tests.mla`](https://github.com/mattilaa/mlang/blob/main/tests/fixture_tests.mla) — `#[fixture]` impl with `setup` / `teardown`
   - [`tests/expect_call_tests.mla`](https://github.com/mattilaa/mlang/blob/main/tests/expect_call_tests.mla) — EXPECT_CALL-style mock cardinality and return queues
   - [`tests/bench_stdlib.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_stdlib.mla) — benchmark example
-  - [`tests/bench_simd.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_simd.mla) — scalar vs [`std::simd`](Stdlib-Module-API#stdsimd) benchmark pairs
-  - [`tests/bench_simd_threads.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_simd_threads.mla) — multi-threaded scalar vs [`std::simd`](Stdlib-Module-API#stdsimd) benchmark pairs
+  - [`tests/bench_simd.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_simd.mla) — scalar vs [`std::simd`](Stdlib-std-simd) benchmark pairs
+  - [`tests/bench_simd_threads.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_simd_threads.mla) — multi-threaded scalar vs [`std::simd`](Stdlib-std-simd) benchmark pairs
 
 ### Standard Library
 
@@ -173,8 +176,8 @@ Use this section as a map into the existing documentation.
   - process execution
   - networking
   - threading and synchronization
-  - terminal truecolor image rendering ([`std::image`](Stdlib-Module-API#stdimage))
-  - [`Vec`](Stdlib-Module-API#stdvec), [`BitSet`](Stdlib-Module-API#stdbits), [`span`](Stdlib-Module-API#stdspan), `sed`, and more
+  - terminal truecolor image rendering ([`std::image`](Stdlib-std-image))
+  - [`Vec`](Stdlib-std-vec), [`BitSet`](Stdlib-std-bitset), [`span`](Stdlib-std-span), `sed`, and more
 
 ### Practical Examples
 
@@ -193,7 +196,7 @@ Relevant example files in the repository:
 - [`tests/bench_stdlib.mla`](https://github.com/mattilaa/mlang/blob/main/tests/bench_stdlib.mla) — benchmark example
 - [`examples/mlang_attributes.mla`](https://github.com/mattilaa/mlang/blob/main/examples/mlang_attributes.mla) — `#[test]` and `#[derive(Debug)]` in one file
 - [`examples/test_fixture_example.mla`](https://github.com/mattilaa/mlang/blob/main/examples/test_fixture_example.mla) — `#[fixture]` impl with per-test `setup` / `teardown`
-- [`examples/testing_mock_example.mla`](https://github.com/mattilaa/mlang/blob/main/examples/testing_mock_example.mla) — mock-based testing with [`std::testing`](Stdlib-Module-API#stdtesting)
+- [`examples/testing_mock_example.mla`](https://github.com/mattilaa/mlang/blob/main/examples/testing_mock_example.mla) — mock-based testing with [`std::testing`](Stdlib-std-testing)
 - [`examples/expect_call_example.mla`](https://github.com/mattilaa/mlang/blob/main/examples/expect_call_example.mla) — EXPECT_CALL cardinality + programmed return values
 - [`examples/uml_ui_generator`](https://github.com/mattilaa/mlang/blob/main/examples/uml_ui_generator) — TOML-driven UML PNG renderer example
 

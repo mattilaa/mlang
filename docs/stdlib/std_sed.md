@@ -1,0 +1,29 @@
+# std::sed
+
+Module file: `stdlib/std/sed.mla`
+
+Sed-like helpers for literal `str8` substitution. These functions do not use
+regex syntax; matching is byte-based and exact.
+
+- `replace_first(text: str8, needle: str8, replacement: str8) -> str8`
+- `replace_all(text: str8, needle: str8, replacement: str8) -> str8`
+- `substitute(text: str8, needle: str8, replacement: str8) -> str8`
+
+Notes:
+- each function returns a newly allocated string
+- caller frees returned strings with `std::strbuf::free`
+- empty `needle` returns a clone of `text`
+
+Example:
+
+```mla
+mod std::sed;
+mod std::strbuf;
+
+use std::sed::replace_all;
+use std::strbuf::free;
+
+let out: str8 = replace_all("name=foo, name=foo", "foo", "bar");
+println!("{}", out);
+free(out);
+```

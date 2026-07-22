@@ -7,9 +7,9 @@ This page documents several small stdlib modules and example/test files that
 are useful in practice but do not have their own larger standalone reference
 pages.
 
-## [`std::chat`](Stdlib-Module-API#stdchat)
+## [`std::chat`](Stdlib-std-chat)
 
-[`std::chat`](Stdlib-Module-API#stdchat) provides an opaque, handle-backed fullscreen chat UI model for
+[`std::chat`](Stdlib-std-chat) provides an opaque, handle-backed fullscreen chat UI model for
 terminal applications.
 
 What it is for:
@@ -29,10 +29,10 @@ Source:
 
 - `stdlib/std/chat.mla`
 
-## [`std::concurrent`](Stdlib-Module-API#stdconcurrent)
+## [`std::concurrent`](Stdlib-Module-API)
 
-[`std::concurrent`](Stdlib-Module-API#stdconcurrent) adds higher-level coordination helpers on top of
-[`std::sync`](Stdlib-Module-API#stdsync) and [`std::thread`](Stdlib-Module-API#stdthread).
+[`std::concurrent`](Stdlib-Module-API) adds higher-level coordination helpers on top of
+[`std::sync`](Stdlib-std-sync) and [`std::thread`](Stdlib-std-thread).
 
 Main types:
 
@@ -45,9 +45,9 @@ Source:
 
 - `stdlib/std/concurrent.mla`
 
-## [`std::env`](Stdlib-Module-API#stdenv)
+## [`std::env`](Stdlib-std-env)
 
-[`std::env`](Stdlib-Module-API#stdenv) exposes runtime-backed process/environment helpers.
+[`std::env`](Stdlib-std-env) exposes runtime-backed process/environment helpers.
 
 Common functions:
 
@@ -65,9 +65,9 @@ Source:
 
 - `stdlib/std/env.mla`
 
-## [`std::gps`](Stdlib-Module-API#stdgps)
+## [`std::gps`](Stdlib-std-gps)
 
-[`std::gps`](Stdlib-Module-API#stdgps) converts latitude/longitude data into local integer XY coordinates.
+[`std::gps`](Stdlib-std-gps) converts latitude/longitude data into local integer XY coordinates.
 
 Useful functions:
 
@@ -82,9 +82,9 @@ Source:
 
 - `stdlib/std/gps.mla`
 
-## [`std::path`](Stdlib-Module-API#stdpath)
+## [`std::path`](Stdlib-Module-API)
 
-[`std::path`](Stdlib-Module-API#stdpath) provides lightweight path helpers used by tooling and package
+[`std::path`](Stdlib-Module-API) provides lightweight path helpers used by tooling and package
 manager code.
 
 Common functions:
@@ -105,9 +105,9 @@ Source:
 
 - `stdlib/std/path.mla`
 
-## [`std::sed`](Stdlib-Module-API#stdsed)
+## [`std::sed`](Stdlib-std-sed)
 
-[`std::sed`](Stdlib-Module-API#stdsed) provides literal, allocation-returning string replacement helpers.
+[`std::sed`](Stdlib-std-sed) provides literal, allocation-returning string replacement helpers.
 
 Common functions:
 
@@ -125,7 +125,7 @@ Source:
 
 ### `tests/test_sample.mla`
 
-Basic `mlang test` example using [`std::testing::verify`](Stdlib-Module-API#stdtesting).
+Basic `mlang test` example using [`std::testing::verify`](Stdlib-std-testing).
 
 Run:
 
@@ -141,7 +141,7 @@ Benchmark-oriented test file for `mlang bench`.
 It demonstrates:
 
 - timed benchmark tests
-- [`std::bench`](Stdlib-Module-API#stdbench) clobber/do-not-optimize helpers
+- [`std::bench`](Stdlib-std-bench) clobber/do-not-optimize helpers
 - container and FFT benchmark coverage
 - exception/unwind benchmark cases
 
@@ -154,13 +154,13 @@ Run:
 
 ### `tests/bench_simd.mla`
 
-SIMD benchmark pairs for comparing scalar loops against [`std::simd`](Stdlib-Module-API#stdsimd).
+SIMD benchmark pairs for comparing scalar loops against [`std::simd`](Stdlib-std-simd).
 
 It demonstrates:
 
-- scalar sum vs [`std::simd::sum`](Stdlib-Module-API#stdsimd)
-- scalar element-wise add vs [`std::simd::add`](Stdlib-Module-API#stdsimd)
-- per-bit [`BitSet`](Stdlib-Module-API#stdbits) scanning vs packed [`std::simd::count_ones`](Stdlib-Module-API#stdsimd)
+- scalar sum vs [`std::simd::sum`](Stdlib-std-simd)
+- scalar element-wise add vs [`std::simd::add`](Stdlib-std-simd)
+- per-bit [`BitSet`](Stdlib-std-bitset) scanning vs packed [`std::simd::count_ones`](Stdlib-std-simd)
 
 Run:
 
@@ -171,13 +171,13 @@ Run:
 ### `tests/bench_simd_threads.mla`
 
 Multi-threaded SIMD benchmark pairs for comparing four scalar workers against
-four [`std::simd`](Stdlib-Module-API#stdsimd) workers.
+four [`std::simd`](Stdlib-std-simd) workers.
 
 It demonstrates:
 
-- four-thread scalar sum vs four-thread [`std::simd::sum`](Stdlib-Module-API#stdsimd)
-- four-thread scalar element-wise add vs four-thread [`std::simd::add`](Stdlib-Module-API#stdsimd)
-- four-thread per-bit [`BitSet`](Stdlib-Module-API#stdbits) scanning vs packed [`std::simd::count_ones`](Stdlib-Module-API#stdsimd)
+- four-thread scalar sum vs four-thread [`std::simd::sum`](Stdlib-std-simd)
+- four-thread scalar element-wise add vs four-thread [`std::simd::add`](Stdlib-std-simd)
+- four-thread per-bit [`BitSet`](Stdlib-std-bitset) scanning vs packed [`std::simd::count_ones`](Stdlib-std-simd)
 
 Run:
 
@@ -187,7 +187,7 @@ Run:
 
 ### `examples/testing_mock_example.mla`
 
-Simple mock-based example built on [`std::testing`](Stdlib-Module-API#stdtesting).
+Simple mock-based example built on [`std::testing`](Stdlib-std-testing).
 
 It demonstrates:
 

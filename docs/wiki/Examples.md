@@ -33,7 +33,7 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   `type_id(T)` in compile-time branches.
 - `examples/test_fixture_example.mla` — `#[fixture]` impl with per-test
   `setup` / `teardown` hooks (run via `mlang --tests`).
-- `examples/testing_mock_example.mla` — mock-based testing using [`std::testing`](Stdlib-Module-API#stdtesting).
+- `examples/testing_mock_example.mla` — mock-based testing using [`std::testing`](Stdlib-std-testing).
 - `examples/namespace_demo.mla` — C++17-style namespace blocks and
   `alias name = path` namespace aliases with qualified type names and local
   namespace type lookup.
@@ -93,17 +93,17 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   integer gate logic, uniform shifts over numeric lists, and packed BitSet
   operations.
 - `examples/std_ipc_named_pipe_demo.mla` — named-pipe IPC roundtrip using
-  [`std::ipc::NamedPipe`](Stdlib-Module-API#stdipc) over Unix FIFOs or Windows named pipes.
+  [`std::ipc::NamedPipe`](Stdlib-std-ipc) over Unix FIFOs or Windows named pipes.
 - `examples/std_ipc_local_socket_demo.mla` — local stream socket IPC roundtrip
-  using [`std::ipc::LocalListener`](Stdlib-Module-API#stdipc) and [`std::ipc::LocalStream`](Stdlib-Module-API#stdipc).
+  using [`std::ipc::LocalListener`](Stdlib-std-ipc) and [`std::ipc::LocalStream`](Stdlib-std-ipc).
 - `examples/std_audio_sine_demo.mla` — list/select output device IDs from the
-  command line and play through [`std::audio`](Stdlib-Module-API#stdaudio), using CoreAudio on macOS or JACK2
+  command line and play through [`std::audio`](Stdlib-std-audio), using CoreAudio on macOS or JACK2
   on Linux.
 - `examples/std_audio_vst3_style_preview.mla` — VST3-style note preview through
-  [`std::audio`](Stdlib-Module-API#stdaudio), cross-linked with `examples/package_manager_vst3_coreaudio_synth`.
+  [`std::audio`](Stdlib-std-audio), cross-linked with `examples/package_manager_vst3_coreaudio_synth`.
 - `examples/std_audio_simd_dsp_demo.mla` — SIMD-shaped DSP block using
-  [`std::simd`](Stdlib-Module-API#stdsimd) for vector gain/mix/envelope math before previewing through
-  [`std::audio`](Stdlib-Module-API#stdaudio), with command-line device/sample-rate/buffer selection.
+  [`std::simd`](Stdlib-std-simd) for vector gain/mix/envelope math before previewing through
+  [`std::audio`](Stdlib-std-audio), with command-line device/sample-rate/buffer selection.
 
 ## Focused regression examples
 

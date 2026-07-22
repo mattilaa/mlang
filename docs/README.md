@@ -58,8 +58,11 @@ If you are new to MLang, read these pages in this order:
 - [Language Attributes](language_attributes.md)
   Attribute syntax such as `#[test]`, `#[derive(Debug)]`,
   `#[derive(Json)]`, and `#[inline]`.
+- [Language Built-ins](language_builtins.md)
+  Compiler-provided collection methods, enum behavior, aliases, `bit`, and
+  `size_of`.
 - [Stdlib Module API](stdlib_mlang_api.md)
-  Module-by-module API documentation for the MLang standard library.
+  Standard library index with each module split into its own topic page.
 - [Package Manager](package_manager.md)
   `mlang pkg` workflow, subcommands, manifest layout, and package build
   configuration keys.

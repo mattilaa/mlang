@@ -1,0 +1,50 @@
+# std::serde
+
+Module file: `stdlib/std/serde.mla`
+
+### Types
+- `Binary`
+- `Reader`
+- `BinarySerde` (trait for custom types)
+
+### Global helpers
+- `last_error() -> str8`
+- `last_ok() -> i32`
+
+### `Binary` API
+- `Binary::new(initial_capacity: i64) -> Result<Binary, str8>`
+- `Binary::from_file(path: str8) -> Result<Binary, str8>`
+- `Binary::len(self: Binary) -> i64`
+- `Binary::capacity(self: Binary) -> i64`
+- `Binary::clear(self: Binary) -> Result<i32, str8>`
+- `Binary::reserve(self: Binary, min_capacity: i64) -> Result<i32, str8>`
+- `Binary::write_u8(self: Binary, value: i32) -> Result<i32, str8>`
+- `Binary::write_bool(self: Binary, value: bool) -> Result<i32, str8>`
+- `Binary::write_i32(self: Binary, value: i32) -> Result<i32, str8>`
+- `Binary::write_i64(self: Binary, value: i64) -> Result<i32, str8>`
+- `Binary::write_f32(self: Binary, value: f32) -> Result<i32, str8>`
+- `Binary::write_f64(self: Binary, value: f64) -> Result<i32, str8>`
+- `Binary::write_string(self: Binary, value: str8) -> Result<i32, str8>`
+- `Binary::get_u8(self: Binary, index: i64) -> Result<i32, str8>`
+- `Binary::to_reader(self: Binary) -> Result<Reader, str8>`
+- `Binary::write_file(self: Binary, path: str8) -> Result<i32, str8>`
+- `Binary::raw_handle(self: Binary) -> i64`
+- `Binary::close(self: Binary) -> i32`
+
+### `Reader` API
+- `Reader::from_binary(binary: Binary) -> Result<Reader, str8>`
+- `Reader::from_file(path: str8) -> Result<Reader, str8>`
+- `Reader::remaining(self: Reader) -> i64`
+- `Reader::read_u8(self: Reader) -> Result<i32, str8>`
+- `Reader::read_bool(self: Reader) -> Result<bool, str8>`
+- `Reader::read_i32(self: Reader) -> Result<i32, str8>`
+- `Reader::read_i64(self: Reader) -> Result<i64, str8>`
+- `Reader::read_f32(self: Reader) -> Result<f32, str8>`
+- `Reader::read_f64(self: Reader) -> Result<f64, str8>`
+- `Reader::read_string(self: Reader) -> Result<str8, str8>`
+- `Reader::raw_handle(self: Reader) -> i64`
+- `Reader::close(self: Reader) -> i32`
+
+### `BinarySerde` trait
+- `serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8>`
+- `deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8>`

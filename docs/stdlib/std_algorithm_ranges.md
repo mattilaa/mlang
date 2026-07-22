@@ -1,0 +1,15 @@
+# std::algorithm::ranges
+
+Module file: `stdlib/std/algorithm/ranges.mla`
+
+C++20 ranges-style helpers for `list<i64>`.
+
+### API
+- `find_i64(data: &list<i64>, value: i64) -> i64` (first index or `-1`)
+- `count_i64(data: &list<i64>, value: i64) -> i64`
+- `contains_i64(data: &list<i64>, value: i64) -> i32`
+- `remove_i64(data: &list<i64>, value: i64) -> list<i64>`
+- `take_i64(data: &list<i64>, n: i64) -> list<i64>`
+- `drop_i64(data: &list<i64>, n: i64) -> list<i64>`
+- `unique_i64(data: &list<i64>) -> list<i64>` (adjacent duplicate removal, `std::ranges::unique`-style)
+- `unique_stable_i64(data: &list<i64>) -> list<i64>` (full dedup preserving first occurrence order)

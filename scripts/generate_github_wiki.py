@@ -33,12 +33,68 @@ class Page:
     group: str
 
 
+STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
+    ("std::algorithm::fft", "std_algorithm_fft.md"),
+    ("std::algorithm::numeric", "std_algorithm_numeric.md"),
+    ("std::algorithm::order", "std_algorithm_order.md"),
+    ("std::algorithm::ranges", "std_algorithm_ranges.md"),
+    ("std::argparser", "std_argparser.md"),
+    ("std::array", "std_array.md"),
+    ("std::audio", "std_audio.md"),
+    ("std::bench", "std_bench.md"),
+    ("std::bits", "std_bits.md"),
+    ("std::bitset", "std_bitset.md"),
+    ("std::bytes", "std_bytes.md"),
+    ("std::chat", "std_chat.md"),
+    ("std::compiler", "std_compiler.md"),
+    ("std::date", "std_date.md"),
+    ("std::env", "std_env.md"),
+    ("std::esc", "std_esc.md"),
+    ("std::event_loop", "std_event_loop.md"),
+    ("std::exceptions", "std_exceptions.md"),
+    ("std::fs", "std_fs.md"),
+    ("std::gps", "std_gps.md"),
+    ("std::hash", "std_hash.md"),
+    ("std::image", "std_image.md"),
+    ("std::io", "std_io.md"),
+    ("std::ipc", "std_ipc.md"),
+    ("std::json", "std_json.md"),
+    ("std::jsonrpc", "std_jsonrpc.md"),
+    ("std::math", "std_math.md"),
+    ("std::net", "std_net.md"),
+    ("std::platform", "std_platform.md"),
+    ("std::printf", "std_printf.md"),
+    ("std::process", "std_process.md"),
+    ("std::protocol", "std_protocol.md"),
+    ("std::rand", "std_rand.md"),
+    ("std::regex", "std_regex.md"),
+    ("std::sed", "std_sed.md"),
+    ("std::serde", "std_serde.md"),
+    ("std::simd", "std_simd.md"),
+    ("std::span", "std_span.md"),
+    ("std::strbuf", "std_strbuf.md"),
+    ("std::sync", "std_sync.md"),
+    ("std::term", "std_term.md"),
+    ("std::testing", "std_testing.md"),
+    ("std::thread", "std_thread.md"),
+    ("std::time", "std_time.md"),
+    ("std::timer", "std_timer.md"),
+    ("std::unordered", "std_unordered.md"),
+    ("std::vec", "std_vec.md"),
+]
+
+
+def stdlib_module_wiki_name(module: str) -> str:
+    return "Stdlib-" + module.replace("std::", "std-").replace("::", "-")
+
+
 PAGES: list[Page] = [
     Page(Path("docs/README.md"), "MLang Documentation", "Home", "Start Here"),
     Page(Path("docs/new_features.md"), "New Features Guide", "New-Features", "Start Here"),
     Page(Path("README.md"), "Project README", "Project-README", "Start Here"),
     Page(Path("docs/compiler_diagnostics.md"), "Compiler Diagnostics", "Compiler-Diagnostics", "Language"),
     Page(Path("docs/language_attributes.md"), "Language Attributes", "Language-Attributes", "Language"),
+    Page(Path("docs/language_builtins.md"), "Language Built-ins", "Language-Built-ins", "Language"),
     Page(Path("docs/language_syntax.md"), "Language Syntax", "Language-Syntax", "Language"),
     Page(Path("docs/quick_guide.md"), "Quick Guide", "Quick-Guide", "Language"),
     Page(Path("docs/examples.md"), "Examples", "Examples", "Examples"),
@@ -48,6 +104,15 @@ PAGES: list[Page] = [
     Page(Path("docs/stdlib_misc_modules.md"), "Stdlib Misc Modules", "Stdlib-Misc-Modules", "Standard Library"),
     Page(Path("docs/stdlib_mlang_api.md"), "Stdlib Module API", "Stdlib-Module-API", "Standard Library"),
     Page(Path("stdlib/README.md"), "Stdlib README", "Stdlib-README", "Standard Library"),
+] + [
+    Page(
+        Path("docs/stdlib") / filename,
+        module,
+        stdlib_module_wiki_name(module),
+        "Stdlib Modules",
+    )
+    for module, filename in STDLIB_MODULE_DOCS
+] + [
     Page(Path("bootstrap/README.md"), "Bootstrap", "Bootstrap", "Tooling"),
     Page(Path("tools/mlangpkg/README.md"), "mlangpkg", "Mlangpkg", "Tooling"),
     Page(Path("docs/package_manager.md"), "Package Manager", "Package-Manager", "Tooling"),
@@ -132,15 +197,20 @@ STDLIB_TYPE_TOKENS = {
     "BitSet",
 }
 
+STDLIB_MODULE_LINKS = {
+    module: stdlib_module_wiki_name(module)
+    for module, _filename in STDLIB_MODULE_DOCS
+}
+
 STDLIB_TYPE_LINKS = {
-    "Vec": "Stdlib-Module-API#stdvec",
-    "Vec<T>": "Stdlib-Module-API#stdvec",
-    "span": "Stdlib-Module-API#stdspan",
-    "Span": "Stdlib-Module-API#stdspan",
-    "Span<T>": "Stdlib-Module-API#stdspan",
-    "span<T>": "Stdlib-Module-API#stdspan",
-    "HashMap": "Stdlib-Module-API#stdunordered",
-    "BitSet": "Stdlib-Module-API#stdbits",
+    "Vec": STDLIB_MODULE_LINKS["std::vec"],
+    "Vec<T>": STDLIB_MODULE_LINKS["std::vec"],
+    "span": STDLIB_MODULE_LINKS["std::span"],
+    "Span": STDLIB_MODULE_LINKS["std::span"],
+    "Span<T>": STDLIB_MODULE_LINKS["std::span"],
+    "span<T>": STDLIB_MODULE_LINKS["std::span"],
+    "HashMap": STDLIB_MODULE_LINKS["std::unordered"],
+    "BitSet": STDLIB_MODULE_LINKS["std::bitset"],
 }
 
 STDLIB_MODULES = {
@@ -216,7 +286,9 @@ def stdlib_module_link(token: str) -> str | None:
     module = next((candidate for candidate in candidates if candidate in STDLIB_MODULES), None)
     if module is None and len(parts) >= 2:
         module = "::".join(parts[:2])
-    return f"Stdlib-Module-API#{wiki_anchor(module)}"
+    if module in STDLIB_MODULE_LINKS:
+        return STDLIB_MODULE_LINKS[module]
+    return "Stdlib-Module-API"
 
 
 def inline_code_link(token: str) -> str | None:
@@ -412,7 +484,7 @@ def write_sidebar(out_dir: Path, pages: list[Page], manpage_names: list[str]) ->
         by_group.setdefault(page.group, []).append(page)
 
     lines = [GENERATED_NOTICE.rstrip(), "# MLang Wiki", ""]
-    group_order = ["Start Here", "Language", "Standard Library", "Tooling", "Examples"]
+    group_order = ["Start Here", "Language", "Standard Library", "Stdlib Modules", "Tooling", "Examples"]
     for group in group_order:
         group_pages = by_group.get(group, [])
         if not group_pages:

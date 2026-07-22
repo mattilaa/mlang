@@ -1,0 +1,29 @@
+# std::time
+
+Module file: `stdlib/std/time.mla`
+
+### Clock
+- `now_ms() -> i64`
+- `now_ns() -> i64`
+- `sleep_ms(ms: i64) -> void`
+- `format_local(pattern: str8) -> str8`
+- `local_datetime() -> str8` (`MM/DD/YYYY:HH:MM:SS`)
+- `local_datetime_ms() -> str8` (`MM/DD/YYYY:HH:MM:SS.MS`)
+- `local_datetime_ns() -> str8` (`MM/DD/YYYY:HH:MM:SS.NS`)
+
+`format_local` token support:
+- `YYYY` year
+- `DD` day-of-month
+- `HH` 24h hour
+- `MM` first occurrence = month, following occurrences = minute
+- `SS` seconds
+- `MS` milliseconds
+- `NS` nanoseconds
+
+### Timer
+- `Timer::after(timeout_ms: i64) -> Result<Timer, str8>`
+- `Timer::reset(self: Timer, timeout_ms: i64) -> i32`
+- `Timer::elapsed(self: Timer) -> i32`
+- `Timer::remaining_ms(self: Timer) -> i64`
+- `Timer::wait(self: Timer) -> i32`
+- `Timer::close(self: Timer) -> i32`

@@ -232,7 +232,7 @@ impl DbFixture {
 ```
 
 For mocks with cardinality and programmable return values, see the
-EXPECT_CALL section in [Stdlib Module API](stdlib_mlang_api.md#stdtesting).
+EXPECT_CALL section in [Stdlib Module API](stdlib/std_testing.md).
 
 ## Where To Go Next
 
