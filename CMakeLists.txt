@@ -253,6 +253,9 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/backend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/backend_utils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/builtins.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/lifecycle.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/literals.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/runtime.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/package_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
