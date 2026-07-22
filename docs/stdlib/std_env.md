@@ -12,4 +12,4 @@ Module file: `stdlib/std/env.mla`
 - `eprintln(msg: str8) -> void`
 - `wants_help(values: list<str8>) -> i32`
 - `arg_or(values: list<str8>, index: i64, fallback: str8) -> str8`
-- `render_help(app: str8, overview: str8, options: list<HelpOption>, total_width: i64) -> str8`
+- `render_help(app: str8, overview: str8, options: list<help_option>, total_width: i64) -> str8`

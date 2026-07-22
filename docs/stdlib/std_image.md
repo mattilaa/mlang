@@ -10,7 +10,7 @@ terminal; each row is terminated with a newline and a SGR reset.
 
 ### Types
 
-#### `ImageGlyphMode`
+#### `image_glyph_mode`
 
 Selects how source pixels are packed into terminal character cells.
 Higher modes subdivide each cell into more sub-pixels and require the
@@ -31,7 +31,7 @@ terminal font to contain the corresponding Unicode glyphs.
 | `10` | `BrailleColor` | 2×4 | braille patterns with proper per-group FG/BG color averaging |
 
 ```mla
-pub enum ImageGlyphMode : i32 {
+pub enum image_glyph_mode : i32 {
     UpperHalfBlocks = 0,
     FullBlocks      = 1,
     UnicodeDensity  = 2,
@@ -46,12 +46,12 @@ pub enum ImageGlyphMode : i32 {
 };
 ```
 
-#### `ImageInfo`
+#### `image_info`
 
 Basic image metadata returned by `probe`.
 
 ```mla
-pub struct ImageInfo {
+pub struct image_info {
     var width:  i64;
     var height: i64;
 };
@@ -63,17 +63,17 @@ pub struct ImageInfo {
   Return the last backend error string.  Useful when a call has already
   returned an `Err` and you want to read the raw message separately.
 
-- `probe(path: str8) -> Result<ImageInfo, str8>`
+- `probe(path: str8) -> Result<image_info, str8>`
   Decode only the image header to retrieve dimensions.  Does not
   load pixel data.  Returns `Err` with a description on failure.
 
 - `render_truecolor(path: str8, columns: i64, rows: i64) -> Result<str8, str8>`
   Render `path` to a truecolor terminal string using
-  `ImageGlyphMode::UpperHalfBlocks`.  `columns` and `rows` are terminal
+  `image_glyph_mode::UpperHalfBlocks`.  `columns` and `rows` are terminal
   cell counts, not source image pixels.  Aspect ratio is preserved;
   the image is letterboxed if the cell ratio does not match the source.
 
-- `render_truecolor_with_mode(path: str8, columns: i64, rows: i64, glyph_mode: ImageGlyphMode) -> Result<str8, str8>`
+- `render_truecolor_with_mode(path: str8, columns: i64, rows: i64, glyph_mode: image_glyph_mode) -> Result<str8, str8>`
   Same as `render_truecolor` but lets you choose the glyph packing mode.
   Returns `Err("... columns and rows must be > 0")` when either dimension
   is zero or negative.
@@ -85,7 +85,7 @@ pub struct ImageInfo {
 ```mla
 mod std::image;
 mod std::term;
-use std::image::ImageGlyphMode;
+use std::image::image_glyph_mode;
 use std::image::render_truecolor_with_mode;
 use std::term::stdout_size;
 
@@ -95,7 +95,7 @@ fn main() -> i32 {
         "photo.png",
         term.cols - 2,
         term.rows - 1,
-        ImageGlyphMode::UpperHalfBlocks
+        image_glyph_mode::UpperHalfBlocks
     );
     if result.is_err() {
         println!("render failed: {}", result.unwrap_err());
@@ -110,10 +110,10 @@ fn main() -> i32 {
 
 ```mla
 mod std::image;
-use std::image::ImageInfo;
+use std::image::image_info;
 use std::image::probe;
 use std::image::render_truecolor_with_mode;
-use std::image::ImageGlyphMode;
+use std::image::image_glyph_mode;
 
 fn main() -> i32 {
     let info_r = probe("fractal.png");
@@ -121,11 +121,11 @@ fn main() -> i32 {
         println!("probe failed: {}", info_r.unwrap_err());
         return 1;
     }
-    let info: ImageInfo = info_r.unwrap();
+    let info: image_info = info_r.unwrap();
     println!("image is {}x{} px", info.width, info.height);
 
     let rendered = render_truecolor_with_mode(
-        "fractal.png", 120, 40, ImageGlyphMode::BrailleColor
+        "fractal.png", 120, 40, image_glyph_mode::BrailleColor
     );
     if rendered.is_err() {
         println!("render failed: {}", rendered.unwrap_err());
@@ -140,25 +140,25 @@ fn main() -> i32 {
 
 ```mla
 mod std::image;
-use std::image::ImageGlyphMode;
+use std::image::image_glyph_mode;
 use std::image::render_truecolor_with_mode;
 
-fn mode_from_arg(arg: str8) -> ImageGlyphMode {
-    if arg == "full"         { return ImageGlyphMode::FullBlocks; }
-    if arg == "density"      { return ImageGlyphMode::UnicodeDensity; }
-    if arg == "braille"      { return ImageGlyphMode::BrailleDots; }
-    if arg == "quadrant"     { return ImageGlyphMode::QuadrantBlocks; }
-    if arg == "ascii"        { return ImageGlyphMode::AsciiRamp; }
-    if arg == "edge"         { return ImageGlyphMode::EdgeAscii; }
-    if arg == "line"         { return ImageGlyphMode::UnicodeLineArt; }
-    if arg == "split"        { return ImageGlyphMode::ColorSplitBlocks; }
-    if arg == "sextant"      { return ImageGlyphMode::SextantBlocks; }
-    if arg == "braille_color" { return ImageGlyphMode::BrailleColor; }
-    return ImageGlyphMode::UpperHalfBlocks;
+fn mode_from_arg(arg: str8) -> image_glyph_mode {
+    if arg == "full"         { return image_glyph_mode::FullBlocks; }
+    if arg == "density"      { return image_glyph_mode::UnicodeDensity; }
+    if arg == "braille"      { return image_glyph_mode::BrailleDots; }
+    if arg == "quadrant"     { return image_glyph_mode::QuadrantBlocks; }
+    if arg == "ascii"        { return image_glyph_mode::AsciiRamp; }
+    if arg == "edge"         { return image_glyph_mode::EdgeAscii; }
+    if arg == "line"         { return image_glyph_mode::UnicodeLineArt; }
+    if arg == "split"        { return image_glyph_mode::ColorSplitBlocks; }
+    if arg == "sextant"      { return image_glyph_mode::SextantBlocks; }
+    if arg == "braille_color" { return image_glyph_mode::BrailleColor; }
+    return image_glyph_mode::UpperHalfBlocks;
 }
 
 fn main() -> i32 {
-    let mode: ImageGlyphMode = mode_from_arg("sextant");
+    let mode: image_glyph_mode = mode_from_arg("sextant");
     let r = render_truecolor_with_mode("image.png", 80, 24, mode);
     if r.is_err() {
         println!("error: {}", r.unwrap_err());

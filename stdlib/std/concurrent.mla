@@ -71,6 +71,13 @@ pub struct OrderedGate {
     var turn: Handle<Atomic64>;
 };
 
+/// @brief Lowercase stdlib type alias for `WaitGroup`.
+alias wait_group = WaitGroup;
+
+/// @brief Lowercase stdlib type alias for `OrderedGate`.
+alias ordered_gate = OrderedGate;
+
+
 impl WaitGroup {
     /// @brief Create a wait group with an initial task count.
     /// @ingroup std_concurrent

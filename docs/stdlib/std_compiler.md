@@ -3,40 +3,40 @@
 Module file: `stdlib/std/compiler.mla`
 
 ### Types
-- `Session`
-- `SyntaxDiagnostic`
-- `DocumentSymbol`
-- `DefinitionLocation`
-- `ReferenceLocation`
-- `ResolvedSymbol`
+- `session`
+- `syntax_diagnostic`
+- `document_symbol`
+- `definition_location`
+- `reference_location`
+- `resolved_symbol`
 
 ### Global helpers
-- `session_create() -> Result<Session, str8>`
+- `session_create() -> Result<session, str8>`
 - `last_status() -> i32`
 - `status_name(status: i32) -> str8`
 - `version() -> str8`
 - `last_error() -> str8`
 
-### Session lifecycle and document state
-- `Session::destroy(self: Session) -> Result<i32, str8>`
-- `Session::open_document(self: Session, uri: str8, language_id: str8, text: str8, version: i32) -> Result<i32, str8>`
-- `Session::change_document(self: Session, uri: str8, text: str8, version: i32) -> Result<i32, str8>`
-- `Session::close_document(self: Session, uri: str8) -> Result<i32, str8>`
+### session lifecycle and document state
+- `session::destroy(self: session) -> Result<i32, str8>`
+- `session::open_document(self: session, uri: str8, language_id: str8, text: str8, version: i32) -> Result<i32, str8>`
+- `session::change_document(self: session, uri: str8, text: str8, version: i32) -> Result<i32, str8>`
+- `session::close_document(self: session, uri: str8) -> Result<i32, str8>`
 
 ### Diagnostics and editor queries
-- `Session::syntax_diagnostic_count(self: Session, uri: str8) -> Result<i32, str8>`
-- `Session::syntax_diagnostic_get(self: Session, uri: str8, index: i32) -> Result<SyntaxDiagnostic, str8>`
-- `Session::hover(self: Session, uri: str8, line: i32, column: i32) -> Result<str8, str8>`
-- `Session::completion_count(self: Session, uri: str8, line: i32, column: i32) -> Result<i32, str8>`
-- `Session::completion_get(self: Session, uri: str8, line: i32, column: i32, index: i32) -> Result<str8, str8>`
+- `session::syntax_diagnostic_count(self: session, uri: str8) -> Result<i32, str8>`
+- `session::syntax_diagnostic_get(self: session, uri: str8, index: i32) -> Result<syntax_diagnostic, str8>`
+- `session::hover(self: session, uri: str8, line: i32, column: i32) -> Result<str8, str8>`
+- `session::completion_count(self: session, uri: str8, line: i32, column: i32) -> Result<i32, str8>`
+- `session::completion_get(self: session, uri: str8, line: i32, column: i32, index: i32) -> Result<str8, str8>`
 
 ### Symbols, definitions, references, rename
-- `Session::document_symbol_count(self: Session, uri: str8) -> Result<i32, str8>`
-- `Session::document_symbol_get(self: Session, uri: str8, index: i32) -> Result<DocumentSymbol, str8>`
-- `Session::definition(self: Session, uri: str8, line: i32, column: i32) -> Result<DefinitionLocation, str8>`
-- `Session::references_count(self: Session, uri: str8, line: i32, column: i32) -> Result<i32, str8>`
-- `Session::reference_get(self: Session, uri: str8, line: i32, column: i32, index: i32) -> Result<ReferenceLocation, str8>`
-- `Session::resolve_symbol(self: Session, uri: str8, line: i32, column: i32) -> Result<ResolvedSymbol, str8>`
-- `Session::rename_is_safe(self: Session, uri: str8, line: i32, column: i32, new_name: str8) -> Result<i32, str8>`
-- `Session::semantic_cache_warm(self: Session, uri: str8) -> Result<i32, str8>`
-- `Session::semantic_cache_clear(self: Session) -> Result<i32, str8>`
+- `session::document_symbol_count(self: session, uri: str8) -> Result<i32, str8>`
+- `session::document_symbol_get(self: session, uri: str8, index: i32) -> Result<document_symbol, str8>`
+- `session::definition(self: session, uri: str8, line: i32, column: i32) -> Result<definition_location, str8>`
+- `session::references_count(self: session, uri: str8, line: i32, column: i32) -> Result<i32, str8>`
+- `session::reference_get(self: session, uri: str8, line: i32, column: i32, index: i32) -> Result<reference_location, str8>`
+- `session::resolve_symbol(self: session, uri: str8, line: i32, column: i32) -> Result<resolved_symbol, str8>`
+- `session::rename_is_safe(self: session, uri: str8, line: i32, column: i32, new_name: str8) -> Result<i32, str8>`
+- `session::semantic_cache_warm(self: session, uri: str8) -> Result<i32, str8>`
+- `session::semantic_cache_clear(self: session) -> Result<i32, str8>`

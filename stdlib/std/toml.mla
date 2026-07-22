@@ -14,6 +14,10 @@ pub struct TomlDoc {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `TomlDoc`.
+alias toml_doc = TomlDoc;
+
+
 /// @brief Parse TOML text into an opaque handle.
 pub fn parse(text: str8) -> TomlDoc {
     return TomlDoc { handle: __toml_parse(text) };

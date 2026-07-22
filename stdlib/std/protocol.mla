@@ -30,6 +30,10 @@ pub struct ProtocolFrame {
     var payload: str8;
 };
 
+/// @brief Lowercase stdlib type alias for `ProtocolFrame`.
+alias protocol_frame = ProtocolFrame;
+
+
 /// @brief Default maximum payload size for recv in bytes.
 pub fn default_max_payload_bytes() -> i64 {
     return 64 * 1024;

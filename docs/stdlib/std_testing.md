@@ -53,15 +53,15 @@ fn test_demo() {
 
 ### Mocks (EXPECT_CALL-style)
 
-`Mock` carries an opaque handle that names a per-mock bag of call entries.
+`mock` carries an opaque handle that names a per-mock bag of call entries.
 Each entry tracks its actual call count, an optional cardinality expectation,
 and a FIFO queue of programmed return values. The user writes the mock
 function body by hand; `mock_record_and_return_*` records the invocation and
 returns the next queued value (or the supplied default when the queue is
 empty).
 
-Mock construction and lifetime:
-- `mock_new() -> Mock`
+mock construction and lifetime:
+- `mock_new() -> mock`
 - `mock_free(handle: i64)`
 - `mock_reset(handle: i64)`
 
@@ -104,7 +104,7 @@ fn fake_send(handle: i64) -> i32 {
 
 #[test]
 fn test_send_called_twice_with_programmed_returns() {
-    let m: Mock = mock_new();
+    let m: mock = mock_new();
     mock_expect_times(m.handle, "send", 2);
     mock_will_return_i32(m.handle, "send", 42);
     mock_will_return_i32(m.handle, "send", 99);
@@ -115,3 +115,4 @@ fn test_send_called_twice_with_programmed_returns() {
     mock_free(m.handle);
 }
 ```
+

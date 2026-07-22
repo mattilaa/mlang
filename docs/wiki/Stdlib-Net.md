@@ -5,27 +5,27 @@
 Module file: `stdlib/std/net.mla`
 
 ### Types
-- `TcpListener`
-- `TcpStream`
+- `tcp_listener`
+- `tcp_stream`
 
 ### Listener API
-- `TcpListener::bind(addr: str8, port: i64) -> Result<TcpListener, str8>`
-- `TcpListener::accept(self: TcpListener) -> Result<TcpStream, str8>`
-- `TcpListener::local_port(self: TcpListener) -> Result<i64, str8>`
-- `TcpListener::close(self: TcpListener) -> i32`
-- `TcpListener::set_backlog(self: TcpListener, backlog: i64) -> Result<i32, str8>`
+- `tcp_listener::bind(addr: str8, port: i64) -> Result<tcp_listener, str8>`
+- `tcp_listener::accept(self: tcp_listener) -> Result<tcp_stream, str8>`
+- `tcp_listener::local_port(self: tcp_listener) -> Result<i64, str8>`
+- `tcp_listener::close(self: tcp_listener) -> i32`
+- `tcp_listener::set_backlog(self: tcp_listener, backlog: i64) -> Result<i32, str8>`
 
 ### Stream API
-- `TcpStream::connect(addr: str8, port: i64) -> Result<TcpStream, str8>`
-- `TcpStream::read(self: TcpStream, buf: str8, capacity: i64) -> Result<i64, str8>`
-- `TcpStream::write(self: TcpStream, s: str8) -> Result<i64, str8>`
-- `TcpStream::close(self: TcpStream) -> i32`
-- `TcpStream::set_nonblocking(self: TcpStream, enabled: i32) -> Result<i32, str8>`
-- `TcpStream::set_read_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, str8>`
-- `TcpStream::set_write_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, str8>`
-- `TcpStream::try_clone(self: TcpStream) -> Result<TcpStream, str8>`
-- `TcpStream::from_handle(handle: i64) -> TcpStream`
-- `TcpStream::raw_handle(self: TcpStream) -> i64`
+- `tcp_stream::connect(addr: str8, port: i64) -> Result<tcp_stream, str8>`
+- `tcp_stream::read(self: tcp_stream, buf: str8, capacity: i64) -> Result<i64, str8>`
+- `tcp_stream::write(self: tcp_stream, s: str8) -> Result<i64, str8>`
+- `tcp_stream::close(self: tcp_stream) -> i32`
+- `tcp_stream::set_nonblocking(self: tcp_stream, enabled: i32) -> Result<i32, str8>`
+- `tcp_stream::set_read_timeout_ms(self: tcp_stream, timeout_ms: i64) -> Result<i32, str8>`
+- `tcp_stream::set_write_timeout_ms(self: tcp_stream, timeout_ms: i64) -> Result<i32, str8>`
+- `tcp_stream::try_clone(self: tcp_stream) -> Result<tcp_stream, str8>`
+- `tcp_stream::from_handle(handle: i64) -> tcp_stream`
+- `tcp_stream::raw_handle(self: tcp_stream) -> i64`
 
 ### Errors
 - `last_error() -> str8`

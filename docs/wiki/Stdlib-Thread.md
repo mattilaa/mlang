@@ -6,10 +6,10 @@ Module file: `stdlib/std/thread.mla`
 
 ### Thread and mutex
 - `join(handle: Handle<Thread>) -> i32`
-- `mutex_new() -> Handle<Mutex>`
-- `mutex_lock_handle(handle: Handle<Mutex>) -> i32`
-- `mutex_unlock_handle(handle: Handle<Mutex>) -> i32`
-- `mutex_free(handle: Handle<Mutex>) -> i32`
+- `mutex_new() -> Handle<mutex>`
+- `mutex_lock_handle(handle: Handle<mutex>) -> i32`
+- `mutex_unlock_handle(handle: Handle<mutex>) -> i32`
+- `mutex_free(handle: Handle<mutex>) -> i32`
 
 ### Atomics
 - `atomic_new(initial: i64) -> Handle<Atomic64>`

@@ -8,18 +8,18 @@ Sequences auto-disable to `""` when `std::term::supports_ansi()` is false.
 
 Ownership note:
 - most `std::esc` helpers return borrowed/static escape strings
-- treat those returned `str8` values as read-only and do not call `String::free()` on them
+- treat those returned `str8` values as read-only and do not call `std::strbuf::free(...)` on them
 - ACS box-drawing helpers (`acs_hline`, `acs_vline`, corners, tees, plus) are the exception here: they return owned formatted strings
 
 ### Value-set Types
-- `Color` (alias of `i32`)
-- `CursorCommand` (alias of `i32`)
-- `CursorDirection` (alias of `i32`)
+- `color` (alias of `i32`)
+- `cursor_command` (alias of `i32`)
+- `cursor_direction` (alias of `i32`)
 
-### Color/style API
+### color/style API
 - `reset() -> str8`
-- `fg(color: Color) -> str8`
-- `bg(color: Color) -> str8`
+- `fg(color: color) -> str8`
+- `bg(color: color) -> str8`
 - `bold_on() -> str8`
 - `bold_off() -> str8`
 - `underline_on() -> str8`
@@ -32,9 +32,9 @@ Ownership note:
 - `alt_screen_on() -> str8`
 - `alt_screen_off() -> str8`
 
-### Cursor API
-- `cursor(cmd: CursorCommand) -> str8`
-- `cursor_move(dir: CursorDirection, amount: i32) -> str8`
+### cursor API
+- `cursor(cmd: cursor_command) -> str8`
+- `cursor_move(dir: cursor_direction, amount: i32) -> str8`
 
 ### ACS (ncurses-style line drawing)
 - `acs_hline() -> str8`
@@ -101,12 +101,12 @@ trap cleanup_terminal EXIT INT TERM
 ```
 
 ### Enum value helpers
-- Color helpers: `color_default`, `color_black`, `color_red`, `color_green`,
+- color helpers: `color_default`, `color_black`, `color_red`, `color_green`,
   `color_yellow`, `color_blue`, `color_magenta`, `color_cyan`, `color_white`,
   `color_bright_black`, `color_bright_red`, `color_bright_green`,
   `color_bright_yellow`, `color_bright_blue`, `color_bright_magenta`,
   `color_bright_cyan`, `color_bright_white`
-- Cursor command helpers:
+- cursor command helpers:
   `cmd_home`, `cmd_clear_screen`, `cmd_clear_line`, `cmd_hide`, `cmd_show`,
   `cmd_save`, `cmd_restore`
-- Cursor direction helpers: `dir_up`, `dir_down`, `dir_right`, `dir_left`
+- cursor direction helpers: `dir_up`, `dir_down`, `dir_right`, `dir_left`

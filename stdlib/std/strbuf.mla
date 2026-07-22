@@ -1,10 +1,10 @@
 /// \file strbuf.mla
 /// \brief String allocation helpers for MLang (std::strbuf).
 ///
-/// Rust-like constructor style is available via compiler intrinsics:
-/// - String::new()
-/// - String::with_capacity(cap)
-/// - String::free(buf)
+/// Lowercase wrappers are available for the compiler string intrinsics:
+/// - new()
+/// - with_capacity(cap)
+/// - free(buf)
 ///
 /// Additional utility helpers are backed by libmlang_std.
 
@@ -30,6 +30,9 @@ pub fn free(buf: str8) -> void {
 
 /// @brief Growable UTF-8 byte string builder handle.
 use type StringBuilder = i64;
+
+/// @brief Lowercase stdlib type alias for `StringBuilder`.
+alias string_builder = StringBuilder;
 
 /// @brief Create a StringBuilder with auto-growth and default page size.
 ///

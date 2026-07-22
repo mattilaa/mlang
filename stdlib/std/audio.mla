@@ -15,6 +15,10 @@ pub struct AudioDevice {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `AudioDevice`.
+alias audio_device = AudioDevice;
+
+
 /// @brief Return the compiled/default std::audio backend name.
 pub fn backend_name() -> str8 {
     return __mlang_std_audio_backend_name();

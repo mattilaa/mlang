@@ -180,6 +180,16 @@ pub struct BufReader {
     var line_capacity: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `SeekFrom`.
+alias seek_from = SeekFrom;
+
+/// @brief Lowercase stdlib type alias for `File`.
+alias file = File;
+
+/// @brief Lowercase stdlib type alias for `BufReader`.
+alias buf_reader = BufReader;
+
+
 impl File {
     /// @brief Open an existing file for reading (binary mode).
     /// @ingroup file

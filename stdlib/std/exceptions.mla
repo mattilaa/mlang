@@ -19,6 +19,10 @@ pub struct Exception {
     var owned: bool;
 };
 
+/// @brief Lowercase stdlib type alias for `Exception`.
+alias exception = Exception;
+
+
 /// @brief Construct a non-owning exception value.
 /// @param type_name Short type tag identifying the exception family.
 /// @param message Human-readable description of the failure.

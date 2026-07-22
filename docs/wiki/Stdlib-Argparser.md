@@ -5,26 +5,26 @@
 Module file: `stdlib/std/argparser.mla`
 
 ### Types
-- `ArgParser`
-- `ParseResult`
+- `arg_parser`
+- `parse_result`
 
 ### Parser setup
-- `ArgParser::new(prog: str8, desc: str8) -> ArgParser`
-- `ArgParser::flag(self: ArgParser, long_name: str8, short_name: str8, help: str8) -> void`
-- `ArgParser::option(self: ArgParser, long_name: str8, short_name: str8, help: str8, default_val: str8) -> void`
-- `ArgParser::positional(self: ArgParser, name: str8, help: str8) -> void`
-- `ArgParser::parse(self: ArgParser, argc: i32, args: list<str8>) -> ParseResult`
-- `ArgParser::print_help(self: ArgParser) -> void`
-- `ArgParser::free(self: ArgParser) -> void`
+- `arg_parser::new(prog: str8, desc: str8) -> arg_parser`
+- `arg_parser::flag(self: arg_parser, long_name: str8, short_name: str8, help: str8) -> void`
+- `arg_parser::option(self: arg_parser, long_name: str8, short_name: str8, help: str8, default_val: str8) -> void`
+- `arg_parser::positional(self: arg_parser, name: str8, help: str8) -> void`
+- `arg_parser::parse(self: arg_parser, argc: i32, args: list<str8>) -> parse_result`
+- `arg_parser::print_help(self: arg_parser) -> void`
+- `arg_parser::free(self: arg_parser) -> void`
 
 ### Parse results
-- `ParseResult::ok(self: ParseResult) -> bool`
-- `ParseResult::has_error(self: ParseResult) -> bool`
-- `ParseResult::error(self: ParseResult) -> str8`
-- `ParseResult::help_requested(self: ParseResult) -> bool`
-- `ParseResult::flag(self: ParseResult, name: str8) -> bool`
-- `ParseResult::get(self: ParseResult, name: str8) -> str8`
-- `ParseResult::get_i64(self: ParseResult, name: str8) -> i64`
-- `ParseResult::positional(self: ParseResult, idx: i64) -> str8`
-- `ParseResult::positional_count(self: ParseResult) -> i64`
-- `ParseResult::free(self: ParseResult) -> void`
+- `parse_result::ok(self: parse_result) -> bool`
+- `parse_result::has_error(self: parse_result) -> bool`
+- `parse_result::error(self: parse_result) -> str8`
+- `parse_result::help_requested(self: parse_result) -> bool`
+- `parse_result::flag(self: parse_result, name: str8) -> bool`
+- `parse_result::get(self: parse_result, name: str8) -> str8`
+- `parse_result::get_i64(self: parse_result, name: str8) -> i64`
+- `parse_result::positional(self: parse_result, idx: i64) -> str8`
+- `parse_result::positional_count(self: parse_result) -> i64`
+- `parse_result::free(self: parse_result) -> void`

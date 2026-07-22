@@ -20,7 +20,7 @@ What it is for:
 
 Typical flow:
 
-1. `ChatUi::new(max_lines)`
+1. `chat_ui::new(max_lines)`
 2. set title/server/channel/nick/prompt fields
 3. push chat lines and feed keycodes
 4. render with `render(rows, cols)`
@@ -36,9 +36,9 @@ Source:
 
 Main types:
 
-- `WaitGroup`
+- `wait_group`
   Count-down style completion tracking for multiple workers and one waiter.
-- `OrderedGate`
+- `ordered_gate`
   Deterministic turn-based gate for staged multithreaded execution.
 
 Source:
@@ -59,7 +59,7 @@ Common functions:
 - `println(msg)`
 - `eprintln(msg)`
 
-It also includes `HelpOption` and helper functions for rendering command help.
+It also includes `help_option` and helper functions for rendering command help.
 
 Source:
 

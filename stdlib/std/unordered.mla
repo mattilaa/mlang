@@ -257,3 +257,25 @@ pub struct UnorderedSet<T> {
 pub struct Vector<T> {
     var data: list<T>;
 };
+
+/// @brief Lowercase stdlib type alias for `HashMapI64I64`.
+alias hash_map_i64_i64 = HashMapI64I64;
+
+/// @brief Lowercase stdlib type alias for `HashSetI64`.
+alias hash_set_i64 = HashSetI64;
+
+/// @brief Lowercase stdlib type alias for `QuickMapI64I64`.
+alias quick_map_i64_i64 = QuickMapI64I64;
+
+/// @brief Lowercase stdlib type alias for `QuickMapVecI64I64`.
+alias quick_map_vec_i64_i64 = QuickMapVecI64I64;
+
+/// @brief Lowercase stdlib type alias for `UnorderedMap`.
+alias unordered_map<K, V> = UnorderedMap<K, V>;
+
+/// @brief Lowercase stdlib type alias for `UnorderedSet`.
+alias unordered_set<T> = UnorderedSet<T>;
+
+/// @brief Lowercase stdlib type alias for `Vector`.
+alias vector<T> = Vector<T>;
+

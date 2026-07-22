@@ -31,6 +31,16 @@ pub struct TimeZone {
     var name: str8;
 };
 
+/// @brief Lowercase stdlib type alias for `DateTime`.
+alias date_time = DateTime;
+
+/// @brief Lowercase stdlib type alias for `UtcOffset`.
+alias utc_offset = UtcOffset;
+
+/// @brief Lowercase stdlib type alias for `TimeZone`.
+alias time_zone = TimeZone;
+
+
 /// @brief Return current local date-time.
 pub fn now() -> DateTime {
     return DateTime {

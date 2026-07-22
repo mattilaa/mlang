@@ -89,6 +89,13 @@ pub struct ParseResult {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `ArgParser`.
+alias arg_parser = ArgParser;
+
+/// @brief Lowercase stdlib type alias for `ParseResult`.
+alias parse_result = ParseResult;
+
+
 impl ArgParser {
     /// @brief Create a new argument parser.
     /// @param prog  Program name shown in usage line.

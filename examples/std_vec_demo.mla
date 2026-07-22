@@ -7,10 +7,12 @@
 ///
 /// Vec<T> is a type alias for list<T>.
 /// Use `mod std::vec; use std::vec::*;` for the public API helpers,
-/// or use Vec::new() and vec![] directly (compiler built-ins).
+/// or use new() and vec![] directly.
 ///
 /// Build:  mlang run examples/std_vec_demo.mla
 /// Run:    ./a.out
+
+mod std::vec;
 
 // ------------------------------------------------------------------ //
 // Basic construction                                                  //
@@ -22,8 +24,8 @@ fn demo_construction() -> void {
     println!("--- construction ---");
 
     // Empty Vec with explicit element type
-    var a: Vec<i32> = Vec::new();
-    println!("Vec::new() len={}", a.len());
+    var a: list<i32> = new();
+    println!("new() len={}", a.len());
 
     // Vec from literal with inferred type
     var b = vec![1, 2, 3, 4, 5];
@@ -41,7 +43,7 @@ fn demo_construction() -> void {
 
 fn demo_push_pop() -> void {
     println!("--- push / pop ---");
-    var v: Vec<i32> = Vec::new();
+    var v: list<i32> = new();
     v.push(10);
     v.push(20);
     v.push(30);
@@ -58,7 +60,7 @@ fn demo_push_pop() -> void {
 
 fn demo_first_last() -> void {
     println!("--- first / last ---");
-    var v: Vec<i32> = Vec::new();
+    var v: list<i32> = new();
     v.push(7);
     v.push(14);
     v.push(21);
@@ -72,7 +74,7 @@ fn demo_first_last() -> void {
 
 fn demo_sort() -> void {
     println!("--- sort / sort_desc / reverse / dedup ---");
-    var v: Vec<i32> = Vec::new();
+    var v: list<i32> = new();
     v.push(5);
     v.push(1);
     v.push(4);
@@ -101,7 +103,7 @@ fn demo_sort() -> void {
 
 fn demo_search() -> void {
     println!("--- contains / index_of ---");
-    var v: Vec<i32> = Vec::new();
+    var v: list<i32> = new();
     v.push(10);
     v.push(20);
     v.push(30);
@@ -122,7 +124,7 @@ fn demo_search() -> void {
 
 fn demo_clear() -> void {
     println!("--- is_empty / clear ---");
-    var v: Vec<i32> = Vec::new();
+    var v: list<i32> = new();
     println!("empty? {}", v.is_empty());
     v.push(1);
     v.push(2);
@@ -137,7 +139,7 @@ fn demo_clear() -> void {
 
 fn demo_i64() -> void {
     println!("--- Vec<i64> ---");
-    var v: Vec<i64> = Vec::new();
+    var v: list<i64> = new();
     v.push(1000000000);
     v.push(2000000000);
     v.push(3000000000);
@@ -153,7 +155,7 @@ fn demo_i64() -> void {
 
 fn demo_iteration() -> void {
     println!("--- iteration ---");
-    var primes: Vec<i32> = Vec::new();
+    var primes: list<i32> = new();
     primes.push(2);
     primes.push(3);
     primes.push(5);

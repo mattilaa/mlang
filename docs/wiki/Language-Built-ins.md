@@ -111,6 +111,10 @@ let scores: SomeMap = {"Alice": 95, "Bob": 87};
 
 If an alias name is duplicated in the same scope, the compiler reports an error referencing the original definition (`file.mla:row:column: alias 'Distance' already defined`), so you can reliably locate the conflict.
 
+Associated calls and instance method lookup resolve through aliases, so an alias
+can be used as a real type name in calls such as `mutex::new()` and on variables
+typed as `mutex`.
+
 ## Builtin [`bit`](Quick-Guide#types) and `size_of`
 
 Builtin reference source: `stdlib/types.mla`

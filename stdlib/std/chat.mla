@@ -22,6 +22,10 @@ pub struct ChatUi {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `ChatUi`.
+alias chat_ui = ChatUi;
+
+
 /// @brief Line kind tag for standard chat lines.
 /// @return Integer discriminator for normal lines.
 pub fn line_normal() -> i32 { return 0; }

@@ -5,15 +5,15 @@ Module file: `stdlib/std/term.mla`
 Terminal capability detection and termios helpers.
 
 ### Types
-- `TermSize`
-- `TerminalCaps`
-- `ColorLevel` (`i32` alias)
+- `term_size`
+- `terminal_caps`
+- `color_level` (`i32` alias)
 
-### Color level constants
-- `color_none() -> ColorLevel` (0)
-- `color_16() -> ColorLevel` (16)
-- `color_256() -> ColorLevel` (256)
-- `color_truecolor() -> ColorLevel` (16777216)
+### color level constants
+- `color_none() -> color_level` (0)
+- `color_16() -> color_level` (16)
+- `color_256() -> color_level` (256)
+- `color_truecolor() -> color_level` (16777216)
 
 ### Capability queries
 - `term_name() -> str8`
@@ -21,14 +21,14 @@ Terminal capability detection and termios helpers.
 - `stdin_is_tty() -> i32`
 - `stdout_is_tty() -> i32`
 - `stderr_is_tty() -> i32`
-- `stdout_size() -> TermSize`
-- `stderr_size() -> TermSize`
-- `stdout_color_level() -> ColorLevel`
-- `stderr_color_level() -> ColorLevel`
+- `stdout_size() -> term_size`
+- `stderr_size() -> term_size`
+- `stdout_color_level() -> color_level`
+- `stderr_color_level() -> color_level`
 - `stdout_truecolor() -> i32`
 - `stderr_truecolor() -> i32`
-- `stdout_caps() -> TerminalCaps`
-- `stderr_caps() -> TerminalCaps`
+- `stdout_caps() -> terminal_caps`
+- `stderr_caps() -> terminal_caps`
 
 ### termios helpers
 - `stdin_enable_raw() -> i32`

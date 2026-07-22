@@ -31,6 +31,19 @@ pub struct LocalStream {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `PipeRead`.
+alias pipe_read = PipeRead;
+
+/// @brief Lowercase stdlib type alias for `NamedPipe`.
+alias named_pipe = NamedPipe;
+
+/// @brief Lowercase stdlib type alias for `LocalListener`.
+alias local_listener = LocalListener;
+
+/// @brief Lowercase stdlib type alias for `LocalStream`.
+alias local_stream = LocalStream;
+
+
 /// @brief Return last std::ipc backend error string.
 pub fn last_error() -> str8 {
     return __mlang_std_ipc_last_error();

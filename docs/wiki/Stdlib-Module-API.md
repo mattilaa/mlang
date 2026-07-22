@@ -6,6 +6,11 @@
 This page is the index for the **MLang-facing stdlib modules** under `stdlib/std/`. Detailed APIs are split by topic so audio, DSP, IO, collections, runtime, and other areas live on separate paths.
 
 - [Language Built-ins](Language-Built-ins) documents compiler-provided collection methods, enum behavior, aliases, [`bit`](Quick-Guide#types), and `size_of`.
+- Stdlib API documentation uses lowercase public type names such as `mutex`,
+  `audio_device`, and `bit_set`. Existing compatibility names may remain in the
+  implementation, but new stdlib-facing docs should present lowercase names.
+  [`Vec<T>`](Stdlib-Vec) is the exception because lowercase `vec` is already used by the
+  `vec![...]` language macro form.
 
 ## Import List
 

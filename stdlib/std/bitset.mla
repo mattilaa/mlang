@@ -15,6 +15,10 @@ pub struct BitSet {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `BitSet`.
+alias bit_set = BitSet;
+
+
 /// @brief Last backend error string.
 pub fn last_error() -> str8 {
     return __mlang_std_bitset_last_error();

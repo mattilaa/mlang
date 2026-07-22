@@ -3,25 +3,25 @@
 Module file: `stdlib/std/bytes.mla`
 
 ### Types
-- `Bytes`
+- `bytes`
 
 ### Lifecycle
-- `Bytes::new(initial_capacity: i64) -> Result<Bytes, str8>`
-- `Bytes::from_string(s: str8) -> Result<Bytes, str8>`
-- `Bytes::close(self: Bytes) -> i32`
+- `bytes::new(initial_capacity: i64) -> Result<bytes, str8>`
+- `bytes::from_string(s: str8) -> Result<bytes, str8>`
+- `bytes::close(self: bytes) -> i32`
 - `last_error() -> str8`
 
 ### Buffer operations
-- `Bytes::len(self: Bytes) -> i64`
-- `Bytes::capacity(self: Bytes) -> i64`
-- `Bytes::clear(self: Bytes) -> i32`
-- `Bytes::reserve(self: Bytes, min_capacity: i64) -> i32`
-- `Bytes::append_byte(self: Bytes, value: i32) -> i32`
-- `Bytes::append_string(self: Bytes, s: str8) -> i64`
-- `Bytes::append_bytes(self: Bytes, other: Bytes) -> i64`
-- `Bytes::get(self: Bytes, index: i64) -> i32`
-- `Bytes::set(self: Bytes, index: i64, value: i32) -> i32`
+- `bytes::len(self: bytes) -> i64`
+- `bytes::capacity(self: bytes) -> i64`
+- `bytes::clear(self: bytes) -> i32`
+- `bytes::reserve(self: bytes, min_capacity: i64) -> i32`
+- `bytes::append_byte(self: bytes, value: i32) -> i32`
+- `bytes::append_string(self: bytes, s: str8) -> i64`
+- `bytes::append_bytes(self: bytes, other: bytes) -> i64`
+- `bytes::get(self: bytes, index: i64) -> i32`
+- `bytes::set(self: bytes, index: i64, value: i32) -> i32`
 
 ### Conversions
-- `Bytes::to_string(self: Bytes) -> str8` (text-oriented C/UTF-8 str8 copy)
-- `Bytes::to_hex(self: Bytes) -> str8` (binary-safe lowercase hex)
+- `bytes::to_string(self: bytes) -> str8` (text-oriented C/UTF-8 str8 copy)
+- `bytes::to_hex(self: bytes) -> str8` (binary-safe lowercase hex)

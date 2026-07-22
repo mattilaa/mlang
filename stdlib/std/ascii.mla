@@ -199,6 +199,13 @@ pub enum UnicodeBoxGlyph : i32 {
     CrossMark = 10007            // U+2717
 };
 
+/// @brief Lowercase stdlib type alias for `AsciiKey`.
+alias ascii_key = AsciiKey;
+
+/// @brief Lowercase stdlib type alias for `UnicodeBoxGlyph`.
+alias unicode_box_glyph_type = UnicodeBoxGlyph;
+
+
 /// \brief Returns UTF-8 text for a box-drawing glyph enum value.
 pub fn unicode_box_glyph(g: UnicodeBoxGlyph) -> str8 {
     if g == UnicodeBoxGlyph::LightHorizontal: { return "─"; }

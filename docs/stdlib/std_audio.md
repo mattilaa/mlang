@@ -13,7 +13,7 @@ Examples:
 - Full VST3/CoreAudio package demo: `examples/package_manager_vst3_coreaudio_synth`
 
 ### Types
-- `AudioDevice`
+- `audio_device`
 
 ### API
 - `backend_name() -> str8`
@@ -21,13 +21,13 @@ Examples:
 - `device_count() -> i64`
 - `default_output_device_id() -> i64`
 - `device_name(device_id: i64) -> str8`
-- `AudioDevice::open_default(client_name: str8) -> Result<AudioDevice, str8>`
-- `AudioDevice::open_default_with_config(client_name: str8, sample_rate: i64, buffer_frames: i64) -> Result<AudioDevice, str8>`
-- `AudioDevice::open(device_id: i64, client_name: str8) -> Result<AudioDevice, str8>`
-- `AudioDevice::open_with_config(device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> Result<AudioDevice, str8>`
-- `AudioDevice::start(self: AudioDevice) -> Result<i32, str8>`
-- `AudioDevice::stop(self: AudioDevice) -> i32`
-- `AudioDevice::close(self: AudioDevice) -> i32`
-- `AudioDevice::sample_rate(self: AudioDevice) -> i64`
-- `AudioDevice::buffer_frames(self: AudioDevice) -> i64`
-- `AudioDevice::play_sine(self: AudioDevice, frequency_hz: f64, gain: f64, duration_ms: i64) -> Result<i32, str8>`
+- `audio_device::open_default(client_name: str8) -> Result<audio_device, str8>`
+- `audio_device::open_default_with_config(client_name: str8, sample_rate: i64, buffer_frames: i64) -> Result<audio_device, str8>`
+- `audio_device::open(device_id: i64, client_name: str8) -> Result<audio_device, str8>`
+- `audio_device::open_with_config(device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> Result<audio_device, str8>`
+- `audio_device::start(self: audio_device) -> Result<i32, str8>`
+- `audio_device::stop(self: audio_device) -> i32`
+- `audio_device::close(self: audio_device) -> i32`
+- `audio_device::sample_rate(self: audio_device) -> i64`
+- `audio_device::buffer_frames(self: audio_device) -> i64`
+- `audio_device::play_sine(self: audio_device, frequency_hz: f64, gain: f64, duration_ms: i64) -> Result<i32, str8>`
