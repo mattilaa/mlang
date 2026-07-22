@@ -6,7 +6,8 @@
  *
  * `#[derive(Json)]` on a struct synthesizes:
  * - `value.to_json() -> str8`
- * - `StructName::from_json(text) -> Result<StructName, str8>`
+ * - a lowercase associated `from_json(text)` constructor on the derived struct,
+ *   returning `Result<your_struct, str8>`
  *
  * The emitted JSON includes inherited base fields directly in the object and,
  * for `@property(...)` members, a sibling `@property` metadata subtree.
@@ -48,6 +49,19 @@ pub struct JsonObjectIter {
     var index: i64;
     var len: i64;
 };
+
+/// @brief Lowercase stdlib type alias for `JsonDoc`.
+alias json_doc = JsonDoc;
+
+/// @brief Lowercase stdlib type alias for `JsonValue`.
+alias json_value = JsonValue;
+
+/// @brief Lowercase stdlib type alias for `JsonArrayIter`.
+alias json_array_iter = JsonArrayIter;
+
+/// @brief Lowercase stdlib type alias for `JsonObjectIter`.
+alias json_object_iter = JsonObjectIter;
+
 
 /// @brief Kind tag returned for unusable/invalid values.
 /// @return Integer kind discriminator.

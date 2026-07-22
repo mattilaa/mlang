@@ -5,18 +5,18 @@
 Module file: `stdlib/std/timer.mla`
 
 ### Types
-- `IntervalTimer`
-- `AsyncTicker`
+- `interval_timer`
+- `async_ticker`
 
 ### Interval timer API
-- `IntervalTimer::every_ms(interval_ms: i64) -> Result<IntervalTimer, str8>`
-- `IntervalTimer::reset(self: IntervalTimer) -> i32`
-- `IntervalTimer::remaining_ms(self: IntervalTimer) -> i64`
-- `IntervalTimer::wait_next(self: IntervalTimer) -> i32`
-- `IntervalTimer::poll(self: IntervalTimer) -> i32`
-- `IntervalTimer::close(self: IntervalTimer) -> i32`
+- `interval_timer::every_ms(interval_ms: i64) -> Result<interval_timer, str8>`
+- `interval_timer::reset(self: interval_timer) -> i32`
+- `interval_timer::remaining_ms(self: interval_timer) -> i64`
+- `interval_timer::wait_next(self: interval_timer) -> i32`
+- `interval_timer::poll(self: interval_timer) -> i32`
+- `interval_timer::close(self: interval_timer) -> i32`
 
 ### Async ticker API
-- `AsyncTicker::start(queue_handle: i64, interval_ms: i64, event_name: str8) -> Result<AsyncTicker, str8>`
-- `AsyncTicker::stop(self: AsyncTicker) -> i32`
-- `AsyncTicker::close(self: AsyncTicker) -> i32`
+- `async_ticker::start(queue_handle: i64, interval_ms: i64, event_name: str8) -> Result<async_ticker, str8>`
+- `async_ticker::stop(self: async_ticker) -> i32`
+- `async_ticker::close(self: async_ticker) -> i32`

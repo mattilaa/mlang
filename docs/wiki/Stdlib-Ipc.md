@@ -15,26 +15,26 @@ Examples:
 - `examples/std_ipc_local_socket_demo.mla`
 
 ### Types
-- `NamedPipe`
-- `PipeRead`
-- `LocalListener`
-- `LocalStream`
+- `named_pipe`
+- `pipe_read`
+- `local_listener`
+- `local_stream`
 
 ### Named Pipe API
-- `NamedPipe::create(name: str8) -> Result<NamedPipe, str8>`
-- `NamedPipe::connect(name: str8) -> Result<NamedPipe, str8>`
-- `NamedPipe::read(self: NamedPipe, buf: str8, capacity: i64) -> Result<PipeRead, str8>`
-- `NamedPipe::write(self: NamedPipe, s: str8) -> Result<i64, str8>`
-- `NamedPipe::close(self: NamedPipe) -> i32`
+- `named_pipe::create(name: str8) -> Result<named_pipe, str8>`
+- `named_pipe::connect(name: str8) -> Result<named_pipe, str8>`
+- `named_pipe::read(self: named_pipe, buf: str8, capacity: i64) -> Result<pipe_read, str8>`
+- `named_pipe::write(self: named_pipe, s: str8) -> Result<i64, str8>`
+- `named_pipe::close(self: named_pipe) -> i32`
 - `remove_named_pipe(name: str8) -> i32`
 - `last_error() -> str8`
 
 ### Local Socket API
-- `LocalListener::bind(path: str8) -> Result<LocalListener, str8>`
-- `LocalListener::accept(self: LocalListener) -> Result<LocalStream, str8>`
-- `LocalListener::close(self: LocalListener) -> i32`
-- `LocalStream::connect(path: str8) -> Result<LocalStream, str8>`
-- `LocalStream::read(self: LocalStream, buf: str8, capacity: i64) -> Result<i64, str8>`
-- `LocalStream::write(self: LocalStream, s: str8) -> Result<i64, str8>`
-- `LocalStream::close(self: LocalStream) -> i32`
+- `local_listener::bind(path: str8) -> Result<local_listener, str8>`
+- `local_listener::accept(self: local_listener) -> Result<local_stream, str8>`
+- `local_listener::close(self: local_listener) -> i32`
+- `local_stream::connect(path: str8) -> Result<local_stream, str8>`
+- `local_stream::read(self: local_stream, buf: str8, capacity: i64) -> Result<i64, str8>`
+- `local_stream::write(self: local_stream, s: str8) -> Result<i64, str8>`
+- `local_stream::close(self: local_stream) -> i32`
 - `remove_local_socket(path: str8) -> i32`

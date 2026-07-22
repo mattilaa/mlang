@@ -17,6 +17,13 @@ pub struct TcpStream {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `TcpListener`.
+alias tcp_listener = TcpListener;
+
+/// @brief Lowercase stdlib type alias for `TcpStream`.
+alias tcp_stream = TcpStream;
+
+
 /// @brief Return the most recent `std::net` error message.
 /// @return UTF-8 error description, or empty string if none.
 pub fn last_error() -> str8 {

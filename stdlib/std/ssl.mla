@@ -17,6 +17,13 @@ pub struct TlsStream {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `TlsListener`.
+alias tls_listener = TlsListener;
+
+/// @brief Lowercase stdlib type alias for `TlsStream`.
+alias tls_stream = TlsStream;
+
+
 /// @brief Return the last `std::ssl` error message.
 /// @return UTF-8 error description, or empty string if none.
 pub fn last_error() -> str8 {

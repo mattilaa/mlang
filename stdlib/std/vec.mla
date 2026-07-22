@@ -7,7 +7,7 @@
 /// mod std::vec;
 /// use std::vec::*;
 ///
-/// var v: Vec<i32> = Vec::new();
+/// var v: list<i32> = new();
 /// v.push(1);
 /// v.push(2);
 /// v.push(3);
@@ -15,8 +15,7 @@
 /// ```
 ///
 /// ## Constructor / macro
-///   - `Vec::new()`         — empty vec (compiler intrinsic)
-///   - `Vec::new_i32()`     — explicit empty i32 vec
+///   - `new()`              — empty vec using the declared element type
 ///   - `vec![a, b, c]`      — literal macro (compiler built-in)
 ///   - `vec![val; N]`       — fill macro  (compiler built-in)
 ///
@@ -56,7 +55,7 @@ use std::vec::detail::*;
 
 // -- Construction -------------------------------------------------- //
 
-/// @brief Create an empty `Vec<T>`.
+/// @brief Create an empty Vec using the declared element type.
 /// @ingroup vec_methods
 ///
 /// The canonical constructor for a vector.  The element type `T` is
@@ -64,19 +63,16 @@ use std::vec::detail::*;
 /// inference from the first `push`:
 ///
 /// ```mlang
-/// var v: Vec<i32> = Vec::new();   // element type fixed to i32
+/// var v: list<i32> = new();       // element type fixed to i32
 /// v.push(10);
 /// v.push(20);
 /// println!("len={}", v.len());    // len=2
 /// ```
 ///
-/// For a specific element type you may also call the typed factories:
-///   - `Vec::new_i32()` — `list<i32>`
-///   - `Vec::new_i64()` — `list<i64>`
-///   - `Vec::new_str()` — `list<str8>`
+/// Use an explicit variable type to select the element type.
 ///
 /// @return An empty `list<T>`.
-pub fn new() -> list<i64> {
+generic<T> pub fn new() -> list<T> {
     return Vec::new();
 }
 
@@ -89,7 +85,7 @@ pub fn new() -> list<i64> {
 /// var v = vec![1, 2, 3];
 /// println!("len={}", v.len());    // len=3
 ///
-/// var empty: Vec<i32> = Vec::new();
+/// var empty: list<i32> = new();
 /// println!("len={}", empty.len()); // len=0
 /// ```
 ///
@@ -104,7 +100,7 @@ pub fn len(v: list<i64>) -> i64 {
 /// Equivalent to `v.len() == 0` but more expressive.
 ///
 /// ```mlang
-/// var v: Vec<i32> = Vec::new();
+/// var v: list<i32> = new();
 /// println!("{}", v.is_empty());  // 1 (true)
 /// v.push(42);
 /// println!("{}", v.is_empty());  // 0 (false)
@@ -124,7 +120,7 @@ pub fn is_empty(v: list<i64>) -> bool {
 /// (mutable binding).
 ///
 /// ```mlang
-/// var v: Vec<i32> = Vec::new();
+/// var v: list<i32> = new();
 /// v.push(1);
 /// v.push(2);
 /// v.push(3);
@@ -142,7 +138,7 @@ pub fn push(v: list<i64>, val: i64) -> void {
 /// Panics if the Vec is empty.
 ///
 /// ```mlang
-/// var v: Vec<i32> = Vec::new();
+/// var v: list<i32> = new();
 /// v.push(10);
 /// v.push(20);
 /// let top = v.pop();
@@ -284,27 +280,4 @@ pub fn first(v: list<i64>) -> i64 {
 /// @return The last element of type T.
 pub fn last(v: list<i64>) -> i64 {
     return v.last();
-}
-
-// ------------------------------------------------------------------ //
-// Public factory functions                                             //
-// ------------------------------------------------------------------ //
-
-/// @brief Create an empty Vec<i32>.
-/// Equivalent to `Vec::new()` with an explicit element type.
-/// @return An empty list<i32>.
-pub fn new_i32() -> list<i32> {
-    return Vec::new();
-}
-
-/// @brief Create an empty Vec<i64>.
-/// @return An empty list<i64>.
-pub fn new_i64() -> list<i64> {
-    return Vec::new();
-}
-
-/// @brief Create an empty Vec<str8>.
-/// @return An empty list<str8>.
-pub fn new_str() -> list<str8> {
-    return Vec::new();
 }

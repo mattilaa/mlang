@@ -54,6 +54,31 @@ pub struct WaitPoll {
     var status: ExitStatus;
 };
 
+/// @brief Lowercase stdlib type alias for `PipeRead`.
+alias pipe_read = PipeRead;
+
+/// @brief Lowercase stdlib type alias for `Child`.
+alias child = Child;
+
+/// @brief Lowercase stdlib type alias for `ChildStdin`.
+alias child_stdin = ChildStdin;
+
+/// @brief Lowercase stdlib type alias for `ChildStdout`.
+alias child_stdout = ChildStdout;
+
+/// @brief Lowercase stdlib type alias for `ChildStderr`.
+alias child_stderr = ChildStderr;
+
+/// @brief Lowercase stdlib type alias for `ChildPty`.
+alias child_pty = ChildPty;
+
+/// @brief Lowercase stdlib type alias for `ExitStatus`.
+alias exit_status = ExitStatus;
+
+/// @brief Lowercase stdlib type alias for `WaitPoll`.
+alias wait_poll = WaitPoll;
+
+
 /// @brief Return last backend process error.
 pub fn last_error() -> str8 {
     return __mlang_std_process_last_error();

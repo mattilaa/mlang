@@ -9,10 +9,7 @@ above.
 
 ### Constructors
 
-- `Vec::new() -> Vec<T>` — create an empty Vec; element type inferred from context
-- `Vec::new_i32() -> Vec<i32>` — empty Vec with explicit `i32` element type
-- `Vec::new_i64() -> Vec<i64>` — empty Vec with explicit `i64` element type
-- `Vec::new_str() -> Vec<str8>` — empty Vec with explicit `str8` element type
+- `new() -> list<T>` — create an empty vector using the declared element type
 
 ### Macros
 

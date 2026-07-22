@@ -6,11 +6,21 @@
 /// `size_of(bit)`, but packed bit storage is provided by `std::bitset::BitSet`.
 
 /// @brief Logical on value (`1`).
-pub fn ON() -> bit {
+pub fn on() -> bit {
     return bit(1);
 }
 
 /// @brief Logical off value (`0`).
-pub fn OFF() -> bit {
+pub fn off() -> bit {
     return bit(0);
+}
+
+/// @brief Compatibility wrapper for `on()`.
+pub fn ON() -> bit {
+    return on();
+}
+
+/// @brief Compatibility wrapper for `off()`.
+pub fn OFF() -> bit {
+    return off();
 }

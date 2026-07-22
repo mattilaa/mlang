@@ -3,9 +3,9 @@
 Module file: `stdlib/std/event_loop.mla`
 
 ### Types
-- `EventLoop`
+- `event_loop`
 
 ### API
-- `EventLoop::start(queue_handle: i64, interval_ms: i64, event_name: str8) -> Result<EventLoop, str8>`
-- `EventLoop::stop(self: EventLoop) -> i32`
-- `EventLoop::close(self: EventLoop) -> i32`
+- `event_loop::start(queue_handle: i64, interval_ms: i64, event_name: str8) -> Result<event_loop, str8>`
+- `event_loop::stop(self: event_loop) -> i32`
+- `event_loop::close(self: event_loop) -> i32`

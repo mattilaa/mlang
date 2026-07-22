@@ -17,6 +17,10 @@ pub struct EventLoop {
     var ticker_handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `EventLoop`.
+alias event_loop = EventLoop;
+
+
 impl EventLoop {
     /// @brief Start event loop ticker thread that periodically posts `event_name`
     /// to `queue_handle`. Use lock-free queue try_recv in main loop.

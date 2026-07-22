@@ -38,7 +38,7 @@ Currently provided:
   and non-blocking stdin reads (`read_line_nonblocking`,
   `read_keys_nonblocking`, `read_key_nonblocking`).
 - `std/strbuf.mla`: string allocation + utility helpers
-  (`String::new/with_capacity/free`, len/compare/find/rfind/repeat,
+  (`new/with_capacity/free`, len/compare/find/rfind/repeat,
    `pad_left/pad_right`, numeric padding helpers
    `pad_i64_left/pad_i64_right/zpad_i64`, UTF-8<->UTF-16 converters and helpers).
 - `std/bytes.mla`: dynamic raw byte buffer helpers for protocol/binary payloads
@@ -54,27 +54,27 @@ Currently provided:
   `x64!()`, `aarch64!()`).
 - `std/serde.mla`: binary serialization/deserialization helpers with
   growable output buffer and sequential reader
-  (`Binary::write_*`, `Reader::read_*`, file roundtrip helpers, and
-  `BinarySerde` trait for custom types).
+  (`binary::write_*`, `reader::read_*`, file roundtrip helpers, and
+  a serialization trait for custom types).
 - `std/protocol.mla`: base framed TCP protocol transport helpers intended for
   project-level derived protocol stacks (`opcode + payload` framing).
 - `std/json.mla`: JSON parse/stringify + object/array navigation and iterators
-  (`JsonDoc::parse/from_file`, `JsonDoc::stringify`,
-   `JsonValue::get/index/as_*`, `iter_array`, `iter_object`),
+  (`json_doc::parse/from_file`, `json_doc::stringify`,
+   `json_value::get/index/as_*`, `iter_array`, `iter_object`),
   backed by RapidJSON. `#[derive(Json)]` also synthesizes
-  `value.to_json()` / `Type::from_json(text)` for supported structs,
+  `value.to_json()` / lowercase `from_json(text)` constructors for supported structs,
   including inherited fields and `@property(...)` metadata.
 - `std/net.mla`: TCP client/server over libc sockets
-  (`TcpListener::bind/accept/local_port`, `TcpStream::connect/read/write`,
+  (`tcp_listener::bind/accept/local_port`, `tcp_stream::connect/read/write`,
    `set_nonblocking`, `set_read_timeout_ms`, `set_write_timeout_ms`,
    `try_clone`, `from_handle`/`raw_handle` for multithread handoff, and
    listener backlog tuning via `set_backlog`).
 - `std/ssl.mla`: TLS client/server streams over OpenSSL
-  (`TlsStream::connect/connect_with_options/read/write/close`,
-   `TlsListener::bind/accept/local_port`, and raw-handle handoff helpers for
+  (`tls_stream::connect/connect_with_options/read/write/close`,
+   `tls_listener::bind/accept/local_port`, and raw-handle handoff helpers for
    multithreaded local TLS servers).
 - `std/regex.mla`: POSIX regular expression helpers
-  (`Regex::compile/is_match/find_start/find_end/match_start/match_end/close`)
+  (`regex::compile/is_match/find_start/find_end/match_start/match_end/close`)
   with error retrieval via [`std::regex::last_error()`](Stdlib-Regex).
 - `std/algorithm.mla`: algorithm namespace root with submodules:
   - [`std::algorithm::fuzzy`](Stdlib-Module-API): subsequence fuzzy matching/ranking

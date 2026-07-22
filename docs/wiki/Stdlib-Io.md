@@ -5,33 +5,30 @@
 Module file: `stdlib/std/io.mla`
 
 ### Handles and trait-like wrappers
-- `Stdin`
-- `Stdout`
-- `Stderr`
-- `StdoutLock`
-- `Cursor`
-- `Read`
-- `Write`
-- `Seek`
-- `BufRead`
+- `stdin_stream`
+- `stdout_stream`
+- `stderr_stream`
+- `stdout_lock`
+- `cursor`
+- `buf_read`
 
 ### Core constructors/helpers
-- `stdin() -> Stdin`
-- `stdout() -> Stdout`
-- `stderr() -> Stderr`
-- `cursor_with_capacity(capacity: i64) -> Cursor`
-- `cursor_from_string(s: str8) -> Cursor`
-- `cursor_free(c: Cursor) -> void`
+- `stdin() -> stdin_stream`
+- `stdout() -> stdout_stream`
+- `stderr() -> stderr_stream`
+- `cursor_with_capacity(capacity: i64) -> cursor`
+- `cursor_from_string(s: str8) -> cursor`
+- `cursor_free(c: cursor) -> void`
 
 ### Stream read/write
-- `read_line(input: Stdin, buf: str8, capacity: i64) -> i64`
-- `read_line_nonblocking(input: Stdin, buf: str8, capacity: i64) -> i64`
-- `write(out: Stdout, s: str8) -> i64`
-- `write(err: Stderr, s: str8) -> i64`
-- `writeln(out: Stdout, s: str8) -> i64`
-- `writeln(err: Stderr, s: str8) -> i64`
-- `flush(out: Stdout) -> i32`
-- `flush(err: Stderr) -> i32`
+- `read_line(input: stdin_stream, buf: str8, capacity: i64) -> i64`
+- `read_line_nonblocking(input: stdin_stream, buf: str8, capacity: i64) -> i64`
+- `write(out: stdout_stream, s: str8) -> i64`
+- `write(err: stderr_stream, s: str8) -> i64`
+- `writeln(out: stdout_stream, s: str8) -> i64`
+- `writeln(err: stderr_stream, s: str8) -> i64`
+- `flush(out: stdout_stream) -> i32`
+- `flush(err: stderr_stream) -> i32`
 
 ### Buffering controls
 - `buffering_unbuffered() -> i32`
@@ -42,26 +39,26 @@ Module file: `stdlib/std/io.mla`
 - `set_stderr_buffering(mode: i32, size: i64) -> i32`
 
 ### Locking and synchronized writes
-- `lock(out: Stdout) -> StdoutLock`
-- `unlock(lockToken: StdoutLock) -> i32`
-- `try_lock(out: Stdout) -> i32`
-- `write_locked(lockToken: StdoutLock, s: str8) -> i64`
-- `writeln_locked(lockToken: StdoutLock, s: str8) -> i64`
-- `write_sync(out: Stdout, s: str8) -> i64`
-- `writeln_sync(out: Stdout, s: str8) -> i64`
-- `__drop(lockToken: StdoutLock) -> void`
+- `lock(out: stdout_stream) -> stdout_lock`
+- `unlock(lockToken: stdout_lock) -> i32`
+- `try_lock(out: stdout_stream) -> i32`
+- `write_locked(lockToken: stdout_lock, s: str8) -> i64`
+- `writeln_locked(lockToken: stdout_lock, s: str8) -> i64`
+- `write_sync(out: stdout_stream, s: str8) -> i64`
+- `writeln_sync(out: stdout_stream, s: str8) -> i64`
+- `__drop(lockToken: stdout_lock) -> void`
 
 ### Trait-like adapters and operations
-- `as_read(input: Stdin) -> Read`
-- `as_read(c: Cursor) -> Read`
-- `as_write(out: Stdout) -> Write`
-- `as_write(err: Stderr) -> Write`
-- `as_write(c: Cursor) -> Write`
-- `as_seek(c: Cursor) -> Seek`
-- `as_buf_read(input: Stdin) -> BufRead`
-- `as_buf_read(c: Cursor) -> BufRead`
-- `read(reader: Read, buf: str8, capacity: i64) -> i64`
-- `write(writer: Write, s: str8) -> i64`
-- `read_line(reader: BufRead, buf: str8, capacity: i64) -> i64`
-- `seek(seeker: Seek, offset: i64, whence: i32) -> i64`
-- `to_string(c: Cursor) -> str8`
+- `as_read(input: stdin_stream)` returns a reader adapter for `read(...)`
+- `as_read(c: cursor)` returns a reader adapter for `read(...)`
+- `as_write(out: stdout_stream)` returns a writer adapter for `write(...)`
+- `as_write(err: stderr_stream)` returns a writer adapter for `write(...)`
+- `as_write(c: cursor)` returns a writer adapter for `write(...)`
+- `as_seek(c: cursor)` returns a seek adapter for `seek(...)`
+- `as_buf_read(input: stdin_stream) -> buf_read`
+- `as_buf_read(c: cursor) -> buf_read`
+- `read(reader, buf: str8, capacity: i64) -> i64`
+- `write(writer, s: str8) -> i64`
+- `read_line(reader: buf_read, buf: str8, capacity: i64) -> i64`
+- `seek(seeker, offset: i64, whence: i32) -> i64`
+- `to_string(c: cursor) -> str8`

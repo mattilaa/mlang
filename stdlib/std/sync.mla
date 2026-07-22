@@ -33,6 +33,19 @@ pub struct LockFreeQueue {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `Mutex`.
+alias mutex = Mutex;
+
+/// @brief Lowercase stdlib type alias for `Condvar`.
+alias condvar = Condvar;
+
+/// @brief Lowercase stdlib type alias for `Channel`.
+alias channel = Channel;
+
+/// @brief Lowercase stdlib type alias for `LockFreeQueue`.
+alias lock_free_queue = LockFreeQueue;
+
+
 /// @brief Return last std::sync backend error string.
 pub fn last_error() -> str8 {
     return __mlang_std_sync_last_error();

@@ -15,6 +15,9 @@ use std::term::detail::*;
 
 use type ColorLevel = i32;
 
+/// @brief Lowercase stdlib type alias for `ColorLevel`.
+alias color_level = ColorLevel;
+
 /// @brief Terminal size measured in rows and columns.
 pub struct TermSize {
     var rows: i32;
@@ -30,6 +33,13 @@ pub struct TerminalCaps {
     var truecolor: i32;
     var term_name: str8;
 };
+
+/// @brief Lowercase stdlib type alias for `TermSize`.
+alias term_size = TermSize;
+
+/// @brief Lowercase stdlib type alias for `TerminalCaps`.
+alias terminal_caps = TerminalCaps;
+
 
 /// @brief Color level constant indicating no color support.
 /// @return `ColorLevel` zero.

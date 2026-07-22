@@ -43,18 +43,18 @@ when every element is true. For empty boolean lists, `any` returns `false` and
 `all` returns `true`.
 
 Packed bitset operations:
-- `bit_and_eq(lhs: BitSet, rhs: BitSet) -> i32`
-- `bit_or_eq(lhs: BitSet, rhs: BitSet) -> i32`
-- `bit_xor_eq(lhs: BitSet, rhs: BitSet) -> i32`
-- `bit_not_eq(values: BitSet) -> i32`
-- `count_ones(values: BitSet) -> i64`
-- `any(values: BitSet) -> bool`
-- `all(values: BitSet) -> bool`
+- `bit_and_eq(lhs: bit_set, rhs: bit_set) -> i32`
+- `bit_or_eq(lhs: bit_set, rhs: bit_set) -> i32`
+- `bit_xor_eq(lhs: bit_set, rhs: bit_set) -> i32`
+- `bit_not_eq(values: bit_set) -> i32`
+- `count_ones(values: bit_set) -> i64`
+- `any(values: bit_set) -> bool`
+- `all(values: bit_set) -> bool`
 
-The [`BitSet`](Stdlib-Bitset) overloads operate on packed one-bit-per-entry storage from
-[`std::bitset::BitSet`](Stdlib-Bitset). The `_eq` functions mutate the left-hand bitset in
-place and return `0` on success. Binary bitset operations require matching
-active bit lengths. Tail bits outside `BitSet::len()` are masked after writes.
+The `bit_set` overloads operate on packed one-bit-per-entry storage from
+[`std::bitset::bit_set`](Stdlib-Bitset). The `_eq` functions mutate the left-hand bitset in
+place and return `0` on success. binary bitset operations require matching
+active bit lengths. Tail bits outside `bit_set::len()` are masked after writes.
 For empty bitsets, `any` returns `false` and `all` returns `true`.
 
 Integer-only gate logic and bit shifts:
@@ -74,7 +74,7 @@ Example:
 mod std::simd;
 mod std::bitset;
 
-use std::bitset::BitSet;
+use std::bitset::bit_set;
 use std::simd::*;
 
 let lhs: list<f32> = [1.0f, 2.0f, 3.0f, 4.0f];
@@ -98,8 +98,8 @@ let has_true: bool = any(checks);
 let all_true: bool = all(checks);
 let has_mask: bool = any_nonzero(masks);
 
-let bitset_result: Result<BitSet, str8> = BitSet::new(128);
-let bitset: BitSet = bitset_result.unwrap();
+let bitset_result: Result<bit_set, str8> = bit_set::new(128);
+let bitset: bit_set = bitset_result.unwrap();
 bitset.resize(128, false);
 bitset.set(64, true);
 let packed_has_bits: bool = any(bitset);

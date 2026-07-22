@@ -20,6 +20,10 @@ pub struct Regex {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `Regex`.
+alias regex = Regex;
+
+
 /// @ingroup algorithm_regex
 pub fn last_error() -> str8 {
     return __mlang_std_regex_last_error();

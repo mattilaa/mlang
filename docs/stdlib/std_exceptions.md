@@ -6,7 +6,7 @@ This module provides the runtime payload type used by the language-level
 `throw` and `try/catch` syntax.
 
 ### Types
-- `Exception`
+- `exception`
 
 ### Language usage
 
@@ -27,7 +27,7 @@ fn main() -> i32 {
     try {
         let value: i32 = parse_number("x");
         println!("{}", value);
-    } catch e: Exception {
+    } catch e: exception {
         println!("caught {} at {}: {}", e.type_name, e.source_line, e.message);
     }
     return 0;
@@ -36,17 +36,17 @@ fn main() -> i32 {
 
 Notes:
 - `throw expr;` transfers control to the nearest enclosing `catch`.
-- `catch e: Exception` binds the thrown payload for the handler block.
+- `catch e: exception` binds the thrown payload for the handler block.
 - If no handler is active, the runtime prints the uncaught exception and aborts.
 - Scope-owned values are cleaned up during unwind before control reaches `catch`.
 
 ### API
-- `Exception`
+- `exception`
   Fields:
   - `type_name: str8`
   - `message: str8`
   - `source_line: i32`
   - `owned: bool`
-- `new(type_name: str8, message: str8) -> Exception`
-- `with_line(type_name: str8, message: str8, source_line: i32) -> Exception`
-- `free(ex: Exception) -> void`
+- `new(type_name: str8, message: str8) -> exception`
+- `with_line(type_name: str8, message: str8, source_line: i32) -> exception`
+- `free(ex: exception) -> void`

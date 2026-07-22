@@ -7,17 +7,18 @@ Module file: `stdlib/std/json.mla`
 Compiler-synthesized JSON serde is also available for supported structs via
 `#[derive(Json)]`. This generates:
 - `value.to_json() -> str8`
-- `StructName::from_json(text) -> Result<StructName, str8>`
+- a lowercase associated `from_json(text)` constructor on the derived struct,
+  returning `Result<your_struct, str8>`
 
 For derived structs, base fields are emitted directly in the JSON object. For
 fields declared with `@property(...)`, serialization also emits a sibling
 `@property` metadata object describing the active property flags.
 
 ### Types
-- `JsonDoc`
-- `JsonValue`
-- `JsonArrayIter`
-- `JsonObjectIter`
+- `json_doc`
+- `json_value`
+- `json_array_iter`
+- `json_object_iter`
 
 ### Kind constants
 - `kind_invalid()`
@@ -29,36 +30,36 @@ fields declared with `@property(...)`, serialization also emits a sibling
 - `kind_object()`
 
 ### Document API
-- `JsonDoc::parse(text: str8) -> Result<JsonDoc, str8>`
-- `JsonDoc::from_file(path: str8) -> Result<JsonDoc, str8>`
-- `JsonDoc::root(self: JsonDoc) -> Result<JsonValue, str8>`
-- `JsonDoc::stringify(self: JsonDoc) -> Result<str8, str8>`
-- `JsonDoc::stringify_pretty(self: JsonDoc) -> Result<str8, str8>`
-- `JsonDoc::free(self: JsonDoc) -> void`
+- `json_doc::parse(text: str8) -> Result<json_doc, str8>`
+- `json_doc::from_file(path: str8) -> Result<json_doc, str8>`
+- `json_doc::root(self: json_doc) -> Result<json_value, str8>`
+- `json_doc::stringify(self: json_doc) -> Result<str8, str8>`
+- `json_doc::stringify_pretty(self: json_doc) -> Result<str8, str8>`
+- `json_doc::free(self: json_doc) -> void`
 - `last_error() -> str8`
 
 ### Value API
-- `JsonValue::kind(self: JsonValue) -> i32`
-- `JsonValue::size(self: JsonValue) -> Result<i64, str8>`
-- `JsonValue::get(self: JsonValue, key: str8) -> Result<JsonValue, str8>`
-- `JsonValue::index(self: JsonValue, i: i64) -> Result<JsonValue, str8>`
-- `JsonValue::as_bool(self: JsonValue) -> Result<i32, str8>`
-- `JsonValue::as_i64(self: JsonValue) -> Result<i64, str8>`
-- `JsonValue::as_f64(self: JsonValue) -> Result<f64, str8>`
-- `JsonValue::as_string(self: JsonValue) -> Result<str8, str8>`
-- `JsonValue::key_at(self: JsonValue, i: i64) -> Result<str8, str8>`
-- `JsonValue::iter_array(self: JsonValue) -> Result<JsonArrayIter, str8>`
-- `JsonValue::iter_object(self: JsonValue) -> Result<JsonObjectIter, str8>`
-- `JsonValue::free(self: JsonValue) -> void`
+- `json_value::kind(self: json_value) -> i32`
+- `json_value::size(self: json_value) -> Result<i64, str8>`
+- `json_value::get(self: json_value, key: str8) -> Result<json_value, str8>`
+- `json_value::index(self: json_value, i: i64) -> Result<json_value, str8>`
+- `json_value::as_bool(self: json_value) -> Result<i32, str8>`
+- `json_value::as_i64(self: json_value) -> Result<i64, str8>`
+- `json_value::as_f64(self: json_value) -> Result<f64, str8>`
+- `json_value::as_string(self: json_value) -> Result<str8, str8>`
+- `json_value::key_at(self: json_value, i: i64) -> Result<str8, str8>`
+- `json_value::iter_array(self: json_value) -> Result<json_array_iter, str8>`
+- `json_value::iter_object(self: json_value) -> Result<json_object_iter, str8>`
+- `json_value::free(self: json_value) -> void`
 
 ### Iterator API
-- `JsonArrayIter::has_next(self: JsonArrayIter) -> i32`
-- `JsonArrayIter::current(self: JsonArrayIter) -> Result<JsonValue, str8>`
-- `JsonArrayIter::advance(self: JsonArrayIter) -> JsonArrayIter`
-- `JsonObjectIter::has_next(self: JsonObjectIter) -> i32`
-- `JsonObjectIter::current_key(self: JsonObjectIter) -> Result<str8, str8>`
-- `JsonObjectIter::current_value(self: JsonObjectIter) -> Result<JsonValue, str8>`
-- `JsonObjectIter::advance(self: JsonObjectIter) -> JsonObjectIter`
+- `json_array_iter::has_next(self: json_array_iter) -> i32`
+- `json_array_iter::current(self: json_array_iter) -> Result<json_value, str8>`
+- `json_array_iter::advance(self: json_array_iter) -> json_array_iter`
+- `json_object_iter::has_next(self: json_object_iter) -> i32`
+- `json_object_iter::current_key(self: json_object_iter) -> Result<str8, str8>`
+- `json_object_iter::current_value(self: json_object_iter) -> Result<json_value, str8>`
+- `json_object_iter::advance(self: json_object_iter) -> json_object_iter`
 
 ### `#[derive(Json)]` decode support
 - [`bool`](Quick-Guide#types)

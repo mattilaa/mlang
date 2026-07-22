@@ -15,6 +15,10 @@ pub struct Hasher {
     var state: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `Hasher`.
+alias hasher = Hasher;
+
+
 /// @brief Create the default initial hash seed.
 pub fn init() -> i64 {
     return __mlang_std_hash_init();

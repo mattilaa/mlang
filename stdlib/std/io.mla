@@ -71,6 +71,25 @@ pub struct BufRead {
     var cursor: Cursor;
 };
 
+/// @brief Lowercase stdlib type alias for `Stdin`.
+alias stdin_stream = Stdin;
+
+/// @brief Lowercase stdlib type alias for `Stdout`.
+alias stdout_stream = Stdout;
+
+/// @brief Lowercase stdlib type alias for `Stderr`.
+alias stderr_stream = Stderr;
+
+/// @brief Lowercase stdlib type alias for `StdoutLock`.
+alias stdout_lock = StdoutLock;
+
+/// @brief Lowercase stdlib type alias for `Cursor`.
+alias cursor = Cursor;
+
+/// @brief Lowercase stdlib type alias for `BufRead`.
+alias buf_read = BufRead;
+
+
 /// @brief Seek constant: offsets measured from the start of the stream.
 /// @return Integer whence value.
 pub fn seek_set() -> i32 { return 0; }

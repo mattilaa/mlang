@@ -26,3 +26,4 @@ Module file: `stdlib/std/math.mla`
 ### Integer-specific
 - `sum_range(start: i32, end: i32) -> i32`
 - `factorial(n: i32) -> i32`
+

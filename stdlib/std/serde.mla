@@ -57,6 +57,13 @@ trait BinarySerde {
     fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8>;
 }
 
+/// @brief Lowercase stdlib type alias for `Binary`.
+alias binary = Binary;
+
+/// @brief Lowercase stdlib type alias for `Reader`.
+alias reader = Reader;
+
+
 impl Binary {
     /// @brief Create a new empty binary buffer.
     pub fn new(initial_capacity: i64) -> Result<Binary, str8> {

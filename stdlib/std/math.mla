@@ -279,6 +279,10 @@ pub struct Complex<T> {
     var im: T;
 };
 
+/// @brief Lowercase stdlib type alias for `Complex`.
+alias complex<T> = Complex<T>;
+
+
 impl<T> Complex {
     /// @brief Construct a complex number from real and imaginary parts.
     pub fn new(re: T, im: T) -> Complex<T> {

@@ -19,6 +19,10 @@ pub struct Timer {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `Timer`.
+alias timer = Timer;
+
+
 /// @brief Monotonic milliseconds since unspecified epoch.
 pub fn now_ms() -> i64 {
     return __mlang_std_time_now_ms();

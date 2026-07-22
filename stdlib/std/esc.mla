@@ -12,7 +12,7 @@ use std::esc::detail::*;
 /// - cursor controls (home, clear, show/hide, move)
 ///
 /// Ownership: `std::esc` helpers mostly return borrowed/static escape strings.
-/// Treat returned `str8` values as read-only and do not pass them to `String::free()`.
+/// Treat returned `str8` values as read-only and do not pass them to `std::strbuf::free(...)`.
 /// ACS box-drawing helpers are the exception: they return owned formatted strings.
 ///
 /// Escape sequences auto-disable when `std::term::supports_ansi()` is false.
@@ -25,6 +25,15 @@ use std::ascii::UnicodeBoxGlyph;
 use type Color = i32;
 use type CursorCommand = i32;
 use type CursorDirection = i32;
+
+/// @brief Lowercase stdlib type alias for `Color`.
+alias color = Color;
+
+/// @brief Lowercase stdlib type alias for `CursorCommand`.
+alias cursor_command = CursorCommand;
+
+/// @brief Lowercase stdlib type alias for `CursorDirection`.
+alias cursor_direction = CursorDirection;
 
 fn ansi_enabled() -> i32 {
     return __mlang_std_term_stdout_supports_ansi();

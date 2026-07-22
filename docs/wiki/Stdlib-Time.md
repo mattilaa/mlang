@@ -22,10 +22,10 @@ Module file: `stdlib/std/time.mla`
 - `MS` milliseconds
 - `NS` nanoseconds
 
-### Timer
-- `Timer::after(timeout_ms: i64) -> Result<Timer, str8>`
-- `Timer::reset(self: Timer, timeout_ms: i64) -> i32`
-- `Timer::elapsed(self: Timer) -> i32`
-- `Timer::remaining_ms(self: Timer) -> i64`
-- `Timer::wait(self: Timer) -> i32`
-- `Timer::close(self: Timer) -> i32`
+### timer
+- `timer::after(timeout_ms: i64) -> Result<timer, str8>`
+- `timer::reset(self: timer, timeout_ms: i64) -> i32`
+- `timer::elapsed(self: timer) -> i32`
+- `timer::remaining_ms(self: timer) -> i64`
+- `timer::wait(self: timer) -> i32`
+- `timer::close(self: timer) -> i32`

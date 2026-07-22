@@ -14,7 +14,7 @@ Documentation/navigation module for the compiler-provided `array<T, N>` type.
   runtime guarded before loading.
 - `size_of(array<T, N>)` returns `N * size_of(T)`.
 
-### `list<bool>` vs `std::bitset::BitSet`
+### `list<bool>` vs `std::bitset::bit_set`
 - `list<bool>` is a normal list container, not a packed `std::vector<bool>`-style specialization
-- Use `std::bitset::BitSet` when you need one-bit-per-entry dense storage
-- `BitSet::len()` is measured in bits
+- Use `std::bitset::bit_set` when you need one-bit-per-entry dense storage
+- `bit_set::len()` is measured in bits

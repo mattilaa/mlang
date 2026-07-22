@@ -54,6 +54,13 @@ pub struct ImageInfo {
     var height: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `ImageGlyphMode`.
+alias image_glyph_mode = ImageGlyphMode;
+
+/// @brief Lowercase stdlib type alias for `ImageInfo`.
+alias image_info = ImageInfo;
+
+
 /// @brief Return the last backend image error string.
 pub fn last_error() -> str8 {
     return __mlang_std_image_last_error();

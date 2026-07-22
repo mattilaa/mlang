@@ -23,6 +23,13 @@ pub struct Runtime {
     var outbound_handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `StdioTransport`.
+alias stdio_transport = StdioTransport;
+
+/// @brief Lowercase stdlib type alias for `Runtime`.
+alias runtime = Runtime;
+
+
 /// @brief Return the last `std::jsonrpc` error message.
 /// @return UTF-8 error description, or empty string if none.
 pub fn last_error() -> str8 {

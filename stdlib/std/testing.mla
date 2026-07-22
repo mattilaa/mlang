@@ -28,6 +28,10 @@ pub struct Mock {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `Mock`.
+alias mock = Mock;
+
+
 /// Reset per-test expectation counters.
 /// @ingroup std_testing
 pub fn reset() -> void {

@@ -1,0 +1,129 @@
+mod std::argparser;
+mod std::bits;
+mod std::bitset;
+mod std::term;
+mod std::vec;
+mod std::sync;
+mod std::testing;
+
+use std::argparser::*;
+use std::bits::*;
+use std::bitset::*;
+use std::term::*;
+use std::vec::*;
+use std::sync::*;
+use std::testing::verify;
+
+struct sample_point {
+    let x: i32 = 0;
+    let y: i32 = 0;
+};
+
+fn test_lowercase_argparser_alias_impl() -> i32 {
+    let ap: arg_parser = arg_parser::new("alias_demo", "lowercase alias test");
+    ap.free();
+    return 0;
+}
+
+#[test]
+fn test_lowercase_argparser_alias() {
+    verify(test_lowercase_argparser_alias_impl() == 0);
+}
+
+fn test_lowercase_bitset_alias_impl() -> i32 {
+    let bits_r: Result<bit_set, str8> = bit_set::new(8);
+    if bits_r.is_err() {
+        return 1;
+    }
+    let bits: bit_set = bits_r.unwrap();
+    bits.resize(8, false);
+    bits.set(3, true);
+    let get_r: Result<bool, str8> = bits.get(3);
+    if get_r.is_err() {
+        bits.close();
+        return 1;
+    }
+    let ok: i32 = get_r.unwrap() ? 0 : 1;
+    bits.close();
+    return ok;
+}
+
+#[test]
+fn test_lowercase_bitset_alias() {
+    verify(test_lowercase_bitset_alias_impl() == 0);
+}
+
+fn test_lowercase_mutex_alias_impl() -> i32 {
+    let mr: Result<mutex, str8> = mutex::new();
+    if mr.is_err() {
+        return 1;
+    }
+    let m: mutex = mr.unwrap();
+    let lock_r: Result<i32, str8> = m.lock();
+    if lock_r.is_err() {
+        m.close();
+        return 1;
+    }
+    let unlock_r: Result<i32, str8> = m.unlock();
+    if unlock_r.is_err() {
+        m.close();
+        return 1;
+    }
+    m.close();
+    return 0;
+}
+
+#[test]
+fn test_lowercase_mutex_alias() {
+    verify(test_lowercase_mutex_alias_impl() == 0);
+}
+
+fn test_qualified_lowercase_mutex_alias_impl() -> i32 {
+    let mr: Result<std::sync::mutex, str8> = std::sync::mutex::new();
+    if mr.is_err() {
+        return 1;
+    }
+    let m: std::sync::mutex = mr.unwrap();
+    m.close();
+    return 0;
+}
+
+#[test]
+fn test_qualified_lowercase_mutex_alias() {
+    verify(test_qualified_lowercase_mutex_alias_impl() == 0);
+}
+
+fn test_lowercase_type_aliases_impl() -> i32 {
+    let level: color_level = color_truecolor();
+    if level != 16777216 {
+        return 1;
+    }
+    if on() != bit(1) || off() != bit(0) {
+        return 1;
+    }
+    var values: list<i32> = new();
+    values.push(10);
+    values.push(20);
+    return values.len() == 2 ? 0 : 1;
+}
+
+#[test]
+fn test_lowercase_type_aliases() {
+    verify(test_lowercase_type_aliases_impl() == 0);
+}
+
+fn test_vec_new_with_struct_element_impl() -> i32 {
+    var points: list<sample_point> = new();
+    points.push(sample_point { x: 3, y: 4 });
+    points.push(sample_point { x: 5, y: 6 });
+    if points.len() != 2 {
+        return 1;
+    }
+    let first = points.first();
+    return first.x == 3 && first.y == 4 ? 0 : 1;
+}
+
+#[test]
+fn test_vec_new_with_struct_element() {
+    verify(test_vec_new_with_struct_element_impl() == 0);
+}

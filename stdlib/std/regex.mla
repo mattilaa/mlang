@@ -19,6 +19,10 @@ pub struct Regex {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `Regex`.
+alias regex = Regex;
+
+
 /// @brief Return the last `std::regex` error message.
 /// @return UTF-8 error description, or empty string if none.
 pub fn last_error() -> str8 {

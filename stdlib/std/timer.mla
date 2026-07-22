@@ -20,6 +20,13 @@ pub struct AsyncTicker {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `IntervalTimer`.
+alias interval_timer = IntervalTimer;
+
+/// @brief Lowercase stdlib type alias for `AsyncTicker`.
+alias async_ticker = AsyncTicker;
+
+
 impl IntervalTimer {
     /// @brief Create periodic timer that ticks every `interval_ms`.
     pub fn every_ms(interval_ms: i64) -> Result<IntervalTimer, str8> {

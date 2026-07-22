@@ -16,14 +16,14 @@ Stable 64-bit hashing helpers for cache keys, fingerprints, and combined IDs.
 - `to_hex(value: i64) -> str8`
 
 ### Incremental builder
-- `Hasher::new() -> Hasher`
-- `Hasher::write_i64(self: &mut Self, value: i64) -> void`
-- `Hasher::write_bool(self: &mut Self, value: bool) -> void`
-- `Hasher::write_str(self: &mut Self, text: str8) -> void`
-- `Hasher::write_str16(self: &mut Self, text: str16) -> void`
-- `Hasher::write_hash(self: &mut Self, value_hash: i64) -> void`
-- `Hasher::finish(self: Hasher) -> i64`
-- `Hasher::finish_hex(self: Hasher) -> str8`
+- `hasher::new() -> hasher`
+- `hasher::write_i64(self: &mut Self, value: i64) -> void`
+- `hasher::write_bool(self: &mut Self, value: bool) -> void`
+- `hasher::write_str(self: &mut Self, text: str8) -> void`
+- `hasher::write_str16(self: &mut Self, text: str16) -> void`
+- `hasher::write_hash(self: &mut Self, value_hash: i64) -> void`
+- `hasher::finish(self: hasher) -> i64`
+- `hasher::finish_hex(self: hasher) -> str8`
 
 Example:
 
@@ -31,7 +31,7 @@ Example:
 mod std::hash;
 use std::hash::*;
 
-var h: Hasher = Hasher::new();
+var h: hasher = hasher::new();
 h.write_str("device");
 h.write_i64(42);
 println!("{}", h.finish_hex());

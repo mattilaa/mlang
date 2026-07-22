@@ -19,6 +19,10 @@ pub struct Bytes {
     var handle: i64;
 };
 
+/// @brief Lowercase stdlib type alias for `Bytes`.
+alias bytes = Bytes;
+
+
 /// @brief Return last backend error.
 pub fn last_error() -> str8 {
     return __mlang_std_bytes_last_error();

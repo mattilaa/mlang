@@ -4152,6 +4152,18 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         }
     }
 
+    if(auto* methodCall = dynamic_cast<MethodCallNode*>(expr))
+    {
+        if(methodCall->methodName == "first" ||
+           methodCall->methodName == "last" ||
+           methodCall->methodName == "pop")
+        {
+            TypeNode* objectType = getLValueType(methodCall->object, line);
+            if(auto* listType = dynamic_cast<GenericListTypeNode*>(objectType))
+                return cloneTypeNode(listType->elementType);
+        }
+    }
+
     if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(expr))
     {
         if(fieldAccess->fieldName == "name")
@@ -15353,6 +15365,23 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
                 return true;
         return false;
     };
+    auto find_alias = [&](const std::string& name)
+    {
+        auto it = typeAliases.find(name);
+        if(it != typeAliases.end())
+            return std::make_pair(name, it);
+
+        size_t scopePos = name.rfind("::");
+        if(scopePos != std::string::npos && scopePos + 2 < name.size())
+        {
+            std::string tail = name.substr(scopePos + 2);
+            it = typeAliases.find(tail);
+            if(it != typeAliases.end())
+                return std::make_pair(tail, it);
+        }
+
+        return std::make_pair(std::string(), typeAliases.end());
+    };
 
     if(auto* listType = dynamic_cast<GenericListTypeNode*>(typeNode))
     {
@@ -15403,7 +15432,7 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
         if(scopeTypeParams.count(structType->structName))
             return typeNode;
 
-        auto it = typeAliases.find(structType->structName);
+        auto [aliasName, it] = find_alias(structType->structName);
         if(it == typeAliases.end())
             return typeNode;
 
@@ -15415,14 +15444,14 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
             return typeNode;
         }
 
-        if(in_stack(structType->structName))
+        if(in_stack(aliasName))
         {
             reportError(typeNode->line, "cyclic type alias detected for '" +
                                             structType->structName + "'");
             return typeNode;
         }
 
-        aliasStack.push_back(structType->structName);
+        aliasStack.push_back(aliasName);
         TypeNode* expanded = cloneTypeNode(it->second.aliasedType);
         expanded = resolveTypeAliasNode(expanded, scopeTypeParams, aliasStack);
         aliasStack.pop_back();
@@ -15440,7 +15469,7 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
         if(scopeTypeParams.count(genStruct->structName))
             return typeNode;
 
-        auto it = typeAliases.find(genStruct->structName);
+        auto [aliasName, it] = find_alias(genStruct->structName);
         if(it == typeAliases.end())
             return typeNode;
 
@@ -15469,14 +15498,14 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
             return typeNode;
         }
 
-        if(in_stack(genStruct->structName))
+        if(in_stack(aliasName))
         {
             reportError(typeNode->line, "cyclic type alias detected for '" +
                                             genStruct->structName + "'");
             return typeNode;
         }
 
-        aliasStack.push_back(genStruct->structName);
+        aliasStack.push_back(aliasName);
         TypeNode* aliasType = cloneTypeNode(it->second.aliasedType);
         TypeNode* expanded = substituteTypeParams(
             aliasType, it->second.typeParams, genStruct->typeArgs);
@@ -19034,6 +19063,33 @@ void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
 std::pair<llvm::Value*, std::string>
 CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
 {
+    auto resolveStructAliasName = [&](const std::string& typeName)
+    {
+        std::string current = typeName;
+        std::set<std::string> seen;
+        while(!current.empty() && seen.insert(current).second)
+        {
+            auto aliasIt = typeAliases.find(current);
+            if(aliasIt == typeAliases.end() || !aliasIt->second.aliasedType)
+                break;
+            if(auto* structRef = dynamic_cast<StructTypeRefNode*>(
+                   aliasIt->second.aliasedType))
+            {
+                current = structRef->structName;
+                continue;
+            }
+            if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(
+                   aliasIt->second.aliasedType))
+            {
+                current = getOrCreateMonomorphizedStruct(genRef->structName,
+                                                         genRef->typeArgs);
+                break;
+            }
+            break;
+        }
+        return current;
+    };
+
     // Case 1: Simple identifier (e.g., "myStruct")
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
@@ -19080,9 +19136,10 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             }
         }
 
-        return {actualPtr, typeIt != structVariableTypes.end()
-                               ? typeIt->second
-                               : inferredStructName};
+        std::string structName = typeIt != structVariableTypes.end()
+                                     ? typeIt->second
+                                     : inferredStructName;
+        return {actualPtr, resolveStructAliasName(structName)};
     }
 
     // Case 2: Field access (e.g., "a.b" in "a.b.c")
@@ -19123,7 +19180,7 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
                                       "' is not a struct");
                 return {nullptr, ""};
             }
-            objTypeName = typeIt->second;
+            objTypeName = resolveStructAliasName(typeIt->second);
 
             // Handle self pointer
             if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(objPtr))
@@ -20541,6 +20598,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
             if(TypeNode* parsedType = type_from_text(structName))
             {
+                std::set<std::string> emptyTypeParams;
+                std::vector<std::string> aliasStack;
+                parsedType = resolveTypeAliasNode(parsedType, emptyTypeParams,
+                                                  aliasStack);
                 if(auto* genericStructType =
                        dynamic_cast<GenericStructTypeRefNode*>(parsedType))
                 {
@@ -23531,6 +23592,33 @@ bool CodeGenerator::generateJsonValueDeserializerMethodBody(
 
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
+    auto resolveStructAliasName = [&](const std::string& typeName)
+    {
+        std::string current = typeName;
+        std::set<std::string> seen;
+        while(!current.empty() && seen.insert(current).second)
+        {
+            auto aliasIt = typeAliases.find(current);
+            if(aliasIt == typeAliases.end() || !aliasIt->second.aliasedType)
+                break;
+            if(auto* structRef = dynamic_cast<StructTypeRefNode*>(
+                   aliasIt->second.aliasedType))
+            {
+                current = structRef->structName;
+                continue;
+            }
+            if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(
+                   aliasIt->second.aliasedType))
+            {
+                current = getOrCreateMonomorphizedStruct(genRef->structName,
+                                                         genRef->typeArgs);
+                break;
+            }
+            break;
+        }
+        return current;
+    };
+
     auto validateTemporaryBorrowArguments =
         [&](const std::vector<ExpressionNode*>& args,
             const std::string& calleeName,
@@ -25694,7 +25782,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         "'" + objId->name + "' is not a struct variable");
             return nullptr;
         }
-        structTypeName = typeIt->second;
+        structTypeName = resolveStructAliasName(typeIt->second);
 
         objPtr = namedValues[objId->name];
         if(!objPtr)
