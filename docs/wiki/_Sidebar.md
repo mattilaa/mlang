@@ -2,88 +2,88 @@
 # MLang Wiki
 
 ## Start Here
-- [MLang Documentation](Home.md)
-- [New Features Guide](New-Features.md)
-- [Project README](Project-README.md)
+- [[MLang Documentation|Home]]
+- [[New Features Guide|New-Features]]
+- [[Project README|Project-README]]
 
 ## Language
-- [Compiler Diagnostics](Compiler-Diagnostics.md)
-- [Language Attributes](Language-Attributes.md)
-- [Language Built-ins](Language-Built-ins.md)
-- [Language Syntax](Language-Syntax.md)
-- [Quick Guide](Quick-Guide.md)
+- [[Compiler Diagnostics|Compiler-Diagnostics]]
+- [[Language Attributes|Language-Attributes]]
+- [[Language Built-ins|Language-Built-ins]]
+- [[Language Syntax|Language-Syntax]]
+- [[Quick Guide|Quick-Guide]]
 
 ## Standard Library
-- [Stdlib Changes 2026-03-13](Stdlib-Changes-2026-03-13.md)
-- [Stdlib Misc Modules](Stdlib-Misc-Modules.md)
-- [Stdlib Module API](Stdlib-Module-API.md)
-- [Stdlib README](Stdlib-README.md)
+- [[Stdlib Changes 2026-03-13|Stdlib-Changes-2026-03-13]]
+- [[Stdlib Misc Modules|Stdlib-Misc-Modules]]
+- [[Stdlib Module API|Stdlib-Module-API]]
+- [[Stdlib README|Stdlib-README]]
 
 ## Stdlib Modules
-- [std::algorithm::fft](Stdlib-Algorithm-Fft.md)
-- [std::algorithm::numeric](Stdlib-Algorithm-Numeric.md)
-- [std::algorithm::order](Stdlib-Algorithm-Order.md)
-- [std::algorithm::ranges](Stdlib-Algorithm-Ranges.md)
-- [std::argparser](Stdlib-Argparser.md)
-- [std::array](Stdlib-Array.md)
-- [std::audio](Stdlib-Audio.md)
-- [std::bench](Stdlib-Bench.md)
-- [std::bits](Stdlib-Bits.md)
-- [std::bitset](Stdlib-Bitset.md)
-- [std::bytes](Stdlib-Bytes.md)
-- [std::chat](Stdlib-Chat.md)
-- [std::compiler](Stdlib-Compiler.md)
-- [std::date](Stdlib-Date.md)
-- [std::env](Stdlib-Env.md)
-- [std::esc](Stdlib-Esc.md)
-- [std::event_loop](Stdlib-Event-Loop.md)
-- [std::exceptions](Stdlib-Exceptions.md)
-- [std::fs](Stdlib-Fs.md)
-- [std::gps](Stdlib-Gps.md)
-- [std::hash](Stdlib-Hash.md)
-- [std::image](Stdlib-Image.md)
-- [std::io](Stdlib-Io.md)
-- [std::ipc](Stdlib-Ipc.md)
-- [std::json](Stdlib-Json.md)
-- [std::jsonrpc](Stdlib-Jsonrpc.md)
-- [std::math](Stdlib-Math.md)
-- [std::net](Stdlib-Net.md)
-- [std::platform](Stdlib-Platform.md)
-- [std::printf](Stdlib-Printf.md)
-- [std::process](Stdlib-Process.md)
-- [std::protocol](Stdlib-Protocol.md)
-- [std::rand](Stdlib-Rand.md)
-- [std::regex](Stdlib-Regex.md)
-- [std::sed](Stdlib-Sed.md)
-- [std::serde](Stdlib-Serde.md)
-- [std::simd](Stdlib-Simd.md)
-- [std::span](Stdlib-Span.md)
-- [std::strbuf](Stdlib-Strbuf.md)
-- [std::sync](Stdlib-Sync.md)
-- [std::term](Stdlib-Term.md)
-- [std::testing](Stdlib-Testing.md)
-- [std::thread](Stdlib-Thread.md)
-- [std::time](Stdlib-Time.md)
-- [std::timer](Stdlib-Timer.md)
-- [std::unordered](Stdlib-Unordered.md)
-- [std::vec](Stdlib-Vec.md)
+- [[std::algorithm::fft|Stdlib-Algorithm-Fft]]
+- [[std::algorithm::numeric|Stdlib-Algorithm-Numeric]]
+- [[std::algorithm::order|Stdlib-Algorithm-Order]]
+- [[std::algorithm::ranges|Stdlib-Algorithm-Ranges]]
+- [[std::argparser|Stdlib-Argparser]]
+- [[std::array|Stdlib-Array]]
+- [[std::audio|Stdlib-Audio]]
+- [[std::bench|Stdlib-Bench]]
+- [[std::bits|Stdlib-Bits]]
+- [[std::bitset|Stdlib-Bitset]]
+- [[std::bytes|Stdlib-Bytes]]
+- [[std::chat|Stdlib-Chat]]
+- [[std::compiler|Stdlib-Compiler]]
+- [[std::date|Stdlib-Date]]
+- [[std::env|Stdlib-Env]]
+- [[std::esc|Stdlib-Esc]]
+- [[std::event_loop|Stdlib-Event-Loop]]
+- [[std::exceptions|Stdlib-Exceptions]]
+- [[std::fs|Stdlib-Fs]]
+- [[std::gps|Stdlib-Gps]]
+- [[std::hash|Stdlib-Hash]]
+- [[std::image|Stdlib-Image]]
+- [[std::io|Stdlib-Io]]
+- [[std::ipc|Stdlib-Ipc]]
+- [[std::json|Stdlib-Json]]
+- [[std::jsonrpc|Stdlib-Jsonrpc]]
+- [[std::math|Stdlib-Math]]
+- [[std::net|Stdlib-Net]]
+- [[std::platform|Stdlib-Platform]]
+- [[std::printf|Stdlib-Printf]]
+- [[std::process|Stdlib-Process]]
+- [[std::protocol|Stdlib-Protocol]]
+- [[std::rand|Stdlib-Rand]]
+- [[std::regex|Stdlib-Regex]]
+- [[std::sed|Stdlib-Sed]]
+- [[std::serde|Stdlib-Serde]]
+- [[std::simd|Stdlib-Simd]]
+- [[std::span|Stdlib-Span]]
+- [[std::strbuf|Stdlib-Strbuf]]
+- [[std::sync|Stdlib-Sync]]
+- [[std::term|Stdlib-Term]]
+- [[std::testing|Stdlib-Testing]]
+- [[std::thread|Stdlib-Thread]]
+- [[std::time|Stdlib-Time]]
+- [[std::timer|Stdlib-Timer]]
+- [[std::unordered|Stdlib-Unordered]]
+- [[std::vec|Stdlib-Vec]]
 
 ## Tooling
-- [Bootstrap](Bootstrap.md)
-- [mlangpkg](Mlangpkg.md)
-- [Package Manager](Package-Manager.md)
-- [Tests](Tests.md)
+- [[Bootstrap|Bootstrap]]
+- [[mlangpkg|Mlangpkg]]
+- [[Package Manager|Package-Manager]]
+- [[Tests|Tests]]
 
 ## Examples
-- [Examples](Examples.md)
-- [UML UI Generator](UML-UI-Generator.md)
-- [UML UI Generator Example](UML-UI-Generator-Example.md)
+- [[Examples|Examples]]
+- [[UML UI Generator|UML-UI-Generator]]
+- [[UML UI Generator Example|UML-UI-Generator-Example]]
 
 ## Man Pages
-- [`mlang`](Man-mlang.md)
-- [`mlang-frontend`](Man-mlang-frontend.md)
-- [`mlang-frontend-mla`](Man-mlang-frontend-mla.md)
-- [`mlang-format`](Man-mlang-format.md)
-- [`mlang-pkg`](Man-mlang-pkg.md)
-- [`mlangd`](Man-mlangd.md)
-- [`mlangd-mla`](Man-mlangd-mla.md)
+- [[`mlang`|Man-mlang]]
+- [[`mlang-frontend`|Man-mlang-frontend]]
+- [[`mlang-frontend-mla`|Man-mlang-frontend-mla]]
+- [[`mlang-format`|Man-mlang-format]]
+- [[`mlang-pkg`|Man-mlang-pkg]]
+- [[`mlangd`|Man-mlangd]]
+- [[`mlangd-mla`|Man-mlangd-mla]]

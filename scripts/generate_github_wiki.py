@@ -496,14 +496,14 @@ def write_sidebar(out_dir: Path, pages: list[Page], manpage_names: list[str]) ->
             continue
         lines.extend([f"## {group}"])
         for page in group_pages:
-            lines.append(f"- [{page.title}]({page.wiki_name}.md)")
+            lines.append(f"- [[{page.title}|{page.wiki_name}]]")
         lines.append("")
 
     if manpage_names:
         lines.extend(["## Man Pages"])
         for command_name in manpage_names:
             wiki_name = f"Man-{slugify_wiki_name(command_name)}"
-            lines.append(f"- [`{command_name}`]({wiki_name}.md)")
+            lines.append(f"- [[`{command_name}`|{wiki_name}]]")
         lines.append("")
 
     (out_dir / "_Sidebar.md").write_text("\n".join(lines), encoding="utf-8")
