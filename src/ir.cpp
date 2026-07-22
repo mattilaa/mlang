@@ -4152,6 +4152,18 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         }
     }
 
+    if(auto* methodCall = dynamic_cast<MethodCallNode*>(expr))
+    {
+        if(methodCall->methodName == "first" ||
+           methodCall->methodName == "last" ||
+           methodCall->methodName == "pop")
+        {
+            TypeNode* objectType = getLValueType(methodCall->object, line);
+            if(auto* listType = dynamic_cast<GenericListTypeNode*>(objectType))
+                return cloneTypeNode(listType->elementType);
+        }
+    }
+
     if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(expr))
     {
         if(fieldAccess->fieldName == "name")

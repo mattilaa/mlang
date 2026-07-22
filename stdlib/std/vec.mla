@@ -55,7 +55,7 @@ use std::vec::detail::*;
 
 // -- Construction -------------------------------------------------- //
 
-/// @brief Create an empty integer Vec.
+/// @brief Create an empty Vec using the declared element type.
 /// @ingroup vec_methods
 ///
 /// The canonical constructor for a vector.  The element type `T` is
@@ -72,7 +72,7 @@ use std::vec::detail::*;
 /// Use an explicit variable type to select the element type.
 ///
 /// @return An empty `list<T>`.
-pub fn new() -> list<i64> {
+generic<T> pub fn new() -> list<T> {
     return Vec::new();
 }
 

@@ -14,6 +14,11 @@ use std::vec::*;
 use std::sync::*;
 use std::testing::verify;
 
+struct sample_point {
+    let x: i32 = 0;
+    let y: i32 = 0;
+};
+
 fn test_lowercase_argparser_alias_impl() -> i32 {
     let ap: arg_parser = arg_parser::new("alias_demo", "lowercase alias test");
     ap.free();
@@ -105,4 +110,20 @@ fn test_lowercase_type_aliases_impl() -> i32 {
 #[test]
 fn test_lowercase_type_aliases() {
     verify(test_lowercase_type_aliases_impl() == 0);
+}
+
+fn test_vec_new_with_struct_element_impl() -> i32 {
+    var points: list<sample_point> = new();
+    points.push(sample_point { x: 3, y: 4 });
+    points.push(sample_point { x: 5, y: 6 });
+    if points.len() != 2 {
+        return 1;
+    }
+    let first = points.first();
+    return first.x == 3 && first.y == 4 ? 0 : 1;
+}
+
+#[test]
+fn test_vec_new_with_struct_element() {
+    verify(test_vec_new_with_struct_element_impl() == 0);
 }
