@@ -656,7 +656,7 @@ Notes:
 ## Exceptions: `throw` and `try/catch`
 
 MLang supports stack-unwinding exceptions with an explicit payload type from
-[`std::exceptions`](Stdlib-std-exceptions).
+[`std::exceptions`](Stdlib-Exceptions).
 
 ## Functional Programming Subset
 
@@ -990,7 +990,7 @@ state = bit(0);
 
 [`bit`](Quick-Guide#types) is useful for flags stored in structs and other low-level state. For
 readable aliases you can wrap the two values in helpers such as
-[`std::bits::ON()`](Stdlib-std-bits) and [`std::bits::OFF()`](Stdlib-std-bits).
+[`std::bits::ON()`](Stdlib-Bits) and [`std::bits::OFF()`](Stdlib-Bits).
 
 The builtin `size_of(...)` returns byte sizes as [`i64`](Quick-Guide#types):
 
@@ -1016,7 +1016,7 @@ static_assert!(size_of(array<i32, 6>) == 24);
 
 Important distinction:
 - [`list<bool>`](Quick-Guide#types) is a normal list container with ordinary element storage
-- [`std::bitset::BitSet`](Stdlib-std-bitset) stores values densely at one bit per entry
+- [`std::bitset::BitSet`](Stdlib-Bitset) stores values densely at one bit per entry
 
 <a id="builder_syntax"></a>
 

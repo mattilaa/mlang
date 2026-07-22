@@ -481,7 +481,7 @@ MLANGD_COMPILER_CACHE_CLEAR_INTERVAL=180 path/to/mlangd --stdio
 
 ## Mlangd (Mlang Scaffold)
 Initial Mlang implementation scaffold lives at `tools/mlangd-mla/main.mla`.
-It uses [`std::jsonrpc::run_stdio_loop(...)`](Stdlib-std-jsonrpc) and a Mlang dispatcher hook:
+It uses [`std::jsonrpc::run_stdio_loop(...)`](Stdlib-Jsonrpc) and a Mlang dispatcher hook:
 `__mlang_std_jsonrpc_runtime_dispatch(...)`.
 
 Build object:
@@ -772,7 +772,7 @@ commands = [
 ```
 
 ## Stdlib Linking
-When using stdlib modules backed by native code (e.g. [`std::math`](Stdlib-std-math)), link
+When using stdlib modules backed by native code (e.g. [`std::math`](Stdlib-Math)), link
 against the stdlib library just like GCC/Clang:
 
 ```sh
@@ -1131,7 +1131,7 @@ mlang bench tests/bench_stdlib.mla --bench-iters 200000 --bench-warmup 20000
 ```
 
 Benchmark anti-optimization helpers (Google Benchmark style) are available in
-[`std::bench`](Stdlib-std-bench):
+[`std::bench`](Stdlib-Bench):
 - `do_not_optimize_i64(v)`
 - `do_not_optimize_i32(v)`
 - `clobber_memory()`
@@ -1142,7 +1142,7 @@ Skip compiling tests in normal builds:
 mlang --no-tests main.mla
 ```
 
-GoogleTest-like non-fatal expectations are available via [`std::testing`](Stdlib-std-testing):
+GoogleTest-like non-fatal expectations are available via [`std::testing`](Stdlib-Testing):
 - `expect_true(cond)`
 - `expect_false(cond)`
 - `expect_eq(expected, actual)` (typed overloads)
@@ -1151,43 +1151,43 @@ GoogleTest-like non-fatal expectations are available via [`std::testing`](Stdlib
 - lightweight mock API is also available:
   `Mock`, `mock_new`, `mock_expect_call`, `mock_called`, `mock_verify`
 
-Interactive [`std::io`](Stdlib-std-io) input example (manual run, not part of Robot example
+Interactive [`std::io`](Stdlib-Io) input example (manual run, not part of Robot example
 suite): `examples/std_io_input_demo.mla`.
 The example uses `var user_input` directly (no `&mut` required) and trims with
 `trim(user_input)`.
-[`std::io`](Stdlib-std-io) now also supports stderr writes, stream buffering configuration
+[`std::io`](Stdlib-Io) now also supports stderr writes, stream buffering configuration
 (`set_*_buffering`), and non-blocking stdin polling (`read_line_nonblocking`).
-[`std::time`](Stdlib-std-time) now also provides local wall-clock formatting helpers:
+[`std::time`](Stdlib-Time) now also provides local wall-clock formatting helpers:
 `local_datetime()` (`MM/DD/YYYY:HH:MM:SS`), `local_datetime_ms()` (`...SS.MS`),
 and `local_datetime_ns()` (`...SS.NS`).
-Trait-like [`std::io`](Stdlib-std-io) handles (`Read`, `Write`, `Seek`, `BufRead`) example:
+Trait-like [`std::io`](Stdlib-Io) handles (`Read`, `Write`, `Seek`, `BufRead`) example:
 `examples/std_io_traits_demo.mla`.
-Filesystem API ([`std::fs::File`](Stdlib-std-fs), [`std::fs::BufReader`](Stdlib-std-fs)) example:
+Filesystem API ([`std::fs::File`](Stdlib-Fs), [`std::fs::BufReader`](Stdlib-Fs)) example:
 `examples/std_fs_demo.mla`.
-TCP networking API ([`std::net::TcpListener`](Stdlib-std-net), [`std::net::TcpStream`](Stdlib-std-net),
+TCP networking API ([`std::net::TcpListener`](Stdlib-Net), [`std::net::TcpStream`](Stdlib-Net),
 non-blocking mode, read/write timeouts) example:
 `examples/std_net_demo.mla`.
-Random API ([`std::rand`](Stdlib-std-rand) seed/range helpers) example:
+Random API ([`std::rand`](Stdlib-Rand) seed/range helpers) example:
 `examples/std_rand_demo.mla`.
-FFT API ([`std::algorithm::fft`](Stdlib-std-algorithm-fft) forward/inverse on split real/imag arrays) example:
+FFT API ([`std::algorithm::fft`](Stdlib-Algorithm-Fft) forward/inverse on split real/imag arrays) example:
 `examples/std_fft_demo.mla`.
-Regex API ([`std::regex::Regex`](Stdlib-std-regex), compile/match/find/captures) example:
+Regex API ([`std::regex::Regex`](Stdlib-Regex), compile/match/find/captures) example:
 `examples/std_regex_demo.mla`.
 Multithreaded TCP server/client examples:
 `examples/std_net_mt_server.mla` and `examples/std_net_mt_client.mla`.
 Advanced framed protocol stack examples (isolated in subdirectory):
 `examples/protocol_mt/server.mla` and `examples/protocol_mt/client.mla`
 with runner script `examples/protocol_mt/run_demo.sh`.
-JSON API ([`std::json::JsonDoc`](Stdlib-std-json) parse/stringify/object-array navigation, iterators, and `from_file`) example:
+JSON API ([`std::json::JsonDoc`](Stdlib-Json) parse/stringify/object-array navigation, iterators, and `from_file`) example:
 `examples/std_json_demo.mla`.
 Compiler-synthesized struct JSON serde (`#[derive(Json)]`, `to_json()`,
 `Type::from_json(text)`, inherited fields, `@property` metadata) example:
 `examples/std_json_derive_demo.mla`.
-JSON-RPC/LSP transport runtime ([`std::jsonrpc`](Stdlib-std-jsonrpc) Content-Length framing, timeout reads, cancellation registry, queue runtime) example:
+JSON-RPC/LSP transport runtime ([`std::jsonrpc`](Stdlib-Jsonrpc) Content-Length framing, timeout reads, cancellation registry, queue runtime) example:
 `examples/std_jsonrpc_runtime_demo.mla`.
 Manual stdio JSON-RPC worker runtime demo (`run_stdio_loop`, built-in `$/cancelRequest` routing):
 `examples/std_jsonrpc_stdio_loop_demo.mla` (manual run, not part of Robot suite).
-Incremental parse/query API for tooling ([`std::compiler::Session`](Stdlib-std-compiler), open/change/close, diagnostics, hover, completion, document symbols, cross-document definition via [`mod`](Language-Syntax) files) example:
+Incremental parse/query API for tooling ([`std::compiler::Session`](Stdlib-Compiler), open/change/close, diagnostics, hover, completion, document symbols, cross-document definition via [`mod`](Language-Syntax) files) example:
 `examples/std_compiler_demo.mla`.
 `?` is supported for [`Result`](Quick-Guide#types) propagation (early-return on `Err`).
 
@@ -1306,7 +1306,7 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
 - Advanced framed protocol demo (multithreaded server, per-client workers, multi-client load):
   `examples/protocol_mt/server.mla`, `examples/protocol_mt/client.mla`
   (runner: `examples/protocol_mt/run_demo.sh`)
-- Random number generation ([`std::rand`](Stdlib-std-rand)) with deterministic seeding + ranges:
+- Random number generation ([`std::rand`](Stdlib-Rand)) with deterministic seeding + ranges:
   `examples/std_rand_demo.mla`
 - Regex compile + match + group extraction:
   `examples/std_regex_demo.mla`
@@ -1315,15 +1315,15 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
 - Struct JSON serde via `#[derive(Json)]` (`to_json()`, `from_json(...)`,
   inherited fields, `@property` metadata):
   `examples/std_json_derive_demo.mla`
-- JSON-RPC/LSP stdio transport + cancellation/runtime queues ([`std::jsonrpc`](Stdlib-std-jsonrpc)):
+- JSON-RPC/LSP stdio transport + cancellation/runtime queues ([`std::jsonrpc`](Stdlib-Jsonrpc)):
   `examples/std_jsonrpc_runtime_demo.mla`
-- JSON-RPC stdio worker runtime loop ([`std::jsonrpc::run_stdio_loop`](Stdlib-std-jsonrpc)):
+- JSON-RPC stdio worker runtime loop ([`std::jsonrpc::run_stdio_loop`](Stdlib-Jsonrpc)):
   `examples/std_jsonrpc_stdio_loop_demo.mla`
-- ANSI terminal escape helpers ([`std::esc`](Stdlib-std-esc)):
+- ANSI terminal escape helpers ([`std::esc`](Stdlib-Esc)):
   `examples/std_esc_demo.mla`
-- ESC widget-style tracker UI composition demo ([`std::esc`](Stdlib-std-esc) + [`std::strbuf`](Stdlib-std-strbuf)):
+- ESC widget-style tracker UI composition demo ([`std::esc`](Stdlib-Esc) + [`std::strbuf`](Stdlib-Strbuf)):
   `examples/esc_widgets/tracker_ui_demo.mla`
-- Terminal capabilities + termios helpers ([`std::term`](Stdlib-std-term)):
+- Terminal capabilities + termios helpers ([`std::term`](Stdlib-Term)):
   `examples/std_term_demo.mla`
 - Type aliases (`alias Distance = f32;` and equivalent `use type Distance = f32;`, generic aliases):
   `examples/type_alias_demo.mla`
@@ -1339,14 +1339,14 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/namespace_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):
   `examples/lambda_fold_demo.mla`
-- Unit-testing mock expectations ([`std::testing::Mock`](Stdlib-std-testing)):
+- Unit-testing mock expectations ([`std::testing::Mock`](Stdlib-Testing)):
   `examples/testing_mock_example.mla`
 - Sundaram sieve with real hash-set membership (`HashSetI64`):
   `examples/sieve_sundaram.mla`
 
 ### JACK2 Lock-Free Queue Demo
 This demo runs JACK2 audio processing in JACK's process callback thread while
-the MLang main thread posts play commands through [`std::sync::LockFreeQueue`](Stdlib-std-sync).
+the MLang main thread posts play commands through [`std::sync::LockFreeQueue`](Stdlib-Sync).
 
 Prereqs (macOS/Homebrew):
 
@@ -1404,7 +1404,7 @@ Run:
 ```
 
 At startup, the sequencer prints controls: `SPACE` toggles start/stop and `q` exits.
-The main loop uses [`std::event_loop::EventLoop`](Stdlib-std-event_loop) (async timer thread) and JACK lock-free tick events.
+The main loop uses [`std::event_loop::EventLoop`](Stdlib-Event-Loop) (async timer thread) and JACK lock-free tick events.
 
 If auto-connect fails, connect manually:
 
@@ -1416,7 +1416,7 @@ jack_connect mlang_drum_machine:out_r system:playback_2
 
 ### JACK2 Stereo FFT Analyzer Demo
 Plays a stereo WAV via JACK2 and renders a real-time 100x25 ASCII spectrum
-analyzer with colorized stereo differences (left/right/overlap) using [`std::algorithm::fft`](Stdlib-std-algorithm-fft).
+analyzer with colorized stereo differences (left/right/overlap) using [`std::algorithm::fft`](Stdlib-Algorithm-Fft).
 `run_demo.sh` also accepts non-WAV input (for example `.m4a`) via `ffmpeg` decode.
 
 Demo directory:

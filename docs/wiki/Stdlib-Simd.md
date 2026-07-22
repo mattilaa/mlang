@@ -51,8 +51,8 @@ Packed bitset operations:
 - `any(values: BitSet) -> bool`
 - `all(values: BitSet) -> bool`
 
-The [`BitSet`](Stdlib-std-bitset) overloads operate on packed one-bit-per-entry storage from
-[`std::bitset::BitSet`](Stdlib-std-bitset). The `_eq` functions mutate the left-hand bitset in
+The [`BitSet`](Stdlib-Bitset) overloads operate on packed one-bit-per-entry storage from
+[`std::bitset::BitSet`](Stdlib-Bitset). The `_eq` functions mutate the left-hand bitset in
 place and return `0` on success. Binary bitset operations require matching
 active bit lengths. Tail bits outside `BitSet::len()` are masked after writes.
 For empty bitsets, `any` returns `false` and `all` returns `true`.

@@ -4,7 +4,7 @@
 
 Module file: `stdlib/std/vec.mla`
 
-[`Vec<T>`](Stdlib-std-vec) is a type alias for [`list<T>`](Quick-Guide#types). The two are interchangeable in all
+[`Vec<T>`](Stdlib-Vec) is a type alias for [`list<T>`](Quick-Guide#types). The two are interchangeable in all
 contexts. Methods listed below are compiler intrinsics backed by `libmlang_std`
 and are also summarized in "Built-in Collection Methods (Compiler Intrinsics)"
 above.

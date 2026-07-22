@@ -6,8 +6,8 @@ Module file: `stdlib/std/bitset.mla`
 
 Packed dynamic bitset container for dense one-bit-per-entry storage.
 
-Use [`std::bitset::BitSet`](Stdlib-std-bitset) when a boolean collection must be compact or when you
-want packed bit operations through [`std::simd`](Stdlib-std-simd).
+Use [`std::bitset::BitSet`](Stdlib-Bitset) when a boolean collection must be compact or when you
+want packed bit operations through [`std::simd`](Stdlib-Simd).
 
 Examples:
 - `examples/std_simd_demo.mla`
@@ -15,7 +15,7 @@ Examples:
 - `tests/std_simd_bitset_tests.mla`
 
 ### Types
-- [`BitSet`](Stdlib-std-bitset)
+- [`BitSet`](Stdlib-Bitset)
 
 ### API
 - `last_error() -> str8`
@@ -42,4 +42,4 @@ Examples:
 ### Notes
 - `BitSet::len()` is measured in bits.
 - [`list<bool>`](Quick-Guide#types) is a normal list container, not a packed specialization.
-- [`std::simd`](Stdlib-std-simd) provides packed bitset reductions and in-place bitwise helpers.
+- [`std::simd`](Stdlib-Simd) provides packed bitset reductions and in-place bitwise helpers.

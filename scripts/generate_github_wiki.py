@@ -85,6 +85,11 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
 
 
 def stdlib_module_wiki_name(module: str) -> str:
+    suffix = module.removeprefix("std::").replace("::", "-").replace("_", "-")
+    return "Stdlib-" + "-".join(part.capitalize() for part in suffix.split("-"))
+
+
+def old_stdlib_module_wiki_name(module: str) -> str:
     return "Stdlib-" + module.replace("std::", "std-").replace("::", "-")
 
 
@@ -491,14 +496,14 @@ def write_sidebar(out_dir: Path, pages: list[Page], manpage_names: list[str]) ->
             continue
         lines.extend([f"## {group}"])
         for page in group_pages:
-            lines.append(f"- [{page.title}]({page.wiki_name})")
+            lines.append(f"- [{page.title}]({page.wiki_name}.md)")
         lines.append("")
 
     if manpage_names:
         lines.extend(["## Man Pages"])
         for command_name in manpage_names:
             wiki_name = f"Man-{slugify_wiki_name(command_name)}"
-            lines.append(f"- [`{command_name}`]({wiki_name})")
+            lines.append(f"- [`{command_name}`]({wiki_name}.md)")
         lines.append("")
 
     (out_dir / "_Sidebar.md").write_text("\n".join(lines), encoding="utf-8")
@@ -509,6 +514,8 @@ def generated_filenames(pages: list[Page]) -> set[str]:
     names.add("_Sidebar.md")
     for _source, command_name in MANPAGES:
         names.add(f"Man-{slugify_wiki_name(command_name)}.md")
+    for module, _filename in STDLIB_MODULE_DOCS:
+        names.add(f"{old_stdlib_module_wiki_name(module)}.md")
     return names
 
 

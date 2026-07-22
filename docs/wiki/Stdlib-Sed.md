@@ -13,7 +13,7 @@ regex syntax; matching is byte-based and exact.
 
 Notes:
 - each function returns a newly allocated string
-- caller frees returned strings with [`std::strbuf::free`](Stdlib-std-strbuf)
+- caller frees returned strings with [`std::strbuf::free`](Stdlib-Strbuf)
 - empty `needle` returns a clone of `text`
 
 Example:

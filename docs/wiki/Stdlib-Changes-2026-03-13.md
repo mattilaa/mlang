@@ -22,7 +22,7 @@ This change set aligns the language and stdlib with Rust-style numeric names and
 ## Stdlib changes
 - Added [`std::ops`](Stdlib-Module-API) traits in `stdlib/std/ops.mla`:
   - `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`
-- Extended [`std::math`](Stdlib-std-math) generic complex support (`Complex<T>`) and trait-based arithmetic usage.
+- Extended [`std::math`](Stdlib-Math) generic complex support (`Complex<T>`) and trait-based arithmetic usage.
 - Updated stdlib and stdlib-adjacent `.mla` sources to use canonical numeric names (`f32/f64/i32/...`) where applicable.
 
 ## Tests added/updated

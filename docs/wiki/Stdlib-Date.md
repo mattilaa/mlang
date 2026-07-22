@@ -32,7 +32,7 @@ Module file: `stdlib/std/date.mla`
 - `format_date(dt: DateTime) -> str8`
 - `format_time(dt: DateTime) -> str8`
 
-[`std::date`](Stdlib-std-date) supports Unix UTC timestamps in whole seconds. Timezone support is
+[`std::date`](Stdlib-Date) supports Unix UTC timestamps in whole seconds. Timezone support is
 provided as fixed UTC offsets (`UtcOffset`), system-local conversions, and named
 system timezones (`TimeZone`). Unix-like platforms load IANA/zoneinfo names such
 as `Europe/Helsinki` from the OS timezone database. Windows uses Windows system

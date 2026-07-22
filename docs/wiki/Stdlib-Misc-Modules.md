@@ -7,9 +7,9 @@ This page documents several small stdlib modules and example/test files that
 are useful in practice but do not have their own larger standalone reference
 pages.
 
-## [`std::chat`](Stdlib-std-chat)
+## [`std::chat`](Stdlib-Chat)
 
-[`std::chat`](Stdlib-std-chat) provides an opaque, handle-backed fullscreen chat UI model for
+[`std::chat`](Stdlib-Chat) provides an opaque, handle-backed fullscreen chat UI model for
 terminal applications.
 
 What it is for:
@@ -32,7 +32,7 @@ Source:
 ## [`std::concurrent`](Stdlib-Module-API)
 
 [`std::concurrent`](Stdlib-Module-API) adds higher-level coordination helpers on top of
-[`std::sync`](Stdlib-std-sync) and [`std::thread`](Stdlib-std-thread).
+[`std::sync`](Stdlib-Sync) and [`std::thread`](Stdlib-Thread).
 
 Main types:
 
@@ -45,9 +45,9 @@ Source:
 
 - `stdlib/std/concurrent.mla`
 
-## [`std::env`](Stdlib-std-env)
+## [`std::env`](Stdlib-Env)
 
-[`std::env`](Stdlib-std-env) exposes runtime-backed process/environment helpers.
+[`std::env`](Stdlib-Env) exposes runtime-backed process/environment helpers.
 
 Common functions:
 
@@ -65,9 +65,9 @@ Source:
 
 - `stdlib/std/env.mla`
 
-## [`std::gps`](Stdlib-std-gps)
+## [`std::gps`](Stdlib-Gps)
 
-[`std::gps`](Stdlib-std-gps) converts latitude/longitude data into local integer XY coordinates.
+[`std::gps`](Stdlib-Gps) converts latitude/longitude data into local integer XY coordinates.
 
 Useful functions:
 
@@ -105,9 +105,9 @@ Source:
 
 - `stdlib/std/path.mla`
 
-## [`std::sed`](Stdlib-std-sed)
+## [`std::sed`](Stdlib-Sed)
 
-[`std::sed`](Stdlib-std-sed) provides literal, allocation-returning string replacement helpers.
+[`std::sed`](Stdlib-Sed) provides literal, allocation-returning string replacement helpers.
 
 Common functions:
 
@@ -125,7 +125,7 @@ Source:
 
 ### `tests/test_sample.mla`
 
-Basic `mlang test` example using [`std::testing::verify`](Stdlib-std-testing).
+Basic `mlang test` example using [`std::testing::verify`](Stdlib-Testing).
 
 Run:
 
@@ -141,7 +141,7 @@ Benchmark-oriented test file for `mlang bench`.
 It demonstrates:
 
 - timed benchmark tests
-- [`std::bench`](Stdlib-std-bench) clobber/do-not-optimize helpers
+- [`std::bench`](Stdlib-Bench) clobber/do-not-optimize helpers
 - container and FFT benchmark coverage
 - exception/unwind benchmark cases
 
@@ -154,13 +154,13 @@ Run:
 
 ### `tests/bench_simd.mla`
 
-SIMD benchmark pairs for comparing scalar loops against [`std::simd`](Stdlib-std-simd).
+SIMD benchmark pairs for comparing scalar loops against [`std::simd`](Stdlib-Simd).
 
 It demonstrates:
 
-- scalar sum vs [`std::simd::sum`](Stdlib-std-simd)
-- scalar element-wise add vs [`std::simd::add`](Stdlib-std-simd)
-- per-bit [`BitSet`](Stdlib-std-bitset) scanning vs packed [`std::simd::count_ones`](Stdlib-std-simd)
+- scalar sum vs [`std::simd::sum`](Stdlib-Simd)
+- scalar element-wise add vs [`std::simd::add`](Stdlib-Simd)
+- per-bit [`BitSet`](Stdlib-Bitset) scanning vs packed [`std::simd::count_ones`](Stdlib-Simd)
 
 Run:
 
@@ -171,13 +171,13 @@ Run:
 ### `tests/bench_simd_threads.mla`
 
 Multi-threaded SIMD benchmark pairs for comparing four scalar workers against
-four [`std::simd`](Stdlib-std-simd) workers.
+four [`std::simd`](Stdlib-Simd) workers.
 
 It demonstrates:
 
-- four-thread scalar sum vs four-thread [`std::simd::sum`](Stdlib-std-simd)
-- four-thread scalar element-wise add vs four-thread [`std::simd::add`](Stdlib-std-simd)
-- four-thread per-bit [`BitSet`](Stdlib-std-bitset) scanning vs packed [`std::simd::count_ones`](Stdlib-std-simd)
+- four-thread scalar sum vs four-thread [`std::simd::sum`](Stdlib-Simd)
+- four-thread scalar element-wise add vs four-thread [`std::simd::add`](Stdlib-Simd)
+- four-thread per-bit [`BitSet`](Stdlib-Bitset) scanning vs packed [`std::simd::count_ones`](Stdlib-Simd)
 
 Run:
 
@@ -187,7 +187,7 @@ Run:
 
 ### `examples/testing_mock_example.mla`
 
-Simple mock-based example built on [`std::testing`](Stdlib-std-testing).
+Simple mock-based example built on [`std::testing`](Stdlib-Testing).
 
 It demonstrates:
 

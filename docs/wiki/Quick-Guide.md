@@ -56,8 +56,8 @@ Common builtin/container types:
 - [`bit`](Quick-Guide#types)
 - [`str8`](Quick-Guide#types), [`str16`](Quick-Guide#types)
 - [`list<T>`](Quick-Guide#types)
-- [`Vec<T>`](Stdlib-std-vec)
-- [`span<T>`](Stdlib-std-span) / [`Span<T>`](Stdlib-std-span)
+- [`Vec<T>`](Stdlib-Vec)
+- [`span<T>`](Stdlib-Span) / [`Span<T>`](Stdlib-Span)
 - [`Option<T>`](Quick-Guide#types)
 - [`Result<T, E>`](Quick-Guide#types)
 
@@ -235,7 +235,7 @@ impl DbFixture {
 ```
 
 For mocks with cardinality and programmable return values, see the
-EXPECT_CALL section in [Stdlib Module API](Stdlib-std-testing).
+EXPECT_CALL section in [Stdlib Module API](Stdlib-Testing).
 
 ## Where To Go Next
 

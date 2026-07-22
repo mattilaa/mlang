@@ -7,13 +7,13 @@ Module file: `stdlib/std/span.mla`
 C++20-style non-owning span/view aliases over the existing safe list runtime
 shape.
 
-- [`Span<T>`](Stdlib-std-span) is a compiler alias for [`list<T>`](Quick-Guide#types)
-- [`span<T>`](Stdlib-std-span) is the lowercase alias for the same type
+- [`Span<T>`](Stdlib-Span) is a compiler alias for [`list<T>`](Quick-Guide#types)
+- [`span<T>`](Stdlib-Span) is the lowercase alias for the same type
 
 Properties:
 - `size_of(Span<T>) == size_of(list<T>)`
 - indexing uses the same compile-time and runtime bounds checks as [`list<T>`](Quick-Guide#types)
-- values can be initialized from normal lists, [`Vec<T>`](Stdlib-std-vec), and array-fill forms
+- values can be initialized from normal lists, [`Vec<T>`](Stdlib-Vec), and array-fill forms
   like `[value; N]`
 - `size_of(spanValue)` is accepted in [`static_assert!`](Language-Syntax) when the span value type
   is known at compile time

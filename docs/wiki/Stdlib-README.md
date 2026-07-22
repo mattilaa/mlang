@@ -75,26 +75,26 @@ Currently provided:
    multithreaded local TLS servers).
 - `std/regex.mla`: POSIX regular expression helpers
   (`Regex::compile/is_match/find_start/find_end/match_start/match_end/close`)
-  with error retrieval via [`std::regex::last_error()`](Stdlib-std-regex).
+  with error retrieval via [`std::regex::last_error()`](Stdlib-Regex).
 - `std/algorithm.mla`: algorithm namespace root with submodules:
   - [`std::algorithm::fuzzy`](Stdlib-Module-API): subsequence fuzzy matching/ranking
     (`is_match`, `score`, `filter_indices`, `best_index`)
-  - [`std::algorithm::order`](Stdlib-std-algorithm-order): ordered-sequence helpers for [`list<i64>`](Quick-Guide#types)
+  - [`std::algorithm::order`](Stdlib-Algorithm-Order): ordered-sequence helpers for [`list<i64>`](Quick-Guide#types)
     (`sort_i64`, `reverse_i64`, `is_sorted_i64`, `unique_sorted_i64`,
      `lower_bound_i64`, `upper_bound_i64`, `binary_search_i64`)
-  - [`std::algorithm::numeric`](Stdlib-std-algorithm-numeric): numeric helpers for [`list<i64>`](Quick-Guide#types)
+  - [`std::algorithm::numeric`](Stdlib-Algorithm-Numeric): numeric helpers for [`list<i64>`](Quick-Guide#types)
     (`accumulate_i64`, `partial_sum_i64`, `adjacent_difference_i64`,
      `inner_product_i64`)
-  - [`std::algorithm::ranges`](Stdlib-std-algorithm-ranges): C++20 ranges-style helpers for [`list<i64>`](Quick-Guide#types)
+  - [`std::algorithm::ranges`](Stdlib-Algorithm-Ranges): C++20 ranges-style helpers for [`list<i64>`](Quick-Guide#types)
     (`unique_i64`, `unique_stable_i64`, `find_i64`, `count_i64`,
      `contains_i64`, `remove_i64`, `take_i64`, `drop_i64`)
-  - [`std::algorithm::rand`](Stdlib-Module-API): random helpers mirroring [`std::rand`](Stdlib-std-rand)
-  - [`std::algorithm::regex`](Stdlib-Module-API): regex helpers mirroring [`std::regex`](Stdlib-std-regex)
-  - [`std::algorithm::fft`](Stdlib-std-algorithm-fft): FFT helpers for forward/inverse transforms
+  - [`std::algorithm::rand`](Stdlib-Module-API): random helpers mirroring [`std::rand`](Stdlib-Rand)
+  - [`std::algorithm::regex`](Stdlib-Module-API): regex helpers mirroring [`std::regex`](Stdlib-Regex)
+  - [`std::algorithm::fft`](Stdlib-Algorithm-Fft): FFT helpers for forward/inverse transforms
   - [`std::algorithm::genetic`](Stdlib-Module-API): GA helpers for genome/population evolution
 - `std/esc.mla`: ANSI terminal escape helpers with named color/cursor values
   cursor control (`fg/bg/reset`, `bold_on/off`, `underline_on/off`,
-  `cursor`, `cursor_move`), auto-disabled when [`std::term::supports_ansi()`](Stdlib-std-term)
+  `cursor`, `cursor_move`), auto-disabled when [`std::term::supports_ansi()`](Stdlib-Term)
   is false.
 - `std/term.mla`: terminal capability + termios helpers
   (`stdin/stdout/stderr` tty detection, size, color level/truecolor, and

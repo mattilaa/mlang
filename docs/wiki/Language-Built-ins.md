@@ -60,9 +60,9 @@ for this builtin type, not a distinct type declaration.
 - `s.len() -> i64`
 - `s.is_empty() -> i32`
 
-### [`list<T>`](Quick-Guide#types) / [`Vec<T>`](Stdlib-std-vec)
+### [`list<T>`](Quick-Guide#types) / [`Vec<T>`](Stdlib-Vec)
 
-[`Vec<T>`](Stdlib-std-vec) is a type alias for [`list<T>`](Quick-Guide#types), so both expose the same method surface.
+[`Vec<T>`](Stdlib-Vec) is a type alias for [`list<T>`](Quick-Guide#types), so both expose the same method surface.
 
 - `v.len() -> i64`
 - `v.is_empty() -> bool`
