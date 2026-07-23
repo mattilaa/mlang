@@ -259,6 +259,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/common.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/control_flow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/constexpr.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/declarations.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/enums.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_diagnostics.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_ops.cpp
