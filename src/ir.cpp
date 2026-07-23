@@ -4,10 +4,7 @@
 #include "ir/common.h"
 #include "ir/expression_type_kind.h"
 #include "module.h"
-#include <array>
-#include <cctype>
 #include <cstdlib>
-#include <cstring>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -25,258 +22,6 @@ namespace
 using mlang::ir_detail::module_target_triple_string;
 using mlang::ir_detail::normalize_target_arch_name;
 using mlang::ir_detail::common::Helpers;
-
-enum class PrimitiveTypeAlias
-{
-    Bool,
-    Bit,
-    I32,
-    I8,
-    I16,
-    I64,
-    U8,
-    U16,
-    U32,
-    U64,
-    F32,
-    F64,
-    Str8,
-    Str16,
-};
-
-template <typename Enum, size_t N>
-static std::optional<Enum>
-find_enum_key(std::string_view key,
-              const std::array<std::pair<Enum, std::string_view>, N>& mappings)
-{
-    const auto it =
-        std::find_if(mappings.begin(), mappings.end(),
-                     [&](const auto& entry) { return entry.second == key; });
-    if(it == mappings.end())
-        return std::nullopt;
-    return it->first;
-}
-
-static bool isSynthesizedPropertyLockFieldName(const std::string& fieldName)
-{
-    constexpr std::string_view prefix = "__mlang_prop_lock_";
-    return fieldName.compare(0, prefix.size(), prefix) == 0;
-}
-
-static bool trait_names_equivalent(const std::string& lhs,
-                                   const std::string& rhs)
-{
-    if(lhs == rhs)
-        return true;
-
-    auto suffixMatches =
-        [](const std::string& qualified, const std::string& shortName)
-    {
-        if(shortName.find("::") != std::string::npos)
-            return false;
-        if(qualified.size() <= shortName.size() + 2)
-            return false;
-        return qualified.compare(qualified.size() - shortName.size(),
-                                 shortName.size(), shortName) == 0 &&
-               qualified.compare(qualified.size() - shortName.size() - 2, 2,
-                                 "::") == 0;
-    };
-
-    return suffixMatches(lhs, rhs) || suffixMatches(rhs, lhs);
-}
-
-static constexpr std::array<std::pair<PrimitiveTypeAlias, std::string_view>, 14>
-    kPrimitiveTypeAliases{{{PrimitiveTypeAlias::Bool, "bool"},
-                           {PrimitiveTypeAlias::Bit, "bit"},
-                           {PrimitiveTypeAlias::I32, "i32"},
-                           {PrimitiveTypeAlias::I8, "i8"},
-                           {PrimitiveTypeAlias::I16, "i16"},
-                           {PrimitiveTypeAlias::I64, "i64"},
-                           {PrimitiveTypeAlias::U8, "u8"},
-                           {PrimitiveTypeAlias::U16, "u16"},
-                           {PrimitiveTypeAlias::U32, "u32"},
-                           {PrimitiveTypeAlias::U64, "u64"},
-                           {PrimitiveTypeAlias::F32, "f32"},
-                           {PrimitiveTypeAlias::F64, "f64"},
-                           {PrimitiveTypeAlias::Str8, "str8"},
-                           {PrimitiveTypeAlias::Str16, "str16"}}};
-
-static std::string trim_copy(std::string s)
-{
-    size_t b = 0;
-    while(b < s.size() && std::isspace(static_cast<unsigned char>(s[b])))
-        ++b;
-    size_t e = s.size();
-    while(e > b && std::isspace(static_cast<unsigned char>(s[e - 1])))
-        --e;
-    return s.substr(b, e - b);
-}
-
-static bool is_wrapped_generic(const std::string& s, const char* head)
-{
-    size_t n = std::strlen(head);
-    return s.size() > n + 2 && s.compare(0, n, head) == 0 && s[n] == '<' &&
-           s.back() == '>';
-}
-
-static std::vector<std::string> split_top_level_commas(const std::string& s)
-{
-    std::vector<std::string> out;
-    int depth = 0;
-    size_t start = 0;
-    for(size_t i = 0; i < s.size(); ++i)
-    {
-        char c = s[i];
-        if(c == '<')
-            ++depth;
-        else if(c == '>')
-            --depth;
-        else if(c == ',' && depth == 0)
-        {
-            out.push_back(trim_copy(s.substr(start, i - start)));
-            start = i + 1;
-        }
-    }
-    out.push_back(trim_copy(s.substr(start)));
-    return out;
-}
-
-static TypeNode* type_from_text(std::string t)
-{
-    t = trim_copy(t);
-    if(const auto typeKey = find_enum_key(t, kPrimitiveTypeAliases);
-       typeKey.has_value())
-    {
-        switch(*typeKey)
-        {
-        case PrimitiveTypeAlias::Bool:
-            return new TypeNode(TypeNode::TYPE_BOOL);
-        case PrimitiveTypeAlias::Bit:
-            return new TypeNode(TypeNode::TYPE_BIT);
-        case PrimitiveTypeAlias::I32:
-            return new TypeNode(TypeNode::TYPE_I32);
-        case PrimitiveTypeAlias::I8:
-            return new TypeNode(TypeNode::TYPE_I8);
-        case PrimitiveTypeAlias::I16:
-            return new TypeNode(TypeNode::TYPE_I16);
-        case PrimitiveTypeAlias::I64:
-            return new TypeNode(TypeNode::TYPE_I64);
-        case PrimitiveTypeAlias::U8:
-            return new TypeNode(TypeNode::TYPE_U8);
-        case PrimitiveTypeAlias::U16:
-            return new TypeNode(TypeNode::TYPE_U16);
-        case PrimitiveTypeAlias::U32:
-            return new TypeNode(TypeNode::TYPE_U32);
-        case PrimitiveTypeAlias::U64:
-            return new TypeNode(TypeNode::TYPE_U64);
-        case PrimitiveTypeAlias::F32:
-            return new TypeNode(TypeNode::TYPE_FLOAT);
-        case PrimitiveTypeAlias::F64:
-            return new TypeNode(TypeNode::TYPE_DOUBLE);
-        case PrimitiveTypeAlias::Str8:
-            return new TypeNode(TypeNode::TYPE_STR8);
-        case PrimitiveTypeAlias::Str16:
-            return new TypeNode(TypeNode::TYPE_STR16);
-        }
-    }
-
-    if(is_wrapped_generic(t, "list"))
-    {
-        std::string inner = t.substr(5, t.size() - 6);
-        return new GenericListTypeNode(type_from_text(inner));
-    }
-    if(is_wrapped_generic(t, "map"))
-    {
-        std::string inner = t.substr(4, t.size() - 5);
-        auto parts = split_top_level_commas(inner);
-        if(parts.size() == 2)
-        {
-            return new MapTypeNode(type_from_text(parts[0]),
-                                   type_from_text(parts[1]));
-        }
-    }
-    if(is_wrapped_generic(t, "tuple"))
-    {
-        std::string inner = t.substr(6, t.size() - 7);
-        auto parts = split_top_level_commas(inner);
-        auto* elems = new TypeListNode();
-        for(const auto& p : parts)
-            elems->addType(type_from_text(p));
-        return new TupleTypeNode(elems);
-    }
-
-    size_t genericPos = t.find('<');
-    if(genericPos != std::string::npos && !t.empty() && t.back() == '>')
-    {
-        std::string baseName = trim_copy(t.substr(0, genericPos));
-        std::string inner = t.substr(genericPos + 1, t.size() - genericPos - 2);
-        auto parts = split_top_level_commas(inner);
-        auto* generic = new GenericStructTypeRefNode(baseName);
-        for(const auto& p : parts)
-            generic->typeArgs.push_back(type_from_text(p));
-        return generic;
-    }
-
-    return new StructTypeRefNode(t);
-}
-
-static std::string resolve_visible_struct_base_name(
-    const std::string& structName,
-    const std::map<std::string, StructDefNode*>& genericStructTemplates,
-    const std::map<std::string,
-                   std::map<std::string, std::pair<bool, StructMethodNode*>>>&
-        structMethods,
-    const std::map<std::string, std::pair<bool, std::string>>& structVisibility)
-{
-    if(genericStructTemplates.count(structName) ||
-       structMethods.count(structName) || structVisibility.count(structName))
-    {
-        return structName;
-    }
-
-    std::string tailName = structName;
-    size_t scopePos = structName.rfind("::");
-    if(scopePos != std::string::npos)
-        tailName = structName.substr(scopePos + 2);
-
-    if(genericStructTemplates.count(tailName) ||
-       structMethods.count(tailName) || structVisibility.count(tailName))
-    {
-        return tailName;
-    }
-
-    auto matchesVisibleTail = [&](const std::string& candidate)
-    {
-        if(candidate == structName || candidate == tailName)
-            return true;
-        if(candidate.size() > tailName.size() &&
-           candidate.compare(candidate.size() - tailName.size(),
-                             tailName.size(), tailName) == 0)
-        {
-            char sep = candidate[candidate.size() - tailName.size() - 1];
-            return sep == ':' || sep == '.' || sep == '_';
-        }
-        return false;
-    };
-
-    for(const auto& entry : genericStructTemplates)
-    {
-        if(matchesVisibleTail(entry.first))
-            return entry.first;
-    }
-    for(const auto& entry : structMethods)
-    {
-        if(matchesVisibleTail(entry.first))
-            return entry.first;
-    }
-    for(const auto& entry : structVisibility)
-    {
-        if(matchesVisibleTail(entry.first))
-            return entry.first;
-    }
-
-    return structName;
-}
 
 // Recursively collect all IdentifierNode names referenced in an AST subtree.
 // Used for Non-Lexical Lifetime (NLL) borrow expiration.
@@ -1222,7 +967,7 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
         // textual struct refs (e.g. "list<i64>"). Reparse and resolve.
         if(structRef->structName.find('<') != std::string::npos)
         {
-            TypeNode* reparsed = type_from_text(structRef->structName);
+            TypeNode* reparsed = Helpers::type_from_text(structRef->structName);
             if(reparsed && !dynamic_cast<StructTypeRefNode*>(reparsed))
                 return getLLVMTypeFromNode(reparsed);
         }
@@ -1333,7 +1078,7 @@ CodeGenerator::resetCopiedStructState(llvm::Value* value,
         llvm::Type* storageType =
             structType->getElementType(layout->storageIndex);
 
-        if(isSynthesizedPropertyLockFieldName(fieldName))
+        if(Helpers::isSynthesizedPropertyLockFieldName(fieldName))
         {
             adjusted = builder.CreateInsertValue(
                 adjusted, llvm::Constant::getNullValue(storageType),
@@ -8353,7 +8098,7 @@ llvm::Type* CodeGenerator::getTraitVTableType(const std::string& traitName)
         for(auto it = traitDefinitions.begin(); it != traitDefinitions.end();
             ++it)
         {
-            if(trait_names_equivalent(it->first, traitName))
+            if(Helpers::trait_names_equivalent(it->first, traitName))
             {
                 traitIt = it;
                 break;
@@ -8389,7 +8134,7 @@ CodeGenerator::ensureTraitVTable(const std::string& concreteTypeName,
         for(auto it = traitDefinitions.begin(); it != traitDefinitions.end();
             ++it)
         {
-            if(trait_names_equivalent(it->first, traitName))
+            if(Helpers::trait_names_equivalent(it->first, traitName))
             {
                 traitIt = it;
                 break;
@@ -8495,7 +8240,7 @@ llvm::Value* CodeGenerator::buildTraitObjectValue(ExpressionNode* expr,
     {
         for(const auto& candidate : implIt->second)
         {
-            if(trait_names_equivalent(candidate, traitName))
+            if(Helpers::trait_names_equivalent(candidate, traitName))
             {
                 implementedTraitName = candidate;
                 break;
@@ -12357,7 +12102,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             std::string methodName = node->name.substr(scopePos + 2);
             std::string displayStructName = structName;
 
-            if(TypeNode* parsedType = type_from_text(structName))
+            if(TypeNode* parsedType = Helpers::type_from_text(structName))
             {
                 std::set<std::string> emptyTypeParams;
                 std::vector<std::string> aliasStack;
@@ -12367,7 +12112,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        dynamic_cast<GenericStructTypeRefNode*>(parsedType))
                 {
                     std::string visibleStructName =
-                        resolve_visible_struct_base_name(
+                        Helpers::resolve_visible_struct_base_name(
                             genericStructType->structName,
                             genericStructTemplates, structMethods,
                             structVisibility);
@@ -12377,7 +12122,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 else if(auto* structType =
                             dynamic_cast<StructTypeRefNode*>(parsedType))
                 {
-                    structName = resolve_visible_struct_base_name(
+                    structName = Helpers::resolve_visible_struct_base_name(
                         structType->structName, genericStructTemplates,
                         structMethods, structVisibility);
                 }
@@ -12678,7 +12423,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     if(auto* actualTraitObj =
                            dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
                     {
-                        if(trait_names_equivalent(actualTraitObj->traitName,
+                        if(Helpers::trait_names_equivalent(actualTraitObj->traitName,
                                                   traitObj->traitName))
                             continue;
                     }
@@ -15742,7 +15487,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 for(auto it = traitDefinitions.begin();
                     it != traitDefinitions.end(); ++it)
                 {
-                    if(trait_names_equivalent(it->first, traitName))
+                    if(Helpers::trait_names_equivalent(it->first, traitName))
                     {
                         traitIt = it;
                         break;
@@ -15910,7 +15655,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 for(auto it = traitDefinitions.begin();
                     it != traitDefinitions.end(); ++it)
                 {
-                    if(trait_names_equivalent(it->first, traitName))
+                    if(Helpers::trait_names_equivalent(it->first, traitName))
                     {
                         traitIt = it;
                         break;
@@ -16128,7 +15873,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 for(auto it = traitDefinitions.begin();
                     it != traitDefinitions.end(); ++it)
                 {
-                    if(trait_names_equivalent(it->first, traitName))
+                    if(Helpers::trait_names_equivalent(it->first, traitName))
                     {
                         traitIt = it;
                         break;
