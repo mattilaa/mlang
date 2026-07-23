@@ -257,6 +257,8 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/builtins.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/enums.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_diagnostics.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_type_kind.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_types.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/formatting.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/lifecycle.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/literals.cpp
