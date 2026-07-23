@@ -267,6 +267,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/lvalues.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/moves.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/ownership.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/output.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/pointers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/runtime.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/sizeof.cpp
