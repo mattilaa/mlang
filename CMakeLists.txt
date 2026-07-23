@@ -251,6 +251,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_handle_helpers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_bridge.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/ast_analysis.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/backend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/backend_utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/borrows.cpp

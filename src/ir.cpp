@@ -1,8 +1,10 @@
 #include "ir.h"
 #include "diagnostics.h"
+#include "ir/ast_analysis.h"
 #include "ir/backend_utils.h"
 #include "ir/common.h"
 #include "ir/expression_type_kind.h"
+#include "ir/return_inference.h"
 #include "module.h"
 #include <cstdlib>
 #include <functional>
@@ -21,278 +23,12 @@ namespace
 
 using mlang::ir_detail::module_target_triple_string;
 using mlang::ir_detail::normalize_target_arch_name;
+using mlang::ir_detail::ast_analysis::collect_used_idents;
+using mlang::ir_detail::ast_analysis::contains_exception_control_flow;
+using mlang::ir_detail::ast_analysis::contains_update_expression;
+using mlang::ir_detail::ast_analysis::strip_iter_methods;
 using mlang::ir_detail::common::Helpers;
-
-// Recursively collect all IdentifierNode names referenced in an AST subtree.
-// Used for Non-Lexical Lifetime (NLL) borrow expiration.
-static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
-{
-    if(!node)
-        return;
-    if(auto* id = dynamic_cast<IdentifierNode*>(node))
-    {
-        out.insert(id->name);
-        return;
-    }
-    if(auto* bin = dynamic_cast<BinaryOpNode*>(node))
-    {
-        collectUsedIdents(bin->left, out);
-        collectUsedIdents(bin->right, out);
-        return;
-    }
-    if(auto* un = dynamic_cast<UnaryOpNode*>(node))
-    {
-        collectUsedIdents(un->operand, out);
-        return;
-    }
-    if(auto* tern = dynamic_cast<TernaryNode*>(node))
-    {
-        collectUsedIdents(tern->condition, out);
-        collectUsedIdents(tern->trueExpr, out);
-        collectUsedIdents(tern->falseExpr, out);
-        return;
-    }
-    if(auto* call = dynamic_cast<FunctionCallNode*>(node))
-    {
-        for(auto* arg : call->arguments)
-            collectUsedIdents(arg, out);
-        return;
-    }
-    if(auto* mc = dynamic_cast<MethodCallNode*>(node))
-    {
-        collectUsedIdents(mc->object, out);
-        for(auto* arg : mc->arguments)
-            collectUsedIdents(arg, out);
-        return;
-    }
-    if(auto* fa = dynamic_cast<FieldAccessNode*>(node))
-    {
-        if(!fa->structName.empty())
-            out.insert(fa->structName);
-        collectUsedIdents(fa->object, out);
-        return;
-    }
-    if(auto* idx = dynamic_cast<IndexExpressionNode*>(node))
-    {
-        collectUsedIdents(idx->base, out);
-        collectUsedIdents(idx->index, out);
-        return;
-    }
-    if(auto* cast = dynamic_cast<CastExpressionNode*>(node))
-    {
-        collectUsedIdents(cast->expression, out);
-        return;
-    }
-    if(auto* tryE = dynamic_cast<TryExpressionNode*>(node))
-    {
-        collectUsedIdents(tryE->expression, out);
-        return;
-    }
-    if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(node))
-    {
-        collectUsedIdents(sizeofExpr->expressionTarget, out);
-        return;
-    }
-    if(auto* cexprExpr = dynamic_cast<CexprExpressionNode*>(node))
-    {
-        collectUsedIdents(cexprExpr->expression, out);
-        return;
-    }
-    if(auto* es = dynamic_cast<ExpressionStatementNode*>(node))
-    {
-        collectUsedIdents(es->expression, out);
-        return;
-    }
-    if(auto* ret = dynamic_cast<ReturnNode*>(node))
-    {
-        collectUsedIdents(ret->expression, out);
-        return;
-    }
-    if(auto* throwNode = dynamic_cast<ThrowNode*>(node))
-    {
-        collectUsedIdents(throwNode->expression, out);
-        return;
-    }
-    if(auto* letD = dynamic_cast<LetDeclNode*>(node))
-    {
-        collectUsedIdents(letD->expression, out);
-        return;
-    }
-    if(auto* varD = dynamic_cast<VarDeclNode*>(node))
-    {
-        collectUsedIdents(varD->initExpr, out);
-        return;
-    }
-    if(auto* asgn = dynamic_cast<AssignmentNode*>(node))
-    {
-        collectUsedIdents(asgn->expression, out);
-        return;
-    }
-    if(auto* fa2 = dynamic_cast<FieldAssignmentNode*>(node))
-    {
-        if(!fa2->structName.empty())
-            out.insert(fa2->structName);
-        collectUsedIdents(fa2->target, out);
-        collectUsedIdents(fa2->expression, out);
-        return;
-    }
-    if(auto* da = dynamic_cast<DerefAssignmentNode*>(node))
-    {
-        collectUsedIdents(da->pointerExpr, out);
-        collectUsedIdents(da->value, out);
-        return;
-    }
-    if(auto* print = dynamic_cast<PrintNode*>(node))
-    {
-        for(auto* arg : print->arguments)
-            collectUsedIdents(arg, out);
-        for(const auto& namedArg : print->namedArguments)
-            collectUsedIdents(namedArg.second, out);
-        return;
-    }
-    if(auto* aeq = dynamic_cast<AssertEqNode*>(node))
-    {
-        collectUsedIdents(aeq->left, out);
-        collectUsedIdents(aeq->right, out);
-        return;
-    }
-    if(auto* ifN = dynamic_cast<IfNode*>(node))
-    {
-        collectUsedIdents(ifN->conditionInit, out);
-        collectUsedIdents(ifN->condition, out);
-        if(ifN->thenBranch)
-            for(auto* s : ifN->thenBranch->statements)
-                collectUsedIdents(s, out);
-        collectUsedIdents(ifN->elseIfBranch, out);
-        if(ifN->elseBranch)
-            for(auto* s : ifN->elseBranch->statements)
-                collectUsedIdents(s, out);
-        return;
-    }
-    if(auto* forN = dynamic_cast<ForNode*>(node))
-    {
-        collectUsedIdents(forN->iterable, out);
-        if(forN->body)
-            for(auto* s : forN->body->statements)
-                collectUsedIdents(s, out);
-        return;
-    }
-    if(auto* whileN = dynamic_cast<WhileNode*>(node))
-    {
-        collectUsedIdents(whileN->condition, out);
-        if(whileN->body)
-            for(auto* s : whileN->body->statements)
-                collectUsedIdents(s, out);
-        return;
-    }
-    if(auto* blk = dynamic_cast<BlockStatementNode*>(node))
-    {
-        if(blk->statements)
-            for(auto* s : blk->statements->statements)
-                collectUsedIdents(s, out);
-        return;
-    }
-    if(auto* tc = dynamic_cast<TryCatchNode*>(node))
-    {
-        collectUsedIdents(tc->tryBlock, out);
-        collectUsedIdents(tc->catchBlock, out);
-        return;
-    }
-}
-
-static bool containsUpdateExpression(ASTNode* node)
-{
-    if(!node)
-        return false;
-    if(dynamic_cast<UpdateExpressionNode*>(node))
-        return true;
-    if(auto* bin = dynamic_cast<BinaryOpNode*>(node))
-        return containsUpdateExpression(bin->left) ||
-               containsUpdateExpression(bin->right);
-    if(auto* un = dynamic_cast<UnaryOpNode*>(node))
-        return containsUpdateExpression(un->operand);
-    if(auto* tern = dynamic_cast<TernaryNode*>(node))
-        return containsUpdateExpression(tern->condition) ||
-               containsUpdateExpression(tern->trueExpr) ||
-               containsUpdateExpression(tern->falseExpr);
-    if(auto* idx = dynamic_cast<IndexExpressionNode*>(node))
-        return containsUpdateExpression(idx->base) ||
-               containsUpdateExpression(idx->index);
-    if(auto* cast = dynamic_cast<CastExpressionNode*>(node))
-        return containsUpdateExpression(cast->expression);
-    if(auto* tryE = dynamic_cast<TryExpressionNode*>(node))
-        return containsUpdateExpression(tryE->expression);
-    if(auto* call = dynamic_cast<FunctionCallNode*>(node))
-    {
-        for(auto* arg : call->arguments)
-        {
-            if(containsUpdateExpression(arg))
-                return true;
-        }
-        return false;
-    }
-    if(auto* mc = dynamic_cast<MethodCallNode*>(node))
-    {
-        if(containsUpdateExpression(mc->object))
-            return true;
-        for(auto* arg : mc->arguments)
-        {
-            if(containsUpdateExpression(arg))
-                return true;
-        }
-        return false;
-    }
-    if(auto* fa = dynamic_cast<FieldAccessNode*>(node))
-        return containsUpdateExpression(fa->object);
-    if(auto* fmt = dynamic_cast<FormatNode*>(node))
-    {
-        for(auto* arg : fmt->arguments)
-        {
-            if(containsUpdateExpression(arg))
-                return true;
-        }
-        for(const auto& namedArg : fmt->namedArguments)
-        {
-            if(containsUpdateExpression(namedArg.second))
-                return true;
-        }
-        return false;
-    }
-    return false;
-}
-
-static bool containsExceptionControlFlow(ASTNode* node)
-{
-    if(!node)
-        return false;
-    if(dynamic_cast<ThrowNode*>(node) || dynamic_cast<TryCatchNode*>(node))
-        return true;
-    if(auto* stmtList = dynamic_cast<StatementListNode*>(node))
-    {
-        for(auto* stmt : stmtList->statements)
-        {
-            if(containsExceptionControlFlow(stmt))
-                return true;
-        }
-        return false;
-    }
-    if(auto* block = dynamic_cast<BlockStatementNode*>(node))
-        return containsExceptionControlFlow(block->statements);
-    if(auto* ifNode = dynamic_cast<IfNode*>(node))
-    {
-        return containsExceptionControlFlow(ifNode->conditionInit) ||
-               containsExceptionControlFlow(ifNode->thenBranch) ||
-               containsExceptionControlFlow(ifNode->elseIfBranch) ||
-               containsExceptionControlFlow(ifNode->elseBranch);
-    }
-    if(auto* forNode = dynamic_cast<ForNode*>(node))
-        return containsExceptionControlFlow(forNode->body);
-    if(auto* whileNode = dynamic_cast<WhileNode*>(node))
-        return containsExceptionControlFlow(whileNode->body);
-    if(auto* closure = dynamic_cast<ClosureNode*>(node))
-        return containsExceptionControlFlow(closure->body);
-    return false;
-}
+using mlang::ir_detail::return_inference::infer_function_return_type;
 
 } // namespace
 
@@ -303,417 +39,6 @@ static bool containsExceptionControlFlow(ASTNode* node)
 #include <llvm/ADT/Triple.h>
 #endif
 #include <llvm/Bitcode/BitcodeWriter.h>
-
-static std::string inferredTypeName(TypeNode::TypeKind kind)
-{
-    switch(kind)
-    {
-    case TypeNode::TYPE_VOID:
-        return "void";
-    case TypeNode::TYPE_BOOL:
-        return "bool";
-    case TypeNode::TYPE_BIT:
-        return "bit";
-    case TypeNode::TYPE_INT:
-        return "i32";
-    case TypeNode::TYPE_I32:
-        return "i32";
-    case TypeNode::TYPE_I64:
-        return "i64";
-    case TypeNode::TYPE_FLOAT:
-        return "f32";
-    case TypeNode::TYPE_DOUBLE:
-        return "f64";
-    case TypeNode::TYPE_STRING:
-        return "str8";
-    case TypeNode::TYPE_STR8:
-        return "str8";
-    case TypeNode::TYPE_STR16:
-        return "str16";
-    case TypeNode::TYPE_I8:
-        return "i8";
-    case TypeNode::TYPE_I16:
-        return "i16";
-    case TypeNode::TYPE_U8:
-        return "u8";
-    case TypeNode::TYPE_U16:
-        return "u16";
-    case TypeNode::TYPE_U32:
-        return "u32";
-    case TypeNode::TYPE_U64:
-        return "u64";
-    default:
-        return "unknown";
-    }
-}
-
-static bool mergeInferredKinds(TypeNode::TypeKind& acc, TypeNode::TypeKind next)
-{
-    acc = Helpers::normalizeInferredKind(acc);
-    next = Helpers::normalizeInferredKind(next);
-    if(acc == next)
-        return true;
-
-    if(Helpers::isIntegerInferKind(acc) && Helpers::isIntegerInferKind(next))
-    {
-        if(acc == TypeNode::TYPE_I64 || acc == TypeNode::TYPE_U64 ||
-           next == TypeNode::TYPE_I64 || next == TypeNode::TYPE_U64)
-            acc = TypeNode::TYPE_I64;
-        else
-            acc = TypeNode::TYPE_I32;
-        return true;
-    }
-    if((Helpers::isIntegerInferKind(acc) || Helpers::isFloatInferKind(acc)) &&
-       (Helpers::isIntegerInferKind(next) || Helpers::isFloatInferKind(next)))
-    {
-        if(acc == TypeNode::TYPE_DOUBLE || next == TypeNode::TYPE_DOUBLE)
-            acc = TypeNode::TYPE_DOUBLE;
-        else
-            acc = TypeNode::TYPE_FLOAT;
-        return true;
-    }
-    if((acc == TypeNode::TYPE_STRING && next == TypeNode::TYPE_STR8) ||
-       (acc == TypeNode::TYPE_STR8 && next == TypeNode::TYPE_STRING) ||
-       (acc == TypeNode::TYPE_STRING && next == TypeNode::TYPE_STR16) ||
-       (acc == TypeNode::TYPE_STR16 && next == TypeNode::TYPE_STRING) ||
-       (acc == TypeNode::TYPE_STR8 && next == TypeNode::TYPE_STR16) ||
-       (acc == TypeNode::TYPE_STR16 && next == TypeNode::TYPE_STR8))
-    {
-        acc = TypeNode::TYPE_STRING;
-        return true;
-    }
-    return false;
-}
-
-struct ReturnInferenceData
-{
-    std::vector<TypeNode::TypeKind> valueReturns;
-    bool hasBareReturn = false;
-    bool hasUnknownValueReturn = false;
-};
-
-static bool inferExprKindForReturn(
-    ExpressionNode* expr,
-    const std::unordered_map<std::string, TypeNode::TypeKind>& localKinds,
-    const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
-    TypeNode::TypeKind& outKind)
-{
-    if(!expr)
-        return false;
-    if(dynamic_cast<BoolLiteralNode*>(expr))
-    {
-        outKind = TypeNode::TYPE_BOOL;
-        return true;
-    }
-    if(dynamic_cast<IntLiteralNode*>(expr))
-    {
-        outKind = TypeNode::TYPE_I32;
-        return true;
-    }
-    if(dynamic_cast<FloatLiteralNode*>(expr))
-    {
-        outKind = TypeNode::TYPE_FLOAT;
-        return true;
-    }
-    if(dynamic_cast<DoubleLiteralNode*>(expr))
-    {
-        outKind = TypeNode::TYPE_DOUBLE;
-        return true;
-    }
-    if(dynamic_cast<StringLiteralNode*>(expr))
-    {
-        outKind = TypeNode::TYPE_STRING;
-        return true;
-    }
-    if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
-    {
-        outKind = Helpers::normalizeInferredKind(castExpr->targetType);
-        return true;
-    }
-    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
-    {
-        auto it = localKinds.find(id->name);
-        if(it == localKinds.end())
-            return false;
-        outKind = Helpers::normalizeInferredKind(it->second);
-        return true;
-    }
-    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
-    {
-        if(call->name == "String::new" ||
-           call->name == "String::with_capacity" ||
-           call->name == "String::from" || call->name == "String::to_utf8")
-        {
-            outKind = TypeNode::TYPE_STRING;
-            return true;
-        }
-        auto fit = fnReturnKinds.find(call->name);
-        if(fit == fnReturnKinds.end())
-            return false;
-        outKind = Helpers::normalizeInferredKind(fit->second);
-        return true;
-    }
-    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
-    {
-        TypeNode::TypeKind operandKind = TypeNode::TYPE_VOID;
-        if(!inferExprKindForReturn(unary->operand, localKinds, fnReturnKinds,
-                                   operandKind))
-            return false;
-        if(unary->op == UnaryOpNode::OP_NOT)
-        {
-            outKind = TypeNode::TYPE_BOOL;
-            return true;
-        }
-        outKind = Helpers::normalizeInferredKind(operandKind);
-        return true;
-    }
-    if(auto* ternary = dynamic_cast<TernaryNode*>(expr))
-    {
-        TypeNode::TypeKind t = TypeNode::TYPE_VOID;
-        TypeNode::TypeKind f = TypeNode::TYPE_VOID;
-        if(!inferExprKindForReturn(ternary->trueExpr, localKinds, fnReturnKinds,
-                                   t))
-            return false;
-        if(!inferExprKindForReturn(ternary->falseExpr, localKinds,
-                                   fnReturnKinds, f))
-            return false;
-        t = Helpers::normalizeInferredKind(t);
-        if(!mergeInferredKinds(t, f))
-            return false;
-        outKind = t;
-        return true;
-    }
-    if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
-    {
-        if(bin->op == BinaryOpNode::OP_LT || bin->op == BinaryOpNode::OP_GT ||
-           bin->op == BinaryOpNode::OP_LE || bin->op == BinaryOpNode::OP_GE ||
-           bin->op == BinaryOpNode::OP_EQ || bin->op == BinaryOpNode::OP_NE ||
-           bin->op == BinaryOpNode::OP_AND || bin->op == BinaryOpNode::OP_OR)
-        {
-            outKind = TypeNode::TYPE_BOOL;
-            return true;
-        }
-        if(bin->op == BinaryOpNode::OP_SPACESHIP)
-        {
-            outKind = TypeNode::TYPE_INT;
-            return true;
-        }
-
-        TypeNode::TypeKind l = TypeNode::TYPE_VOID;
-        TypeNode::TypeKind r = TypeNode::TYPE_VOID;
-        if(!inferExprKindForReturn(bin->left, localKinds, fnReturnKinds, l))
-            return false;
-        if(!inferExprKindForReturn(bin->right, localKinds, fnReturnKinds, r))
-            return false;
-        l = Helpers::normalizeInferredKind(l);
-        if(!mergeInferredKinds(l, r))
-            return false;
-        outKind = l;
-        return true;
-    }
-    return false;
-}
-
-static void collectReturnKindsFromStmt(
-    StatementNode* stmt,
-    std::unordered_map<std::string, TypeNode::TypeKind>& locals,
-    const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
-    ReturnInferenceData& out);
-
-static bool tryEvalReturnInferenceBool(ExpressionNode* expr, bool& out)
-{
-    if(!expr)
-        return false;
-    if(auto* b = dynamic_cast<BoolLiteralNode*>(expr))
-    {
-        out = b->value;
-        return true;
-    }
-    if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
-    {
-        out = i->value != 0;
-        return true;
-    }
-    if(auto* f = dynamic_cast<FloatLiteralNode*>(expr))
-    {
-        out = f->value != 0.0f;
-        return true;
-    }
-    if(auto* d = dynamic_cast<DoubleLiteralNode*>(expr))
-    {
-        out = d->value != 0.0;
-        return true;
-    }
-    if(auto* un = dynamic_cast<UnaryOpNode*>(expr))
-    {
-        if(un->op != UnaryOpNode::OP_NOT)
-            return false;
-        bool value = false;
-        if(!tryEvalReturnInferenceBool(un->operand, value))
-            return false;
-        out = !value;
-        return true;
-    }
-    if(auto* cexprExpr = dynamic_cast<CexprExpressionNode*>(expr))
-        return tryEvalReturnInferenceBool(cexprExpr->expression, out);
-    return false;
-}
-
-static void collectReturnKindsFromList(
-    StatementListNode* body,
-    std::unordered_map<std::string, TypeNode::TypeKind>& locals,
-    const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
-    ReturnInferenceData& out)
-{
-    if(!body)
-        return;
-    for(auto* stmt : body->statements)
-        collectReturnKindsFromStmt(stmt, locals, fnReturnKinds, out);
-}
-
-static void collectReturnKindsFromStmt(
-    StatementNode* stmt,
-    std::unordered_map<std::string, TypeNode::TypeKind>& locals,
-    const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
-    ReturnInferenceData& out)
-{
-    if(!stmt)
-        return;
-
-    if(auto* ret = dynamic_cast<ReturnNode*>(stmt))
-    {
-        if(!ret->expression)
-        {
-            out.hasBareReturn = true;
-            return;
-        }
-        TypeNode::TypeKind k = TypeNode::TYPE_VOID;
-        if(inferExprKindForReturn(ret->expression, locals, fnReturnKinds, k))
-            out.valueReturns.push_back(Helpers::normalizeInferredKind(k));
-        else
-            out.hasUnknownValueReturn = true;
-        return;
-    }
-    if(auto* letDecl = dynamic_cast<LetDeclNode*>(stmt))
-    {
-        if(letDecl->type)
-        {
-            locals[letDecl->name] = Helpers::normalizeInferredKind(letDecl->type->kind);
-        }
-        else if(letDecl->expression)
-        {
-            TypeNode::TypeKind k = TypeNode::TYPE_VOID;
-            if(inferExprKindForReturn(letDecl->expression, locals,
-                                      fnReturnKinds, k))
-                locals[letDecl->name] = Helpers::normalizeInferredKind(k);
-        }
-        return;
-    }
-    if(auto* varDecl = dynamic_cast<VarDeclNode*>(stmt))
-    {
-        if(varDecl->type)
-        {
-            locals[varDecl->name] = Helpers::normalizeInferredKind(varDecl->type->kind);
-        }
-        else if(varDecl->initExpr)
-        {
-            TypeNode::TypeKind k = TypeNode::TYPE_VOID;
-            if(inferExprKindForReturn(varDecl->initExpr, locals, fnReturnKinds,
-                                      k))
-                locals[varDecl->name] = Helpers::normalizeInferredKind(k);
-        }
-        return;
-    }
-    if(auto* block = dynamic_cast<BlockStatementNode*>(stmt))
-    {
-        auto blockLocals = locals;
-        collectReturnKindsFromList(block->statements, blockLocals,
-                                   fnReturnKinds, out);
-        return;
-    }
-    if(auto* ifNode = dynamic_cast<IfNode*>(stmt))
-    {
-        auto ifScopeLocals = locals;
-        if(ifNode->conditionInit)
-            collectReturnKindsFromStmt(ifNode->conditionInit, ifScopeLocals,
-                                       fnReturnKinds, out);
-
-        auto thenLocals = ifScopeLocals;
-        collectReturnKindsFromList(ifNode->thenBranch, thenLocals,
-                                   fnReturnKinds, out);
-
-        if(ifNode->elseIfBranch)
-        {
-            auto elseIfLocals = ifScopeLocals;
-            collectReturnKindsFromStmt(ifNode->elseIfBranch, elseIfLocals,
-                                       fnReturnKinds, out);
-        }
-        if(ifNode->elseBranch)
-        {
-            auto elseLocals = ifScopeLocals;
-            collectReturnKindsFromList(ifNode->elseBranch, elseLocals,
-                                       fnReturnKinds, out);
-        }
-        return;
-    }
-    if(auto* cexprIf = dynamic_cast<CexprIfNode*>(stmt))
-    {
-        bool takeThen = false;
-        if(tryEvalReturnInferenceBool(cexprIf->condition, takeThen))
-        {
-            if(takeThen)
-            {
-                auto thenLocals = locals;
-                collectReturnKindsFromList(cexprIf->thenBranch, thenLocals,
-                                           fnReturnKinds, out);
-            }
-            else if(cexprIf->elseIfBranch)
-            {
-                auto elseIfLocals = locals;
-                collectReturnKindsFromStmt(cexprIf->elseIfBranch,
-                                           elseIfLocals, fnReturnKinds, out);
-            }
-            else if(cexprIf->elseBranch)
-            {
-                auto elseLocals = locals;
-                collectReturnKindsFromList(cexprIf->elseBranch, elseLocals,
-                                           fnReturnKinds, out);
-            }
-            return;
-        }
-
-        auto thenLocals = locals;
-        collectReturnKindsFromList(cexprIf->thenBranch, thenLocals,
-                                   fnReturnKinds, out);
-        if(cexprIf->elseIfBranch)
-        {
-            auto elseIfLocals = locals;
-            collectReturnKindsFromStmt(cexprIf->elseIfBranch, elseIfLocals,
-                                       fnReturnKinds, out);
-        }
-        if(cexprIf->elseBranch)
-        {
-            auto elseLocals = locals;
-            collectReturnKindsFromList(cexprIf->elseBranch, elseLocals,
-                                       fnReturnKinds, out);
-        }
-        return;
-    }
-    if(auto* whileNode = dynamic_cast<WhileNode*>(stmt))
-    {
-        auto loopLocals = locals;
-        collectReturnKindsFromList(whileNode->body, loopLocals, fnReturnKinds,
-                                   out);
-        return;
-    }
-    if(auto* forNode = dynamic_cast<ForNode*>(stmt))
-    {
-        auto loopLocals = locals;
-        collectReturnKindsFromList(forNode->body, loopLocals, fnReturnKinds,
-                                   out);
-        return;
-    }
-}
 
 void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                           ExpressionNode* expr, int line,
@@ -1868,76 +1193,6 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
-    auto tryInferFunctionReturnType =
-        [&](FunctionDefNode* fn,
-            const std::unordered_map<std::string, TypeNode::TypeKind>&
-                fnReturnKinds,
-            TypeNode::TypeKind& inferred, std::string& reason) -> bool
-    {
-        if(!fn || fn->isExtern || !fn->body)
-        {
-            reason = "function body is required for inferred return type";
-            return false;
-        }
-
-        std::unordered_map<std::string, TypeNode::TypeKind> localKinds;
-        if(fn->parameters)
-        {
-            for(auto* p : fn->parameters->parameters)
-            {
-                if(!p || !p->type)
-                    continue;
-                localKinds[p->name] = Helpers::normalizeInferredKind(p->type->kind);
-            }
-        }
-
-        ReturnInferenceData data;
-        collectReturnKindsFromList(fn->body, localKinds, fnReturnKinds, data);
-
-        if(data.hasBareReturn && !data.valueReturns.empty())
-        {
-            reason = "function mixes 'return;' and 'return value;'; add "
-                     "explicit return type";
-            return false;
-        }
-
-        if(data.valueReturns.empty())
-        {
-            if(data.hasUnknownValueReturn)
-            {
-                reason = "cannot infer return type from return expressions; "
-                         "add explicit return type";
-                return false;
-            }
-            inferred = TypeNode::TYPE_VOID;
-            return true;
-        }
-
-        TypeNode::TypeKind merged = data.valueReturns.front();
-        for(size_t i = 1; i < data.valueReturns.size(); ++i)
-        {
-            TypeNode::TypeKind candidate = data.valueReturns[i];
-            TypeNode::TypeKind before = merged;
-            if(!mergeInferredKinds(merged, candidate))
-            {
-                reason = "incompatible return types '" +
-                         inferredTypeName(before) + "' and '" +
-                         inferredTypeName(candidate) +
-                         "'; add explicit return type";
-                return false;
-            }
-        }
-        if(data.hasUnknownValueReturn)
-        {
-            reason = "some return expressions could not be inferred; add "
-                     "explicit return type";
-            return false;
-        }
-
-        inferred = Helpers::normalizeInferredKind(merged);
-        return true;
-    };
-
     if(program->functionList)
     {
         std::unordered_map<std::string, TypeNode::TypeKind> fnReturnKinds;
@@ -1979,7 +1234,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
                 TypeNode::TypeKind inferredKind = TypeNode::TYPE_VOID;
                 std::string reason;
-                if(!tryInferFunctionReturnType(fn, fnReturnKinds, inferredKind,
+                if(!infer_function_return_type(fn, fnReturnKinds, inferredKind,
                                                reason))
                     continue;
 
@@ -1997,7 +1252,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             TypeNode::TypeKind inferredKind = TypeNode::TYPE_VOID;
             std::string reason;
-            if(!tryInferFunctionReturnType(fn, fnReturnKinds, inferredKind,
+            if(!infer_function_return_type(fn, fnReturnKinds, inferredKind,
                                            reason))
             {
                 reportError(fn->line,
@@ -3141,7 +2396,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     else if(node->isInline)
         function->addFnAttr(llvm::Attribute::InlineHint);
 
-    if(containsExceptionControlFlow(node->body))
+    if(contains_exception_control_flow(node->body))
     {
         function->addFnAttr(llvm::Attribute::OptimizeNone);
         function->addFnAttr(llvm::Attribute::NoInline);
@@ -3366,7 +2621,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             {
                 std::set<std::string> futureIdents;
                 for(size_t sj = si + 1; sj < bodyStmts.size(); sj++)
-                    collectUsedIdents(bodyStmts[sj], futureIdents);
+                    collect_used_idents(bodyStmts[sj], futureIdents);
                 std::vector<std::string> toClear;
                 for(const auto& kv : pointerBorrowTarget)
                 {
@@ -3539,7 +2794,7 @@ void CodeGenerator::generateStatement(StatementNode* node)
             {
                 std::set<std::string> futureIdents;
                 for(size_t sj = si + 1; sj < blkStmts.size(); sj++)
-                    collectUsedIdents(blkStmts[sj], futureIdents);
+                    collect_used_idents(blkStmts[sj], futureIdents);
                 std::vector<std::string> toClear;
                 for(const auto& kv : pointerBorrowTarget)
                 {
@@ -6552,26 +5807,13 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
     }
 }
 
-static ExpressionNode* stripIterMethods(ExpressionNode* expr)
-{
-    while(auto* mc = dynamic_cast<MethodCallNode*>(expr))
-    {
-        const std::string& mn = mc->methodName;
-        if(mn == "iter" || mn == "into_iter" || mn == "enumerate")
-            expr = mc->object;
-        else
-            break;
-    }
-    return expr;
-}
-
 void CodeGenerator::generateForStatement(ForNode* node)
 {
     llvm::Function* function = builder.GetInsertBlock()->getParent();
 
     // Strip .iter() / .into_iter() / .enumerate() wrappers from the iterable.
     // The actual iteration is always over the underlying collection.
-    ExpressionNode* iterableExpr = stripIterMethods(node->iterable);
+    ExpressionNode* iterableExpr = strip_iter_methods(node->iterable);
 
     // Check if it's a range expression
     auto* rangeExpr = dynamic_cast<RangeExpressionNode*>(iterableExpr);
@@ -19186,7 +18428,7 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
 
 llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
 {
-    if(containsUpdateExpression(node->index))
+    if(contains_update_expression(node->index))
     {
         reportError(node->line,
                     "index expression does not allow pre/post ++/--; update "
