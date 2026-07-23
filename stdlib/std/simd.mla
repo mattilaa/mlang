@@ -11,6 +11,7 @@ use std::simd::detail::*;
 /// operations where the host compiler supports them, with scalar tails for
 /// lengths that are not a multiple of the vector lane count.
 
+mod std::algorithm::fft;
 mod std::bitset;
 
 use std::bitset::BitSet;
@@ -103,6 +104,45 @@ pub fn multiply(lhs: &list<f32>, rhs: &list<f32>) -> list<f32> {
 /// Returns an empty list when input lengths differ.
 pub fn multiply(lhs: &list<f64>, rhs: &list<f64>) -> list<f64> {
     return __mlang_std_simd_multiply_f64(lhs, rhs);
+}
+
+/// @brief Forward FFT for SIMD-prepared interleaved complex i64 samples.
+///
+/// This is the SIMD namespace entry point for FFT pipelines. Use `std::simd`
+/// operations such as `multiply`, `add`, and `subtract` to prepare the normal
+/// `list<T>` buffer, then call this wrapper. The FFT kernel itself is provided
+/// by `std::algorithm::fft` and expects `[re0, im0, re1, im1, ...]`.
+pub fn fft_forward(data: list<i64>) -> list<i64> {
+    return std::algorithm::fft::forward(data);
+}
+
+/// @brief Inverse FFT for SIMD-prepared interleaved complex i64 samples.
+///
+/// Returns an empty list when the FFT input length is invalid.
+pub fn fft_inverse(data: list<i64>) -> list<i64> {
+    return std::algorithm::fft::inverse(data);
+}
+
+/// @brief Forward FFT for SIMD-prepared interleaved complex f32 samples.
+///
+/// Use this for DSP/audio buffers when SIMD pre/post operations are f32.
+pub fn fft_forward(data: list<f32>) -> list<f32> {
+    return std::algorithm::fft::forward_f32(data);
+}
+
+/// @brief Inverse FFT for SIMD-prepared interleaved complex f32 samples.
+pub fn fft_inverse(data: list<f32>) -> list<f32> {
+    return std::algorithm::fft::inverse_f32(data);
+}
+
+/// @brief Forward FFT for SIMD-prepared interleaved complex f64 samples.
+pub fn fft_forward(data: list<f64>) -> list<f64> {
+    return std::algorithm::fft::forward_f64(data);
+}
+
+/// @brief Inverse FFT for SIMD-prepared interleaved complex f64 samples.
+pub fn fft_inverse(data: list<f64>) -> list<f64> {
+    return std::algorithm::fft::inverse_f64(data);
 }
 
 /// @brief Element-wise bitwise AND.

@@ -8,6 +8,7 @@
 
 mod std::bench;
 mod std::bitset;
+mod std::algorithm::fft;
 mod std::simd;
 mod std::testing;
 
@@ -39,6 +40,48 @@ fn scalar_add_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64> {
         out.push(lhs[i] + rhs[i]);
     }
     return out;
+}
+
+fn make_complex_f32_values(n: i64) -> list<f32> {
+    var out: list<f32> = [];
+    for i in 0..n {
+        if (i % 4) == 0 {
+            out.push(1.0f);
+        } else if (i % 4) == 1 {
+            out.push(0.5f);
+        } else if (i % 4) == 2 {
+            out.push(0.25f);
+        } else {
+            out.push(0.125f);
+        }
+        out.push(0.0f);
+    }
+    return out;
+}
+
+fn make_complex_f32_gain(n: i64) -> list<f32> {
+    var out: list<f32> = [];
+    for _i in 0..n {
+        out.push(0.5f);
+        out.push(0.5f);
+    }
+    return out;
+}
+
+fn scalar_multiply_f32(lhs: &list<f32>, rhs: &list<f32>) -> list<f32> {
+    var out: list<f32> = [];
+    for i in 0..lhs.len() {
+        out.push(lhs[i] * rhs[i]);
+    }
+    return out;
+}
+
+fn approx_f32(a: f32, b: f32, eps: f32) -> bool {
+    var diff: f32 = a - b;
+    if diff < 0.0f {
+        diff = 0.0f - diff;
+    }
+    return diff <= eps;
 }
 
 fn make_bitset(n: i64) -> BitSet {
@@ -114,6 +157,50 @@ fn bench_simd_add_i64_1024x8() {
     do_not_optimize_i64(checksum);
     clobber_memory();
     verify(checksum == 800624);
+}
+
+#[test]
+fn bench_direct_fft_f32_pipeline_1024x8() {
+    var data: list<f32> = make_complex_f32_values(1024);
+    let gain: list<f32> = make_complex_f32_gain(1024);
+    var checksum: i64 = 0;
+
+    for _repeat in 0..8 {
+        let scaled: list<f32> = scalar_multiply_f32(data, gain);
+        let freq: list<f32> = std::algorithm::fft::forward_f32(scaled);
+        verify(freq.len() == 2048);
+        let restored: list<f32> = std::algorithm::fft::inverse_f32(freq);
+        verify(restored.len() == 2048);
+        data = restored;
+        checksum = checksum + data.len();
+    }
+
+    do_not_optimize_i64(checksum);
+    clobber_memory();
+    verify(checksum == 16384);
+    verify(approx_f32(data[0], 0.00390625f, 0.0005f));
+}
+
+#[test]
+fn bench_simd_fft_f32_pipeline_1024x8() {
+    var data: list<f32> = make_complex_f32_values(1024);
+    let gain: list<f32> = make_complex_f32_gain(1024);
+    var checksum: i64 = 0;
+
+    for _repeat in 0..8 {
+        let scaled: list<f32> = multiply(data, gain);
+        let freq: list<f32> = fft_forward(scaled);
+        verify(freq.len() == 2048);
+        let restored: list<f32> = fft_inverse(freq);
+        verify(restored.len() == 2048);
+        data = restored;
+        checksum = checksum + data.len();
+    }
+
+    do_not_optimize_i64(checksum);
+    clobber_memory();
+    verify(checksum == 16384);
+    verify(approx_f32(data[0], 0.00390625f, 0.0005f));
 }
 
 #[test]

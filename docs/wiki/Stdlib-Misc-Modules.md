@@ -160,6 +160,8 @@ It demonstrates:
 
 - scalar sum vs [`std::simd::sum`](Stdlib-Simd)
 - scalar element-wise add vs [`std::simd::add`](Stdlib-Simd)
+- scalar FFT preprocessing plus [`std::algorithm::fft`](Stdlib-Algorithm-Fft) vs [`std::simd`](Stdlib-Simd)
+  preprocessing plus `std::simd::fft_forward` / `std::simd::fft_inverse`
 - per-bit [`BitSet`](Stdlib-Bitset) scanning vs packed [`std::simd::count_ones`](Stdlib-Simd)
 
 Run:

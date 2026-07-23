@@ -21,6 +21,13 @@ fn main() -> i32 {
     let smallest: f32 = min(rhs);
     let largest: f32 = max(rhs);
 
+    let complex: list<f32> = [1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f];
+    let complex_gain: list<f32> = [0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f];
+    let scaled_complex: list<f32> = multiply(complex, complex_gain);
+    let spectrum: list<f32> = fft_forward(scaled_complex);
+    let spectrum0: f32 = spectrum[0];
+    let restored_complex: list<f32> = fft_inverse(spectrum);
+
     let mask_a: list<i32> = [1, 2, 3, 12];
     let mask_b: list<i32> = [3, 1, 5, 10];
     let anded: list<i32> = bit_and(mask_a, mask_b);
@@ -69,6 +76,8 @@ fn main() -> i32 {
     println!("prefix_sum(lhs)[3]={}", running[3]);
     println!("min(rhs)={}", smallest);
     println!("max(rhs)={}", largest);
+    println!("fft_forward(scaled_complex)[0]={}", spectrum0);
+    println!("fft_inverse(spectrum)[0]={}", restored_complex[0]);
     println!("and[0]={}", anded[0]);
     println!("or[2]={}", ored[2]);
     println!("xor[3]={}", xored[3]);

@@ -179,6 +179,34 @@ fn test_simd_f64_ops_and_length_mismatch() {
 }
 
 #[test]
+fn test_simd_fft_wrappers() {
+    let eps: f32 = 0.0001f;
+    let signal: list<f32> = [1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f];
+    let gain: list<f32> = [0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f];
+
+    let scaled: list<f32> = multiply(signal, gain);
+    let spectrum: list<f32> = fft_forward(scaled);
+    verify(spectrum.len() == 8);
+    verify(approx_f32(spectrum[0], 0.5f, eps));
+    verify(approx_f32(spectrum[2], 0.5f, eps));
+    verify(approx_f32(spectrum[4], 0.5f, eps));
+    verify(approx_f32(spectrum[6], 0.5f, eps));
+
+    let restored: list<f32> = fft_inverse(spectrum);
+    verify(restored.len() == 8);
+    verify(approx_f32(restored[0], 0.5f, eps));
+    verify(approx_f32(restored[2], 0.0f, eps));
+
+    let int_signal: list<i64> = [1, 0, 0, 0, 0, 0, 0, 0];
+    let int_spectrum: list<i64> = fft_forward(int_signal);
+    verify(int_spectrum.len() == 8);
+    verify(int_spectrum[0] == 1);
+    verify(int_spectrum[2] == 1);
+    verify(int_spectrum[4] == 1);
+    verify(int_spectrum[6] == 1);
+}
+
+#[test]
 fn test_simd_boolean_reductions() {
     let all_flags: list<bool> = [true, true, true];
     let mixed_flags: list<bool> = [true, false, true];

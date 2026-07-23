@@ -25,12 +25,30 @@ If input lengths differ, they return an empty list.
 - `max(values: &list<T>) -> T`
 - `any_nonzero(values: &list<T>) -> bool`
 - `all_nonzero(values: &list<T>) -> bool`
+- `fft_forward(data: list<T>) -> list<T>`
+- `fft_inverse(data: list<T>) -> list<T>`
 
 `sum`, `product`, `min`, `max`, `any_nonzero`, and `all_nonzero` are
 horizontal reductions over a whole list. Empty numeric lists return `0` for
 `sum`, `min`, and `max`; `1` for `product`; `false` for `any_nonzero`; and
 `true` for `all_nonzero`. `prefix_sum` returns the running sum at each element
 and returns an empty list for empty input.
+
+FFT pipeline wrappers:
+- `fft_forward(data: list<i64>) -> list<i64>`
+- `fft_inverse(data: list<i64>) -> list<i64>`
+- `fft_forward(data: list<f32>) -> list<f32>`
+- `fft_inverse(data: list<f32>) -> list<f32>`
+- `fft_forward(data: list<f64>) -> list<f64>`
+- `fft_inverse(data: list<f64>) -> list<f64>`
+
+Use these when writing SIMD-oriented DSP code: prepare or post-process normal
+`list<T>` buffers with `std::simd` operations, then call the FFT wrapper from
+the same namespace. FFT inputs are interleaved complex samples:
+`[re0, im0, re1, im1, ...]`. The wrapper delegates to
+`std::algorithm::fft`; the FFT kernel is not itself a SIMD intrinsic API.
+Use `std::algorithm::fft` directly when you want the algorithm module without
+the SIMD pipeline naming.
 
 Boolean reductions:
 - `any(values: &list<bool>) -> bool`
@@ -102,6 +120,12 @@ bitset.resize(128, false);
 bitset.set(64, true);
 let packed_has_bits: bool = any(bitset);
 let packed_count: i64 = count_ones(bitset);
+
+let complex: list<f32> = [1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f];
+let gain: list<f32> = [0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f];
+let scaled_complex: list<f32> = multiply(complex, gain);
+let spectrum: list<f32> = fft_forward(scaled_complex);
+let restored: list<f32> = fft_inverse(spectrum);
 ```
 
 See [`examples/std_simd_demo.mla`](../../examples/std_simd_demo.mla).
