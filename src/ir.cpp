@@ -808,123 +808,6 @@ static std::string inferredTypeName(TypeNode::TypeKind kind)
     }
 }
 
-static std::string displayTypeName(TypeNode* type)
-{
-    if(!type)
-        return "unknown";
-
-    if(auto* ref = dynamic_cast<ReferenceTypeNode*>(type))
-    {
-        return ref->isMutable ? "&mut " + displayTypeName(ref->elementType)
-                              : "&" + displayTypeName(ref->elementType);
-    }
-    if(auto* ptr = dynamic_cast<PointerTypeNode*>(type))
-    {
-        return "ptr<" + displayTypeName(ptr->elementType) + ">";
-    }
-    if(auto* gl = dynamic_cast<GenericListTypeNode*>(type))
-    {
-        return "list<" + displayTypeName(gl->elementType) + ">";
-    }
-    if(auto* mapTy = dynamic_cast<MapTypeNode*>(type))
-    {
-        return "map<" + displayTypeName(mapTy->keyType) + ", " +
-               displayTypeName(mapTy->valueType) + ">";
-    }
-    if(auto* tupleTy = dynamic_cast<TupleTypeNode*>(type))
-    {
-        std::string out = "tuple<";
-        if(tupleTy->elementTypes)
-        {
-            for(size_t i = 0; i < tupleTy->elementTypes->types.size(); ++i)
-            {
-                if(i > 0)
-                    out += ", ";
-                out += displayTypeName(tupleTy->elementTypes->types[i]);
-            }
-        }
-        out += ">";
-        return out;
-    }
-    if(auto* s = dynamic_cast<StructTypeRefNode*>(type))
-    {
-        return s->structName;
-    }
-    if(auto* gs = dynamic_cast<GenericStructTypeRefNode*>(type))
-    {
-        std::string out = gs->structName + "<";
-        for(size_t i = 0; i < gs->typeArgs.size(); ++i)
-        {
-            if(i > 0)
-                out += ", ";
-            out += displayTypeName(gs->typeArgs[i]);
-        }
-        out += ">";
-        return out;
-    }
-    if(auto* trait = dynamic_cast<TraitObjectTypeNode*>(type))
-    {
-        return "dyn " + trait->traitName;
-    }
-
-    switch(type->kind)
-    {
-    case TypeNode::TYPE_VOID:
-        return "void";
-    case TypeNode::TYPE_BOOL:
-        return "bool";
-    case TypeNode::TYPE_BIT:
-        return "bit";
-    case TypeNode::TYPE_INT:
-        return "i32";
-    case TypeNode::TYPE_FLOAT:
-        return "f32";
-    case TypeNode::TYPE_DOUBLE:
-        return "f64";
-    case TypeNode::TYPE_STRING:
-        return "str8";
-    case TypeNode::TYPE_STR8:
-        return "str8";
-    case TypeNode::TYPE_STR16:
-        return "str16";
-    case TypeNode::TYPE_LIST:
-        return "list";
-    case TypeNode::TYPE_MAP:
-        return "map";
-    case TypeNode::TYPE_TUPLE:
-        return "tuple";
-    case TypeNode::TYPE_PTR:
-        return "ptr";
-    case TypeNode::TYPE_STRUCT:
-        return "struct";
-    case TypeNode::TYPE_I8:
-        return "i8";
-    case TypeNode::TYPE_I16:
-        return "i16";
-    case TypeNode::TYPE_I32:
-        return "i32";
-    case TypeNode::TYPE_I64:
-        return "i64";
-    case TypeNode::TYPE_U8:
-        return "u8";
-    case TypeNode::TYPE_U16:
-        return "u16";
-    case TypeNode::TYPE_U32:
-        return "u32";
-    case TypeNode::TYPE_U64:
-        return "u64";
-    case TypeNode::TYPE_REF:
-    case TypeNode::TYPE_REF_MUT:
-        return "reference";
-    case TypeNode::TYPE_TRAIT_OBJECT:
-        // Reached only if the typed TraitObjectTypeNode dynamic_cast above
-        // didn't hit (e.g. a bare TypeNode with kind set without the subtype).
-        return "dyn";
-    }
-
-    return "unknown";
-}
-
 /// \brief Normalize a module path into a dotted test suite name.
 ///
 /// Replaces path separators, colons, hyphens, and spaces with dots,
@@ -1813,42 +1696,6 @@ TypeNode::TypeKind getExpressionTypeKind(
     return TypeNode::TYPE_INT;
 }
 
-std::string CodeGenerator::expressionTypeNameForLog(ExpressionNode* expr,
-                                                    int line)
-{
-    if(!expr)
-        return "unknown";
-
-    if(dynamic_cast<IntLiteralNode*>(expr))
-        return "i64";
-    if(dynamic_cast<BoolLiteralNode*>(expr))
-        return "bool";
-    if(dynamic_cast<FloatLiteralNode*>(expr))
-        return "f32";
-    if(dynamic_cast<DoubleLiteralNode*>(expr))
-        return "f64";
-    if(dynamic_cast<StringLiteralNode*>(expr) ||
-       dynamic_cast<FormatNode*>(expr))
-        return "str8";
-
-    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
-    {
-        auto enumIt = enumVariableTypes.find(id->name);
-        if(enumIt != enumVariableTypes.end())
-            return enumIt->second;
-    }
-
-    TypeNode* typeNode = getLValueType(expr, line);
-    if(typeNode)
-        return displayTypeName(typeNode);
-    return "unknown";
-}
-
-static bool isTraitObjectTypeNode(TypeNode* type)
-{
-    return dynamic_cast<TraitObjectTypeNode*>(type) != nullptr;
-}
-
 TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 {
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
@@ -2125,24 +1972,6 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     // Non-lvalue expression; callers that require an lvalue type should emit
     // a context-specific diagnostic.
-    return nullptr;
-}
-
-TypeNode* CodeGenerator::getPointerElementType(ExpressionNode* expr, int line)
-{
-    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
-    {
-        if(unary->op == UnaryOpNode::OP_ADDR)
-        {
-            return getLValueType(unary->operand, line);
-        }
-    }
-
-    TypeNode* type = getLValueType(expr, line);
-    if(auto* ptrNode = dynamic_cast<PointerTypeNode*>(type))
-        return ptrNode->elementType;
-
-    reportError(line, "dereference requires a pointer value");
     return nullptr;
 }
 
@@ -2424,78 +2253,6 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
     }
 
     return nullptr;
-}
-
-llvm::Value* CodeGenerator::generateSizeofExpression(SizeofExpressionNode* node)
-{
-    TypeNode* targetType = nullptr;
-    if(node->typeTarget)
-    {
-        targetType = cloneTypeNode(node->typeTarget);
-        if(auto* namedTarget =
-               dynamic_cast<StructTypeRefNode*>(node->typeTarget))
-        {
-            auto varIt = variableTypes.find(namedTarget->structName);
-            if(varIt != variableTypes.end())
-            {
-                IdentifierNode idExpr(namedTarget->structName);
-                idExpr.line = node->line;
-                targetType = inferExpressionTypeNode(&idExpr, node->line);
-                if(auto* listType =
-                       dynamic_cast<GenericListTypeNode*>(targetType))
-                {
-                    auto capIt = arrayCapacities.find(namedTarget->structName);
-                    if(capIt != arrayCapacities.end())
-                    {
-                        targetType =
-                            new ArrayTypeNode(cloneTypeNode(listType->elementType),
-                                              capIt->second);
-                    }
-                }
-            }
-        }
-    }
-    else
-    {
-        targetType =
-            inferExpressionTypeNode(node->expressionTarget, node->line);
-        if(auto* id = dynamic_cast<IdentifierNode*>(node->expressionTarget))
-        {
-            if(auto* listType = dynamic_cast<GenericListTypeNode*>(targetType))
-            {
-                auto capIt = arrayCapacities.find(id->name);
-                if(capIt != arrayCapacities.end())
-                {
-                    targetType =
-                        new ArrayTypeNode(cloneTypeNode(listType->elementType),
-                                          capIt->second);
-                }
-            }
-        }
-    }
-
-    if(!targetType)
-    {
-        reportError(node->line, "cannot infer type for size_of expression");
-        return nullptr;
-    }
-
-    llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
-    if(!llvmType)
-    {
-        reportError(node->line, "cannot lower size_of target type");
-        return nullptr;
-    }
-
-    uint64_t sizeBytes = 0;
-    if(std::optional<uint64_t> arrayBytes = fixedArrayByteSize(targetType))
-        sizeBytes = *arrayBytes;
-    else
-    {
-        const llvm::DataLayout& dl = module->getDataLayout();
-        sizeBytes = dl.getTypeAllocSize(llvmType).getFixedValue();
-    }
-    return llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), sizeBytes);
 }
 
 llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(

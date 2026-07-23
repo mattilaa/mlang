@@ -119,3 +119,19 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
     reportError(line, "address-of operator requires an assignable expression");
     return nullptr;
 }
+
+TypeNode* CodeGenerator::getPointerElementType(ExpressionNode* expr, int line)
+{
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_ADDR)
+            return getLValueType(unary->operand, line);
+    }
+
+    TypeNode* type = getLValueType(expr, line);
+    if(auto* ptrNode = dynamic_cast<PointerTypeNode*>(type))
+        return ptrNode->elementType;
+
+    reportError(line, "dereference requires a pointer value");
+    return nullptr;
+}

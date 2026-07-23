@@ -256,6 +256,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/borrows.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/builtins.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/enums.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_diagnostics.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/formatting.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/lifecycle.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/literals.cpp
@@ -264,6 +265,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/ownership.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/pointers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/sizeof.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/struct_fields.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/types.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/validation.cpp
