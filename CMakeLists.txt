@@ -265,6 +265,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_ops.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_type_kind.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_types.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_values.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/formatting.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/function_calls.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/function_overloads.cpp
