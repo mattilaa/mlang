@@ -439,3 +439,83 @@ std::string CodeGenerator::getOrCreateMonomorphizedStruct(
 
     return mangledName;
 }
+
+// ============================================================================
+// GENERICS MONOMORPHIZATION IMPLEMENTATION
+// ============================================================================
+
+// Substitute type parameters with concrete types
+// e.g., if typeParams = ["T", "U"] and typeArgs = [i32, i64],
+// then a StructTypeRefNode("T") becomes a TypeNode(TYPE_I32)
+TypeNode*
+CodeGenerator::substituteTypeParams(TypeNode* type,
+                                    const std::vector<std::string>& typeParams,
+                                    const std::vector<TypeNode*>& typeArgs)
+{
+    if(!type)
+        return nullptr;
+
+    // Check if this is a struct type reference that matches a type parameter
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+    {
+        // Look for matching type parameter
+        for(size_t i = 0; i < typeParams.size() && i < typeArgs.size(); ++i)
+        {
+            if(structRef->structName == typeParams[i])
+            {
+                // Return a copy of the concrete type
+                return typeArgs[i];
+            }
+        }
+        // Not a type parameter - return as-is (it's a concrete struct type)
+        return type;
+    }
+
+    // Check if this is a generic struct type reference
+    if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(type))
+    {
+        // Recursively substitute type arguments
+        auto* newRef = new GenericStructTypeRefNode(genRef->structName);
+        for(auto* arg : genRef->typeArgs)
+        {
+            newRef->typeArgs.push_back(
+                substituteTypeParams(arg, typeParams, typeArgs));
+        }
+        return newRef;
+    }
+
+    // Handle generic list type
+    if(auto* listType = dynamic_cast<GenericListTypeNode*>(type))
+    {
+        TypeNode* newElemType =
+            substituteTypeParams(listType->elementType, typeParams, typeArgs);
+        if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(type))
+            return new ArrayTypeNode(newElemType, arrayType->capacity);
+        return new GenericListTypeNode(newElemType);
+    }
+
+    // Handle map type
+    if(auto* mapType = dynamic_cast<MapTypeNode*>(type))
+    {
+        TypeNode* newKeyType =
+            substituteTypeParams(mapType->keyType, typeParams, typeArgs);
+        TypeNode* newValType =
+            substituteTypeParams(mapType->valueType, typeParams, typeArgs);
+        return new MapTypeNode(newKeyType, newValType);
+    }
+
+    // Handle tuple type
+    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(type))
+    {
+        auto* newTypeList = new TypeListNode();
+        for(auto* elemType : tupleType->elementTypes->types)
+        {
+            newTypeList->addType(
+                substituteTypeParams(elemType, typeParams, typeArgs));
+        }
+        return new TupleTypeNode(newTypeList);
+    }
+
+    // Basic types don't need substitution
+    return type;
+}
