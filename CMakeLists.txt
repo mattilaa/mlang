@@ -280,6 +280,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/runtime.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/sizeof.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/struct_fields.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/struct_methods.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/testing.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/type_aliases.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/types.cpp
