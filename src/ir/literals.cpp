@@ -1,11 +1,11 @@
 #include "ir.h"
 #include "ir/common.h"
 
+using mlang::ir_detail::common::Helpers;
+
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Constants.h>
 
-using mlang::ir_detail::enumIsUnsigned;
-using mlang::ir_detail::isEnumStringType;
 
 llvm::Value* CodeGenerator::generateIntLiteral(IntLiteralNode* node)
 {
@@ -48,7 +48,7 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
     auto bkIt = enumBaseTypes.find(resolvedEnumName);
     if(bkIt != enumBaseTypes.end())
         baseKind = bkIt->second;
-    if(isEnumStringType(baseKind))
+    if(Helpers::isEnumStringType(baseKind))
     {
         auto enumIt = enumStringValues.find(resolvedEnumName);
         if(enumIt == enumStringValues.end())
@@ -79,7 +79,7 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
     }
     llvm::Type* enumTy = getLLVMType(baseKind);
     return llvm::ConstantInt::get(enumTy, variantIt->second,
-                                  !enumIsUnsigned(baseKind));
+                                  !Helpers::enumIsUnsigned(baseKind));
 }
 
 llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)

@@ -3,12 +3,12 @@
 #include <llvm/Config/llvm-config.h>
 #include <cstdint>
 
-namespace mlang::ir_detail
+namespace mlang::ir_detail::common
 {
 
-llvm::Value* create_global_cstring(llvm::IRBuilder<>& builder,
-                                   llvm::StringRef text,
-                                   const llvm::Twine& name)
+llvm::Value* Helpers::create_global_cstring(llvm::IRBuilder<>& builder,
+                                            llvm::StringRef text,
+                                            const llvm::Twine& name)
 {
 #if LLVM_VERSION_MAJOR >= 21
     return builder.CreateGlobalString(text, name);
@@ -17,7 +17,8 @@ llvm::Value* create_global_cstring(llvm::IRBuilder<>& builder,
 #endif
 }
 
-bool is_same_module_family(const std::string& a, const std::string& b)
+bool Helpers::is_same_module_family(const std::string& a,
+                                    const std::string& b)
 {
     if(a.empty() || b.empty())
         return a == b;
@@ -34,12 +35,12 @@ bool is_same_module_family(const std::string& a, const std::string& b)
     return is_nested(a, b) || is_nested(b, a);
 }
 
-std::string type_name_for_error(TypeNode* typeNode)
+std::string Helpers::type_name_for_error(TypeNode* typeNode)
 {
     return typeNode ? typeNode->toString() : "<unknown>";
 }
 
-bool isBitFieldTypeNode(TypeNode* type)
+bool Helpers::isBitFieldTypeNode(TypeNode* type)
 {
     if(!type)
         return false;
@@ -50,7 +51,7 @@ bool isBitFieldTypeNode(TypeNode* type)
     return false;
 }
 
-bool isEnumIntegralType(TypeNode::TypeKind kind)
+bool Helpers::isEnumIntegralType(TypeNode::TypeKind kind)
 {
     switch(kind)
     {
@@ -69,12 +70,12 @@ bool isEnumIntegralType(TypeNode::TypeKind kind)
     }
 }
 
-bool isEnumStringType(TypeNode::TypeKind kind)
+bool Helpers::isEnumStringType(TypeNode::TypeKind kind)
 {
     return kind == TypeNode::TYPE_STR8 || kind == TypeNode::TYPE_STRING;
 }
 
-unsigned enumBitWidth(TypeNode::TypeKind kind)
+unsigned Helpers::enumBitWidth(TypeNode::TypeKind kind)
 {
     switch(kind)
     {
@@ -95,13 +96,13 @@ unsigned enumBitWidth(TypeNode::TypeKind kind)
     }
 }
 
-bool enumIsUnsigned(TypeNode::TypeKind kind)
+bool Helpers::enumIsUnsigned(TypeNode::TypeKind kind)
 {
     return kind == TypeNode::TYPE_U8 || kind == TypeNode::TYPE_U16 ||
            kind == TypeNode::TYPE_U32 || kind == TypeNode::TYPE_U64;
 }
 
-std::string enumBaseTypeName(TypeNode::TypeKind kind)
+std::string Helpers::enumBaseTypeName(TypeNode::TypeKind kind)
 {
     switch(kind)
     {
@@ -128,10 +129,10 @@ std::string enumBaseTypeName(TypeNode::TypeKind kind)
     }
 }
 
-bool fitsInEnumBaseType(TypeNode::TypeKind kind, int64_t value)
+bool Helpers::fitsInEnumBaseType(TypeNode::TypeKind kind, int64_t value)
 {
-    const unsigned bits = enumBitWidth(kind);
-    if(enumIsUnsigned(kind))
+    const unsigned bits = Helpers::enumBitWidth(kind);
+    if(Helpers::enumIsUnsigned(kind))
     {
         if(value < 0)
             return false;
@@ -149,7 +150,7 @@ bool fitsInEnumBaseType(TypeNode::TypeKind kind, int64_t value)
     return value >= minVal && value <= maxVal;
 }
 
-TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind)
+TypeNode::TypeKind Helpers::normalizeInferredKind(TypeNode::TypeKind kind)
 {
     if(kind == TypeNode::TYPE_INT)
         return TypeNode::TYPE_I32;
@@ -158,9 +159,9 @@ TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind)
     return kind;
 }
 
-bool isIntegerInferKind(TypeNode::TypeKind kind)
+bool Helpers::isIntegerInferKind(TypeNode::TypeKind kind)
 {
-    switch(normalizeInferredKind(kind))
+    switch(Helpers::normalizeInferredKind(kind))
     {
     case TypeNode::TYPE_I8:
     case TypeNode::TYPE_I16:
@@ -176,10 +177,10 @@ bool isIntegerInferKind(TypeNode::TypeKind kind)
     }
 }
 
-bool isFloatInferKind(TypeNode::TypeKind kind)
+bool Helpers::isFloatInferKind(TypeNode::TypeKind kind)
 {
-    kind = normalizeInferredKind(kind);
+    kind = Helpers::normalizeInferredKind(kind);
     return kind == TypeNode::TYPE_FLOAT || kind == TypeNode::TYPE_DOUBLE;
 }
 
-} // namespace mlang::ir_detail
+} // namespace mlang::ir_detail::common

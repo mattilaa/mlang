@@ -4,7 +4,8 @@
 
 #include <llvm/Config/llvm-config.h>
 
-using mlang::ir_detail::create_global_cstring;
+using mlang::ir_detail::common::Helpers;
+
 
 void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
                                       bool debug, bool pretty, bool json,
@@ -44,7 +45,7 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
             {
                 reportError(line, "cannot debug-format unnamed struct");
                 cFormat += "%s";
-                argValues.push_back(create_global_cstring(builder, "<struct>"));
+                argValues.push_back(Helpers::create_global_cstring(builder, "<struct>"));
                 return;
             }
             if(!debugStructs.count(structName))
@@ -163,7 +164,7 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
         reportError(line, "cannot print struct type '" + structName +
                               "' directly; use {:?} with #[derive(Debug)]");
         cFormat += "%s";
-        argValues.push_back(create_global_cstring(builder, "<struct>"));
+        argValues.push_back(Helpers::create_global_cstring(builder, "<struct>"));
     }
     else
     {

@@ -24,15 +24,7 @@ namespace
 
 using mlang::ir_detail::module_target_triple_string;
 using mlang::ir_detail::normalize_target_arch_name;
-using mlang::ir_detail::create_global_cstring;
-using mlang::ir_detail::enumIsUnsigned;
-using mlang::ir_detail::is_same_module_family;
-using mlang::ir_detail::isBitFieldTypeNode;
-using mlang::ir_detail::isEnumStringType;
-using mlang::ir_detail::isFloatInferKind;
-using mlang::ir_detail::isIntegerInferKind;
-using mlang::ir_detail::normalizeInferredKind;
-using mlang::ir_detail::type_name_for_error;
+using mlang::ir_detail::common::Helpers;
 
 enum class PrimitiveTypeAlias
 {
@@ -612,12 +604,12 @@ static std::string inferredTypeName(TypeNode::TypeKind kind)
 
 static bool mergeInferredKinds(TypeNode::TypeKind& acc, TypeNode::TypeKind next)
 {
-    acc = normalizeInferredKind(acc);
-    next = normalizeInferredKind(next);
+    acc = Helpers::normalizeInferredKind(acc);
+    next = Helpers::normalizeInferredKind(next);
     if(acc == next)
         return true;
 
-    if(isIntegerInferKind(acc) && isIntegerInferKind(next))
+    if(Helpers::isIntegerInferKind(acc) && Helpers::isIntegerInferKind(next))
     {
         if(acc == TypeNode::TYPE_I64 || acc == TypeNode::TYPE_U64 ||
            next == TypeNode::TYPE_I64 || next == TypeNode::TYPE_U64)
@@ -626,8 +618,8 @@ static bool mergeInferredKinds(TypeNode::TypeKind& acc, TypeNode::TypeKind next)
             acc = TypeNode::TYPE_I32;
         return true;
     }
-    if((isIntegerInferKind(acc) || isFloatInferKind(acc)) &&
-       (isIntegerInferKind(next) || isFloatInferKind(next)))
+    if((Helpers::isIntegerInferKind(acc) || Helpers::isFloatInferKind(acc)) &&
+       (Helpers::isIntegerInferKind(next) || Helpers::isFloatInferKind(next)))
     {
         if(acc == TypeNode::TYPE_DOUBLE || next == TypeNode::TYPE_DOUBLE)
             acc = TypeNode::TYPE_DOUBLE;
@@ -690,7 +682,7 @@ static bool inferExprKindForReturn(
     }
     if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
     {
-        outKind = normalizeInferredKind(castExpr->targetType);
+        outKind = Helpers::normalizeInferredKind(castExpr->targetType);
         return true;
     }
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
@@ -698,7 +690,7 @@ static bool inferExprKindForReturn(
         auto it = localKinds.find(id->name);
         if(it == localKinds.end())
             return false;
-        outKind = normalizeInferredKind(it->second);
+        outKind = Helpers::normalizeInferredKind(it->second);
         return true;
     }
     if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
@@ -713,7 +705,7 @@ static bool inferExprKindForReturn(
         auto fit = fnReturnKinds.find(call->name);
         if(fit == fnReturnKinds.end())
             return false;
-        outKind = normalizeInferredKind(fit->second);
+        outKind = Helpers::normalizeInferredKind(fit->second);
         return true;
     }
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
@@ -727,7 +719,7 @@ static bool inferExprKindForReturn(
             outKind = TypeNode::TYPE_BOOL;
             return true;
         }
-        outKind = normalizeInferredKind(operandKind);
+        outKind = Helpers::normalizeInferredKind(operandKind);
         return true;
     }
     if(auto* ternary = dynamic_cast<TernaryNode*>(expr))
@@ -740,7 +732,7 @@ static bool inferExprKindForReturn(
         if(!inferExprKindForReturn(ternary->falseExpr, localKinds,
                                    fnReturnKinds, f))
             return false;
-        t = normalizeInferredKind(t);
+        t = Helpers::normalizeInferredKind(t);
         if(!mergeInferredKinds(t, f))
             return false;
         outKind = t;
@@ -768,7 +760,7 @@ static bool inferExprKindForReturn(
             return false;
         if(!inferExprKindForReturn(bin->right, localKinds, fnReturnKinds, r))
             return false;
-        l = normalizeInferredKind(l);
+        l = Helpers::normalizeInferredKind(l);
         if(!mergeInferredKinds(l, r))
             return false;
         outKind = l;
@@ -852,7 +844,7 @@ static void collectReturnKindsFromStmt(
         }
         TypeNode::TypeKind k = TypeNode::TYPE_VOID;
         if(inferExprKindForReturn(ret->expression, locals, fnReturnKinds, k))
-            out.valueReturns.push_back(normalizeInferredKind(k));
+            out.valueReturns.push_back(Helpers::normalizeInferredKind(k));
         else
             out.hasUnknownValueReturn = true;
         return;
@@ -861,14 +853,14 @@ static void collectReturnKindsFromStmt(
     {
         if(letDecl->type)
         {
-            locals[letDecl->name] = normalizeInferredKind(letDecl->type->kind);
+            locals[letDecl->name] = Helpers::normalizeInferredKind(letDecl->type->kind);
         }
         else if(letDecl->expression)
         {
             TypeNode::TypeKind k = TypeNode::TYPE_VOID;
             if(inferExprKindForReturn(letDecl->expression, locals,
                                       fnReturnKinds, k))
-                locals[letDecl->name] = normalizeInferredKind(k);
+                locals[letDecl->name] = Helpers::normalizeInferredKind(k);
         }
         return;
     }
@@ -876,14 +868,14 @@ static void collectReturnKindsFromStmt(
     {
         if(varDecl->type)
         {
-            locals[varDecl->name] = normalizeInferredKind(varDecl->type->kind);
+            locals[varDecl->name] = Helpers::normalizeInferredKind(varDecl->type->kind);
         }
         else if(varDecl->initExpr)
         {
             TypeNode::TypeKind k = TypeNode::TYPE_VOID;
             if(inferExprKindForReturn(varDecl->initExpr, locals, fnReturnKinds,
                                       k))
-                locals[varDecl->name] = normalizeInferredKind(k);
+                locals[varDecl->name] = Helpers::normalizeInferredKind(k);
         }
         return;
     }
@@ -1410,7 +1402,7 @@ llvm::Value* CodeGenerator::buildDebugString(ExpressionNode* expr, bool pretty,
 {
     llvm::Value* val = generateExpression(expr);
     if(!val)
-        return create_global_cstring(builder, "<null>");
+        return Helpers::create_global_cstring(builder, "<null>");
     if(val->getType()->isStructTy())
     {
         std::string structName = val->getType()->getStructName().str();
@@ -1464,7 +1456,7 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
     if(it == structMembers.end())
     {
         reportError(line, "unknown struct for debug: " + structName);
-        return create_global_cstring(builder, "<struct>");
+        return Helpers::create_global_cstring(builder, "<struct>");
     }
 
     std::string displayName = structName;
@@ -1647,7 +1639,7 @@ llvm::Value* CodeGenerator::buildStructJsonString(llvm::Value* structVal,
     if(it == structMembers.end())
     {
         reportError(line, "unknown struct for json debug: " + structName);
-        return create_global_cstring(builder, "{}");
+        return Helpers::create_global_cstring(builder, "{}");
     }
 
     std::string displayName = structName;
@@ -1827,7 +1819,7 @@ llvm::Value* CodeGenerator::buildStructSerdeJsonString(
     if(it == structMembers.end())
     {
         reportError(line, "unknown struct for json serde: " + structName);
-        return create_global_cstring(builder, "{}");
+        return Helpers::create_global_cstring(builder, "{}");
     }
 
     std::string displayName = structName;
@@ -1887,7 +1879,7 @@ llvm::Value* CodeGenerator::buildStructSerdeJsonString(
                 {
                     reportError(line, "struct '" + fieldStruct +
                                           "' does not derive Json");
-                    return create_global_cstring(builder, "{}");
+                    return Helpers::create_global_cstring(builder, "{}");
                 }
                 llvm::Value* fieldStr = buildStructSerdeJsonString(
                     fieldVal, fieldStruct, line, indentLevel + 1);
@@ -1962,7 +1954,7 @@ llvm::Value* CodeGenerator::buildStructSerdeJsonString(
             reportError(line, "field '" + memberName + "' of struct '" +
                                   structName +
                                   "' has unsupported Json derive type");
-            return create_global_cstring(builder, "{}");
+            return Helpers::create_global_cstring(builder, "{}");
         }
 
 append_property_metadata:
@@ -2150,7 +2142,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
             {
                 if(!p || !p->type)
                     continue;
-                localKinds[p->name] = normalizeInferredKind(p->type->kind);
+                localKinds[p->name] = Helpers::normalizeInferredKind(p->type->kind);
             }
         }
 
@@ -2197,7 +2189,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
             return false;
         }
 
-        inferred = normalizeInferredKind(merged);
+        inferred = Helpers::normalizeInferredKind(merged);
         return true;
     };
 
@@ -2212,9 +2204,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
             if(it == fnReturnKinds.end())
             {
                 fnReturnKinds[fn->name] =
-                    normalizeInferredKind(fn->returnType->kind);
+                    Helpers::normalizeInferredKind(fn->returnType->kind);
             }
-            else if(it->second != normalizeInferredKind(fn->returnType->kind))
+            else if(it->second != Helpers::normalizeInferredKind(fn->returnType->kind))
             {
                 // Ambiguous overload returns for name-only inference; drop
                 // entry.
@@ -2567,8 +2559,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
             substituteTypeParams(lhs, substParams, substArgs);
         TypeNode* rhsResolved =
             substituteTypeParams(rhs, substParams, substArgs);
-        return type_name_for_error(lhsResolved) ==
-               type_name_for_error(rhsResolved);
+        return Helpers::type_name_for_error(lhsResolved) ==
+               Helpers::type_name_for_error(rhsResolved);
     };
 
     auto validateTraitImplBlock = [&](ImplBlockNode* impl)
@@ -2720,9 +2712,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
                                     "' does not match trait '" +
                                     impl->traitName + "': parameter '" +
                                     actualParam->name + "' has type '" +
-                                    type_name_for_error(actualParam->type) +
+                                    Helpers::type_name_for_error(actualParam->type) +
                                     "', expected '" +
-                                    type_name_for_error(expectedParam->type) +
+                                    Helpers::type_name_for_error(expectedParam->type) +
                                     "'");
                     mismatch = true;
                     break;
@@ -2740,9 +2732,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
                     "method '" + impl->structName + "::" + implMethod->name +
                         "' does not match trait '" + impl->traitName +
                         "': return type '" +
-                        type_name_for_error(implMethod->returnType) +
+                        Helpers::type_name_for_error(implMethod->returnType) +
                         "' does not match expected '" +
-                        type_name_for_error(traitMethod->returnType) + "'");
+                        Helpers::type_name_for_error(traitMethod->returnType) + "'");
             }
         }
 
@@ -3200,7 +3192,7 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
         if(!paramType)
         {
             reportError(param->line,
-                        "unknown type: " + type_name_for_error(param->type));
+                        "unknown type: " + Helpers::type_name_for_error(param->type));
             paramType = llvm::Type::getInt32Ty(context); // fallback
         }
         paramTypes.push_back(paramType);
@@ -3210,7 +3202,7 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
     if(!returnType)
     {
         reportError(node->line,
-                    "unknown type: " + type_name_for_error(node->returnType));
+                    "unknown type: " + Helpers::type_name_for_error(node->returnType));
         returnType = llvm::Type::getVoidTy(context); // fallback
     }
 
@@ -6297,7 +6289,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
             fnLabel = "main";
         std::string tryContext = fnLabel + ":" + std::to_string(node->line);
         llvm::Value* ctxStr =
-            create_global_cstring(builder, tryContext, "try.ctx");
+            Helpers::create_global_cstring(builder, tryContext, "try.ctx");
         errPayload = builder.CreateCall(addContextFn, {errPayload, ctxStr},
                                         "try.err.withctx");
     }
@@ -7856,7 +7848,7 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     bodyBB->insertInto(function);
     builder.SetInsertPoint(bodyBB);
 
-    if(isEnumStringType(baseKind))
+    if(Helpers::isEnumStringType(baseKind))
     {
         llvm::Value* enumVal = nullptr;
         for(size_t i = 0; i < strOrderIt->second.size(); ++i)
@@ -7880,14 +7872,14 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     else
     {
         llvm::Value* enumVal = llvm::ConstantInt::get(
-            enumTy, orderIt->second.front().second, !enumIsUnsigned(baseKind));
+            enumTy, orderIt->second.front().second, !Helpers::enumIsUnsigned(baseKind));
         for(size_t i = 0; i < orderIt->second.size(); ++i)
         {
             llvm::Value* idxConst = llvm::ConstantInt::get(indexType, i);
             llvm::Value* isThis =
                 builder.CreateICmpEQ(currentIdx, idxConst, "iseq");
             llvm::Value* variantConst = llvm::ConstantInt::get(
-                enumTy, orderIt->second[i].second, !enumIsUnsigned(baseKind));
+                enumTy, orderIt->second[i].second, !Helpers::enumIsUnsigned(baseKind));
             enumVal = builder.CreateSelect(isThis, variantConst, enumVal,
                                            "selectenum");
         }
@@ -8262,7 +8254,7 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
             fieldAccess.encapsulation = FieldEncapsulation::Protected;
         accessInfo.push_back(fieldAccess);
         StructFieldLayout layout;
-        if(isBitFieldTypeNode(member->type))
+        if(Helpers::isBitFieldTypeNode(member->type))
         {
             if(!packingBitRun || packedBitOffset >= 8)
             {
@@ -9315,7 +9307,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             }
             if(!initValue)
             {
-                if(isEnumStringType(baseKind))
+                if(Helpers::isEnumStringType(baseKind))
                 {
                     initValue = llvm::ConstantPointerNull::get(
                         llvm::cast<llvm::PointerType>(targetType));
@@ -9328,7 +9320,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
             if(initValue->getType() != targetType)
             {
-                if(isEnumStringType(baseKind) &&
+                if(Helpers::isEnumStringType(baseKind) &&
                    initValue->getType()->isPointerTy())
                 {
                     initValue = builder.CreateBitCast(initValue, targetType,
@@ -9337,14 +9329,14 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 else if(initValue->getType()->isIntegerTy())
                 {
                     initValue = builder.CreateIntCast(
-                        initValue, targetType, !enumIsUnsigned(baseKind),
-                        enumIsUnsigned(baseKind) ? "enum.cast.u"
+                        initValue, targetType, !Helpers::enumIsUnsigned(baseKind),
+                        Helpers::enumIsUnsigned(baseKind) ? "enum.cast.u"
                                                  : "enum.cast.s");
                 }
                 else
                 {
                     reportError(node->line,
-                                isEnumStringType(baseKind)
+                                Helpers::isEnumStringType(baseKind)
                                     ? "enum initializer must be str8"
                                     : "enum initializer must be integer");
                     return;
@@ -9485,7 +9477,7 @@ void CodeGenerator::generateCexprDeclaration(CexprDeclNode* node,
                                node->name);
     builder.CreateStore(initValue, alloca);
     namedValues[node->name] = alloca;
-    variableTypes[node->name] = normalizeInferredKind(node->type->kind);
+    variableTypes[node->name] = Helpers::normalizeInferredKind(node->type->kind);
     constantVariables.insert(node->name);
     recordVariableScopeDepth(node->name);
 }
@@ -10393,7 +10385,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 {
                     if(initValue->getType() != targetType)
                     {
-                        if(isEnumStringType(baseKind) &&
+                        if(Helpers::isEnumStringType(baseKind) &&
                            initValue->getType()->isPointerTy())
                         {
                             initValue = builder.CreateBitCast(
@@ -10403,15 +10395,15 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                         {
                             initValue = builder.CreateIntCast(
                                 initValue, targetType,
-                                !enumIsUnsigned(baseKind),
-                                enumIsUnsigned(baseKind) ? "enum.cast.u"
+                                !Helpers::enumIsUnsigned(baseKind),
+                                Helpers::enumIsUnsigned(baseKind) ? "enum.cast.u"
                                                          : "enum.cast.s");
                         }
                         else
                         {
                             reportError(
                                 node->line,
-                                isEnumStringType(baseKind)
+                                Helpers::isEnumStringType(baseKind)
                                     ? "enum initializer must be str8"
                                     : "enum initializer must be integer");
                             return;
@@ -10607,7 +10599,7 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
                 enumBaseKind = baseIt->second;
         }
 
-        if(isEnumAssignment && isEnumStringType(enumBaseKind) &&
+        if(isEnumAssignment && Helpers::isEnumStringType(enumBaseKind) &&
            valueType->isPointerTy() && targetType->isPointerTy())
         {
             value = builder.CreateBitCast(value, targetType, "enum.assign.ptr");
@@ -10642,7 +10634,7 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         {
             reportError(
                 node->line,
-                (isEnumAssignment && isEnumStringType(enumBaseKind))
+                (isEnumAssignment && Helpers::isEnumStringType(enumBaseKind))
                     ? "string-backed enum assignment requires str8 value"
                     : "type mismatch in assignment to variable '" + node->name +
                           "'");
@@ -11427,7 +11419,7 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
                 tmp.line = node->line;
                 typeName = expressionTypeNameForLog(&tmp, node->line);
             }
-            return create_global_cstring(builder, typeName, "type.name");
+            return Helpers::create_global_cstring(builder, typeName, "type.name");
         }
     }
 
@@ -12640,7 +12632,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     for(auto& info : overloadIt->second)
     {
         if(usingTailQualifiedLookup && !qualifiedModuleFilter.empty() &&
-           !is_same_module_family(qualifiedModuleFilter, info.sourceModule))
+           !Helpers::is_same_module_family(qualifiedModuleFilter, info.sourceModule))
         {
             continue;
         }
@@ -14089,7 +14081,7 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
         if(!paramType)
         {
             reportError(param->line,
-                        "unknown type: " + type_name_for_error(param->type));
+                        "unknown type: " + Helpers::type_name_for_error(param->type));
             paramType = llvm::Type::getInt32Ty(context);
         }
         paramTypes.push_back(paramType);
@@ -14099,7 +14091,7 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
     if(!returnType)
     {
         reportError(method->line,
-                    "unknown type: " + type_name_for_error(method->returnType));
+                    "unknown type: " + Helpers::type_name_for_error(method->returnType));
         returnType = llvm::Type::getVoidTy(context);
     }
 
@@ -14578,7 +14570,7 @@ bool CodeGenerator::generateMutexPropertyMethodBody(
     if(!llvmFieldType)
     {
         reportError(method->line,
-                    "unknown type: " + type_name_for_error(fieldType));
+                    "unknown type: " + Helpers::type_name_for_error(fieldType));
         return false;
     }
 
@@ -14734,7 +14726,7 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
     if(!llvmFieldType)
     {
         reportError(method->line,
-                    "unknown type: " + type_name_for_error(fieldType));
+                    "unknown type: " + Helpers::type_name_for_error(fieldType));
         return false;
     }
 
@@ -14928,7 +14920,7 @@ bool CodeGenerator::populateStructFromJsonValue(
 
     builder.SetInsertPoint(objectFailBB);
     branchToFailWithError(
-        create_global_cstring(builder, "std::json from_json: expected object",
+        Helpers::create_global_cstring(builder, "std::json from_json: expected object",
                               "json.expected_object"));
 
     builder.SetInsertPoint(objectOkBB);
@@ -14954,7 +14946,7 @@ bool CodeGenerator::populateStructFromJsonValue(
         }
 
         llvm::Value* keyVal =
-            create_global_cstring(builder, memberName, "json.field.key");
+            Helpers::create_global_cstring(builder, memberName, "json.field.key");
         llvm::Value* childHandle = builder.CreateCall(
             jsonObjectGetFunc, {jsonValueHandle, keyVal}, "json.field.handle");
 
@@ -15080,7 +15072,7 @@ bool CodeGenerator::populateStructFromJsonValue(
 
         builder.SetInsertPoint(kindFailBB);
         builder.CreateCall(jsonValueFreeFunc, {childHandle});
-        branchToFailWithError(create_global_cstring(
+        branchToFailWithError(Helpers::create_global_cstring(
             builder, "std::json from_json: field type mismatch",
             "json.type_mismatch"));
 
@@ -15225,7 +15217,7 @@ bool CodeGenerator::generateJsonTextDeserializerMethodBody(
     auto* errorSlot = builder.CreateAlloca(ptrType, nullptr, "json.err.slot");
     builder.CreateStore(llvm::ConstantInt::get(int64Type, 0), docSlot);
     builder.CreateStore(llvm::ConstantInt::get(int64Type, 0), rootSlot);
-    builder.CreateStore(create_global_cstring(builder, "std::json from_json failed",
+    builder.CreateStore(Helpers::create_global_cstring(builder, "std::json from_json failed",
                                               "json.default.err"),
                         errorSlot);
 
@@ -15324,7 +15316,7 @@ bool CodeGenerator::generateJsonValueDeserializerMethodBody(
         builder.CreateLoad(int64Type, jsonValueStorage, "json.value.handle");
 
     auto* errorSlot = builder.CreateAlloca(ptrType, nullptr, "json.err.slot");
-    builder.CreateStore(create_global_cstring(builder, "std::json from_json failed",
+    builder.CreateStore(Helpers::create_global_cstring(builder, "std::json from_json failed",
                                               "json.default.err"),
                         errorSlot);
     auto* outAlloca =
@@ -15829,7 +15821,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     {
                         reportError(node->line,
                                     "unknown type: " +
-                                        type_name_for_error(param->type));
+                                        Helpers::type_name_for_error(param->type));
                         return nullptr;
                     }
                     paramTypes.push_back(paramType);
@@ -15841,7 +15833,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             {
                 reportError(node->line,
                             "unknown type: " +
-                                type_name_for_error(traitMethod->returnType));
+                                Helpers::type_name_for_error(traitMethod->returnType));
                 return nullptr;
             }
             llvm::FunctionType* fnType =
@@ -16005,7 +15997,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     {
                         reportError(node->line,
                                     "unknown type: " +
-                                        type_name_for_error(param->type));
+                                        Helpers::type_name_for_error(param->type));
                         return nullptr;
                     }
                     paramTypes.push_back(paramType);
@@ -16017,7 +16009,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             {
                 reportError(node->line,
                             "unknown type: " +
-                                type_name_for_error(traitMethod->returnType));
+                                Helpers::type_name_for_error(traitMethod->returnType));
                 return nullptr;
             }
             llvm::FunctionType* fnType =
@@ -16214,7 +16206,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     {
                         reportError(node->line,
                                     "unknown type: " +
-                                        type_name_for_error(param->type));
+                                        Helpers::type_name_for_error(param->type));
                         return nullptr;
                     }
                     paramTypes.push_back(paramType);
@@ -16226,7 +16218,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             {
                 reportError(node->line,
                             "unknown type: " +
-                                type_name_for_error(traitMethod->returnType));
+                                Helpers::type_name_for_error(traitMethod->returnType));
                 return nullptr;
             }
             llvm::FunctionType* fnType =
@@ -18797,7 +18789,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             methodModule = structVisIt->second.second;
     }
     if(!methodModule.empty() && !isPublic &&
-       !is_same_module_family(methodModule, currentModule))
+       !Helpers::is_same_module_family(methodModule, currentModule))
     {
         reportError(node->line, "method '" + node->methodName +
                                     "' is private in module '" + methodModule +
@@ -19532,7 +19524,7 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         {
             reportError(node->line,
                         "cannot index list with unresolved element type '" +
-                            type_name_for_error(elemTypeNode) + "'");
+                            Helpers::type_name_for_error(elemTypeNode) + "'");
             return nullptr;
         }
 
@@ -19631,8 +19623,8 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         {
             reportError(node->line,
                         "cannot index map with unresolved key/value type '" +
-                            type_name_for_error(keyTypeNode) + "'/'" +
-                            type_name_for_error(valTypeNode) + "'");
+                            Helpers::type_name_for_error(keyTypeNode) + "'/'" +
+                            Helpers::type_name_for_error(valTypeNode) + "'");
             return nullptr;
         }
         if(indexVal->getType() != keyType)

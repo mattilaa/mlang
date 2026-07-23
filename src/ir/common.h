@@ -5,23 +5,28 @@
 #include <llvm/IR/IRBuilder.h>
 #include <string>
 
-namespace mlang::ir_detail
+namespace mlang::ir_detail::common
 {
 
-llvm::Value* create_global_cstring(llvm::IRBuilder<>& builder,
-                                   llvm::StringRef text,
-                                   const llvm::Twine& name = "");
-bool is_same_module_family(const std::string& a, const std::string& b);
-std::string type_name_for_error(TypeNode* typeNode);
-bool isBitFieldTypeNode(TypeNode* type);
-bool isEnumIntegralType(TypeNode::TypeKind kind);
-bool isEnumStringType(TypeNode::TypeKind kind);
-unsigned enumBitWidth(TypeNode::TypeKind kind);
-bool enumIsUnsigned(TypeNode::TypeKind kind);
-std::string enumBaseTypeName(TypeNode::TypeKind kind);
-bool fitsInEnumBaseType(TypeNode::TypeKind kind, int64_t value);
-TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind);
-bool isIntegerInferKind(TypeNode::TypeKind kind);
-bool isFloatInferKind(TypeNode::TypeKind kind);
+class Helpers
+{
+public:
+    static llvm::Value* create_global_cstring(llvm::IRBuilder<>& builder,
+                                              llvm::StringRef text,
+                                              const llvm::Twine& name = "");
+    static bool is_same_module_family(const std::string& a,
+                                      const std::string& b);
+    static std::string type_name_for_error(TypeNode* typeNode);
+    static bool isBitFieldTypeNode(TypeNode* type);
+    static bool isEnumIntegralType(TypeNode::TypeKind kind);
+    static bool isEnumStringType(TypeNode::TypeKind kind);
+    static unsigned enumBitWidth(TypeNode::TypeKind kind);
+    static bool enumIsUnsigned(TypeNode::TypeKind kind);
+    static std::string enumBaseTypeName(TypeNode::TypeKind kind);
+    static bool fitsInEnumBaseType(TypeNode::TypeKind kind, int64_t value);
+    static TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind);
+    static bool isIntegerInferKind(TypeNode::TypeKind kind);
+    static bool isFloatInferKind(TypeNode::TypeKind kind);
+};
 
-} // namespace mlang::ir_detail
+} // namespace mlang::ir_detail::common

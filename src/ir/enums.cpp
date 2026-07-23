@@ -5,11 +5,8 @@
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Constants.h>
 
-using mlang::ir_detail::enumBaseTypeName;
-using mlang::ir_detail::enumIsUnsigned;
-using mlang::ir_detail::fitsInEnumBaseType;
-using mlang::ir_detail::isEnumIntegralType;
-using mlang::ir_detail::isEnumStringType;
+using mlang::ir_detail::common::Helpers;
+
 
 std::string
 CodeGenerator::resolveVisibleEnumName(const std::string& enumName) const
@@ -142,7 +139,7 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
     auto bkIt = enumBaseTypes.find(resolvedEnumName);
     if(bkIt != enumBaseTypes.end())
         baseKind = bkIt->second;
-    if(isEnumStringType(baseKind))
+    if(Helpers::isEnumStringType(baseKind))
     {
         if(enumVal->getType()->isPointerTy())
             return enumVal;
@@ -159,7 +156,7 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
        enumValNorm->getType()->isIntegerTy())
     {
         enumValNorm = builder.CreateIntCast(
-            enumValNorm, enumTy, !enumIsUnsigned(baseKind), "enum.str.cast");
+            enumValNorm, enumTy, !Helpers::enumIsUnsigned(baseKind), "enum.str.cast");
     }
 
     std::string unknownText = "<" + resolvedEnumName + ":unknown>";
@@ -175,7 +172,7 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
             it != orderedIt->second.rend(); ++it)
         {
             llvm::Value* variantConst = llvm::ConstantInt::get(
-                enumTy, it->second, !enumIsUnsigned(baseKind));
+                enumTy, it->second, !Helpers::enumIsUnsigned(baseKind));
             llvm::Value* isMatch =
                 builder.CreateICmpEQ(enumValNorm, variantConst, "enum.str.eq");
             std::string text = resolvedEnumName + "::" + it->first;
@@ -201,7 +198,7 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
     for(const auto& kv : enumIt->second)
     {
         llvm::Value* variantConst = llvm::ConstantInt::get(
-            enumTy, kv.second, !enumIsUnsigned(baseKind));
+            enumTy, kv.second, !Helpers::enumIsUnsigned(baseKind));
         llvm::Value* isMatch =
             builder.CreateICmpEQ(enumValNorm, variantConst, "enum.str.eq");
         std::string text = resolvedEnumName + "::" + kv.first;
@@ -228,14 +225,14 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
     }
 
     TypeNode::TypeKind baseKind = node->backingType;
-    if(!isEnumIntegralType(baseKind) && !isEnumStringType(baseKind))
+    if(!Helpers::isEnumIntegralType(baseKind) && !Helpers::isEnumStringType(baseKind))
     {
         reportError(node->line,
                     "enum '" + node->name + "' has unsupported backing type");
         return;
     }
 
-    if(isEnumStringType(baseKind))
+    if(Helpers::isEnumStringType(baseKind))
     {
         std::map<std::string, std::string> variants;
         std::vector<std::pair<std::string, std::string>> orderedVariants;
@@ -385,12 +382,12 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
             {
                 reportError(variant->line > 0 ? variant->line : node->line,
                             "enum implicit value overflows backing type '" +
-                                enumBaseTypeName(baseKind) + "' in enum '" +
+                                Helpers::enumBaseTypeName(baseKind) + "' in enum '" +
                                 node->name + "'");
                 return;
             }
 
-            if(!fitsInEnumBaseType(baseKind, value))
+            if(!Helpers::fitsInEnumBaseType(baseKind, value))
             {
                 if(variant->hasReferenceValue)
                 {
@@ -403,18 +400,18 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
                                 "enum types/values are not compatible: '" +
                                     variant->refEnumName +
                                     "::" + variant->refVariantName + "' (" +
-                                    enumBaseTypeName(refBaseKind) + ", value " +
+                                    Helpers::enumBaseTypeName(refBaseKind) + ", value " +
                                     std::to_string(value) +
                                     ") cannot fit in enum '" + node->name +
                                     "' backing type '" +
-                                    enumBaseTypeName(baseKind) + "'");
+                                    Helpers::enumBaseTypeName(baseKind) + "'");
                 }
                 else
                 {
                     reportError(variant->line > 0 ? variant->line : node->line,
                                 "enum variant value '" + std::to_string(value) +
                                     "' does not fit backing type '" +
-                                    enumBaseTypeName(baseKind) + "' in enum '" +
+                                    Helpers::enumBaseTypeName(baseKind) + "' in enum '" +
                                     node->name + "'");
                 }
                 return;
@@ -429,7 +426,7 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
             else
             {
                 nextValue = value + 1;
-                nextImplicitValid = fitsInEnumBaseType(baseKind, nextValue);
+                nextImplicitValid = Helpers::fitsInEnumBaseType(baseKind, nextValue);
             }
         }
     }

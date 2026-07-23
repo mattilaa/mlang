@@ -1,6 +1,8 @@
 #include "ir.h"
 #include "ir/common.h"
 
+using mlang::ir_detail::common::Helpers;
+
 #include <cctype>
 #include <functional>
 #include <iostream>
@@ -8,7 +10,6 @@
 namespace
 {
 
-using mlang::ir_detail::isBitFieldTypeNode;
 
 static std::string generateMangledName(const std::string& baseName,
                                        const std::vector<TypeNode*>& typeArgs)
@@ -176,7 +177,7 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
                 fieldAccess.encapsulation = FieldEncapsulation::Protected;
             accessInfo.push_back(fieldAccess);
             StructFieldLayout layout;
-            if(isBitFieldTypeNode(substitutedType))
+            if(Helpers::isBitFieldTypeNode(substitutedType))
             {
                 if(!packingBitRun || packedBitOffset >= 8)
                 {

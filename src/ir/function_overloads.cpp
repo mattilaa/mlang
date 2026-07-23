@@ -1,9 +1,10 @@
 #include "ir.h"
 #include "ir/common.h"
 
+using mlang::ir_detail::common::Helpers;
+
 #include <string>
 
-using mlang::ir_detail::is_same_module_family;
 
 std::string CodeGenerator::functionSignatureKey(FunctionDefNode* node) const
 {
@@ -101,7 +102,7 @@ bool CodeGenerator::isOverloadVisible(const FunctionOverloadInfo& info) const
 {
     if(info.sourceModule.empty())
         return true;
-    if(is_same_module_family(info.sourceModule, currentModule))
+    if(Helpers::is_same_module_family(info.sourceModule, currentModule))
         return true;
     return info.isPublic;
 }

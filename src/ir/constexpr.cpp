@@ -1,11 +1,10 @@
 #include "ir.h"
 #include "ir/common.h"
 
+using mlang::ir_detail::common::Helpers;
+
 #include <optional>
 
-using mlang::ir_detail::isFloatInferKind;
-using mlang::ir_detail::isIntegerInferKind;
-using mlang::ir_detail::normalizeInferredKind;
 
 llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(
     const ConstexprValue& value, TypeNode* targetType, int line)
@@ -27,8 +26,8 @@ llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(
     }
 
     TypeNode::TypeKind kind =
-        targetType ? normalizeInferredKind(targetType->kind) : value.typeKind;
-    if(isFloatInferKind(kind))
+        targetType ? Helpers::normalizeInferredKind(targetType->kind) : value.typeKind;
+    if(Helpers::isFloatInferKind(kind))
     {
         const double floatValue =
             value.kind == ConstexprValue::Kind::Float
@@ -75,7 +74,7 @@ bool CodeGenerator::coerceConstexprValueToKind(ConstexprValue& value,
                                                std::string* errorMessage,
                                                const char* context)
 {
-    targetKind = normalizeInferredKind(targetKind);
+    targetKind = Helpers::normalizeInferredKind(targetKind);
     if(value.kind == ConstexprValue::Kind::OpaqueStruct)
     {
         if(errorMessage)
@@ -113,7 +112,7 @@ bool CodeGenerator::coerceConstexprValueToKind(ConstexprValue& value,
         value.typeKind = TypeNode::TYPE_BOOL;
         return true;
     }
-    if(isFloatInferKind(targetKind))
+    if(Helpers::isFloatInferKind(targetKind))
     {
         const double floatValue =
             value.kind == ConstexprValue::Kind::Float
@@ -128,7 +127,7 @@ bool CodeGenerator::coerceConstexprValueToKind(ConstexprValue& value,
         value.typeKind = targetKind;
         return true;
     }
-    if(isIntegerInferKind(targetKind))
+    if(Helpers::isIntegerInferKind(targetKind))
     {
         const int64_t intValue =
             value.kind == ConstexprValue::Kind::Bool
@@ -446,8 +445,8 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
 
             TypeNode::TypeKind paramKind =
                 concreteArgTypes[i]
-                    ? normalizeInferredKind(concreteArgTypes[i]->kind)
-                    : param ? normalizeInferredKind(param->type->kind)
+                    ? Helpers::normalizeInferredKind(concreteArgTypes[i]->kind)
+                    : param ? Helpers::normalizeInferredKind(param->type->kind)
                             : TypeNode::TYPE_I64;
             if(argValue.kind == ConstexprValue::Kind::OpaqueStruct &&
                paramKind == TypeNode::TYPE_STRUCT)
@@ -478,7 +477,7 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         }
         out = returnValue;
         if(fn->returnType)
-            out.typeKind = normalizeInferredKind(fn->returnType->kind);
+            out.typeKind = Helpers::normalizeInferredKind(fn->returnType->kind);
         return true;
     }
 
@@ -552,7 +551,7 @@ bool CodeGenerator::evalConstexprStatementList(
             else
             {
                 TypeNode::TypeKind kind =
-                    varDecl->type ? normalizeInferredKind(varDecl->type->kind)
+                    varDecl->type ? Helpers::normalizeInferredKind(varDecl->type->kind)
                                   : TypeNode::TYPE_I64;
                 if(kind == TypeNode::TYPE_BOOL)
                 {
@@ -562,7 +561,7 @@ bool CodeGenerator::evalConstexprStatementList(
                     value.floatValue = 0.0;
                     value.typeKind = TypeNode::TYPE_BOOL;
                 }
-                else if(isFloatInferKind(kind))
+                else if(Helpers::isFloatInferKind(kind))
                 {
                     value.kind = ConstexprValue::Kind::Float;
                     value.floatValue = 0.0;
@@ -570,7 +569,7 @@ bool CodeGenerator::evalConstexprStatementList(
                     value.boolValue = false;
                     value.typeKind = kind;
                 }
-                else if(isIntegerInferKind(kind))
+                else if(Helpers::isIntegerInferKind(kind))
                 {
                     value.kind = ConstexprValue::Kind::Int;
                     value.intValue = 0;
@@ -990,7 +989,7 @@ bool CodeGenerator::evalConstexprExpression(ExpressionNode* expr,
                                     env, depth + 1))
             return false;
         TypeNode::TypeKind targetKind =
-            normalizeInferredKind(castExpr->targetType);
+            Helpers::normalizeInferredKind(castExpr->targetType);
         if(targetKind == TypeNode::TYPE_BOOL)
         {
             return coerceConstexprValueToKind(out, targetKind, errorMessage,

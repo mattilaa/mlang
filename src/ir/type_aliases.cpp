@@ -1,13 +1,14 @@
 #include "ir.h"
 #include "ir/common.h"
 
+using mlang::ir_detail::common::Helpers;
+
 #include <functional>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
-using mlang::ir_detail::type_name_for_error;
 
 std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
 {
@@ -460,7 +461,7 @@ bool CodeGenerator::validateTypeArgumentTraitBounds(
                                  : (typeArg->line > 0 ? typeArg->line : 0);
                     reportError(errorLine,
                                 "type argument '" +
-                                    type_name_for_error(typeArg) + "' for " +
+                                    Helpers::type_name_for_error(typeArg) + "' for " +
                                     ownerKind + " '" + ownerName +
                                     "' must implement trait '" + requiredTrait +
                                     "' required by type parameter '" +
