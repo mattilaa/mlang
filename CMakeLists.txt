@@ -255,6 +255,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/backend_utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/borrows.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/builtins.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/control_flow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/enums.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_diagnostics.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_type_kind.cpp
