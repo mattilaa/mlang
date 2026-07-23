@@ -117,17 +117,19 @@ The source-of-truth implementation files are:
 - `stdlib/std/unordered.mla`
 - `stdlib/std/vec.mla`
 
-## Algorithms
-
-- [std::algorithm::fft](Stdlib-Algorithm-Fft)
-- [std::algorithm::numeric](Stdlib-Algorithm-Numeric)
-- [std::algorithm::order](Stdlib-Algorithm-Order)
-- [std::algorithm::ranges](Stdlib-Algorithm-Ranges)
-
-## Audio and DSP
+## Math and DSP
 
 - [std::audio](Stdlib-Audio)
+- [std::algorithm::fft](Stdlib-Algorithm-Fft)
+- [std::algorithm::numeric](Stdlib-Algorithm-Numeric)
+- [std::math](Stdlib-Math)
+- [std::rand](Stdlib-Rand)
 - [std::simd](Stdlib-Simd)
+
+## Algorithms
+
+- [std::algorithm::order](Stdlib-Algorithm-Order)
+- [std::algorithm::ranges](Stdlib-Algorithm-Ranges)
 
 ## Collections and Data
 
@@ -171,13 +173,11 @@ The source-of-truth implementation files are:
 - [std::protocol](Stdlib-Protocol)
 - [std::term](Stdlib-Term)
 
-## Parsing, Text, Math, and Utilities
+## Parsing, Text, and Utilities
 
 - [std::gps](Stdlib-Gps)
 - [std::hash](Stdlib-Hash)
 - [std::json](Stdlib-Json)
 - [std::jsonrpc](Stdlib-Jsonrpc)
-- [std::math](Stdlib-Math)
-- [std::rand](Stdlib-Rand)
 - [std::regex](Stdlib-Regex)
 - [std::sed](Stdlib-Sed)

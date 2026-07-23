@@ -114,17 +114,19 @@ The source-of-truth implementation files are:
 - `stdlib/std/unordered.mla`
 - `stdlib/std/vec.mla`
 
-## Algorithms
-
-- [std::algorithm::fft](stdlib/std_algorithm_fft.md)
-- [std::algorithm::numeric](stdlib/std_algorithm_numeric.md)
-- [std::algorithm::order](stdlib/std_algorithm_order.md)
-- [std::algorithm::ranges](stdlib/std_algorithm_ranges.md)
-
-## Audio and DSP
+## Math and DSP
 
 - [std::audio](stdlib/std_audio.md)
+- [std::algorithm::fft](stdlib/std_algorithm_fft.md)
+- [std::algorithm::numeric](stdlib/std_algorithm_numeric.md)
+- [std::math](stdlib/std_math.md)
+- [std::rand](stdlib/std_rand.md)
 - [std::simd](stdlib/std_simd.md)
+
+## Algorithms
+
+- [std::algorithm::order](stdlib/std_algorithm_order.md)
+- [std::algorithm::ranges](stdlib/std_algorithm_ranges.md)
 
 ## Collections and Data
 
@@ -168,13 +170,11 @@ The source-of-truth implementation files are:
 - [std::protocol](stdlib/std_protocol.md)
 - [std::term](stdlib/std_term.md)
 
-## Parsing, Text, Math, and Utilities
+## Parsing, Text, and Utilities
 
 - [std::gps](stdlib/std_gps.md)
 - [std::hash](stdlib/std_hash.md)
 - [std::json](stdlib/std_json.md)
 - [std::jsonrpc](stdlib/std_jsonrpc.md)
-- [std::math](stdlib/std_math.md)
-- [std::rand](stdlib/std_rand.md)
 - [std::regex](stdlib/std_regex.md)
 - [std::sed](stdlib/std_sed.md)

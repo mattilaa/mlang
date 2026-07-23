@@ -83,6 +83,15 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::vec", "std_vec.md"),
 ]
 
+MATH_DSP_MODULES = {
+    "std::algorithm::fft",
+    "std::algorithm::numeric",
+    "std::audio",
+    "std::math",
+    "std::rand",
+    "std::simd",
+}
+
 
 def stdlib_module_wiki_name(module: str) -> str:
     suffix = module.removeprefix("std::").replace("::", "-").replace("_", "-")
@@ -114,7 +123,7 @@ PAGES: list[Page] = [
         Path("docs/stdlib") / filename,
         module,
         stdlib_module_wiki_name(module),
-        "Stdlib Modules",
+        "Math and DSP" if module in MATH_DSP_MODULES else "Stdlib Modules",
     )
     for module, filename in STDLIB_MODULE_DOCS
 ] + [
@@ -489,7 +498,15 @@ def write_sidebar(out_dir: Path, pages: list[Page], manpage_names: list[str]) ->
         by_group.setdefault(page.group, []).append(page)
 
     lines = [GENERATED_NOTICE.rstrip(), "# MLang Wiki", ""]
-    group_order = ["Start Here", "Language", "Standard Library", "Stdlib Modules", "Tooling", "Examples"]
+    group_order = [
+        "Start Here",
+        "Language",
+        "Standard Library",
+        "Math and DSP",
+        "Stdlib Modules",
+        "Tooling",
+        "Examples",
+    ]
     for group in group_order:
         group_pages = by_group.get(group, [])
         if not group_pages:
