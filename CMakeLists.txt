@@ -269,6 +269,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_values.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/formatting.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/function_calls.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/function_generation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/function_overloads.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/lifecycle.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/literals.cpp
