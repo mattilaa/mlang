@@ -1,28 +1,9 @@
 #include "ir.h"
+#include "ir/common.h"
 
 #include <string>
 
-namespace
-{
-
-static bool is_same_module_family(const std::string& a, const std::string& b)
-{
-    if(a.empty() || b.empty())
-        return a == b;
-    if(a == b)
-        return true;
-    auto is_nested = [](const std::string& parent, const std::string& child)
-    {
-        if(child.size() <= parent.size())
-            return false;
-        if(child.compare(0, parent.size(), parent) != 0)
-            return false;
-        return child.compare(parent.size(), 2, "::") == 0;
-    };
-    return is_nested(a, b) || is_nested(b, a);
-}
-
-} // namespace
+using mlang::ir_detail::is_same_module_family;
 
 std::string CodeGenerator::functionSignatureKey(FunctionDefNode* node) const
 {

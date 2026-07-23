@@ -1,4 +1,5 @@
 #include "ir.h"
+#include "ir/common.h"
 
 #include <functional>
 #include <map>
@@ -6,15 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace
-{
-
-static std::string type_name_for_error(TypeNode* typeNode)
-{
-    return typeNode ? typeNode->toString() : "<unknown>";
-}
-
-} // namespace
+using mlang::ir_detail::type_name_for_error;
 
 std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
 {

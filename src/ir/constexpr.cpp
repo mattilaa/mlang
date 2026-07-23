@@ -1,44 +1,11 @@
 #include "ir.h"
+#include "ir/common.h"
 
 #include <optional>
 
-namespace
-{
-
-static TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind)
-{
-    if(kind == TypeNode::TYPE_INT)
-        return TypeNode::TYPE_I32;
-    if(kind == TypeNode::TYPE_STR8 || kind == TypeNode::TYPE_STR16)
-        return TypeNode::TYPE_STRING;
-    return kind;
-}
-
-static bool isIntegerInferKind(TypeNode::TypeKind kind)
-{
-    switch(normalizeInferredKind(kind))
-    {
-    case TypeNode::TYPE_I8:
-    case TypeNode::TYPE_I16:
-    case TypeNode::TYPE_I32:
-    case TypeNode::TYPE_I64:
-    case TypeNode::TYPE_U8:
-    case TypeNode::TYPE_U16:
-    case TypeNode::TYPE_U32:
-    case TypeNode::TYPE_U64:
-        return true;
-    default:
-        return false;
-    }
-}
-
-static bool isFloatInferKind(TypeNode::TypeKind kind)
-{
-    kind = normalizeInferredKind(kind);
-    return kind == TypeNode::TYPE_FLOAT || kind == TypeNode::TYPE_DOUBLE;
-}
-
-} // namespace
+using mlang::ir_detail::isFloatInferKind;
+using mlang::ir_detail::isIntegerInferKind;
+using mlang::ir_detail::normalizeInferredKind;
 
 llvm::Constant* CodeGenerator::buildLLVMConstantFromConstexprValue(
     const ConstexprValue& value, TypeNode* targetType, int line)

@@ -1,23 +1,10 @@
 #include "ir.h"
+#include "ir/common.h"
 #include "ir/expression_type_kind.h"
 
 #include <llvm/Config/llvm-config.h>
 
-namespace
-{
-
-static llvm::Value* create_global_cstring(llvm::IRBuilder<>& builder,
-                                          llvm::StringRef text,
-                                          const llvm::Twine& name = "")
-{
-#if LLVM_VERSION_MAJOR >= 21
-    return builder.CreateGlobalString(text, name);
-#else
-    return builder.CreateGlobalStringPtr(text, name);
-#endif
-}
-
-} // namespace
+using mlang::ir_detail::create_global_cstring;
 
 void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
                                       bool debug, bool pretty, bool json,

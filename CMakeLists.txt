@@ -255,6 +255,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/backend_utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/borrows.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/builtins.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/common.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/control_flow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/constexpr.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/enums.cpp
@@ -266,6 +267,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/lifecycle.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/literals.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/lvalues.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/monomorphization.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/moves.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/ownership.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/output.cpp
