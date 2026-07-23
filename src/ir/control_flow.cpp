@@ -4,85 +4,9 @@
 
 #include <llvm/Config/llvm-config.h>
 
+using mlang::ir_detail::ast_analysis::contains_unsupported_try_control_flow;
 using mlang::ir_detail::ast_analysis::strip_iter_methods;
 using mlang::ir_detail::common::Helpers;
-
-namespace
-{
-
-static bool containsUnsupportedTryControlFlow(StatementNode* node)
-{
-    if(!node)
-        return false;
-    if(dynamic_cast<ReturnNode*>(node) || dynamic_cast<BreakNode*>(node) ||
-       dynamic_cast<ContinueNode*>(node))
-        return true;
-    if(auto* block = dynamic_cast<BlockStatementNode*>(node))
-    {
-        if(!block->statements)
-            return false;
-        for(auto* stmt : block->statements->statements)
-        {
-            if(containsUnsupportedTryControlFlow(stmt))
-                return true;
-        }
-        return false;
-    }
-    if(auto* ifNode = dynamic_cast<IfNode*>(node))
-    {
-        if(containsUnsupportedTryControlFlow(ifNode->conditionInit))
-            return true;
-        if(ifNode->thenBranch)
-        {
-            for(auto* stmt : ifNode->thenBranch->statements)
-            {
-                if(containsUnsupportedTryControlFlow(stmt))
-                    return true;
-            }
-        }
-        if(containsUnsupportedTryControlFlow(ifNode->elseIfBranch))
-            return true;
-        if(ifNode->elseBranch)
-        {
-            for(auto* stmt : ifNode->elseBranch->statements)
-            {
-                if(containsUnsupportedTryControlFlow(stmt))
-                    return true;
-            }
-        }
-        return false;
-    }
-    if(auto* forNode = dynamic_cast<ForNode*>(node))
-    {
-        if(!forNode->body)
-            return false;
-        for(auto* stmt : forNode->body->statements)
-        {
-            if(containsUnsupportedTryControlFlow(stmt))
-                return true;
-        }
-        return false;
-    }
-    if(auto* whileNode = dynamic_cast<WhileNode*>(node))
-    {
-        if(!whileNode->body)
-            return false;
-        for(auto* stmt : whileNode->body->statements)
-        {
-            if(containsUnsupportedTryControlFlow(stmt))
-                return true;
-        }
-        return false;
-    }
-    if(auto* tc = dynamic_cast<TryCatchNode*>(node))
-    {
-        return containsUnsupportedTryControlFlow(tc->tryBlock) ||
-               containsUnsupportedTryControlFlow(tc->catchBlock);
-    }
-    return false;
-}
-
-} // namespace
 
 void CodeGenerator::generateReturnStatement(ReturnNode* node)
 {
@@ -376,7 +300,7 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
     if(!node || !node->tryBlock || !node->catchBlock || !node->catchType)
         return;
 
-    if(containsUnsupportedTryControlFlow(node->tryBlock))
+    if(contains_unsupported_try_control_flow(node->tryBlock))
     {
         reportError(node->line, "return, break, and continue are not yet "
                                 "supported inside try blocks");

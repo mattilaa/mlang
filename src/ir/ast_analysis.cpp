@@ -272,6 +272,78 @@ bool contains_exception_control_flow(ASTNode* node)
     return false;
 }
 
+bool contains_unsupported_try_control_flow(StatementNode* node)
+{
+    if(!node)
+        return false;
+    if(dynamic_cast<ReturnNode*>(node) || dynamic_cast<BreakNode*>(node) ||
+       dynamic_cast<ContinueNode*>(node))
+        return true;
+    if(auto* block = dynamic_cast<BlockStatementNode*>(node))
+    {
+        if(!block->statements)
+            return false;
+        for(auto* stmt : block->statements->statements)
+        {
+            if(contains_unsupported_try_control_flow(stmt))
+                return true;
+        }
+        return false;
+    }
+    if(auto* ifNode = dynamic_cast<IfNode*>(node))
+    {
+        if(contains_unsupported_try_control_flow(ifNode->conditionInit))
+            return true;
+        if(ifNode->thenBranch)
+        {
+            for(auto* stmt : ifNode->thenBranch->statements)
+            {
+                if(contains_unsupported_try_control_flow(stmt))
+                    return true;
+            }
+        }
+        if(contains_unsupported_try_control_flow(ifNode->elseIfBranch))
+            return true;
+        if(ifNode->elseBranch)
+        {
+            for(auto* stmt : ifNode->elseBranch->statements)
+            {
+                if(contains_unsupported_try_control_flow(stmt))
+                    return true;
+            }
+        }
+        return false;
+    }
+    if(auto* forNode = dynamic_cast<ForNode*>(node))
+    {
+        if(!forNode->body)
+            return false;
+        for(auto* stmt : forNode->body->statements)
+        {
+            if(contains_unsupported_try_control_flow(stmt))
+                return true;
+        }
+        return false;
+    }
+    if(auto* whileNode = dynamic_cast<WhileNode*>(node))
+    {
+        if(!whileNode->body)
+            return false;
+        for(auto* stmt : whileNode->body->statements)
+        {
+            if(contains_unsupported_try_control_flow(stmt))
+                return true;
+        }
+        return false;
+    }
+    if(auto* tc = dynamic_cast<TryCatchNode*>(node))
+    {
+        return contains_unsupported_try_control_flow(tc->tryBlock) ||
+               contains_unsupported_try_control_flow(tc->catchBlock);
+    }
+    return false;
+}
+
 ExpressionNode* strip_iter_methods(ExpressionNode* expr)
 {
     while(auto* mc = dynamic_cast<MethodCallNode*>(expr))
