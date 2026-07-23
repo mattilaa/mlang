@@ -1,23 +1,15 @@
 #include "ir.h"
+#include "ir/common.h"
 
+#include <limits>
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Constants.h>
 
-namespace
-{
-
-bool isEnumStringType(TypeNode::TypeKind kind)
-{
-    return kind == TypeNode::TYPE_STR8 || kind == TypeNode::TYPE_STRING;
-}
-
-bool enumIsUnsigned(TypeNode::TypeKind kind)
-{
-    return kind == TypeNode::TYPE_U8 || kind == TypeNode::TYPE_U16 ||
-           kind == TypeNode::TYPE_U32 || kind == TypeNode::TYPE_U64;
-}
-
-} // namespace
+using mlang::ir_detail::enumBaseTypeName;
+using mlang::ir_detail::enumIsUnsigned;
+using mlang::ir_detail::fitsInEnumBaseType;
+using mlang::ir_detail::isEnumIntegralType;
+using mlang::ir_detail::isEnumStringType;
 
 std::string
 CodeGenerator::resolveVisibleEnumName(const std::string& enumName) const
@@ -222,4 +214,227 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
     }
 
     return out;
+}
+
+void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
+{
+    if(!node)
+        return;
+
+    if(enumValues.find(node->name) != enumValues.end())
+    {
+        reportError(node->line, "duplicate enum: '" + node->name + "'");
+        return;
+    }
+
+    TypeNode::TypeKind baseKind = node->backingType;
+    if(!isEnumIntegralType(baseKind) && !isEnumStringType(baseKind))
+    {
+        reportError(node->line,
+                    "enum '" + node->name + "' has unsupported backing type");
+        return;
+    }
+
+    if(isEnumStringType(baseKind))
+    {
+        std::map<std::string, std::string> variants;
+        std::vector<std::pair<std::string, std::string>> orderedVariants;
+        if(node->variants)
+        {
+            for(auto* variant : node->variants->variants)
+            {
+                if(!variant)
+                    continue;
+                if(variants.find(variant->name) != variants.end())
+                {
+                    reportError(node->line, "duplicate enum variant: '" +
+                                                variant->name + "'");
+                    return;
+                }
+
+                std::string value = variant->name;
+                if(variant->hasExplicitStringValue)
+                {
+                    value = variant->explicitStringValue;
+                }
+                else if(variant->hasReferenceValue)
+                {
+                    bool resolved = false;
+                    if(variant->refEnumName == node->name)
+                    {
+                        auto selfIt = variants.find(variant->refVariantName);
+                        if(selfIt != variants.end())
+                        {
+                            value = selfIt->second;
+                            resolved = true;
+                        }
+                    }
+                    else
+                    {
+                        auto refEnumIt =
+                            enumStringValues.find(variant->refEnumName);
+                        if(refEnumIt != enumStringValues.end())
+                        {
+                            auto refVarIt =
+                                refEnumIt->second.find(variant->refVariantName);
+                            if(refVarIt != refEnumIt->second.end())
+                            {
+                                value = refVarIt->second;
+                                resolved = true;
+                            }
+                        }
+                    }
+
+                    if(!resolved)
+                    {
+                        reportError(
+                            variant->line > 0 ? variant->line : node->line,
+                            "enum variant '" + variant->name +
+                                "' references unknown string enum value '" +
+                                variant->refEnumName +
+                                "::" + variant->refVariantName + "' in enum '" +
+                                node->name + "'");
+                        return;
+                    }
+                }
+                else if(variant->hasExplicitValue)
+                {
+                    reportError(variant->line > 0 ? variant->line : node->line,
+                                "string-backed enum '" + node->name +
+                                    "' requires string variant values");
+                    return;
+                }
+
+                variants[variant->name] = value;
+                orderedVariants.push_back({variant->name, value});
+            }
+        }
+
+        enumStringValues[node->name] = variants;
+        enumStringVariantOrder[node->name] = orderedVariants;
+        enumBaseTypes[node->name] = TypeNode::TYPE_STR8;
+        return;
+    }
+
+    std::map<std::string, int64_t> variants;
+    std::vector<std::pair<std::string, int64_t>> orderedVariants;
+    int64_t nextValue = 0;
+    bool nextImplicitValid = true;
+    if(node->variants)
+    {
+        for(auto* variant : node->variants->variants)
+        {
+            if(!variant)
+                continue;
+            if(variants.find(variant->name) != variants.end())
+            {
+                reportError(node->line,
+                            "duplicate enum variant: '" + variant->name + "'");
+                return;
+            }
+
+            int64_t value = nextValue;
+            if(variant->hasExplicitValue)
+            {
+                value = variant->explicitValue;
+                nextImplicitValid = true;
+            }
+            else if(variant->hasReferenceValue)
+            {
+                const std::string& refEnumName = variant->refEnumName;
+                const std::string& refVariantName = variant->refVariantName;
+                bool resolved = false;
+
+                // Self-reference is allowed only to already defined variants.
+                if(refEnumName == node->name)
+                {
+                    auto selfIt = variants.find(refVariantName);
+                    if(selfIt != variants.end())
+                    {
+                        value = selfIt->second;
+                        resolved = true;
+                    }
+                }
+                else
+                {
+                    auto refEnumIt = enumValues.find(refEnumName);
+                    if(refEnumIt != enumValues.end())
+                    {
+                        auto refVarIt = refEnumIt->second.find(refVariantName);
+                        if(refVarIt != refEnumIt->second.end())
+                        {
+                            value = refVarIt->second;
+                            resolved = true;
+                        }
+                    }
+                }
+
+                if(!resolved)
+                {
+                    reportError(variant->line > 0 ? variant->line : node->line,
+                                "enum variant '" + variant->name +
+                                    "' references unknown enum value '" +
+                                    refEnumName + "::" + refVariantName +
+                                    "' in enum '" + node->name + "'");
+                    return;
+                }
+
+                nextImplicitValid = true;
+            }
+            else if(!nextImplicitValid)
+            {
+                reportError(variant->line > 0 ? variant->line : node->line,
+                            "enum implicit value overflows backing type '" +
+                                enumBaseTypeName(baseKind) + "' in enum '" +
+                                node->name + "'");
+                return;
+            }
+
+            if(!fitsInEnumBaseType(baseKind, value))
+            {
+                if(variant->hasReferenceValue)
+                {
+                    TypeNode::TypeKind refBaseKind = TypeNode::TYPE_I32;
+                    auto refBkIt = enumBaseTypes.find(variant->refEnumName);
+                    if(refBkIt != enumBaseTypes.end())
+                        refBaseKind = refBkIt->second;
+
+                    reportError(variant->line > 0 ? variant->line : node->line,
+                                "enum types/values are not compatible: '" +
+                                    variant->refEnumName +
+                                    "::" + variant->refVariantName + "' (" +
+                                    enumBaseTypeName(refBaseKind) + ", value " +
+                                    std::to_string(value) +
+                                    ") cannot fit in enum '" + node->name +
+                                    "' backing type '" +
+                                    enumBaseTypeName(baseKind) + "'");
+                }
+                else
+                {
+                    reportError(variant->line > 0 ? variant->line : node->line,
+                                "enum variant value '" + std::to_string(value) +
+                                    "' does not fit backing type '" +
+                                    enumBaseTypeName(baseKind) + "' in enum '" +
+                                    node->name + "'");
+                }
+                return;
+            }
+
+            variants[variant->name] = value;
+            orderedVariants.push_back({variant->name, value});
+            if(value == std::numeric_limits<int64_t>::max())
+            {
+                nextImplicitValid = false;
+            }
+            else
+            {
+                nextValue = value + 1;
+                nextImplicitValid = fitsInEnumBaseType(baseKind, nextValue);
+            }
+        }
+    }
+
+    enumValues[node->name] = variants;
+    enumVariantOrder[node->name] = orderedVariants;
+    enumBaseTypes[node->name] = baseKind;
 }

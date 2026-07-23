@@ -1,6 +1,7 @@
 #include "ir/common.h"
 
 #include <llvm/Config/llvm-config.h>
+#include <cstdint>
 
 namespace mlang::ir_detail
 {
@@ -47,6 +48,105 @@ bool isBitFieldTypeNode(TypeNode* type)
     if(auto* ref = dynamic_cast<StructTypeRefNode*>(type))
         return ref->structName == "bit";
     return false;
+}
+
+bool isEnumIntegralType(TypeNode::TypeKind kind)
+{
+    switch(kind)
+    {
+    case TypeNode::TYPE_INT:
+    case TypeNode::TYPE_I8:
+    case TypeNode::TYPE_I16:
+    case TypeNode::TYPE_I32:
+    case TypeNode::TYPE_I64:
+    case TypeNode::TYPE_U8:
+    case TypeNode::TYPE_U16:
+    case TypeNode::TYPE_U32:
+    case TypeNode::TYPE_U64:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool isEnumStringType(TypeNode::TypeKind kind)
+{
+    return kind == TypeNode::TYPE_STR8 || kind == TypeNode::TYPE_STRING;
+}
+
+unsigned enumBitWidth(TypeNode::TypeKind kind)
+{
+    switch(kind)
+    {
+    case TypeNode::TYPE_I8:
+    case TypeNode::TYPE_U8:
+        return 8;
+    case TypeNode::TYPE_I16:
+    case TypeNode::TYPE_U16:
+        return 16;
+    case TypeNode::TYPE_I64:
+    case TypeNode::TYPE_U64:
+        return 64;
+    case TypeNode::TYPE_INT:
+    case TypeNode::TYPE_I32:
+    case TypeNode::TYPE_U32:
+    default:
+        return 32;
+    }
+}
+
+bool enumIsUnsigned(TypeNode::TypeKind kind)
+{
+    return kind == TypeNode::TYPE_U8 || kind == TypeNode::TYPE_U16 ||
+           kind == TypeNode::TYPE_U32 || kind == TypeNode::TYPE_U64;
+}
+
+std::string enumBaseTypeName(TypeNode::TypeKind kind)
+{
+    switch(kind)
+    {
+    case TypeNode::TYPE_INT:
+        return "i32";
+    case TypeNode::TYPE_I8:
+        return "i8";
+    case TypeNode::TYPE_I16:
+        return "i16";
+    case TypeNode::TYPE_I32:
+        return "i32";
+    case TypeNode::TYPE_I64:
+        return "i64";
+    case TypeNode::TYPE_U8:
+        return "u8";
+    case TypeNode::TYPE_U16:
+        return "u16";
+    case TypeNode::TYPE_U32:
+        return "u32";
+    case TypeNode::TYPE_U64:
+        return "u64";
+    default:
+        return "i32";
+    }
+}
+
+bool fitsInEnumBaseType(TypeNode::TypeKind kind, int64_t value)
+{
+    const unsigned bits = enumBitWidth(kind);
+    if(enumIsUnsigned(kind))
+    {
+        if(value < 0)
+            return false;
+        if(bits >= 64)
+            return true;
+        const uint64_t maxVal = (uint64_t{1} << bits) - 1u;
+        return static_cast<uint64_t>(value) <= maxVal;
+    }
+
+    if(bits >= 64)
+        return true;
+
+    const int64_t minVal = -(int64_t{1} << (bits - 1));
+    const int64_t maxVal = (int64_t{1} << (bits - 1)) - 1;
+    return value >= minVal && value <= maxVal;
 }
 
 TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind)

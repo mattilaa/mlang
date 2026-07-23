@@ -1,23 +1,11 @@
 #include "ir.h"
+#include "ir/common.h"
 
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Constants.h>
 
-namespace
-{
-
-bool isEnumStringType(TypeNode::TypeKind kind)
-{
-    return kind == TypeNode::TYPE_STR8 || kind == TypeNode::TYPE_STRING;
-}
-
-bool enumIsUnsigned(TypeNode::TypeKind kind)
-{
-    return kind == TypeNode::TYPE_U8 || kind == TypeNode::TYPE_U16 ||
-           kind == TypeNode::TYPE_U32 || kind == TypeNode::TYPE_U64;
-}
-
-} // namespace
+using mlang::ir_detail::enumIsUnsigned;
+using mlang::ir_detail::isEnumStringType;
 
 llvm::Value* CodeGenerator::generateIntLiteral(IntLiteralNode* node)
 {
