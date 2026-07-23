@@ -196,6 +196,7 @@ set(HEADER_FILES
     ${CMAKE_SOURCE_DIR}/include/ide_query.h
     ${CMAKE_SOURCE_DIR}/include/workspace_graph.h
     ${CMAKE_SOURCE_DIR}/include/runtime_concurrency.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/backend_utils.h
 )
 
 # Specify the full path to the lexer and parser files
@@ -250,6 +251,46 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_handle_helpers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_bridge.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/ast_analysis.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/backend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/backend_utils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/borrows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/builtins.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/common.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/control_flow.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/constexpr.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/declarations.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/dispatch.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/enums.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_diagnostics.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_ops.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_type_kind.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_types.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/expression_values.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/formatting.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/function_calls.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/function_generation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/function_overloads.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/lifecycle.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/literals.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/lvalues.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/monomorphization.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/moves.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/ownership.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/output.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/pointers.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/program_generation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/return_inference.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/sizeof.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/struct_copy.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/struct_fields.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/struct_methods.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/struct_types.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/testing.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/type_aliases.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/types.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/validation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/package_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
@@ -271,6 +312,7 @@ add_dependencies(mlang ParserTarget LexerTarget)
 target_include_directories(mlang PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(mlang PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(mlang PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(mlang PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Link against LLVM libraries - include all components needed for backend
 # Core components for IR generation
