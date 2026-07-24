@@ -25,7 +25,7 @@ fn test_origin_x() -> i32 {
 
 fn main() -> i32 {
     let p: Point = Point { x: 10, y: 20 };
-    println!("debug: {:?}", p);
+    println!("debug: { :? }", p);
     println!(p);
     return 0;
 }

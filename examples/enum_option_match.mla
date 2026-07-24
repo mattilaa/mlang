@@ -9,7 +9,7 @@ enum Color {
 };
 
 fn choose_color(flag: bool) -> Option<Color> {
-    if flag: {
+    if flag {
         return Some<Color>(Color::Red);
     }
     return None<Color>();

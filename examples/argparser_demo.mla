@@ -24,7 +24,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     let result: ParseResult = ap.parse(argc, args);
 
-    if result.help_requested(): {
+    if result.help_requested() {
         ap.print_help();
         result.free();
         ap.free();
@@ -56,7 +56,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         println!("input={}", input);
     }
 
-    if verbose: {
+    if verbose {
         println!("(verbose mode active)");
     }
 
