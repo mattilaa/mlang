@@ -105,10 +105,10 @@ pub fn square(x: f64) -> f64 {
     return __mlang_std_math_square_f64(x);
 }
 
-/// @brief Sum integers in [start, end) (end is exclusive).
+/// @brief Sum integers in [start, end] (end is exclusive).
 /// @param start start value.
 /// @param end end value.
-/// @return Sum integers in [start, end) (end is exclusive).
+/// @return Sum integers in [start, end] (end is exclusive).
 pub fn sum_range(start: i32, end: i32) -> i32 {
     return __mlang_std_math_sum_range_i32(start, end);
 }
@@ -283,7 +283,7 @@ pub struct Complex<T> {
 alias complex<T> = Complex<T>;
 
 
-impl<T> Complex {
+impl < T > Complex {
     /// @brief Construct a complex number from real and imaginary parts.
     pub fn new(re: T, im: T) -> Complex<T> {
         return Complex<T> { re: re, im: im };
@@ -291,12 +291,12 @@ impl<T> Complex {
 
     /// @brief Complex conjugate.
     pub fn conj(self: Complex<T>) -> Complex<T> {
-        return Complex<T> { re: self.re, im: -self.im };
+        return Complex<T> { re: self.re, im:-self.im };
     }
 
     /// @brief Squared magnitude (`re^2 + im^2`).
     pub fn norm_sqr(self: Complex<T>) -> T {
-        return (self.re * self.re) + (self.im * self.im);
+        return(self.re * self.re) + (self.im * self.im);
     }
     /// @brief Magnitude.
     pub fn abs(self: Complex<T>) -> T {
@@ -304,7 +304,7 @@ impl<T> Complex {
     }
 }
 
-impl<T> Add for Complex {
+impl < T > Add for Complex {
     fn add(self: &mut Self, other: Complex<T>) -> Complex<T> {
         return Complex<T> {
             re: self.re + other.re,
@@ -313,7 +313,7 @@ impl<T> Add for Complex {
     }
 }
 
-impl<T> Sub for Complex {
+impl < T > Sub for Complex {
     fn sub(self: &mut Self, other: Complex<T>) -> Complex<T> {
         return Complex<T> {
             re: self.re - other.re,
@@ -322,7 +322,7 @@ impl<T> Sub for Complex {
     }
 }
 
-impl<T> Mul for Complex {
+impl < T > Mul for Complex {
     fn mul(self: &mut Self, other: Complex<T>) -> Complex<T> {
         return Complex<T> {
             re: (self.re * other.re) - (self.im * other.im),
@@ -331,9 +331,9 @@ impl<T> Mul for Complex {
     }
 }
 
-impl<T> Neg for Complex {
+impl < T > Neg for Complex {
     fn neg(self: &mut Self) -> Complex<T> {
-        return Complex<T> { re: -self.re, im: -self.im };
+        return Complex<T> { re:-self.re, im:-self.im };
     }
 }
 
