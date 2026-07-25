@@ -1,0 +1,43 @@
+# std::algorithm::genetic
+
+Module file: `stdlib/std/algorithm/genetic.mla`
+
+Genetic algorithm helpers for integer genomes and flat integer populations.
+
+Population layout:
+`[g00, g01, ..., g10, g11, ...]`
+
+API:
+- `random_genome_i64(gene_count: i64, min_gene: i64, max_gene: i64) -> list<i64>`
+- `crossover_one_point_i64(a: &list<i64>, b: &list<i64>, cut: i64) -> list<i64>`
+- `mutate_genome_i64(parent: &list<i64>, mutation_permille: i64, min_gene: i64, max_gene: i64) -> list<i64>`
+- `argmax_i64(fitness: &list<i64>) -> i64`
+- `tournament_select_index_i64(fitness: &list<i64>, tournament_size: i64) -> i64`
+- `random_population_i64(pop_size: i64, gene_count: i64, min_gene: i64, max_gene: i64) -> list<i64>`
+- `genome_at_i64(population: &list<i64>, gene_count: i64, index: i64) -> list<i64>`
+- `replace_genome_i64(population: &list<i64>, gene_count: i64, index: i64, genome: &list<i64>) -> list<i64>`
+- `reproduce_next_population_i64(population: &list<i64>, pop_size: i64, gene_count: i64, fitness: &list<i64>, mutation_permille: i64, min_gene: i64, max_gene: i64, tournament_size: i64) -> list<i64>`
+
+The random helpers use `std::algorithm::rand`, so call
+`std::algorithm::rand::seed` when deterministic test runs are needed.
+
+Example:
+
+```mla
+mod std::algorithm::genetic;
+mod std::algorithm::rand;
+
+use std::algorithm::genetic::*;
+use std::algorithm::rand::seed;
+
+seed(42);
+let population: list<i64> = random_population_i64(8, 4, 0, 9);
+let fitness: list<i64> = [10, 30, 5, 8, 13, 21, 2, 1];
+let best_index: i64 = argmax_i64(fitness);
+let best: list<i64> = genome_at_i64(population, 4, best_index);
+let next: list<i64> =
+    reproduce_next_population_i64(population, 8, 4, fitness, 100, 0, 9, 3);
+```
+
+See [`tests/std_algorithm_tests.mla`](../../tests/std_algorithm_tests.mla) and
+[`examples/ga_tsp/main.mla`](../../examples/ga_tsp/main.mla).

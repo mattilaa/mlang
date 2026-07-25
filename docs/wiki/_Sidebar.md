@@ -23,11 +23,14 @@
 - [[std::algorithm::fft|Stdlib-Algorithm-Fft]]
 - [[std::algorithm::numeric|Stdlib-Algorithm-Numeric]]
 - [[std::audio|Stdlib-Audio]]
+- [[std::dsp|Stdlib-Dsp]]
+- [[std::dsp::convolution|Stdlib-Dsp-Convolution]]
 - [[std::math|Stdlib-Math]]
 - [[std::rand|Stdlib-Rand]]
 - [[std::simd|Stdlib-Simd]]
 
 ## Stdlib Modules
+- [[std::algorithm::genetic|Stdlib-Algorithm-Genetic]]
 - [[std::algorithm::order|Stdlib-Algorithm-Order]]
 - [[std::algorithm::ranges|Stdlib-Algorithm-Ranges]]
 - [[std::argparser|Stdlib-Argparser]]

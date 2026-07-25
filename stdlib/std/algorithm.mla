@@ -2,14 +2,14 @@
 /// \brief Algorithm namespace root for stdlib.
 ///
 /// Submodules:
+/// - `std::algorithm::fft`
 /// - `std::algorithm::fuzzy`
-/// - `std::algorithm::order`
+/// - `std::algorithm::genetic`
 /// - `std::algorithm::numeric`
+/// - `std::algorithm::order`
 /// - `std::algorithm::ranges`
 /// - `std::algorithm::rand`
 /// - `std::algorithm::regex`
-/// - `std::algorithm::fft`
-/// - `std::algorithm::genetic`
 ///
 /// @defgroup algorithm std::algorithm
 /// @brief Algorithm namespace and submodules.
@@ -18,14 +18,14 @@
 /// @{
 
 /// \cond INTERNAL_IMPORTS
+mod std::algorithm::fft;
 mod std::algorithm::fuzzy;
-mod std::algorithm::order;
+mod std::algorithm::genetic;
 mod std::algorithm::numeric;
+mod std::algorithm::order;
 mod std::algorithm::ranges;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
-mod std::algorithm::fft;
-mod std::algorithm::genetic;
 /// \endcond
 
 /// @}

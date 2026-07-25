@@ -35,6 +35,7 @@ class Page:
 
 STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::algorithm::fft", "std_algorithm_fft.md"),
+    ("std::algorithm::genetic", "std_algorithm_genetic.md"),
     ("std::algorithm::numeric", "std_algorithm_numeric.md"),
     ("std::algorithm::order", "std_algorithm_order.md"),
     ("std::algorithm::ranges", "std_algorithm_ranges.md"),
@@ -48,6 +49,8 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::chat", "std_chat.md"),
     ("std::compiler", "std_compiler.md"),
     ("std::date", "std_date.md"),
+    ("std::dsp", "std_dsp.md"),
+    ("std::dsp::convolution", "std_dsp_convolution.md"),
     ("std::env", "std_env.md"),
     ("std::esc", "std_esc.md"),
     ("std::event_loop", "std_event_loop.md"),
@@ -87,6 +90,8 @@ MATH_DSP_MODULES = {
     "std::algorithm::fft",
     "std::algorithm::numeric",
     "std::audio",
+    "std::dsp",
+    "std::dsp::convolution",
     "std::math",
     "std::rand",
     "std::simd",
@@ -229,6 +234,7 @@ STDLIB_TYPE_LINKS = {
 
 STDLIB_MODULES = {
     "std::algorithm::fft",
+    "std::algorithm::genetic",
     "std::algorithm::numeric",
     "std::algorithm::order",
     "std::algorithm::ranges",
@@ -242,6 +248,8 @@ STDLIB_MODULES = {
     "std::chat",
     "std::compiler",
     "std::date",
+    "std::dsp",
+    "std::dsp::convolution",
     "std::env",
     "std::esc",
     "std::event_loop",

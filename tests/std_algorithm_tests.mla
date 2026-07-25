@@ -42,9 +42,11 @@ use std::algorithm::rand::seed;
 use std::algorithm::regex::Regex;
 use std::algorithm::genetic::argmax_i64;
 use std::algorithm::genetic::crossover_one_point_i64;
+use std::algorithm::genetic::genome_at_i64;
 use std::algorithm::genetic::mutate_genome_i64;
 use std::algorithm::genetic::random_genome_i64;
 use std::algorithm::genetic::random_population_i64;
+use std::algorithm::genetic::replace_genome_i64;
 use std::algorithm::genetic::reproduce_next_population_i64;
 use std::algorithm::genetic::tournament_select_index_i64;
 use std::strbuf::eq;
@@ -296,6 +298,32 @@ fn test_algorithm_genetic_selection() {
         let idx: i64 = tournament_select_index_i64(fit, 3);
         verify(idx >= 0 && idx < fit.len());
     }
+}
+
+#[test]
+fn test_algorithm_genetic_population_access_helpers() {
+    let population: list<i64> = [
+        1, 2, 3,
+        4, 5, 6,
+        7, 8, 9
+    ];
+
+    let genome: list<i64> = genome_at_i64(population, 3, 1);
+    verify(genome.len() == 3);
+    verify(genome[0] == 4 && genome[1] == 5 && genome[2] == 6);
+    let missing_genome: list<i64> = genome_at_i64(population, 3, 3);
+    verify(missing_genome.len() == 0);
+
+    let replacement: list<i64> = [10, 11, 12];
+    let replaced: list<i64> = replace_genome_i64(population, 3, 1, replacement);
+    verify(replaced.len() == 9);
+    verify(replaced[0] == 1 && replaced[1] == 2 && replaced[2] == 3);
+    verify(replaced[3] == 10 && replaced[4] == 11 && replaced[5] == 12);
+    verify(replaced[6] == 7 && replaced[7] == 8 && replaced[8] == 9);
+
+    let bad_replacement: list<i64> = [1, 2];
+    let rejected_replacement: list<i64> = replace_genome_i64(population, 3, 1, bad_replacement);
+    verify(rejected_replacement.len() == 0);
 }
 
 #[test]

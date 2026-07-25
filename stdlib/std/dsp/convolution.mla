@@ -1,0 +1,197 @@
+/// \file convolution.mla
+/// \brief Convolution helpers under std::dsp.
+///
+/// @defgroup dsp_convolution std::dsp::convolution
+/// @ingroup dsp
+/// @brief Linear convolution helpers for numeric lists.
+/// @{
+
+/// @brief Full linear convolution for i64 values.
+/// @return A list of length `signal.len() + kernel.len() - 1`, or empty when either input is empty.
+/// @ingroup dsp_convolution
+pub fn full_i64(signal: &list<i64>, kernel: &list<i64>) -> list<i64> {
+    let signal_n: i64 = signal.len();
+    let kernel_n: i64 = kernel.len();
+    if signal_n == 0 || kernel_n == 0 {
+        return [];
+    }
+
+    let out_n: i64 = signal_n + kernel_n - 1;
+    var out: list<i64> = [];
+    for i in 0..out_n {
+        var acc: i64 = 0;
+        for k in 0..kernel_n {
+            let si: i64 = i - k;
+            if si >= 0 && si < signal_n {
+                acc = acc + (signal[si] * kernel[k]);
+            }
+        }
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Full linear convolution for f32 values.
+/// @ingroup dsp_convolution
+pub fn full_f32(signal: &list<f32>, kernel: &list<f32>) -> list<f32> {
+    let signal_n: i64 = signal.len();
+    let kernel_n: i64 = kernel.len();
+    if signal_n == 0 || kernel_n == 0 {
+        return [];
+    }
+
+    let out_n: i64 = signal_n + kernel_n - 1;
+    var out: list<f32> = [];
+    for i in 0..out_n {
+        var acc: f32 = 0.0f;
+        for k in 0..kernel_n {
+            let si: i64 = i - k;
+            if si >= 0 && si < signal_n {
+                acc = acc + (signal[si] * kernel[k]);
+            }
+        }
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Full linear convolution for f64 values.
+/// @ingroup dsp_convolution
+pub fn full_f64(signal: &list<f64>, kernel: &list<f64>) -> list<f64> {
+    let signal_n: i64 = signal.len();
+    let kernel_n: i64 = kernel.len();
+    if signal_n == 0 || kernel_n == 0 {
+        return [];
+    }
+
+    let out_n: i64 = signal_n + kernel_n - 1;
+    var out: list<f64> = [];
+    for i in 0..out_n {
+        var acc: f64 = 0.0;
+        for k in 0..kernel_n {
+            let si: i64 = i - k;
+            if si >= 0 && si < signal_n {
+                acc = acc + (signal[si] * kernel[k]);
+            }
+        }
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Center-cropped convolution with the same length as the signal.
+/// @ingroup dsp_convolution
+pub fn same_i64(signal: &list<i64>, kernel: &list<i64>) -> list<i64> {
+    let full: list<i64> = full_i64(signal, kernel);
+    let signal_n: i64 = signal.len();
+    let kernel_n: i64 = kernel.len();
+    if full.len() == 0 {
+        return [];
+    }
+    let start: i64 = (kernel_n - 1) / 2;
+    var out: list<i64> = [];
+    for i in 0..signal_n {
+        out.push(full[start + i]);
+    }
+    return out;
+}
+
+/// @brief Center-cropped convolution with the same length as the signal.
+/// @ingroup dsp_convolution
+pub fn same_f32(signal: &list<f32>, kernel: &list<f32>) -> list<f32> {
+    let full: list<f32> = full_f32(signal, kernel);
+    let signal_n: i64 = signal.len();
+    let kernel_n: i64 = kernel.len();
+    if full.len() == 0 {
+        return [];
+    }
+    let start: i64 = (kernel_n - 1) / 2;
+    var out: list<f32> = [];
+    for i in 0..signal_n {
+        out.push(full[start + i]);
+    }
+    return out;
+}
+
+/// @brief Center-cropped convolution with the same length as the signal.
+/// @ingroup dsp_convolution
+pub fn same_f64(signal: &list<f64>, kernel: &list<f64>) -> list<f64> {
+    let full: list<f64> = full_f64(signal, kernel);
+    let signal_n: i64 = signal.len();
+    let kernel_n: i64 = kernel.len();
+    if full.len() == 0 {
+        return [];
+    }
+    let start: i64 = (kernel_n - 1) / 2;
+    var out: list<f64> = [];
+    for i in 0..signal_n {
+        out.push(full[start + i]);
+    }
+    return out;
+}
+
+/// @brief Valid convolution where the kernel fully overlaps the signal.
+/// @return Empty list when the kernel is empty or longer than the signal.
+/// @ingroup dsp_convolution
+pub fn valid_i64(signal: &list<i64>, kernel: &list<i64>) -> list<i64> {
+    let signal_n: i64 = signal.len();
+    let kernel_n: i64 = kernel.len();
+    if signal_n == 0 || kernel_n == 0 || kernel_n > signal_n {
+        return [];
+    }
+
+    let out_n: i64 = signal_n - kernel_n + 1;
+    var out: list<i64> = [];
+    for i in 0..out_n {
+        var acc: i64 = 0;
+        for k in 0..kernel_n {
+            acc = acc + (signal[i + kernel_n - 1 - k] * kernel[k]);
+        }
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Valid convolution where the kernel fully overlaps the signal.
+/// @ingroup dsp_convolution
+pub fn valid_f32(signal: &list<f32>, kernel: &list<f32>) -> list<f32> {
+    let signal_n: i64 = signal.len();
+    let kernel_n: i64 = kernel.len();
+    if signal_n == 0 || kernel_n == 0 || kernel_n > signal_n {
+        return [];
+    }
+
+    let out_n: i64 = signal_n - kernel_n + 1;
+    var out: list<f32> = [];
+    for i in 0..out_n {
+        var acc: f32 = 0.0f;
+        for k in 0..kernel_n {
+            acc = acc + (signal[i + kernel_n - 1 - k] * kernel[k]);
+        }
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Valid convolution where the kernel fully overlaps the signal.
+/// @ingroup dsp_convolution
+pub fn valid_f64(signal: &list<f64>, kernel: &list<f64>) -> list<f64> {
+    let signal_n: i64 = signal.len();
+    let kernel_n: i64 = kernel.len();
+    if signal_n == 0 || kernel_n == 0 || kernel_n > signal_n {
+        return [];
+    }
+
+    let out_n: i64 = signal_n - kernel_n + 1;
+    var out: list<f64> = [];
+    for i in 0..out_n {
+        var acc: f64 = 0.0;
+        for k in 0..kernel_n {
+            acc = acc + (signal[i + kernel_n - 1 - k] * kernel[k]);
+        }
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @}

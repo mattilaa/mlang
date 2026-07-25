@@ -153,6 +153,57 @@ pub fn random_population_i64(pop_size: i64, gene_count: i64, min_gene: i64, max_
     return out;
 }
 
+/// @brief Extract one genome from a flat population.
+/// @param population Flat `[g00,g01.., g10,g11..]` population.
+/// @param gene_count Number of genes per genome.
+/// @param index Genome index to extract.
+/// @return Empty list when the index or shape is invalid.
+/// @ingroup algorithm_genetic
+pub fn genome_at_i64(population: &list<i64>, gene_count: i64, index: i64) -> list<i64> {
+    if gene_count <= 0 || index < 0 {
+        return [];
+    }
+    let start: i64 = index * gene_count;
+    if start < 0 || start + gene_count > population.len() {
+        return [];
+    }
+
+    var out: list<i64> = [];
+    for i in 0..gene_count {
+        out.push(population[start + i]);
+    }
+    return out;
+}
+
+/// @brief Return a copy of a flat population with one genome replaced.
+/// @return Empty list when the population shape, index, or genome length is invalid.
+/// @ingroup algorithm_genetic
+pub fn replace_genome_i64(
+    population: &list<i64>,
+    gene_count: i64,
+    index: i64,
+    genome: &list<i64>
+) -> list<i64> {
+    if gene_count <= 0 || index < 0 || genome.len() != gene_count {
+        return [];
+    }
+    let start: i64 = index * gene_count;
+    if start < 0 || start + gene_count > population.len() {
+        return [];
+    }
+
+    var out: list<i64> = [];
+    let n: i64 = population.len();
+    for i in 0..n {
+        if i >= start && i < start + gene_count {
+            out.push(genome[i - start]);
+        } else {
+            out.push(population[i]);
+        }
+    }
+    return out;
+}
+
 /// @brief Produce next population by selection + crossover + mutation.
 /// Population must be flat `[g00,g01.., g10,g11..]` and fit `pop_size * gene_count`.
 /// @ingroup algorithm_genetic

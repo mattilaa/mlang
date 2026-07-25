@@ -14,6 +14,9 @@ Currently provided:
 - `test.mla`: test framework helpers (test::assert, test::run_all).
 
 - `std/math.mla`: generic math helpers (backed by libmlang_std).
+- `std/dsp.mla`: DSP namespace root with submodules:
+  - [`std::dsp::convolution`](Stdlib-Dsp-Convolution): full/same/valid convolution helpers for
+    [`list<i64>`](Quick-Guide#types), `list<f32>`, and `list<f64>`.
 - `std/bench.mla`: benchmark helpers for anti-optimization barriers
   (`do_not_optimize_i64`, `do_not_optimize_i32`, `clobber_memory`).
 - `std/array.mla`: documentation/navigation anchors for the compiler-provided
@@ -91,7 +94,8 @@ Currently provided:
   - [`std::algorithm::rand`](Stdlib-Module-API): random helpers mirroring [`std::rand`](Stdlib-Rand)
   - [`std::algorithm::regex`](Stdlib-Module-API): regex helpers mirroring [`std::regex`](Stdlib-Regex)
   - [`std::algorithm::fft`](Stdlib-Algorithm-Fft): FFT helpers for forward/inverse transforms
-  - [`std::algorithm::genetic`](Stdlib-Module-API): GA helpers for genome/population evolution
+  - [`std::algorithm::genetic`](Stdlib-Algorithm-Genetic): GA helpers for genome/population evolution,
+    including flat-population genome extraction/replacement.
 - `std/esc.mla`: ANSI terminal escape helpers with named color/cursor values
   cursor control (`fg/bg/reset`, `bold_on/off`, `underline_on/off`,
   `cursor`, `cursor_move`), auto-disabled when [`std::term::supports_ansi()`](Stdlib-Term)

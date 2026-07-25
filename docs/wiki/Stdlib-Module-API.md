@@ -18,6 +18,7 @@ These are the documented APIs you import in Mlang source via:
 
 ```rust
 mod std::algorithm::fft;
+mod std::algorithm::genetic;
 mod std::algorithm::numeric;
 mod std::algorithm::order;
 mod std::algorithm::ranges;
@@ -31,6 +32,8 @@ mod std::bytes;
 mod std::chat;
 mod std::compiler;
 mod std::date;
+mod std::dsp;
+mod std::dsp::convolution;
 mod std::env;
 mod std::esc;
 mod std::event_loop;
@@ -70,6 +73,7 @@ mod std::vec;
 
 The source-of-truth implementation files are:
 - `stdlib/std/algorithm/fft.mla`
+- `stdlib/std/algorithm/genetic.mla`
 - `stdlib/std/algorithm/numeric.mla`
 - `stdlib/std/algorithm/order.mla`
 - `stdlib/std/algorithm/ranges.mla`
@@ -83,6 +87,8 @@ The source-of-truth implementation files are:
 - `stdlib/std/chat.mla`
 - `stdlib/std/compiler.mla`
 - `stdlib/std/date.mla`
+- `stdlib/std/dsp.mla`
+- `stdlib/std/dsp/convolution.mla`
 - `stdlib/std/env.mla`
 - `stdlib/std/esc.mla`
 - `stdlib/std/event_loop.mla`
@@ -122,12 +128,15 @@ The source-of-truth implementation files are:
 - [std::audio](Stdlib-Audio)
 - [std::algorithm::fft](Stdlib-Algorithm-Fft)
 - [std::algorithm::numeric](Stdlib-Algorithm-Numeric)
+- [std::dsp](Stdlib-Dsp)
+- [std::dsp::convolution](Stdlib-Dsp-Convolution)
 - [std::math](Stdlib-Math)
 - [std::rand](Stdlib-Rand)
 - [std::simd](Stdlib-Simd)
 
 ## Algorithms
 
+- [std::algorithm::genetic](Stdlib-Algorithm-Genetic)
 - [std::algorithm::order](Stdlib-Algorithm-Order)
 - [std::algorithm::ranges](Stdlib-Algorithm-Ranges)
 
