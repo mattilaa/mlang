@@ -1,0 +1,85 @@
+/// \file std_algorithm_genetic_demo.mla
+/// @ingroup examples
+/// \brief Demonstrates std::algorithm::genetic population helpers.
+///
+/// Run:
+///   ./build/mlang examples/std_algorithm_genetic_demo.mla -L ./build -lmlang_std -o /tmp/std_algorithm_genetic_demo
+///   /tmp/std_algorithm_genetic_demo
+///
+mod std::algorithm::genetic;
+mod std::algorithm::rand;
+
+use std::algorithm::genetic::argmax_i64;
+use std::algorithm::genetic::genome_at_i64;
+use std::algorithm::genetic::random_population_i64;
+use std::algorithm::genetic::replace_genome_i64;
+use std::algorithm::genetic::reproduce_next_population_i64;
+use std::algorithm::rand::seed;
+
+fn print_i64_list(label: str8, values: &list<i64>) -> void {
+    print!("{}: [", label);
+    let n: i64 = values.len();
+    for i in 0..n {
+        if i > 0 {
+            print!(", ");
+        }
+        print!("{}", values[i]);
+    }
+    println!("]");
+}
+
+fn score_genome(genome: &list<i64>, target: &list<i64>) -> i64 {
+    var score: i64 = 0;
+    let n: i64 = genome.len();
+    for i in 0..n {
+        let diff: i64 = genome[i] - target[i];
+        let distance: i64 = diff < 0 ? -diff : diff;
+        score += 100 - distance;
+    }
+    return score;
+}
+
+fn score_population(population: &list<i64>, pop_size: i64, gene_count: i64, target: &list<i64>) -> list<i64> {
+    var fitness: list<i64> = [];
+    for p in 0..pop_size {
+        let genome: list<i64> = genome_at_i64(population, gene_count, p);
+        fitness.push(score_genome(genome, target));
+    }
+    return fitness;
+}
+
+fn main() -> i32 {
+    let pop_size: i64 = 6;
+    let gene_count: i64 = 4;
+    let target: list<i64> = [8, 3, 6, 1];
+
+    seed(20260725);
+    var population: list<i64> = random_population_i64(pop_size, gene_count, 0, 9);
+
+    let elite: list<i64> = [8, 3, 6, 1];
+    population = replace_genome_i64(population, gene_count, 0, elite);
+
+    let fitness: list<i64> = score_population(population, pop_size, gene_count, target);
+    let best_index: i64 = argmax_i64(fitness);
+    let best: list<i64> = genome_at_i64(population, gene_count, best_index);
+
+    let next_population: list<i64> = reproduce_next_population_i64(
+        population,
+        pop_size,
+        gene_count,
+        fitness,
+        120,
+        0,
+        9,
+        3
+    );
+    let next_best: list<i64> = genome_at_i64(next_population, gene_count, 0);
+
+    println!("std::algorithm::genetic flat population demo");
+    print_i64_list("target", target);
+    print_i64_list("fitness", fitness);
+    println!("best_index={}", best_index);
+    print_i64_list("best", best);
+    print_i64_list("next_population_first_genome", next_best);
+    return 0;
+}

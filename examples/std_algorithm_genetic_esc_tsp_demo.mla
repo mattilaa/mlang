@@ -1,0 +1,272 @@
+/// \file std_algorithm_genetic_esc_tsp_demo.mla
+/// @ingroup examples
+/// \brief Terminal Travelling Salesman GA demo using std::algorithm::genetic and std::esc.
+///
+/// Run:
+///   ./build/mlang examples/std_algorithm_genetic_esc_tsp_demo.mla -L ./build -lmlang_std -o /tmp/std_algorithm_genetic_esc_tsp_demo
+///   /tmp/std_algorithm_genetic_esc_tsp_demo
+///
+mod std::algorithm::genetic;
+mod std::algorithm::rand;
+mod std::esc;
+mod std::time;
+
+use std::algorithm::genetic::argmax_i64;
+use std::algorithm::genetic::genome_at_i64;
+use std::algorithm::genetic::random_population_i64;
+use std::algorithm::genetic::replace_genome_i64;
+use std::algorithm::genetic::reproduce_next_population_i64;
+use std::algorithm::rand::seed;
+use std::esc::alt_screen_off;
+use std::esc::alt_screen_on;
+use std::esc::bold_off;
+use std::esc::bold_on;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_show;
+use std::esc::color_bright_black;
+use std::esc::color_bright_cyan;
+use std::esc::color_bright_green;
+use std::esc::color_bright_yellow;
+use std::esc::cursor;
+use std::esc::fg;
+use std::esc::reset;
+use std::time::sleep_ms;
+
+fn iabs(v: i64) -> i64 {
+    if v < 0 {
+        return -v;
+    }
+    return v;
+}
+
+fn has_value(values: &list<i64>, needle: i64) -> bool {
+    let n: i64 = values.len();
+    for i in 0..n {
+        if values[i] == needle {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn repair_permutation(raw: &list<i64>, city_count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let raw_n: i64 = raw.len();
+    for i in 0..raw_n {
+        var v: i64 = raw[i];
+        if city_count > 0 {
+            v = v % city_count;
+            if v < 0 {
+                v += city_count;
+            }
+        }
+        if !has_value(out, v) {
+            out.push(v);
+        }
+    }
+
+    for c in 0..city_count {
+        if !has_value(out, c) {
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+fn repair_population(flat: &list<i64>, pop_size: i64, gene_count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    for p in 0..pop_size {
+        let raw: list<i64> = genome_at_i64(flat, gene_count, p);
+        let fixed: list<i64> = repair_permutation(raw, gene_count);
+        for i in 0..gene_count {
+            out.push(fixed[i]);
+        }
+    }
+    return out;
+}
+
+fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>) -> i64 {
+    let n: i64 = route.len();
+    if n <= 1 {
+        return 0;
+    }
+
+    var total: i64 = 0;
+    for i in 0..n {
+        let a: i64 = route[i];
+        let b: i64 = route[(i + 1) % n];
+        total += iabs(xs[a] - xs[b]) + iabs(ys[a] - ys[b]);
+    }
+    return total;
+}
+
+fn score_population(population: &list<i64>, pop_size: i64, gene_count: i64, xs: &list<i64>, ys: &list<i64>) -> list<i64> {
+    var fitness: list<i64> = [];
+    let fitness_bias: i64 = 1000000;
+    for p in 0..pop_size {
+        let route: list<i64> = genome_at_i64(population, gene_count, p);
+        let cost: i64 = route_cost(route, xs, ys);
+        fitness.push(fitness_bias - cost);
+    }
+    return fitness;
+}
+
+fn nearest_neighbor_route(start_city: i64, city_count: i64, xs: &list<i64>, ys: &list<i64>) -> list<i64> {
+    var route: list<i64> = [];
+    var current: i64 = start_city;
+    route.push(current);
+    while route.len() < city_count {
+        var best_city: i64 = -1;
+        var best_cost: i64 = 999999999;
+        for c in 0..city_count {
+            if !has_value(route, c) {
+                let cost: i64 = iabs(xs[current] - xs[c]) + iabs(ys[current] - ys[c]);
+                if cost < best_cost {
+                    best_cost = cost;
+                    best_city = c;
+                }
+            }
+        }
+        if best_city < 0 {
+            break;
+        }
+        route.push(best_city);
+        current = best_city;
+    }
+    return route;
+}
+
+fn city_at(x: i64, y: i64, xs: &list<i64>, ys: &list<i64>) -> i64 {
+    let n: i64 = xs.len();
+    for i in 0..n {
+        if xs[i] == x && ys[i] == y {
+            return i;
+        }
+    }
+    return -1;
+}
+
+fn route_order(route: &list<i64>, city: i64) -> i64 {
+    let n: i64 = route.len();
+    for i in 0..n {
+        if route[i] == city {
+            return i;
+        }
+    }
+    return -1;
+}
+
+fn print_route(route: &list<i64>) -> void {
+    let n: i64 = route.len();
+    for i in 0..n {
+        if i > 0 {
+            print!(" -> ");
+        }
+        print!("{}", route[i]);
+    }
+    if n > 0 {
+        print!(" -> {}", route[0]);
+    }
+}
+
+fn draw_city(order: i64, city: i64) -> void {
+    if order == 0 {
+        print!("{}{}S{}", bold_on(), fg(color_bright_green()), reset());
+        return;
+    }
+    if order < 10 {
+        print!("{}{}", fg(color_bright_yellow()), order);
+        print!("{}", reset());
+        return;
+    }
+    print!("{}{}{}", fg(color_bright_cyan()), city, reset());
+}
+
+fn draw_frame(generation: i64, best_cost: i64, best_route: &list<i64>, xs: &list<i64>, ys: &list<i64>) -> void {
+    let width: i64 = 24;
+    let height: i64 = 10;
+    print!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
+    println!("{}std::algorithm::genetic + std::esc TSP demo{}", bold_on(), reset());
+    println!("generation={} best_cost={}", generation, best_cost);
+    println!("");
+
+    for y in 0..height {
+        print!("  ");
+        for x in 0..width {
+            let city: i64 = city_at(x, y, xs, ys);
+            if city >= 0 {
+                let order: i64 = route_order(best_route, city);
+                draw_city(order, city);
+            } else {
+                print!("{}.", fg(color_bright_black()));
+                print!("{}", reset());
+            }
+        }
+        println!("");
+    }
+
+    println!("");
+    print!("best route: ");
+    print_route(best_route);
+    println!("");
+}
+
+fn main() -> i32 {
+    let xs: list<i64> = [2, 5, 9, 13, 18, 21, 17, 12, 7, 3];
+    let ys: list<i64> = [2, 8, 3, 7, 2, 8, 9, 5, 1, 6];
+    let city_count: i64 = xs.len();
+    let pop_size: i64 = 72;
+    let generations: i64 = 120;
+    let mutation_permille: i64 = 100;
+    let tournament_size: i64 = 4;
+
+    seed(20260725);
+    var population: list<i64> = random_population_i64(pop_size, city_count, 0, city_count - 1);
+    population = repair_population(population, pop_size, city_count);
+
+    let seeded_route: list<i64> = nearest_neighbor_route(0, city_count, xs, ys);
+    population = replace_genome_i64(population, city_count, 0, seeded_route);
+
+    var best_cost: i64 = 999999999;
+    var best_route: list<i64> = nearest_neighbor_route(0, city_count, xs, ys);
+
+    print!("{}{}{}", alt_screen_on(), cursor(cmd_hide()), cursor(cmd_clear_screen()));
+    for generation in 0..generations {
+        let fitness: list<i64> = score_population(population, pop_size, city_count, xs, ys);
+        let best_index: i64 = argmax_i64(fitness);
+        if best_index >= 0 {
+            let candidate: list<i64> = genome_at_i64(population, city_count, best_index);
+            let candidate_cost: i64 = route_cost(candidate, xs, ys);
+            if candidate_cost < best_cost {
+                best_cost = candidate_cost;
+                best_route = candidate;
+            }
+        }
+
+        if generation % 4 == 0 || generation == generations - 1 {
+            draw_frame(generation, best_cost, best_route, xs, ys);
+            sleep_ms(35);
+        }
+
+        let next: list<i64> = reproduce_next_population_i64(
+            population,
+            pop_size,
+            city_count,
+            fitness,
+            mutation_permille,
+            0,
+            city_count - 1,
+            tournament_size
+        );
+        population = repair_population(next, pop_size, city_count);
+        population = replace_genome_i64(population, city_count, 0, best_route);
+    }
+
+    draw_frame(generations, best_cost, best_route, xs, ys);
+    println!("");
+    println!("done");
+    print!("{}{}{}", reset(), cursor(cmd_show()), alt_screen_off());
+    return 0;
+}
