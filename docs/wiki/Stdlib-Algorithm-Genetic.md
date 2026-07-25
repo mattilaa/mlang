@@ -48,5 +48,11 @@ Demos:
 - [`examples/std_algorithm_genetic_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/std_algorithm_genetic_demo.mla)
 - [`examples/std_algorithm_genetic_esc_tsp_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/std_algorithm_genetic_esc_tsp_demo.mla)
 - [`examples/kallio_bars_ga_tsp_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/kallio_bars_ga_tsp_demo.mla)
+  uses [`examples/kallio_bars.json`](https://github.com/mattilaa/mlang/blob/main/examples/kallio_bars.json) and supports
+  start time/location or start bar name, bar altitude, beer duration, alcohol
+  percentage, maximum estimated promille, promille-based walking slowdown,
+  high-promille walk pauses and entry-risk penalties, route size, delayed
+  schedule-row display, and a return walk to the start location
+  (the bundled sample includes `Bar Loosister`)
 - [`examples/ga_tsp/main.mla`](https://github.com/mattilaa/mlang/blob/main/examples/ga_tsp/main.mla)
 - [`examples/ga_tsp_esc/main.mla`](https://github.com/mattilaa/mlang/blob/main/examples/ga_tsp_esc/main.mla)

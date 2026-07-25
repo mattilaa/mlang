@@ -1,0 +1,1136 @@
+[
+  {
+    "name": "Struts",
+    "address": "Fleminginkatu 13, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1856,
+      "longitude": 24.9535,
+      "altitude_m": 36
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "18:00-00:00",
+      "wed": "18:00-00:00",
+      "thu": "18:00-00:00",
+      "fri": "17:00-02:00",
+      "sat": "17:00-02:00",
+      "sun": "closed"
+    }
+  },
+  {
+    "name": "Karhu Pub",
+    "address": "Viides linja 16 B, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1831,
+      "longitude": 24.9511,
+      "altitude_m": 25
+    },
+    "opening_hours": {
+      "mon": "16:00-03:00",
+      "tue": "16:00-03:00",
+      "wed": "16:00-03:00",
+      "thu": "16:00-03:00",
+      "fri": "16:00-03:00",
+      "sat": "16:00-03:00",
+      "sun": "16:00-03:00"
+    }
+  },
+  {
+    "name": "Kallio Bar",
+    "address": "Hämeentie 12, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1818,
+      "longitude": 24.9602,
+      "altitude_m": 10
+    },
+    "opening_hours": {
+      "mon": "10:00-02:00",
+      "tue": "10:00-02:00",
+      "wed": "10:00-02:00",
+      "thu": "10:00-02:00",
+      "fri": "10:00-02:00",
+      "sat": "09:00-02:00",
+      "sun": "09:00-02:00"
+    }
+  },
+  {
+    "name": "HogoHuone",
+    "address": "Viides linja 7, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1824,
+      "longitude": 24.9497,
+      "altitude_m": 15
+    },
+    "opening_hours": {
+      "mon": "18:00-01:00",
+      "tue": "18:00-01:00",
+      "wed": "18:00-01:00",
+      "thu": "18:00-01:00",
+      "fri": "17:00-02:00",
+      "sat": "17:00-02:00",
+      "sun": "closed"
+    }
+  },
+  {
+    "name": "Flow Bar Kallio",
+    "address": "Castréninkatu 7, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1841,
+      "longitude": 24.9491,
+      "altitude_m": 21
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "17:00-23:00",
+      "wed": "17:00-23:00",
+      "thu": "17:00-23:00",
+      "fri": "17:00-01:30",
+      "sat": "17:00-01:30",
+      "sun": "closed"
+    }
+  },
+  {
+    "name": "Brewster Bar",
+    "address": "Neljäs linja 2, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1822,
+      "longitude": 24.9481,
+      "altitude_m": 12
+    },
+    "opening_hours": {
+      "mon": "17:00-02:00",
+      "tue": "17:00-02:00",
+      "wed": "17:00-05:00",
+      "thu": "17:00-05:00",
+      "fri": "17:00-05:00",
+      "sat": "17:00-05:00",
+      "sun": "closed"
+    }
+  },
+  {
+    "name": "Musta Kissa Bar",
+    "address": "Toinen linja 15, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1812,
+      "longitude": 24.9467,
+      "altitude_m": 12
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "17:00-02:00",
+      "wed": "17:00-02:00",
+      "thu": "17:00-02:00",
+      "fri": "17:00-02:00",
+      "sat": "17:00-02:00",
+      "sun": "17:00-02:00"
+    }
+  },
+  {
+    "name": "Sivukirjasto",
+    "address": "Fleminginkatu 5, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1837,
+      "longitude": 24.9523,
+      "altitude_m": 31
+    },
+    "opening_hours": {
+      "mon": "12:00-02:00",
+      "tue": "12:00-02:00",
+      "wed": "12:00-02:00",
+      "thu": "12:00-02:00",
+      "fri": "12:00-02:00",
+      "sat": "12:00-02:00",
+      "sun": "12:00-02:00"
+    }
+  },
+  {
+    "name": "Siltanen",
+    "address": "Hämeentie 13 B, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1828,
+      "longitude": 24.9614,
+      "altitude_m": 9
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "19:00-03:00",
+      "wed": "17:00-03:00",
+      "thu": "17:00-03:00",
+      "fri": "17:00-03:00",
+      "sat": "17:00-03:00",
+      "sun": "19:00-03:00"
+    }
+  },
+  {
+    "name": "Om'pu",
+    "address": "Siltasaarenkatu 15, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1798,
+      "longitude": 24.9519,
+      "altitude_m": 10
+    },
+    "opening_hours": {
+      "mon": "12:00-02:00",
+      "tue": "12:00-02:00",
+      "wed": "12:00-02:00",
+      "thu": "12:00-02:00",
+      "fri": "12:00-03:00",
+      "sat": "11:00-03:00",
+      "sun": "11:00-02:00"
+    }
+  },
+  {
+    "name": "Bar Kallion B12",
+    "address": "Vaasankatu 12, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1866,
+      "longitude": 24.9514,
+      "altitude_m": 31
+    },
+    "opening_hours": {
+      "mon": "14:00-03:00",
+      "tue": "14:00-03:00",
+      "wed": "14:00-03:00",
+      "thu": "14:00-03:00",
+      "fri": "12:00-04:30",
+      "sat": "09:00-04:30",
+      "sun": "09:00-02:00"
+    }
+  },
+  {
+    "name": "Pub Heinähattu",
+    "address": "Vaasankatu 23, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1859,
+      "longitude": 24.9542,
+      "altitude_m": 36
+    },
+    "opening_hours": {
+      "mon": "16:00-02:00",
+      "tue": "16:00-02:00",
+      "wed": "16:00-02:00",
+      "thu": "16:00-02:00",
+      "fri": "16:00-02:00",
+      "sat": "14:00-02:00",
+      "sun": "14:00-02:00"
+    }
+  },
+  {
+    "name": "Bar Stindebinde",
+    "address": "Vaasankatu 18, 00550 Helsinki",
+    "coordinates": {
+      "latitude": 60.1863,
+      "longitude": 24.9525,
+      "altitude_m": 34
+    },
+    "opening_hours": {
+      "mon": "09:00-02:00",
+      "tue": "09:00-02:00",
+      "wed": "09:00-02:00",
+      "thu": "09:00-02:00",
+      "fri": "09:00-05:00",
+      "sat": "09:00-05:00",
+      "sun": "09:00-02:00"
+    }
+  },
+  {
+    "name": "Hilpeä Hauki",
+    "address": "Vaasankatu 7, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1871,
+      "longitude": 24.9492,
+      "altitude_m": 20
+    },
+    "opening_hours": {
+      "mon": "15:00-00:00",
+      "tue": "15:00-00:00",
+      "wed": "15:00-00:00",
+      "thu": "15:00-00:00",
+      "fri": "14:00-02:00",
+      "sat": "13:00-02:00",
+      "sun": "13:00-00:00"
+    }
+  },
+  {
+    "name": "Bar Loosister",
+    "address": "Hämeentie 50, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1874,
+      "longitude": 24.9555,
+      "altitude_m": 29
+    },
+    "opening_hours": {
+      "mon": "15:00-23:00",
+      "tue": "15:00-23:00",
+      "wed": "15:00-01:00",
+      "thu": "15:00-01:00",
+      "fri": "15:00-03:30",
+      "sat": "15:00-03:30",
+      "sun": "15:00-23:00"
+    }
+  },
+  {
+    "name": "Ravintola Tenkka",
+    "address": "Helsinginkatu 15, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1854,
+      "longitude": 24.9502,
+      "altitude_m": 29
+    },
+    "opening_hours": {
+      "mon": "12:00-02:00",
+      "tue": "12:00-02:00",
+      "wed": "12:00-02:00",
+      "thu": "12:00-02:00",
+      "fri": "12:00-02:30",
+      "sat": "12:00-02:30",
+      "sun": "14:00-02:00"
+    }
+  },
+  {
+    "name": "Relaxin' Bar",
+    "address": "Helsinginkatu 13, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1853,
+      "longitude": 24.9493,
+      "altitude_m": 25
+    },
+    "opening_hours": {
+      "mon": "23:45-04:30",
+      "tue": "22:00-04:30",
+      "wed": "17:00-05:00",
+      "thu": "17:00-05:00",
+      "fri": "17:00-05:00",
+      "sat": "17:00-05:00",
+      "sun": "23:45-04:30"
+    }
+  },
+  {
+    "name": "Snadi Pub Kallio",
+    "address": "Kolmas linja 6, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1818,
+      "longitude": 24.9463,
+      "altitude_m": 12
+    },
+    "opening_hours": {
+      "mon": "15:00-02:00",
+      "tue": "15:00-02:00",
+      "wed": "15:00-02:00",
+      "thu": "15:00-02:00",
+      "fri": "15:00-02:00",
+      "sat": "12:00-02:00",
+      "sun": "12:00-02:00"
+    }
+  },
+  {
+    "name": "Brooke",
+    "address": "Fleminginkatu 13, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1855,
+      "longitude": 24.9536,
+      "altitude_m": 36
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "17:00-01:00",
+      "wed": "17:00-01:00",
+      "thu": "17:00-01:00",
+      "fri": "17:00-03:00",
+      "sat": "17:00-03:00",
+      "sun": "17:00-01:00"
+    }
+  },
+  {
+    "name": "Majava Baari",
+    "address": "Porthaninkatu 9, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1837,
+      "longitude": 24.9498,
+      "altitude_m": 23
+    },
+    "opening_hours": {
+      "mon": "14:00-02:00",
+      "tue": "14:00-02:00",
+      "wed": "14:00-02:00",
+      "thu": "14:00-02:00",
+      "fri": "12:00-02:00",
+      "sat": "12:00-02:00",
+      "sun": "14:00-02:00"
+    }
+  },
+  {
+    "name": "Harju 8",
+    "address": "Harjutori 8, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1868,
+      "longitude": 24.9561,
+      "altitude_m": 30
+    },
+    "opening_hours": {
+      "mon": "11:00-00:00",
+      "tue": "11:00-00:00",
+      "wed": "11:00-00:00",
+      "thu": "11:00-00:00",
+      "fri": "11:00-02:00",
+      "sat": "11:00-02:00",
+      "sun": "11:00-00:00"
+    }
+  },
+  {
+    "name": "Bar Kallionhovi",
+    "address": "Vaasankatu 17, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1862,
+      "longitude": 24.9529,
+      "altitude_m": 35
+    },
+    "opening_hours": {
+      "mon": "14:00-02:00",
+      "tue": "14:00-02:00",
+      "wed": "14:00-02:00",
+      "thu": "14:00-02:00",
+      "fri": "14:00-04:00",
+      "sat": "14:00-04:00",
+      "sun": "14:00-02:00"
+    }
+  },
+  {
+    "name": "Just Another Bar (JAB)",
+    "address": "Hämeentie 23, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1843,
+      "longitude": 24.9625,
+      "altitude_m": 10
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "16:00-12:00",
+      "wed": "16:00-02:00",
+      "thu": "16:00-02:00",
+      "fri": "16:00-02:00",
+      "sat": "16:00-02:00",
+      "sun": "closed"
+    }
+  },
+  {
+    "name": "Kaiku",
+    "address": "Kaikukatu 4, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1808,
+      "longitude": 24.9613,
+      "altitude_m": 9
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "closed",
+      "wed": "22:00-04:00",
+      "thu": "22:00-04:00",
+      "fri": "22:00-05:00",
+      "sat": "22:00-05:00",
+      "sun": "closed"
+    }
+  },
+  {
+    "name": "Kuudes Linja",
+    "address": "Hämeentie 13 B, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1827,
+      "longitude": 24.9615,
+      "altitude_m": 9
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "closed",
+      "wed": "20:00-03:00",
+      "thu": "20:00-03:00",
+      "fri": "22:00-04:30",
+      "sat": "22:00-04:30",
+      "sun": "closed"
+    }
+  },
+  {
+    "name": "Post Bar",
+    "address": "Kaarlenkatu 13, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1851,
+      "longitude": 24.9538,
+      "altitude_m": 36
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "closed",
+      "wed": "closed",
+      "thu": "18:00-02:00",
+      "fri": "22:00-05:00",
+      "sat": "22:00-05:00",
+      "sun": "closed"
+    }
+  },
+  {
+    "name": "Ravintola Kustaa Vaasa",
+    "address": "Vaasankatu 10, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1867,
+      "longitude": 24.951,
+      "altitude_m": 29
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "16:00-23:00",
+      "wed": "16:00-23:00",
+      "thu": "16:00-23:00",
+      "fri": "16:00-02:00",
+      "sat": "16:00-02:00",
+      "sun": "closed"
+    }
+  },
+  {
+    "name": "Ravintola Cella",
+    "address": "Fleminginkatu 15, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1861,
+      "longitude": 24.9536,
+      "altitude_m": 35
+    },
+    "opening_hours": {
+      "mon": "15:00-23:00",
+      "tue": "15:00-23:00",
+      "wed": "15:00-23:00",
+      "thu": "15:00-23:00",
+      "fri": "15:00-00:00",
+      "sat": "13:00-00:00",
+      "sun": "13:00-23:00"
+    }
+  },
+  {
+    "name": "Street Bar Kallio",
+    "address": "Hämeentie 10, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1812,
+      "longitude": 24.9595,
+      "altitude_m": 11
+    },
+    "opening_hours": {
+      "mon": "12:00-04:30",
+      "tue": "12:00-04:30",
+      "wed": "12:00-04:30",
+      "thu": "12:00-04:30",
+      "fri": "12:00-05:00",
+      "sat": "12:00-05:00",
+      "sun": "12:00-04:30"
+    }
+  },
+  {
+    "name": "Pub Porthan",
+    "address": "Porthaninkatu 10, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1834,
+      "longitude": 24.9489,
+      "altitude_m": 17
+    },
+    "opening_hours": {
+      "mon": "09:00-02:00",
+      "tue": "09:00-02:00",
+      "wed": "09:00-02:00",
+      "thu": "09:00-02:00",
+      "fri": "09:00-03:00",
+      "sat": "09:00-03:00",
+      "sun": "09:00-02:00"
+    }
+  },
+  {
+    "name": "Bar Ikkuna",
+    "address": "Helsinginkatu 4, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1849,
+      "longitude": 24.9431,
+      "altitude_m": 15
+    },
+    "opening_hours": {
+      "mon": "12:00-02:00",
+      "tue": "12:00-02:00",
+      "wed": "12:00-02:00",
+      "thu": "12:00-02:00",
+      "fri": "12:00-03:00",
+      "sat": "12:00-03:00",
+      "sun": "12:00-02:00"
+    }
+  },
+  {
+    "name": "Oiva",
+    "address": "Porthaninkatu 5, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1824,
+      "longitude": 24.9491,
+      "altitude_m": 12
+    },
+    "opening_hours": {
+      "mon": "11:00-23:00",
+      "tue": "11:00-23:00",
+      "wed": "11:00-23:00",
+      "thu": "11:00-01:00",
+      "fri": "11:00-03:00",
+      "sat": "12:00-03:00",
+      "sun": "12:00-23:00"
+    }
+  },
+  {
+    "name": "Bullman",
+    "address": "Fleminginkatu 11, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1849,
+      "longitude": 24.9531,
+      "altitude_m": 36
+    },
+    "opening_hours": {
+      "mon": "14:00-02:00",
+      "tue": "14:00-02:00",
+      "wed": "14:00-02:00",
+      "thu": "14:00-02:00",
+      "fri": "12:00-03:00",
+      "sat": "12:00-03:00",
+      "sun": "14:00-02:00"
+    }
+  },
+  {
+    "name": "Flemari 13",
+    "address": "Fleminginkatu 13, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1854,
+      "longitude": 24.9534,
+      "altitude_m": 36
+    },
+    "opening_hours": {
+      "mon": "15:00-02:00",
+      "tue": "15:00-02:00",
+      "wed": "15:00-02:00",
+      "thu": "15:00-02:00",
+      "fri": "14:00-03:00",
+      "sat": "14:00-03:00",
+      "sun": "15:00-02:00"
+    }
+  },
+  {
+    "name": "Porthanin Las Vegas",
+    "address": "Porthaninkatu 11, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1842,
+      "longitude": 24.9501,
+      "altitude_m": 26
+    },
+    "opening_hours": {
+      "mon": "09:00-02:00",
+      "tue": "09:00-02:00",
+      "wed": "09:00-02:00",
+      "thu": "09:00-02:00",
+      "fri": "09:00-03:00",
+      "sat": "09:00-03:00",
+      "sun": "09:00-02:00"
+    }
+  },
+  {
+    "name": "Bar Limbo",
+    "address": "Helsinginkatu 21, 00510 Helsinki",
+    "coordinates": {
+      "latitude": 60.1859,
+      "longitude": 24.9529,
+      "altitude_m": 35
+    },
+    "opening_hours": {
+      "mon": "16:00-02:00",
+      "tue": "16:00-02:00",
+      "wed": "16:00-02:00",
+      "thu": "16:00-02:00",
+      "fri": "15:00-03:00",
+      "sat": "15:00-03:00",
+      "sun": "16:00-02:00"
+    }
+  },
+  {
+    "name": "Heinätori",
+    "address": "Harjutori 10, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1871,
+      "longitude": 24.9566,
+      "altitude_m": 27
+    },
+    "opening_hours": {
+      "mon": "16:00-23:00",
+      "tue": "16:00-23:00",
+      "wed": "16:00-23:00",
+      "thu": "16:00-23:00",
+      "fri": "16:00-02:00",
+      "sat": "14:00-02:00",
+      "sun": "16:00-23:00"
+    }
+  },
+  {
+    "name": "Lepakkomies",
+    "address": "Helsinginkatu 1, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1843,
+      "longitude": 24.9392,
+      "altitude_m": 14
+    },
+    "opening_hours": {
+      "mon": "15:00-02:00",
+      "tue": "15:00-02:00",
+      "wed": "15:00-02:00",
+      "thu": "15:00-02:00",
+      "fri": "14:00-03:00",
+      "sat": "14:00-03:00",
+      "sun": "15:00-02:00"
+    }
+  },
+  {
+    "name": "Mascot Bar & Live Stage",
+    "address": "Neljäs linja 2, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1821,
+      "longitude": 24.9479,
+      "altitude_m": 12
+    },
+    "opening_hours": {
+      "mon": "15:00-02:00",
+      "tue": "15:00-02:00",
+      "wed": "15:00-02:00",
+      "thu": "15:00-02:00",
+      "fri": "15:00-04:30",
+      "sat": "15:00-04:30",
+      "sun": "15:00-02:00"
+    }
+  },
+  {
+    "name": "Musta Härkä",
+    "address": "Mäkelänkatu 52, 00510 Helsinki",
+    "coordinates": {
+      "latitude": 60.1945,
+      "longitude": 24.9512,
+      "altitude_m": 30
+    },
+    "opening_hours": {
+      "mon": "09:00-04:30",
+      "tue": "09:00-04:30",
+      "wed": "09:00-04:30",
+      "thu": "09:00-04:30",
+      "fri": "09:00-05:00",
+      "sat": "09:00-05:00",
+      "sun": "09:00-04:30"
+    }
+  },
+  {
+    "name": "Pub Heinähattu",
+    "address": "Vaasankatu 23, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1859,
+      "longitude": 24.9541,
+      "altitude_m": 36
+    },
+    "opening_hours": {
+      "mon": "12:00-02:00",
+      "tue": "12:00-02:00",
+      "wed": "12:00-02:00",
+      "thu": "12:00-02:00",
+      "fri": "12:00-02:00",
+      "sat": "12:00-02:00",
+      "sun": "12:00-02:00"
+    }
+  },
+  {
+    "name": "Flying Dutch",
+    "address": "Pitkänsillanranta 2, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1783,
+      "longitude": 24.9485,
+      "altitude_m": 7
+    },
+    "opening_hours": {
+      "mon": "12:00-00:00",
+      "tue": "12:00-00:00",
+      "wed": "12:00-00:00",
+      "thu": "12:00-00:00",
+      "fri": "12:00-00:00",
+      "sat": "12:00-00:00",
+      "sun": "12:00-22:00"
+    }
+  },
+  {
+    "name": "Base Camp Kallio",
+    "address": "Helsinginkatu 11, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1851,
+      "longitude": 24.9488,
+      "altitude_m": 22
+    },
+    "opening_hours": {
+      "mon": "16:00-02:00",
+      "tue": "16:00-02:00",
+      "wed": "16:00-02:00",
+      "thu": "16:00-02:00",
+      "fri": "15:00-03:00",
+      "sat": "15:00-03:00",
+      "sun": "16:00-02:00"
+    }
+  },
+  {
+    "name": "Bar Mascot",
+    "address": "Neljäs linja 2, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1821,
+      "longitude": 24.9478,
+      "altitude_m": 12
+    },
+    "opening_hours": {
+      "mon": "15:00-02:00",
+      "tue": "15:00-02:00",
+      "wed": "15:00-02:00",
+      "thu": "15:00-02:00",
+      "fri": "15:00-04:30",
+      "sat": "15:00-04:30",
+      "sun": "15:00-02:00"
+    }
+  },
+  {
+    "name": "Pub Portteri",
+    "address": "Hämeentie 33, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1856,
+      "longitude": 24.9634,
+      "altitude_m": 11
+    },
+    "opening_hours": {
+      "mon": "09:00-02:00",
+      "tue": "09:00-02:00",
+      "wed": "09:00-02:00",
+      "thu": "09:00-02:00",
+      "fri": "09:00-03:00",
+      "sat": "09:00-03:00",
+      "sun": "09:00-02:00"
+    }
+  },
+  {
+    "name": "Oiva Ravintola",
+    "address": "Porthaninkatu 5, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1825,
+      "longitude": 24.9492,
+      "altitude_m": 13
+    },
+    "opening_hours": {
+      "mon": "11:00-23:00",
+      "tue": "11:00-23:00",
+      "wed": "11:00-23:00",
+      "thu": "11:00-01:00",
+      "fri": "11:00-03:00",
+      "sat": "12:00-03:00",
+      "sun": "12:00-23:00"
+    }
+  },
+  {
+    "name": "Bar Base",
+    "address": "Helsinginkatu 11, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1851,
+      "longitude": 24.9487,
+      "altitude_m": 21
+    },
+    "opening_hours": {
+      "mon": "16:00-02:00",
+      "tue": "16:00-02:00",
+      "wed": "16:00-02:00",
+      "thu": "16:00-02:00",
+      "fri": "15:00-03:00",
+      "sat": "15:00-03:00",
+      "sun": "16:00-02:00"
+    }
+  },
+  {
+    "name": "Wanha Kettu",
+    "address": "Fleminginkatu 4, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1832,
+      "longitude": 24.9518,
+      "altitude_m": 27
+    },
+    "opening_hours": {
+      "mon": "14:00-02:00",
+      "tue": "14:00-02:00",
+      "wed": "14:00-02:00",
+      "thu": "14:00-02:00",
+      "fri": "12:00-02:00",
+      "sat": "12:00-02:00",
+      "sun": "14:00-00:00"
+    }
+  },
+  {
+    "name": "Porthanin Kulma",
+    "address": "Porthaninkatu 10, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1835,
+      "longitude": 24.9488,
+      "altitude_m": 17
+    },
+    "opening_hours": {
+      "mon": "10:00-02:00",
+      "tue": "10:00-02:00",
+      "wed": "10:00-02:00",
+      "thu": "10:00-02:00",
+      "fri": "10:00-03:00",
+      "sat": "10:00-03:00",
+      "sun": "10:00-02:00"
+    }
+  },
+  {
+    "name": "Bar 10",
+    "address": "Hämeentie 10, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1811,
+      "longitude": 24.9594,
+      "altitude_m": 11
+    },
+    "opening_hours": {
+      "mon": "12:00-02:00",
+      "tue": "12:00-02:00",
+      "wed": "12:00-02:00",
+      "thu": "12:00-02:00",
+      "fri": "12:00-03:00",
+      "sat": "12:00-03:00",
+      "sun": "12:00-02:00"
+    }
+  },
+  {
+    "name": "Ravintola Weeruska",
+    "address": "Porvoonkatu 19, 00510 Helsinki",
+    "coordinates": {
+      "latitude": 60.1887,
+      "longitude": 24.9498,
+      "altitude_m": 21
+    },
+    "opening_hours": {
+      "mon": "11:00-22:00",
+      "tue": "11:00-22:00",
+      "wed": "11:00-22:00",
+      "thu": "11:00-23:00",
+      "fri": "11:00-00:00",
+      "sat": "12:00-00:00",
+      "sun": "12:00-22:00"
+    }
+  },
+  {
+    "name": "Sörkan Ruusu",
+    "address": "Pääskylänrinne 3, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1849,
+      "longitude": 24.9631,
+      "altitude_m": 10
+    },
+    "opening_hours": {
+      "mon": "15:00-00:00",
+      "tue": "15:00-00:00",
+      "wed": "15:00-00:00",
+      "thu": "15:00-01:00",
+      "fri": "15:00-02:00",
+      "sat": "14:00-02:00",
+      "sun": "14:00-00:00"
+    }
+  },
+  {
+    "name": "Pubi Karhio",
+    "address": "Agricolankatu 11, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1842,
+      "longitude": 24.9475,
+      "altitude_m": 14
+    },
+    "opening_hours": {
+      "mon": "13:00-02:00",
+      "tue": "13:00-02:00",
+      "wed": "13:00-02:00",
+      "thu": "13:00-02:00",
+      "fri": "13:00-03:00",
+      "sat": "12:00-03:00",
+      "sun": "13:00-02:00"
+    }
+  },
+  {
+    "name": "Bar Con",
+    "address": "Siltasaarenkatu 12, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1793,
+      "longitude": 24.9521,
+      "altitude_m": 9
+    },
+    "opening_hours": {
+      "mon": "closed",
+      "tue": "16:00-23:00",
+      "wed": "16:00-23:00",
+      "thu": "16:00-00:00",
+      "fri": "15:00-02:00",
+      "sat": "14:00-02:00",
+      "sun": "closed"
+    }
+  },
+  {
+    "name": "Kallion Oiva",
+    "address": "Siltasaarenkatu 18, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1802,
+      "longitude": 24.9515,
+      "altitude_m": 11
+    },
+    "opening_hours": {
+      "mon": "11:00-22:00",
+      "tue": "11:00-22:00",
+      "wed": "11:00-22:00",
+      "thu": "11:00-23:00",
+      "fri": "11:00-02:00",
+      "sat": "11:00-02:00",
+      "sun": "12:00-21:00"
+    }
+  },
+  {
+    "name": "Kuja Bar & Bistro",
+    "address": "Hakaniemenkatu 7, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1788,
+      "longitude": 24.9542,
+      "altitude_m": 8
+    },
+    "opening_hours": {
+      "mon": "11:00-22:00",
+      "tue": "11:00-22:00",
+      "wed": "11:00-23:00",
+      "thu": "11:00-23:00",
+      "fri": "11:00-01:00",
+      "sat": "12:00-01:00",
+      "sun": "12:00-21:00"
+    }
+  },
+  {
+    "name": "Bar Zoom",
+    "address": "Hämeentie 20, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1831,
+      "longitude": 24.9611,
+      "altitude_m": 9
+    },
+    "opening_hours": {
+      "mon": "12:00-02:00",
+      "tue": "12:00-02:00",
+      "wed": "12:00-02:00",
+      "thu": "12:00-02:00",
+      "fri": "12:00-03:00",
+      "sat": "12:00-03:00",
+      "sun": "12:00-02:00"
+    }
+  },
+  {
+    "name": "Pub Magneetti",
+    "address": "Vilhonvuorenkatu 7, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1865,
+      "longitude": 24.9624,
+      "altitude_m": 14
+    },
+    "opening_hours": {
+      "mon": "14:00-02:00",
+      "tue": "14:00-02:00",
+      "wed": "14:00-02:00",
+      "thu": "14:00-02:00",
+      "fri": "13:00-03:00",
+      "sat": "13:00-03:00",
+      "sun": "14:00-02:00"
+    }
+  },
+  {
+    "name": "Bar Viides Linja",
+    "address": "Viides linja 2, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1819,
+      "longitude": 24.9482,
+      "altitude_m": 12
+    },
+    "opening_hours": {
+      "mon": "16:00-02:00",
+      "tue": "16:00-02:00",
+      "wed": "16:00-02:00",
+      "thu": "16:00-02:00",
+      "fri": "15:00-03:00",
+      "sat": "15:00-03:00",
+      "sun": "16:00-02:00"
+    }
+  },
+  {
+    "name": "Ravintola Toveri",
+    "address": "Castréninkatu 3, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1834,
+      "longitude": 24.9472,
+      "altitude_m": 13
+    },
+    "opening_hours": {
+      "mon": "14:00-02:00",
+      "tue": "14:00-02:00",
+      "wed": "14:00-02:00",
+      "thu": "14:00-02:00",
+      "fri": "12:00-03:00",
+      "sat": "12:00-03:00",
+      "sun": "14:00-02:00"
+    }
+  },
+  {
+    "name": "Bar Porthan",
+    "address": "Porthaninkatu 3, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1818,
+      "longitude": 24.9486,
+      "altitude_m": 12
+    },
+    "opening_hours": {
+      "mon": "15:00-02:00",
+      "tue": "15:00-02:00",
+      "wed": "15:00-02:00",
+      "thu": "15:00-02:00",
+      "fri": "14:00-03:00",
+      "sat": "14:00-03:00",
+      "sun": "15:00-02:00"
+    }
+  },
+  {
+    "name": "Kolmas Linja Pub",
+    "address": "Kolmas linja 11, 00530 Helsinki",
+    "coordinates": {
+      "latitude": 60.1825,
+      "longitude": 24.9476,
+      "altitude_m": 12
+    },
+    "opening_hours": {
+      "mon": "16:00-02:00",
+      "tue": "16:00-02:00",
+      "wed": "16:00-02:00",
+      "thu": "16:00-02:00",
+      "fri": "15:00-03:00",
+      "sat": "15:00-03:00",
+      "sun": "16:00-02:00"
+    }
+  },
+  {
+    "name": "Bar Penger",
+    "address": "Pengerkatu 13, 00500 Helsinki",
+    "coordinates": {
+      "latitude": 60.1852,
+      "longitude": 24.9578,
+      "altitude_m": 27
+    },
+    "opening_hours": {
+      "mon": "16:00-01:00",
+      "tue": "16:00-01:00",
+      "wed": "16:00-01:00",
+      "thu": "16:00-01:00",
+      "fri": "15:00-02:00",
+      "sat": "15:00-02:00",
+      "sun": "16:00-01:00"
+    }
+  }
+]

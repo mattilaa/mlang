@@ -11,14 +11,15 @@
 ///
 /// Run:
 ///   ./build/mlang examples/kallio_bars_ga_tsp_demo.mla -L ./build -lmlang_std -o /tmp/kallio_bars_ga_tsp_demo
-///   /tmp/kallio_bars_ga_tsp_demo --json /Users/mattilaa/Downloads/kallio_bars.json --day fri --start 17:30 --lat-e4 601850 --lon-e4 249500
-///   /tmp/kallio_bars_ga_tsp_demo --json /Users/mattilaa/Downloads/kallio_bars.json --max-bars 0
+///   /tmp/kallio_bars_ga_tsp_demo --json examples/kallio_bars.json --day fri --start 17:30 --lat-e4 601882 --lon-e4 249532 --altitude-m 24 --alcohol-percent 5.5 --max-promille 3
+///   /tmp/kallio_bars_ga_tsp_demo --json examples/kallio_bars.json --max-bars 0
 ///
 mod std::algorithm::genetic;
 mod std::algorithm::rand;
 mod std::argparser;
 mod std::json;
 mod std::strbuf;
+mod std::time;
 
 use std::algorithm::genetic::argmax_i64;
 use std::algorithm::genetic::genome_at_i64;
@@ -31,13 +32,17 @@ use std::argparser::ParseResult;
 use std::json::JsonDoc;
 use std::json::JsonValue;
 use std::strbuf::eq;
+use std::strbuf::len;
 use std::strbuf::sub;
 use std::strbuf::zpad_i64;
+use std::time::now_ms;
+use std::time::sleep_ms;
 
 struct bar_data {
     var names: list<str8>;
     var lats: list<i64>;
     var lons: list<i64>;
+    var alts: list<i64>;
     var opens: list<i64>;
     var closes: list<i64>;
 };
@@ -64,6 +69,59 @@ fn digit_at(s: str8, index: i64) -> i64 {
     return 0;
 }
 
+fn digit_value(ch: str8) -> i64 {
+    if eq(ch, "0") == 1 { return 0; }
+    if eq(ch, "1") == 1 { return 1; }
+    if eq(ch, "2") == 1 { return 2; }
+    if eq(ch, "3") == 1 { return 3; }
+    if eq(ch, "4") == 1 { return 4; }
+    if eq(ch, "5") == 1 { return 5; }
+    if eq(ch, "6") == 1 { return 6; }
+    if eq(ch, "7") == 1 { return 7; }
+    if eq(ch, "8") == 1 { return 8; }
+    if eq(ch, "9") == 1 { return 9; }
+    return -1;
+}
+
+fn parse_percent_x10(text: str8, fallback: i64) -> i64 {
+    let n: i64 = len(text);
+    if n <= 0 {
+        return fallback;
+    }
+    var whole: i64 = 0;
+    var frac: i64 = 0;
+    var has_digit: bool = false;
+    var in_frac: bool = false;
+    var has_frac: bool = false;
+    for i in 0..n {
+        let ch: str8 = sub(text, i, 1);
+        if eq(ch, ".") == 1 || eq(ch, ",") == 1 {
+            if in_frac {
+                return fallback;
+            }
+            in_frac = true;
+        } else {
+            let d: i64 = digit_value(ch);
+            if d < 0 {
+                return fallback;
+            }
+            has_digit = true;
+            if in_frac {
+                if !has_frac {
+                    frac = d;
+                    has_frac = true;
+                }
+            } else {
+                whole = whole * 10 + d;
+            }
+        }
+    }
+    if !has_digit {
+        return fallback;
+    }
+    return whole * 10 + frac;
+}
+
 fn parse_clock_minutes(s: str8, offset: i64) -> i64 {
     let hh: i64 = digit_at(s, offset) * 10 + digit_at(s, offset + 1);
     let mm: i64 = digit_at(s, offset + 3) * 10 + digit_at(s, offset + 4);
@@ -82,6 +140,19 @@ fn format_clock(minutes_in: i64) -> str8 {
     return format!("{}:{}", h, m);
 }
 
+fn format_promille(promille_x100: i64) -> str8 {
+    let whole: i64 = promille_x100 / 100;
+    let frac: i64 = promille_x100 % 100;
+    let frac_s: str8 = zpad_i64(frac, 2);
+    return format!("{}.{}", whole, frac_s);
+}
+
+fn format_percent_x10(percent_x10: i64) -> str8 {
+    let whole: i64 = percent_x10 / 10;
+    let frac: i64 = percent_x10 % 10;
+    return format!("{}.{}", whole, frac);
+}
+
 fn walking_minutes(a_lat: i64, a_lon: i64, b_lat: i64, b_lon: i64) -> i64 {
     let dlat: i64 = iabs(a_lat - b_lat);
     let dlon: i64 = iabs(a_lon - b_lon);
@@ -91,6 +162,78 @@ fn walking_minutes(a_lat: i64, a_lon: i64, b_lat: i64, b_lon: i64) -> i64 {
         return 1;
     }
     return mins;
+}
+
+fn slope_walking_minutes(a_lat: i64, a_lon: i64, a_alt: i64, b_lat: i64, b_lon: i64, b_alt: i64) -> i64 {
+    let base: i64 = walking_minutes(a_lat, a_lon, b_lat, b_lon);
+    let climb: i64 = b_alt - a_alt;
+    var adjusted: i64 = base;
+    if climb > 0 {
+        adjusted += (climb + 2) / 3;
+    }
+    if climb < 0 {
+        adjusted -= ((0 - climb) + 5) / 10;
+    }
+    if adjusted < 1 {
+        return 1;
+    }
+    return adjusted;
+}
+
+fn promille_walk_slowdown_percent(promille_x100: i64) -> i64 {
+    if promille_x100 < 50 {
+        return 0;
+    }
+    if promille_x100 < 100 {
+        return 10;
+    }
+    if promille_x100 < 150 {
+        return 25;
+    }
+    if promille_x100 < 200 {
+        return 45;
+    }
+    return 70 + ((promille_x100 - 200) / 5);
+}
+
+fn promille_walk_pause_minutes(base_walk: i64, promille_x100: i64) -> i64 {
+    if promille_x100 < 200 {
+        return 0;
+    }
+    return ((base_walk + 3) / 4) + ((promille_x100 - 200) / 10);
+}
+
+fn impaired_walking_minutes(base_walk: i64, promille_x100: i64) -> i64 {
+    let slowdown: i64 = promille_walk_slowdown_percent(promille_x100);
+    let slowed: i64 = (base_walk * (100 + slowdown) + 99) / 100;
+    return slowed + promille_walk_pause_minutes(base_walk, promille_x100);
+}
+
+fn entry_refused(bar: i64, arrival_minute: i64, promille_x100: i64) -> bool {
+    if promille_x100 < 220 {
+        return false;
+    }
+    if promille_x100 >= 260 {
+        return true;
+    }
+    let chance: i64 = (promille_x100 - 200) * 2;
+    let roll: i64 = (bar * 37 + arrival_minute * 11) % 100;
+    return roll < chance;
+}
+
+fn beer_promille_x100(alcohol_percent_x10: i64) -> i64 {
+    if alcohol_percent_x10 <= 0 {
+        return 0;
+    }
+    return (25 * alcohol_percent_x10 + 27) / 55;
+}
+
+fn burn_promille_x100(promille_x100: i64, minutes: i64) -> i64 {
+    let burn: i64 = (minutes * 15) / 60;
+    if burn >= promille_x100 {
+        return 0;
+    }
+    return promille_x100 - burn;
 }
 
 fn opening_start(hours: str8) -> i64 {
@@ -120,6 +263,16 @@ fn has_value(values: &list<i64>, needle: i64) -> bool {
         }
     }
     return false;
+}
+
+fn find_name(names: &list<str8>, needle: str8) -> i64 {
+    let n: i64 = names.len();
+    for i in 0..n {
+        if eq(names[i], needle) == 1 {
+            return i;
+        }
+    }
+    return -1;
 }
 
 fn repair_permutation(raw: &list<i64>, count: i64) -> list<i64> {
@@ -157,26 +310,60 @@ fn repair_population(flat: &list<i64>, pop_size: i64, gene_count: i64) -> list<i
     return out;
 }
 
+fn map_route_excluding(route: &list<i64>, excluded: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = route.len();
+    for i in 0..n {
+        let v: i64 = route[i];
+        if v >= excluded {
+            out.push(v + 1);
+        } else {
+            out.push(v);
+        }
+    }
+    return out;
+}
+
+fn prepend_bar(bar: i64, route: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    out.push(bar);
+    let n: i64 = route.len();
+    for i in 0..n {
+        if route[i] != bar {
+            out.push(route[i]);
+        }
+    }
+    return out;
+}
+
 fn route_penalty(
     route: &list<i64>,
     start_minute: i64,
     start_lat: i64,
     start_lon: i64,
+    start_alt: i64,
     beer_minutes: i64,
+    alcohol_percent_x10: i64,
+    max_promille_x100: i64,
     lats: &list<i64>,
     lons: &list<i64>,
+    alts: &list<i64>,
     opens: &list<i64>,
     closes: &list<i64>
 ) -> i64 {
     var now: i64 = start_minute;
     var lat: i64 = start_lat;
     var lon: i64 = start_lon;
+    var alt: i64 = start_alt;
+    var promille_x100: i64 = 0;
     var total: i64 = 0;
     let n: i64 = route.len();
     for i in 0..n {
         let bar: i64 = route[i];
-        let walk: i64 = walking_minutes(lat, lon, lats[bar], lons[bar]);
+        let base_walk: i64 = slope_walking_minutes(lat, lon, alt, lats[bar], lons[bar], alts[bar]);
+        let walk: i64 = impaired_walking_minutes(base_walk, promille_x100);
         now += walk;
+        promille_x100 = burn_promille_x100(promille_x100, walk);
         total += walk;
 
         let open: i64 = opens[bar];
@@ -193,18 +380,33 @@ fn route_penalty(
             if now < open_abs {
                 let wait: i64 = open_abs - now;
                 now += wait;
+                promille_x100 = burn_promille_x100(promille_x100, wait);
                 total += wait;
             }
             if now + beer_minutes > close_abs {
                 total += 100000 + ((now + beer_minutes) - close_abs) * 20;
             }
         }
+        if entry_refused(bar, now, promille_x100) {
+            total += 120000 + promille_x100 * 500;
+        } else if promille_x100 >= 200 {
+            total += 20000 + (promille_x100 - 200) * 300;
+        }
 
+        promille_x100 += beer_promille_x100(alcohol_percent_x10);
+        if max_promille_x100 > 0 && promille_x100 > max_promille_x100 {
+            total += 100000 + (promille_x100 - max_promille_x100) * 1000;
+        }
         now += beer_minutes;
+        promille_x100 = burn_promille_x100(promille_x100, beer_minutes);
         total += beer_minutes;
         lat = lats[bar];
         lon = lons[bar];
+        alt = alts[bar];
     }
+    let return_base_walk: i64 = slope_walking_minutes(lat, lon, alt, start_lat, start_lon, start_alt);
+    let return_walk: i64 = impaired_walking_minutes(return_base_walk, promille_x100);
+    total += return_walk;
     return total;
 }
 
@@ -215,9 +417,13 @@ fn score_population(
     start_minute: i64,
     start_lat: i64,
     start_lon: i64,
+    start_alt: i64,
     beer_minutes: i64,
+    alcohol_percent_x10: i64,
+    max_promille_x100: i64,
     lats: &list<i64>,
     lons: &list<i64>,
+    alts: &list<i64>,
     opens: &list<i64>,
     closes: &list<i64>
 ) -> list<i64> {
@@ -225,7 +431,7 @@ fn score_population(
     let bias: i64 = 10000000;
     for p in 0..pop_size {
         let route: list<i64> = genome_at_i64(population, gene_count, p);
-        let penalty: i64 = route_penalty(route, start_minute, start_lat, start_lon, beer_minutes, lats, lons, opens, closes);
+        let penalty: i64 = route_penalty(route, start_minute, start_lat, start_lon, start_alt, beer_minutes, alcohol_percent_x10, max_promille_x100, lats, lons, alts, opens, closes);
         fitness.push(bias - penalty);
     }
     return fitness;
@@ -236,6 +442,7 @@ fn empty_bar_data() -> bar_data {
         names: [],
         lats: [],
         lons: [],
+        alts: [],
         opens: [],
         closes: []
     };
@@ -245,6 +452,7 @@ fn load_bars(path: str8, day: str8) -> bar_data {
     var names: list<str8> = [];
     var lats: list<i64> = [];
     var lons: list<i64> = [];
+    var alts: list<i64> = [];
     var opens: list<i64> = [];
     var closes: list<i64> = [];
 
@@ -287,28 +495,33 @@ fn load_bars(path: str8, day: str8) -> bar_data {
         let opening: JsonValue = opening_r.unwrap();
         let lat_v_r: Result<JsonValue, str8> = coords.get("latitude");
         let lon_v_r: Result<JsonValue, str8> = coords.get("longitude");
+        let alt_v_r: Result<JsonValue, str8> = coords.get("altitude_m");
         let hours_v_r: Result<JsonValue, str8> = opening.get(day);
-        if lat_v_r.is_err() || lon_v_r.is_err() || hours_v_r.is_err() {
+        if lat_v_r.is_err() || lon_v_r.is_err() || alt_v_r.is_err() || hours_v_r.is_err() {
             continue;
         }
         let lat_v: JsonValue = lat_v_r.unwrap();
         let lon_v: JsonValue = lon_v_r.unwrap();
+        let alt_v: JsonValue = alt_v_r.unwrap();
         let hours_v: JsonValue = hours_v_r.unwrap();
         let name_r: Result<str8, str8> = name_v.as_string();
         let lat_r: Result<f64, str8> = lat_v.as_f64();
         let lon_r: Result<f64, str8> = lon_v.as_f64();
+        let alt_r: Result<i64, str8> = alt_v.as_i64();
         let hours_r: Result<str8, str8> = hours_v.as_string();
-        if name_r.is_err() || lat_r.is_err() || lon_r.is_err() || hours_r.is_err() {
+        if name_r.is_err() || lat_r.is_err() || lon_r.is_err() || alt_r.is_err() || hours_r.is_err() {
             continue;
         }
         let name: str8 = name_r.unwrap();
         let lat_f: f64 = lat_r.unwrap();
         let lon_f: f64 = lon_r.unwrap();
+        let alt_m: i64 = alt_r.unwrap();
         let hours: str8 = hours_r.unwrap();
 
         names.push(name);
         lats.push(i32(lat_f * 10000.0));
         lons.push(i32(lon_f * 10000.0));
+        alts.push(alt_m);
         opens.push(opening_start(hours));
         closes.push(opening_end(hours));
     }
@@ -319,6 +532,7 @@ fn load_bars(path: str8, day: str8) -> bar_data {
         names: names,
         lats: lats,
         lons: lons,
+        alts: alts,
         opens: opens,
         closes: closes
     };
@@ -329,21 +543,32 @@ fn print_schedule(
     names: &list<str8>,
     lats: &list<i64>,
     lons: &list<i64>,
+    alts: &list<i64>,
     opens: &list<i64>,
     closes: &list<i64>,
     start_minute: i64,
     start_lat: i64,
     start_lon: i64,
-    beer_minutes: i64
+    start_alt: i64,
+    beer_minutes: i64,
+    alcohol_percent_x10: i64,
+    max_promille_x100: i64,
+    row_delay_ms: i64
 ) -> void {
     var now: i64 = start_minute;
     var lat: i64 = start_lat;
     var lon: i64 = start_lon;
+    var alt: i64 = start_alt;
+    var promille_x100: i64 = 0;
     let n: i64 = route.len();
     for i in 0..n {
         let bar: i64 = route[i];
-        let walk: i64 = walking_minutes(lat, lon, lats[bar], lons[bar]);
+        let base_walk: i64 = slope_walking_minutes(lat, lon, alt, lats[bar], lons[bar], alts[bar]);
+        let pause: i64 = promille_walk_pause_minutes(base_walk, promille_x100);
+        let slowdown: i64 = promille_walk_slowdown_percent(promille_x100);
+        let walk: i64 = impaired_walking_minutes(base_walk, promille_x100);
         now += walk;
+        promille_x100 = burn_promille_x100(promille_x100, walk);
         let open: i64 = opens[bar];
         let close: i64 = closes[bar];
         var note: str8 = "";
@@ -357,33 +582,94 @@ fn print_schedule(
                 close_abs += 1440;
             }
             if now < open_abs {
+                let wait: i64 = open_abs - now;
                 now = open_abs;
+                promille_x100 = burn_promille_x100(promille_x100, wait);
                 note = "waited";
             }
             if now + beer_minutes > close_abs {
                 note = "misses close";
             }
         }
+        if entry_refused(bar, now, promille_x100) {
+            note = "entry refused";
+        } else if promille_x100 >= 200 {
+            note = "entry risk";
+        }
+        let entry_promille: str8 = format_promille(promille_x100);
+        let after_beer_promille: i64 = promille_x100 + beer_promille_x100(alcohol_percent_x10);
+        if max_promille_x100 > 0 && after_beer_promille > max_promille_x100 && len(note) == 0 {
+            note = "over max promille";
+        }
         let arrive: str8 = format_clock(now);
         let leave: str8 = format_clock(now + beer_minutes);
-        println!("{}. {}  arrive={} leave={} walk={}min {}", i + 1, names[bar], arrive, leave, walk, note);
+        println!("{}. {}", i + 1, names[bar]);
+        println!("    - arrive={}", arrive);
+        println!("    - leave={}", leave);
+        println!("    - walk={}min", walk);
+        if slowdown > 0 {
+            println!("    - walk_slowdown_percent={}", slowdown);
+        }
+        if pause > 0 {
+            println!("    - walk_pause={}min", pause);
+        }
+        println!("    - altitude={}m", alts[bar]);
+        println!("    - promille={}", entry_promille);
+        if len(note) > 0 {
+            println!("    - note={}", note);
+        }
+        println!("");
+        if row_delay_ms > 0 {
+            sleep_ms(row_delay_ms);
+        }
+        promille_x100 = after_beer_promille;
         now += beer_minutes;
+        promille_x100 = burn_promille_x100(promille_x100, beer_minutes);
         lat = lats[bar];
         lon = lons[bar];
+        alt = alts[bar];
     }
+    let return_base_walk: i64 = slope_walking_minutes(lat, lon, alt, start_lat, start_lon, start_alt);
+    let return_pause: i64 = promille_walk_pause_minutes(return_base_walk, promille_x100);
+    let return_slowdown: i64 = promille_walk_slowdown_percent(promille_x100);
+    let return_walk: i64 = impaired_walking_minutes(return_base_walk, promille_x100);
+    now += return_walk;
+    promille_x100 = burn_promille_x100(promille_x100, return_walk);
+    let home_time: str8 = format_clock(now);
+    let promille: str8 = format_promille(promille_x100);
+    if row_delay_ms > 0 {
+        sleep_ms(row_delay_ms);
+    }
+    println!("return to start");
+    println!("    - arrive={}", home_time);
+    println!("    - walk={}min", return_walk);
+    if return_slowdown > 0 {
+        println!("    - walk_slowdown_percent={}", return_slowdown);
+    }
+    if return_pause > 0 {
+        println!("    - walk_pause={}min", return_pause);
+    }
+    println!("    - altitude={}m", start_alt);
+    println!("    - promille={}", promille);
+    println!("");
 }
 
 fn main(argc: i32, args: list<str8>) -> i32 {
     var ap: ArgParser = ArgParser::new("kallio_bars_ga_tsp_demo", "Plan a one-beer-per-bar Kallio crawl with a genetic TSP route.");
-    ap.option("json", "j", "Path to kallio_bars.json", "/Users/mattilaa/Downloads/kallio_bars.json");
+    ap.option("json", "j", "Path to kallio_bars.json", "examples/kallio_bars.json");
     ap.option("day", "d", "Opening-hours day key: mon tue wed thu fri sat sun", "fri");
     ap.option("start", "s", "First departure/entry time as HH:MM", "17:30");
-    ap.option("lat-e4", "", "Start latitude scaled by 10000", "601850");
-    ap.option("lon-e4", "", "Start longitude scaled by 10000", "249500");
+    ap.option("start-bar", "", "Start from this bar name instead of lat/lon/altitude", "");
+    ap.option("lat-e4", "", "Start latitude scaled by 10000", "601882");
+    ap.option("lon-e4", "", "Start longitude scaled by 10000", "249532");
+    ap.option("altitude-m", "", "Start altitude in meters", "24");
     ap.option("beer-minutes", "b", "Minutes spent drinking one beer in each bar", "50");
-    ap.option("max-bars", "m", "Maximum bars to route; 0 uses all loaded bars", "12");
+    ap.option("alcohol-percent", "a", "Alcohol percent per beer", "5.5");
+    ap.option("max-promille", "", "Maximum estimated promille; 0 disables this limit", "3");
+    ap.option("max-bars", "m", "Maximum bars to route; 0 uses all loaded bars", "22");
     ap.option("population", "p", "GA population size", "96");
     ap.option("generations", "g", "GA generation count", "250");
+    ap.option("log-interval-ms", "", "Milliseconds between displayed schedule rows; 0 disables row delay", "900");
 
     let parsed: ParseResult = ap.parse(argc, args);
     if parsed.help_requested() {
@@ -403,13 +689,19 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let json_path: str8 = parsed.get("json");
     let day: str8 = parsed.get("day");
     let start_text: str8 = parsed.get("start");
+    let start_bar: str8 = parsed.get("start-bar");
     let start_minute: i64 = parse_clock_minutes(start_text, 0);
-    let start_lat: i64 = parsed.get_i64("lat-e4");
-    let start_lon: i64 = parsed.get_i64("lon-e4");
+    var start_lat: i64 = parsed.get_i64("lat-e4");
+    var start_lon: i64 = parsed.get_i64("lon-e4");
+    var start_alt: i64 = parsed.get_i64("altitude-m");
     let beer_minutes: i64 = parsed.get_i64("beer-minutes");
+    let alcohol_percent_text: str8 = parsed.get("alcohol-percent");
+    let alcohol_percent_x10: i64 = parse_percent_x10(alcohol_percent_text, 55);
+    let max_promille_x100: i64 = parsed.get_i64("max-promille") * 100;
     let max_bars: i64 = parsed.get_i64("max-bars");
     let pop_size: i64 = parsed.get_i64("population");
     let generations: i64 = parsed.get_i64("generations");
+    let log_interval_ms: i64 = parsed.get_i64("log-interval-ms");
 
     let bars: bar_data = load_bars(json_path, day);
     let loaded_count: i64 = bars.names.len();
@@ -424,37 +716,100 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     println!("loaded {} bars for {}; planning {}", loaded_count, day, bar_count);
 
+    let start_bar_index: i64 = find_name(bars.names, start_bar);
+    var fixed_first_bar: i64 = -1;
+    if len(start_bar) > 0 {
+        if start_bar_index < 0 {
+            println!("start bar not found: {}", start_bar);
+            parsed.free();
+            ap.free();
+            return 1;
+        }
+        start_lat = bars.lats[start_bar_index];
+        start_lon = bars.lons[start_bar_index];
+        start_alt = bars.alts[start_bar_index];
+        fixed_first_bar = start_bar_index;
+        if bar_count > 1 {
+            bar_count = bar_count - 1;
+        }
+        println!("starting from bar '{}' at 0 promille", start_bar);
+    } else {
+        println!("starting from coordinates lat_e4={} lon_e4={} altitude={}m at 0 promille", start_lat, start_lon, start_alt);
+    }
+
     seed(20260725);
     var population: list<i64> = random_population_i64(pop_size, bar_count, 0, bar_count - 1);
     population = repair_population(population, pop_size, bar_count);
 
     var best_penalty: i64 = 999999999;
     var best_route: list<i64> = genome_at_i64(population, bar_count, 0);
+    if fixed_first_bar >= 0 {
+        let mapped_initial: list<i64> = map_route_excluding(best_route, fixed_first_bar);
+        best_route = prepend_bar(fixed_first_bar, mapped_initial);
+    }
+    var last_log_ms: i64 = now_ms() - log_interval_ms;
     for gen in 0..generations {
-        let fitness: list<i64> = score_population(population, pop_size, bar_count, start_minute, start_lat, start_lon, beer_minutes, bars.lats, bars.lons, bars.opens, bars.closes);
+        var fitness: list<i64> = [];
+        for p in 0..pop_size {
+            let raw_route: list<i64> = genome_at_i64(population, bar_count, p);
+            if fixed_first_bar >= 0 {
+                let mapped_route: list<i64> = map_route_excluding(raw_route, fixed_first_bar);
+                let candidate_route: list<i64> = prepend_bar(fixed_first_bar, mapped_route);
+                let candidate_penalty: i64 = route_penalty(candidate_route, start_minute, start_lat, start_lon, start_alt, beer_minutes, alcohol_percent_x10, max_promille_x100, bars.lats, bars.lons, bars.alts, bars.opens, bars.closes);
+                fitness.push(10000000 - candidate_penalty);
+            } else {
+                let candidate_penalty: i64 = route_penalty(raw_route, start_minute, start_lat, start_lon, start_alt, beer_minutes, alcohol_percent_x10, max_promille_x100, bars.lats, bars.lons, bars.alts, bars.opens, bars.closes);
+                fitness.push(10000000 - candidate_penalty);
+            }
+        }
         let best_index: i64 = argmax_i64(fitness);
         if best_index >= 0 {
-            let candidate: list<i64> = genome_at_i64(population, bar_count, best_index);
-            let penalty: i64 = route_penalty(candidate, start_minute, start_lat, start_lon, beer_minutes, bars.lats, bars.lons, bars.opens, bars.closes);
-            if penalty < best_penalty {
-                best_penalty = penalty;
-                best_route = candidate;
+            let raw_candidate: list<i64> = genome_at_i64(population, bar_count, best_index);
+            if fixed_first_bar >= 0 {
+                let mapped_candidate: list<i64> = map_route_excluding(raw_candidate, fixed_first_bar);
+                let candidate: list<i64> = prepend_bar(fixed_first_bar, mapped_candidate);
+                let penalty: i64 = route_penalty(candidate, start_minute, start_lat, start_lon, start_alt, beer_minutes, alcohol_percent_x10, max_promille_x100, bars.lats, bars.lons, bars.alts, bars.opens, bars.closes);
+                if penalty < best_penalty {
+                    best_penalty = penalty;
+                    best_route = candidate;
+                }
+            } else {
+                let penalty: i64 = route_penalty(raw_candidate, start_minute, start_lat, start_lon, start_alt, beer_minutes, alcohol_percent_x10, max_promille_x100, bars.lats, bars.lons, bars.alts, bars.opens, bars.closes);
+                if penalty < best_penalty {
+                    best_penalty = penalty;
+                    best_route = raw_candidate;
+                }
             }
         }
 
         let next: list<i64> = reproduce_next_population_i64(population, pop_size, bar_count, fitness, 100, 0, bar_count - 1, 5);
         population = repair_population(next, pop_size, bar_count);
-        population = replace_genome_i64(population, bar_count, 0, best_route);
-        if gen % 25 == 0 {
-            println!("generation={} best_score={}", gen, 10000000 - best_penalty);
+        if fixed_first_bar < 0 {
+            population = replace_genome_i64(population, bar_count, 0, best_route);
         }
+        if log_interval_ms > 0 {
+            let now_log_ms: i64 = now_ms();
+            if gen == 0 || now_log_ms - last_log_ms >= log_interval_ms {
+                println!("generation={} best_score={}", gen, 10000000 - best_penalty);
+                last_log_ms = now_log_ms;
+            }
+        }
+    }
+    if log_interval_ms > 0 {
+        println!("generation={} best_score={}", generations, 10000000 - best_penalty);
     }
 
     println!("");
     println!("Kallio one-beer GA crawl");
-    println!("day={} start={} beer_minutes={} bars={}", day, start_text, beer_minutes, bar_count);
-    println!("estimated route cost={} minutes", best_penalty);
-    print_schedule(best_route, bars.names, bars.lats, bars.lons, bars.opens, bars.closes, start_minute, start_lat, start_lon, beer_minutes);
+    if len(start_bar) > 0 {
+        println!("start_bar={} at 0 promille", start_bar);
+    } else {
+        println!("start_location lat_e4={} lon_e4={} altitude={}m at 0 promille", start_lat, start_lon, start_alt);
+    }
+    let alcohol_percent_display: str8 = format_percent_x10(alcohol_percent_x10);
+    println!("day={} start={} beer_minutes={} alcohol_percent={} bars={} max_promille={}", day, start_text, beer_minutes, alcohol_percent_display, best_route.len(), parsed.get_i64("max-promille"));
+    println!("estimated route cost={} minutes including return", best_penalty);
+    print_schedule(best_route, bars.names, bars.lats, bars.lons, bars.alts, bars.opens, bars.closes, start_minute, start_lat, start_lon, start_alt, beer_minutes, alcohol_percent_x10, max_promille_x100, log_interval_ms);
     parsed.free();
     ap.free();
     return 0;
