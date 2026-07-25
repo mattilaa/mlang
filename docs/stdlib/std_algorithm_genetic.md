@@ -41,3 +41,10 @@ let next: list<i64> =
 
 See [`tests/std_algorithm_tests.mla`](../../tests/std_algorithm_tests.mla) and
 [`examples/ga_tsp/main.mla`](../../examples/ga_tsp/main.mla).
+
+Demos:
+- [`examples/std_algorithm_genetic_demo.mla`](../../examples/std_algorithm_genetic_demo.mla)
+- [`examples/std_algorithm_genetic_esc_tsp_demo.mla`](../../examples/std_algorithm_genetic_esc_tsp_demo.mla)
+- [`examples/kallio_bars_ga_tsp_demo.mla`](../../examples/kallio_bars_ga_tsp_demo.mla)
+- [`examples/ga_tsp/main.mla`](../../examples/ga_tsp/main.mla)
+- [`examples/ga_tsp_esc/main.mla`](../../examples/ga_tsp_esc/main.mla)

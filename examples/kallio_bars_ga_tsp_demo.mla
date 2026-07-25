@@ -1,0 +1,461 @@
+/// \file kallio_bars_ga_tsp_demo.mla
+/// @ingroup examples
+/// \brief Kallio bar crawl planner using JSON input and std::algorithm::genetic.
+///
+/// The JSON file is expected to be an array of bars with:
+///   name, address, coordinates.latitude, coordinates.longitude, opening_hours.<day>
+///
+/// Coordinates on the command line are scaled integers:
+///   latitude 60.1850  -> 601850
+///   longitude 24.9500 -> 249500
+///
+/// Run:
+///   ./build/mlang examples/kallio_bars_ga_tsp_demo.mla -L ./build -lmlang_std -o /tmp/kallio_bars_ga_tsp_demo
+///   /tmp/kallio_bars_ga_tsp_demo --json /Users/mattilaa/Downloads/kallio_bars.json --day fri --start 17:30 --lat-e4 601850 --lon-e4 249500
+///   /tmp/kallio_bars_ga_tsp_demo --json /Users/mattilaa/Downloads/kallio_bars.json --max-bars 0
+///
+mod std::algorithm::genetic;
+mod std::algorithm::rand;
+mod std::argparser;
+mod std::json;
+mod std::strbuf;
+
+use std::algorithm::genetic::argmax_i64;
+use std::algorithm::genetic::genome_at_i64;
+use std::algorithm::genetic::random_population_i64;
+use std::algorithm::genetic::replace_genome_i64;
+use std::algorithm::genetic::reproduce_next_population_i64;
+use std::algorithm::rand::seed;
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::json::JsonDoc;
+use std::json::JsonValue;
+use std::strbuf::eq;
+use std::strbuf::sub;
+use std::strbuf::zpad_i64;
+
+struct bar_data {
+    var names: list<str8>;
+    var lats: list<i64>;
+    var lons: list<i64>;
+    var opens: list<i64>;
+    var closes: list<i64>;
+};
+
+fn iabs(v: i64) -> i64 {
+    if v < 0 {
+        return -v;
+    }
+    return v;
+}
+
+fn digit_at(s: str8, index: i64) -> i64 {
+    let ch: str8 = sub(s, index, 1);
+    if eq(ch, "0") == 1 { return 0; }
+    if eq(ch, "1") == 1 { return 1; }
+    if eq(ch, "2") == 1 { return 2; }
+    if eq(ch, "3") == 1 { return 3; }
+    if eq(ch, "4") == 1 { return 4; }
+    if eq(ch, "5") == 1 { return 5; }
+    if eq(ch, "6") == 1 { return 6; }
+    if eq(ch, "7") == 1 { return 7; }
+    if eq(ch, "8") == 1 { return 8; }
+    if eq(ch, "9") == 1 { return 9; }
+    return 0;
+}
+
+fn parse_clock_minutes(s: str8, offset: i64) -> i64 {
+    let hh: i64 = digit_at(s, offset) * 10 + digit_at(s, offset + 1);
+    let mm: i64 = digit_at(s, offset + 3) * 10 + digit_at(s, offset + 4);
+    return hh * 60 + mm;
+}
+
+fn format_clock(minutes_in: i64) -> str8 {
+    var minutes: i64 = minutes_in % 1440;
+    if minutes < 0 {
+        minutes += 1440;
+    }
+    let hh: i64 = minutes / 60;
+    let mm: i64 = minutes % 60;
+    let h: str8 = zpad_i64(hh, 2);
+    let m: str8 = zpad_i64(mm, 2);
+    return format!("{}:{}", h, m);
+}
+
+fn walking_minutes(a_lat: i64, a_lon: i64, b_lat: i64, b_lon: i64) -> i64 {
+    let dlat: i64 = iabs(a_lat - b_lat);
+    let dlon: i64 = iabs(a_lon - b_lon);
+    let meters: i64 = dlat * 11 + dlon * 6;
+    let mins: i64 = (meters + 79) / 80;
+    if mins < 1 {
+        return 1;
+    }
+    return mins;
+}
+
+fn opening_start(hours: str8) -> i64 {
+    if eq(hours, "closed") == 1 {
+        return -1;
+    }
+    return parse_clock_minutes(hours, 0);
+}
+
+fn opening_end(hours: str8) -> i64 {
+    if eq(hours, "closed") == 1 {
+        return -1;
+    }
+    let start: i64 = parse_clock_minutes(hours, 0);
+    var close: i64 = parse_clock_minutes(hours, 6);
+    if close <= start {
+        close += 1440;
+    }
+    return close;
+}
+
+fn has_value(values: &list<i64>, needle: i64) -> bool {
+    let n: i64 = values.len();
+    for i in 0..n {
+        if values[i] == needle {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn repair_permutation(raw: &list<i64>, count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = raw.len();
+    for i in 0..n {
+        var v: i64 = raw[i];
+        if count > 0 {
+            v = v % count;
+            if v < 0 {
+                v += count;
+            }
+        }
+        if !has_value(out, v) {
+            out.push(v);
+        }
+    }
+    for i in 0..count {
+        if !has_value(out, i) {
+            out.push(i);
+        }
+    }
+    return out;
+}
+
+fn repair_population(flat: &list<i64>, pop_size: i64, gene_count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    for p in 0..pop_size {
+        let genome: list<i64> = genome_at_i64(flat, gene_count, p);
+        let fixed: list<i64> = repair_permutation(genome, gene_count);
+        for i in 0..gene_count {
+            out.push(fixed[i]);
+        }
+    }
+    return out;
+}
+
+fn route_penalty(
+    route: &list<i64>,
+    start_minute: i64,
+    start_lat: i64,
+    start_lon: i64,
+    beer_minutes: i64,
+    lats: &list<i64>,
+    lons: &list<i64>,
+    opens: &list<i64>,
+    closes: &list<i64>
+) -> i64 {
+    var now: i64 = start_minute;
+    var lat: i64 = start_lat;
+    var lon: i64 = start_lon;
+    var total: i64 = 0;
+    let n: i64 = route.len();
+    for i in 0..n {
+        let bar: i64 = route[i];
+        let walk: i64 = walking_minutes(lat, lon, lats[bar], lons[bar]);
+        now += walk;
+        total += walk;
+
+        let open: i64 = opens[bar];
+        let close: i64 = closes[bar];
+        if open < 0 || close < 0 {
+            total += 100000;
+        } else {
+            var open_abs: i64 = open;
+            var close_abs: i64 = close;
+            if open_abs < start_minute - 720 {
+                open_abs += 1440;
+                close_abs += 1440;
+            }
+            if now < open_abs {
+                let wait: i64 = open_abs - now;
+                now += wait;
+                total += wait;
+            }
+            if now + beer_minutes > close_abs {
+                total += 100000 + ((now + beer_minutes) - close_abs) * 20;
+            }
+        }
+
+        now += beer_minutes;
+        total += beer_minutes;
+        lat = lats[bar];
+        lon = lons[bar];
+    }
+    return total;
+}
+
+fn score_population(
+    population: &list<i64>,
+    pop_size: i64,
+    gene_count: i64,
+    start_minute: i64,
+    start_lat: i64,
+    start_lon: i64,
+    beer_minutes: i64,
+    lats: &list<i64>,
+    lons: &list<i64>,
+    opens: &list<i64>,
+    closes: &list<i64>
+) -> list<i64> {
+    var fitness: list<i64> = [];
+    let bias: i64 = 10000000;
+    for p in 0..pop_size {
+        let route: list<i64> = genome_at_i64(population, gene_count, p);
+        let penalty: i64 = route_penalty(route, start_minute, start_lat, start_lon, beer_minutes, lats, lons, opens, closes);
+        fitness.push(bias - penalty);
+    }
+    return fitness;
+}
+
+fn empty_bar_data() -> bar_data {
+    return bar_data {
+        names: [],
+        lats: [],
+        lons: [],
+        opens: [],
+        closes: []
+    };
+}
+
+fn load_bars(path: str8, day: str8) -> bar_data {
+    var names: list<str8> = [];
+    var lats: list<i64> = [];
+    var lons: list<i64> = [];
+    var opens: list<i64> = [];
+    var closes: list<i64> = [];
+
+    let doc_r: Result<JsonDoc, str8> = JsonDoc::from_file(path);
+    if doc_r.is_err() {
+        println!("json load failed: {}", doc_r.unwrap_err());
+        return empty_bar_data();
+    }
+    let doc: JsonDoc = doc_r.unwrap();
+    let root_r: Result<JsonValue, str8> = doc.root();
+    if root_r.is_err() {
+        println!("json root failed: {}", root_r.unwrap_err());
+        doc.free();
+        return empty_bar_data();
+    }
+    let root: JsonValue = root_r.unwrap();
+    let count_r: Result<i64, str8> = root.size();
+    if count_r.is_err() {
+        println!("json root is not an array");
+        root.free();
+        doc.free();
+        return empty_bar_data();
+    }
+
+    let count: i64 = count_r.unwrap();
+    for i in 0..count {
+        let item_r: Result<JsonValue, str8> = root.index(i);
+        if item_r.is_err() {
+            continue;
+        }
+        let item: JsonValue = item_r.unwrap();
+        let name_v_r: Result<JsonValue, str8> = item.get("name");
+        let coords_r: Result<JsonValue, str8> = item.get("coordinates");
+        let opening_r: Result<JsonValue, str8> = item.get("opening_hours");
+        if name_v_r.is_err() || coords_r.is_err() || opening_r.is_err() {
+            continue;
+        }
+        let name_v: JsonValue = name_v_r.unwrap();
+        let coords: JsonValue = coords_r.unwrap();
+        let opening: JsonValue = opening_r.unwrap();
+        let lat_v_r: Result<JsonValue, str8> = coords.get("latitude");
+        let lon_v_r: Result<JsonValue, str8> = coords.get("longitude");
+        let hours_v_r: Result<JsonValue, str8> = opening.get(day);
+        if lat_v_r.is_err() || lon_v_r.is_err() || hours_v_r.is_err() {
+            continue;
+        }
+        let lat_v: JsonValue = lat_v_r.unwrap();
+        let lon_v: JsonValue = lon_v_r.unwrap();
+        let hours_v: JsonValue = hours_v_r.unwrap();
+        let name_r: Result<str8, str8> = name_v.as_string();
+        let lat_r: Result<f64, str8> = lat_v.as_f64();
+        let lon_r: Result<f64, str8> = lon_v.as_f64();
+        let hours_r: Result<str8, str8> = hours_v.as_string();
+        if name_r.is_err() || lat_r.is_err() || lon_r.is_err() || hours_r.is_err() {
+            continue;
+        }
+        let name: str8 = name_r.unwrap();
+        let lat_f: f64 = lat_r.unwrap();
+        let lon_f: f64 = lon_r.unwrap();
+        let hours: str8 = hours_r.unwrap();
+
+        names.push(name);
+        lats.push(i32(lat_f * 10000.0));
+        lons.push(i32(lon_f * 10000.0));
+        opens.push(opening_start(hours));
+        closes.push(opening_end(hours));
+    }
+
+    root.free();
+    doc.free();
+    return bar_data {
+        names: names,
+        lats: lats,
+        lons: lons,
+        opens: opens,
+        closes: closes
+    };
+}
+
+fn print_schedule(
+    route: &list<i64>,
+    names: &list<str8>,
+    lats: &list<i64>,
+    lons: &list<i64>,
+    opens: &list<i64>,
+    closes: &list<i64>,
+    start_minute: i64,
+    start_lat: i64,
+    start_lon: i64,
+    beer_minutes: i64
+) -> void {
+    var now: i64 = start_minute;
+    var lat: i64 = start_lat;
+    var lon: i64 = start_lon;
+    let n: i64 = route.len();
+    for i in 0..n {
+        let bar: i64 = route[i];
+        let walk: i64 = walking_minutes(lat, lon, lats[bar], lons[bar]);
+        now += walk;
+        let open: i64 = opens[bar];
+        let close: i64 = closes[bar];
+        var note: str8 = "";
+        if open < 0 || close < 0 {
+            note = "closed";
+        } else {
+            var open_abs: i64 = open;
+            var close_abs: i64 = close;
+            if open_abs < start_minute - 720 {
+                open_abs += 1440;
+                close_abs += 1440;
+            }
+            if now < open_abs {
+                now = open_abs;
+                note = "waited";
+            }
+            if now + beer_minutes > close_abs {
+                note = "misses close";
+            }
+        }
+        let arrive: str8 = format_clock(now);
+        let leave: str8 = format_clock(now + beer_minutes);
+        println!("{}. {}  arrive={} leave={} walk={}min {}", i + 1, names[bar], arrive, leave, walk, note);
+        now += beer_minutes;
+        lat = lats[bar];
+        lon = lons[bar];
+    }
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new("kallio_bars_ga_tsp_demo", "Plan a one-beer-per-bar Kallio crawl with a genetic TSP route.");
+    ap.option("json", "j", "Path to kallio_bars.json", "/Users/mattilaa/Downloads/kallio_bars.json");
+    ap.option("day", "d", "Opening-hours day key: mon tue wed thu fri sat sun", "fri");
+    ap.option("start", "s", "First departure/entry time as HH:MM", "17:30");
+    ap.option("lat-e4", "", "Start latitude scaled by 10000", "601850");
+    ap.option("lon-e4", "", "Start longitude scaled by 10000", "249500");
+    ap.option("beer-minutes", "b", "Minutes spent drinking one beer in each bar", "50");
+    ap.option("max-bars", "m", "Maximum bars to route; 0 uses all loaded bars", "12");
+    ap.option("population", "p", "GA population size", "96");
+    ap.option("generations", "g", "GA generation count", "250");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        println!("Error: {}", parsed.error());
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+
+    let json_path: str8 = parsed.get("json");
+    let day: str8 = parsed.get("day");
+    let start_text: str8 = parsed.get("start");
+    let start_minute: i64 = parse_clock_minutes(start_text, 0);
+    let start_lat: i64 = parsed.get_i64("lat-e4");
+    let start_lon: i64 = parsed.get_i64("lon-e4");
+    let beer_minutes: i64 = parsed.get_i64("beer-minutes");
+    let max_bars: i64 = parsed.get_i64("max-bars");
+    let pop_size: i64 = parsed.get_i64("population");
+    let generations: i64 = parsed.get_i64("generations");
+
+    let bars: bar_data = load_bars(json_path, day);
+    let loaded_count: i64 = bars.names.len();
+    var bar_count: i64 = loaded_count;
+    if max_bars > 0 && max_bars < bar_count {
+        bar_count = max_bars;
+    }
+    if bar_count <= 0 {
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    println!("loaded {} bars for {}; planning {}", loaded_count, day, bar_count);
+
+    seed(20260725);
+    var population: list<i64> = random_population_i64(pop_size, bar_count, 0, bar_count - 1);
+    population = repair_population(population, pop_size, bar_count);
+
+    var best_penalty: i64 = 999999999;
+    var best_route: list<i64> = genome_at_i64(population, bar_count, 0);
+    for gen in 0..generations {
+        let fitness: list<i64> = score_population(population, pop_size, bar_count, start_minute, start_lat, start_lon, beer_minutes, bars.lats, bars.lons, bars.opens, bars.closes);
+        let best_index: i64 = argmax_i64(fitness);
+        if best_index >= 0 {
+            let candidate: list<i64> = genome_at_i64(population, bar_count, best_index);
+            let penalty: i64 = route_penalty(candidate, start_minute, start_lat, start_lon, beer_minutes, bars.lats, bars.lons, bars.opens, bars.closes);
+            if penalty < best_penalty {
+                best_penalty = penalty;
+                best_route = candidate;
+            }
+        }
+
+        let next: list<i64> = reproduce_next_population_i64(population, pop_size, bar_count, fitness, 100, 0, bar_count - 1, 5);
+        population = repair_population(next, pop_size, bar_count);
+        population = replace_genome_i64(population, bar_count, 0, best_route);
+        if gen % 25 == 0 {
+            println!("generation={} best_score={}", gen, 10000000 - best_penalty);
+        }
+    }
+
+    println!("");
+    println!("Kallio one-beer GA crawl");
+    println!("day={} start={} beer_minutes={} bars={}", day, start_text, beer_minutes, bar_count);
+    println!("estimated route cost={} minutes", best_penalty);
+    print_schedule(best_route, bars.names, bars.lats, bars.lons, bars.opens, bars.closes, start_minute, start_lat, start_lon, beer_minutes);
+    parsed.free();
+    ap.free();
+    return 0;
+}

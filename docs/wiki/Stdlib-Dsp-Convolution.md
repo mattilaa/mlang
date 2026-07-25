@@ -43,3 +43,6 @@ let valid: list<f32> = valid_f32(signal, kernel);
 ```
 
 See [`tests/std_dsp_tests.mla`](https://github.com/mattilaa/mlang/blob/main/tests/std_dsp_tests.mla).
+
+Demo:
+- [`examples/std_dsp_convolution_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/std_dsp_convolution_demo.mla)
