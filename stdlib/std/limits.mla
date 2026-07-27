@@ -1,0 +1,74 @@
+/// \file limits.mla
+/// \brief Integer limit helpers for MLang primitive numeric types.
+
+/// @brief Minimum signed 8-bit integer.
+pub fn i8_min() -> i8 { return 0 - 127 - 1; }
+
+/// @brief Maximum signed 8-bit integer.
+pub fn i8_max() -> i8 { return 127; }
+
+/// @brief Minimum signed 16-bit integer.
+pub fn i16_min() -> i16 { return 0 - 32767 - 1; }
+
+/// @brief Maximum signed 16-bit integer.
+pub fn i16_max() -> i16 { return 32767; }
+
+/// @brief Minimum signed 32-bit integer.
+pub fn i32_min() -> i32 { return 0 - 2147483647 - 1; }
+
+/// @brief Maximum signed 32-bit integer.
+pub fn i32_max() -> i32 { return 2147483647; }
+
+/// @brief Minimum signed 64-bit integer.
+pub fn i64_min() -> i64 { return 0 - 9223372036854775807 - 1; }
+
+/// @brief Maximum signed 64-bit integer.
+pub fn i64_max() -> i64 { return 9223372036854775807; }
+
+/// @brief Minimum unsigned 8-bit integer.
+pub fn u8_min() -> u8 { return 0; }
+
+/// @brief Maximum unsigned 8-bit integer.
+pub fn u8_max() -> u8 { return 255; }
+
+/// @brief Minimum unsigned 16-bit integer.
+pub fn u16_min() -> u16 { return 0; }
+
+/// @brief Maximum unsigned 16-bit integer.
+pub fn u16_max() -> u16 { return 65535; }
+
+/// @brief Minimum unsigned 32-bit integer.
+pub fn u32_min() -> u32 { return 0; }
+
+/// @brief Maximum unsigned 32-bit integer.
+pub fn u32_max() -> u32 { return 4294967295; }
+
+/// @brief Minimum unsigned 64-bit integer.
+pub fn u64_min() -> u64 { return 0; }
+
+/// @brief Maximum unsigned 64-bit integer.
+pub fn u64_max() -> u64 { return 18446744073709551615; }
+
+/// @brief Alias for the conventional 32-bit signed int minimum.
+pub fn int_min() -> i32 { return i32_min(); }
+
+/// @brief Alias for the conventional 32-bit signed int maximum.
+pub fn int_max() -> i32 { return i32_max(); }
+
+/// @brief Alias for the conventional 64-bit signed long minimum.
+pub fn long_min() -> i64 { return i64_min(); }
+
+/// @brief Alias for the conventional 64-bit signed long maximum.
+pub fn long_max() -> i64 { return i64_max(); }
+
+/// @brief Alias for the conventional 32-bit unsigned int minimum.
+pub fn uint_min() -> u32 { return u32_min(); }
+
+/// @brief Alias for the conventional 32-bit unsigned int maximum.
+pub fn uint_max() -> u32 { return u32_max(); }
+
+/// @brief Alias for the conventional 64-bit unsigned long minimum.
+pub fn ulong_min() -> u64 { return u64_min(); }
+
+/// @brief Alias for the conventional 64-bit unsigned long maximum.
+pub fn ulong_max() -> u64 { return u64_max(); }

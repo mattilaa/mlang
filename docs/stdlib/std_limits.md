@@ -1,0 +1,49 @@
+# std::limits
+
+Module file: `stdlib/std/limits.mla`
+
+Integer limit helpers for MLang primitive integer types.
+
+### Signed widths
+- `i8_min() -> i8`
+- `i8_max() -> i8`
+- `i16_min() -> i16`
+- `i16_max() -> i16`
+- `i32_min() -> i32`
+- `i32_max() -> i32`
+- `i64_min() -> i64`
+- `i64_max() -> i64`
+
+### Unsigned widths
+- `u8_min() -> u8`
+- `u8_max() -> u8`
+- `u16_min() -> u16`
+- `u16_max() -> u16`
+- `u32_min() -> u32`
+- `u32_max() -> u32`
+- `u64_min() -> u64`
+- `u64_max() -> u64`
+
+### Aliases
+- `int_min() -> i32`
+- `int_max() -> i32`
+- `long_min() -> i64`
+- `long_max() -> i64`
+- `uint_min() -> u32`
+- `uint_max() -> u32`
+- `ulong_min() -> u64`
+- `ulong_max() -> u64`
+
+Example:
+
+```mla
+mod std::limits;
+
+use std::limits::int_max;
+use std::limits::i64_min;
+
+let max_value: i32 = int_max();
+let floor_value: i64 = i64_min();
+```
+
+See [`tests/std_limits_tests.mla`](../../tests/std_limits_tests.mla).

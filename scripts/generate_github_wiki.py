@@ -63,6 +63,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::ipc", "std_ipc.md"),
     ("std::json", "std_json.md"),
     ("std::jsonrpc", "std_jsonrpc.md"),
+    ("std::limits", "std_limits.md"),
     ("std::math", "std_math.md"),
     ("std::net", "std_net.md"),
     ("std::platform", "std_platform.md"),

@@ -1,0 +1,68 @@
+mod std::limits;
+mod std::testing;
+
+use std::limits::*;
+use std::testing::verify;
+
+#[test]
+fn test_signed_integer_limits() {
+    let min8: i8 = i8_min();
+    let max8: i8 = i8_max();
+    let min16: i16 = i16_min();
+    let max16: i16 = i16_max();
+    let min32: i32 = i32_min();
+    let max32: i32 = i32_max();
+    let min64: i64 = i64_min();
+    let max64: i64 = i64_max();
+
+    verify(min8 == (0 - 127 - 1));
+    verify(max8 == 127);
+    verify(min16 == (0 - 32767 - 1));
+    verify(max16 == 32767);
+    verify(min32 == (0 - 2147483647 - 1));
+    verify(max32 == 2147483647);
+    verify(min64 == (0 - 9223372036854775807 - 1));
+    verify(max64 == 9223372036854775807);
+}
+
+#[test]
+fn test_unsigned_integer_limits() {
+    let min8: u8 = u8_min();
+    let max8: u8 = u8_max();
+    let min16: u16 = u16_min();
+    let max16: u16 = u16_max();
+    let min32: u32 = u32_min();
+    let max32: u32 = u32_max();
+    let min64: u64 = u64_min();
+    let max64: u64 = u64_max();
+
+    verify(min8 == 0);
+    verify(max8 == 255);
+    verify(min16 == 0);
+    verify(max16 == 65535);
+    verify(min32 == 0);
+    verify(max32 == 4294967295);
+    verify(min64 == 0);
+    verify(max64 == 18446744073709551615);
+}
+
+#[test]
+fn test_integer_limit_aliases() {
+    let min_int: i32 = int_min();
+    let max_int: i32 = int_max();
+    let min_long: i64 = long_min();
+    let max_long: i64 = long_max();
+    let min_uint: u32 = uint_min();
+    let max_uint: u32 = uint_max();
+    let min_ulong: u64 = ulong_min();
+    let max_ulong: u64 = ulong_max();
+
+    verify(min_int == i32_min());
+    verify(max_int == i32_max());
+    verify(min_long == i64_min());
+    verify(max_long == i64_max());
+    verify(min_uint == u32_min());
+    verify(max_uint == u32_max());
+    verify(min_ulong == u64_min());
+    verify(max_ulong == u64_max());
+}
