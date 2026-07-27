@@ -47,11 +47,17 @@ Demos:
 - [`examples/std_algorithm_genetic_esc_tsp_demo.mla`](../../examples/std_algorithm_genetic_esc_tsp_demo.mla)
 - [`examples/kallio_bars_ga_tsp_demo.mla`](../../examples/kallio_bars_ga_tsp_demo.mla)
   uses [`examples/kallio_bars.json`](../../examples/kallio_bars.json) and supports
-  start time/location or start bar name, bar altitude, beer duration, alcohol
-  percentage, maximum estimated promille, optional JSON opening-hours scoring
-  via `--use-opening-hours 1`, promille-based walking slowdown, high-promille
-  walk pauses and entry-risk penalties, route size, delayed schedule-row
-  display, and a return walk to the start location
+  start time, decimal start coordinates via `--start-lat`/`--start-lon`, legacy
+  scaled coordinates via `--lat-e4`/`--lon-e4`, or a start bar name. If no start
+  coordinates or start bar are provided, the first loaded bar is used as the
+  start at 0 promille. The demo also supports bar altitude, beer duration,
+  alcohol percentage, maximum estimated promille, optional JSON opening-hours
+  scoring via `--use-opening-hours 1`, route truncation before bars that cannot
+  be finished before closing, the 04:00-09:00 alcohol-sales ban, optional
+  directional `walking_hills` JSON entries with uphill/downhill meters for route
+  legs, a whole-route duration cap via `--max-route-minutes`, promille-based
+  walking slowdown, high-promille walk pauses and entry-risk penalties, route
+  size, delayed schedule-row display, and a return walk to the start location
   (the bundled sample includes `Bar Loosister`)
 - [`examples/ga_tsp/main.mla`](../../examples/ga_tsp/main.mla)
 - [`examples/ga_tsp_esc/main.mla`](../../examples/ga_tsp_esc/main.mla)

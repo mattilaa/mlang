@@ -1,4 +1,9 @@
-[
+{
+  "elevation_data": {
+    "source": "manual Kallio demo estimates; replace with Google Elevation API path samples for production",
+    "notes": "walking_hills entries are directional total uphill/downhill meters for selected common route legs; missing pairs fall back to endpoint altitude_m"
+  },
+  "bars": [
   {
     "name": "Struts",
     "address": "Fleminginkatu 13, 00500 Helsinki",
@@ -1133,4 +1138,35 @@
       "sun": "16:00-01:00"
     }
   }
-]
+  ],
+  "walking_hills": [
+    { "from": "Bar Loosister", "to": "Pub Heinähattu", "uphill_m": 9, "downhill_m": 2 },
+    { "from": "Pub Heinähattu", "to": "Bar Loosister", "uphill_m": 2, "downhill_m": 9 },
+    { "from": "Pub Heinähattu", "to": "Bar Stindebinde", "uphill_m": 3, "downhill_m": 5 },
+    { "from": "Bar Stindebinde", "to": "Pub Heinähattu", "uphill_m": 5, "downhill_m": 3 },
+    { "from": "Bar Stindebinde", "to": "Struts", "uphill_m": 5, "downhill_m": 3 },
+    { "from": "Struts", "to": "Bar Stindebinde", "uphill_m": 3, "downhill_m": 5 },
+    { "from": "Struts", "to": "Sivukirjasto", "uphill_m": 2, "downhill_m": 8 },
+    { "from": "Sivukirjasto", "to": "Struts", "uphill_m": 8, "downhill_m": 2 },
+    { "from": "Sivukirjasto", "to": "Karhu Pub", "uphill_m": 1, "downhill_m": 9 },
+    { "from": "Karhu Pub", "to": "Sivukirjasto", "uphill_m": 9, "downhill_m": 1 },
+    { "from": "Karhu Pub", "to": "Flow Bar Kallio", "uphill_m": 3, "downhill_m": 7 },
+    { "from": "Flow Bar Kallio", "to": "Karhu Pub", "uphill_m": 7, "downhill_m": 3 },
+    { "from": "Flow Bar Kallio", "to": "Ravintola Tenkka", "uphill_m": 10, "downhill_m": 2 },
+    { "from": "Ravintola Tenkka", "to": "Flow Bar Kallio", "uphill_m": 2, "downhill_m": 10 },
+    { "from": "Ravintola Tenkka", "to": "HogoHuone", "uphill_m": 1, "downhill_m": 15 },
+    { "from": "HogoHuone", "to": "Ravintola Tenkka", "uphill_m": 15, "downhill_m": 1 },
+    { "from": "HogoHuone", "to": "Om'pu", "uphill_m": 2, "downhill_m": 8 },
+    { "from": "Om'pu", "to": "HogoHuone", "uphill_m": 8, "downhill_m": 2 },
+    { "from": "Om'pu", "to": "Brewster Bar", "uphill_m": 4, "downhill_m": 2 },
+    { "from": "Brewster Bar", "to": "Om'pu", "uphill_m": 2, "downhill_m": 4 },
+    { "from": "Kallio Bar", "to": "Struts", "uphill_m": 30, "downhill_m": 4 },
+    { "from": "Struts", "to": "Kallio Bar", "uphill_m": 4, "downhill_m": 30 },
+    { "from": "Kallio Bar", "to": "Bar Penger", "uphill_m": 22, "downhill_m": 5 },
+    { "from": "Bar Penger", "to": "Kallio Bar", "uphill_m": 5, "downhill_m": 22 },
+    { "from": "Musta Kissa Bar", "to": "Struts", "uphill_m": 28, "downhill_m": 4 },
+    { "from": "Struts", "to": "Musta Kissa Bar", "uphill_m": 4, "downhill_m": 28 },
+    { "from": "Brewster Bar", "to": "Sivukirjasto", "uphill_m": 21, "downhill_m": 2 },
+    { "from": "Sivukirjasto", "to": "Brewster Bar", "uphill_m": 2, "downhill_m": 21 }
+  ]
+}
