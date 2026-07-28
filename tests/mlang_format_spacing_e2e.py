@@ -110,6 +110,51 @@ def main() -> int:
             "expected ternary colon spacing to be configurable"
         )
 
+        condition_path = root / "multiline_condition_case.mla"
+        condition_path.write_text(
+            "fn main() -> i32 {\n"
+            "if pat_note_map_h == 0 || pat_v1_map_h == 0 || pat_v2_map_h == 0 ||\n"
+            "    pat_custom_map_h == 0 || pat_cell_active_map_h == 0 ||\n"
+            "    ev_event_map_h == 0 || ev_val1_map_h == 0 || ev_val2_map_h == 0 ||\n"
+            "    ev_mod_map_h == 0 || ev_m1_map_h == 0 || ev_m2_map_h == 0 ||\n"
+            "    ev_count_map_h == 0 {\n"
+            "return 1;\n"
+            "}\n"
+            "return 0;\n"
+            "}\n"
+        )
+        (root / ".mlang-format").write_text(
+            "ConditionContinuationIndentWidth: 3\n"
+        )
+        out_condition = subprocess.run(
+            [str(formatter), str(condition_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert "    if pat_note_map_h == 0 || pat_v1_map_h == 0 || pat_v2_map_h == 0 ||\n" in out_condition, (
+            "expected multiline condition opener to keep block indentation"
+        )
+        assert "       pat_custom_map_h == 0 || pat_cell_active_map_h == 0 ||\n" in out_condition, (
+            "expected default condition continuation indent to align after 'if '"
+        )
+        assert "       ev_count_map_h == 0 {\n" in out_condition, (
+            "expected final condition continuation row to keep condition indent"
+        )
+
+        (root / ".mlang-format").write_text(
+            "ConditionContinuationIndentWidth: 0\n"
+        )
+        out_condition_no_extra = subprocess.run(
+            [str(formatter), str(condition_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert "    pat_custom_map_h == 0 || pat_cell_active_map_h == 0 ||\n" in out_condition_no_extra, (
+            "expected condition continuation indentation to be configurable off"
+        )
+
         multiline_path = root / "multiline_string_case.mla"
         multiline_path.write_text(
             "fn main() -> i32 {\n"

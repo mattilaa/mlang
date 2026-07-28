@@ -35,6 +35,7 @@ extern fn strcmp(a: str8, b: str8) -> i32;
 struct FormatConfig {
     var indent_width: i64;
     var continuation_indent_width: i64;
+    var condition_continuation_indent_width: i64;
     var indent_function_signature_closing_paren: bool;
     var ensure_trailing_newline: bool;
     var space_after_comma: bool;
@@ -50,6 +51,7 @@ fn default_config() -> FormatConfig {
     return FormatConfig {
         indent_width: 4,
         continuation_indent_width: 4,
+        condition_continuation_indent_width: 3,
         indent_function_signature_closing_paren: false,
         ensure_trailing_newline: false,
         space_after_comma: true,
@@ -108,6 +110,31 @@ fn parse_continuation_indent_width(line: str8, fallback: i64) -> i64 {
     if find(line, ":6") >= 0 { return 6; }
     if find(line, ": 4") >= 0 { return 4; }
     if find(line, ":4") >= 0 { return 4; }
+    if find(line, ": 2") >= 0 { return 2; }
+    if find(line, ":2") >= 0 { return 2; }
+    if find(line, ": 0") >= 0 { return 0; }
+    if find(line, ":0") >= 0 { return 0; }
+    return fallback;
+}
+
+fn parse_condition_continuation_indent_width(line: str8, fallback: i64) -> i64 {
+    if starts_with(line, "ConditionContinuationIndentWidth:") == 0 {
+        return fallback;
+    }
+    if find(line, ": 16") >= 0 { return 16; }
+    if find(line, ":16") >= 0 { return 16; }
+    if find(line, ": 12") >= 0 { return 12; }
+    if find(line, ":12") >= 0 { return 12; }
+    if find(line, ": 10") >= 0 { return 10; }
+    if find(line, ":10") >= 0 { return 10; }
+    if find(line, ": 8") >= 0 { return 8; }
+    if find(line, ":8") >= 0 { return 8; }
+    if find(line, ": 6") >= 0 { return 6; }
+    if find(line, ":6") >= 0 { return 6; }
+    if find(line, ": 4") >= 0 { return 4; }
+    if find(line, ":4") >= 0 { return 4; }
+    if find(line, ": 3") >= 0 { return 3; }
+    if find(line, ":3") >= 0 { return 3; }
     if find(line, ": 2") >= 0 { return 2; }
     if find(line, ":2") >= 0 { return 2; }
     if find(line, ": 0") >= 0 { return 0; }
@@ -246,6 +273,11 @@ fn read_config(path: str8) -> FormatConfig {
         cfg.indent_width = parse_indent_width(line, cfg.indent_width);
         cfg.continuation_indent_width =
             parse_continuation_indent_width(line, cfg.continuation_indent_width);
+        cfg.condition_continuation_indent_width =
+            parse_condition_continuation_indent_width(
+                line,
+                cfg.condition_continuation_indent_width
+            );
         cfg.indent_function_signature_closing_paren =
             parse_indent_function_signature_closing_paren(
                 line,
@@ -325,6 +357,7 @@ fn apply_config_format(text: str8, cfg: FormatConfig) -> str8 {
         cfg.indent_width,
         1,
         cfg.continuation_indent_width,
+        cfg.condition_continuation_indent_width,
         bool_to_int(cfg.indent_function_signature_closing_paren),
         bool_to_int(cfg.space_after_comma),
         bool_to_int(cfg.space_after_colon),

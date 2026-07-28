@@ -65,6 +65,9 @@ Indent width in spaces.
 .B ContinuationIndentWidth
 Extra indent width in spaces for multiline argument and bracket continuation rows. Set to 0 to disable continuation indentation.
 .TP
+.B ConditionContinuationIndentWidth
+Extra indent width in spaces for multiline if/while condition rows. The default 3 aligns rows after the control keyword.
+.TP
 .B IndentFunctionSignatureClosingParen
 Whether a function signature closing parenthesis line containing an arrow, such as `) -> T {`, keeps continuation indentation.
 .TP

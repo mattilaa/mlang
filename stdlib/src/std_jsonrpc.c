@@ -3134,9 +3134,57 @@ static int line_contains_function_return_arrow(const char* first, const char* le
     return 0;
 }
 
+static int line_starts_control_condition(const char* first, const char* le)
+{
+    const size_t n = (size_t)(le - first);
+    if(n >= 3u && first[0] == 'i' && first[1] == 'f' &&
+       is_space_char(first[2]))
+    {
+        return 1;
+    }
+    if(n >= 6u && first[0] == 'w' && first[1] == 'h' && first[2] == 'i' &&
+       first[3] == 'l' && first[4] == 'e' && is_space_char(first[5]))
+    {
+        return 1;
+    }
+    if(n >= 8u && first[0] == 'e' && first[1] == 'l' && first[2] == 's' &&
+       first[3] == 'e' && is_space_char(first[4]) && first[5] == 'i' &&
+       first[6] == 'f' && is_space_char(first[7]))
+    {
+        return 1;
+    }
+    return 0;
+}
+
+static int line_ends_condition_continuation(const char* first, const char* le)
+{
+    const char* q = le;
+    while(q > first && is_space_char(q[-1]))
+        --q;
+    if(q <= first)
+        return 0;
+    if(q - first >= 2 && q[-2] == '|' && q[-1] == '|')
+        return 1;
+    if(q - first >= 2 && q[-2] == '&' && q[-1] == '&')
+        return 1;
+    return 0;
+}
+
+static int line_finishes_condition_continuation(const char* first,
+                                                const char* le)
+{
+    for(const char* q = first; q < le; ++q)
+    {
+        if(*q == '{')
+            return 1;
+    }
+    return line_ends_condition_continuation(first, le) == 0;
+}
+
 static char* apply_block_indentation(
     const char* text, int64_t tab_size, int insert_spaces,
     int64_t continuation_indent_width,
+    int64_t condition_continuation_indent_width,
     int indent_function_signature_closing_paren)
 {
     if(!text)
@@ -3149,6 +3197,10 @@ static char* apply_block_indentation(
         continuation_indent_width = tab_size;
     if(continuation_indent_width > 32)
         continuation_indent_width = 32;
+    if(condition_continuation_indent_width < 0)
+        condition_continuation_indent_width = 0;
+    if(condition_continuation_indent_width > 32)
+        condition_continuation_indent_width = 32;
 
     size_t cap = strlen(text) * 2u + 128u;
     char* out = (char*)malloc(cap);
@@ -3159,6 +3211,7 @@ static char* apply_block_indentation(
 
     int depth = 0;
     int continuation_depth = 0;
+    int condition_continuation_active = 0;
     const char* p = text;
     int in_multiline_string = 0;
     while(*p)
@@ -3227,11 +3280,16 @@ static char* apply_block_indentation(
         if(line_continuation_depth < 0)
             line_continuation_depth = 0;
 
+        const int line_condition_continuation =
+            condition_continuation_active == 1 ? 1 : 0;
+
         if(insert_spaces == 1)
         {
             int64_t spaces = (int64_t)line_indent_depth * tab_size +
                              (int64_t)line_continuation_depth *
-                                 continuation_indent_width;
+                                 continuation_indent_width +
+                             (int64_t)line_condition_continuation *
+                                 condition_continuation_indent_width;
             for(int64_t i = 0; i < spaces; ++i)
             {
                 if(append_char_dyn(&out, &cap, &w, ' ') != 0)
@@ -3243,7 +3301,10 @@ static char* apply_block_indentation(
             int total_tabs = line_indent_depth;
             if(tab_size > 0)
                 total_tabs += (int)((line_continuation_depth *
-                                     continuation_indent_width) / tab_size);
+                                         continuation_indent_width +
+                                     line_condition_continuation *
+                                         condition_continuation_indent_width) /
+                                    tab_size);
             for(int i = 0; i < total_tabs; ++i)
             {
                 if(append_char_dyn(&out, &cap, &w, '\t') != 0)
@@ -3267,6 +3328,17 @@ static char* apply_block_indentation(
         if(continuation_depth < 0)
             continuation_depth = 0;
 
+        if(line_starts_control_condition(first, le) == 1 &&
+           line_ends_condition_continuation(first, le) == 1)
+        {
+            condition_continuation_active = 1;
+        }
+        else if(condition_continuation_active == 1 &&
+                line_finishes_condition_continuation(first, le) == 1)
+        {
+            condition_continuation_active = 0;
+        }
+
         if(*p == '\n')
         {
             if(append_char_dyn(&out, &cap, &w, '\n') != 0)
@@ -3284,6 +3356,7 @@ oom:
 char* __mlang_std_jsonrpc_format_text_with_style_options(
     const char* text, int64_t tab_size, int insert_spaces,
     int64_t continuation_indent_width,
+    int64_t condition_continuation_indent_width,
     int indent_function_signature_closing_paren, int space_after_comma,
     int space_after_colon, int space_before_ternary_colon,
     int space_around_operators,
@@ -3303,6 +3376,7 @@ char* __mlang_std_jsonrpc_format_text_with_style_options(
     free(spaced);
     char* indented = apply_block_indentation(
         braced, tab_size, insert_spaces, continuation_indent_width,
+        condition_continuation_indent_width,
         indent_function_signature_closing_paren);
     free(braced);
     return indented;
