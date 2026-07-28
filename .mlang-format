@@ -1,5 +1,7 @@
 BasedOnStyle: Rust
 IndentWidth: 4
+ContinuationIndentWidth: 8
+IndentFunctionSignatureClosingParen: true
 MaxWidth: 100
 SpaceAfterComma: true
 SpaceAfterColon: true

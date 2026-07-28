@@ -2078,6 +2078,8 @@ static int line_multiline_string_fragment(const char* s, size_t n,
                                           int* in_string_io);
 static int count_net_brace_delta_code_with_string_state(const char* s, size_t n,
                                                         int* in_string_io);
+static int count_net_continuation_delta_code_with_string_state(
+    const char* s, size_t n, int* in_string_io);
 
 char* __mlang_std_jsonrpc_format_text_basic(const char* text)
 {
@@ -2159,6 +2161,8 @@ static int line_multiline_string_fragment(const char* s, size_t n,
                                           int* in_string_io);
 static int count_net_brace_delta_code_with_string_state(const char* s, size_t n,
                                                         int* in_string_io);
+static int count_net_continuation_delta_code_with_string_state(
+    const char* s, size_t n, int* in_string_io);
 
 static char* format_text_with_options_impl(const char* text, int64_t tab_size,
                                            int insert_spaces)
@@ -3024,8 +3028,83 @@ static int count_net_brace_delta_code_with_string_state(const char* s, size_t n,
     return depth;
 }
 
-static char* apply_block_indentation(const char* text, int64_t tab_size,
-                                     int insert_spaces)
+static int count_net_continuation_delta_code_with_string_state(
+    const char* s, size_t n, int* in_string_io)
+{
+    int depth = 0;
+    int in_string = (in_string_io && *in_string_io) ? 1 : 0;
+    int in_line_comment = 0;
+    int in_block_comment = 0;
+
+    for(size_t i = 0; s && i < n; ++i)
+    {
+        char c = s[i];
+        char n1 = s[i + 1u];
+
+        if(in_string)
+        {
+            if(c == '\\' && n1 != '\0')
+            {
+                ++i;
+                continue;
+            }
+            if(c == '"')
+                in_string = 0;
+            continue;
+        }
+        if(in_line_comment)
+            break;
+        if(in_block_comment)
+        {
+            if(c == '*' && n1 == '/')
+            {
+                in_block_comment = 0;
+                ++i;
+            }
+            continue;
+        }
+
+        if(c == '"')
+        {
+            in_string = 1;
+            continue;
+        }
+        if(c == '/' && n1 == '/')
+        {
+            in_line_comment = 1;
+            continue;
+        }
+        if(c == '/' && n1 == '*')
+        {
+            in_block_comment = 1;
+            ++i;
+            continue;
+        }
+        if(c == '(' || c == '[')
+            depth++;
+        else if(c == ')' || c == ']')
+            depth--;
+    }
+
+    if(in_string_io)
+        *in_string_io = in_string;
+    return depth;
+}
+
+static int line_contains_function_return_arrow(const char* first, const char* le)
+{
+    for(const char* p = first; p && p + 1 < le; ++p)
+    {
+        if(p[0] == '-' && p[1] == '>')
+            return 1;
+    }
+    return 0;
+}
+
+static char* apply_block_indentation(
+    const char* text, int64_t tab_size, int insert_spaces,
+    int64_t continuation_indent_width,
+    int indent_function_signature_closing_paren)
 {
     if(!text)
         return dup_cstr("");
@@ -3033,6 +3112,10 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
         tab_size = 4;
     if(tab_size > 16)
         tab_size = 16;
+    if(continuation_indent_width < 0)
+        continuation_indent_width = tab_size;
+    if(continuation_indent_width > 32)
+        continuation_indent_width = 32;
 
     size_t cap = strlen(text) * 2u + 128u;
     char* out = (char*)malloc(cap);
@@ -3042,6 +3125,7 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
     out[0] = '\0';
 
     int depth = 0;
+    int continuation_depth = 0;
     const char* p = text;
     int in_multiline_string = 0;
     while(*p)
@@ -3060,6 +3144,12 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
                 goto oom;
             depth += count_net_brace_delta_code_with_string_state(
                 ls, (size_t)(le - ls), &in_multiline_string);
+            {
+                int continuation_string_state = in_multiline_string;
+                continuation_depth +=
+                    count_net_continuation_delta_code_with_string_state(
+                        ls, (size_t)(le - ls), &continuation_string_state);
+            }
             if(depth < 0)
                 depth = 0;
             if(*p == '\n')
@@ -3091,9 +3181,24 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
         if(line_indent_depth < 0)
             line_indent_depth = 0;
 
+        int line_continuation_depth = continuation_depth;
+        if((*first == ')' || *first == ']') && line_continuation_depth > 0)
+        {
+            int keep_function_closing_indent =
+                indent_function_signature_closing_paren == 1 &&
+                *first == ')' &&
+                line_contains_function_return_arrow(first, le) == 1;
+            if(keep_function_closing_indent == 0)
+                line_continuation_depth--;
+        }
+        if(line_continuation_depth < 0)
+            line_continuation_depth = 0;
+
         if(insert_spaces == 1)
         {
-            int64_t spaces = (int64_t)line_indent_depth * tab_size;
+            int64_t spaces = (int64_t)line_indent_depth * tab_size +
+                             (int64_t)line_continuation_depth *
+                                 continuation_indent_width;
             for(int64_t i = 0; i < spaces; ++i)
             {
                 if(append_char_dyn(&out, &cap, &w, ' ') != 0)
@@ -3102,7 +3207,11 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
         }
         else
         {
-            for(int i = 0; i < line_indent_depth; ++i)
+            int total_tabs = line_indent_depth;
+            if(tab_size > 0)
+                total_tabs += (int)((line_continuation_depth *
+                                     continuation_indent_width) / tab_size);
+            for(int i = 0; i < total_tabs; ++i)
             {
                 if(append_char_dyn(&out, &cap, &w, '\t') != 0)
                     goto oom;
@@ -3114,8 +3223,16 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
 
         depth += count_net_brace_delta_code_with_string_state(
             first, (size_t)(le - first), &in_multiline_string);
+        {
+            int continuation_string_state = in_multiline_string;
+            continuation_depth +=
+                count_net_continuation_delta_code_with_string_state(
+                    first, (size_t)(le - first), &continuation_string_state);
+        }
         if(depth < 0)
             depth = 0;
+        if(continuation_depth < 0)
+            continuation_depth = 0;
 
         if(*p == '\n')
         {
@@ -3132,7 +3249,9 @@ oom:
 }
 
 char* __mlang_std_jsonrpc_format_text_with_style_options(
-    const char* text, int64_t tab_size, int insert_spaces, int space_after_comma,
+    const char* text, int64_t tab_size, int insert_spaces,
+    int64_t continuation_indent_width,
+    int indent_function_signature_closing_paren, int space_after_comma,
     int space_after_colon, int space_around_operators,
     int space_inside_braces_single_line, int compact_fat_arrow,
     int space_around_relational_operators)
@@ -3147,7 +3266,9 @@ char* __mlang_std_jsonrpc_format_text_with_style_options(
     char* braced = apply_single_line_brace_spacing(
         spaced, space_inside_braces_single_line);
     free(spaced);
-    char* indented = apply_block_indentation(braced, tab_size, insert_spaces);
+    char* indented = apply_block_indentation(
+        braced, tab_size, insert_spaces, continuation_indent_width,
+        indent_function_signature_closing_paren);
     free(braced);
     return indented;
 }

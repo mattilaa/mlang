@@ -1072,7 +1072,8 @@ cat /path/to/file.mla | mlang-format --assume-filename /path/to/file.mla
 
 Current Mlang port scope:
 - `--style file`, `-i/--in-place`, `--root`, `--assume-filename`
-- `.mlang-format`: `IndentWidth`, `EnsureTrailingNewline`,
+- `.mlang-format`: `IndentWidth`, `ContinuationIndentWidth`,
+  `IndentFunctionSignatureClosingParen`, `EnsureTrailingNewline`,
   `SpaceAfterComma`, `SpaceAfterColon`, `SpaceAroundOperators`,
   `SpaceAroundRelationalOperators`, `SpaceInsideBracesSingleLine`,
   `CompactFatArrow` (default: `true`)

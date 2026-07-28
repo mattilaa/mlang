@@ -102,6 +102,67 @@ def main() -> int:
             "}\n"
         )
 
+
+        args_path = root / "multiline_args_case.mla"
+        args_path.write_text(
+            "fn route_walking_minutes(\n"
+            "from_bar: i64,\n"
+            "to_bar: i64,\n"
+            "hill_froms: &list<i64>\n"
+            ") -> i64 {\n"
+            "return find_hill_index(\n"
+            "from_bar,\n"
+            "to_bar,\n"
+            "hill_froms\n"
+            ");\n"
+            "}\n"
+        )
+        (root / ".mlang-format").write_text(
+            "ContinuationIndentWidth: 8\n"
+            "IndentFunctionSignatureClosingParen: true\n"
+        )
+        out_args = subprocess.run(
+            [str(formatter), str(args_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert "fn route_walking_minutes(\n" in out_args, (
+            "expected multiline function header to remain multiline"
+        )
+        assert "        from_bar: i64,\n" in out_args, (
+            "expected multiline function parameters to use continuation indent"
+        )
+        assert "        to_bar: i64,\n" in out_args, (
+            "expected subsequent multiline function parameters to use continuation indent"
+        )
+        assert "        ) -> i64 {\n" in out_args, (
+            "expected configured function signature closing paren to keep continuation indent"
+        )
+        assert "            from_bar,\n" in out_args, (
+            "expected multiline call arguments inside a block to include block + continuation indent"
+        )
+        assert "    );\n" in out_args, (
+            "expected multiline call closing paren to keep only block indent"
+        )
+
+        (root / ".mlang-format").write_text(
+            "ContinuationIndentWidth: 0\n"
+            "IndentFunctionSignatureClosingParen: false\n"
+        )
+        out_no_continuation = subprocess.run(
+            [str(formatter), str(args_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert "from_bar: i64,\n" in out_no_continuation, (
+            "expected continuation indentation to be configurable off"
+        )
+        assert "    from_bar,\n" in out_no_continuation, (
+            "expected block indentation to remain when continuation indentation is disabled"
+        )
+
         out_multiline = subprocess.run(
             [str(formatter), str(multiline_path)],
             check=True,

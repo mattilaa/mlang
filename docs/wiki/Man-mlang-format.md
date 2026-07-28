@@ -62,6 +62,12 @@ files with keys including:
 .B IndentWidth
 Indent width in spaces.
 .TP
+.B ContinuationIndentWidth
+Extra indent width in spaces for multiline argument and bracket continuation rows. Set to 0 to disable continuation indentation.
+.TP
+.B IndentFunctionSignatureClosingParen
+Whether a function signature closing parenthesis line containing an arrow, such as `) -> T {`, keeps continuation indentation.
+.TP
 .B EnsureTrailingNewline
 Whether the formatter should ensure a final newline.
 .TP
