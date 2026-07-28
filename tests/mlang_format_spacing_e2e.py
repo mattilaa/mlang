@@ -24,6 +24,7 @@ def main() -> int:
             "        result = result + 1;\n"
             "        return result == 13 ? 0 : 1;\n"
             "    }\n"
+            "    let ov: i64 = __mlang_std_unordered_map_i64_i64_get_or(ev_count_map_h, k,-1);\n"
             "    for i    in 1..n + 1 {\n"
             "        result = result * i;\n"
             "        result*=2;\n"
@@ -70,6 +71,9 @@ def main() -> int:
         )
         assert "        return result == 13 ? 0 : 1;\n" in out, (
             "expected default ternary colon spacing to keep a space before ':'"
+        )
+        assert "__mlang_std_unordered_map_i64_i64_get_or(ev_count_map_h, k, -1);" in out, (
+            "expected comma spacing before negative arguments"
         )
         assert "fn main() -> i32 {\n" in out, (
             "expected function spacing normalization for main"

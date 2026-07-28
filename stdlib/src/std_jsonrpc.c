@@ -2760,7 +2760,8 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
             if(c == '<' || c == '>')
                 space_for_this_operator = space_around_relational_operators;
             const int keep_compact = (op_len >= 2 && c == '.') ? 1 : 0;
-            trim_inline_spaces(out, &w);
+            if(unary_plus_minus == 0)
+                trim_inline_spaces(out, &w);
             if(!keep_compact && space_for_this_operator == 1)
             {
                 if(w > 0u && out[w - 1u] != ' ' && out[w - 1u] != '\n' &&
