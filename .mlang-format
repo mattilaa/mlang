@@ -1,8 +1,12 @@
 BasedOnStyle: Rust
 IndentWidth: 4
+ContinuationIndentWidth: 8
+ConditionContinuationIndentWidth: 3
+IndentFunctionSignatureClosingParen: true
 MaxWidth: 100
 SpaceAfterComma: true
 SpaceAfterColon: true
+SpaceBeforeTernaryColon: true
 SpaceAroundOperators: true
 SpaceAroundRelationalOperators: true
 SpaceInsideBracesSingleLine: true

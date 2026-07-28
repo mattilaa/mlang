@@ -2078,6 +2078,8 @@ static int line_multiline_string_fragment(const char* s, size_t n,
                                           int* in_string_io);
 static int count_net_brace_delta_code_with_string_state(const char* s, size_t n,
                                                         int* in_string_io);
+static int count_net_continuation_delta_code_with_string_state(
+    const char* s, size_t n, int* in_string_io);
 
 char* __mlang_std_jsonrpc_format_text_basic(const char* text)
 {
@@ -2159,6 +2161,8 @@ static int line_multiline_string_fragment(const char* s, size_t n,
                                           int* in_string_io);
 static int count_net_brace_delta_code_with_string_state(const char* s, size_t n,
                                                         int* in_string_io);
+static int count_net_continuation_delta_code_with_string_state(
+    const char* s, size_t n, int* in_string_io);
 
 static char* format_text_with_options_impl(const char* text, int64_t tab_size,
                                            int insert_spaces)
@@ -2420,8 +2424,32 @@ static int is_unary_plus_minus_context(const char* out, size_t w)
     return 0;
 }
 
+static int has_unmatched_ternary_question(const char* out, size_t w)
+{
+    int colon_depth = 0;
+    for(size_t j = w; j > 0u; --j)
+    {
+        const char p = out[j - 1u];
+        if(p == ';' || p == '\n' || p == '{' || p == '}')
+            return 0;
+        if(p == ':')
+        {
+            ++colon_depth;
+            continue;
+        }
+        if(p == '?')
+        {
+            if(colon_depth == 0)
+                return 1;
+            --colon_depth;
+        }
+    }
+    return 0;
+}
+
 static char* apply_spacing_rules(const char* text, int space_after_comma,
                                  int space_after_colon,
+                                 int space_before_ternary_colon,
                                  int space_around_operators,
                                  int compact_fat_arrow,
                                  int space_around_relational_operators)
@@ -2607,7 +2635,16 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
         }
         if(c == ':')
         {
+            const int ternary_colon =
+                space_before_ternary_colon == 1 &&
+                has_unmatched_ternary_question(out, w);
             trim_inline_spaces(out, &w);
+            if(ternary_colon && w > 0u && out[w - 1u] != ' ' &&
+               out[w - 1u] != '\n')
+            {
+                if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                    goto oom;
+            }
             if(append_char_dyn(&out, &cap, &w, ':') != 0)
                 goto oom;
             while(is_space_char(text[i + 1u]))
@@ -2723,7 +2760,8 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
             if(c == '<' || c == '>')
                 space_for_this_operator = space_around_relational_operators;
             const int keep_compact = (op_len >= 2 && c == '.') ? 1 : 0;
-            trim_inline_spaces(out, &w);
+            if(unary_plus_minus == 0)
+                trim_inline_spaces(out, &w);
             if(!keep_compact && space_for_this_operator == 1)
             {
                 if(w > 0u && out[w - 1u] != ' ' && out[w - 1u] != '\n' &&
@@ -3024,8 +3062,131 @@ static int count_net_brace_delta_code_with_string_state(const char* s, size_t n,
     return depth;
 }
 
-static char* apply_block_indentation(const char* text, int64_t tab_size,
-                                     int insert_spaces)
+static int count_net_continuation_delta_code_with_string_state(
+    const char* s, size_t n, int* in_string_io)
+{
+    int depth = 0;
+    int in_string = (in_string_io && *in_string_io) ? 1 : 0;
+    int in_line_comment = 0;
+    int in_block_comment = 0;
+
+    for(size_t i = 0; s && i < n; ++i)
+    {
+        char c = s[i];
+        char n1 = s[i + 1u];
+
+        if(in_string)
+        {
+            if(c == '\\' && n1 != '\0')
+            {
+                ++i;
+                continue;
+            }
+            if(c == '"')
+                in_string = 0;
+            continue;
+        }
+        if(in_line_comment)
+            break;
+        if(in_block_comment)
+        {
+            if(c == '*' && n1 == '/')
+            {
+                in_block_comment = 0;
+                ++i;
+            }
+            continue;
+        }
+
+        if(c == '"')
+        {
+            in_string = 1;
+            continue;
+        }
+        if(c == '/' && n1 == '/')
+        {
+            in_line_comment = 1;
+            continue;
+        }
+        if(c == '/' && n1 == '*')
+        {
+            in_block_comment = 1;
+            ++i;
+            continue;
+        }
+        if(c == '(' || c == '[')
+            depth++;
+        else if(c == ')' || c == ']')
+            depth--;
+    }
+
+    if(in_string_io)
+        *in_string_io = in_string;
+    return depth;
+}
+
+static int line_contains_function_return_arrow(const char* first, const char* le)
+{
+    for(const char* p = first; p && p + 1 < le; ++p)
+    {
+        if(p[0] == '-' && p[1] == '>')
+            return 1;
+    }
+    return 0;
+}
+
+static int line_starts_control_condition(const char* first, const char* le)
+{
+    const size_t n = (size_t)(le - first);
+    if(n >= 3u && first[0] == 'i' && first[1] == 'f' &&
+       is_space_char(first[2]))
+    {
+        return 1;
+    }
+    if(n >= 6u && first[0] == 'w' && first[1] == 'h' && first[2] == 'i' &&
+       first[3] == 'l' && first[4] == 'e' && is_space_char(first[5]))
+    {
+        return 1;
+    }
+    if(n >= 8u && first[0] == 'e' && first[1] == 'l' && first[2] == 's' &&
+       first[3] == 'e' && is_space_char(first[4]) && first[5] == 'i' &&
+       first[6] == 'f' && is_space_char(first[7]))
+    {
+        return 1;
+    }
+    return 0;
+}
+
+static int line_ends_condition_continuation(const char* first, const char* le)
+{
+    const char* q = le;
+    while(q > first && is_space_char(q[-1]))
+        --q;
+    if(q <= first)
+        return 0;
+    if(q - first >= 2 && q[-2] == '|' && q[-1] == '|')
+        return 1;
+    if(q - first >= 2 && q[-2] == '&' && q[-1] == '&')
+        return 1;
+    return 0;
+}
+
+static int line_finishes_condition_continuation(const char* first,
+                                                const char* le)
+{
+    for(const char* q = first; q < le; ++q)
+    {
+        if(*q == '{')
+            return 1;
+    }
+    return line_ends_condition_continuation(first, le) == 0;
+}
+
+static char* apply_block_indentation(
+    const char* text, int64_t tab_size, int insert_spaces,
+    int64_t continuation_indent_width,
+    int64_t condition_continuation_indent_width,
+    int indent_function_signature_closing_paren)
 {
     if(!text)
         return dup_cstr("");
@@ -3033,6 +3194,14 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
         tab_size = 4;
     if(tab_size > 16)
         tab_size = 16;
+    if(continuation_indent_width < 0)
+        continuation_indent_width = tab_size;
+    if(continuation_indent_width > 32)
+        continuation_indent_width = 32;
+    if(condition_continuation_indent_width < 0)
+        condition_continuation_indent_width = 0;
+    if(condition_continuation_indent_width > 32)
+        condition_continuation_indent_width = 32;
 
     size_t cap = strlen(text) * 2u + 128u;
     char* out = (char*)malloc(cap);
@@ -3042,6 +3211,8 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
     out[0] = '\0';
 
     int depth = 0;
+    int continuation_depth = 0;
+    int condition_continuation_active = 0;
     const char* p = text;
     int in_multiline_string = 0;
     while(*p)
@@ -3060,6 +3231,12 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
                 goto oom;
             depth += count_net_brace_delta_code_with_string_state(
                 ls, (size_t)(le - ls), &in_multiline_string);
+            {
+                int continuation_string_state = in_multiline_string;
+                continuation_depth +=
+                    count_net_continuation_delta_code_with_string_state(
+                        ls, (size_t)(le - ls), &continuation_string_state);
+            }
             if(depth < 0)
                 depth = 0;
             if(*p == '\n')
@@ -3091,9 +3268,29 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
         if(line_indent_depth < 0)
             line_indent_depth = 0;
 
+        int line_continuation_depth = continuation_depth;
+        if((*first == ')' || *first == ']') && line_continuation_depth > 0)
+        {
+            int keep_function_closing_indent =
+                indent_function_signature_closing_paren == 1 &&
+                *first == ')' &&
+                line_contains_function_return_arrow(first, le) == 1;
+            if(keep_function_closing_indent == 0)
+                line_continuation_depth--;
+        }
+        if(line_continuation_depth < 0)
+            line_continuation_depth = 0;
+
+        const int line_condition_continuation =
+            condition_continuation_active == 1 ? 1 : 0;
+
         if(insert_spaces == 1)
         {
-            int64_t spaces = (int64_t)line_indent_depth * tab_size;
+            int64_t spaces = (int64_t)line_indent_depth * tab_size +
+                             (int64_t)line_continuation_depth *
+                                 continuation_indent_width +
+                             (int64_t)line_condition_continuation *
+                                 condition_continuation_indent_width;
             for(int64_t i = 0; i < spaces; ++i)
             {
                 if(append_char_dyn(&out, &cap, &w, ' ') != 0)
@@ -3102,7 +3299,14 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
         }
         else
         {
-            for(int i = 0; i < line_indent_depth; ++i)
+            int total_tabs = line_indent_depth;
+            if(tab_size > 0)
+                total_tabs += (int)((line_continuation_depth *
+                                         continuation_indent_width +
+                                     line_condition_continuation *
+                                         condition_continuation_indent_width) /
+                                    tab_size);
+            for(int i = 0; i < total_tabs; ++i)
             {
                 if(append_char_dyn(&out, &cap, &w, '\t') != 0)
                     goto oom;
@@ -3114,8 +3318,27 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
 
         depth += count_net_brace_delta_code_with_string_state(
             first, (size_t)(le - first), &in_multiline_string);
+        {
+            int continuation_string_state = in_multiline_string;
+            continuation_depth +=
+                count_net_continuation_delta_code_with_string_state(
+                    first, (size_t)(le - first), &continuation_string_state);
+        }
         if(depth < 0)
             depth = 0;
+        if(continuation_depth < 0)
+            continuation_depth = 0;
+
+        if(line_starts_control_condition(first, le) == 1 &&
+           line_ends_condition_continuation(first, le) == 1)
+        {
+            condition_continuation_active = 1;
+        }
+        else if(condition_continuation_active == 1 &&
+                line_finishes_condition_continuation(first, le) == 1)
+        {
+            condition_continuation_active = 0;
+        }
 
         if(*p == '\n')
         {
@@ -3132,14 +3355,19 @@ oom:
 }
 
 char* __mlang_std_jsonrpc_format_text_with_style_options(
-    const char* text, int64_t tab_size, int insert_spaces, int space_after_comma,
-    int space_after_colon, int space_around_operators,
+    const char* text, int64_t tab_size, int insert_spaces,
+    int64_t continuation_indent_width,
+    int64_t condition_continuation_indent_width,
+    int indent_function_signature_closing_paren, int space_after_comma,
+    int space_after_colon, int space_before_ternary_colon,
+    int space_around_operators,
     int space_inside_braces_single_line, int compact_fat_arrow,
     int space_around_relational_operators)
 {
     char* base = format_text_with_options_impl(text, tab_size, insert_spaces);
     char* spaced = apply_spacing_rules(base, space_after_comma,
                                        space_after_colon,
+                                       space_before_ternary_colon,
                                        space_around_operators,
                                        compact_fat_arrow,
                                        space_around_relational_operators);
@@ -3147,7 +3375,10 @@ char* __mlang_std_jsonrpc_format_text_with_style_options(
     char* braced = apply_single_line_brace_spacing(
         spaced, space_inside_braces_single_line);
     free(spaced);
-    char* indented = apply_block_indentation(braced, tab_size, insert_spaces);
+    char* indented = apply_block_indentation(
+        braced, tab_size, insert_spaces, continuation_indent_width,
+        condition_continuation_indent_width,
+        indent_function_signature_closing_paren);
     free(braced);
     return indented;
 }

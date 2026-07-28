@@ -295,19 +295,19 @@ fn find_hill_index(from_bar: i64, to_bar: i64, hill_froms: &list<i64>, hill_tos:
 }
 
 fn route_walking_minutes(
-from_bar: i64,
-to_bar: i64,
-a_lat: i64,
-a_lon: i64,
-a_alt: i64,
-b_lat: i64,
-b_lon: i64,
-b_alt: i64,
-hill_froms: &list<i64>,
-hill_tos: &list<i64>,
-hill_ups: &list<i64>,
-hill_downs: &list<i64>
-) -> i64 {
+        from_bar: i64,
+        to_bar: i64,
+        a_lat: i64,
+        a_lon: i64,
+        a_alt: i64,
+        b_lat: i64,
+        b_lon: i64,
+        b_alt: i64,
+        hill_froms: &list<i64>,
+        hill_tos: &list<i64>,
+        hill_ups: &list<i64>,
+        hill_downs: &list<i64>
+        ) -> i64 {
     if from_bar >= 0 && to_bar >= 0 {
         let hill_index: i64 = find_hill_index(from_bar, to_bar, hill_froms, hill_tos);
         if hill_index >= 0 {
@@ -421,20 +421,20 @@ fn exceeds_route_minutes(start_minute: i64, end_minute: i64, max_route_minutes: 
 }
 
 fn projected_return_end_after_stop(
-stop_end: i64,
-bar: i64,
-bar_lat: i64,
-bar_lon: i64,
-bar_alt: i64,
-start_lat: i64,
-start_lon: i64,
-start_alt: i64,
-promille_after_stop_x100: i64,
-hill_froms: &list<i64>,
-hill_tos: &list<i64>,
-hill_ups: &list<i64>,
-hill_downs: &list<i64>
-) -> i64 {
+        stop_end: i64,
+        bar: i64,
+        bar_lat: i64,
+        bar_lon: i64,
+        bar_alt: i64,
+        start_lat: i64,
+        start_lon: i64,
+        start_alt: i64,
+        promille_after_stop_x100: i64,
+        hill_froms: &list<i64>,
+        hill_tos: &list<i64>,
+        hill_ups: &list<i64>,
+        hill_downs: &list<i64>
+        ) -> i64 {
     let return_base_walk: i64 = route_walking_minutes(bar,-1, bar_lat, bar_lon, bar_alt, start_lat, start_lon, start_alt, hill_froms, hill_tos, hill_ups, hill_downs);
     return stop_end + impaired_walking_minutes(return_base_walk, promille_after_stop_x100);
 }
@@ -521,26 +521,26 @@ fn prepend_bar(bar: i64, route: &list<i64>) -> list<i64> {
 }
 
 fn route_penalty(
-route: &list<i64>,
-start_minute: i64,
-start_lat: i64,
-start_lon: i64,
-start_alt: i64,
-beer_minutes: i64,
-alcohol_percent_x10: i64,
-max_promille_x100: i64,
-max_route_minutes: i64,
-use_opening_hours: i64,
-lats: &list<i64>,
-lons: &list<i64>,
-alts: &list<i64>,
-opens: &list<i64>,
-closes: &list<i64>,
-hill_froms: &list<i64>,
-hill_tos: &list<i64>,
-hill_ups: &list<i64>,
-hill_downs: &list<i64>
-) -> i64 {
+        route: &list<i64>,
+        start_minute: i64,
+        start_lat: i64,
+        start_lon: i64,
+        start_alt: i64,
+        beer_minutes: i64,
+        alcohol_percent_x10: i64,
+        max_promille_x100: i64,
+        max_route_minutes: i64,
+        use_opening_hours: i64,
+        lats: &list<i64>,
+        lons: &list<i64>,
+        alts: &list<i64>,
+        opens: &list<i64>,
+        closes: &list<i64>,
+        hill_froms: &list<i64>,
+        hill_tos: &list<i64>,
+        hill_ups: &list<i64>,
+        hill_downs: &list<i64>
+        ) -> i64 {
     var now: i64 = start_minute;
     var lat: i64 = start_lat;
     var lon: i64 = start_lon;
@@ -620,25 +620,25 @@ hill_downs: &list<i64>
 }
 
 fn trim_route_for_opening_hours(
-route: &list<i64>,
-start_minute: i64,
-start_lat: i64,
-start_lon: i64,
-start_alt: i64,
-beer_minutes: i64,
-alcohol_percent_x10: i64,
-max_route_minutes: i64,
-use_opening_hours: i64,
-lats: &list<i64>,
-lons: &list<i64>,
-alts: &list<i64>,
-opens: &list<i64>,
-closes: &list<i64>,
-hill_froms: &list<i64>,
-hill_tos: &list<i64>,
-hill_ups: &list<i64>,
-hill_downs: &list<i64>
-) -> list<i64> {
+        route: &list<i64>,
+        start_minute: i64,
+        start_lat: i64,
+        start_lon: i64,
+        start_alt: i64,
+        beer_minutes: i64,
+        alcohol_percent_x10: i64,
+        max_route_minutes: i64,
+        use_opening_hours: i64,
+        lats: &list<i64>,
+        lons: &list<i64>,
+        alts: &list<i64>,
+        opens: &list<i64>,
+        closes: &list<i64>,
+        hill_froms: &list<i64>,
+        hill_tos: &list<i64>,
+        hill_ups: &list<i64>,
+        hill_downs: &list<i64>
+        ) -> list<i64> {
     var out: list<i64> = [];
     var now: i64 = start_minute;
     var lat: i64 = start_lat;
@@ -702,28 +702,28 @@ hill_downs: &list<i64>
 }
 
 fn score_population(
-population: &list<i64>,
-pop_size: i64,
-gene_count: i64,
-start_minute: i64,
-start_lat: i64,
-start_lon: i64,
-start_alt: i64,
-beer_minutes: i64,
-alcohol_percent_x10: i64,
-max_promille_x100: i64,
-max_route_minutes: i64,
-use_opening_hours: i64,
-lats: &list<i64>,
-lons: &list<i64>,
-alts: &list<i64>,
-opens: &list<i64>,
-closes: &list<i64>,
-hill_froms: &list<i64>,
-hill_tos: &list<i64>,
-hill_ups: &list<i64>,
-hill_downs: &list<i64>
-) -> list<i64> {
+        population: &list<i64>,
+        pop_size: i64,
+        gene_count: i64,
+        start_minute: i64,
+        start_lat: i64,
+        start_lon: i64,
+        start_alt: i64,
+        beer_minutes: i64,
+        alcohol_percent_x10: i64,
+        max_promille_x100: i64,
+        max_route_minutes: i64,
+        use_opening_hours: i64,
+        lats: &list<i64>,
+        lons: &list<i64>,
+        alts: &list<i64>,
+        opens: &list<i64>,
+        closes: &list<i64>,
+        hill_froms: &list<i64>,
+        hill_tos: &list<i64>,
+        hill_ups: &list<i64>,
+        hill_downs: &list<i64>
+        ) -> list<i64> {
     var fitness: list<i64> = [];
     let bias: i64 = 10000000;
     for p in 0..pop_size {
@@ -911,27 +911,27 @@ fn load_bars(path: str8, day: str8) -> bar_data {
 }
 
 fn print_schedule(
-route: &list<i64>,
-names: &list<str8>,
-lats: &list<i64>,
-lons: &list<i64>,
-alts: &list<i64>,
-opens: &list<i64>,
-closes: &list<i64>,
-start_minute: i64,
-start_lat: i64,
-start_lon: i64,
-start_alt: i64,
-beer_minutes: i64,
-alcohol_percent_x10: i64,
-max_promille_x100: i64,
-use_opening_hours: i64,
-hill_froms: &list<i64>,
-hill_tos: &list<i64>,
-hill_ups: &list<i64>,
-hill_downs: &list<i64>,
-row_delay_ms: i64
-) -> void {
+        route: &list<i64>,
+        names: &list<str8>,
+        lats: &list<i64>,
+        lons: &list<i64>,
+        alts: &list<i64>,
+        opens: &list<i64>,
+        closes: &list<i64>,
+        start_minute: i64,
+        start_lat: i64,
+        start_lon: i64,
+        start_alt: i64,
+        beer_minutes: i64,
+        alcohol_percent_x10: i64,
+        max_promille_x100: i64,
+        use_opening_hours: i64,
+        hill_froms: &list<i64>,
+        hill_tos: &list<i64>,
+        hill_ups: &list<i64>,
+        hill_downs: &list<i64>,
+        row_delay_ms: i64
+        ) -> void {
     var now: i64 = start_minute;
     var lat: i64 = start_lat;
     var lon: i64 = start_lon;

@@ -62,6 +62,15 @@ files with keys including:
 .B IndentWidth
 Indent width in spaces.
 .TP
+.B ContinuationIndentWidth
+Extra indent width in spaces for multiline argument and bracket continuation rows. Set to 0 to disable continuation indentation.
+.TP
+.B ConditionContinuationIndentWidth
+Extra indent width in spaces for multiline if/while condition rows. The default 3 aligns rows after the control keyword.
+.TP
+.B IndentFunctionSignatureClosingParen
+Whether a function signature closing parenthesis line containing an arrow, such as `) -> T {`, keeps continuation indentation.
+.TP
 .B EnsureTrailingNewline
 Whether the formatter should ensure a final newline.
 .TP
@@ -70,6 +79,9 @@ Whether a space is emitted after commas.
 .TP
 .B SpaceAfterColon
 Whether a space is emitted after colons.
+.TP
+.B SpaceBeforeTernaryColon
+Whether a space is emitted before the colon in ternary expressions.
 .TP
 .B SpaceAroundOperators
 Whether arithmetic and assignment operators are surrounded by spaces.
