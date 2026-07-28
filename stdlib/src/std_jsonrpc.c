@@ -2424,8 +2424,32 @@ static int is_unary_plus_minus_context(const char* out, size_t w)
     return 0;
 }
 
+static int has_unmatched_ternary_question(const char* out, size_t w)
+{
+    int colon_depth = 0;
+    for(size_t j = w; j > 0u; --j)
+    {
+        const char p = out[j - 1u];
+        if(p == ';' || p == '\n' || p == '{' || p == '}')
+            return 0;
+        if(p == ':')
+        {
+            ++colon_depth;
+            continue;
+        }
+        if(p == '?')
+        {
+            if(colon_depth == 0)
+                return 1;
+            --colon_depth;
+        }
+    }
+    return 0;
+}
+
 static char* apply_spacing_rules(const char* text, int space_after_comma,
                                  int space_after_colon,
+                                 int space_before_ternary_colon,
                                  int space_around_operators,
                                  int compact_fat_arrow,
                                  int space_around_relational_operators)
@@ -2611,7 +2635,16 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
         }
         if(c == ':')
         {
+            const int ternary_colon =
+                space_before_ternary_colon == 1 &&
+                has_unmatched_ternary_question(out, w);
             trim_inline_spaces(out, &w);
+            if(ternary_colon && w > 0u && out[w - 1u] != ' ' &&
+               out[w - 1u] != '\n')
+            {
+                if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                    goto oom;
+            }
             if(append_char_dyn(&out, &cap, &w, ':') != 0)
                 goto oom;
             while(is_space_char(text[i + 1u]))
@@ -3252,13 +3285,15 @@ char* __mlang_std_jsonrpc_format_text_with_style_options(
     const char* text, int64_t tab_size, int insert_spaces,
     int64_t continuation_indent_width,
     int indent_function_signature_closing_paren, int space_after_comma,
-    int space_after_colon, int space_around_operators,
+    int space_after_colon, int space_before_ternary_colon,
+    int space_around_operators,
     int space_inside_braces_single_line, int compact_fat_arrow,
     int space_around_relational_operators)
 {
     char* base = format_text_with_options_impl(text, tab_size, insert_spaces);
     char* spaced = apply_spacing_rules(base, space_after_comma,
                                        space_after_colon,
+                                       space_before_ternary_colon,
                                        space_around_operators,
                                        compact_fat_arrow,
                                        space_around_relational_operators);

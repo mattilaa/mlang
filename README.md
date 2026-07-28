@@ -1074,7 +1074,8 @@ Current Mlang port scope:
 - `--style file`, `-i/--in-place`, `--root`, `--assume-filename`
 - `.mlang-format`: `IndentWidth`, `ContinuationIndentWidth`,
   `IndentFunctionSignatureClosingParen`, `EnsureTrailingNewline`,
-  `SpaceAfterComma`, `SpaceAfterColon`, `SpaceAroundOperators`,
+  `SpaceAfterComma`, `SpaceAfterColon`, `SpaceBeforeTernaryColon`,
+  `SpaceAroundOperators`,
   `SpaceAroundRelationalOperators`, `SpaceInsideBracesSingleLine`,
   `CompactFatArrow` (default: `true`)
 

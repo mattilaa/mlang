@@ -5,6 +5,7 @@ IndentFunctionSignatureClosingParen: true
 MaxWidth: 100
 SpaceAfterComma: true
 SpaceAfterColon: true
+SpaceBeforeTernaryColon: true
 SpaceAroundOperators: true
 SpaceAroundRelationalOperators: true
 SpaceInsideBracesSingleLine: true

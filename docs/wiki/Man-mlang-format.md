@@ -77,6 +77,9 @@ Whether a space is emitted after commas.
 .B SpaceAfterColon
 Whether a space is emitted after colons.
 .TP
+.B SpaceBeforeTernaryColon
+Whether a space is emitted before the colon in ternary expressions.
+.TP
 .B SpaceAroundOperators
 Whether arithmetic and assignment operators are surrounded by spaces.
 .TP

@@ -39,6 +39,7 @@ struct FormatConfig {
     var ensure_trailing_newline: bool;
     var space_after_comma: bool;
     var space_after_colon: bool;
+    var space_before_ternary_colon: bool;
     var space_around_operators: bool;
     var space_around_relational_operators: bool;
     var space_inside_braces_single_line: bool;
@@ -53,6 +54,7 @@ fn default_config() -> FormatConfig {
         ensure_trailing_newline: false,
         space_after_comma: true,
         space_after_colon: true,
+        space_before_ternary_colon: true,
         space_around_operators: true,
         space_around_relational_operators: true,
         space_inside_braces_single_line: true,
@@ -165,6 +167,17 @@ fn parse_space_after_colon(line: str8, fallback: bool) -> bool {
     return fallback;
 }
 
+fn parse_space_before_ternary_colon(line: str8, fallback: bool) -> bool {
+    if starts_with(line, "SpaceBeforeTernaryColon:") == 0 {
+        return fallback;
+    }
+    if find(line, "true") >= 0 { return true; }
+    if find(line, "True") >= 0 { return true; }
+    if find(line, "false") >= 0 { return false; }
+    if find(line, "False") >= 0 { return false; }
+    return fallback;
+}
+
 fn parse_space_around_operators(line: str8, fallback: bool) -> bool {
     if starts_with(line, "SpaceAroundOperators:") == 0 {
         return fallback;
@@ -244,6 +257,8 @@ fn read_config(path: str8) -> FormatConfig {
             parse_space_after_comma(line, cfg.space_after_comma);
         cfg.space_after_colon =
             parse_space_after_colon(line, cfg.space_after_colon);
+        cfg.space_before_ternary_colon =
+            parse_space_before_ternary_colon(line, cfg.space_before_ternary_colon);
         cfg.space_around_operators =
             parse_space_around_operators(line, cfg.space_around_operators);
         cfg.space_around_relational_operators =
@@ -313,6 +328,7 @@ fn apply_config_format(text: str8, cfg: FormatConfig) -> str8 {
         bool_to_int(cfg.indent_function_signature_closing_paren),
         bool_to_int(cfg.space_after_comma),
         bool_to_int(cfg.space_after_colon),
+        bool_to_int(cfg.space_before_ternary_colon),
         bool_to_int(cfg.space_around_operators),
         bool_to_int(cfg.space_inside_braces_single_line),
         bool_to_int(cfg.compact_fat_arrow),
