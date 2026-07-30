@@ -1,0 +1,41 @@
+/// \file std_log_demo.mla
+/// @ingroup examples
+/// \brief std::log out/warn/err and file forwarding demo.
+///
+mod std::log;
+
+use std::log::*;
+
+fn main() -> i32 {
+    let created: Result<Log, str8> = Log::with_output_path("/tmp/mlang_std_log_created_demo.log");
+    if created.is_err() {
+        err("could not create file-backed logger");
+        return 1;
+    }
+    let logger: Log = created.unwrap();
+    logger.out("created logger uses its initial path");
+    logger.close();
+
+    out("std::log demo");
+    warn("this goes to stderr with a warn prefix");
+    err("this goes to stderr with an err prefix");
+
+    if set_output_path("/tmp/mlang_std_log_demo.log") != 0 {
+        err("could not open shared log file");
+        return 1;
+    }
+
+    out("forwarded stdout line");
+    warn("forwarded warning line");
+    err("forwarded error line");
+    reset_output_path();
+
+    if set_err_path("/tmp/mlang_std_log_errors.log") != 0 {
+        err("could not open error log file");
+        return 1;
+    }
+
+    err("only errors are forwarded here");
+    reset_output_path();
+    return 0;
+}

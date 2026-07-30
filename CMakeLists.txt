@@ -413,6 +413,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_error.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_compiler_api.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_log.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fs.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_env.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_time.c

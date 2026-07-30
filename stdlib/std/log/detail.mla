@@ -1,0 +1,14 @@
+/// \file log/detail.mla
+/// \brief Native bindings for std::log.
+
+extern pub fn __mlang_std_log_out(msg: str8) -> i64;
+extern pub fn __mlang_std_log_warn(msg: str8) -> i64;
+extern pub fn __mlang_std_log_err(msg: str8) -> i64;
+extern pub fn __mlang_std_log_forward_level_to_file(level: i32, path: str8) -> i32;
+extern pub fn __mlang_std_log_forward_all_to_file(path: str8) -> i32;
+extern pub fn __mlang_std_log_clear_forwarding() -> i32;
+extern pub fn __mlang_std_log_new(path: str8) -> i64;
+extern pub fn __mlang_std_log_set_logger_output_path(handle: i64, path: str8) -> i32;
+extern pub fn __mlang_std_log_reset_logger_output_path(handle: i64) -> i32;
+extern pub fn __mlang_std_log_close(handle: i64) -> i32;
+extern pub fn __mlang_std_log_logger_write(handle: i64, level: i32, msg: str8) -> i64;

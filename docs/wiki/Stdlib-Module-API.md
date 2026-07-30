@@ -47,6 +47,7 @@ mod std::ipc;
 mod std::json;
 mod std::jsonrpc;
 mod std::limits;
+mod std::log;
 mod std::math;
 mod std::net;
 mod std::platform;
@@ -103,6 +104,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/json.mla`
 - `stdlib/std/jsonrpc.mla`
 - `stdlib/std/limits.mla`
+- `stdlib/std/log.mla`
 - `stdlib/std/math.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/platform.mla`
@@ -178,6 +180,7 @@ The source-of-truth implementation files are:
 - [std::image](Stdlib-Image)
 - [std::io](Stdlib-Io)
 - [std::ipc](Stdlib-Ipc)
+- [std::log](Stdlib-Log)
 - [std::net](Stdlib-Net)
 - [std::printf](Stdlib-Printf)
 - [std::process](Stdlib-Process)
