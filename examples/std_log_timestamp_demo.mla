@@ -1,0 +1,41 @@
+/// \file std_log_timestamp_demo.mla
+/// @ingroup examples
+/// \brief std::log timestamped logging demo.
+///
+mod std::log;
+
+use std::log::*;
+
+fn main() -> i32 {
+    let created: Result<Log, str8> = Log::with_options(
+        "/tmp/mlang_std_log_timestamp_created.log",
+        1);
+    if created.is_err() {
+        err("could not create timestamped logger");
+        return 1;
+    }
+
+    let logger: Log = created.unwrap();
+    logger.out("created timestamped logger");
+    logger.warn("created logger warning");
+    logger.set_timestamp_color_code(level_warn(), 35);
+    logger.warn("created logger warning with magenta timestamp");
+    logger.close();
+
+    if set_output_path("/tmp/mlang_std_log_timestamp_module.log") != 0 {
+        err("could not open timestamped module log");
+        return 1;
+    }
+    enable_timestamps();
+    out("module timestamped output");
+    warn("module timestamped warning");
+    err("module timestamped error");
+    set_timestamp_color_code(level_out(), 36);
+    out("module timestamped output with cyan timestamp");
+    set_timestamp_colors_enabled(0);
+    out("module timestamped output without color");
+    disable_timestamps();
+    reset_output_path();
+
+    return 0;
+}

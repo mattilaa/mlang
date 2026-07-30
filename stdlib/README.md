@@ -38,6 +38,10 @@ Currently provided:
   (`set_stdin_buffering`, `set_stdout_buffering`, `set_stderr_buffering`)
   and non-blocking stdin reads (`read_line_nonblocking`,
   `read_keys_nonblocking`, `read_key_nonblocking`).
+- `std/log.mla`: line-oriented logging helpers (`out`, `warn`, `err`) that
+  write to stdout/stderr by default and can append-forward all levels or
+  individual levels to configurable log file paths. Also includes `Log`
+  instances created with a file path up front.
 - `std/strbuf.mla`: string allocation + utility helpers
   (`new/with_capacity/free`, len/compare/find/rfind/repeat,
    `pad_left/pad_right`, numeric padding helpers

@@ -1,0 +1,273 @@
+/// \file log.mla
+/// \brief Line-oriented logging helpers for MLang (std::log).
+///
+/// `out`, `warn`, and `err` write one line to stdout/stderr and can optionally
+/// tee those lines to append-only log files.
+///
+/// ```mlang
+/// mod std::log;
+/// use std::log::*;
+///
+/// fn main() -> i32 {
+///     forward_all_to_file("app.log");
+///     out("service started");
+///     warn("cache is cold");
+///     err("request failed");
+///     clear_forwarding();
+///     return 0;
+/// }
+/// ```
+
+/// \cond INTERNAL_IMPORTS
+mod std::log::detail;
+use std::log::detail::*;
+/// \endcond
+
+/// @brief Numeric level value for `out` messages.
+pub fn level_out() -> i32 { return 0; }
+
+/// @brief Numeric level value for `warn` messages.
+pub fn level_warn() -> i32 { return 1; }
+
+/// @brief Numeric level value for `err` messages.
+pub fn level_err() -> i32 { return 2; }
+
+/// @brief Owned logger with independent file-forwarding configuration.
+///
+/// `Log::new()` uses the default console-only behavior. Use
+/// `Log::with_output_path(path)` to define the shared log file when the logger
+/// is created.
+pub struct Log {
+    var handle: i64;
+};
+
+/// @brief Lowercase stdlib type alias for `Log`.
+alias log = Log;
+
+impl Log {
+    /// @brief Create a console-only logger.
+    pub fn new() -> Log {
+        return Log { handle: __mlang_std_log_new("") };
+    }
+
+    /// @brief Create a logger that forwards all levels to `path`.
+    ///
+    /// The file is opened in append mode. The logger still writes to stdout or
+    /// stderr for each level.
+    pub fn with_output_path(path: str8) -> Result<Log, str8> {
+        let h: i64 = __mlang_std_log_new(path);
+        if h == 0 {
+            return Err<Log, str8>("std::log::Log::with_output_path failed");
+        }
+        return Ok<Log, str8>(Log { handle: h });
+    }
+
+    /// @brief Create a logger with output path and timestamp setting defined up front.
+    ///
+    /// Pass `1` for `timestamps_enabled` to prefix each line with
+    /// `[YYYY-MM-DD HH:MM:SS] `.
+    pub fn with_options(path: str8, timestamps_enabled: i32) -> Result<Log, str8> {
+        let h: i64 = __mlang_std_log_new_with_options(path, timestamps_enabled);
+        if h == 0 {
+            return Err<Log, str8>("std::log::Log::with_options failed");
+        }
+        return Ok<Log, str8>(Log { handle: h });
+    }
+
+    /// @brief Set or change the shared append file for future messages.
+    pub fn set_output_path(self: Log, path: str8) -> i32 {
+        return __mlang_std_log_set_logger_output_path(self.handle, path);
+    }
+
+    /// @brief Restore console-only behavior for this logger.
+    pub fn reset_output_path(self: Log) -> i32 {
+        return __mlang_std_log_reset_logger_output_path(self.handle);
+    }
+
+    /// @brief Enable or disable timestamp prefixes for this logger.
+    pub fn set_timestamps_enabled(self: Log, enabled: i32) -> i32 {
+        return __mlang_std_log_set_logger_timestamps_enabled(self.handle, enabled);
+    }
+
+    /// @brief Enable timestamp prefixes for this logger.
+    pub fn enable_timestamps(self: Log) -> i32 {
+        return self.set_timestamps_enabled(1);
+    }
+
+    /// @brief Disable timestamp prefixes for this logger.
+    pub fn disable_timestamps(self: Log) -> i32 {
+        return self.set_timestamps_enabled(0);
+    }
+
+    /// @brief Enable or disable ANSI colors around timestamp prefixes.
+    ///
+    /// When enabled, timestamp defaults are green for out, yellow for warn,
+    /// and red for err. Message text is emitted as normal white.
+    pub fn set_timestamp_colors_enabled(self: Log, enabled: i32) -> i32 {
+        return __mlang_std_log_set_logger_timestamp_colors_enabled(self.handle, enabled);
+    }
+
+    /// @brief Set timestamp color for one level using an ANSI escape sequence.
+    pub fn set_timestamp_color(self: Log, level: i32, color: str8) -> i32 {
+        return __mlang_std_log_set_logger_timestamp_color(self.handle, level, color);
+    }
+
+    /// @brief Set timestamp color for one level using an ANSI SGR code.
+    ///
+    /// Examples: 32 green, 33 yellow, 31 red, 35 magenta.
+    pub fn set_timestamp_color_code(self: Log, level: i32, sgr_code: i32) -> i32 {
+        return __mlang_std_log_set_logger_timestamp_color_code(self.handle, level, sgr_code);
+    }
+
+    /// @brief Write `msg` plus newline to stdout and the optional out log file.
+    pub fn out(self: Log, msg: str8) -> i64 {
+        return __mlang_std_log_logger_write(self.handle, level_out(), msg);
+    }
+
+    /// @brief Write `warn: {msg}` plus newline to stderr and the optional warn log file.
+    pub fn warn(self: Log, msg: str8) -> i64 {
+        return __mlang_std_log_logger_write(self.handle, level_warn(), msg);
+    }
+
+    /// @brief Write `err: {msg}` plus newline to stderr and the optional err log file.
+    pub fn err(self: Log, msg: str8) -> i64 {
+        return __mlang_std_log_logger_write(self.handle, level_err(), msg);
+    }
+
+    /// @brief Close this logger's forwarding files and release its native handle.
+    pub fn close(self: Log) -> i32 {
+        return __mlang_std_log_close(self.handle);
+    }
+}
+
+/// @brief Write `msg` plus newline to stdout and the optional out log file.
+///
+/// @return Number of bytes written to stdout, including newline, or -1.
+pub fn out(msg: str8) -> i64 {
+    return __mlang_std_log_out(msg);
+}
+
+/// @brief Write `warn: {msg}` plus newline to stderr and the optional warn log file.
+///
+/// @return Number of bytes written to stderr, including newline, or -1.
+pub fn warn(msg: str8) -> i64 {
+    return __mlang_std_log_warn(msg);
+}
+
+/// @brief Write `err: {msg}` plus newline to stderr and the optional err log file.
+///
+/// @return Number of bytes written to stderr, including newline, or -1.
+pub fn err(msg: str8) -> i64 {
+    return __mlang_std_log_err(msg);
+}
+
+/// @brief Append future `out` messages to `path` as well as stdout.
+/// @return `0` on success, `-1` on failure.
+pub fn forward_out_to_file(path: str8) -> i32 {
+    return __mlang_std_log_forward_level_to_file(level_out(), path);
+}
+
+/// @brief Set or change the append file for future `out` messages.
+///
+/// Passing a new path closes the previous out log file. Passing an empty path
+/// disables out-file forwarding and leaves console output unchanged.
+/// @return `0` on success, `-1` on failure.
+pub fn set_out_path(path: str8) -> i32 {
+    return forward_out_to_file(path);
+}
+
+/// @brief Append future `warn` messages to `path` as well as stderr.
+/// @return `0` on success, `-1` on failure.
+pub fn forward_warn_to_file(path: str8) -> i32 {
+    return __mlang_std_log_forward_level_to_file(level_warn(), path);
+}
+
+/// @brief Set or change the append file for future `warn` messages.
+///
+/// Passing a new path closes the previous warn log file. Passing an empty path
+/// disables warn-file forwarding and leaves console output unchanged.
+/// @return `0` on success, `-1` on failure.
+pub fn set_warn_path(path: str8) -> i32 {
+    return forward_warn_to_file(path);
+}
+
+/// @brief Append future `err` messages to `path` as well as stderr.
+/// @return `0` on success, `-1` on failure.
+pub fn forward_err_to_file(path: str8) -> i32 {
+    return __mlang_std_log_forward_level_to_file(level_err(), path);
+}
+
+/// @brief Set or change the append file for future `err` messages.
+///
+/// Passing a new path closes the previous err log file. Passing an empty path
+/// disables err-file forwarding and leaves console output unchanged.
+/// @return `0` on success, `-1` on failure.
+pub fn set_err_path(path: str8) -> i32 {
+    return forward_err_to_file(path);
+}
+
+/// @brief Append future `out`, `warn`, and `err` messages to the same file.
+///
+/// Each level still writes to its normal console stream.
+/// @return `0` on success, `-1` on failure.
+pub fn forward_all_to_file(path: str8) -> i32 {
+    return __mlang_std_log_forward_all_to_file(path);
+}
+
+/// @brief Set or change the shared append file for future log messages.
+///
+/// The default is console-only logging. Calling this enables file forwarding;
+/// calling it again changes the path for all levels.
+/// @return `0` on success, `-1` on failure.
+pub fn set_output_path(path: str8) -> i32 {
+    return forward_all_to_file(path);
+}
+
+/// @brief Close all configured forwarding files.
+/// @return `0` on success.
+pub fn clear_forwarding() -> i32 {
+    return __mlang_std_log_clear_forwarding();
+}
+
+/// @brief Restore the default console-only output behavior.
+/// @return `0` on success.
+pub fn reset_output_path() -> i32 {
+    return clear_forwarding();
+}
+
+/// @brief Enable or disable timestamp prefixes for module-level log calls.
+///
+/// Enabled lines are prefixed as `[YYYY-MM-DD HH:MM:SS] `. The default is off.
+pub fn set_timestamps_enabled(enabled: i32) -> i32 {
+    return __mlang_std_log_set_timestamps_enabled(enabled);
+}
+
+/// @brief Enable timestamp prefixes for module-level log calls.
+pub fn enable_timestamps() -> i32 {
+    return set_timestamps_enabled(1);
+}
+
+/// @brief Disable timestamp prefixes for module-level log calls.
+pub fn disable_timestamps() -> i32 {
+    return set_timestamps_enabled(0);
+}
+
+/// @brief Enable or disable ANSI colors around timestamp prefixes.
+///
+/// When enabled, timestamp defaults are green for out, yellow for warn, and red
+/// for err. Message text is emitted as normal white.
+pub fn set_timestamp_colors_enabled(enabled: i32) -> i32 {
+    return __mlang_std_log_set_timestamp_colors_enabled(enabled);
+}
+
+/// @brief Set timestamp color for one level using an ANSI escape sequence.
+pub fn set_timestamp_color(level: i32, color: str8) -> i32 {
+    return __mlang_std_log_set_timestamp_color(level, color);
+}
+
+/// @brief Set timestamp color for one level using an ANSI SGR code.
+///
+/// Examples: 32 green, 33 yellow, 31 red, 35 magenta.
+pub fn set_timestamp_color_code(level: i32, sgr_code: i32) -> i32 {
+    return __mlang_std_log_set_timestamp_color_code(level, sgr_code);
+}
