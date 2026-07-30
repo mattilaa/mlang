@@ -131,3 +131,35 @@ fn test_log_thread_safe_file_forwarding() {
     verify(rc4 == 0);
     verify(file_size(path) == 960);
 }
+
+#[test]
+fn test_log_module_timestamps() {
+    let path: str8 = "/tmp/mlang_std_log_timestamp_module_test.log";
+    let _clean = write_all_text(path, "");
+
+    verify(std::log::set_output_path(path) == 0);
+    verify(std::log::enable_timestamps() == 0);
+    let written: i64 = std::log::out("timestamped");
+    verify(std::log::disable_timestamps() == 0);
+    verify(std::log::reset_output_path() == 0);
+
+    verify(written == 34);
+    verify(file_size(path) == 34);
+}
+
+#[test]
+fn test_created_log_can_enable_timestamps_at_creation() {
+    let path: str8 = "/tmp/mlang_std_log_timestamp_created_test.log";
+    let _clean = write_all_text(path, "");
+
+    let lr: Result<Log, str8> = Log::with_options(path, 1);
+    if lr.is_err() { verify(false); return; }
+    let logger: Log = lr.unwrap();
+    let n1: i64 = logger.out("created-ts");
+    let n2: i64 = logger.warn("created-warn-ts");
+    verify(logger.close() == 0);
+
+    verify(n1 == 33);
+    verify(n2 == 44);
+    verify(file_size(path) == 77);
+}

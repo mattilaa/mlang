@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 enum
 {
@@ -15,10 +16,12 @@ enum
 static pthread_mutex_t g_log_mutex;
 static pthread_once_t g_log_once = PTHREAD_ONCE_INIT;
 static FILE* g_forward_files[MLANG_LOG_LEVEL_COUNT];
+static int g_timestamps_enabled;
 
 typedef struct MlangLog
 {
     FILE* forward_files[MLANG_LOG_LEVEL_COUNT];
+    int timestamps_enabled;
 } MlangLog;
 
 static void init_log_mutex(void)
@@ -40,7 +43,7 @@ static const char* prefix_for_level(int level)
     return "";
 }
 
-static int64_t write_log_line(FILE* fp, const char* prefix, const char* msg)
+static int64_t write_log_line(FILE* fp, int timestamps_enabled, const char* prefix, const char* msg)
 {
     if(!fp || !msg)
         return -1;
@@ -49,6 +52,20 @@ static int64_t write_log_line(FILE* fp, const char* prefix, const char* msg)
     const size_t msg_len = strlen(msg);
     size_t written = 0;
 
+    if(timestamps_enabled)
+    {
+        time_t now = time(NULL);
+        struct tm tm_now;
+#if defined(_WIN32)
+        localtime_s(&tm_now, &now);
+#else
+        localtime_r(&now, &tm_now);
+#endif
+        char timestamp[32];
+        size_t timestamp_len = strftime(timestamp, sizeof(timestamp), "[%Y-%m-%d %H:%M:%S] ", &tm_now);
+        if(timestamp_len > 0)
+            written += fwrite(timestamp, 1, timestamp_len, fp);
+    }
     if(prefix_len > 0)
         written += fwrite(prefix, 1, prefix_len, fp);
     written += fwrite(msg, 1, msg_len, fp);
@@ -73,11 +90,11 @@ int64_t __mlang_std_log_write(int level, const char* msg)
     (void)pthread_mutex_lock(&g_log_mutex);
 
     const char* prefix = prefix_for_level(level);
-    int64_t console_written = write_log_line(console_for_level(level), prefix, msg);
+    int64_t console_written = write_log_line(console_for_level(level), g_timestamps_enabled, prefix, msg);
 
     FILE* forward = g_forward_files[level];
     if(forward)
-        (void)write_log_line(forward, prefix, msg);
+        (void)write_log_line(forward, g_timestamps_enabled, prefix, msg);
 
     (void)pthread_mutex_unlock(&g_log_mutex);
     return console_written;
@@ -214,13 +231,23 @@ int __mlang_std_log_clear_forwarding(void)
     return 0;
 }
 
-int64_t __mlang_std_log_new(const char* path)
+int __mlang_std_log_set_timestamps_enabled(int enabled)
+{
+    (void)pthread_once(&g_log_once, init_log_mutex);
+    (void)pthread_mutex_lock(&g_log_mutex);
+    g_timestamps_enabled = enabled ? 1 : 0;
+    (void)pthread_mutex_unlock(&g_log_mutex);
+    return 0;
+}
+
+int64_t __mlang_std_log_new_with_options(const char* path, int timestamps_enabled)
 {
     (void)pthread_once(&g_log_once, init_log_mutex);
 
     MlangLog* logger = (MlangLog*)calloc(1, sizeof(MlangLog));
     if(!logger)
         return 0;
+    logger->timestamps_enabled = timestamps_enabled ? 1 : 0;
 
     if(path && path[0] != '\0')
     {
@@ -235,6 +262,11 @@ int64_t __mlang_std_log_new(const char* path)
     }
 
     return (int64_t)(intptr_t)logger;
+}
+
+int64_t __mlang_std_log_new(const char* path)
+{
+    return __mlang_std_log_new_with_options(path, 0);
 }
 
 int __mlang_std_log_set_logger_output_path(int64_t handle, const char* path)
@@ -263,6 +295,19 @@ int __mlang_std_log_reset_logger_output_path(int64_t handle)
     return 0;
 }
 
+int __mlang_std_log_set_logger_timestamps_enabled(int64_t handle, int enabled)
+{
+    MlangLog* logger = (MlangLog*)(intptr_t)handle;
+    if(!logger)
+        return -1;
+
+    (void)pthread_once(&g_log_once, init_log_mutex);
+    (void)pthread_mutex_lock(&g_log_mutex);
+    logger->timestamps_enabled = enabled ? 1 : 0;
+    (void)pthread_mutex_unlock(&g_log_mutex);
+    return 0;
+}
+
 int __mlang_std_log_close(int64_t handle)
 {
     MlangLog* logger = (MlangLog*)(intptr_t)handle;
@@ -287,11 +332,11 @@ int64_t __mlang_std_log_logger_write(int64_t handle, int level, const char* msg)
     (void)pthread_mutex_lock(&g_log_mutex);
 
     const char* prefix = prefix_for_level(level);
-    int64_t console_written = write_log_line(console_for_level(level), prefix, msg);
+    int64_t console_written = write_log_line(console_for_level(level), logger->timestamps_enabled, prefix, msg);
 
     FILE* forward = logger->forward_files[level];
     if(forward)
-        (void)write_log_line(forward, prefix, msg);
+        (void)write_log_line(forward, logger->timestamps_enabled, prefix, msg);
 
     (void)pthread_mutex_unlock(&g_log_mutex);
     return console_written;

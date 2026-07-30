@@ -11,9 +11,11 @@ Created loggers:
 - `Log::new() -> Log` creates a console-only logger.
 - `Log::with_output_path(path: str8) -> Result<Log, str8>` creates a logger
   with file forwarding defined up front.
+- `Log::with_options(path: str8, timestamps_enabled: i32) -> Result<Log, str8>`
+  creates a logger with file forwarding and timestamps defined up front.
 - `logger.out(msg)`, `logger.warn(msg)`, `logger.err(msg)`
 - `logger.set_output_path(path)`, `logger.reset_output_path()`,
-  `logger.close()`
+  `logger.enable_timestamps()`, `logger.disable_timestamps()`, `logger.close()`
 
 File forwarding:
 - `set_output_path(path: str8) -> i32`
@@ -21,6 +23,9 @@ File forwarding:
 - `set_warn_path(path: str8) -> i32`
 - `set_err_path(path: str8) -> i32`
 - `reset_output_path() -> i32`
+- `enable_timestamps() -> i32`
+- `disable_timestamps() -> i32`
+- `set_timestamps_enabled(enabled: i32) -> i32`
 - `forward_all_to_file(path: str8) -> i32`
 - `forward_out_to_file(path: str8) -> i32`
 - `forward_warn_to_file(path: str8) -> i32`
@@ -31,24 +36,28 @@ The default is console-only logging. Setting a path appends to that file and
 keeps writing to the normal console stream. Setting another path changes the
 destination for future messages. Call `reset_output_path()` or
 `clear_forwarding()` before exit when you want to close the files explicitly.
+Timestamps are off by default. When enabled, each line is prefixed with
+`[YYYY-MM-DD HH:MM:SS] `.
 
 ```mlang
 mod std::log;
 use std::log::*;
 
 fn main() -> i32 {
-    let lr: Result<Log, str8> = Log::with_output_path("created.log");
+    let lr: Result<Log, str8> = Log::with_options("created.log", 1);
     if lr.is_err() { return 1; }
     let logger: Log = lr.unwrap();
-    logger.out("this logger was created with a path");
+    logger.out("this logger was created with a path and timestamps");
     logger.close();
 
     set_output_path("app.log");
+    enable_timestamps();
     out("started");
     warn("using defaults");
     err("request failed");
     set_output_path("next.log");
     out("future messages go to next.log");
+    disable_timestamps();
     reset_output_path();
     return 0;
 }

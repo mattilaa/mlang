@@ -62,6 +62,18 @@ impl Log {
         return Ok<Log, str8>(Log { handle: h });
     }
 
+    /// @brief Create a logger with output path and timestamp setting defined up front.
+    ///
+    /// Pass `1` for `timestamps_enabled` to prefix each line with
+    /// `[YYYY-MM-DD HH:MM:SS] `.
+    pub fn with_options(path: str8, timestamps_enabled: i32) -> Result<Log, str8> {
+        let h: i64 = __mlang_std_log_new_with_options(path, timestamps_enabled);
+        if h == 0 {
+            return Err<Log, str8>("std::log::Log::with_options failed");
+        }
+        return Ok<Log, str8>(Log { handle: h });
+    }
+
     /// @brief Set or change the shared append file for future messages.
     pub fn set_output_path(self: Log, path: str8) -> i32 {
         return __mlang_std_log_set_logger_output_path(self.handle, path);
@@ -70,6 +82,21 @@ impl Log {
     /// @brief Restore console-only behavior for this logger.
     pub fn reset_output_path(self: Log) -> i32 {
         return __mlang_std_log_reset_logger_output_path(self.handle);
+    }
+
+    /// @brief Enable or disable timestamp prefixes for this logger.
+    pub fn set_timestamps_enabled(self: Log, enabled: i32) -> i32 {
+        return __mlang_std_log_set_logger_timestamps_enabled(self.handle, enabled);
+    }
+
+    /// @brief Enable timestamp prefixes for this logger.
+    pub fn enable_timestamps(self: Log) -> i32 {
+        return self.set_timestamps_enabled(1);
+    }
+
+    /// @brief Disable timestamp prefixes for this logger.
+    pub fn disable_timestamps(self: Log) -> i32 {
+        return self.set_timestamps_enabled(0);
     }
 
     /// @brief Write `msg` plus newline to stdout and the optional out log file.
@@ -186,4 +213,21 @@ pub fn clear_forwarding() -> i32 {
 /// @return `0` on success.
 pub fn reset_output_path() -> i32 {
     return clear_forwarding();
+}
+
+/// @brief Enable or disable timestamp prefixes for module-level log calls.
+///
+/// Enabled lines are prefixed as `[YYYY-MM-DD HH:MM:SS] `. The default is off.
+pub fn set_timestamps_enabled(enabled: i32) -> i32 {
+    return __mlang_std_log_set_timestamps_enabled(enabled);
+}
+
+/// @brief Enable timestamp prefixes for module-level log calls.
+pub fn enable_timestamps() -> i32 {
+    return set_timestamps_enabled(1);
+}
+
+/// @brief Disable timestamp prefixes for module-level log calls.
+pub fn disable_timestamps() -> i32 {
+    return set_timestamps_enabled(0);
 }
