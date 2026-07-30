@@ -17,7 +17,10 @@ Created loggers:
   creates a logger with file forwarding and timestamps defined up front.
 - `logger.out(msg)`, `logger.warn(msg)`, `logger.err(msg)`
 - `logger.set_output_path(path)`, `logger.reset_output_path()`,
-  `logger.enable_timestamps()`, `logger.disable_timestamps()`, `logger.close()`
+  `logger.enable_timestamps()`, `logger.disable_timestamps()`,
+  `logger.set_timestamp_colors_enabled(enabled)`,
+  `logger.set_timestamp_color(level, ansi)`,
+  `logger.set_timestamp_color_code(level, code)`, `logger.close()`
 
 File forwarding:
 - `set_output_path(path: str8) -> i32`
@@ -28,6 +31,9 @@ File forwarding:
 - `enable_timestamps() -> i32`
 - `disable_timestamps() -> i32`
 - `set_timestamps_enabled(enabled: i32) -> i32`
+- `set_timestamp_colors_enabled(enabled: i32) -> i32`
+- `set_timestamp_color(level: i32, ansi: str8) -> i32`
+- `set_timestamp_color_code(level: i32, code: i32) -> i32`
 - `forward_all_to_file(path: str8) -> i32`
 - `forward_out_to_file(path: str8) -> i32`
 - `forward_warn_to_file(path: str8) -> i32`
@@ -39,7 +45,10 @@ keeps writing to the normal console stream. Setting another path changes the
 destination for future messages. Call `reset_output_path()` or
 `clear_forwarding()` before exit when you want to close the files explicitly.
 Timestamps are off by default. When enabled, each line is prefixed with
-`[YYYY-MM-DD HH:MM:SS] `.
+`[M/D/YYYY/HH:MM:SS] `. Timestamp colors are on by default when timestamps are
+enabled: green for `out`, yellow for `warn`, red for `err`; the message text is
+normal white. Disable colors with `set_timestamp_colors_enabled(0)` or override
+per-level colors with `set_timestamp_color_code(level_out(), 36)`.
 
 ```mlang
 mod std::log;
@@ -50,6 +59,8 @@ fn main() -> i32 {
     if lr.is_err() { return 1; }
     let logger: Log = lr.unwrap();
     logger.out("this logger was created with a path and timestamps");
+    logger.set_timestamp_color_code(level_warn(), 35);
+    logger.warn("this warning has a magenta timestamp");
     logger.close();
 
     set_output_path("app.log");
@@ -57,6 +68,8 @@ fn main() -> i32 {
     out("started");
     warn("using defaults");
     err("request failed");
+    set_timestamp_colors_enabled(0);
+    out("timestamp without color");
     set_output_path("next.log");
     out("future messages go to next.log");
     disable_timestamps();

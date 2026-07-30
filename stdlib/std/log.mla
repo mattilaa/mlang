@@ -99,6 +99,26 @@ impl Log {
         return self.set_timestamps_enabled(0);
     }
 
+    /// @brief Enable or disable ANSI colors around timestamp prefixes.
+    ///
+    /// When enabled, timestamp defaults are green for out, yellow for warn,
+    /// and red for err. Message text is emitted as normal white.
+    pub fn set_timestamp_colors_enabled(self: Log, enabled: i32) -> i32 {
+        return __mlang_std_log_set_logger_timestamp_colors_enabled(self.handle, enabled);
+    }
+
+    /// @brief Set timestamp color for one level using an ANSI escape sequence.
+    pub fn set_timestamp_color(self: Log, level: i32, color: str8) -> i32 {
+        return __mlang_std_log_set_logger_timestamp_color(self.handle, level, color);
+    }
+
+    /// @brief Set timestamp color for one level using an ANSI SGR code.
+    ///
+    /// Examples: 32 green, 33 yellow, 31 red, 35 magenta.
+    pub fn set_timestamp_color_code(self: Log, level: i32, sgr_code: i32) -> i32 {
+        return __mlang_std_log_set_logger_timestamp_color_code(self.handle, level, sgr_code);
+    }
+
     /// @brief Write `msg` plus newline to stdout and the optional out log file.
     pub fn out(self: Log, msg: str8) -> i64 {
         return __mlang_std_log_logger_write(self.handle, level_out(), msg);
@@ -230,4 +250,24 @@ pub fn enable_timestamps() -> i32 {
 /// @brief Disable timestamp prefixes for module-level log calls.
 pub fn disable_timestamps() -> i32 {
     return set_timestamps_enabled(0);
+}
+
+/// @brief Enable or disable ANSI colors around timestamp prefixes.
+///
+/// When enabled, timestamp defaults are green for out, yellow for warn, and red
+/// for err. Message text is emitted as normal white.
+pub fn set_timestamp_colors_enabled(enabled: i32) -> i32 {
+    return __mlang_std_log_set_timestamp_colors_enabled(enabled);
+}
+
+/// @brief Set timestamp color for one level using an ANSI escape sequence.
+pub fn set_timestamp_color(level: i32, color: str8) -> i32 {
+    return __mlang_std_log_set_timestamp_color(level, color);
+}
+
+/// @brief Set timestamp color for one level using an ANSI SGR code.
+///
+/// Examples: 32 green, 33 yellow, 31 red, 35 magenta.
+pub fn set_timestamp_color_code(level: i32, sgr_code: i32) -> i32 {
+    return __mlang_std_log_set_timestamp_color_code(level, sgr_code);
 }

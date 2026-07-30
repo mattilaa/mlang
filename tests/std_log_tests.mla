@@ -139,12 +139,14 @@ fn test_log_module_timestamps() {
 
     verify(std::log::set_output_path(path) == 0);
     verify(std::log::enable_timestamps() == 0);
+    verify(std::log::set_timestamp_colors_enabled(0) == 0);
     let written: i64 = std::log::out("timestamped");
     verify(std::log::disable_timestamps() == 0);
+    verify(std::log::set_timestamp_colors_enabled(1) == 0);
     verify(std::log::reset_output_path() == 0);
 
-    verify(written == 34);
-    verify(file_size(path) == 34);
+    verify(written >= 32 && written <= 34);
+    verify(file_size(path) == written);
 }
 
 #[test]
@@ -159,7 +161,41 @@ fn test_created_log_can_enable_timestamps_at_creation() {
     let n2: i64 = logger.warn("created-warn-ts");
     verify(logger.close() == 0);
 
-    verify(n1 == 33);
-    verify(n2 == 44);
-    verify(file_size(path) == 77);
+    verify(n1 >= 45 && n1 <= 47);
+    verify(n2 >= 56 && n2 <= 58);
+    verify(file_size(path) == n1 + n2);
+}
+
+#[test]
+fn test_log_timestamp_colors_are_configurable() {
+    let plain_path: str8 = "/tmp/mlang_std_log_timestamp_plain_color_test.log";
+    let default_path: str8 = "/tmp/mlang_std_log_timestamp_default_color_test.log";
+    let custom_path: str8 = "/tmp/mlang_std_log_timestamp_custom_color_test.log";
+    let _clean_plain = write_all_text(plain_path, "");
+    let _clean_default = write_all_text(default_path, "");
+    let _clean_custom = write_all_text(custom_path, "");
+
+    verify(std::log::set_output_path(plain_path) == 0);
+    verify(std::log::enable_timestamps() == 0);
+    verify(std::log::set_timestamp_colors_enabled(0) == 0);
+    let plain_written: i64 = std::log::out("color-check");
+    verify(std::log::reset_output_path() == 0);
+
+    verify(std::log::set_output_path(default_path) == 0);
+    verify(std::log::set_timestamp_colors_enabled(1) == 0);
+    let default_written: i64 = std::log::out("color-check");
+    verify(std::log::reset_output_path() == 0);
+
+    verify(std::log::set_output_path(custom_path) == 0);
+    verify(std::log::set_timestamp_color(level_out(), "ABC") == 0);
+    let custom_written: i64 = std::log::out("color-check");
+    verify(std::log::disable_timestamps() == 0);
+    verify(std::log::set_timestamp_color_code(level_out(), 32) == 0);
+    verify(std::log::reset_output_path() == 0);
+
+    verify(default_written == plain_written + 14);
+    verify(custom_written == plain_written + 12);
+    verify(file_size(plain_path) == plain_written);
+    verify(file_size(default_path) == default_written);
+    verify(file_size(custom_path) == custom_written);
 }
