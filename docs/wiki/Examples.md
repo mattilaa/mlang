@@ -21,6 +21,32 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 
 ## Example programs
 
+### Route planning and genetic algorithms
+
+- `examples/kallio_pub_crawl_esc` — animated terminal [`std::esc`](Stdlib-Esc) Kallio and
+  Vaasankatu pub-crawl planner. Build and run it with:
+
+  ```sh
+  ./examples/kallio_pub_crawl_esc/run_demo.sh Thu 18:00 budget=180
+  ```
+
+- `examples/kallio_bars_ga_tsp_demo.mla` — non-animated Kallio bar-crawl
+  genetic TSP planner that reads `examples/kallio_bars.json`. Compile and run
+  it with:
+
+  ```sh
+  ./build/mlang examples/kallio_bars_ga_tsp_demo.mla -L build -lmlang_std -o /tmp/kallio_bars_ga_tsp_demo
+  /tmp/kallio_bars_ga_tsp_demo --json examples/kallio_bars.json --day fri --start 17:30 --lat-e4 601882 --lon-e4 249532 --altitude-m 24 --alcohol-percent 5.5 --max-promille 3
+  ```
+
+- `examples/mofe_ga_tsp_esc` — animated terminal pub-crawl TSP demo with
+  configurable alcohol and timing settings. Run it with
+  `./examples/mofe_ga_tsp_esc/run_demo.sh Thu 13:00`.
+- `examples/ga_tsp` — compact genetic travelling-salesman demo; run
+  `./examples/ga_tsp/run_demo.sh`.
+- `examples/ga_tsp_esc` — animated [`std::esc`](Stdlib-Esc) genetic travelling-salesman
+  demo; run `./examples/ga_tsp_esc/run_demo.sh`.
+
 - `examples/mlang_attributes.mla` — combining `#[test]` and `#[derive(Debug)]`.
 - `examples/cexpr_twice_demo.mla` — first-step `cexpr fn` compile-time
   evaluation with an [`i32`](Quick-Guide#types) function.
