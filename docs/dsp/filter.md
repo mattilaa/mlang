@@ -90,8 +90,12 @@ Bicubic interpolation is included for two-dimensional DSP parameter tables.
 
 [`examples/package_manager_coreaudio_filter`](../../examples/package_manager_coreaudio_filter)
 loads `examples/fft_example/illusion.wav` and runs 24 dB cutoff sweeps. Select
-the topology with `--filter lowpass`, `--filter highpass`, or
-`--filter bandpass`. The processor keeps filter history across sweep sections
-and crossfades from the dry reference to filtered output to avoid transition
-clicks. All file decoding and buffer allocation happens before the CoreAudio
-callback starts.
+the topology with `--filter lowpass24`, `--filter highpass24`, or
+`--filter bandpass24`. The shorter names remain accepted as aliases. The
+processor keeps filter history across sweep sections and crossfades from the
+dry reference to filtered output to avoid transition clicks. All file decoding
+and buffer allocation happens before the CoreAudio callback starts.
+
+The binary reports the 24 dB/octave filter slope separately from each
+section's resonance target. The `+18 dB` target in the resonant sections is
+resonance gain and does not describe the filter slope.
