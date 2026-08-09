@@ -134,8 +134,8 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   [`dsp::convolution`](DSP-Convolution).
 - `examples/dsp_fft_demo.mla` — forward/inverse transforms via [`dsp::fft`](DSP-FFT).
 - `examples/package_manager_coreaudio_filter` — real-time CoreAudio playback
-  of `examples/fft_example/illusion.wav` with dry, non-resonant, and resonant
-  cutoff sweeps driven by [`dsp::filter`](DSP-Filter).
+  of `examples/fft_example/illusion.wav` with click-free 24 dB low-pass,
+  high-pass, and band-pass sweeps selected by the binary's `--filter` option.
 
 ## Focused regression examples
 

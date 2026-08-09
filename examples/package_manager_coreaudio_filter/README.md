@@ -1,14 +1,14 @@
 # CoreAudio Realtime Filter Sweeps
 
 This macOS example loads `examples/fft_example/illusion.wav` and processes it
-through `dsp::filter` in a CoreAudio Audio Queue callback. It plays five
-sections so cutoff and resonance changes are easy to compare:
+through a selectable 24 dB `dsp::filter` in a CoreAudio Audio Queue callback.
+It plays five sections so cutoff and resonance changes are easy to compare:
 
 1. dry reference
-2. closing cutoff sweep without resonance
-3. opening cutoff sweep without resonance
-4. closing cutoff sweep with 18 dB resonance
-5. opening cutoff sweep with 18 dB resonance
+2. falling cutoff sweep without resonance
+3. rising cutoff sweep without resonance
+4. falling cutoff sweep while resonance moves toward 18 dB
+5. rising cutoff sweep with 18 dB resonance
 
 The five sections span the complete input sample. Their original 3:5:5:5:5
 timing ratio is scaled to the WAV length, and each filter ramp ends at its
@@ -18,7 +18,9 @@ extends the demo automatically without changing the source.
 The sample is decoded and all Audio Queue buffers are allocated before
 playback. The callback performs fixed-cost sample processing only: no memory
 allocation, file I/O, logging, or locking. Cutoff and resonance targets move
-sample by sample instead of changing abruptly.
+sample by sample instead of changing abruptly. Filter history is retained
+between sections, and a 20 ms dry/wet crossfade removes the dry-to-filtered
+transition click.
 
 From this directory, build and run the complete sequence with:
 
@@ -26,11 +28,21 @@ From this directory, build and run the complete sequence with:
 ../../build/mlang pkg run demo
 ```
 
+The default is the 24 dB low-pass. Select another filter in the built binary:
+
+```sh
+./build/cmake/coreaudio_filter_sweeps --filter lowpass
+./build/cmake/coreaudio_filter_sweeps --filter highpass
+./build/cmake/coreaudio_filter_sweeps --filter bandpass
+```
+
 Pass another mono or stereo 16-bit PCM WAV file directly to the built program:
 
 ```sh
-./build/cmake/coreaudio_filter_sweeps /path/to/input.wav
+./build/cmake/coreaudio_filter_sweeps --filter highpass /path/to/input.wav
 ```
+
+Run `./build/cmake/coreaudio_filter_sweeps --help` for the complete syntax.
 
 Validate decoding without opening an audio device:
 

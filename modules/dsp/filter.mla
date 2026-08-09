@@ -175,14 +175,20 @@ impl Biquad {
     pub fn output_2(self: Biquad) -> f32 { return self.y2; }
 
     fn design_values(cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> FilterDesign {
+        let resonance: f32 = clamp_f32(resonance_db, 0.0f, 36.0f);
+        let q: f32 = 0.70710678118654752440f * expf(0.11512925464970228420f * resonance);
+        return Biquad::design_values_q(cutoff_hz, q, sample_rate_hz);
+    }
+
+    fn design_values_q(cutoff_hz: f32, q: f32, sample_rate_hz: f32) -> FilterDesign {
         let safe_rate: f32 = sample_rate_hz < 1000.0f ? 1000.0f : sample_rate_hz;
         let cutoff_max: f32 = safe_rate * 0.495f;
         let cutoff: f32 = clamp_f32(cutoff_hz, 1.0f, cutoff_max);
-        let resonance: f32 = clamp_f32(resonance_db, 0.0f, 36.0f);
+        let safe_q: f32 = clamp_f32(q, 0.05f, 96.0f);
         let omega: f32 = 2.0f * 3.14159265358979323846f * cutoff / safe_rate;
         let sn: f32 = sinf(omega);
         let cs: f32 = cosf(omega);
-        let alpha: f32 = sn * 0.70710678118654752440f * expf(0.0f - 0.11512925464970228420f * resonance);
+        let alpha: f32 = sn / (2.0f * safe_q);
         let inverse_a0: f32 = 1.0f / (1.0f + alpha);
         return FilterDesign {
             cosine: cs,
@@ -194,6 +200,16 @@ impl Biquad {
     /// @brief Configure a two-pole low-pass filter.
     pub fn set_lowpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
         let v: FilterDesign = Biquad::design_values(cutoff_hz, resonance_db, sample_rate_hz);
+        self.set_lowpass_values(v);
+    }
+
+    /// @brief Configure a two-pole low-pass filter using an explicit Q value.
+    pub fn set_lowpass_q(self: &mut Self, cutoff_hz: f32, q: f32, sample_rate_hz: f32) -> void {
+        let v: FilterDesign = Biquad::design_values_q(cutoff_hz, q, sample_rate_hz);
+        self.set_lowpass_values(v);
+    }
+
+    fn set_lowpass_values(self: &mut Self, v: FilterDesign) -> void {
         self.b0 = v.inverse_a0 * (1.0f - v.cosine) * 0.5f;
         self.b1 = v.inverse_a0 * (1.0f - v.cosine);
         self.b2 = self.b0;
@@ -204,6 +220,16 @@ impl Biquad {
     /// @brief Configure a two-pole high-pass filter.
     pub fn set_highpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
         let v: FilterDesign = Biquad::design_values(cutoff_hz, resonance_db, sample_rate_hz);
+        self.set_highpass_values(v);
+    }
+
+    /// @brief Configure a two-pole high-pass filter using an explicit Q value.
+    pub fn set_highpass_q(self: &mut Self, cutoff_hz: f32, q: f32, sample_rate_hz: f32) -> void {
+        let v: FilterDesign = Biquad::design_values_q(cutoff_hz, q, sample_rate_hz);
+        self.set_highpass_values(v);
+    }
+
+    fn set_highpass_values(self: &mut Self, v: FilterDesign) -> void {
         self.b0 = v.inverse_a0 * (1.0f + v.cosine) * 0.5f;
         self.b1 = v.inverse_a0 * (0.0f - (1.0f + v.cosine));
         self.b2 = self.b0;
@@ -214,6 +240,16 @@ impl Biquad {
     /// @brief Configure a constant-skirt-gain two-pole band-pass filter.
     pub fn set_bandpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
         let v: FilterDesign = Biquad::design_values(cutoff_hz, resonance_db, sample_rate_hz);
+        self.set_bandpass_values(v);
+    }
+
+    /// @brief Configure a constant-skirt-gain band-pass filter using explicit Q.
+    pub fn set_bandpass_q(self: &mut Self, cutoff_hz: f32, q: f32, sample_rate_hz: f32) -> void {
+        let v: FilterDesign = Biquad::design_values_q(cutoff_hz, q, sample_rate_hz);
+        self.set_bandpass_values(v);
+    }
+
+    fn set_bandpass_values(self: &mut Self, v: FilterDesign) -> void {
         self.b0 = v.inverse_a0 * v.alpha;
         self.b1 = 0.0f;
         self.b2 = 0.0f - self.b0;
@@ -243,6 +279,120 @@ impl Biquad {
         self.y2 = self.y1;
         self.y1 = output;
         return output;
+    }
+}
+
+/// @brief Fourth-order low-pass filter with a 24 dB/octave stop-band slope.
+///
+/// The two cascaded stages use the Q values for a fourth-order Butterworth
+/// response at zero resonance. Positive resonance scales both stage Q values.
+pub struct Lowpass24 {
+    var stage1: Biquad;
+    var stage2: Biquad;
+};
+
+impl Lowpass24 {
+    /// @brief Create a bypass filter with cleared stage histories.
+    pub fn new() -> Lowpass24 {
+        return Lowpass24 {
+            stage1: Biquad::new(),
+            stage2: Biquad::new()
+        };
+    }
+
+    /// @brief Configure the cascaded low-pass stages.
+    pub fn set_lowpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
+        let resonance: f32 = clamp_f32(resonance_db, 0.0f, 36.0f);
+        let q_scale: f32 = expf(0.11512925464970228420f * resonance);
+        self.stage1.set_lowpass_q(cutoff_hz, 0.54119610014619698440f * q_scale, sample_rate_hz);
+        self.stage2.set_lowpass_q(cutoff_hz, 1.30656296487637652790f * q_scale, sample_rate_hz);
+    }
+
+    /// @brief Process one sample through both stages without allocating.
+    pub fn process(self: &mut Self, input: f32) -> f32 {
+        let stage1_output: f32 = self.stage1.process(input);
+        return self.stage2.process(stage1_output);
+    }
+
+    /// @brief Clear both stage histories without changing coefficients.
+    pub fn reset(self: &mut Self) -> void {
+        self.stage1.reset();
+        self.stage2.reset();
+    }
+}
+
+/// @brief Fourth-order high-pass filter with a 24 dB/octave stop-band slope.
+pub struct Highpass24 {
+    var stage1: Biquad;
+    var stage2: Biquad;
+};
+
+impl Highpass24 {
+    /// @brief Create a bypass filter with cleared stage histories.
+    pub fn new() -> Highpass24 {
+        return Highpass24 {
+            stage1: Biquad::new(),
+            stage2: Biquad::new()
+        };
+    }
+
+    /// @brief Configure the cascaded high-pass stages.
+    pub fn set_highpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
+        let resonance: f32 = clamp_f32(resonance_db, 0.0f, 36.0f);
+        let q_scale: f32 = expf(0.11512925464970228420f * resonance);
+        self.stage1.set_highpass_q(cutoff_hz, 0.54119610014619698440f * q_scale, sample_rate_hz);
+        self.stage2.set_highpass_q(cutoff_hz, 1.30656296487637652790f * q_scale, sample_rate_hz);
+    }
+
+    /// @brief Process one sample through both stages without allocating.
+    pub fn process(self: &mut Self, input: f32) -> f32 {
+        let stage1_output: f32 = self.stage1.process(input);
+        return self.stage2.process(stage1_output);
+    }
+
+    /// @brief Clear both stage histories without changing coefficients.
+    pub fn reset(self: &mut Self) -> void {
+        self.stage1.reset();
+        self.stage2.reset();
+    }
+}
+
+/// @brief Cascaded fourth-order band-pass filter.
+///
+/// Both sides of the pass band roll off at 24 dB/octave. Positive resonance
+/// narrows and emphasizes the region around the center frequency.
+pub struct Bandpass24 {
+    var stage1: Biquad;
+    var stage2: Biquad;
+};
+
+impl Bandpass24 {
+    /// @brief Create a bypass filter with cleared stage histories.
+    pub fn new() -> Bandpass24 {
+        return Bandpass24 {
+            stage1: Biquad::new(),
+            stage2: Biquad::new()
+        };
+    }
+
+    /// @brief Configure the cascaded band-pass stages.
+    pub fn set_bandpass(self: &mut Self, center_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
+        let resonance: f32 = clamp_f32(resonance_db, 0.0f, 36.0f);
+        let q_scale: f32 = expf(0.11512925464970228420f * resonance);
+        self.stage1.set_bandpass_q(center_hz, 0.54119610014619698440f * q_scale, sample_rate_hz);
+        self.stage2.set_bandpass_q(center_hz, 1.30656296487637652790f * q_scale, sample_rate_hz);
+    }
+
+    /// @brief Process one sample through both stages without allocating.
+    pub fn process(self: &mut Self, input: f32) -> f32 {
+        let stage1_output: f32 = self.stage1.process(input);
+        return self.stage2.process(stage1_output);
+    }
+
+    /// @brief Clear both stage histories without changing coefficients.
+    pub fn reset(self: &mut Self) -> void {
+        self.stage1.reset();
+        self.stage2.reset();
     }
 }
 
