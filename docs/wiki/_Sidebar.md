@@ -19,15 +19,18 @@
 - [[Stdlib Module API|Stdlib-Module-API]]
 - [[Stdlib README|Stdlib-README]]
 
-## Math and DSP
-- [[std::algorithm::fft|Stdlib-Algorithm-Fft]]
+## Math and Audio
 - [[std::algorithm::numeric|Stdlib-Algorithm-Numeric]]
 - [[std::audio|Stdlib-Audio]]
-- [[std::dsp|Stdlib-Dsp]]
-- [[std::dsp::convolution|Stdlib-Dsp-Convolution]]
 - [[std::math|Stdlib-Math]]
 - [[std::rand|Stdlib-Rand]]
 - [[std::simd|Stdlib-Simd]]
+
+## DSP Library
+- [[DSP Library|DSP]]
+- [[dsp::filter|DSP-Filter]]
+- [[dsp::convolution|DSP-Convolution]]
+- [[dsp::fft|DSP-FFT]]
 
 ## Stdlib Modules
 - [[std::algorithm::genetic|Stdlib-Algorithm-Genetic]]

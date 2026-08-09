@@ -1,6 +1,8 @@
 # Mlang Stdlib Module API {#stdlib_mlang_api}
 
-This page is the index for the **MLang-facing stdlib modules** under `stdlib/std/`. Detailed APIs are split by topic so audio, DSP, IO, collections, runtime, and other areas live on separate paths.
+This page is the index for the **MLang-facing stdlib modules** under `stdlib/std/`.
+The separately installed [`dsp` library](dsp/index.md) contains filtering,
+convolution, FFT, and sampler interpolation APIs outside the `std` namespace.
 
 - [Language Built-ins](language_builtins.md) documents compiler-provided collection methods, enum behavior, aliases, `bit`, and `size_of`.
 - Stdlib API documentation uses lowercase public type names such as `mutex`,
@@ -14,7 +16,6 @@ This page is the index for the **MLang-facing stdlib modules** under `stdlib/std
 These are the documented APIs you import in Mlang source via:
 
 ```mla
-mod std::algorithm::fft;
 mod std::algorithm::genetic;
 mod std::algorithm::numeric;
 mod std::algorithm::order;
@@ -29,8 +30,6 @@ mod std::bytes;
 mod std::chat;
 mod std::compiler;
 mod std::date;
-mod std::dsp;
-mod std::dsp::convolution;
 mod std::env;
 mod std::esc;
 mod std::event_loop;
@@ -44,6 +43,7 @@ mod std::ipc;
 mod std::json;
 mod std::jsonrpc;
 mod std::limits;
+mod std::log;
 mod std::math;
 mod std::net;
 mod std::platform;
@@ -70,7 +70,6 @@ mod std::vec;
 ## Source Files
 
 The source-of-truth implementation files are:
-- `stdlib/std/algorithm/fft.mla`
 - `stdlib/std/algorithm/genetic.mla`
 - `stdlib/std/algorithm/numeric.mla`
 - `stdlib/std/algorithm/order.mla`
@@ -85,8 +84,6 @@ The source-of-truth implementation files are:
 - `stdlib/std/chat.mla`
 - `stdlib/std/compiler.mla`
 - `stdlib/std/date.mla`
-- `stdlib/std/dsp.mla`
-- `stdlib/std/dsp/convolution.mla`
 - `stdlib/std/env.mla`
 - `stdlib/std/esc.mla`
 - `stdlib/std/event_loop.mla`
@@ -100,6 +97,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/json.mla`
 - `stdlib/std/jsonrpc.mla`
 - `stdlib/std/limits.mla`
+- `stdlib/std/log.mla`
 - `stdlib/std/math.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/platform.mla`
@@ -122,13 +120,10 @@ The source-of-truth implementation files are:
 - `stdlib/std/unordered.mla`
 - `stdlib/std/vec.mla`
 
-## Math and DSP
+## Math and Audio
 
 - [std::audio](stdlib/std_audio.md)
-- [std::algorithm::fft](stdlib/std_algorithm_fft.md)
 - [std::algorithm::numeric](stdlib/std_algorithm_numeric.md)
-- [std::dsp](stdlib/std_dsp.md)
-- [std::dsp::convolution](stdlib/std_dsp_convolution.md)
 - [std::math](stdlib/std_math.md)
 - [std::rand](stdlib/std_rand.md)
 - [std::simd](stdlib/std_simd.md)
@@ -175,6 +170,7 @@ The source-of-truth implementation files are:
 - [std::image](stdlib/std_image.md)
 - [std::io](stdlib/std_io.md)
 - [std::ipc](stdlib/std_ipc.md)
+- [std::log](stdlib/std_log.md)
 - [std::net](stdlib/std_net.md)
 - [std::printf](stdlib/std_printf.md)
 - [std::process](stdlib/std_process.md)

@@ -8,7 +8,7 @@
 
 mod std::bench;
 mod std::bitset;
-mod std::algorithm::fft;
+mod dsp::fft;
 mod std::simd;
 mod std::testing;
 
@@ -167,9 +167,9 @@ fn bench_direct_fft_f32_pipeline_1024x8() {
 
     for _repeat in 0..8 {
         let scaled: list<f32> = scalar_multiply_f32(data, gain);
-        let freq: list<f32> = std::algorithm::fft::forward_f32(scaled);
+        let freq: list<f32> = dsp::fft::forward_f32(scaled);
         verify(freq.len() == 2048);
-        let restored: list<f32> = std::algorithm::fft::inverse_f32(freq);
+        let restored: list<f32> = dsp::fft::inverse_f32(freq);
         verify(restored.len() == 2048);
         data = restored;
         checksum = checksum + data.len();

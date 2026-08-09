@@ -12,9 +12,6 @@ Currently provided:
 - `test.mla`: test framework helpers (test::assert, test::run_all).
 
 - `std/math.mla`: generic math helpers (backed by libmlang_std).
-- `std/dsp.mla`: DSP namespace root with submodules:
-  - `std::dsp::convolution`: full/same/valid convolution helpers for
-    `list<i64>`, `list<f32>`, and `list<f64>`.
 - `std/bench.mla`: benchmark helpers for anti-optimization barriers
   (`do_not_optimize_i64`, `do_not_optimize_i32`, `clobber_memory`).
 - `std/array.mla`: documentation/navigation anchors for the compiler-provided
@@ -41,7 +38,8 @@ Currently provided:
 - `std/log.mla`: line-oriented logging helpers (`out`, `warn`, `err`) that
   write to stdout/stderr by default and can append-forward all levels or
   individual levels to configurable log file paths. Also includes `Log`
-  instances created with a file path up front.
+  instances created with a file path up front, timestamp prefixes, and
+  configurable timestamp colors.
 - `std/strbuf.mla`: string allocation + utility helpers
   (`new/with_capacity/free`, len/compare/find/rfind/repeat,
    `pad_left/pad_right`, numeric padding helpers
@@ -95,7 +93,6 @@ Currently provided:
      `contains_i64`, `remove_i64`, `take_i64`, `drop_i64`)
   - `std::algorithm::rand`: random helpers mirroring `std::rand`
   - `std::algorithm::regex`: regex helpers mirroring `std::regex`
-  - `std::algorithm::fft`: FFT helpers for forward/inverse transforms
   - `std::algorithm::genetic`: GA helpers for genome/population evolution,
     including flat-population genome extraction/replacement.
 - `std/esc.mla`: ANSI terminal escape helpers with named color/cursor values

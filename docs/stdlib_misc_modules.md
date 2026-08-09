@@ -157,7 +157,7 @@ It demonstrates:
 
 - scalar sum vs `std::simd::sum`
 - scalar element-wise add vs `std::simd::add`
-- scalar FFT preprocessing plus `std::algorithm::fft` vs `std::simd`
+- scalar FFT preprocessing plus `dsp::fft` vs `std::simd`
   preprocessing plus `std::simd::fft_forward` / `std::simd::fft_inverse`
 - per-bit `BitSet` scanning vs packed `std::simd::count_ones`
 

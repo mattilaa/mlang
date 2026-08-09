@@ -1,13 +1,13 @@
 mod std::testing;
-mod std::algorithm::fft;
+mod dsp::fft;
 
-use std::algorithm::fft::forward;
-use std::algorithm::fft::inverse;
-use std::algorithm::fft::forward_f32;
-use std::algorithm::fft::inverse_f32;
-use std::algorithm::fft::forward_f64;
-use std::algorithm::fft::inverse_f64;
-use std::algorithm::fft::is_power_of_two;
+use dsp::fft::forward;
+use dsp::fft::inverse;
+use dsp::fft::forward_f32;
+use dsp::fft::inverse_f32;
+use dsp::fft::forward_f64;
+use dsp::fft::inverse_f64;
+use dsp::fft::is_power_of_two;
 use std::testing::verify;
 
 fn absf(x: f32) -> f32 {

@@ -4,7 +4,7 @@
 ///
 mod std::esc;
 mod std::ascii;
-mod std::algorithm::fft;
+mod dsp::fft;
 mod std::io;
 mod std::strbuf;
 mod std::term;
@@ -27,7 +27,7 @@ use std::esc::reset;
 use std::ascii::unicode_box_glyph;
 use std::ascii::unicode_density_glyph;
 use std::ascii::UnicodeBoxGlyph;
-use std::algorithm::fft::forward;
+use dsp::fft::forward;
 use std::io::Stdin;
 use std::io::Stdout;
 use std::io::flush;

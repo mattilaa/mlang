@@ -1,0 +1,19 @@
+/// \file dsp.mla
+/// \brief Digital signal processing library namespace root.
+///
+/// Submodules:
+/// - `dsp::convolution`
+/// - `dsp::filter`
+/// - `dsp::fft`
+///
+/// @defgroup dsp dsp
+/// @brief Digital signal processing helpers.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::convolution;
+mod dsp::filter;
+mod dsp::fft;
+/// \endcond
+
+/// @}

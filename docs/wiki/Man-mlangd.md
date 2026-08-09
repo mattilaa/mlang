@@ -23,6 +23,9 @@ interactively in a terminal session.
 Start the server in stdio mode. This is the only supported runtime mode.
 .SH ENVIRONMENT
 .TP
+.B MLANG_MODULE_PATH
+Override the standalone MLang library module search path used by the tooling layer.
+.TP
 .B MLANG_LSP_DEBUG
 Enable native debug telemetry.
 .TP

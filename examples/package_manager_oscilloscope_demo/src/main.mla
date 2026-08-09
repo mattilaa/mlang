@@ -2,7 +2,7 @@
 /// \ingroup examples
 /// \brief CoreAudio WAV oscilloscope demo rendered with std::esc.
 ///
-mod std::algorithm::fft;
+mod dsp::fft;
 mod std::esc;
 mod std::ascii;
 mod std::io;
@@ -10,7 +10,7 @@ mod std::strbuf;
 mod std::term;
 mod std::time;
 
-use std::algorithm::fft::forward;
+use dsp::fft::forward;
 use std::ascii::AsciiKey;
 use std::esc::acs_bullet;
 use std::esc::acs_dot;

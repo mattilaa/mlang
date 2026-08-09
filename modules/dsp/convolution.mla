@@ -1,7 +1,7 @@
 /// \file convolution.mla
-/// \brief Convolution helpers under std::dsp.
+/// \brief Convolution helpers under dsp.
 ///
-/// @defgroup dsp_convolution std::dsp::convolution
+/// @defgroup dsp_convolution dsp::convolution
 /// @ingroup dsp
 /// @brief Linear convolution helpers for numeric lists.
 /// @{

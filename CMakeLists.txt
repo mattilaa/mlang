@@ -111,6 +111,11 @@ set(MLANG_STDLIB_INSTALL_DIR "${CMAKE_INSTALL_FULL_DATADIR}/mlang/stdlib")
 add_compile_definitions(MLANG_STDLIB_INSTALL_DIR="${MLANG_STDLIB_INSTALL_DIR}")
 add_compile_definitions(MLANG_STDLIB_SOURCE_DIR="${CMAKE_SOURCE_DIR}/stdlib")
 
+# Install location for non-stdlib MLang libraries such as dsp::*.
+set(MLANG_MODULE_INSTALL_DIR "${CMAKE_INSTALL_FULL_DATADIR}/mlang/modules")
+add_compile_definitions(MLANG_MODULE_INSTALL_DIR="${MLANG_MODULE_INSTALL_DIR}")
+add_compile_definitions(MLANG_MODULE_SOURCE_DIR="${CMAKE_SOURCE_DIR}/modules")
+
 # Install location for stdlib libraries.
 set(MLANG_STDLIB_LIB_INSTALL_DIR "${CMAKE_INSTALL_FULL_LIBDIR}/mlang")
 add_compile_definitions(MLANG_STDLIB_LIB_INSTALL_DIR="${MLANG_STDLIB_LIB_INSTALL_DIR}")
@@ -669,6 +674,12 @@ install(TARGETS mlang_std
 # Install stdlib modules for editor tooling and go-to-definition.
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/
         DESTINATION ${CMAKE_INSTALL_DATADIR}/mlang/stdlib
+        COMPONENT mlang-core
+        FILES_MATCHING PATTERN "*.mla" PATTERN "*.md")
+
+# Install standalone MLang libraries outside the std namespace.
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/modules/
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/mlang/modules
         COMPONENT mlang-core
         FILES_MATCHING PATTERN "*.mla" PATTERN "*.md")
 

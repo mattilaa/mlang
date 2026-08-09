@@ -915,6 +915,19 @@ findManifestPath(std::filesystem::path start_dir)
 static std::vector<std::string> defaultStdlibPaths()
 {
     std::vector<std::string> paths;
+    if(const char* env = std::getenv("MLANG_MODULE_PATH"))
+    {
+        paths.emplace_back(env);
+    }
+#ifdef MLANG_MODULE_SOURCE_DIR
+    {
+        std::error_code ec;
+        if(std::filesystem::exists(MLANG_MODULE_SOURCE_DIR, ec))
+        {
+            paths.emplace_back(MLANG_MODULE_SOURCE_DIR);
+        }
+    }
+#endif
     if(const char* env = std::getenv("MLANG_STDLIB_PATH"))
     {
         paths.emplace_back(env);
@@ -928,6 +941,19 @@ static std::vector<std::string> defaultStdlibPaths()
         }
     }
 #endif
+    if(const char* xdg = std::getenv("XDG_DATA_HOME"))
+    {
+        paths.emplace_back(std::string(xdg) + "/mlang/modules");
+    }
+    if(const char* home = std::getenv("HOME"))
+    {
+        paths.emplace_back(std::string(home) + "/.local/share/mlang/modules");
+    }
+#ifdef MLANG_MODULE_INSTALL_DIR
+    paths.emplace_back(MLANG_MODULE_INSTALL_DIR);
+#endif
+    paths.emplace_back("/usr/local/share/mlang/modules");
+    paths.emplace_back("/usr/share/mlang/modules");
     if(const char* xdg = std::getenv("XDG_DATA_HOME"))
     {
         paths.emplace_back(std::string(xdg) + "/mlang/stdlib");

@@ -1,5 +1,5 @@
 mod std::strbuf;
-mod std::algorithm::fft;
+mod dsp::fft;
 mod std::testing;
 use std::strbuf::eq;
 use std::strbuf::len as str_len;
@@ -129,10 +129,10 @@ fn test_use_module_alias_resolves() {
 #[test]
 fn test_qualified_module_function_call_in_expression() {
     let data: list<i64> = [1, 0, 0, 0, 0, 0, 0, 0];
-    let probe: list<i64> = std::algorithm::fft::forward(data);
+    let probe: list<i64> = dsp::fft::forward(data);
     verify_true(probe.len() > 0);
-    let out: list<i64> = std::algorithm::fft::inverse(
-        std::algorithm::fft::forward([1, 0, 0, 0, 0, 0, 0, 0])
+    let out: list<i64> = dsp::fft::inverse(
+        dsp::fft::forward([1, 0, 0, 0, 0, 0, 0, 0])
     );
     verify_true(out.len() > 0);
 }

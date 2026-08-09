@@ -171,6 +171,9 @@ For the package-manager forms and options, see
 .BR mlang-pkg (1).
 .SH ENVIRONMENT
 .TP
+.B MLANG_MODULE_PATH
+Override the standalone MLang library module search path.
+.TP
 .B MLANG_STDLIB_PATH
 Override the standard-library module search path.
 .TP

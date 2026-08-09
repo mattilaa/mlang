@@ -98,7 +98,7 @@ BRIEFS: dict[str, str] = {
     "examples/bit_packed_struct_demo.mla": "Bit-packed struct fields and layout demo.",
     "examples/enum_print_demo.mla": "Pretty-printing enum variants.",
     "examples/std_math_demo.mla": "std::math numeric helpers demo (add/sub/sin/etc.).",
-    "examples/std_fft_demo.mla": "std::fft forward/inverse FFT demo with sample arrays.",
+    "examples/dsp_fft_demo.mla": "dsp::fft forward/inverse FFT demo with sample arrays.",
     "examples/std_gps_demo.mla": "std::gps GPS NMEA parsing / coordinate helpers demo.",
     "examples/notepad_demo.mla": "Minimal terminal notepad editor demo.",
     "examples/std_thread_demo.mla": "std::thread spawn/join API demo.",

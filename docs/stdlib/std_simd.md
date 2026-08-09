@@ -46,8 +46,8 @@ Use these when writing SIMD-oriented DSP code: prepare or post-process normal
 `list<T>` buffers with `std::simd` operations, then call the FFT wrapper from
 the same namespace. FFT inputs are interleaved complex samples:
 `[re0, im0, re1, im1, ...]`. The wrapper delegates to
-`std::algorithm::fft`; the FFT kernel is not itself a SIMD intrinsic API.
-Use `std::algorithm::fft` directly when you want the algorithm module without
+`dsp::fft`; the FFT kernel is not itself a SIMD intrinsic API.
+Use `dsp::fft` directly when you want the transform module without
 the SIMD pipeline naming.
 
 Boolean reductions:

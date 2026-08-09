@@ -1,16 +1,16 @@
-/// \file std_dsp_convolution_demo.mla
+/// \file dsp_convolution_demo.mla
 /// @ingroup examples
-/// \brief Demonstrates std::dsp::convolution full/same/valid modes.
+/// \brief Demonstrates dsp::convolution full/same/valid modes.
 ///
 /// Run:
-///   ./build/mlang examples/std_dsp_convolution_demo.mla -L ./build -lmlang_std -o /tmp/std_dsp_convolution_demo
-///   /tmp/std_dsp_convolution_demo
+///   ./build/mlang examples/dsp_convolution_demo.mla -L ./build -lmlang_std -o /tmp/dsp_convolution_demo
+///   /tmp/dsp_convolution_demo
 ///
-mod std::dsp::convolution;
+mod dsp::convolution;
 
-use std::dsp::convolution::full_f32;
-use std::dsp::convolution::same_f32;
-use std::dsp::convolution::valid_f32;
+use dsp::convolution::full_f32;
+use dsp::convolution::same_f32;
+use dsp::convolution::valid_f32;
 
 fn print_f32_list(label: str8, values: &list<f32>) -> void {
     print!("{}: [", label);
@@ -35,7 +35,7 @@ fn main() -> i32 {
     let same: list<f32> = same_f32(signal, smoothing_kernel);
     let valid: list<f32> = valid_f32(signal, smoothing_kernel);
 
-    println!("std::dsp::convolution smoothing demo");
+    println!("dsp::convolution smoothing demo");
     print_f32_list("signal", signal);
     print_f32_list("kernel", smoothing_kernel);
     print_f32_list("full", full);

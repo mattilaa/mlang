@@ -1,0 +1,95 @@
+/// \file filter_processor.mla
+/// \ingroup examples
+/// \brief MLang realtime filter state exported to the CoreAudio bridge.
+
+mod dsp::filter;
+
+use dsp::filter::Biquad;
+
+var g_sample_rate_hz: f32 = 48000.0f;
+var g_cutoff_hz: f32 = 12000.0f;
+var g_cutoff_target_hz: f32 = 12000.0f;
+var g_cutoff_step_hz: f32 = 0.0f;
+var g_resonance_db: f32 = 0.0f;
+var g_resonance_target_db: f32 = 0.0f;
+var g_resonance_step_db: f32 = 0.0f;
+var g_ramp_samples_left: i64 = 0;
+
+var g_left_x1: f32 = 0.0f;
+var g_left_x2: f32 = 0.0f;
+var g_left_y1: f32 = 0.0f;
+var g_left_y2: f32 = 0.0f;
+var g_right_x1: f32 = 0.0f;
+var g_right_x2: f32 = 0.0f;
+var g_right_y1: f32 = 0.0f;
+var g_right_y2: f32 = 0.0f;
+
+fn mlang_dsp_filter_reset(sample_rate_hz: f32, cutoff_hz: f32, resonance_db: f32) {
+    g_sample_rate_hz = sample_rate_hz;
+    g_cutoff_hz = cutoff_hz;
+    g_cutoff_target_hz = cutoff_hz;
+    g_cutoff_step_hz = 0.0f;
+    g_resonance_db = resonance_db;
+    g_resonance_target_db = resonance_db;
+    g_resonance_step_db = 0.0f;
+    g_ramp_samples_left = 0;
+    g_left_x1 = 0.0f;
+    g_left_x2 = 0.0f;
+    g_left_y1 = 0.0f;
+    g_left_y2 = 0.0f;
+    g_right_x1 = 0.0f;
+    g_right_x2 = 0.0f;
+    g_right_y1 = 0.0f;
+    g_right_y2 = 0.0f;
+}
+
+fn mlang_dsp_filter_set_target(cutoff_hz: f32, resonance_db: f32, ramp_samples: i64) {
+    if ramp_samples <= 0 {
+        g_cutoff_hz = cutoff_hz;
+        g_resonance_db = resonance_db;
+        g_ramp_samples_left = 0;
+        return;
+    }
+    g_cutoff_target_hz = cutoff_hz;
+    g_resonance_target_db = resonance_db;
+    g_cutoff_step_hz = (cutoff_hz - g_cutoff_hz) / f32(ramp_samples);
+    g_resonance_step_db = (resonance_db - g_resonance_db) / f32(ramp_samples);
+    g_ramp_samples_left = ramp_samples;
+}
+
+fn mlang_dsp_filter_begin_frame() {
+    if g_ramp_samples_left <= 0 {
+        return;
+    }
+    g_cutoff_hz = g_cutoff_hz + g_cutoff_step_hz;
+    g_resonance_db = g_resonance_db + g_resonance_step_db;
+    g_ramp_samples_left = g_ramp_samples_left - 1;
+    if g_ramp_samples_left == 0 {
+        g_cutoff_hz = g_cutoff_target_hz;
+        g_resonance_db = g_resonance_target_db;
+    }
+}
+
+fn mlang_dsp_filter_process_left(input: f32) -> f32 {
+    var filter: Biquad = Biquad::new();
+    filter.set_lowpass(g_cutoff_hz, g_resonance_db, g_sample_rate_hz);
+    filter.restore_history(g_left_x1, g_left_x2, g_left_y1, g_left_y2);
+    let output: f32 = filter.process(input);
+    g_left_x1 = filter.input_1();
+    g_left_x2 = filter.input_2();
+    g_left_y1 = filter.output_1();
+    g_left_y2 = filter.output_2();
+    return output;
+}
+
+fn mlang_dsp_filter_process_right(input: f32) -> f32 {
+    var filter: Biquad = Biquad::new();
+    filter.set_lowpass(g_cutoff_hz, g_resonance_db, g_sample_rate_hz);
+    filter.restore_history(g_right_x1, g_right_x2, g_right_y1, g_right_y2);
+    let output: f32 = filter.process(input);
+    g_right_x1 = filter.input_1();
+    g_right_x2 = filter.input_2();
+    g_right_y1 = filter.output_1();
+    g_right_y2 = filter.output_2();
+    return output;
+}

@@ -1,5 +1,5 @@
 /// \file detail.mla
-/// \brief Native bindings for std::algorithm::fft.
+/// \brief Native bindings for dsp::fft.
 
 extern pub fn __mlang_std_fft_is_power_of_two(n: i64) -> i32;
 extern pub fn __mlang_std_fft_forward_i64(data: list<i64>) -> list<i64>;

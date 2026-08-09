@@ -34,7 +34,6 @@ class Page:
 
 
 STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
-    ("std::algorithm::fft", "std_algorithm_fft.md"),
     ("std::algorithm::genetic", "std_algorithm_genetic.md"),
     ("std::algorithm::numeric", "std_algorithm_numeric.md"),
     ("std::algorithm::order", "std_algorithm_order.md"),
@@ -49,8 +48,6 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::chat", "std_chat.md"),
     ("std::compiler", "std_compiler.md"),
     ("std::date", "std_date.md"),
-    ("std::dsp", "std_dsp.md"),
-    ("std::dsp::convolution", "std_dsp_convolution.md"),
     ("std::env", "std_env.md"),
     ("std::esc", "std_esc.md"),
     ("std::event_loop", "std_event_loop.md"),
@@ -64,6 +61,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::json", "std_json.md"),
     ("std::jsonrpc", "std_jsonrpc.md"),
     ("std::limits", "std_limits.md"),
+    ("std::log", "std_log.md"),
     ("std::math", "std_math.md"),
     ("std::net", "std_net.md"),
     ("std::platform", "std_platform.md"),
@@ -88,11 +86,8 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
 ]
 
 MATH_DSP_MODULES = {
-    "std::algorithm::fft",
     "std::algorithm::numeric",
     "std::audio",
-    "std::dsp",
-    "std::dsp::convolution",
     "std::math",
     "std::rand",
     "std::simd",
@@ -124,12 +119,16 @@ PAGES: list[Page] = [
     Page(Path("docs/stdlib_misc_modules.md"), "Stdlib Misc Modules", "Stdlib-Misc-Modules", "Standard Library"),
     Page(Path("docs/stdlib_mlang_api.md"), "Stdlib Module API", "Stdlib-Module-API", "Standard Library"),
     Page(Path("stdlib/README.md"), "Stdlib README", "Stdlib-README", "Standard Library"),
+    Page(Path("docs/dsp/index.md"), "DSP Library", "DSP", "DSP Library"),
+    Page(Path("docs/dsp/filter.md"), "dsp::filter", "DSP-Filter", "DSP Library"),
+    Page(Path("docs/dsp/convolution.md"), "dsp::convolution", "DSP-Convolution", "DSP Library"),
+    Page(Path("docs/dsp/fft.md"), "dsp::fft", "DSP-FFT", "DSP Library"),
 ] + [
     Page(
         Path("docs/stdlib") / filename,
         module,
         stdlib_module_wiki_name(module),
-        "Math and DSP" if module in MATH_DSP_MODULES else "Stdlib Modules",
+        "Math and Audio" if module in MATH_DSP_MODULES else "Stdlib Modules",
     )
     for module, filename in STDLIB_MODULE_DOCS
 ] + [
@@ -234,7 +233,6 @@ STDLIB_TYPE_LINKS = {
 }
 
 STDLIB_MODULES = {
-    "std::algorithm::fft",
     "std::algorithm::genetic",
     "std::algorithm::numeric",
     "std::algorithm::order",
@@ -249,8 +247,6 @@ STDLIB_MODULES = {
     "std::chat",
     "std::compiler",
     "std::date",
-    "std::dsp",
-    "std::dsp::convolution",
     "std::env",
     "std::esc",
     "std::event_loop",
@@ -315,6 +311,14 @@ def stdlib_module_link(token: str) -> str | None:
 
 
 def inline_code_link(token: str) -> str | None:
+    if token == "dsp" or token.startswith("dsp::"):
+        if token.startswith("dsp::filter"):
+            return "DSP-Filter"
+        if token.startswith("dsp::convolution"):
+            return "DSP-Convolution"
+        if token.startswith("dsp::fft"):
+            return "DSP-FFT"
+        return "DSP"
     module_link = stdlib_module_link(token)
     if module_link:
         return module_link
@@ -511,7 +515,8 @@ def write_sidebar(out_dir: Path, pages: list[Page], manpage_names: list[str]) ->
         "Start Here",
         "Language",
         "Standard Library",
-        "Math and DSP",
+        "Math and Audio",
+        "DSP Library",
         "Stdlib Modules",
         "Tooling",
         "Examples",

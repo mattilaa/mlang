@@ -130,6 +130,12 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 - `examples/std_audio_simd_dsp_demo.mla` — SIMD-shaped DSP block using
   [`std::simd`](Stdlib-Simd) for vector gain/mix/envelope math before previewing through
   [`std::audio`](Stdlib-Audio), with command-line device/sample-rate/buffer selection.
+- `examples/dsp_convolution_demo.mla` — full, same, and valid convolution via
+  [`dsp::convolution`](DSP-Convolution).
+- `examples/dsp_fft_demo.mla` — forward/inverse transforms via [`dsp::fft`](DSP-FFT).
+- `examples/package_manager_coreaudio_filter` — real-time CoreAudio playback
+  of `examples/fft_example/illusion.wav` with dry, non-resonant, and resonant
+  cutoff sweeps driven by [`dsp::filter`](DSP-Filter).
 
 ## Focused regression examples
 

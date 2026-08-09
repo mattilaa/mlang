@@ -1,12 +1,12 @@
-/// \file std_fft_demo.mla
+/// \file dsp_fft_demo.mla
 /// @ingroup examples
-/// \brief std::fft forward/inverse FFT demo with sample arrays.
+/// \brief dsp::fft forward/inverse FFT demo with sample arrays.
 ///
-/// Simple std::algorithm::fft usage demo.
-mod std::algorithm::fft;
+/// Simple dsp::fft usage demo.
+mod dsp::fft;
 
-use std::algorithm::fft::forward;
-use std::algorithm::fft::inverse;
+use dsp::fft::forward;
+use dsp::fft::inverse;
 
 fn main() -> i32 {
     // 8 complex samples in interleaved form: [re0, im0, re1, im1, ...].

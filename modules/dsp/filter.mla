@@ -1,0 +1,311 @@
+/// \file filter.mla
+/// \brief Real-time-safe audio filters, parameter ramps, and sampler interpolation.
+///
+/// @defgroup dsp_filter dsp::filter
+/// @ingroup dsp
+/// @brief Stateful biquad filters and allocation-free control smoothing.
+/// @{
+
+extern fn sinf(value: f32) -> f32;
+extern fn cosf(value: f32) -> f32;
+extern fn expf(value: f32) -> f32;
+extern fn llroundf(value: f32) -> i64;
+
+fn clamp_f32(value: f32, low: f32, high: f32) -> f32 {
+    if value < low {
+        return low;
+    }
+    if value > high {
+        return high;
+    }
+    return value;
+}
+
+struct FilterDesign {
+    var cosine: f32;
+    var alpha: f32;
+    var inverse_a0: f32;
+};
+
+/// @brief Four-point cubic interpolation used for fractional sample playback.
+///
+/// `fraction` is normally in `[0, 1]`; `x0` and `x1` are the endpoints and
+/// `xm1`/`x2` are their neighboring samples. The polynomial matches the cubic
+/// sampler interpolation used by LinuxSampler.
+pub fn cubic_interpolate_f32(xm1: f32, x0: f32, x1: f32, x2: f32, fraction: f32) -> f32 {
+    let t: f32 = clamp_f32(fraction, 0.0f, 1.0f);
+    let a: f32 = (3.0f * (x0 - x1) - xm1 + x2) * 0.5f;
+    let b: f32 = 2.0f * x1 + xm1 - (5.0f * x0 + x2) * 0.5f;
+    let c: f32 = (x1 - xm1) * 0.5f;
+    return (((a * t) + b) * t + c) * t + x0;
+}
+
+/// @brief Bicubic interpolation over a row-major 4x4 neighborhood.
+///
+/// Returns zero when fewer than 16 values are provided. This helper is useful
+/// for two-dimensional DSP tables; audio sample-rate conversion normally uses
+/// the one-dimensional `cubic_interpolate_f32` function above.
+pub fn bicubic_interpolate_f32(samples: &list<f32>, x_fraction: f32, y_fraction: f32) -> f32 {
+    if samples.len() < 16 {
+        return 0.0f;
+    }
+    let row0: f32 = cubic_interpolate_f32(samples[0], samples[1], samples[2], samples[3], x_fraction);
+    let row1: f32 = cubic_interpolate_f32(samples[4], samples[5], samples[6], samples[7], x_fraction);
+    let row2: f32 = cubic_interpolate_f32(samples[8], samples[9], samples[10], samples[11], x_fraction);
+    let row3: f32 = cubic_interpolate_f32(samples[12], samples[13], samples[14], samples[15], x_fraction);
+    return cubic_interpolate_f32(row0, row1, row2, row3, y_fraction);
+}
+
+/// @brief Allocation-free linear parameter ramp.
+pub struct LinearRamp {
+    var current_value: f32;
+    var target_value: f32;
+    var step_value: f32;
+    var samples_left: i64;
+};
+
+impl LinearRamp {
+    /// @brief Create a ramp fixed at `value`.
+    pub fn new(value: f32) -> LinearRamp {
+        return LinearRamp {
+            current_value: value,
+            target_value: value,
+            step_value: 0.0f,
+            samples_left: 0
+        };
+    }
+
+    /// @brief Jump immediately to a value.
+    pub fn set_immediate(self: &mut Self, value: f32) -> void {
+        self.current_value = value;
+        self.target_value = value;
+        self.step_value = 0.0f;
+        self.samples_left = 0;
+    }
+
+    /// @brief Reach `target` after exactly `samples` calls to `next()`.
+    pub fn set_target(self: &mut Self, target: f32, samples: i64) -> void {
+        if samples <= 0 {
+            self.set_immediate(target);
+            return;
+        }
+        self.target_value = target;
+        self.samples_left = samples;
+        self.step_value = (target - self.current_value) / f32(samples);
+    }
+
+    /// @brief Advance the ramp by one sample and return the new value.
+    pub fn next(self: &mut Self) -> f32 {
+        if self.samples_left <= 0 {
+            return self.current_value;
+        }
+        self.current_value = self.current_value + self.step_value;
+        self.samples_left = self.samples_left - 1;
+        if self.samples_left == 0 {
+            self.current_value = self.target_value;
+            self.step_value = 0.0f;
+        }
+        return self.current_value;
+    }
+
+    /// @brief Return the current ramp value without advancing it.
+    pub fn value(self: LinearRamp) -> f32 {
+        return self.current_value;
+    }
+
+    /// @brief Return the number of samples remaining in the ramp.
+    pub fn remaining(self: LinearRamp) -> i64 {
+        return self.samples_left;
+    }
+}
+
+/// @brief Stateful second-order IIR filter using direct form I.
+///
+/// Resonance is specified in decibels. Zero dB gives a Butterworth-like
+/// response; larger positive values increase resonance while remaining
+/// bounded by the coefficient-design clamp.
+pub struct Biquad {
+    var b0: f32;
+    var b1: f32;
+    var b2: f32;
+    var a1: f32;
+    var a2: f32;
+    var x1: f32;
+    var x2: f32;
+    var y1: f32;
+    var y2: f32;
+};
+
+impl Biquad {
+    /// @brief Create a bypass filter with cleared history.
+    pub fn new() -> Biquad {
+        return Biquad {
+            b0: 1.0f, b1: 0.0f, b2: 0.0f,
+            a1: 0.0f, a2: 0.0f,
+            x1: 0.0f, x2: 0.0f, y1: 0.0f, y2: 0.0f
+        };
+    }
+
+    /// @brief Clear sample history without changing coefficients.
+    pub fn reset(self: &mut Self) -> void {
+        self.x1 = 0.0f;
+        self.x2 = 0.0f;
+        self.y1 = 0.0f;
+        self.y2 = 0.0f;
+    }
+
+    /// @brief Restore direct-form history, primarily for FFI-owned state.
+    pub fn restore_history(self: &mut Self, x1: f32, x2: f32, y1: f32, y2: f32) -> void {
+        self.x1 = x1;
+        self.x2 = x2;
+        self.y1 = y1;
+        self.y2 = y2;
+    }
+
+    /// @brief Return the previous input sample.
+    pub fn input_1(self: Biquad) -> f32 { return self.x1; }
+
+    /// @brief Return the input sample preceding `input_1()`.
+    pub fn input_2(self: Biquad) -> f32 { return self.x2; }
+
+    /// @brief Return the previous output sample.
+    pub fn output_1(self: Biquad) -> f32 { return self.y1; }
+
+    /// @brief Return the output sample preceding `output_1()`.
+    pub fn output_2(self: Biquad) -> f32 { return self.y2; }
+
+    fn design_values(cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> FilterDesign {
+        let safe_rate: f32 = sample_rate_hz < 1000.0f ? 1000.0f : sample_rate_hz;
+        let cutoff_max: f32 = safe_rate * 0.495f;
+        let cutoff: f32 = clamp_f32(cutoff_hz, 1.0f, cutoff_max);
+        let resonance: f32 = clamp_f32(resonance_db, 0.0f, 36.0f);
+        let omega: f32 = 2.0f * 3.14159265358979323846f * cutoff / safe_rate;
+        let sn: f32 = sinf(omega);
+        let cs: f32 = cosf(omega);
+        let alpha: f32 = sn * 0.70710678118654752440f * expf(0.0f - 0.11512925464970228420f * resonance);
+        let inverse_a0: f32 = 1.0f / (1.0f + alpha);
+        return FilterDesign {
+            cosine: cs,
+            alpha: alpha,
+            inverse_a0: inverse_a0
+        };
+    }
+
+    /// @brief Configure a two-pole low-pass filter.
+    pub fn set_lowpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
+        let v: FilterDesign = Biquad::design_values(cutoff_hz, resonance_db, sample_rate_hz);
+        self.b0 = v.inverse_a0 * (1.0f - v.cosine) * 0.5f;
+        self.b1 = v.inverse_a0 * (1.0f - v.cosine);
+        self.b2 = self.b0;
+        self.a1 = v.inverse_a0 * (2.0f * v.cosine);
+        self.a2 = v.inverse_a0 * (v.alpha - 1.0f);
+    }
+
+    /// @brief Configure a two-pole high-pass filter.
+    pub fn set_highpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
+        let v: FilterDesign = Biquad::design_values(cutoff_hz, resonance_db, sample_rate_hz);
+        self.b0 = v.inverse_a0 * (1.0f + v.cosine) * 0.5f;
+        self.b1 = v.inverse_a0 * (0.0f - (1.0f + v.cosine));
+        self.b2 = self.b0;
+        self.a1 = v.inverse_a0 * (2.0f * v.cosine);
+        self.a2 = v.inverse_a0 * (v.alpha - 1.0f);
+    }
+
+    /// @brief Configure a constant-skirt-gain two-pole band-pass filter.
+    pub fn set_bandpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
+        let v: FilterDesign = Biquad::design_values(cutoff_hz, resonance_db, sample_rate_hz);
+        self.b0 = v.inverse_a0 * v.alpha;
+        self.b1 = 0.0f;
+        self.b2 = 0.0f - self.b0;
+        self.a1 = v.inverse_a0 * (2.0f * v.cosine);
+        self.a2 = v.inverse_a0 * (v.alpha - 1.0f);
+    }
+
+    /// @brief Configure a two-pole band-reject (notch) filter.
+    pub fn set_bandreject(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
+        let v: FilterDesign = Biquad::design_values(cutoff_hz, resonance_db, sample_rate_hz);
+        self.b0 = v.inverse_a0;
+        self.b1 = v.inverse_a0 * (0.0f - 2.0f * v.cosine);
+        self.b2 = v.inverse_a0;
+        self.a1 = v.inverse_a0 * (2.0f * v.cosine);
+        self.a2 = v.inverse_a0 * (v.alpha - 1.0f);
+    }
+
+    /// @brief Process one sample without allocating or locking.
+    pub fn process(self: &mut Self, input: f32) -> f32 {
+        var output: f32 = self.b0 * input + self.b1 * self.x1 + self.b2 * self.x2
+            + self.a1 * self.y1 + self.a2 * self.y2;
+        if output < 0.000000000000000001f && output > -0.000000000000000001f {
+            output = 0.0f;
+        }
+        self.x2 = self.x1;
+        self.x1 = input;
+        self.y2 = self.y1;
+        self.y1 = output;
+        return output;
+    }
+}
+
+/// @brief Low-pass biquad with sample-accurate cutoff and resonance ramps.
+pub struct SmoothedLowpass {
+    var filter: Biquad;
+    var cutoff: LinearRamp;
+    var resonance: LinearRamp;
+    var sample_rate_hz: f32;
+};
+
+impl SmoothedLowpass {
+    /// @brief Create a smoothed low-pass filter at its initial parameters.
+    pub fn new(sample_rate_hz: f32, cutoff_hz: f32, resonance_db: f32) -> SmoothedLowpass {
+        var filter: Biquad = Biquad::new();
+        filter.set_lowpass(cutoff_hz, resonance_db, sample_rate_hz);
+        return SmoothedLowpass {
+            filter: filter,
+            cutoff: LinearRamp::new(cutoff_hz),
+            resonance: LinearRamp::new(resonance_db),
+            sample_rate_hz: sample_rate_hz
+        };
+    }
+
+    /// @brief Set cutoff and resonance targets over a sample count.
+    pub fn set_target(self: &mut Self, cutoff_hz: f32, resonance_db: f32, ramp_samples: i64) -> void {
+        self.cutoff.set_target(cutoff_hz, ramp_samples);
+        self.resonance.set_target(resonance_db, ramp_samples);
+    }
+
+    /// @brief Set cutoff and resonance targets over a duration in milliseconds.
+    pub fn set_target_ms(self: &mut Self, cutoff_hz: f32, resonance_db: f32, ramp_ms: f32) -> void {
+        let samples: i64 = llroundf(self.sample_rate_hz * clamp_f32(ramp_ms, 0.0f, 60000.0f) / 1000.0f);
+        self.set_target(cutoff_hz, resonance_db, samples);
+    }
+
+    /// @brief Process one sample with sample-accurate parameter smoothing.
+    pub fn process(self: &mut Self, input: f32) -> f32 {
+        let cutoff_hz: f32 = self.cutoff.next();
+        let resonance_db: f32 = self.resonance.next();
+        self.filter.set_lowpass(cutoff_hz, resonance_db, self.sample_rate_hz);
+        return self.filter.process(input);
+    }
+
+    /// @brief Clear audio history while retaining parameters and ramp state.
+    pub fn reset(self: &mut Self) -> void {
+        self.filter.reset();
+    }
+
+    /// @brief Return the current cutoff frequency.
+    pub fn cutoff_hz(self: SmoothedLowpass) -> f32 {
+        return self.cutoff.value();
+    }
+
+    /// @brief Return the current resonance in decibels.
+    pub fn resonance_db(self: SmoothedLowpass) -> f32 {
+        return self.resonance.value();
+    }
+
+    /// @brief Return the number of samples left in the active ramp.
+    pub fn remaining(self: SmoothedLowpass) -> i64 {
+        return self.cutoff.remaining();
+    }
+}
+
+/// @}

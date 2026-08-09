@@ -1,0 +1,149 @@
+mod std::testing;
+mod dsp::convolution;
+mod dsp::filter;
+
+use dsp::convolution::full_f32;
+use dsp::convolution::full_f64;
+use dsp::convolution::full_i64;
+use dsp::convolution::same_i64;
+use dsp::convolution::valid_f32;
+use dsp::convolution::valid_i64;
+use dsp::filter::Biquad;
+use dsp::filter::LinearRamp;
+use dsp::filter::SmoothedLowpass;
+use dsp::filter::cubic_interpolate_f32;
+use dsp::filter::bicubic_interpolate_f32;
+use std::testing::verify;
+
+fn approx_f32(a: f32, b: f32, eps: f32) -> bool {
+    var diff: f32 = a - b;
+    if diff < 0.0f {
+        diff = 0.0f - diff;
+    }
+    return diff <= eps;
+}
+
+fn approx_f64(a: f64, b: f64, eps: f64) -> bool {
+    var diff: f64 = a - b;
+    if diff < 0.0 {
+        diff = 0.0 - diff;
+    }
+    return diff <= eps;
+}
+
+#[test]
+fn test_dsp_convolution_i64_modes() {
+    let signal: list<i64> = [1, 2, 3];
+    let kernel: list<i64> = [4, 5];
+
+    let full: list<i64> = full_i64(signal, kernel);
+    verify(full.len() == 4);
+    verify(full[0] == 4);
+    verify(full[1] == 13);
+    verify(full[2] == 22);
+    verify(full[3] == 15);
+
+    let same: list<i64> = same_i64(signal, kernel);
+    verify(same.len() == 3);
+    verify(same[0] == 4);
+    verify(same[1] == 13);
+    verify(same[2] == 22);
+
+    let valid: list<i64> = valid_i64(signal, kernel);
+    verify(valid.len() == 2);
+    verify(valid[0] == 13);
+    verify(valid[1] == 22);
+
+    let empty: list<i64> = [];
+    let empty_full: list<i64> = full_i64(empty, kernel);
+    let invalid_valid: list<i64> = valid_i64(kernel, signal);
+    verify(empty_full.len() == 0);
+    verify(invalid_valid.len() == 0);
+}
+
+#[test]
+fn test_dsp_convolution_float_modes() {
+    let signal32: list<f32> = [1.0f, 2.0f, 3.0f];
+    let kernel32: list<f32> = [0.5f, 0.25f];
+    let full32: list<f32> = full_f32(signal32, kernel32);
+    let valid32: list<f32> = valid_f32(signal32, kernel32);
+    verify(full32.len() == 4);
+    verify(approx_f32(full32[0], 0.5f, 0.0001f));
+    verify(approx_f32(full32[1], 1.25f, 0.0001f));
+    verify(approx_f32(full32[2], 2.0f, 0.0001f));
+    verify(approx_f32(full32[3], 0.75f, 0.0001f));
+    verify(valid32.len() == 2);
+    verify(approx_f32(valid32[0], 1.25f, 0.0001f));
+    verify(approx_f32(valid32[1], 2.0f, 0.0001f));
+
+    let signal64: list<f64> = [2.0, 4.0];
+    let kernel64: list<f64> = [0.25, 0.5, 1.0];
+    let full64: list<f64> = full_f64(signal64, kernel64);
+    verify(full64.len() == 4);
+    verify(approx_f64(full64[0], 0.5, 0.0000001));
+    verify(approx_f64(full64[1], 2.0, 0.0000001));
+    verify(approx_f64(full64[2], 4.0, 0.0000001));
+    verify(approx_f64(full64[3], 4.0, 0.0000001));
+}
+
+#[test]
+fn test_dsp_cubic_sampler_interpolation() {
+    verify(approx_f32(cubic_interpolate_f32(0.0f, 1.0f, 2.0f, 3.0f, 0.0f), 1.0f, 0.0001f));
+    verify(approx_f32(cubic_interpolate_f32(0.0f, 1.0f, 2.0f, 3.0f, 0.5f), 1.5f, 0.0001f));
+    verify(approx_f32(cubic_interpolate_f32(0.0f, 1.0f, 2.0f, 3.0f, 1.0f), 2.0f, 0.0001f));
+}
+
+#[test]
+fn test_dsp_bicubic_table_interpolation() {
+    let values: list<f32> = [
+        0.0f, 1.0f, 2.0f, 3.0f,
+        4.0f, 5.0f, 6.0f, 7.0f,
+        8.0f, 9.0f, 10.0f, 11.0f,
+        12.0f, 13.0f, 14.0f, 15.0f
+    ];
+    verify(approx_f32(bicubic_interpolate_f32(values, 0.5f, 0.5f), 7.5f, 0.0001f));
+    let too_short: list<f32> = [1.0f, 2.0f];
+    verify(approx_f32(bicubic_interpolate_f32(too_short, 0.5f, 0.5f), 0.0f, 0.0001f));
+}
+
+#[test]
+fn test_dsp_linear_ramp_reaches_exact_target() {
+    var ramp: LinearRamp = LinearRamp::new(100.0f);
+    ramp.set_target(200.0f, 4);
+    verify(approx_f32(ramp.next(), 125.0f, 0.0001f));
+    verify(approx_f32(ramp.next(), 150.0f, 0.0001f));
+    verify(approx_f32(ramp.next(), 175.0f, 0.0001f));
+    verify(approx_f32(ramp.next(), 200.0f, 0.0001f));
+    verify(ramp.remaining() == 0);
+}
+
+#[test]
+fn test_dsp_biquad_lowpass_and_highpass_dc() {
+    var lowpass: Biquad = Biquad::new();
+    lowpass.set_lowpass(1000.0f, 0.0f, 48000.0f);
+    var low_output: f32 = 0.0f;
+    for i in 0..4096 {
+        low_output = lowpass.process(1.0f);
+    }
+    verify(approx_f32(low_output, 1.0f, 0.001f));
+
+    var highpass: Biquad = Biquad::new();
+    highpass.set_highpass(1000.0f, 0.0f, 48000.0f);
+    var high_output: f32 = 0.0f;
+    for i in 0..4096 {
+        high_output = highpass.process(1.0f);
+    }
+    verify(approx_f32(high_output, 0.0f, 0.001f));
+}
+
+#[test]
+fn test_dsp_smoothed_lowpass_parameter_ramp() {
+    var filter: SmoothedLowpass = SmoothedLowpass::new(48000.0f, 200.0f, 0.0f);
+    filter.set_target(2200.0f, 12.0f, 8);
+    for i in 0..8 {
+        let _ = filter.process(0.0f);
+    }
+    verify(approx_f32(filter.cutoff_hz(), 2200.0f, 0.001f));
+    verify(approx_f32(filter.resonance_db(), 12.0f, 0.001f));
+    verify(filter.remaining() == 0);
+}

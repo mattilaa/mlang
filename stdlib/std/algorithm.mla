@@ -2,7 +2,6 @@
 /// \brief Algorithm namespace root for stdlib.
 ///
 /// Submodules:
-/// - `std::algorithm::fft`
 /// - `std::algorithm::fuzzy`
 /// - `std::algorithm::genetic`
 /// - `std::algorithm::numeric`
@@ -18,7 +17,6 @@
 /// @{
 
 /// \cond INTERNAL_IMPORTS
-mod std::algorithm::fft;
 mod std::algorithm::fuzzy;
 mod std::algorithm::genetic;
 mod std::algorithm::numeric;

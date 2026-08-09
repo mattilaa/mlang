@@ -1,0 +1,73 @@
+/// \file fft.mla
+/// \brief Fast Fourier Transform helpers (dsp::fft).
+///
+/// Integer FFT over interleaved complex arrays:
+/// `[re0, im0, re1, im1, ...]` using `list<i64>`.
+/// Returns empty list on invalid input.
+///
+/// @defgroup dsp_fft dsp::fft
+/// @ingroup dsp
+/// @brief Fast Fourier Transform helpers.
+/// @{
+
+
+/// @brief Check whether n is a power-of-two (> 0).
+/// @ingroup dsp_fft
+/// \cond INTERNAL_IMPORTS
+mod dsp::fft::detail;
+use dsp::fft::detail::*;
+/// \endcond
+
+pub fn is_power_of_two(n: i64) -> bool {
+    return __mlang_std_fft_is_power_of_two(n) != 0;
+}
+
+/// @brief Forward FFT over interleaved complex samples.
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Transformed data, or empty list on invalid input.
+/// @ingroup dsp_fft
+pub fn forward(data: list<i64>) -> list<i64> {
+    return __mlang_std_fft_forward_i64(data);
+}
+
+/// @brief Inverse FFT over interleaved complex samples.
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Inverse-transformed data, or empty list on invalid input.
+/// @ingroup dsp_fft
+pub fn inverse(data: list<i64>) -> list<i64> {
+    return __mlang_std_fft_inverse_i64(data);
+}
+
+/// @brief Forward FFT over interleaved complex samples (f32).
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Transformed data, or empty list on invalid input.
+/// @ingroup dsp_fft
+pub fn forward_f32(data: list<f32>) -> list<f32> {
+    return __mlang_std_fft_forward_f32(data);
+}
+
+/// @brief Inverse FFT over interleaved complex samples (f32).
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Inverse-transformed data, or empty list on invalid input.
+/// @ingroup dsp_fft
+pub fn inverse_f32(data: list<f32>) -> list<f32> {
+    return __mlang_std_fft_inverse_f32(data);
+}
+
+/// @brief Forward FFT over interleaved complex samples (f64).
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Transformed data, or empty list on invalid input.
+/// @ingroup dsp_fft
+pub fn forward_f64(data: list<f64>) -> list<f64> {
+    return __mlang_std_fft_forward_f64(data);
+}
+
+/// @brief Inverse FFT over interleaved complex samples (f64).
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Inverse-transformed data, or empty list on invalid input.
+/// @ingroup dsp_fft
+pub fn inverse_f64(data: list<f64>) -> list<f64> {
+    return __mlang_std_fft_inverse_f64(data);
+}
+
+/// @}

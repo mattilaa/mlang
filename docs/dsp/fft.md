@@ -1,6 +1,6 @@
-# std::algorithm::fft
+# dsp::fft
 
-Module file: `stdlib/std/algorithm/fft.mla`
+Module file: `modules/dsp/fft.mla`
 
 Radix-2 FFT over interleaved complex arrays:
 `[re0, im0, re1, im1, ...]`.

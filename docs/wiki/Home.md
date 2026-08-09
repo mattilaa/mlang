@@ -45,6 +45,7 @@ If you are new to MLang, read these pages in this order:
 4. [Language Attributes](Language-Attributes)
 5. [Package Manager](Package-Manager)
 6. [Stdlib Module API](Stdlib-Module-API)
+7. [DSP Library](DSP)
 
 ## Quick Links
 
@@ -65,6 +66,9 @@ If you are new to MLang, read these pages in this order:
   `size_of`.
 - [Stdlib Module API](Stdlib-Module-API)
   Standard library index with each module split into its own topic page.
+- [DSP Library](DSP)
+  Filtering, convolution, FFT, interpolation, and real-time parameter ramps
+  under the standalone [`dsp`](DSP) namespace.
 - [Package Manager](Package-Manager)
   `mlang pkg` workflow, subcommands, manifest layout, and package build
   configuration keys.
@@ -178,6 +182,12 @@ Use this section as a map into the existing documentation.
   - threading and synchronization
   - terminal truecolor image rendering ([`std::image`](Stdlib-Image))
   - [`Vec`](Stdlib-Vec), [`BitSet`](Stdlib-Bitset), [`span`](Stdlib-Span), `sed`, and more
+
+### DSP Library
+
+- [DSP Library](DSP)
+  Includes [`dsp::filter`](DSP-Filter), [`dsp::convolution`](DSP-Convolution), and [`dsp::fft`](DSP-FFT), plus the
+  CoreAudio real-time sweep example.
 
 ### Practical Examples
 

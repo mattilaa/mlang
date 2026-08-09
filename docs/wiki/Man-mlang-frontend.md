@@ -43,6 +43,9 @@ All other arguments are interpreted as normal MLang compiler, test, benchmark,
 documentation, or package-manager arguments and are forwarded to the backend.
 .SH ENVIRONMENT
 .TP
+.B MLANG_MODULE_PATH
+Override the standalone MLang library module search path.
+.TP
 .B MLANG_PKG_IMPL
 Select the package-manager backend when the
 .B pkg

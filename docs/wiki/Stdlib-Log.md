@@ -50,7 +50,7 @@ enabled: green for `out`, yellow for `warn`, red for `err`; the message text is
 normal white. Disable colors with `set_timestamp_colors_enabled(0)` or override
 per-level colors with `set_timestamp_color_code(level_out(), 36)`.
 
-```mlang
+```rust
 mod std::log;
 use std::log::*;
 

@@ -786,6 +786,10 @@ export MLANG_STDLIB_LIB_PATH=~/.local/lib/mlang
 The stdlib module search path is controlled by `MLANG_STDLIB_PATH` and defaults
 to `~/.local/share/mlang/stdlib` when installed.
 
+Standalone libraries outside the `std` namespace use `MLANG_MODULE_PATH` and
+default to `~/.local/share/mlang/modules`. The bundled `dsp` library is
+installed there and imported with paths such as `dsp::filter` and `dsp::fft`.
+
 ## Build + Install
 Build the compiler first from the repository root:
 
@@ -1170,8 +1174,8 @@ non-blocking mode, read/write timeouts) example:
 `examples/std_net_demo.mla`.
 Random API (`std::rand` seed/range helpers) example:
 `examples/std_rand_demo.mla`.
-FFT API (`std::algorithm::fft` forward/inverse on split real/imag arrays) example:
-`examples/std_fft_demo.mla`.
+FFT API (`dsp::fft` forward/inverse on split real/imag arrays) example:
+`examples/dsp_fft_demo.mla`.
 Regex API (`std::regex::Regex`, compile/match/find/captures) example:
 `examples/std_regex_demo.mla`.
 Multithreaded TCP server/client examples:
@@ -1417,7 +1421,7 @@ jack_connect mlang_drum_machine:out_r system:playback_2
 
 ### JACK2 Stereo FFT Analyzer Demo
 Plays a stereo WAV via JACK2 and renders a real-time 100x25 ASCII spectrum
-analyzer with colorized stereo differences (left/right/overlap) using `std::algorithm::fft`.
+analyzer with colorized stereo differences (left/right/overlap) using `dsp::fft`.
 `run_demo.sh` also accepts non-WAV input (for example `.m4a`) via `ffmpeg` decode.
 
 Demo directory:

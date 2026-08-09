@@ -3,7 +3,9 @@
 <a id="stdlib_mlang_api"></a>
 
 # Mlang Stdlib Module API
-This page is the index for the **MLang-facing stdlib modules** under `stdlib/std/`. Detailed APIs are split by topic so audio, DSP, IO, collections, runtime, and other areas live on separate paths.
+This page is the index for the **MLang-facing stdlib modules** under `stdlib/std/`.
+The separately installed [`dsp` library](DSP) contains filtering,
+convolution, FFT, and sampler interpolation APIs outside the `std` namespace.
 
 - [Language Built-ins](Language-Built-ins) documents compiler-provided collection methods, enum behavior, aliases, [`bit`](Quick-Guide#types), and `size_of`.
 - Stdlib API documentation uses lowercase public type names such as `mutex`,
@@ -17,7 +19,6 @@ This page is the index for the **MLang-facing stdlib modules** under `stdlib/std
 These are the documented APIs you import in Mlang source via:
 
 ```rust
-mod std::algorithm::fft;
 mod std::algorithm::genetic;
 mod std::algorithm::numeric;
 mod std::algorithm::order;
@@ -32,8 +33,6 @@ mod std::bytes;
 mod std::chat;
 mod std::compiler;
 mod std::date;
-mod std::dsp;
-mod std::dsp::convolution;
 mod std::env;
 mod std::esc;
 mod std::event_loop;
@@ -74,7 +73,6 @@ mod std::vec;
 ## Source Files
 
 The source-of-truth implementation files are:
-- `stdlib/std/algorithm/fft.mla`
 - `stdlib/std/algorithm/genetic.mla`
 - `stdlib/std/algorithm/numeric.mla`
 - `stdlib/std/algorithm/order.mla`
@@ -89,8 +87,6 @@ The source-of-truth implementation files are:
 - `stdlib/std/chat.mla`
 - `stdlib/std/compiler.mla`
 - `stdlib/std/date.mla`
-- `stdlib/std/dsp.mla`
-- `stdlib/std/dsp/convolution.mla`
 - `stdlib/std/env.mla`
 - `stdlib/std/esc.mla`
 - `stdlib/std/event_loop.mla`
@@ -127,13 +123,10 @@ The source-of-truth implementation files are:
 - `stdlib/std/unordered.mla`
 - `stdlib/std/vec.mla`
 
-## Math and DSP
+## Math and Audio
 
 - [std::audio](Stdlib-Audio)
-- [std::algorithm::fft](Stdlib-Algorithm-Fft)
 - [std::algorithm::numeric](Stdlib-Algorithm-Numeric)
-- [std::dsp](Stdlib-Dsp)
-- [std::dsp::convolution](Stdlib-Dsp-Convolution)
 - [std::math](Stdlib-Math)
 - [std::rand](Stdlib-Rand)
 - [std::simd](Stdlib-Simd)

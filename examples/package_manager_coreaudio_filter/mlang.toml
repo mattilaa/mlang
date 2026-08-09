@@ -1,0 +1,53 @@
+[package]
+name = "coreaudio_filter_sweeps"
+version = "0.1.0"
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+module_paths = ["../../modules"]
+
+[[task]]
+name = "toolchain-check"
+supported_hosts = ["darwin"]
+unsupported_message = "This realtime filter example requires macOS CoreAudio"
+commands = [
+  "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler first.; exit 1; fi'",
+  "sh -c 'for tool in cmake c++; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool: $tool; exit 1; fi; done'"
+]
+
+[[task]]
+name = "prepare"
+depends_on = ["toolchain-check"]
+commands = ["mkdir -p {{build_dir}}/obj {{build_dir}}/cmake"]
+
+[[task]]
+name = "compile-filter"
+phase = "compile"
+depends_on = ["prepare"]
+language = "mlang"
+source = "src/filter_processor.mla"
+output = "{{build_dir}}/obj/filter_processor.o"
+compile_only = true
+opt_level = "O2"
+
+[[task]]
+name = "configure"
+depends_on = ["compile-filter"]
+commands = [
+  "cmake -S {{root}} -B {{build_dir}}/cmake -DCMAKE_BUILD_TYPE=Release -DMLANG_FILTER_OBJECT={{build_dir}}/obj/filter_processor.o"
+]
+
+[[task]]
+name = "build"
+phase = "build"
+depends_on = ["configure"]
+commands = ["cmake --build {{build_dir}}/cmake --target coreaudio_filter_sweeps -j4"]
+
+[[task]]
+name = "demo"
+depends_on = ["build"]
+log_output = false
+shell = [
+  "exec {{build_dir}}/cmake/coreaudio_filter_sweeps ../../examples/fft_example/illusion.wav"
+]
