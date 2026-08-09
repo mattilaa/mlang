@@ -9,7 +9,10 @@ use dsp::convolution::same_i64;
 use dsp::convolution::valid_f32;
 use dsp::convolution::valid_i64;
 use dsp::filter::Biquad;
+use dsp::filter::Bandpass24;
+use dsp::filter::Highpass24;
 use dsp::filter::LinearRamp;
+use dsp::filter::Lowpass24;
 use dsp::filter::SmoothedLowpass;
 use dsp::filter::cubic_interpolate_f32;
 use dsp::filter::bicubic_interpolate_f32;
@@ -134,6 +137,31 @@ fn test_dsp_biquad_lowpass_and_highpass_dc() {
         high_output = highpass.process(1.0f);
     }
     verify(approx_f32(high_output, 0.0f, 0.001f));
+}
+
+#[test]
+fn test_dsp_24db_filter_dc_responses() {
+    var lowpass: Lowpass24 = Lowpass24::new();
+    lowpass.set_lowpass(1000.0f, 0.0f, 48000.0f);
+    var low_output: f32 = 0.0f;
+
+    var highpass: Highpass24 = Highpass24::new();
+    highpass.set_highpass(1000.0f, 0.0f, 48000.0f);
+    var high_output: f32 = 0.0f;
+
+    var bandpass: Bandpass24 = Bandpass24::new();
+    bandpass.set_bandpass(1000.0f, 0.0f, 48000.0f);
+    var band_output: f32 = 0.0f;
+
+    for i in 0..8192 {
+        low_output = lowpass.process(1.0f);
+        high_output = highpass.process(1.0f);
+        band_output = bandpass.process(1.0f);
+    }
+
+    verify(approx_f32(low_output, 1.0f, 0.002f));
+    verify(approx_f32(high_output, 0.0f, 0.002f));
+    verify(approx_f32(band_output, 0.0f, 0.002f));
 }
 
 #[test]

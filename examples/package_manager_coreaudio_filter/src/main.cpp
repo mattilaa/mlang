@@ -16,6 +16,65 @@
 
 namespace {
 
+enum class FilterMode : std::int32_t
+{
+    Lowpass = 1,
+    Highpass = 2,
+    Bandpass = 3,
+};
+
+const char* filterModeName(FilterMode mode)
+{
+    switch(mode)
+    {
+    case FilterMode::Lowpass: return "low-pass 24 dB/octave";
+    case FilterMode::Highpass: return "high-pass 24 dB/octave";
+    case FilterMode::Bandpass: return "band-pass 24 dB/octave";
+    }
+    return "unknown";
+}
+
+bool parseFilterMode(const std::string& value, FilterMode& mode)
+{
+    if(value == "lowpass24" || value == "lowpass")
+        mode = FilterMode::Lowpass;
+    else if(value == "highpass24" || value == "highpass")
+        mode = FilterMode::Highpass;
+    else if(value == "bandpass24" || value == "bandpass")
+        mode = FilterMode::Bandpass;
+    else
+        return false;
+    return true;
+}
+
+void printUsage(const char* program)
+{
+    std::printf("CoreAudio real-time 24 dB filter sweep demo\n\n");
+    std::printf("Usage:\n");
+    std::printf("  %s [--filter MODE] [WAV]\n", program);
+    std::printf("  %s --validate [WAV]\n\n", program);
+    std::printf("Options:\n");
+    std::printf("  --filter MODE  Select a 24 dB/octave filter (default: lowpass24)\n");
+    std::printf("  --validate     Validate WAV decoding without opening an audio device\n");
+    std::printf("  -h, --help     Show this help\n\n");
+    std::printf("Filter modes:\n");
+    std::printf("  lowpass24      Fourth-order low-pass cutoff sweeps\n");
+    std::printf("  highpass24     Fourth-order high-pass cutoff sweeps\n");
+    std::printf("  bandpass24     Cascaded fourth-order band-pass center sweeps\n");
+    std::printf("  Short aliases: lowpass, highpass, bandpass\n\n");
+    std::printf("Input:\n");
+    std::printf("  WAV must be mono or stereo 16-bit PCM. The default is illusion.wav.\n");
+    std::printf("  Sweep timing automatically spans the complete WAV length.\n\n");
+    std::printf("Display note:\n");
+    std::printf("  24 dB/octave is the filter slope. Resonance targets such as +18 dB\n");
+    std::printf("  are independent resonance gain settings, not filter slopes.\n\n");
+    std::printf("Examples:\n");
+    std::printf("  %s --filter lowpass24\n", program);
+    std::printf("  %s --filter highpass24 /path/to/sample.wav\n", program);
+    std::printf("  %s --filter bandpass24 /path/to/sample.wav\n", program);
+    std::printf("  %s --validate /path/to/sample.wav\n", program);
+}
+
 struct WavData
 {
     std::uint32_t sampleRate {0};
@@ -119,10 +178,10 @@ struct Sweep
 
 constexpr Sweep kSweeps[] = {
     {"dry reference", false, 12000.0f, 12000.0f, 0.0f, 3},
-    {"closing sweep, no resonance", true, 12000.0f, 180.0f, 0.0f, 5},
-    {"opening sweep, no resonance", true, 180.0f, 12000.0f, 0.0f, 5},
-    {"closing sweep, 18 dB resonance", true, 12000.0f, 180.0f, 18.0f, 5},
-    {"opening sweep, 18 dB resonance", true, 180.0f, 12000.0f, 18.0f, 5},
+    {"falling cutoff, no resonance", true, 12000.0f, 180.0f, 0.0f, 5},
+    {"rising cutoff, no resonance", true, 180.0f, 12000.0f, 0.0f, 5},
+    {"falling cutoff, increasing resonance", true, 12000.0f, 180.0f, 18.0f, 5},
+    {"rising cutoff, resonant", true, 180.0f, 12000.0f, 18.0f, 5},
 };
 
 constexpr std::size_t kSweepCount = sizeof(kSweeps) / sizeof(kSweeps[0]);
@@ -180,16 +239,14 @@ void enterSweep(PlaybackState& state, int index)
     if(index < 0 || index >= static_cast<int>(kSweepCount))
         return;
     const Sweep& sweep = kSweeps[index];
-    if(sweep.filtered)
-    {
-        const float sampleRate = static_cast<float>(state.wav->sampleRate);
-        const auto rampSamples = static_cast<std::int64_t>(
-            state.sweepBoundaries[index + 1] - state.sweepBoundaries[index]);
-        mlang::coreaudio_filter::reset(
-            sampleRate, sweep.cutoffStart, sweep.resonanceDb);
-        mlang::coreaudio_filter::setTarget(
-            sweep.cutoffEnd, sweep.resonanceDb, rampSamples);
-    }
+    const auto rampSamples = static_cast<std::int64_t>(
+        state.sweepBoundaries[index + 1] - state.sweepBoundaries[index]);
+    mlang::coreaudio_filter::setTarget(
+        sweep.cutoffEnd, sweep.resonanceDb, rampSamples);
+    const auto crossfadeSamples = std::min<std::int64_t>(
+        rampSamples, static_cast<std::int64_t>(state.wav->sampleRate / 50));
+    mlang::coreaudio_filter::setWetTarget(
+        sweep.filtered ? 1.0f : 0.0f, crossfadeSamples);
 }
 
 void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer,
@@ -217,13 +274,9 @@ void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer,
         const std::uint64_t sourceIndex = state.framesRendered * wav.channels;
         float left = wav.samples[sourceIndex];
         float right = wav.channels == 2 ? wav.samples[sourceIndex + 1] : left;
-        const Sweep& sweep = kSweeps[state.activeSweep];
-        if(sweep.filtered)
-        {
-            mlang::coreaudio_filter::beginFrame();
-            left = mlang::coreaudio_filter::processLeft(left);
-            right = mlang::coreaudio_filter::processRight(right);
-        }
+        mlang::coreaudio_filter::beginFrame();
+        left = mlang::coreaudio_filter::processLeft(left);
+        right = mlang::coreaudio_filter::processRight(right);
 
         output[i * channels] = std::clamp(left * 0.55f, -0.98f, 0.98f);
         output[i * channels + 1] = std::clamp(right * 0.55f, -0.98f, 0.98f);
@@ -252,12 +305,47 @@ void outputCallback(void* userData, AudioQueueRef queue,
 
 int main(int argc, char** argv)
 {
-    const bool validateOnly = argc > 1 && std::string(argv[1]) == "--validate";
-    const std::string wavPath = validateOnly && argc > 2
-        ? argv[2]
-        : argc > 1 && !validateOnly
-        ? argv[1]
-        : "../../examples/fft_example/illusion.wav";
+    bool validateOnly = false;
+    FilterMode filterMode = FilterMode::Lowpass;
+    std::string wavPath = "../../examples/fft_example/illusion.wav";
+    bool hasWavPath = false;
+    for(int i = 1; i < argc; ++i)
+    {
+        const std::string argument = argv[i];
+        if(argument == "--help" || argument == "-h")
+        {
+            printUsage(argv[0]);
+            return 0;
+        }
+        if(argument == "--validate")
+        {
+            validateOnly = true;
+            continue;
+        }
+        if(argument == "--filter")
+        {
+            if(i + 1 >= argc || !parseFilterMode(argv[++i], filterMode))
+            {
+                std::fprintf(stderr,
+                    "--filter requires lowpass24, highpass24, or bandpass24\n");
+                return 2;
+            }
+            continue;
+        }
+        if(!argument.empty() && argument[0] == '-')
+        {
+            std::fprintf(stderr, "unknown option: %s\n", argument.c_str());
+            printUsage(argv[0]);
+            return 2;
+        }
+        if(hasWavPath)
+        {
+            std::fprintf(stderr, "only one WAV path may be provided\n");
+            return 2;
+        }
+        wavPath = argument;
+        hasWavPath = true;
+    }
     WavData wav;
     std::string error;
     if(!loadPcm16Wav(wavPath, wav, error))
@@ -279,6 +367,9 @@ int main(int argc, char** argv)
     state.wav = &wav;
     state.totalFrames = wav.samples.size() / wav.channels;
     buildSweepSchedule(state);
+    mlang::coreaudio_filter::reset(
+        static_cast<std::int32_t>(filterMode), static_cast<float>(wav.sampleRate),
+        kSweeps[0].cutoffStart, kSweeps[0].resonanceDb);
 
     AudioStreamBasicDescription format {};
     format.mSampleRate = wav.sampleRate;
@@ -313,7 +404,8 @@ int main(int argc, char** argv)
         fillBuffer(state.queue, buffer, state);
     }
 
-    std::printf("CoreAudio realtime dsp::filter demo\n");
+    std::printf("CoreAudio realtime dsp::filter demo: %s\n",
+                filterModeName(filterMode));
     std::printf("source: %s (%u Hz, %u channel%s)\n", wavPath.c_str(),
                 wav.sampleRate, wav.channels, wav.channels == 1 ? "" : "s");
     std::printf("demo duration: %.2f seconds (full source)\n",
@@ -324,8 +416,18 @@ int main(int argc, char** argv)
             static_cast<double>(state.sweepBoundaries[i]) / wav.sampleRate;
         const double endSeconds =
             static_cast<double>(state.sweepBoundaries[i + 1]) / wav.sampleRate;
-        std::printf("  %zu. %6.2f-%6.2f s  %s\n", i + 1, startSeconds,
-                    endSeconds, kSweeps[i].name);
+        if(kSweeps[i].filtered)
+        {
+            std::printf("  %zu. %6.2f-%6.2f s  %s\n",
+                        i + 1, startSeconds, endSeconds, kSweeps[i].name);
+            std::printf("      filter: %s; resonance target: %+.0f dB\n",
+                        filterModeName(filterMode), kSweeps[i].resonanceDb);
+        }
+        else
+        {
+            std::printf("  %zu. %6.2f-%6.2f s  %s [unfiltered]\n",
+                        i + 1, startSeconds, endSeconds, kSweeps[i].name);
+        }
     }
 
     rc = AudioQueueStart(state.queue, nullptr);
@@ -343,7 +445,17 @@ int main(int argc, char** argv)
         if(current != announced && current >= 0 && current < static_cast<int>(kSweepCount))
         {
             announced = current;
-            std::printf("now: %s\n", kSweeps[current].name);
+            const Sweep& sweep = kSweeps[current];
+            if(sweep.filtered)
+            {
+                std::printf("now: %s [%s; resonance target %+.0f dB]\n",
+                            sweep.name, filterModeName(filterMode),
+                            sweep.resonanceDb);
+            }
+            else
+            {
+                std::printf("now: %s [unfiltered]\n", sweep.name);
+            }
             std::fflush(stdout);
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));

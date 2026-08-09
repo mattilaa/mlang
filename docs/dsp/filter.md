@@ -19,6 +19,9 @@ design methods:
 - `process(input) -> f32`
 - `reset()`
 
+The explicit-Q variants `set_lowpass_q`, `set_highpass_q`, and
+`set_bandpass_q` are available for constructing tuned cascades.
+
 Cutoff is clamped to `1 Hz .. 0.495 * sample_rate` and resonance to
 `0 .. 36 dB` before coefficient calculation.
 
@@ -28,6 +31,28 @@ use dsp::filter::Biquad;
 
 var filter: Biquad = Biquad::new();
 filter.set_lowpass(1200.0f, 6.0f, 48000.0f);
+let output: f32 = filter.process(input);
+```
+
+## 24 dB filters
+
+The fourth-order filters cascade two biquads. Low-pass and high-pass use the
+stage Q values for a Butterworth response at `0 dB` resonance; band-pass uses
+the same tuned stage pair around its center frequency:
+
+- `Lowpass24::set_lowpass(cutoff_hz, resonance_db, sample_rate_hz)`
+- `Highpass24::set_highpass(cutoff_hz, resonance_db, sample_rate_hz)`
+- `Bandpass24::set_bandpass(center_hz, resonance_db, sample_rate_hz)`
+
+Each type provides `new()`, `process(input)`, and `reset()`. The low-pass and
+high-pass stop bands roll off at 24 dB/octave. Cascading both band-pass stages
+gives a 24 dB/octave rolloff on either side of its pass band.
+
+```mla
+use dsp::filter::Highpass24;
+
+var filter: Highpass24 = Highpass24::new();
+filter.set_highpass(1200.0f, 6.0f, 48000.0f);
 let output: f32 = filter.process(input);
 ```
 
@@ -64,7 +89,13 @@ Bicubic interpolation is included for two-dimensional DSP parameter tables.
 ## CoreAudio example
 
 [`examples/package_manager_coreaudio_filter`](../../examples/package_manager_coreaudio_filter)
-loads `examples/fft_example/illusion.wav` and compares dry playback with
-opening and closing cutoff sweeps, first without resonance and then with
-`18 dB` resonance. All file decoding and buffer allocation happens before the
-CoreAudio callback starts.
+loads `examples/fft_example/illusion.wav` and runs 24 dB cutoff sweeps. Select
+the topology with `--filter lowpass24`, `--filter highpass24`, or
+`--filter bandpass24`. The shorter names remain accepted as aliases. The
+processor keeps filter history across sweep sections and crossfades from the
+dry reference to filtered output to avoid transition clicks. All file decoding
+and buffer allocation happens before the CoreAudio callback starts.
+
+The binary reports the 24 dB/octave filter slope separately from each
+section's resonance target. The `+18 dB` target in the resonant sections is
+resonance gain and does not describe the filter slope.
