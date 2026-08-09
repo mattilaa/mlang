@@ -99,3 +99,6 @@ and buffer allocation happens before the CoreAudio callback starts.
 The binary reports the 24 dB/octave filter slope separately from each
 section's resonance target. The `+18 dB` target in the resonant sections is
 resonance gain and does not describe the filter slope.
+
+Input may be mono or stereo 16-bit PCM WAV, AIFF, or uncompressed AIFF-C.
+Use `--validate PATH` to check decoding without opening an audio device.

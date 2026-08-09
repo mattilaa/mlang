@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -51,11 +52,11 @@ void printUsage(const char* program)
 {
     std::printf("CoreAudio real-time 24 dB filter sweep demo\n\n");
     std::printf("Usage:\n");
-    std::printf("  %s [--filter MODE] [WAV]\n", program);
-    std::printf("  %s --validate [WAV]\n\n", program);
+    std::printf("  %s [--filter MODE] [AUDIO]\n", program);
+    std::printf("  %s --validate [AUDIO]\n\n", program);
     std::printf("Options:\n");
     std::printf("  --filter MODE  Select a 24 dB/octave filter (default: lowpass24)\n");
-    std::printf("  --validate     Validate WAV decoding without opening an audio device\n");
+    std::printf("  --validate     Validate audio decoding without opening an audio device\n");
     std::printf("  -h, --help     Show this help\n\n");
     std::printf("Filter modes:\n");
     std::printf("  lowpass24      Fourth-order low-pass cutoff sweeps\n");
@@ -63,19 +64,19 @@ void printUsage(const char* program)
     std::printf("  bandpass24     Cascaded fourth-order band-pass center sweeps\n");
     std::printf("  Short aliases: lowpass, highpass, bandpass\n\n");
     std::printf("Input:\n");
-    std::printf("  WAV must be mono or stereo 16-bit PCM. The default is illusion.wav.\n");
-    std::printf("  Sweep timing automatically spans the complete WAV length.\n\n");
+    std::printf("  WAV, AIFF, or uncompressed AIFF-C must be mono or stereo 16-bit PCM.\n");
+    std::printf("  The default is illusion.wav. Sweeps span the complete file length.\n\n");
     std::printf("Display note:\n");
     std::printf("  24 dB/octave is the filter slope. Resonance targets such as +18 dB\n");
     std::printf("  are independent resonance gain settings, not filter slopes.\n\n");
     std::printf("Examples:\n");
     std::printf("  %s --filter lowpass24\n", program);
     std::printf("  %s --filter highpass24 /path/to/sample.wav\n", program);
-    std::printf("  %s --filter bandpass24 /path/to/sample.wav\n", program);
-    std::printf("  %s --validate /path/to/sample.wav\n", program);
+    std::printf("  %s --filter bandpass24 /path/to/sample.aif\n", program);
+    std::printf("  %s --validate /path/to/sample.aif\n", program);
 }
 
-struct WavData
+struct AudioData
 {
     std::uint32_t sampleRate {0};
     std::uint16_t channels {0};
@@ -96,7 +97,38 @@ std::uint32_t readU32(const unsigned char* p)
            (static_cast<std::uint32_t>(p[3]) << 24);
 }
 
-bool loadPcm16Wav(const std::string& path, WavData& out, std::string& error)
+std::uint16_t readU16Be(const unsigned char* p)
+{
+    return (static_cast<std::uint16_t>(p[0]) << 8) |
+           static_cast<std::uint16_t>(p[1]);
+}
+
+std::uint32_t readU32Be(const unsigned char* p)
+{
+    return (static_cast<std::uint32_t>(p[0]) << 24) |
+           (static_cast<std::uint32_t>(p[1]) << 16) |
+           (static_cast<std::uint32_t>(p[2]) << 8) |
+           static_cast<std::uint32_t>(p[3]);
+}
+
+double readExtended80(const unsigned char* p)
+{
+    const std::uint16_t signAndExponent = readU16Be(p);
+    if((signAndExponent & 0x8000U) != 0)
+        return 0.0;
+    const std::uint16_t exponent = signAndExponent & 0x7fffU;
+    std::uint64_t mantissa = 0;
+    for(int i = 0; i < 8; ++i)
+        mantissa = (mantissa << 8) | p[2 + i];
+    if(exponent == 0 && mantissa == 0)
+        return 0.0;
+    if(exponent == 0x7fffU)
+        return 0.0;
+    return std::ldexp(static_cast<double>(mantissa),
+                      static_cast<int>(exponent) - 16383 - 63);
+}
+
+bool loadPcm16Wav(const std::string& path, AudioData& out, std::string& error)
 {
     std::ifstream stream(path, std::ios::binary);
     if(!stream)
@@ -166,6 +198,133 @@ bool loadPcm16Wav(const std::string& path, WavData& out, std::string& error)
     return true;
 }
 
+bool loadPcm16Aiff(const std::string& path, AudioData& out, std::string& error)
+{
+    std::ifstream stream(path, std::ios::binary);
+    if(!stream)
+    {
+        error = "cannot open " + path;
+        return false;
+    }
+    stream.seekg(0, std::ios::end);
+    const auto size = stream.tellg();
+    stream.seekg(0, std::ios::beg);
+    if(size < 12)
+    {
+        error = "AIFF file is too short";
+        return false;
+    }
+
+    std::vector<unsigned char> bytes(static_cast<std::size_t>(size));
+    stream.read(reinterpret_cast<char*>(bytes.data()), size);
+    const bool isAiff = std::memcmp(bytes.data(), "FORM", 4) == 0 &&
+        std::memcmp(bytes.data() + 8, "AIFF", 4) == 0;
+    const bool isAifc = std::memcmp(bytes.data(), "FORM", 4) == 0 &&
+        std::memcmp(bytes.data() + 8, "AIFC", 4) == 0;
+    if(!stream || (!isAiff && !isAifc))
+    {
+        error = "not an AIFF/AIFF-C file";
+        return false;
+    }
+
+    std::uint16_t bits = 0;
+    std::uint32_t declaredFrames = 0;
+    bool foundCommon = false;
+    bool supportedCompression = isAiff;
+    bool littleEndianPcm = false;
+    const unsigned char* pcm = nullptr;
+    std::size_t pcmBytes = 0;
+    std::size_t offset = 12;
+    while(offset + 8 <= bytes.size())
+    {
+        const unsigned char* chunk = bytes.data() + offset;
+        const std::uint32_t chunkSize = readU32Be(chunk + 4);
+        const std::size_t dataOffset = offset + 8;
+        if(dataOffset > bytes.size() || chunkSize > bytes.size() - dataOffset)
+            break;
+
+        if(std::memcmp(chunk, "COMM", 4) == 0 && chunkSize >= 18)
+        {
+            foundCommon = true;
+            out.channels = readU16Be(bytes.data() + dataOffset);
+            declaredFrames = readU32Be(bytes.data() + dataOffset + 2);
+            bits = readU16Be(bytes.data() + dataOffset + 6);
+            const double rate = readExtended80(bytes.data() + dataOffset + 8);
+            if(std::isfinite(rate) && rate >= 1.0 && rate <= 1000000.0)
+                out.sampleRate = static_cast<std::uint32_t>(std::llround(rate));
+
+            if(isAifc && chunkSize >= 22)
+            {
+                const unsigned char* compression = bytes.data() + dataOffset + 18;
+                supportedCompression =
+                    std::memcmp(compression, "NONE", 4) == 0 ||
+                    std::memcmp(compression, "twos", 4) == 0 ||
+                    std::memcmp(compression, "sowt", 4) == 0;
+                littleEndianPcm = std::memcmp(compression, "sowt", 4) == 0;
+            }
+        }
+        else if(std::memcmp(chunk, "SSND", 4) == 0 && chunkSize >= 8)
+        {
+            const std::uint32_t soundOffset = readU32Be(bytes.data() + dataOffset);
+            if(soundOffset <= chunkSize - 8)
+            {
+                pcm = bytes.data() + dataOffset + 8 + soundOffset;
+                pcmBytes = chunkSize - 8 - soundOffset;
+            }
+        }
+        offset = dataOffset + chunkSize + (chunkSize & 1U);
+    }
+
+    if(!foundCommon || !supportedCompression || bits != 16 ||
+       out.channels == 0 || out.channels > 2 || out.sampleRate == 0 || pcm == nullptr)
+    {
+        error = "example requires mono or stereo 16-bit PCM AIFF input";
+        return false;
+    }
+
+    std::size_t sampleCount = pcmBytes / sizeof(std::int16_t);
+    const std::uint64_t declaredSamples =
+        static_cast<std::uint64_t>(declaredFrames) * out.channels;
+    if(declaredFrames > 0 && declaredSamples < sampleCount)
+        sampleCount = static_cast<std::size_t>(declaredSamples);
+    out.samples.resize(sampleCount);
+    for(std::size_t i = 0; i < sampleCount; ++i)
+    {
+        const std::uint16_t encoded = littleEndianPcm
+            ? readU16(pcm + i * 2)
+            : readU16Be(pcm + i * 2);
+        const auto raw = static_cast<std::int16_t>(encoded);
+        out.samples[i] = static_cast<float>(raw) / 32768.0f;
+    }
+    return true;
+}
+
+bool loadPcm16Audio(const std::string& path, AudioData& out, std::string& error)
+{
+    std::ifstream stream(path, std::ios::binary);
+    unsigned char header[12] {};
+    if(!stream)
+    {
+        error = "cannot open " + path;
+        return false;
+    }
+    stream.read(reinterpret_cast<char*>(header), sizeof(header));
+    if(stream.gcount() != static_cast<std::streamsize>(sizeof(header)))
+    {
+        error = "audio file is too short";
+        return false;
+    }
+    if(std::memcmp(header, "RIFF", 4) == 0 &&
+       std::memcmp(header + 8, "WAVE", 4) == 0)
+        return loadPcm16Wav(path, out, error);
+    if(std::memcmp(header, "FORM", 4) == 0 &&
+       (std::memcmp(header + 8, "AIFF", 4) == 0 ||
+        std::memcmp(header + 8, "AIFC", 4) == 0))
+        return loadPcm16Aiff(path, out, error);
+    error = "unsupported audio container; expected WAV, AIFF, or AIFF-C";
+    return false;
+}
+
 struct Sweep
 {
     const char* name;
@@ -199,7 +358,7 @@ constexpr std::uint32_t kSweepWeightTotal = sweepWeightTotal();
 struct PlaybackState
 {
     AudioQueueRef queue {nullptr};
-    const WavData* wav {nullptr};
+    const AudioData* wav {nullptr};
     std::uint64_t framesRendered {0};
     std::uint64_t totalFrames {0};
     std::array<std::uint64_t, kSweepCount + 1> sweepBoundaries {};
@@ -253,7 +412,7 @@ void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer,
                 PlaybackState& state)
 {
     float* output = static_cast<float*>(buffer->mAudioData);
-    const WavData& wav = *state.wav;
+    const AudioData& wav = *state.wav;
     const std::uint64_t sourceFrames = wav.samples.size() / wav.channels;
     const std::uint32_t channels = 2;
 
@@ -307,8 +466,8 @@ int main(int argc, char** argv)
 {
     bool validateOnly = false;
     FilterMode filterMode = FilterMode::Lowpass;
-    std::string wavPath = "../../examples/fft_example/illusion.wav";
-    bool hasWavPath = false;
+    std::string audioPath = "../../examples/fft_example/illusion.wav";
+    bool hasAudioPath = false;
     for(int i = 1; i < argc; ++i)
     {
         const std::string argument = argv[i];
@@ -338,26 +497,26 @@ int main(int argc, char** argv)
             printUsage(argv[0]);
             return 2;
         }
-        if(hasWavPath)
+        if(hasAudioPath)
         {
-            std::fprintf(stderr, "only one WAV path may be provided\n");
+            std::fprintf(stderr, "only one audio path may be provided\n");
             return 2;
         }
-        wavPath = argument;
-        hasWavPath = true;
+        audioPath = argument;
+        hasAudioPath = true;
     }
-    WavData wav;
+    AudioData wav;
     std::string error;
-    if(!loadPcm16Wav(wavPath, wav, error))
+    if(!loadPcm16Audio(audioPath, wav, error))
     {
-        std::fprintf(stderr, "WAV load failed: %s\n", error.c_str());
+        std::fprintf(stderr, "audio load failed: %s\n", error.c_str());
         return 1;
     }
     if(validateOnly)
     {
         const std::size_t frameCount = wav.samples.size() / wav.channels;
         std::printf("validated %s: %u Hz, %u channel%s, %zu frames, %.2f seconds\n",
-                    wavPath.c_str(), wav.sampleRate, wav.channels,
+                    audioPath.c_str(), wav.sampleRate, wav.channels,
                     wav.channels == 1 ? "" : "s",
                     frameCount, static_cast<double>(frameCount) / wav.sampleRate);
         return 0;
@@ -406,7 +565,7 @@ int main(int argc, char** argv)
 
     std::printf("CoreAudio realtime dsp::filter demo: %s\n",
                 filterModeName(filterMode));
-    std::printf("source: %s (%u Hz, %u channel%s)\n", wavPath.c_str(),
+    std::printf("source: %s (%u Hz, %u channel%s)\n", audioPath.c_str(),
                 wav.sampleRate, wav.channels, wav.channels == 1 ? "" : "s");
     std::printf("demo duration: %.2f seconds (full source)\n",
                 static_cast<double>(state.totalFrames) / wav.sampleRate);

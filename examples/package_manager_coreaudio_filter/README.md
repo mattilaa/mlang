@@ -15,8 +15,8 @@ last two sections is a separate resonance target, not the filter slope. The
 demo output labels both values explicitly.
 
 The five sections span the complete input sample. Their original 3:5:5:5:5
-timing ratio is scaled to the WAV length, and each filter ramp ends at its
-section boundary. Replacing `illusion.wav` with a longer sample therefore
+timing ratio is scaled to the audio-file length, and each filter ramp ends at
+its section boundary. Replacing `illusion.wav` with a longer sample therefore
 extends the demo automatically without changing the source.
 
 The sample is decoded and all Audio Queue buffers are allocated before
@@ -40,10 +40,12 @@ The default is the 24 dB low-pass. Select another filter in the built binary:
 ./build/cmake/coreaudio_filter_sweeps --filter bandpass24
 ```
 
-Pass another mono or stereo 16-bit PCM WAV file directly to the built program:
+Pass another mono or stereo 16-bit PCM WAV, AIFF, or AIFF-C file directly to
+the built program:
 
 ```sh
 ./build/cmake/coreaudio_filter_sweeps --filter highpass24 /path/to/input.wav
+./build/cmake/coreaudio_filter_sweeps --filter bandpass24 /path/to/input.aif
 ```
 
 Run `./build/cmake/coreaudio_filter_sweeps --help` for the complete syntax.
@@ -52,7 +54,11 @@ Validate decoding without opening an audio device:
 
 ```sh
 ./build/cmake/coreaudio_filter_sweeps --validate ../../examples/fft_example/illusion.wav
+./build/cmake/coreaudio_filter_sweeps --validate /path/to/input.aif
 ```
+
+AIFF uses big-endian PCM. For AIFF-C, the uncompressed `NONE`, `twos`, and
+little-endian `sowt` encodings are supported.
 
 The MLang processing entry points are in `src/filter_processor.mla`; the thin
 CoreAudio and WAV boundary is in `src/main.cpp`.
