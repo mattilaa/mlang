@@ -11,6 +11,7 @@ module_paths = ["../../modules"]
 audio_path = "../../examples/fft_example/illusion.wav"
 audio_output = ""
 filter = "lowpass24"
+max_resonance_db = "12"
 
 [[task]]
 name = "toolchain-check"
@@ -54,7 +55,7 @@ name = "demo"
 depends_on = ["build"]
 log_output = false
 shell = [
-  "audio_output='{{option.audio_output}}'; set -- --filter '{{option.filter}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --output-device \"$audio_output\"; fi; exec {{build_dir}}/cmake/coreaudio_filter_sweeps \"$@\" '{{option.audio_path}}'"
+  "audio_output='{{option.audio_output}}'; set -- --filter '{{option.filter}}' --max-resonance-db '{{option.max_resonance_db}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --output-device \"$audio_output\"; fi; exec {{build_dir}}/cmake/coreaudio_filter_sweeps \"$@\" '{{option.audio_path}}'"
 ]
 
 [[task]]

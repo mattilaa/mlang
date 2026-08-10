@@ -9,10 +9,10 @@ The filter coefficient design follows the Robert Bristow-Johnson biquad
 formulas used by LinuxSampler. Resonance is expressed in decibels: `0 dB`
 gives a Butterworth-like response and positive values increase resonance.
 
-## Biquad filters
+## 12 dB biquad filters
 
-`Biquad` supports allocation-free sample processing with these coefficient
-design methods:
+`Biquad` is a second-order, 12 dB/octave filter and supports allocation-free
+sample processing with these coefficient design methods:
 
 - `set_lowpass(cutoff_hz, resonance_db, sample_rate_hz)`
 - `set_highpass(cutoff_hz, resonance_db, sample_rate_hz)`
@@ -93,21 +93,25 @@ Bicubic interpolation is included for two-dimensional DSP parameter tables.
 ## CoreAudio example
 
 [`examples/package_manager_coreaudio_filter`](https://github.com/mattilaa/mlang/blob/main/examples/package_manager_coreaudio_filter)
-loads `examples/fft_example/illusion.wav` and runs 24 dB cutoff sweeps. Select
-the topology with `--filter lowpass24`, `--filter highpass24`, or
-`--filter bandpass24`. The shorter names remain accepted as aliases. The
-processor keeps filter history across sweep sections and crossfades from the
-dry reference to filtered output to avoid transition clicks. All file decoding
-and buffer allocation happens before the CoreAudio callback starts.
+loads `examples/fft_example/illusion.wav` and runs 12 or 24 dB/octave cutoff
+sweeps. Select `lowpass12`, `highpass12`, `bandpass12`, `lowpass24`,
+`highpass24`, or `bandpass24` with `--filter`. The shorter names remain aliases
+for the 24 dB modes. The processor keeps filter history across sweep sections
+and crossfades from the dry reference to filtered output to avoid transition
+clicks. All file decoding and buffer allocation happens before the CoreAudio
+callback starts.
 
 The binary reports the 24 dB/octave filter slope separately from each
-section's resonance target. Its realtime processor caps resonance at `+12 dB`
-to reduce peak gain and clipping during automation. The capped target is then
-reached with a per-frame linear ramp, so limiting does not introduce a sudden
-coefficient change.
+section's resonance target. Its realtime resonance peak defaults to `+12 dB`
+and can be changed with `--max-resonance-db DB` in the range `0..36`. The
+limited target is reached with a per-frame linear ramp, so changing the peak
+does not introduce a sudden coefficient change. Values above the default can
+produce strong peaks and require additional gain reduction.
 
 Input may be mono or stereo 16-bit PCM WAV, AIFF, or uncompressed AIFF-C.
 Use `--validate PATH` to check decoding without opening an audio device.
+Input paths beginning with `~/` are expanded by the binary, including paths
+provided through the package task's `audio_path` option.
 Use `--list-devices` to enumerate CoreAudio outputs and
 `--output-device NAME_OR_UID` to select one. If no output is specified, the
 current system default is used.

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <string>
@@ -20,18 +21,24 @@ namespace {
 
 enum class FilterMode : std::int32_t
 {
-    Lowpass = 1,
-    Highpass = 2,
-    Bandpass = 3,
+    Lowpass24 = 1,
+    Highpass24 = 2,
+    Bandpass24 = 3,
+    Lowpass12 = 4,
+    Highpass12 = 5,
+    Bandpass12 = 6,
 };
 
 const char* filterModeName(FilterMode mode)
 {
     switch(mode)
     {
-    case FilterMode::Lowpass: return "low-pass 24 dB/octave";
-    case FilterMode::Highpass: return "high-pass 24 dB/octave";
-    case FilterMode::Bandpass: return "band-pass 24 dB/octave";
+    case FilterMode::Lowpass24: return "low-pass 24 dB/octave";
+    case FilterMode::Highpass24: return "high-pass 24 dB/octave";
+    case FilterMode::Bandpass24: return "band-pass 24 dB/octave";
+    case FilterMode::Lowpass12: return "low-pass 12 dB/octave";
+    case FilterMode::Highpass12: return "high-pass 12 dB/octave";
+    case FilterMode::Bandpass12: return "band-pass 12 dB/octave";
     }
     return "unknown";
 }
@@ -39,30 +46,63 @@ const char* filterModeName(FilterMode mode)
 bool parseFilterMode(const std::string& value, FilterMode& mode)
 {
     if(value == "lowpass24" || value == "lowpass")
-        mode = FilterMode::Lowpass;
+        mode = FilterMode::Lowpass24;
     else if(value == "highpass24" || value == "highpass")
-        mode = FilterMode::Highpass;
+        mode = FilterMode::Highpass24;
     else if(value == "bandpass24" || value == "bandpass")
-        mode = FilterMode::Bandpass;
+        mode = FilterMode::Bandpass24;
+    else if(value == "lowpass12")
+        mode = FilterMode::Lowpass12;
+    else if(value == "highpass12")
+        mode = FilterMode::Highpass12;
+    else if(value == "bandpass12")
+        mode = FilterMode::Bandpass12;
     else
         return false;
     return true;
 }
 
+bool parseResonanceLimit(const std::string& value, float& result)
+{
+    char* end = nullptr;
+    const float parsed = std::strtof(value.c_str(), &end);
+    if(end == value.c_str() || *end != '\0' || !std::isfinite(parsed) ||
+       parsed < 0.0f || parsed > 36.0f)
+        return false;
+    result = parsed;
+    return true;
+}
+
+std::string expandUserPath(const std::string& path)
+{
+    if(path != "~" && path.rfind("~/", 0) != 0)
+        return path;
+    const char* home = std::getenv("HOME");
+    if(!home || !home[0])
+        return path;
+    if(path == "~")
+        return home;
+    return std::string(home) + path.substr(1);
+}
+
 void printUsage(const char* program)
 {
-    std::printf("CoreAudio real-time 24 dB filter sweep demo\n\n");
+    std::printf("CoreAudio real-time 12/24 dB filter sweep demo\n\n");
     std::printf("Usage:\n");
     std::printf("  %s [--filter MODE] [AUDIO]\n", program);
     std::printf("  %s --validate [AUDIO]\n\n", program);
     std::printf("Options:\n");
-    std::printf("  --filter MODE  Select a 24 dB/octave filter (default: lowpass24)\n");
+    std::printf("  --filter MODE  Select filter topology and slope (default: lowpass24)\n");
+    std::printf("  --max-resonance-db DB  Realtime resonance peak, 0..36 (default: 12)\n");
     std::printf("  --output-device DEVICE  Select output by name, name substring, or UID\n");
     std::printf("  --list-devices          List CoreAudio output devices and UIDs\n");
     std::printf("  --verbose               Add ids, channels, and rates to device listing\n");
     std::printf("  --validate     Validate audio decoding without opening an audio device\n");
     std::printf("  -h, --help     Show this help\n\n");
     std::printf("Filter modes:\n");
+    std::printf("  lowpass12      Second-order low-pass cutoff sweeps\n");
+    std::printf("  highpass12     Second-order high-pass cutoff sweeps\n");
+    std::printf("  bandpass12     Second-order band-pass center sweeps\n");
     std::printf("  lowpass24      Fourth-order low-pass cutoff sweeps\n");
     std::printf("  highpass24     Fourth-order high-pass cutoff sweeps\n");
     std::printf("  bandpass24     Cascaded fourth-order band-pass center sweeps\n");
@@ -71,10 +111,11 @@ void printUsage(const char* program)
     std::printf("  WAV, AIFF, or uncompressed AIFF-C must be mono or stereo 16-bit PCM.\n");
     std::printf("  The default is illusion.wav. Sweeps span the complete file length.\n\n");
     std::printf("Display note:\n");
-    std::printf("  24 dB/octave is the filter slope. Realtime resonance is capped at +12 dB\n");
-    std::printf("  in this demo; resonance gain is independent from the filter slope.\n\n");
+    std::printf("  Filter slope and resonance gain are independent. Resonance ramps to the\n");
+    std::printf("  selected peak in realtime; the default peak is +12 dB.\n\n");
     std::printf("Examples:\n");
     std::printf("  %s --filter lowpass24\n", program);
+    std::printf("  %s --filter lowpass12 --max-resonance-db 6\n", program);
     std::printf("  %s --filter highpass24 /path/to/sample.wav\n", program);
     std::printf("  %s --filter bandpass24 --output-device BlackHole /path/to/sample.aif\n", program);
     std::printf("  %s --list-devices --verbose\n", program);
@@ -591,16 +632,16 @@ struct Sweep
     bool filtered;
     float cutoffStart;
     float cutoffEnd;
-    float resonanceDb;
+    bool resonant;
     std::uint32_t durationWeight;
 };
 
 constexpr Sweep kSweeps[] = {
-    {"dry reference", false, 12000.0f, 12000.0f, 0.0f, 3},
-    {"falling cutoff, no resonance", true, 12000.0f, 180.0f, 0.0f, 5},
-    {"rising cutoff, no resonance", true, 180.0f, 12000.0f, 0.0f, 5},
-    {"falling cutoff, increasing resonance", true, 12000.0f, 180.0f, 12.0f, 5},
-    {"rising cutoff, resonant", true, 180.0f, 12000.0f, 12.0f, 5},
+    {"dry reference", false, 12000.0f, 12000.0f, false, 3},
+    {"falling cutoff, no resonance", true, 12000.0f, 180.0f, false, 5},
+    {"rising cutoff, no resonance", true, 180.0f, 12000.0f, false, 5},
+    {"falling cutoff, increasing resonance", true, 12000.0f, 180.0f, true, 5},
+    {"rising cutoff, resonant", true, 180.0f, 12000.0f, true, 5},
 };
 
 constexpr std::size_t kSweepCount = sizeof(kSweeps) / sizeof(kSweeps[0]);
@@ -622,6 +663,7 @@ struct PlaybackState
     std::uint64_t framesRendered {0};
     std::uint64_t totalFrames {0};
     std::array<std::uint64_t, kSweepCount + 1> sweepBoundaries {};
+    float maxResonanceDb {12.0f};
     std::uint32_t framesPerBuffer {512};
     int activeSweep {-1};
     std::atomic<int> visibleSweep {-1};
@@ -658,10 +700,11 @@ void enterSweep(PlaybackState& state, int index)
     if(index < 0 || index >= static_cast<int>(kSweepCount))
         return;
     const Sweep& sweep = kSweeps[index];
+    const float resonanceDb = sweep.resonant ? state.maxResonanceDb : 0.0f;
     const auto rampSamples = static_cast<std::int64_t>(
         state.sweepBoundaries[index + 1] - state.sweepBoundaries[index]);
     mlang::coreaudio_filter::setTarget(
-        sweep.cutoffEnd, sweep.resonanceDb, rampSamples);
+        sweep.cutoffEnd, resonanceDb, rampSamples);
     const auto crossfadeSamples = std::min<std::int64_t>(
         rampSamples, static_cast<std::int64_t>(state.wav->sampleRate / 50));
     mlang::coreaudio_filter::setWetTarget(
@@ -727,7 +770,8 @@ int main(int argc, char** argv)
     bool validateOnly = false;
     bool listDevicesOnly = false;
     bool verboseDevices = false;
-    FilterMode filterMode = FilterMode::Lowpass;
+    FilterMode filterMode = FilterMode::Lowpass24;
+    float maxResonanceDb = 12.0f;
     std::string outputDeviceSelector;
     std::string audioPath = "../../examples/fft_example/illusion.wav";
     bool hasAudioPath = false;
@@ -770,7 +814,18 @@ int main(int argc, char** argv)
             if(i + 1 >= argc || !parseFilterMode(argv[++i], filterMode))
             {
                 std::fprintf(stderr,
-                    "--filter requires lowpass24, highpass24, or bandpass24\n");
+                    "--filter requires a lowpass, highpass, or bandpass 12/24 mode\n");
+                return 2;
+            }
+            continue;
+        }
+        if(argument == "--max-resonance-db")
+        {
+            if(i + 1 >= argc ||
+               !parseResonanceLimit(argv[++i], maxResonanceDb))
+            {
+                std::fprintf(stderr,
+                    "--max-resonance-db requires a value from 0 to 36\n");
                 return 2;
             }
             continue;
@@ -794,6 +849,7 @@ int main(int argc, char** argv)
         printOutputDevices(verboseDevices);
         return 0;
     }
+    audioPath = expandUserPath(audioPath);
     AudioData wav;
     std::string error;
     if(!loadPcm16Audio(audioPath, wav, error))
@@ -813,11 +869,13 @@ int main(int argc, char** argv)
 
     PlaybackState state;
     state.wav = &wav;
+    state.maxResonanceDb = maxResonanceDb;
     state.totalFrames = wav.samples.size() / wav.channels;
     buildSweepSchedule(state);
+    mlang::coreaudio_filter::setResonanceLimit(maxResonanceDb);
     mlang::coreaudio_filter::reset(
         static_cast<std::int32_t>(filterMode), static_cast<float>(wav.sampleRate),
-        kSweeps[0].cutoffStart, kSweeps[0].resonanceDb);
+        kSweeps[0].cutoffStart, 0.0f);
 
     AudioStreamBasicDescription format {};
     format.mSampleRate = wav.sampleRate;
@@ -866,6 +924,8 @@ int main(int argc, char** argv)
     std::printf("source: %s (%u Hz, %u channel%s)\n", audioPath.c_str(),
                 wav.sampleRate, wav.channels, wav.channels == 1 ? "" : "s");
     std::printf("output: %s\n", outputDeviceName.c_str());
+    std::printf("maximum resonance peak: %+.1f dB (realtime ramped)\n",
+                maxResonanceDb);
     std::printf("demo duration: %.2f seconds (full source)\n",
                 static_cast<double>(state.totalFrames) / wav.sampleRate);
     for(std::size_t i = 0; i < kSweepCount; ++i)
@@ -878,8 +938,9 @@ int main(int argc, char** argv)
         {
             std::printf("  %zu. %6.2f-%6.2f s  %s\n",
                         i + 1, startSeconds, endSeconds, kSweeps[i].name);
-            std::printf("      filter: %s; resonance target: %+.0f dB\n",
-                        filterModeName(filterMode), kSweeps[i].resonanceDb);
+            std::printf("      filter: %s; resonance target: %+.1f dB\n",
+                        filterModeName(filterMode),
+                        kSweeps[i].resonant ? maxResonanceDb : 0.0f);
         }
         else
         {
@@ -906,9 +967,9 @@ int main(int argc, char** argv)
             const Sweep& sweep = kSweeps[current];
             if(sweep.filtered)
             {
-                std::printf("now: %s [%s; resonance target %+.0f dB]\n",
+                std::printf("now: %s [%s; resonance target %+.1f dB]\n",
                             sweep.name, filterModeName(filterMode),
-                            sweep.resonanceDb);
+                            sweep.resonant ? maxResonanceDb : 0.0f);
             }
             else
             {
