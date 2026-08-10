@@ -7,6 +7,12 @@ min_mlang_version = "0.2.0"
 build_dir = "build"
 module_paths = ["../../modules"]
 
+[tool.mlang.options]
+audio_path = "../../examples/fft_example/illusion.wav"
+audio_output = ""
+filter = "lowpass24"
+max_resonance_db = "12"
+
 [[task]]
 name = "toolchain-check"
 supported_hosts = ["darwin"]
@@ -49,5 +55,21 @@ name = "demo"
 depends_on = ["build"]
 log_output = false
 shell = [
-  "exec {{build_dir}}/cmake/coreaudio_filter_sweeps ../../examples/fft_example/illusion.wav"
+  "audio_output='{{option.audio_output}}'; set -- --filter '{{option.filter}}' --max-resonance-db '{{option.max_resonance_db}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --output-device \"$audio_output\"; fi; exec {{build_dir}}/cmake/coreaudio_filter_sweeps \"$@\" '{{option.audio_path}}'"
+]
+
+[[task]]
+name = "list-devices"
+depends_on = ["build"]
+log_output = false
+shell = [
+  "exec {{build_dir}}/cmake/coreaudio_filter_sweeps --list-devices"
+]
+
+[[task]]
+name = "list-devices-verbose"
+depends_on = ["build"]
+log_output = false
+shell = [
+  "exec {{build_dir}}/cmake/coreaudio_filter_sweeps --list-devices --verbose"
 ]

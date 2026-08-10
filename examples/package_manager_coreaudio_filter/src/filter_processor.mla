@@ -9,6 +9,7 @@ use dsp::filter::Biquad;
 extern fn expf(value: f32) -> f32;
 
 var g_filter_mode: i32 = 1;
+var g_resonance_limit_db: f32 = 12.0f;
 var g_sample_rate_hz: f32 = 48000.0f;
 var g_cutoff_hz: f32 = 12000.0f;
 var g_cutoff_target_hz: f32 = 12000.0f;
@@ -39,14 +40,35 @@ var g_right_stage2_x2: f32 = 0.0f;
 var g_right_stage2_y1: f32 = 0.0f;
 var g_right_stage2_y2: f32 = 0.0f;
 
+fn clamp_realtime_resonance(resonance_db: f32) -> f32 {
+    if resonance_db < 0.0f {
+        return 0.0f;
+    }
+    if resonance_db > g_resonance_limit_db {
+        return g_resonance_limit_db;
+    }
+    return resonance_db;
+}
+
+fn mlang_dsp_filter_set_resonance_limit(max_resonance_db: f32) {
+    if max_resonance_db < 0.0f {
+        g_resonance_limit_db = 0.0f;
+    } else if max_resonance_db > 36.0f {
+        g_resonance_limit_db = 36.0f;
+    } else {
+        g_resonance_limit_db = max_resonance_db;
+    }
+}
+
 fn mlang_dsp_filter_reset(filter_mode: i32, sample_rate_hz: f32, cutoff_hz: f32, resonance_db: f32) {
+    let safe_resonance_db: f32 = clamp_realtime_resonance(resonance_db);
     g_filter_mode = filter_mode;
     g_sample_rate_hz = sample_rate_hz;
     g_cutoff_hz = cutoff_hz;
     g_cutoff_target_hz = cutoff_hz;
     g_cutoff_step_hz = 0.0f;
-    g_resonance_db = resonance_db;
-    g_resonance_target_db = resonance_db;
+    g_resonance_db = safe_resonance_db;
+    g_resonance_target_db = safe_resonance_db;
     g_resonance_step_db = 0.0f;
     g_ramp_samples_left = 0;
     g_wet_mix = 0.0f;
@@ -72,16 +94,18 @@ fn mlang_dsp_filter_reset(filter_mode: i32, sample_rate_hz: f32, cutoff_hz: f32,
 }
 
 fn mlang_dsp_filter_set_target(cutoff_hz: f32, resonance_db: f32, ramp_samples: i64) {
+    // Clamp the target before deriving the per-frame step so limiting remains smooth.
+    let safe_resonance_db: f32 = clamp_realtime_resonance(resonance_db);
     if ramp_samples <= 0 {
         g_cutoff_hz = cutoff_hz;
-        g_resonance_db = resonance_db;
+        g_resonance_db = safe_resonance_db;
         g_ramp_samples_left = 0;
         return;
     }
     g_cutoff_target_hz = cutoff_hz;
-    g_resonance_target_db = resonance_db;
+    g_resonance_target_db = safe_resonance_db;
     g_cutoff_step_hz = (cutoff_hz - g_cutoff_hz) / f32(ramp_samples);
-    g_resonance_step_db = (resonance_db - g_resonance_db) / f32(ramp_samples);
+    g_resonance_step_db = (safe_resonance_db - g_resonance_db) / f32(ramp_samples);
     g_ramp_samples_left = ramp_samples;
 }
 
@@ -121,59 +145,81 @@ fn mlang_dsp_filter_begin_frame() {
 }
 
 fn mlang_dsp_filter_process_left(input: f32) -> f32 {
-    let q_scale: f32 = expf(0.11512925464970228420f * g_resonance_db);
     var stage1: Biquad = Biquad::new();
     var stage2: Biquad = Biquad::new();
-    if g_filter_mode == 2 {
-        stage1.set_highpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
-        stage2.set_highpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
-    } else if g_filter_mode == 3 {
-        stage1.set_bandpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
-        stage2.set_bandpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
+    let is_12_db: bool = g_filter_mode >= 4;
+    if g_filter_mode == 5 {
+        stage1.set_highpass(g_cutoff_hz, g_resonance_db, g_sample_rate_hz);
+    } else if g_filter_mode == 6 {
+        stage1.set_bandpass(g_cutoff_hz, g_resonance_db, g_sample_rate_hz);
+    } else if g_filter_mode == 4 {
+        stage1.set_lowpass(g_cutoff_hz, g_resonance_db, g_sample_rate_hz);
     } else {
-        stage1.set_lowpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
-        stage2.set_lowpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
+        let q_scale: f32 = expf(0.05756462732485114210f * g_resonance_db);
+        if g_filter_mode == 2 {
+            stage1.set_highpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
+            stage2.set_highpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
+        } else if g_filter_mode == 3 {
+            stage1.set_bandpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
+            stage2.set_bandpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
+        } else {
+            stage1.set_lowpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
+            stage2.set_lowpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
+        }
     }
     stage1.restore_history(g_left_x1, g_left_x2, g_left_y1, g_left_y2);
-    stage2.restore_history(g_left_stage2_x1, g_left_stage2_x2, g_left_stage2_y1, g_left_stage2_y2);
-    let stage1_output: f32 = stage1.process(input);
-    let wet: f32 = stage2.process(stage1_output);
+    var wet: f32 = stage1.process(input);
+    if !is_12_db {
+        stage2.restore_history(g_left_stage2_x1, g_left_stage2_x2, g_left_stage2_y1, g_left_stage2_y2);
+        wet = stage2.process(wet);
+        g_left_stage2_x1 = stage2.input_1();
+        g_left_stage2_x2 = stage2.input_2();
+        g_left_stage2_y1 = stage2.output_1();
+        g_left_stage2_y2 = stage2.output_2();
+    }
     g_left_x1 = stage1.input_1();
     g_left_x2 = stage1.input_2();
     g_left_y1 = stage1.output_1();
     g_left_y2 = stage1.output_2();
-    g_left_stage2_x1 = stage2.input_1();
-    g_left_stage2_x2 = stage2.input_2();
-    g_left_stage2_y1 = stage2.output_1();
-    g_left_stage2_y2 = stage2.output_2();
     return input + (wet - input) * g_wet_mix;
 }
 
 fn mlang_dsp_filter_process_right(input: f32) -> f32 {
-    let q_scale: f32 = expf(0.11512925464970228420f * g_resonance_db);
     var stage1: Biquad = Biquad::new();
     var stage2: Biquad = Biquad::new();
-    if g_filter_mode == 2 {
-        stage1.set_highpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
-        stage2.set_highpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
-    } else if g_filter_mode == 3 {
-        stage1.set_bandpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
-        stage2.set_bandpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
+    let is_12_db: bool = g_filter_mode >= 4;
+    if g_filter_mode == 5 {
+        stage1.set_highpass(g_cutoff_hz, g_resonance_db, g_sample_rate_hz);
+    } else if g_filter_mode == 6 {
+        stage1.set_bandpass(g_cutoff_hz, g_resonance_db, g_sample_rate_hz);
+    } else if g_filter_mode == 4 {
+        stage1.set_lowpass(g_cutoff_hz, g_resonance_db, g_sample_rate_hz);
     } else {
-        stage1.set_lowpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
-        stage2.set_lowpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
+        let q_scale: f32 = expf(0.05756462732485114210f * g_resonance_db);
+        if g_filter_mode == 2 {
+            stage1.set_highpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
+            stage2.set_highpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
+        } else if g_filter_mode == 3 {
+            stage1.set_bandpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
+            stage2.set_bandpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
+        } else {
+            stage1.set_lowpass_q(g_cutoff_hz, 0.54119610014619698440f * q_scale, g_sample_rate_hz);
+            stage2.set_lowpass_q(g_cutoff_hz, 1.30656296487637652790f * q_scale, g_sample_rate_hz);
+        }
     }
     stage1.restore_history(g_right_x1, g_right_x2, g_right_y1, g_right_y2);
-    stage2.restore_history(g_right_stage2_x1, g_right_stage2_x2, g_right_stage2_y1, g_right_stage2_y2);
-    let stage1_output: f32 = stage1.process(input);
-    let wet: f32 = stage2.process(stage1_output);
+    var wet: f32 = stage1.process(input);
+    if !is_12_db {
+        stage2.restore_history(g_right_stage2_x1, g_right_stage2_x2, g_right_stage2_y1, g_right_stage2_y2);
+        wet = stage2.process(wet);
+        g_right_stage2_x1 = stage2.input_1();
+        g_right_stage2_x2 = stage2.input_2();
+        g_right_stage2_y1 = stage2.output_1();
+        g_right_stage2_y2 = stage2.output_2();
+    }
     g_right_x1 = stage1.input_1();
     g_right_x2 = stage1.input_2();
     g_right_y1 = stage1.output_1();
     g_right_y2 = stage1.output_2();
-    g_right_stage2_x1 = stage2.input_1();
-    g_right_stage2_x2 = stage2.input_2();
-    g_right_stage2_y1 = stage2.output_1();
-    g_right_stage2_y2 = stage2.output_2();
     return input + (wet - input) * g_wet_mix;
 }

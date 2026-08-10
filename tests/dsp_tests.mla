@@ -137,6 +137,14 @@ fn test_dsp_biquad_lowpass_and_highpass_dc() {
         high_output = highpass.process(1.0f);
     }
     verify(approx_f32(high_output, 0.0f, 0.001f));
+
+    var bandpass: Biquad = Biquad::new();
+    bandpass.set_bandpass(1000.0f, 0.0f, 48000.0f);
+    var band_output: f32 = 0.0f;
+    for i in 0..4096 {
+        band_output = bandpass.process(1.0f);
+    }
+    verify(approx_f32(band_output, 0.0f, 0.001f));
 }
 
 #[test]

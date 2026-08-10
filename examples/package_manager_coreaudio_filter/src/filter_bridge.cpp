@@ -3,6 +3,8 @@
 extern "C" void mlang_dsp_filter_reset__i32_f32_f32_f32(
     std::int32_t filterMode, float sampleRateHz, float cutoffHz,
     float resonanceDb);
+extern "C" void mlang_dsp_filter_set_resonance_limit__f32(
+    float maxResonanceDb);
 extern "C" void mlang_dsp_filter_set_target__f32_f32_i64(
     float cutoffHz, float resonanceDb, std::int64_t rampSamples);
 extern "C" void mlang_dsp_filter_set_wet_target__f32_i64(
@@ -12,6 +14,11 @@ extern "C" float mlang_dsp_filter_process_left__f32(float input);
 extern "C" float mlang_dsp_filter_process_right__f32(float input);
 
 namespace mlang::coreaudio_filter {
+
+void setResonanceLimit(float maxResonanceDb)
+{
+    mlang_dsp_filter_set_resonance_limit__f32(maxResonanceDb);
+}
 
 void reset(std::int32_t filterMode, float sampleRateHz, float cutoffHz,
            float resonanceDb)

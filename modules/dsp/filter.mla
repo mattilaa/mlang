@@ -285,7 +285,8 @@ impl Biquad {
 /// @brief Fourth-order low-pass filter with a 24 dB/octave stop-band slope.
 ///
 /// The two cascaded stages use the Q values for a fourth-order Butterworth
-/// response at zero resonance. Positive resonance scales both stage Q values.
+/// response at zero resonance. Resonance gain is distributed across both
+/// stages so `resonance_db` describes the cascade rather than each stage.
 pub struct Lowpass24 {
     var stage1: Biquad;
     var stage2: Biquad;
@@ -303,7 +304,7 @@ impl Lowpass24 {
     /// @brief Configure the cascaded low-pass stages.
     pub fn set_lowpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
         let resonance: f32 = clamp_f32(resonance_db, 0.0f, 36.0f);
-        let q_scale: f32 = expf(0.11512925464970228420f * resonance);
+        let q_scale: f32 = expf(0.05756462732485114210f * resonance);
         self.stage1.set_lowpass_q(cutoff_hz, 0.54119610014619698440f * q_scale, sample_rate_hz);
         self.stage2.set_lowpass_q(cutoff_hz, 1.30656296487637652790f * q_scale, sample_rate_hz);
     }
@@ -339,7 +340,7 @@ impl Highpass24 {
     /// @brief Configure the cascaded high-pass stages.
     pub fn set_highpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
         let resonance: f32 = clamp_f32(resonance_db, 0.0f, 36.0f);
-        let q_scale: f32 = expf(0.11512925464970228420f * resonance);
+        let q_scale: f32 = expf(0.05756462732485114210f * resonance);
         self.stage1.set_highpass_q(cutoff_hz, 0.54119610014619698440f * q_scale, sample_rate_hz);
         self.stage2.set_highpass_q(cutoff_hz, 1.30656296487637652790f * q_scale, sample_rate_hz);
     }
@@ -378,7 +379,7 @@ impl Bandpass24 {
     /// @brief Configure the cascaded band-pass stages.
     pub fn set_bandpass(self: &mut Self, center_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
         let resonance: f32 = clamp_f32(resonance_db, 0.0f, 36.0f);
-        let q_scale: f32 = expf(0.11512925464970228420f * resonance);
+        let q_scale: f32 = expf(0.05756462732485114210f * resonance);
         self.stage1.set_bandpass_q(center_hz, 0.54119610014619698440f * q_scale, sample_rate_hz);
         self.stage2.set_bandpass_q(center_hz, 1.30656296487637652790f * q_scale, sample_rate_hz);
     }
