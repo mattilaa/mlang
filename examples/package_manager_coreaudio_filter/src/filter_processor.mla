@@ -39,14 +39,25 @@ var g_right_stage2_x2: f32 = 0.0f;
 var g_right_stage2_y1: f32 = 0.0f;
 var g_right_stage2_y2: f32 = 0.0f;
 
+fn clamp_realtime_resonance(resonance_db: f32) -> f32 {
+    if resonance_db < 0.0f {
+        return 0.0f;
+    }
+    if resonance_db > 12.0f {
+        return 12.0f;
+    }
+    return resonance_db;
+}
+
 fn mlang_dsp_filter_reset(filter_mode: i32, sample_rate_hz: f32, cutoff_hz: f32, resonance_db: f32) {
+    let safe_resonance_db: f32 = clamp_realtime_resonance(resonance_db);
     g_filter_mode = filter_mode;
     g_sample_rate_hz = sample_rate_hz;
     g_cutoff_hz = cutoff_hz;
     g_cutoff_target_hz = cutoff_hz;
     g_cutoff_step_hz = 0.0f;
-    g_resonance_db = resonance_db;
-    g_resonance_target_db = resonance_db;
+    g_resonance_db = safe_resonance_db;
+    g_resonance_target_db = safe_resonance_db;
     g_resonance_step_db = 0.0f;
     g_ramp_samples_left = 0;
     g_wet_mix = 0.0f;
@@ -72,16 +83,18 @@ fn mlang_dsp_filter_reset(filter_mode: i32, sample_rate_hz: f32, cutoff_hz: f32,
 }
 
 fn mlang_dsp_filter_set_target(cutoff_hz: f32, resonance_db: f32, ramp_samples: i64) {
+    // Clamp the target before deriving the per-frame step so limiting remains smooth.
+    let safe_resonance_db: f32 = clamp_realtime_resonance(resonance_db);
     if ramp_samples <= 0 {
         g_cutoff_hz = cutoff_hz;
-        g_resonance_db = resonance_db;
+        g_resonance_db = safe_resonance_db;
         g_ramp_samples_left = 0;
         return;
     }
     g_cutoff_target_hz = cutoff_hz;
-    g_resonance_target_db = resonance_db;
+    g_resonance_target_db = safe_resonance_db;
     g_cutoff_step_hz = (cutoff_hz - g_cutoff_hz) / f32(ramp_samples);
-    g_resonance_step_db = (resonance_db - g_resonance_db) / f32(ramp_samples);
+    g_resonance_step_db = (safe_resonance_db - g_resonance_db) / f32(ramp_samples);
     g_ramp_samples_left = ramp_samples;
 }
 
@@ -121,7 +134,7 @@ fn mlang_dsp_filter_begin_frame() {
 }
 
 fn mlang_dsp_filter_process_left(input: f32) -> f32 {
-    let q_scale: f32 = expf(0.11512925464970228420f * g_resonance_db);
+    let q_scale: f32 = expf(0.05756462732485114210f * g_resonance_db);
     var stage1: Biquad = Biquad::new();
     var stage2: Biquad = Biquad::new();
     if g_filter_mode == 2 {
@@ -150,7 +163,7 @@ fn mlang_dsp_filter_process_left(input: f32) -> f32 {
 }
 
 fn mlang_dsp_filter_process_right(input: f32) -> f32 {
-    let q_scale: f32 = expf(0.11512925464970228420f * g_resonance_db);
+    let q_scale: f32 = expf(0.05756462732485114210f * g_resonance_db);
     var stage1: Biquad = Biquad::new();
     var stage2: Biquad = Biquad::new();
     if g_filter_mode == 2 {

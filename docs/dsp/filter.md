@@ -46,7 +46,9 @@ the same tuned stage pair around its center frequency:
 
 Each type provides `new()`, `process(input)`, and `reset()`. The low-pass and
 high-pass stop bands roll off at 24 dB/octave. Cascading both band-pass stages
-gives a 24 dB/octave rolloff on either side of its pass band.
+gives a 24 dB/octave rolloff on either side of its pass band. Resonance gain is
+distributed across both stages, so the argument describes the complete
+cascade instead of being applied twice.
 
 ```mla
 use dsp::filter::Highpass24;
@@ -65,7 +67,7 @@ resonance can change without an abrupt coefficient jump:
 ```mla
 var filter: SmoothedLowpass = SmoothedLowpass::new(
     48000.0f, 12000.0f, 0.0f);
-filter.set_target_ms(180.0f, 18.0f, 5000.0f);
+filter.set_target_ms(180.0f, 12.0f, 5000.0f);
 
 // Call once per audio sample.
 let output: f32 = filter.process(input);
@@ -97,8 +99,13 @@ dry reference to filtered output to avoid transition clicks. All file decoding
 and buffer allocation happens before the CoreAudio callback starts.
 
 The binary reports the 24 dB/octave filter slope separately from each
-section's resonance target. The `+18 dB` target in the resonant sections is
-resonance gain and does not describe the filter slope.
+section's resonance target. Its realtime processor caps resonance at `+12 dB`
+to reduce peak gain and clipping during automation. The capped target is then
+reached with a per-frame linear ramp, so limiting does not introduce a sudden
+coefficient change.
 
 Input may be mono or stereo 16-bit PCM WAV, AIFF, or uncompressed AIFF-C.
 Use `--validate PATH` to check decoding without opening an audio device.
+Use `--list-devices` to enumerate CoreAudio outputs and
+`--output-device NAME_OR_UID` to select one. If no output is specified, the
+current system default is used.

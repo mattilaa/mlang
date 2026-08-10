@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -56,6 +57,9 @@ void printUsage(const char* program)
     std::printf("  %s --validate [AUDIO]\n\n", program);
     std::printf("Options:\n");
     std::printf("  --filter MODE  Select a 24 dB/octave filter (default: lowpass24)\n");
+    std::printf("  --output-device DEVICE  Select output by name, name substring, or UID\n");
+    std::printf("  --list-devices          List CoreAudio output devices and UIDs\n");
+    std::printf("  --verbose               Add ids, channels, and rates to device listing\n");
     std::printf("  --validate     Validate audio decoding without opening an audio device\n");
     std::printf("  -h, --help     Show this help\n\n");
     std::printf("Filter modes:\n");
@@ -67,12 +71,13 @@ void printUsage(const char* program)
     std::printf("  WAV, AIFF, or uncompressed AIFF-C must be mono or stereo 16-bit PCM.\n");
     std::printf("  The default is illusion.wav. Sweeps span the complete file length.\n\n");
     std::printf("Display note:\n");
-    std::printf("  24 dB/octave is the filter slope. Resonance targets such as +18 dB\n");
-    std::printf("  are independent resonance gain settings, not filter slopes.\n\n");
+    std::printf("  24 dB/octave is the filter slope. Realtime resonance is capped at +12 dB\n");
+    std::printf("  in this demo; resonance gain is independent from the filter slope.\n\n");
     std::printf("Examples:\n");
     std::printf("  %s --filter lowpass24\n", program);
     std::printf("  %s --filter highpass24 /path/to/sample.wav\n", program);
-    std::printf("  %s --filter bandpass24 /path/to/sample.aif\n", program);
+    std::printf("  %s --filter bandpass24 --output-device BlackHole /path/to/sample.aif\n", program);
+    std::printf("  %s --list-devices --verbose\n", program);
     std::printf("  %s --validate /path/to/sample.aif\n", program);
 }
 
@@ -82,6 +87,261 @@ struct AudioData
     std::uint16_t channels {0};
     std::vector<float> samples;
 };
+
+struct OutputDeviceInfo
+{
+    AudioDeviceID id {kAudioObjectUnknown};
+    std::string uid;
+    std::string name;
+    std::uint32_t outputChannels {0};
+    Float64 nominalSampleRate {0.0};
+    bool isDefaultOutput {false};
+};
+
+std::string cfStringToUtf8(CFStringRef value)
+{
+    if(!value)
+        return {};
+    const CFIndex length = CFStringGetLength(value);
+    const CFIndex maxSize =
+        CFStringGetMaximumSizeForEncoding(length, kCFStringEncodingUTF8) + 1;
+    std::string result(static_cast<std::size_t>(maxSize), '\0');
+    if(!CFStringGetCString(value, result.data(), maxSize, kCFStringEncodingUTF8))
+        return {};
+    result.resize(std::strlen(result.c_str()));
+    return result;
+}
+
+std::string asciiLower(std::string value)
+{
+    for(char& c : value)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return value;
+}
+
+bool hasOutputStreams(AudioDeviceID id)
+{
+    AudioObjectPropertyAddress address {
+        kAudioDevicePropertyStreams,
+        kAudioDevicePropertyScopeOutput,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32 size = 0;
+    return AudioObjectGetPropertyDataSize(
+        id, &address, 0, nullptr, &size) == noErr && size > 0;
+}
+
+std::uint32_t outputChannelCount(AudioDeviceID id)
+{
+    AudioObjectPropertyAddress address {
+        kAudioDevicePropertyStreamConfiguration,
+        kAudioDevicePropertyScopeOutput,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32 size = 0;
+    if(AudioObjectGetPropertyDataSize(id, &address, 0, nullptr, &size) != noErr ||
+       size == 0)
+        return 0;
+    std::vector<unsigned char> storage(size);
+    auto* buffers = reinterpret_cast<AudioBufferList*>(storage.data());
+    if(AudioObjectGetPropertyData(
+           id, &address, 0, nullptr, &size, buffers) != noErr)
+        return 0;
+    std::uint32_t channels = 0;
+    for(UInt32 i = 0; i < buffers->mNumberBuffers; ++i)
+        channels += buffers->mBuffers[i].mNumberChannels;
+    return channels;
+}
+
+Float64 deviceNominalSampleRate(AudioDeviceID id)
+{
+    AudioObjectPropertyAddress address {
+        kAudioDevicePropertyNominalSampleRate,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    Float64 rate = 0.0;
+    UInt32 size = sizeof(rate);
+    if(AudioObjectGetPropertyData(
+           id, &address, 0, nullptr, &size, &rate) != noErr)
+        return 0.0;
+    return rate;
+}
+
+AudioDeviceID defaultOutputDeviceId()
+{
+    AudioObjectPropertyAddress address {
+        kAudioHardwarePropertyDefaultOutputDevice,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    AudioDeviceID id = kAudioObjectUnknown;
+    UInt32 size = sizeof(id);
+    if(AudioObjectGetPropertyData(kAudioObjectSystemObject, &address,
+                                  0, nullptr, &size, &id) != noErr)
+        return kAudioObjectUnknown;
+    return id;
+}
+
+std::vector<OutputDeviceInfo> listOutputDevices()
+{
+    AudioObjectPropertyAddress devicesAddress {
+        kAudioHardwarePropertyDevices,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32 size = 0;
+    if(AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &devicesAddress,
+                                      0, nullptr, &size) != noErr || size == 0)
+        return {};
+    std::vector<AudioDeviceID> ids(size / sizeof(AudioDeviceID));
+    if(AudioObjectGetPropertyData(kAudioObjectSystemObject, &devicesAddress,
+                                  0, nullptr, &size, ids.data()) != noErr)
+        return {};
+
+    const AudioDeviceID defaultOutput = defaultOutputDeviceId();
+    std::vector<OutputDeviceInfo> devices;
+    for(AudioDeviceID id : ids)
+    {
+        if(id == kAudioObjectUnknown || !hasOutputStreams(id))
+            continue;
+        AudioObjectPropertyAddress nameAddress {
+            kAudioObjectPropertyName,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+        AudioObjectPropertyAddress uidAddress {
+            kAudioDevicePropertyDeviceUID,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+        CFStringRef nameRef = nullptr;
+        CFStringRef uidRef = nullptr;
+        UInt32 nameSize = sizeof(nameRef);
+        UInt32 uidSize = sizeof(uidRef);
+        if(AudioObjectGetPropertyData(
+               id, &nameAddress, 0, nullptr, &nameSize, &nameRef) != noErr)
+            continue;
+        if(AudioObjectGetPropertyData(
+               id, &uidAddress, 0, nullptr, &uidSize, &uidRef) != noErr)
+        {
+            if(nameRef)
+                CFRelease(nameRef);
+            continue;
+        }
+        OutputDeviceInfo info;
+        info.id = id;
+        info.name = cfStringToUtf8(nameRef);
+        info.uid = cfStringToUtf8(uidRef);
+        info.outputChannels = outputChannelCount(id);
+        info.nominalSampleRate = deviceNominalSampleRate(id);
+        info.isDefaultOutput = id == defaultOutput;
+        devices.push_back(info);
+        if(nameRef)
+            CFRelease(nameRef);
+        if(uidRef)
+            CFRelease(uidRef);
+    }
+    return devices;
+}
+
+void printOutputDevices(bool verbose)
+{
+    const std::vector<OutputDeviceInfo> devices = listOutputDevices();
+    if(devices.empty())
+    {
+        std::printf("No CoreAudio output devices found.\n");
+        return;
+    }
+    for(const OutputDeviceInfo& device : devices)
+    {
+        std::printf("%s%s\n", device.name.empty() ? "(unnamed device)" : device.name.c_str(),
+                    device.isDefaultOutput ? "  [default output]" : "");
+        std::printf("  uid: %s\n", device.uid.empty() ? "(none)" : device.uid.c_str());
+        if(verbose)
+        {
+            std::printf("  id: %u\n  output channels: %u\n  nominal sample rate: %.0f Hz\n",
+                        static_cast<unsigned>(device.id), device.outputChannels,
+                        device.nominalSampleRate);
+        }
+    }
+}
+
+bool resolveOutputDevice(const std::string& selector, OutputDeviceInfo& result)
+{
+    const std::string wantedLower = asciiLower(selector);
+    const std::vector<OutputDeviceInfo> devices = listOutputDevices();
+    for(const OutputDeviceInfo& device : devices)
+    {
+        if(device.uid == selector)
+        {
+            result = device;
+            return true;
+        }
+    }
+    for(const OutputDeviceInfo& device : devices)
+    {
+        if(asciiLower(device.name) == wantedLower)
+        {
+            result = device;
+            return true;
+        }
+    }
+    for(const OutputDeviceInfo& device : devices)
+    {
+        if(asciiLower(device.name).find(wantedLower) != std::string::npos)
+        {
+            result = device;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool setQueueOutputDevice(AudioQueueRef queue, const std::string& selector,
+                          std::string& selectedName, std::string& error)
+{
+    if(selector.empty())
+    {
+        const AudioDeviceID defaultId = defaultOutputDeviceId();
+        for(const OutputDeviceInfo& device : listOutputDevices())
+        {
+            if(device.id == defaultId)
+            {
+                selectedName = device.name;
+                break;
+            }
+        }
+        if(selectedName.empty())
+            selectedName = "system default";
+        return true;
+    }
+
+    OutputDeviceInfo device;
+    if(!resolveOutputDevice(selector, device))
+    {
+        error = "output device not found: " + selector;
+        return false;
+    }
+    CFStringRef uid = CFStringCreateWithCString(
+        kCFAllocatorDefault, device.uid.c_str(), kCFStringEncodingUTF8);
+    if(!uid)
+    {
+        error = "failed to create CoreAudio device UID";
+        return false;
+    }
+    const OSStatus status = AudioQueueSetProperty(
+        queue, kAudioQueueProperty_CurrentDevice, &uid, sizeof(uid));
+    CFRelease(uid);
+    if(status != noErr)
+    {
+        error = "AudioQueueSetProperty(CurrentDevice) failed: " +
+            std::to_string(static_cast<int>(status));
+        return false;
+    }
+    selectedName = device.name;
+    return true;
+}
 
 std::uint16_t readU16(const unsigned char* p)
 {
@@ -339,8 +599,8 @@ constexpr Sweep kSweeps[] = {
     {"dry reference", false, 12000.0f, 12000.0f, 0.0f, 3},
     {"falling cutoff, no resonance", true, 12000.0f, 180.0f, 0.0f, 5},
     {"rising cutoff, no resonance", true, 180.0f, 12000.0f, 0.0f, 5},
-    {"falling cutoff, increasing resonance", true, 12000.0f, 180.0f, 18.0f, 5},
-    {"rising cutoff, resonant", true, 180.0f, 12000.0f, 18.0f, 5},
+    {"falling cutoff, increasing resonance", true, 12000.0f, 180.0f, 12.0f, 5},
+    {"rising cutoff, resonant", true, 180.0f, 12000.0f, 12.0f, 5},
 };
 
 constexpr std::size_t kSweepCount = sizeof(kSweeps) / sizeof(kSweeps[0]);
@@ -465,7 +725,10 @@ void outputCallback(void* userData, AudioQueueRef queue,
 int main(int argc, char** argv)
 {
     bool validateOnly = false;
+    bool listDevicesOnly = false;
+    bool verboseDevices = false;
     FilterMode filterMode = FilterMode::Lowpass;
+    std::string outputDeviceSelector;
     std::string audioPath = "../../examples/fft_example/illusion.wav";
     bool hasAudioPath = false;
     for(int i = 1; i < argc; ++i)
@@ -479,6 +742,27 @@ int main(int argc, char** argv)
         if(argument == "--validate")
         {
             validateOnly = true;
+            continue;
+        }
+        if(argument == "--list-devices")
+        {
+            listDevicesOnly = true;
+            continue;
+        }
+        if(argument == "--verbose")
+        {
+            verboseDevices = true;
+            continue;
+        }
+        if(argument == "--output-device" || argument == "--device")
+        {
+            if(i + 1 >= argc)
+            {
+                std::fprintf(stderr, "%s requires a device name or UID\n",
+                             argument.c_str());
+                return 2;
+            }
+            outputDeviceSelector = argv[++i];
             continue;
         }
         if(argument == "--filter")
@@ -504,6 +788,11 @@ int main(int argc, char** argv)
         }
         audioPath = argument;
         hasAudioPath = true;
+    }
+    if(listDevicesOnly)
+    {
+        printOutputDevices(verboseDevices);
+        return 0;
     }
     AudioData wav;
     std::string error;
@@ -548,6 +837,15 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    std::string outputDeviceName;
+    if(!setQueueOutputDevice(state.queue, outputDeviceSelector,
+                             outputDeviceName, error))
+    {
+        std::fprintf(stderr, "output device selection failed: %s\n", error.c_str());
+        AudioQueueDispose(state.queue, true);
+        return 1;
+    }
+
     constexpr std::uint32_t kBufferCount = 3;
     const std::uint32_t bufferBytes = state.framesPerBuffer * 2 * sizeof(float);
     for(std::uint32_t i = 0; i < kBufferCount; ++i)
@@ -567,6 +865,7 @@ int main(int argc, char** argv)
                 filterModeName(filterMode));
     std::printf("source: %s (%u Hz, %u channel%s)\n", audioPath.c_str(),
                 wav.sampleRate, wav.channels, wav.channels == 1 ? "" : "s");
+    std::printf("output: %s\n", outputDeviceName.c_str());
     std::printf("demo duration: %.2f seconds (full source)\n",
                 static_cast<double>(state.totalFrames) / wav.sampleRate);
     for(std::size_t i = 0; i < kSweepCount; ++i)

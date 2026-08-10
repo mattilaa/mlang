@@ -10,9 +10,13 @@ It plays five sections so cutoff and resonance changes are easy to compare:
 4. falling cutoff sweep with increasing resonance
 5. rising resonant cutoff sweep
 
-The selected filter slope is always 24 dB/octave. The `+18 dB` shown for the
-last two sections is a separate resonance target, not the filter slope. The
-demo output labels both values explicitly.
+The selected filter slope is always 24 dB/octave. Realtime resonance is capped
+at `+12 dB` and distributed across the two cascaded stages to avoid the strong
+peak and clipping produced when each stage receives the full resonance gain.
+Resonance remains separate from the filter slope, and the demo labels both
+values explicitly. The cap is applied to the target before its per-frame ramp
+is calculated, so resonance moves continuously to the safe value without a
+sudden parameter change in the audio callback.
 
 The five sections span the complete input sample. Their original 3:5:5:5:5
 timing ratio is scaled to the audio-file length, and each filter ramp ends at
@@ -49,6 +53,38 @@ the built program:
 ```
 
 Run `./build/cmake/coreaudio_filter_sweeps --help` for the complete syntax.
+
+## Output device selection
+
+List available CoreAudio output devices:
+
+```sh
+./build/cmake/coreaudio_filter_sweeps --list-devices
+./build/cmake/coreaudio_filter_sweeps --list-devices --verbose
+```
+
+Select an output by its full name, a case-insensitive name substring, or the
+UID shown by `--list-devices`:
+
+```sh
+./build/cmake/coreaudio_filter_sweeps \
+  --filter bandpass24 \
+  --output-device "BlackHole 2ch" \
+  /path/to/input.aif
+```
+
+The package task exposes the same settings:
+
+```sh
+../../build/mlang pkg run list-devices
+../../build/mlang pkg run list-devices-verbose
+../../build/mlang pkg run demo \
+  --option filter=bandpass24 \
+  --option audio_output=BlackHole \
+  --option audio_path=/path/to/input.aif
+```
+
+Without `--output-device`, CoreAudio uses the current system default output.
 
 Validate decoding without opening an audio device:
 
