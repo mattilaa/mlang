@@ -11,6 +11,7 @@ results
 *html
 *xml
 docs/out
+.rg
 PIPE
 
 .cache
