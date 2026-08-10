@@ -136,7 +136,8 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 - `examples/package_manager_coreaudio_filter` — real-time CoreAudio playback
   of `examples/fft_example/illusion.wav` with click-free 12/24 dB low-pass,
   high-pass, and band-pass sweeps, configurable resonance peaks, and CoreAudio
-  output selection by name or UID.
+  output selection by name or UID. Fractional playback can compare nearest,
+  linear, Hermite, cubic, and bicubic-reduction interpolation modes.
 
 ## Focused regression examples
 

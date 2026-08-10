@@ -27,17 +27,37 @@ struct FilterDesign {
     var inverse_a0: f32;
 };
 
-/// @brief Four-point cubic interpolation used for fractional sample playback.
+/// @brief Select the closer endpoint for fractional sample playback.
+pub fn nearest_interpolate_f32(x0: f32, x1: f32, fraction: f32) -> f32 {
+    let t: f32 = clamp_f32(fraction, 0.0f, 1.0f);
+    return t < 0.5f ? x0 : x1;
+}
+
+/// @brief Linearly interpolate between two adjacent samples.
+pub fn linear_interpolate_f32(x0: f32, x1: f32, fraction: f32) -> f32 {
+    let t: f32 = clamp_f32(fraction, 0.0f, 1.0f);
+    return x0 + (x1 - x0) * t;
+}
+
+/// @brief Four-point third-order Hermite interpolation for audio samples.
 ///
 /// `fraction` is normally in `[0, 1]`; `x0` and `x1` are the endpoints and
-/// `xm1`/`x2` are their neighboring samples. The polynomial matches the cubic
-/// sampler interpolation used by LinuxSampler.
-pub fn cubic_interpolate_f32(xm1: f32, x0: f32, x1: f32, x2: f32, fraction: f32) -> f32 {
+/// `xm1`/`x2` are their neighboring samples. Central-difference derivatives
+/// make value and slope transitions smooth at sample boundaries.
+pub fn hermite_interpolate_f32(xm1: f32, x0: f32, x1: f32, x2: f32, fraction: f32) -> f32 {
     let t: f32 = clamp_f32(fraction, 0.0f, 1.0f);
     let a: f32 = (3.0f * (x0 - x1) - xm1 + x2) * 0.5f;
     let b: f32 = 2.0f * x1 + xm1 - (5.0f * x0 + x2) * 0.5f;
     let c: f32 = (x1 - xm1) * 0.5f;
     return (((a * t) + b) * t + c) * t + x0;
+}
+
+/// @brief Compatibility name for four-point Hermite/Catmull-Rom interpolation.
+///
+/// This is the cubic sampler polynomial used by LinuxSampler and delegates to
+/// `hermite_interpolate_f32`.
+pub fn cubic_interpolate_f32(xm1: f32, x0: f32, x1: f32, x2: f32, fraction: f32) -> f32 {
+    return hermite_interpolate_f32(xm1, x0, x1, x2, fraction);
 }
 
 /// @brief Bicubic interpolation over a row-major 4x4 neighborhood.

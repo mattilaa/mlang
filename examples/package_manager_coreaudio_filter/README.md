@@ -55,6 +55,40 @@ Set a different resonance peak; `+12 dB` remains the default:
 ./build/cmake/coreaudio_filter_sweeps --filter bandpass24 --max-resonance-db 9.5
 ```
 
+## Interpolation filters
+
+Fractional playback supports these sampler interpolation filters:
+
+- `nearest`: closest sample, lowest CPU, highest imaging/distortion
+- `linear`: two-point blend with low CPU usage
+- `hermite`: four-point third-order Hermite with smooth derivatives and a
+  strong quality/CPU balance for audio
+- `cubic`: four-point Catmull-Rom cubic; mathematically the same polynomial as
+  this Hermite implementation
+- `bicubic`: a selectable one-dimensional waveform reduction to cubic
+
+`hermite` is the default. True bicubic interpolation needs a two-dimensional
+4x4 neighborhood. A waveform has only one time axis, so the realtime bicubic
+mode reduces to the equivalent four-point cubic result without allocating a
+4x4 list in the callback. The full 2D `bicubic_interpolate_f32` API remains
+available for DSP tables.
+
+Use a fractional playback rate to hear interpolation differences:
+
+```sh
+./build/cmake/coreaudio_filter_sweeps \
+  --filter lowpass12 \
+  --interpolation hermite \
+  --playback-rate 0.75 \
+  ~/Desktop/1995-Short.aif
+```
+
+The startup interface prints the selected audio filter, interpolation filter,
+playback rate, and maximum resonance peak. At `1.0x`, source positions are
+integers, so interpolation methods produce the same sample values.
+The five-step schedule is not dumped at startup. Each step's time range,
+filter, and resonance target are printed only when playback enters that step.
+
 Pass another mono or stereo 16-bit PCM WAV, AIFF, or AIFF-C file directly to
 the built program:
 
@@ -92,6 +126,8 @@ The package task exposes the same settings:
 ../../build/mlang pkg run demo \
   --option filter=bandpass24 \
   --option max_resonance_db=9 \
+  --option interpolation=hermite \
+  --option playback_rate=0.75 \
   --option audio_output=BlackHole \
   --option audio_path=/path/to/input.aif
 ```

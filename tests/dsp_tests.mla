@@ -16,6 +16,9 @@ use dsp::filter::Lowpass24;
 use dsp::filter::SmoothedLowpass;
 use dsp::filter::cubic_interpolate_f32;
 use dsp::filter::bicubic_interpolate_f32;
+use dsp::filter::hermite_interpolate_f32;
+use dsp::filter::linear_interpolate_f32;
+use dsp::filter::nearest_interpolate_f32;
 use std::testing::verify;
 
 fn approx_f32(a: f32, b: f32, eps: f32) -> bool {
@@ -91,9 +94,17 @@ fn test_dsp_convolution_float_modes() {
 
 #[test]
 fn test_dsp_cubic_sampler_interpolation() {
+    verify(approx_f32(nearest_interpolate_f32(1.0f, 2.0f, 0.25f), 1.0f, 0.0001f));
+    verify(approx_f32(nearest_interpolate_f32(1.0f, 2.0f, 0.75f), 2.0f, 0.0001f));
+    verify(approx_f32(linear_interpolate_f32(1.0f, 2.0f, 0.25f), 1.25f, 0.0001f));
+    verify(approx_f32(hermite_interpolate_f32(0.0f, 1.0f, 2.0f, 3.0f, 0.5f), 1.5f, 0.0001f));
     verify(approx_f32(cubic_interpolate_f32(0.0f, 1.0f, 2.0f, 3.0f, 0.0f), 1.0f, 0.0001f));
     verify(approx_f32(cubic_interpolate_f32(0.0f, 1.0f, 2.0f, 3.0f, 0.5f), 1.5f, 0.0001f));
     verify(approx_f32(cubic_interpolate_f32(0.0f, 1.0f, 2.0f, 3.0f, 1.0f), 2.0f, 0.0001f));
+    verify(approx_f32(
+        cubic_interpolate_f32(-0.5f, 0.25f, 1.5f, 0.75f, 0.35f),
+        hermite_interpolate_f32(-0.5f, 0.25f, 1.5f, 0.75f, 0.35f),
+        0.0001f));
 }
 
 #[test]

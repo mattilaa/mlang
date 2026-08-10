@@ -78,15 +78,22 @@ locks. Trigonometric coefficient calculation is bounded but runs per sample in
 `SmoothedLowpass`; use a control-rate update strategy when CPU cost is more
 important than sample-accurate automation.
 
-## Cubic interpolation
+## Sampler interpolation
 
-- `cubic_interpolate_f32(xm1, x0, x1, x2, fraction)` implements the
-  four-point polynomial used by LinuxSampler for fractional sample playback.
+- `nearest_interpolate_f32(x0, x1, fraction)` selects the closest endpoint.
+- `linear_interpolate_f32(x0, x1, fraction)` blends two adjacent samples.
+- `hermite_interpolate_f32(xm1, x0, x1, x2, fraction)` implements optimized
+  four-point third-order Hermite interpolation with smooth boundary slopes.
+- `cubic_interpolate_f32(xm1, x0, x1, x2, fraction)` is the compatibility name
+  for the same Hermite/Catmull-Rom polynomial used by LinuxSampler.
 - `bicubic_interpolate_f32(samples, x_fraction, y_fraction)` applies the same
   polynomial over a row-major 4x4 neighborhood for two-dimensional tables.
 
-The sampler algorithm is cubic, not bicubic: a waveform is one-dimensional.
-Bicubic interpolation is included for two-dimensional DSP parameter tables.
+Nearest has the lowest CPU cost and most distortion; linear is a low-cost
+middle ground; Hermite gives smoother audio with four points. Waveform
+interpolation is one-dimensional, so the demo's selectable bicubic mode
+reduces to cubic. The full bicubic function remains available for
+two-dimensional DSP parameter tables.
 
 ## CoreAudio example
 
@@ -98,6 +105,15 @@ for the 24 dB modes. The processor keeps filter history across sweep sections
 and crossfades from the dry reference to filtered output to avoid transition
 clicks. All file decoding and buffer allocation happens before the CoreAudio
 callback starts.
+
+Sampler interpolation is selected independently with `--interpolation` using
+`nearest`, `linear`, `hermite`, `cubic`, or `bicubic`. In waveform playback,
+the bicubic option reports and uses its one-dimensional cubic reduction; the
+full 4x4 bicubic API is intended for 2D tables. Use `--playback-rate RATE` in
+the range `0.25..4` to exercise fractional source positions. The runtime
+interface prints both the audio filter type and interpolation type.
+It prints each sweep step and its time range only when playback enters that
+step instead of dumping the complete schedule at startup.
 
 The binary reports the 24 dB/octave filter slope separately from each
 section's resonance target. Its realtime resonance peak defaults to `+12 dB`

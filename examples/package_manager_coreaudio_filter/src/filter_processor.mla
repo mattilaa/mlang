@@ -5,6 +5,9 @@
 mod dsp::filter;
 
 use dsp::filter::Biquad;
+use dsp::filter::hermite_interpolate_f32;
+use dsp::filter::linear_interpolate_f32;
+use dsp::filter::nearest_interpolate_f32;
 
 extern fn expf(value: f32) -> f32;
 
@@ -39,6 +42,18 @@ var g_right_stage2_x1: f32 = 0.0f;
 var g_right_stage2_x2: f32 = 0.0f;
 var g_right_stage2_y1: f32 = 0.0f;
 var g_right_stage2_y2: f32 = 0.0f;
+
+fn mlang_dsp_interpolate_nearest(x0: f32, x1: f32, fraction: f32) -> f32 {
+    return nearest_interpolate_f32(x0, x1, fraction);
+}
+
+fn mlang_dsp_interpolate_linear(x0: f32, x1: f32, fraction: f32) -> f32 {
+    return linear_interpolate_f32(x0, x1, fraction);
+}
+
+fn mlang_dsp_interpolate_hermite(xm1: f32, x0: f32, x1: f32, x2: f32, fraction: f32) -> f32 {
+    return hermite_interpolate_f32(xm1, x0, x1, x2, fraction);
+}
 
 fn clamp_realtime_resonance(resonance_db: f32) -> f32 {
     if resonance_db < 0.0f {
