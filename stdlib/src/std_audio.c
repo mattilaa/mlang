@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,14 @@
 #endif
 
 typedef struct mlang_audio_device mlang_audio_device_t;
+typedef struct mlang_pcm_audio mlang_pcm_audio_t;
+typedef struct mlang_pcm_block mlang_pcm_block_t;
+
+typedef struct
+{
+    int64_t size;
+    void* data;
+} mlang_list_t;
 
 int32_t __mlang_std_audio_close(int64_t handle);
 
@@ -26,6 +35,12 @@ struct mlang_audio_device
     double frequency_hz;
     double gain;
     int64_t frames_left;
+    float* pcm_ring;
+    uint64_t pcm_capacity_frames;
+    _Atomic uint64_t pcm_read_frame;
+    _Atomic uint64_t pcm_write_frame;
+    _Atomic uint64_t pcm_underruns;
+    _Atomic int source_mode;
 #if defined(__APPLE__)
     AudioQueueRef queue;
     AudioQueueBufferRef buffers[3];
@@ -35,6 +50,20 @@ struct mlang_audio_device
     void* out_l;
     void* out_r;
 #endif
+};
+
+struct mlang_pcm_audio
+{
+    float* samples;
+    int64_t sample_rate;
+    int64_t channels;
+    int64_t frame_count;
+};
+
+struct mlang_pcm_block
+{
+    float* samples;
+    int64_t capacity_frames;
 };
 
 static char g_audio_last_error[512];
@@ -106,6 +135,463 @@ static float audio_next_sample(mlang_audio_device_t* d)
             d->running = 0;
     }
     return out;
+}
+
+static uint64_t audio_pcm_queued_frames(const mlang_audio_device_t* d)
+{
+    if(!d || !d->pcm_ring || d->pcm_capacity_frames == 0)
+        return 0;
+    const uint64_t read_frame = atomic_load_explicit(
+        &d->pcm_read_frame, memory_order_acquire);
+    const uint64_t write_frame = atomic_load_explicit(
+        &d->pcm_write_frame, memory_order_acquire);
+    const uint64_t queued = write_frame - read_frame;
+    return queued > d->pcm_capacity_frames ? d->pcm_capacity_frames : queued;
+}
+
+static void audio_render_frames(mlang_audio_device_t* d, float* interleaved,
+                                float* left, float* right, uint64_t frames)
+{
+    if(!d)
+        return;
+    uint64_t read_frame = atomic_load_explicit(
+        &d->pcm_read_frame, memory_order_relaxed);
+    const uint64_t write_frame = atomic_load_explicit(
+        &d->pcm_write_frame, memory_order_acquire);
+    const int mode = atomic_load_explicit(&d->source_mode, memory_order_acquire);
+    int underrun = 0;
+
+    for(uint64_t i = 0; i < frames; ++i)
+    {
+        float sample_l = 0.0f;
+        float sample_r = 0.0f;
+        if(mode == 2 && read_frame < write_frame)
+        {
+            const uint64_t slot = read_frame % d->pcm_capacity_frames;
+            sample_l = d->pcm_ring[slot * 2];
+            sample_r = d->pcm_ring[slot * 2 + 1];
+            ++read_frame;
+        }
+        else if(mode == 1)
+        {
+            sample_l = audio_next_sample(d);
+            sample_r = sample_l;
+        }
+        else if(mode == 2)
+        {
+            underrun = 1;
+        }
+
+        if(interleaved)
+        {
+            interleaved[i * 2] = sample_l;
+            interleaved[i * 2 + 1] = sample_r;
+        }
+        else
+        {
+            left[i] = sample_l;
+            right[i] = sample_r;
+        }
+    }
+
+    atomic_store_explicit(&d->pcm_read_frame, read_frame, memory_order_release);
+    if(underrun)
+        (void)atomic_fetch_add_explicit(
+            &d->pcm_underruns, 1u, memory_order_relaxed);
+}
+
+static uint16_t audio_read_u16_le(const unsigned char* p)
+{
+    return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
+}
+
+static uint32_t audio_read_u32_le(const unsigned char* p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static uint16_t audio_read_u16_be(const unsigned char* p)
+{
+    return (uint16_t)(((uint16_t)p[0] << 8) | (uint16_t)p[1]);
+}
+
+static uint32_t audio_read_u32_be(const unsigned char* p)
+{
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
+           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+}
+
+static double audio_read_extended80(const unsigned char* p)
+{
+    const uint16_t sign_exponent = audio_read_u16_be(p);
+    const uint16_t exponent = sign_exponent & 0x7fffu;
+    uint64_t mantissa = 0;
+    if((sign_exponent & 0x8000u) != 0 || exponent == 0x7fffu)
+        return 0.0;
+    for(int i = 0; i < 8; ++i)
+        mantissa = (mantissa << 8) | p[2 + i];
+    if(exponent == 0 && mantissa == 0)
+        return 0.0;
+    return ldexp((double)mantissa, (int)exponent - 16383 - 63);
+}
+
+static char* audio_expand_path(const char* path)
+{
+    if(!path)
+        return NULL;
+    if(path[0] == '~' && path[1] == '/')
+    {
+        const char* home = getenv("HOME");
+        if(home && home[0])
+        {
+            const size_t home_len = strlen(home);
+            const size_t tail_len = strlen(path + 1);
+            char* expanded = (char*)malloc(home_len + tail_len + 1u);
+            if(!expanded)
+                return NULL;
+            memcpy(expanded, home, home_len);
+            memcpy(expanded + home_len, path + 1, tail_len + 1u);
+            return expanded;
+        }
+    }
+    const size_t len = strlen(path);
+    char* copy = (char*)malloc(len + 1u);
+    if(copy)
+        memcpy(copy, path, len + 1u);
+    return copy;
+}
+
+static unsigned char* audio_read_file(const char* path, size_t* out_size)
+{
+    *out_size = 0;
+    char* expanded = audio_expand_path(path);
+    if(!expanded)
+    {
+        audio_set_error("std::audio PCM path allocation failed");
+        return NULL;
+    }
+    FILE* file = fopen(expanded, "rb");
+    if(!file)
+    {
+        (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
+                       "std::audio cannot open %s", expanded);
+        free(expanded);
+        return NULL;
+    }
+    free(expanded);
+    if(fseek(file, 0, SEEK_END) != 0)
+    {
+        fclose(file);
+        audio_set_error("std::audio failed to seek PCM file");
+        return NULL;
+    }
+    const long file_size = ftell(file);
+    if(file_size < 0 || fseek(file, 0, SEEK_SET) != 0)
+    {
+        fclose(file);
+        audio_set_error("std::audio failed to size PCM file");
+        return NULL;
+    }
+    unsigned char* bytes = (unsigned char*)malloc(
+        file_size > 0 ? (size_t)file_size : 1u);
+    if(!bytes)
+    {
+        fclose(file);
+        audio_set_error("std::audio PCM file allocation failed");
+        return NULL;
+    }
+    const size_t size = (size_t)file_size;
+    if(size > 0 && fread(bytes, 1u, size, file) != size)
+    {
+        free(bytes);
+        fclose(file);
+        audio_set_error("std::audio failed to read PCM file");
+        return NULL;
+    }
+    fclose(file);
+    *out_size = size;
+    return bytes;
+}
+
+static int audio_decode_wav(mlang_pcm_audio_t* out,
+                            const unsigned char* bytes, size_t size)
+{
+    uint16_t format = 0;
+    uint16_t bits = 0;
+    uint16_t channels = 0;
+    uint32_t sample_rate = 0;
+    const unsigned char* pcm = NULL;
+    size_t pcm_bytes = 0;
+    size_t offset = 12;
+    if(size < 12 || memcmp(bytes, "RIFF", 4) != 0 ||
+       memcmp(bytes + 8, "WAVE", 4) != 0)
+        return -1;
+    while(offset + 8 <= size)
+    {
+        const uint32_t chunk_size = audio_read_u32_le(bytes + offset + 4);
+        const size_t data_offset = offset + 8;
+        if(data_offset > size || chunk_size > size - data_offset)
+            break;
+        if(memcmp(bytes + offset, "fmt ", 4) == 0 && chunk_size >= 16)
+        {
+            format = audio_read_u16_le(bytes + data_offset);
+            channels = audio_read_u16_le(bytes + data_offset + 2);
+            sample_rate = audio_read_u32_le(bytes + data_offset + 4);
+            bits = audio_read_u16_le(bytes + data_offset + 14);
+        }
+        else if(memcmp(bytes + offset, "data", 4) == 0)
+        {
+            pcm = bytes + data_offset;
+            pcm_bytes = chunk_size;
+        }
+        offset = data_offset + chunk_size + (chunk_size & 1u);
+    }
+    if(format != 1 || bits != 16 || channels < 1 || channels > 2 ||
+       sample_rate == 0 || !pcm)
+        return -1;
+    const size_t sample_count = pcm_bytes / 2u;
+    if(sample_count == 0 || sample_count % channels != 0)
+        return -1;
+    out->samples = (float*)malloc(sample_count * sizeof(float));
+    if(!out->samples)
+        return -2;
+    for(size_t i = 0; i < sample_count; ++i)
+        out->samples[i] = (float)(int16_t)audio_read_u16_le(pcm + i * 2u) /
+                          32768.0f;
+    out->sample_rate = sample_rate;
+    out->channels = channels;
+    out->frame_count = (int64_t)(sample_count / channels);
+    return 0;
+}
+
+static int audio_decode_aiff(mlang_pcm_audio_t* out,
+                             const unsigned char* bytes, size_t size)
+{
+    const int is_aiff = size >= 12 && memcmp(bytes, "FORM", 4) == 0 &&
+                        memcmp(bytes + 8, "AIFF", 4) == 0;
+    const int is_aifc = size >= 12 && memcmp(bytes, "FORM", 4) == 0 &&
+                        memcmp(bytes + 8, "AIFC", 4) == 0;
+    uint16_t channels = 0;
+    uint16_t bits = 0;
+    uint32_t declared_frames = 0;
+    int64_t sample_rate = 0;
+    int found_common = 0;
+    int supported_compression = is_aiff;
+    int little_endian = 0;
+    const unsigned char* pcm = NULL;
+    size_t pcm_bytes = 0;
+    size_t offset = 12;
+    if(!is_aiff && !is_aifc)
+        return -1;
+    while(offset + 8 <= size)
+    {
+        const uint32_t chunk_size = audio_read_u32_be(bytes + offset + 4);
+        const size_t data_offset = offset + 8;
+        if(data_offset > size || chunk_size > size - data_offset)
+            break;
+        if(memcmp(bytes + offset, "COMM", 4) == 0 && chunk_size >= 18)
+        {
+            found_common = 1;
+            channels = audio_read_u16_be(bytes + data_offset);
+            declared_frames = audio_read_u32_be(bytes + data_offset + 2);
+            bits = audio_read_u16_be(bytes + data_offset + 6);
+            const double rate = audio_read_extended80(bytes + data_offset + 8);
+            if(isfinite(rate) && rate >= 1.0 && rate <= 1000000.0)
+                sample_rate = (int64_t)llround(rate);
+            if(is_aifc && chunk_size >= 22)
+            {
+                const unsigned char* compression = bytes + data_offset + 18;
+                supported_compression = memcmp(compression, "NONE", 4) == 0 ||
+                                        memcmp(compression, "twos", 4) == 0 ||
+                                        memcmp(compression, "sowt", 4) == 0;
+                little_endian = memcmp(compression, "sowt", 4) == 0;
+            }
+        }
+        else if(memcmp(bytes + offset, "SSND", 4) == 0 && chunk_size >= 8)
+        {
+            const uint32_t sound_offset = audio_read_u32_be(bytes + data_offset);
+            if(sound_offset <= chunk_size - 8)
+            {
+                pcm = bytes + data_offset + 8 + sound_offset;
+                pcm_bytes = chunk_size - 8 - sound_offset;
+            }
+        }
+        offset = data_offset + chunk_size + (chunk_size & 1u);
+    }
+    if(!found_common || !supported_compression || bits != 16 ||
+       channels < 1 || channels > 2 || sample_rate == 0 || !pcm)
+        return -1;
+    size_t sample_count = pcm_bytes / 2u;
+    const uint64_t declared_samples = (uint64_t)declared_frames * channels;
+    if(declared_frames > 0 && declared_samples < sample_count)
+        sample_count = (size_t)declared_samples;
+    if(sample_count == 0 || sample_count % channels != 0)
+        return -1;
+    out->samples = (float*)malloc(sample_count * sizeof(float));
+    if(!out->samples)
+        return -2;
+    for(size_t i = 0; i < sample_count; ++i)
+    {
+        const uint16_t encoded = little_endian
+            ? audio_read_u16_le(pcm + i * 2u)
+            : audio_read_u16_be(pcm + i * 2u);
+        out->samples[i] = (float)(int16_t)encoded / 32768.0f;
+    }
+    out->sample_rate = sample_rate;
+    out->channels = channels;
+    out->frame_count = (int64_t)(sample_count / channels);
+    return 0;
+}
+
+int64_t __mlang_std_audio_pcm_load(const char* path)
+{
+    size_t size = 0;
+    unsigned char* bytes = audio_read_file(path, &size);
+    if(!bytes)
+        return 0;
+    mlang_pcm_audio_t* audio = (mlang_pcm_audio_t*)calloc(1u, sizeof(*audio));
+    if(!audio)
+    {
+        free(bytes);
+        audio_set_error("std::audio PCM object allocation failed");
+        return 0;
+    }
+    int rc = -1;
+    if(size >= 12 && memcmp(bytes, "RIFF", 4) == 0)
+        rc = audio_decode_wav(audio, bytes, size);
+    else if(size >= 12 && memcmp(bytes, "FORM", 4) == 0)
+        rc = audio_decode_aiff(audio, bytes, size);
+    free(bytes);
+    if(rc != 0)
+    {
+        free(audio->samples);
+        free(audio);
+        audio_set_error(rc == -2
+            ? "std::audio PCM sample allocation failed"
+            : "std::audio requires mono/stereo 16-bit PCM WAV, AIFF, or AIFF-C");
+        return 0;
+    }
+    audio_clear_error();
+    return (int64_t)(intptr_t)audio;
+}
+
+int64_t __mlang_std_audio_pcm_file_sample_rate(int64_t handle)
+{
+    const mlang_pcm_audio_t* audio = (const mlang_pcm_audio_t*)(intptr_t)handle;
+    return audio ? audio->sample_rate : 0;
+}
+
+int64_t __mlang_std_audio_pcm_file_channels(int64_t handle)
+{
+    const mlang_pcm_audio_t* audio = (const mlang_pcm_audio_t*)(intptr_t)handle;
+    return audio ? audio->channels : 0;
+}
+
+int64_t __mlang_std_audio_pcm_file_frame_count(int64_t handle)
+{
+    const mlang_pcm_audio_t* audio = (const mlang_pcm_audio_t*)(intptr_t)handle;
+    return audio ? audio->frame_count : 0;
+}
+
+mlang_list_t __mlang_std_audio_pcm_file_samples(int64_t handle)
+{
+    mlang_list_t out = {0, NULL};
+    const mlang_pcm_audio_t* audio = (const mlang_pcm_audio_t*)(intptr_t)handle;
+    if(!audio || !audio->samples)
+    {
+        audio_set_error("std::audio PCM samples: invalid handle");
+        return out;
+    }
+    const int64_t count = audio->frame_count * audio->channels;
+    out.data = malloc((size_t)count * sizeof(float));
+    if(!out.data)
+    {
+        audio_set_error("std::audio PCM sample copy allocation failed");
+        return out;
+    }
+    memcpy(out.data, audio->samples, (size_t)count * sizeof(float));
+    out.size = count;
+    audio_clear_error();
+    return out;
+}
+
+int32_t __mlang_std_audio_pcm_file_close(int64_t handle)
+{
+    mlang_pcm_audio_t* audio = (mlang_pcm_audio_t*)(intptr_t)handle;
+    if(!audio)
+        return 0;
+    free(audio->samples);
+    free(audio);
+    return 0;
+}
+
+int64_t __mlang_std_audio_pcm_block_new(int64_t capacity_frames)
+{
+    if(capacity_frames <= 0 || capacity_frames > 1048576)
+    {
+        audio_set_error("std::audio PCM block capacity is invalid");
+        return 0;
+    }
+    mlang_pcm_block_t* block = (mlang_pcm_block_t*)calloc(1u, sizeof(*block));
+    if(!block)
+    {
+        audio_set_error("std::audio PCM block allocation failed");
+        return 0;
+    }
+    block->samples = (float*)calloc(
+        (size_t)capacity_frames * 2u, sizeof(float));
+    if(!block->samples)
+    {
+        free(block);
+        audio_set_error("std::audio PCM block sample allocation failed");
+        return 0;
+    }
+    block->capacity_frames = capacity_frames;
+    audio_clear_error();
+    return (int64_t)(intptr_t)block;
+}
+
+int64_t __mlang_std_audio_pcm_block_capacity_frames(int64_t handle)
+{
+    const mlang_pcm_block_t* block =
+        (const mlang_pcm_block_t*)(intptr_t)handle;
+    return block ? block->capacity_frames : 0;
+}
+
+int32_t __mlang_std_audio_pcm_block_set_stereo(
+    int64_t handle, int64_t frame, float left, float right)
+{
+    mlang_pcm_block_t* block = (mlang_pcm_block_t*)(intptr_t)handle;
+    if(!block || !block->samples || frame < 0 ||
+       frame >= block->capacity_frames)
+    {
+        audio_set_error("std::audio PCM block frame is out of range");
+        return -1;
+    }
+    block->samples[frame * 2] = left;
+    block->samples[frame * 2 + 1] = right;
+    return 0;
+}
+
+int32_t __mlang_std_audio_pcm_block_clear(int64_t handle)
+{
+    mlang_pcm_block_t* block = (mlang_pcm_block_t*)(intptr_t)handle;
+    if(!block || !block->samples)
+        return -1;
+    memset(block->samples, 0,
+           (size_t)block->capacity_frames * 2u * sizeof(float));
+    return 0;
+}
+
+int32_t __mlang_std_audio_pcm_block_close(int64_t handle)
+{
+    mlang_pcm_block_t* block = (mlang_pcm_block_t*)(intptr_t)handle;
+    if(!block)
+        return 0;
+    free(block->samples);
+    free(block);
+    return 0;
 }
 
 #if defined(__APPLE__)
@@ -276,12 +762,7 @@ static void audioqueue_fill(mlang_audio_device_t* d, AudioQueueBufferRef buffer)
         return;
     const int64_t frames = d->buffer_frames > 0 ? d->buffer_frames : 512;
     float* samples = (float*)buffer->mAudioData;
-    for(int64_t i = 0; i < frames; ++i)
-    {
-        float s = audio_next_sample(d);
-        samples[i * 2] = s;
-        samples[i * 2 + 1] = s;
-    }
+    audio_render_frames(d, samples, NULL, NULL, (uint64_t)frames);
     buffer->mAudioDataByteSize = (UInt32)(frames * 2 * (int64_t)sizeof(float));
 }
 
@@ -412,12 +893,7 @@ static int jack_process(jack_nframes_t nframes, void* arg)
     float* out_r = p_jack_port_get_buffer ? (float*)p_jack_port_get_buffer(d->out_r, nframes) : NULL;
     if(!out_l || !out_r)
         return 0;
-    for(jack_nframes_t i = 0; i < nframes; ++i)
-    {
-        float s = audio_next_sample(d);
-        out_l[i] = s;
-        out_r[i] = s;
-    }
+    audio_render_frames(d, NULL, out_l, out_r, (uint64_t)nframes);
     return 0;
 }
 
@@ -665,6 +1141,23 @@ int64_t __mlang_std_audio_open_output_device_config(int64_t device_id, const cha
     d->gain = 0.15;
     d->frames_left = 0;
     d->device_id = device_id;
+    d->pcm_capacity_frames = (uint64_t)d->buffer_frames * 64u;
+    if(d->pcm_capacity_frames < 4096u)
+        d->pcm_capacity_frames = 4096u;
+    if(d->pcm_capacity_frames > 1048576u)
+        d->pcm_capacity_frames = 1048576u;
+    d->pcm_ring = (float*)calloc(
+        (size_t)d->pcm_capacity_frames * 2u, sizeof(float));
+    if(!d->pcm_ring)
+    {
+        free(d);
+        audio_set_error("std::audio PCM queue allocation failed");
+        return 0;
+    }
+    atomic_init(&d->pcm_read_frame, 0u);
+    atomic_init(&d->pcm_write_frame, 0u);
+    atomic_init(&d->pcm_underruns, 0u);
+    atomic_init(&d->source_mode, 0);
 
 #if defined(__APPLE__)
     (void)client_name;
@@ -691,6 +1184,7 @@ int64_t __mlang_std_audio_open_output_device_config(int64_t device_id, const cha
     }
 #else
     (void)client_name;
+    free(d->pcm_ring);
     free(d);
     audio_set_error("std::audio backend unsupported on this platform");
     return 0;
@@ -776,6 +1270,7 @@ int32_t __mlang_std_audio_close(int64_t handle)
     if(d->jack_lib)
         dlclose(d->jack_lib);
 #endif
+    free(d->pcm_ring);
     free(d);
     audio_clear_error();
     return 0;
@@ -791,6 +1286,134 @@ int64_t __mlang_std_audio_buffer_frames(int64_t handle)
 {
     mlang_audio_device_t* d = (mlang_audio_device_t*)(intptr_t)handle;
     return d ? d->buffer_frames : 0;
+}
+
+int64_t __mlang_std_audio_pcm_capacity_frames(int64_t handle)
+{
+    mlang_audio_device_t* d = (mlang_audio_device_t*)(intptr_t)handle;
+    return d ? (int64_t)d->pcm_capacity_frames : 0;
+}
+
+int64_t __mlang_std_audio_pcm_queued_frames(int64_t handle)
+{
+    mlang_audio_device_t* d = (mlang_audio_device_t*)(intptr_t)handle;
+    return d ? (int64_t)audio_pcm_queued_frames(d) : 0;
+}
+
+int64_t __mlang_std_audio_pcm_available_frames(int64_t handle)
+{
+    mlang_audio_device_t* d = (mlang_audio_device_t*)(intptr_t)handle;
+    if(!d)
+        return 0;
+    const uint64_t queued = audio_pcm_queued_frames(d);
+    return (int64_t)(d->pcm_capacity_frames - queued);
+}
+
+int64_t __mlang_std_audio_pcm_underrun_count(int64_t handle)
+{
+    mlang_audio_device_t* d = (mlang_audio_device_t*)(intptr_t)handle;
+    if(!d)
+        return 0;
+    return (int64_t)atomic_load_explicit(
+        &d->pcm_underruns, memory_order_relaxed);
+}
+
+int32_t __mlang_std_audio_pcm_clear(int64_t handle)
+{
+    mlang_audio_device_t* d = (mlang_audio_device_t*)(intptr_t)handle;
+    if(!d)
+    {
+        audio_set_error("std::audio pcm_clear: invalid handle");
+        return -1;
+    }
+    const uint64_t write_frame = atomic_load_explicit(
+        &d->pcm_write_frame, memory_order_acquire);
+    atomic_store_explicit(
+        &d->pcm_read_frame, write_frame, memory_order_release);
+    atomic_store_explicit(&d->pcm_underruns, 0u, memory_order_relaxed);
+    audio_clear_error();
+    return 0;
+}
+
+int64_t __mlang_std_audio_queue_interleaved_f32(
+    int64_t handle, mlang_list_t samples)
+{
+    mlang_audio_device_t* d = (mlang_audio_device_t*)(intptr_t)handle;
+    if(!d || !d->pcm_ring)
+    {
+        audio_set_error("std::audio queue_interleaved_f32: invalid handle");
+        return -1;
+    }
+    if(samples.size < 0 || (samples.size & 1) != 0 ||
+       (samples.size > 0 && !samples.data))
+    {
+        audio_set_error(
+            "std::audio queue_interleaved_f32: expected stereo sample pairs");
+        return -1;
+    }
+    const uint64_t frames = (uint64_t)samples.size / 2u;
+    if(frames == 0)
+    {
+        audio_clear_error();
+        return 0;
+    }
+    const uint64_t queued = audio_pcm_queued_frames(d);
+    if(frames > d->pcm_capacity_frames - queued)
+    {
+        audio_set_error("std::audio PCM queue has insufficient free frames");
+        return -1;
+    }
+
+    const float* input = (const float*)samples.data;
+    uint64_t write_frame = atomic_load_explicit(
+        &d->pcm_write_frame, memory_order_relaxed);
+    for(uint64_t i = 0; i < frames; ++i)
+    {
+        const uint64_t slot = (write_frame + i) % d->pcm_capacity_frames;
+        d->pcm_ring[slot * 2] = input[i * 2];
+        d->pcm_ring[slot * 2 + 1] = input[i * 2 + 1];
+    }
+    atomic_store_explicit(
+        &d->pcm_write_frame, write_frame + frames, memory_order_release);
+    atomic_store_explicit(&d->source_mode, 2, memory_order_release);
+    audio_clear_error();
+    return (int64_t)frames;
+}
+
+int64_t __mlang_std_audio_queue_pcm_block(
+    int64_t handle, int64_t block_handle, int64_t frames)
+{
+    mlang_audio_device_t* d = (mlang_audio_device_t*)(intptr_t)handle;
+    const mlang_pcm_block_t* block =
+        (const mlang_pcm_block_t*)(intptr_t)block_handle;
+    if(!d || !d->pcm_ring || !block || !block->samples || frames < 0 ||
+       frames > block->capacity_frames)
+    {
+        audio_set_error("std::audio queue_pcm_block: invalid arguments");
+        return -1;
+    }
+    if(frames == 0)
+        return 0;
+    const uint64_t frame_count = (uint64_t)frames;
+    const uint64_t queued = audio_pcm_queued_frames(d);
+    if(frame_count > d->pcm_capacity_frames - queued)
+    {
+        audio_set_error("std::audio PCM queue has insufficient free frames");
+        return -1;
+    }
+    const uint64_t write_frame = atomic_load_explicit(
+        &d->pcm_write_frame, memory_order_relaxed);
+    for(uint64_t i = 0; i < frame_count; ++i)
+    {
+        const uint64_t slot = (write_frame + i) % d->pcm_capacity_frames;
+        d->pcm_ring[slot * 2] = block->samples[i * 2];
+        d->pcm_ring[slot * 2 + 1] = block->samples[i * 2 + 1];
+    }
+    atomic_store_explicit(
+        &d->pcm_write_frame, write_frame + frame_count, memory_order_release);
+    atomic_store_explicit(&d->source_mode, 2, memory_order_release);
+    audio_clear_error();
+    return frames;
 }
 
 int32_t __mlang_std_audio_play_sine(int64_t handle, double frequency_hz, double gain, int64_t duration_ms)
@@ -815,6 +1438,7 @@ int32_t __mlang_std_audio_play_sine(int64_t handle, double frequency_hz, double 
     if(d->frames_left < 1)
         d->frames_left = 1;
     d->running = 1;
+    atomic_store_explicit(&d->source_mode, 1, memory_order_release);
     audio_clear_error();
     return 0;
 }

@@ -6,6 +6,8 @@ use std::audio::backend_name;
 use std::audio::default_output_device_id;
 use std::audio::device_count;
 use std::audio::last_error;
+use std::audio::PcmAudio;
+use std::audio::PcmBlock;
 use std::strbuf::len;
 use std::testing::verify;
 
@@ -17,4 +19,36 @@ fn test_audio_backend_metadata() {
     verify(default_output_device_id() >= -1);
     let err: str8 = last_error();
     verify(len(err) >= 0);
+}
+
+#[test]
+fn test_audio_pcm_wav_decode() {
+    let audio_r: Result<PcmAudio, str8> = PcmAudio::load("examples/fft_example/illusion.wav");
+    verify(audio_r.is_ok());
+    if audio_r.is_err() {
+        return;
+    }
+    let audio: PcmAudio = audio_r.unwrap();
+    verify(audio.sample_rate() > 0);
+    verify(audio.channels() >= 1 && audio.channels() <= 2);
+    verify(audio.frame_count() > 0);
+    let samples: list<f32> = audio.samples();
+    verify(samples.len() == audio.frame_count() * audio.channels());
+    audio.close();
+}
+
+#[test]
+fn test_audio_pcm_block() {
+    let block_r: Result<PcmBlock, str8> = PcmBlock::new(64);
+    verify(block_r.is_ok());
+    if block_r.is_err() {
+        return;
+    }
+    let block: PcmBlock = block_r.unwrap();
+    verify(block.capacity_frames() == 64);
+    verify(block.set_stereo(0, 0.25f, -0.25f) == 0);
+    verify(block.set_stereo(63, 0.5f, -0.5f) == 0);
+    verify(block.set_stereo(64, 0.0f, 0.0f) != 0);
+    verify(block.clear() == 0);
+    verify(block.close() == 0);
 }
