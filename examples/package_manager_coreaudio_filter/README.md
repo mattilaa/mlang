@@ -1,151 +1,98 @@
-# CoreAudio Realtime Filter Sweeps
+# Realtime Filter Sweeps in MLang
 
-This macOS example loads `examples/fft_example/illusion.wav` and processes it
-through a selectable 12 or 24 dB/octave `dsp::filter` in a CoreAudio Audio
-Queue callback. It plays five sections so cutoff and resonance changes are
-easy to compare:
+This example decodes a mono or stereo 16-bit PCM WAV, AIFF, or uncompressed
+AIFF-C file with `std::audio`, processes it with `dsp::filter`, and streams
+stereo PCM to CoreAudio. The executable sources are entirely MLang:
+
+- `src/main_mlang.mla`: CLI, decoding, interpolation, scheduling, and PCM queue
+- `src/filter_processor.mla`: filter state, ramps, and sample processing
+
+The package uses the system `c++` command only as a linker driver for the MLang
+objects and the existing `mlang_std` runtime archive. There are no C++ example
+sources or CMake build steps.
+
+## Sweep sequence
+
+The complete source duration is divided using a 3:5:5:5:5 timing ratio:
 
 1. dry reference
-2. falling cutoff sweep without resonance
-3. rising cutoff sweep without resonance
-4. falling cutoff sweep with increasing resonance
-5. rising resonant cutoff sweep
+2. falling cutoff without resonance
+3. rising cutoff without resonance
+4. falling cutoff with increasing resonance
+5. rising cutoff with resonance
 
-Filter slope and resonance are independent. The realtime resonance peak
-defaults to `+12 dB`; choose another peak with `--max-resonance-db`. For 24 dB
-filters, resonance is distributed across the two cascaded stages. The limit is
-applied before the per-frame ramp is calculated, so resonance moves
-continuously without a sudden parameter change. Peaks above the default can
-clip strongly and may require reducing source or output gain.
+Cutoff, resonance, and dry/wet transitions use sample-accurate ramps. The
+default maximum resonance is `+12 dB`. One preallocated
+`std::audio::PcmBlock` is reused by the producer, so playback does not grow an
+MLang list or allocate a new output block.
 
-The five sections span the complete input sample. Their original 3:5:5:5:5
-timing ratio is scaled to the audio-file length, and each filter ramp ends at
-its section boundary. Replacing `illusion.wav` with a longer sample therefore
-extends the demo automatically without changing the source.
+## Build and run
 
-The sample is decoded and all Audio Queue buffers are allocated before
-playback. The callback performs fixed-cost sample processing only: no memory
-allocation, file I/O, logging, or locking. Cutoff and resonance targets move
-sample by sample instead of changing abruptly. Filter history is retained
-between sections, and a 20 ms dry/wet crossfade removes the dry-to-filtered
-transition click.
-
-From this directory, build and run the complete sequence with:
+From this directory:
 
 ```sh
 ../../build/mlang pkg run demo
 ```
 
-The default is the 24 dB low-pass. Select 12 or 24 dB/octave filters in the
-built binary:
+Run the requested AIFF configuration:
 
 ```sh
-./build/cmake/coreaudio_filter_sweeps --filter lowpass12
-./build/cmake/coreaudio_filter_sweeps --filter highpass12
-./build/cmake/coreaudio_filter_sweeps --filter bandpass12
-./build/cmake/coreaudio_filter_sweeps --filter lowpass24
-./build/cmake/coreaudio_filter_sweeps --filter highpass24
-./build/cmake/coreaudio_filter_sweeps --filter bandpass24
+../../build/mlang pkg run demo \
+  --option filter=lowpass24 \
+  --option interpolation=hermite \
+  --option playback_rate=1 \
+  --option audio_path=~/Desktop/1995-Short.aif
 ```
 
-Set a different resonance peak; `+12 dB` remains the default:
+Other examples:
 
 ```sh
-./build/cmake/coreaudio_filter_sweeps --filter lowpass12 --max-resonance-db 6
-./build/cmake/coreaudio_filter_sweeps --filter bandpass24 --max-resonance-db 9.5
+../../build/mlang pkg run demo \
+  --option filter=bandpass12 \
+  --option max_resonance_db=6 \
+  --option interpolation=linear \
+  --option playback_rate=0.75 \
+  --option audio_path=/path/to/input.wav
 ```
 
-## Interpolation filters
+Supported filters are `lowpass12`, `lowpass24`, `highpass12`, `highpass24`,
+`bandpass12`, and `bandpass24`. Supported interpolation modes are `nearest`,
+`linear`, `hermite`, `cubic`, and `bicubic`. For a one-dimensional waveform,
+`cubic` and `bicubic` use the same four-point Hermite/Catmull-Rom polynomial.
 
-Fractional playback supports these sampler interpolation filters:
+The playback rate must be from `0.25` to `4`, and the maximum resonance must be
+from `0` to `36` dB. At `1.0x`, source positions are integers, so interpolation
+modes produce the same source values.
 
-- `nearest`: closest sample, lowest CPU, highest imaging/distortion
-- `linear`: two-point blend with low CPU usage
-- `hermite`: four-point third-order Hermite with smooth derivatives and a
-  strong quality/CPU balance for audio
-- `cubic`: four-point Catmull-Rom cubic; mathematically the same polynomial as
-  this Hermite implementation
-- `bicubic`: a selectable one-dimensional waveform reduction to cubic
+## Output devices
 
-`hermite` is the default. True bicubic interpolation needs a two-dimensional
-4x4 neighborhood. A waveform has only one time axis, so the realtime bicubic
-mode reduces to the equivalent four-point cubic result without allocating a
-4x4 list in the callback. The full 2D `bicubic_interpolate_f32` API remains
-available for DSP tables.
-
-Use a fractional playback rate to hear interpolation differences:
-
-```sh
-./build/cmake/coreaudio_filter_sweeps \
-  --filter lowpass12 \
-  --interpolation hermite \
-  --playback-rate 0.75 \
-  ~/Desktop/1995-Short.aif
-```
-
-The startup interface prints the selected audio filter, interpolation filter,
-playback rate, and maximum resonance peak. At `1.0x`, source positions are
-integers, so interpolation methods produce the same sample values.
-The five-step schedule is not dumped at startup. Each step's time range,
-filter, and resonance target are printed only when playback enters that step.
-
-Pass another mono or stereo 16-bit PCM WAV, AIFF, or AIFF-C file directly to
-the built program:
-
-```sh
-./build/cmake/coreaudio_filter_sweeps --filter highpass24 /path/to/input.wav
-./build/cmake/coreaudio_filter_sweeps --filter bandpass24 /path/to/input.aif
-```
-
-Run `./build/cmake/coreaudio_filter_sweeps --help` for the complete syntax.
-
-## Output device selection
-
-List available CoreAudio output devices:
-
-```sh
-./build/cmake/coreaudio_filter_sweeps --list-devices
-./build/cmake/coreaudio_filter_sweeps --list-devices --verbose
-```
-
-Select an output by its full name, a case-insensitive name substring, or the
-UID shown by `--list-devices`:
-
-```sh
-./build/cmake/coreaudio_filter_sweeps \
-  --filter bandpass24 \
-  --output-device "BlackHole 2ch" \
-  /path/to/input.aif
-```
-
-The package task exposes the same settings:
+List the integer `std::audio` output ids:
 
 ```sh
 ../../build/mlang pkg run list-devices
-../../build/mlang pkg run list-devices-verbose
-../../build/mlang pkg run demo \
-  --option filter=bandpass24 \
-  --option max_resonance_db=9 \
-  --option interpolation=hermite \
-  --option playback_rate=0.75 \
-  --option audio_output=BlackHole \
-  --option audio_path=/path/to/input.aif
 ```
 
-Without `--output-device`, CoreAudio uses the current system default output.
-
-Validate decoding without opening an audio device:
+Select one through the package option:
 
 ```sh
-./build/cmake/coreaudio_filter_sweeps --validate ../../examples/fft_example/illusion.wav
-./build/cmake/coreaudio_filter_sweeps --validate /path/to/input.aif
+../../build/mlang pkg run demo \
+  --option audio_output=0 \
+  --option audio_path=~/Desktop/1995-Short.aif
 ```
 
-AIFF uses big-endian PCM. For AIFF-C, the uncompressed `NONE`, `twos`, and
-little-endian `sowt` encodings are supported.
+An empty `audio_output` or `-1` uses the default device.
 
-Paths beginning with `~/` are expanded by the binary. This also applies to
-`--option audio_path=~/...` values passed through the package task.
+After building, the executable can also be invoked directly:
 
-The MLang processing entry points are in `src/filter_processor.mla`; the thin
-CoreAudio and WAV boundary is in `src/main.cpp`.
+```sh
+./build/coreaudio_filter_sweeps_mlang --help
+./build/coreaudio_filter_sweeps_mlang --list-devices
+./build/coreaudio_filter_sweeps_mlang \
+  --filter highpass24 \
+  --interpolation hermite \
+  --playback-rate 1 \
+  --audio-path /path/to/input.aif
+```
+
+Paths beginning with `~/` are expanded by `std::audio`. AIFF uses big-endian
+PCM; uncompressed AIFF-C `NONE`, `twos`, and little-endian `sowt` are supported.
