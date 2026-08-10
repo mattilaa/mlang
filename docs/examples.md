@@ -122,6 +122,8 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 - `examples/std_audio_sine_demo.mla` — list/select output device IDs from the
   command line and play through `std::audio`, using CoreAudio on macOS or JACK2
   on Linux.
+- `examples/std_audio_pcm_queue_demo.mla` — generate an interleaved stereo PCM
+  block entirely in MLang and play it through the bounded `std::audio` queue.
 - `examples/std_audio_vst3_style_preview.mla` — VST3-style note preview through
   `std::audio`, cross-linked with `examples/package_manager_vst3_coreaudio_synth`.
 - `examples/std_audio_simd_dsp_demo.mla` — SIMD-shaped DSP block using
@@ -133,8 +135,9 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 - `examples/package_manager_coreaudio_filter` — real-time CoreAudio playback
   of `examples/fft_example/illusion.wav` with click-free 12/24 dB low-pass,
   high-pass, and band-pass sweeps, configurable resonance peaks, and CoreAudio
-  output selection by name or UID. Fractional playback can compare nearest,
+  output selection by integer device id. Fractional playback can compare nearest,
   linear, Hermite, cubic, and bicubic-reduction interpolation modes.
+  Its `demo` task and DSP processor are written in MLang and use `std::audio`.
 
 ## Focused regression examples
 

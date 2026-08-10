@@ -18,6 +18,22 @@ pub struct AudioDevice {
 /// @brief Lowercase stdlib type alias for `AudioDevice`.
 alias audio_device = AudioDevice;
 
+/// @brief Owned decoded mono/stereo 16-bit PCM WAV or AIFF file.
+pub struct PcmAudio {
+    var handle: i64;
+};
+
+/// @brief Lowercase stdlib type alias for `PcmAudio`.
+alias pcm_audio = PcmAudio;
+
+/// @brief Owned preallocated interleaved stereo PCM producer block.
+pub struct PcmBlock {
+    var handle: i64;
+};
+
+/// @brief Lowercase stdlib type alias for `PcmBlock`.
+alias pcm_block = PcmBlock;
+
 
 /// @brief Return the compiled/default std::audio backend name.
 pub fn backend_name() -> str8 {
@@ -42,6 +58,75 @@ pub fn default_output_device_id() -> i64 {
 /// @brief Return a printable output device name for an integer device id.
 pub fn device_name(device_id: i64) -> str8 {
     return __mlang_std_audio_device_name(device_id);
+}
+
+impl PcmAudio {
+    /// @brief Decode a mono/stereo 16-bit PCM WAV, AIFF, or AIFF-C file.
+    ///
+    /// Paths beginning with `~/` are expanded using the current home directory.
+    pub fn load(path: str8) -> Result<PcmAudio, str8> {
+        let h: i64 = __mlang_std_audio_pcm_load(path);
+        if h == 0 {
+            return Err<PcmAudio, str8>(last_error());
+        }
+        return Ok<PcmAudio, str8>(PcmAudio { handle: h });
+    }
+
+    /// @brief Return the decoded source sample rate.
+    pub fn sample_rate(self: PcmAudio) -> i64 {
+        return __mlang_std_audio_pcm_file_sample_rate(self.handle);
+    }
+
+    /// @brief Return one or two decoded channels.
+    pub fn channels(self: PcmAudio) -> i64 {
+        return __mlang_std_audio_pcm_file_channels(self.handle);
+    }
+
+    /// @brief Return the decoded frame count.
+    pub fn frame_count(self: PcmAudio) -> i64 {
+        return __mlang_std_audio_pcm_file_frame_count(self.handle);
+    }
+
+    /// @brief Copy decoded interleaved samples into an MLang f32 list.
+    pub fn samples(self: PcmAudio) -> list<f32> {
+        return __mlang_std_audio_pcm_file_samples(self.handle);
+    }
+
+    /// @brief Release the native decoded file buffer.
+    pub fn close(self: PcmAudio) -> i32 {
+        return __mlang_std_audio_pcm_file_close(self.handle);
+    }
+}
+
+impl PcmBlock {
+    /// @brief Allocate a reusable zero-filled stereo block.
+    pub fn new(capacity_frames: i64) -> Result<PcmBlock, str8> {
+        let h: i64 = __mlang_std_audio_pcm_block_new(capacity_frames);
+        if h == 0 {
+            return Err<PcmBlock, str8>(last_error());
+        }
+        return Ok<PcmBlock, str8>(PcmBlock { handle: h });
+    }
+
+    /// @brief Return the fixed block capacity in stereo frames.
+    pub fn capacity_frames(self: PcmBlock) -> i64 {
+        return __mlang_std_audio_pcm_block_capacity_frames(self.handle);
+    }
+
+    /// @brief Write one stereo frame without allocating.
+    pub fn set_stereo(self: PcmBlock, frame: i64, left: f32, right: f32) -> i32 {
+        return __mlang_std_audio_pcm_block_set_stereo(self.handle, frame, left, right);
+    }
+
+    /// @brief Fill the complete block with silence.
+    pub fn clear(self: PcmBlock) -> i32 {
+        return __mlang_std_audio_pcm_block_clear(self.handle);
+    }
+
+    /// @brief Release the native block.
+    pub fn close(self: PcmBlock) -> i32 {
+        return __mlang_std_audio_pcm_block_close(self.handle);
+    }
 }
 
 impl AudioDevice {
@@ -118,6 +203,56 @@ impl AudioDevice {
     /// @brief Query backend buffer size in frames.
     pub fn buffer_frames(self: AudioDevice) -> i64 {
         return __mlang_std_audio_buffer_frames(self.handle);
+    }
+
+    /// @brief Return the fixed stereo PCM queue capacity in frames.
+    pub fn pcm_capacity_frames(self: AudioDevice) -> i64 {
+        return __mlang_std_audio_pcm_capacity_frames(self.handle);
+    }
+
+    /// @brief Return the number of stereo PCM frames waiting for playback.
+    pub fn pcm_queued_frames(self: AudioDevice) -> i64 {
+        return __mlang_std_audio_pcm_queued_frames(self.handle);
+    }
+
+    /// @brief Return the number of stereo PCM frames that can be queued now.
+    pub fn pcm_available_frames(self: AudioDevice) -> i64 {
+        return __mlang_std_audio_pcm_available_frames(self.handle);
+    }
+
+    /// @brief Return the number of callbacks that exhausted the PCM queue.
+    pub fn pcm_underrun_count(self: AudioDevice) -> i64 {
+        return __mlang_std_audio_pcm_underrun_count(self.handle);
+    }
+
+    /// @brief Discard queued PCM and reset its underrun counter.
+    ///
+    /// Call while stopped; clearing concurrently with playback is not supported.
+    pub fn clear_pcm_queue(self: AudioDevice) -> i32 {
+        return __mlang_std_audio_pcm_clear(self.handle);
+    }
+
+    /// @brief Queue nonblocking interleaved stereo f32 samples.
+    ///
+    /// The list layout is `[L0, R0, L1, R1, ...]`. The complete list is copied
+    /// into a preallocated native ring, or an error is returned when its length
+    /// is odd or insufficient free frames are available. Queue initial blocks
+    /// before `start()` and refill according to `pcm_available_frames()`.
+    pub fn queue_interleaved_f32(self: AudioDevice, samples: &list<f32>) -> Result<i64, str8> {
+        let frames: i64 = __mlang_std_audio_queue_interleaved_f32(self.handle, samples);
+        if frames < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(frames);
+    }
+
+    /// @brief Queue frames from a reusable preallocated stereo PCM block.
+    pub fn queue_pcm_block(self: AudioDevice, block: PcmBlock, frames: i64) -> Result<i64, str8> {
+        let queued: i64 = __mlang_std_audio_queue_pcm_block(self.handle, block.handle, frames);
+        if queued < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(queued);
     }
 
     /// @brief Play a built-in stereo sine tone through the output stream.

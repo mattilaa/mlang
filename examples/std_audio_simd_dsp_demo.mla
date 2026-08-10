@@ -4,9 +4,8 @@
 ///
 /// This example computes a small audio-processing block with `std::simd`
 /// operations, then opens the default hardware output through `std::audio`.
-/// The current std::audio API exposes a built-in sine generator rather than a
-/// realtime user callback, so the SIMD block is used here for DSP analysis and
-/// control values before previewing an equivalent tone.
+/// See `std_audio_pcm_queue_demo.mla` for direct playback of MLang-generated
+/// interleaved PCM through the bounded native queue.
 ///
 /// Run:
 ///   ./build/mlang examples/std_audio_simd_dsp_demo.mla -L ./build -lmlang_std -- --help

@@ -1,0 +1,150 @@
+/// \file std_audio_pcm_queue_demo.mla
+/// @ingroup examples
+/// \brief Generate stereo PCM in MLang and stream it through std::audio.
+///
+/// Run:
+///   ./build/mlang -o build/std_audio_pcm_queue_demo examples/std_audio_pcm_queue_demo.mla -L ./build -lmlang_std
+///   ./build/std_audio_pcm_queue_demo --help
+///   ./build/std_audio_pcm_queue_demo --device 0 --frequency 440 --duration 500
+///
+mod std::argparser;
+mod std::audio;
+mod std::time;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::audio::AudioDevice;
+use std::audio::backend_name;
+use std::audio::default_output_device_id;
+use std::audio::device_count;
+use std::audio::device_name;
+use std::time::sleep_ms;
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new("std_audio_pcm_queue_demo", "Generate PCM in MLang and play it through std::audio.");
+    ap.option("device", "d", "Output device id; -1 uses the default device", "-1");
+    ap.option("sample-rate", "r", "Requested sample rate in Hz; 0 uses backend default", "0");
+    ap.option("buffer", "b", "Requested latency buffer size in frames; 0 uses backend default", "0");
+    ap.option("frequency", "f", "Generated sine frequency in Hz", "440");
+    ap.option("duration", "t", "Generated block duration in milliseconds", "500");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        println!("Error: {}", parsed.error());
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+
+    let requested_device: i64 = parsed.get_i64("device");
+    let requested_sample_rate: i64 = parsed.get_i64("sample-rate");
+    let requested_buffer_frames: i64 = parsed.get_i64("buffer");
+    let frequency_hz: i64 = parsed.get_i64("frequency");
+    let duration_ms: i64 = parsed.get_i64("duration");
+    parsed.free();
+    ap.free();
+
+    if frequency_hz <= 0 || duration_ms <= 0 {
+        println!("frequency and duration must be positive");
+        return 1;
+    }
+
+    println!("std::audio backend: {}", backend_name());
+    let count: i64 = device_count();
+    let default_id: i64 = default_output_device_id();
+    println!("output devices: count={} default_id={}", count, default_id);
+    var device_index: i64 = 0;
+    while device_index < count {
+        println!("  [{}] {}", device_index, device_name(device_index));
+        device_index = device_index + 1;
+    }
+
+    let selected_id: i64 = requested_device >= 0 ? requested_device : default_id;
+    if selected_id >= 0 {
+        println!("selected output: [{}] {}", selected_id, device_name(selected_id));
+    }
+    let dev_r: Result<AudioDevice, str8> = selected_id >= 0
+        ? AudioDevice::open_with_config(selected_id, "mlang_pcm_queue_demo", requested_sample_rate, requested_buffer_frames)
+        : AudioDevice::open_default_with_config("mlang_pcm_queue_demo", requested_sample_rate, requested_buffer_frames);
+    if dev_r.is_err() {
+        println!("audio open failed: {}", dev_r.unwrap_err());
+        return 1;
+    }
+    let dev: AudioDevice = dev_r.unwrap();
+
+    let sample_rate: i64 = dev.sample_rate();
+    let frame_count: i64 = sample_rate * duration_ms / 1000;
+    let buffer_frames: i64 = dev.buffer_frames();
+    let block_padding: i64 = (buffer_frames - frame_count % buffer_frames) % buffer_frames;
+    let tail_frames: i64 = block_padding + buffer_frames * 3;
+    let queued_frame_count: i64 = frame_count + tail_frames;
+    let capacity: i64 = dev.pcm_capacity_frames();
+    if queued_frame_count > capacity {
+        println!("generated block and output tail need {} frames, but the PCM queue holds {}", queued_frame_count, capacity);
+        println!("reduce --duration or open with a larger --buffer value");
+        dev.close();
+        return 1;
+    }
+
+    var samples: list<f32> = [];
+    let fade_frames: i64 = sample_rate / 200;
+    let phase_step: f32 = 2.0f * f32(frequency_hz) / f32(sample_rate);
+    var phase: f32 = 0.0f;
+    var frame: i64 = 0;
+    while frame < frame_count {
+        var envelope: f32 = 1.0f;
+        if frame < fade_frames {
+            envelope = f32(frame) / f32(fade_frames);
+        } else if frame_count - frame <= fade_frames {
+            envelope = f32(frame_count - frame - 1) / f32(fade_frames);
+        }
+        let abs_phase: f32 = phase < 0.0f ? -phase : phase;
+        var wave: f32 = 4.0f * phase * (1.0f - abs_phase);
+        let abs_wave: f32 = wave < 0.0f ? -wave : wave;
+        wave = wave + 0.225f * (wave * abs_wave - wave);
+        let sample: f32 = 0.15f * envelope * wave;
+        samples.push(sample);
+        samples.push(sample);
+        phase = phase + phase_step;
+        if phase > 1.0f {
+            phase = phase - 2.0f;
+        }
+        frame = frame + 1;
+    }
+    var tail: i64 = 0;
+    while tail < tail_frames {
+        samples.push(0.0f);
+        samples.push(0.0f);
+        tail = tail + 1;
+    }
+
+    let queued_r: Result<i64, str8> = dev.queue_interleaved_f32(samples);
+    if queued_r.is_err() {
+        println!("PCM queue failed: {}", queued_r.unwrap_err());
+        dev.close();
+        return 1;
+    }
+    println!("sample_rate={} buffer_frames={} queued_frames={}", sample_rate, buffer_frames, queued_r.unwrap());
+
+    let start_r: Result<i32, str8> = dev.start();
+    if start_r.is_err() {
+        println!("audio start failed: {}", start_r.unwrap_err());
+        dev.close();
+        return 1;
+    }
+
+    while dev.pcm_queued_frames() > 0 {
+        sleep_ms(5);
+    }
+    dev.stop();
+    println!("PCM callback underruns: {}", dev.pcm_underrun_count());
+    dev.close();
+    return 0;
+}
