@@ -1,0 +1,329 @@
+/// \file main_mlang.mla
+/// \ingroup examples
+/// \brief MLang std::audio frontend for realtime PCM filter sweeps.
+
+mod std::argparser;
+mod std::audio;
+mod std::strbuf;
+mod std::time;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::audio::AudioDevice;
+use std::audio::PcmAudio;
+use std::audio::PcmBlock;
+use std::audio::default_output_device_id;
+use std::audio::device_count;
+use std::audio::device_name;
+use std::strbuf::eq;
+use std::time::sleep_ms;
+
+extern fn atof(value: str8) -> f64;
+extern fn llround(value: f64) -> i64;
+extern fn mlang_dsp_interpolate_nearest__f32_f32_f32(x0: f32, x1: f32, fraction: f32) -> f32;
+extern fn mlang_dsp_interpolate_linear__f32_f32_f32(x0: f32, x1: f32, fraction: f32) -> f32;
+extern fn mlang_dsp_interpolate_hermite__f32_f32_f32_f32_f32(xm1: f32, x0: f32, x1: f32, x2: f32, fraction: f32) -> f32;
+extern fn mlang_dsp_filter_set_resonance_limit__f32(max_resonance_db: f32) -> void;
+extern fn mlang_dsp_filter_reset__i32_f32_f32_f32(filter_mode: i32, sample_rate_hz: f32, cutoff_hz: f32, resonance_db: f32) -> void;
+extern fn mlang_dsp_filter_set_target__f32_f32_i64(cutoff_hz: f32, resonance_db: f32, ramp_samples: i64) -> void;
+extern fn mlang_dsp_filter_set_wet_target__f32_i64(wet_mix: f32, ramp_samples: i64) -> void;
+extern fn mlang_dsp_filter_begin_frame__void() -> void;
+extern fn mlang_dsp_filter_process_left__f32(input: f32) -> f32;
+extern fn mlang_dsp_filter_process_right__f32(input: f32) -> f32;
+
+fn filter_mode(name: str8) -> i32 {
+    if eq(name, "lowpass24") == 1 { return 1; }
+    if eq(name, "highpass24") == 1 { return 2; }
+    if eq(name, "bandpass24") == 1 { return 3; }
+    if eq(name, "lowpass12") == 1 { return 4; }
+    if eq(name, "highpass12") == 1 { return 5; }
+    if eq(name, "bandpass12") == 1 { return 6; }
+    return 0;
+}
+
+fn interpolation_mode(name: str8) -> i32 {
+    if eq(name, "nearest") == 1 { return 1; }
+    if eq(name, "linear") == 1 { return 2; }
+    if eq(name, "hermite") == 1 { return 3; }
+    if eq(name, "cubic") == 1 { return 4; }
+    if eq(name, "bicubic") == 1 { return 5; }
+    return 0;
+}
+
+fn source_sample(samples: &list<f32>, channels: i64, frames: i64, frame: i64, channel: i64) -> f32 {
+    let safe_frame: i64 = frame < 0 ? 0 : (frame >= frames ? frames - 1 : frame);
+    let safe_channel: i64 = channel < channels ? channel : 0;
+    return samples[safe_frame * channels + safe_channel];
+}
+
+fn interpolated_sample(samples: &list<f32>, channels: i64, frames: i64, position: f64, channel: i64, mode: i32) -> f32 {
+    let x0_index: i64 = position < 1.0 ? 0 : llround(position - 0.5);
+    let fraction: f32 = f32(position - f64(x0_index));
+    let x0: f32 = source_sample(samples, channels, frames, x0_index, channel);
+    let x1: f32 = source_sample(samples, channels, frames, x0_index + 1, channel);
+    if mode == 1 {
+        return mlang_dsp_interpolate_nearest__f32_f32_f32(x0, x1, fraction);
+    }
+    if mode == 2 {
+        return mlang_dsp_interpolate_linear__f32_f32_f32(x0, x1, fraction);
+    }
+    return mlang_dsp_interpolate_hermite__f32_f32_f32_f32_f32(
+        source_sample(samples, channels, frames, x0_index - 1, channel),
+        x0, x1,
+        source_sample(samples, channels, frames, x0_index + 2, channel),
+        fraction
+    );
+}
+
+fn sweep_end(index: i32, total_frames: i64) -> i64 {
+    if index == 0 { return total_frames * 3 / 23; }
+    if index == 1 { return total_frames * 8 / 23; }
+    if index == 2 { return total_frames * 13 / 23; }
+    if index == 3 { return total_frames * 18 / 23; }
+    return total_frames;
+}
+
+fn sweep_for_frame(frame: i64, total_frames: i64) -> i32 {
+    var index: i32 = 0;
+    while index < 5 {
+        if frame < sweep_end(index, total_frames) {
+            return index;
+        }
+        index = index + 1;
+    }
+    return 4;
+}
+
+fn announce_sweep(index: i32, total_frames: i64, sample_rate: i64, filter: str8, max_resonance_db: f32) -> void {
+    let start_frame: i64 = index == 0 ? 0 : sweep_end(index - 1, total_frames);
+    let end_frame: i64 = sweep_end(index, total_frames);
+    let start_seconds: f64 = f64(start_frame) / f64(sample_rate);
+    let end_seconds: f64 = f64(end_frame) / f64(sample_rate);
+    if index == 0 {
+        println!("step 1/5  {}-{} s: dry reference [unfiltered]", start_seconds, end_seconds);
+    } else if index == 1 {
+        println!("step 2/5  {}-{} s: falling cutoff, no resonance", start_seconds, end_seconds);
+        println!("  filter: {}; resonance target: +0.0 dB", filter);
+    } else if index == 2 {
+        println!("step 3/5  {}-{} s: rising cutoff, no resonance", start_seconds, end_seconds);
+        println!("  filter: {}; resonance target: +0.0 dB", filter);
+    } else if index == 3 {
+        println!("step 4/5  {}-{} s: falling cutoff, increasing resonance", start_seconds, end_seconds);
+        println!("  filter: {}; resonance target: +{} dB", filter, max_resonance_db);
+    } else {
+        println!("step 5/5  {}-{} s: rising cutoff, resonant", start_seconds, end_seconds);
+        println!("  filter: {}; resonance target: +{} dB", filter, max_resonance_db);
+    }
+}
+
+fn enter_sweep(index: i32, total_frames: i64, sample_rate: i64, max_resonance_db: f32) -> void {
+    let start_frame: i64 = index == 0 ? 0 : sweep_end(index - 1, total_frames);
+    let frames: i64 = sweep_end(index, total_frames) - start_frame;
+    let cutoff_end: f32 = index == 1 || index == 3 ? 180.0f : 12000.0f;
+    let resonance: f32 = index >= 3 ? max_resonance_db : 0.0f;
+    let wet: f32 = index == 0 ? 0.0f : 1.0f;
+    let crossfade_frames: i64 = frames < sample_rate / 50 ? frames : sample_rate / 50;
+    mlang_dsp_filter_set_target__f32_f32_i64(cutoff_end, resonance, frames);
+    mlang_dsp_filter_set_wet_target__f32_i64(wet, crossfade_frames);
+}
+
+fn start_device(dev: AudioDevice) -> bool {
+    let result: Result<i32, str8> = dev.start();
+    if result.is_err() {
+        println!("audio start failed: {}", result.unwrap_err());
+        return false;
+    }
+    return true;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new("coreaudio_filter_sweeps_mlang", "MLang realtime dsp::filter sweeps through std::audio.");
+    ap.option("filter", "f", "lowpass12/24, highpass12/24, or bandpass12/24", "lowpass24");
+    ap.option("max-resonance-db", "q", "Maximum ramped resonance peak from 0 to 36 dB", "12");
+    ap.option("interpolation", "i", "nearest, linear, hermite, cubic, or bicubic", "hermite");
+    ap.option("playback-rate", "r", "Fractional source playback rate from 0.25 to 4", "1");
+    ap.option("audio-path", "a", "Mono/stereo 16-bit PCM WAV, AIFF, or AIFF-C input", "../../examples/fft_example/illusion.wav");
+    ap.option("device", "d", "std::audio output device id; -1 uses the default", "-1");
+    ap.flag("list-devices", "l", "List std::audio output device ids and exit");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        println!("Error: {}", parsed.error());
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 2;
+    }
+    if parsed.flag("list-devices") {
+        let count: i64 = device_count();
+        let default_id: i64 = default_output_device_id();
+        println!("output devices: count={} default_id={}", count, default_id);
+        var id: i64 = 0;
+        while id < count {
+            println!("  [{}] {}", id, device_name(id));
+            id = id + 1;
+        }
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+
+    let filter_name: str8 = parsed.get("filter");
+    let interpolation_name: str8 = parsed.get("interpolation");
+    let audio_path: str8 = parsed.get("audio-path");
+    let mode: i32 = filter_mode(filter_name);
+    let interpolation: i32 = interpolation_mode(interpolation_name);
+    let max_resonance_db: f32 = f32(atof(parsed.get("max-resonance-db")));
+    let playback_rate: f64 = atof(parsed.get("playback-rate"));
+    let device_id: i64 = parsed.get_i64("device");
+    if mode == 0 || interpolation == 0 || max_resonance_db < 0.0f || max_resonance_db > 36.0f || playback_rate < 0.25 || playback_rate > 4.0 {
+        println!("invalid filter, interpolation, resonance, or playback-rate option");
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 2;
+    }
+
+    let audio_r: Result<PcmAudio, str8> = PcmAudio::load(audio_path);
+    if audio_r.is_err() {
+        println!("audio load failed: {}", audio_r.unwrap_err());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let audio: PcmAudio = audio_r.unwrap();
+    let sample_rate: i64 = audio.sample_rate();
+    let channels: i64 = audio.channels();
+    let source_frames: i64 = audio.frame_count();
+    let samples: list<f32> = audio.samples();
+    audio.close();
+    let dev_r: Result<AudioDevice, str8> = device_id >= 0
+        ? AudioDevice::open_with_config(device_id, "mlang_filter_sweeps", sample_rate, 512)
+        : AudioDevice::open_default_with_config("mlang_filter_sweeps", sample_rate, 512);
+    if dev_r.is_err() {
+        println!("audio open failed: {}", dev_r.unwrap_err());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let dev: AudioDevice = dev_r.unwrap();
+    let buffer_frames: i64 = dev.buffer_frames();
+    let total_frames: i64 = llround(f64(source_frames) / playback_rate + 0.499999);
+
+    println!("MLang realtime dsp::filter demo");
+    println!("audio filter: {}", filter_name);
+    println!("interpolation filter: {}", interpolation_name);
+    println!("playback rate: {}x", playback_rate);
+    println!("source: {} ({} Hz, {} channel(s), {} frames)", audio_path, sample_rate, channels, source_frames);
+    println!("maximum resonance peak: +{} dB (realtime ramped)", max_resonance_db);
+    println!("demo duration: {} seconds (full source)", f64(total_frames) / f64(sample_rate));
+
+    mlang_dsp_filter_set_resonance_limit__f32(max_resonance_db);
+    mlang_dsp_filter_reset__i32_f32_f32_f32(mode, f32(sample_rate), 12000.0f, 0.0f);
+
+    let block_r: Result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
+    if block_r.is_err() {
+        println!("PCM block allocation failed: {}", block_r.unwrap_err());
+        dev.close();
+        return 1;
+    }
+    let block: PcmBlock = block_r.unwrap();
+
+    var rendered: i64 = 0;
+    var source_position: f64 = 0.0;
+    var active_sweep: i32 = -1;
+    var started: bool = false;
+    var frame: i64 = 0;
+    var sweep: i32 = 0;
+    var left: f32 = 0.0f;
+    var right: f32 = 0.0f;
+    while rendered < total_frames {
+        if dev.pcm_queued_frames() >= buffer_frames * 4 {
+            sleep_ms(1);
+            continue;
+        }
+        if dev.pcm_available_frames() < buffer_frames {
+            sleep_ms(1);
+            continue;
+        }
+        frame = 0;
+        while frame < buffer_frames {
+            if rendered < total_frames {
+                sweep = sweep_for_frame(rendered, total_frames);
+                if sweep != active_sweep {
+                    active_sweep = sweep;
+                    enter_sweep(sweep, total_frames, sample_rate, max_resonance_db);
+                    announce_sweep(sweep, total_frames, sample_rate, filter_name, max_resonance_db);
+                }
+                left = interpolated_sample(samples, channels, source_frames, source_position, 0, interpolation);
+                right = channels == 2
+                    ? interpolated_sample(samples, channels, source_frames, source_position, 1, interpolation)
+                    : left;
+                mlang_dsp_filter_begin_frame__void();
+                left = mlang_dsp_filter_process_left__f32(left) * 0.55f;
+                right = mlang_dsp_filter_process_right__f32(right) * 0.55f;
+                left = left < -0.98f ? -0.98f : (left > 0.98f ? 0.98f : left);
+                right = right < -0.98f ? -0.98f : (right > 0.98f ? 0.98f : right);
+                block.set_stereo(frame, left, right);
+                rendered = rendered + 1;
+                source_position = source_position + playback_rate;
+            } else {
+                block.set_stereo(frame, 0.0f, 0.0f);
+            }
+            frame = frame + 1;
+        }
+        let queued_r: Result<i64, str8> = dev.queue_pcm_block(block, buffer_frames);
+        if queued_r.is_err() {
+            println!("PCM queue failed: {}", queued_r.unwrap_err());
+            block.close();
+            dev.close();
+            return 1;
+        }
+        if !started && (dev.pcm_queued_frames() >= buffer_frames * 3 || rendered >= total_frames) {
+            if !start_device(dev) {
+                block.close();
+                dev.close();
+                return 1;
+            }
+            started = true;
+        }
+    }
+
+    block.clear();
+    var tail_blocks: i32 = 0;
+    while tail_blocks < 3 {
+        if dev.pcm_available_frames() < buffer_frames {
+            sleep_ms(1);
+            continue;
+        }
+        let tail_r: Result<i64, str8> = dev.queue_pcm_block(block, buffer_frames);
+        if tail_r.is_err() {
+            println!("PCM tail queue failed: {}", tail_r.unwrap_err());
+            block.close();
+            dev.close();
+            return 1;
+        }
+        tail_blocks = tail_blocks + 1;
+    }
+    if !started && !start_device(dev) {
+        block.close();
+        dev.close();
+        return 1;
+    }
+    while dev.pcm_queued_frames() > 0 {
+        sleep_ms(5);
+    }
+    dev.stop();
+    println!("PCM callback underruns: {}", dev.pcm_underrun_count());
+    block.close();
+    dev.close();
+    parsed.free();
+    ap.free();
+    return 0;
+}

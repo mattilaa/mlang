@@ -21,13 +21,13 @@ supported_hosts = ["darwin"]
 unsupported_message = "This realtime filter example requires macOS CoreAudio"
 commands = [
   "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler first.; exit 1; fi'",
-  "sh -c 'for tool in cmake c++; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool: $tool; exit 1; fi; done'"
+  "sh -c 'if ! command -v c++ >/dev/null 2>&1; then echo Missing required linker driver: c++; exit 1; fi'"
 ]
 
 [[task]]
 name = "prepare"
 depends_on = ["toolchain-check"]
-commands = ["mkdir -p {{build_dir}}/obj {{build_dir}}/cmake"]
+commands = ["mkdir -p {{build_dir}}/obj"]
 
 [[task]]
 name = "compile-filter"
@@ -40,38 +40,58 @@ compile_only = true
 opt_level = "O2"
 
 [[task]]
-name = "configure"
+name = "compile-mlang-demo"
+phase = "compile"
 depends_on = ["compile-filter"]
-commands = [
-  "cmake -S {{root}} -B {{build_dir}}/cmake -DCMAKE_BUILD_TYPE=Release -DMLANG_FILTER_OBJECT={{build_dir}}/obj/filter_processor.o"
-]
+language = "mlang"
+source = "src/main_mlang.mla"
+output = "{{build_dir}}/obj/main_mlang.o"
+compile_only = true
+opt_level = "O2"
 
 [[task]]
-name = "build"
+name = "link-mlang-demo"
 phase = "build"
-depends_on = ["configure"]
-commands = ["cmake --build {{build_dir}}/cmake --target coreaudio_filter_sweeps -j4"]
+depends_on = ["compile-mlang-demo"]
+language = "c++"
+output = "{{build_dir}}/coreaudio_filter_sweeps_mlang"
+inputs = [
+  "{{build_dir}}/obj/main_mlang.o",
+  "{{build_dir}}/obj/filter_processor.o"
+]
+lib_paths = ["../../build"]
+libs = ["mlang_std"]
+
+[task.host.darwin]
+linker_flags = [
+  "-framework CoreAudio",
+  "-framework AudioToolbox",
+  "-framework CoreFoundation"
+]
+
+[task.host.linux]
+libs = ["m", "dl"]
 
 [[task]]
 name = "demo"
-depends_on = ["build"]
+depends_on = ["link-mlang-demo"]
 log_output = false
 shell = [
-  "audio_output='{{option.audio_output}}'; set -- --filter '{{option.filter}}' --max-resonance-db '{{option.max_resonance_db}}' --interpolation '{{option.interpolation}}' --playback-rate '{{option.playback_rate}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --output-device \"$audio_output\"; fi; exec {{build_dir}}/cmake/coreaudio_filter_sweeps \"$@\" '{{option.audio_path}}'"
+  "audio_output='{{option.audio_output}}'; set -- --filter '{{option.filter}}' --max-resonance-db '{{option.max_resonance_db}}' --interpolation '{{option.interpolation}}' --playback-rate '{{option.playback_rate}}' --audio-path '{{option.audio_path}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/coreaudio_filter_sweeps_mlang \"$@\""
 ]
 
 [[task]]
 name = "list-devices"
-depends_on = ["build"]
+depends_on = ["link-mlang-demo"]
 log_output = false
 shell = [
-  "exec {{build_dir}}/cmake/coreaudio_filter_sweeps --list-devices"
+  "exec {{build_dir}}/coreaudio_filter_sweeps_mlang --list-devices"
 ]
 
 [[task]]
 name = "list-devices-verbose"
-depends_on = ["build"]
+depends_on = ["link-mlang-demo"]
 log_output = false
 shell = [
-  "exec {{build_dir}}/cmake/coreaudio_filter_sweeps --list-devices --verbose"
+  "exec {{build_dir}}/coreaudio_filter_sweeps_mlang --list-devices"
 ]
