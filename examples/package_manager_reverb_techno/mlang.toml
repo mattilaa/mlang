@@ -63,7 +63,7 @@ name = "demo"
 depends_on = ["link"]
 log_output = false
 shell = [
-  "audio_output='{{option.audio_output}}'; set -- --bpm '{{option.bpm}}' --duration '{{option.duration}}' --reverb-type '{{option.reverb_type}}' --clap-mix '{{option.clap_mix}}' --kick '{{option.kick_path}}' --clap '{{option.clap_path}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/reverb_techno_sequence \"$@\""
+  "audio_output='{{option.audio_output}}'; set -- --bpm '{{option.bpm}}' --duration '{{option.duration}}' --reverb-type '{{option.reverb_type}}' --clap-mix '{{option.clap_mix}}' --kick '{{option.kick_path}}' --clap '{{option.clap_path}}'; case \"$audio_output\" in '') ;; -1|[0-9]*) set -- \"$@\" --device \"$audio_output\" ;; *) set -- \"$@\" --device-name \"$audio_output\" ;; esac; exec {{build_dir}}/reverb_techno_sequence \"$@\""
 ]
 
 [[task]]

@@ -50,21 +50,29 @@ Use `clap_mix=0` for a dry clap or `clap_mix=1` for a fully reverberated clap:
   --option clap_mix=1
 ```
 
-List and select output devices:
+List and select output devices by integer ID or name:
 
 ```sh
 ../../build/mlang pkg run list-devices
 
 ../../build/mlang pkg run demo \
   --option audio_output=0
+
+../../build/mlang pkg run demo \
+  --option audio_output='BlackHole 2ch' \
+  --option reverb_type=gated \
+  --option clap_mix=0.7
 ```
 
-An empty `audio_output` or `-1` uses the default output device. The copied WAV
-paths can be overridden with `kick_path` and `clap_path` package options.
+An empty `audio_output` or `-1` uses the default output device. A text value
+first matches the complete CoreAudio/JACK device name, then a unique substring.
+The copied WAV paths can be overridden with `kick_path` and `clap_path` package
+options.
 
 After building, run the executable directly for complete CLI help:
 
 ```sh
 ./build/reverb_techno_sequence --help
 ./build/reverb_techno_sequence --device 0 --reverb-type gated --clap-mix 0.7
+./build/reverb_techno_sequence --device-name 'BlackHole 2ch' --reverb-type gated
 ```

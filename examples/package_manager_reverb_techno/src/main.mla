@@ -20,6 +20,7 @@ use std::audio::backend_name;
 use std::audio::default_output_device_id;
 use std::audio::device_count;
 use std::audio::device_name;
+use std::strbuf::contains;
 use std::strbuf::eq;
 use std::time::sleep_ms;
 
@@ -82,6 +83,27 @@ fn print_devices() -> void {
     }
 }
 
+fn find_output_device(name: str8) -> i64 {
+    let count: i64 = device_count();
+    var id: i64 = 0;
+    while id < count {
+        if eq(device_name(id), name) == 1 { return id; }
+        id = id + 1;
+    }
+
+    var match_id: i64 = -1;
+    var matches: i64 = 0;
+    id = 0;
+    while id < count {
+        if contains(device_name(id), name) == 1 {
+            match_id = id;
+            matches = matches + 1;
+        }
+        id = id + 1;
+    }
+    return matches == 1 ? match_id : -1;
+}
+
 fn main(argc: i32, args: list<str8>) -> i32 {
     var ap: ArgParser = ArgParser::new(
         "reverb_techno_sequence",
@@ -94,6 +116,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     ap.option("reverb-type", "r", "hall, room, plate, gated, reverse, nonlinear-short, or nonlinear-long", "hall");
     ap.option("clap-mix", "m", "Clap dry/wet mix: 0 is dry and 1 is fully reverberated", "0.45");
     ap.option("device", "d", "Output device id; -1 uses the default", "-1");
+    ap.option("device-name", "n", "Exact or uniquely matching output device name", "");
     ap.flag("list-devices", "l", "List output device ids and exit");
 
     let parsed: ParseResult = ap.parse(argc, args);
@@ -125,6 +148,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let type_id: i32 = reverb_type_id(reverb_name);
     let clap_mix: f32 = f32(atof(parsed.get("clap-mix")));
     let requested_device: i64 = parsed.get_i64("device");
+    let requested_device_name: str8 = parsed.get("device-name");
     if bpm <= 0 || duration_seconds <= 0 || type_id == 0 || clap_mix < 0.0f || clap_mix > 1.0f {
         println!("invalid reverb type or clap mix; bpm and duration must be positive");
         parsed.free();
@@ -160,9 +184,21 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let clap_samples: list<f32> = clap_audio.samples();
     clap_audio.close();
 
+    var selected_device: i64 = requested_device;
+    if eq(requested_device_name, "") != 1 {
+        selected_device = find_output_device(requested_device_name);
+        if selected_device < 0 {
+            println!("output device name not found or ambiguous: {}", requested_device_name);
+            print_devices();
+            parsed.free();
+            ap.free();
+            return 1;
+        }
+    }
+
     let requested_rate: i64 = kick_rate;
-    let device_r: Result<AudioDevice, str8> = requested_device >= 0
-        ? AudioDevice::open_with_config(requested_device, "mlang_reverb_techno", requested_rate, 512)
+    let device_r: Result<AudioDevice, str8> = selected_device >= 0
+        ? AudioDevice::open_with_config(selected_device, "mlang_reverb_techno", requested_rate, 512)
         : AudioDevice::open_default_with_config("mlang_reverb_techno", requested_rate, 512);
     if device_r.is_err() {
         println!("audio open failed: {}", device_r.unwrap_err());
@@ -199,6 +235,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     println!("MLang dsp::reverb techno sequence");
     println!("backend: {}; output: {} Hz, {} frame buffer", backend_name(), output_rate, buffer_frames);
+    if selected_device >= 0 {
+        println!("output device: [{}] {}", selected_device, device_name(selected_device));
+    } else {
+        println!("output device: system default");
+    }
     println!("tempo: {} BPM; duration: {} seconds", bpm, duration_seconds);
     println!("pattern: BD...BD+CL...BD...BD+CL (repeat)");
     println!("kick: {} ({} Hz, {} frames)", kick_path, kick_rate, kick_frames);
