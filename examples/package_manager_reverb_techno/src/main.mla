@@ -5,9 +5,11 @@
 mod dsp::reverb;
 mod std::argparser;
 mod std::audio;
+mod std::strbuf;
 mod std::time;
 
 use dsp::reverb::Reverb;
+use dsp::reverb::ReverbType;
 use dsp::reverb::StereoFrame;
 use std::argparser::ArgParser;
 use std::argparser::ParseResult;
@@ -18,6 +20,7 @@ use std::audio::backend_name;
 use std::audio::default_output_device_id;
 use std::audio::device_count;
 use std::audio::device_name;
+use std::strbuf::eq;
 use std::time::sleep_ms;
 
 extern fn atof(value: str8) -> f64;
@@ -46,6 +49,17 @@ fn clamp_audio(value: f32) -> f32 {
     if value < -0.98f { return -0.98f; }
     if value > 0.98f { return 0.98f; }
     return value;
+}
+
+fn reverb_type_id(name: str8) -> i32 {
+    if eq(name, "hall") == 1 { return 1; }
+    if eq(name, "room") == 1 { return 2; }
+    if eq(name, "plate") == 1 { return 3; }
+    if eq(name, "gated") == 1 { return 4; }
+    if eq(name, "reverse") == 1 { return 5; }
+    if eq(name, "nonlinear-short") == 1 { return 6; }
+    if eq(name, "nonlinear-long") == 1 { return 7; }
+    return 0;
 }
 
 fn start_device(device: AudioDevice) -> bool {
@@ -77,7 +91,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     ap.option("clap", "c", "Clap WAV path", "samples/19_02_08.WAV");
     ap.option("bpm", "b", "Sequence tempo", "130");
     ap.option("duration", "t", "Playback duration in seconds", "30");
-    ap.option("wet-level", "w", "Reverb return level from 0 to 1", "0.32");
+    ap.option("reverb-type", "r", "hall, room, plate, gated, reverse, nonlinear-short, or nonlinear-long", "hall");
+    ap.option("clap-mix", "m", "Clap dry/wet mix: 0 is dry and 1 is fully reverberated", "0.45");
     ap.option("device", "d", "Output device id; -1 uses the default", "-1");
     ap.flag("list-devices", "l", "List output device ids and exit");
 
@@ -106,10 +121,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let clap_path: str8 = parsed.get("clap");
     let bpm: i64 = parsed.get_i64("bpm");
     let duration_seconds: i64 = parsed.get_i64("duration");
-    let wet_level: f32 = f32(atof(parsed.get("wet-level")));
+    let reverb_name: str8 = parsed.get("reverb-type");
+    let type_id: i32 = reverb_type_id(reverb_name);
+    let clap_mix: f32 = f32(atof(parsed.get("clap-mix")));
     let requested_device: i64 = parsed.get_i64("device");
-    if bpm <= 0 || duration_seconds <= 0 || wet_level < 0.0f || wet_level > 1.0f {
-        println!("bpm and duration must be positive; wet-level must be from 0 to 1");
+    if bpm <= 0 || duration_seconds <= 0 || type_id == 0 || clap_mix < 0.0f || clap_mix > 1.0f {
+        println!("invalid reverb type or clap mix; bpm and duration must be positive");
         parsed.free();
         ap.free();
         return 2;
@@ -172,20 +189,21 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let block: PcmBlock = block_r.unwrap();
     var reverb: Reverb = Reverb::new(f32(output_rate));
     reverb.set_mix(1.0f);
-    reverb.set_size(0.72f);
-    reverb.set_decay(0.58f);
-    reverb.set_damping(0.42f);
-    reverb.set_density(0.68f);
-    reverb.set_bandwidth(0.92f);
-    reverb.set_predelay(0.06f);
-    reverb.set_early_mix(0.62f);
+    if type_id == 1 { reverb.set_type(ReverbType::Hall); }
+    else if type_id == 2 { reverb.set_type(ReverbType::Room); }
+    else if type_id == 3 { reverb.set_type(ReverbType::Plate); }
+    else if type_id == 4 { reverb.set_type(ReverbType::Gated); }
+    else if type_id == 5 { reverb.set_type(ReverbType::Reverse); }
+    else if type_id == 6 { reverb.set_type(ReverbType::NonlinearShort); }
+    else { reverb.set_type(ReverbType::NonlinearLong); }
 
     println!("MLang dsp::reverb techno sequence");
     println!("backend: {}; output: {} Hz, {} frame buffer", backend_name(), output_rate, buffer_frames);
     println!("tempo: {} BPM; duration: {} seconds", bpm, duration_seconds);
     println!("pattern: BD...BD+CL...BD...BD+CL (repeat)");
     println!("kick: {} ({} Hz, {} frames)", kick_path, kick_rate, kick_frames);
-    println!("clap: {} ({} Hz, {} frames); reverb return={}", clap_path, clap_rate, clap_frames, wet_level);
+    println!("clap: {} ({} Hz, {} frames)", clap_path, clap_rate, clap_frames);
+    println!("reverb type: {}; clap dry/wet mix={}", reverb_name, clap_mix);
 
     var rendered: i64 = 0;
     var beat: i64 = 0;
@@ -215,11 +233,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             let kick: f32 = source_sample(kick_samples, kick_channels, kick_frames, kick_position);
             let clap: f32 = source_sample(clap_samples, clap_channels, clap_frames, clap_position);
             let wet: StereoFrame = reverb.process_stereo(clap * 0.65f, clap * 0.65f);
-            let dry: f32 = kick * 0.68f + clap * 0.28f;
+            let dry: f32 = kick * 0.68f + clap * 0.42f * (1.0f - clap_mix);
             block.set_stereo(
                 frame,
-                clamp_audio(dry + wet.left() * wet_level),
-                clamp_audio(dry + wet.right() * wet_level)
+                clamp_audio(dry + wet.left() * 0.55f * clap_mix),
+                clamp_audio(dry + wet.right() * 0.55f * clap_mix)
             );
             if kick_position >= 0.0 { kick_position = kick_position + kick_step; }
             if clap_position >= 0.0 { clap_position = clap_position + clap_step; }

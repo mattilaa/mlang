@@ -215,6 +215,20 @@ impl StateVariableLowpass {
     }
 }
 
+/// @brief Reverb topology preset and wet-envelope mode.
+///
+/// `Gated`, `Reverse`, and the nonlinear modes are inspired by the effect
+/// families in the Ensoniq ASR-10. They are not bit-exact ESP emulations.
+pub enum ReverbType : i32 {
+    Hall = 0,
+    Room = 1,
+    Plate = 2,
+    Gated = 3,
+    Reverse = 4,
+    NonlinearShort = 5,
+    NonlinearLong = 6
+};
+
 /// @brief One processed stereo sample frame.
 pub struct StereoFrame {
     var left_sample: f32;
@@ -235,6 +249,7 @@ impl StereoFrame {
 /// `[0, 1]` unless documented otherwise.
 pub struct Reverb {
     var sample_rate: f32;
+    var reverb_type: ReverbType;
     var damping: f32;
     var density: f32;
     var bandwidth: f32;
@@ -254,6 +269,9 @@ pub struct Reverb {
     var previous_left: f32;
     var previous_right: f32;
     var control_counter: i64;
+    var shape_counter: i64;
+    var shape_length: i64;
+    var trigger_open: bool;
     var input_ap0: Allpass;
     var input_ap1: Allpass;
     var input_ap2: Allpass;
@@ -286,6 +304,7 @@ impl Reverb {
         let predelay_capacity: i64 = max_i64(round_i64(sr * 0.200f) + 2, 2);
         var reverb: Reverb = Reverb {
             sample_rate: sr,
+            reverb_type: ReverbType::Hall,
             damping: 0.1f, density: 0.5f, bandwidth: 0.9f,
             decay: 0.5f, predelay: 0.5f, size: 1.0f,
             gain: 1.0f, mix: 1.0f, early_mix: 1.0f,
@@ -295,6 +314,7 @@ impl Reverb {
             density_smooth: 0.005f,
             previous_left: 0.0f, previous_right: 0.0f,
             control_counter: 0,
+            shape_counter: 0, shape_length: 0, trigger_open: false,
             input_ap0: Allpass::new(input_capacity),
             input_ap1: Allpass::new(input_capacity),
             input_ap2: Allpass::new(input_capacity),
@@ -371,8 +391,56 @@ impl Reverb {
         self.previous_left = 0.0f;
         self.previous_right = 0.0f;
         self.control_counter = 0;
+        self.shape_counter = 0;
+        self.trigger_open = false;
         self.configure_delays();
     }
+
+    /// @brief Apply an acoustic or ASR-10-inspired nonlinear reverb preset.
+    ///
+    /// This resets delay history and preserves the current output gain and
+    /// dry/wet mix. Call it before realtime processing begins.
+    pub fn set_type(self: &mut Self, reverb_type: ReverbType) -> void {
+        self.reverb_type = reverb_type;
+        self.shape_length = 0;
+        if reverb_type == ReverbType::Hall {
+            self.size = 0.72f; self.decay = 0.58f; self.damping = 0.42f;
+            self.density = 0.68f; self.bandwidth = 0.92f;
+            self.predelay = 0.06f; self.early_mix = 0.62f;
+        } else if reverb_type == ReverbType::Room {
+            self.size = 0.34f; self.decay = 0.32f; self.damping = 0.46f;
+            self.density = 0.60f; self.bandwidth = 0.88f;
+            self.predelay = 0.015f; self.early_mix = 0.28f;
+        } else if reverb_type == ReverbType::Plate {
+            self.size = 0.56f; self.decay = 0.68f; self.damping = 0.26f;
+            self.density = 0.82f; self.bandwidth = 0.96f;
+            self.predelay = 0.025f; self.early_mix = 0.88f;
+        } else if reverb_type == ReverbType::Gated {
+            self.size = 0.46f; self.decay = 0.72f; self.damping = 0.30f;
+            self.density = 0.84f; self.bandwidth = 0.95f;
+            self.predelay = 0.02f; self.early_mix = 0.74f;
+            self.shape_length = round_i64(self.sample_rate * 0.30f);
+        } else if reverb_type == ReverbType::Reverse {
+            self.size = 0.52f; self.decay = 0.70f; self.damping = 0.34f;
+            self.density = 0.78f; self.bandwidth = 0.92f;
+            self.predelay = 0.01f; self.early_mix = 0.82f;
+            self.shape_length = round_i64(self.sample_rate * 0.40f);
+        } else if reverb_type == ReverbType::NonlinearShort {
+            self.size = 0.30f; self.decay = 0.54f; self.damping = 0.28f;
+            self.density = 0.88f; self.bandwidth = 0.96f;
+            self.predelay = 0.005f; self.early_mix = 0.70f;
+            self.shape_length = round_i64(self.sample_rate * 0.22f);
+        } else {
+            self.size = 0.64f; self.decay = 0.80f; self.damping = 0.44f;
+            self.density = 0.90f; self.bandwidth = 0.90f;
+            self.predelay = 0.03f; self.early_mix = 0.80f;
+            self.shape_length = round_i64(self.sample_rate * 0.62f);
+        }
+        self.reset();
+    }
+
+    /// @brief Return the active reverb preset/type.
+    pub fn get_type(self: Reverb) -> ReverbType { return self.reverb_type; }
 
     /// @brief Set high-frequency damping, normalized from 0 (bright) to 1 (dark).
     pub fn set_damping(self: &mut Self, value: f32) -> void { self.damping = clamp(value, 0.0f, 1.0f); }
@@ -407,9 +475,46 @@ impl Reverb {
         self.density_smooth = self.density_smooth + (((0.7995f * self.density) + 0.005f) - self.density_smooth) * amount;
     }
 
+    fn wet_shape(self: &mut Self, input_left: f32, input_right: f32) -> f32 {
+        if self.shape_length <= 0 { return 1.0f; }
+        var magnitude: f32 = input_left < 0.0f ? 0.0f - input_left : input_left;
+        let right_magnitude: f32 = input_right < 0.0f ? 0.0f - input_right : input_right;
+        if right_magnitude > magnitude { magnitude = right_magnitude; }
+        if magnitude > 0.025f && !self.trigger_open {
+            self.shape_counter = 0;
+            self.trigger_open = true;
+        } else if magnitude < 0.01f {
+            self.trigger_open = false;
+        }
+
+        let position: i64 = self.shape_counter;
+        self.shape_counter = self.shape_counter + 1;
+        if position >= self.shape_length { return 0.0f; }
+        let phase: f32 = f32(position) / f32(self.shape_length);
+        if self.reverb_type == ReverbType::Gated {
+            let attack: f32 = 0.03f;
+            let release_start: f32 = 0.70f;
+            if phase < attack { return phase / attack; }
+            if phase < release_start { return 1.0f; }
+            return (1.0f - phase) / (1.0f - release_start);
+        }
+        if self.reverb_type == ReverbType::Reverse {
+            return phase * phase;
+        }
+        if self.reverb_type == ReverbType::NonlinearShort {
+            if phase < 0.20f { return phase * 5.0f; }
+            if phase < 0.72f { return 1.0f; }
+            return (1.0f - phase) / 0.28f;
+        }
+        if phase < 0.18f { return phase / 0.18f; }
+        if phase < 0.78f { return 1.0f; }
+        return (1.0f - phase) / 0.22f;
+    }
+
     /// @brief Process one stereo frame without allocating or locking.
     pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> StereoFrame {
         self.smooth_controls();
+        let wet_envelope: f32 = self.wet_shape(input_left, input_right);
         let control_rate: i64 = max_i64(round_i64(self.sample_rate / 1000.0f), 1);
         if self.control_counter >= control_rate {
             self.control_counter = 0;
@@ -469,6 +574,8 @@ impl Reverb {
             - 0.6f * self.tank_delay3.tap(2);
         late_left = late_left * self.early_smooth + early_left * (1.0f - self.early_smooth);
         late_right = late_right * self.early_smooth + early_right * (1.0f - self.early_smooth);
+        late_left = late_left * wet_envelope;
+        late_right = late_right * wet_envelope;
         return StereoFrame {
             left_sample: (input_left + self.mix_smooth * (late_left - input_left)) * self.gain,
             right_sample: (input_right + self.mix_smooth * (late_right - input_right)) * self.gain

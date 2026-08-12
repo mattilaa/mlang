@@ -17,6 +17,9 @@ license terms.
 - `Reverb::new(sample_rate_hz: f32) -> Reverb`
 - `reset()`
 - `process_stereo(left: f32, right: f32) -> StereoFrame`
+- `set_type(reverb_type: ReverbType)` — apply a topology/envelope preset and
+  reset delay history while preserving output gain and dry/wet mix
+- `get_type() -> ReverbType`
 - `set_damping(value)` — `0` is bright and `1` is dark
 - `set_density(value)` — diffusion density
 - `set_bandwidth(value)` — input bandwidth
@@ -30,16 +33,32 @@ license terms.
 All controls are clamped to `[0, 1]`. Control changes are smoothed per sample;
 bandwidth and damping coefficients update at a 1 kHz control rate.
 
+## Reverb types
+
+`ReverbType` provides:
+
+- `Hall` — the original spacious MVerb-derived hall
+- `Room` — compact, early-reflection-forward ambience
+- `Plate` — dense, bright late reflections
+- `Gated` — short attack/hold/release wet envelope
+- `Reverse` — rising wet envelope followed by a cutoff
+- `NonlinearShort` — short bloom, plateau, and cutoff
+- `NonlinearLong` — longer nonlinear bloom and cutoff
+
+The gated, reverse, and nonlinear types are inspired by the corresponding
+Ensoniq ASR-10 effect families. They use original MLang processing around the
+MVerb-derived tank and are not bit-exact emulations of Ensoniq's proprietary
+ESP algorithms.
+
 ```mla
 mod dsp::reverb;
 
 use dsp::reverb::Reverb;
+use dsp::reverb::ReverbType;
 use dsp::reverb::StereoFrame;
 
 var room: Reverb = Reverb::new(48000.0f);
-room.set_size(0.75f);
-room.set_decay(0.65f);
-room.set_damping(0.35f);
+room.set_type(ReverbType::Hall);
 room.set_mix(0.30f);
 
 let wet: StereoFrame = room.process_stereo(input_left, input_right);

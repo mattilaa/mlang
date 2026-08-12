@@ -1,8 +1,8 @@
 # MLang Reverb Techno Sequence
 
 This MLang-only example loads two included mono WAV samples, schedules a
-four-beat techno pattern at 130 BPM, sends the clap through `dsp::reverb`, and
-streams exactly 30 seconds through `std::audio`.
+four-beat techno pattern at 130 BPM, sends the clap through a selectable
+`dsp::reverb` type, and streams exactly 30 seconds through `std::audio`.
 
 The musical render is exactly 30 seconds. A short silent queue guard remains
 after it so the output stream can stop without reporting a shutdown underrun.
@@ -34,7 +34,20 @@ The default package options are equivalent to:
 ../../build/mlang pkg run demo \
   --option bpm=130 \
   --option duration=30 \
-  --option wet_level=0.32
+  --option reverb_type=hall \
+  --option clap_mix=0.45
+```
+
+Available reverb types are `hall`, `room`, `plate`, `gated`, `reverse`,
+`nonlinear-short`, and `nonlinear-long`. The last four are inspired by Ensoniq
+ASR-10 nonlinear effect types; they are not bit-exact ESP emulations.
+
+Use `clap_mix=0` for a dry clap or `clap_mix=1` for a fully reverberated clap:
+
+```sh
+../../build/mlang pkg run demo \
+  --option reverb_type=gated \
+  --option clap_mix=1
 ```
 
 List and select output devices:
@@ -53,5 +66,5 @@ After building, run the executable directly for complete CLI help:
 
 ```sh
 ./build/reverb_techno_sequence --help
-./build/reverb_techno_sequence --device 0 --bpm 130 --duration 30
+./build/reverb_techno_sequence --device 0 --reverb-type gated --clap-mix 0.7
 ```

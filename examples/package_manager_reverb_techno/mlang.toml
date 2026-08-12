@@ -11,7 +11,8 @@ module_paths = ["../../modules"]
 audio_output = ""
 bpm = "130"
 duration = "30"
-wet_level = "0.32"
+reverb_type = "hall"
+clap_mix = "0.45"
 kick_path = "samples/19_02_01.WAV"
 clap_path = "samples/19_02_08.WAV"
 
@@ -62,7 +63,7 @@ name = "demo"
 depends_on = ["link"]
 log_output = false
 shell = [
-  "audio_output='{{option.audio_output}}'; set -- --bpm '{{option.bpm}}' --duration '{{option.duration}}' --wet-level '{{option.wet_level}}' --kick '{{option.kick_path}}' --clap '{{option.clap_path}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/reverb_techno_sequence \"$@\""
+  "audio_output='{{option.audio_output}}'; set -- --bpm '{{option.bpm}}' --duration '{{option.duration}}' --reverb-type '{{option.reverb_type}}' --clap-mix '{{option.clap_mix}}' --kick '{{option.kick_path}}' --clap '{{option.clap_path}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/reverb_techno_sequence \"$@\""
 ]
 
 [[task]]

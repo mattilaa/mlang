@@ -140,8 +140,9 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   Its `demo` task and DSP processor are written in MLang and use `std::audio`.
 - `examples/package_manager_reverb_techno` — MLang-only 130 BPM techno
   sequencer using included kick and clap WAV samples. It sends the clap through
-  `dsp::reverb` and streams a 30-second render through `std::audio`, with output
-  device selection and sample-rate conversion.
+  selectable hall, room, plate, gated, reverse, or nonlinear `dsp::reverb`
+  modes and streams a 30-second render through `std::audio`, with clap dry/wet
+  control, output device selection, and sample-rate conversion.
 
 ## Focused regression examples
 
