@@ -1,0 +1,72 @@
+[package]
+name = "reverb_techno_sequence"
+version = "0.1.0"
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+module_paths = ["../../modules"]
+
+[tool.mlang.options]
+audio_output = ""
+bpm = "130"
+duration = "30"
+wet_level = "0.32"
+kick_path = "samples/19_02_01.WAV"
+clap_path = "samples/19_02_08.WAV"
+
+[[task]]
+name = "toolchain-check"
+commands = [
+  "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler first.; exit 1; fi'",
+  "sh -c 'if ! command -v c++ >/dev/null 2>&1; then echo Missing required linker driver: c++; exit 1; fi'"
+]
+
+[[task]]
+name = "prepare"
+depends_on = ["toolchain-check"]
+commands = ["mkdir -p {{build_dir}}/obj"]
+
+[[task]]
+name = "compile"
+phase = "compile"
+depends_on = ["prepare"]
+language = "mlang"
+source = "src/main.mla"
+output = "{{build_dir}}/obj/main.o"
+compile_only = true
+opt_level = "O2"
+
+[[task]]
+name = "link"
+phase = "build"
+depends_on = ["compile"]
+language = "c++"
+output = "{{build_dir}}/reverb_techno_sequence"
+inputs = ["{{build_dir}}/obj/main.o"]
+lib_paths = ["../../build"]
+libs = ["mlang_std"]
+
+[task.host.darwin]
+linker_flags = [
+  "-framework CoreAudio",
+  "-framework AudioToolbox",
+  "-framework CoreFoundation"
+]
+
+[task.host.linux]
+libs = ["m", "dl"]
+
+[[task]]
+name = "demo"
+depends_on = ["link"]
+log_output = false
+shell = [
+  "audio_output='{{option.audio_output}}'; set -- --bpm '{{option.bpm}}' --duration '{{option.duration}}' --wet-level '{{option.wet_level}}' --kick '{{option.kick_path}}' --clap '{{option.clap_path}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/reverb_techno_sequence \"$@\""
+]
+
+[[task]]
+name = "list-devices"
+depends_on = ["link"]
+log_output = false
+shell = ["exec {{build_dir}}/reverb_techno_sequence --list-devices"]

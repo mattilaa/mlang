@@ -138,6 +138,10 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
   output selection by integer device id. Fractional playback can compare nearest,
   linear, Hermite, cubic, and bicubic-reduction interpolation modes.
   Its `demo` task and DSP processor are written in MLang and use `std::audio`.
+- `examples/package_manager_reverb_techno` — MLang-only 130 BPM techno
+  sequencer using included kick and clap WAV samples. It sends the clap through
+  `dsp::reverb` and streams a 30-second render through `std::audio`, with output
+  device selection and sample-rate conversion.
 
 ## Focused regression examples
 

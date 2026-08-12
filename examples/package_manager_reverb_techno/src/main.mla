@@ -1,0 +1,287 @@
+/// \file main.mla
+/// \ingroup examples
+/// \brief 130 BPM sample sequence processed with dsp::reverb.
+
+mod dsp::reverb;
+mod std::argparser;
+mod std::audio;
+mod std::time;
+
+use dsp::reverb::Reverb;
+use dsp::reverb::StereoFrame;
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::audio::AudioDevice;
+use std::audio::PcmAudio;
+use std::audio::PcmBlock;
+use std::audio::backend_name;
+use std::audio::default_output_device_id;
+use std::audio::device_count;
+use std::audio::device_name;
+use std::time::sleep_ms;
+
+extern fn atof(value: str8) -> f64;
+extern fn llround(value: f64) -> i64;
+
+fn source_sample(samples: &list<f32>, channels: i64, frames: i64,
+                 position: f64) -> f32 {
+    if position < 0.0 || position >= f64(frames) {
+        return 0.0f;
+    }
+    let frame0: i64 = position < 1.0 ? 0 : llround(position - 0.5);
+    let frame1: i64 = frame0 + 1 < frames ? frame0 + 1 : frame0;
+    let fraction: f32 = f32(position - f64(frame0));
+    let left0: f32 = samples[frame0 * channels];
+    let left1: f32 = samples[frame1 * channels];
+    let sample0: f32 = channels == 2
+        ? (left0 + samples[frame0 * channels + 1]) * 0.5f
+        : left0;
+    let sample1: f32 = channels == 2
+        ? (left1 + samples[frame1 * channels + 1]) * 0.5f
+        : left1;
+    return sample0 + (sample1 - sample0) * fraction;
+}
+
+fn clamp_audio(value: f32) -> f32 {
+    if value < -0.98f { return -0.98f; }
+    if value > 0.98f { return 0.98f; }
+    return value;
+}
+
+fn start_device(device: AudioDevice) -> bool {
+    let result: Result<i32, str8> = device.start();
+    if result.is_err() {
+        println!("audio start failed: {}", result.unwrap_err());
+        return false;
+    }
+    return true;
+}
+
+fn print_devices() -> void {
+    let count: i64 = device_count();
+    let default_id: i64 = default_output_device_id();
+    println!("output devices: count={} default_id={}", count, default_id);
+    var id: i64 = 0;
+    while id < count {
+        println!("  [{}] {}", id, device_name(id));
+        id = id + 1;
+    }
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new(
+        "reverb_techno_sequence",
+        "Play a sample-based techno beat through the MLang dsp::reverb."
+    );
+    ap.option("kick", "k", "Kick WAV path", "samples/19_02_01.WAV");
+    ap.option("clap", "c", "Clap WAV path", "samples/19_02_08.WAV");
+    ap.option("bpm", "b", "Sequence tempo", "130");
+    ap.option("duration", "t", "Playback duration in seconds", "30");
+    ap.option("wet-level", "w", "Reverb return level from 0 to 1", "0.32");
+    ap.option("device", "d", "Output device id; -1 uses the default", "-1");
+    ap.flag("list-devices", "l", "List output device ids and exit");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        println!("Error: {}", parsed.error());
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 2;
+    }
+    if parsed.flag("list-devices") {
+        print_devices();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+
+    let kick_path: str8 = parsed.get("kick");
+    let clap_path: str8 = parsed.get("clap");
+    let bpm: i64 = parsed.get_i64("bpm");
+    let duration_seconds: i64 = parsed.get_i64("duration");
+    let wet_level: f32 = f32(atof(parsed.get("wet-level")));
+    let requested_device: i64 = parsed.get_i64("device");
+    if bpm <= 0 || duration_seconds <= 0 || wet_level < 0.0f || wet_level > 1.0f {
+        println!("bpm and duration must be positive; wet-level must be from 0 to 1");
+        parsed.free();
+        ap.free();
+        return 2;
+    }
+
+    let kick_r: Result<PcmAudio, str8> = PcmAudio::load(kick_path);
+    if kick_r.is_err() {
+        println!("kick load failed: {}", kick_r.unwrap_err());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let kick_audio: PcmAudio = kick_r.unwrap();
+    let kick_rate: i64 = kick_audio.sample_rate();
+    let kick_channels: i64 = kick_audio.channels();
+    let kick_frames: i64 = kick_audio.frame_count();
+    let kick_samples: list<f32> = kick_audio.samples();
+    kick_audio.close();
+
+    let clap_r: Result<PcmAudio, str8> = PcmAudio::load(clap_path);
+    if clap_r.is_err() {
+        println!("clap load failed: {}", clap_r.unwrap_err());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let clap_audio: PcmAudio = clap_r.unwrap();
+    let clap_rate: i64 = clap_audio.sample_rate();
+    let clap_channels: i64 = clap_audio.channels();
+    let clap_frames: i64 = clap_audio.frame_count();
+    let clap_samples: list<f32> = clap_audio.samples();
+    clap_audio.close();
+
+    let requested_rate: i64 = kick_rate;
+    let device_r: Result<AudioDevice, str8> = requested_device >= 0
+        ? AudioDevice::open_with_config(requested_device, "mlang_reverb_techno", requested_rate, 512)
+        : AudioDevice::open_default_with_config("mlang_reverb_techno", requested_rate, 512);
+    if device_r.is_err() {
+        println!("audio open failed: {}", device_r.unwrap_err());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let device: AudioDevice = device_r.unwrap();
+    let output_rate: i64 = device.sample_rate();
+    let buffer_frames: i64 = device.buffer_frames();
+    let total_frames: i64 = output_rate * duration_seconds;
+    let beat_frames: f64 = 60.0 * f64(output_rate) / f64(bpm);
+    let kick_step: f64 = f64(kick_rate) / f64(output_rate);
+    let clap_step: f64 = f64(clap_rate) / f64(output_rate);
+
+    let block_r: Result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
+    if block_r.is_err() {
+        println!("PCM block allocation failed: {}", block_r.unwrap_err());
+        device.close();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let block: PcmBlock = block_r.unwrap();
+    var reverb: Reverb = Reverb::new(f32(output_rate));
+    reverb.set_mix(1.0f);
+    reverb.set_size(0.72f);
+    reverb.set_decay(0.58f);
+    reverb.set_damping(0.42f);
+    reverb.set_density(0.68f);
+    reverb.set_bandwidth(0.92f);
+    reverb.set_predelay(0.06f);
+    reverb.set_early_mix(0.62f);
+
+    println!("MLang dsp::reverb techno sequence");
+    println!("backend: {}; output: {} Hz, {} frame buffer", backend_name(), output_rate, buffer_frames);
+    println!("tempo: {} BPM; duration: {} seconds", bpm, duration_seconds);
+    println!("pattern: BD...BD+CL...BD...BD+CL (repeat)");
+    println!("kick: {} ({} Hz, {} frames)", kick_path, kick_rate, kick_frames);
+    println!("clap: {} ({} Hz, {} frames); reverb return={}", clap_path, clap_rate, clap_frames, wet_level);
+
+    var rendered: i64 = 0;
+    var beat: i64 = 0;
+    var next_beat: i64 = 0;
+    var kick_position: f64 = -1.0;
+    var clap_position: f64 = -1.0;
+    var started: bool = false;
+    while rendered < total_frames {
+        if device.pcm_queued_frames() >= buffer_frames * 8 || device.pcm_available_frames() < buffer_frames {
+            sleep_ms(1);
+            continue;
+        }
+
+        let remaining: i64 = total_frames - rendered;
+        let frames_this_block: i64 = remaining < buffer_frames ? remaining : buffer_frames;
+        var frame: i64 = 0;
+        while frame < frames_this_block {
+            if rendered >= next_beat {
+                kick_position = 0.0;
+                if beat % 2 == 1 {
+                    clap_position = 0.0;
+                }
+                beat = beat + 1;
+                next_beat = llround(f64(beat) * beat_frames);
+            }
+
+            let kick: f32 = source_sample(kick_samples, kick_channels, kick_frames, kick_position);
+            let clap: f32 = source_sample(clap_samples, clap_channels, clap_frames, clap_position);
+            let wet: StereoFrame = reverb.process_stereo(clap * 0.65f, clap * 0.65f);
+            let dry: f32 = kick * 0.68f + clap * 0.28f;
+            block.set_stereo(
+                frame,
+                clamp_audio(dry + wet.left() * wet_level),
+                clamp_audio(dry + wet.right() * wet_level)
+            );
+            if kick_position >= 0.0 { kick_position = kick_position + kick_step; }
+            if clap_position >= 0.0 { clap_position = clap_position + clap_step; }
+            rendered = rendered + 1;
+            frame = frame + 1;
+        }
+
+        let queued_r: Result<i64, str8> = device.queue_pcm_block(block, frames_this_block);
+        if queued_r.is_err() {
+            println!("PCM queue failed: {}", queued_r.unwrap_err());
+            block.close();
+            device.close();
+            parsed.free();
+            ap.free();
+            return 1;
+        }
+        if !started && (device.pcm_queued_frames() >= buffer_frames * 6 || rendered >= total_frames) {
+            if !start_device(device) {
+                block.close();
+                device.close();
+                parsed.free();
+                ap.free();
+                return 1;
+            }
+            started = true;
+        }
+    }
+
+    block.clear();
+    var guard_blocks: i32 = 0;
+    while guard_blocks < 8 {
+        if device.pcm_available_frames() < buffer_frames {
+            sleep_ms(1);
+            continue;
+        }
+        let guard_r: Result<i64, str8> = device.queue_pcm_block(block, buffer_frames);
+        if guard_r.is_err() {
+            println!("PCM shutdown guard failed: {}", guard_r.unwrap_err());
+            block.close();
+            device.close();
+            parsed.free();
+            ap.free();
+            return 1;
+        }
+        guard_blocks = guard_blocks + 1;
+    }
+
+    if !started && !start_device(device) {
+        block.close();
+        device.close();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    while device.pcm_queued_frames() > buffer_frames * 4 {
+        sleep_ms(5);
+    }
+    device.stop();
+    println!("finished: {} frames, underruns={}", total_frames, device.pcm_underrun_count());
+    block.close();
+    device.close();
+    parsed.free();
+    ap.free();
+    return 0;
+}
