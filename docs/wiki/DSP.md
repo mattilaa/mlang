@@ -10,9 +10,10 @@ Submodules:
 - [dsp::convolution](DSP-Convolution)
 - [dsp::filter](DSP-Filter)
 - [dsp::fft](DSP-FFT)
+- [dsp::reverb](DSP-Reverb)
 
-Import specific DSP modules such as [`dsp::convolution`](DSP-Convolution), [`dsp::filter`](DSP-Filter), and
-[`dsp::fft`](DSP-FFT) in application code. This library is installed and discovered
+Import specific DSP modules such as [`dsp::convolution`](DSP-Convolution), [`dsp::filter`](DSP-Filter),
+[`dsp::fft`](DSP-FFT), and [`dsp::reverb`](DSP-Reverb) in application code. This library is installed and discovered
 separately from the `std` namespace.
 
 The compiler searches the repository's `modules/` directory in source builds,

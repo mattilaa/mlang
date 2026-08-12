@@ -5,6 +5,7 @@
 /// - `dsp::convolution`
 /// - `dsp::filter`
 /// - `dsp::fft`
+/// - `dsp::reverb`
 ///
 /// @defgroup dsp dsp
 /// @brief Digital signal processing helpers.
@@ -14,6 +15,7 @@
 mod dsp::convolution;
 mod dsp::filter;
 mod dsp::fft;
+mod dsp::reverb;
 /// \endcond
 
 /// @}
