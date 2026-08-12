@@ -165,6 +165,17 @@ pub fn clear(v: list<i64>) -> void {
     v.clear();
 }
 
+/// @brief Replace one f32 element without changing length or allocating.
+/// @ingroup vec_methods
+///
+/// This checked operation supports preallocated numeric work buffers where
+/// growing a list in a realtime loop is not acceptable.
+///
+/// @return `0` on success, `-1` when `index` is out of range.
+pub fn set_f32(values: &list<f32>, index: i64, value: f32) -> i32 {
+    return __mlang_std_vec_set_f32(values, index, value);
+}
+
 // -- Search -------------------------------------------------------- //
 
 /// @brief Return `true` if the Vec contains the given element.

@@ -199,6 +199,13 @@ void __mlang_std_vec_clear(void* vec_ptr) {
     v->count = 0;
 }
 
+/** Replace one f32 element without changing length or allocating. */
+int32_t __mlang_std_vec_set_f32(mlang_vec_t v, int64_t index, float value) {
+    if (!v.data || index < 0 || index >= v.count) return -1;
+    ((float*)v.data)[index] = value;
+    return 0;
+}
+
 /* ------------------------------------------------------------------ */
 /* contains / index_of                                                  */
 /* ------------------------------------------------------------------ */
