@@ -48,8 +48,9 @@ mkdir -p "$BUILD_DIR"
 "$CLANG" --target=i386-none-elf -Wno-override-module -ffreestanding \
     -fno-stack-protector \
     -c "$BUILD_DIR/boot.ll" -o "$BUILD_DIR/boot.o"
-"$LD_LLD" -m elf_i386 -T "$EXAMPLE_DIR/linker.ld" --build-id=none -nostdlib \
-    "$BUILD_DIR/boot.o" -o "$BUILD_DIR/boot.elf"
+"$LD_LLD" -m elf_i386 --image-base=0 --section-start=.boot=0x7c00 \
+    --entry=_start --build-id=none -nostdlib "$BUILD_DIR/boot.o" \
+    -o "$BUILD_DIR/boot.elf"
 "$OBJCOPY" -O binary "$BUILD_DIR/boot.elf" "$BUILD_DIR/boot.img"
 
 size=$(wc -c < "$BUILD_DIR/boot.img" | tr -d ' ')

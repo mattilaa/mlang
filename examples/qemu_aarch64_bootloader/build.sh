@@ -46,16 +46,12 @@ mkdir -p "$BUILD_DIR"
 "$MLANG" --target-arch aarch64 -emit-llvm --no-tests -O0 \
     "$EXAMPLE_DIR/kernel.mla" -o "$BUILD_DIR/kernel.ll"
 
-"$CLANG" --target=aarch64-none-elf -ffreestanding -fno-stack-protector \
+"$CLANG" --target=aarch64-none-elf -Wno-override-module -ffreestanding \
+    -fno-stack-protector \
     -c "$BUILD_DIR/kernel.ll" -o "$BUILD_DIR/kernel.o"
-"$CLANG" --target=aarch64-none-elf -ffreestanding \
-    -c "$EXAMPLE_DIR/boot.S" -o "$BUILD_DIR/boot.o"
-"$CLANG" --target=aarch64-none-elf -ffreestanding \
-    -c "$EXAMPLE_DIR/runtime.S" -o "$BUILD_DIR/runtime.o"
 
 "$LD_LLD" -T "$EXAMPLE_DIR/linker.ld" --build-id=none -nostdlib \
-    "$BUILD_DIR/boot.o" "$BUILD_DIR/kernel.o" "$BUILD_DIR/runtime.o" \
-    -o "$BUILD_DIR/kernel.elf"
+    "$BUILD_DIR/kernel.o" -o "$BUILD_DIR/kernel.elf"
 "$OBJCOPY" -O binary "$BUILD_DIR/kernel.elf" "$BUILD_DIR/kernel.bin"
 
 echo "Built $BUILD_DIR/kernel.bin"

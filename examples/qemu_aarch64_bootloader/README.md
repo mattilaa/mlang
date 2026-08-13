@@ -8,10 +8,11 @@ Hello from MLang under QEMU!
 The MLang kernel entrypoint is running.
 ```
 
-The MLang code is in `kernel.mla`. QEMU's `-kernel` loader starts the raw image
-at the address selected by `linker.ld`. The small `boot.S` shim establishes a
-stack and enters `kernel_main`; `runtime.S` supplies PL011 serial output and the
-minimal normal-path runtime symbols currently emitted by MLang.
+All executable code is in `kernel.mla`. Its top-level AArch64 module assembly
+establishes the stack, enters `kernel_main`, writes through the PL011 UART, and
+supplies the minimal normal-path runtime symbols currently emitted by MLang.
+QEMU's `-kernel` loader starts the raw image at the address selected by
+`linker.ld`; that file describes memory placement rather than executable code.
 
 ## Requirements
 
