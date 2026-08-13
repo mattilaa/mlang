@@ -14,6 +14,18 @@ use std::vec::*;
 use std::sync::*;
 use std::testing::verify;
 
+#[test]
+fn test_vec_set_f32_checked_in_place() {
+    let values: list<f32> = [1.0f, 2.0f, 3.0f];
+    verify(set_f32(values, 1, 9.0f) == 0);
+    verify(values[0] == 1.0f);
+    verify(values[1] == 9.0f);
+    verify(values[2] == 3.0f);
+    verify(values.len() == 3);
+    verify(set_f32(values, -1, 0.0f) == -1);
+    verify(set_f32(values, 3, 0.0f) == -1);
+}
+
 struct sample_point {
     let x: i32 = 0;
     let y: i32 = 0;

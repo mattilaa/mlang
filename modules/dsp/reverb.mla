@@ -1,0 +1,586 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/// \file reverb.mla
+/// \brief Allocation-free stereo algorithmic reverb derived from MVerb.
+///
+/// This MLang implementation follows Martin Eastwood's MVerb topology:
+/// predelay, four input diffusion allpasses, stereo early reflections, and a
+/// cross-coupled late tank with damping and multi-tap output decorrelation.
+/// MVerb is Copyright (c) 2010 Martin Eastwood and GPLv3-or-later software;
+/// this derived implementation is provided under the same license terms. See
+/// <https://github.com/martineastwood/mverb>.
+///
+/// @defgroup dsp_reverb dsp::reverb
+/// @ingroup dsp
+/// @brief Stateful stereo room reverb with normalized controls.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+mod std::vec;
+use dsp::detail::sinf;
+use dsp::detail::llroundf;
+use std::vec::set_f32;
+/// \endcond
+
+fn clamp(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+fn max_i64(a: i64, b: i64) -> i64 {
+    return a > b ? a : b;
+}
+
+fn round_i64(value: f32) -> i64 {
+    return llroundf(value);
+}
+
+fn advance(index: i64, length: i64) -> i64 {
+    let next: i64 = index + 1;
+    return next >= length ? 0 : next;
+}
+
+struct DelayLine {
+    var buffer: list<f32>;
+    var length: i64;
+    var index0: i64;
+    var index1: i64;
+    var index2: i64;
+    var index3: i64;
+    var index4: i64;
+    var index5: i64;
+    var index6: i64;
+    var index7: i64;
+};
+
+impl DelayLine {
+    fn new(capacity: i64) -> DelayLine {
+        let safe_capacity: i64 = max_i64(capacity, 1);
+        return DelayLine {
+            buffer: [0.0f; safe_capacity],
+            length: safe_capacity,
+            index0: 0, index1: 0, index2: 0, index3: 0,
+            index4: 0, index5: 0, index6: 0, index7: 0
+        };
+    }
+
+    fn capacity(self: DelayLine) -> i64 {
+        return self.buffer.len();
+    }
+
+    fn set_length(self: &mut Self, length: i64) -> void {
+        var safe: i64 = length;
+        if safe < 1 { safe = 1; }
+        if safe > self.capacity() { safe = self.capacity(); }
+        self.length = safe;
+        self.index0 = self.index0 % safe;
+        self.index1 = self.index1 % safe;
+        self.index2 = self.index2 % safe;
+        self.index3 = self.index3 % safe;
+        self.index4 = self.index4 % safe;
+        self.index5 = self.index5 % safe;
+        self.index6 = self.index6 % safe;
+        self.index7 = self.index7 % safe;
+    }
+
+    fn set_taps(self: &mut Self, i0: i64, i1: i64, i2: i64, i3: i64,
+                i4: i64, i5: i64, i6: i64, i7: i64) -> void {
+        self.index0 = i0 % self.length;
+        self.index1 = i1 % self.length;
+        self.index2 = i2 % self.length;
+        self.index3 = i3 % self.length;
+        self.index4 = i4 % self.length;
+        self.index5 = i5 % self.length;
+        self.index6 = i6 % self.length;
+        self.index7 = i7 % self.length;
+    }
+
+    fn clear(self: &mut Self) -> void {
+        var i: i64 = 0;
+        while i < self.buffer.len() {
+            set_f32(self.buffer, i, 0.0f);
+            i = i + 1;
+        }
+        self.set_taps(0, 0, 0, 0, 0, 0, 0, 0);
+    }
+
+    fn process(self: &mut Self, input: f32) -> f32 {
+        let output: f32 = self.buffer[self.index0];
+        set_f32(self.buffer, self.index0, input);
+        self.index0 = advance(self.index0, self.length);
+        self.index1 = advance(self.index1, self.length);
+        self.index2 = advance(self.index2, self.length);
+        self.index3 = advance(self.index3, self.length);
+        self.index4 = advance(self.index4, self.length);
+        self.index5 = advance(self.index5, self.length);
+        self.index6 = advance(self.index6, self.length);
+        self.index7 = advance(self.index7, self.length);
+        return output;
+    }
+
+    fn tap(self: DelayLine, index: i32) -> f32 {
+        if index == 1 { return self.buffer[self.index1]; }
+        if index == 2 { return self.buffer[self.index2]; }
+        if index == 3 { return self.buffer[self.index3]; }
+        if index == 4 { return self.buffer[self.index4]; }
+        if index == 5 { return self.buffer[self.index5]; }
+        if index == 6 { return self.buffer[self.index6]; }
+        if index == 7 { return self.buffer[self.index7]; }
+        return self.buffer[self.index0];
+    }
+}
+
+struct Allpass {
+    var delay: DelayLine;
+    var feedback: f32;
+};
+
+impl Allpass {
+    fn new(capacity: i64) -> Allpass {
+        return Allpass { delay: DelayLine::new(capacity), feedback: 0.5f };
+    }
+
+    fn set_length(self: &mut Self, length: i64) -> void {
+        self.delay.set_length(length);
+    }
+
+    fn set_feedback(self: &mut Self, feedback: f32) -> void {
+        self.feedback = feedback;
+    }
+
+    fn set_taps(self: &mut Self, i0: i64, i1: i64, i2: i64, i3: i64) -> void {
+        self.delay.set_taps(i0, i1, i2, i3, 0, 0, 0, 0);
+    }
+
+    fn clear(self: &mut Self) -> void { self.delay.clear(); }
+
+    fn process(self: &mut Self, input: f32) -> f32 {
+        let delayed: f32 = self.delay.tap(0);
+        let temp: f32 = input * (0.0f - self.feedback);
+        let output: f32 = delayed + temp;
+        self.delay.process(input + output * self.feedback);
+        return output;
+    }
+
+    fn tap(self: Allpass, index: i32) -> f32 { return self.delay.tap(index); }
+}
+
+struct StateVariableLowpass {
+    var sample_rate: f32;
+    var frequency: f32;
+    var coefficient: f32;
+    var low: f32;
+    var high: f32;
+    var band: f32;
+};
+
+impl StateVariableLowpass {
+    fn new(sample_rate: f32, frequency: f32) -> StateVariableLowpass {
+        var filter: StateVariableLowpass = StateVariableLowpass {
+            sample_rate: sample_rate * 4.0f,
+            frequency: frequency,
+            coefficient: 0.0f,
+            low: 0.0f, high: 0.0f, band: 0.0f
+        };
+        filter.set_frequency(frequency);
+        return filter;
+    }
+
+    fn set_sample_rate(self: &mut Self, sample_rate: f32) -> void {
+        self.sample_rate = sample_rate * 4.0f;
+        self.set_frequency(self.frequency);
+    }
+
+    fn set_frequency(self: &mut Self, frequency: f32) -> void {
+        self.frequency = clamp(frequency, 20.0f, self.sample_rate * 0.124f);
+        self.coefficient = 2.0f * sinf(3.141592654f * self.frequency / self.sample_rate);
+    }
+
+    fn reset(self: &mut Self) -> void {
+        self.low = 0.0f;
+        self.high = 0.0f;
+        self.band = 0.0f;
+    }
+
+    fn process(self: &mut Self, input: f32) -> f32 {
+        var i: i32 = 0;
+        while i < 4 {
+            self.low = self.low + self.coefficient * self.band + 0.0000000000000000000000001f;
+            self.high = input - self.low - 2.0f * self.band;
+            self.band = self.band + self.coefficient * self.high;
+            i = i + 1;
+        }
+        return self.low;
+    }
+}
+
+/// @brief Reverb topology preset and wet-envelope mode.
+///
+/// `Gated`, `Reverse`, and the nonlinear modes are inspired by the effect
+/// families in the Ensoniq ASR-10. They are not bit-exact ESP emulations.
+pub enum ReverbType : i32 {
+    Hall = 0,
+    Room = 1,
+    Plate = 2,
+    Gated = 3,
+    Reverse = 4,
+    NonlinearShort = 5,
+    NonlinearLong = 6
+};
+
+/// @brief One processed stereo sample frame.
+pub struct StereoFrame {
+    var left_sample: f32;
+    var right_sample: f32;
+};
+
+impl StereoFrame {
+    /// @brief Return the processed left sample.
+    pub fn left(self: StereoFrame) -> f32 { return self.left_sample; }
+    /// @brief Return the processed right sample.
+    pub fn right(self: StereoFrame) -> f32 { return self.right_sample; }
+}
+
+/// @brief MVerb-derived stereo algorithmic reverb.
+///
+/// Allocate with `new()` before audio starts. `process_stereo()` performs no
+/// allocation, file I/O, locking, or list growth. Controls are normalized to
+/// `[0, 1]` unless documented otherwise.
+pub struct Reverb {
+    var sample_rate: f32;
+    var reverb_type: ReverbType;
+    var damping: f32;
+    var density: f32;
+    var bandwidth: f32;
+    var decay: f32;
+    var predelay: f32;
+    var size: f32;
+    var gain: f32;
+    var mix: f32;
+    var early_mix: f32;
+    var mix_smooth: f32;
+    var early_smooth: f32;
+    var bandwidth_smooth: f32;
+    var damping_smooth: f32;
+    var predelay_smooth: f32;
+    var decay_smooth: f32;
+    var density_smooth: f32;
+    var previous_left: f32;
+    var previous_right: f32;
+    var control_counter: i64;
+    var shape_counter: i64;
+    var shape_length: i64;
+    var trigger_open: bool;
+    var input_ap0: Allpass;
+    var input_ap1: Allpass;
+    var input_ap2: Allpass;
+    var input_ap3: Allpass;
+    var tank_ap0: Allpass;
+    var tank_ap1: Allpass;
+    var tank_ap2: Allpass;
+    var tank_ap3: Allpass;
+    var predelay_line: DelayLine;
+    var tank_delay0: DelayLine;
+    var tank_delay1: DelayLine;
+    var tank_delay2: DelayLine;
+    var tank_delay3: DelayLine;
+    var early_delay_l: DelayLine;
+    var early_delay_r: DelayLine;
+    var bandwidth_l: StateVariableLowpass;
+    var bandwidth_r: StateVariableLowpass;
+    var damping_l: StateVariableLowpass;
+    var damping_r: StateVariableLowpass;
+};
+
+impl Reverb {
+    /// @brief Allocate delay storage and initialize the MVerb defaults.
+    pub fn new(sample_rate_hz: f32) -> Reverb {
+        let sr: f32 = clamp(sample_rate_hz, 8000.0f, 384000.0f);
+        let input_capacity: i64 = max_i64(round_i64(sr * 0.013f) + 2, 2);
+        let tank_ap_capacity: i64 = max_i64(round_i64(sr * 0.090f) + 2, 2);
+        let tank_capacity: i64 = max_i64(round_i64(sr * 0.151f) + 2, 2);
+        let early_capacity: i64 = max_i64(round_i64(sr * 0.090f) + 2, 2);
+        let predelay_capacity: i64 = max_i64(round_i64(sr * 0.200f) + 2, 2);
+        var reverb: Reverb = Reverb {
+            sample_rate: sr,
+            reverb_type: ReverbType::Hall,
+            damping: 0.1f, density: 0.5f, bandwidth: 0.9f,
+            decay: 0.5f, predelay: 0.5f, size: 1.0f,
+            gain: 1.0f, mix: 1.0f, early_mix: 1.0f,
+            mix_smooth: 0.0f, early_smooth: 0.0f,
+            bandwidth_smooth: 100.0f, damping_smooth: 100.0f,
+            predelay_smooth: 0.0f, decay_smooth: 0.005f,
+            density_smooth: 0.005f,
+            previous_left: 0.0f, previous_right: 0.0f,
+            control_counter: 0,
+            shape_counter: 0, shape_length: 0, trigger_open: false,
+            input_ap0: Allpass::new(input_capacity),
+            input_ap1: Allpass::new(input_capacity),
+            input_ap2: Allpass::new(input_capacity),
+            input_ap3: Allpass::new(input_capacity),
+            tank_ap0: Allpass::new(tank_ap_capacity),
+            tank_ap1: Allpass::new(tank_ap_capacity),
+            tank_ap2: Allpass::new(tank_ap_capacity),
+            tank_ap3: Allpass::new(tank_ap_capacity),
+            predelay_line: DelayLine::new(predelay_capacity),
+            tank_delay0: DelayLine::new(tank_capacity),
+            tank_delay1: DelayLine::new(tank_capacity),
+            tank_delay2: DelayLine::new(tank_capacity),
+            tank_delay3: DelayLine::new(tank_capacity),
+            early_delay_l: DelayLine::new(early_capacity),
+            early_delay_r: DelayLine::new(early_capacity),
+            bandwidth_l: StateVariableLowpass::new(sr, 1000.0f),
+            bandwidth_r: StateVariableLowpass::new(sr, 1000.0f),
+            damping_l: StateVariableLowpass::new(sr, 1000.0f),
+            damping_r: StateVariableLowpass::new(sr, 1000.0f)
+        };
+        reverb.configure_delays();
+        reverb.reset();
+        return reverb;
+    }
+
+    fn configure_delays(self: &mut Self) -> void {
+        let sr: f32 = self.sample_rate;
+        let room: f32 = 0.05f + 0.95f * self.size;
+        self.input_ap0.set_length(round_i64(0.0048f * sr));
+        self.input_ap1.set_length(round_i64(0.0036f * sr));
+        self.input_ap2.set_length(round_i64(0.0127f * sr));
+        self.input_ap3.set_length(round_i64(0.0093f * sr));
+        self.input_ap0.set_feedback(0.75f);
+        self.input_ap1.set_feedback(0.75f);
+        self.input_ap2.set_feedback(0.625f);
+        self.input_ap3.set_feedback(0.625f);
+
+        self.tank_ap0.set_length(round_i64(0.020f * sr * room));
+        self.tank_ap1.set_length(round_i64(0.060f * sr * room));
+        self.tank_ap2.set_length(round_i64(0.030f * sr * room));
+        self.tank_ap3.set_length(round_i64(0.089f * sr * room));
+        self.tank_ap0.set_taps(0, 0, 0, 0);
+        self.tank_ap1.set_taps(0, round_i64(0.006f * sr * room), round_i64(0.041f * sr * room), 0);
+        self.tank_ap2.set_taps(0, 0, 0, 0);
+        self.tank_ap3.set_taps(0, round_i64(0.031f * sr * room), round_i64(0.011f * sr * room), 0);
+
+        self.tank_delay0.set_length(round_i64(0.150f * sr * room));
+        self.tank_delay1.set_length(round_i64(0.120f * sr * room));
+        self.tank_delay2.set_length(round_i64(0.140f * sr * room));
+        self.tank_delay3.set_length(round_i64(0.110f * sr * room));
+        self.tank_delay0.set_taps(0, round_i64(0.067f * sr * room), round_i64(0.011f * sr * room), round_i64(0.121f * sr * room), 0, 0, 0, 0);
+        self.tank_delay1.set_taps(0, round_i64(0.036f * sr * room), round_i64(0.089f * sr * room), 0, 0, 0, 0, 0);
+        self.tank_delay2.set_taps(0, round_i64(0.0089f * sr * room), round_i64(0.099f * sr * room), 0, 0, 0, 0, 0);
+        self.tank_delay3.set_taps(0, round_i64(0.067f * sr * room), round_i64(0.0041f * sr * room), 0, 0, 0, 0, 0);
+
+        self.early_delay_l.set_length(round_i64(0.089f * sr));
+        self.early_delay_l.set_taps(0, round_i64(0.0199f * sr), round_i64(0.0219f * sr), round_i64(0.0354f * sr), round_i64(0.0389f * sr), round_i64(0.0414f * sr), round_i64(0.0692f * sr), 0);
+        self.early_delay_r.set_length(round_i64(0.069f * sr));
+        self.early_delay_r.set_taps(0, round_i64(0.0099f * sr), round_i64(0.011f * sr), round_i64(0.0182f * sr), round_i64(0.0189f * sr), round_i64(0.0213f * sr), round_i64(0.0431f * sr), 0);
+    }
+
+    /// @brief Clear histories while retaining allocated delay storage.
+    pub fn reset(self: &mut Self) -> void {
+        self.input_ap0.clear(); self.input_ap1.clear();
+        self.input_ap2.clear(); self.input_ap3.clear();
+        self.tank_ap0.clear(); self.tank_ap1.clear();
+        self.tank_ap2.clear(); self.tank_ap3.clear();
+        self.predelay_line.clear();
+        self.tank_delay0.clear(); self.tank_delay1.clear();
+        self.tank_delay2.clear(); self.tank_delay3.clear();
+        self.early_delay_l.clear(); self.early_delay_r.clear();
+        self.bandwidth_l.reset(); self.bandwidth_r.reset();
+        self.damping_l.reset(); self.damping_r.reset();
+        self.previous_left = 0.0f;
+        self.previous_right = 0.0f;
+        self.control_counter = 0;
+        self.shape_counter = 0;
+        self.trigger_open = false;
+        self.configure_delays();
+    }
+
+    /// @brief Apply an acoustic or ASR-10-inspired nonlinear reverb preset.
+    ///
+    /// This resets delay history and preserves the current output gain and
+    /// dry/wet mix. Call it before realtime processing begins.
+    pub fn set_type(self: &mut Self, reverb_type: ReverbType) -> void {
+        self.reverb_type = reverb_type;
+        self.shape_length = 0;
+        if reverb_type == ReverbType::Hall {
+            self.size = 0.72f; self.decay = 0.58f; self.damping = 0.42f;
+            self.density = 0.68f; self.bandwidth = 0.92f;
+            self.predelay = 0.06f; self.early_mix = 0.62f;
+        } else if reverb_type == ReverbType::Room {
+            self.size = 0.34f; self.decay = 0.32f; self.damping = 0.46f;
+            self.density = 0.60f; self.bandwidth = 0.88f;
+            self.predelay = 0.015f; self.early_mix = 0.28f;
+        } else if reverb_type == ReverbType::Plate {
+            self.size = 0.56f; self.decay = 0.68f; self.damping = 0.26f;
+            self.density = 0.82f; self.bandwidth = 0.96f;
+            self.predelay = 0.025f; self.early_mix = 0.88f;
+        } else if reverb_type == ReverbType::Gated {
+            self.size = 0.46f; self.decay = 0.72f; self.damping = 0.30f;
+            self.density = 0.84f; self.bandwidth = 0.95f;
+            self.predelay = 0.02f; self.early_mix = 0.74f;
+            self.shape_length = round_i64(self.sample_rate * 0.30f);
+        } else if reverb_type == ReverbType::Reverse {
+            self.size = 0.52f; self.decay = 0.70f; self.damping = 0.34f;
+            self.density = 0.78f; self.bandwidth = 0.92f;
+            self.predelay = 0.01f; self.early_mix = 0.82f;
+            self.shape_length = round_i64(self.sample_rate * 0.40f);
+        } else if reverb_type == ReverbType::NonlinearShort {
+            self.size = 0.30f; self.decay = 0.54f; self.damping = 0.28f;
+            self.density = 0.88f; self.bandwidth = 0.96f;
+            self.predelay = 0.005f; self.early_mix = 0.70f;
+            self.shape_length = round_i64(self.sample_rate * 0.22f);
+        } else {
+            self.size = 0.64f; self.decay = 0.80f; self.damping = 0.44f;
+            self.density = 0.90f; self.bandwidth = 0.90f;
+            self.predelay = 0.03f; self.early_mix = 0.80f;
+            self.shape_length = round_i64(self.sample_rate * 0.62f);
+        }
+        self.reset();
+    }
+
+    /// @brief Return the active reverb preset/type.
+    pub fn get_type(self: Reverb) -> ReverbType { return self.reverb_type; }
+
+    /// @brief Set high-frequency damping, normalized from 0 (bright) to 1 (dark).
+    pub fn set_damping(self: &mut Self, value: f32) -> void { self.damping = clamp(value, 0.0f, 1.0f); }
+    /// @brief Set diffusion density in `[0, 1]`.
+    pub fn set_density(self: &mut Self, value: f32) -> void { self.density = clamp(value, 0.0f, 1.0f); }
+    /// @brief Set input bandwidth in `[0, 1]`.
+    pub fn set_bandwidth(self: &mut Self, value: f32) -> void { self.bandwidth = clamp(value, 0.0f, 1.0f); }
+    /// @brief Set decay in `[0, 1]`.
+    pub fn set_decay(self: &mut Self, value: f32) -> void { self.decay = clamp(value, 0.0f, 1.0f); }
+    /// @brief Set predelay in `[0, 1]`, mapped to `0..200 ms`.
+    pub fn set_predelay(self: &mut Self, value: f32) -> void { self.predelay = clamp(value, 0.0f, 1.0f); }
+    /// @brief Set room size in `[0, 1]`; changing size clears delay histories.
+    pub fn set_size(self: &mut Self, value: f32) -> void {
+        self.size = clamp(value, 0.0f, 1.0f);
+        self.reset();
+    }
+    /// @brief Set output gain in `[0, 1]`.
+    pub fn set_gain(self: &mut Self, value: f32) -> void { self.gain = clamp(value, 0.0f, 1.0f); }
+    /// @brief Set dry/wet mix in `[0, 1]`.
+    pub fn set_mix(self: &mut Self, value: f32) -> void { self.mix = clamp(value, 0.0f, 1.0f); }
+    /// @brief Set late/early balance: 0 is early only, 1 is late only.
+    pub fn set_early_mix(self: &mut Self, value: f32) -> void { self.early_mix = clamp(value, 0.0f, 1.0f); }
+
+    fn smooth_controls(self: &mut Self) -> void {
+        let amount: f32 = clamp(1000.0f / self.sample_rate, 0.001f, 1.0f);
+        self.mix_smooth = self.mix_smooth + (self.mix - self.mix_smooth) * amount;
+        self.early_smooth = self.early_smooth + (self.early_mix - self.early_smooth) * amount;
+        self.bandwidth_smooth = self.bandwidth_smooth + (((self.bandwidth * 18400.0f) + 100.0f) - self.bandwidth_smooth) * amount;
+        self.damping_smooth = self.damping_smooth + ((((1.0f - self.damping) * 18400.0f) + 100.0f) - self.damping_smooth) * amount;
+        self.predelay_smooth = self.predelay_smooth + ((self.predelay * 0.200f * self.sample_rate) - self.predelay_smooth) * amount;
+        self.decay_smooth = self.decay_smooth + (((0.7995f * self.decay) + 0.005f) - self.decay_smooth) * amount;
+        self.density_smooth = self.density_smooth + (((0.7995f * self.density) + 0.005f) - self.density_smooth) * amount;
+    }
+
+    fn wet_shape(self: &mut Self, input_left: f32, input_right: f32) -> f32 {
+        if self.shape_length <= 0 { return 1.0f; }
+        var magnitude: f32 = input_left < 0.0f ? 0.0f - input_left : input_left;
+        let right_magnitude: f32 = input_right < 0.0f ? 0.0f - input_right : input_right;
+        if right_magnitude > magnitude { magnitude = right_magnitude; }
+        if magnitude > 0.025f && !self.trigger_open {
+            self.shape_counter = 0;
+            self.trigger_open = true;
+        } else if magnitude < 0.01f {
+            self.trigger_open = false;
+        }
+
+        let position: i64 = self.shape_counter;
+        self.shape_counter = self.shape_counter + 1;
+        if position >= self.shape_length { return 0.0f; }
+        let phase: f32 = f32(position) / f32(self.shape_length);
+        if self.reverb_type == ReverbType::Gated {
+            let attack: f32 = 0.03f;
+            let release_start: f32 = 0.70f;
+            if phase < attack { return phase / attack; }
+            if phase < release_start { return 1.0f; }
+            return (1.0f - phase) / (1.0f - release_start);
+        }
+        if self.reverb_type == ReverbType::Reverse {
+            return phase * phase;
+        }
+        if self.reverb_type == ReverbType::NonlinearShort {
+            if phase < 0.20f { return phase * 5.0f; }
+            if phase < 0.72f { return 1.0f; }
+            return (1.0f - phase) / 0.28f;
+        }
+        if phase < 0.18f { return phase / 0.18f; }
+        if phase < 0.78f { return 1.0f; }
+        return (1.0f - phase) / 0.22f;
+    }
+
+    /// @brief Process one stereo frame without allocating or locking.
+    pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> StereoFrame {
+        self.smooth_controls();
+        let wet_envelope: f32 = self.wet_shape(input_left, input_right);
+        let control_rate: i64 = max_i64(round_i64(self.sample_rate / 1000.0f), 1);
+        if self.control_counter >= control_rate {
+            self.control_counter = 0;
+            self.bandwidth_l.set_frequency(self.bandwidth_smooth);
+            self.bandwidth_r.set_frequency(self.bandwidth_smooth);
+            self.damping_l.set_frequency(self.damping_smooth);
+            self.damping_r.set_frequency(self.damping_smooth);
+        }
+        self.control_counter = self.control_counter + 1;
+        self.predelay_line.set_length(round_i64(self.predelay_smooth) + 1);
+
+        let density2: f32 = clamp(self.decay_smooth + 0.15f, 0.25f, 0.5f);
+        self.tank_ap0.set_feedback(self.density_smooth);
+        self.tank_ap1.set_feedback(density2);
+        self.tank_ap2.set_feedback(self.density_smooth);
+        self.tank_ap3.set_feedback(density2);
+
+        let bandwidth_left: f32 = self.bandwidth_l.process(input_left);
+        let bandwidth_right: f32 = self.bandwidth_r.process(input_right);
+        let early_left: f32 = self.early_delay_l.process(bandwidth_left * 0.5f + bandwidth_right * 0.3f)
+            + self.early_delay_l.tap(2) * 0.6f + self.early_delay_l.tap(3) * 0.4f
+            + self.early_delay_l.tap(4) * 0.3f + self.early_delay_l.tap(5) * 0.3f
+            + self.early_delay_l.tap(6) * 0.1f + self.early_delay_l.tap(7) * 0.1f
+            + (bandwidth_left * 0.4f + bandwidth_right * 0.2f) * 0.5f;
+        let early_right: f32 = self.early_delay_r.process(bandwidth_left * 0.3f + bandwidth_right * 0.5f)
+            + self.early_delay_r.tap(2) * 0.6f + self.early_delay_r.tap(3) * 0.4f
+            + self.early_delay_r.tap(4) * 0.3f + self.early_delay_r.tap(5) * 0.3f
+            + self.early_delay_r.tap(6) * 0.1f + self.early_delay_r.tap(7) * 0.1f
+            + (bandwidth_left * 0.2f + bandwidth_right * 0.4f) * 0.5f;
+
+        let mono: f32 = self.predelay_line.process((bandwidth_left + bandwidth_right) * 0.5f);
+        var smeared: f32 = self.input_ap0.process(mono);
+        smeared = self.input_ap1.process(smeared);
+        smeared = self.input_ap2.process(smeared);
+        smeared = self.input_ap3.process(smeared);
+
+        var left_tank: f32 = self.tank_ap0.process(smeared + self.previous_right);
+        left_tank = self.tank_delay0.process(left_tank);
+        left_tank = self.damping_l.process(left_tank);
+        left_tank = self.tank_ap1.process(left_tank);
+        left_tank = self.tank_delay1.process(left_tank);
+        var right_tank: f32 = self.tank_ap2.process(smeared + self.previous_left);
+        right_tank = self.tank_delay2.process(right_tank);
+        right_tank = self.damping_r.process(right_tank);
+        right_tank = self.tank_ap3.process(right_tank);
+        right_tank = self.tank_delay3.process(right_tank);
+        self.previous_left = left_tank * self.decay_smooth;
+        self.previous_right = right_tank * self.decay_smooth;
+
+        var late_left: f32 = 0.6f * self.tank_delay2.tap(1) + 0.6f * self.tank_delay2.tap(2)
+            - 0.6f * self.tank_ap3.tap(1) + 0.6f * self.tank_delay3.tap(1)
+            - 0.6f * self.tank_delay0.tap(1) - 0.6f * self.tank_ap1.tap(1)
+            - 0.6f * self.tank_delay1.tap(1);
+        var late_right: f32 = 0.6f * self.tank_delay0.tap(2) + 0.6f * self.tank_delay0.tap(3)
+            - 0.6f * self.tank_ap1.tap(2) + 0.6f * self.tank_delay1.tap(2)
+            - 0.6f * self.tank_delay2.tap(3) - 0.6f * self.tank_ap3.tap(2)
+            - 0.6f * self.tank_delay3.tap(2);
+        late_left = late_left * self.early_smooth + early_left * (1.0f - self.early_smooth);
+        late_right = late_right * self.early_smooth + early_right * (1.0f - self.early_smooth);
+        late_left = late_left * wet_envelope;
+        late_right = late_right * wet_envelope;
+        return StereoFrame {
+            left_sample: (input_left + self.mix_smooth * (late_left - input_left)) * self.gain,
+            right_sample: (input_right + self.mix_smooth * (late_right - input_right)) * self.gain
+        };
+    }
+}
+
+/// @}

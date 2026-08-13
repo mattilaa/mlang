@@ -6,10 +6,13 @@
 /// @brief Stateful biquad filters and allocation-free control smoothing.
 /// @{
 
-extern fn sinf(value: f32) -> f32;
-extern fn cosf(value: f32) -> f32;
-extern fn expf(value: f32) -> f32;
-extern fn llroundf(value: f32) -> i64;
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+use dsp::detail::sinf;
+use dsp::detail::cosf;
+use dsp::detail::expf;
+use dsp::detail::llroundf;
+/// \endcond
 
 fn clamp_f32(value: f32, low: f32, high: f32) -> f32 {
     if value < low {

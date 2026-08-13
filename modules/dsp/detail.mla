@@ -1,0 +1,7 @@
+/// \file detail.mla
+/// \brief Shared native math bindings for DSP modules.
+
+extern pub fn sinf(value: f32) -> f32;
+extern pub fn cosf(value: f32) -> f32;
+extern pub fn expf(value: f32) -> f32;
+extern pub fn llroundf(value: f32) -> i64;

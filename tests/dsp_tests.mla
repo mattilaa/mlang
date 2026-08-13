@@ -1,6 +1,7 @@
 mod std::testing;
 mod dsp::convolution;
 mod dsp::filter;
+mod dsp::reverb;
 
 use dsp::convolution::full_f32;
 use dsp::convolution::full_f64;
@@ -19,6 +20,9 @@ use dsp::filter::bicubic_interpolate_f32;
 use dsp::filter::hermite_interpolate_f32;
 use dsp::filter::linear_interpolate_f32;
 use dsp::filter::nearest_interpolate_f32;
+use dsp::reverb::Reverb;
+use dsp::reverb::ReverbType;
+use dsp::reverb::StereoFrame;
 use std::testing::verify;
 
 fn approx_f32(a: f32, b: f32, eps: f32) -> bool {
@@ -181,6 +185,79 @@ fn test_dsp_24db_filter_dc_responses() {
     verify(approx_f32(low_output, 1.0f, 0.002f));
     verify(approx_f32(high_output, 0.0f, 0.002f));
     verify(approx_f32(band_output, 0.0f, 0.002f));
+}
+
+#[test]
+fn test_dsp_reverb_dry_signal_and_reset() {
+    var reverb: Reverb = Reverb::new(48000.0f);
+    reverb.set_mix(0.0f);
+    let first: StereoFrame = reverb.process_stereo(0.25f, -0.5f);
+    verify(approx_f32(first.left(), 0.25f, 0.0001f));
+    verify(approx_f32(first.right(), -0.5f, 0.0001f));
+    reverb.reset();
+    let silence: StereoFrame = reverb.process_stereo(0.0f, 0.0f);
+    verify(approx_f32(silence.left(), 0.0f, 0.0001f));
+    verify(approx_f32(silence.right(), 0.0f, 0.0001f));
+}
+
+#[test]
+fn test_dsp_reverb_impulse_produces_finite_tail() {
+    var reverb: Reverb = Reverb::new(48000.0f);
+    reverb.set_mix(1.0f);
+    reverb.set_predelay(0.0f);
+    reverb.set_decay(0.65f);
+    reverb.set_early_mix(0.5f);
+    var energy: f32 = 0.0f;
+    var stereo_difference: f32 = 0.0f;
+    var i: i64 = 0;
+    while i < 24000 {
+        let input: f32 = i == 0 ? 1.0f : 0.0f;
+        let frame: StereoFrame = reverb.process_stereo(input, input);
+        verify(frame.left() == frame.left());
+        verify(frame.right() == frame.right());
+        energy = energy + frame.left() * frame.left() + frame.right() * frame.right();
+        var difference: f32 = frame.left() - frame.right();
+        if difference < 0.0f { difference = 0.0f - difference; }
+        stereo_difference = stereo_difference + difference;
+        i = i + 1;
+    }
+    verify(energy > 0.01f);
+    verify(stereo_difference > 0.001f);
+}
+
+#[test]
+fn test_dsp_reverb_types_and_gated_tail() {
+    var reverb: Reverb = Reverb::new(48000.0f);
+    reverb.set_type(ReverbType::Room);
+    verify(reverb.get_type() == ReverbType::Room);
+    reverb.set_type(ReverbType::Plate);
+    verify(reverb.get_type() == ReverbType::Plate);
+    reverb.set_type(ReverbType::Reverse);
+    verify(reverb.get_type() == ReverbType::Reverse);
+    reverb.set_type(ReverbType::NonlinearShort);
+    verify(reverb.get_type() == ReverbType::NonlinearShort);
+    reverb.set_type(ReverbType::NonlinearLong);
+    verify(reverb.get_type() == ReverbType::NonlinearLong);
+
+    reverb.set_type(ReverbType::Gated);
+    reverb.set_mix(1.0f);
+    reverb.set_predelay(0.0f);
+    var energy: f32 = 0.0f;
+    var last_left: f32 = 0.0f;
+    var last_right: f32 = 0.0f;
+    var i: i64 = 0;
+    while i < 24000 {
+        let input: f32 = i == 0 ? 1.0f : 0.0f;
+        let frame: StereoFrame = reverb.process_stereo(input, input);
+        last_left = frame.left();
+        last_right = frame.right();
+        energy = energy + last_left * last_left + last_right * last_right;
+        i = i + 1;
+    }
+    verify(energy > 0.001f);
+    verify(approx_f32(last_left, 0.0f, 0.0001f));
+    verify(approx_f32(last_right, 0.0f, 0.0001f));
+    verify(reverb.get_type() == ReverbType::Gated);
 }
 
 #[test]

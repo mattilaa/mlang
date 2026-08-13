@@ -27,6 +27,8 @@ above.
 - `v.pop() -> T` — remove and return the last element; known-empty arrays are
   rejected at compile time, otherwise empty containers abort at runtime
 - `v.clear()` — remove all elements (Vec remains valid for further pushes)
+- `set_f32(values, index, value) -> i32` — replace one `f32` element without
+  changing list length or allocating; returns `-1` for an invalid index
 
 ### Search
 
