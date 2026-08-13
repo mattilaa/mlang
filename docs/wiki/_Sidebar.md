@@ -87,6 +87,8 @@
 
 ## Examples
 - [[Examples|Examples]]
+- [[MLang QEMU x86 Bootloader Example|QEMU-x86-Bootloader-Example]]
+- [[MLang QEMU AArch64 Boot Example|QEMU-AArch64-Boot-Example]]
 - [[UML UI Generator|UML-UI-Generator]]
 - [[UML UI Generator Example|UML-UI-Generator-Example]]
 

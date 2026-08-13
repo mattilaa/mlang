@@ -21,6 +21,25 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 
 ## Example programs
 
+### Bare metal and QEMU
+
+- `examples/qemu_x86_bootloader` — complete 512-byte x86 BIOS boot sector
+  written with MLang module assembly and built through `mlang.toml`. Run it
+  with:
+
+  ```sh
+  cd examples/qemu_x86_bootloader
+  ../../build/mlang pkg run demo
+  ```
+
+- `examples/qemu_aarch64_bootloader` — minimal freestanding AArch64 image that
+  enters an MLang function and prints to QEMU's serial terminal. QEMU must be
+  installed. Run it with:
+
+  ```sh
+  ./examples/qemu_aarch64_bootloader/run.sh
+  ```
+
 ### Route planning and genetic algorithms
 
 - `examples/kallio_pub_crawl_esc` — animated terminal [`std::esc`](Stdlib-Esc) Kallio and

@@ -1,0 +1,19 @@
+[package]
+name = "qemu_x86_bootloader"
+version = "0.1.0"
+
+[tool.mlang]
+min_mlang_version = "0.2.95"
+target_arch = "x86"
+build_dir = "build"
+
+[[task]]
+name = "build"
+print = "[example] Building the MLang x86 BIOS boot sector"
+commands = ["./build.sh"]
+
+[[task]]
+name = "demo"
+print = "[example] Booting the MLang x86 BIOS image under QEMU"
+log_output = false
+commands = ["./run.sh"]

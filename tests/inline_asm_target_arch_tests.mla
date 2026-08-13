@@ -210,6 +210,40 @@ fn test_inline_asm_embedded_string_x64_emits_llvm() {
     verify_true(contains(text, "leaq 1b(%rip), $0") == 1);
 }
 
+#[test]
+fn test_module_asm_x86_emits_at_module_scope() {
+    let src_path: str8 = "/tmp/mlang_module_asm_x86_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_module_asm_x86_emit.ll";
+    let src: str8 = "asm x86(\".code16\\n.globl _start\\n_start:\\n    hlt\");\n";
+    let wr: result<i32, str8> = write_all_text(src_path, src);
+    verify_eq(wr.is_ok(), true);
+
+    let rc: i32 = run_compiler_capture(["--target-arch", "x86", "-emit-llvm", src_path, "-o", ll_path]);
+    verify_eq(rc, 0);
+
+    let text_r: result<str8, str8> = read_all_text(ll_path);
+    verify_eq(text_r.is_ok(), true);
+    let text: str8 = text_r.unwrap();
+    verify_true(contains(text, "target triple = \"i386") == 1);
+    verify_true(contains(text, "module asm \".code16") == 1);
+    verify_true(contains(text, ".globl _start") == 1);
+}
+
+#[test]
+fn test_module_asm_reports_arch_mismatch() {
+    let src_path: str8 = "/tmp/mlang_module_asm_arch_mismatch.mla";
+    let src: str8 = "asm x86(\".code16\\nhlt\");\n";
+    let wr: result<i32, str8> = write_all_text(src_path, src);
+    verify_eq(wr.is_ok(), true);
+
+    let result: CompilerRunCapture = run_compiler_capture_stdout_stderr(["--target-arch", "x64", "-emit-llvm", src_path, "-o", "/tmp/mlang_module_asm_arch_mismatch.ll"]);
+    verify_true(result.rc != 0);
+    verify_true(
+        contains(result.stdout_text, "module asm target arch 'x86' does not match compilation target arch 'x64'") == 1 ||
+        contains(result.stderr_text, "module asm target arch 'x86' does not match compilation target arch 'x64'") == 1
+    );
+}
+
 fn run_arch_attrs_select_aarch64_inline_asm() {
     let src_path: str8 = "/tmp/mlang_arch_attr_aarch64_emit.mla";
     let ll_path: str8 = "/tmp/mlang_arch_attr_aarch64_emit.ll";
@@ -266,6 +300,8 @@ fn test_inline_asm_target_arch_tests() {
     test_inline_asm_raw_multiline_x64_emits_llvm();
     test_inline_asm_embedded_string_aarch64_emits_llvm();
     test_inline_asm_embedded_string_x64_emits_llvm();
+    test_module_asm_x86_emits_at_module_scope();
+    test_module_asm_reports_arch_mismatch();
     run_arch_attrs_select_aarch64_inline_asm();
     run_arch_attrs_select_x64_inline_asm();
 }

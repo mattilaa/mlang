@@ -1,14 +1,19 @@
 #include "ir.h"
 #include "ir/ast_analysis.h"
+#include "ir/backend_utils.h"
 #include "ir/common.h"
 #include "ir/return_inference.h"
 
 #include <functional>
 #include <llvm/Config/llvm-config.h>
+#include <llvm/TargetParser/Host.h>
+#include <llvm/TargetParser/Triple.h>
 #include <unordered_map>
 #include <unordered_set>
 
 using mlang::ir_detail::ast_analysis::contains_update_expression;
+using mlang::ir_detail::module_target_triple_string;
+using mlang::ir_detail::normalize_target_arch_name;
 using mlang::ir_detail::common::Helpers;
 using mlang::ir_detail::return_inference::infer_function_return_type;
 
@@ -22,6 +27,42 @@ void CodeGenerator::generateCode(ProgramNode* program)
     arrayKnownLengths.clear();
     constexprValues.clear();
     deferredModuleFunctionDefs.clear();
+
+    for(auto* moduleAsm : program->moduleAsms)
+    {
+        if(!moduleAsm)
+            continue;
+
+        const std::string requiredArch =
+            normalize_target_arch_name(moduleAsm->requiredArch);
+        if(requiredArch.empty())
+        {
+            reportError(moduleAsm->line,
+                        "unsupported module asm target arch '" +
+                            moduleAsm->requiredArch +
+                            "'; expected x86, x64, or aarch64");
+            continue;
+        }
+
+        std::string effectiveTriple = module_target_triple_string(module.get());
+        if(effectiveTriple.empty())
+            effectiveTriple = llvm::sys::getDefaultTargetTriple();
+        llvm::Triple triple(effectiveTriple);
+        const std::string actualArch =
+            normalize_target_arch_name(triple.getArchName().str());
+        if(actualArch != requiredArch)
+        {
+            reportError(moduleAsm->line,
+                        "module asm target arch '" + requiredArch +
+                            "' does not match compilation target arch '" +
+                            (actualArch.empty() ? triple.getArchName().str()
+                                                : actualArch) +
+                            "'");
+            continue;
+        }
+
+        module->appendModuleInlineAsm(moduleAsm->asmTemplate);
+    }
 
     ensureOptionBuiltin(program);
     ensureResultBuiltin(program);

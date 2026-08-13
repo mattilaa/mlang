@@ -1,0 +1,67 @@
+# MLang QEMU AArch64 boot example
+
+This example boots a small freestanding image on QEMU's AArch64 `virt`
+machine and prints two lines to its serial terminal:
+
+```text
+Hello from MLang under QEMU!
+The MLang kernel entrypoint is running.
+```
+
+The MLang code is in `kernel.mla`. QEMU's `-kernel` loader starts the raw image
+at the address selected by `linker.ld`. The small `boot.S` shim establishes a
+stack and enters `kernel_main`; `runtime.S` supplies PL011 serial output and the
+minimal normal-path runtime symbols currently emitted by MLang.
+
+## Requirements
+
+QEMU must be installed. The build also needs LLVM `clang`, `ld.lld`, and
+`llvm-objcopy`, plus a built MLang compiler at `../../build/mlang`.
+
+macOS with Homebrew:
+
+```sh
+brew install qemu llvm lld
+```
+
+Debian or Ubuntu:
+
+```sh
+sudo apt install qemu-system-arm clang lld llvm
+```
+
+## Build and run
+
+From the repository root:
+
+```sh
+./examples/qemu_aarch64_bootloader/run.sh
+```
+
+The package task provides the same workflow:
+
+```sh
+cd examples/qemu_aarch64_bootloader
+../../build/mlang pkg run demo
+```
+
+To build the image without starting QEMU:
+
+```sh
+./examples/qemu_aarch64_bootloader/build.sh
+```
+
+or:
+
+```sh
+cd examples/qemu_aarch64_bootloader
+../../build/mlang pkg run build
+```
+
+The generated ELF and raw image are written under
+`examples/qemu_aarch64_bootloader/build/`. Press `Ctrl-a`, then `x`, to exit
+QEMU.
+
+This is intentionally a first-stage example rather than a complete operating
+system. QEMU performs the initial image loading; the assembly shim handles the
+machine entry state, and execution then continues in MLang.

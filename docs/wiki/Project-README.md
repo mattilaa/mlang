@@ -556,6 +556,22 @@ Current first-version constraints:
 - `asm volatile(...)` lowers with LLVM `sideeffect`
 - plain `asm(...)` lowers without `sideeffect`
 
+Architecture-qualified module assembly is available for freestanding entry
+code and definitions that cannot live inside a normal function:
+
+```rust
+asm x86(".code16
+.globl _start
+_start:
+    cli
+    hlt
+");
+```
+
+The qualifier must match `--target-arch`. Module assembly has no operands or
+result value. See `examples/qemu_x86_bootloader` for a complete BIOS boot
+sector built through `mlang.toml`.
+
 ## Package Manager (MLang Backend Default)
 `mlang pkg ...` now prefers the MLang implementation in
 `tools/mlang-pkg-mla/main.mla` by default, with automatic fallback to the C++

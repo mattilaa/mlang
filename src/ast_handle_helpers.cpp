@@ -705,6 +705,11 @@ ASTNode* mla_ast_inline_asm(ASTNode* type, char* asm_text, char* arch_name,
                                   line);
 }
 
+ASTNode* mla_ast_module_asm(char* asm_text, char* arch_name, int line)
+{
+    return create_module_asm_impl(asm_text, arch_name, line);
+}
+
 ASTNode* mla_ast_update_expression(int kind, int is_prefix, ASTNode* operand, int line)
 {
     return create_update_expression_impl(kind, is_prefix, operand, line);

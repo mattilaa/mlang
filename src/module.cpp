@@ -539,6 +539,17 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             return false;
         }
 
+        // Module assembly is part of the imported module's emitted code. Keep
+        // each AST node once when several use declarations name the module.
+        for(auto* moduleAsm : module->moduleAsms)
+        {
+            if(std::find(program->moduleAsms.begin(), program->moduleAsms.end(),
+                         moduleAsm) == program->moduleAsms.end())
+            {
+                program->moduleAsms.push_back(moduleAsm);
+            }
+        }
+
         // Always import ALL functions from the module (for internal calls)
         // but mark their source module so visibility can be checked at call
         // sites

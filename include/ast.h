@@ -1205,6 +1205,24 @@ public:
     }
 };
 
+/// \brief Assembly emitted directly into the LLVM module.
+///
+/// Module assembly is intended for freestanding entry code, interrupt tables,
+/// and other definitions that cannot live inside a normal function. Unlike
+/// \c InlineAsmNode it has no operands or result value.
+class ModuleAsmNode : public ASTNode
+{
+public:
+    std::string asmTemplate;
+    std::string requiredArch;
+
+    ModuleAsmNode(const std::string& text, const std::string& arch)
+        : asmTemplate(text), requiredArch(arch)
+    {
+    }
+    std::string toString() const override;
+};
+
 class EnumVariantNode : public ASTNode
 {
 public:
@@ -1512,6 +1530,7 @@ public:
     std::vector<VarDeclNode*> globalVars;
     std::vector<CexprDeclNode*> cexprDecls;
     std::vector<TypeAliasNode*> typeAliases;
+    std::vector<ModuleAsmNode*> moduleAsms;
 
     std::string toString() const override;
 };

@@ -1,0 +1,31 @@
+/// A complete 512-byte x86 BIOS boot sector written as MLang module assembly.
+asm x86(".code16
+.section .boot,\"ax\",@progbits
+.globl _start
+_start:
+    cli
+    xorw %ax, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %ss
+    movw $0x7c00, %sp
+    sti
+    cld
+    movw $message, %si
+.Lprint:
+    lodsb
+    testb %al, %al
+    jz .Lhalt
+    outb %al, $0xe9
+    movb $0x0e, %ah
+    int $0x10
+    jmp .Lprint
+.Lhalt:
+    cli
+    hlt
+    jmp .Lhalt
+message:
+    .asciz \"Hello from an x86 MLang bootloader!\\r\\n\"
+    .org 510
+    .word 0xaa55
+");

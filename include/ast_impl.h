@@ -49,6 +49,7 @@ ASTNode* create_sizeof_value_expression_impl(ASTNode* expr, int line);
 ASTNode* create_cexpr_expression_impl(ASTNode* expr, int line);
 ASTNode* create_inline_asm_impl(ASTNode* type, char* asm_text, char* arch_name,
                                 ASTNode* args, int is_volatile, int line);
+ASTNode* create_module_asm_impl(char* asm_text, char* arch_name, int line);
 ASTNode* create_function_call_impl(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* create_function_call_multi_impl(char* name, ASTNode* args, int line);
 ASTNode* create_result_constructor_impl(char* variant, ASTNode* type_args, ASTNode* args, int line);

@@ -778,7 +778,7 @@ Notes:
 ## Inline Assembly: `asm`
 
 MLang supports expression-style inline assembly lowered directly to LLVM inline
-asm.
+asm, plus architecture-qualified assembly emitted at module scope.
 
 Supported source forms:
 - `asm(T, "template", operands...)`
@@ -788,6 +788,9 @@ Supported source forms:
 - `asm aarch64(T, "template", operands...)`
 - `asm volatile x86(...)`, `asm volatile x64(...)`,
   `asm volatile aarch64(...)`
+- `asm x86("module assembly");` at module scope
+- `asm x64("module assembly");` at module scope
+- `asm aarch64("module assembly");` at module scope
 
 Examples:
 
@@ -802,6 +805,19 @@ fn main() -> i32 {
     }
     return 1;
 }
+```
+
+Module assembly defines labels, sections, and entry code without a generated
+MLang function wrapper. Multiline strings can contain the assembly directly:
+
+```mla
+asm x86(".code16
+.section .boot,\"ax\",@progbits
+.globl _start
+_start:
+    cli
+    hlt
+");
 ```
 
 ```mla
@@ -829,6 +845,8 @@ Constraints:
   `--target-arch x86`, `--target-arch x64`, or `--target-arch aarch64`.
 - The compiler reports an error if the inline asm architecture qualifier does
   not match the active target architecture.
+- Module assembly is allowed only at top level, always requires an architecture
+  qualifier, and has no operands or result type.
 
 Reference examples in the repository:
 - `examples/inline_asm_x64_demo.mla`
@@ -837,6 +855,7 @@ Reference examples in the repository:
 - `examples/inline_asm_aarch64_hello_demo.mla`
 - `examples/inline_asm_x64_data_hello_demo.mla`
 - `examples/inline_asm_aarch64_data_hello_demo.mla`
+- `examples/qemu_x86_bootloader/boot.mla`
 
 ## `main` Return Type Defaulting
 

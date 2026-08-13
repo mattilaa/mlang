@@ -113,6 +113,8 @@ PAGES: list[Page] = [
     Page(Path("docs/language_syntax.md"), "Language Syntax", "Language-Syntax", "Language"),
     Page(Path("docs/quick_guide.md"), "Quick Guide", "Quick-Guide", "Language"),
     Page(Path("docs/examples.md"), "Examples", "Examples", "Examples"),
+    Page(Path("examples/qemu_x86_bootloader/README.md"), "MLang QEMU x86 Bootloader Example", "QEMU-x86-Bootloader-Example", "Examples"),
+    Page(Path("examples/qemu_aarch64_bootloader/README.md"), "MLang QEMU AArch64 Boot Example", "QEMU-AArch64-Boot-Example", "Examples"),
     Page(Path("docs/uml_ui_generator.md"), "UML UI Generator", "UML-UI-Generator", "Examples"),
     Page(Path("examples/uml_ui_generator/README.md"), "UML UI Generator Example", "UML-UI-Generator-Example", "Examples"),
     Page(Path("docs/stdlib_changes_2026-03-13.md"), "Stdlib Changes 2026-03-13", "Stdlib-Changes-2026-03-13", "Standard Library"),
