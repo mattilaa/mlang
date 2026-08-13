@@ -140,6 +140,7 @@ ASTNode* mla_ast_cexpr_if_statement(ASTNode* condition, ASTNode* then_branch,
                                     ASTNode* else_branch);
 ASTNode* mla_ast_inline_asm(ASTNode* type, char* asm_text, char* arch_name,
                             ASTNode* args, int is_volatile, int line);
+ASTNode* mla_ast_module_asm(char* asm_text, char* arch_name, int line);
 ASTNode* mla_ast_update_expression(int kind, int is_prefix, ASTNode* operand, int line);
 ASTNode* mla_ast_tuple_literal(ASTNode* elements);
 ASTNode* mla_ast_tuple_access(ASTNode* tuple, int index, int line);

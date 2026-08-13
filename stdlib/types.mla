@@ -221,6 +221,9 @@
 /// `asm volatile(type, "...", operands...)` when side effects must be preserved.
 /// Arch-qualified forms such as `asm aarch64(...)`, `asm x64(...)`, and
 /// `asm x86(...)` require the matching `--target-arch` compilation target.
+/// At module scope, `asm x86("...");` emits assembly outside any function.
+/// Module assembly requires an architecture qualifier and has no operands or
+/// result value. It is intended for freestanding entry and platform code.
 
 // @builtin x86
 /// Inline assembly architecture qualifier for 32-bit x86 targets.

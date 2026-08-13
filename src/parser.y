@@ -1624,6 +1624,7 @@ ASTNode* mla_ast_literal_double(float value);
 ASTNode* mla_ast_literal_string(char* value);
 ASTNode* mla_ast_inline_asm(ASTNode* type, char* asm_text, char* arch_name,
                             ASTNode* args, int is_volatile, int line);
+ASTNode* mla_ast_module_asm(char* asm_text, char* arch_name, int line);
 ASTNode* create_identifier(char* name);
 ASTNode* create_identifier_line(char* name, int line);
 ASTNode* create_identifier_at(char* name, int line, int col);
@@ -1914,6 +1915,7 @@ enum UpdatePosition
 %token INLINE_NEVER_ATTR
 
 %type <ast> program top_level_list top_level_item test_function_def
+%type <ast> module_asm_declaration
 %type <ast> inline_function_def
 %type <ast> arch_gated_function_def arch_gated_test_function_def arch_gated_inline_function_def
 %type <ast> type_alias_def namespace_block namespace_alias_def
@@ -1996,6 +1998,12 @@ top_level_item
     | impl_block
     | cexpr_declaration
     | global_var_statement
+    | module_asm_declaration
+    ;
+
+module_asm_declaration
+    : ASM IDENTIFIER LPAREN STRING_LITERAL RPAREN SEMICOLON
+        { $$ = mla_ast_module_asm($4, $2, yylineno); }
     ;
 
 module_path

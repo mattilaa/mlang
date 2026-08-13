@@ -121,6 +121,10 @@ ASTNode* create_program_impl(ASTNode* top_level_list)
         {
             program->traitDefs.push_back(traitDef);
         }
+        else if(auto* moduleAsm = dynamic_cast<ModuleAsmNode*>(item))
+        {
+            program->moduleAsms.push_back(moduleAsm);
+        }
     }
 
     return program;
@@ -501,6 +505,16 @@ ASTNode* create_inline_asm_impl(ASTNode* type, char* asm_text, char* arch_name,
         auto* argList = static_cast<ArgumentListNode*>(args);
         node->arguments = argList->args;
     }
+    return node;
+}
+
+ASTNode* create_module_asm_impl(char* asm_text, char* arch_name, int line)
+{
+    auto* node = new ModuleAsmNode(asm_text ? std::string(asm_text)
+                                            : std::string(),
+                                   arch_name ? std::string(arch_name)
+                                             : std::string());
+    node->line = line;
     return node;
 }
 
@@ -1979,6 +1993,11 @@ std::string InlineAsmNode::toString() const
     return result;
 }
 
+std::string ModuleAsmNode::toString() const
+{
+    return "asm " + requiredArch + "(\"" + asmTemplate + "\");";
+}
+
 std::string FunctionCallNode::toString() const
 {
     std::string result = name + "(";
@@ -2313,6 +2332,10 @@ std::string StructInitNode::toString() const
 std::string ProgramNode::toString() const
 {
     std::string result;
+    for(const auto& moduleAsm : moduleAsms)
+    {
+        result += moduleAsm->toString() + "\n";
+    }
     for(const auto& mod : modules)
     {
         result += mod->toString() + "\n";
