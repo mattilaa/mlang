@@ -108,13 +108,13 @@ fn print_usage(program: str8) -> void {
 }
 
 fn run_inherit(program: str8, args: list<str8>) -> i32 {
-    let cr: Result<Child, str8> = spawn_inherit(program, args);
+    let cr: result<Child, str8> = spawn_inherit(program, args);
     if (cr.is_err()) {
         eprintln!("failed to spawn '{}': {}", program, cr.unwrap_err());
         return 1;
     }
     let child: Child = cr.unwrap();
-    let wr: Result<ExitStatus, str8> = child.wait();
+    let wr: result<ExitStatus, str8> = child.wait();
     if (wr.is_err()) {
         eprintln!("wait failed for '{}': {}", program, wr.unwrap_err());
         child.close();
@@ -128,13 +128,13 @@ fn run_inherit(program: str8, args: list<str8>) -> i32 {
     return st.code();
 }
 
-fn run_capture_stdout(program: str8, args: list<str8>) -> Result<str8, str8> {
-    let cr: Result<Child, str8> = spawn(program, args);
+fn run_capture_stdout(program: str8, args: list<str8>) -> result<str8, str8> {
+    let cr: result<Child, str8> = spawn(program, args);
     if (cr.is_err()) {
         return Err<str8, str8>(format!("failed to spawn '{}': {}", program, cr.unwrap_err()));
     }
     let child: Child = cr.unwrap();
-    let or: Result<ChildStdout, str8> = child.stdout();
+    let or: result<ChildStdout, str8> = child.stdout();
     if (or.is_err()) {
         child.close();
         return Err<str8, str8>("failed to capture stdout");
@@ -144,7 +144,7 @@ fn run_capture_stdout(program: str8, args: list<str8>) -> Result<str8, str8> {
     var buf: str8 = String::with_capacity(4096);
     var text: str8 = String::new();
     for _i in 0..8192 {
-        let rr: Result<i64, str8> = out.read(buf, 4096);
+        let rr: result<i64, str8> = out.read(buf, 4096);
         if (rr.is_err()) {
             out.close();
             child.close();
@@ -160,7 +160,7 @@ fn run_capture_stdout(program: str8, args: list<str8>) -> Result<str8, str8> {
     out.close();
     String::free(buf);
 
-    let wr: Result<ExitStatus, str8> = child.wait();
+    let wr: result<ExitStatus, str8> = child.wait();
     if (wr.is_err()) {
         child.close();
         return Err<str8, str8>("wait failed");
@@ -420,7 +420,7 @@ fn ensure_stdlib_link_args(args: list<str8>, backend: str8) -> list<str8> {
 
 fn collect_dir_mla_files(path: str8) -> list<str8> {
     let cmd: str8 = format!("find {} -maxdepth 1 -type f -name '*.mla' | sort", shell_quote(path));
-    let rr: Result<str8, str8> = run_capture_stdout("/bin/sh", ["-c", cmd]);
+    let rr: result<str8, str8> = run_capture_stdout("/bin/sh", ["-c", cmd]);
     if rr.is_err() {
         return [];
     }
@@ -456,7 +456,7 @@ fn abspath(path: str8) -> str8 {
     }
     if len(trim(dir)) == 0 { dir = "."; }
     let cmd: str8 = format!("cd {} && pwd", shell_quote(dir));
-    let rr: Result<str8, str8> = run_capture_stdout("/bin/sh", ["-c", cmd]);
+    let rr: result<str8, str8> = run_capture_stdout("/bin/sh", ["-c", cmd]);
     if rr.is_err() {
         return dir;
     }
@@ -506,7 +506,7 @@ fn unquote(s: str8) -> str8 {
 }
 
 fn parse_module_paths_from_toml(manifest: str8) -> list<str8> {
-    let rr: Result<str8, str8> = read_all_text(manifest);
+    let rr: result<str8, str8> = read_all_text(manifest);
     if rr.is_err() {
         return [];
     }
@@ -571,7 +571,7 @@ fn find_manifest_path(start_dir: str8) -> str8 {
 }
 
 fn getenv_value(name: str8) -> str8 {
-    let rr: Result<str8, str8> = run_capture_stdout("/usr/bin/printenv", [name]);
+    let rr: result<str8, str8> = run_capture_stdout("/usr/bin/printenv", [name]);
     if rr.is_err() {
         return String::new();
     }
@@ -854,7 +854,7 @@ fn is_test_or_bench_mode_only_flag(a: str8) -> i32 {
 }
 
 fn file_has_test_attr(path: str8) -> i32 {
-    let rr: Result<str8, str8> = read_all_text(path);
+    let rr: result<str8, str8> = read_all_text(path);
     if rr.is_err() {
         return 0;
     }

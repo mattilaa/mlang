@@ -6,7 +6,7 @@ and Rust that are most useful in practice into one language.
 The project goal is straightforward:
 - C-style directness and native interop
 - C++-style zero-cost abstractions, templates/generics, and low-level control
-- Rust-inspired safety features such as explicit ownership, `Result`, `Option`,
+- Rust-inspired safety features such as explicit ownership, `result`, `option`,
   `match`, bounds checks, and stronger compile-time diagnostics
 
 This documentation is split into a small guided entry path and deeper reference
@@ -24,7 +24,7 @@ where you want:
 
 Examples of supported language/runtime features include:
 - structs, enums, generics, modules, and `alias` / `use type` aliases
-- `Option<T>`, `Result<T, E>`, `match`, and functional pipe `|>`
+- `option<T>`, `result<T, E>`, `match`, and functional pipe `|>`
 - exceptions with `throw` and `try/catch`
 - RAII-style scope cleanup
 - `switch` / `case`
@@ -116,7 +116,7 @@ examples, see the example programs in the repository such as:
 MLang is not only a thin C wrapper. It also includes language features intended
 to make low-level code safer and easier to reason about:
 
-- `Result<T, E>` and `Option<T>`
+- `result<T, E>` and `option<T>`
 - `match`
 - bounds checks for strings and lists
 - RAII-style cleanup on scope exit

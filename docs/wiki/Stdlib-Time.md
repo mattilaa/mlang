@@ -23,7 +23,7 @@ Module file: `stdlib/std/time.mla`
 - `NS` nanoseconds
 
 ### timer
-- `timer::after(timeout_ms: i64) -> Result<timer, str8>`
+- `timer::after(timeout_ms: i64) -> result<timer, str8>`
 - `timer::reset(self: timer, timeout_ms: i64) -> i32`
 - `timer::elapsed(self: timer) -> i32`
 - `timer::remaining_ms(self: timer) -> i64`

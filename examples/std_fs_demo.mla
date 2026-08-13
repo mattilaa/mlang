@@ -8,7 +8,7 @@ use std::fs::BufReader;
 use std::fs::File;
 use std::fs::free_lines;
 
-fn run_demo() -> Result<i32, str8> {
+fn run_demo() -> result<i32, str8> {
     let f: File = File::open("foo.txt")?;
     let reader: BufReader = BufReader::new(f);
     let lines: list<str8> = reader.lines();
@@ -22,7 +22,7 @@ fn run_demo() -> Result<i32, str8> {
 }
 
 fn main() -> i32 {
-    let rc: Result<i32, str8> = run_demo();
+    let rc: result<i32, str8> = run_demo();
     if rc.is_ok(): {
         return rc.unwrap();
     }

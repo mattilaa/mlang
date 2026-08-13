@@ -51,7 +51,7 @@ fn consumer_thread(queue_handle: i64) -> i32 {
 fn post_event(q: LockFreeQueue, ev: Event) -> i32 {
     let payload: str8 = encode_event(ev);
     for _i in 0..2000000 {
-        let sr: Result<i32, str8> = q.try_send(payload);
+        let sr: result<i32, str8> = q.try_send(payload);
         if sr.is_err(): {
             eprintln!("[producer] send error: {}", sr.unwrap_err());
             return 1;
@@ -68,14 +68,14 @@ fn post_event(q: LockFreeQueue, ev: Event) -> i32 {
 }
 
 fn main() -> i32 {
-    let qr: Result<LockFreeQueue, str8> = LockFreeQueue::new(4);
+    let qr: result<LockFreeQueue, str8> = LockFreeQueue::new(4);
     if qr.is_err(): {
         eprintln!("queue new failed: {}", qr.unwrap_err());
         return 1;
     }
     let q: LockFreeQueue = qr.unwrap();
 
-    let h: Handle<Thread> = thread::spawn(consumer_thread, q.handle);
+    let h: std::thread::thread = thread::spawn(consumer_thread, q.handle);
 
     let events: list<Event> = [
         Event { id: 1, kind: "price-update", value: 42 },

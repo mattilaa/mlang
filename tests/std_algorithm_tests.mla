@@ -234,7 +234,7 @@ fn test_algorithm_rand_namespace_reproducible() {
 
 #[test]
 fn test_algorithm_regex_namespace_basic() {
-    let rr: Result<Regex, str8> = Regex::compile("([A-Za-z]+)-([0-9]+)");
+    let rr: result<Regex, str8> = Regex::compile("([A-Za-z]+)-([0-9]+)");
     verify(rr.is_err() == false);
     let re: Regex = rr.unwrap();
     let text: str8 = "user-42";

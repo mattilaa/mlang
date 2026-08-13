@@ -8,7 +8,7 @@ Module file: `stdlib/std/regex.mla`
 - `regex`
 
 ### Compile / lifetime
-- `regex::compile(pattern: str8) -> Result<regex, str8>`
+- `regex::compile(pattern: str8) -> result<regex, str8>`
 - `regex::close(self: regex) -> i32`
 
 ### Matching

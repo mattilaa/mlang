@@ -64,7 +64,7 @@ impl PcmAudio {
     /// @brief Decode a mono/stereo 16-bit PCM WAV, AIFF, or AIFF-C file.
     ///
     /// Paths beginning with `~/` are expanded using the current home directory.
-    pub fn load(path: str8) -> Result<PcmAudio, str8> {
+    pub fn load(path: str8) -> result<PcmAudio, str8> {
         let h: i64 = __mlang_std_audio_pcm_load(path);
         if h == 0 {
             return Err<PcmAudio, str8>(last_error());
@@ -100,7 +100,7 @@ impl PcmAudio {
 
 impl PcmBlock {
     /// @brief Allocate a reusable zero-filled stereo block.
-    pub fn new(capacity_frames: i64) -> Result<PcmBlock, str8> {
+    pub fn new(capacity_frames: i64) -> result<PcmBlock, str8> {
         let h: i64 = __mlang_std_audio_pcm_block_new(capacity_frames);
         if h == 0 {
             return Err<PcmBlock, str8>(last_error());
@@ -131,7 +131,7 @@ impl PcmBlock {
 
 impl AudioDevice {
     /// @brief Open the default stereo output device.
-    pub fn open_default(client_name: str8) -> Result<AudioDevice, str8> {
+    pub fn open_default(client_name: str8) -> result<AudioDevice, str8> {
         let h: i64 = __mlang_std_audio_open_default_output(client_name);
         if h == 0 {
             return Err<AudioDevice, str8>(last_error());
@@ -145,7 +145,7 @@ impl AudioDevice {
     /// JACK2 uses the server sample rate and treats `buffer_frames` as a server
     /// buffer-size request; query `sample_rate()` and `buffer_frames()` after open
     /// for the actual values.
-    pub fn open_default_with_config(client_name: str8, sample_rate: i64, buffer_frames: i64) -> Result<AudioDevice, str8> {
+    pub fn open_default_with_config(client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<AudioDevice, str8> {
         let h: i64 = __mlang_std_audio_open_default_output_config(client_name, sample_rate, buffer_frames);
         if h == 0 {
             return Err<AudioDevice, str8>(last_error());
@@ -157,7 +157,7 @@ impl AudioDevice {
     ///
     /// Pass an id from `0..device_count()-1`; use `default_output_device_id()`
     /// to select the system default.
-    pub fn open(device_id: i64, client_name: str8) -> Result<AudioDevice, str8> {
+    pub fn open(device_id: i64, client_name: str8) -> result<AudioDevice, str8> {
         let h: i64 = __mlang_std_audio_open_output_device(device_id, client_name);
         if h == 0 {
             return Err<AudioDevice, str8>(last_error());
@@ -168,7 +168,7 @@ impl AudioDevice {
     /// @brief Open a selected output device with requested sample rate and latency buffer.
     ///
     /// `sample_rate <= 0` and `buffer_frames <= 0` use backend defaults.
-    pub fn open_with_config(device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> Result<AudioDevice, str8> {
+    pub fn open_with_config(device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<AudioDevice, str8> {
         let h: i64 = __mlang_std_audio_open_output_device_config(device_id, client_name, sample_rate, buffer_frames);
         if h == 0 {
             return Err<AudioDevice, str8>(last_error());
@@ -177,7 +177,7 @@ impl AudioDevice {
     }
 
     /// @brief Start audio processing.
-    pub fn start(self: AudioDevice) -> Result<i32, str8> {
+    pub fn start(self: AudioDevice) -> result<i32, str8> {
         let rc: i32 = __mlang_std_audio_start(self.handle);
         if rc != 0 {
             return Err<i32, str8>(last_error());
@@ -238,7 +238,7 @@ impl AudioDevice {
     /// into a preallocated native ring, or an error is returned when its length
     /// is odd or insufficient free frames are available. Queue initial blocks
     /// before `start()` and refill according to `pcm_available_frames()`.
-    pub fn queue_interleaved_f32(self: AudioDevice, samples: &list<f32>) -> Result<i64, str8> {
+    pub fn queue_interleaved_f32(self: AudioDevice, samples: &list<f32>) -> result<i64, str8> {
         let frames: i64 = __mlang_std_audio_queue_interleaved_f32(self.handle, samples);
         if frames < 0 {
             return Err<i64, str8>(last_error());
@@ -247,7 +247,7 @@ impl AudioDevice {
     }
 
     /// @brief Queue frames from a reusable preallocated stereo PCM block.
-    pub fn queue_pcm_block(self: AudioDevice, block: PcmBlock, frames: i64) -> Result<i64, str8> {
+    pub fn queue_pcm_block(self: AudioDevice, block: PcmBlock, frames: i64) -> result<i64, str8> {
         let queued: i64 = __mlang_std_audio_queue_pcm_block(self.handle, block.handle, frames);
         if queued < 0 {
             return Err<i64, str8>(last_error());
@@ -256,7 +256,7 @@ impl AudioDevice {
     }
 
     /// @brief Play a built-in stereo sine tone through the output stream.
-    pub fn play_sine(self: AudioDevice, frequency_hz: f64, gain: f64, duration_ms: i64) -> Result<i32, str8> {
+    pub fn play_sine(self: AudioDevice, frequency_hz: f64, gain: f64, duration_ms: i64) -> result<i32, str8> {
         let rc: i32 = __mlang_std_audio_play_sine(self.handle, frequency_hz, gain, duration_ms);
         if rc != 0 {
             return Err<i32, str8>(last_error());

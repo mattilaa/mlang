@@ -11,6 +11,7 @@ use std::strbuf::contains;
 use std::sync::Channel;
 use std::testing::verify;
 use std::thread::join;
+use std::thread::atomic64;
 use std::time::sleep_ms;
 
 fn wait_mutex_slot(value: i64, write: i32) -> i64 {
@@ -76,7 +77,7 @@ fn set_shared_wait_group(mutex_handle: i64, cond_handle: i64, count: i64) -> voi
 }
 
 fn shared_wait_group() -> WaitGroup {
-    let count: Handle<Atomic64> = wait_count_slot(0, 0);
+    let count: atomic64 = atomic64 { raw: wait_count_slot(0, 0) };
     return WaitGroup {
         mutex_handle: wait_mutex_slot(0, 0),
         cond_handle: wait_cond_slot(0, 0),
@@ -91,7 +92,7 @@ fn set_shared_ordered_gate(mutex_handle: i64, cond_handle: i64, turn: i64) -> vo
 }
 
 fn shared_ordered_gate() -> OrderedGate {
-    let turn: Handle<Atomic64> = gate_turn_slot(0, 0);
+    let turn: atomic64 = atomic64 { raw: gate_turn_slot(0, 0) };
     return OrderedGate {
         mutex_handle: gate_mutex_slot(0, 0),
         cond_handle: gate_cond_slot(0, 0),
@@ -110,48 +111,47 @@ fn shared_channel() -> Channel {
 fn wg_worker(delay_ms: i64) -> i32 {
     sleep_ms(delay_ms);
     let wg: WaitGroup = shared_wait_group();
-    let dr: Result<i64, str8> = wg.done();
+    let dr: result<i64, str8> = wg.done();
     return dr.is_err() ? 1 : 0;
 }
 
 fn gate_worker(turn: i64, delay_ms: i64) -> i32 {
     sleep_ms(delay_ms);
     let gate: OrderedGate = shared_ordered_gate();
-    let ch: Channel = shared_channel();
     let wg: WaitGroup = shared_wait_group();
-    let wr: Result<i32, str8> = gate.wait_for(turn);
+    let wr: result<i32, str8> = gate.wait_for(turn);
     if wr.is_err(): {
         let _ = wg.done();
         return 1;
     }
-    let sr: Result<i32, str8> = ch.send(format!("task-{}", turn));
+    let sr: result<i32, str8> = shared_channel().send(format!("task-{}", turn));
     if sr.is_err(): {
         let _ = wg.done();
         return 1;
     }
-    let ar: Result<i64, str8> = gate.advance();
+    let ar: result<i64, str8> = gate.advance();
     if ar.is_err(): {
         let _ = wg.done();
         return 1;
     }
-    let dr: Result<i64, str8> = wg.done();
+    let dr: result<i64, str8> = wg.done();
     return dr.is_err() ? 1 : 0;
 }
 
 fn test_wait_group_impl() -> i32 {
-    let wr: Result<WaitGroup, str8> = WaitGroup::new(3);
+    let wr: result<WaitGroup, str8> = WaitGroup::new(3);
     if wr.is_err(): { return 1; }
     let wg0: WaitGroup = wr.unwrap();
     let wg_mutex: i64 = wg0.mutex_handle;
     let wg_cond: i64 = wg0.cond_handle;
-    let wg_count: i64 = wg0.count;
+    let wg_count: i64 = wg0.count.raw;
     set_shared_wait_group(wg_mutex, wg_cond, wg_count);
 
-    let h1: Handle<Thread> = thread_spawn(wg_worker, 20);
-    let h2: Handle<Thread> = thread_spawn(wg_worker, 5);
-    let h3: Handle<Thread> = thread_spawn(wg_worker, 10);
+    let h1: std::thread::thread = thread::spawn(wg_worker, 20);
+    let h2: std::thread::thread = thread::spawn(wg_worker, 5);
+    let h3: std::thread::thread = thread::spawn(wg_worker, 10);
 
-    let wait_r: Result<i32, str8> = shared_wait_group().wait();
+    let wait_r: result<i32, str8> = shared_wait_group().wait();
     let rc1: i32 = join(h1);
     let rc2: i32 = join(h2);
     let rc3: i32 = join(h3);
@@ -169,9 +169,9 @@ fn test_wait_group() {
 }
 
 fn test_ordered_gate_impl() -> i32 {
-    let gr: Result<OrderedGate, str8> = OrderedGate::new(0);
-    let chr: Result<Channel, str8> = Channel::new(4);
-    let wgr: Result<WaitGroup, str8> = WaitGroup::new(3);
+    let gr: result<OrderedGate, str8> = OrderedGate::new(0);
+    let chr: result<Channel, str8> = Channel::new(4);
+    let wgr: result<WaitGroup, str8> = WaitGroup::new(3);
     if gr.is_err() || chr.is_err() || wgr.is_err(): { return 1; }
 
     let gate0: OrderedGate = gr.unwrap();
@@ -179,37 +179,36 @@ fn test_ordered_gate_impl() -> i32 {
     let wg0: WaitGroup = wgr.unwrap();
     let gate_mutex: i64 = gate0.mutex_handle;
     let gate_cond: i64 = gate0.cond_handle;
-    let gate_turn: i64 = gate0.turn;
+    let gate_turn: i64 = gate0.turn.raw;
     let ch_handle: i64 = ch0.handle;
     let wg_mutex: i64 = wg0.mutex_handle;
     let wg_cond: i64 = wg0.cond_handle;
-    let wg_count: i64 = wg0.count;
+    let wg_count: i64 = wg0.count.raw;
     set_shared_ordered_gate(gate_mutex, gate_cond, gate_turn);
     set_shared_channel(ch_handle);
     set_shared_wait_group(wg_mutex, wg_cond, wg_count);
 
-    let h1: Handle<Thread> = thread_spawn(gate_worker, 2, 5);
-    let h2: Handle<Thread> = thread_spawn(gate_worker, 0, 25);
-    let h3: Handle<Thread> = thread_spawn(gate_worker, 1, 10);
+    let h1: std::thread::thread = thread::spawn(gate_worker, 2, 5);
+    let h2: std::thread::thread = thread::spawn(gate_worker, 0, 25);
+    let h3: std::thread::thread = thread::spawn(gate_worker, 1, 10);
 
-    let wait_r: Result<i32, str8> = shared_wait_group().wait();
+    let wait_r: result<i32, str8> = shared_wait_group().wait();
     if wait_r.is_err(): {
         let _ = join(h1);
         let _ = join(h2);
         let _ = join(h3);
         let _ = shared_channel().close();
-        let _ = shared_channel().free();
         let _ = shared_ordered_gate().close();
         let _ = shared_wait_group().close();
         return 1;
     }
 
     var buf = String::with_capacity(64);
-    let r1: Result<i64, str8> = shared_channel().recv(buf, 64);
+    let r1: result<i64, str8> = shared_channel().recv(buf, 64);
     let ok1: i32 = r1.is_ok() && contains(buf, "task-0") == 1 ? 1 : 0;
-    let r2: Result<i64, str8> = shared_channel().recv(buf, 64);
+    let r2: result<i64, str8> = shared_channel().recv(buf, 64);
     let ok2: i32 = r2.is_ok() && contains(buf, "task-1") == 1 ? 1 : 0;
-    let r3: Result<i64, str8> = shared_channel().recv(buf, 64);
+    let r3: result<i64, str8> = shared_channel().recv(buf, 64);
     let ok3: i32 = r3.is_ok() && contains(buf, "task-2") == 1 ? 1 : 0;
 
     let rc1: i32 = join(h1);
@@ -219,7 +218,6 @@ fn test_ordered_gate_impl() -> i32 {
 
     String::free(buf);
     let _ = shared_channel().close();
-    let _ = shared_channel().free();
     let _ = shared_ordered_gate().close();
     let _ = shared_wait_group().close();
 

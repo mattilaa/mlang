@@ -11,9 +11,9 @@ Line-oriented logging helpers:
 
 Created loggers:
 - `Log::new() -> Log` creates a console-only logger.
-- `Log::with_output_path(path: str8) -> Result<Log, str8>` creates a logger
+- `Log::with_output_path(path: str8) -> result<Log, str8>` creates a logger
   with file forwarding defined up front.
-- `Log::with_options(path: str8, timestamps_enabled: i32) -> Result<Log, str8>`
+- `Log::with_options(path: str8, timestamps_enabled: i32) -> result<Log, str8>`
   creates a logger with file forwarding and timestamps defined up front.
 - `logger.out(msg)`, `logger.warn(msg)`, `logger.err(msg)`
 - `logger.set_output_path(path)`, `logger.reset_output_path()`,
@@ -55,7 +55,7 @@ mod std::log;
 use std::log::*;
 
 fn main() -> i32 {
-    let lr: Result<Log, str8> = Log::with_options("created.log", 1);
+    let lr: result<Log, str8> = Log::with_options("created.log", 1);
     if lr.is_err() { return 1; }
     let logger: Log = lr.unwrap();
     logger.out("this logger was created with a path and timestamps");

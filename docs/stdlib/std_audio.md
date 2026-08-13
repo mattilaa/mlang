@@ -24,22 +24,22 @@ Examples:
 - `device_count() -> i64`
 - `default_output_device_id() -> i64`
 - `device_name(device_id: i64) -> str8`
-- `pcm_audio::load(path: str8) -> Result<pcm_audio, str8>`
+- `pcm_audio::load(path: str8) -> result<pcm_audio, str8>`
 - `pcm_audio::sample_rate(self: pcm_audio) -> i64`
 - `pcm_audio::channels(self: pcm_audio) -> i64`
 - `pcm_audio::frame_count(self: pcm_audio) -> i64`
 - `pcm_audio::samples(self: pcm_audio) -> list<f32>`
 - `pcm_audio::close(self: pcm_audio) -> i32`
-- `pcm_block::new(capacity_frames: i64) -> Result<pcm_block, str8>`
+- `pcm_block::new(capacity_frames: i64) -> result<pcm_block, str8>`
 - `pcm_block::capacity_frames(self: pcm_block) -> i64`
 - `pcm_block::set_stereo(self: pcm_block, frame: i64, left: f32, right: f32) -> i32`
 - `pcm_block::clear(self: pcm_block) -> i32`
 - `pcm_block::close(self: pcm_block) -> i32`
-- `audio_device::open_default(client_name: str8) -> Result<audio_device, str8>`
-- `audio_device::open_default_with_config(client_name: str8, sample_rate: i64, buffer_frames: i64) -> Result<audio_device, str8>`
-- `audio_device::open(device_id: i64, client_name: str8) -> Result<audio_device, str8>`
-- `audio_device::open_with_config(device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> Result<audio_device, str8>`
-- `audio_device::start(self: audio_device) -> Result<i32, str8>`
+- `audio_device::open_default(client_name: str8) -> result<audio_device, str8>`
+- `audio_device::open_default_with_config(client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<audio_device, str8>`
+- `audio_device::open(device_id: i64, client_name: str8) -> result<audio_device, str8>`
+- `audio_device::open_with_config(device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<audio_device, str8>`
+- `audio_device::start(self: audio_device) -> result<i32, str8>`
 - `audio_device::stop(self: audio_device) -> i32`
 - `audio_device::close(self: audio_device) -> i32`
 - `audio_device::sample_rate(self: audio_device) -> i64`
@@ -49,9 +49,9 @@ Examples:
 - `audio_device::pcm_available_frames(self: audio_device) -> i64`
 - `audio_device::pcm_underrun_count(self: audio_device) -> i64`
 - `audio_device::clear_pcm_queue(self: audio_device) -> i32`
-- `audio_device::queue_interleaved_f32(self: audio_device, samples: &list<f32>) -> Result<i64, str8>`
-- `audio_device::queue_pcm_block(self: audio_device, block: pcm_block, frames: i64) -> Result<i64, str8>`
-- `audio_device::play_sine(self: audio_device, frequency_hz: f64, gain: f64, duration_ms: i64) -> Result<i32, str8>`
+- `audio_device::queue_interleaved_f32(self: audio_device, samples: &list<f32>) -> result<i64, str8>`
+- `audio_device::queue_pcm_block(self: audio_device, block: pcm_block, frames: i64) -> result<i64, str8>`
+- `audio_device::play_sine(self: audio_device, frequency_hz: f64, gain: f64, duration_ms: i64) -> result<i32, str8>`
 
 ### PCM queue
 

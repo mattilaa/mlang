@@ -2,13 +2,16 @@
 /// @ingroup examples
 /// \brief Spawning a single worker thread and joining it.
 ///
+mod std::thread;
+use std::thread::*;
+
 fn worker() -> void {
     println!("worker started");
 }
 
 fn main() -> i32 {
-    let handle: Handle<Thread> = thread_spawn(worker);
-    let status: i32 = thread_join(handle);
+    let handle: std::thread::thread = thread::spawn(worker);
+    let status: i32 = std::thread::join(handle);
     println!("join status = {}", status);
     return 0;
 }

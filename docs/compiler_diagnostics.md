@@ -113,7 +113,7 @@ Discouraged plain `if` / `else-if` colon syntax.
 Discouraged plain `while` colon syntax.
 
 ### `MLANG-W0003`
-`Result.unwrap()` may panic and should usually be replaced with safer handling.
+`result.unwrap()` may panic and should usually be replaced with safer handling.
 
 ### `MLANG-W0004`
 Empty block warning.

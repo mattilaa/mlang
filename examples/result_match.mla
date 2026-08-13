@@ -1,8 +1,8 @@
 /// \file result_match.mla
 /// @ingroup examples
-/// \brief Pattern matching on Result<T,E> branches.
+/// \brief Pattern matching on result<T,E> branches.
 ///
-fn div(a: i32, b: i32) -> Result<i32, str8> {
+fn div(a: i32, b: i32) -> result<i32, str8> {
     if b == 0: {
         return Err<i32, str8>("divide by zero");
     }
@@ -10,7 +10,7 @@ fn div(a: i32, b: i32) -> Result<i32, str8> {
 }
 
 fn main() -> i32 {
-    let r: Result<i32, str8> = div(10, 2);
+    let r: result<i32, str8> = div(10, 2);
     let v: i32 = match r { Ok(x) => x, Err(e) => 0 };
     let w: i32 = match 1 + 1 { 1 => 10, 2 => 20, _ => 0 };
     let n: i32 = 2;

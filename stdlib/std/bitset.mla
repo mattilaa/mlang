@@ -26,7 +26,7 @@ pub fn last_error() -> str8 {
 
 impl BitSet {
     /// @brief Create bitset with reserved capacity in bits.
-    pub fn new(bit_capacity: i64) -> Result<BitSet, str8> {
+    pub fn new(bit_capacity: i64) -> result<BitSet, str8> {
         let h: i64 = __mlang_std_bitset_new(bit_capacity);
         if h == 0 {
             return Err<BitSet, str8>(last_error());
@@ -70,7 +70,7 @@ impl BitSet {
     }
 
     /// @brief Read bit at index (`Err` on out-of-range).
-    pub fn get(self: BitSet, index: i64) -> Result<bool, str8> {
+    pub fn get(self: BitSet, index: i64) -> result<bool, str8> {
         let v: i32 = __mlang_std_bitset_get(self.handle, index);
         if v < 0 {
             return Err<bool, str8>(last_error());
@@ -80,7 +80,7 @@ impl BitSet {
 
     /// @brief Fast read for hot loops. Returns `0` or `1`, or `-1` on invalid index.
     ///
-    /// Unlike `get()`, this avoids `Result` construction and error string handling.
+    /// Unlike `get()`, this avoids `result` construction and error string handling.
     pub fn get_fast(self: BitSet, index: i64) -> i32 {
         return __mlang_std_bitset_get_fast(self.handle, index);
     }
@@ -97,7 +97,7 @@ impl BitSet {
     }
 
     /// @brief Remove and return last bit (`Err` on empty).
-    pub fn pop(self: BitSet) -> Result<bool, str8> {
+    pub fn pop(self: BitSet) -> result<bool, str8> {
         let v: i32 = __mlang_std_bitset_pop(self.handle);
         if v < 0 {
             return Err<bool, str8>(last_error());

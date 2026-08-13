@@ -43,7 +43,7 @@ fn handle_client(client_id: i64, stream_handle: i64, rounds: i64) -> i32 {
     let fmt: str8 = "MM/DD/YYYY:HH:MM:SS.MS";
     var last_rx_ms: i64 = -1;
     for i in 0..rounds {
-        let rf: Result<ProtocolFrame, str8> = recv(stream_handle, 2048, default_max_payload_bytes());
+        let rf: result<ProtocolFrame, str8> = recv(stream_handle, 2048, default_max_payload_bytes());
         if rf.is_err() {
             println!("SERVER_CLIENT_ERROR id={} phase=recv err={}", client_id, rf.unwrap_err());
             close(stream_handle);
@@ -74,7 +74,7 @@ fn handle_client(client_id: i64, stream_handle: i64, rounds: i64) -> i32 {
 
         String::free(req.payload);
 
-        let sr: Result<i64, str8> = send(stream_handle, reply_opcode, reply_payload);
+        let sr: result<i64, str8> = send(stream_handle, reply_opcode, reply_payload);
         let tx_ts: str8 = format_local(fmt);
         println!(
             "{} SERVER_TX: id={} round={} opcode={}",
@@ -102,14 +102,14 @@ fn accept_spawn_join(listener: TcpListener, next_id: i64, remaining: i64, rounds
         return 0;
     }
 
-    let ar: Result<TcpStream, str8> = listener.accept();
+    let ar: result<TcpStream, str8> = listener.accept();
     if ar.is_err() {
         println!("SERVER_ACCEPT_ERROR id={} err={}", next_id, ar.unwrap_err());
         return 1;
     }
 
     let stream: TcpStream = ar.unwrap();
-    let worker_stream_r: Result<TcpStream, str8> = stream.try_clone();
+    let worker_stream_r: result<TcpStream, str8> = stream.try_clone();
     if worker_stream_r.is_err() {
         println!("SERVER_CLONE_ERROR id={} err={}", next_id, worker_stream_r.unwrap_err());
         stream.close();
@@ -117,7 +117,7 @@ fn accept_spawn_join(listener: TcpListener, next_id: i64, remaining: i64, rounds
     }
 
     let worker_stream: TcpStream = worker_stream_r.unwrap();
-    let h: Handle<Thread> = thread_spawn(handle_client, next_id, worker_stream.raw_handle(), rounds);
+    let h: std::thread::thread = thread::spawn(handle_client, next_id, worker_stream.raw_handle(), rounds);
     stream.close();
 
     let rest_rc: i32 = accept_spawn_join(listener, next_id + 1, remaining - 1, rounds);
@@ -133,14 +133,14 @@ fn accept_spawn_join(listener: TcpListener, next_id: i64, remaining: i64, rounds
 }
 
 fn run_server(port: i64, clients: i64, rounds: i64) -> i32 {
-    let lr: Result<TcpListener, str8> = TcpListener::bind("127.0.0.1", port);
+    let lr: result<TcpListener, str8> = TcpListener::bind("127.0.0.1", port);
     if lr.is_err() {
         println!("SERVER_BIND_ERROR err={}", lr.unwrap_err());
         return 1;
     }
 
     let listener: TcpListener = lr.unwrap();
-    let br: Result<i32, str8> = listener.set_backlog(128);
+    let br: result<i32, str8> = listener.set_backlog(128);
     if br.is_err() {
         println!("SERVER_BACKLOG_ERROR err={}", br.unwrap_err());
         listener.close();

@@ -65,17 +65,17 @@ pub struct image_info {
   Return the last backend error string.  Useful when a call has already
   returned an `Err` and you want to read the raw message separately.
 
-- `probe(path: str8) -> Result<image_info, str8>`
+- `probe(path: str8) -> result<image_info, str8>`
   Decode only the image header to retrieve dimensions.  Does not
   load pixel data.  Returns `Err` with a description on failure.
 
-- `render_truecolor(path: str8, columns: i64, rows: i64) -> Result<str8, str8>`
+- `render_truecolor(path: str8, columns: i64, rows: i64) -> result<str8, str8>`
   Render `path` to a truecolor terminal string using
   `image_glyph_mode::UpperHalfBlocks`.  `columns` and `rows` are terminal
   cell counts, not source image pixels.  Aspect ratio is preserved;
   the image is letterboxed if the cell ratio does not match the source.
 
-- `render_truecolor_with_mode(path: str8, columns: i64, rows: i64, glyph_mode: image_glyph_mode) -> Result<str8, str8>`
+- `render_truecolor_with_mode(path: str8, columns: i64, rows: i64, glyph_mode: image_glyph_mode) -> result<str8, str8>`
   Same as `render_truecolor` but lets you choose the glyph packing mode.
   Returns `Err("... columns and rows must be > 0")` when either dimension
   is zero or negative.

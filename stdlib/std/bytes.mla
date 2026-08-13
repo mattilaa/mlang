@@ -30,7 +30,7 @@ pub fn last_error() -> str8 {
 
 impl Bytes {
     /// @brief Create an empty byte buffer with initial capacity.
-    pub fn new(initial_capacity: i64) -> Result<Bytes, str8> {
+    pub fn new(initial_capacity: i64) -> result<Bytes, str8> {
         let h: i64 = __mlang_std_bytes_new(initial_capacity);
         if h == 0 {
             return Err<Bytes, str8>(last_error());
@@ -39,7 +39,7 @@ impl Bytes {
     }
 
     /// @brief Build a byte buffer from UTF-8 string bytes.
-    pub fn from_string(s: str8) -> Result<Bytes, str8> {
+    pub fn from_string(s: str8) -> result<Bytes, str8> {
         let h: i64 = __mlang_std_bytes_from_string(s);
         if h == 0 {
             return Err<Bytes, str8>(last_error());

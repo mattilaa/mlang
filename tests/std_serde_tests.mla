@@ -67,21 +67,21 @@ struct VecEnvelope {
 };
 
 impl BinarySerde for EnvelopeMeta {
-    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8> {
+    fn serialize(self: &mut Self, out_handle: i64) -> result<i32, str8> {
         let out: Binary = Binary { handle: out_handle };
-        let w1: Result<i32, str8> = out.write_i32(self.version);
+        let w1: result<i32, str8> = out.write_i32(self.version);
         if w1.is_err() { return Err<i32, str8>(w1.unwrap_err()); }
-        let w2: Result<i32, str8> = out.write_string(self.tag);
+        let w2: result<i32, str8> = out.write_string(self.tag);
         if w2.is_err() { return Err<i32, str8>(w2.unwrap_err()); }
         return Ok<i32, str8>(0);
     }
 
-    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8> {
+    fn deserialize(self: &mut Self, input_handle: i64) -> result<i32, str8> {
         let input: Reader = Reader { handle: input_handle };
-        let r1: Result<i32, str8> = input.read_i32();
+        let r1: result<i32, str8> = input.read_i32();
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
         self.version = r1.unwrap();
-        let r2: Result<str8, str8> = input.read_string();
+        let r2: result<str8, str8> = input.read_string();
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
         self.tag = r2.unwrap();
         return Ok<i32, str8>(0);
@@ -89,26 +89,26 @@ impl BinarySerde for EnvelopeMeta {
 }
 
 impl BinarySerde for SensorSample {
-    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8> {
+    fn serialize(self: &mut Self, out_handle: i64) -> result<i32, str8> {
         let out: Binary = Binary { handle: out_handle };
-        let w1: Result<i32, str8> = out.write_i64(self.ts_ns);
+        let w1: result<i32, str8> = out.write_i64(self.ts_ns);
         if w1.is_err() { return Err<i32, str8>(w1.unwrap_err()); }
-        let w2: Result<i32, str8> = out.write_f64(self.value);
+        let w2: result<i32, str8> = out.write_f64(self.value);
         if w2.is_err() { return Err<i32, str8>(w2.unwrap_err()); }
-        let w3: Result<i32, str8> = out.write_bool(self.ok);
+        let w3: result<i32, str8> = out.write_bool(self.ok);
         if w3.is_err() { return Err<i32, str8>(w3.unwrap_err()); }
         return Ok<i32, str8>(0);
     }
 
-    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8> {
+    fn deserialize(self: &mut Self, input_handle: i64) -> result<i32, str8> {
         let input: Reader = Reader { handle: input_handle };
-        let r1: Result<i64, str8> = input.read_i64();
+        let r1: result<i64, str8> = input.read_i64();
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
         self.ts_ns = r1.unwrap();
-        let r2: Result<f64, str8> = input.read_f64();
+        let r2: result<f64, str8> = input.read_f64();
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
         self.value = r2.unwrap();
-        let r3: Result<bool, str8> = input.read_bool();
+        let r3: result<bool, str8> = input.read_bool();
         if r3.is_err() { return Err<i32, str8>(r3.unwrap_err()); }
         self.ok = r3.unwrap();
         return Ok<i32, str8>(0);
@@ -116,21 +116,21 @@ impl BinarySerde for SensorSample {
 }
 
 impl BinarySerde for EngineFlags {
-    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8> {
+    fn serialize(self: &mut Self, out_handle: i64) -> result<i32, str8> {
         let out: Binary = Binary { handle: out_handle };
-        let w1: Result<i32, str8> = out.write_bool(self.safe_mode);
+        let w1: result<i32, str8> = out.write_bool(self.safe_mode);
         if w1.is_err() { return Err<i32, str8>(w1.unwrap_err()); }
-        let w2: Result<i32, str8> = out.write_bool(self.armed);
+        let w2: result<i32, str8> = out.write_bool(self.armed);
         if w2.is_err() { return Err<i32, str8>(w2.unwrap_err()); }
         return Ok<i32, str8>(0);
     }
 
-    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8> {
+    fn deserialize(self: &mut Self, input_handle: i64) -> result<i32, str8> {
         let input: Reader = Reader { handle: input_handle };
-        let r1: Result<bool, str8> = input.read_bool();
+        let r1: result<bool, str8> = input.read_bool();
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
         self.safe_mode = r1.unwrap();
-        let r2: Result<bool, str8> = input.read_bool();
+        let r2: result<bool, str8> = input.read_bool();
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
         self.armed = r2.unwrap();
         return Ok<i32, str8>(0);
@@ -138,22 +138,22 @@ impl BinarySerde for EngineFlags {
 }
 
 impl BinarySerde for ControlBlock {
-    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8> {
-        let r1: Result<i32, str8> = self.flags.serialize(out_handle);
+    fn serialize(self: &mut Self, out_handle: i64) -> result<i32, str8> {
+        let r1: result<i32, str8> = self.flags.serialize(out_handle);
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
 
         let out: Binary = Binary { handle: out_handle };
-        let r2: Result<i32, str8> = out.write_i32(self.gain);
+        let r2: result<i32, str8> = out.write_i32(self.gain);
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
         return Ok<i32, str8>(0);
     }
 
-    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8> {
-        let r1: Result<i32, str8> = self.flags.deserialize(input_handle);
+    fn deserialize(self: &mut Self, input_handle: i64) -> result<i32, str8> {
+        let r1: result<i32, str8> = self.flags.deserialize(input_handle);
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
 
         let input: Reader = Reader { handle: input_handle };
-        let r2: Result<i32, str8> = input.read_i32();
+        let r2: result<i32, str8> = input.read_i32();
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
         self.gain = r2.unwrap();
         return Ok<i32, str8>(0);
@@ -161,38 +161,38 @@ impl BinarySerde for ControlBlock {
 }
 
 impl BinarySerde for DemoPacket {
-    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8> {
+    fn serialize(self: &mut Self, out_handle: i64) -> result<i32, str8> {
         let out: Binary = Binary { handle: out_handle };
-        let w1: Result<i32, str8> = out.write_i32(self.id);
+        let w1: result<i32, str8> = out.write_i32(self.id);
         if w1.is_err() { return Err<i32, str8>(w1.unwrap_err()); }
 
-        let w2: Result<i32, str8> = out.write_string(self.name);
+        let w2: result<i32, str8> = out.write_string(self.name);
         if w2.is_err() { return Err<i32, str8>(w2.unwrap_err()); }
 
-        let w3: Result<i32, str8> = out.write_bool(self.enabled);
+        let w3: result<i32, str8> = out.write_bool(self.enabled);
         if w3.is_err() { return Err<i32, str8>(w3.unwrap_err()); }
 
-        let w4: Result<i32, str8> = out.write_i64(self.score);
+        let w4: result<i32, str8> = out.write_i64(self.score);
         if w4.is_err() { return Err<i32, str8>(w4.unwrap_err()); }
 
         return Ok<i32, str8>(0);
     }
 
-    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8> {
+    fn deserialize(self: &mut Self, input_handle: i64) -> result<i32, str8> {
         let input: Reader = Reader { handle: input_handle };
-        let r1: Result<i32, str8> = input.read_i32();
+        let r1: result<i32, str8> = input.read_i32();
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
         self.id = r1.unwrap();
 
-        let r2: Result<str8, str8> = input.read_string();
+        let r2: result<str8, str8> = input.read_string();
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
         self.name = r2.unwrap();
 
-        let r3: Result<bool, str8> = input.read_bool();
+        let r3: result<bool, str8> = input.read_bool();
         if r3.is_err() { return Err<i32, str8>(r3.unwrap_err()); }
         self.enabled = r3.unwrap();
 
-        let r4: Result<i64, str8> = input.read_i64();
+        let r4: result<i64, str8> = input.read_i64();
         if r4.is_err() { return Err<i32, str8>(r4.unwrap_err()); }
         self.score = r4.unwrap();
 
@@ -201,35 +201,35 @@ impl BinarySerde for DemoPacket {
 }
 
 impl BinarySerde for DeepNestedPacket {
-    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8> {
+    fn serialize(self: &mut Self, out_handle: i64) -> result<i32, str8> {
         let out: Binary = Binary { handle: out_handle };
-        let r1: Result<i32, str8> = out.write_i64(self.id);
+        let r1: result<i32, str8> = out.write_i64(self.id);
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
 
-        let r2: Result<i32, str8> = self.ctrl.serialize(out_handle);
+        let r2: result<i32, str8> = self.ctrl.serialize(out_handle);
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
 
-        let r3: Result<i32, str8> = self.sample.serialize(out_handle);
+        let r3: result<i32, str8> = self.sample.serialize(out_handle);
         if r3.is_err() { return Err<i32, str8>(r3.unwrap_err()); }
 
-        let r4: Result<i32, str8> = out.write_string(self.label);
+        let r4: result<i32, str8> = out.write_string(self.label);
         if r4.is_err() { return Err<i32, str8>(r4.unwrap_err()); }
         return Ok<i32, str8>(0);
     }
 
-    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8> {
+    fn deserialize(self: &mut Self, input_handle: i64) -> result<i32, str8> {
         let input: Reader = Reader { handle: input_handle };
-        let r1: Result<i64, str8> = input.read_i64();
+        let r1: result<i64, str8> = input.read_i64();
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
         self.id = r1.unwrap();
 
-        let r2: Result<i32, str8> = self.ctrl.deserialize(input_handle);
+        let r2: result<i32, str8> = self.ctrl.deserialize(input_handle);
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
 
-        let r3: Result<i32, str8> = self.sample.deserialize(input_handle);
+        let r3: result<i32, str8> = self.sample.deserialize(input_handle);
         if r3.is_err() { return Err<i32, str8>(r3.unwrap_err()); }
 
-        let r4: Result<str8, str8> = input.read_string();
+        let r4: result<str8, str8> = input.read_string();
         if r4.is_err() { return Err<i32, str8>(r4.unwrap_err()); }
         self.label = r4.unwrap();
         return Ok<i32, str8>(0);
@@ -237,40 +237,40 @@ impl BinarySerde for DeepNestedPacket {
 }
 
 impl BinarySerde for MultiNestedPacket {
-    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8> {
-        let r1: Result<i32, str8> = self.meta.serialize(out_handle);
+    fn serialize(self: &mut Self, out_handle: i64) -> result<i32, str8> {
+        let r1: result<i32, str8> = self.meta.serialize(out_handle);
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
 
-        let r2: Result<i32, str8> = self.primary.serialize(out_handle);
+        let r2: result<i32, str8> = self.primary.serialize(out_handle);
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
 
-        let r3: Result<i32, str8> = self.backup.serialize(out_handle);
+        let r3: result<i32, str8> = self.backup.serialize(out_handle);
         if r3.is_err() { return Err<i32, str8>(r3.unwrap_err()); }
 
         let out: Binary = Binary { handle: out_handle };
-        let r4: Result<i32, str8> = out.write_i32(self.retries);
+        let r4: result<i32, str8> = out.write_i32(self.retries);
         if r4.is_err() { return Err<i32, str8>(r4.unwrap_err()); }
-        let r5: Result<i32, str8> = out.write_string(self.note);
+        let r5: result<i32, str8> = out.write_string(self.note);
         if r5.is_err() { return Err<i32, str8>(r5.unwrap_err()); }
 
         return Ok<i32, str8>(0);
     }
 
-    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8> {
-        let r1: Result<i32, str8> = self.meta.deserialize(input_handle);
+    fn deserialize(self: &mut Self, input_handle: i64) -> result<i32, str8> {
+        let r1: result<i32, str8> = self.meta.deserialize(input_handle);
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
 
-        let r2: Result<i32, str8> = self.primary.deserialize(input_handle);
+        let r2: result<i32, str8> = self.primary.deserialize(input_handle);
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
 
-        let r3: Result<i32, str8> = self.backup.deserialize(input_handle);
+        let r3: result<i32, str8> = self.backup.deserialize(input_handle);
         if r3.is_err() { return Err<i32, str8>(r3.unwrap_err()); }
 
         let input: Reader = Reader { handle: input_handle };
-        let r4: Result<i32, str8> = input.read_i32();
+        let r4: result<i32, str8> = input.read_i32();
         if r4.is_err() { return Err<i32, str8>(r4.unwrap_err()); }
         self.retries = r4.unwrap();
-        let r5: Result<str8, str8> = input.read_string();
+        let r5: result<str8, str8> = input.read_string();
         if r5.is_err() { return Err<i32, str8>(r5.unwrap_err()); }
         self.note = r5.unwrap();
 
@@ -279,22 +279,22 @@ impl BinarySerde for MultiNestedPacket {
 }
 
 impl BinarySerde for VecBucket {
-    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8> {
+    fn serialize(self: &mut Self, out_handle: i64) -> result<i32, str8> {
         let out: Binary = Binary { handle: out_handle };
-        let w1: Result<i32, str8> = out.write_list_i32(self.bins);
+        let w1: result<i32, str8> = out.write_list_i32(self.bins);
         if w1.is_err() { return Err<i32, str8>(w1.unwrap_err()); }
-        let w2: Result<i32, str8> = out.write_list_bool(self.marks);
+        let w2: result<i32, str8> = out.write_list_bool(self.marks);
         if w2.is_err() { return Err<i32, str8>(w2.unwrap_err()); }
         return Ok<i32, str8>(0);
     }
 
-    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8> {
+    fn deserialize(self: &mut Self, input_handle: i64) -> result<i32, str8> {
         let input: Reader = Reader { handle: input_handle };
-        let b1: Result<list<i32>, str8> = input.read_list_i32();
+        let b1: result<list<i32>, str8> = input.read_list_i32();
         if b1.is_err() { return Err<i32, str8>(b1.unwrap_err()); }
         self.bins = b1.unwrap();
 
-        let b2: Result<list<bool>, str8> = input.read_list_bool();
+        let b2: result<list<bool>, str8> = input.read_list_bool();
         if b2.is_err() { return Err<i32, str8>(b2.unwrap_err()); }
         self.marks = b2.unwrap();
         return Ok<i32, str8>(0);
@@ -302,28 +302,28 @@ impl BinarySerde for VecBucket {
 }
 
 impl BinarySerde for VecEnvelope {
-    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8> {
+    fn serialize(self: &mut Self, out_handle: i64) -> result<i32, str8> {
         let out: Binary = Binary { handle: out_handle };
-        let w1: Result<i32, str8> = out.write_string(self.title);
+        let w1: result<i32, str8> = out.write_string(self.title);
         if w1.is_err() { return Err<i32, str8>(w1.unwrap_err()); }
-        let w2: Result<i32, str8> = out.write_list_i64(self.offsets);
+        let w2: result<i32, str8> = out.write_list_i64(self.offsets);
         if w2.is_err() { return Err<i32, str8>(w2.unwrap_err()); }
-        let w3: Result<i32, str8> = self.nested.serialize(out_handle);
+        let w3: result<i32, str8> = self.nested.serialize(out_handle);
         if w3.is_err() { return Err<i32, str8>(w3.unwrap_err()); }
         return Ok<i32, str8>(0);
     }
 
-    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8> {
+    fn deserialize(self: &mut Self, input_handle: i64) -> result<i32, str8> {
         let input: Reader = Reader { handle: input_handle };
-        let r1: Result<str8, str8> = input.read_string();
+        let r1: result<str8, str8> = input.read_string();
         if r1.is_err() { return Err<i32, str8>(r1.unwrap_err()); }
         self.title = r1.unwrap();
 
-        let r2: Result<list<i64>, str8> = input.read_list_i64();
+        let r2: result<list<i64>, str8> = input.read_list_i64();
         if r2.is_err() { return Err<i32, str8>(r2.unwrap_err()); }
         self.offsets = r2.unwrap();
 
-        let r3: Result<i32, str8> = self.nested.deserialize(input_handle);
+        let r3: result<i32, str8> = self.nested.deserialize(input_handle);
         if r3.is_err() { return Err<i32, str8>(r3.unwrap_err()); }
         return Ok<i32, str8>(0);
     }
@@ -331,57 +331,57 @@ impl BinarySerde for VecEnvelope {
 
 #[test]
 fn test_serde_primitive_roundtrip() {
-    let br: Result<Binary, str8> = Binary::new(0);
+    let br: result<Binary, str8> = Binary::new(0);
     verify(!br.is_err());
     let b: Binary = br.unwrap();
 
-    let w1: Result<i32, str8> = b.write_u8(255);
+    let w1: result<i32, str8> = b.write_u8(255);
     verify(!w1.is_err());
-    let w2: Result<i32, str8> = b.write_bool(true);
+    let w2: result<i32, str8> = b.write_bool(true);
     verify(!w2.is_err());
-    let w3: Result<i32, str8> = b.write_i32(-12345);
+    let w3: result<i32, str8> = b.write_i32(-12345);
     verify(!w3.is_err());
-    let w4: Result<i32, str8> = b.write_i64(1234567890123);
+    let w4: result<i32, str8> = b.write_i64(1234567890123);
     verify(!w4.is_err());
-    let w5: Result<i32, str8> = b.write_f32(1.5f);
+    let w5: result<i32, str8> = b.write_f32(1.5f);
     verify(!w5.is_err());
-    let w6: Result<i32, str8> = b.write_f64(2.25);
+    let w6: result<i32, str8> = b.write_f64(2.25);
     verify(!w6.is_err());
-    let w7: Result<i32, str8> = b.write_string("hello-serde");
+    let w7: result<i32, str8> = b.write_string("hello-serde");
     verify(!w7.is_err());
 
     let expected_len: i64 = 45;
     verify_eq(expected_len, b.len());
 
-    let rr: Result<Reader, str8> = b.to_reader();
+    let rr: result<Reader, str8> = b.to_reader();
     verify(!rr.is_err());
     let r: Reader = rr.unwrap();
 
-    let ur: Result<i32, str8> = r.read_u8();
+    let ur: result<i32, str8> = r.read_u8();
     verify(!ur.is_err());
     let u: i32 = ur.unwrap();
 
-    let bor: Result<bool, str8> = r.read_bool();
+    let bor: result<bool, str8> = r.read_bool();
     verify(!bor.is_err());
     let bo: bool = bor.unwrap();
 
-    let i32r: Result<i32, str8> = r.read_i32();
+    let i32r: result<i32, str8> = r.read_i32();
     verify(!i32r.is_err());
     let i32v: i32 = i32r.unwrap();
 
-    let i64r: Result<i64, str8> = r.read_i64();
+    let i64r: result<i64, str8> = r.read_i64();
     verify(!i64r.is_err());
     let i64v: i64 = i64r.unwrap();
 
-    let f32r: Result<f32, str8> = r.read_f32();
+    let f32r: result<f32, str8> = r.read_f32();
     verify(!f32r.is_err());
     let f32v: f32 = f32r.unwrap();
 
-    let f64r: Result<f64, str8> = r.read_f64();
+    let f64r: result<f64, str8> = r.read_f64();
     verify(!f64r.is_err());
     let f64v: f64 = f64r.unwrap();
 
-    let sr: Result<str8, str8> = r.read_string();
+    let sr: result<str8, str8> = r.read_string();
     verify(!sr.is_err());
     let s: str8 = sr.unwrap();
 
@@ -398,7 +398,7 @@ fn test_serde_primitive_roundtrip() {
     let zero_i64: i64 = 0;
     verify_eq(zero_i64, r.remaining());
 
-    let eof_read: Result<i32, str8> = r.read_u8();
+    let eof_read: result<i32, str8> = r.read_u8();
     verify(eof_read.is_err());
 
     r.close();
@@ -407,7 +407,7 @@ fn test_serde_primitive_roundtrip() {
 
 #[test]
 fn test_serde_custom_trait_roundtrip() {
-    let br: Result<Binary, str8> = Binary::new(64);
+    let br: result<Binary, str8> = Binary::new(64);
     verify(!br.is_err());
     let b: Binary = br.unwrap();
 
@@ -418,10 +418,10 @@ fn test_serde_custom_trait_roundtrip() {
         score: 987654321
     };
 
-    let sw: Result<i32, str8> = src.serialize(b.raw_handle());
+    let sw: result<i32, str8> = src.serialize(b.raw_handle());
     verify(!sw.is_err());
 
-    let rr: Result<Reader, str8> = b.to_reader();
+    let rr: result<Reader, str8> = b.to_reader();
     verify(!rr.is_err());
     let r: Reader = rr.unwrap();
 
@@ -432,7 +432,7 @@ fn test_serde_custom_trait_roundtrip() {
         score: 0
     };
 
-    let dr: Result<i32, str8> = dst.deserialize(r.raw_handle());
+    let dr: result<i32, str8> = dst.deserialize(r.raw_handle());
     verify(!dr.is_err());
 
     verify_eq_i32(42, dst.id);
@@ -450,30 +450,30 @@ fn test_serde_custom_trait_roundtrip() {
 fn test_serde_file_roundtrip() {
     let path: str8 = "/tmp/mlang_std_serde_roundtrip.bin";
 
-    let br: Result<Binary, str8> = Binary::new(16);
+    let br: result<Binary, str8> = Binary::new(16);
     verify(!br.is_err());
     let b: Binary = br.unwrap();
 
-    let w1: Result<i32, str8> = b.write_i32(77);
+    let w1: result<i32, str8> = b.write_i32(77);
     verify(!w1.is_err());
-    let w2: Result<i32, str8> = b.write_string("file-io");
+    let w2: result<i32, str8> = b.write_string("file-io");
     verify(!w2.is_err());
-    let wf: Result<i32, str8> = b.write_file(path);
+    let wf: result<i32, str8> = b.write_file(path);
     verify(!wf.is_err());
 
-    let br2: Result<Binary, str8> = Binary::from_file(path);
+    let br2: result<Binary, str8> = Binary::from_file(path);
     verify(!br2.is_err());
     let b2: Binary = br2.unwrap();
 
-    let rr: Result<Reader, str8> = b2.to_reader();
+    let rr: result<Reader, str8> = b2.to_reader();
     verify(!rr.is_err());
     let r: Reader = rr.unwrap();
 
-    let i32r: Result<i32, str8> = r.read_i32();
+    let i32r: result<i32, str8> = r.read_i32();
     verify(!i32r.is_err());
     verify_eq_i32(77, i32r.unwrap());
 
-    let sr: Result<str8, str8> = r.read_string();
+    let sr: result<str8, str8> = r.read_string();
     verify(!sr.is_err());
     let s: str8 = sr.unwrap();
     verify(eq(s, "file-io") == 1);
@@ -486,7 +486,7 @@ fn test_serde_file_roundtrip() {
 
 #[test]
 fn test_serde_multi_nested_struct_roundtrip() {
-    let br: Result<Binary, str8> = Binary::new(128);
+    let br: result<Binary, str8> = Binary::new(128);
     verify(!br.is_err());
     let b: Binary = br.unwrap();
 
@@ -509,10 +509,10 @@ fn test_serde_multi_nested_struct_roundtrip() {
         note: "nested-serde-ok"
     };
 
-    let sw: Result<i32, str8> = src.serialize(b.raw_handle());
+    let sw: result<i32, str8> = src.serialize(b.raw_handle());
     verify(!sw.is_err());
 
-    let rr: Result<Reader, str8> = b.to_reader();
+    let rr: result<Reader, str8> = b.to_reader();
     verify(!rr.is_err());
     let r: Reader = rr.unwrap();
 
@@ -535,7 +535,7 @@ fn test_serde_multi_nested_struct_roundtrip() {
         note: ""
     };
 
-    let dr: Result<i32, str8> = dst.deserialize(r.raw_handle());
+    let dr: result<i32, str8> = dst.deserialize(r.raw_handle());
     verify(!dr.is_err());
 
     verify_eq_i32(3, dst.meta.version);
@@ -557,7 +557,7 @@ fn test_serde_multi_nested_struct_roundtrip() {
 
 #[test]
 fn test_serde_three_level_nested_struct_roundtrip() {
-    let br: Result<Binary, str8> = Binary::new(128);
+    let br: result<Binary, str8> = Binary::new(128);
     verify(!br.is_err());
     let b: Binary = br.unwrap();
 
@@ -578,10 +578,10 @@ fn test_serde_three_level_nested_struct_roundtrip() {
         label: "three-level-ok"
     };
 
-    let sw: Result<i32, str8> = src.serialize(b.raw_handle());
+    let sw: result<i32, str8> = src.serialize(b.raw_handle());
     verify(!sw.is_err());
 
-    let rr: Result<Reader, str8> = b.to_reader();
+    let rr: result<Reader, str8> = b.to_reader();
     verify(!rr.is_err());
     let r: Reader = rr.unwrap();
 
@@ -602,7 +602,7 @@ fn test_serde_three_level_nested_struct_roundtrip() {
         label: ""
     };
 
-    let dr: Result<i32, str8> = dst.deserialize(r.raw_handle());
+    let dr: result<i32, str8> = dst.deserialize(r.raw_handle());
     verify(!dr.is_err());
 
     verify_eq(9001, dst.id);
@@ -621,7 +621,7 @@ fn test_serde_three_level_nested_struct_roundtrip() {
 
 #[test]
 fn test_serde_nested_struct_with_vectors_roundtrip() {
-    let br: Result<Binary, str8> = Binary::new(128);
+    let br: result<Binary, str8> = Binary::new(128);
     verify(!br.is_err());
     let b: Binary = br.unwrap();
 
@@ -634,10 +634,10 @@ fn test_serde_nested_struct_with_vectors_roundtrip() {
         }
     };
 
-    let sw: Result<i32, str8> = src.serialize(b.raw_handle());
+    let sw: result<i32, str8> = src.serialize(b.raw_handle());
     verify(!sw.is_err());
 
-    let rr: Result<Reader, str8> = b.to_reader();
+    let rr: result<Reader, str8> = b.to_reader();
     verify(!rr.is_err());
     let r: Reader = rr.unwrap();
 
@@ -650,7 +650,7 @@ fn test_serde_nested_struct_with_vectors_roundtrip() {
         }
     };
 
-    let dr: Result<i32, str8> = dst.deserialize(r.raw_handle());
+    let dr: result<i32, str8> = dst.deserialize(r.raw_handle());
     verify(!dr.is_err());
 
     verify(eq(dst.title, "vec-envelope") == 1);
@@ -665,18 +665,18 @@ fn test_serde_nested_struct_with_vectors_roundtrip() {
 
 #[test]
 fn test_serde_read_list_result_roundtrip() {
-    let br: Result<Binary, str8> = Binary::new(64);
+    let br: result<Binary, str8> = Binary::new(64);
     verify(!br.is_err());
     let b: Binary = br.unwrap();
 
-    let w: Result<i32, str8> = b.write_list_i64([11, 22, 33, 44]);
+    let w: result<i32, str8> = b.write_list_i64([11, 22, 33, 44]);
     verify(!w.is_err());
 
-    let rr: Result<Reader, str8> = b.to_reader();
+    let rr: result<Reader, str8> = b.to_reader();
     verify(!rr.is_err());
     let r: Reader = rr.unwrap();
 
-    let vals_r: Result<list<i64>, str8> = r.read_list_i64();
+    let vals_r: result<list<i64>, str8> = r.read_list_i64();
     verify(!vals_r.is_err());
     let vals: list<i64> = vals_r.unwrap();
     verify_eq(4, vals.len());
@@ -689,11 +689,11 @@ fn test_serde_read_list_result_roundtrip() {
 
 #[test]
 fn test_serde_bitset_roundtrip() {
-    let br: Result<Binary, str8> = Binary::new(32);
+    let br: result<Binary, str8> = Binary::new(32);
     verify(!br.is_err());
     let b: Binary = br.unwrap();
 
-    let bsr: Result<BitSet, str8> = BitSet::new(0);
+    let bsr: result<BitSet, str8> = BitSet::new(0);
     verify(!bsr.is_err());
     let bs: BitSet = bsr.unwrap();
     verify(bs.resize(11, false) == 0);
@@ -701,22 +701,22 @@ fn test_serde_bitset_roundtrip() {
     verify(bs.set(5, true) == 0);
     verify(bs.set(10, true) == 0);
 
-    let w: Result<i32, str8> = b.write_bitset(bs.raw_handle(), bs.len());
+    let w: result<i32, str8> = b.write_bitset(bs.raw_handle(), bs.len());
     verify(!w.is_err());
 
-    let rr: Result<Reader, str8> = b.to_reader();
+    let rr: result<Reader, str8> = b.to_reader();
     verify(!rr.is_err());
     let r: Reader = rr.unwrap();
 
-    let out_r: Result<BitSet, str8> = r.read_bitset();
+    let out_r: result<BitSet, str8> = r.read_bitset();
     verify(!out_r.is_err());
     let out: BitSet = out_r.unwrap();
 
     verify_eq(11, out.len());
     verify_eq(3, out.count_ones());
-    let v0: Result<bool, str8> = out.get(0);
-    let v5: Result<bool, str8> = out.get(5);
-    let v10: Result<bool, str8> = out.get(10);
+    let v0: result<bool, str8> = out.get(0);
+    let v5: result<bool, str8> = out.get(5);
+    let v10: result<bool, str8> = out.get(10);
     verify(!v0.is_err() && v0.unwrap());
     verify(!v5.is_err() && v5.unwrap());
     verify(!v10.is_err() && v10.unwrap());

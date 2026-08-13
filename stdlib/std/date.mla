@@ -92,7 +92,7 @@ pub fn local_offset() -> UtcOffset {
 /// @brief Load a named system timezone.
 ///
 /// Returns `Err` when the operating system does not know the timezone name.
-pub fn load_timezone(name: str8) -> Result<TimeZone, str8> {
+pub fn load_timezone(name: str8) -> result<TimeZone, str8> {
     if __mlang_std_date_timezone_valid(name) == 0 {
         return Err<TimeZone, str8>(format!("unknown timezone: {}", name));
     }

@@ -776,7 +776,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             return;
         }
 
-        llvm::Type* structType = getStructType(structRef->structName);
+        std::string resolvedStructName =
+            resolveVisibleStructName(structRef->structName);
+        llvm::Type* structType = getStructType(resolvedStructName);
         if(!structType)
         {
             reportError(node->line,
@@ -789,8 +791,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
-        structVariableTypes[node->name] = structRef->structName;
-        registerStructCleanupIfNeeded(node->name, structRef->structName);
+        structVariableTypes[node->name] = resolvedStructName;
+        registerStructCleanupIfNeeded(node->name, resolvedStructName);
         constantVariables.insert(node->name);
         return;
     }
@@ -1848,7 +1850,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             return;
         }
 
-        llvm::Type* structType = getStructType(structRef->structName);
+        std::string resolvedStructName =
+            resolveVisibleStructName(structRef->structName);
+        llvm::Type* structType = getStructType(resolvedStructName);
         if(!structType)
         {
             reportError(node->line,
@@ -1875,8 +1879,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
-        structVariableTypes[node->name] = structRef->structName;
-        registerStructCleanupIfNeeded(node->name, structRef->structName);
+        structVariableTypes[node->name] = resolvedStructName;
+        registerStructCleanupIfNeeded(node->name, resolvedStructName);
         return;
     }
 

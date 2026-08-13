@@ -25,7 +25,7 @@ def main() -> int:
             "use std::bitset::BitSet;\n"
             "\n"
             "fn main() -> i32 {\n"
-            "  let r: Result<BitSet, str8> = BitSet::new(8);\n"
+            "  let r: result<BitSet, str8> = BitSet::new(8);\n"
             "  let bs: BitSet = r.unwrap();\n"
             "  bs.\n"
             "  return 0;\n"

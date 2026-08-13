@@ -17,7 +17,7 @@ use std::fs::File;
 use std::fs::SeekFrom;
 
 fn print_file(path: str8) -> i32 {
-    let tr: Result<str8, str8> = read_all_text(path);
+    let tr: result<str8, str8> = read_all_text(path);
     if tr.is_err(): { println!("error: read failed"); return 1; }
     println!("{}", tr.unwrap());
     return 0;
@@ -29,7 +29,7 @@ fn main() -> i32 {
     // -- step 1: create with initial content ------------------------------
     // "STATUS:PENDING" is 14 bytes; "STATUS:" occupies bytes 0-6,
     // "PENDING" occupies bytes 7-13, so we can patch just those 7 bytes.
-    let cr: Result<File, str8> = File::create(path);
+    let cr: result<File, str8> = File::create(path);
     if cr.is_err(): { println!("error: create failed"); return 1; }
     var fc: File = cr.unwrap();
     fc.write_line("STATUS:PENDING");
@@ -40,7 +40,7 @@ fn main() -> i32 {
     if print_file(path) != 0: { return 1; }
 
     // -- step 2: append log entries ---------------------------------------
-    let ar: Result<File, str8> = File::append(path);
+    let ar: result<File, str8> = File::append(path);
     if ar.is_err(): { println!("error: append failed"); return 1; }
     var fa: File = ar.unwrap();
     fa.write_line("LOG:entry1");
@@ -53,13 +53,13 @@ fn main() -> i32 {
     // -- step 3: open_rw — patch STATUS field in-place -------------------
     // "STATUS:" is 7 bytes at offset 0, "PENDING" is 7 bytes at offset 7.
     // We overwrite those 7 bytes with "DONE   " (padded to same length).
-    let rwr: Result<File, str8> = File::open_rw(path);
+    let rwr: result<File, str8> = File::open_rw(path);
     if rwr.is_err(): { println!("error: open_rw failed"); return 1; }
     var frw: File = rwr.unwrap();
 
-    let sk: Result<i64, str8> = frw.seek(SeekFrom::start(7));
+    let sk: result<i64, str8> = frw.seek(SeekFrom::start(7));
     if sk.is_err(): { frw.close(); return 1; }
-    let pw: Result<i64, str8> = frw.write_bytes("DONE   ", 7);
+    let pw: result<i64, str8> = frw.write_bytes("DONE   ", 7);
     if pw.is_err(): { frw.close(); return 1; }
     frw.close();
 
@@ -67,10 +67,10 @@ fn main() -> i32 {
     if print_file(path) != 0: { return 1; }
 
     // -- step 4: show file size at each stage is sane --------------------
-    let fr: Result<File, str8> = File::open(path);
+    let fr: result<File, str8> = File::open(path);
     if fr.is_err(): { return 1; }
     var ff: File = fr.unwrap();
-    let sz_r: Result<i64, str8> = ff.size();
+    let sz_r: result<i64, str8> = ff.size();
     let sz: i64 = sz_r.unwrap();
     println!("final_size={}", sz);
     ff.close();

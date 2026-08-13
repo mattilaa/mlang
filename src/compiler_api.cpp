@@ -4284,11 +4284,11 @@ builtinMemberNames(std::string_view owner)
     {
         return kBitSet;
     }
-    if(owner == "Result")
+    if(owner == "result")
     {
         return kResult;
     }
-    if(owner == "Option")
+    if(owner == "option")
     {
         return kOption;
     }
@@ -4393,8 +4393,7 @@ static constexpr std::string_view kBuiltinCompletionLabels[] = {
     "void",   "bool",   "bit",    "i8",     "i16",    "i32",
     "i64",    "u8",     "u16",    "u32",    "u64",    "f32",
     "f64",    "str8",   "str16",  "list",   "map",    "tuple",
-    "ptr",    "Handle", "Thread", "Mutex",  "Atomic64",
-    "Result", "Option", "Ok",     "Err",    "Some",   "None",
+    "ptr",    "result", "option", "Ok",     "Err",    "Some",   "None",
     "array",  "size_of", "Vec",   "Span",  "span",
 };
 

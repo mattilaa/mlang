@@ -46,7 +46,7 @@ fn scalar_add_i64(lhs: &list<i64>, rhs: &list<i64>) -> list<i64> {
 }
 
 fn make_bitset(n: i64) -> BitSet {
-    let r: Result<BitSet, str8> = BitSet::new(n);
+    let r: result<BitSet, str8> = BitSet::new(n);
     verify(!r.is_err());
     let bits: BitSet = r.unwrap();
     verify(bits.resize(n, false) == 0);
@@ -68,25 +68,25 @@ fn scalar_count_ones(bits: BitSet) -> i64 {
     return total;
 }
 
-fn scalar_sum_worker(id: i64, total: Handle<Atomic64>) -> void {
+fn scalar_sum_worker(id: i64, total: std::thread::atomic64) -> void {
     let values: list<i64> = make_i64_values(1024, id);
     var checksum: i64 = 0;
     for _repeat in 0..16 {
         checksum = checksum + scalar_sum_i64(values);
     }
-    atomic_i64_add(total, checksum);
+    atomic_add_value(total, checksum);
 }
 
-fn simd_sum_worker(id: i64, total: Handle<Atomic64>) -> void {
+fn simd_sum_worker(id: i64, total: std::thread::atomic64) -> void {
     let values: list<i64> = make_i64_values(1024, id);
     var checksum: i64 = 0;
     for _repeat in 0..16 {
         checksum = checksum + sum(values);
     }
-    atomic_i64_add(total, checksum);
+    atomic_add_value(total, checksum);
 }
 
-fn scalar_add_worker(id: i64, total: Handle<Atomic64>) -> void {
+fn scalar_add_worker(id: i64, total: std::thread::atomic64) -> void {
     let lhs: list<i64> = make_i64_values(1024, id);
     let rhs: list<i64> = make_i64_values(1024, id + 2);
     var checksum: i64 = 0;
@@ -94,10 +94,10 @@ fn scalar_add_worker(id: i64, total: Handle<Atomic64>) -> void {
         let out: list<i64> = scalar_add_i64(lhs, rhs);
         checksum = checksum + scalar_sum_i64(out);
     }
-    atomic_i64_add(total, checksum);
+    atomic_add_value(total, checksum);
 }
 
-fn simd_add_worker(id: i64, total: Handle<Atomic64>) -> void {
+fn simd_add_worker(id: i64, total: std::thread::atomic64) -> void {
     let lhs: list<i64> = make_i64_values(1024, id);
     let rhs: list<i64> = make_i64_values(1024, id + 2);
     var checksum: i64 = 0;
@@ -105,79 +105,79 @@ fn simd_add_worker(id: i64, total: Handle<Atomic64>) -> void {
         let out: list<i64> = add(lhs, rhs);
         checksum = checksum + sum(out);
     }
-    atomic_i64_add(total, checksum);
+    atomic_add_value(total, checksum);
 }
 
-fn scalar_bitset_worker(id: i64, total: Handle<Atomic64>) -> void {
+fn scalar_bitset_worker(id: i64, total: std::thread::atomic64) -> void {
     let bits: BitSet = make_bitset(4096 + id);
     var checksum: i64 = 0;
     for _repeat in 0..8 {
         checksum = checksum + scalar_count_ones(bits);
     }
     bits.close();
-    atomic_i64_add(total, checksum);
+    atomic_add_value(total, checksum);
 }
 
-fn simd_bitset_worker(id: i64, total: Handle<Atomic64>) -> void {
+fn simd_bitset_worker(id: i64, total: std::thread::atomic64) -> void {
     let bits: BitSet = make_bitset(4096 + id);
     var checksum: i64 = 0;
     for _repeat in 0..8 {
         checksum = checksum + count_ones(bits);
     }
     bits.close();
-    atomic_i64_add(total, checksum);
+    atomic_add_value(total, checksum);
 }
 
-fn run_four(worker_id_base: i64, total: Handle<Atomic64>, kind: i64) -> i32 {
+fn run_four(worker_id_base: i64, total: std::thread::atomic64, kind: i64) -> i32 {
     if kind == 0 {
-        let h1: Handle<Thread> = thread_spawn(scalar_sum_worker, worker_id_base + 0, total);
-        let h2: Handle<Thread> = thread_spawn(scalar_sum_worker, worker_id_base + 1, total);
-        let h3: Handle<Thread> = thread_spawn(scalar_sum_worker, worker_id_base + 2, total);
-        let h4: Handle<Thread> = thread_spawn(scalar_sum_worker, worker_id_base + 3, total);
-        return thread_join(h1) + thread_join(h2) + thread_join(h3) + thread_join(h4);
+        let h1: std::thread::thread = thread::spawn(scalar_sum_worker, worker_id_base + 0, total);
+        let h2: std::thread::thread = thread::spawn(scalar_sum_worker, worker_id_base + 1, total);
+        let h3: std::thread::thread = thread::spawn(scalar_sum_worker, worker_id_base + 2, total);
+        let h4: std::thread::thread = thread::spawn(scalar_sum_worker, worker_id_base + 3, total);
+        return std::thread::join(h1) + std::thread::join(h2) + std::thread::join(h3) + std::thread::join(h4);
     }
     if kind == 1 {
-        let h1: Handle<Thread> = thread_spawn(simd_sum_worker, worker_id_base + 0, total);
-        let h2: Handle<Thread> = thread_spawn(simd_sum_worker, worker_id_base + 1, total);
-        let h3: Handle<Thread> = thread_spawn(simd_sum_worker, worker_id_base + 2, total);
-        let h4: Handle<Thread> = thread_spawn(simd_sum_worker, worker_id_base + 3, total);
-        return thread_join(h1) + thread_join(h2) + thread_join(h3) + thread_join(h4);
+        let h1: std::thread::thread = thread::spawn(simd_sum_worker, worker_id_base + 0, total);
+        let h2: std::thread::thread = thread::spawn(simd_sum_worker, worker_id_base + 1, total);
+        let h3: std::thread::thread = thread::spawn(simd_sum_worker, worker_id_base + 2, total);
+        let h4: std::thread::thread = thread::spawn(simd_sum_worker, worker_id_base + 3, total);
+        return std::thread::join(h1) + std::thread::join(h2) + std::thread::join(h3) + std::thread::join(h4);
     }
     if kind == 2 {
-        let h1: Handle<Thread> = thread_spawn(scalar_add_worker, worker_id_base + 0, total);
-        let h2: Handle<Thread> = thread_spawn(scalar_add_worker, worker_id_base + 1, total);
-        let h3: Handle<Thread> = thread_spawn(scalar_add_worker, worker_id_base + 2, total);
-        let h4: Handle<Thread> = thread_spawn(scalar_add_worker, worker_id_base + 3, total);
-        return thread_join(h1) + thread_join(h2) + thread_join(h3) + thread_join(h4);
+        let h1: std::thread::thread = thread::spawn(scalar_add_worker, worker_id_base + 0, total);
+        let h2: std::thread::thread = thread::spawn(scalar_add_worker, worker_id_base + 1, total);
+        let h3: std::thread::thread = thread::spawn(scalar_add_worker, worker_id_base + 2, total);
+        let h4: std::thread::thread = thread::spawn(scalar_add_worker, worker_id_base + 3, total);
+        return std::thread::join(h1) + std::thread::join(h2) + std::thread::join(h3) + std::thread::join(h4);
     }
     if kind == 3 {
-        let h1: Handle<Thread> = thread_spawn(simd_add_worker, worker_id_base + 0, total);
-        let h2: Handle<Thread> = thread_spawn(simd_add_worker, worker_id_base + 1, total);
-        let h3: Handle<Thread> = thread_spawn(simd_add_worker, worker_id_base + 2, total);
-        let h4: Handle<Thread> = thread_spawn(simd_add_worker, worker_id_base + 3, total);
-        return thread_join(h1) + thread_join(h2) + thread_join(h3) + thread_join(h4);
+        let h1: std::thread::thread = thread::spawn(simd_add_worker, worker_id_base + 0, total);
+        let h2: std::thread::thread = thread::spawn(simd_add_worker, worker_id_base + 1, total);
+        let h3: std::thread::thread = thread::spawn(simd_add_worker, worker_id_base + 2, total);
+        let h4: std::thread::thread = thread::spawn(simd_add_worker, worker_id_base + 3, total);
+        return std::thread::join(h1) + std::thread::join(h2) + std::thread::join(h3) + std::thread::join(h4);
     }
     if kind == 4 {
-        let h1: Handle<Thread> = thread_spawn(scalar_bitset_worker, worker_id_base + 0, total);
-        let h2: Handle<Thread> = thread_spawn(scalar_bitset_worker, worker_id_base + 1, total);
-        let h3: Handle<Thread> = thread_spawn(scalar_bitset_worker, worker_id_base + 2, total);
-        let h4: Handle<Thread> = thread_spawn(scalar_bitset_worker, worker_id_base + 3, total);
-        return thread_join(h1) + thread_join(h2) + thread_join(h3) + thread_join(h4);
+        let h1: std::thread::thread = thread::spawn(scalar_bitset_worker, worker_id_base + 0, total);
+        let h2: std::thread::thread = thread::spawn(scalar_bitset_worker, worker_id_base + 1, total);
+        let h3: std::thread::thread = thread::spawn(scalar_bitset_worker, worker_id_base + 2, total);
+        let h4: std::thread::thread = thread::spawn(scalar_bitset_worker, worker_id_base + 3, total);
+        return std::thread::join(h1) + std::thread::join(h2) + std::thread::join(h3) + std::thread::join(h4);
     }
-    let h1: Handle<Thread> = thread_spawn(simd_bitset_worker, worker_id_base + 0, total);
-    let h2: Handle<Thread> = thread_spawn(simd_bitset_worker, worker_id_base + 1, total);
-    let h3: Handle<Thread> = thread_spawn(simd_bitset_worker, worker_id_base + 2, total);
-    let h4: Handle<Thread> = thread_spawn(simd_bitset_worker, worker_id_base + 3, total);
-    return thread_join(h1) + thread_join(h2) + thread_join(h3) + thread_join(h4);
+    let h1: std::thread::thread = thread::spawn(simd_bitset_worker, worker_id_base + 0, total);
+    let h2: std::thread::thread = thread::spawn(simd_bitset_worker, worker_id_base + 1, total);
+    let h3: std::thread::thread = thread::spawn(simd_bitset_worker, worker_id_base + 2, total);
+    let h4: std::thread::thread = thread::spawn(simd_bitset_worker, worker_id_base + 3, total);
+    return std::thread::join(h1) + std::thread::join(h2) + std::thread::join(h3) + std::thread::join(h4);
 }
 
 fn bench_threaded_kind(kind: i64, expected: i64) -> void {
-    let total: Handle<Atomic64> = atomic_i64_new(0);
+    let total: std::thread::atomic64 = atomic_new(0);
     let rc: i32 = run_four(1, total, kind);
-    let checksum: i64 = atomic_i64_load(total);
+    let checksum: i64 = atomic_load_value(total);
     do_not_optimize_i64(checksum);
     clobber_memory();
-    atomic_i64_free(total);
+    atomic_free_handle(total);
     verify(rc == 0);
     verify(checksum == expected);
 }

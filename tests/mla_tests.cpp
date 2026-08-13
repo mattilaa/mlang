@@ -2355,7 +2355,7 @@ TEST_F(MLATest, DeriveJsonRoundTripsDerivedStructAndPropertyMetadata)
             leaf.name = String::from("ok");
 
             let text: str8 = leaf.to_json();
-            let decoded_r: Result<Leaf, str8> = Leaf::from_json(text);
+            let decoded_r: result<Leaf, str8> = Leaf::from_json(text);
             if decoded_r.is_err() {
                 return 11;
             }
@@ -2395,7 +2395,7 @@ TEST_F(MLATest, DeriveJsonMissingFieldReturnsErr)
         };
 
         fn main() -> i32 {
-            let parsed: Result<Packet, str8> =
+            let parsed: result<Packet, str8> =
                 Packet::from_json("{\"type\":\"Packet\",\"id\":5}");
             return parsed.is_err() ? 0 : 1;
         }
@@ -2485,7 +2485,7 @@ TEST_F(MLATest, ResultIsOkAndUnwrap)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let r: Result<i32, str8> = Ok<i32, str8>(123);
+            let r: result<i32, str8> = Ok<i32, str8>(123);
             if r.is_ok(): {
                 let v: i32 = r.unwrap();
                 println!("{}", v);
@@ -2502,7 +2502,7 @@ TEST_F(MLATest, ResultUnwrapWarns)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let r: Result<i32, str8> = Ok<i32, str8>(1);
+            let r: result<i32, str8> = Ok<i32, str8>(1);
             let v: i32 = r.unwrap();
             return v;
         }
@@ -2511,7 +2511,38 @@ TEST_F(MLATest, ResultUnwrapWarns)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 0);
-    EXPECT_NE(out.find("Result.unwrap() may panic"), std::string::npos);
+    EXPECT_NE(out.find("result.unwrap() may panic"), std::string::npos);
+}
+
+TEST_F(MLATest, UppercaseSumTypesAreNotBuiltins)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let r: Result<i32, str8> = Ok<i32, str8>(1);
+            let o: Option<i32> = Some<i32>(2);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("Result"), std::string::npos);
+}
+
+TEST_F(MLATest, LegacyRuntimeHandleTypesAreNotBuiltins)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let handle: Handle<Thread>;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("Handle"), std::string::npos);
 }
 
 TEST_F(MLATest, FloatModuloByZeroReportsError)
@@ -2967,10 +2998,12 @@ TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
 TEST_F(MLATest, OwnershipHandleFreeDoubleFreeReportsError)
 {
     std::string code = R"(
+        mod std::thread;
+
         fn main() -> i32 {
-            let a = atomic_i64_new(1);
-            atomic_i64_free(a);
-            atomic_i64_free(a);
+            let a: std::thread::atomic64 = std::thread::atomic_new(1);
+            std::thread::atomic_free_handle(a);
+            std::thread::atomic_free_handle(a);
             return 0;
         }
     )";

@@ -4599,10 +4599,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
     auto isResultType = [&](const std::string& typeName) -> bool
     {
-        if(typeName == "Result")
+        if(typeName == "result")
             return true;
         auto it = mangledToGenericName.find(typeName);
-        return it != mangledToGenericName.end() && it->second == "Result";
+        return it != mangledToGenericName.end() && it->second == "result";
     };
 
     auto loadStructField = [&](llvm::Value* basePtr,
@@ -4681,7 +4681,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(warnResultUnwrap)
             {
                 reportWarning(node->line, node->col,
-                              "Result.unwrap() may panic on Err; consider "
+                              "result.unwrap() may panic on Err; consider "
                               "match/is_ok/is_err");
             }
             return loadStructField(objPtr, structTypeName, "ok");
@@ -4719,7 +4719,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
        warnResultUnwrap)
     {
         reportWarning(node->line, node->col,
-                      "Result.unwrap() may panic on Err; consider "
+                      "result.unwrap() may panic on Err; consider "
                       "match/is_ok/is_err");
     }
 
@@ -5044,4 +5044,3 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     }
     return builder.CreateCall(callee, args, "methodcall");
 }
-

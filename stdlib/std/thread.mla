@@ -11,17 +11,31 @@
 ///   });
 ///   thread::join(handle);
 ///
-/// Spawn a named function (legacy):
-///   let handle = thread_spawn(my_fn);
+/// Spawn a named function:
+///   let handle = thread::spawn(my_fn);
 ///   thread::join(handle);
 ///
-/// Note: `thread_spawn(...)` is a compiler intrinsic also reachable via the
-/// `thread::spawn` qualified name when given a closure or function identifier.
+/// `thread::spawn` is compiler-lowered when given a closure or function
+/// identifier. The returned handle is owned by this stdlib module.
 
-/// \cond INTERNAL_IMPORTS
-mod std::thread::detail;
-use std::thread::detail::*;
-/// \endcond
+/// @brief Owned native thread handle.
+pub struct thread {
+    var raw: i64;
+};
+
+/// @brief Owned native 64-bit atomic handle.
+pub struct atomic64 {
+    var raw: i64;
+};
+
+// Private compiler intrinsics exchange raw handles. Public APIs wrap them in
+// stdlib-owned types so no compiler marker types leak into application code.
+extern fn thread_join(raw: i64) -> i32;
+extern fn atomic_i64_new(initial: i64) -> i64;
+extern fn atomic_i64_load(raw: i64) -> i64;
+extern fn atomic_i64_store(raw: i64, value: i64) -> i64;
+extern fn atomic_i64_add(raw: i64, delta: i64) -> i64;
+extern fn atomic_i64_free(raw: i64) -> void;
 
 /// @brief Spawn a thread from a closure/function pointer.
 ///
@@ -29,59 +43,36 @@ use std::thread::detail::*;
 /// to documented stdlib source.
 ///
 /// Note: this is a compiler intrinsic declaration (not a C FFI binding).
-extern pub fn spawn(fn_ptr: ptr<void>) -> Handle<Thread>;
+extern pub fn spawn(fn_ptr: ptr<void>) -> thread;
 
 /// @brief Join a spawned thread handle.
 /// Returns thread exit status.
-pub fn join(handle: Handle<Thread>) -> i32 {
-    return thread_join(handle);
-}
-
-/// @brief Create a new mutex handle.
-pub fn mutex_new() -> Handle<Mutex> {
-    return mutex_create();
-}
-
-/// @brief Lock a mutex.
-/// Returns `0` on success.
-pub fn mutex_lock_handle(handle: Handle<Mutex>) -> i32 {
-    return mutex_lock(handle);
-}
-
-/// @brief Unlock a mutex.
-/// Returns `0` on success.
-pub fn mutex_unlock_handle(handle: Handle<Mutex>) -> i32 {
-    return mutex_unlock(handle);
-}
-
-/// @brief Destroy a mutex.
-/// Returns `0` on success.
-pub fn mutex_free(handle: Handle<Mutex>) -> i32 {
-    return mutex_destroy(handle);
+pub fn join(handle: thread) -> i32 {
+    return thread_join(handle.raw);
 }
 
 /// @brief Create a 64-bit atomic counter.
-pub fn atomic_new(initial: i64) -> Handle<Atomic64> {
-    return atomic_i64_new(initial);
+pub fn atomic_new(initial: i64) -> atomic64 {
+    return atomic64 { raw: atomic_i64_new(initial) };
 }
 
 /// @brief Load atomic value.
-pub fn atomic_load_value(handle: Handle<Atomic64>) -> i64 {
-    return atomic_i64_load(handle);
+pub fn atomic_load_value(handle: &atomic64) -> i64 {
+    return atomic_i64_load(handle.raw);
 }
 
 /// @brief Store atomic value and return stored value.
-pub fn atomic_store_value(handle: Handle<Atomic64>, value: i64) -> i64 {
-    return atomic_i64_store(handle, value);
+pub fn atomic_store_value(handle: &atomic64, value: i64) -> i64 {
+    return atomic_i64_store(handle.raw, value);
 }
 
 /// @brief Add `delta` to atomic value.
 /// Returns the previous value.
-pub fn atomic_add_value(handle: Handle<Atomic64>, delta: i64) -> i64 {
-    return atomic_i64_add(handle, delta);
+pub fn atomic_add_value(handle: &atomic64, delta: i64) -> i64 {
+    return atomic_i64_add(handle.raw, delta);
 }
 
 /// @brief Free atomic handle.
-pub fn atomic_free_handle(handle: Handle<Atomic64>) -> void {
-    atomic_i64_free(handle);
+pub fn atomic_free_handle(handle: atomic64) -> void {
+    atomic_i64_free(handle.raw);
 }

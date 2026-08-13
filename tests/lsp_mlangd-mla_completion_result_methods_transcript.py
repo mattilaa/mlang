@@ -30,7 +30,7 @@ def main() -> int:
         doc = root / "result_completion.mla"
         text = (
             "fn main() -> i32 {\n"
-            "  let r: Result<i32, str8> = Ok<i32, str8>(7);\n"
+            "  let r: result<i32, str8> = Ok<i32, str8>(7);\n"
             "  r.\n"
             "  return 0;\n"
             "}\n"
@@ -66,7 +66,7 @@ def main() -> int:
                     "position": {"line": line, "character": char},
                 },
             )
-            assert isinstance(res, list) and res, f"Result member completion should return items: {res!r}"
+            assert isinstance(res, list) and res, f"result member completion should return items: {res!r}"
 
             unwrap_item = find_item(res, "unwrap")
             is_err_item = find_item(res, "is_err")
@@ -93,7 +93,7 @@ def main() -> int:
         finally:
             client.close()
 
-    print("PASS: mlangd-mla completion transcript includes cached Result methods")
+    print("PASS: mlangd-mla completion transcript includes cached result methods")
     return 0
 
 

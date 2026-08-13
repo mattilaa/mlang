@@ -45,8 +45,8 @@ pub fn last_error() -> str8 {
 }
 
 /// @brief Connect to TCP endpoint and wrap as protocol stream handle.
-pub fn connect(addr: str8, port: i64) -> Result<i64, str8> {
-    let cr: Result<TcpStream, str8> = TcpStream::connect(addr, port);
+pub fn connect(addr: str8, port: i64) -> result<i64, str8> {
+    let cr: result<TcpStream, str8> = TcpStream::connect(addr, port);
     if cr.is_err() {
         return Err<i64, str8>(cr.unwrap_err());
     }
@@ -61,7 +61,7 @@ pub fn from_stream(stream: TcpStream) -> i64 {
 }
 
 /// @brief Send one framed message.
-pub fn send(stream_handle: i64, opcode: i32, payload: str8) -> Result<i64, str8> {
+pub fn send(stream_handle: i64, opcode: i32, payload: str8) -> result<i64, str8> {
     let n: i64 = __mlang_std_protocol_stream_write_text(stream_handle, opcode, payload);
     if n < 0 {
         return Err<i64, str8>(last_error());
@@ -71,7 +71,7 @@ pub fn send(stream_handle: i64, opcode: i32, payload: str8) -> Result<i64, str8>
 
 /// @brief Receive one framed message.
 /// Caller owns returned payload and should free via `String::free`.
-pub fn recv(stream_handle: i64, payload_capacity: i64, max_payload_bytes: i64) -> Result<ProtocolFrame, str8> {
+pub fn recv(stream_handle: i64, payload_capacity: i64, max_payload_bytes: i64) -> result<ProtocolFrame, str8> {
     var buf: str8 = String::with_capacity(payload_capacity);
     let n: i64 = __mlang_std_protocol_stream_read_text(
         stream_handle,

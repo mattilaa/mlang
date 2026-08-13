@@ -60,7 +60,7 @@ fn main() -> i32 {
         }
     }
 
-    let info_r: Result<ImageInfo, str8> = probe(image_path);
+    let info_r: result<ImageInfo, str8> = probe(image_path);
     if info_r.is_err(): {
         println!("probe failed: {}", info_r.unwrap_err());
         return 1;
@@ -69,7 +69,7 @@ fn main() -> i32 {
     println!("rendering {} ({}x{}) -> {}x{} cells", image_path, meta.width,
              meta.height, cols, rows);
 
-    let rendered_r: Result<str8, str8> = render_truecolor_with_mode(image_path,
+    let rendered_r: result<str8, str8> = render_truecolor_with_mode(image_path,
                                                                     cols,
                                                                     rows,
                                                                     mode);

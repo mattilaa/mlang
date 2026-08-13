@@ -101,7 +101,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     if selected_id >= 0 {
         println!("selected output: [{}] {}", selected_id, device_name(selected_id));
     }
-    let dev_r: Result<AudioDevice, str8> = selected_id >= 0
+    let dev_r: result<AudioDevice, str8> = selected_id >= 0
         ? AudioDevice::open_with_config(selected_id, "mlang_audio_simd_dsp", requested_sample_rate, requested_buffer_frames)
         : AudioDevice::open_default_with_config("mlang_audio_simd_dsp", requested_sample_rate, requested_buffer_frames);
     if dev_r.is_err() {
@@ -110,7 +110,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     let dev: AudioDevice = dev_r.unwrap();
 
-    let start_r: Result<i32, str8> = dev.start();
+    let start_r: result<i32, str8> = dev.start();
     if start_r.is_err() {
         println!("audio start failed: {}", start_r.unwrap_err());
         dev.close();
@@ -118,7 +118,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
 
     println!("sample_rate={} buffer_frames={}", dev.sample_rate(), dev.buffer_frames());
-    let tone_r: Result<i32, str8> = dev.play_sine(440.0, preview_gain, 650);
+    let tone_r: result<i32, str8> = dev.play_sine(440.0, preview_gain, 650);
     if tone_r.is_err() {
         println!("tone failed: {}", tone_r.unwrap_err());
         dev.close();

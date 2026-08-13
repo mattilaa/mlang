@@ -141,11 +141,11 @@ fn demo_logic_in_closure() -> void {
 fn demo_spawn_closure() -> void {
     println!("-- 6. thread::spawn with closure --");
 
-    let h1: Handle<Thread> = thread::spawn(|| {
+    let h1: std::thread::thread = thread::spawn(|| {
         println!("  [thread 1] hello from spawned closure!");
     });
 
-    let h2: Handle<Thread> = thread::spawn(|| {
+    let h2: std::thread::thread = thread::spawn(|| {
         var n: i32 = 0;
         for i in 1..4 {
             n += i;
@@ -166,7 +166,7 @@ fn demo_spawn_closure() -> void {
 fn demo_rust_style_spawn() -> void {
     println!("-- 7. Rust-style spawn pattern --");
 
-    let handle: Handle<Thread> = thread::spawn(|| {
+    let handle: std::thread::thread = thread::spawn(|| {
         for i in 1..4 {
             println!("  hi number {} from the spawned thread!", i);
         }

@@ -19,7 +19,7 @@ use std::strbuf::eq;
 use std::thread::join;
 
 fn run_client(id: i64, port: i64) -> i32 {
-    let c_r: Result<TcpStream, str8> = TcpStream::connect("127.0.0.1", port);
+    let c_r: result<TcpStream, str8> = TcpStream::connect("127.0.0.1", port);
     if c_r.is_err(): {
         println!("CLIENT_ERROR id={} err={}", id, c_r.unwrap_err());
         return 1;
@@ -27,7 +27,7 @@ fn run_client(id: i64, port: i64) -> i32 {
     let c: TcpStream = c_r.unwrap();
 
     let msg: str8 = format!("hello-{}", id);
-    let w: Result<i64, str8> = c.write(msg);
+    let w: result<i64, str8> = c.write(msg);
     if w.is_err(): {
         println!("CLIENT_ERROR id={} err={}", id, w.unwrap_err());
         c.close();
@@ -35,7 +35,7 @@ fn run_client(id: i64, port: i64) -> i32 {
     }
 
     var buf = String::with_capacity(256);
-    let r: Result<i64, str8> = c.read(buf, 256);
+    let r: result<i64, str8> = c.read(buf, 256);
     if r.is_err(): {
         println!("CLIENT_ERROR id={} err={}", id, r.unwrap_err());
         String::free(buf);
@@ -71,8 +71,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     parsed.free();
     ap.free();
 
-    let h1: Handle<Thread> = thread_spawn(run_client, 1, port);
-    let h2: Handle<Thread> = thread_spawn(run_client, 2, port);
+    let h1: std::thread::thread = thread::spawn(run_client, 1, port);
+    let h2: std::thread::thread = thread::spawn(run_client, 2, port);
     let rc1: i32 = join(h1);
     let rc2: i32 = join(h2);
 

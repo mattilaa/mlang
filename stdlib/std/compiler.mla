@@ -2,7 +2,7 @@
 /// \brief Incremental parse/query APIs for MLang tooling (std::compiler).
 ///
 /// This module exposes compiler session/document/query APIs to MLang code.
-/// It wraps the compiler C ABI with MLang-friendly handles and Result values.
+/// It wraps the compiler C ABI with MLang-friendly handles and result values.
 
 
 /// \cond INTERNAL_IMPORTS
@@ -112,7 +112,7 @@ pub fn last_error() -> str8 {
 }
 
 /// @brief Create a new compiler session.
-pub fn session_create() -> Result<Session, str8> {
+pub fn session_create() -> result<Session, str8> {
     let h: i64 = __mlang_std_compiler_session_create();
     if h == 0 {
         return Err<Session, str8>(last_error());
@@ -121,7 +121,7 @@ pub fn session_create() -> Result<Session, str8> {
 }
 
 /// @brief Create a new compiler session and return the raw handle.
-pub fn session_create_handle() -> Result<i64, str8> {
+pub fn session_create_handle() -> result<i64, str8> {
     let h: i64 = __mlang_std_compiler_session_create();
     if h == 0 {
         return Err<i64, str8>(last_error());
@@ -136,7 +136,7 @@ pub fn session_ref(handle: i64) -> SessionRef {
 
 impl Session {
     /// @brief Destroy compiler session and release associated document state.
-    pub fn destroy(self: Session) -> Result<i32, str8> {
+    pub fn destroy(self: Session) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_session_destroy(self.handle);
         if st != 0 {
             return Err<i32, str8>(last_error());
@@ -145,7 +145,7 @@ impl Session {
     }
 
     /// @brief Open or replace a document in this session.
-    pub fn open_document(self: Session, uri: str8, language_id: str8, text: str8, version: i32) -> Result<i32, str8> {
+    pub fn open_document(self: Session, uri: str8, language_id: str8, text: str8, version: i32) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_document_open(self.handle, uri, language_id, text, version);
         if st != 0 {
             return Err<i32, str8>(last_error());
@@ -154,7 +154,7 @@ impl Session {
     }
 
     /// @brief Replace full text for an already-open document, enforcing monotonic version.
-    pub fn change_document(self: Session, uri: str8, text: str8, version: i32) -> Result<i32, str8> {
+    pub fn change_document(self: Session, uri: str8, text: str8, version: i32) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_document_change(self.handle, uri, text, version);
         if st != 0 {
             return Err<i32, str8>(last_error());
@@ -163,7 +163,7 @@ impl Session {
     }
 
     /// @brief Close and forget a document in this session.
-    pub fn close_document(self: Session, uri: str8) -> Result<i32, str8> {
+    pub fn close_document(self: Session, uri: str8) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_document_close(self.handle, uri);
         if st != 0 {
             return Err<i32, str8>(last_error());
@@ -172,7 +172,7 @@ impl Session {
     }
 
     /// @brief Return number of syntax diagnostics for a document.
-    pub fn syntax_diagnostic_count(self: Session, uri: str8) -> Result<i32, str8> {
+    pub fn syntax_diagnostic_count(self: Session, uri: str8) -> result<i32, str8> {
         let count: i32 = __mlang_std_compiler_document_syntax_diagnostic_count(self.handle, uri);
         if count < 0 {
             return Err<i32, str8>(last_error());
@@ -181,7 +181,7 @@ impl Session {
     }
 
     /// @brief Fetch one syntax diagnostic by index.
-    pub fn syntax_diagnostic_get(self: Session, uri: str8, index: i32) -> Result<SyntaxDiagnostic, str8> {
+    pub fn syntax_diagnostic_get(self: Session, uri: str8, index: i32) -> result<SyntaxDiagnostic, str8> {
         let line: i32 = __mlang_std_compiler_document_syntax_diagnostic_line(self.handle, uri, index);
         if line < 0 {
             return Err<SyntaxDiagnostic, str8>(last_error());
@@ -202,7 +202,7 @@ impl Session {
     }
 
     /// @brief Return hover text at 1-based line/column.
-    pub fn hover(self: Session, uri: str8, line: i32, column: i32) -> Result<str8, str8> {
+    pub fn hover(self: Session, uri: str8, line: i32, column: i32) -> result<str8, str8> {
         let msg: str8 = __mlang_std_compiler_document_hover(self.handle, uri, line, column);
         if last_status() != 0 {
             return Err<str8, str8>(last_error());
@@ -211,7 +211,7 @@ impl Session {
     }
 
     /// @brief Return completion item count at 1-based line/column.
-    pub fn completion_count(self: Session, uri: str8, line: i32, column: i32) -> Result<i32, str8> {
+    pub fn completion_count(self: Session, uri: str8, line: i32, column: i32) -> result<i32, str8> {
         let count: i32 = __mlang_std_compiler_document_completion_count(self.handle, uri, line, column);
         if count < 0 {
             return Err<i32, str8>(last_error());
@@ -220,7 +220,7 @@ impl Session {
     }
 
     /// @brief Fetch completion item by index for 1-based line/column.
-    pub fn completion_get(self: Session, uri: str8, line: i32, column: i32, index: i32) -> Result<str8, str8> {
+    pub fn completion_get(self: Session, uri: str8, line: i32, column: i32, index: i32) -> result<str8, str8> {
         let item: str8 = __mlang_std_compiler_document_completion_get(self.handle, uri, line, column, index);
         if last_status() != 0 {
             return Err<str8, str8>(last_error());
@@ -229,7 +229,7 @@ impl Session {
     }
 
     /// @brief Return declared symbol count for a document.
-    pub fn document_symbol_count(self: Session, uri: str8) -> Result<i32, str8> {
+    pub fn document_symbol_count(self: Session, uri: str8) -> result<i32, str8> {
         let count: i32 = __mlang_std_compiler_document_symbol_count(self.handle, uri);
         if count < 0 {
             return Err<i32, str8>(last_error());
@@ -238,7 +238,7 @@ impl Session {
     }
 
     /// @brief Fetch one declared symbol by index.
-    pub fn document_symbol_get(self: Session, uri: str8, index: i32) -> Result<DocumentSymbol, str8> {
+    pub fn document_symbol_get(self: Session, uri: str8, index: i32) -> result<DocumentSymbol, str8> {
         let line: i32 = __mlang_std_compiler_document_symbol_line(self.handle, uri, index);
         if line < 0 {
             return Err<DocumentSymbol, str8>(last_error());
@@ -284,7 +284,7 @@ impl Session {
     }
 
     /// @brief Resolve definition for symbol under cursor (same document scope).
-    pub fn definition(self: Session, uri: str8, line: i32, column: i32) -> Result<DefinitionLocation, str8> {
+    pub fn definition(self: Session, uri: str8, line: i32, column: i32) -> result<DefinitionLocation, str8> {
         let def_line: i32 = __mlang_std_compiler_document_definition_line(self.handle, uri, line, column);
         if def_line < 0 {
             return Err<DefinitionLocation, str8>(last_error());
@@ -315,7 +315,7 @@ impl Session {
     }
 
     /// @brief Count references to symbol under cursor across loaded/workspace-resolved documents.
-    pub fn references_count(self: Session, uri: str8, line: i32, column: i32) -> Result<i32, str8> {
+    pub fn references_count(self: Session, uri: str8, line: i32, column: i32) -> result<i32, str8> {
         let count: i32 = __mlang_std_compiler_document_reference_count(self.handle, uri, line, column);
         if count < 0 {
             return Err<i32, str8>(last_error());
@@ -324,7 +324,7 @@ impl Session {
     }
 
     /// @brief Fetch one reference location by index.
-    pub fn reference_get(self: Session, uri: str8, line: i32, column: i32, index: i32) -> Result<ReferenceLocation, str8> {
+    pub fn reference_get(self: Session, uri: str8, line: i32, column: i32, index: i32) -> result<ReferenceLocation, str8> {
         let ref_line: i32 = __mlang_std_compiler_document_reference_line(self.handle, uri, line, column, index);
         if ref_line < 0 {
             return Err<ReferenceLocation, str8>(last_error());
@@ -345,7 +345,7 @@ impl Session {
     }
 
     /// @brief Resolve symbol under cursor with typed metadata and overload count.
-    pub fn resolve_symbol(self: Session, uri: str8, line: i32, column: i32) -> Result<ResolvedSymbol, str8> {
+    pub fn resolve_symbol(self: Session, uri: str8, line: i32, column: i32) -> result<ResolvedSymbol, str8> {
         let sym_line: i32 = __mlang_std_compiler_resolve_symbol_line(self.handle, uri, line, column);
         if sym_line < 0 {
             return Err<ResolvedSymbol, str8>(last_error());
@@ -401,7 +401,7 @@ impl Session {
     }
 
     /// @brief Conservative rename safety check (1 safe, 0 unsafe).
-    pub fn rename_is_safe(self: Session, uri: str8, line: i32, column: i32, new_name: str8) -> Result<i32, str8> {
+    pub fn rename_is_safe(self: Session, uri: str8, line: i32, column: i32, new_name: str8) -> result<i32, str8> {
         let safe: i32 = __mlang_std_compiler_document_rename_is_safe(self.handle, uri, line, column, new_name);
         if safe < 0 {
             return Err<i32, str8>(last_error());
@@ -410,7 +410,7 @@ impl Session {
     }
 
     /// @brief Warm semantic cache for a document + workspace graph rooted from it.
-    pub fn semantic_cache_warm(self: Session, uri: str8) -> Result<i32, str8> {
+    pub fn semantic_cache_warm(self: Session, uri: str8) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_semantic_cache_warm(self.handle, uri);
         if st != 0 {
             return Err<i32, str8>(last_error());
@@ -419,7 +419,7 @@ impl Session {
     }
 
     /// @brief Clear cached semantic snapshots for this session.
-    pub fn semantic_cache_clear(self: Session) -> Result<i32, str8> {
+    pub fn semantic_cache_clear(self: Session) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_semantic_cache_clear(self.handle);
         if st != 0 {
             return Err<i32, str8>(last_error());
@@ -430,7 +430,7 @@ impl Session {
 
 impl SessionRef {
     /// @brief Open or replace a document in this session.
-    pub fn open_document(self: SessionRef, uri: str8, language_id: str8, text: str8, version: i32) -> Result<i32, str8> {
+    pub fn open_document(self: SessionRef, uri: str8, language_id: str8, text: str8, version: i32) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_document_open(self.handle, uri, language_id, text, version);
         if st != 0 {
             return Err<i32, str8>(last_error());
@@ -439,7 +439,7 @@ impl SessionRef {
     }
 
     /// @brief Replace full text for an already-open document, enforcing monotonic version.
-    pub fn change_document(self: SessionRef, uri: str8, text: str8, version: i32) -> Result<i32, str8> {
+    pub fn change_document(self: SessionRef, uri: str8, text: str8, version: i32) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_document_change(self.handle, uri, text, version);
         if st != 0 {
             return Err<i32, str8>(last_error());
@@ -448,7 +448,7 @@ impl SessionRef {
     }
 
     /// @brief Close and forget a document in this session.
-    pub fn close_document(self: SessionRef, uri: str8) -> Result<i32, str8> {
+    pub fn close_document(self: SessionRef, uri: str8) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_document_close(self.handle, uri);
         if st != 0 {
             return Err<i32, str8>(last_error());
@@ -457,7 +457,7 @@ impl SessionRef {
     }
 
     /// @brief Return number of syntax diagnostics for a document.
-    pub fn syntax_diagnostic_count(self: SessionRef, uri: str8) -> Result<i32, str8> {
+    pub fn syntax_diagnostic_count(self: SessionRef, uri: str8) -> result<i32, str8> {
         let count: i32 = __mlang_std_compiler_document_syntax_diagnostic_count(self.handle, uri);
         if count < 0 {
             return Err<i32, str8>(last_error());
@@ -466,7 +466,7 @@ impl SessionRef {
     }
 
     /// @brief Fetch one syntax diagnostic by index.
-    pub fn syntax_diagnostic_get(self: SessionRef, uri: str8, index: i32) -> Result<SyntaxDiagnostic, str8> {
+    pub fn syntax_diagnostic_get(self: SessionRef, uri: str8, index: i32) -> result<SyntaxDiagnostic, str8> {
         let line: i32 = __mlang_std_compiler_document_syntax_diagnostic_line(self.handle, uri, index);
         if line < 0 {
             return Err<SyntaxDiagnostic, str8>(last_error());
@@ -487,7 +487,7 @@ impl SessionRef {
     }
 
     /// @brief Return hover text at 1-based line/column.
-    pub fn hover(self: SessionRef, uri: str8, line: i32, column: i32) -> Result<str8, str8> {
+    pub fn hover(self: SessionRef, uri: str8, line: i32, column: i32) -> result<str8, str8> {
         let msg: str8 = __mlang_std_compiler_document_hover(self.handle, uri, line, column);
         if last_status() != 0 {
             return Err<str8, str8>(last_error());
@@ -496,7 +496,7 @@ impl SessionRef {
     }
 
     /// @brief Return completion item count at 1-based line/column.
-    pub fn completion_count(self: SessionRef, uri: str8, line: i32, column: i32) -> Result<i32, str8> {
+    pub fn completion_count(self: SessionRef, uri: str8, line: i32, column: i32) -> result<i32, str8> {
         let count: i32 = __mlang_std_compiler_document_completion_count(self.handle, uri, line, column);
         if count < 0 {
             return Err<i32, str8>(last_error());
@@ -505,7 +505,7 @@ impl SessionRef {
     }
 
     /// @brief Fetch completion item by index for 1-based line/column.
-    pub fn completion_get(self: SessionRef, uri: str8, line: i32, column: i32, index: i32) -> Result<str8, str8> {
+    pub fn completion_get(self: SessionRef, uri: str8, line: i32, column: i32, index: i32) -> result<str8, str8> {
         let item: str8 = __mlang_std_compiler_document_completion_get(self.handle, uri, line, column, index);
         if last_status() != 0 {
             return Err<str8, str8>(last_error());
@@ -514,7 +514,7 @@ impl SessionRef {
     }
 
     /// @brief Return declared symbol count for a document.
-    pub fn document_symbol_count(self: SessionRef, uri: str8) -> Result<i32, str8> {
+    pub fn document_symbol_count(self: SessionRef, uri: str8) -> result<i32, str8> {
         let count: i32 = __mlang_std_compiler_document_symbol_count(self.handle, uri);
         if count < 0 {
             return Err<i32, str8>(last_error());
@@ -523,7 +523,7 @@ impl SessionRef {
     }
 
     /// @brief Fetch one declared symbol by index.
-    pub fn document_symbol_get(self: SessionRef, uri: str8, index: i32) -> Result<DocumentSymbol, str8> {
+    pub fn document_symbol_get(self: SessionRef, uri: str8, index: i32) -> result<DocumentSymbol, str8> {
         let line: i32 = __mlang_std_compiler_document_symbol_line(self.handle, uri, index);
         if line < 0 {
             return Err<DocumentSymbol, str8>(last_error());
@@ -569,7 +569,7 @@ impl SessionRef {
     }
 
     /// @brief Return definition location at 1-based line/column.
-    pub fn definition(self: SessionRef, uri: str8, line: i32, column: i32) -> Result<DefinitionLocation, str8> {
+    pub fn definition(self: SessionRef, uri: str8, line: i32, column: i32) -> result<DefinitionLocation, str8> {
         let dline: i32 = __mlang_std_compiler_document_definition_line(self.handle, uri, line, column);
         if dline < 0 {
             return Err<DefinitionLocation, str8>(last_error());
@@ -600,7 +600,7 @@ impl SessionRef {
     }
 
     /// @brief Resolve symbol at 1-based line/column.
-    pub fn resolve_symbol(self: SessionRef, uri: str8, line: i32, column: i32) -> Result<ResolvedSymbol, str8> {
+    pub fn resolve_symbol(self: SessionRef, uri: str8, line: i32, column: i32) -> result<ResolvedSymbol, str8> {
         let sline: i32 = __mlang_std_compiler_resolve_symbol_line(self.handle, uri, line, column);
         if sline < 0 {
             return Err<ResolvedSymbol, str8>(last_error());
@@ -656,7 +656,7 @@ impl SessionRef {
     }
 
     /// @brief Return reference count at 1-based line/column.
-    pub fn references_count(self: SessionRef, uri: str8, line: i32, column: i32) -> Result<i32, str8> {
+    pub fn references_count(self: SessionRef, uri: str8, line: i32, column: i32) -> result<i32, str8> {
         let count: i32 = __mlang_std_compiler_document_reference_count(self.handle, uri, line, column);
         if count < 0 {
             return Err<i32, str8>(last_error());
@@ -665,7 +665,7 @@ impl SessionRef {
     }
 
     /// @brief Fetch one reference location by index.
-    pub fn reference_get(self: SessionRef, uri: str8, line: i32, column: i32, index: i32) -> Result<ReferenceLocation, str8> {
+    pub fn reference_get(self: SessionRef, uri: str8, line: i32, column: i32, index: i32) -> result<ReferenceLocation, str8> {
         let rline: i32 = __mlang_std_compiler_document_reference_line(self.handle, uri, line, column, index);
         if rline < 0 {
             return Err<ReferenceLocation, str8>(last_error());
@@ -686,7 +686,7 @@ impl SessionRef {
     }
 
     /// @brief Check if renaming the symbol at 1-based line/column is safe.
-    pub fn rename_is_safe(self: SessionRef, uri: str8, line: i32, column: i32, new_name: str8) -> Result<i32, str8> {
+    pub fn rename_is_safe(self: SessionRef, uri: str8, line: i32, column: i32, new_name: str8) -> result<i32, str8> {
         let ok: i32 = __mlang_std_compiler_document_rename_is_safe(self.handle, uri, line, column, new_name);
         if ok < 0 {
             return Err<i32, str8>(last_error());
@@ -695,7 +695,7 @@ impl SessionRef {
     }
 
     /// @brief Warm semantic cache for one document.
-    pub fn semantic_cache_warm(self: SessionRef, uri: str8) -> Result<i32, str8> {
+    pub fn semantic_cache_warm(self: SessionRef, uri: str8) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_semantic_cache_warm(self.handle, uri);
         if st != 0 {
             return Err<i32, str8>(last_error());
@@ -704,7 +704,7 @@ impl SessionRef {
     }
 
     /// @brief Clear semantic cache for the whole session.
-    pub fn semantic_cache_clear(self: SessionRef) -> Result<i32, str8> {
+    pub fn semantic_cache_clear(self: SessionRef) -> result<i32, str8> {
         let st: i32 = __mlang_std_compiler_semantic_cache_clear(self.handle);
         if st != 0 {
             return Err<i32, str8>(last_error());

@@ -23,10 +23,6 @@ void CodeGenerator::generateCode(ProgramNode* program)
     constexprValues.clear();
     deferredModuleFunctionDefs.clear();
 
-    ensureHandleBuiltin(program);
-    ensureThreadBuiltin(program);
-    ensureMutexBuiltin(program);
-    ensureAtomic64Builtin(program);
     ensureOptionBuiltin(program);
     ensureResultBuiltin(program);
 
@@ -769,6 +765,15 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
                 {
                     auto depIt = structMap.find(structRef->structName);
+                    if(depIt == structMap.end())
+                    {
+                        size_t scopePos = structRef->structName.rfind("::");
+                        if(scopePos != std::string::npos)
+                        {
+                            depIt = structMap.find(
+                                structRef->structName.substr(scopePos + 2));
+                        }
+                    }
                     if(depIt != structMap.end() && depIt->second != structDef)
                         processStruct(depIt->second);
                 }

@@ -345,8 +345,8 @@ fn main() -> i32 {
 
     var width: i64 = 0;
     var height: i64 = 0;
-    let current_r: Result<BitSet, str8> = BitSet::new(0);
-    let next_r: Result<BitSet, str8> = BitSet::new(0);
+    let current_r: result<BitSet, str8> = BitSet::new(0);
+    let next_r: result<BitSet, str8> = BitSet::new(0);
     if current_r.is_err() || next_r.is_err() {
         println!("BitSet init failed");
         let _ = write_unflushed(stdout(), reset());

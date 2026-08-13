@@ -22,8 +22,8 @@ Module file: `stdlib/std/fs.mla`
 - `buf_reader`
 
 ### file API
-- `file::open(path: str8) -> Result<file, str8>`
-- `file::create(path: str8) -> Result<file, str8>`
+- `file::open(path: str8) -> result<file, str8>`
+- `file::create(path: str8) -> result<file, str8>`
 - `file::close(self: file) -> i32`
-- `file::write(self: file, s: str8) -> Result<i64, str8>`
-- `file::write_line(self: file, s: str8) -> Result<i64, str8>`
+- `file::write(self: file, s: str8) -> result<i64, str8>`
+- `file::write_line(self: file, s: str8) -> result<i64, str8>`

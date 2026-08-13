@@ -18,16 +18,16 @@ use std::testing::verify_eq;
 
 #[test]
 fn test_spawn_echo_and_capture_stdout() {
-    let child_r: Result<Child, str8> = spawn("/bin/echo", ["hello-process"]);
+    let child_r: result<Child, str8> = spawn("/bin/echo", ["hello-process"]);
     verify(!(child_r.is_err()));
     let child: Child = child_r.unwrap();
 
-    let out_r: Result<ChildStdout, str8> = child.stdout();
+    let out_r: result<ChildStdout, str8> = child.stdout();
     verify(!(out_r.is_err()));
     let out: ChildStdout = out_r.unwrap();
 
     var buf = String::with_capacity(256);
-    let n_r: Result<i64, str8> = out.read(buf, 256);
+    let n_r: result<i64, str8> = out.read(buf, 256);
     verify(!(n_r.is_err()));
     let n: i64 = n_r.unwrap();
     let ok: i32 = n > 0 ? 1 : 0;
@@ -37,7 +37,7 @@ fn test_spawn_echo_and_capture_stdout() {
     String::free(buf);
     out.close();
 
-    let st_r: Result<ExitStatus, str8> = child.wait();
+    let st_r: result<ExitStatus, str8> = child.wait();
     verify(!(st_r.is_err()));
     let st: ExitStatus = st_r.unwrap();
     child.close();
@@ -47,22 +47,22 @@ fn test_spawn_echo_and_capture_stdout() {
 
 #[test]
 fn test_spawn_sh_stderr_and_exit_code() {
-    let child_r: Result<Child, str8> = spawn("/bin/sh", ["-c", "echo process-error 1>&2; exit 7"]);
+    let child_r: result<Child, str8> = spawn("/bin/sh", ["-c", "echo process-error 1>&2; exit 7"]);
     verify(!(child_r.is_err()));
     let child: Child = child_r.unwrap();
 
-    let err_r: Result<ChildStderr, str8> = child.stderr();
+    let err_r: result<ChildStderr, str8> = child.stderr();
     verify(!(err_r.is_err()));
     let errp: ChildStderr = err_r.unwrap();
 
     var buf = String::with_capacity(256);
-    let n_r: Result<i64, str8> = errp.read(buf, 256);
+    let n_r: result<i64, str8> = errp.read(buf, 256);
     verify(!(n_r.is_err()));
     let saw_err: i32 = contains(buf, "process-error") == 1 ? 1 : 0;
     String::free(buf);
     errp.close();
 
-    let st_r: Result<ExitStatus, str8> = child.wait();
+    let st_r: result<ExitStatus, str8> = child.wait();
     verify(!(st_r.is_err()));
     let st: ExitStatus = st_r.unwrap();
     child.close();
@@ -73,29 +73,29 @@ fn test_spawn_sh_stderr_and_exit_code() {
 
 #[test]
 fn test_stdin_stdout_pipe_roundtrip() {
-    let child_r: Result<Child, str8> = spawn("/bin/cat", []);
+    let child_r: result<Child, str8> = spawn("/bin/cat", []);
     verify(!(child_r.is_err()));
     let child: Child = child_r.unwrap();
 
-    let in_r: Result<ChildStdin, str8> = child.stdin();
-    let out_r: Result<ChildStdout, str8> = child.stdout();
+    let in_r: result<ChildStdin, str8> = child.stdin();
+    let out_r: result<ChildStdout, str8> = child.stdout();
     verify(!(in_r.is_err()));
     verify(!(out_r.is_err()));
     let inp: ChildStdin = in_r.unwrap();
     let out: ChildStdout = out_r.unwrap();
 
-    let w_r: Result<i64, str8> = inp.write("cat-roundtrip\n");
+    let w_r: result<i64, str8> = inp.write("cat-roundtrip\n");
     verify(!(w_r.is_err()));
     inp.close();
 
     var buf = String::with_capacity(256);
-    let r_r: Result<i64, str8> = out.read(buf, 256);
+    let r_r: result<i64, str8> = out.read(buf, 256);
     verify(!(r_r.is_err()));
     let ok: i32 = contains(buf, "cat-roundtrip") == 1 ? 1 : 0;
     String::free(buf);
     out.close();
 
-    let st_r: Result<ExitStatus, str8> = child.wait();
+    let st_r: result<ExitStatus, str8> = child.wait();
     verify(!(st_r.is_err()));
     let st: ExitStatus = st_r.unwrap();
     child.close();
@@ -105,41 +105,41 @@ fn test_stdin_stdout_pipe_roundtrip() {
 
 #[test]
 fn test_nonblocking_process_poll_and_pipe_read() {
-    let child_r: Result<Child, str8> = spawn("/bin/sh", ["-c", "sleep 0.2; printf ready"]);
+    let child_r: result<Child, str8> = spawn("/bin/sh", ["-c", "sleep 0.2; printf ready"]);
     verify(!(child_r.is_err()));
     let child: Child = child_r.unwrap();
 
-    let out_r: Result<ChildStdout, str8> = child.stdout();
+    let out_r: result<ChildStdout, str8> = child.stdout();
     verify(!(out_r.is_err()));
     let out: ChildStdout = out_r.unwrap();
 
-    let poll1_r: Result<WaitPoll, str8> = child.try_wait();
+    let poll1_r: result<WaitPoll, str8> = child.try_wait();
     verify(!(poll1_r.is_err()));
     let poll1: WaitPoll = poll1_r.unwrap();
     verify_eq(poll1.ready , 0);
 
     var buf = String::with_capacity(256);
-    let read1_r: Result<PipeRead, str8> = out.read_nonblocking(buf, 256);
+    let read1_r: result<PipeRead, str8> = out.read_nonblocking(buf, 256);
     verify(!(read1_r.is_err()));
     let read1: PipeRead = read1_r.unwrap();
     verify_eq(read1.ready , 0);
 
     sleep_ms(260);
 
-    let read2_r: Result<PipeRead, str8> = out.read_nonblocking(buf, 256);
+    let read2_r: result<PipeRead, str8> = out.read_nonblocking(buf, 256);
     verify(!(read2_r.is_err()));
     let read2: PipeRead = read2_r.unwrap();
     verify_eq(read2.ready , 1);
     verify(!(read2.len <= 0));
     verify(!(contains(buf, "ready") != 1));
 
-    let poll2_r: Result<WaitPoll, str8> = child.try_wait();
+    let poll2_r: result<WaitPoll, str8> = child.try_wait();
     verify(!(poll2_r.is_err()));
     let poll2: WaitPoll = poll2_r.unwrap();
     if poll2.ready == 0: {
         sleep_ms(20);
     }
-    let poll3_r: Result<WaitPoll, str8> = child.try_wait();
+    let poll3_r: result<WaitPoll, str8> = child.try_wait();
     verify(!(poll3_r.is_err()));
     let poll3: WaitPoll = poll3_r.unwrap();
     verify_eq(poll3.ready , 1);

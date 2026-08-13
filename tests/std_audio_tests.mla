@@ -23,7 +23,7 @@ fn test_audio_backend_metadata() {
 
 #[test]
 fn test_audio_pcm_wav_decode() {
-    let audio_r: Result<PcmAudio, str8> = PcmAudio::load("examples/fft_example/illusion.wav");
+    let audio_r: result<PcmAudio, str8> = PcmAudio::load("examples/fft_example/illusion.wav");
     verify(audio_r.is_ok());
     if audio_r.is_err() {
         return;
@@ -39,7 +39,7 @@ fn test_audio_pcm_wav_decode() {
 
 #[test]
 fn test_audio_pcm_block() {
-    let block_r: Result<PcmBlock, str8> = PcmBlock::new(64);
+    let block_r: result<PcmBlock, str8> = PcmBlock::new(64);
     verify(block_r.is_ok());
     if block_r.is_err() {
         return;

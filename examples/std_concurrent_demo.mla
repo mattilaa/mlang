@@ -9,6 +9,7 @@ mod std::time;
 use std::concurrent::OrderedGate;
 use std::concurrent::WaitGroup;
 use std::thread::join;
+use std::thread::atomic64;
 use std::time::sleep_ms;
 
 fn gate_mutex_slot(value: i64, write: i32) -> i64 {
@@ -66,7 +67,7 @@ fn set_demo_gate(mutex_handle: i64, cond_handle: i64, turn: i64) -> void {
 }
 
 fn demo_gate() -> OrderedGate {
-    let turn: Handle<Atomic64> = gate_turn_slot(0, 0);
+    let turn: atomic64 = atomic64 { raw: gate_turn_slot(0, 0) };
     return OrderedGate {
         mutex_handle: gate_mutex_slot(0, 0),
         cond_handle: gate_cond_slot(0, 0),
@@ -81,7 +82,7 @@ fn set_demo_wait_group(mutex_handle: i64, cond_handle: i64, count: i64) -> void 
 }
 
 fn demo_wait_group() -> WaitGroup {
-    let count: Handle<Atomic64> = wait_count_slot(0, 0);
+    let count: atomic64 = atomic64 { raw: wait_count_slot(0, 0) };
     return WaitGroup {
         mutex_handle: wait_mutex_slot(0, 0),
         cond_handle: wait_cond_slot(0, 0),
@@ -92,14 +93,14 @@ fn demo_wait_group() -> WaitGroup {
 fn ordered_worker(turn: i64, delay_ms: i64) -> i32 {
     println!("worker {} spawned", turn);
     sleep_ms(delay_ms);
-    let wr: Result<i32, str8> = demo_gate().wait_for(turn);
+    let wr: result<i32, str8> = demo_gate().wait_for(turn);
     if wr.is_err(): {
         println!("worker {} wait_for error: {}", turn, wr.unwrap_err());
         let _ = demo_wait_group().done();
         return 1;
     }
     println!("worker {} running in ordered slot {}", turn, turn);
-    let ar: Result<i64, str8> = demo_gate().advance();
+    let ar: result<i64, str8> = demo_gate().advance();
     if ar.is_err(): {
         println!("worker {} advance error: {}", turn, ar.unwrap_err());
         let _ = demo_wait_group().done();
@@ -110,8 +111,8 @@ fn ordered_worker(turn: i64, delay_ms: i64) -> i32 {
 }
 
 fn main() -> i32 {
-    let gr: Result<OrderedGate, str8> = OrderedGate::new(0);
-    let wr: Result<WaitGroup, str8> = WaitGroup::new(3);
+    let gr: result<OrderedGate, str8> = OrderedGate::new(0);
+    let wr: result<WaitGroup, str8> = WaitGroup::new(3);
     if gr.is_err() || wr.is_err(): {
         println!("std::concurrent setup failed");
         return 1;
@@ -121,18 +122,18 @@ fn main() -> i32 {
     let wg0: WaitGroup = wr.unwrap();
     let gate_mutex: i64 = gate0.mutex_handle;
     let gate_cond: i64 = gate0.cond_handle;
-    let gate_turn: i64 = gate0.turn;
+    let gate_turn: i64 = gate0.turn.raw;
     let wg_mutex: i64 = wg0.mutex_handle;
     let wg_cond: i64 = wg0.cond_handle;
-    let wg_count: i64 = wg0.count;
+    let wg_count: i64 = wg0.count.raw;
     set_demo_gate(gate_mutex, gate_cond, gate_turn);
     set_demo_wait_group(wg_mutex, wg_cond, wg_count);
 
-    let h1: Handle<Thread> = thread_spawn(ordered_worker, 2, 5);
-    let h2: Handle<Thread> = thread_spawn(ordered_worker, 0, 25);
-    let h3: Handle<Thread> = thread_spawn(ordered_worker, 1, 10);
+    let h1: std::thread::thread = thread::spawn(ordered_worker, 2, 5);
+    let h2: std::thread::thread = thread::spawn(ordered_worker, 0, 25);
+    let h3: std::thread::thread = thread::spawn(ordered_worker, 1, 10);
 
-    let wait_r: Result<i32, str8> = demo_wait_group().wait();
+    let wait_r: result<i32, str8> = demo_wait_group().wait();
     if wait_r.is_err(): {
         println!("wait group error: {}", wait_r.unwrap_err());
     } else {

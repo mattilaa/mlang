@@ -14,22 +14,22 @@ use std::testing::verify;
 fn test_create_open_and_lines_impl() -> i32 {
     let path = "/tmp/mlang_std_fs_test.txt";
 
-    let created: Result<File, str8> = File::create(path);
+    let created: result<File, str8> = File::create(path);
     if created.is_err(): { return 1; }
     let wf: File = created.unwrap();
-    let w1: Result<i64, str8> = wf.write_line("alpha");
+    let w1: result<i64, str8> = wf.write_line("alpha");
     if w1.is_err(): {
         wf.close();
         return 1;
     }
-    let w2: Result<i64, str8> = wf.write_line("beta");
+    let w2: result<i64, str8> = wf.write_line("beta");
     if w2.is_err(): {
         wf.close();
         return 1;
     }
     if wf.close() != 0: { return 1; }
 
-    let opened: Result<File, str8> = File::open(path);
+    let opened: result<File, str8> = File::open(path);
     if opened.is_err(): { return 1; }
     let rf: File = opened.unwrap();
 
@@ -64,7 +64,7 @@ fn test_create_open_and_lines() {
 }
 
 fn test_open_missing_file_is_err_impl() -> i32 {
-    let missing: Result<File, str8> = File::open("/tmp/mlang_std_fs_missing_no_such_file.txt");
+    let missing: result<File, str8> = File::open("/tmp/mlang_std_fs_missing_no_such_file.txt");
     if missing.is_err(): {
         return 0;
     }

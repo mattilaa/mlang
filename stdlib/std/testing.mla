@@ -15,7 +15,7 @@ use std::testing::detail::*;
 /// - inequality: `expect_not_eq`, `verify_not_eq`, `*_i32`, `*_i64`
 /// - vector/list comparisons: `expect_array_eq`, `verify_array_eq`,
 ///   `expect_array_not_eq`, `verify_array_not_eq`
-/// - counters: `reset`, `checks`, `failures`, `result`
+/// - counters: `reset`, `checks`, `failures`, `status`
 /// - lightweight mocks: `mock_*`
 
 
@@ -52,7 +52,7 @@ pub fn failures() -> i32 {
 
 /// Return 0 when no expectations failed, otherwise 1.
 /// @ingroup std_testing
-pub fn result() -> i32 {
+pub fn status() -> i32 {
     return __mlang_std_testing_result();
 }
 

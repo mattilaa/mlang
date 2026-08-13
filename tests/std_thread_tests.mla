@@ -1,6 +1,8 @@
 mod std::testing;
+mod std::sync;
 mod std::thread;
 
+use std::sync::mutex;
 use std::thread::*;
 use std::testing::verify;
 
@@ -127,19 +129,23 @@ fn recursive_mutex_property_slot(next: i64, write: i32) -> i64 {
 
 #[test]
 fn test_thread_join_helper() {
-    let h: Handle<Thread> = thread_spawn(worker, 7);
+    let h: std::thread::thread = thread::spawn(worker, 7);
     let status: i32 = join(h);
     verify(status == 0);
 }
 
 #[test]
 fn test_mutex_atomic_helpers() {
-    let mtx: Handle<Mutex> = mutex_new();
-    if mutex_lock_handle(mtx) != 0: { verify(false); }
-    if mutex_unlock_handle(mtx) != 0: { verify(false); }
-    if mutex_free(mtx) != 0: { verify(false); }
+    let mr: result<mutex, str8> = mutex::new();
+    verify(mr.is_ok());
+    let mtx: mutex = mr.unwrap();
+    let lock_r: result<i32, str8> = mtx.lock();
+    verify(lock_r.is_ok());
+    let unlock_r: result<i32, str8> = mtx.unlock();
+    verify(unlock_r.is_ok());
+    verify(mtx.close() == 0);
 
-    let c: Handle<Atomic64> = atomic_new(5);
+    let c: std::thread::atomic64 = atomic_new(5);
     let old: i64 = atomic_add_value(c, 3);
     let now: i64 = atomic_load_value(c);
     atomic_free_handle(c);
@@ -163,10 +169,10 @@ fn test_atomic_property_accessors() {
 fn test_atomic_property_parallel_writers() {
     let _ = shared_atomic_property_slot(0, 1);
 
-    let h1: Handle<Thread> = thread_spawn(atomic_property_writer, 0, 20000);
-    let h2: Handle<Thread> = thread_spawn(atomic_property_writer, 1, 20000);
-    let h3: Handle<Thread> = thread_spawn(atomic_property_writer, 2, 20000);
-    let h4: Handle<Thread> = thread_spawn(atomic_property_writer, 3, 20000);
+    let h1: std::thread::thread = thread::spawn(atomic_property_writer, 0, 20000);
+    let h2: std::thread::thread = thread::spawn(atomic_property_writer, 1, 20000);
+    let h3: std::thread::thread = thread::spawn(atomic_property_writer, 2, 20000);
+    let h4: std::thread::thread = thread::spawn(atomic_property_writer, 3, 20000);
 
     let rc1: i32 = join(h1);
     let rc2: i32 = join(h2);
@@ -198,11 +204,11 @@ fn test_mutex_property_accessors() {
 fn test_mutex_property_parallel_writers() {
     let _ = shared_mutex_property_slot(PairStamp { left: 0, right: 0 }, 1);
 
-    let h1: Handle<Thread> = thread_spawn(mutex_property_writer, 0, 15000);
-    let h2: Handle<Thread> = thread_spawn(mutex_property_writer, 1, 15000);
-    let h3: Handle<Thread> = thread_spawn(mutex_property_writer, 2, 15000);
-    let h4: Handle<Thread> = thread_spawn(mutex_property_writer, 3, 15000);
-    let hr: Handle<Thread> = thread_spawn(mutex_property_reader, 30000);
+    let h1: std::thread::thread = thread::spawn(mutex_property_writer, 0, 15000);
+    let h2: std::thread::thread = thread::spawn(mutex_property_writer, 1, 15000);
+    let h3: std::thread::thread = thread::spawn(mutex_property_writer, 2, 15000);
+    let h4: std::thread::thread = thread::spawn(mutex_property_writer, 3, 15000);
+    let hr: std::thread::thread = thread::spawn(mutex_property_reader, 30000);
 
     let rc1: i32 = join(h1);
     let rc2: i32 = join(h2);

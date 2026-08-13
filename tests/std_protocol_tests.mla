@@ -16,25 +16,25 @@ use std::strbuf::eq;
 use std::testing::verify;
 
 fn test_protocol_ping_pong_roundtrip_impl() -> i32 {
-    let listener_r: Result<TcpListener, str8> = TcpListener::bind("127.0.0.1", 0);
+    let listener_r: result<TcpListener, str8> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err() { return 0; }
     let listener: TcpListener = listener_r.unwrap();
 
-    let port_r: Result<i64, str8> = listener.local_port();
+    let port_r: result<i64, str8> = listener.local_port();
     if port_r.is_err() {
         listener.close();
         return 0;
     }
     let port: i64 = port_r.unwrap();
 
-    let client_r: Result<i64, str8> = connect("127.0.0.1", port);
+    let client_r: result<i64, str8> = connect("127.0.0.1", port);
     if client_r.is_err() {
         listener.close();
         return 0;
     }
     let client: i64 = client_r.unwrap();
 
-    let server_stream_r: Result<TcpStream, str8> = listener.accept();
+    let server_stream_r: result<TcpStream, str8> = listener.accept();
     if server_stream_r.is_err() {
         close(client);
         listener.close();
@@ -42,7 +42,7 @@ fn test_protocol_ping_pong_roundtrip_impl() -> i32 {
     }
     let server: i64 = from_stream(server_stream_r.unwrap());
 
-    let sw: Result<i64, str8> = send(client, 1, "ping");
+    let sw: result<i64, str8> = send(client, 1, "ping");
     if sw.is_err() {
         close(server);
         close(client);
@@ -50,7 +50,7 @@ fn test_protocol_ping_pong_roundtrip_impl() -> i32 {
         return 1;
     }
 
-    let recv1: Result<ProtocolFrame, str8> = recv(server, 128, default_max_payload_bytes());
+    let recv1: result<ProtocolFrame, str8> = recv(server, 128, default_max_payload_bytes());
     if recv1.is_err() {
         close(server);
         close(client);
@@ -74,7 +74,7 @@ fn test_protocol_ping_pong_roundtrip_impl() -> i32 {
     }
     String::free(f1.payload);
 
-    let rw: Result<i64, str8> = send(server, 2, "pong");
+    let rw: result<i64, str8> = send(server, 2, "pong");
     if rw.is_err() {
         close(server);
         close(client);
@@ -82,7 +82,7 @@ fn test_protocol_ping_pong_roundtrip_impl() -> i32 {
         return 1;
     }
 
-    let recv2: Result<ProtocolFrame, str8> = recv(client, 128, default_max_payload_bytes());
+    let recv2: result<ProtocolFrame, str8> = recv(client, 128, default_max_payload_bytes());
     if recv2.is_err() {
         close(server);
         close(client);
@@ -109,25 +109,25 @@ fn test_protocol_ping_pong_roundtrip() {
 }
 
 fn test_protocol_max_payload_limit_impl() -> i32 {
-    let listener_r: Result<TcpListener, str8> = TcpListener::bind("127.0.0.1", 0);
+    let listener_r: result<TcpListener, str8> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err() { return 0; }
     let listener: TcpListener = listener_r.unwrap();
 
-    let port_r: Result<i64, str8> = listener.local_port();
+    let port_r: result<i64, str8> = listener.local_port();
     if port_r.is_err() {
         listener.close();
         return 0;
     }
     let port: i64 = port_r.unwrap();
 
-    let client_r: Result<i64, str8> = connect("127.0.0.1", port);
+    let client_r: result<i64, str8> = connect("127.0.0.1", port);
     if client_r.is_err() {
         listener.close();
         return 0;
     }
     let client: i64 = client_r.unwrap();
 
-    let server_stream_r: Result<TcpStream, str8> = listener.accept();
+    let server_stream_r: result<TcpStream, str8> = listener.accept();
     if server_stream_r.is_err() {
         close(client);
         listener.close();
@@ -135,7 +135,7 @@ fn test_protocol_max_payload_limit_impl() -> i32 {
     }
     let server: i64 = from_stream(server_stream_r.unwrap());
 
-    let sw: Result<i64, str8> = send(client, 9, "toolong");
+    let sw: result<i64, str8> = send(client, 9, "toolong");
     if sw.is_err() {
         close(server);
         close(client);
@@ -143,7 +143,7 @@ fn test_protocol_max_payload_limit_impl() -> i32 {
         return 1;
     }
 
-    let rr: Result<ProtocolFrame, str8> = recv(server, 128, 4);
+    let rr: result<ProtocolFrame, str8> = recv(server, 128, 4);
 
     close(server);
     close(client);

@@ -85,7 +85,7 @@ fn approx_f32(a: f32, b: f32, eps: f32) -> bool {
 }
 
 fn make_bitset(n: i64) -> BitSet {
-    let r: Result<BitSet, str8> = BitSet::new(n);
+    let r: result<BitSet, str8> = BitSet::new(n);
     verify(!r.is_err());
     let bits: BitSet = r.unwrap();
     verify(bits.resize(n, false) == 0);

@@ -654,7 +654,7 @@ ASTNode* create_result_constructor_impl(char* variant, ASTNode* type_args,
     }
 
     return create_struct_literal(
-        strdup(family == VariantFamily::Result ? "Result" : "Option"),
+        strdup(family == VariantFamily::Result ? "result" : "option"),
                                  type_args, fields, line);
 }
 
@@ -968,7 +968,7 @@ static void synthesizeJsonSerdeMethods(StructDefNode* def)
 
     if(!structHasMethodNamed(def, "from_json"))
     {
-        auto* resultType = new GenericStructTypeRefNode("Result");
+        auto* resultType = new GenericStructTypeRefNode("result");
         resultType->typeArgs.push_back(new StructTypeRefNode(def->name));
         resultType->typeArgs.push_back(new TypeNode(TypeNode::TYPE_STR8));
 
@@ -987,7 +987,7 @@ static void synthesizeJsonSerdeMethods(StructDefNode* def)
     const std::string helperName = "__mlang_from_json_value";
     if(!structHasMethodNamed(def, helperName))
     {
-        auto* resultType = new GenericStructTypeRefNode("Result");
+        auto* resultType = new GenericStructTypeRefNode("result");
         resultType->typeArgs.push_back(new StructTypeRefNode(def->name));
         resultType->typeArgs.push_back(new TypeNode(TypeNode::TYPE_STR8));
 

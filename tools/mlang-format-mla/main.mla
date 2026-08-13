@@ -250,7 +250,7 @@ fn parse_compact_fat_arrow(line: str8, fallback: bool) -> bool {
 }
 
 fn read_config(path: str8) -> FormatConfig {
-    let open_r: Result<File, str8> = File::open(path);
+    let open_r: result<File, str8> = File::open(path);
     if open_r.is_err() {
         return default_config();
     }
@@ -538,14 +538,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
 
     if len(target_path) > 0 {
-        let read_r: Result<str8, str8> = read_all_text(target_path);
+        let read_r: result<str8, str8> = read_all_text(target_path);
         if read_r.is_err() {
             return fail(format!("mlang-format: failed to read '{}'", target_path));
         }
         let text: str8 = read_r.unwrap();
         let formatted: str8 = apply_config_format(text, cfg);
         if in_place {
-            let wr: Result<i32, str8> = write_all_text(target_path, formatted);
+            let wr: result<i32, str8> = write_all_text(target_path, formatted);
             if wr.is_err() {
                 return fail(format!("mlang-format: failed to write '{}'", target_path));
             }

@@ -34,7 +34,7 @@ Counters/result helpers:
 - `reset()`
 - `checks() -> i32`
 - `failures() -> i32`
-- `result() -> i32` (`0` when no failures, else `1`)
+- `status() -> i32` (`0` when no failures, else `1`)
 
 Typical test usage:
 
@@ -115,4 +115,3 @@ fn test_send_called_twice_with_programmed_returns() {
     mock_free(m.handle);
 }
 ```
-

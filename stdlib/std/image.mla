@@ -67,7 +67,7 @@ pub fn last_error() -> str8 {
 }
 
 /// @brief Probe image dimensions without rendering it.
-pub fn probe(path: str8) -> Result<ImageInfo, str8> {
+pub fn probe(path: str8) -> result<ImageInfo, str8> {
     let width: i64 = __mlang_std_image_probe_width(path);
     let height: i64 = __mlang_std_image_probe_height(path);
     if width <= 0 || height <= 0 {
@@ -81,7 +81,7 @@ pub fn probe(path: str8) -> Result<ImageInfo, str8> {
 /// `columns` and `rows` are terminal cell counts, not source image pixels.
 /// Aspect ratio is preserved and the image is letterboxed if needed.
 pub fn render_truecolor(path: str8, columns: i64, rows: i64)
-    -> Result<str8, str8> {
+    -> result<str8, str8> {
     return render_truecolor_with_mode(path, columns, rows,
                                       ImageGlyphMode::UpperHalfBlocks);
 }
@@ -100,7 +100,7 @@ pub fn render_truecolor_crop(path: str8, columns: i64, rows: i64,
                               glyph_mode: ImageGlyphMode,
                               crop_x: i64, crop_y: i64,
                               crop_w: i64, crop_h: i64)
-    -> Result<str8, str8> {
+    -> result<str8, str8> {
     if columns <= 0 || rows <= 0 {
         return Err<str8, str8>("std::image render_truecolor_crop: columns and rows must be > 0");
     }
@@ -135,7 +135,7 @@ pub fn render_truecolor_crop(path: str8, columns: i64, rows: i64,
 /// when the terminal font supports box and diagonal line glyphs well.
 pub fn render_truecolor_with_mode(path: str8, columns: i64, rows: i64,
                                   glyph_mode: ImageGlyphMode)
-    -> Result<str8, str8> {
+    -> result<str8, str8> {
     if columns <= 0 || rows <= 0 {
         return Err<str8, str8>("std::image render_truecolor: columns and rows must be > 0");
     }

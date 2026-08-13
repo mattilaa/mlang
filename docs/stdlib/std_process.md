@@ -12,25 +12,25 @@ Module file: `stdlib/std/process.mla`
 - `pipe_read`
 
 ### Spawn
-- `spawn(program: str8, args: list<str8>) -> Result<child, str8>`
-- `spawn_inherit(program: str8, args: list<str8>) -> Result<child, str8>`
+- `spawn(program: str8, args: list<str8>) -> result<child, str8>`
+- `spawn_inherit(program: str8, args: list<str8>) -> result<child, str8>`
 - `last_error() -> str8`
 
 ### child and pipe API
-- `child::stdin(self: child) -> Result<child_stdin, str8>`
-- `child::stdout(self: child) -> Result<child_stdout, str8>`
-- `child::stderr(self: child) -> Result<child_stderr, str8>`
-- `child::wait(self: child) -> Result<exit_status, str8>`
-- `child::try_wait(self: child) -> Result<wait_poll, str8>`
-- `child::kill(self: child, sig: i32) -> Result<i32, str8>`
+- `child::stdin(self: child) -> result<child_stdin, str8>`
+- `child::stdout(self: child) -> result<child_stdout, str8>`
+- `child::stderr(self: child) -> result<child_stderr, str8>`
+- `child::wait(self: child) -> result<exit_status, str8>`
+- `child::try_wait(self: child) -> result<wait_poll, str8>`
+- `child::kill(self: child, sig: i32) -> result<i32, str8>`
 - `child::close(self: child) -> i32`
-- `child_stdin::write(self: child_stdin, s: str8) -> Result<i64, str8>`
+- `child_stdin::write(self: child_stdin, s: str8) -> result<i64, str8>`
 - `child_stdin::close(self: child_stdin) -> i32`
-- `child_stdout::read(self: child_stdout, buf: str8, capacity: i64) -> Result<i64, str8>`
-- `child_stdout::read_nonblocking(self: child_stdout, buf: str8, capacity: i64) -> Result<pipe_read, str8>`
+- `child_stdout::read(self: child_stdout, buf: str8, capacity: i64) -> result<i64, str8>`
+- `child_stdout::read_nonblocking(self: child_stdout, buf: str8, capacity: i64) -> result<pipe_read, str8>`
 - `child_stdout::close(self: child_stdout) -> i32`
-- `child_stderr::read(self: child_stderr, buf: str8, capacity: i64) -> Result<i64, str8>`
-- `child_stderr::read_nonblocking(self: child_stderr, buf: str8, capacity: i64) -> Result<pipe_read, str8>`
+- `child_stderr::read(self: child_stderr, buf: str8, capacity: i64) -> result<i64, str8>`
+- `child_stderr::read_nonblocking(self: child_stderr, buf: str8, capacity: i64) -> result<pipe_read, str8>`
 - `child_stderr::close(self: child_stderr) -> i32`
 
 ### Exit status

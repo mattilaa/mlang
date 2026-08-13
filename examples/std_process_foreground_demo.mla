@@ -19,14 +19,14 @@ fn main() -> i32 {
         child_args.push(argv[i]);
     }
 
-    let child_r: Result<Child, str8> = spawn_foreground_inherit(program, child_args);
+    let child_r: result<Child, str8> = spawn_foreground_inherit(program, child_args);
     if child_r.is_err(): {
         eprintln(format!("spawn_foreground_inherit failed: {}", child_r.unwrap_err()));
         return 1;
     }
 
     let child: Child = child_r.unwrap();
-    let wait_r: Result<ExitStatus, str8> = child.wait();
+    let wait_r: result<ExitStatus, str8> = child.wait();
     if wait_r.is_err(): {
         eprintln(format!("wait failed: {}", wait_r.unwrap_err()));
         child.close();

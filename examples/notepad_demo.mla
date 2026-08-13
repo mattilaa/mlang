@@ -366,8 +366,8 @@ fn parse_key(input: Stdin) -> i32 {
     return AsciiKey::Esc;
 }
 
-fn open_file_into_buffer(path: str8) -> Result<list<str8>, str8> {
-    let rr: Result<str8, str8> = read_all_text(path);
+fn open_file_into_buffer(path: str8) -> result<list<str8>, str8> {
+    let rr: result<str8, str8> = read_all_text(path);
     if rr.is_err(): {
         return Err<list<str8>, str8>(rr.unwrap_err());
     }
@@ -564,7 +564,7 @@ fn main() -> i32 {
                         status = clone("Open cancelled");
                         continue;
                     }
-                    let loaded: Result<list<str8>, str8> = open_file_into_buffer(path);
+                    let loaded: result<list<str8>, str8> = open_file_into_buffer(path);
                     if loaded.is_err(): {
                         status = format!("Open failed: {}", loaded.unwrap_err());
                         continue;
@@ -638,7 +638,7 @@ fn main() -> i32 {
                             status = clone("Type a path and press Enter");
                         } else if menu_sel == 1 {
                             let text: str8 = join_lines(lines);
-                            let wr: Result<i32, str8> = write_all_text(filename, text);
+                            let wr: result<i32, str8> = write_all_text(filename, text);
                             if wr.is_err(): {
                                 status = format!("Save failed: {}", wr.unwrap_err());
                             } else {

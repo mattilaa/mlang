@@ -38,7 +38,7 @@ fn main() -> i32 {
         return 1;
     }
 
-    let ui_r: Result<ChatUi, str8> = ChatUi::new(400);
+    let ui_r: result<ChatUi, str8> = ChatUi::new(400);
     if ui_r.is_err() {
         println!("ChatUi::new failed: {}", ui_r.unwrap_err());
         return 1;

@@ -2,6 +2,9 @@
 /// @ingroup examples
 /// \brief Spawning multiple worker threads and joining them.
 ///
+mod std::thread;
+use std::thread::*;
+
 fn worker(id: i64) -> void {
     var sum: i64 = 0;
     for i in 0..1000 {
@@ -11,14 +14,14 @@ fn worker(id: i64) -> void {
 }
 
 fn main() -> i32 {
-    let h1: Handle<Thread> = thread_spawn(worker, 1);
-    let h2: Handle<Thread> = thread_spawn(worker, 2);
-    let h3: Handle<Thread> = thread_spawn(worker, 3);
-    let h4: Handle<Thread> = thread_spawn(worker, 4);
+    let h1: std::thread::thread = thread::spawn(worker, 1);
+    let h2: std::thread::thread = thread::spawn(worker, 2);
+    let h3: std::thread::thread = thread::spawn(worker, 3);
+    let h4: std::thread::thread = thread::spawn(worker, 4);
 
-    thread_join(h1);
-    thread_join(h2);
-    thread_join(h3);
-    thread_join(h4);
+    std::thread::join(h1);
+    std::thread::join(h2);
+    std::thread::join(h3);
+    std::thread::join(h4);
     return 0;
 }

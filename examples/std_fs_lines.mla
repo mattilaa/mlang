@@ -25,14 +25,14 @@ fn main() -> i32 {
 
     // -- write sample file ------------------------------------------------
     let content: str8 = "# Student score data\n# Format: name,score\nname,score\nAlice,95\nBob,87\nCarol,92\nDave,78\n";
-    let wr: Result<i32, str8> = write_all_text(path, content);
+    let wr: result<i32, str8> = write_all_text(path, content);
     if wr.is_err(): {
         println!("error: could not write {}", path);
         return 1;
     }
 
     // -- open, read all lines, filter and report --------------------------
-    let fr: Result<File, str8> = File::open(path);
+    let fr: result<File, str8> = File::open(path);
     if fr.is_err(): {
         println!("error: could not open {}", path);
         return 1;
@@ -76,7 +76,7 @@ fn main() -> i32 {
     free_lines(lines);
 
     // -- re-open and search for a specific entry --------------------------
-    let fr2: Result<File, str8> = File::open(path);
+    let fr2: result<File, str8> = File::open(path);
     if fr2.is_err(): { return 1; }
     let reader2: BufReader = BufReader::new(fr2.unwrap());
     let lines2: list<str8> = reader2.lines();

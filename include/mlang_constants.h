@@ -11,17 +11,12 @@ struct AttributeTokenSpec
     int keywordLength;
 };
 
-constexpr std::array<const char*, 12> kLspKeywords = {
-    "fn",    "let",   "struct", "enum",  "if",     "else",
-    "match", "return","Handle", "Thread","Mutex",  "Atomic64",
+constexpr std::array<const char*, 10> kLspKeywords = {
+    "fn", "let", "struct", "enum", "if", "else", "match", "return",
+    "result", "option",
 };
 
-constexpr std::array<const char*, 4> kRuntimeBuiltinTypes = {
-    "Handle",
-    "Thread",
-    "Mutex",
-    "Atomic64",
-};
+constexpr std::array<const char*, 0> kRuntimeBuiltinTypes = {};
 
 constexpr std::array<const char*, 11> kRuntimeBuiltinFunctions = {
     "thread_spawn",

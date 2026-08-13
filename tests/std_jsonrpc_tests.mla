@@ -15,7 +15,7 @@ fn test_jsonrpc_build_and_parse_frame() {
     }
 
     var out = String::with_capacity(256);
-    let parsed: Result<i64, str8> = parse_frame(frame, out, 256);
+    let parsed: result<i64, str8> = parse_frame(frame, out, 256);
     String::free(frame);
     if parsed.is_err(): {
         verify(false);
@@ -28,7 +28,7 @@ fn test_jsonrpc_build_and_parse_frame() {
 #[test]
 fn test_jsonrpc_cancel_registry() {
     if cancel_clear_all() != 0: { verify(false); }
-    let mr: Result<i32, str8> = cancel_mark(42);
+    let mr: result<i32, str8> = cancel_mark(42);
     if mr.is_err(): { verify(false); }
     if cancel_is_marked(42) != 1: { verify(false); }
     if cancel_take(42) != 1: { verify(false); }
@@ -39,7 +39,7 @@ fn test_jsonrpc_cancel_registry() {
 fn test_jsonrpc_register_cancel_from_payload() {
     cancel_clear_all();
     let payload: str8 = "{\"jsonrpc\":\"2.0\",\"method\":\"$/cancelRequest\",\"params\":{\"id\":99}}";
-    let rr: Result<i32, str8> = register_cancel_from_payload(payload);
+    let rr: result<i32, str8> = register_cancel_from_payload(payload);
     if rr.is_err(): { verify(false); }
     if rr.unwrap() != 1: { verify(false); }
     if cancel_is_marked(99) != 1: { verify(false); }
@@ -48,17 +48,17 @@ fn test_jsonrpc_register_cancel_from_payload() {
 
 #[test]
 fn test_jsonrpc_runtime_queue_roundtrip() {
-    let rt_r: Result<Runtime, str8> = Runtime::new(4);
+    let rt_r: result<Runtime, str8> = Runtime::new(4);
     if rt_r.is_err(): { verify(false); }
     let rt: Runtime = rt_r.unwrap();
 
-    let push_r: Result<i32, str8> = rt.push_outbound("{\"jsonrpc\":\"2.0\",\"id\":1}");
+    let push_r: result<i32, str8> = rt.push_outbound("{\"jsonrpc\":\"2.0\",\"id\":1}");
     if push_r.is_err(): {
         verify(false);
     }
 
     var scratch = String::with_capacity(128);
-    let pop_r: Result<i64, str8> = rt.try_pop_outbound(scratch, 128);
+    let pop_r: result<i64, str8> = rt.try_pop_outbound(scratch, 128);
     if pop_r.is_err(): {
         verify(false);
     }

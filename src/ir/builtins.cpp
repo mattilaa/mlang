@@ -30,7 +30,7 @@ void add_builtin_struct(ProgramNode* program, StructDefNode* def)
 
 void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
 {
-    if(!program || program_has_struct(program, "Result"))
+    if(!program || program_has_struct(program, "result"))
         return;
 
     auto* members = new StructMemberListNode();
@@ -43,7 +43,7 @@ void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
 
     auto make_self_param = []() -> ParameterNode*
     {
-        auto* selfType = new GenericStructTypeRefNode("Result");
+        auto* selfType = new GenericStructTypeRefNode("result");
         selfType->typeArgs.push_back(new StructTypeRefNode("T"));
         selfType->typeArgs.push_back(new StructTypeRefNode("E"));
         return new ParameterNode(selfType, "self");
@@ -79,7 +79,7 @@ void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
         static_cast<ExpressionNode*>(create_field_access_expr(
             new IdentifierNode("self"), strdup("err"), 0))));
 
-    auto* resultDef = new StructDefNode("Result", "", members, true);
+    auto* resultDef = new StructDefNode("result", "", members, true);
     resultDef->typeParams = {"T", "E"};
     resultDef->sourceModule = "";
     add_builtin_struct(program, resultDef);
@@ -87,7 +87,7 @@ void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
 
 void CodeGenerator::ensureOptionBuiltin(ProgramNode* program)
 {
-    if(!program || program_has_struct(program, "Option"))
+    if(!program || program_has_struct(program, "option"))
         return;
 
     auto* members = new StructMemberListNode();
@@ -96,65 +96,8 @@ void CodeGenerator::ensureOptionBuiltin(ProgramNode* program)
     members->addMember(new StructMemberNode(false, new StructTypeRefNode("T"),
                                             "value", nullptr));
 
-    auto* optionDef = new StructDefNode("Option", "", members, true);
+    auto* optionDef = new StructDefNode("option", "", members, true);
     optionDef->typeParams = {"T"};
     optionDef->sourceModule = "";
     add_builtin_struct(program, optionDef);
-}
-
-void CodeGenerator::ensureHandleBuiltin(ProgramNode* program)
-{
-    if(!program || program_has_struct(program, "Handle"))
-        return;
-
-    auto* members = new StructMemberListNode();
-    members->addMember(new StructMemberNode(
-        false, new TypeNode(TypeNode::TYPE_I64), "raw", nullptr));
-
-    auto* handleDef = new StructDefNode("Handle", "", members, true);
-    handleDef->typeParams = {"T"};
-    handleDef->sourceModule = "";
-    add_builtin_struct(program, handleDef);
-}
-
-void CodeGenerator::ensureThreadBuiltin(ProgramNode* program)
-{
-    if(!program || program_has_struct(program, "Thread"))
-        return;
-
-    auto* members = new StructMemberListNode();
-    members->addMember(new StructMemberNode(
-        false, new TypeNode(TypeNode::TYPE_I8), "_pad", nullptr));
-
-    auto* threadDef = new StructDefNode("Thread", "", members, true);
-    threadDef->sourceModule = "";
-    add_builtin_struct(program, threadDef);
-}
-
-void CodeGenerator::ensureMutexBuiltin(ProgramNode* program)
-{
-    if(!program || program_has_struct(program, "Mutex"))
-        return;
-
-    auto* members = new StructMemberListNode();
-    members->addMember(new StructMemberNode(
-        false, new TypeNode(TypeNode::TYPE_I8), "_pad", nullptr));
-
-    auto* mutexDef = new StructDefNode("Mutex", "", members, true);
-    mutexDef->sourceModule = "";
-    add_builtin_struct(program, mutexDef);
-}
-
-void CodeGenerator::ensureAtomic64Builtin(ProgramNode* program)
-{
-    if(!program || program_has_struct(program, "Atomic64"))
-        return;
-
-    auto* members = new StructMemberListNode();
-    members->addMember(new StructMemberNode(
-        false, new TypeNode(TypeNode::TYPE_I8), "_pad", nullptr));
-
-    auto* atomicDef = new StructDefNode("Atomic64", "", members, true);
-    atomicDef->sourceModule = "";
-    add_builtin_struct(program, atomicDef);
 }

@@ -34,8 +34,9 @@ mod std::sync;
 mod std::thread;
 
 use std::sync::Condvar;
-use std::sync::Mutex;
+use std::sync::mutex;
 use std::thread::atomic_add_value;
+use std::thread::atomic64;
 use std::thread::atomic_free_handle;
 use std::thread::atomic_load_value;
 use std::thread::atomic_new;
@@ -53,7 +54,7 @@ use std::thread::atomic_store_value;
 pub struct WaitGroup {
     var mutex_handle: i64;
     var cond_handle: i64;
-    var count: Handle<Atomic64>;
+    var count: atomic64;
 };
 
 /// @brief Deterministic turn gate for ordered thread progress.
@@ -68,7 +69,7 @@ pub struct WaitGroup {
 pub struct OrderedGate {
     var mutex_handle: i64;
     var cond_handle: i64;
-    var turn: Handle<Atomic64>;
+    var turn: atomic64;
 };
 
 /// @brief Lowercase stdlib type alias for `WaitGroup`.
@@ -83,24 +84,24 @@ impl WaitGroup {
     /// @ingroup std_concurrent
     /// @param initial Initial number of unfinished tasks. Must be >= 0.
     /// @return `Ok(WaitGroup)` on success, otherwise an error string.
-    pub fn new(initial: i64) -> Result<WaitGroup, str8> {
+    pub fn new(initial: i64) -> result<WaitGroup, str8> {
         if initial < 0 {
             return Err<WaitGroup, str8>("std::concurrent::WaitGroup::new: initial must be >= 0");
         }
-        let mr: Result<Mutex, str8> = Mutex::new();
+        let mr: result<mutex, str8> = mutex::new();
         if mr.is_err(): {
             return Err<WaitGroup, str8>(mr.unwrap_err());
         }
-        let cr: Result<Condvar, str8> = Condvar::new();
+        let cr: result<Condvar, str8> = Condvar::new();
         if cr.is_err(): {
-            let m0: Mutex = mr.unwrap();
+            let m0: mutex = mr.unwrap();
             m0.close();
             return Err<WaitGroup, str8>(cr.unwrap_err());
         }
-        let m1: Mutex = mr.unwrap();
+        let m1: mutex = mr.unwrap();
         let c1: Condvar = cr.unwrap();
         return Ok<WaitGroup, str8>(WaitGroup {
-            mutex_handle: m1.handle,
+            mutex_handle: m1.raw,
             cond_handle: c1.handle,
             count: atomic_new(initial)
         });
@@ -112,10 +113,10 @@ impl WaitGroup {
     /// @return Updated count on success, or an error if the count would go negative.
     ///
     /// When the resulting count becomes zero, all waiters are notified.
-    pub fn add(self: WaitGroup, delta: i64) -> Result<i64, str8> {
-        let m: Mutex = Mutex { handle: self.mutex_handle };
+    pub fn add(self: WaitGroup, delta: i64) -> result<i64, str8> {
+        let m: mutex = mutex { raw: self.mutex_handle };
         let c: Condvar = Condvar { handle: self.cond_handle };
-        let lr: Result<i32, str8> = m.lock();
+        let lr: result<i32, str8> = m.lock();
         if lr.is_err(): {
             return Err<i64, str8>(lr.unwrap_err());
         }
@@ -127,13 +128,13 @@ impl WaitGroup {
         }
         let _ = atomic_store_value(self.count, next);
         if next == 0 {
-            let nr: Result<i32, str8> = c.notify_all();
-            let ur: Result<i32, str8> = m.unlock();
+            let nr: result<i32, str8> = c.notify_all();
+            let ur: result<i32, str8> = m.unlock();
             if nr.is_err(): { return Err<i64, str8>(nr.unwrap_err()); }
             if ur.is_err(): { return Err<i64, str8>(ur.unwrap_err()); }
             return Ok<i64, str8>(0);
         }
-        let ur2: Result<i32, str8> = m.unlock();
+        let ur2: result<i32, str8> = m.unlock();
         if ur2.is_err(): {
             return Err<i64, str8>(ur2.unwrap_err());
         }
@@ -143,28 +144,28 @@ impl WaitGroup {
     /// @brief Mark one task complete.
     /// @ingroup std_concurrent
     /// @return Updated count on success.
-    pub fn done(self: WaitGroup) -> Result<i64, str8> {
+    pub fn done(self: WaitGroup) -> result<i64, str8> {
         return self.add(-1);
     }
 
     /// @brief Block until the count reaches zero.
     /// @ingroup std_concurrent
     /// @return `Ok(0)` when all tasks are complete, otherwise an error string.
-    pub fn wait(self: WaitGroup) -> Result<i32, str8> {
-        let m: Mutex = Mutex { handle: self.mutex_handle };
+    pub fn wait(self: WaitGroup) -> result<i32, str8> {
+        let m: mutex = mutex { raw: self.mutex_handle };
         let c: Condvar = Condvar { handle: self.cond_handle };
-        let lr: Result<i32, str8> = m.lock();
+        let lr: result<i32, str8> = m.lock();
         if lr.is_err(): {
             return Err<i32, str8>(lr.unwrap_err());
         }
         while atomic_load_value(self.count) > 0 {
-            let wr: Result<i32, str8> = c.wait(m);
+            let wr: result<i32, str8> = c.wait(m);
             if wr.is_err(): {
                 let _ = m.unlock();
                 return Err<i32, str8>(wr.unwrap_err());
             }
         }
-        let ur: Result<i32, str8> = m.unlock();
+        let ur: result<i32, str8> = m.unlock();
         if ur.is_err(): {
             return Err<i32, str8>(ur.unwrap_err());
         }
@@ -187,7 +188,7 @@ impl WaitGroup {
     pub fn close(self: WaitGroup) -> i32 {
         atomic_free_handle(self.count);
         let c: Condvar = Condvar { handle: self.cond_handle };
-        let m: Mutex = Mutex { handle: self.mutex_handle };
+        let m: mutex = mutex { raw: self.mutex_handle };
         let rc1: i32 = c.close();
         let rc2: i32 = m.close();
         return rc1 != 0 ? rc1 : rc2;
@@ -199,21 +200,21 @@ impl OrderedGate {
     /// @ingroup std_concurrent
     /// @param start_turn Initial active turn number.
     /// @return `Ok(OrderedGate)` on success, otherwise an error string.
-    pub fn new(start_turn: i64) -> Result<OrderedGate, str8> {
-        let mr: Result<Mutex, str8> = Mutex::new();
+    pub fn new(start_turn: i64) -> result<OrderedGate, str8> {
+        let mr: result<mutex, str8> = mutex::new();
         if mr.is_err(): {
             return Err<OrderedGate, str8>(mr.unwrap_err());
         }
-        let cr: Result<Condvar, str8> = Condvar::new();
+        let cr: result<Condvar, str8> = Condvar::new();
         if cr.is_err(): {
-            let m0: Mutex = mr.unwrap();
+            let m0: mutex = mr.unwrap();
             m0.close();
             return Err<OrderedGate, str8>(cr.unwrap_err());
         }
-        let m1: Mutex = mr.unwrap();
+        let m1: mutex = mr.unwrap();
         let c1: Condvar = cr.unwrap();
         return Ok<OrderedGate, str8>(OrderedGate {
-            mutex_handle: m1.handle,
+            mutex_handle: m1.raw,
             cond_handle: c1.handle,
             turn: atomic_new(start_turn)
         });
@@ -223,21 +224,21 @@ impl OrderedGate {
     /// @ingroup std_concurrent
     /// @param turn Required logical turn number for the caller.
     /// @return `Ok(0)` when the requested turn is active.
-    pub fn wait_for(self: OrderedGate, turn: i64) -> Result<i32, str8> {
-        let m: Mutex = Mutex { handle: self.mutex_handle };
+    pub fn wait_for(self: OrderedGate, turn: i64) -> result<i32, str8> {
+        let m: mutex = mutex { raw: self.mutex_handle };
         let c: Condvar = Condvar { handle: self.cond_handle };
-        let lr: Result<i32, str8> = m.lock();
+        let lr: result<i32, str8> = m.lock();
         if lr.is_err(): {
             return Err<i32, str8>(lr.unwrap_err());
         }
         while atomic_load_value(self.turn) != turn {
-            let wr: Result<i32, str8> = c.wait(m);
+            let wr: result<i32, str8> = c.wait(m);
             if wr.is_err(): {
                 let _ = m.unlock();
                 return Err<i32, str8>(wr.unwrap_err());
             }
         }
-        let ur: Result<i32, str8> = m.unlock();
+        let ur: result<i32, str8> = m.unlock();
         if ur.is_err(): {
             return Err<i32, str8>(ur.unwrap_err());
         }
@@ -248,16 +249,16 @@ impl OrderedGate {
     /// @ingroup std_concurrent
     /// @param turn New active turn number.
     /// @return The new active turn on success.
-    pub fn set(self: OrderedGate, turn: i64) -> Result<i64, str8> {
-        let m: Mutex = Mutex { handle: self.mutex_handle };
+    pub fn set(self: OrderedGate, turn: i64) -> result<i64, str8> {
+        let m: mutex = mutex { raw: self.mutex_handle };
         let c: Condvar = Condvar { handle: self.cond_handle };
-        let lr: Result<i32, str8> = m.lock();
+        let lr: result<i32, str8> = m.lock();
         if lr.is_err(): {
             return Err<i64, str8>(lr.unwrap_err());
         }
         let _ = atomic_store_value(self.turn, turn);
-        let nr: Result<i32, str8> = c.notify_all();
-        let ur: Result<i32, str8> = m.unlock();
+        let nr: result<i32, str8> = c.notify_all();
+        let ur: result<i32, str8> = m.unlock();
         if nr.is_err(): { return Err<i64, str8>(nr.unwrap_err()); }
         if ur.is_err(): { return Err<i64, str8>(ur.unwrap_err()); }
         return Ok<i64, str8>(turn);
@@ -266,17 +267,17 @@ impl OrderedGate {
     /// @brief Advance to the next turn and wake all waiters.
     /// @ingroup std_concurrent
     /// @return The newly active turn on success.
-    pub fn advance(self: OrderedGate) -> Result<i64, str8> {
-        let m: Mutex = Mutex { handle: self.mutex_handle };
+    pub fn advance(self: OrderedGate) -> result<i64, str8> {
+        let m: mutex = mutex { raw: self.mutex_handle };
         let c: Condvar = Condvar { handle: self.cond_handle };
-        let lr: Result<i32, str8> = m.lock();
+        let lr: result<i32, str8> = m.lock();
         if lr.is_err(): {
             return Err<i64, str8>(lr.unwrap_err());
         }
         let prev: i64 = atomic_add_value(self.turn, 1);
         let next: i64 = prev + 1;
-        let nr: Result<i32, str8> = c.notify_all();
-        let ur: Result<i32, str8> = m.unlock();
+        let nr: result<i32, str8> = c.notify_all();
+        let ur: result<i32, str8> = m.unlock();
         if nr.is_err(): { return Err<i64, str8>(nr.unwrap_err()); }
         if ur.is_err(): { return Err<i64, str8>(ur.unwrap_err()); }
         return Ok<i64, str8>(next);
@@ -295,7 +296,7 @@ impl OrderedGate {
     pub fn close(self: OrderedGate) -> i32 {
         atomic_free_handle(self.turn);
         let c: Condvar = Condvar { handle: self.cond_handle };
-        let m: Mutex = Mutex { handle: self.mutex_handle };
+        let m: mutex = mutex { raw: self.mutex_handle };
         let rc1: i32 = c.close();
         let rc2: i32 = m.close();
         return rc1 != 0 ? rc1 : rc2;

@@ -32,7 +32,7 @@ pub fn last_error() -> str8 {
 
 impl TcpListener {
     /// Bind and listen on addr:port (port=0 for ephemeral).
-    pub fn bind(addr: str8, port: i64) -> Result<TcpListener, str8> {
+    pub fn bind(addr: str8, port: i64) -> result<TcpListener, str8> {
         let h: i64 = __mlang_std_net_tcp_bind(addr, port);
         if h == 0 {
             return Err<TcpListener, str8>(last_error());
@@ -41,7 +41,7 @@ impl TcpListener {
     }
 
     /// Accept an incoming connection.
-    pub fn accept(self: TcpListener) -> Result<TcpStream, str8> {
+    pub fn accept(self: TcpListener) -> result<TcpStream, str8> {
         let h: i64 = __mlang_std_net_tcp_accept(self.handle);
         if h == 0 {
             return Err<TcpStream, str8>(last_error());
@@ -50,7 +50,7 @@ impl TcpListener {
     }
 
     /// Read local bound port (useful when bound with port=0).
-    pub fn local_port(self: TcpListener) -> Result<i64, str8> {
+    pub fn local_port(self: TcpListener) -> result<i64, str8> {
         let p: i64 = __mlang_std_net_tcp_local_port(self.handle);
         if p < 0 {
             return Err<i64, str8>(last_error());
@@ -65,7 +65,7 @@ impl TcpListener {
     }
 
     /// Tune pending-connection queue length (listen backlog).
-    pub fn set_backlog(self: TcpListener, backlog: i64) -> Result<i32, str8> {
+    pub fn set_backlog(self: TcpListener, backlog: i64) -> result<i32, str8> {
         let rc: i32 = __mlang_std_net_tcp_set_listener_backlog(self.handle, backlog);
         if rc != 0 {
             return Err<i32, str8>(last_error());
@@ -79,7 +79,7 @@ impl TcpStream {
     /// @param addr Destination hostname or IP literal.
     /// @param port Destination port number.
     /// @return Connected stream, or an error message on failure.
-    pub fn connect(addr: str8, port: i64) -> Result<TcpStream, str8> {
+    pub fn connect(addr: str8, port: i64) -> result<TcpStream, str8> {
         let h: i64 = __mlang_std_net_tcp_connect(addr, port);
         if h == 0 {
             return Err<TcpStream, str8>(last_error());
@@ -91,7 +91,7 @@ impl TcpStream {
     /// @param buf Destination buffer (reused in-place).
     /// @param capacity Maximum number of bytes to read.
     /// @return Number of bytes read (0 = EOF) or an error message.
-    pub fn read(self: TcpStream, buf: str8, capacity: i64) -> Result<i64, str8> {
+    pub fn read(self: TcpStream, buf: str8, capacity: i64) -> result<i64, str8> {
         let n: i64 = __mlang_std_net_tcp_read(self.handle, buf, capacity);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -102,7 +102,7 @@ impl TcpStream {
     /// @brief Write the full contents of `s` to the socket.
     /// @param s Bytes to send.
     /// @return Number of bytes written, or an error message.
-    pub fn write(self: TcpStream, s: str8) -> Result<i64, str8> {
+    pub fn write(self: TcpStream, s: str8) -> result<i64, str8> {
         let n: i64 = __mlang_std_net_tcp_write(self.handle, s);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -119,7 +119,7 @@ impl TcpStream {
     /// @brief Toggle non-blocking I/O on the socket.
     /// @param enabled 1 to enable non-blocking mode, 0 to disable.
     /// @return `Ok(0)` on success, else error message.
-    pub fn set_nonblocking(self: TcpStream, enabled: i32) -> Result<i32, str8> {
+    pub fn set_nonblocking(self: TcpStream, enabled: i32) -> result<i32, str8> {
         let rc: i32 = __mlang_std_net_tcp_set_nonblocking(self.handle, enabled);
         if rc != 0 {
             return Err<i32, str8>(last_error());
@@ -130,7 +130,7 @@ impl TcpStream {
     /// @brief Set a read timeout in milliseconds (0 disables).
     /// @param timeout_ms Timeout in milliseconds.
     /// @return `Ok(0)` on success, else error message.
-    pub fn set_read_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, str8> {
+    pub fn set_read_timeout_ms(self: TcpStream, timeout_ms: i64) -> result<i32, str8> {
         let rc: i32 = __mlang_std_net_tcp_set_read_timeout_ms(self.handle, timeout_ms);
         if rc != 0 {
             return Err<i32, str8>(last_error());
@@ -141,7 +141,7 @@ impl TcpStream {
     /// @brief Set a write timeout in milliseconds (0 disables).
     /// @param timeout_ms Timeout in milliseconds.
     /// @return `Ok(0)` on success, else error message.
-    pub fn set_write_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, str8> {
+    pub fn set_write_timeout_ms(self: TcpStream, timeout_ms: i64) -> result<i32, str8> {
         let rc: i32 = __mlang_std_net_tcp_set_write_timeout_ms(self.handle, timeout_ms);
         if rc != 0 {
             return Err<i32, str8>(last_error());
@@ -150,7 +150,7 @@ impl TcpStream {
     }
 
     /// Clone a TCP stream handle so it can be used by another thread.
-    pub fn try_clone(self: TcpStream) -> Result<TcpStream, str8> {
+    pub fn try_clone(self: TcpStream) -> result<TcpStream, str8> {
         let h: i64 = __mlang_std_net_tcp_try_clone(self.handle);
         if h == 0 {
             return Err<TcpStream, str8>(last_error());

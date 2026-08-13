@@ -229,8 +229,8 @@ fn test_simd_boolean_reductions() {
 
 #[test]
 fn test_simd_bitset_ops_and_reductions() {
-    let ar: Result<BitSet, str8> = BitSet::new(130);
-    let br: Result<BitSet, str8> = BitSet::new(130);
+    let ar: result<BitSet, str8> = BitSet::new(130);
+    let br: result<BitSet, str8> = BitSet::new(130);
     verify(!ar.is_err());
     verify(!br.is_err());
 
@@ -265,9 +265,9 @@ fn test_simd_bitset_ops_and_reductions() {
 
     verify(bit_not_eq(a) == 0);
     verify(count_ones(a) == 127);
-    let after_not_64: Result<bool, str8> = a.get(64);
-    let after_not_65: Result<bool, str8> = a.get(65);
-    let after_not_129: Result<bool, str8> = a.get(129);
+    let after_not_64: result<bool, str8> = a.get(64);
+    let after_not_65: result<bool, str8> = a.get(65);
+    let after_not_129: result<bool, str8> = a.get(129);
     verify(!after_not_64.is_err() && !after_not_64.unwrap());
     verify(!after_not_65.is_err() && !after_not_65.unwrap());
     verify(!after_not_129.is_err() && !after_not_129.unwrap());

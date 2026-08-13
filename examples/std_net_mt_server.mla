@@ -21,7 +21,7 @@ fn handle_client(id: i64, stream_handle: i64) -> i32 {
     let stream: TcpStream = TcpStream::from_handle(stream_handle);
     var input = String::with_capacity(256);
 
-    let r: Result<i64, str8> = stream.read(input, 256);
+    let r: result<i64, str8> = stream.read(input, 256);
     if r.is_err(): {
         println!("SERVER_CLIENT_ERROR id={} err={}", id, r.unwrap_err());
         String::free(input);
@@ -29,7 +29,7 @@ fn handle_client(id: i64, stream_handle: i64) -> i32 {
         return 1;
     }
 
-    let w: Result<i64, str8> = stream.write(input);
+    let w: result<i64, str8> = stream.write(input);
     if w.is_err(): {
         println!("SERVER_CLIENT_ERROR id={} err={}", id, w.unwrap_err());
         String::free(input);
@@ -59,13 +59,13 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     parsed.free();
     ap.free();
 
-    let listener_r: Result<TcpListener, str8> = TcpListener::bind("127.0.0.1", port);
+    let listener_r: result<TcpListener, str8> = TcpListener::bind("127.0.0.1", port);
     if listener_r.is_err(): {
         println!("bind failed: {}", listener_r.unwrap_err());
         return 1;
     }
     let listener: TcpListener = listener_r.unwrap();
-    let backlog_r: Result<i32, str8> = listener.set_backlog(32);
+    let backlog_r: result<i32, str8> = listener.set_backlog(32);
     if backlog_r.is_err(): {
         println!("set_backlog failed: {}", backlog_r.unwrap_err());
         listener.close();
@@ -74,14 +74,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     println!("SERVER_READY port={}", port);
 
-    let s1_r: Result<TcpStream, str8> = listener.accept();
+    let s1_r: result<TcpStream, str8> = listener.accept();
     if s1_r.is_err(): {
         println!("accept 1 failed: {}", s1_r.unwrap_err());
         listener.close();
         return 1;
     }
     let s1: TcpStream = s1_r.unwrap();
-    let s1c_r: Result<TcpStream, str8> = s1.try_clone();
+    let s1c_r: result<TcpStream, str8> = s1.try_clone();
     if s1c_r.is_err(): {
         println!("clone 1 failed: {}", s1c_r.unwrap_err());
         s1.close();
@@ -89,10 +89,10 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
     let s1c: TcpStream = s1c_r.unwrap();
-    let h1: Handle<Thread> = thread_spawn(handle_client, 1, s1c.raw_handle());
+    let h1: std::thread::thread = thread::spawn(handle_client, 1, s1c.raw_handle());
     s1.close();
 
-    let s2_r: Result<TcpStream, str8> = listener.accept();
+    let s2_r: result<TcpStream, str8> = listener.accept();
     if s2_r.is_err(): {
         println!("accept 2 failed: {}", s2_r.unwrap_err());
         join(h1);
@@ -100,7 +100,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
     let s2: TcpStream = s2_r.unwrap();
-    let s2c_r: Result<TcpStream, str8> = s2.try_clone();
+    let s2c_r: result<TcpStream, str8> = s2.try_clone();
     if s2c_r.is_err(): {
         println!("clone 2 failed: {}", s2c_r.unwrap_err());
         s2.close();
@@ -109,7 +109,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
     let s2c: TcpStream = s2c_r.unwrap();
-    let h2: Handle<Thread> = thread_spawn(handle_client, 2, s2c.raw_handle());
+    let h2: std::thread::thread = thread::spawn(handle_client, 2, s2c.raw_handle());
     s2.close();
 
     let rc1: i32 = join(h1);

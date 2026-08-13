@@ -55,8 +55,8 @@ Common builtin/container types:
 - `list<T>`
 - `Vec<T>`
 - `span<T>` / `Span<T>`
-- `Option<T>`
-- `Result<T, E>`
+- `option<T>`
+- `result<T, E>`
 
 Integer type names use bit width, not byte width. For example, `i8` is an
 8-bit signed integer (1 byte), while `i64` is a 64-bit signed integer (8 bytes).
@@ -132,7 +132,7 @@ println!("{} {}", p.x, p.y);
 ## Results and Match
 
 ```mla
-fn divide(a: i32, b: i32) -> Result<i32, str8> {
+fn divide(a: i32, b: i32) -> result<i32, str8> {
     if b == 0 {
         return Err("divide by zero");
     }

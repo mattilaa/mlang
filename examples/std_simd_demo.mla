@@ -47,8 +47,8 @@ fn main() -> i32 {
     let has_mask: bool = any_nonzero(mask_a);
     let all_masks_set: bool = all_nonzero(mask_a);
 
-    let bits_a_result: Result<BitSet, str8> = BitSet::new(130);
-    let bits_b_result: Result<BitSet, str8> = BitSet::new(130);
+    let bits_a_result: result<BitSet, str8> = BitSet::new(130);
+    let bits_b_result: result<BitSet, str8> = BitSet::new(130);
     if bits_a_result.is_err() || bits_b_result.is_err() {
         println!("bitset init failed");
         return 1;

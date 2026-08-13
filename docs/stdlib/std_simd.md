@@ -114,7 +114,7 @@ let has_true: bool = any(checks);
 let all_true: bool = all(checks);
 let has_mask: bool = any_nonzero(masks);
 
-let bitset_result: Result<bit_set, str8> = bit_set::new(128);
+let bitset_result: result<bit_set, str8> = bit_set::new(128);
 let bitset: bit_set = bitset_result.unwrap();
 bitset.resize(128, false);
 bitset.set(64, true);

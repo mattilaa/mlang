@@ -140,13 +140,13 @@ fn print_usage() -> void {
 
 fn run_inherit(program: str8, args: list<str8>) -> i32 {
     println!("running {}", program);
-    let cr: Result<Child, str8> = spawn_inherit(program, args);
+    let cr: result<Child, str8> = spawn_inherit(program, args);
     if cr.is_err() {
         println!("failed to spawn '{}': {}", program, cr.unwrap_err());
         return 1;
     }
     let child: Child = cr.unwrap();
-    let wr: Result<ExitStatus, str8> = child.wait();
+    let wr: result<ExitStatus, str8> = child.wait();
     if (wr.is_err()) {
         println!("wait failed for '{}': {}", program, wr.unwrap_err());
         child.close();
@@ -160,14 +160,14 @@ fn run_inherit(program: str8, args: list<str8>) -> i32 {
     return st.code();
 }
 
-fn run_capture_stdout(program: str8, args: list<str8>) -> Result<str8, str8> {
-    let cr: Result<Child, str8> = spawn(program, args);
+fn run_capture_stdout(program: str8, args: list<str8>) -> result<str8, str8> {
+    let cr: result<Child, str8> = spawn(program, args);
     if (cr.is_err()) {
         return Err<str8, str8>(format!("failed to spawn '{}': {}", program, cr.unwrap_err()));
     }
     let child: Child = cr.unwrap();
 
-    let or: Result<ChildStdout, str8> = child.stdout();
+    let or: result<ChildStdout, str8> = child.stdout();
     if (or.is_err()) {
         child.close();
         return Err<str8, str8>("failed to capture stdout");
@@ -177,7 +177,7 @@ fn run_capture_stdout(program: str8, args: list<str8>) -> Result<str8, str8> {
     var buf: str8 = String::with_capacity(1024);
     var text: str8 = String::new();
     for _i in 0..4096 {
-        let rr: Result<i64, str8> = out.read(buf, 1024);
+        let rr: result<i64, str8> = out.read(buf, 1024);
         if (rr.is_err()) {
             out.close();
             child.close();
@@ -194,7 +194,7 @@ fn run_capture_stdout(program: str8, args: list<str8>) -> Result<str8, str8> {
     out.close();
     String::free(buf);
 
-    let wr: Result<ExitStatus, str8> = child.wait();
+    let wr: result<ExitStatus, str8> = child.wait();
     if (wr.is_err()) {
         child.close();
         return Err<str8, str8>("wait failed");
@@ -268,7 +268,7 @@ fn line_has_dep(line: str8, name: str8) -> i32 {
     return find(t, "=") >= 0 ? 1 : 0;
 }
 
-fn add_dep_to_section(content: str8, section: str8, dep_name: str8, line: str8) -> Result<str8, str8> {
+fn add_dep_to_section(content: str8, section: str8, dep_name: str8, line: str8) -> result<str8, str8> {
     let lines: list<str8> = split_lines(content);
     let n: i64 = lines.len();
 
@@ -819,7 +819,7 @@ fn collect_dep_link_flags(deps: list<DepSpec>, deps_dir: str8) -> LinkFlags {
             if (contains_string(lib_dirs, d) == 0) {
                 lib_dirs.push(d);
             }
-            let fr: Result<str8, str8> =
+            let fr: result<str8, str8> =
                 run_capture_stdout("find", [d, "-maxdepth", "1", "-type", "f"]);
             if (fr.is_err()) {
                 continue;
@@ -940,11 +940,11 @@ fn ensure_deps_dir() -> i32 {
     return 0;
 }
 
-fn read_manifest(manifest_path: str8) -> Result<str8, str8> {
+fn read_manifest(manifest_path: str8) -> result<str8, str8> {
     if (file_exists(manifest_path) == 0) {
         return Err<str8, str8>("mlang.toml not found. Run 'mlang pkg init' first.");
     }
-    let rr: Result<str8, str8> = read_all_text(manifest_path);
+    let rr: result<str8, str8> = read_all_text(manifest_path);
     if (rr.is_err()) {
         return Err<str8, str8>("Failed to read mlang.toml");
     }
@@ -969,7 +969,7 @@ fn run_init(manifest_path: str8) -> i32 {
         name,
         version()
     );
-    let wr: Result<i32, str8> = write_all_text(manifest_path, content);
+    let wr: result<i32, str8> = write_all_text(manifest_path, content);
     if (wr.is_err()) {
         println!("Failed to write mlang.toml");
         return 1;
@@ -1024,7 +1024,7 @@ fn run_add(argv: list<str8>, start_idx: i64, manifest_path: str8) -> i32 {
         return 1;
     }
 
-    let rr: Result<str8, str8> = read_manifest(manifest_path);
+    let rr: result<str8, str8> = read_manifest(manifest_path);
     if (rr.is_err()) {
         println!("{}", rr.unwrap_err());
         return 1;
@@ -1053,12 +1053,12 @@ fn run_add(argv: list<str8>, start_idx: i64, manifest_path: str8) -> i32 {
         line = format!("{} = \"*\"", name);
     }
 
-    let ar: Result<str8, str8> = add_dep_to_section(content, section, name, line);
+    let ar: result<str8, str8> = add_dep_to_section(content, section, name, line);
     if (ar.is_err()) {
         println!("Dependency already exists: {}", name);
         return 1;
     }
-    let wr: Result<i32, str8> = write_all_text(manifest_path, ar.unwrap());
+    let wr: result<i32, str8> = write_all_text(manifest_path, ar.unwrap());
     if (wr.is_err()) {
         println!("Failed to update mlang.toml");
         return 1;
@@ -1067,7 +1067,7 @@ fn run_add(argv: list<str8>, start_idx: i64, manifest_path: str8) -> i32 {
 }
 
 fn run_fetch(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str8) -> i32 {
-    let rr: Result<str8, str8> = read_manifest(manifest_path);
+    let rr: result<str8, str8> = read_manifest(manifest_path);
     if (rr.is_err()) {
         println!("{}", rr.unwrap_err());
         return 1;
@@ -1115,7 +1115,7 @@ fn run_build(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str
         return 1;
     }
 
-    let rr: Result<str8, str8> = read_manifest(manifest_path);
+    let rr: result<str8, str8> = read_manifest(manifest_path);
     if (rr.is_err()) {
         println!("{}", rr.unwrap_err());
         return 1;
@@ -1154,7 +1154,7 @@ fn run_build(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str
         if (dep.use_pkg_config == 0 || len(dep.pkg_config) == 0) {
             continue;
         }
-        let r: Result<str8, str8> =
+        let r: result<str8, str8> =
             run_capture_stdout("pkg-config", ["--cflags", "--libs", dep.pkg_config]);
         if (r.is_err()) {
             println!("pkg-config failed for: {}", dep.pkg_config);
@@ -1231,7 +1231,7 @@ fn run_build(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str
 }
 
 fn run_clean(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str8) -> i32 {
-    let rr: Result<str8, str8> = read_manifest(manifest_path);
+    let rr: result<str8, str8> = read_manifest(manifest_path);
     if (rr.is_ok()) {
         let content: str8 = rr.unwrap();
         if (manifest_uses_build_config(content) == 1 || has_pkg_dir_override_args(argv, start_idx + 1) == 1) {
@@ -1247,7 +1247,7 @@ fn run_clean(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str
         return 0;
     }
 
-    let rr: Result<i32, str8> = remove_tree(build_dir);
+    let rr: result<i32, str8> = remove_tree(build_dir);
     if (rr.is_err()) {
         println!("Failed to clean {}", build_dir);
         return 1;

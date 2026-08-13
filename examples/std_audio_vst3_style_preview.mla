@@ -33,7 +33,7 @@ fn midi_note_to_frequency(note: i32) -> f64 {
 
 fn play_note(dev: AudioDevice, note: i32, velocity: f64, duration_ms: i64) -> i32 {
     let hz: f64 = midi_note_to_frequency(note);
-    let tone_r: Result<i32, str8> = dev.play_sine(hz, 0.20 * velocity, duration_ms);
+    let tone_r: result<i32, str8> = dev.play_sine(hz, 0.20 * velocity, duration_ms);
     if tone_r.is_err() {
         println!("note preview failed: {}", tone_r.unwrap_err());
         return 1;
@@ -83,7 +83,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     if selected_id >= 0 {
         println!("selected output: [{}] {}", selected_id, device_name(selected_id));
     }
-    let dev_r: Result<AudioDevice, str8> = selected_id >= 0
+    let dev_r: result<AudioDevice, str8> = selected_id >= 0
         ? AudioDevice::open_with_config(selected_id, "mlang_vst3_style_preview", requested_sample_rate, requested_buffer_frames)
         : AudioDevice::open_default_with_config("mlang_vst3_style_preview", requested_sample_rate, requested_buffer_frames);
     if dev_r.is_err() {
@@ -92,7 +92,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     let dev: AudioDevice = dev_r.unwrap();
 
-    let start_r: Result<i32, str8> = dev.start();
+    let start_r: result<i32, str8> = dev.start();
     if start_r.is_err() {
         println!("audio start failed: {}", start_r.unwrap_err());
         dev.close();

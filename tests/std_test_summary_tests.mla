@@ -13,7 +13,7 @@ use std::strbuf::contains;
 
 fn read_child_stdout_all(out: ChildStdout) -> str8 {
     var buf: str8 = String::with_capacity(8192);
-    let buf_r: Result<i64, str8> = out.read(buf, 8192);
+    let buf_r: result<i64, str8> = out.read(buf, 8192);
     if buf_r.is_err(): { return ""; }
     let _ = out.close();
     return buf;
@@ -21,7 +21,7 @@ fn read_child_stdout_all(out: ChildStdout) -> str8 {
 
 fn read_child_stderr_all(err: ChildStderr) -> str8 {
     var buf: str8 = String::with_capacity(8192);
-    let buf_r: Result<i64, str8> = err.read(buf, 8192);
+    let buf_r: result<i64, str8> = err.read(buf, 8192);
     if buf_r.is_err(): { return ""; }
     let _ = err.close();
     return buf;
@@ -31,22 +31,22 @@ fn read_child_stderr_all(err: ChildStderr) -> str8 {
 fn test_summary_lists_failing_test_names() -> i32 {
     let src_path: str8 = "/tmp/mlang_test_output_failure_summary_case.mla";
     let src: str8 = "mod std::testing;\nuse std::testing::expect_true;\n\n#[test]\nfn test_first_failure_case() -> i32 {\n    expect_true(false);\n    return 1;\n}\n\n#[test]\nfn test_second_failure_case() -> i32 {\n    return 1;\n}\n\n#[test]\nfn test_passing_case() -> i32 {\n    return 0;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
 
     let args: list<str8> = ["--tests", src_path, "-L", "build", "-lmlang_std"];
-    let cr: Result<Child, str8> = spawn("./build/mlang", args);
+    let cr: result<Child, str8> = spawn("./build/mlang", args);
     if cr.is_err(): { return 1; }
     let child: Child = cr.unwrap();
 
-    let out_r: Result<ChildStdout, str8> = child.stdout();
+    let out_r: result<ChildStdout, str8> = child.stdout();
     if out_r.is_err(): { return 1; }
     let out: ChildStdout = out_r.unwrap();
-    let err_r: Result<ChildStderr, str8> = child.stderr();
+    let err_r: result<ChildStderr, str8> = child.stderr();
     if err_r.is_err(): { return 1; }
     let err: ChildStderr = err_r.unwrap();
 
-    let status_r: Result<ExitStatus, str8> = child.wait();
+    let status_r: result<ExitStatus, str8> = child.wait();
     if status_r.is_err(): { return 1; }
     let status: ExitStatus = status_r.unwrap();
     let stdout_text: str8 = read_child_stdout_all(out);

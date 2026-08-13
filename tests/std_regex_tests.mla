@@ -11,7 +11,7 @@ use std::testing::verify;
 
 #[test]
 fn test_regex_compile_and_is_match() {
-    let rr: Result<Regex, str8> = Regex::compile("h[ae]llo");
+    let rr: result<Regex, str8> = Regex::compile("h[ae]llo");
     if rr.is_err(): { verify(false); }
     let re: Regex = rr.unwrap();
 
@@ -30,7 +30,7 @@ fn test_regex_compile_and_is_match() {
 
 #[test]
 fn test_regex_find_offsets() {
-    let rr: Result<Regex, str8> = Regex::compile("[0-9]+");
+    let rr: result<Regex, str8> = Regex::compile("[0-9]+");
     if rr.is_err(): { verify(false); }
     let re: Regex = rr.unwrap();
 
@@ -50,7 +50,7 @@ fn test_regex_find_offsets() {
 
 #[test]
 fn test_regex_capture_groups() {
-    let rr: Result<Regex, str8> = Regex::compile("([A-Za-z]+)-([0-9]+)");
+    let rr: result<Regex, str8> = Regex::compile("([A-Za-z]+)-([0-9]+)");
     if rr.is_err(): { verify(false); }
     let re: Regex = rr.unwrap();
 
@@ -76,7 +76,7 @@ fn test_regex_capture_groups() {
 
 #[test]
 fn test_regex_compile_error_reports_message() {
-    let rr: Result<Regex, str8> = Regex::compile("([0-9]+");
+    let rr: result<Regex, str8> = Regex::compile("([0-9]+");
     if rr.is_ok(): {
         let re: Regex = rr.unwrap();
         verify(false);

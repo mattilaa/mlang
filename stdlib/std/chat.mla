@@ -44,7 +44,7 @@ pub fn last_error() -> str8 {
 
 impl ChatUi {
     /// @brief Create a chat UI state with bounded scrollback.
-    pub fn new(max_lines: i64) -> Result<ChatUi, str8> {
+    pub fn new(max_lines: i64) -> result<ChatUi, str8> {
         let h: i64 = __mlang_std_chat_new(max_lines);
         if h == 0 {
             return Err<ChatUi, str8>(last_error());

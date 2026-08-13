@@ -23,7 +23,7 @@ struct Leaf : Base {
     var name: str8;
 };
 
-fn run_demo() -> Result<i32, str8> {
+fn run_demo() -> result<i32, str8> {
     var leaf: Leaf {};
     leaf.setSecret(7);
     leaf.x = 3;
@@ -47,7 +47,7 @@ fn run_demo() -> Result<i32, str8> {
 }
 
 fn main() -> i32 {
-    let r: Result<i32, str8> = run_demo();
+    let r: result<i32, str8> = run_demo();
     if r.is_err() {
         println!("demo failed: {}", r.unwrap_err());
         return 1;

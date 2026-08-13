@@ -8,30 +8,30 @@ Module file: `stdlib/std/jsonrpc.mla`
 
 ### Transport API
 - `stdio() -> stdio_transport`
-- `stdio_transport::read_frame(self, buf: str8, capacity: i64) -> Result<i64, str8>`
-- `stdio_transport::read_frame_timeout(self, buf: str8, capacity: i64, timeout_ms: i64) -> Result<i64, str8>`
-- `stdio_transport::write_frame(self, payload: str8) -> Result<i32, str8>`
+- `stdio_transport::read_frame(self, buf: str8, capacity: i64) -> result<i64, str8>`
+- `stdio_transport::read_frame_timeout(self, buf: str8, capacity: i64, timeout_ms: i64) -> result<i64, str8>`
+- `stdio_transport::write_frame(self, payload: str8) -> result<i32, str8>`
 - `build_frame(payload: str8) -> str8`
-- `parse_frame(frame: str8, out: str8, capacity: i64) -> Result<i64, str8>`
+- `parse_frame(frame: str8, out: str8, capacity: i64) -> result<i64, str8>`
 - `last_error() -> str8`
 
 ### runtime queues
-- `runtime::new(queue_capacity: i64) -> Result<runtime, str8>`
-- `runtime::push_inbound(self, payload: str8) -> Result<i32, str8>`
-- `runtime::try_pop_inbound(self, buf: str8, capacity: i64) -> Result<i64, str8>`
-- `runtime::push_outbound(self, payload: str8) -> Result<i32, str8>`
-- `runtime::try_pop_outbound(self, buf: str8, capacity: i64) -> Result<i64, str8>`
+- `runtime::new(queue_capacity: i64) -> result<runtime, str8>`
+- `runtime::push_inbound(self, payload: str8) -> result<i32, str8>`
+- `runtime::try_pop_inbound(self, buf: str8, capacity: i64) -> result<i64, str8>`
+- `runtime::push_outbound(self, payload: str8) -> result<i32, str8>`
+- `runtime::try_pop_outbound(self, buf: str8, capacity: i64) -> result<i64, str8>`
 - `runtime::close(self) -> void`
-- `flush_one_outbound(rt: runtime, transport: stdio_transport, scratch: str8, capacity: i64) -> Result<i32, str8>`
-- `run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity: i64) -> Result<i32, str8>`
+- `flush_one_outbound(rt: runtime, transport: stdio_transport, scratch: str8, capacity: i64) -> result<i32, str8>`
+- `run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity: i64) -> result<i32, str8>`
 
 ### Cancellation API
-- `cancel_mark(request_id: i64) -> Result<i32, str8>`
+- `cancel_mark(request_id: i64) -> result<i32, str8>`
 - `cancel_is_marked(request_id: i64) -> i32`
 - `cancel_take(request_id: i64) -> i32`
 - `cancel_clear(request_id: i64) -> i32`
 - `cancel_clear_all() -> i32`
-- `register_cancel_from_payload(payload: str8) -> Result<i32, str8>`
+- `register_cancel_from_payload(payload: str8) -> result<i32, str8>`
 - `is_timeout_error(err: str8) -> i32`
 
 ### runtime Dispatch Hook

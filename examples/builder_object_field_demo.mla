@@ -1,6 +1,6 @@
 /// \file builder_object_field_demo.mla
 /// \ingroup examples
-/// \brief Builder object JSON demo — Option B: clause keys are declared with
+/// \brief Builder object JSON demo — option B: clause keys are declared with
 ///        the compact `field` keyword.
 ///
 /// Same builder syntax as \ref builder_object_json_demo.mla, but demonstrates
@@ -16,7 +16,7 @@
 ///   mlang run examples/builder_object_field_demo.mla
 /// \endcode
 
-// Builder JSON demo — Option B: leaf clauses are declared with the compact
+// Builder JSON demo — option B: leaf clauses are declared with the compact
 // `field` keyword (desugars to a single-field struct). Container types are
 // regular `struct` declarations. The domain is a shop order with line items,
 // showing that value types can be strings, integers, and floats — all

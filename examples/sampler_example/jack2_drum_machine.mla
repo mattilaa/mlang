@@ -326,7 +326,7 @@ fn main() -> i32 {
     let sample_dir: str8 = "examples/sampler_example";
     let bpm_default: i32 = 130;
 
-    let fr: Result<File, str8> = File::open(schema_path);
+    let fr: result<File, str8> = File::open(schema_path);
     if fr.is_err() {
         eprintln!("failed to open schema: {}", schema_path);
         return 1;
@@ -548,7 +548,7 @@ fn main() -> i32 {
         }
     }
 
-    let event_loop_r: Result<EventLoop, str8> = EventLoop::start(event_queue, 2, "poll");
+    let event_loop_r: result<EventLoop, str8> = EventLoop::start(event_queue, 2, "poll");
     if event_loop_r.is_err() {
         eprintln!("[drum] failed to create std::event_loop");
         if raw_enabled == 1 {

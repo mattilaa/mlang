@@ -112,7 +112,7 @@ public:
         warnPlainColonWhile = enabled;
     }
 
-    /// \brief Enable or disable the warning for \c Result.unwrap() usage.
+    /// \brief Enable or disable the warning for \c result.unwrap() usage.
     void setWarnResultUnwrap(bool enabled)
     {
         warnResultUnwrap = enabled;
@@ -721,10 +721,6 @@ private:
     void generateEnumDefinition(EnumDefNode* node);
     void ensureResultBuiltin(ProgramNode* program);
     void ensureOptionBuiltin(ProgramNode* program);
-    void ensureHandleBuiltin(ProgramNode* program);
-    void ensureThreadBuiltin(ProgramNode* program);
-    void ensureMutexBuiltin(ProgramNode* program);
-    void ensureAtomic64Builtin(ProgramNode* program);
 
     // Struct method helpers
     void generateStructMethods(StructDefNode* node);

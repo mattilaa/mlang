@@ -12,7 +12,7 @@ Module file: `stdlib/std/chat.mla`
 - `line_system() -> i32`
 - `line_self() -> i32`
 - `last_error() -> str8`
-- `chat_ui::new(max_lines: i64) -> Result<chat_ui, str8>`
+- `chat_ui::new(max_lines: i64) -> result<chat_ui, str8>`
 - `chat_ui::close(self: chat_ui) -> i32`
 - `chat_ui::set_title(self: chat_ui, title: str8) -> i32`
 - `chat_ui::set_server(self: chat_ui, server: str8) -> i32`

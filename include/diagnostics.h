@@ -28,7 +28,7 @@ inline std::string classify_warning_code(const std::string& message)
         return "MLANG-W0001";
     if(contains_text(message, "plain while with ':'"))
         return "MLANG-W0002";
-    if(contains_text(message, "Result.unwrap() may panic"))
+    if(contains_text(message, "result.unwrap() may panic"))
         return "MLANG-W0003";
     if(contains_text(message, "empty block"))
         return "MLANG-W0004";

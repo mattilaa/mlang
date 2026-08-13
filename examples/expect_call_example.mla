@@ -80,5 +80,5 @@ fn main() -> i32 {
              checks(), failures(), total);
 
     mock_free(m.handle);
-    return result();
+    return status();
 }

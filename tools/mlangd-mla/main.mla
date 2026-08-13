@@ -288,7 +288,7 @@ fn ensure_session() -> i32 {
     if g_session_ready == 1 {
         return 0;
     }
-    let sr: Result<i64, str8> = session_create_handle();
+    let sr: result<i64, str8> = session_create_handle();
     if sr.is_err() {
         return 1;
     }
@@ -490,7 +490,7 @@ fn text_for_uri(uri: str8) -> str8 {
     }
     let path: str8 = file_uri_to_path(uri);
     if len(path) == 0 { return String::new(); }
-    let text_r: Result<str8, str8> = read_all_text(path);
+    let text_r: result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
     return text_r.unwrap();
 }
@@ -533,7 +533,7 @@ fn attribute_doc_location(line_text: str8) -> str8 {
     if len(root) == 0 { return String::new(); }
     let doc_path: str8 = concat(root, "/docs/language_attributes.md");
     if file_exists(doc_path) != 1 { return String::new(); }
-    let text_r: Result<str8, str8> = read_all_text(doc_path);
+    let text_r: result<str8, str8> = read_all_text(doc_path);
     if text_r.is_err() { return String::new(); }
     let text: str8 = text_r.unwrap();
     // Check longest forms first so #[inline] does not match inside #[inline(always)]
@@ -567,7 +567,7 @@ fn runtime_builtin_location(word: str8) -> str8 {
     let docs_runtime: str8 = concat(root, "/docs/runtime_builtins.h");
 
     if file_exists(docs_lang) == 1 {
-        let text_r: Result<str8, str8> = read_all_text(docs_lang);
+        let text_r: result<str8, str8> = read_all_text(docs_lang);
         if text_r.is_ok() {
             let text: str8 = text_r.unwrap();
             let p1: str8 = first_match_location(docs_lang, text, word);
@@ -578,7 +578,7 @@ fn runtime_builtin_location(word: str8) -> str8 {
     }
 
     if file_exists(docs_runtime) == 1 {
-        let text_r2: Result<str8, str8> = read_all_text(docs_runtime);
+        let text_r2: result<str8, str8> = read_all_text(docs_runtime);
         if text_r2.is_ok() {
             let text2: str8 = text_r2.unwrap();
             let p3: str8 = first_match_location(docs_runtime, text2, word);
@@ -624,7 +624,7 @@ fn builtin_type_location(word: str8) -> str8 {
             if file_exists(a2) == 1 { array_path = a2; }
         }
         if len(array_path) == 0 { return String::new(); }
-        let array_text_r: Result<str8, str8> = read_all_text(array_path);
+        let array_text_r: result<str8, str8> = read_all_text(array_path);
         if array_text_r.is_err() { return String::new(); }
         return first_match_location(array_path, array_text_r.unwrap(),
                                     "@builtin array");
@@ -667,7 +667,7 @@ fn builtin_type_location(word: str8) -> str8 {
     }
     if len(path) == 0 { return String::new(); }
 
-    let text_r: Result<str8, str8> = read_all_text(path);
+    let text_r: result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
     let text: str8 = text_r.unwrap();
     let marker: str8 = format!("@builtin {}", lookup);
@@ -715,7 +715,7 @@ fn builtin_result_method_location(member: str8) -> str8 {
     }
     if len(path) == 0 { return String::new(); }
 
-    // Builtin Result docs live in stdlib/types.mla around line 90.
+    // Builtin result docs live in stdlib/types.mla around line 90.
     return location_json(path_to_file_uri(path), 90, 1);
 }
 
@@ -776,7 +776,7 @@ fn string_intrinsic_location(member: str8) -> str8 {
                 if file_exists(d3) == 1 { dpath = d3; }
             }
             if len(dpath) > 0 {
-                let dtext_r: Result<str8, str8> = read_all_text(dpath);
+                let dtext_r: result<str8, str8> = read_all_text(dpath);
                 if dtext_r.is_ok() {
                     let dtext: str8 = dtext_r.unwrap();
                     let dloc: str8 = first_match_location(dpath, dtext, "extern fn __mlang_std_strbuf_clone(");
@@ -787,7 +787,7 @@ fn string_intrinsic_location(member: str8) -> str8 {
         return String::new();
     }
 
-    let text_r: Result<str8, str8> = read_all_text(path);
+    let text_r: result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
     let text: str8 = text_r.unwrap();
     let pat: str8 = format!("pub fn {}", target);
@@ -813,7 +813,7 @@ fn string_intrinsic_location(member: str8) -> str8 {
             if file_exists(d3b) == 1 { dpath2 = d3b; }
         }
         if len(dpath2) > 0 {
-            let dtext_r2: Result<str8, str8> = read_all_text(dpath2);
+            let dtext_r2: result<str8, str8> = read_all_text(dpath2);
             if dtext_r2.is_ok() {
                 let dtext2: str8 = dtext_r2.unwrap();
                 let dloc2: str8 = first_match_location(dpath2, dtext2, "extern fn __mlang_std_strbuf_clone(");
@@ -833,7 +833,7 @@ fn associated_type_method_location(query_text: str8, type_name: str8, method: st
     if eq(type_base, "TcpListener") == 1 || eq(type_base, "TcpStream") == 1 {
         let net_path: str8 = module_file_path("std::net");
         if len(net_path) > 0 {
-            let net_text_r: Result<str8, str8> = read_all_text(net_path);
+            let net_text_r: result<str8, str8> = read_all_text(net_path);
             if net_text_r.is_ok() {
                 let net_text: str8 = net_text_r.unwrap();
                 let net_loc: str8 = first_match_location(net_path, net_text, format!("fn {}(", method));
@@ -851,7 +851,7 @@ fn associated_type_method_location(query_text: str8, type_name: str8, method: st
     let path: str8 = module_file_path(type_mod);
     if len(path) == 0 { return String::new(); }
 
-    let text_r: Result<str8, str8> = read_all_text(path);
+    let text_r: result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
     let text: str8 = text_r.unwrap();
     return first_match_location(path, text, format!("fn {}(", method));
@@ -861,19 +861,14 @@ fn std_net_method_location(method: str8) -> str8 {
     if len(method) == 0 { return String::new(); }
     let p: str8 = module_file_path("std::net");
     if len(p) == 0 { return String::new(); }
-    let tr: Result<str8, str8> = read_all_text(p);
+    let tr: result<str8, str8> = read_all_text(p);
     if tr.is_err() { return String::new(); }
     let t: str8 = tr.unwrap();
     return first_match_location(p, t, format!("fn {}(", method));
 }
 
 fn thread_intrinsic_location(name: str8) -> str8 {
-    if eq(name, "thread_spawn") == 0 &&
-       eq(name, "thread_join") == 0 &&
-       eq(name, "mutex_create") == 0 &&
-       eq(name, "mutex_lock") == 0 &&
-       eq(name, "mutex_unlock") == 0 &&
-       eq(name, "mutex_destroy") == 0 &&
+    if eq(name, "thread_join") == 0 &&
        eq(name, "atomic_i64_new") == 0 &&
        eq(name, "atomic_i64_load") == 0 &&
        eq(name, "atomic_i64_store") == 0 &&
@@ -886,16 +881,16 @@ fn thread_intrinsic_location(name: str8) -> str8 {
     let here: str8 = cwd();
     var path: str8 = String::new();
     if len(root) > 0 {
-        let p1: str8 = concat(root, "/stdlib/std/thread/detail.mla");
+        let p1: str8 = concat(root, "/stdlib/std/thread.mla");
         if file_exists(p1) == 1 { path = p1; }
     }
     if len(path) == 0 {
-        let p2: str8 = concat(here, "/stdlib/std/thread/detail.mla");
+        let p2: str8 = concat(here, "/stdlib/std/thread.mla");
         if file_exists(p2) == 1 { path = p2; }
     }
     if len(path) == 0 { return String::new(); }
 
-    let text_r: Result<str8, str8> = read_all_text(path);
+    let text_r: result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
     let text: str8 = text_r.unwrap();
     return first_match_location(path, text, format!("extern fn {}(", name));
@@ -1102,7 +1097,7 @@ fn module_for_type_in_scope(text: str8, type_name: str8) -> str8 {
         if len(modn) == 0 { continue; }
         let p: str8 = module_file_path(modn);
         if len(p) == 0 { continue; }
-        let tr: Result<str8, str8> = read_all_text(p);
+        let tr: result<str8, str8> = read_all_text(p);
         if tr.is_err() { continue; }
         let t: str8 = tr.unwrap();
         if contains(t, format!("impl {}", type_name)) == 1 { return modn; }
@@ -1252,7 +1247,7 @@ fn local_binding_type(text: str8, name: str8) -> str8 {
         }
         return ty;
     }
-    // Infer `let x = y.unwrap();` from `y: Result<T, E>`.
+    // Infer `let x = y.unwrap();` from `y: result<T, E>`.
     for i in 0..n {
         let raw: str8 = line_text_at(text, i);
         let line: str8 = trim_ascii_ws(raw);
@@ -1273,7 +1268,7 @@ fn local_binding_type(text: str8, name: str8) -> str8 {
         if len(src) == 0 { continue; }
         if eq(src, name) == 1 { continue; }
         let src_ty: str8 = local_binding_type(text, src);
-        if starts_with(src_ty, "Result<") == 1 {
+        if starts_with(src_ty, "result<") == 1 {
             let inner: str8 = sub(src_ty, 7, len(src_ty) - 7);
             let comma: i64 = find(inner, ",");
             if comma > 0 {
@@ -1336,7 +1331,7 @@ fn c_type_target(word: str8) -> str8 {
 fn symbol_location_in_c_file(path: str8, symbol: str8) -> str8 {
     if len(path) == 0 { return String::new(); }
     if file_exists(path) != 1 { return String::new(); }
-    let text_r: Result<str8, str8> = read_all_text(path);
+    let text_r: result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
     let text: str8 = text_r.unwrap();
     return first_match_location(path, text, symbol);
@@ -1445,7 +1440,7 @@ fn c_internals_location(word: str8) -> str8 {
         }
     }
     if len(path) > 0 {
-        let text_r: Result<str8, str8> = read_all_text(path);
+        let text_r: result<str8, str8> = read_all_text(path);
         if text_r.is_ok() {
             let text: str8 = text_r.unwrap();
             let tloc: str8 = first_match_location(path, text, target);
@@ -1488,7 +1483,7 @@ fn c_internals_location(word: str8) -> str8 {
             if file_exists(c5) == 1 { hpath = c5; }
         }
         if len(hpath) > 0 {
-            let htext_r: Result<str8, str8> = read_all_text(hpath);
+            let htext_r: result<str8, str8> = read_all_text(hpath);
             if htext_r.is_ok() {
                 let htext: str8 = htext_r.unwrap();
                 let hloc: str8 = first_match_location(hpath, htext, target);
@@ -1520,7 +1515,7 @@ fn c_internals_location(word: str8) -> str8 {
             }
         }
         if len(spath) > 0 {
-            let stext_r: Result<str8, str8> = read_all_text(spath);
+            let stext_r: result<str8, str8> = read_all_text(spath);
             if stext_r.is_ok() {
                 let stext: str8 = stext_r.unwrap();
                 let sloc: str8 = first_match_location(spath, stext, target);
@@ -1546,7 +1541,7 @@ fn c_internals_location(word: str8) -> str8 {
         }
     }
     if len(path) > 0 {
-        let text2_r: Result<str8, str8> = read_all_text(path);
+        let text2_r: result<str8, str8> = read_all_text(path);
         if text2_r.is_ok() {
             let text2: str8 = text2_r.unwrap();
             let tloc2: str8 = first_match_location(path, text2, target);
@@ -1684,7 +1679,7 @@ fn c_stdlib_function_location(name: str8) -> str8 {
         for j in 0..candidates.len() {
             let hpath: str8 = candidates[j];
             if file_exists(hpath) != 1 { continue; }
-            let htext_r: Result<str8, str8> = read_all_text(hpath);
+            let htext_r: result<str8, str8> = read_all_text(hpath);
             if htext_r.is_err() { continue; }
             let htext: str8 = htext_r.unwrap();
             let hloc: str8 = first_match_location(hpath, htext, pattern);
@@ -1703,7 +1698,7 @@ fn c_stdlib_function_location(name: str8) -> str8 {
         let hdrs: list<str8> = glob_recursive(inc_root, "*.h");
         for j in 0..hdrs.len() {
             let hpath: str8 = hdrs[j];
-            let htext_r: Result<str8, str8> = read_all_text(hpath);
+            let htext_r: result<str8, str8> = read_all_text(hpath);
             if htext_r.is_err() { continue; }
             let htext: str8 = htext_r.unwrap();
             let hloc: str8 = first_match_location(hpath, htext, pattern);
@@ -1924,12 +1919,8 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "map") == 1 { return 22; }
     if eq(label, "tuple") == 1 { return 22; }
     if eq(label, "ptr") == 1 { return 22; }
-    if eq(label, "Handle") == 1 { return 22; }
-    if eq(label, "Thread") == 1 { return 22; }
-    if eq(label, "Mutex") == 1 { return 22; }
-    if eq(label, "Atomic64") == 1 { return 22; }
-    if eq(label, "Result") == 1 { return 22; }
-    if eq(label, "Option") == 1 { return 22; }
+    if eq(label, "result") == 1 { return 22; }
+    if eq(label, "option") == 1 { return 22; }
     if eq(label, "Vec") == 1 { return 22; }
     if eq(label, "Span") == 1 { return 22; }
     if eq(label, "span") == 1 { return 22; }
@@ -1984,17 +1975,13 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "map") == 1 { return "builtin generic map type"; }
     if eq(label, "tuple") == 1 { return "builtin tuple type"; }
     if eq(label, "ptr") == 1 { return "builtin pointer type"; }
-    if eq(label, "Handle") == 1 { return "builtin generic runtime handle type"; }
-    if eq(label, "Thread") == 1 { return "builtin thread handle payload marker type"; }
-    if eq(label, "Mutex") == 1 { return "builtin mutex handle payload marker type"; }
-    if eq(label, "Atomic64") == 1 { return "builtin 64-bit atomic handle payload marker type"; }
     if eq(label, "string") == 1 { return "builtin UTF-8 string type"; }
-    if eq(label, "Result") == 1 { return "builtin generic result type"; }
-    if eq(label, "Ok") == 1 { return "builtin Result constructor"; }
-    if eq(label, "Err") == 1 { return "builtin Result constructor"; }
-    if eq(label, "Option") == 1 { return "builtin generic optional type"; }
-    if eq(label, "Some") == 1 { return "builtin Option constructor"; }
-    if eq(label, "None") == 1 { return "builtin Option constructor"; }
+    if eq(label, "result") == 1 { return "builtin generic result type"; }
+    if eq(label, "Ok") == 1 { return "builtin result constructor"; }
+    if eq(label, "Err") == 1 { return "builtin result constructor"; }
+    if eq(label, "option") == 1 { return "builtin generic optional type"; }
+    if eq(label, "Some") == 1 { return "builtin option constructor"; }
+    if eq(label, "None") == 1 { return "builtin option constructor"; }
     if eq(label, "Vec") == 1 { return "stdlib alias for list<T>"; }
     if eq(label, "Span") == 1 { return "stdlib alias for list<T>"; }
     if eq(label, "span") == 1 { return "stdlib alias for list<T>"; }
@@ -2006,11 +1993,11 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "hidden") == 1 { return "property option"; }
     if eq(label, "protected") == 1 { return "property option"; }
     if eq(label, "cexpr") == 1 { return "compile-time evaluation keyword"; }
-    if eq(label, "is_ok") == 1 { return "builtin Result method"; }
-    if eq(label, "is_err") == 1 { return "builtin Result method"; }
-    if eq(label, "unwrap") == 1 { return "builtin Result/Option method"; }
-    if eq(label, "unwrap_err") == 1 { return "builtin Result method"; }
-    if eq(label, "is_some") == 1 { return "builtin Option method"; }
+    if eq(label, "is_ok") == 1 { return "builtin result method"; }
+    if eq(label, "is_err") == 1 { return "builtin result method"; }
+    if eq(label, "unwrap") == 1 { return "builtin result/option method"; }
+    if eq(label, "unwrap_err") == 1 { return "builtin result method"; }
+    if eq(label, "is_some") == 1 { return "builtin option method"; }
     if eq(label, "set") == 1 { return "BitSet method"; }
     if eq(label, "get") == 1 { return "BitSet method"; }
     if eq(label, "toggle") == 1 { return "BitSet method"; }
@@ -2109,35 +2096,23 @@ fn completion_documentation(label: str8) -> str8 {
     if eq(label, "ptr") == 1 {
         return "Pointer type: ptr<T>. Take an address with &value and dereference with *ptr.";
     }
-    if eq(label, "Handle") == 1 {
-        return "Generic runtime handle wrapper: Handle<T>. Used by thread and sync intrinsics such as Handle<Thread>, Handle<Mutex>, and Handle<Atomic64>.";
-    }
-    if eq(label, "Thread") == 1 {
-        return "Opaque payload marker used with Handle<Thread> for spawned threads.";
-    }
-    if eq(label, "Mutex") == 1 {
-        return "Opaque payload marker used with Handle<Mutex> for mutex intrinsics.";
-    }
-    if eq(label, "Atomic64") == 1 {
-        return "Opaque payload marker used with Handle<Atomic64> for 64-bit atomic intrinsics.";
-    }
-    if eq(label, "Result") == 1 {
-        return "Result<T, E> represents success Ok(T) or failure Err(E). Construct with Ok<T, E>(value) or Err<T, E>(error). Methods include is_ok(), is_err(), unwrap(), and unwrap_err(). The ? operator propagates Err values.";
+    if eq(label, "result") == 1 {
+        return "result<T, E> represents success Ok(T) or failure Err(E). Construct with Ok<T, E>(value) or Err<T, E>(error). Methods include is_ok(), is_err(), unwrap(), and unwrap_err(). The ? operator propagates Err values.";
     }
     if eq(label, "Ok") == 1 {
-        return "Result success constructor: Ok<T, E>(value).";
+        return "result success constructor: Ok<T, E>(value).";
     }
     if eq(label, "Err") == 1 {
-        return "Result failure constructor: Err<T, E>(error).";
+        return "result failure constructor: Err<T, E>(error).";
     }
-    if eq(label, "Option") == 1 {
-        return "Option<T> represents either Some(value) or None. Use it for optional values without a separate error payload.";
+    if eq(label, "option") == 1 {
+        return "option<T> represents either Some(value) or None. Use it for optional values without a separate error payload.";
     }
     if eq(label, "Some") == 1 {
-        return "Option constructor for present values: Some<T>(value).";
+        return "option constructor for present values: Some<T>(value).";
     }
     if eq(label, "None") == 1 {
-        return "Option constructor for absent values: None<T>().";
+        return "option constructor for absent values: None<T>().";
     }
     if eq(label, "size_of") == 1 {
         return "Builtin size query: size_of(Type) or size_of(expr). Returns the ABI size in bytes as i64.";
@@ -2164,25 +2139,25 @@ fn completion_documentation(label: str8) -> str8 {
         return "Compile-time evaluation keyword. Use cexpr(expr) to require compile-time folding, or mark functions callable from compile-time contexts.";
     }
     if eq(label, "is_ok") == 1 {
-        return "Result<T, E>.is_ok() returns true when the value is Ok.";
+        return "result<T, E>.is_ok() returns true when the value is Ok.";
     }
     if eq(label, "is_err") == 1 {
-        return "Result<T, E>.is_err() returns true when the value is Err.";
+        return "result<T, E>.is_err() returns true when the value is Err.";
     }
     if eq(label, "unwrap") == 1 {
-        return "Result<T, E>.unwrap() returns the Ok value and may panic on Err. Option<T>.unwrap() returns the Some value.";
+        return "result<T, E>.unwrap() returns the Ok value and may panic on Err. option<T>.unwrap() returns the Some value.";
     }
     if eq(label, "unwrap_err") == 1 {
-        return "Result<T, E>.unwrap_err() returns the Err value.";
+        return "result<T, E>.unwrap_err() returns the Err value.";
     }
     if eq(label, "is_some") == 1 {
-        return "Option<T>.is_some() returns true when the value is Some.";
+        return "option<T>.is_some() returns true when the value is Some.";
     }
     if eq(label, "set") == 1 {
         return "BitSet.set(index, value) writes a single bit at the given index.";
     }
     if eq(label, "get") == 1 {
-        return "BitSet.get(index) returns Result<bool, str8> for the bit at the given index.";
+        return "BitSet.get(index) returns result<bool, str8> for the bit at the given index.";
     }
     if eq(label, "toggle") == 1 {
         return "BitSet.toggle(index) flips a single bit in place.";
@@ -2191,7 +2166,7 @@ fn completion_documentation(label: str8) -> str8 {
         return "BitSet.push(value) appends one bit to the packed bitset.";
     }
     if eq(label, "pop") == 1 {
-        return "BitSet.pop() removes and returns the last bit as Result<bool, str8>.";
+        return "BitSet.pop() removes and returns the last bit as result<bool, str8>.";
     }
     if eq(label, "resize") == 1 {
         return "BitSet.resize(new_len, fill) changes the logical bit length and fills new bits.";
@@ -2281,14 +2256,14 @@ fn load_document_symbols(target_uri: str8) -> list<DocumentSymbol> {
     var out: list<DocumentSymbol> = [];
     if len(target_uri) == 0 { return out; }
     let s: SessionRef = current_session();
-    let cr: Result<i32, str8> = s.document_symbol_count(target_uri);
+    let cr: result<i32, str8> = s.document_symbol_count(target_uri);
     if cr.is_err() { return out; }
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
     };
     for i in 0..n {
-        let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(target_uri, i);
+        let sr: result<DocumentSymbol, str8> = s.document_symbol_get(target_uri, i);
         if sr.is_err() { continue; }
         let sym: DocumentSymbol = match sr {
             Ok(v) => v,
@@ -2502,7 +2477,7 @@ fn handle_did_open(payload: str8) -> i32 {
     if len(uri) == 0 { return 1; }
     if len(lang) == 0 { return 1; }
     let s: SessionRef = current_session();
-    let r: Result<i32, str8> = s.open_document(uri, lang, text, version);
+    let r: result<i32, str8> = s.open_document(uri, lang, text, version);
     if r.is_err() {
         return 1;
     }
@@ -2528,7 +2503,7 @@ fn handle_did_change(payload: str8) -> i32 {
     let version: i64 = extract_text_document_version(payload);
     if len(uri) == 0 { return 1; }
     let s: SessionRef = current_session();
-    let r: Result<i32, str8> = s.change_document(uri, text, version);
+    let r: result<i32, str8> = s.change_document(uri, text, version);
     if r.is_err() {
         return 1;
     }
@@ -2546,7 +2521,7 @@ fn handle_did_close(payload: str8) -> i32 {
     let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return 1; }
     let s: SessionRef = current_session();
-    let r: Result<i32, str8> = s.close_document(uri);
+    let r: result<i32, str8> = s.close_document(uri);
     if r.is_err() {
         return 1;
     }
@@ -2661,7 +2636,7 @@ fn handle_definition(payload: str8) -> str8 {
         let p: str8 = file_uri_to_path(uri);
         if len(p) > 0 {
             if file_exists(p) == 1 {
-                let tr: Result<str8, str8> = read_all_text(p);
+                let tr: result<str8, str8> = read_all_text(p);
                 if tr.is_ok() {
                     query_text = tr.unwrap();
                 }
@@ -2735,7 +2710,7 @@ fn handle_definition(payload: str8) -> str8 {
                 if len(dc_ty) > 0 && len(dc_method) > 0 {
                     let dc_loc: str8 = associated_type_method_location(query_text, base_type_name(dc_ty), dc_method);
                     if len(dc_loc) > 0 { return format!("[{}]", dc_loc); }
-                    if eq(base_type_name(dc_ty), "Result") == 1 {
+                    if eq(base_type_name(dc_ty), "result") == 1 {
                         let rloc0: str8 = builtin_result_method_location(dc_method);
                         if len(rloc0) > 0 { return format!("[{}]", rloc0); }
                     }
@@ -2788,7 +2763,7 @@ fn handle_definition(payload: str8) -> str8 {
                                 if len(recv_assoc) > 0 { return format!("[{}]", recv_assoc); }
                                 let recv_result_loc: str8 = builtin_result_method_location(word);
                                 if len(recv_result_loc) > 0 {
-                                    if eq(base_type_name(recv_ty), "Result") == 1 {
+                                    if eq(base_type_name(recv_ty), "result") == 1 {
                                         return format!("[{}]", recv_result_loc);
                                     }
                                 }
@@ -2831,7 +2806,7 @@ fn handle_definition(payload: str8) -> str8 {
     }
 
     let s: SessionRef = current_session();
-    let dr: Result<DefinitionLocation, str8> =
+    let dr: result<DefinitionLocation, str8> =
         s.definition(uri, line + 1, col + 1);
     if dr.is_err() {
         if len(query_text) > 0 {
@@ -2892,7 +2867,7 @@ fn handle_definition(payload: str8) -> str8 {
                 if len(dc_ty2) > 0 && len(dc_method2) > 0 {
                     let dc_loc2: str8 = associated_type_method_location(query_text, base_type_name(dc_ty2), dc_method2);
                     if len(dc_loc2) > 0 { return format!("[{}]", dc_loc2); }
-                    if eq(base_type_name(dc_ty2), "Result") == 1 {
+                    if eq(base_type_name(dc_ty2), "result") == 1 {
                         let rloc3: str8 = builtin_result_method_location(dc_method2);
                         if len(rloc3) > 0 { return format!("[{}]", rloc3); }
                     }
@@ -2922,7 +2897,7 @@ fn handle_definition(payload: str8) -> str8 {
                         if len(dot_ty2) > 0 {
                             let dot_assoc2: str8 = associated_type_method_location(query_text, base_type_name(dot_ty2), word2);
                             if len(dot_assoc2) > 0 { return format!("[{}]", dot_assoc2); }
-                            if eq(base_type_name(dot_ty2), "Result") == 1 {
+                            if eq(base_type_name(dot_ty2), "result") == 1 {
                                 let rloc2: str8 = builtin_result_method_location(word2);
                                 if len(rloc2) > 0 { return format!("[{}]", rloc2); }
                             }
@@ -2946,7 +2921,7 @@ fn handle_references(payload: str8) -> str8 {
     if col < 0 { return "[]"; }
 
     let s: SessionRef = current_session();
-    let cr: Result<i32, str8> = s.references_count(uri, line + 1, col + 1);
+    let cr: result<i32, str8> = s.references_count(uri, line + 1, col + 1);
     if cr.is_err() { return "[]"; }
     let include_decl: i32 = extract_include_declaration(payload);
     let n: i32 = match cr {
@@ -2957,7 +2932,7 @@ fn handle_references(payload: str8) -> str8 {
     var def_line: i32 = -1;
     var def_col: i32 = -1;
     if include_decl == 0 {
-        let dr: Result<DefinitionLocation, str8> = s.definition(uri, line + 1, col + 1);
+        let dr: result<DefinitionLocation, str8> = s.definition(uri, line + 1, col + 1);
         if dr.is_ok() {
             let d: DefinitionLocation = match dr {
                 Ok(v) => v,
@@ -2975,7 +2950,7 @@ fn handle_references(payload: str8) -> str8 {
     var j: i32 = 0;
 
     for i in 0..n {
-        let rr: Result<ReferenceLocation, str8> = s.reference_get(uri, line + 1, col + 1, i);
+        let rr: result<ReferenceLocation, str8> = s.reference_get(uri, line + 1, col + 1, i);
         if rr.is_err() { continue; }
         let r: ReferenceLocation = match rr {
             Ok(v) => v,
@@ -3014,7 +2989,7 @@ fn handle_hover(payload: str8) -> str8 {
     if col < 0 { return "null"; }
 
     let s: SessionRef = current_session();
-    let hr: Result<str8, str8> = s.hover(uri, line + 1, col + 1);
+    let hr: result<str8, str8> = s.hover(uri, line + 1, col + 1);
     if hr.is_err() { return "null"; }
     let h: str8 = match hr {
         Ok(v) => v,
@@ -3039,7 +3014,7 @@ fn handle_completion(payload: str8) -> str8 {
     if col < 0 { return "[]"; }
 
     let s: SessionRef = current_session();
-    let cr: Result<i32, str8> = s.completion_count(uri, line + 1, col + 1);
+    let cr: result<i32, str8> = s.completion_count(uri, line + 1, col + 1);
     if cr.is_err() { return "[]"; }
     let n: i32 = match cr {
         Ok(v) => v,
@@ -3048,7 +3023,7 @@ fn handle_completion(payload: str8) -> str8 {
 
     var need_symbol_meta: i32 = 0;
     for i in 0..n {
-        let ir0: Result<str8, str8> = s.completion_get(uri, line + 1, col + 1, i);
+        let ir0: result<str8, str8> = s.completion_get(uri, line + 1, col + 1, i);
         if ir0.is_err() { continue; }
         let label0: str8 = match ir0 {
             Ok(v) => v,
@@ -3073,7 +3048,7 @@ fn handle_completion(payload: str8) -> str8 {
     var j: i32 = 0;
 
     for i in 0..n {
-        let ir: Result<str8, str8> = s.completion_get(uri, line + 1, col + 1, i);
+        let ir: result<str8, str8> = s.completion_get(uri, line + 1, col + 1, i);
         if ir.is_err() { continue; }
         let label_raw: str8 = match ir {
             Ok(v) => v,
@@ -3126,7 +3101,7 @@ fn handle_document_symbol(payload: str8) -> str8 {
     let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "[]"; }
     let s: SessionRef = current_session();
-    let cr: Result<i32, str8> = s.document_symbol_count(uri);
+    let cr: result<i32, str8> = s.document_symbol_count(uri);
     if cr.is_err() { return "[]"; }
     let n: i32 = match cr {
         Ok(v) => v,
@@ -3135,7 +3110,7 @@ fn handle_document_symbol(payload: str8) -> str8 {
     var out: str8 = String::new();
     out = concat(out, "[");
     for i in 0..n {
-        let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
+        let sr: result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
         if sr.is_err() { continue; }
         let sym: DocumentSymbol = match sr {
             Ok(v) => v,
@@ -3179,7 +3154,7 @@ fn handle_document_highlight(payload: str8) -> str8 {
     if col < 0 { return "[]"; }
 
     let s: SessionRef = current_session();
-    let cr: Result<i32, str8> = s.references_count(uri, line + 1, col + 1);
+    let cr: result<i32, str8> = s.references_count(uri, line + 1, col + 1);
     if cr.is_err() { return "[]"; }
     let n: i32 = match cr {
         Ok(v) => v,
@@ -3190,7 +3165,7 @@ fn handle_document_highlight(payload: str8) -> str8 {
     out = concat(out, "[");
     var j: i32 = 0;
     for i in 0..n {
-        let rr: Result<ReferenceLocation, str8> = s.reference_get(uri, line + 1, col + 1, i);
+        let rr: result<ReferenceLocation, str8> = s.reference_get(uri, line + 1, col + 1, i);
         if rr.is_err() { continue; }
         let r: ReferenceLocation = match rr {
             Ok(v) => v,
@@ -3225,7 +3200,7 @@ fn handle_signature_help(payload: str8) -> str8 {
     if col < 0 { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
 
     let s: SessionRef = current_session();
-    let rr: Result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
+    let rr: result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
     var sig: str8 = String::new();
     if rr.is_ok() {
         let sym: ResolvedSymbol = match rr {
@@ -3257,14 +3232,14 @@ fn handle_signature_help(payload: str8) -> str8 {
                         for ui in 0..uri_count {
                             let doc_uri: str8 = uri_store_get(g_uri_store_handle, ui);
                             if len(doc_uri) == 0 { continue; }
-                            let cr: Result<i32, str8> = s.document_symbol_count(doc_uri);
+                            let cr: result<i32, str8> = s.document_symbol_count(doc_uri);
                             if cr.is_err() { continue; }
                             let n: i32 = match cr {
                                 Ok(v) => v,
                                 Err(_e) => 0
                             };
                             for i in 0..n {
-                                let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(doc_uri, i);
+                                let sr: result<DocumentSymbol, str8> = s.document_symbol_get(doc_uri, i);
                                 if sr.is_err() { continue; }
                                 let d: DocumentSymbol = match sr {
                                     Ok(v) => v,
@@ -3293,7 +3268,7 @@ fn handle_signature_help(payload: str8) -> str8 {
         }
     }
     if len(sig) == 0 {
-        let hr: Result<str8, str8> = s.hover(uri, line + 1, col + 1);
+        let hr: result<str8, str8> = s.hover(uri, line + 1, col + 1);
         if hr.is_err() { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
         sig = match hr {
             Ok(v) => v,
@@ -3317,7 +3292,7 @@ fn handle_prepare_rename(payload: str8) -> str8 {
     if line < 0 { return "null"; }
     if col < 0 { return "null"; }
     let s: SessionRef = current_session();
-    let rr: Result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
+    let rr: result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
     if rr.is_err() { return "null"; }
     let sym: ResolvedSymbol = match rr {
         Ok(v) => v,
@@ -3356,7 +3331,7 @@ fn handle_rename(payload: str8) -> str8 {
     if len(new_name) == 0 { return "null"; }
 
     let s: SessionRef = current_session();
-    let safe_r: Result<i32, str8> = s.rename_is_safe(uri, line + 1, col + 1, new_name);
+    let safe_r: result<i32, str8> = s.rename_is_safe(uri, line + 1, col + 1, new_name);
     if safe_r.is_err() { return "null"; }
     let safe: i32 = match safe_r {
         Ok(v) => v,
@@ -3364,7 +3339,7 @@ fn handle_rename(payload: str8) -> str8 {
     };
     if safe != 1 { return "null"; }
 
-    let sym_r: Result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
+    let sym_r: result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
     if sym_r.is_err() { return "null"; }
     let sym: ResolvedSymbol = match sym_r {
         Ok(v) => v,
@@ -3384,7 +3359,7 @@ fn handle_rename(payload: str8) -> str8 {
     let old_len: i32 = len(sym.name);
     if old_len <= 0 { return "null"; }
 
-    let refs_r: Result<i32, str8> = s.references_count(uri, line + 1, col + 1);
+    let refs_r: result<i32, str8> = s.references_count(uri, line + 1, col + 1);
     if refs_r.is_err() { return "null"; }
     let n: i32 = match refs_r {
         Ok(v) => v,
@@ -3396,7 +3371,7 @@ fn handle_rename(payload: str8) -> str8 {
     var j: i32 = 0;
     let new_e: str8 = json_escape(new_name);
     for i in 0..n {
-        let rr: Result<ReferenceLocation, str8> = s.reference_get(uri, line + 1, col + 1, i);
+        let rr: result<ReferenceLocation, str8> = s.reference_get(uri, line + 1, col + 1, i);
         if rr.is_err() { continue; }
         let r: ReferenceLocation = match rr {
             Ok(v) => v,
@@ -3453,7 +3428,7 @@ fn diagnostic_items_json(uri: str8) -> str8 {
     if ensure_session() != 0 { return "[]"; }
     if len(uri) == 0 { return "[]"; }
     let s: SessionRef = current_session();
-    let cr: Result<i32, str8> = s.syntax_diagnostic_count(uri);
+    let cr: result<i32, str8> = s.syntax_diagnostic_count(uri);
     if cr.is_err() { return "[]"; }
     let n: i32 = match cr {
         Ok(v) => v,
@@ -3463,7 +3438,7 @@ fn diagnostic_items_json(uri: str8) -> str8 {
     items = concat(items, "[");
     var j: i32 = 0;
     for i in 0..n {
-        let dr: Result<SyntaxDiagnostic, str8> = s.syntax_diagnostic_get(uri, i);
+        let dr: result<SyntaxDiagnostic, str8> = s.syntax_diagnostic_get(uri, i);
         if dr.is_err() { continue; }
         let d: SyntaxDiagnostic = match dr {
             Ok(v) => v,
@@ -3609,14 +3584,14 @@ fn handle_workspace_symbol(payload: str8) -> str8 {
     for ui in 0..uri_count {
         let uri: str8 = uri_store_get(g_uri_store_handle, ui);
         if len(uri) == 0 { continue; }
-        let cr: Result<i32, str8> = s.document_symbol_count(uri);
+        let cr: result<i32, str8> = s.document_symbol_count(uri);
         if cr.is_err() { continue; }
         let n: i32 = match cr {
             Ok(v) => v,
             Err(_e) => 0
         };
         for i in 0..n {
-            let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
+            let sr: result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
             if sr.is_err() { continue; }
             let sym: DocumentSymbol = match sr {
                 Ok(v) => v,
@@ -3726,7 +3701,7 @@ fn handle_semantic_tokens_full(payload: str8) -> str8 {
     let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "{\"data\":[]}"; }
     let s: SessionRef = current_session();
-    let cr: Result<i32, str8> = s.document_symbol_count(uri);
+    let cr: result<i32, str8> = s.document_symbol_count(uri);
     if cr.is_err() { return "{\"data\":[]}"; }
     let n: i32 = match cr {
         Ok(v) => v,
@@ -3741,7 +3716,7 @@ fn handle_semantic_tokens_full(payload: str8) -> str8 {
     var prev_col: i32 = 0;
 
     for i in 0..n {
-        let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
+        let sr: result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
         if sr.is_err() { continue; }
         let sym: DocumentSymbol = match sr {
             Ok(v) => v,
@@ -3987,11 +3962,11 @@ fn has_version_flag(args: list<str8>) -> bool {
     return false;
 }
 
-fn run_server_stdio_loop(frame_capacity: i64) -> Result<i32, str8> {
+fn run_server_stdio_loop(frame_capacity: i64) -> result<i32, str8> {
     let transport: StdioTransport = stdio();
     var frame = String::with_capacity(frame_capacity);
     for _i in 0..2147483647 {
-        let rr: Result<i64, str8> = transport.read_frame(frame, frame_capacity);
+        let rr: result<i64, str8> = transport.read_frame(frame, frame_capacity);
         if rr.is_err() {
             let e: str8 = rr.unwrap_err();
             String::free(frame);
@@ -4009,7 +3984,7 @@ fn run_server_stdio_loop(frame_capacity: i64) -> Result<i32, str8> {
             if len(uri) > 0 {
                 if eq(method, "textDocument/didOpen") == 1 {
                     let notification: str8 = publish_current_diagnostics_notification(uri);
-                    let wrn: Result<i32, str8> = transport.write_frame(notification);
+                    let wrn: result<i32, str8> = transport.write_frame(notification);
                     String::free(notification);
                     if wrn.is_err() {
                         let ew: str8 = wrn.unwrap_err();
@@ -4019,7 +3994,7 @@ fn run_server_stdio_loop(frame_capacity: i64) -> Result<i32, str8> {
                 }
                 if eq(method, "textDocument/didChange") == 1 {
                     let notification: str8 = publish_current_diagnostics_notification(uri);
-                    let wrn: Result<i32, str8> = transport.write_frame(notification);
+                    let wrn: result<i32, str8> = transport.write_frame(notification);
                     String::free(notification);
                     if wrn.is_err() {
                         let ew: str8 = wrn.unwrap_err();
@@ -4029,7 +4004,7 @@ fn run_server_stdio_loop(frame_capacity: i64) -> Result<i32, str8> {
                 }
                 if eq(method, "textDocument/didClose") == 1 {
                     let notification: str8 = publish_clear_diagnostics_notification(uri);
-                    let wrn: Result<i32, str8> = transport.write_frame(notification);
+                    let wrn: result<i32, str8> = transport.write_frame(notification);
                     String::free(notification);
                     if wrn.is_err() {
                         let ew: str8 = wrn.unwrap_err();
@@ -4048,7 +4023,7 @@ fn run_server_stdio_loop(frame_capacity: i64) -> Result<i32, str8> {
             response = make_error_response(id, -32601, "Method not found");
         }
 
-        let wr: Result<i32, str8> = transport.write_frame(response);
+        let wr: result<i32, str8> = transport.write_frame(response);
         String::free(response);
         if wr.is_err() {
             let ew: str8 = wr.unwrap_err();
@@ -4071,7 +4046,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
     log_write(log_level_info(), format!("mlangd-mla {} starting stdio loop", version()));
-    let r: Result<i32, str8> = run_server_stdio_loop(262144);
+    let r: result<i32, str8> = run_server_stdio_loop(262144);
     if r.is_err() {
         log_write(log_level_error(), format!("stdio loop error: {}", r.unwrap_err()));
         if g_log_handle != 0 {

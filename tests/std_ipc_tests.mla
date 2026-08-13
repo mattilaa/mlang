@@ -17,21 +17,21 @@ fn test_named_pipe_create_connect_write_read() {
     let name: str8 = "mlang-std-ipc-test";
     remove_named_pipe(name);
 
-    let server_r: Result<NamedPipe, str8> = NamedPipe::create(name);
+    let server_r: result<NamedPipe, str8> = NamedPipe::create(name);
     verify(!(server_r.is_err()));
     let server: NamedPipe = server_r.unwrap();
 
-    let client_r: Result<NamedPipe, str8> = NamedPipe::connect(name);
+    let client_r: result<NamedPipe, str8> = NamedPipe::connect(name);
     verify(!(client_r.is_err()));
     let client: NamedPipe = client_r.unwrap();
 
-    let w_r: Result<i64, str8> = client.write("hello-ipc");
+    let w_r: result<i64, str8> = client.write("hello-ipc");
     verify(!(w_r.is_err()));
     let written: i64 = w_r.unwrap();
     verify(written > 0);
 
     var buf = String::with_capacity(128);
-    let read_r: Result<PipeRead, str8> = server.read(buf, 128);
+    let read_r: result<PipeRead, str8> = server.read(buf, 128);
     verify(!(read_r.is_err()));
     let read: PipeRead = read_r.unwrap();
     verify_eq(read.ready, 1);
@@ -49,24 +49,24 @@ fn test_local_socket_connect_accept_write_read() {
     let path: str8 = "/tmp/mlang-std-ipc-local-test.sock";
     remove_local_socket(path);
 
-    let listener_r: Result<LocalListener, str8> = LocalListener::bind(path);
+    let listener_r: result<LocalListener, str8> = LocalListener::bind(path);
     verify(!(listener_r.is_err()));
     let listener: LocalListener = listener_r.unwrap();
 
-    let client_r: Result<LocalStream, str8> = LocalStream::connect(path);
+    let client_r: result<LocalStream, str8> = LocalStream::connect(path);
     verify(!(client_r.is_err()));
     let client: LocalStream = client_r.unwrap();
 
-    let server_r: Result<LocalStream, str8> = listener.accept();
+    let server_r: result<LocalStream, str8> = listener.accept();
     verify(!(server_r.is_err()));
     let server: LocalStream = server_r.unwrap();
 
-    let w_r: Result<i64, str8> = client.write("hello-local-socket");
+    let w_r: result<i64, str8> = client.write("hello-local-socket");
     verify(!(w_r.is_err()));
     verify(w_r.unwrap() > 0);
 
     var buf = String::with_capacity(128);
-    let read_r: Result<i64, str8> = server.read(buf, 128);
+    let read_r: result<i64, str8> = server.read(buf, 128);
     verify(!(read_r.is_err()));
     verify(read_r.unwrap() > 0);
     verify(contains(buf, "hello-local-socket") == 1);

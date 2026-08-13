@@ -24,7 +24,7 @@ fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: str8) -> str8 {
 
 /// Manual stdio server demo. Not part of automated robot run.
 fn main() -> i32 {
-    let r: Result<i32, str8> = run_stdio_loop(4, 262144, 262144);
+    let r: result<i32, str8> = run_stdio_loop(4, 262144, 262144);
     if r.is_err(): {
         writeln(stderr(), r.unwrap_err());
         return 1;

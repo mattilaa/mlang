@@ -605,7 +605,7 @@ fn parse_key(input: Stdin) -> i32 {
     return AsciiKey::Esc;
 }
 
-fn open_file_into_buffer(path: str8) -> Result<list<str8>, str8> {
+fn open_file_into_buffer(path: str8) -> result<list<str8>, str8> {
     let text: str8 = read_all_text(path)?;
     let lines: list<str8> = split_text_lines(text);
     free(text);
@@ -1113,7 +1113,7 @@ fn main() -> i32 {
 
     if argv.len() > 1 {
         let path: str8 = argv[1];
-        let rr: Result<list<str8>, str8> = open_file_into_buffer(path);
+        let rr: result<list<str8>, str8> = open_file_into_buffer(path);
         current_filename = clone(path);
         if rr.is_ok() {
             let text0: str8 = join_lines(rr.unwrap());
@@ -1224,7 +1224,7 @@ fn main() -> i32 {
                         }
                         let body: str8 = join_lines(current_lines);
                         let text: str8 = join_lines_for_save(current_lines);
-                        let wr: Result<i32, str8> = write_all_text(current_filename, text);
+                        let wr: result<i32, str8> = write_all_text(current_filename, text);
                         if wr.is_err() {
                             status = format!("Write failed: {}", wr.unwrap_err());
                         } else {
@@ -1359,7 +1359,7 @@ fn main() -> i32 {
                             continue;
                         }
                         let text2: str8 = join_lines_for_save(current_lines);
-                        let wr2: Result<i32, str8> = write_all_text(current_filename, text2);
+                        let wr2: result<i32, str8> = write_all_text(current_filename, text2);
                         if wr2.is_err() {
                             status = format!("Write failed: {}", wr2.unwrap_err());
                         } else {
@@ -1437,7 +1437,7 @@ fn main() -> i32 {
                     }
                     if starts_with(cmd, "e ") == 1 {
                         let path: str8 = sub(cmd, 2, len(cmd) - 2);
-                        let rr2: Result<list<str8>, str8> = open_file_into_buffer(path);
+                        let rr2: result<list<str8>, str8> = open_file_into_buffer(path);
                         tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
                         tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
                         tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));

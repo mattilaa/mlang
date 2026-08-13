@@ -5,7 +5,7 @@
 /// a generated Doxygen page for the language's built-in types.
 ///
 /// \page builtin_types Built-in Types
-/// \brief Reference for primitive, generic, handle, and sum types built into MLang.
+/// \brief Reference for primitive, generic, and sum types built into MLang.
 ///
 /// \section builtin_types_primitive Primitive Types
 /// - `void`: no value; primarily used as a function return type.
@@ -30,18 +30,12 @@
 /// - `map<K, V>`: associative container.
 /// - `tuple<T1, T2, ...>`: fixed-size heterogeneous product type.
 /// - `ptr<T>`: pointer type.
-/// - `Handle<T>`: opaque runtime handle wrapper.
 /// - `size_of(Type)` / `size_of(expr)`: ABI size query returning `i64`.
 ///
-/// \section builtin_types_runtime Runtime Marker Types
-/// - `Thread`: opaque payload marker used with `Handle<Thread>`.
-/// - `Mutex`: opaque payload marker used with `Handle<Mutex>`.
-/// - `Atomic64`: opaque payload marker used with `Handle<Atomic64>`.
-///
 /// \section builtin_types_sum Sum Types
-/// - `Result<T, E>` with constructors `Ok<T, E>(value)` and
+/// - `result<T, E>` with constructors `Ok<T, E>(value)` and
 ///   `Err<T, E>(error)`.
-/// - `Option<T>` with constructors `Some<T>(value)` and `None<T>()`.
+/// - `option<T>` with constructors `Some<T>(value)` and `None<T>()`.
 ///
 /// \section builtin_types_inline_asm Inline Assembly Keywords
 /// - `asm`
@@ -52,7 +46,7 @@
 /// \section builtin_types_notes Notes
 /// - This page documents language built-ins, not importable stdlib modules.
 /// - The `?` operator propagates `Err` values and enriches
-///   `Result<_, str8>` error stacks with call-site context.
+///   `result<_, str8>` error stacks with call-site context.
 /// - `cexpr(...)` and `cexpr fn` provide explicit compile-time evaluation for
 ///   integer and `bool` expressions.
 /// - Property attributes such as `@property(hidden)` and
@@ -133,22 +127,8 @@
 // Pointer type: ptr<T>.
 // Take an address with &value and dereference with *ptr.
 
-// @builtin Handle
-// Generic runtime handle type: Handle<T>.
-// Used by thread/sync intrinsics such as Handle<Thread>, Handle<Mutex>,
-// and Handle<Atomic64>.
-
-// @builtin Thread
-// Opaque thread handle payload marker type used with Handle<Thread>.
-
-// @builtin Mutex
-// Opaque mutex handle payload marker type used with Handle<Mutex>.
-
-// @builtin Atomic64
-// Opaque 64-bit atomic handle payload marker type used with Handle<Atomic64>.
-
-// @builtin Result
-// Result<T, E> represents success (Ok) or failure (Err).
+// @builtin result
+// result<T, E> represents success (Ok) or failure (Err).
 // Construct with Ok<T, E>(value) or Err<T, E>(error).
 // Methods:
 //   - is_ok() -> bool
@@ -156,17 +136,17 @@
 //   - unwrap() -> T (warning: may panic on Err)
 //   - unwrap_err() -> E
 // Prefer match or is_ok/is_err checks before unwrap().
-// The `?` operator propagates Err values and, for Result<_, str8>, appends
+// The `?` operator propagates Err values and, for result<_, str8>, appends
 // call-site context (`function:line`) to build an error stack.
 
 // @builtin Ok
-// Result constructor: Ok<T, E>(value).
+// result constructor: Ok<T, E>(value).
 
 // @builtin Err
-// Result constructor: Err<T, E>(error).
+// result constructor: Err<T, E>(error).
 
-// @builtin Option
-// Option<T> represents Some(value) or None.
+// @builtin option
+// option<T> represents Some(value) or None.
 // Construct with Some<T>(value) or None<T>().
 
 // @builtin enum
@@ -179,10 +159,10 @@
 // The enumerate form exposes a zero-based `i64` index plus the enum value.
 
 // @builtin Some
-// Option constructor for present values: Some<T>(value).
+// option constructor for present values: Some<T>(value).
 
 // @builtin None
-// Option constructor for absent values: None<T>().
+// option constructor for absent values: None<T>().
 
 // @builtin property
 // Property field attribute: `@property ...` or `@property(...)`.
@@ -258,7 +238,7 @@
 /// Requires `--target-arch aarch64` at compile time.
 
 // Language keyword reference:
-// - `match` performs pattern matching for Result/Option and literal values.
+// - `match` performs pattern matching for result/option and literal values.
 // Example:
 // let value: i32 = match maybe {
 //     Some(x) => x,

@@ -1196,7 +1196,7 @@ Manual stdio JSON-RPC worker runtime demo (`run_stdio_loop`, built-in `$/cancelR
 `examples/std_jsonrpc_stdio_loop_demo.mla` (manual run, not part of Robot suite).
 Incremental parse/query API for tooling ([`std::compiler::Session`](Stdlib-Compiler), open/change/close, diagnostics, hover, completion, document symbols, cross-document definition via [`mod`](Language-Syntax) files) example:
 `examples/std_compiler_demo.mla`.
-`?` is supported for [`Result`](Quick-Guide#types) propagation (early-return on `Err`).
+`?` is supported for [`result`](Quick-Guide#types) propagation (early-return on `Err`).
 
 ## Multithreaded TCP Demo (Local)
 Build the compiler and run the new multithreaded TCP server/client examples:
@@ -2052,7 +2052,7 @@ fn main() -> i32 {
     leaf.name = String::from("ok");
 
     let text: str8 = leaf.to_json();
-    let parsed: Result<Leaf, str8> = Leaf::from_json(text);
+    let parsed: result<Leaf, str8> = Leaf::from_json(text);
     if parsed.is_err() {
         return 1;
     }

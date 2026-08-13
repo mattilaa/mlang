@@ -3,7 +3,9 @@
 /// \brief std::thread spawn/join API demo.
 ///
 mod std::thread;
+mod std::sync;
 
+use std::sync::mutex;
 use std::thread::*;
 
 fn worker(id: i64) -> i32 {
@@ -12,19 +14,21 @@ fn worker(id: i64) -> i32 {
 }
 
 fn main() -> i32 {
-    // thread_spawn is intrinsic; std::thread provides helper wrappers.
-    let h1: Handle<Thread> = thread_spawn(worker, 1);
-    let h2: Handle<Thread> = thread_spawn(worker, 2);
+    // std::thread owns the public handle and helper APIs.
+    let h1: std::thread::thread = thread::spawn(worker, 1);
+    let h2: std::thread::thread = thread::spawn(worker, 2);
 
     join(h1);
     join(h2);
 
-    let mtx: Handle<Mutex> = mutex_new();
-    mutex_lock_handle(mtx);
-    mutex_unlock_handle(mtx);
-    mutex_free(mtx);
+    let mtx_r: result<mutex, str8> = mutex::new();
+    if mtx_r.is_err() { return 1; }
+    let mtx: mutex = mtx_r.unwrap();
+    let _ = mtx.lock();
+    let _ = mtx.unlock();
+    mtx.close();
 
-    let counter: Handle<Atomic64> = atomic_new(10);
+    let counter: std::thread::atomic64 = atomic_new(10);
     let prev: i64 = atomic_add_value(counter, 5);
     let cur: i64 = atomic_load_value(counter);
     println!("atomic prev={} cur={}", prev, cur);
@@ -34,4 +38,3 @@ fn main() -> i32 {
 
     return 0;
 }
-

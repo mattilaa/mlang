@@ -1539,6 +1539,24 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
 
 llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
 {
+    // A thread spawn can occur in a transitively imported module whose structs
+    // were not merged into the root program. Load the stdlib-owned return type
+    // before lowering the intrinsic; the compiler does not synthesize it.
+    if(!getStructType("thread") && moduleLoader)
+    {
+        for(auto* structDef : moduleLoader->getModuleStructs("std::thread"))
+        {
+            if(structDef && structDef->name == "thread")
+            {
+                structVisibility[structDef->name] =
+                    std::make_pair(structDef->isPublic,
+                                   structDef->sourceModule);
+                generateStructDefinition(structDef);
+                break;
+            }
+        }
+    }
+
     if(node->arguments.size() < 1 || node->arguments.size() > 5)
     {
         reportError(node->line,
@@ -1845,11 +1863,7 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
     llvm::Value* rawHandle =
         builder.CreatePtrToInt(threadVal, int64Type, "thread.handle_i64");
 
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Thread"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
-    return buildHandleValue(handleTypeName, rawHandle, node->line);
+    return buildHandleValue("thread", rawHandle, node->line);
 }
 
 llvm::Value* CodeGenerator::generateThreadJoin(FunctionCallNode* node)
@@ -1870,12 +1884,8 @@ llvm::Value* CodeGenerator::generateThreadJoin(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Thread"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
     llvm::Value* handleVal =
-        extractHandleValue(node->arguments[0], handleTypeName, node->line);
+        extractHandleValue(node->arguments[0], "", node->line);
     if(!handleVal)
         return nullptr;
 
@@ -2046,11 +2056,7 @@ llvm::Value* CodeGenerator::generateMutexCreate(FunctionCallNode* node)
     builder.CreateCall(pthreadMutexInitFunc, {mem, nullPtr});
     llvm::Value* rawHandle =
         builder.CreatePtrToInt(mem, int64Type, "mutex.handle_i64");
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Mutex"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
-    return buildHandleValue(handleTypeName, rawHandle, node->line);
+    return rawHandle;
 }
 
 llvm::Value*
@@ -2196,12 +2202,8 @@ llvm::Value* CodeGenerator::generateMutexLock(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Mutex"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
     llvm::Value* handleVal =
-        extractHandleValue(node->arguments[0], handleTypeName, node->line);
+        extractHandleValue(node->arguments[0], "", node->line);
     if(!handleVal)
         return nullptr;
 
@@ -2228,12 +2230,8 @@ llvm::Value* CodeGenerator::generateMutexUnlock(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Mutex"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
     llvm::Value* handleVal =
-        extractHandleValue(node->arguments[0], handleTypeName, node->line);
+        extractHandleValue(node->arguments[0], "", node->line);
     if(!handleVal)
         return nullptr;
 
@@ -2262,12 +2260,8 @@ llvm::Value* CodeGenerator::generateMutexDestroy(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Mutex"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
     llvm::Value* handleVal =
-        extractHandleValue(node->arguments[0], handleTypeName, node->line);
+        extractHandleValue(node->arguments[0], "", node->line);
     if(!handleVal)
         return nullptr;
 
@@ -2320,11 +2314,7 @@ llvm::Value* CodeGenerator::generateAtomicI64New(FunctionCallNode* node)
 #endif
     llvm::Value* rawHandle =
         builder.CreatePtrToInt(mem, int64Type, "atomic.handle_i64");
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Atomic64"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
-    return buildHandleValue(handleTypeName, rawHandle, node->line);
+    return rawHandle;
 }
 
 llvm::Value* CodeGenerator::generateAtomicI64Load(FunctionCallNode* node)
@@ -2343,12 +2333,8 @@ llvm::Value* CodeGenerator::generateAtomicI64Load(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Atomic64"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
     llvm::Value* handleVal =
-        extractHandleValue(node->arguments[0], handleTypeName, node->line);
+        extractHandleValue(node->arguments[0], "", node->line);
     if(!handleVal)
         return nullptr;
 
@@ -2378,12 +2364,8 @@ llvm::Value* CodeGenerator::generateAtomicI64Store(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Atomic64"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
     llvm::Value* handleVal =
-        extractHandleValue(node->arguments[0], handleTypeName, node->line);
+        extractHandleValue(node->arguments[0], "", node->line);
     llvm::Value* valueVal = generateExpression(node->arguments[1]);
     if(!handleVal || !valueVal)
         return nullptr;
@@ -2416,12 +2398,8 @@ llvm::Value* CodeGenerator::generateAtomicI64Add(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Atomic64"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
     llvm::Value* handleVal =
-        extractHandleValue(node->arguments[0], handleTypeName, node->line);
+        extractHandleValue(node->arguments[0], "", node->line);
     llvm::Value* addVal = generateExpression(node->arguments[1]);
     if(!handleVal || !addVal)
         return nullptr;
@@ -2456,10 +2434,6 @@ llvm::Value* CodeGenerator::generateAtomicI64Free(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    std::vector<TypeNode*> typeArgs;
-    typeArgs.push_back(new StructTypeRefNode("Atomic64"));
-    std::string handleTypeName =
-        getOrCreateMonomorphizedStruct("Handle", typeArgs);
     std::string freeOwner = resolveBorrowOwnerFromLValue(node->arguments[0]);
     if(!freeOwner.empty() &&
        globalNamedValues.find(freeOwner) == globalNamedValues.end() &&
@@ -2470,7 +2444,7 @@ llvm::Value* CodeGenerator::generateAtomicI64Free(FunctionCallNode* node)
         return nullptr;
     }
     llvm::Value* handleVal =
-        extractHandleValue(node->arguments[0], handleTypeName, node->line);
+        extractHandleValue(node->arguments[0], "", node->line);
     if(!handleVal)
         return nullptr;
 

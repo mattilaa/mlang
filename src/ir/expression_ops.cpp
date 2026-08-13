@@ -2133,7 +2133,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
 
     if(!resultValue->getType()->isStructTy())
     {
-        reportError(node->line, "operator '?' expects Result<T, E> expression");
+        reportError(node->line, "operator '?' expects result<T, E> expression");
         return nullptr;
     }
 
@@ -2143,7 +2143,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     auto resultMembersIt = structMembers.find(resultStructName);
     if(resultMembersIt == structMembers.end())
     {
-        reportError(node->line, "operator '?' expects Result<T, E> expression");
+        reportError(node->line, "operator '?' expects result<T, E> expression");
         return nullptr;
     }
 
@@ -2171,7 +2171,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
 
     if(resultIsOkIndex < 0 || resultOkIndex < 0 || resultErrIndex < 0)
     {
-        reportError(node->line, "operator '?' expects Result<T, E> expression");
+        reportError(node->line, "operator '?' expects result<T, E> expression");
         return nullptr;
     }
 
@@ -2180,7 +2180,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     if(!expectedRetType->isStructTy())
     {
         reportError(node->line, "operator '?' can only be used in functions "
-                                "returning Result<_, _>");
+                                "returning result<_, _>");
         return nullptr;
     }
 
@@ -2190,7 +2190,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     if(expectedMembersIt == structMembers.end())
     {
         reportError(node->line, "operator '?' can only be used in functions "
-                                "returning Result<_, _>");
+                                "returning result<_, _>");
         return nullptr;
     }
 
@@ -2216,7 +2216,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
        !expectedErrType)
     {
         reportError(node->line, "operator '?' can only be used in functions "
-                                "returning Result<_, _>");
+                                "returning result<_, _>");
         return nullptr;
     }
 
@@ -2300,7 +2300,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     }
 
     llvm::Value* retResult = llvm::UndefValue::get(expectedRetType);
-    // For Result<_, string>, append call-site context on every `?` propagation.
+    // For result<_, string>, append call-site context on every `?` propagation.
     if(expectedErrType && (expectedErrType->kind == TypeNode::TYPE_STRING ||
                            expectedErrType->kind == TypeNode::TYPE_STR8))
     {

@@ -8,7 +8,7 @@ and Rust that are most useful in practice into one language.
 The project goal is straightforward:
 - C-style directness and native interop
 - C++-style zero-cost abstractions, templates/generics, and low-level control
-- Rust-inspired safety features such as explicit ownership, [`Result`](Quick-Guide#types), [`Option`](Quick-Guide#types),
+- Rust-inspired safety features such as explicit ownership, [`result`](Quick-Guide#types), [`option`](Quick-Guide#types),
   [`match`](Language-Syntax), bounds checks, and stronger compile-time diagnostics
 
 This documentation is split into a small guided entry path and deeper reference
@@ -26,7 +26,7 @@ where you want:
 
 Examples of supported language/runtime features include:
 - structs, enums, generics, modules, and [`alias`](Language-Syntax) / `use type` aliases
-- [`Option<T>`](Quick-Guide#types), [`Result<T, E>`](Quick-Guide#types), [`match`](Language-Syntax), and functional pipe `|>`
+- [`option<T>`](Quick-Guide#types), [`result<T, E>`](Quick-Guide#types), [`match`](Language-Syntax), and functional pipe `|>`
 - exceptions with `throw` and `try/catch`
 - RAII-style scope cleanup
 - [`switch`](Language-Syntax) / [`case`](Language-Syntax)
@@ -118,7 +118,7 @@ examples, see the example programs in the repository such as:
 MLang is not only a thin C wrapper. It also includes language features intended
 to make low-level code safer and easier to reason about:
 
-- [`Result<T, E>`](Quick-Guide#types) and [`Option<T>`](Quick-Guide#types)
+- [`result<T, E>`](Quick-Guide#types) and [`option<T>`](Quick-Guide#types)
 - [`match`](Language-Syntax)
 - bounds checks for strings and lists
 - RAII-style cleanup on scope exit

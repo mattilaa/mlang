@@ -70,7 +70,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     if selected_id >= 0 {
         println!("selected output: [{}] {}", selected_id, device_name(selected_id));
     }
-    let dev_r: Result<AudioDevice, str8> = selected_id >= 0
+    let dev_r: result<AudioDevice, str8> = selected_id >= 0
         ? AudioDevice::open_with_config(selected_id, "mlang_pcm_queue_demo", requested_sample_rate, requested_buffer_frames)
         : AudioDevice::open_default_with_config("mlang_pcm_queue_demo", requested_sample_rate, requested_buffer_frames);
     if dev_r.is_err() {
@@ -125,7 +125,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         tail = tail + 1;
     }
 
-    let queued_r: Result<i64, str8> = dev.queue_interleaved_f32(samples);
+    let queued_r: result<i64, str8> = dev.queue_interleaved_f32(samples);
     if queued_r.is_err() {
         println!("PCM queue failed: {}", queued_r.unwrap_err());
         dev.close();
@@ -133,7 +133,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     println!("sample_rate={} buffer_frames={} queued_frames={}", sample_rate, buffer_frames, queued_r.unwrap());
 
-    let start_r: Result<i32, str8> = dev.start();
+    let start_r: result<i32, str8> = dev.start();
     if start_r.is_err() {
         println!("audio start failed: {}", start_r.unwrap_err());
         dev.close();

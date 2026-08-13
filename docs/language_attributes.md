@@ -43,7 +43,7 @@ structs.
 
 What it enables:
 - `value.to_json() -> str8`
-- `StructName::from_json(text) -> Result<StructName, str8>`
+- `StructName::from_json(text) -> result<StructName, str8>`
 - JSON output that includes inherited base fields directly in the object
 - A sibling `@property` metadata object for fields declared with
   `@property(...)`
@@ -76,7 +76,7 @@ fn main() -> i32 {
     leaf.name = String::from("ok");
 
     let text: str8 = leaf.to_json();
-    let parsed: Result<Leaf, str8> = Leaf::from_json(text);
+    let parsed: result<Leaf, str8> = Leaf::from_json(text);
     return parsed.is_ok() ? 0 : 1;
 }
 ```

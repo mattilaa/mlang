@@ -43,14 +43,14 @@ fn test_lowercase_argparser_alias() {
 }
 
 fn test_lowercase_bitset_alias_impl() -> i32 {
-    let bits_r: Result<bit_set, str8> = bit_set::new(8);
+    let bits_r: result<bit_set, str8> = bit_set::new(8);
     if bits_r.is_err() {
         return 1;
     }
     let bits: bit_set = bits_r.unwrap();
     bits.resize(8, false);
     bits.set(3, true);
-    let get_r: Result<bool, str8> = bits.get(3);
+    let get_r: result<bool, str8> = bits.get(3);
     if get_r.is_err() {
         bits.close();
         return 1;
@@ -66,17 +66,17 @@ fn test_lowercase_bitset_alias() {
 }
 
 fn test_lowercase_mutex_alias_impl() -> i32 {
-    let mr: Result<mutex, str8> = mutex::new();
+    let mr: result<mutex, str8> = mutex::new();
     if mr.is_err() {
         return 1;
     }
     let m: mutex = mr.unwrap();
-    let lock_r: Result<i32, str8> = m.lock();
+    let lock_r: result<i32, str8> = m.lock();
     if lock_r.is_err() {
         m.close();
         return 1;
     }
-    let unlock_r: Result<i32, str8> = m.unlock();
+    let unlock_r: result<i32, str8> = m.unlock();
     if unlock_r.is_err() {
         m.close();
         return 1;
@@ -91,7 +91,7 @@ fn test_lowercase_mutex_alias() {
 }
 
 fn test_qualified_lowercase_mutex_alias_impl() -> i32 {
-    let mr: Result<std::sync::mutex, str8> = std::sync::mutex::new();
+    let mr: result<std::sync::mutex, str8> = std::sync::mutex::new();
     if mr.is_err() {
         return 1;
     }

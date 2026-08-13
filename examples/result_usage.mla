@@ -1,10 +1,10 @@
 /// \file result_usage.mla
 /// @ingroup examples
-/// \brief Result<T,E> usage showing propagation and unwrap patterns.
+/// \brief result<T,E> usage showing propagation and unwrap patterns.
 ///
-// Example: Result<T, E>
+// Example: result<T, E>
 
-fn div(a: i32, b: i32) -> Result<i32, str8> {
+fn div(a: i32, b: i32) -> result<i32, str8> {
     if b == 0: {
         return Err<i32, str8>("divide by zero");
     }
@@ -12,7 +12,7 @@ fn div(a: i32, b: i32) -> Result<i32, str8> {
 }
 
 fn main() -> i32 {
-    let r: Result<i32, str8> = div(10, 2);
+    let r: result<i32, str8> = div(10, 2);
 
     if r.is_ok(): {
         let v: i32 = r.unwrap();

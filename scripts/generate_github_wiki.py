@@ -198,10 +198,10 @@ LANGUAGE_TOKENS = {
     "list<str8>",
     "span",
     "span<T>",
-    "Option",
-    "Option<T>",
-    "Result",
-    "Result<T, E>",
+    "option",
+    "option<T>",
+    "result",
+    "result<T, E>",
     "Self",
     "dyn",
 }
@@ -328,7 +328,7 @@ def inline_code_link(token: str) -> str | None:
     if token in STDLIB_TYPE_TOKENS:
         return STDLIB_TYPE_LINKS[token]
     if token in LANGUAGE_TOKENS:
-        return "Quick-Guide#types" if re.search(r"[0-9]|str|bool|list|map|Option|Result|Self|dyn|ptr|bit|void|string", token) else "Language-Syntax"
+        return "Quick-Guide#types" if re.search(r"[0-9]|str|bool|list|map|option|result|Self|dyn|ptr|bit|void|string", token) else "Language-Syntax"
     return None
 
 

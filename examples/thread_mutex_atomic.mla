@@ -2,43 +2,51 @@
 /// @ingroup examples
 /// \brief Threaded counter demo contrasting mutex and atomic operations.
 ///
-fn worker(id: i64, total: Handle<Atomic64>, mtx: Handle<Mutex>, counter: Handle<Atomic64>) -> void {
+mod std::sync;
+mod std::thread;
+
+use std::sync::mutex;
+use std::thread::*;
+
+fn worker(id: i64, total: std::thread::atomic64, mtx: mutex, counter: std::thread::atomic64) -> void {
     var local: i64 = 0;
     for i in 0..100000 {
         local = local + 1;
     }
 
-    atomic_i64_add(counter, local);
+    atomic_add_value(counter, local);
 
-    mutex_lock(mtx);
-    let current: i64 = atomic_i64_load(total);
-    atomic_i64_store(total, current + local);
-    mutex_unlock(mtx);
+    let _ = mtx.lock();
+    let current: i64 = atomic_load_value(total);
+    atomic_store_value(total, current + local);
+    let _ = mtx.unlock();
 
     println!("worker {} done", id);
 }
 
 fn main() -> i32 {
-    let total: Handle<Atomic64> = atomic_i64_new(0);
-    let counter: Handle<Atomic64> = atomic_i64_new(0);
-    let mtx: Handle<Mutex> = mutex_create();
+    let total: std::thread::atomic64 = atomic_new(0);
+    let counter: std::thread::atomic64 = atomic_new(0);
+    let mtx_r: result<mutex, str8> = mutex::new();
+    if mtx_r.is_err() { return 1; }
+    let mtx: mutex = mtx_r.unwrap();
 
-    let h1: Handle<Thread> = thread_spawn(worker, 1, total, mtx, counter);
-    let h2: Handle<Thread> = thread_spawn(worker, 2, total, mtx, counter);
-    let h3: Handle<Thread> = thread_spawn(worker, 3, total, mtx, counter);
-    let h4: Handle<Thread> = thread_spawn(worker, 4, total, mtx, counter);
+    let h1: std::thread::thread = thread::spawn(worker, 1, total, mtx, counter);
+    let h2: std::thread::thread = thread::spawn(worker, 2, total, mtx, counter);
+    let h3: std::thread::thread = thread::spawn(worker, 3, total, mtx, counter);
+    let h4: std::thread::thread = thread::spawn(worker, 4, total, mtx, counter);
 
-    thread_join(h1);
-    thread_join(h2);
-    thread_join(h3);
-    thread_join(h4);
+    std::thread::join(h1);
+    std::thread::join(h2);
+    std::thread::join(h3);
+    std::thread::join(h4);
 
-    let total_val: i64 = atomic_i64_load(total);
-    let counter_val: i64 = atomic_i64_load(counter);
+    let total_val: i64 = atomic_load_value(total);
+    let counter_val: i64 = atomic_load_value(counter);
     println!("total = {} counter = {}", total_val, counter_val);
 
-    mutex_destroy(mtx);
-    atomic_i64_free(total);
-    atomic_i64_free(counter);
+    mtx.close();
+    atomic_free_handle(total);
+    atomic_free_handle(counter);
     return 0;
 }

@@ -1,6 +1,6 @@
 /// \file std_sync_demo.mla
 /// @ingroup examples
-/// \brief Synchronization primitives demo (Mutex, atomics) from std::sync.
+/// \brief Synchronization primitives demo (mutex, atomics) from std::sync.
 ///
 mod std::sync;
 mod std::strbuf;
@@ -8,11 +8,11 @@ mod std::strbuf;
 use std::strbuf::contains;
 use std::sync::Channel;
 use std::sync::Condvar;
-use std::sync::Mutex;
+use std::sync::mutex;
 
 fn main() -> i32 {
-    let mr: Result<Mutex, str8> = Mutex::new();
-    let cr: Result<Condvar, str8> = Condvar::new();
+    let mr: result<mutex, str8> = mutex::new();
+    let cr: result<Condvar, str8> = Condvar::new();
     if mr.is_err(): {
         println!("mutex/condvar create failed");
         return 1;
@@ -21,10 +21,10 @@ fn main() -> i32 {
         println!("mutex/condvar create failed");
         return 1;
     }
-    let m: Mutex = mr.unwrap();
+    let m: mutex = mr.unwrap();
     let c: Condvar = cr.unwrap();
     m.lock();
-    let w: Result<i32, str8> = c.wait_timeout_ms(m, 10);
+    let w: result<i32, str8> = c.wait_timeout_ms(m, 10);
     m.unlock();
     c.close();
     m.close();
@@ -34,7 +34,7 @@ fn main() -> i32 {
     }
     println!("condvar timeout result={}", w.unwrap());
 
-    let chr: Result<Channel, str8> = Channel::new(4);
+    let chr: result<Channel, str8> = Channel::new(4);
     if chr.is_err(): {
         println!("channel create failed");
         return 1;
@@ -42,7 +42,7 @@ fn main() -> i32 {
     let ch: Channel = chr.unwrap();
     ch.send("sync-message");
     var buf = String::with_capacity(128);
-    let rr: Result<i64, str8> = ch.recv(buf, 128);
+    let rr: result<i64, str8> = ch.recv(buf, 128);
     if rr.is_err(): {
         println!("channel recv failed");
         String::free(buf);

@@ -27,5 +27,5 @@ fn main() -> i32 {
     expect_true(mock_verify(api.handle));
     println!("checks={} failures={}", checks(), failures());
     mock_free(api.handle);
-    return result();
+    return status();
 }

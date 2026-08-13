@@ -8,8 +8,8 @@ Module file: `stdlib/std/bytes.mla`
 - `bytes`
 
 ### Lifecycle
-- `bytes::new(initial_capacity: i64) -> Result<bytes, str8>`
-- `bytes::from_string(s: str8) -> Result<bytes, str8>`
+- `bytes::new(initial_capacity: i64) -> result<bytes, str8>`
+- `bytes::from_string(s: str8) -> result<bytes, str8>`
 - `bytes::close(self: bytes) -> i32`
 - `last_error() -> str8`
 

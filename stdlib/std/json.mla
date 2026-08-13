@@ -7,7 +7,7 @@
  * `#[derive(Json)]` on a struct synthesizes:
  * - `value.to_json() -> str8`
  * - a lowercase associated `from_json(text)` constructor on the derived struct,
- *   returning `Result<your_struct, str8>`
+ *   returning `result<your_struct, str8>`
  *
  * The emitted JSON includes inherited base fields directly in the object and,
  * for `@property(...)` members, a sibling `@property` metadata subtree.
@@ -93,7 +93,7 @@ pub fn last_error() -> str8 {
 
 impl JsonDoc {
     /// Parse a JSON document into an owned handle.
-    pub fn parse(text: str8) -> Result<JsonDoc, str8> {
+    pub fn parse(text: str8) -> result<JsonDoc, str8> {
         let h: i64 = __mlang_std_json_parse(text);
         if h == 0 {
             return Err<JsonDoc, str8>(last_error());
@@ -102,8 +102,8 @@ impl JsonDoc {
     }
 
     /// Parse JSON from a file using std::fs.
-    pub fn from_file(path: str8) -> Result<JsonDoc, str8> {
-        let opened: Result<File, str8> = File::open(path);
+    pub fn from_file(path: str8) -> result<JsonDoc, str8> {
+        let opened: result<File, str8> = File::open(path);
         if opened.is_err() {
             return Err<JsonDoc, str8>(opened.unwrap_err());
         }
@@ -123,13 +123,13 @@ impl JsonDoc {
 
         free_lines(lines);
 
-        let parsed: Result<JsonDoc, str8> = JsonDoc::parse(text);
+        let parsed: result<JsonDoc, str8> = JsonDoc::parse(text);
         String::free(text);
         return parsed;
     }
 
     /// Return root value of this document.
-    pub fn root(self: JsonDoc) -> Result<JsonValue, str8> {
+    pub fn root(self: JsonDoc) -> result<JsonValue, str8> {
         let h: i64 = __mlang_std_json_doc_root(self.handle);
         if h == 0 {
             return Err<JsonValue, str8>(last_error());
@@ -138,13 +138,13 @@ impl JsonDoc {
     }
 
     /// Stringify JSON document without whitespace formatting.
-    pub fn stringify(self: JsonDoc) -> Result<str8, str8> {
+    pub fn stringify(self: JsonDoc) -> result<str8, str8> {
         let s: str8 = __mlang_std_json_stringify(self.handle, 0);
         return Ok<str8, str8>(s);
     }
 
     /// Pretty stringify with indentation/newlines.
-    pub fn stringify_pretty(self: JsonDoc) -> Result<str8, str8> {
+    pub fn stringify_pretty(self: JsonDoc) -> result<str8, str8> {
         let s: str8 = __mlang_std_json_stringify(self.handle, 1);
         return Ok<str8, str8>(s);
     }
@@ -164,7 +164,7 @@ impl JsonValue {
     }
 
     /// For arrays/objects: element/member count. Otherwise Err.
-    pub fn size(self: JsonValue) -> Result<i64, str8> {
+    pub fn size(self: JsonValue) -> result<i64, str8> {
         let n = __mlang_std_json_value_size(self.handle);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -173,7 +173,7 @@ impl JsonValue {
     }
 
     /// Object field lookup by key.
-    pub fn get(self: JsonValue, key: str8) -> Result<JsonValue, str8> {
+    pub fn get(self: JsonValue, key: str8) -> result<JsonValue, str8> {
         let h: i64 = __mlang_std_json_object_get(self.handle, key);
         if h == 0 {
             return Err<JsonValue, str8>(last_error());
@@ -182,7 +182,7 @@ impl JsonValue {
     }
 
     /// Array element lookup by index.
-    pub fn index(self: JsonValue, i: i64) -> Result<JsonValue, str8> {
+    pub fn index(self: JsonValue, i: i64) -> result<JsonValue, str8> {
         let h: i64 = __mlang_std_json_array_get(self.handle, i);
         if h == 0 {
             return Err<JsonValue, str8>(last_error());
@@ -192,7 +192,7 @@ impl JsonValue {
 
     /// @brief Decode the value as a boolean.
     /// @return `Ok(0|1)` when the value is a JSON bool, else `Err`.
-    pub fn as_bool(self: JsonValue) -> Result<i32, str8> {
+    pub fn as_bool(self: JsonValue) -> result<i32, str8> {
         if self.kind() != kind_bool() {
             return Err<i32, str8>("std::json as_bool: value is not bool");
         }
@@ -201,7 +201,7 @@ impl JsonValue {
 
     /// @brief Decode the value as a signed 64-bit integer.
     /// @return `Ok(i64)` when the value is numeric, else `Err`.
-    pub fn as_i64(self: JsonValue) -> Result<i64, str8> {
+    pub fn as_i64(self: JsonValue) -> result<i64, str8> {
         if self.kind() != kind_number() {
             return Err<i64, str8>("std::json as_i64: value is not number");
         }
@@ -210,7 +210,7 @@ impl JsonValue {
 
     /// @brief Decode the value as a 64-bit floating point number.
     /// @return `Ok(f64)` when the value is numeric, else `Err`.
-    pub fn as_f64(self: JsonValue) -> Result<f64, str8> {
+    pub fn as_f64(self: JsonValue) -> result<f64, str8> {
         if self.kind() != kind_number() {
             return Err<f64, str8>("std::json as_f64: value is not number");
         }
@@ -219,7 +219,7 @@ impl JsonValue {
 
     /// @brief Decode the value as an owned UTF-8 string.
     /// @return `Ok(str8)` when the value is a JSON string, else `Err`.
-    pub fn as_string(self: JsonValue) -> Result<str8, str8> {
+    pub fn as_string(self: JsonValue) -> result<str8, str8> {
         if self.kind() != kind_string() {
             return Err<str8, str8>("std::json as_string: value is not string");
         }
@@ -228,17 +228,17 @@ impl JsonValue {
     }
 
     /// Object key name at index, preserving object iteration order.
-    pub fn key_at(self: JsonValue, i: i64) -> Result<str8, str8> {
+    pub fn key_at(self: JsonValue, i: i64) -> result<str8, str8> {
         let s: str8 = __mlang_std_json_object_key_at(self.handle, i);
         return Ok<str8, str8>(s);
     }
 
     /// Create an array iterator from this value.
-    pub fn iter_array(self: JsonValue) -> Result<JsonArrayIter, str8> {
+    pub fn iter_array(self: JsonValue) -> result<JsonArrayIter, str8> {
         if self.kind() != kind_array() {
             return Err<JsonArrayIter, str8>("std::json iter_array: value is not array");
         }
-        let n: Result<i64, str8> = self.size();
+        let n: result<i64, str8> = self.size();
         if n.is_err() {
             return Err<JsonArrayIter, str8>(n.unwrap_err());
         }
@@ -250,11 +250,11 @@ impl JsonValue {
     }
 
     /// Create an object iterator from this value.
-    pub fn iter_object(self: JsonValue) -> Result<JsonObjectIter, str8> {
+    pub fn iter_object(self: JsonValue) -> result<JsonObjectIter, str8> {
         if self.kind() != kind_object() {
             return Err<JsonObjectIter, str8>("std::json iter_object: value is not object");
         }
-        let n: Result<i64, str8> = self.size();
+        let n: result<i64, str8> = self.size();
         if n.is_err() {
             return Err<JsonObjectIter, str8>(n.unwrap_err());
         }
@@ -278,7 +278,7 @@ impl JsonArrayIter {
         return self.index < self.len ? 1 : 0;
     }
 
-    pub fn current(self: JsonArrayIter) -> Result<JsonValue, str8> {
+    pub fn current(self: JsonArrayIter) -> result<JsonValue, str8> {
         if self.has_next() != 1 {
             return Err<JsonValue, str8>("std::json array iter: out of range");
         }
@@ -299,23 +299,23 @@ impl JsonObjectIter {
         return self.index < self.len ? 1 : 0;
     }
 
-    pub fn current_key(self: JsonObjectIter) -> Result<str8, str8> {
+    pub fn current_key(self: JsonObjectIter) -> result<str8, str8> {
         if self.has_next() != 1 {
             return Err<str8, str8>("std::json object iter: out of range");
         }
         return self.source.key_at(self.index);
     }
 
-    pub fn current_value(self: JsonObjectIter) -> Result<JsonValue, str8> {
+    pub fn current_value(self: JsonObjectIter) -> result<JsonValue, str8> {
         if self.has_next() != 1 {
             return Err<JsonValue, str8>("std::json object iter: out of range");
         }
-        let key_r: Result<str8, str8> = self.current_key();
+        let key_r: result<str8, str8> = self.current_key();
         if key_r.is_err() {
             return Err<JsonValue, str8>(key_r.unwrap_err());
         }
         let key: str8 = key_r.unwrap();
-        let out: Result<JsonValue, str8> = self.source.get(key);
+        let out: result<JsonValue, str8> = self.source.get(key);
         String::free(key);
         return out;
     }

@@ -7,7 +7,7 @@ mod std::log;
 use std::log::*;
 
 fn main() -> i32 {
-    let created: Result<Log, str8> = Log::with_options(
+    let created: result<Log, str8> = Log::with_options(
         "/tmp/mlang_std_log_timestamp_created.log",
         1);
     if created.is_err() {

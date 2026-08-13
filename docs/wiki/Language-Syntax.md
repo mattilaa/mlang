@@ -666,8 +666,8 @@ MLang code:
 - immutable [`let`](Language-Syntax) bindings for pure intermediate values
 - pipe operator `|>` for left-to-right function composition
 - closures, including typed parameter closures such as `|x: i32| { ... }`
-- algebraic-data-type style [`Option<T>`](Quick-Guide#types) and [`Result<T, E>`](Quick-Guide#types)
-- [`match`](Language-Syntax) expressions over enums, [`Option`](Quick-Guide#types), [`Result`](Quick-Guide#types), and literals
+- algebraic-data-type style [`option<T>`](Quick-Guide#types) and [`result<T, E>`](Quick-Guide#types)
+- [`match`](Language-Syntax) expressions over enums, [`option`](Quick-Guide#types), [`result`](Quick-Guide#types), and literals
 - tuple types and tuple literals
 - fold expressions over lists
 
@@ -709,7 +709,7 @@ code without introducing a separate runtime abstraction.
 Example:
 
 ```rust
-fn choose(flag: bool) -> Option<i32> {
+fn choose(flag: bool) -> option<i32> {
     if flag {
         return Some<i32>(42);
     }
@@ -720,7 +720,7 @@ fn main() -> i32 {
     let values: list<i32> = [1, 2, 3, 4];
     let total: i32 = (... + values);
 
-    let maybe_value: Option<i32> = choose(true);
+    let maybe_value: option<i32> = choose(true);
     let answer: i32 = match maybe_value {
         Some(v) => v,
         None => 0

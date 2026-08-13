@@ -1,6 +1,6 @@
 /// \file enum_option_match.mla
 /// @ingroup examples
-/// \brief Matching on enum Option-style variants.
+/// \brief Matching on enum option-style variants.
 ///
 enum Color {
     Red,
@@ -8,7 +8,7 @@ enum Color {
     Blue
 };
 
-fn choose_color(flag: bool) -> Option<Color> {
+fn choose_color(flag: bool) -> option<Color> {
     if flag {
         return Some<Color>(Color::Red);
     }
@@ -25,7 +25,7 @@ fn describe_color(color: Color) -> i32 {
 }
 
 fn main() -> i32 {
-    let chosen: Option<Color> = choose_color(true);
+    let chosen: option<Color> = choose_color(true);
     let value: i32 = match chosen {
         Some(c) => describe_color(c),
         None => 0

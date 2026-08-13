@@ -64,7 +64,7 @@ fn reverb_type_id(name: str8) -> i32 {
 }
 
 fn start_device(device: AudioDevice) -> bool {
-    let result: Result<i32, str8> = device.start();
+    let result: result<i32, str8> = device.start();
     if result.is_err() {
         println!("audio start failed: {}", result.unwrap_err());
         return false;
@@ -156,7 +156,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 2;
     }
 
-    let kick_r: Result<PcmAudio, str8> = PcmAudio::load(kick_path);
+    let kick_r: result<PcmAudio, str8> = PcmAudio::load(kick_path);
     if kick_r.is_err() {
         println!("kick load failed: {}", kick_r.unwrap_err());
         parsed.free();
@@ -170,7 +170,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let kick_samples: list<f32> = kick_audio.samples();
     kick_audio.close();
 
-    let clap_r: Result<PcmAudio, str8> = PcmAudio::load(clap_path);
+    let clap_r: result<PcmAudio, str8> = PcmAudio::load(clap_path);
     if clap_r.is_err() {
         println!("clap load failed: {}", clap_r.unwrap_err());
         parsed.free();
@@ -197,7 +197,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
 
     let requested_rate: i64 = kick_rate;
-    let device_r: Result<AudioDevice, str8> = selected_device >= 0
+    let device_r: result<AudioDevice, str8> = selected_device >= 0
         ? AudioDevice::open_with_config(selected_device, "mlang_reverb_techno", requested_rate, 512)
         : AudioDevice::open_default_with_config("mlang_reverb_techno", requested_rate, 512);
     if device_r.is_err() {
@@ -214,7 +214,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let kick_step: f64 = f64(kick_rate) / f64(output_rate);
     let clap_step: f64 = f64(clap_rate) / f64(output_rate);
 
-    let block_r: Result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
+    let block_r: result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
     if block_r.is_err() {
         println!("PCM block allocation failed: {}", block_r.unwrap_err());
         device.close();
@@ -286,7 +286,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             frame = frame + 1;
         }
 
-        let queued_r: Result<i64, str8> = device.queue_pcm_block(block, frames_this_block);
+        let queued_r: result<i64, str8> = device.queue_pcm_block(block, frames_this_block);
         if queued_r.is_err() {
             println!("PCM queue failed: {}", queued_r.unwrap_err());
             block.close();
@@ -314,7 +314,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             sleep_ms(1);
             continue;
         }
-        let guard_r: Result<i64, str8> = device.queue_pcm_block(block, buffer_frames);
+        let guard_r: result<i64, str8> = device.queue_pcm_block(block, buffer_frames);
         if guard_r.is_err() {
             println!("PCM shutdown guard failed: {}", guard_r.unwrap_err());
             block.close();

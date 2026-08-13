@@ -262,12 +262,12 @@ Mutable Borrow Call Arg Rejected While Shared Borrow Active
     Should Not Be Equal As Integers    ${build.rc}    0
     Should Contain    ${build.stderr}    cannot borrow 'p' as mutable because it is already borrowed
 
-Result Methods And Unwrap Warns
+result Methods And Unwrap Warns
     ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/result_unwrap_warn.mla
     ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/result_unwrap_warn_bin
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
-    ...        let r: Result<i32, str8> = Ok<i32, str8>(42);
+    ...        let r: result<i32, str8> = Ok<i32, str8>(42);
     ...        if r.is_ok(): {
     ...            println!("{}", r.unwrap());
     ...        } else: {
@@ -277,8 +277,8 @@ Result Methods And Unwrap Warns
     ...    }
     Create File    ${src}    ${code}
     ${build}=    Run Process    ${MLANG}    ${src}    -o    ${bin}    stdout=PIPE    stderr=PIPE
-    Should Be Equal As Integers    ${build.rc}    0    msg=Failed building Result unwrap test (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
-    Should Contain    ${build.stderr}    Result.unwrap() may panic
+    Should Be Equal As Integers    ${build.rc}    0    msg=Failed building result unwrap test (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    Should Contain    ${build.stderr}    result.unwrap() may panic
     ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stdout}    42
@@ -650,7 +650,7 @@ MLang Frontend CompileOnly TestsFlag MissingOutputValue Fails
     Should Contain    ${run.stderr}    Unknown option: -o
     Should Contain    ${run.stdout}    Usage:
 
-MLang Frontend Last Backend Option Wins
+MLang Frontend Last Backend option Wins
     [Documentation]    Verify wrapper parsing uses the last --backend value before passthrough args.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_last_backend
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -3194,7 +3194,7 @@ MLang Frontend RunTests Invalid BenchWarmup Value Errors
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Invalid value for --bench-warmup
 
-MLang Frontend Test Missing BenchIters Value Uses Unknown Option Error
+MLang Frontend Test Missing BenchIters Value Uses Unknown option Error
     [Documentation]    Verify test mode missing value after --bench-iters reports unknown option (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_missing_benchiters
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -3205,7 +3205,7 @@ MLang Frontend Test Missing BenchIters Value Uses Unknown Option Error
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-iters
 
-MLang Frontend RunTests Missing BenchWarmup Value Uses Unknown Option Error
+MLang Frontend RunTests Missing BenchWarmup Value Uses Unknown option Error
     [Documentation]    Verify run tests mode missing value after --bench-warmup reports unknown option (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_missing_benchwarmup
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -3300,7 +3300,7 @@ MLang Frontend Test Directory Invalid BenchWarmup Value Errors
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Invalid value for --bench-warmup
 
-MLang Frontend RunTests Directory Missing BenchIters Value Uses Unknown Option Error
+MLang Frontend RunTests Directory Missing BenchIters Value Uses Unknown option Error
     [Documentation]    Verify `run tests <dir> --bench-iters` missing value reports unknown option (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_missing_benchiters
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -3320,7 +3320,7 @@ MLang Frontend RunTests Directory Missing BenchIters Value Uses Unknown Option E
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-iters
 
-MLang Frontend Test Directory Missing BenchWarmup Value Uses Unknown Option Error
+MLang Frontend Test Directory Missing BenchWarmup Value Uses Unknown option Error
     [Documentation]    Verify `test <dir> --bench-warmup` missing value reports unknown option (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_dir_missing_benchwarmup
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -3432,7 +3432,7 @@ MLang Frontend Tests Flag Works In Trailing Position
     Should Be Equal As Integers    ${run.rc}    0
     ...    msg=frontend failed to honor trailing --tests flag (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
-MLang Frontend Trailing Tests Flag Unknown Option Fails
+MLang Frontend Trailing Tests Flag Unknown option Fails
     [Documentation]    Verify C++ parity: trailing --tests stream still rejects unknown options with usage.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_unknown
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -3926,7 +3926,7 @@ MLang Frontend Pkg Mla Mode Routes Under FrontendImplMla Env
     ...    msg=frontend pkg --help under MLANG_FRONTEND_IMPL=mla should fail with nonzero (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     ${has_unknown}=    Run Keyword And Return Status    Should Contain    ${run.stderr}    Unknown pkg subcommand: --help
     ${has_compile_error}=    Run Keyword And Return Status    Should Contain    ${run.stderr}    Compilation failed due to errors.
-    ${has_unwrap_warn}=    Run Keyword And Return Status    Should Contain    ${run.stderr}    Result.unwrap() may panic
+    ${has_unwrap_warn}=    Run Keyword And Return Status    Should Contain    ${run.stderr}    result.unwrap() may panic
     ${has_usage}=    Run Keyword And Return Status    Should Contain    ${run.stdout}    Usage:
     ${ok}=    Evaluate    bool(${has_unknown} or ${has_compile_error} or ${has_unwrap_warn} or ${has_usage})
     Should Be True    ${ok}
@@ -5454,7 +5454,7 @@ MLang Frontend SingleFile Forwards OutputFlag
     ${log_text}=    Get File    ${fake_log}
     Should Contain    ${log_text}    -o single_output_bin
 
-MLang Frontend Directory Mode Rejects Unknown Option
+MLang Frontend Directory Mode Rejects Unknown option
     [Documentation]    Verify test/bench directory mode rejects unknown options instead of silently dropping them.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_dir_unknown
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -5474,7 +5474,7 @@ MLang Frontend Directory Mode Rejects Unknown Option
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
 
-MLang Frontend Bench Missing Value Uses Unknown Option Error
+MLang Frontend Bench Missing Value Uses Unknown option Error
     [Documentation]    Verify missing value for bench options is reported as unknown option (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_missing
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -5491,7 +5491,7 @@ MLang Frontend Bench Missing Value Uses Unknown Option Error
     Should Not Be Equal As Integers    ${run_warmup.rc}    0
     Should Contain    ${run_warmup.stderr}    Unknown option: --bench-warmup
 
-MLang Frontend Missing LinkOrOutput Value Uses Unknown Option Error
+MLang Frontend Missing LinkOrOutput Value Uses Unknown option Error
     [Documentation]    Verify missing value for -o/-L/-l in test mode reports unknown option and usage (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_missing_link_or_output
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -5526,7 +5526,7 @@ MLang Frontend Missing LinkOrOutput Value Uses Unknown Option Error
     Should Contain    ${run_l.stderr}    Unknown option: -l
     Should Contain    ${run_l.stdout}    Usage:
 
-MLang Frontend RunTests Missing LinkOrOutput Value Uses Unknown Option Error
+MLang Frontend RunTests Missing LinkOrOutput Value Uses Unknown option Error
     [Documentation]    Verify missing value for -o/-L/-l in run tests mode reports unknown option and usage (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_missing_link_or_output
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -5561,7 +5561,7 @@ MLang Frontend RunTests Missing LinkOrOutput Value Uses Unknown Option Error
     Should Contain    ${run_l.stderr}    Unknown option: -l
     Should Contain    ${run_l.stdout}    Usage:
 
-MLang Frontend Bench Missing LinkOrOutput Value Uses Unknown Option Error
+MLang Frontend Bench Missing LinkOrOutput Value Uses Unknown option Error
     [Documentation]    Verify missing value for -o/-L/-l in bench mode reports unknown option and usage (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_missing_link_or_output
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -5595,7 +5595,7 @@ MLang Frontend Bench Missing LinkOrOutput Value Uses Unknown Option Error
     Should Contain    ${run_l.stderr}    Unknown option: -l
     Should Contain    ${run_l.stdout}    Usage:
 
-MLang Frontend Compile Missing LinkOrOutput Value Uses Unknown Option Error
+MLang Frontend Compile Missing LinkOrOutput Value Uses Unknown option Error
     [Documentation]    Verify C++ parity: missing value for -o/-L/-l in compile mode reports unknown option and usage.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_missing_link_or_output
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -5629,7 +5629,7 @@ MLang Frontend Compile Missing LinkOrOutput Value Uses Unknown Option Error
     Should Contain    ${run_l.stderr}    Unknown option: -l
     Should Contain    ${run_l.stdout}    Usage:
 
-MLang Frontend Unknown Option Prints Usage
+MLang Frontend Unknown option Prints Usage
     [Documentation]    Verify unknown test/bench options print usage text in addition to error (C++ parity style).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_unknown_usage
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -6282,14 +6282,14 @@ Tls Client Server Handshake With Generated Certificate
     ...    use std::ssl::last_error;
     ...    use std::strbuf::eq;
     ...    fn main() -> i32 {
-    ...        let listener_r: Result<TlsListener, str8> = TlsListener::bind("127.0.0.1", ${PORT}, "tls_cert.pem", "tls_key.pem");
+    ...        let listener_r: result<TlsListener, str8> = TlsListener::bind("127.0.0.1", ${PORT}, "tls_cert.pem", "tls_key.pem");
     ...        if listener_r.is_err() {
     ...            eprintln!("TLS_SERVER_BIND_ERR {}", last_error());
     ...            return 2;
     ...        }
     ...        let listener: TlsListener = listener_r.unwrap();
     ...        println!("TLS_SERVER_READY");
-    ...        let stream_r: Result<TlsStream, str8> = listener.accept();
+    ...        let stream_r: result<TlsStream, str8> = listener.accept();
     ...        if stream_r.is_err() {
     ...            eprintln!("TLS_SERVER_ACCEPT_ERR {}", last_error());
     ...            listener.close();
@@ -6297,7 +6297,7 @@ Tls Client Server Handshake With Generated Certificate
     ...        }
     ...        let stream: TlsStream = stream_r.unwrap();
     ...        var buf = String::with_capacity(64);
-    ...        let read_r: Result<i64, str8> = stream.read(buf, 64);
+    ...        let read_r: result<i64, str8> = stream.read(buf, 64);
     ...        if read_r.is_err() {
     ...            eprintln!("TLS_SERVER_READ_ERR {}", last_error());
     ...            String::free(buf);
@@ -6313,7 +6313,7 @@ Tls Client Server Handshake With Generated Certificate
     ...            return 5;
     ...        }
     ...        String::free(buf);
-    ...        let write_r: Result<i64, str8> = stream.write("pong");
+    ...        let write_r: result<i64, str8> = stream.write("pong");
     ...        if write_r.is_err() {
     ...            eprintln!("TLS_SERVER_WRITE_ERR {}", last_error());
     ...            stream.close();
@@ -6335,20 +6335,20 @@ Tls Client Server Handshake With Generated Certificate
     ...    use std::ssl::last_error;
     ...    use std::strbuf::eq;
     ...    fn main() -> i32 {
-    ...        let client_r: Result<TlsStream, str8> = TlsStream::connect_with_options("127.0.0.1", ${PORT}, "localhost", "tls_cert.pem", 1);
+    ...        let client_r: result<TlsStream, str8> = TlsStream::connect_with_options("127.0.0.1", ${PORT}, "localhost", "tls_cert.pem", 1);
     ...        if client_r.is_err() {
     ...            eprintln!("TLS_CLIENT_CONNECT_ERR {}", last_error());
     ...            return 2;
     ...        }
     ...        let client: TlsStream = client_r.unwrap();
-    ...        let write_r: Result<i64, str8> = client.write("ping");
+    ...        let write_r: result<i64, str8> = client.write("ping");
     ...        if write_r.is_err() {
     ...            eprintln!("TLS_CLIENT_WRITE_ERR {}", last_error());
     ...            client.close();
     ...            return 3;
     ...        }
     ...        var buf = String::with_capacity(64);
-    ...        let read_r: Result<i64, str8> = client.read(buf, 64);
+    ...        let read_r: result<i64, str8> = client.read(buf, 64);
     ...        if read_r.is_err() {
     ...            eprintln!("TLS_CLIENT_READ_ERR {}", last_error());
     ...            String::free(buf);

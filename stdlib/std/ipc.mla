@@ -54,7 +54,7 @@ impl NamedPipe {
     ///
     /// On Unix this creates the FIFO if needed and opens it read/write
     /// nonblocking. On Windows this creates a named-pipe server endpoint.
-    pub fn create(name: str8) -> Result<NamedPipe, str8> {
+    pub fn create(name: str8) -> result<NamedPipe, str8> {
         let h: i64 = __mlang_std_ipc_named_pipe_create(name);
         if h == 0 {
             return Err<NamedPipe, str8>(last_error());
@@ -63,7 +63,7 @@ impl NamedPipe {
     }
 
     /// @brief Connect/open an existing named pipe endpoint.
-    pub fn connect(name: str8) -> Result<NamedPipe, str8> {
+    pub fn connect(name: str8) -> result<NamedPipe, str8> {
         let h: i64 = __mlang_std_ipc_named_pipe_connect(name);
         if h == 0 {
             return Err<NamedPipe, str8>(last_error());
@@ -75,7 +75,7 @@ impl NamedPipe {
     ///
     /// Returns `PipeRead { ready: 0, len: 0 }` when no data is currently
     /// available on a nonblocking pipe.
-    pub fn read(self: NamedPipe, buf: str8, capacity: i64) -> Result<PipeRead, str8> {
+    pub fn read(self: NamedPipe, buf: str8, capacity: i64) -> result<PipeRead, str8> {
         let n: i64 = __mlang_std_ipc_named_pipe_read(self.handle, buf, capacity);
         if n == -2 {
             return Ok<PipeRead, str8>(PipeRead { ready: 0, len: 0 });
@@ -87,7 +87,7 @@ impl NamedPipe {
     }
 
     /// @brief Write bytes to the named pipe.
-    pub fn write(self: NamedPipe, s: str8) -> Result<i64, str8> {
+    pub fn write(self: NamedPipe, s: str8) -> result<i64, str8> {
         let n: i64 = __mlang_std_ipc_named_pipe_write(self.handle, s);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -114,7 +114,7 @@ impl LocalListener {
     ///
     /// On Unix-like platforms this is an `AF_UNIX` path socket. On Windows this
     /// uses Winsock `AF_UNIX` support when available.
-    pub fn bind(path: str8) -> Result<LocalListener, str8> {
+    pub fn bind(path: str8) -> result<LocalListener, str8> {
         let h: i64 = __mlang_std_ipc_local_socket_bind(path);
         if h == 0 {
             return Err<LocalListener, str8>(last_error());
@@ -123,7 +123,7 @@ impl LocalListener {
     }
 
     /// @brief Accept one incoming local socket connection.
-    pub fn accept(self: LocalListener) -> Result<LocalStream, str8> {
+    pub fn accept(self: LocalListener) -> result<LocalStream, str8> {
         let h: i64 = __mlang_std_ipc_local_socket_accept(self.handle);
         if h == 0 {
             return Err<LocalStream, str8>(last_error());
@@ -139,7 +139,7 @@ impl LocalListener {
 
 impl LocalStream {
     /// @brief Connect to a local stream socket path.
-    pub fn connect(path: str8) -> Result<LocalStream, str8> {
+    pub fn connect(path: str8) -> result<LocalStream, str8> {
         let h: i64 = __mlang_std_ipc_local_socket_connect(path);
         if h == 0 {
             return Err<LocalStream, str8>(last_error());
@@ -148,7 +148,7 @@ impl LocalStream {
     }
 
     /// @brief Read up to `capacity` bytes into `buf`.
-    pub fn read(self: LocalStream, buf: str8, capacity: i64) -> Result<i64, str8> {
+    pub fn read(self: LocalStream, buf: str8, capacity: i64) -> result<i64, str8> {
         let n: i64 = __mlang_std_ipc_local_socket_read(self.handle, buf, capacity);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -157,7 +157,7 @@ impl LocalStream {
     }
 
     /// @brief Write bytes to the local socket.
-    pub fn write(self: LocalStream, s: str8) -> Result<i64, str8> {
+    pub fn write(self: LocalStream, s: str8) -> result<i64, str8> {
         let n: i64 = __mlang_std_ipc_local_socket_write(self.handle, s);
         if n < 0 {
             return Err<i64, str8>(last_error());

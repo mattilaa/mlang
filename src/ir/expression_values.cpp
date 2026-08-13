@@ -859,15 +859,15 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     std::string structTypeName = node->structName;
 
     // Check if this is a generic struct instantiation (has type arguments)
-    if(node->structName == "Result" && node->typeArgs.empty())
+    if(node->structName == "result" && node->typeArgs.empty())
     {
-        reportError(node->line, "Result literals require type arguments (e.g. "
+        reportError(node->line, "result literals require type arguments (e.g. "
                                 "Ok<i32, str8>(...))");
         return nullptr;
     }
-    if(node->structName == "Option" && node->typeArgs.empty())
+    if(node->structName == "option" && node->typeArgs.empty())
     {
-        reportError(node->line, "Option literals require type arguments (e.g. "
+        reportError(node->line, "option literals require type arguments (e.g. "
                                 "Some<i32>(...))");
         return nullptr;
     }
@@ -1454,12 +1454,12 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     bool hasOption = hasSome || hasNone;
     if(hasResult && (hasLiteral || hasOption))
     {
-        reportError(node->line, "match cannot mix Result and other patterns");
+        reportError(node->line, "match cannot mix result and other patterns");
         return nullptr;
     }
     if(hasOption && hasLiteral)
     {
-        reportError(node->line, "match cannot mix Option and literal patterns");
+        reportError(node->line, "match cannot mix option and literal patterns");
         return nullptr;
     }
 
@@ -1596,7 +1596,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         llvm::Type* matchType = matchVal->getType();
         if(!matchType->isStructTy())
         {
-            reportError(node->line, "match expects a Result value");
+            reportError(node->line, "match expects a result value");
             return nullptr;
         }
 
@@ -1641,7 +1641,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(isOkIndex < 0 || okIndex < 0 || errIndex < 0)
         {
             reportError(node->line,
-                        "match expects Result with is_ok/ok/err fields");
+                        "match expects result with is_ok/ok/err fields");
             return nullptr;
         }
 
@@ -1837,7 +1837,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         llvm::Type* matchType = matchVal->getType();
         if(!matchType->isStructTy())
         {
-            reportError(node->line, "match expects an Option value");
+            reportError(node->line, "match expects an option value");
             return nullptr;
         }
 
@@ -1875,7 +1875,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(isSomeIndex < 0 || valueIndex < 0)
         {
             reportError(node->line,
-                        "match expects Option with is_some/value fields");
+                        "match expects option with is_some/value fields");
             return nullptr;
         }
 
@@ -2381,4 +2381,3 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     activeBorrowers = std::move(mergedActiveBorrowers);
     return phi;
 }
-

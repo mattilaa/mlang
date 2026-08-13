@@ -662,8 +662,8 @@ MLang code:
 - immutable `let` bindings for pure intermediate values
 - pipe operator `|>` for left-to-right function composition
 - closures, including typed parameter closures such as `|x: i32| { ... }`
-- algebraic-data-type style `Option<T>` and `Result<T, E>`
-- `match` expressions over enums, `Option`, `Result`, and literals
+- algebraic-data-type style `option<T>` and `result<T, E>`
+- `match` expressions over enums, `option`, `result`, and literals
 - tuple types and tuple literals
 - fold expressions over lists
 
@@ -704,7 +704,7 @@ code without introducing a separate runtime abstraction.
 Example:
 
 ```mla
-fn choose(flag: bool) -> Option<i32> {
+fn choose(flag: bool) -> option<i32> {
     if flag {
         return Some<i32>(42);
     }
@@ -715,7 +715,7 @@ fn main() -> i32 {
     let values: list<i32> = [1, 2, 3, 4];
     let total: i32 = (... + values);
 
-    let maybe_value: Option<i32> = choose(true);
+    let maybe_value: option<i32> = choose(true);
     let answer: i32 = match maybe_value {
         Some(v) => v,
         None => 0

@@ -194,7 +194,7 @@ def _must_run_serial(test_name: str) -> bool:
         "Examples.Inline Attrs Demo Runs Correctly",
         "Examples.Multithreaded Net Server Client Roundtrip",
         "Examples.Printf And GetChar Demo",
-        "Examples.Result Methods And Unwrap Warns",
+        "Examples.result Methods And Unwrap Warns",
     }:
         return True
     return False

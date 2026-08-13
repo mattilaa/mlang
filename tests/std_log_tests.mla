@@ -10,10 +10,10 @@ use std::testing::verify;
 use std::thread::join;
 
 fn file_size(path: str8) -> i64 {
-    let opened: Result<File, str8> = File::open(path);
+    let opened: result<File, str8> = File::open(path);
     if opened.is_err() { return -1; }
     let f: File = opened.unwrap();
-    let sr: Result<i64, str8> = f.size();
+    let sr: result<i64, str8> = f.size();
     let _ = f.close();
     if sr.is_err() { return -1; }
     return sr.unwrap();
@@ -93,7 +93,7 @@ fn test_created_log_has_initial_output_path() {
     let path: str8 = "/tmp/mlang_std_log_created_path.log";
     let _clean = write_all_text(path, "");
 
-    let lr: Result<Log, str8> = Log::with_output_path(path);
+    let lr: result<Log, str8> = Log::with_output_path(path);
     if lr.is_err() { verify(false); return; }
     let logger: Log = lr.unwrap();
     logger.out("created");
@@ -109,15 +109,15 @@ fn test_log_thread_safe_file_forwarding() {
     let path: str8 = "/tmp/mlang_std_log_thread_safe.log";
     let _clean = write_all_text(path, "");
 
-    let lr: Result<Log, str8> = Log::with_output_path(path);
+    let lr: result<Log, str8> = Log::with_output_path(path);
     if lr.is_err() { verify(false); return; }
     let logger: Log = lr.unwrap();
     let handle: i64 = logger.handle;
 
-    let h1: Handle<Thread> = thread_spawn(shared_log_writer, handle, 20);
-    let h2: Handle<Thread> = thread_spawn(shared_log_writer, handle, 20);
-    let h3: Handle<Thread> = thread_spawn(shared_log_writer, handle, 20);
-    let h4: Handle<Thread> = thread_spawn(shared_log_writer, handle, 20);
+    let h1: std::thread::thread = thread::spawn(shared_log_writer, handle, 20);
+    let h2: std::thread::thread = thread::spawn(shared_log_writer, handle, 20);
+    let h3: std::thread::thread = thread::spawn(shared_log_writer, handle, 20);
+    let h4: std::thread::thread = thread::spawn(shared_log_writer, handle, 20);
 
     let rc1: i32 = join(h1);
     let rc2: i32 = join(h2);
@@ -154,7 +154,7 @@ fn test_created_log_can_enable_timestamps_at_creation() {
     let path: str8 = "/tmp/mlang_std_log_timestamp_created_test.log";
     let _clean = write_all_text(path, "");
 
-    let lr: Result<Log, str8> = Log::with_options(path, 1);
+    let lr: result<Log, str8> = Log::with_options(path, 1);
     if lr.is_err() { verify(false); return; }
     let logger: Log = lr.unwrap();
     let n1: i64 = logger.out("created-ts");

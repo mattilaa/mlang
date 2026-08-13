@@ -1,6 +1,6 @@
 /// \file functional_option_result_demo.mla
 /// @ingroup examples
-/// \brief Functional usage of Option/Result with map/and_then helpers.
+/// \brief Functional usage of option/result with map/and_then helpers.
 ///
 mod std::exceptions;
 
@@ -12,7 +12,7 @@ enum Status {
     Archived
 };
 
-fn parse_port(text: str8) -> Result<i32, str8> {
+fn parse_port(text: str8) -> result<i32, str8> {
     if text == "8080" {
         return Ok<i32, str8>(8080);
     }
@@ -22,7 +22,7 @@ fn parse_port(text: str8) -> Result<i32, str8> {
     return Err<i32, str8>("unsupported port");
 }
 
-fn choose_status(port: i32) -> Option<Status> {
+fn choose_status(port: i32) -> option<Status> {
     if port == 8080 {
         return Some<Status>(Status::Published);
     }
@@ -48,20 +48,20 @@ fn require_status(flag: bool) -> void {
 }
 
 fn main() -> i32 {
-    let port_r: Result<i32, str8> = parse_port("8080");
+    let port_r: result<i32, str8> = parse_port("8080");
     let port: i32 = match port_r {
         Ok(v) => v,
         Err(_) => 0
     };
 
-    let maybe_status: Option<Status> = choose_status(port);
+    let maybe_status: option<Status> = choose_status(port);
     let label: str8 = match maybe_status {
         Some(s) => describe_status(s),
         None => "none"
     };
     println!("port={} status={}", port, label);
 
-    let bad_port_r: Result<i32, str8> = parse_port("21");
+    let bad_port_r: result<i32, str8> = parse_port("21");
     let bad_label: str8 = match bad_port_r {
         Ok(_) => "ok",
         Err(e) => e

@@ -186,7 +186,7 @@ fn test_closure_body_compound_assign() {
 // Spawn a no-op closure and join -- just verifies no crash / correct handle.
 #[test]
 fn test_thread_spawn_closure_basic() {
-    let h: Handle<Thread> = thread_spawn(|| {
+    let h: std::thread::thread = thread::spawn(|| {
         var x: i32 = 1;
         x += 1;
     });
@@ -196,7 +196,7 @@ fn test_thread_spawn_closure_basic() {
 // Spawn a closure containing a for loop.
 #[test]
 fn test_thread_spawn_closure_loop() {
-    let h: Handle<Thread> = thread_spawn(|| {
+    let h: std::thread::thread = thread::spawn(|| {
         var s: i32 = 0;
         for i in 0..4 {
             s += 1;
@@ -205,10 +205,10 @@ fn test_thread_spawn_closure_loop() {
     join(h);
     }
 
-// thread_spawn intrinsic form also accepts a closure.
+// The stdlib spawn entrypoint also accepts a closure.
 #[test]
-fn test_thread_spawn_intrinsic_closure() {
-    let h: Handle<Thread> = thread_spawn(|| {
+fn test_thread_spawn_closure_alias() {
+    let h: std::thread::thread = thread::spawn(|| {
         var dummy: i32 = 42;
         dummy *= 2;
     });

@@ -10,7 +10,7 @@ use std::compiler::DefinitionLocation;
 use std::compiler::session_create;
 
 fn main() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): {
         println!("session_create failed: {}", sr.unwrap_err());
         return 1;
@@ -20,41 +20,41 @@ fn main() -> i32 {
     let uri: str8 = "mem://std_compiler_demo.mla";
     let src: str8 = "fn alpha() -> i32 { return 1; }\nfn main() -> i32 {\n  let al\n  return alpha();\n}";
 
-    let opened: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let opened: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if opened.is_err(): {
         println!("open_document failed: {}", opened.unwrap_err());
         let _ = s.destroy();
         return 1;
     }
 
-    let diags_r: Result<i32, str8> = s.syntax_diagnostic_count(uri);
+    let diags_r: result<i32, str8> = s.syntax_diagnostic_count(uri);
     if diags_r.is_ok(): {
         println!("diagnostics: {}", diags_r.unwrap());
     }
 
-    let hover_r: Result<str8, str8> = s.hover(uri, 1, 4);
+    let hover_r: result<str8, str8> = s.hover(uri, 1, 4);
     if hover_r.is_ok(): {
         println!("hover(1,4): {}", hover_r.unwrap());
     }
 
-    let cc_r: Result<i32, str8> = s.completion_count(uri, 3, 9);
+    let cc_r: result<i32, str8> = s.completion_count(uri, 3, 9);
     if cc_r.is_ok(): {
         let count: i32 = cc_r.unwrap();
         println!("completion_count: {}", count);
         if count > 0: {
-            let c0_r: Result<str8, str8> = s.completion_get(uri, 3, 9, 0);
+            let c0_r: result<str8, str8> = s.completion_get(uri, 3, 9, 0);
             if c0_r.is_ok(): {
                 println!("completion[0]: {}", c0_r.unwrap());
             }
         }
     }
 
-    let sc_r: Result<i32, str8> = s.document_symbol_count(uri);
+    let sc_r: result<i32, str8> = s.document_symbol_count(uri);
     if sc_r.is_ok(): {
         let sc: i32 = sc_r.unwrap();
         println!("symbol_count: {}", sc);
         if sc > 0: {
-            let sym0_r: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, 0);
+            let sym0_r: result<DocumentSymbol, str8> = s.document_symbol_get(uri, 0);
             if sym0_r.is_ok(): {
                 let sym0: DocumentSymbol = sym0_r.unwrap();
                 println!("symbol[0]: {} @ {}:{}", sym0.name, sym0.line, sym0.column);
@@ -62,7 +62,7 @@ fn main() -> i32 {
         }
     }
 
-    let def_r: Result<DefinitionLocation, str8> = s.definition(uri, 4, 10);
+    let def_r: result<DefinitionLocation, str8> = s.definition(uri, 4, 10);
     if def_r.is_ok(): {
         let def: DefinitionLocation = def_r.unwrap();
         println!("definition: {} @ {}:{} ({})", def.name, def.line, def.column, def.uri);

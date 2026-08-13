@@ -32,7 +32,7 @@ pub fn last_error() -> str8 {
 
 impl TlsListener {
     /// Bind a TLS listener using PEM certificate and private key files.
-    pub fn bind(addr: str8, port: i64, cert_file: str8, key_file: str8) -> Result<TlsListener, str8> {
+    pub fn bind(addr: str8, port: i64, cert_file: str8, key_file: str8) -> result<TlsListener, str8> {
         let h: i64 = __mlang_std_ssl_listener_bind(addr, port, cert_file, key_file);
         if h == 0 {
             return Err<TlsListener, str8>(last_error());
@@ -42,7 +42,7 @@ impl TlsListener {
 
     /// @brief Return the port the listener is bound to.
     /// @return `Ok(port)` or an error message.
-    pub fn local_port(self: TlsListener) -> Result<i64, str8> {
+    pub fn local_port(self: TlsListener) -> result<i64, str8> {
         let p: i64 = __mlang_std_ssl_listener_local_port(self.handle);
         if p < 0 {
             return Err<i64, str8>(last_error());
@@ -52,7 +52,7 @@ impl TlsListener {
 
     /// @brief Accept the next incoming TLS connection.
     /// @return A ready-to-use `TlsStream` or an error message.
-    pub fn accept(self: TlsListener) -> Result<TlsStream, str8> {
+    pub fn accept(self: TlsListener) -> result<TlsStream, str8> {
         let h: i64 = __mlang_std_ssl_listener_accept(self.handle);
         if h == 0 {
             return Err<TlsStream, str8>(last_error());
@@ -82,13 +82,13 @@ impl TlsListener {
 
 impl TlsStream {
     /// Connect using system trust roots and hostname verification.
-    pub fn connect(host: str8, port: i64) -> Result<TlsStream, str8> {
+    pub fn connect(host: str8, port: i64) -> result<TlsStream, str8> {
         return TlsStream::connect_with_options(host, port, host, "", 1);
     }
 
     /// Connect with explicit server-name verification and CA bundle override.
     /// When `verify_peer == 0`, certificate verification is disabled.
-    pub fn connect_with_options(host: str8, port: i64, server_name: str8, ca_file: str8, verify_peer: i32) -> Result<TlsStream, str8> {
+    pub fn connect_with_options(host: str8, port: i64, server_name: str8, ca_file: str8, verify_peer: i32) -> result<TlsStream, str8> {
         let h: i64 = __mlang_std_ssl_client_connect(host, port, server_name, ca_file, verify_peer);
         if h == 0 {
             return Err<TlsStream, str8>(last_error());
@@ -100,7 +100,7 @@ impl TlsStream {
     /// @param buf Destination buffer (reused in-place).
     /// @param capacity Maximum bytes to read.
     /// @return Bytes read (0 = EOF) or an error message.
-    pub fn read(self: TlsStream, buf: str8, capacity: i64) -> Result<i64, str8> {
+    pub fn read(self: TlsStream, buf: str8, capacity: i64) -> result<i64, str8> {
         let n: i64 = __mlang_std_ssl_stream_read(self.handle, buf, capacity);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -111,7 +111,7 @@ impl TlsStream {
     /// @brief Write all bytes of `s` to the stream.
     /// @param s Payload bytes.
     /// @return Bytes written or an error message.
-    pub fn write(self: TlsStream, s: str8) -> Result<i64, str8> {
+    pub fn write(self: TlsStream, s: str8) -> result<i64, str8> {
         let n: i64 = __mlang_std_ssl_stream_write(self.handle, s);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -122,7 +122,7 @@ impl TlsStream {
     /// @brief Apply a read timeout in milliseconds (0 disables).
     /// @param timeout_ms Timeout in milliseconds.
     /// @return `Ok(0)` on success, else error message.
-    pub fn set_read_timeout_ms(self: TlsStream, timeout_ms: i64) -> Result<i32, str8> {
+    pub fn set_read_timeout_ms(self: TlsStream, timeout_ms: i64) -> result<i32, str8> {
         let rc: i32 = __mlang_std_ssl_stream_set_read_timeout_ms(self.handle, timeout_ms);
         if rc != 0 {
             return Err<i32, str8>(last_error());
@@ -133,7 +133,7 @@ impl TlsStream {
     /// @brief Apply a write timeout in milliseconds (0 disables).
     /// @param timeout_ms Timeout in milliseconds.
     /// @return `Ok(0)` on success, else error message.
-    pub fn set_write_timeout_ms(self: TlsStream, timeout_ms: i64) -> Result<i32, str8> {
+    pub fn set_write_timeout_ms(self: TlsStream, timeout_ms: i64) -> result<i32, str8> {
         let rc: i32 = __mlang_std_ssl_stream_set_write_timeout_ms(self.handle, timeout_ms);
         if rc != 0 {
             return Err<i32, str8>(last_error());

@@ -19,7 +19,7 @@ fn test_expect_helpers_pass() {
 
     verify_eq_i32(10, checks());
     verify_eq_i32(0, failures());
-    verify_eq_i32(0, result());
+    verify_eq_i32(0, status());
 }
 
 #[test]
@@ -37,7 +37,7 @@ fn test_expect_helpers_record_nonfatal_failures() {
     set_quiet(false);
     verify_eq_i32(6, checks());
     verify_eq_i32(6, failures());
-    verify_true(result() == 1);
+    verify_true(status() == 1);
 }
 
 #[test]

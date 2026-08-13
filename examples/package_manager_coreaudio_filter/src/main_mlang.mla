@@ -128,7 +128,7 @@ fn enter_sweep(index: i32, total_frames: i64, sample_rate: i64, max_resonance_db
 }
 
 fn start_device(dev: AudioDevice) -> bool {
-    let result: Result<i32, str8> = dev.start();
+    let result: result<i32, str8> = dev.start();
     if result.is_err() {
         println!("audio start failed: {}", result.unwrap_err());
         return false;
@@ -190,7 +190,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 2;
     }
 
-    let audio_r: Result<PcmAudio, str8> = PcmAudio::load(audio_path);
+    let audio_r: result<PcmAudio, str8> = PcmAudio::load(audio_path);
     if audio_r.is_err() {
         println!("audio load failed: {}", audio_r.unwrap_err());
         parsed.free();
@@ -203,7 +203,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let source_frames: i64 = audio.frame_count();
     let samples: list<f32> = audio.samples();
     audio.close();
-    let dev_r: Result<AudioDevice, str8> = device_id >= 0
+    let dev_r: result<AudioDevice, str8> = device_id >= 0
         ? AudioDevice::open_with_config(device_id, "mlang_filter_sweeps", sample_rate, 512)
         : AudioDevice::open_default_with_config("mlang_filter_sweeps", sample_rate, 512);
     if dev_r.is_err() {
@@ -227,7 +227,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     mlang_dsp_filter_set_resonance_limit__f32(max_resonance_db);
     mlang_dsp_filter_reset__i32_f32_f32_f32(mode, f32(sample_rate), 12000.0f, 0.0f);
 
-    let block_r: Result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
+    let block_r: result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
     if block_r.is_err() {
         println!("PCM block allocation failed: {}", block_r.unwrap_err());
         dev.close();
@@ -278,7 +278,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             }
             frame = frame + 1;
         }
-        let queued_r: Result<i64, str8> = dev.queue_pcm_block(block, buffer_frames);
+        let queued_r: result<i64, str8> = dev.queue_pcm_block(block, buffer_frames);
         if queued_r.is_err() {
             println!("PCM queue failed: {}", queued_r.unwrap_err());
             block.close();
@@ -302,7 +302,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             sleep_ms(1);
             continue;
         }
-        let tail_r: Result<i64, str8> = dev.queue_pcm_block(block, buffer_frames);
+        let tail_r: result<i64, str8> = dev.queue_pcm_block(block, buffer_frames);
         if tail_r.is_err() {
             println!("PCM tail queue failed: {}", tail_r.unwrap_err());
             block.close();

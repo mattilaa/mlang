@@ -19,18 +19,18 @@ Examples:
 
 ### API
 - `last_error() -> str8`
-- `bit_set::new(bit_capacity: i64) -> Result<bit_set, str8>`
+- `bit_set::new(bit_capacity: i64) -> result<bit_set, str8>`
 - `bit_set::len(self: bit_set) -> i64`
 - `bit_set::capacity(self: bit_set) -> i64`
 - `bit_set::clear(self: bit_set) -> i32`
 - `bit_set::resize(self: bit_set, new_len: i64, fill: bool) -> i32`
 - `bit_set::set(self: bit_set, index: i64, value: bool) -> i32`
 - `bit_set::set_fast(self: bit_set, index: i64, value: bool) -> i32`
-- `bit_set::get(self: bit_set, index: i64) -> Result<bool, str8>`
+- `bit_set::get(self: bit_set, index: i64) -> result<bool, str8>`
 - `bit_set::get_fast(self: bit_set, index: i64) -> i32`
 - `bit_set::toggle(self: bit_set, index: i64) -> i32`
 - `bit_set::push(self: bit_set, value: bool) -> i32`
-- `bit_set::pop(self: bit_set) -> Result<bool, str8>`
+- `bit_set::pop(self: bit_set) -> result<bool, str8>`
 - `bit_set::count_ones(self: bit_set) -> i64`
 - `bit_set::and_eq(self: bit_set, rhs_handle: i64) -> i32`
 - `bit_set::or_eq(self: bit_set, rhs_handle: i64) -> i32`

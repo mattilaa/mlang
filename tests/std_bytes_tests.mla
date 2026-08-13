@@ -8,7 +8,7 @@ use std::testing::verify;
 
 #[test]
 fn test_bytes_append_get_set_and_string() {
-    let br: Result<Bytes, str8> = Bytes::new(2);
+    let br: result<Bytes, str8> = Bytes::new(2);
     if br.is_err() { verify(false); }
     let b: Bytes = br.unwrap();
 
@@ -28,14 +28,14 @@ fn test_bytes_append_get_set_and_string() {
 
 #[test]
 fn test_bytes_hex_and_append_bytes() {
-    let r1: Result<Bytes, str8> = Bytes::new(0);
+    let r1: result<Bytes, str8> = Bytes::new(0);
     if r1.is_err() { verify(false); }
     let a: Bytes = r1.unwrap();
 
     if a.append_byte(0) != 0 { verify(false); }
     if a.append_byte(255) != 0 { verify(false); }
 
-    let r2: Result<Bytes, str8> = Bytes::from_string("ok");
+    let r2: result<Bytes, str8> = Bytes::from_string("ok");
     if r2.is_err() { verify(false); }
     let b: Bytes = r2.unwrap();
 
@@ -52,7 +52,7 @@ fn test_bytes_hex_and_append_bytes() {
 
 #[test]
 fn test_bytes_reserve_clear_and_bounds() {
-    let r: Result<Bytes, str8> = Bytes::new(1);
+    let r: result<Bytes, str8> = Bytes::new(1);
     if r.is_err() { verify(false); }
     let b: Bytes = r.unwrap();
 

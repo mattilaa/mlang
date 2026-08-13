@@ -14,7 +14,7 @@ use std::strbuf::contains;
 
 /// Demonstrates queue/cancellation helpers without blocking on stdio input.
 fn main() -> i32 {
-    let rt_r: Result<Runtime, str8> = Runtime::new(32);
+    let rt_r: result<Runtime, str8> = Runtime::new(32);
     if rt_r.is_err(): {
         writeln(stdout(), rt_r.unwrap_err());
         return 1;
@@ -23,7 +23,7 @@ fn main() -> i32 {
 
     let cancel_payload: str8 =
         "{\"jsonrpc\":\"2.0\",\"method\":\"$/cancelRequest\",\"params\":{\"id\":42}}";
-    let cr: Result<i32, str8> = register_cancel_from_payload(cancel_payload);
+    let cr: result<i32, str8> = register_cancel_from_payload(cancel_payload);
     if cr.is_err(): {
         writeln(stdout(), cr.unwrap_err());
         rt.close();
@@ -31,7 +31,7 @@ fn main() -> i32 {
     }
 
     let msg: str8 = "{\"jsonrpc\":\"2.0\",\"id\":42,\"result\":\"done\"}";
-    let pr: Result<i32, str8> = rt.push_outbound(msg);
+    let pr: result<i32, str8> = rt.push_outbound(msg);
     if pr.is_err(): {
         writeln(stdout(), pr.unwrap_err());
         rt.close();
@@ -39,7 +39,7 @@ fn main() -> i32 {
     }
 
     var scratch = String::with_capacity(256);
-    let rr: Result<i64, str8> = rt.try_pop_outbound(scratch, 256);
+    let rr: result<i64, str8> = rt.try_pop_outbound(scratch, 256);
     if rr.is_err(): {
         writeln(stdout(), rr.unwrap_err());
         String::free(scratch);

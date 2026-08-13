@@ -194,7 +194,7 @@ fn test_six_bits_and_one_bool_take_two_bytes() {
 
 #[test]
 fn test_bitset_len_tracks_bits_not_bools_as_bytes() {
-    let r: Result<BitSet, str8> = BitSet::new(0);
+    let r: result<BitSet, str8> = BitSet::new(0);
     verify(!r.is_err());
     let bs: BitSet = r.unwrap();
 

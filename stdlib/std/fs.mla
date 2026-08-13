@@ -24,16 +24,16 @@
 /// use std::fs::SeekFrom;
 ///
 /// fn main() -> i32 {
-///     let fr: Result<File, str8> = File::open("data.bin");
+///     let fr: result<File, str8> = File::open("data.bin");
 ///     if fr.is_err(): { return 1; }
 ///     var f: File = fr.unwrap();
 ///
 ///     // jump to last 10 bytes
-///     let sk: Result<i64, str8> = f.seek(SeekFrom::end(-10));
+///     let sk: result<i64, str8> = f.seek(SeekFrom::end(-10));
 ///     if sk.is_err(): { f.close(); return 1; }
 ///
 ///     var buf: str8 = String::with_capacity(11);
-///     let nr: Result<i64, str8> = f.read_bytes(buf, 10);
+///     let nr: result<i64, str8> = f.read_bytes(buf, 10);
 ///     let n: i64 = nr.unwrap();
 ///     println!("read {} bytes: {}", n, buf);
 ///     f.close();
@@ -85,10 +85,10 @@ impl SeekFrom {
     ///
     /// ```mlang
     /// // rewind to the very beginning
-    /// let sk: Result<i64, str8> = f.seek(SeekFrom::start(0));
+    /// let sk: result<i64, str8> = f.seek(SeekFrom::start(0));
     ///
     /// // jump to byte 512
-    /// let sk: Result<i64, str8> = f.seek(SeekFrom::start(512));
+    /// let sk: result<i64, str8> = f.seek(SeekFrom::start(512));
     /// ```
     ///
     /// @param offset  Non-negative byte offset from the start of the file.
@@ -105,10 +105,10 @@ impl SeekFrom {
     ///
     /// ```mlang
     /// // skip 4 bytes forward from wherever we are
-    /// let sk: Result<i64, str8> = f.seek(SeekFrom::current(4));
+    /// let sk: result<i64, str8> = f.seek(SeekFrom::current(4));
     ///
     /// // step 2 bytes back
-    /// let sk: Result<i64, str8> = f.seek(SeekFrom::current(-2));
+    /// let sk: result<i64, str8> = f.seek(SeekFrom::current(-2));
     /// ```
     ///
     /// @param offset  Signed byte offset relative to the current position.
@@ -125,10 +125,10 @@ impl SeekFrom {
     ///
     /// ```mlang
     /// // position cursor at the last 10 bytes
-    /// let sk: Result<i64, str8> = f.seek(SeekFrom::end(-10));
+    /// let sk: result<i64, str8> = f.seek(SeekFrom::end(-10));
     ///
     /// // position at EOF (useful before appending via open_rw)
-    /// let sk: Result<i64, str8> = f.seek(SeekFrom::end(0));
+    /// let sk: result<i64, str8> = f.seek(SeekFrom::end(0));
     /// ```
     ///
     /// @param offset  Signed byte offset from the end of the file (usually <= 0).
@@ -167,7 +167,7 @@ pub struct File {
 /// `BufReader::with_capacity` for larger lines.
 ///
 /// ```mlang
-/// let fr: Result<File, str8> = File::open("log.txt");
+/// let fr: result<File, str8> = File::open("log.txt");
 /// var r: BufReader = BufReader::new(fr.unwrap());
 /// let lines: list<str8> = r.lines();
 /// for line in lines {
@@ -197,14 +197,14 @@ impl File {
     /// Returns `Err` if the file does not exist or cannot be opened.
     ///
     /// ```mlang
-    /// let fr: Result<File, str8> = File::open("data.txt");
+    /// let fr: result<File, str8> = File::open("data.txt");
     /// if fr.is_err(): { println!("open failed"); return 1; }
     /// var f: File = fr.unwrap();
     /// ```
     ///
     /// @param path  Path to the file.
     /// @return `Ok(File)` on success, `Err(str8)` on failure.
-    pub fn open(path: str8) -> Result<File, str8> {
+    pub fn open(path: str8) -> result<File, str8> {
         let h = __mlang_std_fs_open_read(path);
         if h == 0 {
             return Err<File, str8>("std::fs::File::open failed");
@@ -219,7 +219,7 @@ impl File {
     /// Returns `Err` if the path cannot be created.
     ///
     /// ```mlang
-    /// let cr: Result<File, str8> = File::create("out.txt");
+    /// let cr: result<File, str8> = File::create("out.txt");
     /// if cr.is_err(): { return 1; }
     /// var f: File = cr.unwrap();
     /// f.write("hello\n");
@@ -228,7 +228,7 @@ impl File {
     ///
     /// @param path  Destination file path.
     /// @return `Ok(File)` on success, `Err(str8)` on failure.
-    pub fn create(path: str8) -> Result<File, str8> {
+    pub fn create(path: str8) -> result<File, str8> {
         let h = __mlang_std_fs_open_write(path);
         if h == 0 {
             return Err<File, str8>("std::fs::File::create failed");
@@ -244,7 +244,7 @@ impl File {
     /// Returns `Err` if the path cannot be opened.
     ///
     /// ```mlang
-    /// let ar: Result<File, str8> = File::append("log.txt");
+    /// let ar: result<File, str8> = File::append("log.txt");
     /// if ar.is_err(): { return 1; }
     /// var f: File = ar.unwrap();
     /// f.write_line("new entry");
@@ -253,7 +253,7 @@ impl File {
     ///
     /// @param path  Path to the file.
     /// @return `Ok(File)` on success, `Err(str8)` on failure.
-    pub fn append(path: str8) -> Result<File, str8> {
+    pub fn append(path: str8) -> result<File, str8> {
         let h = __mlang_std_fs_open_append(path);
         if h == 0 {
             return Err<File, str8>("std::fs::File::append failed");
@@ -270,7 +270,7 @@ impl File {
     ///
     /// ```mlang
     /// // patch bytes 7..12 in an existing file
-    /// let rwr: Result<File, str8> = File::open_rw("data.bin");
+    /// let rwr: result<File, str8> = File::open_rw("data.bin");
     /// if rwr.is_err(): { return 1; }
     /// var f: File = rwr.unwrap();
     /// f.seek(SeekFrom::start(7));
@@ -280,7 +280,7 @@ impl File {
     ///
     /// @param path  Path to an existing file.
     /// @return `Ok(File)` on success, `Err(str8)` on failure.
-    pub fn open_rw(path: str8) -> Result<File, str8> {
+    pub fn open_rw(path: str8) -> result<File, str8> {
         let h = __mlang_std_fs_open_read_write(path);
         if h == 0 {
             return Err<File, str8>("std::fs::File::open_rw failed");
@@ -310,14 +310,14 @@ impl File {
     /// @ingroup file
     ///
     /// ```mlang
-    /// let wr: Result<i64, str8> = f.write("hello");
+    /// let wr: result<i64, str8> = f.write("hello");
     /// if wr.is_err(): { return 1; }
     /// println!("wrote {} bytes", wr.unwrap());
     /// ```
     ///
     /// @param s  Text to write (NUL-terminated string).
     /// @return `Ok(i64)` — bytes written; `Err(str8)` on I/O error.
-    pub fn write(self: File, s: str8) -> Result<i64, str8> {
+    pub fn write(self: File, s: str8) -> result<i64, str8> {
         let n = __mlang_std_fs_write(self.handle, s);
         if n < 0 {
             return Err<i64, str8>("std::fs::File::write failed");
@@ -337,12 +337,12 @@ impl File {
     ///
     /// @param s  Text to write (newline is appended automatically).
     /// @return `Ok(i64)` — total bytes written including newline; `Err(str8)` on error.
-    pub fn write_line(self: File, s: str8) -> Result<i64, str8> {
-        let n1: Result<i64, str8> = self.write(s);
+    pub fn write_line(self: File, s: str8) -> result<i64, str8> {
+        let n1: result<i64, str8> = self.write(s);
         if n1.is_err() {
             return Err<i64, str8>("std::fs::File::write_line failed");
         }
-        let n2: Result<i64, str8> = self.write("\n");
+        let n2: result<i64, str8> = self.write("\n");
         if n2.is_err() {
             return Err<i64, str8>("std::fs::File::write_line failed");
         }
@@ -357,7 +357,7 @@ impl File {
     ///
     /// ```mlang
     /// // jump to last 10 bytes
-    /// let sk: Result<i64, str8> = f.seek(SeekFrom::end(-10));
+    /// let sk: result<i64, str8> = f.seek(SeekFrom::end(-10));
     /// if sk.is_err(): { f.close(); return 1; }
     /// println!("cursor now at {}", sk.unwrap());
     ///
@@ -370,7 +370,7 @@ impl File {
     ///
     /// @param sf  Seek anchor — construct with `SeekFrom::start/current/end`.
     /// @return `Ok(i64)` — new byte offset from file start; `Err(str8)` on failure.
-    pub fn seek(self: File, sf: SeekFrom) -> Result<i64, str8> {
+    pub fn seek(self: File, sf: SeekFrom) -> result<i64, str8> {
         let pos: i64 = __mlang_std_fs_seek(self.handle, sf.offset, sf.whence);
         if pos < 0 {
             return Err<i64, str8>("std::fs::File::seek failed");
@@ -384,12 +384,12 @@ impl File {
     /// Equivalent to `seek(SeekFrom::current(0))` but does not move the cursor.
     ///
     /// ```mlang
-    /// let t: Result<i64, str8> = f.tell();
+    /// let t: result<i64, str8> = f.tell();
     /// println!("cursor at byte {}", t.unwrap());
     /// ```
     ///
     /// @return `Ok(i64)` — current position in bytes; `Err(str8)` on failure.
-    pub fn tell(self: File) -> Result<i64, str8> {
+    pub fn tell(self: File) -> result<i64, str8> {
         let pos: i64 = __mlang_std_fs_tell(self.handle);
         if pos < 0 {
             return Err<i64, str8>("std::fs::File::tell failed");
@@ -403,12 +403,12 @@ impl File {
     /// Internally seeks to EOF and back, so the cursor position is preserved.
     ///
     /// ```mlang
-    /// let sz: Result<i64, str8> = f.size();
+    /// let sz: result<i64, str8> = f.size();
     /// println!("file is {} bytes", sz.unwrap());
     /// ```
     ///
     /// @return `Ok(i64)` — file size in bytes; `Err(str8)` on failure.
-    pub fn size(self: File) -> Result<i64, str8> {
+    pub fn size(self: File) -> result<i64, str8> {
         let sz: i64 = __mlang_std_fs_file_size(self.handle);
         if sz < 0 {
             return Err<i64, str8>("std::fs::File::size failed");
@@ -427,7 +427,7 @@ impl File {
     /// var buf: str8 = String::with_capacity(11);
     ///
     /// // read up to 10 bytes
-    /// let nr: Result<i64, str8> = f.read_bytes(buf, 10);
+    /// let nr: result<i64, str8> = f.read_bytes(buf, 10);
     /// if nr.is_err(): { f.close(); return 1; }
     /// let n: i64 = nr.unwrap();
     /// println!("got {} bytes: {}", n, buf);
@@ -440,7 +440,7 @@ impl File {
     /// @param buf  Pre-allocated mutable string buffer (capacity >= n + 1).
     /// @param n    Maximum number of bytes to read.
     /// @return `Ok(i64)` — bytes actually read (0 at EOF); `Err(str8)` on I/O error.
-    pub fn read_bytes(self: File, buf: str8, n: i64) -> Result<i64, str8> {
+    pub fn read_bytes(self: File, buf: str8, n: i64) -> result<i64, str8> {
         let got: i64 = __mlang_std_fs_read_bytes(self.handle, buf, n);
         if got < 0 {
             return Err<i64, str8>("std::fs::File::read_bytes failed");
@@ -458,7 +458,7 @@ impl File {
     /// ```mlang
     /// // write a 4-byte magic header
     /// let header: str8 = "MLAG";
-    /// let wr: Result<i64, str8> = f.write_bytes(header, 4);
+    /// let wr: result<i64, str8> = f.write_bytes(header, 4);
     /// if wr.is_err(): { return 1; }
     ///
     /// // overwrite 5 bytes in-place at offset 7
@@ -469,7 +469,7 @@ impl File {
     /// @param buf  Source buffer (at least `n` bytes of valid data).
     /// @param n    Number of bytes to write.
     /// @return `Ok(i64)` — bytes written; `Err(str8)` on I/O error.
-    pub fn write_bytes(self: File, buf: str8, n: i64) -> Result<i64, str8> {
+    pub fn write_bytes(self: File, buf: str8, n: i64) -> result<i64, str8> {
         let w: i64 = __mlang_std_fs_write_bytes(self.handle, buf, n);
         if w < 0 {
             return Err<i64, str8>("std::fs::File::write_bytes failed");
@@ -487,7 +487,7 @@ impl BufReader {
     /// @ingroup bufreader
     ///
     /// ```mlang
-    /// let fr: Result<File, str8> = File::open("input.txt");
+    /// let fr: result<File, str8> = File::open("input.txt");
     /// var r: BufReader = BufReader::new(fr.unwrap());
     /// ```
     ///
@@ -520,14 +520,14 @@ impl BufReader {
     ///
     /// ```mlang
     /// var buf: str8 = String::with_capacity(4096);
-    /// let n: Result<i64, str8> = r.read_line(buf);
+    /// let n: result<i64, str8> = r.read_line(buf);
     /// if n.is_err(): { /* EOF or error */ }
     /// println!("{}", buf);
     /// ```
     ///
     /// @param buf  Caller-allocated buffer; capacity set by `with_capacity` (default 4096).
     /// @return `Ok(i64)` — bytes read without newline; `Err(str8)` at EOF or on error.
-    pub fn read_line(self: BufReader, buf: str8) -> Result<i64, str8> {
+    pub fn read_line(self: BufReader, buf: str8) -> result<i64, str8> {
         let n = __mlang_std_fs_read_line(self.file.handle, buf, self.line_capacity);
         if n < 0 {
             return Err<i64, str8>("std::fs::BufReader::read_line failed");
@@ -655,7 +655,7 @@ pub fn chdir(path: str8) -> i32 {
 /// into memory at once.
 ///
 /// ```mlang
-/// let tr: Result<str8, str8> = read_all_text("config.toml");
+/// let tr: result<str8, str8> = read_all_text("config.toml");
 /// if tr.is_err(): { return 1; }
 /// let text: str8 = tr.unwrap();
 /// println!("{}", text);
@@ -664,7 +664,7 @@ pub fn chdir(path: str8) -> i32 {
 /// @param path  Path to the file to read.
 /// @return `Ok(str8)` — full file contents; `Err(str8)` if the file
 ///         cannot be opened or read.
-pub fn read_all_text(path: str8) -> Result<str8, str8> {
+pub fn read_all_text(path: str8) -> result<str8, str8> {
     let text: str8 = __mlang_std_fs_read_all_text(path);
     if __mlang_std_strbuf_len(text) == 0 {
         if file_exists(path) == 0 {
@@ -679,14 +679,14 @@ pub fn read_all_text(path: str8) -> Result<str8, str8> {
 /// Equivalent to `File::create` + `File::write` + `File::close` in one call.
 ///
 /// ```mlang
-/// let wr: Result<i32, str8> = write_all_text("out.txt", "hello\n");
+/// let wr: result<i32, str8> = write_all_text("out.txt", "hello\n");
 /// if wr.is_err(): { println!("write failed"); return 1; }
 /// ```
 ///
 /// @param path  Destination file path (created or truncated).
 /// @param text  String to write.
 /// @return `Ok(0)` on success; `Err(str8)` on failure.
-pub fn write_all_text(path: str8, text: str8) -> Result<i32, str8> {
+pub fn write_all_text(path: str8, text: str8) -> result<i32, str8> {
     let rc: i32 = __mlang_std_fs_write_all_text(path, text);
     if rc != 0 {
         return Err<i32, str8>("std::fs::write_all_text failed");
@@ -695,7 +695,7 @@ pub fn write_all_text(path: str8, text: str8) -> Result<i32, str8> {
 }
 
 /// @brief Recursively create directories (`mkdir -p` behavior).
-pub fn mkdir_p(path: str8) -> Result<i32, str8> {
+pub fn mkdir_p(path: str8) -> result<i32, str8> {
     let rc: i32 = __mlang_std_fs_mkdir_p(path);
     if rc != 0 {
         return Err<i32, str8>("std::fs::mkdir_p failed");
@@ -704,7 +704,7 @@ pub fn mkdir_p(path: str8) -> Result<i32, str8> {
 }
 
 /// @brief Recursively remove directory tree or file at `path`.
-pub fn remove_tree(path: str8) -> Result<i32, str8> {
+pub fn remove_tree(path: str8) -> result<i32, str8> {
     let rc: i32 = __mlang_std_fs_remove_tree(path);
     if rc != 0 {
         return Err<i32, str8>("std::fs::remove_tree failed");
@@ -732,7 +732,7 @@ pub fn fs_mkdir_p(path: str8) -> void {
 /// @param path Input file path.
 /// @return File contents as UTF-8, or empty string on failure.
 pub fn fs_read_text(path: str8) -> str8 {
-    let r: Result<str8, str8> = read_all_text(path);
+    let r: result<str8, str8> = read_all_text(path);
     if r.is_err() {
         return "";
     }

@@ -85,7 +85,7 @@ fn test_enum_multiple_variants() {
 
 #[test]
 fn test_option_enum_match_still_works() {
-    let maybe: Option<Color> = Some<Color>(Color::Blue);
+    let maybe: option<Color> = Some<Color>(Color::Blue);
     let out: i32 = match maybe {
         Some(v) => color_code(v),
         None => 0

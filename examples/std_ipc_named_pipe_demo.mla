@@ -14,14 +14,14 @@ fn main() -> i32 {
     let name: str8 = "mlang-std-ipc-demo";
     remove_named_pipe(name);
 
-    let server_r: Result<NamedPipe, str8> = NamedPipe::create(name);
+    let server_r: result<NamedPipe, str8> = NamedPipe::create(name);
     if server_r.is_err() {
         println!("named pipe create failed: {}", server_r.unwrap_err());
         return 1;
     }
     let server: NamedPipe = server_r.unwrap();
 
-    let client_r: Result<NamedPipe, str8> = NamedPipe::connect(name);
+    let client_r: result<NamedPipe, str8> = NamedPipe::connect(name);
     if client_r.is_err() {
         println!("named pipe connect failed: {}", client_r.unwrap_err());
         server.close();
@@ -30,7 +30,7 @@ fn main() -> i32 {
     }
     let client: NamedPipe = client_r.unwrap();
 
-    let w_r: Result<i64, str8> = client.write("hello from std::ipc");
+    let w_r: result<i64, str8> = client.write("hello from std::ipc");
     if w_r.is_err() {
         println!("named pipe write failed: {}", w_r.unwrap_err());
         client.close();
@@ -40,7 +40,7 @@ fn main() -> i32 {
     }
 
     var buf = String::with_capacity(128);
-    let read_r: Result<PipeRead, str8> = server.read(buf, 128);
+    let read_r: result<PipeRead, str8> = server.read(buf, 128);
     if read_r.is_err() {
         println!("named pipe read failed: {}", read_r.unwrap_err());
         String::free(buf);

@@ -117,7 +117,9 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
             return getLLVMType(baseKind);
         }
 
-        auto it = structTypes.find(structRef->structName);
+        std::string resolvedStructName =
+            resolveVisibleStructName(structRef->structName);
+        auto it = structTypes.find(resolvedStructName);
         if(it != structTypes.end())
         {
             return it->second;

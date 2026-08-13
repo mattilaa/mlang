@@ -72,7 +72,7 @@ void printUsage(const char* programName)
               << "  --filter <name> Run only tests matching <name> (substring match)\n"
               << "  -Wno-colon-if Suppress warning for plain if/else-if with ':'\n"
               << "  -Wno-colon-while Suppress warning for plain while with ':'\n"
-              << "  -Wno-unwrap Suppress warning for Result.unwrap() usage\n"
+              << "  -Wno-unwrap Suppress warning for result.unwrap() usage\n"
               << "  --force       Rebuild and install the bootstrap toolchain into\n"
               << "                ~/.local before running the requested command\n"
               << "  -L <dir>      Add a library search path for linking\n"

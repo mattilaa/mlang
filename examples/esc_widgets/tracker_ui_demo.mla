@@ -552,7 +552,7 @@ fn main() -> i32 {
         return 1;
     }
 
-    let loop_r: Result<EventLoop, str8> = EventLoop::start(qh, 30, "tick");
+    let loop_r: result<EventLoop, str8> = EventLoop::start(qh, 30, "tick");
     if loop_r.is_err() {
         println!("event loop init failed: {}", loop_r.unwrap_err());
         __mlang_std_sync_lfqueue_free(qh);

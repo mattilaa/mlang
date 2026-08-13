@@ -1,6 +1,6 @@
 /// \file builder_object_json_demo.mla
 /// \ingroup examples
-/// \brief Builder object JSON demo — Option A: every clause key and container
+/// \brief Builder object JSON demo — option A: every clause key and container
 ///        type is declared as a full `struct`.
 ///
 /// Shows the declarative `add<T>()` builder form with `|` clause chaining,
@@ -16,7 +16,7 @@
 ///   mlang run examples/builder_object_json_demo.mla
 /// \endcode
 
-// Builder JSON demo — Option A: every builder clause and container type is a
+// Builder JSON demo — option A: every builder clause and container type is a
 // full `struct` declaration. Leaf clauses (Method, Url, Name, Value, Text,
 // Priority) are single-field structs whose `value` field's type is enforced
 // by the compiler. Builder roots (HttpRequest, Header, Body) are regular

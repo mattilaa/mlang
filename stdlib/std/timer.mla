@@ -29,7 +29,7 @@ alias async_ticker = AsyncTicker;
 
 impl IntervalTimer {
     /// @brief Create periodic timer that ticks every `interval_ms`.
-    pub fn every_ms(interval_ms: i64) -> Result<IntervalTimer, str8> {
+    pub fn every_ms(interval_ms: i64) -> result<IntervalTimer, str8> {
         let h: i64 = __mlang_std_timer_interval_new(interval_ms);
         if h == 0 {
             return Err<IntervalTimer, str8>("std::timer::IntervalTimer::every_ms failed");
@@ -66,7 +66,7 @@ impl IntervalTimer {
 
 impl AsyncTicker {
     /// @brief Start async ticker thread that posts `event_name` to lock-free queue every `interval_ms`.
-    pub fn start(queue_handle: i64, interval_ms: i64, event_name: str8) -> Result<AsyncTicker, str8> {
+    pub fn start(queue_handle: i64, interval_ms: i64, event_name: str8) -> result<AsyncTicker, str8> {
         let h: i64 = __mlang_std_timer_async_ticker_new(queue_handle, interval_ms, event_name);
         if h == 0 {
             return Err<AsyncTicker, str8>("std::timer::AsyncTicker::start failed");

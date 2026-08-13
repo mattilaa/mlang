@@ -58,8 +58,8 @@ Common builtin/container types:
 - [`list<T>`](Quick-Guide#types)
 - [`Vec<T>`](Stdlib-Vec)
 - [`span<T>`](Stdlib-Span) / [`Span<T>`](Stdlib-Span)
-- [`Option<T>`](Quick-Guide#types)
-- [`Result<T, E>`](Quick-Guide#types)
+- [`option<T>`](Quick-Guide#types)
+- [`result<T, E>`](Quick-Guide#types)
 
 Integer type names use bit width, not byte width. For example, [`i8`](Quick-Guide#types) is an
 8-bit signed integer (1 byte), while [`i64`](Quick-Guide#types) is a 64-bit signed integer (8 bytes).
@@ -135,7 +135,7 @@ println!("{} {}", p.x, p.y);
 ## Results and Match
 
 ```rust
-fn divide(a: i32, b: i32) -> Result<i32, str8> {
+fn divide(a: i32, b: i32) -> result<i32, str8> {
     if b == 0 {
         return Err("divide by zero");
     }

@@ -85,7 +85,7 @@ pub fn last_error() -> str8 {
 }
 
 /// @brief Spawn a child process with stdin/stdout/stderr pipes enabled.
-pub fn spawn(program: str8, args: list<str8>) -> Result<Child, str8> {
+pub fn spawn(program: str8, args: list<str8>) -> result<Child, str8> {
     let h: i64 = __mlang_std_process_spawn(program, args, 1, 1, 1);
     if h == 0 {
         return Err<Child, str8>(last_error());
@@ -94,7 +94,7 @@ pub fn spawn(program: str8, args: list<str8>) -> Result<Child, str8> {
 }
 
 /// @brief Spawn a child process inheriting parent stdio.
-pub fn spawn_inherit(program: str8, args: list<str8>) -> Result<Child, str8> {
+pub fn spawn_inherit(program: str8, args: list<str8>) -> result<Child, str8> {
     let h: i64 = __mlang_std_process_spawn(program, args, 0, 0, 0);
     if h == 0 {
         return Err<Child, str8>(last_error());
@@ -106,7 +106,7 @@ pub fn spawn_inherit(program: str8, args: list<str8>) -> Result<Child, str8> {
 ///
 /// This is intended for terminal-oriented full-screen programs that should
 /// temporarily own the controlling terminal while they run.
-pub fn spawn_foreground_inherit(program: str8, args: list<str8>) -> Result<Child, str8> {
+pub fn spawn_foreground_inherit(program: str8, args: list<str8>) -> result<Child, str8> {
     let h: i64 = __mlang_std_process_spawn_foreground_inherit(program, args);
     if h == 0 {
         return Err<Child, str8>(last_error());
@@ -115,7 +115,7 @@ pub fn spawn_foreground_inherit(program: str8, args: list<str8>) -> Result<Child
 }
 
 /// @brief Spawn a child process attached to a PTY.
-pub fn spawn_pty(program: str8, args: list<str8>) -> Result<Child, str8> {
+pub fn spawn_pty(program: str8, args: list<str8>) -> result<Child, str8> {
     let h: i64 = __mlang_std_process_spawn_pty(program, args);
     if h == 0 {
         return Err<Child, str8>(last_error());
@@ -125,7 +125,7 @@ pub fn spawn_pty(program: str8, args: list<str8>) -> Result<Child, str8> {
 
 impl Child {
     /// @brief Take writable child stdin pipe.
-    pub fn stdin(self: Child) -> Result<ChildStdin, str8> {
+    pub fn stdin(self: Child) -> result<ChildStdin, str8> {
         let h: i64 = __mlang_std_process_take_stdin(self.handle);
         if h == 0 {
             return Err<ChildStdin, str8>(last_error());
@@ -134,7 +134,7 @@ impl Child {
     }
 
     /// @brief Take readable child stdout pipe.
-    pub fn stdout(self: Child) -> Result<ChildStdout, str8> {
+    pub fn stdout(self: Child) -> result<ChildStdout, str8> {
         let h: i64 = __mlang_std_process_take_stdout(self.handle);
         if h == 0 {
             return Err<ChildStdout, str8>(last_error());
@@ -143,7 +143,7 @@ impl Child {
     }
 
     /// @brief Take readable child stderr pipe.
-    pub fn stderr(self: Child) -> Result<ChildStderr, str8> {
+    pub fn stderr(self: Child) -> result<ChildStderr, str8> {
         let h: i64 = __mlang_std_process_take_stderr(self.handle);
         if h == 0 {
             return Err<ChildStderr, str8>(last_error());
@@ -152,7 +152,7 @@ impl Child {
     }
 
     /// @brief Take PTY master handle.
-    pub fn pty(self: Child) -> Result<ChildPty, str8> {
+    pub fn pty(self: Child) -> result<ChildPty, str8> {
         let h: i64 = __mlang_std_process_take_pty(self.handle);
         if h == 0 {
             return Err<ChildPty, str8>(last_error());
@@ -161,7 +161,7 @@ impl Child {
     }
 
     /// @brief Wait for child completion and return exit status.
-    pub fn wait(self: Child) -> Result<ExitStatus, str8> {
+    pub fn wait(self: Child) -> result<ExitStatus, str8> {
         let raw: i32 = __mlang_std_process_wait_raw(self.handle);
         if raw < 0 {
             return Err<ExitStatus, str8>(last_error());
@@ -174,7 +174,7 @@ impl Child {
     /// Returns `WaitPoll { ready: 0, ... }` while the child is still running.
     /// When `ready == 1`, `status` contains the same decoded raw status values
     /// as `wait()`.
-    pub fn try_wait(self: Child) -> Result<WaitPoll, str8> {
+    pub fn try_wait(self: Child) -> result<WaitPoll, str8> {
         let raw: i32 = __mlang_std_process_try_wait_raw(self.handle);
         if raw < -1 {
             return Err<WaitPoll, str8>(last_error());
@@ -190,7 +190,7 @@ impl Child {
     }
 
     /// @brief Send signal `sig` to child process.
-    pub fn kill(self: Child, sig: i32) -> Result<i32, str8> {
+    pub fn kill(self: Child, sig: i32) -> result<i32, str8> {
         let rc: i32 = __mlang_std_process_kill(self.handle, sig);
         if rc != 0 {
             return Err<i32, str8>(last_error());
@@ -236,7 +236,7 @@ impl ExitStatus {
 
 impl ChildStdin {
     /// @brief Write bytes to child stdin pipe.
-    pub fn write(self: ChildStdin, s: str8) -> Result<i64, str8> {
+    pub fn write(self: ChildStdin, s: str8) -> result<i64, str8> {
         let n: i64 = __mlang_std_process_pipe_write(self.handle, s);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -252,7 +252,7 @@ impl ChildStdin {
 
 impl ChildStdout {
     /// @brief Read up to `capacity-1` bytes into `buf` (NUL-terminated).
-    pub fn read(self: ChildStdout, buf: str8, capacity: i64) -> Result<i64, str8> {
+    pub fn read(self: ChildStdout, buf: str8, capacity: i64) -> result<i64, str8> {
         let n: i64 = __mlang_std_process_pipe_read(self.handle, buf, capacity);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -265,7 +265,7 @@ impl ChildStdout {
     /// Returns `PipeRead { ready: 0, len: 0 }` when no bytes are currently
     /// available. When `ready == 1`, `len == 0` means EOF and `len > 0`
     /// means bytes were read into `buf`.
-    pub fn read_nonblocking(self: ChildStdout, buf: str8, capacity: i64) -> Result<PipeRead, str8> {
+    pub fn read_nonblocking(self: ChildStdout, buf: str8, capacity: i64) -> result<PipeRead, str8> {
         let n: i64 = __mlang_std_process_pipe_read_nonblocking(self.handle, buf, capacity);
         if n < -1 {
             return Err<PipeRead, str8>(last_error());
@@ -286,7 +286,7 @@ impl ChildStdout {
 
 impl ChildStderr {
     /// @brief Read up to `capacity-1` bytes into `buf` (NUL-terminated).
-    pub fn read(self: ChildStderr, buf: str8, capacity: i64) -> Result<i64, str8> {
+    pub fn read(self: ChildStderr, buf: str8, capacity: i64) -> result<i64, str8> {
         let n: i64 = __mlang_std_process_pipe_read(self.handle, buf, capacity);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -299,7 +299,7 @@ impl ChildStderr {
     /// Returns `PipeRead { ready: 0, len: 0 }` when no bytes are currently
     /// available. When `ready == 1`, `len == 0` means EOF and `len > 0`
     /// means bytes were read into `buf`.
-    pub fn read_nonblocking(self: ChildStderr, buf: str8, capacity: i64) -> Result<PipeRead, str8> {
+    pub fn read_nonblocking(self: ChildStderr, buf: str8, capacity: i64) -> result<PipeRead, str8> {
         let n: i64 = __mlang_std_process_pipe_read_nonblocking(self.handle, buf, capacity);
         if n < -1 {
             return Err<PipeRead, str8>(last_error());
@@ -329,7 +329,7 @@ impl ChildPty {
     }
 
     /// @brief Write bytes to PTY master.
-    pub fn write(self: ChildPty, s: str8) -> Result<i64, str8> {
+    pub fn write(self: ChildPty, s: str8) -> result<i64, str8> {
         let n: i64 = __mlang_std_process_pipe_write(self.handle, s);
         if n < 0 {
             return Err<i64, str8>(last_error());
@@ -338,7 +338,7 @@ impl ChildPty {
     }
 
     /// @brief Read available bytes from PTY master without blocking.
-    pub fn read_nonblocking(self: ChildPty, buf: str8, capacity: i64) -> Result<PipeRead, str8> {
+    pub fn read_nonblocking(self: ChildPty, buf: str8, capacity: i64) -> result<PipeRead, str8> {
         let n: i64 = __mlang_std_process_pipe_read_nonblocking(self.handle, buf, capacity);
         if n < -1 {
             return Err<PipeRead, str8>(last_error());
@@ -373,12 +373,12 @@ pub fn process_run(argv: list<str8>) -> i32 {
     for i in 1..argv.len() {
         args.push(argv[i]);
     }
-    let sr: Result<Child, str8> = spawn_inherit(program, args);
+    let sr: result<Child, str8> = spawn_inherit(program, args);
     if sr.is_err() {
         return -1;
     }
     let child: Child = sr.unwrap();
-    let wr: Result<ExitStatus, str8> = child.wait();
+    let wr: result<ExitStatus, str8> = child.wait();
     if wr.is_err() {
         child.close();
         return -1;

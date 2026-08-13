@@ -10,7 +10,7 @@ use std::strbuf::sub;
 use std::strbuf::free;
 
 fn main() -> i32 {
-    let r: Result<Regex, str8> = Regex::compile("([A-Za-z]+)-([0-9]+)");
+    let r: result<Regex, str8> = Regex::compile("([A-Za-z]+)-([0-9]+)");
     if r.is_err(): {
         println!("compile failed: {}", r.unwrap_err());
         return 1;

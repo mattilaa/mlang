@@ -23,7 +23,7 @@ use std::strbuf::contains;
 use std::testing::verify;
 
 fn test_compiler_open_change_close_impl() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
@@ -31,16 +31,16 @@ fn test_compiler_open_change_close_impl() -> i32 {
     let src1: str8 = "fn main() -> i32 { return 0; }";
     let src2: str8 = "fn main() -> i32 { return 1; }";
 
-    let o: Result<i32, str8> = s.open_document(uri, "mlang", src1, 1);
+    let o: result<i32, str8> = s.open_document(uri, "mlang", src1, 1);
     if o.is_err(): { return 1; }
 
-    let c: Result<i32, str8> = s.change_document(uri, src2, 2);
+    let c: result<i32, str8> = s.change_document(uri, src2, 2);
     if c.is_err(): { return 1; }
 
-    let cl: Result<i32, str8> = s.close_document(uri);
+    let cl: result<i32, str8> = s.close_document(uri);
     if cl.is_err(): { return 1; }
 
-    let d: Result<i32, str8> = s.destroy();
+    let d: result<i32, str8> = s.destroy();
     if d.is_err(): { return 1; }
     return 0;
 }
@@ -51,16 +51,16 @@ fn test_compiler_open_change_close() {
 }
 
 fn test_compiler_main_without_explicit_return_type_defaults_i32_impl() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://main_no_arrow_defaults_i32.mla";
     let src: str8 = "fn main() {\n  let i: i32 = 1;\n  if i == 1 {\n    println!(\"hello\");\n  }\n}";
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
-    let cr: Result<i32, str8> = s.syntax_diagnostic_count(uri);
+    let cr: result<i32, str8> = s.syntax_diagnostic_count(uri);
     if cr.is_err(): { return 1; }
     if cr.unwrap() != 0: { return 1; }
 
@@ -74,21 +74,21 @@ fn test_compiler_main_without_explicit_return_type_defaults_i32() {
 }
 
 fn test_compiler_syntax_diag_get_impl() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://diag_get.mla";
     let src: str8 = "fn main() -> i32 { if (1 > 0) { return 0; ";
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
-    let cr: Result<i32, str8> = s.syntax_diagnostic_count(uri);
+    let cr: result<i32, str8> = s.syntax_diagnostic_count(uri);
     if cr.is_err(): { return 1; }
     let count: i32 = cr.unwrap();
     if count <= 0: { return 1; }
 
-    let dr: Result<SyntaxDiagnostic, str8> = s.syntax_diagnostic_get(uri, 0);
+    let dr: result<SyntaxDiagnostic, str8> = s.syntax_diagnostic_get(uri, 0);
     if dr.is_err(): { return 1; }
     let d: SyntaxDiagnostic = dr.unwrap();
     if d.line <= 0: { return 1; }
@@ -101,29 +101,29 @@ fn test_compiler_syntax_diag_get_impl() -> i32 {
 
 #[test]
 fn test_compiler_hover_and_completion() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://hover_completion.mla";
     let src: str8 = "fn helper() -> i32 { return 1; }\nfn main() -> i32 {\n  let alpha: i32 = helper();\n  let al: i32 = alpha;\n  return alpha;\n}";
 
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
-    let hr: Result<str8, str8> = s.hover(uri, 3, 8);
+    let hr: result<str8, str8> = s.hover(uri, 3, 8);
     if hr.is_err(): { return 1; }
     let h: str8 = hr.unwrap();
     if contains(h, "alpha") == 0: { return 1; }
 
-    let ccr: Result<i32, str8> = s.completion_count(uri, 4, 9);
+    let ccr: result<i32, str8> = s.completion_count(uri, 4, 9);
     if ccr.is_err(): { return 1; }
     let cc: i32 = ccr.unwrap();
     if cc <= 0: { return 1; }
 
     var mut_found: i32 = 0;
     for i in 0..cc {
-        let ir: Result<str8, str8> = s.completion_get(uri, 4, 9, i);
+        let ir: result<str8, str8> = s.completion_get(uri, 4, 9, i);
         if ir.is_err(): { return 1; }
         let item: str8 = ir.unwrap();
         if contains(item, "alpha") == 1: {
@@ -138,17 +138,17 @@ fn test_compiler_hover_and_completion() -> i32 {
 
 #[test]
 fn test_compiler_property_accessor_completion_docs() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://property_completion_docs.mla";
     let src: str8 = "struct Device {\n  /// @brief Battery percentage exposed through property accessors.\n  @property var value: i32;\n};\nfn main() -> i32 {\n  var d: Device = Device { value: 1 };\n  let current: i32 = d.getValue();\n  d.setValue(2);\n  return current;\n}";
 
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
-    let sym_cr: Result<i32, str8> = s.document_symbol_count(uri);
+    let sym_cr: result<i32, str8> = s.document_symbol_count(uri);
     if sym_cr.is_err(): { return 1; }
     let sym_count: i32 = sym_cr.unwrap();
     if sym_count <= 0: { return 1; }
@@ -156,7 +156,7 @@ fn test_compiler_property_accessor_completion_docs() -> i32 {
     var saw_get_doc: i32 = 0;
     var saw_set_doc: i32 = 0;
     for i in 0..sym_count {
-        let sym_r: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
+        let sym_r: result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
         if sym_r.is_err(): { return 1; }
         let sym: DocumentSymbol = sym_r.unwrap();
         if contains(sym.name, "getValue") == 1 {
@@ -179,16 +179,16 @@ fn test_compiler_property_accessor_completion_docs() -> i32 {
 }
 
 fn test_compiler_debug_json_macro_syntax_impl() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://debug_json_macro.mla";
     let src: str8 = "#[derive(Debug)]\nstruct Device {\n  var value: i32;\n};\nfn main() -> i32 {\n  let d: Device = Device { value: 7 };\n  debug_json!(d);\n  return 0;\n}";
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
-    let cr: Result<i32, str8> = s.syntax_diagnostic_count(uri);
+    let cr: result<i32, str8> = s.syntax_diagnostic_count(uri);
     if cr.is_err(): { return 1; }
     if cr.unwrap() != 0: { return 1; }
 
@@ -203,17 +203,17 @@ fn test_compiler_debug_json_macro_syntax() {
 
 #[test]
 fn test_compiler_hover_struct_shows_size_summary() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://hover_struct_size.mla";
     let src: str8 = "struct DeviceFlags {\n  var power: bit;\n  var armed: bool;\n};\nfn main() -> i32 {\n  let d: DeviceFlags = DeviceFlags { power: 1, armed: true };\n  return 0;\n}";
 
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
-    let hr: Result<str8, str8> = s.hover(uri, 1, 9);
+    let hr: result<str8, str8> = s.hover(uri, 1, 9);
     if hr.is_err(): { return 1; }
     let h: str8 = hr.unwrap();
     if contains(h, "size=2 bytes") == 0: { return 1; }
@@ -226,19 +226,19 @@ fn test_compiler_hover_struct_shows_size_summary() -> i32 {
 
 #[test]
 fn test_compiler_semantic_queries_require_ast_parse() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://invalid_semantic_doc.mla";
     let src: str8 = "fn main() -> i32 { let x: i32 = ; }";
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
-    let hr: Result<str8, str8> = s.hover(uri, 1, 21);
+    let hr: result<str8, str8> = s.hover(uri, 1, 21);
     if hr.is_ok(): { return 1; }
 
-    let dr: Result<DefinitionLocation, str8> = s.definition(uri, 1, 21);
+    let dr: result<DefinitionLocation, str8> = s.definition(uri, 1, 21);
     if dr.is_ok(): { return 1; }
 
     let _ = s.destroy();
@@ -247,16 +247,16 @@ fn test_compiler_semantic_queries_require_ast_parse() -> i32 {
 
 #[test]
 fn test_compiler_document_symbols_and_definition() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://symbols_definition.mla";
     let src: str8 = "mod std::io;\nstruct Box { var value: i32; };\nfn helper() -> i32 { return 1; }\nfn main() -> i32 {\n  let alpha: i32 = helper();\n  return alpha;\n}";
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
-    let cr: Result<i32, str8> = s.document_symbol_count(uri);
+    let cr: result<i32, str8> = s.document_symbol_count(uri);
     if cr.is_err(): { return 1; }
     let count: i32 = cr.unwrap();
     if count <= 0: { return 1; }
@@ -264,7 +264,7 @@ fn test_compiler_document_symbols_and_definition() -> i32 {
     var saw_main: i32 = 0;
     var saw_alpha: i32 = 0;
     for i in 0..count {
-        let sym_r: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
+        let sym_r: result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
         if sym_r.is_err(): { return 1; }
         let sym: DocumentSymbol = sym_r.unwrap();
         if contains(sym.name, "main") == 1: {
@@ -277,7 +277,7 @@ fn test_compiler_document_symbols_and_definition() -> i32 {
     if saw_main != 1: { return 1; }
     if saw_alpha != 1: { return 1; }
 
-    let def_r: Result<DefinitionLocation, str8> = s.definition(uri, 6, 11);
+    let def_r: result<DefinitionLocation, str8> = s.definition(uri, 6, 11);
     if def_r.is_err(): { return 1; }
     let def: DefinitionLocation = def_r.unwrap();
     if contains(def.name, "alpha") == 0: { return 1; }
@@ -290,7 +290,7 @@ fn test_compiler_document_symbols_and_definition() -> i32 {
 
 #[test]
 fn test_compiler_definition_cross_document_mod() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
@@ -300,12 +300,12 @@ fn test_compiler_definition_cross_document_mod() -> i32 {
     let util_src: str8 = "fn util_value() -> i32 { return 7; }";
     let main_src: str8 = "mod lib::util;\nfn main() -> i32 {\n  let x: i32 = util_value();\n  return x;\n}";
 
-    let o1: Result<i32, str8> = s.open_document(util_uri, "mlang", util_src, 1);
+    let o1: result<i32, str8> = s.open_document(util_uri, "mlang", util_src, 1);
     if o1.is_err(): { return 1; }
-    let o2: Result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
+    let o2: result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
     if o2.is_err(): { return 1; }
 
-    let def_r: Result<DefinitionLocation, str8> = s.definition(main_uri, 3, 18);
+    let def_r: result<DefinitionLocation, str8> = s.definition(main_uri, 3, 18);
     if def_r.is_err(): { return 1; }
     let def: DefinitionLocation = def_r.unwrap();
     if contains(def.name, "util_value") == 0: { return 1; }
@@ -318,18 +318,18 @@ fn test_compiler_definition_cross_document_mod() -> i32 {
 
 #[test]
 fn test_compiler_definition_type_alias() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://definition_type_alias.mla";
     let src: str8 = "alias SomeMap = map<str8, i32>;\nfn main() -> i32 {\n  let scores: SomeMap = {\"Alice\": 95, \"Bob\": 87};\n  return 0;\n}";
 
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
     // Cursor on "SomeMap" in "let scores: SomeMap = ...".
-    let dr: Result<DefinitionLocation, str8> = s.definition(uri, 3, 15);
+    let dr: result<DefinitionLocation, str8> = s.definition(uri, 3, 15);
     if dr.is_err(): { return 1; }
     let def: DefinitionLocation = dr.unwrap();
 
@@ -343,18 +343,18 @@ fn test_compiler_definition_type_alias() -> i32 {
 
 #[test]
 fn test_compiler_definition_scoped_type_alias_shadowing() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://definition_scoped_type_alias_shadowing.mla";
     let src: str8 = "alias Distance = f32;\nfn main() -> i32 {\n  {\n    alias Distance = i32;\n    let grid: Distance = 42;\n    println!(\"grid={}\", grid);\n  }\n  return 0;\n}";
 
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
     // Cursor on "Distance" in "let grid: Distance = 42;" should resolve to line 4.
-    let dr: Result<DefinitionLocation, str8> = s.definition(uri, 5, 15);
+    let dr: result<DefinitionLocation, str8> = s.definition(uri, 5, 15);
     if dr.is_err(): { return 1; }
     let def: DefinitionLocation = dr.unwrap();
 
@@ -368,7 +368,7 @@ fn test_compiler_definition_scoped_type_alias_shadowing() -> i32 {
 
 #[test]
 fn test_compiler_semantic_scope_and_use_import() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
@@ -377,18 +377,18 @@ fn test_compiler_semantic_scope_and_use_import() -> i32 {
     let util_src: str8 = "fn util_call() -> i32 { return 11; }";
     let main_src: str8 = "use lib::util2::util_call;\nfn main() -> i32 {\n  let x: i32 = 1;\n  if x == 1: {\n    let x: i32 = util_call();\n    return x;\n  }\n  return x;\n}";
 
-    let o1: Result<i32, str8> = s.open_document(util_uri, "mlang", util_src, 1);
+    let o1: result<i32, str8> = s.open_document(util_uri, "mlang", util_src, 1);
     if o1.is_err(): { return 1; }
-    let o2: Result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
+    let o2: result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
     if o2.is_err(): { return 1; }
 
-    let d1r: Result<DefinitionLocation, str8> = s.definition(main_uri, 6, 12);
+    let d1r: result<DefinitionLocation, str8> = s.definition(main_uri, 6, 12);
     if d1r.is_err(): { return 1; }
     let d1: DefinitionLocation = d1r.unwrap();
     if contains(d1.name, "x") == 0: { return 1; }
     if d1.line != 5: { return 1; }
 
-    let d2r: Result<DefinitionLocation, str8> = s.definition(main_uri, 5, 18);
+    let d2r: result<DefinitionLocation, str8> = s.definition(main_uri, 5, 18);
     if d2r.is_err(): { return 1; }
     let d2: DefinitionLocation = d2r.unwrap();
     if contains(d2.name, "util_call") == 0: { return 1; }
@@ -400,32 +400,32 @@ fn test_compiler_semantic_scope_and_use_import() -> i32 {
 
 #[test]
 fn test_compiler_if_let_guard_scopes_and_shadowing() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://if_let_guard_scope.mla";
     let src: str8 = "fn some_func() -> i32 { return 1; }\nfn main() -> i32 {\n  let i: i32 = 12;\n  if let i: i32 = some_func(): (i >= 0 && i < 10) || ((i > 20 && i < 30) || (i > 50 && i < 100)): {\n    let t: i32 = i;\n  }\n  else if var i: i32 = some_func(): (i < 0 && i > -10): {\n    i = 15;\n  }\n  return i;\n}";
 
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
     // "i" in "let t: i32 = i;" should resolve to if-let binder on line 4.
-    let d1r: Result<DefinitionLocation, str8> = s.definition(uri, 5, 18);
+    let d1r: result<DefinitionLocation, str8> = s.definition(uri, 5, 18);
     if d1r.is_err(): { return 1; }
     let d1: DefinitionLocation = d1r.unwrap();
     if contains(d1.name, "i") == 0: { return 1; }
     if d1.line != 4: { return 1; }
 
     // "i" in "i = 15;" should resolve to else-if var binder on line 7.
-    let d2r: Result<DefinitionLocation, str8> = s.definition(uri, 8, 5);
+    let d2r: result<DefinitionLocation, str8> = s.definition(uri, 8, 5);
     if d2r.is_err(): { return 1; }
     let d2: DefinitionLocation = d2r.unwrap();
     if contains(d2.name, "i") == 0: { return 1; }
     if d2.line != 7: { return 1; }
 
     // "i" in "return i;" should resolve to outer binding on line 3.
-    let d3r: Result<DefinitionLocation, str8> = s.definition(uri, 10, 10);
+    let d3r: result<DefinitionLocation, str8> = s.definition(uri, 10, 10);
     if d3r.is_err(): { return 1; }
     let d3: DefinitionLocation = d3r.unwrap();
     if contains(d3.name, "i") == 0: { return 1; }
@@ -437,16 +437,16 @@ fn test_compiler_if_let_guard_scopes_and_shadowing() -> i32 {
 
 #[test]
 fn test_compiler_definition_from_workspace_module_paths() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let main_uri: str8 = "workspace_cfg/app/main_cfg.mla";
     let main_src: str8 = "use lib::util_cfg::util_cfg;\nfn main() -> i32 {\n  return util_cfg();\n}";
-    let o: Result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
+    let o: result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
     if o.is_err(): { return 1; }
 
-    let def_r: Result<DefinitionLocation, str8> = s.definition(main_uri, 3, 10);
+    let def_r: result<DefinitionLocation, str8> = s.definition(main_uri, 3, 10);
     if def_r.is_err(): { return 1; }
     let def: DefinitionLocation = def_r.unwrap();
     if contains(def.name, "util_cfg") == 0: { return 1; }
@@ -459,20 +459,20 @@ fn test_compiler_definition_from_workspace_module_paths() -> i32 {
 
 #[test]
 fn test_compiler_definition_use_module_path_segment() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let main_uri: str8 = "mem://use_module_path_segment.mla";
-    let main_src: str8 = "mod std::thread::detail;\nuse std::thread::detail::*;\nfn main() -> i32 { return 0; }";
-    let o: Result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
+    let main_src: str8 = "mod std::algorithm::regex;\nuse std::algorithm::regex::*;\nfn main() -> i32 { return 0; }";
+    let o: result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
     if o.is_err(): { return 1; }
 
-    // Cursor at "detail" in "use std::thread::detail::*;".
-    let def_r: Result<DefinitionLocation, str8> = s.definition(main_uri, 2, 18);
+    // Cursor at "regex" in "use std::algorithm::regex::*;".
+    let def_r: result<DefinitionLocation, str8> = s.definition(main_uri, 2, 21);
     if def_r.is_err(): { return 1; }
     let def: DefinitionLocation = def_r.unwrap();
-    if contains(def.uri, "stdlib/std/thread/detail.mla") == 0: { return 1; }
+    if contains(def.uri, "stdlib/std/algorithm/regex.mla") == 0: { return 1; }
     if def.line != 1: { return 1; }
     if def.column != 1: { return 1; }
 
@@ -482,17 +482,17 @@ fn test_compiler_definition_use_module_path_segment() -> i32 {
 
 #[test]
 fn test_compiler_definition_trait_name_from_impl() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://definition_trait_from_impl.mla";
     let src: str8 = "trait Decrement {\n  fn decrement(self: &mut Self) -> void;\n}\nstruct Counter { var value: i32; };\nimpl Decrement for Counter {\n  fn decrement(self: &mut Self) -> void {\n    self.value -= 1;\n  }\n}\n";
-    let o: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let o: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if o.is_err(): { return 1; }
 
     // Cursor on "Decrement" in "impl Decrement for Counter".
-    let dr: Result<DefinitionLocation, str8> = s.definition(uri, 5, 8);
+    let dr: result<DefinitionLocation, str8> = s.definition(uri, 5, 8);
     if dr.is_err(): { return 1; }
     let d: DefinitionLocation = dr.unwrap();
     if contains(d.name, "Decrement") == 0: { return 1; }
@@ -504,17 +504,17 @@ fn test_compiler_definition_trait_name_from_impl() -> i32 {
 
 #[test]
 fn test_compiler_definition_impl_self_member_access_mut_self() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://definition_impl_self_member_access.mla";
     let src: str8 = "trait Decrement {\n  fn decrement(self: &mut Self) -> void;\n}\nstruct Counter { var value: i32; };\nimpl Decrement for Counter {\n  fn decrement(self: &mut Self) -> void {\n    self.value -= 1;\n  }\n}\n";
-    let o: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let o: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if o.is_err(): { return 1; }
 
     // Cursor on "value" in "self.value -= 1;".
-    let dr: Result<DefinitionLocation, str8> = s.definition(uri, 7, 12);
+    let dr: result<DefinitionLocation, str8> = s.definition(uri, 7, 12);
     if dr.is_err(): { return 1; }
     let d: DefinitionLocation = dr.unwrap();
     if contains(d.name, "value") == 0: { return 1; }
@@ -526,7 +526,7 @@ fn test_compiler_definition_impl_self_member_access_mut_self() -> i32 {
 
 #[test]
 fn test_compiler_stable_symbol_id_and_references() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
@@ -535,24 +535,24 @@ fn test_compiler_stable_symbol_id_and_references() -> i32 {
     let util_src: str8 = "fn util_ref() -> i32 { return 9; }";
     let main_src: str8 = "use lib::id_refs_util::util_ref;\nfn main() -> i32 {\n  let a: i32 = util_ref();\n  let b: i32 = util_ref();\n  return a + b;\n}";
 
-    let o1: Result<i32, str8> = s.open_document(util_uri, "mlang", util_src, 1);
+    let o1: result<i32, str8> = s.open_document(util_uri, "mlang", util_src, 1);
     if o1.is_err(): { return 1; }
-    let o2: Result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
+    let o2: result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
     if o2.is_err(): { return 1; }
 
-    let def_r: Result<DefinitionLocation, str8> = s.definition(main_uri, 3, 17);
+    let def_r: result<DefinitionLocation, str8> = s.definition(main_uri, 3, 17);
     if def_r.is_err(): { return 1; }
     let def: DefinitionLocation = def_r.unwrap();
     if contains(def.id, "sym_") == 0: { return 1; }
 
-    let rc_r: Result<i32, str8> = s.references_count(main_uri, 3, 17);
+    let rc_r: result<i32, str8> = s.references_count(main_uri, 3, 17);
     if rc_r.is_err(): { return 1; }
     let rc: i32 = rc_r.unwrap();
     if rc < 3: { return 1; }
 
     var found_util_def: i32 = 0;
     for i in 0..rc {
-        let rr: Result<ReferenceLocation, str8> = s.reference_get(main_uri, 3, 17, i);
+        let rr: result<ReferenceLocation, str8> = s.reference_get(main_uri, 3, 17, i);
         if rr.is_err(): { return 1; }
         let r: ReferenceLocation = rr.unwrap();
         if contains(r.uri, "id_refs_util.mla") == 1: {
@@ -569,20 +569,20 @@ fn test_compiler_stable_symbol_id_and_references() -> i32 {
 
 #[test]
 fn test_compiler_rename_safety() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://rename_safety.mla";
     let src: str8 = "fn main() -> i32 {\n  let alpha: i32 = 1;\n  let beta: i32 = alpha + 1;\n  return beta;\n}";
-    let o: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let o: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if o.is_err(): { return 1; }
 
-    let safe1_r: Result<i32, str8> = s.rename_is_safe(uri, 3, 19, "gamma");
+    let safe1_r: result<i32, str8> = s.rename_is_safe(uri, 3, 19, "gamma");
     if safe1_r.is_err(): { return 1; }
     if safe1_r.unwrap() != 1: { return 1; }
 
-    let safe2_r: Result<i32, str8> = s.rename_is_safe(uri, 3, 19, "beta");
+    let safe2_r: result<i32, str8> = s.rename_is_safe(uri, 3, 19, "beta");
     if safe2_r.is_err(): { return 1; }
     if safe2_r.unwrap() != 0: { return 1; }
 
@@ -592,7 +592,7 @@ fn test_compiler_rename_safety() -> i32 {
 
 #[test]
 fn test_compiler_semantic_cache_api() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
@@ -601,23 +601,23 @@ fn test_compiler_semantic_cache_api() -> i32 {
     let util_src: str8 = "fn util_cache() -> i32 { return 5; }";
     let main_src: str8 = "use lib::cache_api_util::util_cache;\nfn main() -> i32 { return util_cache(); }";
 
-    let o1: Result<i32, str8> = s.open_document(util_uri, "mlang", util_src, 1);
+    let o1: result<i32, str8> = s.open_document(util_uri, "mlang", util_src, 1);
     if o1.is_err(): { return 1; }
-    let o2: Result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
+    let o2: result<i32, str8> = s.open_document(main_uri, "mlang", main_src, 1);
     if o2.is_err(): { return 1; }
 
-    let warm_r: Result<i32, str8> = s.semantic_cache_warm(main_uri);
+    let warm_r: result<i32, str8> = s.semantic_cache_warm(main_uri);
     if warm_r.is_err(): { return 1; }
 
-    let def_r: Result<DefinitionLocation, str8> = s.definition(main_uri, 2, 27);
+    let def_r: result<DefinitionLocation, str8> = s.definition(main_uri, 2, 27);
     if def_r.is_err(): { return 1; }
     let def: DefinitionLocation = def_r.unwrap();
     if contains(def.name, "util_cache") == 0: { return 1; }
 
-    let clr_r: Result<i32, str8> = s.semantic_cache_clear();
+    let clr_r: result<i32, str8> = s.semantic_cache_clear();
     if clr_r.is_err(): { return 1; }
 
-    let def2_r: Result<DefinitionLocation, str8> = s.definition(main_uri, 2, 27);
+    let def2_r: result<DefinitionLocation, str8> = s.definition(main_uri, 2, 27);
     if def2_r.is_err(): { return 1; }
     let def2: DefinitionLocation = def2_r.unwrap();
     if contains(def2.name, "util_cache") == 0: { return 1; }
@@ -628,16 +628,16 @@ fn test_compiler_semantic_cache_api() -> i32 {
 
 #[test]
 fn test_compiler_symbol_typed_metadata() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://typed_symbol_meta.mla";
     let src: str8 = "fn helper(x: i32) -> i32 { return x; }\nfn main() -> i32 {\n  let alpha: i32 = helper(1);\n  return alpha;\n}";
-    let o: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let o: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if o.is_err(): { return 1; }
 
-    let cr: Result<i32, str8> = s.document_symbol_count(uri);
+    let cr: result<i32, str8> = s.document_symbol_count(uri);
     if cr.is_err(): { return 1; }
     let count: i32 = cr.unwrap();
     if count <= 0: { return 1; }
@@ -645,7 +645,7 @@ fn test_compiler_symbol_typed_metadata() -> i32 {
     var saw_helper_signature: i32 = 0;
     var saw_alpha_type: i32 = 0;
     for i in 0..count {
-        let sym_r: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
+        let sym_r: result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
         if sym_r.is_err(): { return 1; }
         let sym: DocumentSymbol = sym_r.unwrap();
         if contains(sym.name, "helper") == 1: {
@@ -668,16 +668,16 @@ fn test_compiler_symbol_typed_metadata() -> i32 {
 
 #[test]
 fn test_compiler_resolve_symbol_overload_metadata() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://resolve_overload_meta.mla";
     let src: str8 = "fn foo(x: i32) -> i32 { return x; }\nfn foo(x: i64) -> i64 { return x; }\nfn main() -> i32 {\n  let y: i32 = foo(1);\n  return y;\n}";
-    let o: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let o: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if o.is_err(): { return 1; }
 
-    let rr: Result<ResolvedSymbol, str8> = s.resolve_symbol(uri, 4, 16);
+    let rr: result<ResolvedSymbol, str8> = s.resolve_symbol(uri, 4, 16);
     if rr.is_err(): { return 1; }
     let rs: ResolvedSymbol = rr.unwrap();
     if contains(rs.name, "foo") == 0: { return 1; }
@@ -692,13 +692,13 @@ fn test_compiler_resolve_symbol_overload_metadata() -> i32 {
 
 #[test]
 fn test_compiler_resolve_struct_member_self_access() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://resolve_self_field.mla";
     let src: str8 = "struct Counter { var value: i32; };\nimpl Counter {\n  fn increment(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter { value: 1 };\n  let n: Counter = c.increment();\n  return n.value;\n}";
-    let o: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let o: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if o.is_err(): { return 1; }
 
     var resolved_col: i32 = 0;
@@ -715,7 +715,7 @@ fn test_compiler_resolve_struct_member_self_access() -> i32 {
         from_current_document: 0
     };
     for c in 30..40 {
-        let rr: Result<ResolvedSymbol, str8> = s.resolve_symbol(uri, 4, c);
+        let rr: result<ResolvedSymbol, str8> = s.resolve_symbol(uri, 4, c);
         if rr.is_err(): { continue; }
         let candidate: ResolvedSymbol = rr.unwrap();
         if contains(candidate.signature, "field Counter::value") == 1: {
@@ -728,7 +728,7 @@ fn test_compiler_resolve_struct_member_self_access() -> i32 {
     if rs.kind != 2: { return 1; }
     if contains(rs.name, "value") == 0: { return 1; }
 
-    let dr: Result<DefinitionLocation, str8> = s.definition(uri, 4, resolved_col);
+    let dr: result<DefinitionLocation, str8> = s.definition(uri, 4, resolved_col);
     if dr.is_err(): { return 1; }
     let def: DefinitionLocation = dr.unwrap();
     if contains(def.name, "value") == 0: { return 1; }
@@ -740,18 +740,18 @@ fn test_compiler_resolve_struct_member_self_access() -> i32 {
 
 #[test]
 fn test_compiler_definition_struct_member_self_access() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://member_definition_self.mla";
     let src: str8 = "struct Counter {\n  var value: i32;\n  fn inc(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n};";
 
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
     // Cursor on "value" in "self.value".
-    let dr: Result<DefinitionLocation, str8> = s.definition(uri, 4, 34);
+    let dr: result<DefinitionLocation, str8> = s.definition(uri, 4, 34);
     if dr.is_err(): { return 1; }
     let d: DefinitionLocation = dr.unwrap();
 
@@ -765,32 +765,32 @@ fn test_compiler_definition_struct_member_self_access() -> i32 {
 
 #[test]
 fn test_compiler_definition_method_params_and_member_access() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://method_params_member_access.mla";
     let src: str8 = "struct Counter {\n  var value: i32;\n  pub fn add(self: Counter, amount: i32) -> Counter {\n    return Counter { value: self.value + amount };\n  }\n};";
 
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
     // Cursor on "value" in "self.value" should resolve to the struct field.
-    let value_dr: Result<DefinitionLocation, str8> = s.definition(uri, 4, 34);
+    let value_dr: result<DefinitionLocation, str8> = s.definition(uri, 4, 34);
     if value_dr.is_err(): { return 1; }
     let value_def: DefinitionLocation = value_dr.unwrap();
     if contains(value_def.name, "value") == 0: { return 1; }
     if value_def.line != 2: { return 1; }
 
     // Cursor on "amount" usage should resolve to parameter declaration.
-    let amount_dr: Result<DefinitionLocation, str8> = s.definition(uri, 4, 42);
+    let amount_dr: result<DefinitionLocation, str8> = s.definition(uri, 4, 42);
     if amount_dr.is_err(): { return 1; }
     let amount_def: DefinitionLocation = amount_dr.unwrap();
     if contains(amount_def.name, "amount") == 0: { return 1; }
     if amount_def.line != 3: { return 1; }
 
     // Cursor on "self" usage should resolve to method parameter declaration.
-    let self_dr: Result<DefinitionLocation, str8> = s.definition(uri, 4, 29);
+    let self_dr: result<DefinitionLocation, str8> = s.definition(uri, 4, 29);
     if self_dr.is_err(): { return 1; }
     let self_def: DefinitionLocation = self_dr.unwrap();
     if contains(self_def.name, "self") == 0: { return 1; }
@@ -802,25 +802,25 @@ fn test_compiler_definition_method_params_and_member_access() -> i32 {
 
 #[test]
 fn test_compiler_definition_prefers_member_object_symbol() -> i32 {
-    let sr: Result<Session, str8> = session_create();
+    let sr: result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
 
     let uri: str8 = "mem://member_object_definition_prefer_lhs.mla";
     let src: str8 = "trait Summary {\n    fn summarize(&self) -> str8;\n}\n\nstruct SocialPost {\n    var username: str8;\n    var content: str8;\n    var reply: bool;\n    var repost: bool;\n};\n\nimpl Summary for SocialPost {\n    fn summarize(&self) -> str8 {\n        return format!(\"{}: {}\", self.username, self.content);\n    }\n}\n\nfn main() -> i32 {\n    let post: SocialPost = SocialPost {\n        username: \"alice\",\n        content: \"Hello from traits\",\n        reply: false,\n        repost: false\n    };\n\n    println!(\"{}\", post.summarize());\n    return 0;\n}\n";
 
-    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    let od: result<i32, str8> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
 
     // Cursor on "post" in "post.summarize()" should resolve to local variable.
-    let post_dr: Result<DefinitionLocation, str8> = s.definition(uri, 26, 20);
+    let post_dr: result<DefinitionLocation, str8> = s.definition(uri, 26, 20);
     if post_dr.is_err(): { return 1; }
     let post_def: DefinitionLocation = post_dr.unwrap();
     if contains(post_def.name, "post") == 0: { return 1; }
     if post_def.line != 19: { return 1; }
 
     // Cursor on "summarize" should still resolve to the method declaration.
-    let method_dr: Result<DefinitionLocation, str8> = s.definition(uri, 26, 27);
+    let method_dr: result<DefinitionLocation, str8> = s.definition(uri, 26, 27);
     if method_dr.is_err(): { return 1; }
     let method_def: DefinitionLocation = method_dr.unwrap();
     if contains(method_def.name, "summarize") == 0: { return 1; }
@@ -836,7 +836,7 @@ fn test_compiler_syntax_diag_get() {
 
 fn read_child_stdout_all(out: ChildStdout) -> str8 {
     var buf: str8 = String::with_capacity(8192);
-    let rr: Result<i64, str8> = out.read(buf, 8192);
+    let rr: result<i64, str8> = out.read(buf, 8192);
     if rr.is_err(): { return ""; }
     let _ = out.close();
     return buf;
@@ -844,17 +844,17 @@ fn read_child_stdout_all(out: ChildStdout) -> str8 {
 
 fn read_child_stderr_all(err: ChildStderr) -> str8 {
     var buf: str8 = String::with_capacity(8192);
-    let rr: Result<i64, str8> = err.read(buf, 8192);
+    let rr: result<i64, str8> = err.read(buf, 8192);
     if rr.is_err(): { return ""; }
     let _ = err.close();
     return buf;
 }
 
 fn run_compiler_capture(args: list<str8>) -> i32 {
-    let cr: Result<Child, str8> = spawn("./build/mlang", args);
+    let cr: result<Child, str8> = spawn("./build/mlang", args);
     if cr.is_err(): { return -1; }
     let child: Child = cr.unwrap();
-    let status_r: Result<ExitStatus, str8> = child.wait();
+    let status_r: result<ExitStatus, str8> = child.wait();
     let _ = child.close();
     if status_r.is_err(): { return -1; }
     let status: ExitStatus = status_r.unwrap();
@@ -868,18 +868,18 @@ struct CompilerRunCapture {
 };
 
 fn run_compiler_capture_stdout_stderr(args: list<str8>) -> CompilerRunCapture {
-    let cr: Result<Child, str8> = spawn("./build/mlang", args);
+    let cr: result<Child, str8> = spawn("./build/mlang", args);
     if cr.is_err() { return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" }; }
     let child: Child = cr.unwrap();
 
-    let out_r: Result<ChildStdout, str8> = child.stdout();
+    let out_r: result<ChildStdout, str8> = child.stdout();
     if out_r.is_err() { let _ = child.close(); return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" }; }
     let out: ChildStdout = out_r.unwrap();
-    let err_r: Result<ChildStderr, str8> = child.stderr();
+    let err_r: result<ChildStderr, str8> = child.stderr();
     if err_r.is_err() { let _ = out.close(); let _ = child.close(); return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" }; }
     let err: ChildStderr = err_r.unwrap();
 
-    let status_r: Result<ExitStatus, str8> = child.wait();
+    let status_r: result<ExitStatus, str8> = child.wait();
     if status_r.is_err() {
         let _ = out.close();
         let _ = err.close();
@@ -898,7 +898,7 @@ fn test_compiler_private_method_same_module_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_private_method_same_module").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_private_method_same_module/main.mla";
     let src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  fn inc(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter { value: 1 };\n  let d: Counter = c.inc();\n  return d.value;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1009,7 +1009,7 @@ fn test_compiler_associated_function_same_module_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_associated_function_same_module").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_associated_function_same_module/main.mla";
     let src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  fn make(value: i32) -> Counter {\n    return Counter { value: value };\n  }\n  pub fn new(value: i32) -> Counter {\n    return Counter::make(value);\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter::new(4);\n  return c.value == 4 ? 0 : 1;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1048,7 +1048,7 @@ fn test_compiler_instance_method_called_as_associated_function_rejected() -> i32
     if mkdir_p("/tmp/mlang_instance_method_called_as_associated").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_instance_method_called_as_associated/main.mla";
     let src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  pub fn inc(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter::inc(1);\n  return c.value;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let run: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
@@ -1061,7 +1061,7 @@ fn test_compiler_associated_function_called_as_instance_method_rejected() -> i32
     if mkdir_p("/tmp/mlang_associated_function_called_as_instance").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_associated_function_called_as_instance/main.mla";
     let src: str8 = "pub struct Counter { var value: i32; };\nimpl Counter {\n  pub fn new(value: i32) -> Counter {\n    return Counter { value: value };\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter { value: 1 };\n  let d: Counter = c.new(2);\n  return d.value;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let run: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
@@ -1074,7 +1074,7 @@ fn test_compiler_trait_impl_matching_signature_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_trait_impl_matching_signature").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_trait_impl_matching_signature/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return \"ok\";\n  }\n}\nfn main() -> i32 {\n  let p: Post = Post { id: 1 };\n  println!(\"{}\", p.summarize());\n  return 0;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1085,7 +1085,7 @@ fn test_compiler_trait_impl_missing_required_method_rejected() -> i32 {
     if mkdir_p("/tmp/mlang_trait_impl_missing_method").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_trait_impl_missing_method/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n}\nfn main() -> i32 { return 0; }\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let run: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
@@ -1098,7 +1098,7 @@ fn test_compiler_trait_impl_wrong_return_type_rejected() -> i32 {
     if mkdir_p("/tmp/mlang_trait_impl_wrong_return").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_trait_impl_wrong_return/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> i32 {\n    return self.id;\n  }\n}\nfn main() -> i32 { return 0; }\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let run: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
@@ -1111,7 +1111,7 @@ fn test_compiler_trait_impl_static_instance_mismatch_rejected() -> i32 {
     if mkdir_p("/tmp/mlang_trait_impl_static_mismatch").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_trait_impl_static_mismatch/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize() -> str8 {\n    return \"ok\";\n  }\n}\nfn main() -> i32 { return 0; }\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let run: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
@@ -1124,7 +1124,7 @@ fn test_compiler_generic_struct_trait_bound_syntax_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_generic_struct_trait_bound").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_generic_struct_trait_bound/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Holder<T: Summary> {\n  var value: i32;\n};\nfn main() -> i32 { return 0; }\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1135,7 +1135,7 @@ fn test_compiler_generic_impl_trait_bound_syntax_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_generic_impl_trait_bound").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_generic_impl_trait_bound/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Holder<T: Summary> {\n  var value: T;\n};\nimpl<T: Summary> Holder {\n  pub fn noop(self: Holder<T>) -> i32 {\n    return 0;\n  }\n}\nfn main() -> i32 { return 0; }\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1146,7 +1146,7 @@ fn test_compiler_type_alias_trait_bound_syntax_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_type_alias_trait_bound").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_type_alias_trait_bound/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\nalias Box<T: Summary> = T;\nfn main() -> i32 { return 0; }\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1157,7 +1157,7 @@ fn test_compiler_generic_struct_trait_bound_concrete_use_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_generic_struct_trait_bound_ok").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_generic_struct_trait_bound_ok/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return \"ok\";\n  }\n}\npub struct Holder<T: Summary> {\n  var value: T;\n};\nfn main() -> i32 {\n  let h: Holder<Post> = Holder<Post> { value: Post { id: 1 } };\n  return h.value.id;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1168,7 +1168,7 @@ fn test_compiler_generic_struct_trait_bound_concrete_use_rejected() -> i32 {
     if mkdir_p("/tmp/mlang_generic_struct_trait_bound_fail").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_generic_struct_trait_bound_fail/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Holder<T: Summary> {\n  var value: T;\n};\nfn main() -> i32 {\n  let h: Holder<i32> = Holder<i32> { value: 1 };\n  return h.value;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let run: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
@@ -1181,7 +1181,7 @@ fn test_compiler_type_alias_trait_bound_concrete_use_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_type_alias_trait_bound_ok").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_type_alias_trait_bound_ok/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return \"ok\";\n  }\n}\nalias Box<T: Summary> = T;\nfn main() -> i32 {\n  let p: Box<Post> = Post { id: 1 };\n  return p.id;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1192,7 +1192,7 @@ fn test_compiler_type_alias_trait_bound_concrete_use_rejected() -> i32 {
     if mkdir_p("/tmp/mlang_type_alias_trait_bound_fail").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_type_alias_trait_bound_fail/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\nuse type Box<T: Summary> = T;\nfn main() -> i32 {\n  let p: Box<i32> = 1;\n  return p;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let run: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
@@ -1205,7 +1205,7 @@ fn test_compiler_generic_method_call_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_generic_method_call_ok").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_generic_method_call_ok/main.mla";
     let src: str8 = "pub struct Holder<T> {\n  var value: T;\n};\nimpl<T> Holder {\n  pub fn noop(self: Holder<T>) -> i32 {\n    return 0;\n  }\n}\nfn main() -> i32 {\n  let h: Holder<i32> = Holder<i32> { value: 1 };\n  return h.noop();\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1216,7 +1216,7 @@ fn test_compiler_generic_static_method_call_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_generic_static_method_call_ok").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_generic_static_method_call_ok/main.mla";
     let src: str8 = "pub struct Holder<T> {\n  var value: T;\n};\nimpl<T> Holder {\n  pub fn new(value: T) -> Holder<T> {\n    return Holder<T> { value: value };\n  }\n}\nfn main() -> i32 {\n  let h: Holder<i32> = Holder<i32>::new(1);\n  return h.value;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1229,9 +1229,9 @@ fn test_compiler_module_path_generic_static_method_call_allowed() -> i32 {
     let main_path: str8 = "/tmp/mlang_module_path_generic_static_method_call_ok/main.mla";
     let lib_src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var title: str8; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return self.title;\n  }\n}\npub struct Holder<T: Summary> {\n  var value: T;\n};\nimpl<T: Summary> Holder {\n  pub fn new(value: T) -> Holder<T> {\n    return Holder<T> { value: value };\n  }\n  pub fn summary(self: Holder<T>) -> str8 {\n    return self.value.summarize();\n  }\n}\n";
     let main_src: str8 = "mod lib::summary;\nuse lib::summary::Post;\nuse lib::summary::Holder;\nfn main() -> i32 {\n  let post: Post = Post { title: \"ok\" };\n  let holder: Holder<Post> = lib::summary::Holder<Post>::new(post);\n  let text: str8 = holder.summary();\n  return text == \"ok\" ? 0 : 1;\n}\n";
-    let wr1: Result<i32, str8> = write_all_text(lib_path, lib_src);
+    let wr1: result<i32, str8> = write_all_text(lib_path, lib_src);
     if wr1.is_err(): { return 1; }
-    let wr2: Result<i32, str8> = write_all_text(main_path, main_src);
+    let wr2: result<i32, str8> = write_all_text(main_path, main_src);
     if wr2.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", main_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1245,25 +1245,25 @@ fn test_compiler_dyn_trait_object_method_call_allowed() -> i32 {
     let bin_path: str8 = "/tmp/mlang_dyn_trait_object_call_ok/dyn_trait_object_bin";
     let lib_src: str8 = "trait Summary {\n  fn score(self: Self) -> i32;\n}\npub struct Post { var score_value: i32; };\nimpl Summary for Post {\n  fn score(self: Post) -> i32 {\n    return self.score_value;\n  }\n}\npub fn show_score(item: dyn Summary) -> i32 {\n  return item.score();\n}\n";
     let main_src: str8 = "mod lib::summary;\nuse lib::summary::Post;\nfn main() -> i32 {\n  let post: Post = Post { score_value: 7 };\n  let item: dyn lib::summary::Summary = post;\n  let score: i32 = lib::summary::show_score(item);\n  return score == 7 ? 0 : 1;\n}\n";
-    let wr1: Result<i32, str8> = write_all_text(lib_path, lib_src);
+    let wr1: result<i32, str8> = write_all_text(lib_path, lib_src);
     if wr1.is_err(): { return 1; }
-    let wr2: Result<i32, str8> = write_all_text(main_path, main_src);
+    let wr2: result<i32, str8> = write_all_text(main_path, main_src);
     if wr2.is_err(): { return 1; }
 
     let build: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-o", bin_path, main_path, "-L", "build", "-lmlang_std"]);
     if build.rc != 0 { return 1; }
 
-    let run_cr: Result<Child, str8> = spawn(bin_path, []);
+    let run_cr: result<Child, str8> = spawn(bin_path, []);
     if run_cr.is_err(): { return 1; }
     let child: Child = run_cr.unwrap();
-    let out_r: Result<ChildStdout, str8> = child.stdout();
+    let out_r: result<ChildStdout, str8> = child.stdout();
     if out_r.is_err(): { return 1; }
     let out: ChildStdout = out_r.unwrap();
-    let err_r: Result<ChildStderr, str8> = child.stderr();
+    let err_r: result<ChildStderr, str8> = child.stderr();
     if err_r.is_err(): { return 1; }
     let err: ChildStderr = err_r.unwrap();
-    let status_r: Result<ExitStatus, str8> = child.wait();
+    let status_r: result<ExitStatus, str8> = child.wait();
     if status_r.is_err(): { return 1; }
     let status: ExitStatus = status_r.unwrap();
     let stdout_text: str8 = read_child_stdout_all(out);
@@ -1284,19 +1284,19 @@ fn test_compiler_dyn_trait_object_return_allowed() -> i32 {
     let bin_path: str8 = "/tmp/mlang_dyn_trait_object_return_ok/dyn_trait_object_return_bin";
     let lib_src: str8 = "trait Summary {\n  fn score(self: Self) -> i32;\n}\npub struct Post { var score_value: i32; };\nimpl Summary for Post {\n  fn score(self: Post) -> i32 {\n    return self.score_value;\n  }\n}\npub fn make_summary(post: Post) -> dyn Summary {\n  return post;\n}\npub fn pass_summary(item: dyn Summary) -> dyn Summary {\n  return item;\n}\npub fn show_score(item: dyn Summary) -> i32 {\n  return item.score();\n}\n";
     let main_src: str8 = "mod lib::summary;\nuse lib::summary::Post;\nfn main() -> i32 {\n  let post: Post = Post { score_value: 7 };\n  let item: dyn lib::summary::Summary = lib::summary::make_summary(post);\n  let item2: dyn lib::summary::Summary = lib::summary::pass_summary(item);\n  let score: i32 = lib::summary::show_score(item2);\n  return score == 7 ? 0 : 1;\n}\n";
-    let wr1: Result<i32, str8> = write_all_text(lib_path, lib_src);
+    let wr1: result<i32, str8> = write_all_text(lib_path, lib_src);
     if wr1.is_err(): { return 1; }
-    let wr2: Result<i32, str8> = write_all_text(main_path, main_src);
+    let wr2: result<i32, str8> = write_all_text(main_path, main_src);
     if wr2.is_err(): { return 1; }
 
     let build: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-o", bin_path, main_path, "-L", "build", "-lmlang_std"]);
     if build.rc != 0 { return 1; }
 
-    let run_cr: Result<Child, str8> = spawn(bin_path, []);
+    let run_cr: result<Child, str8> = spawn(bin_path, []);
     if run_cr.is_err(): { return 1; }
     let child: Child = run_cr.unwrap();
-    let status_r: Result<ExitStatus, str8> = child.wait();
+    let status_r: result<ExitStatus, str8> = child.wait();
     if status_r.is_err(): { return 1; }
     let status: ExitStatus = status_r.unwrap();
     let _ = child.close();
@@ -1309,15 +1309,15 @@ fn test_compiler_dyn_trait_object_field_literal_allowed() -> i32 {
     let src_path: str8 = "/tmp/mlang_dyn_trait_object_field_literal/main.mla";
     let bin_path: str8 = "/tmp/mlang_dyn_trait_object_field_literal/dyn_field_bin";
     let src: str8 = "trait Summary {\n  fn score(self: Self) -> i32;\n}\npub struct Post { var score_value: i32; };\nimpl Summary for Post {\n  fn score(self: Post) -> i32 { return self.score_value; }\n}\npub struct Holder { var item: dyn Summary; };\nfn main() -> i32 {\n  let post: Post = Post { score_value: 9 };\n  let h: Holder = Holder { item: post };\n  return h.item.score() == 9 ? 0 : 1;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let build: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-o", bin_path, src_path, "-L", "build", "-lmlang_std"]);
     if build.rc != 0 { return 1; }
-    let run_cr: Result<Child, str8> = spawn(bin_path, []);
+    let run_cr: result<Child, str8> = spawn(bin_path, []);
     if run_cr.is_err(): { return 1; }
     let child: Child = run_cr.unwrap();
-    let status_r: Result<ExitStatus, str8> = child.wait();
+    let status_r: result<ExitStatus, str8> = child.wait();
     if status_r.is_err(): { return 1; }
     let status: ExitStatus = status_r.unwrap();
     let _ = child.close();
@@ -1330,15 +1330,15 @@ fn test_compiler_dyn_trait_object_field_assignment_allowed() -> i32 {
     let src_path: str8 = "/tmp/mlang_dyn_trait_object_field_assignment/main.mla";
     let bin_path: str8 = "/tmp/mlang_dyn_trait_object_field_assignment/dyn_field_assign_bin";
     let src: str8 = "trait Summary {\n  fn score(self: Self) -> i32;\n}\npub struct Post { var score_value: i32; };\nimpl Summary for Post {\n  fn score(self: Post) -> i32 { return self.score_value; }\n}\npub struct Holder { var item: dyn Summary; };\nfn main() -> i32 {\n  let first: Post = Post { score_value: 3 };\n  let second: Post = Post { score_value: 11 };\n  var h: Holder = Holder { item: first };\n  h.item = second;\n  return h.item.score() == 11 ? 0 : 1;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let build: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-o", bin_path, src_path, "-L", "build", "-lmlang_std"]);
     if build.rc != 0 { return 1; }
-    let run_cr: Result<Child, str8> = spawn(bin_path, []);
+    let run_cr: result<Child, str8> = spawn(bin_path, []);
     if run_cr.is_err(): { return 1; }
     let child: Child = run_cr.unwrap();
-    let status_r: Result<ExitStatus, str8> = child.wait();
+    let status_r: result<ExitStatus, str8> = child.wait();
     if status_r.is_err(): { return 1; }
     let status: ExitStatus = status_r.unwrap();
     let _ = child.close();
@@ -1351,15 +1351,15 @@ fn test_compiler_dyn_trait_object_field_returned_holder_allowed() -> i32 {
     let src_path: str8 = "/tmp/mlang_dyn_trait_object_field_returned_holder/main.mla";
     let bin_path: str8 = "/tmp/mlang_dyn_trait_object_field_returned_holder/dyn_field_return_bin";
     let src: str8 = "trait Summary {\n  fn score(self: Self) -> i32;\n}\npub struct Post { var score_value: i32; };\nimpl Summary for Post {\n  fn score(self: Post) -> i32 { return self.score_value; }\n}\npub struct Holder { var item: dyn Summary; };\nfn make_holder() -> Holder {\n  let post: Post = Post { score_value: 13 };\n  return Holder { item: post };\n}\nfn main() -> i32 {\n  let h: Holder = make_holder();\n  return h.item.score() == 13 ? 0 : 1;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let build: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-o", bin_path, src_path, "-L", "build", "-lmlang_std"]);
     if build.rc != 0 { return 1; }
-    let run_cr: Result<Child, str8> = spawn(bin_path, []);
+    let run_cr: result<Child, str8> = spawn(bin_path, []);
     if run_cr.is_err(): { return 1; }
     let child: Child = run_cr.unwrap();
-    let status_r: Result<ExitStatus, str8> = child.wait();
+    let status_r: result<ExitStatus, str8> = child.wait();
     if status_r.is_err(): { return 1; }
     let status: ExitStatus = status_r.unwrap();
     let _ = child.close();
@@ -1371,7 +1371,7 @@ fn test_compiler_generic_trait_bound_method_call_allowed() -> i32 {
     if mkdir_p("/tmp/mlang_generic_trait_bound_method_call_ok").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_generic_trait_bound_method_call_ok/main.mla";
     let src: str8 = "trait Summary {\n  fn summarize(self: Self) -> str8;\n}\npub struct Post { var id: i32; };\nimpl Summary for Post {\n  fn summarize(self: Post) -> str8 {\n    return \"ok\";\n  }\n}\npub struct Holder<T: Summary> {\n  var value: T;\n};\nimpl<T: Summary> Holder {\n  pub fn render(self: Holder<T>) -> str8 {\n    return self.value.summarize();\n  }\n}\nfn main() -> i32 {\n  let h: Holder<Post> = Holder<Post> { value: Post { id: 1 } };\n  let s: str8 = h.render();\n  return 0;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1381,22 +1381,22 @@ fn test_compiler_generic_trait_bound_method_call_allowed() -> i32 {
 fn test_compiler_test_output_uses_robot_style_progress_format() -> i32 {
     let src_path: str8 = "/tmp/mlang_test_output_format_case.mla";
     let src: str8 = "mod std::testing;\nuse std::testing::verify_true;\n\n#[test]\nfn test_output_format_uses_progress_and_timestamp() {\n    verify_true(true);\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
 
     let args: list<str8> = ["--tests", src_path, "-L", "build", "-lmlang_std"];
-    let cr: Result<Child, str8> = spawn("./build/mlang", args);
+    let cr: result<Child, str8> = spawn("./build/mlang", args);
     if cr.is_err(): { return 1; }
     let child: Child = cr.unwrap();
 
-    let out_r: Result<ChildStdout, str8> = child.stdout();
+    let out_r: result<ChildStdout, str8> = child.stdout();
     if out_r.is_err(): { return 1; }
     let out: ChildStdout = out_r.unwrap();
-    let err_r: Result<ChildStderr, str8> = child.stderr();
+    let err_r: result<ChildStderr, str8> = child.stderr();
     if err_r.is_err(): { return 1; }
     let err: ChildStderr = err_r.unwrap();
 
-    let status_r: Result<ExitStatus, str8> = child.wait();
+    let status_r: result<ExitStatus, str8> = child.wait();
     if status_r.is_err(): { return 1; }
     let status: ExitStatus = status_r.unwrap();
     let stdout_text: str8 = read_child_stdout_all(out);
@@ -1415,22 +1415,22 @@ fn test_compiler_test_output_uses_robot_style_progress_format() -> i32 {
 fn test_compiler_test_output_preserves_failing_keyword_details() -> i32 {
     let src_path: str8 = "/tmp/mlang_test_output_failure_case.mla";
     let src: str8 = "mod std::testing;\nuse std::testing::verify_eq_i32;\n\n#[test]\nfn test_failure_shows_keyword_details() {\n    verify_eq_i32(1, 2);\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
 
     let args: list<str8> = ["--tests", src_path, "-L", "build", "-lmlang_std"];
-    let cr: Result<Child, str8> = spawn("./build/mlang", args);
+    let cr: result<Child, str8> = spawn("./build/mlang", args);
     if cr.is_err(): { return 1; }
     let child: Child = cr.unwrap();
 
-    let out_r: Result<ChildStdout, str8> = child.stdout();
+    let out_r: result<ChildStdout, str8> = child.stdout();
     if out_r.is_err(): { return 1; }
     let out: ChildStdout = out_r.unwrap();
-    let err_r: Result<ChildStderr, str8> = child.stderr();
+    let err_r: result<ChildStderr, str8> = child.stderr();
     if err_r.is_err(): { return 1; }
     let err: ChildStderr = err_r.unwrap();
 
-    let status_r: Result<ExitStatus, str8> = child.wait();
+    let status_r: result<ExitStatus, str8> = child.wait();
     if status_r.is_err(): { return 1; }
     let status: ExitStatus = status_r.unwrap();
     let stdout_text: str8 = read_child_stdout_all(out);
@@ -1449,13 +1449,13 @@ fn test_compiler_inline_asm_emit_llvm_nonvolatile_has_no_sideeffect() -> i32 {
     let src_path: str8 = "/tmp/mlang_inline_asm_nonvolatile_emit.mla";
     let ll_path: str8 = "/tmp/mlang_inline_asm_nonvolatile_emit.ll";
     let src: str8 = "fn main() -> i32 {\n    let value: i64 = 9;\n    let copy: i64 = asm(i64, \"\", value);\n    if copy != 9 { return 1; }\n    return 0;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err() { return 1; }
 
     let rc: i32 = run_compiler_capture(["-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
     if rc != 0 { return 1; }
 
-    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    let text_r: result<str8, str8> = read_all_text(ll_path);
     if text_r.is_err() { return 1; }
     let text: str8 = text_r.unwrap();
     if contains(text, "call i64 asm") == 0 { return 1; }
@@ -1468,13 +1468,13 @@ fn test_compiler_inline_asm_emit_llvm_volatile_uses_sideeffect() -> i32 {
     let src_path: str8 = "/tmp/mlang_inline_asm_volatile_emit.mla";
     let ll_path: str8 = "/tmp/mlang_inline_asm_volatile_emit.ll";
     let src: str8 = "fn main() -> i32 {\n    let value: i64 = 9;\n    asm volatile(void, \"\", value);\n    return 0;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err() { return 1; }
 
     let rc: i32 = run_compiler_capture(["-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
     if rc != 0 { return 1; }
 
-    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    let text_r: result<str8, str8> = read_all_text(ll_path);
     if text_r.is_err() { return 1; }
     let text: str8 = text_r.unwrap();
     if contains(text, "call void asm sideeffect") == 0 { return 1; }
@@ -1486,7 +1486,7 @@ fn test_compiler_trait_default_method_inherited_when_omitted() -> i32 {
     if mkdir_p("/tmp/mlang_trait_default_method_inherited").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_trait_default_method_inherited/main.mla";
     let src: str8 = "trait Greeter {\n  fn name(self: Self) -> str8;\n  fn greet(self: Self) -> str8 {\n    return self.name();\n  }\n}\npub struct F { var who: str8; };\nimpl Greeter for F {\n  fn name(self: F) -> str8 { return self.who; }\n}\nfn main() -> i32 {\n  let f: F = F { who: \"x\" };\n  println!(\"{}\", f.greet());\n  return 0;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1497,7 +1497,7 @@ fn test_compiler_trait_default_method_can_be_overridden() -> i32 {
     if mkdir_p("/tmp/mlang_trait_default_method_override").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_trait_default_method_override/main.mla";
     let src: str8 = "trait Greeter {\n  fn name(self: Self) -> str8;\n  fn greet(self: Self) -> str8 { return self.name(); }\n}\npub struct R { var serial: str8; };\nimpl Greeter for R {\n  fn name(self: R) -> str8 { return self.serial; }\n  fn greet(self: R) -> str8 { return \"BEEP\"; }\n}\nfn main() -> i32 { return 0; }\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1508,7 +1508,7 @@ fn test_compiler_super_trait_requires_super_impl() -> i32 {
     if mkdir_p("/tmp/mlang_super_trait_missing").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_super_trait_missing/main.mla";
     let src: str8 = "trait Display {\n  fn show(self: Self) -> str8;\n}\ntrait Loud: Display {\n  fn shout(self: Self) -> str8;\n}\npub struct W { var t: str8; };\nimpl Loud for W {\n  fn shout(self: W) -> str8 { return self.t; }\n}\nfn main() -> i32 { return 0; }\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let run: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);
@@ -1521,7 +1521,7 @@ fn test_compiler_super_trait_satisfied_when_super_impl_present() -> i32 {
     if mkdir_p("/tmp/mlang_super_trait_ok").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_super_trait_ok/main.mla";
     let src: str8 = "trait Display {\n  fn show(self: Self) -> str8;\n}\ntrait Loud: Display {\n  fn shout(self: Self) -> str8;\n}\npub struct W { var t: str8; };\nimpl Display for W {\n  fn show(self: W) -> str8 { return self.t; }\n}\nimpl Loud for W {\n  fn shout(self: W) -> str8 { return self.t; }\n}\nfn main() -> i32 { return 0; }\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1532,7 +1532,7 @@ fn test_compiler_multiple_trait_bounds_satisfied() -> i32 {
     if mkdir_p("/tmp/mlang_multi_bound_ok").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_multi_bound_ok/main.mla";
     let src: str8 = "trait A { fn a(self: Self) -> i32; }\ntrait B { fn b(self: Self) -> i32; }\npub struct X { var v: i32; };\nimpl A for X { fn a(self: X) -> i32 { return self.v; } }\nimpl B for X { fn b(self: X) -> i32 { return self.v; } }\npub struct Box<T: A + B> { var inner: T; };\nimpl<T: A + B> Box {\n  pub fn new(inner: T) -> Box<T> { return Box<T> { inner: inner }; }\n}\nfn main() -> i32 {\n  let x: X = X { v: 1 };\n  let b: Box<X> = Box<X>::new(x);\n  return 0;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let rc: i32 = run_compiler_capture(["-c", src_path, "-L", "build", "-lmlang_std"]);
     return rc == 0 ? 0 : 1;
@@ -1543,7 +1543,7 @@ fn test_compiler_multiple_trait_bounds_partial_match_rejected() -> i32 {
     if mkdir_p("/tmp/mlang_multi_bound_partial").is_err(): { return 1; }
     let src_path: str8 = "/tmp/mlang_multi_bound_partial/main.mla";
     let src: str8 = "trait A { fn a(self: Self) -> i32; }\ntrait B { fn b(self: Self) -> i32; }\npub struct X { var v: i32; };\nimpl A for X { fn a(self: X) -> i32 { return self.v; } }\npub struct Box<T: A + B> { var inner: T; };\nimpl<T: A + B> Box {\n  pub fn new(inner: T) -> Box<T> { return Box<T> { inner: inner }; }\n}\nfn main() -> i32 {\n  let x: X = X { v: 1 };\n  let b: Box<X> = Box<X>::new(x);\n  return 0;\n}\n";
-    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    let wr: result<i32, str8> = write_all_text(src_path, src);
     if wr.is_err(): { return 1; }
     let run: CompilerRunCapture =
         run_compiler_capture_stdout_stderr(["-c", src_path, "-L", "build", "-lmlang_std"]);

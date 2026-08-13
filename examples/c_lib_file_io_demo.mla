@@ -14,7 +14,7 @@ extern fn fclose(stream: ptr<void>) -> i32;
 
 fn main() -> i32 {
     let path: str8 = "/tmp/mlang_c_file_io_demo.txt";
-    let write_r: Result<i32, str8> =
+    let write_r: result<i32, str8> =
         write_all_text(path, "first line from libc\nsecond line\n");
     if write_r.is_err() {
         println!("write failed");

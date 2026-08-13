@@ -50,7 +50,7 @@ fn main() -> i32 {
     println!("flags2 armed={} power={} fault={}",
              flags2.armed ? 1 : 0, i32(flags2.power), i32(flags2.fault));
 
-    let r: Result<BitSet, str8> = BitSet::new(0);
+    let r: result<BitSet, str8> = BitSet::new(0);
     if r.is_err() {
         println!("bitset init failed: {}", r.unwrap_err());
         return 1;

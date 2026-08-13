@@ -761,13 +761,13 @@ fn load_bars(path: str8, day: str8) -> bar_data {
     var hill_ups: list<i64> = [];
     var hill_downs: list<i64> = [];
 
-    let doc_r: Result<JsonDoc, str8> = JsonDoc::from_file(path);
+    let doc_r: result<JsonDoc, str8> = JsonDoc::from_file(path);
     if doc_r.is_err() {
         println!("json load failed: {}", doc_r.unwrap_err());
         return empty_bar_data();
     }
     let doc: JsonDoc = doc_r.unwrap();
-    let root_r: Result<JsonValue, str8> = doc.root();
+    let root_r: result<JsonValue, str8> = doc.root();
     if root_r.is_err() {
         println!("json root failed: {}", root_r.unwrap_err());
         doc.free();
@@ -775,9 +775,9 @@ fn load_bars(path: str8, day: str8) -> bar_data {
     }
     let root: JsonValue = root_r.unwrap();
     var bars_root: JsonValue = root;
-    var hills_root_r: Result<JsonValue, str8> = Err<JsonValue, str8>("no walking_hills");
+    var hills_root_r: result<JsonValue, str8> = Err<JsonValue, str8>("no walking_hills");
     if root.kind() == kind_object() {
-        let bars_r: Result<JsonValue, str8> = root.get("bars");
+        let bars_r: result<JsonValue, str8> = root.get("bars");
         if bars_r.is_err() {
             println!("json object root is missing bars");
             root.free();
@@ -793,7 +793,7 @@ fn load_bars(path: str8, day: str8) -> bar_data {
         doc.free();
         return empty_bar_data();
     }
-    let count_r: Result<i64, str8> = bars_root.size();
+    let count_r: result<i64, str8> = bars_root.size();
     if count_r.is_err() {
         println!("json bars root is not an array");
         root.free();
@@ -803,24 +803,24 @@ fn load_bars(path: str8, day: str8) -> bar_data {
 
     let count: i64 = count_r.unwrap();
     for i in 0..count {
-        let item_r: Result<JsonValue, str8> = bars_root.index(i);
+        let item_r: result<JsonValue, str8> = bars_root.index(i);
         if item_r.is_err() {
             continue;
         }
         let item: JsonValue = item_r.unwrap();
-        let name_v_r: Result<JsonValue, str8> = item.get("name");
-        let coords_r: Result<JsonValue, str8> = item.get("coordinates");
-        let opening_r: Result<JsonValue, str8> = item.get("opening_hours");
+        let name_v_r: result<JsonValue, str8> = item.get("name");
+        let coords_r: result<JsonValue, str8> = item.get("coordinates");
+        let opening_r: result<JsonValue, str8> = item.get("opening_hours");
         if name_v_r.is_err() || coords_r.is_err() || opening_r.is_err() {
             continue;
         }
         let name_v: JsonValue = name_v_r.unwrap();
         let coords: JsonValue = coords_r.unwrap();
         let opening: JsonValue = opening_r.unwrap();
-        let lat_v_r: Result<JsonValue, str8> = coords.get("latitude");
-        let lon_v_r: Result<JsonValue, str8> = coords.get("longitude");
-        let alt_v_r: Result<JsonValue, str8> = coords.get("altitude_m");
-        let hours_v_r: Result<JsonValue, str8> = opening.get(day);
+        let lat_v_r: result<JsonValue, str8> = coords.get("latitude");
+        let lon_v_r: result<JsonValue, str8> = coords.get("longitude");
+        let alt_v_r: result<JsonValue, str8> = coords.get("altitude_m");
+        let hours_v_r: result<JsonValue, str8> = opening.get(day);
         if lat_v_r.is_err() || lon_v_r.is_err() || alt_v_r.is_err() || hours_v_r.is_err() {
             continue;
         }
@@ -828,11 +828,11 @@ fn load_bars(path: str8, day: str8) -> bar_data {
         let lon_v: JsonValue = lon_v_r.unwrap();
         let alt_v: JsonValue = alt_v_r.unwrap();
         let hours_v: JsonValue = hours_v_r.unwrap();
-        let name_r: Result<str8, str8> = name_v.as_string();
-        let lat_r: Result<f64, str8> = lat_v.as_f64();
-        let lon_r: Result<f64, str8> = lon_v.as_f64();
-        let alt_r: Result<i64, str8> = alt_v.as_i64();
-        let hours_r: Result<str8, str8> = hours_v.as_string();
+        let name_r: result<str8, str8> = name_v.as_string();
+        let lat_r: result<f64, str8> = lat_v.as_f64();
+        let lon_r: result<f64, str8> = lon_v.as_f64();
+        let alt_r: result<i64, str8> = alt_v.as_i64();
+        let hours_r: result<str8, str8> = hours_v.as_string();
         if name_r.is_err() || lat_r.is_err() || lon_r.is_err() || alt_r.is_err() || hours_r.is_err() {
             continue;
         }
@@ -853,19 +853,19 @@ fn load_bars(path: str8, day: str8) -> bar_data {
     if hills_root_r.is_ok() {
         let hills_root: JsonValue = hills_root_r.unwrap();
         if hills_root.kind() == kind_array() {
-            let hill_count_r: Result<i64, str8> = hills_root.size();
+            let hill_count_r: result<i64, str8> = hills_root.size();
             if hill_count_r.is_ok() {
                 let hill_count: i64 = hill_count_r.unwrap();
                 for i in 0..hill_count {
-                    let hill_r: Result<JsonValue, str8> = hills_root.index(i);
+                    let hill_r: result<JsonValue, str8> = hills_root.index(i);
                     if hill_r.is_err() {
                         continue;
                     }
                     let hill: JsonValue = hill_r.unwrap();
-                    let from_r: Result<JsonValue, str8> = hill.get("from");
-                    let to_r: Result<JsonValue, str8> = hill.get("to");
-                    let up_r: Result<JsonValue, str8> = hill.get("uphill_m");
-                    let down_r: Result<JsonValue, str8> = hill.get("downhill_m");
+                    let from_r: result<JsonValue, str8> = hill.get("from");
+                    let to_r: result<JsonValue, str8> = hill.get("to");
+                    let up_r: result<JsonValue, str8> = hill.get("uphill_m");
+                    let down_r: result<JsonValue, str8> = hill.get("downhill_m");
                     if from_r.is_err() || to_r.is_err() || up_r.is_err() || down_r.is_err() {
                         continue;
                     }
@@ -873,10 +873,10 @@ fn load_bars(path: str8, day: str8) -> bar_data {
                     let to_v: JsonValue = to_r.unwrap();
                     let up_v: JsonValue = up_r.unwrap();
                     let down_v: JsonValue = down_r.unwrap();
-                    let from_name_r: Result<str8, str8> = from_v.as_string();
-                    let to_name_r: Result<str8, str8> = to_v.as_string();
-                    let up_m_r: Result<i64, str8> = up_v.as_i64();
-                    let down_m_r: Result<i64, str8> = down_v.as_i64();
+                    let from_name_r: result<str8, str8> = from_v.as_string();
+                    let to_name_r: result<str8, str8> = to_v.as_string();
+                    let up_m_r: result<i64, str8> = up_v.as_i64();
+                    let down_m_r: result<i64, str8> = down_v.as_i64();
                     if from_name_r.is_err() || to_name_r.is_err() || up_m_r.is_err() || down_m_r.is_err() {
                         continue;
                     }

@@ -7,7 +7,7 @@ mod std::log;
 use std::log::*;
 
 fn main() -> i32 {
-    let created: Result<Log, str8> = Log::with_output_path("/tmp/mlang_std_log_created_demo.log");
+    let created: result<Log, str8> = Log::with_output_path("/tmp/mlang_std_log_created_demo.log");
     if created.is_err() {
         err("could not create file-backed logger");
         return 1;

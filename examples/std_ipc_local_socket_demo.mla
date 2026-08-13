@@ -14,14 +14,14 @@ fn main() -> i32 {
     let path: str8 = "/tmp/mlang-std-ipc-local-demo.sock";
     remove_local_socket(path);
 
-    let listener_r: Result<LocalListener, str8> = LocalListener::bind(path);
+    let listener_r: result<LocalListener, str8> = LocalListener::bind(path);
     if listener_r.is_err() {
         println!("local socket bind failed: {}", listener_r.unwrap_err());
         return 1;
     }
     let listener: LocalListener = listener_r.unwrap();
 
-    let client_r: Result<LocalStream, str8> = LocalStream::connect(path);
+    let client_r: result<LocalStream, str8> = LocalStream::connect(path);
     if client_r.is_err() {
         println!("local socket connect failed: {}", client_r.unwrap_err());
         listener.close();
@@ -30,7 +30,7 @@ fn main() -> i32 {
     }
     let client: LocalStream = client_r.unwrap();
 
-    let server_r: Result<LocalStream, str8> = listener.accept();
+    let server_r: result<LocalStream, str8> = listener.accept();
     if server_r.is_err() {
         println!("local socket accept failed: {}", server_r.unwrap_err());
         client.close();
@@ -40,7 +40,7 @@ fn main() -> i32 {
     }
     let server: LocalStream = server_r.unwrap();
 
-    let w_r: Result<i64, str8> = client.write("hello from std::ipc local socket");
+    let w_r: result<i64, str8> = client.write("hello from std::ipc local socket");
     if w_r.is_err() {
         println!("local socket write failed: {}", w_r.unwrap_err());
         server.close();
@@ -51,7 +51,7 @@ fn main() -> i32 {
     }
 
     var buf = String::with_capacity(128);
-    let read_r: Result<i64, str8> = server.read(buf, 128);
+    let read_r: result<i64, str8> = server.read(buf, 128);
     if read_r.is_err() {
         println!("local socket read failed: {}", read_r.unwrap_err());
         String::free(buf);
