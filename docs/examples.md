@@ -18,6 +18,16 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 
 ## Example programs
 
+### Bare metal and QEMU
+
+- `examples/qemu_aarch64_bootloader` — minimal freestanding AArch64 image that
+  enters an MLang function and prints to QEMU's serial terminal. QEMU must be
+  installed. Run it with:
+
+  ```sh
+  ./examples/qemu_aarch64_bootloader/run.sh
+  ```
+
 ### Route planning and genetic algorithms
 
 - `examples/kallio_pub_crawl_esc` — animated terminal `std::esc` Kallio and

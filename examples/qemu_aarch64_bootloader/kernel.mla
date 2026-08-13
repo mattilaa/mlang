@@ -1,0 +1,10 @@
+/// \file kernel.mla
+/// \brief Minimal freestanding MLang entrypoint for QEMU's AArch64 virt board.
+
+extern fn serial_write(message: str8) -> void;
+
+fn kernel_main() -> i32 {
+    serial_write("Hello from MLang under QEMU!\n");
+    serial_write("The MLang kernel entrypoint is running.\n");
+    return 0;
+}
