@@ -1,0 +1,64 @@
+# MLang x86 BIOS bootloader example
+
+This example builds a complete 512-byte legacy x86 BIOS boot sector from the
+MLang source in `boot.mla`. It uses architecture-qualified module assembly to
+define code and data outside a normal function:
+
+```mla
+asm x86(".code16
+.globl _start
+_start:
+    // real-mode assembly
+");
+```
+
+The boot sector initializes its real-mode segments and stack, prints through
+BIOS video interrupt `0x10` and QEMU's debug console, then halts. The build
+checks both the 512-byte image size and the final `55 aa` BIOS signature.
+
+## Requirements
+
+QEMU must be installed. The build also needs LLVM `clang`, `ld.lld`, and
+`llvm-objcopy`, plus a built MLang compiler at `../../build/mlang`.
+
+macOS with Homebrew:
+
+```sh
+brew install qemu llvm lld
+```
+
+Debian or Ubuntu:
+
+```sh
+sudo apt install qemu-system-x86 clang lld llvm
+```
+
+## Build and run with mlang.toml
+
+```sh
+cd examples/qemu_x86_bootloader
+../../build/mlang pkg run demo
+```
+
+Expected output:
+
+```text
+Hello from an x86 MLang bootloader!
+```
+
+Press `Ctrl-c` to stop QEMU after the boot sector halts.
+
+Build without starting QEMU:
+
+```sh
+../../build/mlang pkg run build
+```
+
+The generated `boot.elf` and `boot.img` are written under `build/`.
+
+## Module assembly
+
+Top-level `asm <arch>("...");` emits text into LLVM's module assembly instead
+of placing it inside a compiler-generated function. The architecture qualifier
+is mandatory and must match `--target-arch`. Module assembly has no operands or
+result value; use ordinary inline `asm` inside MLang functions for those cases.

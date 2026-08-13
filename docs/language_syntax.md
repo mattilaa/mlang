@@ -855,6 +855,7 @@ Reference examples in the repository:
 - `examples/inline_asm_aarch64_hello_demo.mla`
 - `examples/inline_asm_x64_data_hello_demo.mla`
 - `examples/inline_asm_aarch64_data_hello_demo.mla`
+- `examples/qemu_x86_bootloader/boot.mla`
 
 ## `main` Return Type Defaulting
 
