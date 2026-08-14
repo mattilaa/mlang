@@ -1,4 +1,4 @@
-/// Sixteen-sector MFS2 image with typed paths and writable directory slots.
+/// Seed data for a build-sized MFS2 image with writable directory slots.
 asm x86(".section .filesystem,\"a\",@progbits
 .globl filesystem_start
 filesystem_start:
@@ -6,7 +6,7 @@ filesystem_start:
     .word 10
     .word 32
     .long filesystem_end - filesystem_start
-    .long 8192
+    .long 0
 
 root_path:
     .asciz \"/\"
@@ -116,6 +116,4 @@ example_data:
 example_end:
 
 filesystem_end:
-
-    .org 8192
 ");

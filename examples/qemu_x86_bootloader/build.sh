@@ -6,6 +6,34 @@ EXAMPLE_DIR="$ROOT/examples/qemu_x86_bootloader"
 BUILD_DIR="$EXAMPLE_DIR/build"
 MLANG=${MLANG:-"$ROOT/build/mlang"}
 
+FILESYSTEM_KIB=1024
+if [ "${1:-}" = "--filesystem-kib" ]; then
+    if [ "$#" -ne 2 ]; then
+        echo "usage: ./build.sh [--filesystem-kib KIB]" >&2
+        exit 1
+    fi
+    FILESYSTEM_KIB=$2
+elif [ "$#" -ne 0 ]; then
+    echo "usage: ./build.sh [--filesystem-kib KIB]" >&2
+    exit 1
+fi
+
+case "$FILESYSTEM_KIB" in
+    ''|*[!0-9]*)
+        echo "filesystem size must be a positive integer in KiB" >&2
+        exit 1
+        ;;
+esac
+if [ "$FILESYSTEM_KIB" -lt 4 ]; then
+    echo "filesystem size must be at least 4 KiB" >&2
+    exit 1
+fi
+FILESYSTEM_SIZE=$((FILESYSTEM_KIB * 1024))
+if [ "$FILESYSTEM_SIZE" -gt 1073741824 ]; then
+    echo "filesystem size must fit in the 32-bit guest address space (maximum 1048576 KiB)" >&2
+    exit 1
+fi
+
 find_tool() {
     name=$1
     shift
@@ -69,7 +97,7 @@ mkdir -p "$BUILD_DIR"
     "$BUILD_DIR/filesystem.o" -o "$BUILD_DIR/filesystem.elf"
 "$OBJCOPY" -O binary "$BUILD_DIR/boot.elf" "$BUILD_DIR/boot.img"
 "$OBJCOPY" -O binary "$BUILD_DIR/kernel.elf" "$BUILD_DIR/kernel.img"
-"$OBJCOPY" -O binary "$BUILD_DIR/filesystem.elf" "$BUILD_DIR/filesystem.img"
+"$OBJCOPY" -O binary "$BUILD_DIR/filesystem.elf" "$BUILD_DIR/filesystem.seed.img"
 
 size=$(wc -c < "$BUILD_DIR/boot.img" | tr -d ' ')
 if [ "$size" -ne 512 ]; then
@@ -89,26 +117,53 @@ if [ "$kernel_size" -gt 16384 ]; then
     exit 1
 fi
 
-filesystem_size=$(wc -c < "$BUILD_DIR/filesystem.img" | tr -d ' ')
-if [ "$filesystem_size" -ne 8192 ]; then
-    echo "filesystem image must be exactly 16 sectors, got $filesystem_size bytes" >&2
+filesystem_seed_size=$(wc -c < "$BUILD_DIR/filesystem.seed.img" | tr -d ' ')
+if [ "$filesystem_seed_size" -gt "$FILESYSTEM_SIZE" ]; then
+    echo "filesystem seed requires $filesystem_seed_size bytes, configured size is $FILESYSTEM_SIZE" >&2
     exit 1
 fi
 
-dd if=/dev/zero of="$BUILD_DIR/disk.img" bs=512 count=2880 >/dev/null 2>&1
+filesystem_sectors=$((FILESYSTEM_SIZE / 512))
+dd if=/dev/zero of="$BUILD_DIR/filesystem.img" bs=512 count=0 \
+    seek="$filesystem_sectors" >/dev/null 2>&1
+dd if="$BUILD_DIR/filesystem.seed.img" of="$BUILD_DIR/filesystem.img" \
+    conv=notrunc >/dev/null 2>&1
+
+b0=$((FILESYSTEM_SIZE & 255))
+b1=$(((FILESYSTEM_SIZE >> 8) & 255))
+b2=$(((FILESYSTEM_SIZE >> 16) & 255))
+b3=$(((FILESYSTEM_SIZE >> 24) & 255))
+size_bytes=$(printf '\\%03o\\%03o\\%03o\\%03o' "$b0" "$b1" "$b2" "$b3")
+printf '%b' "$size_bytes" | dd of="$BUILD_DIR/filesystem.img" bs=1 seek=12 \
+    conv=notrunc >/dev/null 2>&1
+
+filesystem_size=$(wc -c < "$BUILD_DIR/filesystem.img" | tr -d ' ')
+if [ "$filesystem_size" -ne "$FILESYSTEM_SIZE" ]; then
+    echo "filesystem image must be $FILESYSTEM_SIZE bytes, got $filesystem_size" >&2
+    exit 1
+fi
+
+disk_sectors=$((36 + filesystem_sectors))
+dd if=/dev/zero of="$BUILD_DIR/disk.img" bs=512 count=0 \
+    seek="$disk_sectors" >/dev/null 2>&1
 dd if="$BUILD_DIR/boot.img" of="$BUILD_DIR/disk.img" conv=notrunc >/dev/null 2>&1
 dd if="$BUILD_DIR/kernel.img" of="$BUILD_DIR/disk.img" bs=512 seek=1 \
     conv=notrunc >/dev/null 2>&1
+filesystem_seed_sectors=$(((filesystem_seed_size + 511) / 512))
 dd if="$BUILD_DIR/filesystem.img" of="$BUILD_DIR/disk.img" bs=512 seek=36 \
-    conv=notrunc >/dev/null 2>&1
+    count="$filesystem_seed_sectors" conv=notrunc >/dev/null 2>&1
 
 disk_size=$(wc -c < "$BUILD_DIR/disk.img" | tr -d ' ')
-if [ "$disk_size" -ne 1474560 ]; then
-    echo "disk image must be exactly 1474560 bytes, got $disk_size" >&2
+expected_disk_size=$((disk_sectors * 512))
+if [ "$disk_size" -ne "$expected_disk_size" ]; then
+    echo "disk image must be exactly $expected_disk_size bytes, got $disk_size" >&2
     exit 1
 fi
+
+printf '%s\n' "$FILESYSTEM_KIB" > "$BUILD_DIR/filesystem_kib"
 
 echo "Built $BUILD_DIR/disk.img"
 echo "  boot sector: 512 bytes, BIOS signature 55aa"
 echo "  loaded kernel: $kernel_size bytes in sectors 2-33"
-echo "  MFS2 filesystem: $filesystem_size bytes in sectors 37-52"
+echo "  MFS2 filesystem: $filesystem_size bytes ($filesystem_sectors sectors) from LBA 36"
+echo "  disk image: $disk_size bytes"

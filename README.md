@@ -571,7 +571,7 @@ result value. See `examples/qemu_x86_bootloader` for a two-stage BIOS loader
 and separately linked MLang kernel with an interactive serial terminal, built
 through `mlang.toml`. The example mounts a small hierarchical filesystem and
 provides `pwd`, `ls`, `cd`, `cat`, `touch`, and a small `/bin/vi` text editor.
-The mounted MFS2 copy is writable, and its protected-mode floppy driver
+The configurable MFS2 image is writable, and its protected-mode ATA driver
 persists file metadata and text contents to the disk image.
 
 ## Package Manager (MLang Backend Default)

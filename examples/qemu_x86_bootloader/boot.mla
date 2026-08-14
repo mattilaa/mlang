@@ -1,4 +1,4 @@
-/// A 512-byte BIOS loader that reads up to 32 kernel sectors from the floppy.
+/// A 512-byte BIOS loader that reads the kernel from an LBA-addressed disk.
 asm x86(".code16
 .section .boot,\"ax\",@progbits
 .globl _start
@@ -17,45 +17,9 @@ _start:
     movw $loader_message, %si
     call .Lprint
 
-    xorw %ax, %ax
+    movw $kernel_packet, %si
     movb boot_drive, %dl
-    int $0x13
-
-    movw $0x1000, %ax
-    movw %ax, %es
-    xorw %bx, %bx
-    movb $0x02, %ah
-    movb $17, %al
-    xorw %cx, %cx
-    movb $2, %cl
-    xorw %dx, %dx
-    movb boot_drive, %dl
-    int $0x13
-    jc .Ldisk_error
-
-    movw $0x2000, %ax
-    movw %ax, %es
-    xorw %bx, %bx
-    movb $0x02, %ah
-    movb $16, %al
-    xorw %cx, %cx
-    movb $1, %ch
-    movb $1, %cl
-    xorw %dx, %dx
-    movb boot_drive, %dl
-    int $0x13
-    jc .Ldisk_error
-
-    movw $0x1220, %ax
-    movw %ax, %es
-    xorw %bx, %bx
-    movb $0x02, %ah
-    movb $15, %al
-    xorw %cx, %cx
-    movb $1, %cl
-    xorw %dx, %dx
-    movb $1, %dh
-    movb boot_drive, %dl
+    movb $0x42, %ah
     int $0x13
     jc .Ldisk_error
 
@@ -123,10 +87,17 @@ _start:
 
 boot_drive:
     .byte 0
+.balign 4
+kernel_packet:
+    .byte 0x10, 0
+    .word 32
+    .word 0
+    .word 0x1000
+    .quad 1
 loader_message:
     .asciz \"MLang bootloader: loading kernel...\\r\\n\"
 loaded_message:
-    .asciz \"MLang bootloader: kernel and filesystem loaded.\\r\\n\"
+    .asciz \"MLang bootloader: kernel loaded.\\r\\n\"
 error_message:
     .asciz \"MLang bootloader: disk read failed.\\r\\n\"
     .org 510

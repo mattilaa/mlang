@@ -19,12 +19,12 @@ _start:
 ```
 
 The boot sector initializes its real-mode segments and stack, preserves the
-BIOS boot-drive number, and loads the kernel and filesystem using BIOS disk
-interrupt `0x13`. The kernel installs a Global Descriptor Table, enters
-protected mode, initializes COM1, mounts the filesystem at `/`, and provides a
+BIOS boot-drive number, and loads the kernel with the BIOS extended LBA read.
+The kernel installs a Global Descriptor Table, enters protected mode,
+initializes COM1, loads MFS2 through ATA PIO, mounts it at `/`, and provides a
 line-oriented terminal over QEMU's serial console. The build checks the loader
-size, `55 aa` signature, kernel and filesystem sizes, and final 1.44 MB floppy
-image size.
+size, `55 aa` signature, kernel size, configured filesystem size, and final IDE
+disk image size.
 
 ## Requirements
 
@@ -50,11 +50,22 @@ cd examples/qemu_x86_bootloader
 ../../build/mlang pkg run demo
 ```
 
+The default MFS2 capacity is 1 MiB. Override it in KiB for either `build` or
+`demo`:
+
+```sh
+../../build/mlang pkg run demo --option filesystem_kib=65536
+```
+
+This example creates a 64 MiB filesystem. Supported values range from 4 KiB
+through 1 GiB. The run script derives the QEMU memory allocation from this
+value so the kernel has room for both MFS2 and the editor workspace.
+
 Expected output:
 
 ```text
 MLang bootloader: loading kernel...
-MLang bootloader: kernel and filesystem loaded.
+MLang bootloader: kernel loaded.
 
 MLang virtual terminal
 Mounted writable MFS2 at /.
@@ -74,7 +85,7 @@ The terminal supports:
 - `cat <path>`: print a file's contents
 - `touch <path>`: create and persist an empty file
 - `vi <path>` or `/bin/vi <path>`: replace and persist a text file's contents
-- `sync`: flush the mounted MFS2 metadata to the floppy image
+- `sync`: flush the used MFS2 data and metadata to the IDE disk image
 - `reboot`: reset the virtual machine through the keyboard controller
 - `halt`: halt the virtual CPU
 
@@ -87,14 +98,22 @@ Build without starting QEMU:
 ../../build/mlang pkg run build
 ```
 
+The scripts expose the same option directly:
+
+```sh
+./build.sh --filesystem-kib 16384
+./run.sh --filesystem-kib 16384
+```
+
 The generated boot-sector, protected-mode kernel, filesystem, ELF, and final
 `disk.img` files are written under `build/`.
 
 ## MFS2 filesystem
 
-`filesystem.mla` defines a minimal hierarchical filesystem image. The build
-writes its 16 sectors at LBA 36, and the BIOS loader reads them into physical
-address `0x20000`. The kernel validates the `MFS2` header and mounts it at `/`.
+`filesystem.mla` defines the initial hierarchical filesystem contents. The
+build pads that seed to the configured capacity and writes it from LBA 36 of
+the IDE disk. The protected-mode kernel reads the used sectors into physical
+address `0x100000`, validates the `MFS2` header, and mounts it at `/`.
 
 The initial tree is:
 
@@ -143,11 +162,12 @@ terminal's ordinary line editor.
 
 Each fixed-size directory entry stores a 32-byte absolute path, entry type,
 data offset, size, and capacity. The image reserves 32 directory slots.
-`touch` allocates an entry in the mounted RAM copy. The editor allocates a
-1 KiB data block when a file first receives text and overwrites that block on
-later saves. Both commands use the kernel's protected-mode floppy driver and
-ISA DMA channel 2 to write all 16 MFS2 sectors back to `disk.img`. `sync`
-exposes the same flush operation explicitly.
+`touch` allocates an entry in the mounted RAM copy. On save, the editor reserves
+exactly the file's required bytes from the remaining data area. Later saves
+overwrite that allocation when they fit or append a larger allocation when
+needed. Both commands use the kernel's protected-mode ATA PIO driver to write
+the contiguous used MFS2 sectors back to `disk.img`. `sync` exposes the same
+flush operation explicitly; unused configured capacity is not transferred.
 
 Created files survive the kernel's `reboot` command. The ordinary `demo` task
 rebuilds the baseline disk before QEMU starts. To boot the existing image and
@@ -159,13 +179,15 @@ retain changes across QEMU process restarts, use:
 
 The `resume` task requires an existing `build/disk.img`; run the `build` or
 `demo` task once first. Re-running `build` resets the image to the files defined
-in `filesystem.mla`.
+in `filesystem.mla`. Disk images produced by the earlier floppy-backed version
+are not compatible with the ATA layout; rebuild once before using `resume`.
 
-Each edited file is limited to 1,023 bytes, including the editor's CRLF line
-separators but excluding its terminating zero byte. The fixed 8 KiB image can
-hold six dynamically allocated 1 KiB text blocks in addition to its initial
-files. This version has no deletion, dynamic directory creation, compaction,
-or permissions.
+There is no separate per-file size setting or fixed editor limit. A file may
+grow until the configured MFS2 data area runs out of free bytes. The serial
+line reader still accepts at most 63 printable characters per input line, but
+the editor can collect as many lines as fit in the image. Because this version
+has no compaction, growing an existing allocation leaves its smaller old block
+unused. It also has no deletion, dynamic directory creation, or permissions.
 
 ## Module assembly
 

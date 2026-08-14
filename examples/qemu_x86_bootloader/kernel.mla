@@ -40,6 +40,8 @@ protected_entry:
     call terminal_main__void
     jmp terminal_halt
 
+.set MFS_BASE, 0x00100000
+
 .Lserial_init:
     movw $0x3f9, %dx
     xorb %al, %al
@@ -214,10 +216,10 @@ terminal_argument:
 .globl fs_mount
 fs_mount:
     xorl %eax, %eax
-    cmpl $0x3253464d, 0x00020000
+    cmpl $0x3253464d, MFS_BASE
     jne .Lfs_mount_done
-    movzwl 0x00020004, %ecx
-    movzwl 0x00020006, %edx
+    movzwl MFS_BASE + 4, %ecx
+    movzwl MFS_BASE + 6, %edx
     cmpl %edx, %ecx
     ja .Lfs_mount_done
     cmpl $32, %edx
@@ -230,7 +232,7 @@ fs_mount:
 
 .globl fs_entry_count
 fs_entry_count:
-    movzwl 0x00020004, %eax
+    movzwl MFS_BASE + 4, %eax
     ret
 
 .globl fs_entry_path
@@ -238,11 +240,11 @@ fs_entry_path:
     movl 4(%esp), %eax
     testl %eax, %eax
     js .Lfs_entry_path_invalid
-    movzwl 0x00020004, %ecx
+    movzwl MFS_BASE + 4, %ecx
     cmpl %ecx, %eax
     jae .Lfs_entry_path_invalid
     imull $48, %eax, %eax
-    addl $0x00020010, %eax
+    addl $MFS_BASE + 16, %eax
     ret
 .Lfs_entry_path_invalid:
     xorl %eax, %eax
@@ -253,11 +255,11 @@ fs_entry_type:
     movl 4(%esp), %eax
     testl %eax, %eax
     js .Lfs_entry_type_invalid
-    movzwl 0x00020004, %ecx
+    movzwl MFS_BASE + 4, %ecx
     cmpl %ecx, %eax
     jae .Lfs_entry_type_invalid
     imull $48, %eax, %eax
-    movzbl 0x00020030(%eax), %eax
+    movzbl MFS_BASE + 48(%eax), %eax
     ret
 .Lfs_entry_type_invalid:
     xorl %eax, %eax
@@ -268,14 +270,14 @@ fs_entry_data:
     movl 4(%esp), %eax
     testl %eax, %eax
     js .Lfs_entry_data_invalid
-    movzwl 0x00020004, %ecx
+    movzwl MFS_BASE + 4, %ecx
     cmpl %ecx, %eax
     jae .Lfs_entry_data_invalid
     imull $48, %eax, %eax
-    cmpl $0, 0x00020038(%eax)
+    cmpl $0, MFS_BASE + 56(%eax)
     je .Lfs_entry_empty
-    movl 0x00020034(%eax), %eax
-    addl $0x00020000, %eax
+    movl MFS_BASE + 52(%eax), %eax
+    addl $MFS_BASE, %eax
     ret
 .Lfs_entry_empty:
     movl $empty_file, %eax
@@ -385,13 +387,13 @@ fs_find:
     pushl %ebx
     movl 16(%esp), %ebx
     xorl %edx, %edx
-    movzwl 0x00020004, %ecx
+    movzwl MFS_BASE + 4, %ecx
 .Lfs_find_entry:
     cmpl %ecx, %edx
     jae .Lfs_find_missing
     movl %edx, %eax
     imull $48, %eax, %eax
-    addl $0x00020010, %eax
+    addl $MFS_BASE + 16, %eax
     movl %eax, %esi
     movl %ebx, %edi
 .Lfs_find_compare:
@@ -544,12 +546,12 @@ fs_create_empty:
     pushl %edi
     pushl %ebx
     movl 16(%esp), %esi
-    movzwl 0x00020004, %eax
-    movzwl 0x00020006, %ecx
+    movzwl MFS_BASE + 4, %eax
+    movzwl MFS_BASE + 6, %ecx
     cmpl %ecx, %eax
     jae .Lcreate_full
     imull $48, %eax, %eax
-    addl $0x00020010, %eax
+    addl $MFS_BASE + 16, %eax
     movl %eax, %edi
     movl %edi, %ebx
     xorl %eax, %eax
@@ -567,7 +569,7 @@ fs_create_empty:
     movb $0, (%edi)
 .Lcreate_type:
     movb $1, 32(%ebx)
-    incw 0x00020004
+    incw MFS_BASE + 4
     movl $1, %eax
     jmp .Lcreate_done
 .Lcreate_full:
@@ -588,33 +590,37 @@ fs_write_text:
     movl 8(%ebp), %eax
     testl %eax, %eax
     js .Lwrite_invalid
-    movzwl 0x00020004, %ecx
+    movzwl MFS_BASE + 4, %ecx
     cmpl %ecx, %eax
     jae .Lwrite_invalid
     imull $48, %eax, %eax
-    addl $0x00020010, %eax
+    addl $MFS_BASE + 16, %eax
     movl %eax, %ebx
     cmpb $1, 32(%ebx)
     jne .Lwrite_invalid
     movl 16(%ebp), %edx
-    cmpl $1023, %edx
-    ja .Lwrite_too_large
     leal 1(%edx), %ecx
+    testl %ecx, %ecx
+    jz .Lwrite_no_space
     cmpl 44(%ebx), %ecx
     jbe .Lwrite_copy
-    movl 0x00020008, %eax
+    movl MFS_BASE + 8, %eax
     addl $15, %eax
+    jc .Lwrite_no_space
     andl $-16, %eax
-    leal 1024(%eax), %ecx
-    cmpl 0x0002000c, %ecx
+    addl %eax, %ecx
+    jc .Lwrite_no_space
+    cmpl MFS_BASE + 12, %ecx
     ja .Lwrite_no_space
     movl %eax, 36(%ebx)
-    movl $1024, 44(%ebx)
-    movl %ecx, 0x00020008
+    movl 16(%ebp), %eax
+    incl %eax
+    movl %eax, 44(%ebx)
+    movl %ecx, MFS_BASE + 8
 .Lwrite_copy:
     movl 12(%ebp), %esi
     movl 36(%ebx), %edi
-    addl $0x00020000, %edi
+    addl $MFS_BASE, %edi
     movl %edx, %ecx
     rep movsb
     movb $0, (%edi)
@@ -627,8 +633,6 @@ fs_write_text:
 .Lwrite_no_space:
     movl $-2, %eax
     jmp .Lwrite_done
-.Lwrite_too_large:
-    movl $-3, %eax
 .Lwrite_done:
     popl %edi
     popl %esi
@@ -643,19 +647,20 @@ editor_load:
     movl 12(%esp), %eax
     testl %eax, %eax
     js .Leditor_load_empty
-    movzwl 0x00020004, %ecx
+    movzwl MFS_BASE + 4, %ecx
     cmpl %ecx, %eax
     jae .Leditor_load_empty
     imull $48, %eax, %eax
-    movl 0x00020038(%eax), %ecx
-    cmpl $1023, %ecx
-    ja .Leditor_load_too_large
+    movl MFS_BASE + 56(%eax), %ecx
+    cmpl MFS_BASE + 12, %ecx
+    jae .Leditor_load_too_large
     movl %ecx, editor_length
     testl %ecx, %ecx
     jz .Leditor_load_empty_data
-    movl 0x00020034(%eax), %esi
-    addl $0x00020000, %esi
-    movl $editor_buffer, %edi
+    movl MFS_BASE + 52(%eax), %esi
+    addl $MFS_BASE, %esi
+    movl MFS_BASE + 12, %edi
+    addl $MFS_BASE, %edi
     rep movsb
     movb $0, (%edi)
     movl $1, %eax
@@ -663,7 +668,8 @@ editor_load:
 .Leditor_load_empty:
     movl $0, editor_length
 .Leditor_load_empty_data:
-    movb $0, editor_buffer
+    movl MFS_BASE + 12, %eax
+    movb $0, MFS_BASE(%eax)
     movl $1, %eax
     jmp .Leditor_load_done
 .Leditor_load_too_large:
@@ -676,7 +682,8 @@ editor_load:
 .globl editor_clear
 editor_clear:
     movl $0, editor_length
-    movb $0, editor_buffer
+    movl MFS_BASE + 12, %eax
+    movb $0, MFS_BASE(%eax)
     ret
 
 .globl editor_append_line
@@ -694,9 +701,12 @@ editor_append_line:
 .Leditor_measured:
     movl editor_length, %ebx
     leal 2(%ebx,%ecx), %eax
-    cmpl $1023, %eax
-    ja .Leditor_append_full
-    leal editor_buffer(%ebx), %edi
+    jc .Leditor_append_full
+    cmpl MFS_BASE + 12, %eax
+    jae .Leditor_append_full
+    movl MFS_BASE + 12, %edi
+    addl $MFS_BASE, %edi
+    addl %ebx, %edi
     movl 16(%esp), %esi
     rep movsb
     movb $13, (%edi)
@@ -715,7 +725,8 @@ editor_append_line:
 
 .globl editor_data
 editor_data:
-    movl $editor_buffer, %eax
+    movl MFS_BASE + 12, %eax
+    addl $MFS_BASE, %eax
     ret
 
 .globl editor_size
@@ -723,186 +734,213 @@ editor_size:
     movl editor_length, %eax
     ret
 
-.Lfdc_wait_write:
-    movl $0x00100000, %ecx
-    movw $0x3f4, %dx
-.Lfdc_wait_write_loop:
+.Lata_wait_idle:
+    movl $0x01000000, %ecx
+    movw $0x1f7, %dx
+.Lata_idle_loop:
     inb %dx, %al
-    andb $0xc0, %al
-    cmpb $0x80, %al
-    je .Lfdc_wait_ready
-    loop .Lfdc_wait_write_loop
+    testb $0x80, %al
+    jz .Lata_idle_ready
+    loop .Lata_idle_loop
     xorl %eax, %eax
     ret
-.Lfdc_wait_ready:
+.Lata_idle_ready:
     movl $1, %eax
     ret
 
-.Lfdc_send_byte:
-    pushl %ebx
-    movzbl %al, %ebx
-    call .Lfdc_wait_write
-    testl %eax, %eax
-    jz .Lfdc_send_failed
-    movw $0x3f5, %dx
+.Lata_wait_complete:
+    movl $0x01000000, %ecx
+    movw $0x1f7, %dx
+.Lata_complete_loop:
+    inb %dx, %al
+    testb $0x80, %al
+    jnz .Lata_complete_next
+    testb $0x21, %al
+    jnz .Lata_wait_failed
+    movl $1, %eax
+    ret
+.Lata_complete_next:
+    loop .Lata_complete_loop
+    xorl %eax, %eax
+    ret
+
+.Lata_wait_data:
+    movl $0x01000000, %ecx
+    movw $0x1f7, %dx
+.Lata_data_loop:
+    inb %dx, %al
+    testb $0x21, %al
+    jnz .Lata_wait_failed
+    testb $0x80, %al
+    jnz .Lata_data_next
+    testb $0x08, %al
+    jnz .Lata_wait_ready
+.Lata_data_next:
+    loop .Lata_data_loop
+.Lata_wait_failed:
+    xorl %eax, %eax
+    ret
+.Lata_wait_ready:
+    movl $1, %eax
+    ret
+
+.Lata_program_lba:
+    movw $0x1f2, %dx
+    movb $1, %al
+    outb %al, %dx
+    incl %edx
     movb %bl, %al
     outb %al, %dx
-    movl $1, %eax
-.Lfdc_send_failed:
+    shrl $8, %ebx
+    incl %edx
+    movb %bl, %al
+    outb %al, %dx
+    shrl $8, %ebx
+    incl %edx
+    movb %bl, %al
+    outb %al, %dx
+    shrl $8, %ebx
+    incl %edx
+    movb %bl, %al
+    andb $0x0f, %al
+    orb $0xe0, %al
+    outb %al, %dx
+    ret
+
+.Lata_read_sector:
+    pushl %ebx
+    pushl %ecx
+    pushl %edx
+    movl %eax, %ebx
+    call .Lata_wait_idle
+    testl %eax, %eax
+    jz .Lata_read_done
+    call .Lata_program_lba
+    movw $0x1f7, %dx
+    movb $0x20, %al
+    outb %al, %dx
+    call .Lata_wait_data
+    testl %eax, %eax
+    jz .Lata_read_done
+    movw $0x1f0, %dx
+    movl $256, %ecx
+    rep insw
+    call .Lata_wait_complete
+.Lata_read_done:
+    popl %edx
+    popl %ecx
     popl %ebx
     ret
 
-.Lfdc_read_byte:
-    movl $0x00100000, %ecx
-    movw $0x3f4, %dx
-.Lfdc_read_wait:
-    inb %dx, %al
-    andb $0xc0, %al
-    cmpb $0xc0, %al
-    je .Lfdc_read_ready
-    loop .Lfdc_read_wait
-    movl $-1, %eax
-    ret
-.Lfdc_read_ready:
-    movw $0x3f5, %dx
-    inb %dx, %al
-    movzbl %al, %eax
+.Lata_write_sector:
+    pushl %ebx
+    pushl %ecx
+    pushl %edx
+    movl %eax, %ebx
+    call .Lata_wait_idle
+    testl %eax, %eax
+    jz .Lata_write_done
+    call .Lata_program_lba
+    movw $0x1f7, %dx
+    movb $0x30, %al
+    outb %al, %dx
+    call .Lata_wait_data
+    testl %eax, %eax
+    jz .Lata_write_done
+    movw $0x1f0, %dx
+    movl $256, %ecx
+    rep outsw
+    call .Lata_wait_complete
+.Lata_write_done:
+    popl %edx
+    popl %ecx
+    popl %ebx
     ret
 
-.Lfdc_fail_motor:
-    xorl %ebp, %ebp
-    jmp .Lfdc_motor_off
+.globl fs_load
+fs_load:
+    pushl %ebx
+    pushl %edi
+    pushl %ebp
+    movl $MFS_BASE, %edi
+    movl $36, %eax
+    call .Lata_read_sector
+    testl %eax, %eax
+    jz .Lata_load_failed
+    cmpl $0x3253464d, MFS_BASE
+    jne .Lata_load_failed
+    movl MFS_BASE + 8, %eax
+    cmpl MFS_BASE + 12, %eax
+    ja .Lata_load_failed
+    addl $511, %eax
+    jc .Lata_load_failed
+    shrl $9, %eax
+    testl %eax, %eax
+    jz .Lata_load_failed
+    movl %eax, %ebx
+    decl %ebx
+    movl $37, %ebp
+.Lata_load_loop:
+    testl %ebx, %ebx
+    jz .Lata_load_ok
+    movl %ebp, %eax
+    call .Lata_read_sector
+    testl %eax, %eax
+    jz .Lata_load_failed
+    incl %ebp
+    decl %ebx
+    jmp .Lata_load_loop
+.Lata_load_ok:
+    movl $1, %eax
+    jmp .Lata_load_done
+.Lata_load_failed:
+    xorl %eax, %eax
+.Lata_load_done:
+    popl %ebp
+    popl %edi
+    popl %ebx
+    ret
 
 .globl fs_flush
 fs_flush:
     pushl %ebx
     pushl %esi
-    pushl %edi
     pushl %ebp
-    xorl %ebp, %ebp
-
-    movw $0x3f2, %dx
-    movb $0x1c, %al
-    outb %al, %dx
-    movw $0x3f7, %dx
-    xorb %al, %al
-    outb %al, %dx
-    movl $0x00200000, %ecx
-.Lfdc_spinup_delay:
-    loop .Lfdc_spinup_delay
-
-    movb $0x03, %al
-    call .Lfdc_send_byte
-    testl %eax, %eax
-    jz .Lfdc_fail_motor
-    movb $0xdf, %al
-    call .Lfdc_send_byte
-    testl %eax, %eax
-    jz .Lfdc_fail_motor
-    movb $0x02, %al
-    call .Lfdc_send_byte
-    testl %eax, %eax
-    jz .Lfdc_fail_motor
-
-    movb $0x0f, %al
-    call .Lfdc_send_byte
-    testl %eax, %eax
-    jz .Lfdc_fail_motor
-    xorb %al, %al
-    call .Lfdc_send_byte
-    testl %eax, %eax
-    jz .Lfdc_fail_motor
-    movb $1, %al
-    call .Lfdc_send_byte
-    testl %eax, %eax
-    jz .Lfdc_fail_motor
-
-    movl $0x00100000, %ecx
-.Lfdc_seek_delay:
-    loop .Lfdc_seek_delay
-    movb $0x08, %al
-    call .Lfdc_send_byte
-    testl %eax, %eax
-    jz .Lfdc_fail_motor
-    call .Lfdc_read_byte
-    cmpl $0, %eax
-    jl .Lfdc_fail_motor
-    call .Lfdc_read_byte
-    cmpl $1, %eax
-    jne .Lfdc_fail_motor
-
-    movb $0x06, %al
-    outb %al, $0x0a
-    xorb %al, %al
-    outb %al, $0x0c
-    outb %al, $0x04
-    outb %al, $0x04
-    movb $0x02, %al
-    outb %al, $0x81
-    xorb %al, %al
-    outb %al, $0x0c
-    movb $0xff, %al
-    outb %al, $0x05
-    movb $0x1f, %al
-    outb %al, $0x05
-    movb $0x4a, %al
-    outb %al, $0x0b
-    movb $0x02, %al
-    outb %al, $0x0a
-
-    movb $0x45, %al
-    call .Lfdc_send_byte
-    testl %eax, %eax
-    jz .Lfdc_fail_motor
-    xorb %al, %al
-    call .Lfdc_send_byte
-    movb $1, %al
-    call .Lfdc_send_byte
-    xorb %al, %al
-    call .Lfdc_send_byte
-    movb $1, %al
-    call .Lfdc_send_byte
-    movb $2, %al
-    call .Lfdc_send_byte
-    movb $16, %al
-    call .Lfdc_send_byte
-    movb $0x1b, %al
-    call .Lfdc_send_byte
-    movb $0xff, %al
-    call .Lfdc_send_byte
-
-    call .Lfdc_read_byte
-    cmpl $0, %eax
-    jl .Lfdc_fail_motor
+    movl MFS_BASE + 8, %eax
+    cmpl MFS_BASE + 12, %eax
+    ja .Lata_flush_failed
+    addl $511, %eax
+    jc .Lata_flush_failed
+    shrl $9, %eax
     movl %eax, %ebx
-    call .Lfdc_read_byte
-    cmpl $0, %eax
-    jl .Lfdc_fail_motor
-    movl %eax, %esi
-    call .Lfdc_read_byte
-    cmpl $0, %eax
-    jl .Lfdc_fail_motor
-    movl %eax, %edi
-    call .Lfdc_read_byte
-    call .Lfdc_read_byte
-    call .Lfdc_read_byte
-    call .Lfdc_read_byte
-
-    testb $0xc0, %bl
-    jnz .Lfdc_fail_motor
-    testl %esi, %esi
-    jnz .Lfdc_fail_motor
-    testl %edi, %edi
-    jnz .Lfdc_fail_motor
-    movl $1, %ebp
-
-.Lfdc_motor_off:
-    movw $0x3f2, %dx
-    movb $0x0c, %al
-    outb %al, %dx
+    movl $MFS_BASE, %esi
+    movl $36, %ebp
+.Lata_flush_loop:
+    testl %ebx, %ebx
+    jz .Lata_flush_cache
     movl %ebp, %eax
+    call .Lata_write_sector
+    testl %eax, %eax
+    jz .Lata_flush_failed
+    incl %ebp
+    decl %ebx
+    jmp .Lata_flush_loop
+.Lata_flush_cache:
+    call .Lata_wait_idle
+    testl %eax, %eax
+    jz .Lata_flush_failed
+    movw $0x1f7, %dx
+    movb $0xe7, %al
+    outb %al, %dx
+    call .Lata_wait_complete
+    testl %eax, %eax
+    jz .Lata_flush_failed
+    movl $1, %eax
+    jmp .Lata_flush_done
+.Lata_flush_failed:
+    xorl %eax, %eax
+.Lata_flush_done:
     popl %ebp
-    popl %edi
     popl %esi
     popl %ebx
     ret
@@ -959,8 +997,6 @@ empty_file:
     .skip 1
 editor_length:
     .skip 4
-editor_buffer:
-    .skip 1024
 __mlang_boot_jmp_buffer:
     .skip 256
 ");
@@ -972,6 +1008,7 @@ extern fn terminal_command_prefix(actual: str8, prefix: str8) -> i32;
 extern fn terminal_argument(command: str8, offset: i32) -> str8;
 extern fn terminal_reboot() -> void;
 extern fn terminal_halt() -> void;
+extern fn fs_load() -> i32;
 extern fn fs_mount() -> i32;
 extern fn fs_entry_count() -> i32;
 extern fn fs_entry_path(index: i32) -> str8;
@@ -1116,7 +1153,7 @@ fn edit_file(request: str8) -> i32 {
             return 0;
         }
         if editor_append_line(line) != 1 {
-            serial_write("vi: 1023-byte limit reached; save or cancel\r\n");
+            serial_write("vi: editor buffer is full; save or cancel\r\n");
         }
     }
     return 0;
@@ -1132,7 +1169,7 @@ fn report_edit_result(result: i32) -> void {
     } else if result == -3 {
         serial_write("vi: filesystem directory is full\r\n");
     } else if result == -4 {
-        serial_write("vi: file exceeds the 1023-byte editor limit\r\n");
+        serial_write("vi: file is too large for the configured image\r\n");
     } else if result == -5 {
         serial_write("vi: filesystem data area is full\r\n");
     } else if result == -6 {
@@ -1144,7 +1181,7 @@ fn report_edit_result(result: i32) -> void {
 
 fn terminal_main() -> i32 {
     serial_write("\r\nMLang virtual terminal\r\n");
-    if fs_mount() == 1 {
+    if fs_load() == 1 && fs_mount() == 1 {
         serial_write("Mounted writable MFS2 at /.\r\n");
     } else {
         serial_write("MFS2 mount failed.\r\n");
@@ -1222,7 +1259,7 @@ fn terminal_main() -> i32 {
             if fs_flush() == 1 {
                 serial_write("MFS2 synchronized to disk.\r\n");
             } else {
-                serial_write("sync: floppy write failed\r\n");
+                serial_write("sync: ATA disk write failed\r\n");
             }
         } else if terminal_command_eq(command, "reboot") == 1 {
             serial_write("Rebooting...\r\n");
