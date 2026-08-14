@@ -185,10 +185,24 @@ serial_write_char:
 
 .globl terminal_read_key
 terminal_read_key:
+.Lkey_read:
     cmpl $0, pending_key_valid
     jne .Lkey_pending
     call .Lserial_getc
     movzbl %al, %eax
+    cmpl $10, %eax
+    jne .Lkey_check_cr
+    cmpl $0, pending_cr
+    je .Lkey_clear_cr
+    movl $0, pending_cr
+    jmp .Lkey_read
+.Lkey_check_cr:
+    cmpl $13, %eax
+    jne .Lkey_clear_cr
+    movl $1, pending_cr
+    ret
+.Lkey_clear_cr:
+    movl $0, pending_cr
     cmpl $27, %eax
     jne .Lkey_done
     call .Lserial_try_getc
@@ -1383,6 +1397,8 @@ editor_command_buffer:
 pending_key:
     .skip 4
 pending_key_valid:
+    .skip 4
+pending_cr:
     .skip 4
 ansi_position:
     .skip 12
