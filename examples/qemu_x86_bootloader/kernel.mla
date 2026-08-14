@@ -1,6 +1,10 @@
 /// A separately linked 32-bit kernel loaded by boot.mla at physical 0x10000.
 /// Hardware entry and COM1 primitives use module assembly; the terminal command
 /// loop below is ordinary MLang code.
+mod vi;
+use vi::edit_file;
+use vi::report_edit_result;
+
 asm x86(".code16
 .section .kernel,\"ax\",@progbits
 .globl kernel_start
@@ -155,6 +159,93 @@ terminal_read_line:
     popl %edi
     popl %ebx
     leave
+    ret
+
+.globl serial_write_char
+serial_write_char:
+    movb 4(%esp), %al
+    call .Lserial_putc
+    ret
+
+.Lserial_try_getc:
+    movl $0x00040000, %ecx
+    movw $0x3fd, %dx
+.Lserial_try_loop:
+    inb %dx, %al
+    testb $1, %al
+    jnz .Lserial_try_ready
+    loop .Lserial_try_loop
+    movl $-1, %eax
+    ret
+.Lserial_try_ready:
+    movw $0x3f8, %dx
+    inb %dx, %al
+    movzbl %al, %eax
+    ret
+
+.globl terminal_read_key
+terminal_read_key:
+    cmpl $0, pending_key_valid
+    jne .Lkey_pending
+    call .Lserial_getc
+    movzbl %al, %eax
+    cmpl $27, %eax
+    jne .Lkey_done
+    call .Lserial_try_getc
+    cmpl $-1, %eax
+    je .Lkey_escape
+    cmpl $91, %eax
+    jne .Lkey_save_pending
+    call .Lserial_try_getc
+    cmpl $-1, %eax
+    je .Lkey_escape
+    cmpl $65, %eax
+    je .Lkey_up
+    cmpl $66, %eax
+    je .Lkey_down
+    cmpl $67, %eax
+    je .Lkey_right
+    cmpl $68, %eax
+    je .Lkey_left
+    cmpl $72, %eax
+    je .Lkey_home
+    cmpl $70, %eax
+    je .Lkey_end
+    cmpl $51, %eax
+    jne .Lkey_escape
+    call .Lserial_try_getc
+    cmpl $126, %eax
+    jne .Lkey_escape
+    movl $1005, %eax
+    ret
+.Lkey_save_pending:
+    movl %eax, pending_key
+    movl $1, pending_key_valid
+.Lkey_escape:
+    movl $27, %eax
+    ret
+.Lkey_up:
+    movl $1001, %eax
+    ret
+.Lkey_down:
+    movl $1002, %eax
+    ret
+.Lkey_right:
+    movl $1003, %eax
+    ret
+.Lkey_left:
+    movl $1004, %eax
+    ret
+.Lkey_home:
+    movl $1006, %eax
+    ret
+.Lkey_end:
+    movl $1007, %eax
+    ret
+.Lkey_pending:
+    movl pending_key, %eax
+    movl $0, pending_key_valid
+.Lkey_done:
     ret
 
 .globl terminal_command_eq
@@ -734,6 +825,250 @@ editor_size:
     movl editor_length, %eax
     ret
 
+.globl editor_char
+editor_char:
+    movl 4(%esp), %ecx
+    cmpl editor_length, %ecx
+    jae .Leditor_char_invalid
+    movl MFS_BASE + 12, %eax
+    movzbl MFS_BASE(%eax,%ecx), %eax
+    ret
+.Leditor_char_invalid:
+    movl $-1, %eax
+    ret
+
+.globl editor_insert_char
+editor_insert_char:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %edx
+    movl editor_length, %eax
+    cmpl %eax, %edx
+    ja .Leditor_insert_full
+    leal 1(%eax), %ecx
+    cmpl MFS_BASE + 12, %ecx
+    jae .Leditor_insert_full
+    movl MFS_BASE + 12, %edi
+    addl $MFS_BASE, %edi
+    movl %edi, %esi
+    addl %eax, %edi
+    leal -1(%edi), %esi
+    movl %eax, %ecx
+    subl %edx, %ecx
+    testl %ecx, %ecx
+    jz .Leditor_insert_store
+    std
+    rep movsb
+    cld
+.Leditor_insert_store:
+    movl MFS_BASE + 12, %edi
+    addl $MFS_BASE, %edi
+    movb 16(%esp), %al
+    movb %al, (%edi,%edx)
+    incl editor_length
+    movl editor_length, %eax
+    movb $0, (%edi,%eax)
+    movl $1, %eax
+    jmp .Leditor_insert_done
+.Leditor_insert_full:
+    xorl %eax, %eax
+.Leditor_insert_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl editor_insert_newline
+editor_insert_newline:
+    pushl %ebx
+    movl 8(%esp), %ebx
+    movl editor_length, %eax
+    addl $2, %eax
+    cmpl MFS_BASE + 12, %eax
+    jae .Leditor_newline_full
+    pushl $13
+    pushl %ebx
+    call editor_insert_char
+    addl $8, %esp
+    testl %eax, %eax
+    jz .Leditor_newline_full
+    incl %ebx
+    pushl $10
+    pushl %ebx
+    call editor_insert_char
+    addl $8, %esp
+    jmp .Leditor_newline_done
+.Leditor_newline_full:
+    xorl %eax, %eax
+.Leditor_newline_done:
+    popl %ebx
+    ret
+
+.globl editor_delete_char
+editor_delete_char:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %edx
+    movl editor_length, %eax
+    cmpl %eax, %edx
+    jae .Leditor_delete_invalid
+    movl MFS_BASE + 12, %edi
+    addl $MFS_BASE, %edi
+    leal 1(%edi,%edx), %esi
+    addl %edx, %edi
+    movl %eax, %ecx
+    subl %edx, %ecx
+    cld
+    rep movsb
+    decl editor_length
+    movl $1, %eax
+    jmp .Leditor_delete_done
+.Leditor_delete_invalid:
+    xorl %eax, %eax
+.Leditor_delete_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl editor_command_clear
+editor_command_clear:
+    movl $0, editor_command_length
+    movb $0, editor_command_buffer
+    ret
+
+.globl editor_command_append
+editor_command_append:
+    movl editor_command_length, %ecx
+    cmpl $62, %ecx
+    jae .Leditor_command_full
+    movb 4(%esp), %al
+    movb %al, editor_command_buffer(%ecx)
+    incl %ecx
+    movl %ecx, editor_command_length
+    movb $0, editor_command_buffer(%ecx)
+    movl $1, %eax
+    ret
+.Leditor_command_full:
+    xorl %eax, %eax
+    ret
+
+.globl editor_command_backspace
+editor_command_backspace:
+    movl editor_command_length, %ecx
+    testl %ecx, %ecx
+    jz .Leditor_command_backspace_done
+    decl %ecx
+    movl %ecx, editor_command_length
+    movb $0, editor_command_buffer(%ecx)
+.Leditor_command_backspace_done:
+    ret
+
+.globl editor_command_data
+editor_command_data:
+    movl $editor_command_buffer, %eax
+    ret
+
+.globl __mlang_std_term_stdout_supports_ansi
+__mlang_std_term_stdout_supports_ansi:
+    movl $1, %eax
+    ret
+
+.globl __mlang_std_esc_reset
+__mlang_std_esc_reset:
+    movl $ansi_reset, %eax
+    ret
+
+.globl __mlang_std_esc_sgr_code
+__mlang_std_esc_sgr_code:
+    movl $ansi_inverse, %eax
+    ret
+
+.globl __mlang_std_esc_cursor_code
+__mlang_std_esc_cursor_code:
+    movl 4(%esp), %eax
+    cmpl $0, %eax
+    je .Lansi_home
+    cmpl $1, %eax
+    je .Lansi_clear
+    cmpl $2, %eax
+    je .Lansi_clear_line
+    cmpl $3, %eax
+    je .Lansi_hide
+    cmpl $4, %eax
+    je .Lansi_show
+    cmpl $5, %eax
+    je .Lansi_save
+    cmpl $6, %eax
+    je .Lansi_restore
+    movl $ansi_empty, %eax
+    ret
+.Lansi_home:
+    movl $ansi_home, %eax
+    ret
+.Lansi_clear:
+    movl $ansi_clear, %eax
+    ret
+.Lansi_clear_line:
+    movl $ansi_clear_line, %eax
+    ret
+.Lansi_hide:
+    movl $ansi_hide, %eax
+    ret
+.Lansi_show:
+    movl $ansi_show, %eax
+    ret
+.Lansi_save:
+    movl $ansi_save, %eax
+    ret
+.Lansi_restore:
+    movl $ansi_restore, %eax
+    ret
+
+.globl __mlang_std_esc_cursor_pos
+__mlang_std_esc_cursor_pos:
+    pushl %ebx
+    pushl %edi
+    movl $ansi_position, %edi
+    movb $27, (%edi)
+    movb $91, 1(%edi)
+    movl 12(%esp), %eax
+    cmpl $1, %eax
+    jge .Lansi_row_positive
+    movl $1, %eax
+.Lansi_row_positive:
+    cmpl $99, %eax
+    jle .Lansi_row_ready
+    movl $99, %eax
+.Lansi_row_ready:
+    xorl %edx, %edx
+    movl $10, %ebx
+    divl %ebx
+    addb $48, %al
+    addb $48, %dl
+    movb %al, 2(%edi)
+    movb %dl, 3(%edi)
+    movb $59, 4(%edi)
+    movl 16(%esp), %eax
+    cmpl $1, %eax
+    jge .Lansi_col_positive
+    movl $1, %eax
+.Lansi_col_positive:
+    cmpl $99, %eax
+    jle .Lansi_col_ready
+    movl $99, %eax
+.Lansi_col_ready:
+    xorl %edx, %edx
+    divl %ebx
+    addb $48, %al
+    addb $48, %dl
+    movb %al, 5(%edi)
+    movb %dl, 6(%edi)
+    movb $72, 7(%edi)
+    movb $0, 8(%edi)
+    movl %edi, %eax
+    popl %edi
+    popl %ebx
+    ret
+
 .Lata_wait_idle:
     movl $0x01000000, %ecx
     movw $0x1f7, %dx
@@ -863,7 +1198,7 @@ fs_load:
     pushl %edi
     pushl %ebp
     movl $MFS_BASE, %edi
-    movl $36, %eax
+    movl $68, %eax
     call .Lata_read_sector
     testl %eax, %eax
     jz .Lata_load_failed
@@ -879,7 +1214,7 @@ fs_load:
     jz .Lata_load_failed
     movl %eax, %ebx
     decl %ebx
-    movl $37, %ebp
+    movl $69, %ebp
 .Lata_load_loop:
     testl %ebx, %ebx
     jz .Lata_load_ok
@@ -914,7 +1249,7 @@ fs_flush:
     shrl $9, %eax
     movl %eax, %ebx
     movl $MFS_BASE, %esi
-    movl $36, %ebp
+    movl $68, %ebp
 .Lata_flush_loop:
     testl %ebx, %ebx
     jz .Lata_flush_cache
@@ -983,6 +1318,28 @@ __mlang_std_exceptions_pop_frame:
 __mlang_std_exceptions_rethrow_current:
     jmp terminal_halt
 
+.section .rodata,\"a\",@progbits
+ansi_empty:
+    .asciz \"\"
+ansi_reset:
+    .asciz \"\\033[0m\"
+ansi_inverse:
+    .asciz \"\\033[7m\"
+ansi_home:
+    .asciz \"\\033[H\"
+ansi_clear:
+    .asciz \"\\033[2J\"
+ansi_clear_line:
+    .asciz \"\\033[2K\"
+ansi_hide:
+    .asciz \"\\033[?25l\"
+ansi_show:
+    .asciz \"\\033[?25h\"
+ansi_save:
+    .asciz \"\\033[s\"
+ansi_restore:
+    .asciz \"\\033[u\"
+
 .section .bss,\"aw\",@nobits
 .balign 16
 input_buffer:
@@ -997,6 +1354,16 @@ empty_file:
     .skip 1
 editor_length:
     .skip 4
+editor_command_length:
+    .skip 4
+editor_command_buffer:
+    .skip 64
+pending_key:
+    .skip 4
+pending_key_valid:
+    .skip 4
+ansi_position:
+    .skip 12
 __mlang_boot_jmp_buffer:
     .skip 256
 ");
@@ -1097,86 +1464,6 @@ fn touch_file(request: str8) -> i32 {
         return -3;
     }
     return 1;
-}
-
-fn edit_file(request: str8) -> i32 {
-    let path: str8 = fs_resolve(request);
-    var index: i32 = fs_find(path);
-    if index >= 0 && fs_entry_type(index) != 1 {
-        return -2;
-    }
-    if index < 0 {
-        let parent: str8 = fs_parent(path);
-        let parent_index: i32 = fs_find(parent);
-        if parent_index < 0 || fs_entry_type(parent_index) != 2 {
-            return -1;
-        }
-        editor_clear();
-    } else {
-        if editor_load(index) != 1 {
-            return -4;
-        }
-    }
-    serial_write("MLang vi: ");
-    serial_write(path);
-    serial_write("\r\n");
-    if editor_size() > 0 {
-        serial_write("--- current contents ---\r\n");
-        serial_write(editor_data());
-    }
-    serial_write("--- replace contents; '.' saves, ':q!' cancels ---\r\n");
-    editor_clear();
-    while true {
-        serial_write("| ");
-        let line: str8 = terminal_read_line();
-        if terminal_command_eq(line, ".") == 1 {
-            if index < 0 {
-                let created: i32 = fs_create_empty(path);
-                if created != 1 {
-                    return -3;
-                }
-                index = fs_find(path);
-            }
-            let written: i32 = fs_write_text(index, editor_data(), editor_size());
-            if written == -2 {
-                return -5;
-            }
-            if written != 1 {
-                return -4;
-            }
-            if fs_flush() != 1 {
-                return -6;
-            }
-            return 1;
-        }
-        if terminal_command_eq(line, ":q!") == 1 {
-            return 0;
-        }
-        if editor_append_line(line) != 1 {
-            serial_write("vi: editor buffer is full; save or cancel\r\n");
-        }
-    }
-    return 0;
-}
-
-fn report_edit_result(result: i32) -> void {
-    if result == 0 {
-        serial_write("vi: changes discarded\r\n");
-    } else if result == -1 {
-        serial_write("vi: parent directory not found\r\n");
-    } else if result == -2 {
-        serial_write("vi: is a directory\r\n");
-    } else if result == -3 {
-        serial_write("vi: filesystem directory is full\r\n");
-    } else if result == -4 {
-        serial_write("vi: file is too large for the configured image\r\n");
-    } else if result == -5 {
-        serial_write("vi: filesystem data area is full\r\n");
-    } else if result == -6 {
-        serial_write("vi: saved in memory but disk flush failed\r\n");
-    } else {
-        serial_write("vi: saved\r\n");
-    }
 }
 
 fn terminal_main() -> i32 {

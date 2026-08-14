@@ -4,7 +4,7 @@
 
 This example builds a two-stage legacy x86 BIOS disk image entirely from MLang
 sources. The 512-byte loader in `boot.mla` reads the separate `kernel.mla`
-image from disk sectors 2-33 into physical address `0x10000`, then transfers
+image from disk sectors 2-65 into physical address `0x10000`, then transfers
 control to it. The kernel switches to 32-bit protected mode and enters the
 ordinary MLang `terminal_main()` function. Architecture-qualified module
 assembly defines the hardware entry and I/O primitives that cannot live in a
@@ -84,13 +84,14 @@ The terminal supports:
 - `cd <path>`: change the current working directory; `cd ..` is supported
 - `cat <path>`: print a file's contents
 - `touch <path>`: create and persist an empty file
-- `vi <path>` or `/bin/vi <path>`: replace and persist a text file's contents
+- `vi <path>` or `/bin/vi <path>`: edit and persist text in a full-screen modal editor
 - `sync`: flush the used MFS2 data and metadata to the IDE disk image
 - `reboot`: reset the virtual machine through the keyboard controller
 - `halt`: halt the virtual CPU
 
-Printable input and backspace editing are supported. Press `Ctrl-c` to stop
-QEMU after using `halt`.
+The shell supports printable input and backspace editing. `/bin/vi` switches
+the serial connection to raw-key handling while its full-screen view is open.
+Press `Ctrl-c` to stop QEMU after using `halt`.
 
 Build without starting QEMU:
 
@@ -111,7 +112,7 @@ The generated boot-sector, protected-mode kernel, filesystem, ELF, and final
 ## MFS2 filesystem
 
 `filesystem.mla` defines the initial hierarchical filesystem contents. The
-build pads that seed to the configured capacity and writes it from LBA 36 of
+build pads that seed to the configured capacity and writes it from LBA 68 of
 the IDE disk. The protected-mode kernel reads the used sectors into physical
 address `0x100000`, validates the `MFS2` header, and mounts it at `/`.
 
@@ -143,22 +144,31 @@ mlang> ls
 readme.txt
 session.log
 mlang> vi notes.txt
-MLang vi: /home/user/notes.txt
---- replace contents; '.' saves, ':q!' cancels ---
-| first line
-| second line
-| .
+# press i, type two lines, press Esc, then type :wq and Enter
 vi: saved
 mlang> cat notes.txt
 first line
 second line
 ```
 
-The editor is intentionally line-oriented rather than a full-screen terminal
-editor. Starting it replaces the file contents: enter one text line at a time,
-then enter `.` alone to save or `:q!` alone to discard the edit. Canceling a
-new file does not create it. Input lines support backspace through the serial
-terminal's ordinary line editor.
+The editor uses the alternate screen through [`std::esc::freestanding`](Stdlib-Esc) and
+opens in normal mode. It preserves existing contents and redraws a 24-row,
+80-column viewport with vertical and horizontal scrolling, a mode line, dirty
+state, status messages, and a command prompt.
+
+Normal mode supports:
+
+- `i`, `a`, and `A`: enter insert mode at, after, or at the end of the line
+- `h`, `j`, `k`, `l` or arrow keys: move the cursor
+- `0`, `$`, `gg`, and `G`: move to line/file boundaries
+- `x` or Delete: delete the character under the cursor
+- `o`: open a line below and enter insert mode
+- `:`: enter command mode
+
+Insert mode accepts printable text, Enter, Backspace, Delete, Home, End, and
+arrow keys. Pressing the physical `Esc` key returns to normal mode. Command
+mode supports `:w`, `:q`, `:q!`, and `:wq`; `:q` refuses to discard unsaved
+changes. Canceling a new file with `:q!` does not create it.
 
 Each fixed-size directory entry stores a 32-byte absolute path, entry type,
 data offset, size, and capacity. The image reserves 32 directory slots.
@@ -183,11 +193,12 @@ in `filesystem.mla`. Disk images produced by the earlier floppy-backed version
 are not compatible with the ATA layout; rebuild once before using `resume`.
 
 There is no separate per-file size setting or fixed editor limit. A file may
-grow until the configured MFS2 data area runs out of free bytes. The serial
-line reader still accepts at most 63 printable characters per input line, but
-the editor can collect as many lines as fit in the image. Because this version
-has no compaction, growing an existing allocation leaves its smaller old block
-unused. It also has no deletion, dynamic directory creation, or permissions.
+grow until the configured MFS2 data area runs out of free bytes. The shell's
+line reader accepts at most 63 printable characters per command; the editor's
+raw input path has no per-line limit and can collect as many lines as fit in
+the image. Because this version has no compaction, growing an existing
+allocation leaves its smaller old block unused. It also has no deletion,
+dynamic directory creation, or permissions.
 
 ## Module assembly
 

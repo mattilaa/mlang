@@ -1,5 +1,6 @@
 mod std::testing;
 mod std::esc;
+mod std::esc::freestanding;
 mod std::strbuf;
 mod std::term;
 
@@ -18,10 +19,15 @@ use std::esc::dir_right;
 use std::esc::dir_up;
 use std::esc::fg;
 use std::esc::reset;
+use std::esc::freestanding::ansi_alt_screen_off;
+use std::esc::freestanding::ansi_alt_screen_on;
+use std::esc::freestanding::ansi_cursor_blink_bar;
+use std::esc::freestanding::ansi_cursor_reset_shape;
 use std::term::supports_ansi;
 use std::strbuf::find;
 use std::strbuf::len;
 use std::testing::verify;
+use std::testing::verify_eq_i64;
 
 #[test]
 fn test_esc_fg_bg_codes() {
@@ -78,3 +84,23 @@ fn test_esc_cursor_move_and_reset() {
         verify(!(len(reset()) != 0));
     }
     }
+
+#[test]
+fn test_freestanding_esc_alt_screen_on() {
+    verify_eq_i64(8, len(ansi_alt_screen_on()));
+}
+
+#[test]
+fn test_freestanding_esc_alt_screen_off() {
+    verify_eq_i64(8, len(ansi_alt_screen_off()));
+}
+
+#[test]
+fn test_freestanding_esc_cursor_bar() {
+    verify_eq_i64(5, len(ansi_cursor_blink_bar()));
+}
+
+#[test]
+fn test_freestanding_esc_cursor_reset() {
+    verify_eq_i64(5, len(ansi_cursor_reset_shape()));
+}
