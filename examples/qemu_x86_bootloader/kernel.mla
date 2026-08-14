@@ -4,6 +4,7 @@
 mod vi;
 use vi::edit_file;
 use vi::report_edit_result;
+use vi::write_decimal;
 
 asm x86(".code16
 .section .kernel,\"ax\",@progbits
@@ -219,7 +220,7 @@ terminal_read_key:
     je .Lkey_down
     cmpl $67, %eax
     je .Lkey_right
-    cmpl $68, %eax
+    cmpl $100, %eax
     je .Lkey_left
     cmpl $72, %eax
     je .Lkey_home
@@ -393,6 +394,72 @@ terminal_argument:
     addl 8(%esp), %eax
     ret
 
+.globl terminal_split_argument
+terminal_split_argument:
+    movl 4(%esp), %edx
+.Lsplit_find_space:
+    movb (%edx), %al
+    testb %al, %al
+    jz .Lsplit_missing
+    cmpb $32, %al
+    je .Lsplit_found
+    incl %edx
+    jmp .Lsplit_find_space
+.Lsplit_found:
+    movb $0, (%edx)
+    incl %edx
+.Lsplit_skip_spaces:
+    cmpb $32, (%edx)
+    jne .Lsplit_ready
+    incl %edx
+    jmp .Lsplit_skip_spaces
+.Lsplit_ready:
+    cmpb $0, (%edx)
+    je .Lsplit_missing
+    movl %edx, %eax
+    ret
+.Lsplit_missing:
+    movl $empty_file, %eax
+    ret
+
+.globl terminal_parse_mode
+terminal_parse_mode:
+    pushl %ebx
+    movl 8(%esp), %edx
+    cmpb $48, (%edx)
+    jne .Lmode_parse_start
+    cmpb $0, 3(%edx)
+    je .Lmode_parse_start
+    incl %edx
+.Lmode_parse_start:
+    xorl %eax, %eax
+    xorl %ecx, %ecx
+.Lmode_parse_digit:
+    movzbl (%edx), %ebx
+    testb %bl, %bl
+    jz .Lmode_parse_done
+    cmpb $48, %bl
+    jb .Lmode_parse_invalid
+    cmpb $55, %bl
+    ja .Lmode_parse_invalid
+    cmpl $3, %ecx
+    jae .Lmode_parse_invalid
+    shll $3, %eax
+    subl $48, %ebx
+    addl %ebx, %eax
+    incl %ecx
+    incl %edx
+    jmp .Lmode_parse_digit
+.Lmode_parse_done:
+    cmpl $3, %ecx
+    jne .Lmode_parse_invalid
+    popl %ebx
+    ret
+.Lmode_parse_invalid:
+    movl $-1, %eax
+    popl %ebx
+    ret
+
 .globl fs_mount
 fs_mount:
     xorl %eax, %eax
@@ -406,6 +473,26 @@ fs_mount:
     ja .Lfs_mount_done
     movb $47, current_directory
     movb $0, current_directory + 1
+    movb $0, current_user_id
+    xorl %edx, %edx
+.Lfs_mount_mode_loop:
+    cmpl %ecx, %edx
+    jae .Lfs_mount_ready
+    movl %edx, %eax
+    imull $48, %eax, %eax
+    cmpw $0, MFS_BASE + 50(%eax)
+    jne .Lfs_mount_mode_next
+    movw $0x01a4, MFS_BASE + 50(%eax)
+    cmpb $2, MFS_BASE + 48(%eax)
+    je .Lfs_mount_executable
+    cmpb $3, MFS_BASE + 48(%eax)
+    jne .Lfs_mount_mode_next
+.Lfs_mount_executable:
+    movw $0x01ed, MFS_BASE + 50(%eax)
+.Lfs_mount_mode_next:
+    incl %edx
+    jmp .Lfs_mount_mode_loop
+.Lfs_mount_ready:
     movl $1, %eax
 .Lfs_mount_done:
     ret
@@ -443,6 +530,152 @@ fs_entry_type:
     ret
 .Lfs_entry_type_invalid:
     xorl %eax, %eax
+    ret
+
+.globl fs_entry_owner
+fs_entry_owner:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_owner_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_owner_invalid
+    imull $48, %eax, %eax
+    movzbl MFS_BASE + 49(%eax), %eax
+    ret
+.Lfs_entry_owner_invalid:
+    movl $-1, %eax
+    ret
+
+.globl fs_entry_mode
+fs_entry_mode:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_mode_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_mode_invalid
+    imull $48, %eax, %eax
+    movzwl MFS_BASE + 50(%eax), %eax
+    ret
+.Lfs_entry_mode_invalid:
+    movl $-1, %eax
+    ret
+
+.globl fs_entry_size
+fs_entry_size:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_size_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_size_invalid
+    imull $48, %eax, %eax
+    movl MFS_BASE + 56(%eax), %eax
+    ret
+.Lfs_entry_size_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl fs_current_uid
+fs_current_uid:
+    movzbl current_user_id, %eax
+    ret
+
+.globl fs_set_current_uid
+fs_set_current_uid:
+    movl 4(%esp), %eax
+    cmpl $1, %eax
+    ja .Lfs_set_uid_invalid
+    movb %al, current_user_id
+    movl $1, %eax
+    ret
+.Lfs_set_uid_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl fs_can_access
+fs_can_access:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_access_no
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_access_no
+    imull $48, %eax, %eax
+    movzbl current_user_id, %ecx
+    testl %ecx, %ecx
+    jz .Lfs_access_yes
+    cmpb MFS_BASE + 49(%eax), %cl
+    jne .Lfs_access_other
+    movzwl MFS_BASE + 50(%eax), %eax
+    shrl $6, %eax
+    jmp .Lfs_access_check
+.Lfs_access_other:
+    movzwl MFS_BASE + 50(%eax), %eax
+.Lfs_access_check:
+    andl $7, %eax
+    movl 8(%esp), %ecx
+    andl %ecx, %eax
+    cmpl %ecx, %eax
+    jne .Lfs_access_no
+.Lfs_access_yes:
+    movl $1, %eax
+    ret
+.Lfs_access_no:
+    xorl %eax, %eax
+    ret
+
+.globl fs_chmod
+fs_chmod:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_chmod_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_chmod_invalid
+    movl 8(%esp), %edx
+    cmpl $0x01ff, %edx
+    ja .Lfs_chmod_invalid
+    imull $48, %eax, %eax
+    movzbl current_user_id, %ecx
+    testl %ecx, %ecx
+    jz .Lfs_chmod_store
+    cmpb MFS_BASE + 49(%eax), %cl
+    jne .Lfs_chmod_denied
+.Lfs_chmod_store:
+    movw %dx, MFS_BASE + 50(%eax)
+    movl $1, %eax
+    ret
+.Lfs_chmod_denied:
+    movl $-2, %eax
+    ret
+.Lfs_chmod_invalid:
+    movl $-1, %eax
+    ret
+
+.globl fs_chown
+fs_chown:
+    cmpb $0, current_user_id
+    jne .Lfs_chown_denied
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_chown_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_chown_invalid
+    movl 8(%esp), %edx
+    cmpl $1, %edx
+    ja .Lfs_chown_invalid
+    imull $48, %eax, %eax
+    movb %dl, MFS_BASE + 49(%eax)
+    movl $1, %eax
+    ret
+.Lfs_chown_denied:
+    movl $-2, %eax
+    ret
+.Lfs_chown_invalid:
+    movl $-1, %eax
     ret
 
 .globl fs_entry_data
@@ -771,6 +1004,9 @@ fs_create_empty:
     movb $0, (%edi)
 .Lcreate_type:
     movb $1, 32(%ebx)
+    movb current_user_id, %al
+    movb %al, 33(%ebx)
+    movw $0x01a4, 34(%ebx)
     incw MFS_BASE + 4
     movl $1, %eax
     jmp .Lcreate_done
@@ -789,6 +1025,12 @@ fs_write_text:
     pushl %ebx
     pushl %esi
     pushl %edi
+    pushl $2
+    pushl 8(%ebp)
+    call fs_can_access
+    addl $8, %esp
+    testl %eax, %eax
+    jz .Lwrite_denied
     movl 8(%ebp), %eax
     testl %eax, %eax
     js .Lwrite_invalid
@@ -835,6 +1077,8 @@ fs_write_text:
 .Lwrite_no_space:
     movl $-2, %eax
     jmp .Lwrite_done
+.Lwrite_denied:
+    movl $-3, %eax
 .Lwrite_done:
     popl %edi
     popl %esi
@@ -1309,7 +1553,7 @@ fs_load:
     pushl %edi
     pushl %ebp
     movl $MFS_BASE, %edi
-    movl $68, %eax
+    movl $100, %eax
     call .Lata_read_sector
     testl %eax, %eax
     jz .Lata_load_failed
@@ -1325,7 +1569,7 @@ fs_load:
     jz .Lata_load_failed
     movl %eax, %ebx
     decl %ebx
-    movl $69, %ebp
+    movl $101, %ebp
 .Lata_load_loop:
     testl %ebx, %ebx
     jz .Lata_load_ok
@@ -1360,7 +1604,7 @@ fs_flush:
     shrl $9, %eax
     movl %eax, %ebx
     movl $MFS_BASE, %esi
-    movl $68, %ebp
+    movl $100, %ebp
 .Lata_flush_loop:
     testl %ebx, %ebx
     jz .Lata_flush_cache
@@ -1459,6 +1703,9 @@ input_buffer:
     .skip 64
 current_directory:
     .skip 32
+current_user_id:
+    .skip 1
+.balign 4
 resolved_path:
     .skip 32
 parent_path:
@@ -1488,10 +1735,13 @@ __mlang_boot_jmp_buffer:
 ");
 
 extern fn serial_write(message: str8) -> void;
+extern fn serial_write_char(ch: i32) -> void;
 extern fn terminal_read_line() -> str8;
 extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
 extern fn terminal_command_prefix(actual: str8, prefix: str8) -> i32;
 extern fn terminal_argument(command: str8, offset: i32) -> str8;
+extern fn terminal_split_argument(argument: str8) -> str8;
+extern fn terminal_parse_mode(mode: str8) -> i32;
 extern fn terminal_reboot() -> void;
 extern fn terminal_halt() -> void;
 extern fn fs_load() -> i32;
@@ -1499,8 +1749,16 @@ extern fn fs_mount() -> i32;
 extern fn fs_entry_count() -> i32;
 extern fn fs_entry_path(index: i32) -> str8;
 extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_entry_owner(index: i32) -> i32;
+extern fn fs_entry_mode(index: i32) -> i32;
+extern fn fs_entry_size(index: i32) -> i32;
 extern fn fs_entry_data(index: i32) -> str8;
 extern fn fs_entry_ends_lf(index: i32) -> i32;
+extern fn fs_current_uid() -> i32;
+extern fn fs_set_current_uid(uid: i32) -> i32;
+extern fn fs_can_access(index: i32, mask: i32) -> i32;
+extern fn fs_chmod(index: i32, mode: i32) -> i32;
+extern fn fs_chown(index: i32, uid: i32) -> i32;
 extern fn fs_pwd() -> str8;
 extern fn fs_resolve(path: str8) -> str8;
 extern fn fs_find(path: str8) -> i32;
@@ -1517,7 +1775,58 @@ extern fn editor_append_line(line: str8) -> i32;
 extern fn editor_data() -> str8;
 extern fn editor_size() -> i32;
 
-fn list_directory(request: str8) -> i32 {
+fn user_name(uid: i32) -> str8 {
+    if uid == 1 {
+        return "user";
+    }
+    return "root";
+}
+
+fn switch_user(name: str8) -> i32 {
+    if terminal_command_eq(name, "user") == 1 {
+        return fs_set_current_uid(1);
+    }
+    if terminal_command_eq(name, "root") == 1 {
+        if fs_current_uid() != 0 {
+            return -2;
+        }
+        return fs_set_current_uid(0);
+    }
+    return -1;
+}
+
+fn write_mode_bit(mode: i32, mask: i32, shown: i32) -> void {
+    if (mode & mask) != 0 {
+        serial_write_char(shown);
+    } else {
+        serial_write_char(45);
+    }
+}
+
+fn write_long_entry(index: i32) -> void {
+    if fs_entry_type(index) == 2 {
+        serial_write_char(100);
+    } else {
+        serial_write_char(45);
+    }
+    let mode: i32 = fs_entry_mode(index);
+    write_mode_bit(mode, 256, 114);
+    write_mode_bit(mode, 128, 119);
+    write_mode_bit(mode, 64, 120);
+    write_mode_bit(mode, 32, 114);
+    write_mode_bit(mode, 16, 119);
+    write_mode_bit(mode, 8, 120);
+    write_mode_bit(mode, 4, 114);
+    write_mode_bit(mode, 2, 119);
+    write_mode_bit(mode, 1, 120);
+    serial_write("  ");
+    serial_write(user_name(fs_entry_owner(index)));
+    serial_write("  ");
+    write_decimal(fs_entry_size(index));
+    serial_write("  ");
+}
+
+fn list_directory(request: str8, long_format: i32) -> i32 {
     let directory: str8 = fs_resolve(request);
     let directory_index: i32 = fs_find(directory);
     if directory_index < 0 {
@@ -1526,12 +1835,18 @@ fn list_directory(request: str8) -> i32 {
     if fs_entry_type(directory_index) != 2 {
         return -2;
     }
+    if fs_can_access(directory_index, 5) != 1 {
+        return -3;
+    }
 
     var index: i32 = 0;
     let count: i32 = fs_entry_count();
     while index < count {
         let path: str8 = fs_entry_path(index);
         if fs_is_direct_child(directory, path) == 1 {
+            if long_format == 1 {
+                write_long_entry(index);
+            }
             serial_write(fs_basename(path));
             if fs_entry_type(index) == 2 {
                 serial_write("/");
@@ -1552,6 +1867,9 @@ fn cat_file(request: str8) -> i32 {
     if fs_entry_type(index) != 1 {
         return -2;
     }
+    if fs_can_access(index, 4) != 1 {
+        return -3;
+    }
     serial_write(fs_entry_data(index));
     if fs_entry_ends_lf(index) == 0 {
         serial_write("\r\n");
@@ -1563,7 +1881,10 @@ fn change_directory(request: str8) -> i32 {
     let path: str8 = fs_resolve(request);
     let index: i32 = fs_find(path);
     if index < 0 || fs_entry_type(index) != 2 {
-        return 0;
+        return -1;
+    }
+    if fs_can_access(index, 1) != 1 {
+        return -2;
     }
     fs_set_cwd(path);
     return 1;
@@ -1579,6 +1900,9 @@ fn touch_file(request: str8) -> i32 {
     if parent_index < 0 || fs_entry_type(parent_index) != 2 {
         return -1;
     }
+    if fs_can_access(parent_index, 3) != 1 {
+        return -4;
+    }
     let created: i32 = fs_create_empty(path);
     if created != 1 {
         return created;
@@ -1587,6 +1911,57 @@ fn touch_file(request: str8) -> i32 {
         return -3;
     }
     return 1;
+}
+
+fn change_mode(mode_text: str8, request: str8) -> i32 {
+    let mode: i32 = terminal_parse_mode(mode_text);
+    if mode < 0 {
+        return -3;
+    }
+    let index: i32 = fs_find(fs_resolve(request));
+    if index < 0 {
+        return -1;
+    }
+    let changed: i32 = fs_chmod(index, mode);
+    if changed != 1 {
+        return changed;
+    }
+    if fs_flush() != 1 {
+        return -4;
+    }
+    return 1;
+}
+
+fn change_owner(owner_text: str8, request: str8) -> i32 {
+    var uid: i32 = -1;
+    if terminal_command_eq(owner_text, "root") == 1 {
+        uid = 0;
+    } else if terminal_command_eq(owner_text, "user") == 1 {
+        uid = 1;
+    }
+    if uid < 0 {
+        return -3;
+    }
+    let index: i32 = fs_find(fs_resolve(request));
+    if index < 0 {
+        return -1;
+    }
+    let changed: i32 = fs_chown(index, uid);
+    if changed != 1 {
+        return changed;
+    }
+    if fs_flush() != 1 {
+        return -4;
+    }
+    return 1;
+}
+
+fn launch_editor(request: str8) -> i32 {
+    let executable: i32 = fs_find("/bin/vi");
+    if executable < 0 || fs_can_access(executable, 1) != 1 {
+        return -7;
+    }
+    return edit_file(request);
 }
 
 fn terminal_main() -> i32 {
@@ -1607,10 +1982,14 @@ fn terminal_main() -> i32 {
             serial_write("about  show kernel information\r\n");
             serial_write("clear  clear the terminal\r\n");
             serial_write("pwd    print working directory\r\n");
-            serial_write("ls     list a directory: ls [path]\r\n");
+            serial_write("whoami print the current user\r\n");
+            serial_write("su     switch user: su <root|user>\r\n");
+            serial_write("ls     list a directory: ls [-l] [path]\r\n");
             serial_write("cd     change directory: cd <path>\r\n");
             serial_write("cat    print a file: cat <path>\r\n");
             serial_write("touch  create an empty file\r\n");
+            serial_write("chmod  change mode: chmod <mode> <path>\r\n");
+            serial_write("chown  change owner: chown <user> <path>\r\n");
             serial_write("vi     edit a text file: vi <path>\r\n");
             serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");
@@ -1622,20 +2001,48 @@ fn terminal_main() -> i32 {
         } else if terminal_command_eq(command, "pwd") == 1 {
             serial_write(fs_pwd());
             serial_write("\r\n");
+        } else if terminal_command_eq(command, "whoami") == 1 {
+            serial_write(user_name(fs_current_uid()));
+            serial_write("\r\n");
+        } else if terminal_command_eq(command, "su") == 1 {
+            serial_write("usage: su <root|user>\r\n");
+        } else if terminal_command_prefix(command, "su ") == 1 {
+            let result: i32 = switch_user(terminal_argument(command, 3));
+            if result == -1 {
+                serial_write("su: unknown user\r\n");
+            } else if result == -2 {
+                serial_write("su: permission denied\r\n");
+            }
         } else if terminal_command_eq(command, "ls") == 1 {
-            let _ = list_directory(fs_pwd());
-        } else if terminal_command_prefix(command, "ls ") == 1 {
-            let result: i32 = list_directory(terminal_argument(command, 3));
+            let _ = list_directory(fs_pwd(), 1);
+        } else if terminal_command_eq(command, "ls -l") == 1 {
+            let _ = list_directory(fs_pwd(), 1);
+        } else if terminal_command_prefix(command, "ls -l ") == 1 {
+            let result: i32 = list_directory(terminal_argument(command, 6), 1);
             if result == -1 {
                 serial_write("ls: directory not found\r\n");
             } else if result == -2 {
                 serial_write("ls: not a directory\r\n");
+            } else if result == -3 {
+                serial_write("ls: permission denied\r\n");
+            }
+        } else if terminal_command_prefix(command, "ls ") == 1 {
+            let result: i32 = list_directory(terminal_argument(command, 3), 1);
+            if result == -1 {
+                serial_write("ls: directory not found\r\n");
+            } else if result == -2 {
+                serial_write("ls: not a directory\r\n");
+            } else if result == -3 {
+                serial_write("ls: permission denied\r\n");
             }
         } else if terminal_command_eq(command, "cd") == 1 {
             serial_write("usage: cd <directory>\r\n");
         } else if terminal_command_prefix(command, "cd ") == 1 {
-            if change_directory(terminal_argument(command, 3)) != 1 {
+            let result: i32 = change_directory(terminal_argument(command, 3));
+            if result == -1 {
                 serial_write("cd: directory not found\r\n");
+            } else if result == -2 {
+                serial_write("cd: permission denied\r\n");
             }
         } else if terminal_command_eq(command, "cat") == 1 {
             serial_write("usage: cat <file>\r\n");
@@ -1645,6 +2052,8 @@ fn terminal_main() -> i32 {
                 serial_write("cat: file not found\r\n");
             } else if result == -2 {
                 serial_write("cat: is a directory\r\n");
+            } else if result == -3 {
+                serial_write("cat: permission denied\r\n");
             }
         } else if terminal_command_eq(command, "touch") == 1 {
             serial_write("usage: touch <file>\r\n");
@@ -1658,13 +2067,53 @@ fn terminal_main() -> i32 {
                 serial_write("touch: filesystem directory is full\r\n");
             } else if result == -3 {
                 serial_write("touch: created in memory but disk flush failed\r\n");
+            } else if result == -4 {
+                serial_write("touch: permission denied\r\n");
+            }
+        } else if terminal_command_eq(command, "chmod") == 1 {
+            serial_write("usage: chmod <mode> <path>\r\n");
+        } else if terminal_command_prefix(command, "chmod ") == 1 {
+            let mode_text: str8 = terminal_argument(command, 6);
+            let path: str8 = terminal_split_argument(mode_text);
+            if terminal_command_eq(path, "") == 1 {
+                serial_write("usage: chmod <mode> <path>\r\n");
+            } else {
+                let result: i32 = change_mode(mode_text, path);
+                if result == -1 {
+                    serial_write("chmod: file not found\r\n");
+                } else if result == -2 {
+                    serial_write("chmod: permission denied\r\n");
+                } else if result == -3 {
+                    serial_write("chmod: invalid mode\r\n");
+                } else if result == -4 {
+                    serial_write("chmod: disk flush failed\r\n");
+                }
+            }
+        } else if terminal_command_eq(command, "chown") == 1 {
+            serial_write("usage: chown <root|user> <path>\r\n");
+        } else if terminal_command_prefix(command, "chown ") == 1 {
+            let owner_text: str8 = terminal_argument(command, 6);
+            let path: str8 = terminal_split_argument(owner_text);
+            if terminal_command_eq(path, "") == 1 {
+                serial_write("usage: chown <root|user> <path>\r\n");
+            } else {
+                let result: i32 = change_owner(owner_text, path);
+                if result == -1 {
+                    serial_write("chown: file not found\r\n");
+                } else if result == -2 {
+                    serial_write("chown: permission denied\r\n");
+                } else if result == -3 {
+                    serial_write("chown: unknown user\r\n");
+                } else if result == -4 {
+                    serial_write("chown: disk flush failed\r\n");
+                }
             }
         } else if terminal_command_eq(command, "vi") == 1 || terminal_command_eq(command, "/bin/vi") == 1 {
             serial_write("usage: vi <file>\r\n");
         } else if terminal_command_prefix(command, "vi ") == 1 {
-            report_edit_result(edit_file(terminal_argument(command, 3)));
+            report_edit_result(launch_editor(terminal_argument(command, 3)));
         } else if terminal_command_prefix(command, "/bin/vi ") == 1 {
-            report_edit_result(edit_file(terminal_argument(command, 8)));
+            report_edit_result(launch_editor(terminal_argument(command, 8)));
         } else if terminal_command_eq(command, "sync") == 1 {
             if fs_flush() == 1 {
                 serial_write("MFS2 synchronized to disk.\r\n");

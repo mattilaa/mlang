@@ -2,7 +2,7 @@
 
 This example builds a two-stage legacy x86 BIOS disk image entirely from MLang
 sources. The 512-byte loader in `boot.mla` reads the separate `kernel.mla`
-image from disk sectors 2-65 into physical address `0x10000`, then transfers
+image from disk sectors 2-97 into physical address `0x10000`, then transfers
 control to it. The kernel switches to 32-bit protected mode and enters the
 ordinary MLang `terminal_main()` function. Architecture-qualified module
 assembly defines the hardware entry and I/O primitives that cannot live in a
@@ -78,10 +78,14 @@ The terminal supports:
 - `about`: show kernel information
 - `clear`: clear the serial terminal with ANSI control sequences
 - `pwd`: print the current working directory
-- `ls [path]`: list direct children of a directory
+- `whoami`: print the current user (`root` by default)
+- `su <root|user>`: switch from `root` to a supported user
+- `ls [-l] [path]`: list mode, owner, byte size, and name for direct children
 - `cd <path>`: change the current working directory; `cd ..` is supported
 - `cat <path>`: print a file's contents
 - `touch <path>`: create and persist an empty file
+- `chmod <mode> <path>`: change a mode as root or the file owner
+- `chown <root|user> <path>`: change ownership as root
 - `vi <path>` or `/bin/vi <path>`: edit and persist text in a full-screen modal editor
 - `sync`: flush the used MFS2 data and metadata to the IDE disk image
 - `reboot`: reset the virtual machine through the keyboard controller
@@ -90,6 +94,11 @@ The terminal supports:
 The shell supports printable input and backspace editing. `/bin/vi` switches
 the serial connection to raw-key handling while its full-screen view is open.
 Press `Ctrl-c` to stop QEMU after using `halt`.
+
+The shell starts as UID 0 (`root`). `su user` enters the unprivileged UID 1
+account; switching from `user` back to `root` is denied because this minimal
+kernel has no password authentication. Use `reboot` to return to the default
+root session. Root bypasses file permission checks.
 
 Build without starting QEMU:
 
@@ -110,7 +119,7 @@ The generated boot-sector, protected-mode kernel, filesystem, ELF, and final
 ## MFS2 filesystem
 
 `filesystem.mla` defines the initial hierarchical filesystem contents. The
-build pads that seed to the configured capacity and writes it from LBA 68 of
+build pads that seed to the configured capacity and writes it from LBA 100 of
 the IDE disk. The protected-mode kernel reads the used sectors into physical
 address `0x100000`, validates the `MFS2` header, and mounts it at `/`.
 
@@ -147,16 +156,34 @@ vi: saved
 $ cat notes.txt
 first line
 second line
+$ ls -l
+-rw-r--r--  user  60  readme.txt
+-rw-r--r--  root  23  notes.txt
 ```
 
+MFS2 stores an owner UID and a Unix-style nine-bit mode in each directory
+entry. Directories default to `0755`, ordinary files to `0644`, `/bin/vi` to
+`0755`, and `/tmp` to `0777`. `/home/user` and its initial `readme.txt` belong
+to `user`; the remaining seed entries belong to `root`. New files use `0644`
+and belong to the current user. Access checks use owner bits for the owner and
+other bits for everyone else; group bits are stored and displayed but this
+small user model does not yet define groups.
+
+Reading requires `r`, writing or saving through `vi` requires `w`, changing
+directory requires `x`, listing requires `r+x`, and creating a file requires
+`w+x` on its parent directory. Only root may use `chown`; `chmod` is available
+to root and the entry owner.
+
 The editor uses the alternate screen through `std::esc::freestanding` and
-opens in normal mode. It preserves existing contents and uses rows 1-22 for an
-80-column text viewport with vertical and horizontal scrolling. Row 23 is the
-only mode, filename, and dirty-state line; row 24 contains status messages or
-the command prompt. The alternate screen is cleared once when opening; later
-frames update rows in place to avoid blank flashes on serial terminals. The
-visible cursor is rendered in the selected text cell while the terminal
-hardware cursor remains hidden, avoiding cursor-row drift.
+opens in normal mode. It probes the serial terminal dimensions and reserves the
+last two rows: `rows - 1` shows mode, filename, dirty state, and a right-aligned
+`column:line` position, while `rows` contains status messages or the command
+prompt. The remaining rows form a vertically and horizontally scrolling text
+viewport. A `24x80` fallback is used if the terminal does not answer the size
+probe. The alternate screen is cleared once when opening; later frames update
+rows in place to avoid blank flashes on serial terminals. The visible cursor
+is rendered in the selected text cell while the terminal hardware cursor
+remains hidden, avoiding cursor-row drift.
 
 Normal mode supports:
 
@@ -173,7 +200,8 @@ mode supports `:w`, `:q`, `:q!`, and `:wq`; `:q` refuses to discard unsaved
 changes. Canceling a new file with `:q!` does not create it.
 
 Each fixed-size directory entry stores a 32-byte absolute path, entry type,
-data offset, size, and capacity. The image reserves 32 directory slots.
+owner UID, mode, data offset, size, and capacity. The image reserves 32
+directory slots.
 `touch` allocates an entry in the mounted RAM copy. On save, the editor reserves
 exactly the file's required bytes from the remaining data area. Later saves
 overwrite that allocation when they fit or append a larger allocation when
@@ -192,7 +220,8 @@ retain changes across QEMU process restarts, use:
 The `resume` task requires an existing `build/disk.img`; run the `build` or
 `demo` task once first. Re-running `build` resets the image to the files defined
 in `filesystem.mla`. Disk images produced by the earlier floppy-backed version
-are not compatible with the ATA layout; rebuild once before using `resume`.
+or the earlier LBA 68 MFS2 layout are not compatible with this LBA 100 layout;
+rebuild once before using `resume`.
 
 There is no separate per-file size setting or fixed editor limit. A file may
 grow until the configured MFS2 data area runs out of free bytes. The shell's
@@ -200,7 +229,7 @@ line reader accepts at most 63 printable characters per command; the editor's
 raw input path has no per-line limit and can collect as many lines as fit in
 the image. Because this version has no compaction, growing an existing
 allocation leaves its smaller old block unused. It also has no deletion,
-dynamic directory creation, or permissions.
+dynamic directory creation, groups, or password authentication.
 
 ## Module assembly
 

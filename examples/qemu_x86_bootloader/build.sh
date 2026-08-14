@@ -112,8 +112,8 @@ if [ "$signature" != "55aa" ]; then
 fi
 
 kernel_size=$(wc -c < "$BUILD_DIR/kernel.img" | tr -d ' ')
-if [ "$kernel_size" -gt 32768 ]; then
-    echo "kernel image exceeds the 64 sectors loaded by boot.mla: $kernel_size bytes" >&2
+if [ "$kernel_size" -gt 49152 ]; then
+    echo "kernel image exceeds the 96 sectors loaded by boot.mla: $kernel_size bytes" >&2
     exit 1
 fi
 
@@ -143,14 +143,14 @@ if [ "$filesystem_size" -ne "$FILESYSTEM_SIZE" ]; then
     exit 1
 fi
 
-disk_sectors=$((68 + filesystem_sectors))
+disk_sectors=$((100 + filesystem_sectors))
 dd if=/dev/zero of="$BUILD_DIR/disk.img" bs=512 count=0 \
     seek="$disk_sectors" >/dev/null 2>&1
 dd if="$BUILD_DIR/boot.img" of="$BUILD_DIR/disk.img" conv=notrunc >/dev/null 2>&1
 dd if="$BUILD_DIR/kernel.img" of="$BUILD_DIR/disk.img" bs=512 seek=1 \
     conv=notrunc >/dev/null 2>&1
 filesystem_seed_sectors=$(((filesystem_seed_size + 511) / 512))
-dd if="$BUILD_DIR/filesystem.img" of="$BUILD_DIR/disk.img" bs=512 seek=68 \
+dd if="$BUILD_DIR/filesystem.img" of="$BUILD_DIR/disk.img" bs=512 seek=100 \
     count="$filesystem_seed_sectors" conv=notrunc >/dev/null 2>&1
 
 disk_size=$(wc -c < "$BUILD_DIR/disk.img" | tr -d ' ')
@@ -164,6 +164,6 @@ printf '%s\n' "$FILESYSTEM_KIB" > "$BUILD_DIR/filesystem_kib"
 
 echo "Built $BUILD_DIR/disk.img"
 echo "  boot sector: 512 bytes, BIOS signature 55aa"
-echo "  loaded kernel: $kernel_size bytes in sectors 2-65"
-echo "  MFS2 filesystem: $filesystem_size bytes ($filesystem_sectors sectors) from LBA 68"
+echo "  loaded kernel: $kernel_size bytes in sectors 2-97"
+echo "  MFS2 filesystem: $filesystem_size bytes ($filesystem_sectors sectors) from LBA 100"
 echo "  disk image: $disk_size bytes"

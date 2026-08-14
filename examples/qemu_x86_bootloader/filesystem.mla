@@ -12,7 +12,8 @@ root_path:
     .asciz \"/\"
     .zero 32 - (. - root_path)
     .byte 2
-    .zero 3
+    .byte 0
+    .word 0x01ed
     .long 0
     .long 0
     .long 0
@@ -21,7 +22,8 @@ bin_path:
     .asciz \"/bin\"
     .zero 32 - (. - bin_path)
     .byte 2
-    .zero 3
+    .byte 0
+    .word 0x01ed
     .long 0
     .long 0
     .long 0
@@ -30,7 +32,8 @@ vi_path:
     .asciz \"/bin/vi\"
     .zero 32 - (. - vi_path)
     .byte 3
-    .zero 3
+    .byte 0
+    .word 0x01ed
     .long 0
     .long 0
     .long 0
@@ -39,7 +42,8 @@ etc_path:
     .asciz \"/etc\"
     .zero 32 - (. - etc_path)
     .byte 2
-    .zero 3
+    .byte 0
+    .word 0x01ed
     .long 0
     .long 0
     .long 0
@@ -48,7 +52,8 @@ home_path:
     .asciz \"/home\"
     .zero 32 - (. - home_path)
     .byte 2
-    .zero 3
+    .byte 0
+    .word 0x01ed
     .long 0
     .long 0
     .long 0
@@ -57,7 +62,8 @@ user_path:
     .asciz \"/home/user\"
     .zero 32 - (. - user_path)
     .byte 2
-    .zero 3
+    .byte 1
+    .word 0x01ed
     .long 0
     .long 0
     .long 0
@@ -66,7 +72,8 @@ tmp_path:
     .asciz \"/tmp\"
     .zero 32 - (. - tmp_path)
     .byte 2
-    .zero 3
+    .byte 0
+    .word 0x01ff
     .long 0
     .long 0
     .long 0
@@ -75,7 +82,8 @@ motd_path:
     .asciz \"/etc/motd\"
     .zero 32 - (. - motd_path)
     .byte 1
-    .zero 3
+    .byte 0
+    .word 0x01a4
     .long motd_data - filesystem_start
     .long motd_end - motd_data - 1
     .long motd_end - motd_data
@@ -84,7 +92,8 @@ readme_path:
     .asciz \"/home/user/readme.txt\"
     .zero 32 - (. - readme_path)
     .byte 1
-    .zero 3
+    .byte 1
+    .word 0x01a4
     .long readme_data - filesystem_start
     .long readme_end - readme_data - 1
     .long readme_end - readme_data
@@ -93,7 +102,8 @@ example_path:
     .asciz \"/tmp/example.txt\"
     .zero 32 - (. - example_path)
     .byte 1
-    .zero 3
+    .byte 0
+    .word 0x01a4
     .long example_data - filesystem_start
     .long example_end - example_data - 1
     .long example_end - example_data
