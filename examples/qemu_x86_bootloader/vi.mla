@@ -187,7 +187,10 @@ fn render_editor(path: str8, mode: i32, dirty: i32, cursor_offset: i32,
     while row < 22 {
         serial_write(ansi_cursor_pos(row + 1, 1));
         serial_write(ansi_cursor(ansi_cmd_clear_line()));
-        let exists: i32 = line < size || (line == 0 && size == 0) ? 1 : 0;
+        var exists: i32 = line < size ? 1 : 0;
+        if line == size && (size == 0 || editor_char(size - 1) == 10) {
+            exists = 1;
+        }
         let advanced: i32 = render_line(line, horizontal, exists, cursor_offset);
         if advanced == line {
             line = size + 1;
