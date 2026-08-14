@@ -13,7 +13,7 @@ fi
 "$EXAMPLE_DIR/build.sh"
 
 exec qemu-system-i386 \
-    -drive format=raw,file="$EXAMPLE_DIR/build/boot.img",if=floppy \
+    -drive format=raw,file="$EXAMPLE_DIR/build/disk.img",if=floppy \
     -display none \
     -serial none \
     -monitor none \

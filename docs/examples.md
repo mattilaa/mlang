@@ -20,9 +20,9 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 
 ### Bare metal and QEMU
 
-- `examples/qemu_x86_bootloader` — complete 512-byte x86 BIOS boot sector
-  written with MLang module assembly and built through `mlang.toml`. Run it
-  with:
+- `examples/qemu_x86_bootloader` — two-stage x86 BIOS disk image whose MLang
+  boot sector loads and transfers control to a separate MLang kernel. Build and
+  run it through `mlang.toml` with:
 
   ```sh
   cd examples/qemu_x86_bootloader

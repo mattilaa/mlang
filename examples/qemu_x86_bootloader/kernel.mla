@@ -1,0 +1,32 @@
+/// A separately linked real-mode kernel loaded by boot.mla at 0x1000:0x0000.
+asm x86(".code16
+.section .kernel,\"ax\",@progbits
+.globl kernel_start
+kernel_start:
+    cli
+    movw %cs, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %ss
+    movw $0xfffe, %sp
+    sti
+    cld
+
+    movw $(kernel_message - kernel_start), %si
+.Lkernel_print:
+    lodsb
+    testb %al, %al
+    jz .Lkernel_halt
+    outb %al, $0xe9
+    movb $0x0e, %ah
+    int $0x10
+    jmp .Lkernel_print
+
+.Lkernel_halt:
+    cli
+    hlt
+    jmp .Lkernel_halt
+
+kernel_message:
+    .asciz \"MLang kernel: loaded from disk and running!\\r\\n\"
+");

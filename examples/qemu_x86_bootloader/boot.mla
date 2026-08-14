@@ -1,4 +1,4 @@
-/// A complete 512-byte x86 BIOS boot sector written as MLang module assembly.
+/// A 512-byte BIOS loader that reads the MLang kernel from sectors 2-5.
 asm x86(".code16
 .section .boot,\"ax\",@progbits
 .globl _start
@@ -9,23 +9,60 @@ _start:
     movw %ax, %es
     movw %ax, %ss
     movw $0x7c00, %sp
+    movb %dl, boot_drive
     sti
     cld
-    movw $message, %si
-.Lprint:
-    lodsb
-    testb %al, %al
-    jz .Lhalt
-    outb %al, $0xe9
-    movb $0x0e, %ah
-    int $0x10
-    jmp .Lprint
+
+    movw $loader_message, %si
+    call .Lprint
+
+    xorw %ax, %ax
+    movb boot_drive, %dl
+    int $0x13
+
+    movw $0x1000, %ax
+    movw %ax, %es
+    xorw %bx, %bx
+    movb $0x02, %ah
+    movb $4, %al
+    xorw %cx, %cx
+    movb $2, %cl
+    xorw %dx, %dx
+    movb boot_drive, %dl
+    int $0x13
+    jc .Ldisk_error
+
+    movw $loaded_message, %si
+    call .Lprint
+    ljmp $0x1000, $0x0000
+
+.Ldisk_error:
+    movw $error_message, %si
+    call .Lprint
 .Lhalt:
     cli
     hlt
     jmp .Lhalt
-message:
-    .asciz \"Hello from an x86 MLang bootloader!\\r\\n\"
+
+.Lprint:
+    lodsb
+    testb %al, %al
+    jz .Lprint_done
+    outb %al, $0xe9
+    movb $0x0e, %ah
+    int $0x10
+    jmp .Lprint
+.Lprint_done:
+    ret
+
+boot_drive:
+    .byte 0
+loader_message:
+    .asciz \"MLang bootloader: loading kernel...\\r\\n\"
+loaded_message:
+    .asciz \"MLang bootloader: kernel loaded, transferring control.\\r\\n\"
+error_message:
+    .asciz \"MLang bootloader: disk read failed.\\r\\n\"
     .org 510
     .word 0xaa55
 ");

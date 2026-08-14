@@ -9,11 +9,11 @@ build_dir = "build"
 
 [[task]]
 name = "build"
-print = "[example] Building the MLang x86 BIOS boot sector"
+print = "[example] Building the MLang x86 loader and kernel disk image"
 commands = ["./build.sh"]
 
 [[task]]
 name = "demo"
-print = "[example] Booting the MLang x86 BIOS image under QEMU"
+print = "[example] Booting the MLang x86 loader and kernel under QEMU"
 log_output = false
 commands = ["./run.sh"]

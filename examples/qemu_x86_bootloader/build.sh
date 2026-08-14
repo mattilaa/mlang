@@ -45,13 +45,22 @@ mkdir -p "$BUILD_DIR"
 
 "$MLANG" --target-arch x86 -emit-llvm --no-tests -O0 \
     "$EXAMPLE_DIR/boot.mla" -o "$BUILD_DIR/boot.ll"
+"$MLANG" --target-arch x86 -emit-llvm --no-tests -O0 \
+    "$EXAMPLE_DIR/kernel.mla" -o "$BUILD_DIR/kernel.ll"
 "$CLANG" --target=i386-none-elf -Wno-override-module -ffreestanding \
     -fno-stack-protector \
     -c "$BUILD_DIR/boot.ll" -o "$BUILD_DIR/boot.o"
+"$CLANG" --target=i386-none-elf -Wno-override-module -ffreestanding \
+    -fno-stack-protector \
+    -c "$BUILD_DIR/kernel.ll" -o "$BUILD_DIR/kernel.o"
 "$LD_LLD" -m elf_i386 --image-base=0 --section-start=.boot=0x7c00 \
     --entry=_start --build-id=none -nostdlib "$BUILD_DIR/boot.o" \
     -o "$BUILD_DIR/boot.elf"
+"$LD_LLD" -m elf_i386 --image-base=0 --section-start=.kernel=0x10000 \
+    --entry=kernel_start --build-id=none -nostdlib "$BUILD_DIR/kernel.o" \
+    -o "$BUILD_DIR/kernel.elf"
 "$OBJCOPY" -O binary "$BUILD_DIR/boot.elf" "$BUILD_DIR/boot.img"
+"$OBJCOPY" -O binary "$BUILD_DIR/kernel.elf" "$BUILD_DIR/kernel.img"
 
 size=$(wc -c < "$BUILD_DIR/boot.img" | tr -d ' ')
 if [ "$size" -ne 512 ]; then
@@ -65,4 +74,23 @@ if [ "$signature" != "55aa" ]; then
     exit 1
 fi
 
-echo "Built $BUILD_DIR/boot.img (512 bytes, BIOS signature 55aa)"
+kernel_size=$(wc -c < "$BUILD_DIR/kernel.img" | tr -d ' ')
+if [ "$kernel_size" -gt 2048 ]; then
+    echo "kernel image exceeds the four sectors loaded by boot.mla: $kernel_size bytes" >&2
+    exit 1
+fi
+
+dd if=/dev/zero of="$BUILD_DIR/disk.img" bs=512 count=2880 >/dev/null 2>&1
+dd if="$BUILD_DIR/boot.img" of="$BUILD_DIR/disk.img" conv=notrunc >/dev/null 2>&1
+dd if="$BUILD_DIR/kernel.img" of="$BUILD_DIR/disk.img" bs=512 seek=1 \
+    conv=notrunc >/dev/null 2>&1
+
+disk_size=$(wc -c < "$BUILD_DIR/disk.img" | tr -d ' ')
+if [ "$disk_size" -ne 1474560 ]; then
+    echo "disk image must be exactly 1474560 bytes, got $disk_size" >&2
+    exit 1
+fi
+
+echo "Built $BUILD_DIR/disk.img"
+echo "  boot sector: 512 bytes, BIOS signature 55aa"
+echo "  loaded kernel: $kernel_size bytes in sectors 2-5"
