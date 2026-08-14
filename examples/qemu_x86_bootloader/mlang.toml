@@ -17,3 +17,9 @@ name = "demo"
 print = "[example] Booting the MLang x86 loader and kernel under QEMU"
 log_output = false
 commands = ["./run.sh"]
+
+[[task]]
+name = "resume"
+print = "[example] Booting the existing disk image with persisted MFS2 changes"
+log_output = false
+commands = ["./run.sh --no-build"]

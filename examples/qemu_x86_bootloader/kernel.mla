@@ -578,6 +578,190 @@ fs_create_empty:
     popl %esi
     ret
 
+.Lfdc_wait_write:
+    movl $0x00100000, %ecx
+    movw $0x3f4, %dx
+.Lfdc_wait_write_loop:
+    inb %dx, %al
+    andb $0xc0, %al
+    cmpb $0x80, %al
+    je .Lfdc_wait_ready
+    loop .Lfdc_wait_write_loop
+    xorl %eax, %eax
+    ret
+.Lfdc_wait_ready:
+    movl $1, %eax
+    ret
+
+.Lfdc_send_byte:
+    pushl %ebx
+    movzbl %al, %ebx
+    call .Lfdc_wait_write
+    testl %eax, %eax
+    jz .Lfdc_send_failed
+    movw $0x3f5, %dx
+    movb %bl, %al
+    outb %al, %dx
+    movl $1, %eax
+.Lfdc_send_failed:
+    popl %ebx
+    ret
+
+.Lfdc_read_byte:
+    movl $0x00100000, %ecx
+    movw $0x3f4, %dx
+.Lfdc_read_wait:
+    inb %dx, %al
+    andb $0xc0, %al
+    cmpb $0xc0, %al
+    je .Lfdc_read_ready
+    loop .Lfdc_read_wait
+    movl $-1, %eax
+    ret
+.Lfdc_read_ready:
+    movw $0x3f5, %dx
+    inb %dx, %al
+    movzbl %al, %eax
+    ret
+
+.Lfdc_fail_motor:
+    xorl %ebp, %ebp
+    jmp .Lfdc_motor_off
+
+.globl fs_flush
+fs_flush:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    pushl %ebp
+    xorl %ebp, %ebp
+
+    movw $0x3f2, %dx
+    movb $0x1c, %al
+    outb %al, %dx
+    movw $0x3f7, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movl $0x00200000, %ecx
+.Lfdc_spinup_delay:
+    loop .Lfdc_spinup_delay
+
+    movb $0x03, %al
+    call .Lfdc_send_byte
+    testl %eax, %eax
+    jz .Lfdc_fail_motor
+    movb $0xdf, %al
+    call .Lfdc_send_byte
+    testl %eax, %eax
+    jz .Lfdc_fail_motor
+    movb $0x02, %al
+    call .Lfdc_send_byte
+    testl %eax, %eax
+    jz .Lfdc_fail_motor
+
+    movb $0x0f, %al
+    call .Lfdc_send_byte
+    testl %eax, %eax
+    jz .Lfdc_fail_motor
+    xorb %al, %al
+    call .Lfdc_send_byte
+    testl %eax, %eax
+    jz .Lfdc_fail_motor
+    movb $1, %al
+    call .Lfdc_send_byte
+    testl %eax, %eax
+    jz .Lfdc_fail_motor
+
+    movl $0x00100000, %ecx
+.Lfdc_seek_delay:
+    loop .Lfdc_seek_delay
+    movb $0x08, %al
+    call .Lfdc_send_byte
+    testl %eax, %eax
+    jz .Lfdc_fail_motor
+    call .Lfdc_read_byte
+    cmpl $0, %eax
+    jl .Lfdc_fail_motor
+    call .Lfdc_read_byte
+    cmpl $1, %eax
+    jne .Lfdc_fail_motor
+
+    movb $0x06, %al
+    outb %al, $0x0a
+    xorb %al, %al
+    outb %al, $0x0c
+    outb %al, $0x04
+    outb %al, $0x04
+    movb $0x02, %al
+    outb %al, $0x81
+    xorb %al, %al
+    outb %al, $0x0c
+    movb $0xff, %al
+    outb %al, $0x05
+    movb $0x1f, %al
+    outb %al, $0x05
+    movb $0x4a, %al
+    outb %al, $0x0b
+    movb $0x02, %al
+    outb %al, $0x0a
+
+    movb $0x45, %al
+    call .Lfdc_send_byte
+    testl %eax, %eax
+    jz .Lfdc_fail_motor
+    xorb %al, %al
+    call .Lfdc_send_byte
+    movb $1, %al
+    call .Lfdc_send_byte
+    xorb %al, %al
+    call .Lfdc_send_byte
+    movb $1, %al
+    call .Lfdc_send_byte
+    movb $2, %al
+    call .Lfdc_send_byte
+    movb $16, %al
+    call .Lfdc_send_byte
+    movb $0x1b, %al
+    call .Lfdc_send_byte
+    movb $0xff, %al
+    call .Lfdc_send_byte
+
+    call .Lfdc_read_byte
+    cmpl $0, %eax
+    jl .Lfdc_fail_motor
+    movl %eax, %ebx
+    call .Lfdc_read_byte
+    cmpl $0, %eax
+    jl .Lfdc_fail_motor
+    movl %eax, %esi
+    call .Lfdc_read_byte
+    cmpl $0, %eax
+    jl .Lfdc_fail_motor
+    movl %eax, %edi
+    call .Lfdc_read_byte
+    call .Lfdc_read_byte
+    call .Lfdc_read_byte
+    call .Lfdc_read_byte
+
+    testb $0xc0, %bl
+    jnz .Lfdc_fail_motor
+    testl %esi, %esi
+    jnz .Lfdc_fail_motor
+    testl %edi, %edi
+    jnz .Lfdc_fail_motor
+    movl $1, %ebp
+
+.Lfdc_motor_off:
+    movw $0x3f2, %dx
+    movb $0x0c, %al
+    outb %al, %dx
+    movl %ebp, %eax
+    popl %ebp
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
 .globl terminal_reboot
 terminal_reboot:
     cli
@@ -652,6 +836,7 @@ extern fn fs_basename(path: str8) -> str8;
 extern fn fs_parent(path: str8) -> str8;
 extern fn fs_is_direct_child(directory: str8, candidate: str8) -> i32;
 extern fn fs_create_empty(path: str8) -> i32;
+extern fn fs_flush() -> i32;
 
 fn list_directory(request: str8) -> i32 {
     let directory: str8 = fs_resolve(request);
@@ -712,7 +897,14 @@ fn touch_file(request: str8) -> i32 {
     if parent_index < 0 || fs_entry_type(parent_index) != 2 {
         return -1;
     }
-    return fs_create_empty(path);
+    let created: i32 = fs_create_empty(path);
+    if created != 1 {
+        return created;
+    }
+    if fs_flush() != 1 {
+        return -3;
+    }
+    return 1;
 }
 
 fn terminal_main() -> i32 {
@@ -737,6 +929,7 @@ fn terminal_main() -> i32 {
             serial_write("cd     change directory: cd <path>\r\n");
             serial_write("cat    print a file: cat <path>\r\n");
             serial_write("touch  create an empty file\r\n");
+            serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");
             serial_write("halt   stop the virtual CPU\r\n");
         } else if terminal_command_eq(command, "about") == 1 {
@@ -780,6 +973,14 @@ fn terminal_main() -> i32 {
                 serial_write("touch: parent directory not found\r\n");
             } else if result == -2 {
                 serial_write("touch: filesystem directory is full\r\n");
+            } else if result == -3 {
+                serial_write("touch: created in memory but disk flush failed\r\n");
+            }
+        } else if terminal_command_eq(command, "sync") == 1 {
+            if fs_flush() == 1 {
+                serial_write("MFS2 synchronized to disk.\r\n");
+            } else {
+                serial_write("sync: floppy write failed\r\n");
             }
         } else if terminal_command_eq(command, "reboot") == 1 {
             serial_write("Rebooting...\r\n");

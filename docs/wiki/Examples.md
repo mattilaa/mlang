@@ -25,8 +25,9 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 
 - `examples/qemu_x86_bootloader` — two-stage x86 BIOS disk image whose MLang
   boot sector loads a separate 32-bit MLang kernel with an interactive serial
-  terminal and a hierarchical, session-writable filesystem supporting `pwd`,
-  `ls`, `cd`, `cat`, and `touch`. Build and run it through `mlang.toml` with:
+  terminal and a hierarchical filesystem supporting persistent `touch` writes,
+  `pwd`, `ls`, `cd`, `cat`, and `sync`. Build and run it through `mlang.toml`
+  with:
 
   ```sh
   cd examples/qemu_x86_bootloader

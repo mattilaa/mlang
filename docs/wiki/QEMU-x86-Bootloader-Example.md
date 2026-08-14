@@ -72,7 +72,8 @@ The terminal supports:
 - `ls [path]`: list direct children of a directory
 - `cd <path>`: change the current working directory; `cd ..` is supported
 - `cat <path>`: print a file's contents
-- `touch <path>`: create an empty file in the mounted filesystem
+- `touch <path>`: create and persist an empty file
+- `sync`: flush the mounted MFS2 metadata to the floppy image
 - `reboot`: reset the virtual machine through the keyboard controller
 - `halt`: halt the virtual CPU
 
@@ -124,13 +125,24 @@ session.log
 
 Each fixed-size directory entry stores a 32-byte absolute path, entry type,
 data offset, size, and capacity. The image reserves 32 directory slots.
-`touch` allocates a file entry in the mounted RAM copy, so files are writable
-for the current boot session and immediately visible to `ls` and `cat`.
+`touch` allocates an entry in the mounted RAM copy, then uses the kernel's
+protected-mode floppy driver and ISA DMA channel 2 to write all 16 MFS2 sectors
+back to `disk.img`. `sync` exposes the same flush operation explicitly.
 
-Changes are not yet persisted to `disk.img`: rebooting reloads the original
-MFS2 sectors. Persistent writes require a protected-mode floppy or block-device
-driver. This version also has no permissions, file-content writes, deletion,
-or dynamic directory creation.
+Created files survive the kernel's `reboot` command. The ordinary `demo` task
+rebuilds the baseline disk before QEMU starts. To boot the existing image and
+retain changes across QEMU process restarts, use:
+
+```sh
+../../build/mlang pkg run resume
+```
+
+The `resume` task requires an existing `build/disk.img`; run the `build` or
+`demo` task once first. Re-running `build` resets the image to the files defined
+in `filesystem.mla`.
+
+This version has no file-content writes, deletion, dynamic directory creation,
+or permissions. `touch` persists empty file entries only.
 
 ## Module assembly
 
