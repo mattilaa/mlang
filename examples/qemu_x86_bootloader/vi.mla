@@ -6,6 +6,9 @@ use std::esc::freestanding::*;
 extern fn serial_write(message: str8) -> void;
 extern fn serial_write_char(ch: i32) -> void;
 extern fn terminal_read_key() -> i32;
+extern fn terminal_measure() -> void;
+extern fn terminal_rows() -> i32;
+extern fn terminal_columns() -> i32;
 extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
 extern fn fs_entry_type(index: i32) -> i32;
 extern fn fs_resolve(path: str8) -> str8;
@@ -115,13 +118,13 @@ fn visible_row(scroll: i32, cursor_offset: i32) -> i32 {
     return row;
 }
 
-fn adjust_scroll(scroll_value: i32, cursor_offset: i32) -> i32 {
+fn adjust_scroll(scroll_value: i32, cursor_offset: i32, content_rows: i32) -> i32 {
     var scroll: i32 = scroll_value;
     if cursor_offset < scroll {
         return line_start(cursor_offset);
     }
     var row: i32 = visible_row(scroll, cursor_offset);
-    while row >= 22 {
+    while row >= content_rows {
         let advanced: i32 = next_line(scroll);
         if advanced == scroll {
             return scroll;
@@ -139,8 +142,41 @@ fn mode_indicator(mode: i32) -> str8 {
     return "--NORMAL--";
 }
 
+fn decimal_digits(value: i32) -> i32 {
+    var digits: i32 = 1;
+    var remaining: i32 = value;
+    while remaining >= 10 {
+        remaining = remaining / 10;
+        digits = digits + 1;
+    }
+    return digits;
+}
+
+fn serial_write_decimal(value: i32) -> void {
+    var divisor: i32 = 1;
+    while divisor <= value / 10 {
+        divisor = divisor * 10;
+    }
+    while divisor > 0 {
+        serial_write_char(48 + (value / divisor) % 10);
+        divisor = divisor / 10;
+    }
+}
+
+fn cursor_line_number(cursor_offset: i32) -> i32 {
+    var position: i32 = 0;
+    var line: i32 = 1;
+    while position < cursor_offset {
+        if editor_char(position) == 10 {
+            line = line + 1;
+        }
+        position = position + 1;
+    }
+    return line;
+}
+
 fn render_line(start: i32, horizontal: i32, exists: i32,
-               cursor_offset: i32) -> i32 {
+               cursor_offset: i32, columns: i32) -> i32 {
     if exists == 0 {
         serial_write("~");
         return start;
@@ -153,7 +189,7 @@ fn render_line(start: i32, horizontal: i32, exists: i32,
         skipped = skipped + 1;
     }
     var column: i32 = 0;
-    while p < end && column < 80 {
+    while p < end && column < columns {
         let ch: i32 = editor_char(p);
         if p == cursor_offset {
             serial_write(ansi_inverse_on());
@@ -169,7 +205,7 @@ fn render_line(start: i32, horizontal: i32, exists: i32,
         p = p + 1;
         column = column + 1;
     }
-    if cursor_offset == end && column < 80 && cursor_offset - start >= horizontal {
+    if cursor_offset == end && column < columns && cursor_offset - start >= horizontal {
         serial_write(ansi_inverse_on());
         serial_write(" ");
         serial_write(ansi_reset());
@@ -181,21 +217,24 @@ fn render_editor(path: str8, mode: i32, dirty: i32, cursor_offset: i32,
                  scroll: i32, status: str8) -> void {
     let start: i32 = line_start(cursor_offset);
     let cursor_column: i32 = cursor_offset - start;
+    let rows: i32 = terminal_rows();
+    let columns: i32 = terminal_columns();
+    let content_rows: i32 = rows - 2;
     var horizontal: i32 = 0;
-    if cursor_column >= 80 {
-        horizontal = cursor_column - 79;
+    if cursor_column >= columns {
+        horizontal = cursor_column - columns + 1;
     }
 
     var row: i32 = 0;
     var line: i32 = scroll;
     let size: i32 = editor_size();
-    while row < 22 {
+    while row < content_rows {
         serial_write(ansi_cursor_pos(row + 1, 1));
         var exists: i32 = line < size ? 1 : 0;
         if line == size && cursor_offset == size && line_start(cursor_offset) == size {
             exists = 1;
         }
-        let advanced: i32 = render_line(line, horizontal, exists, cursor_offset);
+        let advanced: i32 = render_line(line, horizontal, exists, cursor_offset, columns);
         serial_write("\x1b[K");
         if advanced == line {
             line = size + 1;
@@ -205,19 +244,24 @@ fn render_editor(path: str8, mode: i32, dirty: i32, cursor_offset: i32,
         row = row + 1;
     }
 
-    serial_write(ansi_cursor_pos(23, 1));
-    serial_write(ansi_inverse_on());
-    serial_write(" ");
+    serial_write(ansi_cursor_pos(rows - 1, 1));
     serial_write(mode_indicator(mode));
     serial_write("  ");
     serial_write(path);
     if dirty == 1 {
         serial_write("  modified");
     }
-    serial_write(ansi_reset());
+    serial_write("\x1b[K");
+    let cursor_line: i32 = cursor_line_number(cursor_offset);
+    let status_column: i32 = cursor_offset - line_start(cursor_offset) + 1;
+    let position_width: i32 = decimal_digits(status_column) + decimal_digits(cursor_line) + 1;
+    serial_write(ansi_cursor_pos(rows - 1, columns - position_width + 1));
+    serial_write_decimal(status_column);
+    serial_write(":");
+    serial_write_decimal(cursor_line);
     serial_write("\x1b[K");
 
-    serial_write(ansi_cursor_pos(24, 1));
+    serial_write(ansi_cursor_pos(rows, 1));
     if mode == 2 {
         serial_write(":");
         serial_write(editor_command_data());
@@ -284,9 +328,10 @@ pub fn edit_file(request: str8) -> i32 {
     serial_write(ansi_cursor(ansi_cmd_hide()));
     serial_write(ansi_cursor(ansi_cmd_home()));
     serial_write(ansi_cursor(ansi_cmd_clear_screen()));
+    terminal_measure();
 
     while true {
-        scroll = adjust_scroll(scroll, cursor_offset);
+        scroll = adjust_scroll(scroll, cursor_offset, terminal_rows() - 2);
         render_editor(path, mode, dirty, cursor_offset, scroll, status);
         let key: i32 = terminal_read_key();
         status = "";

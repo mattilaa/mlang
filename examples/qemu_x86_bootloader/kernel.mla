@@ -262,6 +262,81 @@ terminal_read_key:
 .Lkey_done:
     ret
 
+.globl terminal_measure
+terminal_measure:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl $24, terminal_row_count
+    movl $80, terminal_column_count
+    movl $ansi_size_query, %esi
+.Lsize_query_write:
+    lodsb
+    testb %al, %al
+    jz .Lsize_expect_escape
+    call .Lserial_putc
+    jmp .Lsize_query_write
+.Lsize_expect_escape:
+    call .Lserial_try_getc
+    cmpl $27, %eax
+    jne .Lsize_done
+    call .Lserial_try_getc
+    cmpl $91, %eax
+    jne .Lsize_done
+    xorl %ebx, %ebx
+.Lsize_read_rows:
+    call .Lserial_try_getc
+    cmpl $59, %eax
+    je .Lsize_rows_done
+    cmpl $48, %eax
+    jb .Lsize_done
+    cmpl $57, %eax
+    ja .Lsize_done
+    imull $10, %ebx, %ebx
+    subl $48, %eax
+    addl %eax, %ebx
+    jmp .Lsize_read_rows
+.Lsize_rows_done:
+    xorl %edi, %edi
+.Lsize_read_columns:
+    call .Lserial_try_getc
+    cmpl $82, %eax
+    je .Lsize_columns_done
+    cmpl $48, %eax
+    jb .Lsize_done
+    cmpl $57, %eax
+    ja .Lsize_done
+    imull $10, %edi, %edi
+    subl $48, %eax
+    addl %eax, %edi
+    jmp .Lsize_read_columns
+.Lsize_columns_done:
+    cmpl $3, %ebx
+    jb .Lsize_done
+    cmpl $99, %ebx
+    ja .Lsize_done
+    cmpl $20, %edi
+    jb .Lsize_done
+    cmpl $99, %edi
+    ja .Lsize_done
+    movl %ebx, terminal_row_count
+    movl %edi, terminal_column_count
+.Lsize_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl terminal_rows
+terminal_rows:
+    movl terminal_row_count, %eax
+    ret
+
+.globl terminal_columns
+terminal_columns:
+    movl terminal_column_count, %eax
+    ret
+
 .globl terminal_command_eq
 terminal_command_eq:
     pushl %esi
@@ -1375,6 +1450,8 @@ ansi_save:
     .asciz \"\\033[s\"
 ansi_restore:
     .asciz \"\\033[u\"
+ansi_size_query:
+    .asciz \"\\033[99;99H\\033[6n\"
 
 .section .bss,\"aw\",@nobits
 .balign 16
@@ -1399,6 +1476,10 @@ pending_key:
 pending_key_valid:
     .skip 4
 pending_cr:
+    .skip 4
+terminal_row_count:
+    .skip 4
+terminal_column_count:
     .skip 4
 ansi_position:
     .skip 12
