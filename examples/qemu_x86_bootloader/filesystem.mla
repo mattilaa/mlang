@@ -1,0 +1,48 @@
+/// Eight-sector read-only MFS1 image mounted by the kernel at `/`.
+asm x86(".section .filesystem,\"a\",@progbits
+.globl filesystem_start
+filesystem_start:
+    .ascii \"MFS1\"
+    .word 3
+    .word 0
+
+readme_name:
+    .asciz \"README.txt\"
+    .zero 16 - (. - readme_name)
+    .long readme_data - filesystem_start
+    .long readme_end - readme_data - 1
+    .zero 8
+
+hello_name:
+    .asciz \"hello.txt\"
+    .zero 16 - (. - hello_name)
+    .long hello_data - filesystem_start
+    .long hello_end - hello_data - 1
+    .zero 8
+
+notes_name:
+    .asciz \"notes.txt\"
+    .zero 16 - (. - notes_name)
+    .long notes_data - filesystem_start
+    .long notes_end - notes_data - 1
+    .zero 8
+
+readme_data:
+    .ascii \"MLang MFS1 example filesystem\"
+    .byte 13, 10
+    .ascii \"Use ls, pwd, and cat <file> in the virtual terminal.\"
+    .byte 13, 10, 0
+readme_end:
+
+hello_data:
+    .ascii \"Hello from a file loaded from the floppy image!\"
+    .byte 13, 10, 0
+hello_end:
+
+notes_data:
+    .ascii \"The bootloader mounted this read-only filesystem at /.\"
+    .byte 13, 10, 0
+notes_end:
+
+    .org 4096
+");

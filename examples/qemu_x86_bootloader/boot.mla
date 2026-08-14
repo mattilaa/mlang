@@ -33,6 +33,19 @@ _start:
     int $0x13
     jc .Ldisk_error
 
+    movw $0x2000, %ax
+    movw %ax, %es
+    xorw %bx, %bx
+    movb $0x02, %ah
+    movb $8, %al
+    xorw %cx, %cx
+    movb $1, %ch
+    movb $1, %cl
+    xorw %dx, %dx
+    movb boot_drive, %dl
+    int $0x13
+    jc .Ldisk_error
+
     movw $0x1220, %ax
     movw %ax, %es
     xorw %bx, %bx
@@ -113,7 +126,7 @@ boot_drive:
 loader_message:
     .asciz \"MLang bootloader: loading kernel...\\r\\n\"
 loaded_message:
-    .asciz \"MLang bootloader: kernel loaded, transferring control.\\r\\n\"
+    .asciz \"MLang bootloader: kernel and filesystem loaded.\\r\\n\"
 error_message:
     .asciz \"MLang bootloader: disk read failed.\\r\\n\"
     .org 510

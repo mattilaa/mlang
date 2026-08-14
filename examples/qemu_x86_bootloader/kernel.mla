@@ -180,6 +180,85 @@ terminal_command_eq:
     popl %esi
     ret
 
+.globl terminal_command_prefix
+terminal_command_prefix:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl 16(%esp), %edi
+.Lprefix_next:
+    movb (%edi), %al
+    testb %al, %al
+    jz .Lprefix_match
+    cmpb (%esi), %al
+    jne .Lprefix_no_match
+    incl %esi
+    incl %edi
+    jmp .Lprefix_next
+.Lprefix_no_match:
+    xorl %eax, %eax
+    jmp .Lprefix_done
+.Lprefix_match:
+    movl $1, %eax
+.Lprefix_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl terminal_argument
+terminal_argument:
+    movl 4(%esp), %eax
+    addl 8(%esp), %eax
+    ret
+
+.globl fs_mount
+fs_mount:
+    xorl %eax, %eax
+    cmpl $0x3153464d, 0x00020000
+    jne .Lfs_mount_done
+    movzwl 0x00020004, %ecx
+    cmpl $8, %ecx
+    ja .Lfs_mount_done
+    movl $1, %eax
+.Lfs_mount_done:
+    ret
+
+.globl fs_file_count
+fs_file_count:
+    movzwl 0x00020004, %eax
+    ret
+
+.globl fs_file_name
+fs_file_name:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_name_invalid
+    movzwl 0x00020004, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_name_invalid
+    shll $5, %eax
+    addl $0x00020008, %eax
+    ret
+.Lfs_name_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl fs_file_data
+fs_file_data:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_data_invalid
+    movzwl 0x00020004, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_data_invalid
+    shll $5, %eax
+    movl 0x00020018(%eax), %eax
+    addl $0x00020000, %eax
+    ret
+.Lfs_data_invalid:
+    xorl %eax, %eax
+    ret
+
 .globl terminal_reboot
 terminal_reboot:
     cli
@@ -229,11 +308,46 @@ __mlang_boot_jmp_buffer:
 extern fn serial_write(message: str8) -> void;
 extern fn terminal_read_line() -> str8;
 extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn terminal_command_prefix(actual: str8, prefix: str8) -> i32;
+extern fn terminal_argument(command: str8, offset: i32) -> str8;
 extern fn terminal_reboot() -> void;
 extern fn terminal_halt() -> void;
+extern fn fs_mount() -> i32;
+extern fn fs_file_count() -> i32;
+extern fn fs_file_name(index: i32) -> str8;
+extern fn fs_file_data(index: i32) -> str8;
+
+fn list_root_files() -> i32 {
+    var index: i32 = 0;
+    let count: i32 = fs_file_count();
+    while index < count {
+        serial_write(fs_file_name(index));
+        serial_write("\r\n");
+        index = index + 1;
+    }
+    return 0;
+}
+
+fn cat_root_file(name: str8) -> i32 {
+    var index: i32 = 0;
+    let count: i32 = fs_file_count();
+    while index < count {
+        if terminal_command_eq(name, fs_file_name(index)) == 1 {
+            serial_write(fs_file_data(index));
+            return 1;
+        }
+        index = index + 1;
+    }
+    return 0;
+}
 
 fn terminal_main() -> i32 {
     serial_write("\r\nMLang virtual terminal\r\n");
+    if fs_mount() == 1 {
+        serial_write("Mounted MFS1 at / with 3 files.\r\n");
+    } else {
+        serial_write("MFS1 mount failed.\r\n");
+    }
     serial_write("Type 'help' for available commands.\r\n\r\n");
 
     while true {
@@ -244,12 +358,29 @@ fn terminal_main() -> i32 {
             serial_write("help   show available commands\r\n");
             serial_write("about  show kernel information\r\n");
             serial_write("clear  clear the terminal\r\n");
+            serial_write("pwd    print working directory\r\n");
+            serial_write("ls     list files: ls or ls /\r\n");
+            serial_write("cat    print a file: cat <name>\r\n");
             serial_write("reboot restart the virtual machine\r\n");
             serial_write("halt   stop the virtual CPU\r\n");
         } else if terminal_command_eq(command, "about") == 1 {
             serial_write("MLang 32-bit protected-mode kernel loaded by BIOS.\r\n");
         } else if terminal_command_eq(command, "clear") == 1 {
             serial_write("\x1b[2J\x1b[H");
+        } else if terminal_command_eq(command, "pwd") == 1 {
+            serial_write("/\r\n");
+        } else if terminal_command_eq(command, "ls") == 1 || terminal_command_eq(command, "ls /") == 1 {
+            let _ = list_root_files();
+        } else if terminal_command_eq(command, "cat") == 1 {
+            serial_write("usage: cat <file>\r\n");
+        } else if terminal_command_prefix(command, "cat ") == 1 {
+            var name: str8 = terminal_argument(command, 4);
+            if terminal_command_prefix(name, "/") == 1 {
+                name = terminal_argument(name, 1);
+            }
+            if cat_root_file(name) != 1 {
+                serial_write("cat: file not found\r\n");
+            }
         } else if terminal_command_eq(command, "reboot") == 1 {
             serial_write("Rebooting...\r\n");
             terminal_reboot();

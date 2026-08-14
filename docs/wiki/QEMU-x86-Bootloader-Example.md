@@ -19,11 +19,12 @@ _start:
 ```
 
 The boot sector initializes its real-mode segments and stack, preserves the
-BIOS boot-drive number, and loads the kernel using BIOS disk interrupt `0x13`.
-The kernel installs a Global Descriptor Table, enters protected mode,
-initializes COM1, and provides a line-oriented terminal over QEMU's serial
-console. The build checks the loader size, `55 aa` signature, kernel size, and
-final 1.44 MB floppy image size.
+BIOS boot-drive number, and loads the kernel and filesystem using BIOS disk
+interrupt `0x13`. The kernel installs a Global Descriptor Table, enters
+protected mode, initializes COM1, mounts the filesystem at `/`, and provides a
+line-oriented terminal over QEMU's serial console. The build checks the loader
+size, `55 aa` signature, kernel and filesystem sizes, and final 1.44 MB floppy
+image size.
 
 ## Requirements
 
@@ -53,9 +54,10 @@ Expected output:
 
 ```text
 MLang bootloader: loading kernel...
-MLang bootloader: kernel loaded, transferring control.
+MLang bootloader: kernel and filesystem loaded.
 
 MLang virtual terminal
+Mounted MFS1 at / with 3 files.
 Type 'help' for available commands.
 
 mlang>
@@ -66,6 +68,9 @@ The terminal supports:
 - `help`: list commands
 - `about`: show kernel information
 - `clear`: clear the serial terminal with ANSI control sequences
+- `pwd`: print the current root directory
+- `ls` or `ls /`: list files in `/`
+- `cat <file>`: print a file's contents using `README.txt` or `/README.txt`
 - `reboot`: reset the virtual machine through the keyboard controller
 - `halt`: halt the virtual CPU
 
@@ -78,8 +83,26 @@ Build without starting QEMU:
 ../../build/mlang pkg run build
 ```
 
-The generated boot-sector, protected-mode kernel, ELF, and final `disk.img`
-files are written under `build/`.
+The generated boot-sector, protected-mode kernel, filesystem, ELF, and final
+`disk.img` files are written under `build/`.
+
+## MFS1 filesystem
+
+`filesystem.mla` defines a minimal read-only filesystem image. The build writes
+its eight sectors at LBA 36, and the BIOS loader reads them into physical
+address `0x20000`. The kernel validates the `MFS1` magic and mounts the flat
+root directory at `/`.
+
+The image contains:
+
+- `README.txt`: terminal and filesystem usage
+- `hello.txt`: a short file-loaded-from-disk demonstration
+- `notes.txt`: boot and mount information
+
+Each fixed-size directory entry stores a 16-byte filename, data offset, and
+size. File data remains on the floppy image until the BIOS loader copies the
+filesystem sectors into memory. This first version intentionally has no write,
+subdirectory, permission, or persistence support.
 
 ## Module assembly
 
