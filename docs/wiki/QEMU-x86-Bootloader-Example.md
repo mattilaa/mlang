@@ -152,12 +152,13 @@ second line
 ```
 
 The editor uses the alternate screen through [`std::esc::freestanding`](Stdlib-Esc) and
-opens in normal mode. It preserves existing contents and redraws a 24-row,
-80-column viewport with vertical and horizontal scrolling, a mode line, dirty
-state, status messages, and a command prompt. The alternate screen is cleared
-once when opening; later frames update rows in place to avoid blank flashes on
-serial terminals. The visible cursor is rendered in the selected text cell
-while the terminal hardware cursor remains hidden, avoiding cursor-row drift.
+opens in normal mode. It preserves existing contents and uses rows 1-22 for an
+80-column text viewport with vertical and horizontal scrolling. Row 23 is the
+only mode, filename, and dirty-state line; row 24 contains status messages or
+the command prompt. The alternate screen is cleared once when opening; later
+frames update rows in place to avoid blank flashes on serial terminals. The
+visible cursor is rendered in the selected text cell while the terminal
+hardware cursor remains hidden, avoiding cursor-row drift.
 
 Normal mode supports:
 

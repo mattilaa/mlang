@@ -113,7 +113,7 @@ fn adjust_scroll(scroll_value: i32, cursor_offset: i32) -> i32 {
         return line_start(cursor_offset);
     }
     var row: i32 = visible_row(scroll, cursor_offset);
-    while row >= 21 {
+    while row >= 22 {
         let advanced: i32 = next_line(scroll);
         if advanced == scroll {
             return scroll;
@@ -181,25 +181,11 @@ fn render_editor(path: str8, mode: i32, dirty: i32, cursor_offset: i32,
         horizontal = cursor_column - 79;
     }
 
-    serial_write(ansi_cursor(ansi_cmd_home()));
-    serial_write(ansi_cursor_pos(1, 1));
-    serial_write(ansi_cursor(ansi_cmd_clear_line()));
-    serial_write(ansi_inverse_on());
-    serial_write(" MLang vi | ");
-    serial_write(path);
-    serial_write(" | -- ");
-    serial_write(mode_name(mode));
-    serial_write(" --");
-    if dirty == 1 {
-        serial_write(" [+]");
-    }
-    serial_write(ansi_reset());
-
     var row: i32 = 0;
     var line: i32 = scroll;
     let size: i32 = editor_size();
-    while row < 21 {
-        serial_write(ansi_cursor_pos(row + 2, 1));
+    while row < 22 {
+        serial_write(ansi_cursor_pos(row + 1, 1));
         serial_write(ansi_cursor(ansi_cmd_clear_line()));
         let exists: i32 = line < size || (line == 0 && size == 0) ? 1 : 0;
         let advanced: i32 = render_line(line, horizontal, exists, cursor_offset);
