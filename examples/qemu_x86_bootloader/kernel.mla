@@ -578,6 +578,151 @@ fs_create_empty:
     popl %esi
     ret
 
+.globl fs_write_text
+fs_write_text:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl 8(%ebp), %eax
+    testl %eax, %eax
+    js .Lwrite_invalid
+    movzwl 0x00020004, %ecx
+    cmpl %ecx, %eax
+    jae .Lwrite_invalid
+    imull $48, %eax, %eax
+    addl $0x00020010, %eax
+    movl %eax, %ebx
+    cmpb $1, 32(%ebx)
+    jne .Lwrite_invalid
+    movl 16(%ebp), %edx
+    cmpl $1023, %edx
+    ja .Lwrite_too_large
+    leal 1(%edx), %ecx
+    cmpl 44(%ebx), %ecx
+    jbe .Lwrite_copy
+    movl 0x00020008, %eax
+    addl $15, %eax
+    andl $-16, %eax
+    leal 1024(%eax), %ecx
+    cmpl 0x0002000c, %ecx
+    ja .Lwrite_no_space
+    movl %eax, 36(%ebx)
+    movl $1024, 44(%ebx)
+    movl %ecx, 0x00020008
+.Lwrite_copy:
+    movl 12(%ebp), %esi
+    movl 36(%ebx), %edi
+    addl $0x00020000, %edi
+    movl %edx, %ecx
+    rep movsb
+    movb $0, (%edi)
+    movl %edx, 40(%ebx)
+    movl $1, %eax
+    jmp .Lwrite_done
+.Lwrite_invalid:
+    movl $-1, %eax
+    jmp .Lwrite_done
+.Lwrite_no_space:
+    movl $-2, %eax
+    jmp .Lwrite_done
+.Lwrite_too_large:
+    movl $-3, %eax
+.Lwrite_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    leave
+    ret
+
+.globl editor_load
+editor_load:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %eax
+    testl %eax, %eax
+    js .Leditor_load_empty
+    movzwl 0x00020004, %ecx
+    cmpl %ecx, %eax
+    jae .Leditor_load_empty
+    imull $48, %eax, %eax
+    movl 0x00020038(%eax), %ecx
+    cmpl $1023, %ecx
+    ja .Leditor_load_too_large
+    movl %ecx, editor_length
+    testl %ecx, %ecx
+    jz .Leditor_load_empty_data
+    movl 0x00020034(%eax), %esi
+    addl $0x00020000, %esi
+    movl $editor_buffer, %edi
+    rep movsb
+    movb $0, (%edi)
+    movl $1, %eax
+    jmp .Leditor_load_done
+.Leditor_load_empty:
+    movl $0, editor_length
+.Leditor_load_empty_data:
+    movb $0, editor_buffer
+    movl $1, %eax
+    jmp .Leditor_load_done
+.Leditor_load_too_large:
+    xorl %eax, %eax
+.Leditor_load_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl editor_clear
+editor_clear:
+    movl $0, editor_length
+    movb $0, editor_buffer
+    ret
+
+.globl editor_append_line
+editor_append_line:
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 16(%esp), %esi
+    xorl %ecx, %ecx
+.Leditor_measure:
+    cmpb $0, (%esi,%ecx)
+    je .Leditor_measured
+    incl %ecx
+    jmp .Leditor_measure
+.Leditor_measured:
+    movl editor_length, %ebx
+    leal 2(%ebx,%ecx), %eax
+    cmpl $1023, %eax
+    ja .Leditor_append_full
+    leal editor_buffer(%ebx), %edi
+    movl 16(%esp), %esi
+    rep movsb
+    movb $13, (%edi)
+    movb $10, 1(%edi)
+    movb $0, 2(%edi)
+    movl %eax, editor_length
+    movl $1, %eax
+    jmp .Leditor_append_done
+.Leditor_append_full:
+    xorl %eax, %eax
+.Leditor_append_done:
+    popl %ebx
+    popl %edi
+    popl %esi
+    ret
+
+.globl editor_data
+editor_data:
+    movl $editor_buffer, %eax
+    ret
+
+.globl editor_size
+editor_size:
+    movl editor_length, %eax
+    ret
+
 .Lfdc_wait_write:
     movl $0x00100000, %ecx
     movw $0x3f4, %dx
@@ -812,6 +957,10 @@ parent_path:
     .skip 32
 empty_file:
     .skip 1
+editor_length:
+    .skip 4
+editor_buffer:
+    .skip 1024
 __mlang_boot_jmp_buffer:
     .skip 256
 ");
@@ -836,7 +985,13 @@ extern fn fs_basename(path: str8) -> str8;
 extern fn fs_parent(path: str8) -> str8;
 extern fn fs_is_direct_child(directory: str8, candidate: str8) -> i32;
 extern fn fs_create_empty(path: str8) -> i32;
+extern fn fs_write_text(index: i32, text: str8, length: i32) -> i32;
 extern fn fs_flush() -> i32;
+extern fn editor_load(index: i32) -> i32;
+extern fn editor_clear() -> void;
+extern fn editor_append_line(line: str8) -> i32;
+extern fn editor_data() -> str8;
+extern fn editor_size() -> i32;
 
 fn list_directory(request: str8) -> i32 {
     let directory: str8 = fs_resolve(request);
@@ -907,6 +1062,86 @@ fn touch_file(request: str8) -> i32 {
     return 1;
 }
 
+fn edit_file(request: str8) -> i32 {
+    let path: str8 = fs_resolve(request);
+    var index: i32 = fs_find(path);
+    if index >= 0 && fs_entry_type(index) != 1 {
+        return -2;
+    }
+    if index < 0 {
+        let parent: str8 = fs_parent(path);
+        let parent_index: i32 = fs_find(parent);
+        if parent_index < 0 || fs_entry_type(parent_index) != 2 {
+            return -1;
+        }
+        editor_clear();
+    } else {
+        if editor_load(index) != 1 {
+            return -4;
+        }
+    }
+    serial_write("MLang vi: ");
+    serial_write(path);
+    serial_write("\r\n");
+    if editor_size() > 0 {
+        serial_write("--- current contents ---\r\n");
+        serial_write(editor_data());
+    }
+    serial_write("--- replace contents; '.' saves, ':q!' cancels ---\r\n");
+    editor_clear();
+    while true {
+        serial_write("| ");
+        let line: str8 = terminal_read_line();
+        if terminal_command_eq(line, ".") == 1 {
+            if index < 0 {
+                let created: i32 = fs_create_empty(path);
+                if created != 1 {
+                    return -3;
+                }
+                index = fs_find(path);
+            }
+            let written: i32 = fs_write_text(index, editor_data(), editor_size());
+            if written == -2 {
+                return -5;
+            }
+            if written != 1 {
+                return -4;
+            }
+            if fs_flush() != 1 {
+                return -6;
+            }
+            return 1;
+        }
+        if terminal_command_eq(line, ":q!") == 1 {
+            return 0;
+        }
+        if editor_append_line(line) != 1 {
+            serial_write("vi: 1023-byte limit reached; save or cancel\r\n");
+        }
+    }
+    return 0;
+}
+
+fn report_edit_result(result: i32) -> void {
+    if result == 0 {
+        serial_write("vi: changes discarded\r\n");
+    } else if result == -1 {
+        serial_write("vi: parent directory not found\r\n");
+    } else if result == -2 {
+        serial_write("vi: is a directory\r\n");
+    } else if result == -3 {
+        serial_write("vi: filesystem directory is full\r\n");
+    } else if result == -4 {
+        serial_write("vi: file exceeds the 1023-byte editor limit\r\n");
+    } else if result == -5 {
+        serial_write("vi: filesystem data area is full\r\n");
+    } else if result == -6 {
+        serial_write("vi: saved in memory but disk flush failed\r\n");
+    } else {
+        serial_write("vi: saved\r\n");
+    }
+}
+
 fn terminal_main() -> i32 {
     serial_write("\r\nMLang virtual terminal\r\n");
     if fs_mount() == 1 {
@@ -929,6 +1164,7 @@ fn terminal_main() -> i32 {
             serial_write("cd     change directory: cd <path>\r\n");
             serial_write("cat    print a file: cat <path>\r\n");
             serial_write("touch  create an empty file\r\n");
+            serial_write("vi     edit a text file: vi <path>\r\n");
             serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");
             serial_write("halt   stop the virtual CPU\r\n");
@@ -976,6 +1212,12 @@ fn terminal_main() -> i32 {
             } else if result == -3 {
                 serial_write("touch: created in memory but disk flush failed\r\n");
             }
+        } else if terminal_command_eq(command, "vi") == 1 || terminal_command_eq(command, "/bin/vi") == 1 {
+            serial_write("usage: vi <file>\r\n");
+        } else if terminal_command_prefix(command, "vi ") == 1 {
+            report_edit_result(edit_file(terminal_argument(command, 3)));
+        } else if terminal_command_prefix(command, "/bin/vi ") == 1 {
+            report_edit_result(edit_file(terminal_argument(command, 8)));
         } else if terminal_command_eq(command, "sync") == 1 {
             if fs_flush() == 1 {
                 serial_write("MFS2 synchronized to disk.\r\n");

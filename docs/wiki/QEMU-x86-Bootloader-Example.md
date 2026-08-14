@@ -73,6 +73,7 @@ The terminal supports:
 - `cd <path>`: change the current working directory; `cd ..` is supported
 - `cat <path>`: print a file's contents
 - `touch <path>`: create and persist an empty file
+- `vi <path>` or `/bin/vi <path>`: replace and persist a text file's contents
 - `sync`: flush the mounted MFS2 metadata to the floppy image
 - `reboot`: reset the virtual machine through the keyboard controller
 - `halt`: halt the virtual CPU
@@ -100,6 +101,7 @@ The initial tree is:
 ```text
 /
 |-- bin/
+|   `-- vi
 |-- etc/
 |   `-- motd
 |-- home/
@@ -121,13 +123,31 @@ mlang> touch session.log
 mlang> ls
 readme.txt
 session.log
+mlang> vi notes.txt
+MLang vi: /home/user/notes.txt
+--- replace contents; '.' saves, ':q!' cancels ---
+| first line
+| second line
+| .
+vi: saved
+mlang> cat notes.txt
+first line
+second line
 ```
+
+The editor is intentionally line-oriented rather than a full-screen terminal
+editor. Starting it replaces the file contents: enter one text line at a time,
+then enter `.` alone to save or `:q!` alone to discard the edit. Canceling a
+new file does not create it. Input lines support backspace through the serial
+terminal's ordinary line editor.
 
 Each fixed-size directory entry stores a 32-byte absolute path, entry type,
 data offset, size, and capacity. The image reserves 32 directory slots.
-`touch` allocates an entry in the mounted RAM copy, then uses the kernel's
-protected-mode floppy driver and ISA DMA channel 2 to write all 16 MFS2 sectors
-back to `disk.img`. `sync` exposes the same flush operation explicitly.
+`touch` allocates an entry in the mounted RAM copy. The editor allocates a
+1 KiB data block when a file first receives text and overwrites that block on
+later saves. Both commands use the kernel's protected-mode floppy driver and
+ISA DMA channel 2 to write all 16 MFS2 sectors back to `disk.img`. `sync`
+exposes the same flush operation explicitly.
 
 Created files survive the kernel's `reboot` command. The ordinary `demo` task
 rebuilds the baseline disk before QEMU starts. To boot the existing image and
@@ -141,8 +161,11 @@ The `resume` task requires an existing `build/disk.img`; run the `build` or
 `demo` task once first. Re-running `build` resets the image to the files defined
 in `filesystem.mla`.
 
-This version has no file-content writes, deletion, dynamic directory creation,
-or permissions. `touch` persists empty file entries only.
+Each edited file is limited to 1,023 bytes, including the editor's CRLF line
+separators but excluding its terminating zero byte. The fixed 8 KiB image can
+hold six dynamically allocated 1 KiB text blocks in addition to its initial
+files. This version has no deletion, dynamic directory creation, compaction,
+or permissions.
 
 ## Module assembly
 

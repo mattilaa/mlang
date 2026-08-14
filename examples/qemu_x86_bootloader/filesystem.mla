@@ -3,9 +3,9 @@ asm x86(".section .filesystem,\"a\",@progbits
 .globl filesystem_start
 filesystem_start:
     .ascii \"MFS2\"
-    .word 9
+    .word 10
     .word 32
-    .long filesystem_data - filesystem_start
+    .long filesystem_end - filesystem_start
     .long 8192
 
 root_path:
@@ -21,6 +21,15 @@ bin_path:
     .asciz \"/bin\"
     .zero 32 - (. - bin_path)
     .byte 2
+    .zero 3
+    .long 0
+    .long 0
+    .long 0
+
+vi_path:
+    .asciz \"/bin/vi\"
+    .zero 32 - (. - vi_path)
+    .byte 3
     .zero 3
     .long 0
     .long 0
@@ -105,6 +114,8 @@ example_data:
     .ascii \"Files created with touch are writable in memory until reboot.\"
     .byte 13, 10, 0
 example_end:
+
+filesystem_end:
 
     .org 8192
 ");
