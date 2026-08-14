@@ -1,4 +1,6 @@
-/// A separately linked real-mode kernel loaded by boot.mla at 0x1000:0x0000.
+/// A separately linked 32-bit kernel loaded by boot.mla at physical 0x10000.
+/// Hardware entry and COM1 primitives use module assembly; the terminal command
+/// loop below is ordinary MLang code.
 asm x86(".code16
 .section .kernel,\"ax\",@progbits
 .globl kernel_start
@@ -9,24 +11,255 @@ kernel_start:
     movw %ax, %es
     movw %ax, %ss
     movw $0xfffe, %sp
-    sti
-    cld
+    lgdt (gdt_descriptor - kernel_start)
+    movl %cr0, %eax
+    orl $1, %eax
+    movl %eax, %cr0
+    ljmpl $0x08, $protected_entry
 
-    movw $(kernel_message - kernel_start), %si
-.Lkernel_print:
+.balign 8
+gdt_start:
+    .quad 0x0000000000000000
+    .quad 0x00cf9a000000ffff
+    .quad 0x00cf92000000ffff
+gdt_end:
+gdt_descriptor:
+    .word gdt_end - gdt_start - 1
+    .long gdt_start
+
+.code32
+protected_entry:
+    movw $0x10, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %fs
+    movw %ax, %gs
+    movw %ax, %ss
+    movl $0x00090000, %esp
+    call .Lserial_init
+    call terminal_main__void
+    jmp terminal_halt
+
+.Lserial_init:
+    movw $0x3f9, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x3fb, %dx
+    movb $0x80, %al
+    outb %al, %dx
+    movw $0x3f8, %dx
+    movb $1, %al
+    outb %al, %dx
+    movw $0x3f9, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x3fb, %dx
+    movb $3, %al
+    outb %al, %dx
+    movw $0x3fa, %dx
+    movb $0xc7, %al
+    outb %al, %dx
+    movw $0x3fc, %dx
+    movb $0x0b, %al
+    outb %al, %dx
+    ret
+
+.Lserial_putc:
+    pushl %edx
+    pushl %eax
+.Lserial_putc_wait:
+    movw $0x3fd, %dx
+    inb %dx, %al
+    testb $0x20, %al
+    jz .Lserial_putc_wait
+    popl %eax
+    movw $0x3f8, %dx
+    outb %al, %dx
+    popl %edx
+    ret
+
+.Lserial_getc:
+    pushl %edx
+.Lserial_getc_wait:
+    movw $0x3fd, %dx
+    inb %dx, %al
+    testb $1, %al
+    jz .Lserial_getc_wait
+    movw $0x3f8, %dx
+    inb %dx, %al
+    popl %edx
+    ret
+
+.globl serial_write
+serial_write:
+    pushl %esi
+    movl 8(%esp), %esi
+.Lserial_write_next:
     lodsb
     testb %al, %al
-    jz .Lkernel_halt
-    outb %al, $0xe9
-    movb $0x0e, %ah
-    int $0x10
-    jmp .Lkernel_print
+    jz .Lserial_write_done
+    call .Lserial_putc
+    jmp .Lserial_write_next
+.Lserial_write_done:
+    popl %esi
+    ret
 
-.Lkernel_halt:
+.globl terminal_read_line
+terminal_read_line:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %edi
+    movl $input_buffer, %edi
+    xorl %ebx, %ebx
+.Lread_key:
+    call .Lserial_getc
+    cmpb $13, %al
+    je .Lread_done
+    cmpb $10, %al
+    je .Lread_done
+    cmpb $8, %al
+    je .Lread_backspace
+    cmpb $127, %al
+    je .Lread_backspace
+    cmpb $32, %al
+    jb .Lread_key
+    cmpb $126, %al
+    ja .Lread_key
+    cmpl $63, %ebx
+    jae .Lread_key
+    movb %al, (%edi,%ebx)
+    incl %ebx
+    call .Lserial_putc
+    jmp .Lread_key
+.Lread_backspace:
+    testl %ebx, %ebx
+    jz .Lread_key
+    decl %ebx
+    movb $8, %al
+    call .Lserial_putc
+    movb $32, %al
+    call .Lserial_putc
+    movb $8, %al
+    call .Lserial_putc
+    jmp .Lread_key
+.Lread_done:
+    movb $0, (%edi,%ebx)
+    movb $13, %al
+    call .Lserial_putc
+    movb $10, %al
+    call .Lserial_putc
+    movl %edi, %eax
+    popl %edi
+    popl %ebx
+    leave
+    ret
+
+.globl terminal_command_eq
+terminal_command_eq:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl 16(%esp), %edi
+.Lcommand_eq_next:
+    movb (%esi), %al
+    cmpb (%edi), %al
+    jne .Lcommand_not_equal
+    testb %al, %al
+    jz .Lcommand_equal
+    incl %esi
+    incl %edi
+    jmp .Lcommand_eq_next
+.Lcommand_not_equal:
+    xorl %eax, %eax
+    jmp .Lcommand_eq_done
+.Lcommand_equal:
+    movl $1, %eax
+.Lcommand_eq_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl terminal_reboot
+terminal_reboot:
     cli
-    hlt
-    jmp .Lkernel_halt
+.Lreboot_wait:
+    movw $0x64, %dx
+    inb %dx, %al
+    testb $2, %al
+    jnz .Lreboot_wait
+    movb $0xfe, %al
+    outb %al, %dx
+    jmp terminal_halt
 
-kernel_message:
-    .asciz \"MLang kernel: loaded from disk and running!\\r\\n\"
+.globl terminal_halt
+terminal_halt:
+    cli
+.Lterminal_halt_loop:
+    hlt
+    jmp .Lterminal_halt_loop
+
+.globl __mlang_std_exceptions_push_frame
+__mlang_std_exceptions_push_frame:
+    xorl %eax, %eax
+    ret
+.globl __mlang_std_exceptions_frame_env
+__mlang_std_exceptions_frame_env:
+    movl $__mlang_boot_jmp_buffer, %eax
+    ret
+.globl _setjmp
+_setjmp:
+    xorl %eax, %eax
+    ret
+.globl __mlang_std_exceptions_pop_frame
+__mlang_std_exceptions_pop_frame:
+    ret
+.globl __mlang_std_exceptions_rethrow_current
+__mlang_std_exceptions_rethrow_current:
+    jmp terminal_halt
+
+.section .bss,\"aw\",@nobits
+.balign 16
+input_buffer:
+    .skip 64
+__mlang_boot_jmp_buffer:
+    .skip 256
 ");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_read_line() -> str8;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn terminal_reboot() -> void;
+extern fn terminal_halt() -> void;
+
+fn terminal_main() -> i32 {
+    serial_write("\r\nMLang virtual terminal\r\n");
+    serial_write("Type 'help' for available commands.\r\n\r\n");
+
+    while true {
+        serial_write("mlang> ");
+        let command: str8 = terminal_read_line();
+
+        if terminal_command_eq(command, "help") == 1 {
+            serial_write("help   show available commands\r\n");
+            serial_write("about  show kernel information\r\n");
+            serial_write("clear  clear the terminal\r\n");
+            serial_write("reboot restart the virtual machine\r\n");
+            serial_write("halt   stop the virtual CPU\r\n");
+        } else if terminal_command_eq(command, "about") == 1 {
+            serial_write("MLang 32-bit protected-mode kernel loaded by BIOS.\r\n");
+        } else if terminal_command_eq(command, "clear") == 1 {
+            serial_write("\x1b[2J\x1b[H");
+        } else if terminal_command_eq(command, "reboot") == 1 {
+            serial_write("Rebooting...\r\n");
+            terminal_reboot();
+        } else if terminal_command_eq(command, "halt") == 1 {
+            serial_write("CPU halted.\r\n");
+            terminal_halt();
+        } else if terminal_command_eq(command, "") != 1 {
+            serial_write("Unknown command. Type 'help'.\r\n");
+        }
+    }
+
+    return 0;
+}

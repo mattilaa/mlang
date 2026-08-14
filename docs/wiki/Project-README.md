@@ -570,7 +570,8 @@ _start:
 
 The qualifier must match `--target-arch`. Module assembly has no operands or
 result value. See `examples/qemu_x86_bootloader` for a two-stage BIOS loader
-and separately linked MLang kernel built through `mlang.toml`.
+and separately linked MLang kernel with an interactive serial terminal, built
+through `mlang.toml`.
 
 ## Package Manager (MLang Backend Default)
 `mlang pkg ...` now prefers the MLang implementation in

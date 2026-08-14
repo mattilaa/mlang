@@ -1,4 +1,4 @@
-/// A 512-byte BIOS loader that reads the MLang kernel from sectors 2-5.
+/// A 512-byte BIOS loader that reads up to 32 kernel sectors from the floppy.
 asm x86(".code16
 .section .boot,\"ax\",@progbits
 .globl _start
@@ -12,6 +12,7 @@ _start:
     movb %dl, boot_drive
     sti
     cld
+    call .Lserial_init
 
     movw $loader_message, %si
     call .Lprint
@@ -24,10 +25,23 @@ _start:
     movw %ax, %es
     xorw %bx, %bx
     movb $0x02, %ah
-    movb $4, %al
+    movb $17, %al
     xorw %cx, %cx
     movb $2, %cl
     xorw %dx, %dx
+    movb boot_drive, %dl
+    int $0x13
+    jc .Ldisk_error
+
+    movw $0x1220, %ax
+    movw %ax, %es
+    xorw %bx, %bx
+    movb $0x02, %ah
+    movb $15, %al
+    xorw %cx, %cx
+    movb $1, %cl
+    xorw %dx, %dx
+    movb $1, %dh
     movb boot_drive, %dl
     int $0x13
     jc .Ldisk_error
@@ -48,11 +62,50 @@ _start:
     lodsb
     testb %al, %al
     jz .Lprint_done
+    call .Lserial_putc
     outb %al, $0xe9
     movb $0x0e, %ah
     int $0x10
     jmp .Lprint
 .Lprint_done:
+    ret
+
+.Lserial_init:
+    movw $0x3f9, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x3fb, %dx
+    movb $0x80, %al
+    outb %al, %dx
+    movw $0x3f8, %dx
+    movb $1, %al
+    outb %al, %dx
+    movw $0x3f9, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x3fb, %dx
+    movb $3, %al
+    outb %al, %dx
+    movw $0x3fa, %dx
+    movb $0xc7, %al
+    outb %al, %dx
+    movw $0x3fc, %dx
+    movb $0x0b, %al
+    outb %al, %dx
+    ret
+
+.Lserial_putc:
+    pushw %dx
+    pushw %ax
+.Lserial_wait:
+    movw $0x3fd, %dx
+    inb %dx, %al
+    testb $0x20, %al
+    jz .Lserial_wait
+    popw %ax
+    movw $0x3f8, %dx
+    outb %al, %dx
+    popw %dx
     ret
 
 boot_drive:

@@ -45,7 +45,7 @@ mkdir -p "$BUILD_DIR"
 
 "$MLANG" --target-arch x86 -emit-llvm --no-tests -O0 \
     "$EXAMPLE_DIR/boot.mla" -o "$BUILD_DIR/boot.ll"
-"$MLANG" --target-arch x86 -emit-llvm --no-tests -O0 \
+"$MLANG" --target-arch x86 -emit-llvm --no-tests -Oz \
     "$EXAMPLE_DIR/kernel.mla" -o "$BUILD_DIR/kernel.ll"
 "$CLANG" --target=i386-none-elf -Wno-override-module -ffreestanding \
     -fno-stack-protector \
@@ -75,8 +75,8 @@ if [ "$signature" != "55aa" ]; then
 fi
 
 kernel_size=$(wc -c < "$BUILD_DIR/kernel.img" | tr -d ' ')
-if [ "$kernel_size" -gt 2048 ]; then
-    echo "kernel image exceeds the four sectors loaded by boot.mla: $kernel_size bytes" >&2
+if [ "$kernel_size" -gt 16384 ]; then
+    echo "kernel image exceeds the 32 sectors loaded by boot.mla: $kernel_size bytes" >&2
     exit 1
 fi
 
@@ -93,4 +93,4 @@ fi
 
 echo "Built $BUILD_DIR/disk.img"
 echo "  boot sector: 512 bytes, BIOS signature 55aa"
-echo "  loaded kernel: $kernel_size bytes in sectors 2-5"
+echo "  loaded kernel: $kernel_size bytes in sectors 2-33"

@@ -15,6 +15,6 @@ fi
 exec qemu-system-i386 \
     -drive format=raw,file="$EXAMPLE_DIR/build/disk.img",if=floppy \
     -display none \
-    -serial none \
+    -serial stdio \
     -monitor none \
-    -debugcon stdio
+    -debugcon file:"$EXAMPLE_DIR/build/debugcon.log"

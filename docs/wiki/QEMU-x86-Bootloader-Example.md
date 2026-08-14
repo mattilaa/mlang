@@ -4,9 +4,11 @@
 
 This example builds a two-stage legacy x86 BIOS disk image entirely from MLang
 sources. The 512-byte loader in `boot.mla` reads the separate `kernel.mla`
-image from disk sectors 2-5 into physical address `0x10000`, then transfers
-control to it. Both stages use architecture-qualified module assembly to define
-code and data outside a normal function:
+image from disk sectors 2-33 into physical address `0x10000`, then transfers
+control to it. The kernel switches to 32-bit protected mode and enters the
+ordinary MLang `terminal_main()` function. Architecture-qualified module
+assembly defines the hardware entry and I/O primitives that cannot live in a
+normal function:
 
 ```rust
 asm x86(".code16
@@ -17,11 +19,11 @@ _start:
 ```
 
 The boot sector initializes its real-mode segments and stack, preserves the
-BIOS boot-drive number, and loads four sectors using BIOS disk interrupt
-`0x13`. The kernel initializes its own segments and stack after the far jump.
-Both stages print through BIOS video interrupt `0x10` and QEMU's debug console.
-The build checks the loader size, `55 aa` signature, kernel size, and final
-1.44 MB floppy image size.
+BIOS boot-drive number, and loads the kernel using BIOS disk interrupt `0x13`.
+The kernel installs a Global Descriptor Table, enters protected mode,
+initializes COM1, and provides a line-oriented terminal over QEMU's serial
+console. The build checks the loader size, `55 aa` signature, kernel size, and
+final 1.44 MB floppy image size.
 
 ## Requirements
 
@@ -52,10 +54,23 @@ Expected output:
 ```text
 MLang bootloader: loading kernel...
 MLang bootloader: kernel loaded, transferring control.
-MLang kernel: loaded from disk and running!
+
+MLang virtual terminal
+Type 'help' for available commands.
+
+mlang>
 ```
 
-Press `Ctrl-c` to stop QEMU after the boot sector halts.
+The terminal supports:
+
+- `help`: list commands
+- `about`: show kernel information
+- `clear`: clear the serial terminal with ANSI control sequences
+- `reboot`: reset the virtual machine through the keyboard controller
+- `halt`: halt the virtual CPU
+
+Printable input and backspace editing are supported. Press `Ctrl-c` to stop
+QEMU after using `halt`.
 
 Build without starting QEMU:
 
@@ -63,8 +78,8 @@ Build without starting QEMU:
 ../../build/mlang pkg run build
 ```
 
-The generated boot-sector, kernel, ELF, and final `disk.img` files are written
-under `build/`.
+The generated boot-sector, protected-mode kernel, ELF, and final `disk.img`
+files are written under `build/`.
 
 ## Module assembly
 
