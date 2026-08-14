@@ -90,8 +90,8 @@ if [ "$kernel_size" -gt 16384 ]; then
 fi
 
 filesystem_size=$(wc -c < "$BUILD_DIR/filesystem.img" | tr -d ' ')
-if [ "$filesystem_size" -ne 4096 ]; then
-    echo "filesystem image must be exactly eight sectors, got $filesystem_size bytes" >&2
+if [ "$filesystem_size" -ne 8192 ]; then
+    echo "filesystem image must be exactly 16 sectors, got $filesystem_size bytes" >&2
     exit 1
 fi
 
@@ -111,4 +111,4 @@ fi
 echo "Built $BUILD_DIR/disk.img"
 echo "  boot sector: 512 bytes, BIOS signature 55aa"
 echo "  loaded kernel: $kernel_size bytes in sectors 2-33"
-echo "  MFS1 filesystem: $filesystem_size bytes in sectors 37-44"
+echo "  MFS2 filesystem: $filesystem_size bytes in sectors 37-52"

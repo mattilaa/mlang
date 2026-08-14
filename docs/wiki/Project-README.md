@@ -571,8 +571,9 @@ _start:
 The qualifier must match `--target-arch`. Module assembly has no operands or
 result value. See `examples/qemu_x86_bootloader` for a two-stage BIOS loader
 and separately linked MLang kernel with an interactive serial terminal, built
-through `mlang.toml`. The example mounts a small read-only filesystem and
-provides `pwd`, `ls`, and `cat` commands.
+through `mlang.toml`. The example mounts a small hierarchical filesystem and
+provides `pwd`, `ls`, `cd`, `cat`, and `touch` commands. The mounted MFS2 copy
+is writable for the current boot session.
 
 ## Package Manager (MLang Backend Default)
 `mlang pkg ...` now prefers the MLang implementation in

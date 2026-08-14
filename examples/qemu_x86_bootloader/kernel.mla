@@ -214,49 +214,368 @@ terminal_argument:
 .globl fs_mount
 fs_mount:
     xorl %eax, %eax
-    cmpl $0x3153464d, 0x00020000
+    cmpl $0x3253464d, 0x00020000
     jne .Lfs_mount_done
     movzwl 0x00020004, %ecx
-    cmpl $8, %ecx
+    movzwl 0x00020006, %edx
+    cmpl %edx, %ecx
     ja .Lfs_mount_done
+    cmpl $32, %edx
+    ja .Lfs_mount_done
+    movb $47, current_directory
+    movb $0, current_directory + 1
     movl $1, %eax
 .Lfs_mount_done:
     ret
 
-.globl fs_file_count
-fs_file_count:
+.globl fs_entry_count
+fs_entry_count:
     movzwl 0x00020004, %eax
     ret
 
-.globl fs_file_name
-fs_file_name:
+.globl fs_entry_path
+fs_entry_path:
     movl 4(%esp), %eax
     testl %eax, %eax
-    js .Lfs_name_invalid
+    js .Lfs_entry_path_invalid
     movzwl 0x00020004, %ecx
     cmpl %ecx, %eax
-    jae .Lfs_name_invalid
-    shll $5, %eax
-    addl $0x00020008, %eax
+    jae .Lfs_entry_path_invalid
+    imull $48, %eax, %eax
+    addl $0x00020010, %eax
     ret
-.Lfs_name_invalid:
+.Lfs_entry_path_invalid:
     xorl %eax, %eax
     ret
 
-.globl fs_file_data
-fs_file_data:
+.globl fs_entry_type
+fs_entry_type:
     movl 4(%esp), %eax
     testl %eax, %eax
-    js .Lfs_data_invalid
+    js .Lfs_entry_type_invalid
     movzwl 0x00020004, %ecx
     cmpl %ecx, %eax
-    jae .Lfs_data_invalid
-    shll $5, %eax
-    movl 0x00020018(%eax), %eax
+    jae .Lfs_entry_type_invalid
+    imull $48, %eax, %eax
+    movzbl 0x00020030(%eax), %eax
+    ret
+.Lfs_entry_type_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl fs_entry_data
+fs_entry_data:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_data_invalid
+    movzwl 0x00020004, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_data_invalid
+    imull $48, %eax, %eax
+    cmpl $0, 0x00020038(%eax)
+    je .Lfs_entry_empty
+    movl 0x00020034(%eax), %eax
     addl $0x00020000, %eax
     ret
-.Lfs_data_invalid:
+.Lfs_entry_empty:
+    movl $empty_file, %eax
+    ret
+.Lfs_entry_data_invalid:
     xorl %eax, %eax
+    ret
+
+.globl fs_pwd
+fs_pwd:
+    movl $current_directory, %eax
+    ret
+
+.globl fs_resolve
+fs_resolve:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 8(%ebp), %esi
+    movl $resolved_path, %edi
+    movl $31, %ecx
+    cmpb $0, (%esi)
+    je .Lresolve_current
+    cmpb $46, (%esi)
+    jne .Lresolve_not_dot
+    cmpb $0, 1(%esi)
+    je .Lresolve_current
+    cmpb $46, 1(%esi)
+    jne .Lresolve_not_dot
+    cmpb $0, 2(%esi)
+    je .Lresolve_parent
+.Lresolve_not_dot:
+    cmpb $47, (%esi)
+    je .Lresolve_copy
+    pushl %esi
+    movl $current_directory, %esi
+.Lresolve_copy_cwd:
+    lodsb
+    testb %al, %al
+    jz .Lresolve_cwd_done
+    stosb
+    decl %ecx
+    jz .Lresolve_finish
+    jmp .Lresolve_copy_cwd
+.Lresolve_cwd_done:
+    popl %esi
+    cmpb $47, -1(%edi)
+    je .Lresolve_copy
+    movb $47, (%edi)
+    incl %edi
+    decl %ecx
+.Lresolve_copy:
+    lodsb
+    testb %al, %al
+    jz .Lresolve_finish
+    stosb
+    decl %ecx
+    jnz .Lresolve_copy
+    jmp .Lresolve_finish
+.Lresolve_current:
+    movl $current_directory, %esi
+    jmp .Lresolve_copy
+.Lresolve_parent:
+    movl $current_directory, %esi
+.Lresolve_parent_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jnz .Lresolve_parent_copy
+    cmpl $resolved_path + 2, %edi
+    jbe .Lresolve_return
+    subl $2, %edi
+.Lresolve_parent_scan:
+    cmpb $47, (%edi)
+    je .Lresolve_parent_found
+    decl %edi
+    cmpl $resolved_path, %edi
+    ja .Lresolve_parent_scan
+.Lresolve_parent_found:
+    cmpl $resolved_path, %edi
+    jne .Lresolve_parent_trim
+    incl %edi
+.Lresolve_parent_trim:
+    movb $0, (%edi)
+    jmp .Lresolve_return
+.Lresolve_finish:
+    movb $0, (%edi)
+    cmpl $resolved_path + 1, %edi
+    jbe .Lresolve_return
+    cmpb $47, -1(%edi)
+    jne .Lresolve_return
+    movb $0, -1(%edi)
+.Lresolve_return:
+    movl $resolved_path, %eax
+    popl %ebx
+    popl %edi
+    popl %esi
+    leave
+    ret
+
+.globl fs_find
+fs_find:
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 16(%esp), %ebx
+    xorl %edx, %edx
+    movzwl 0x00020004, %ecx
+.Lfs_find_entry:
+    cmpl %ecx, %edx
+    jae .Lfs_find_missing
+    movl %edx, %eax
+    imull $48, %eax, %eax
+    addl $0x00020010, %eax
+    movl %eax, %esi
+    movl %ebx, %edi
+.Lfs_find_compare:
+    movb (%esi), %al
+    cmpb (%edi), %al
+    jne .Lfs_find_next
+    testb %al, %al
+    jz .Lfs_find_found
+    incl %esi
+    incl %edi
+    jmp .Lfs_find_compare
+.Lfs_find_next:
+    incl %edx
+    jmp .Lfs_find_entry
+.Lfs_find_found:
+    movl %edx, %eax
+    jmp .Lfs_find_done
+.Lfs_find_missing:
+    movl $-1, %eax
+.Lfs_find_done:
+    popl %ebx
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_set_cwd
+fs_set_cwd:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl $current_directory, %edi
+    movl $31, %ecx
+.Lset_cwd_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jz .Lset_cwd_done
+    decl %ecx
+    jnz .Lset_cwd_copy
+    movb $0, (%edi)
+.Lset_cwd_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_basename
+fs_basename:
+    movl 4(%esp), %eax
+    movl %eax, %edx
+.Lbasename_scan:
+    movb (%edx), %cl
+    testb %cl, %cl
+    jz .Lbasename_done
+    cmpb $47, %cl
+    jne .Lbasename_next
+    leal 1(%edx), %eax
+.Lbasename_next:
+    incl %edx
+    jmp .Lbasename_scan
+.Lbasename_done:
+    ret
+
+.globl fs_parent
+fs_parent:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl $parent_path, %edi
+.Lparent_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jnz .Lparent_copy
+    subl $2, %edi
+    cmpl $parent_path, %edi
+    jbe .Lparent_root
+.Lparent_scan:
+    cmpb $47, (%edi)
+    je .Lparent_found
+    decl %edi
+    cmpl $parent_path, %edi
+    ja .Lparent_scan
+.Lparent_found:
+    cmpl $parent_path, %edi
+    jne .Lparent_trim
+.Lparent_root:
+    movb $47, parent_path
+    movb $0, parent_path + 1
+    jmp .Lparent_done
+.Lparent_trim:
+    movb $0, (%edi)
+.Lparent_done:
+    movl $parent_path, %eax
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_is_direct_child
+fs_is_direct_child:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl 16(%esp), %edi
+    cmpb $47, (%esi)
+    jne .Lchild_non_root
+    cmpb $0, 1(%esi)
+    jne .Lchild_non_root
+    cmpb $47, (%edi)
+    jne .Lchild_no
+    incl %edi
+    cmpb $0, (%edi)
+    je .Lchild_no
+    jmp .Lchild_remainder
+.Lchild_non_root:
+    movb (%esi), %al
+    testb %al, %al
+    jz .Lchild_prefix_done
+    cmpb (%edi), %al
+    jne .Lchild_no
+    incl %esi
+    incl %edi
+    jmp .Lchild_non_root
+.Lchild_prefix_done:
+    cmpb $47, (%edi)
+    jne .Lchild_no
+    incl %edi
+    cmpb $0, (%edi)
+    je .Lchild_no
+.Lchild_remainder:
+    movb (%edi), %al
+    testb %al, %al
+    jz .Lchild_yes
+    cmpb $47, %al
+    je .Lchild_no
+    incl %edi
+    jmp .Lchild_remainder
+.Lchild_yes:
+    movl $1, %eax
+    jmp .Lchild_done
+.Lchild_no:
+    xorl %eax, %eax
+.Lchild_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_create_empty
+fs_create_empty:
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 16(%esp), %esi
+    movzwl 0x00020004, %eax
+    movzwl 0x00020006, %ecx
+    cmpl %ecx, %eax
+    jae .Lcreate_full
+    imull $48, %eax, %eax
+    addl $0x00020010, %eax
+    movl %eax, %edi
+    movl %edi, %ebx
+    xorl %eax, %eax
+    movl $12, %ecx
+    rep stosl
+    movl %ebx, %edi
+    movl $31, %ecx
+.Lcreate_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jz .Lcreate_type
+    decl %ecx
+    jnz .Lcreate_copy
+    movb $0, (%edi)
+.Lcreate_type:
+    movb $1, 32(%ebx)
+    incw 0x00020004
+    movl $1, %eax
+    jmp .Lcreate_done
+.Lcreate_full:
+    movl $-2, %eax
+.Lcreate_done:
+    popl %ebx
+    popl %edi
+    popl %esi
     ret
 
 .globl terminal_reboot
@@ -301,6 +620,14 @@ __mlang_std_exceptions_rethrow_current:
 .balign 16
 input_buffer:
     .skip 64
+current_directory:
+    .skip 32
+resolved_path:
+    .skip 32
+parent_path:
+    .skip 32
+empty_file:
+    .skip 1
 __mlang_boot_jmp_buffer:
     .skip 256
 ");
@@ -313,40 +640,87 @@ extern fn terminal_argument(command: str8, offset: i32) -> str8;
 extern fn terminal_reboot() -> void;
 extern fn terminal_halt() -> void;
 extern fn fs_mount() -> i32;
-extern fn fs_file_count() -> i32;
-extern fn fs_file_name(index: i32) -> str8;
-extern fn fs_file_data(index: i32) -> str8;
+extern fn fs_entry_count() -> i32;
+extern fn fs_entry_path(index: i32) -> str8;
+extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_entry_data(index: i32) -> str8;
+extern fn fs_pwd() -> str8;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_set_cwd(path: str8) -> void;
+extern fn fs_basename(path: str8) -> str8;
+extern fn fs_parent(path: str8) -> str8;
+extern fn fs_is_direct_child(directory: str8, candidate: str8) -> i32;
+extern fn fs_create_empty(path: str8) -> i32;
 
-fn list_root_files() -> i32 {
-    var index: i32 = 0;
-    let count: i32 = fs_file_count();
-    while index < count {
-        serial_write(fs_file_name(index));
-        serial_write("\r\n");
-        index = index + 1;
+fn list_directory(request: str8) -> i32 {
+    let directory: str8 = fs_resolve(request);
+    let directory_index: i32 = fs_find(directory);
+    if directory_index < 0 {
+        return -1;
     }
-    return 0;
-}
+    if fs_entry_type(directory_index) != 2 {
+        return -2;
+    }
 
-fn cat_root_file(name: str8) -> i32 {
     var index: i32 = 0;
-    let count: i32 = fs_file_count();
+    let count: i32 = fs_entry_count();
     while index < count {
-        if terminal_command_eq(name, fs_file_name(index)) == 1 {
-            serial_write(fs_file_data(index));
-            return 1;
+        let path: str8 = fs_entry_path(index);
+        if fs_is_direct_child(directory, path) == 1 {
+            serial_write(fs_basename(path));
+            if fs_entry_type(index) == 2 {
+                serial_write("/");
+            }
+            serial_write("\r\n");
         }
         index = index + 1;
     }
     return 0;
 }
 
+fn cat_file(request: str8) -> i32 {
+    let path: str8 = fs_resolve(request);
+    let index: i32 = fs_find(path);
+    if index < 0 {
+        return -1;
+    }
+    if fs_entry_type(index) != 1 {
+        return -2;
+    }
+    serial_write(fs_entry_data(index));
+    return 0;
+}
+
+fn change_directory(request: str8) -> i32 {
+    let path: str8 = fs_resolve(request);
+    let index: i32 = fs_find(path);
+    if index < 0 || fs_entry_type(index) != 2 {
+        return 0;
+    }
+    fs_set_cwd(path);
+    return 1;
+}
+
+fn touch_file(request: str8) -> i32 {
+    let path: str8 = fs_resolve(request);
+    if fs_find(path) >= 0 {
+        return 0;
+    }
+    let parent: str8 = fs_parent(path);
+    let parent_index: i32 = fs_find(parent);
+    if parent_index < 0 || fs_entry_type(parent_index) != 2 {
+        return -1;
+    }
+    return fs_create_empty(path);
+}
+
 fn terminal_main() -> i32 {
     serial_write("\r\nMLang virtual terminal\r\n");
     if fs_mount() == 1 {
-        serial_write("Mounted MFS1 at / with 3 files.\r\n");
+        serial_write("Mounted writable MFS2 at /.\r\n");
     } else {
-        serial_write("MFS1 mount failed.\r\n");
+        serial_write("MFS2 mount failed.\r\n");
     }
     serial_write("Type 'help' for available commands.\r\n\r\n");
 
@@ -359,8 +733,10 @@ fn terminal_main() -> i32 {
             serial_write("about  show kernel information\r\n");
             serial_write("clear  clear the terminal\r\n");
             serial_write("pwd    print working directory\r\n");
-            serial_write("ls     list files: ls or ls /\r\n");
-            serial_write("cat    print a file: cat <name>\r\n");
+            serial_write("ls     list a directory: ls [path]\r\n");
+            serial_write("cd     change directory: cd <path>\r\n");
+            serial_write("cat    print a file: cat <path>\r\n");
+            serial_write("touch  create an empty file\r\n");
             serial_write("reboot restart the virtual machine\r\n");
             serial_write("halt   stop the virtual CPU\r\n");
         } else if terminal_command_eq(command, "about") == 1 {
@@ -368,18 +744,42 @@ fn terminal_main() -> i32 {
         } else if terminal_command_eq(command, "clear") == 1 {
             serial_write("\x1b[2J\x1b[H");
         } else if terminal_command_eq(command, "pwd") == 1 {
-            serial_write("/\r\n");
-        } else if terminal_command_eq(command, "ls") == 1 || terminal_command_eq(command, "ls /") == 1 {
-            let _ = list_root_files();
+            serial_write(fs_pwd());
+            serial_write("\r\n");
+        } else if terminal_command_eq(command, "ls") == 1 {
+            let _ = list_directory(fs_pwd());
+        } else if terminal_command_prefix(command, "ls ") == 1 {
+            let result: i32 = list_directory(terminal_argument(command, 3));
+            if result == -1 {
+                serial_write("ls: directory not found\r\n");
+            } else if result == -2 {
+                serial_write("ls: not a directory\r\n");
+            }
+        } else if terminal_command_eq(command, "cd") == 1 {
+            serial_write("usage: cd <directory>\r\n");
+        } else if terminal_command_prefix(command, "cd ") == 1 {
+            if change_directory(terminal_argument(command, 3)) != 1 {
+                serial_write("cd: directory not found\r\n");
+            }
         } else if terminal_command_eq(command, "cat") == 1 {
             serial_write("usage: cat <file>\r\n");
         } else if terminal_command_prefix(command, "cat ") == 1 {
-            var name: str8 = terminal_argument(command, 4);
-            if terminal_command_prefix(name, "/") == 1 {
-                name = terminal_argument(name, 1);
-            }
-            if cat_root_file(name) != 1 {
+            let result: i32 = cat_file(terminal_argument(command, 4));
+            if result == -1 {
                 serial_write("cat: file not found\r\n");
+            } else if result == -2 {
+                serial_write("cat: is a directory\r\n");
+            }
+        } else if terminal_command_eq(command, "touch") == 1 {
+            serial_write("usage: touch <file>\r\n");
+        } else if terminal_command_prefix(command, "touch ") == 1 {
+            let result: i32 = touch_file(terminal_argument(command, 6));
+            if result == 0 {
+                serial_write("touch: file already exists\r\n");
+            } else if result == -1 {
+                serial_write("touch: parent directory not found\r\n");
+            } else if result == -2 {
+                serial_write("touch: filesystem directory is full\r\n");
             }
         } else if terminal_command_eq(command, "reboot") == 1 {
             serial_write("Rebooting...\r\n");

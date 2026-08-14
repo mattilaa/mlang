@@ -37,7 +37,7 @@ _start:
     movw %ax, %es
     xorw %bx, %bx
     movb $0x02, %ah
-    movb $8, %al
+    movb $16, %al
     xorw %cx, %cx
     movb $1, %ch
     movb $1, %cl

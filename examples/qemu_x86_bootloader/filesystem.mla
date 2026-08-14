@@ -1,48 +1,110 @@
-/// Eight-sector read-only MFS1 image mounted by the kernel at `/`.
+/// Sixteen-sector MFS2 image with typed paths and writable directory slots.
 asm x86(".section .filesystem,\"a\",@progbits
 .globl filesystem_start
 filesystem_start:
-    .ascii \"MFS1\"
-    .word 3
-    .word 0
+    .ascii \"MFS2\"
+    .word 9
+    .word 32
+    .long filesystem_data - filesystem_start
+    .long 8192
 
-readme_name:
-    .asciz \"README.txt\"
-    .zero 16 - (. - readme_name)
+root_path:
+    .asciz \"/\"
+    .zero 32 - (. - root_path)
+    .byte 2
+    .zero 3
+    .long 0
+    .long 0
+    .long 0
+
+bin_path:
+    .asciz \"/bin\"
+    .zero 32 - (. - bin_path)
+    .byte 2
+    .zero 3
+    .long 0
+    .long 0
+    .long 0
+
+etc_path:
+    .asciz \"/etc\"
+    .zero 32 - (. - etc_path)
+    .byte 2
+    .zero 3
+    .long 0
+    .long 0
+    .long 0
+
+home_path:
+    .asciz \"/home\"
+    .zero 32 - (. - home_path)
+    .byte 2
+    .zero 3
+    .long 0
+    .long 0
+    .long 0
+
+user_path:
+    .asciz \"/home/user\"
+    .zero 32 - (. - user_path)
+    .byte 2
+    .zero 3
+    .long 0
+    .long 0
+    .long 0
+
+tmp_path:
+    .asciz \"/tmp\"
+    .zero 32 - (. - tmp_path)
+    .byte 2
+    .zero 3
+    .long 0
+    .long 0
+    .long 0
+
+motd_path:
+    .asciz \"/etc/motd\"
+    .zero 32 - (. - motd_path)
+    .byte 1
+    .zero 3
+    .long motd_data - filesystem_start
+    .long motd_end - motd_data - 1
+    .long motd_end - motd_data
+
+readme_path:
+    .asciz \"/home/user/readme.txt\"
+    .zero 32 - (. - readme_path)
+    .byte 1
+    .zero 3
     .long readme_data - filesystem_start
     .long readme_end - readme_data - 1
-    .zero 8
+    .long readme_end - readme_data
 
-hello_name:
-    .asciz \"hello.txt\"
-    .zero 16 - (. - hello_name)
-    .long hello_data - filesystem_start
-    .long hello_end - hello_data - 1
-    .zero 8
+example_path:
+    .asciz \"/tmp/example.txt\"
+    .zero 32 - (. - example_path)
+    .byte 1
+    .zero 3
+    .long example_data - filesystem_start
+    .long example_end - example_data - 1
+    .long example_end - example_data
 
-notes_name:
-    .asciz \"notes.txt\"
-    .zero 16 - (. - notes_name)
-    .long notes_data - filesystem_start
-    .long notes_end - notes_data - 1
-    .zero 8
+    .org 16 + (32 * 48)
+filesystem_data:
+motd_data:
+    .ascii \"Welcome to the MLang protected-mode kernel.\"
+    .byte 13, 10, 0
+motd_end:
 
 readme_data:
-    .ascii \"MLang MFS1 example filesystem\"
-    .byte 13, 10
-    .ascii \"Use ls, pwd, and cat <file> in the virtual terminal.\"
+    .ascii \"This file lives in /home/user on the MFS2 root filesystem.\"
     .byte 13, 10, 0
 readme_end:
 
-hello_data:
-    .ascii \"Hello from a file loaded from the floppy image!\"
+example_data:
+    .ascii \"Files created with touch are writable in memory until reboot.\"
     .byte 13, 10, 0
-hello_end:
+example_end:
 
-notes_data:
-    .ascii \"The bootloader mounted this read-only filesystem at /.\"
-    .byte 13, 10, 0
-notes_end:
-
-    .org 4096
+    .org 8192
 ");
