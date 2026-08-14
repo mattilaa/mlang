@@ -377,6 +377,28 @@ fs_entry_data:
     xorl %eax, %eax
     ret
 
+.globl fs_entry_ends_lf
+fs_entry_ends_lf:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_ends_lf_no
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_ends_lf_no
+    imull $48, %eax, %eax
+    movl MFS_BASE + 56(%eax), %ecx
+    testl %ecx, %ecx
+    jz .Lfs_entry_ends_lf_no
+    movl MFS_BASE + 52(%eax), %edx
+    addl $MFS_BASE, %edx
+    cmpb $10, -1(%edx,%ecx)
+    sete %al
+    movzbl %al, %eax
+    ret
+.Lfs_entry_ends_lf_no:
+    xorl %eax, %eax
+    ret
+
 .globl fs_pwd
 fs_pwd:
     movl $current_directory, %eax
@@ -1381,6 +1403,7 @@ extern fn fs_entry_count() -> i32;
 extern fn fs_entry_path(index: i32) -> str8;
 extern fn fs_entry_type(index: i32) -> i32;
 extern fn fs_entry_data(index: i32) -> str8;
+extern fn fs_entry_ends_lf(index: i32) -> i32;
 extern fn fs_pwd() -> str8;
 extern fn fs_resolve(path: str8) -> str8;
 extern fn fs_find(path: str8) -> i32;
@@ -1433,6 +1456,9 @@ fn cat_file(request: str8) -> i32 {
         return -2;
     }
     serial_write(fs_entry_data(index));
+    if fs_entry_ends_lf(index) == 0 {
+        serial_write("\r\n");
+    }
     return 0;
 }
 
