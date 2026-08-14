@@ -71,7 +71,7 @@ MLang virtual terminal
 Mounted writable MFS2 at /.
 Type 'help' for available commands.
 
-mlang>
+$
 ```
 
 The terminal supports:
@@ -134,19 +134,19 @@ The initial tree is:
 For example:
 
 ```text
-mlang> cd /home/user
-mlang> pwd
+$ cd /home/user
+$ pwd
 /home/user
-mlang> cat readme.txt
+$ cat readme.txt
 This file lives in /home/user on the MFS2 root filesystem.
-mlang> touch session.log
-mlang> ls
+$ touch session.log
+$ ls
 readme.txt
 session.log
-mlang> vi notes.txt
+$ vi notes.txt
 # press i, type two lines, press Esc, then type :wq and Enter
 vi: saved
-mlang> cat notes.txt
+$ cat notes.txt
 first line
 second line
 ```
@@ -154,7 +154,10 @@ second line
 The editor uses the alternate screen through [`std::esc::freestanding`](Stdlib-Esc) and
 opens in normal mode. It preserves existing contents and redraws a 24-row,
 80-column viewport with vertical and horizontal scrolling, a mode line, dirty
-state, status messages, and a command prompt.
+state, status messages, and a command prompt. The alternate screen is cleared
+once when opening; later frames update rows in place to avoid blank flashes on
+serial terminals. The visible cursor is rendered in the selected text cell
+while the terminal hardware cursor remains hidden, avoiding cursor-row drift.
 
 Normal mode supports:
 

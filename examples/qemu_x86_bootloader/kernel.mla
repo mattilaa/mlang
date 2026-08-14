@@ -1476,7 +1476,7 @@ fn terminal_main() -> i32 {
     serial_write("Type 'help' for available commands.\r\n\r\n");
 
     while true {
-        serial_write("mlang> ");
+        serial_write("$ ");
         let command: str8 = terminal_read_line();
 
         if terminal_command_eq(command, "help") == 1 {

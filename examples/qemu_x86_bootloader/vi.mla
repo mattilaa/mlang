@@ -134,7 +134,8 @@ fn mode_name(mode: i32) -> str8 {
     return "NORMAL";
 }
 
-fn render_line(start: i32, horizontal: i32, exists: i32) -> i32 {
+fn render_line(start: i32, horizontal: i32, exists: i32,
+               cursor_offset: i32) -> i32 {
     if exists == 0 {
         serial_write("~");
         return start;
@@ -149,13 +150,24 @@ fn render_line(start: i32, horizontal: i32, exists: i32) -> i32 {
     var column: i32 = 0;
     while p < end && column < 80 {
         let ch: i32 = editor_char(p);
+        if p == cursor_offset {
+            serial_write(ansi_inverse_on());
+        }
         if ch >= 32 && ch <= 126 {
             serial_write_char(ch);
         } else {
             serial_write_char(32);
         }
+        if p == cursor_offset {
+            serial_write(ansi_reset());
+        }
         p = p + 1;
         column = column + 1;
+    }
+    if cursor_offset == end && column < 80 && cursor_offset - start >= horizontal {
+        serial_write(ansi_inverse_on());
+        serial_write(" ");
+        serial_write(ansi_reset());
     }
     return next_line(start);
 }
@@ -169,9 +181,7 @@ fn render_editor(path: str8, mode: i32, dirty: i32, cursor_offset: i32,
         horizontal = cursor_column - 79;
     }
 
-    serial_write(ansi_cursor(ansi_cmd_hide()));
     serial_write(ansi_cursor(ansi_cmd_home()));
-    serial_write(ansi_cursor(ansi_cmd_clear_screen()));
     serial_write(ansi_cursor_pos(1, 1));
     serial_write(ansi_cursor(ansi_cmd_clear_line()));
     serial_write(ansi_inverse_on());
@@ -192,7 +202,7 @@ fn render_editor(path: str8, mode: i32, dirty: i32, cursor_offset: i32,
         serial_write(ansi_cursor_pos(row + 2, 1));
         serial_write(ansi_cursor(ansi_cmd_clear_line()));
         let exists: i32 = line < size || (line == 0 && size == 0) ? 1 : 0;
-        let advanced: i32 = render_line(line, horizontal, exists);
+        let advanced: i32 = render_line(line, horizontal, exists, cursor_offset);
         if advanced == line {
             line = size + 1;
         } else {
@@ -224,15 +234,6 @@ fn render_editor(path: str8, mode: i32, dirty: i32, cursor_offset: i32,
         serial_write("i insert | hjkl/arrows move | x delete | :w write | :q quit");
     }
 
-    let screen_row: i32 = visible_row(scroll, cursor_offset) + 2;
-    let screen_column: i32 = cursor_column - horizontal + 1;
-    serial_write(ansi_cursor_pos(screen_row, screen_column));
-    if mode == 1 {
-        serial_write(ansi_cursor_blink_bar());
-    } else {
-        serial_write(ansi_cursor_reset_shape());
-    }
-    serial_write(ansi_cursor(ansi_cmd_show()));
 }
 
 fn leave_screen() -> void {
@@ -288,6 +289,9 @@ pub fn edit_file(request: str8) -> i32 {
     var pending_g: i32 = 0;
     var status: str8 = "";
     serial_write(ansi_alt_screen_on());
+    serial_write(ansi_cursor(ansi_cmd_hide()));
+    serial_write(ansi_cursor(ansi_cmd_home()));
+    serial_write(ansi_cursor(ansi_cmd_clear_screen()));
 
     while true {
         scroll = adjust_scroll(scroll, cursor_offset);
