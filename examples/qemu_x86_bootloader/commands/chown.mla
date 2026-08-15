@@ -15,6 +15,11 @@ extern fn fs_chown(index: i32, uid: i32) -> i32;
 extern fn fs_flush() -> i32;
 
 pub fn run_chown(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
+        serial_write("usage: chown <root|user> <path>\r\n");
+        serial_write("change file ownership as root\r\n");
+        return 0;
+    }
     if terminal_command_eq(arguments, "") == 1 {
         serial_write("usage: chown <root|user> <path>\r\n");
         return -5;

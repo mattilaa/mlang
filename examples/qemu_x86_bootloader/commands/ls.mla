@@ -265,6 +265,11 @@ fn list_directory(request: str8) -> i32 {
 }
 
 pub fn run_ls(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
+        serial_write("usage: ls [-l] [path]\r\n");
+        serial_write("list directory contents in long, human-readable form\r\n");
+        return 0;
+    }
     var request: str8 = arguments;
     if terminal_command_eq(arguments, "") == 1 || terminal_command_eq(arguments, "-l") == 1 {
         request = ".";

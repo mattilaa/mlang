@@ -546,6 +546,11 @@ pub fn report_edit_result(result: i32) -> void {
 }
 
 pub fn run_vi(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
+        serial_write("usage: vi <file>\r\n");
+        serial_write("edit a text file in a full-screen modal editor\r\n");
+        return 0;
+    }
     if terminal_command_eq(arguments, "") == 1 {
         serial_write("usage: vi <file>\r\n");
         return -1;

@@ -76,6 +76,8 @@ $
 
 The terminal supports:
 
+Every command accepts `-h` and `--help` for command-specific usage.
+
 - `help`: list commands
 - `about`: show kernel information
 - `clear`: clear the serial terminal with ANSI control sequences
@@ -91,6 +93,8 @@ The terminal supports:
 - `mkdir <path>`: create and persist a directory
 - `rm <path>`: remove and persist a regular file
 - `rm -r <path>`: recursively remove and persist a directory tree
+- `rm -f <path>`: remove a file without reporting a missing path
+- `rm -rf <path>` or `rm -fr <path>`: recursively remove a tree without reporting a missing path
 - `vi <path>` or `/bin/vi <path>`: edit and persist text in a full-screen modal editor
 - `sync`: flush the used MFS2 data and metadata to the IDE disk image
 - `reboot`: reset the virtual machine through the keyboard controller
@@ -185,7 +189,8 @@ $ ls
 -rw-r--r--  1 root  root      0B Aug 15 10:41 session.log
 drwxr-xr-x  1 root  root      0B Aug 15 10:41 drafts/
 $ rm session.log
-$ rm -r drafts
+$ rm -rf drafts
+$ ls --help
 $ vi notes.txt
 # press i, type two lines, press Esc, then type :wq and Enter
 vi: saved

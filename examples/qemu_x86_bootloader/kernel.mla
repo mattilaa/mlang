@@ -2168,6 +2168,35 @@ fn run_native_command(command: str8) -> i32 {
     return 0;
 }
 
+fn terminal_builtin_help(command: str8) -> i32 {
+    if terminal_command_eq(command, "help -h") == 1 || terminal_command_eq(command, "help --help") == 1 {
+        serial_write("usage: help\r\nlist available commands\r\n");
+    } else if terminal_command_eq(command, "about -h") == 1 || terminal_command_eq(command, "about --help") == 1 {
+        serial_write("usage: about\r\nshow kernel information\r\n");
+    } else if terminal_command_eq(command, "clear -h") == 1 || terminal_command_eq(command, "clear --help") == 1 {
+        serial_write("usage: clear\r\nclear the terminal\r\n");
+    } else if terminal_command_eq(command, "pwd -h") == 1 || terminal_command_eq(command, "pwd --help") == 1 {
+        serial_write("usage: pwd\r\nprint the current directory\r\n");
+    } else if terminal_command_eq(command, "whoami -h") == 1 || terminal_command_eq(command, "whoami --help") == 1 {
+        serial_write("usage: whoami\r\nprint the current user\r\n");
+    } else if terminal_command_eq(command, "su -h") == 1 || terminal_command_eq(command, "su --help") == 1 {
+        serial_write("usage: su <root|user>\r\nswitch the current user\r\n");
+    } else if terminal_command_eq(command, "cd -h") == 1 || terminal_command_eq(command, "cd --help") == 1 {
+        serial_write("usage: cd <directory>\r\nchange the current directory\r\n");
+    } else if terminal_command_eq(command, "touch -h") == 1 || terminal_command_eq(command, "touch --help") == 1 {
+        serial_write("usage: touch <file>\r\ncreate an empty file\r\n");
+    } else if terminal_command_eq(command, "sync -h") == 1 || terminal_command_eq(command, "sync --help") == 1 {
+        serial_write("usage: sync\r\nflush MFS2 metadata and data to disk\r\n");
+    } else if terminal_command_eq(command, "reboot -h") == 1 || terminal_command_eq(command, "reboot --help") == 1 {
+        serial_write("usage: reboot\r\nrestart the virtual machine\r\n");
+    } else if terminal_command_eq(command, "halt -h") == 1 || terminal_command_eq(command, "halt --help") == 1 {
+        serial_write("usage: halt\r\nstop the virtual CPU\r\n");
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
 fn terminal_main() -> i32 {
     serial_write("\r\nMLang virtual terminal\r\n");
     if fs_load() == 1 && fs_mount() == 1 {
@@ -2181,7 +2210,8 @@ fn terminal_main() -> i32 {
         serial_write("$ ");
         let command: str8 = terminal_read_line();
 
-        if terminal_command_eq(command, "help") == 1 {
+        let help_result: i32 = terminal_builtin_help(command);
+        if help_result != 1 && terminal_command_eq(command, "help") == 1 {
             serial_write("help   show available commands\r\n");
             serial_write("about  show kernel information\r\n");
             serial_write("clear  clear the terminal\r\n");
@@ -2195,11 +2225,12 @@ fn terminal_main() -> i32 {
             serial_write("chmod  change mode: chmod <mode> <path>\r\n");
             serial_write("chown  change owner: chown <user> <path>\r\n");
             serial_write("mkdir  create a directory: mkdir <path>\r\n");
-            serial_write("rm     remove a file or tree: rm [-r] <path>\r\n");
+            serial_write("rm     remove a file or tree: rm [-f] [-r] <path>\r\n");
             serial_write("vi     edit a text file: vi <path>\r\n");
             serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");
             serial_write("halt   stop the virtual CPU\r\n");
+            serial_write("Use <command> -h or --help for command help.\r\n");
         } else if terminal_command_eq(command, "about") == 1 {
             serial_write("MLang 32-bit protected-mode kernel loaded by BIOS.\r\n");
         } else if terminal_command_eq(command, "clear") == 1 {
@@ -2255,7 +2286,7 @@ fn terminal_main() -> i32 {
         } else if terminal_command_eq(command, "halt") == 1 {
             serial_write("CPU halted.\r\n");
             terminal_halt();
-        } else if terminal_command_eq(command, "") != 1 {
+        } else if help_result != 1 && terminal_command_eq(command, "") != 1 {
             if run_native_command(command) == -1 {
                 serial_write("Unknown command. Type 'help'.\r\n");
             }
