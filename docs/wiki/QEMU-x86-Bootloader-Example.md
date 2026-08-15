@@ -98,7 +98,7 @@ Every command accepts `-h` and `--help` for command-specific usage.
 - `rm -f <path>`: remove a file without reporting a missing path
 - `rm -rf <path>` or `rm -fr <path>`: recursively remove a tree without reporting a missing path
 - `echo [text]`: write command-line text to the terminal
-- `cp <source> <destination>`: copy and persist a regular file
+- `cp <source> <destination>`: copy and persist a regular file; an existing destination directory uses the source filename
 - `mv <source> <destination>`: rename and persist a regular file while preserving its metadata
 - `wc <path>`: print newline, word, and byte counts for a regular file
 - `vi <path>` or `/bin/vi <path>`: edit and persist text in a full-screen modal editor
@@ -301,9 +301,10 @@ line reader accepts at most 63 printable characters per command; the editor's
 raw input path has no per-line limit and can collect as many lines as fit in
 the image. Because this version has no compaction, growing an existing
 allocation leaves its smaller old block unused. Removed file data is likewise
-not reclaimed. `cp` and `mv` currently accept regular files and explicit
-destination paths; they do not recurse, move directories, overwrite with `mv`,
-or interpret a destination directory. `echo` writes only to the terminal
+not reclaimed. `cp` and `mv` currently accept regular files and do not recurse
+or move directories. `cp` accepts an explicit destination path or an existing
+destination directory; `mv` requires an explicit new path and does not
+overwrite. `echo` writes only to the terminal
 because the shell does not implement redirection. The example does not yet
 support `mkdir -p`, multiple path operands, independent groups, or password
 authentication.

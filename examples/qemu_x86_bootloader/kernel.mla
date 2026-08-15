@@ -992,6 +992,46 @@ fs_basename:
 .Lbasename_done:
     ret
 
+.globl fs_join_path
+fs_join_path:
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 16(%esp), %esi
+    movl $joined_path, %edi
+    movl $31, %ecx
+.Ljoin_directory:
+    lodsb
+    testb %al, %al
+    jz .Ljoin_separator
+    stosb
+    decl %ecx
+    jnz .Ljoin_directory
+    jmp .Ljoin_finish
+.Ljoin_separator:
+    cmpb $47, -1(%edi)
+    je .Ljoin_name_start
+    movb $47, (%edi)
+    incl %edi
+    decl %ecx
+    jz .Ljoin_finish
+.Ljoin_name_start:
+    movl 20(%esp), %esi
+.Ljoin_name:
+    lodsb
+    testb %al, %al
+    jz .Ljoin_finish
+    stosb
+    decl %ecx
+    jnz .Ljoin_name
+.Ljoin_finish:
+    movb $0, (%edi)
+    movl $joined_path, %eax
+    popl %ebx
+    popl %edi
+    popl %esi
+    ret
+
 .globl fs_parent
 fs_parent:
     pushl %esi
@@ -2030,6 +2070,8 @@ current_user_id:
 resolved_path:
     .skip 32
 parent_path:
+    .skip 32
+joined_path:
     .skip 32
 empty_file:
     .skip 1

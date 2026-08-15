@@ -4,22 +4,43 @@ asm x86(".section .command_entry,\"ax\",@progbits
 .globl command_start
 command_start:
     jmp run_cp__str8
+
+.globl cp_ends_with_slash
+cp_ends_with_slash:
+    movl 4(%esp), %edx
+    cmpb $0, (%edx)
+    je .Lcp_no_slash
+.Lcp_slash_scan:
+    incl %edx
+    cmpb $0, (%edx)
+    jne .Lcp_slash_scan
+    cmpb $47, -1(%edx)
+    sete %al
+    movzbl %al, %eax
+    ret
+.Lcp_no_slash:
+    xorl %eax, %eax
+    ret
 ");
 
 extern fn serial_write(message: str8) -> void;
 extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
 extern fn terminal_split_argument(argument: str8) -> str8;
 extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_entry_path(index: i32) -> str8;
 extern fn fs_entry_size(index: i32) -> i32;
 extern fn fs_entry_data(index: i32) -> str8;
 extern fn fs_can_access(index: i32, mask: i32) -> i32;
 extern fn fs_resolve(path: str8) -> str8;
 extern fn fs_find(path: str8) -> i32;
+extern fn fs_basename(path: str8) -> str8;
+extern fn fs_join_path(directory: str8, name: str8) -> str8;
 extern fn fs_parent(path: str8) -> str8;
 extern fn fs_create_empty(path: str8) -> i32;
 extern fn fs_remove_entry(index: i32) -> i32;
 extern fn fs_write_text(index: i32, text: str8, length: i32) -> i32;
 extern fn fs_flush() -> i32;
+extern fn cp_ends_with_slash(path: str8) -> i32;
 
 pub fn run_cp(arguments: str8) -> i32 {
     if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
@@ -47,8 +68,21 @@ pub fn run_cp(arguments: str8) -> i32 {
         return -4;
     }
 
-    let destination_path: str8 = fs_resolve(destination_request);
+    let directory_required: i32 = cp_ends_with_slash(destination_request);
+    var destination_path: str8 = fs_resolve(destination_request);
     var destination: i32 = fs_find(destination_path);
+    if directory_required == 1 && destination < 0 {
+        serial_write("cp: destination directory not found\r\n");
+        return -5;
+    }
+    if directory_required == 1 && fs_entry_type(destination) != 2 {
+        serial_write("cp: destination is not a directory\r\n");
+        return -3;
+    }
+    if destination >= 0 && fs_entry_type(destination) == 2 {
+        destination_path = fs_join_path(destination_path, fs_basename(fs_entry_path(source)));
+        destination = fs_find(destination_path);
+    }
     var created: i32 = 0;
     if destination >= 0 {
         if fs_entry_type(destination) != 1 {
