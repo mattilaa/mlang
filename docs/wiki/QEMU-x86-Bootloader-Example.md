@@ -101,7 +101,7 @@ Every command accepts `-h` and `--help` for command-specific usage.
 - `cp <source> <destination>`: copy and persist a regular file; an existing destination directory uses the source filename
 - `mv <source> <destination>`: rename and persist a regular file while preserving its metadata
 - `wc <path>`: print newline, word, and byte counts for a regular file
-- `ping <host-or-IPv4-address>`: resolve an A record when needed and send four ICMP echo requests
+- `ping [-i seconds] <host-or-IPv4-address>`: resolve an A record when needed and send four ICMP echo requests, spaced one second apart by default
 - `vi <path>` or `/bin/vi <path>`: edit and persist text in a full-screen modal editor
 - `sync`: flush the used MFS2 data and metadata to the IDE disk image
 - `reboot`: reset the virtual machine through the keyboard controller
@@ -144,6 +144,13 @@ PING www.google.com (<resolved-IPv4-address>) (8 data bytes)
 reply from <resolved-IPv4-address>: icmp_seq=1 ttl=255
 ...
 4 packets transmitted, 4 received
+```
+
+Use `-i` or `--interval` to select an integer delay from zero through 60
+seconds between requests. For example, this sends requests two seconds apart:
+
+```text
+$ ping -i 2 www.google.com
 ```
 
 The shell starts as UID 0 (`root`). `su user` enters the unprivileged UID 1

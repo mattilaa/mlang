@@ -158,6 +158,53 @@ terminal_timestamp:
     popl %ebx
     ret
 
+.globl terminal_wait_ms
+terminal_wait_ms:
+    pushl %ebx
+    pushl %esi
+    movl 12(%esp), %esi
+    testl %esi, %esi
+    jle .Lwait_ms_done
+    movw $0x61, %dx
+    inb %dx, %al
+    movb %al, %bl
+.Lwait_ms_chunk:
+    movl %esi, %ecx
+    cmpl $50, %ecx
+    jbe .Lwait_ms_size_ready
+    movl $50, %ecx
+.Lwait_ms_size_ready:
+    movw $0x61, %dx
+    inb %dx, %al
+    andb $0xfc, %al
+    outb %al, %dx
+    movw $0x43, %dx
+    movb $0xb0, %al
+    outb %al, %dx
+    movl %ecx, %eax
+    imull $1193, %eax, %eax
+    movw $0x42, %dx
+    outb %al, %dx
+    movb %ah, %al
+    outb %al, %dx
+    movw $0x61, %dx
+    inb %dx, %al
+    andb $0xfd, %al
+    orb $0x01, %al
+    outb %al, %dx
+.Lwait_ms_poll:
+    inb %dx, %al
+    testb $0x20, %al
+    jz .Lwait_ms_poll
+    subl %ecx, %esi
+    jg .Lwait_ms_chunk
+    movb %bl, %al
+    outb %al, %dx
+.Lwait_ms_done:
+    popl %esi
+    popl %ebx
+    ret
+
 .Lserial_putc:
     pushl %edx
     pushl %eax
@@ -2654,7 +2701,7 @@ fn terminal_main() -> i32 {
             serial_write("cp     copy a file: cp <source> <destination>\r\n");
             serial_write("mv     rename a file: mv <source> <destination>\r\n");
             serial_write("wc     count text: wc <path>\r\n");
-            serial_write("ping   test IPv4 reachability: ping <host-or-address>\r\n");
+            serial_write("ping   test IPv4 reachability: ping [-i seconds] <host>\r\n");
             serial_write("vi     edit a text file: vi <path>\r\n");
             serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");
