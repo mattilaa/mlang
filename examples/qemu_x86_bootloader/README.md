@@ -6,7 +6,8 @@ image from disk sectors 2-97 into physical address `0x10000`, then transfers
 control to it. The kernel switches to 32-bit protected mode and enters the
 ordinary MLang `terminal_main()` function. Architecture-qualified module
 assembly defines the hardware entry and I/O primitives that cannot live in a
-normal function:
+normal function. `ls`, `cat`, `chmod`, `chown`, and `vi` are compiled as
+independent MLang command images and stored as executable files under `/bin`:
 
 ```mla
 asm x86(".code16
@@ -55,7 +56,7 @@ The default MFS2 capacity is 1 MiB. Override it in KiB for either `build` or
 ../../build/mlang pkg run demo --option filesystem_kib=65536
 ```
 
-This example creates a 64 MiB filesystem. Supported values range from 4 KiB
+This example creates a 64 MiB filesystem. Supported values range from 32 KiB
 through 1 GiB. The run script derives the QEMU memory allocation from this
 value so the kernel has room for both MFS2 and the editor workspace.
 
@@ -113,8 +114,28 @@ The scripts expose the same option directly:
 ./run.sh --filesystem-kib 16384
 ```
 
-The generated boot-sector, protected-mode kernel, filesystem, ELF, and final
-`disk.img` files are written under `build/`.
+The generated boot-sector, protected-mode kernel, command ELFs and flat command
+images, filesystem, and final `disk.img` are written under `build/`.
+
+## Native command binaries
+
+The `build` task in `mlang.toml` runs `build.sh`, which compiles each source in
+`commands/` plus `vi.mla` independently from the kernel. `command.ld` links
+each command for the transient address `0x50000`. The linker resolves only the
+kernel ABI functions used by the command; the resulting flat image is embedded
+as the data of its matching MFS2 `/bin` entry.
+
+When the shell invokes a command, the kernel resolves `/bin/<name>`, verifies
+that it is an executable entry and that the current user has execute access,
+copies its bytes to the command area, and enters the image with its argument
+string. Commands return to the shell normally. They are real files rather than
+markers or code linked into the kernel, so `ls /bin` reports their actual byte
+sizes and changing an executable's mode affects dispatch.
+
+This is an initial executable ABI, not process isolation: commands run in the
+kernel address space and call a narrow set of exported filesystem and terminal
+functions. There is currently one transient command area, so commands run one
+at a time.
 
 ## MFS2 filesystem
 
@@ -128,6 +149,10 @@ The initial tree is:
 ```text
 /
 |-- bin/
+|   |-- cat
+|   |-- chmod
+|   |-- chown
+|   |-- ls
 |   `-- vi
 |-- etc/
 |   `-- motd
@@ -148,8 +173,8 @@ $ cat readme.txt
 This file lives in /home/user on the MFS2 root filesystem.
 $ touch session.log
 $ ls
-readme.txt
-session.log
+-rw-r--r--  user  60  readme.txt
+-rw-r--r--  root  0  session.log
 $ vi notes.txt
 # press i, type two lines, press Esc, then type :wq and Enter
 vi: saved
@@ -162,8 +187,8 @@ $ ls -l
 ```
 
 MFS2 stores an owner UID and a Unix-style nine-bit mode in each directory
-entry. Directories default to `0755`, ordinary files to `0644`, `/bin/vi` to
-`0755`, and `/tmp` to `0777`. `/home/user` and its initial `readme.txt` belong
+entry. Directories and `/bin` executables default to `0755`, ordinary files to
+`0644`, and `/tmp` to `0777`. `/home/user` and its initial `readme.txt` belong
 to `user`; the remaining seed entries belong to `root`. New files use `0644`
 and belong to the current user. Access checks use owner bits for the owner and
 other bits for everyone else; group bits are stored and displayed but this
@@ -219,9 +244,9 @@ retain changes across QEMU process restarts, use:
 
 The `resume` task requires an existing `build/disk.img`; run the `build` or
 `demo` task once first. Re-running `build` resets the image to the files defined
-in `filesystem.mla`. Disk images produced by the earlier floppy-backed version
-or the earlier LBA 68 MFS2 layout are not compatible with this LBA 100 layout;
-rebuild once before using `resume`.
+in `filesystem.mla`. Disk images produced by the earlier floppy-backed version,
+the earlier LBA 68 MFS2 layout, or the marker-only `/bin/vi` layout are not
+compatible with this executable layout; rebuild once before using `resume`.
 
 There is no separate per-file size setting or fixed editor limit. A file may
 grow until the configured MFS2 data area runs out of free bytes. The shell's

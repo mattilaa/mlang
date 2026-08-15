@@ -12,7 +12,7 @@ filesystem_kib = "1024"
 
 [[task]]
 name = "build"
-print = "[example] Building the MLang x86 loader with a {{option.filesystem_kib}} KiB MFS2 image"
+print = "[example] Building the MLang x86 kernel and native /bin commands with a {{option.filesystem_kib}} KiB MFS2 image"
 commands = ["./build.sh --filesystem-kib '{{option.filesystem_kib}}'"]
 
 [[task]]

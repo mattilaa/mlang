@@ -1,0 +1,42 @@
+/// Native MFS2 file-printing command.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_cat__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_entry_data(index: i32) -> str8;
+extern fn fs_entry_ends_lf(index: i32) -> i32;
+extern fn fs_can_access(index: i32, mask: i32) -> i32;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+
+pub fn run_cat(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "") == 1 {
+        serial_write("usage: cat <file>\r\n");
+        return -4;
+    }
+
+    let index: i32 = fs_find(fs_resolve(arguments));
+    if index < 0 {
+        serial_write("cat: file not found\r\n");
+        return -1;
+    }
+    if fs_entry_type(index) != 1 {
+        serial_write("cat: is a directory\r\n");
+        return -2;
+    }
+    if fs_can_access(index, 4) != 1 {
+        serial_write("cat: permission denied\r\n");
+        return -3;
+    }
+    serial_write(fs_entry_data(index));
+    if fs_entry_ends_lf(index) == 0 {
+        serial_write("\r\n");
+    }
+    return 0;
+}

@@ -24,8 +24,8 @@ case "$FILESYSTEM_KIB" in
         exit 1
         ;;
 esac
-if [ "$FILESYSTEM_KIB" -lt 4 ]; then
-    echo "filesystem size must be at least 4 KiB" >&2
+if [ "$FILESYSTEM_KIB" -lt 32 ]; then
+    echo "filesystem size must be at least 32 KiB for the native /bin commands" >&2
     exit 1
 fi
 FILESYSTEM_SIZE=$((FILESYSTEM_KIB * 1024))
@@ -92,12 +92,70 @@ mkdir -p "$BUILD_DIR"
 "$LD_LLD" -m elf_i386 --image-base=0 --section-start=.kernel=0x10000 \
     --entry=kernel_start --build-id=none -nostdlib "$BUILD_DIR/kernel.o" \
     -o "$BUILD_DIR/kernel.elf"
+
+for command in ls cat chmod chown vi; do
+    command_source="$EXAMPLE_DIR/commands/$command.mla"
+    if [ "$command" = "vi" ]; then
+        command_source="$EXAMPLE_DIR/vi.mla"
+    fi
+    "$MLANG" --target-arch x86 -emit-llvm --no-tests -Oz \
+        "$command_source" -o "$BUILD_DIR/command-$command.ll"
+    "$CLANG" --target=i386-none-elf -Wno-override-module -ffreestanding \
+        -fno-stack-protector -c "$BUILD_DIR/command-$command.ll" \
+        -o "$BUILD_DIR/command-$command.o"
+    "$LD_LLD" -m elf_i386 -T "$EXAMPLE_DIR/command.ld" \
+        --entry=command_start --build-id=none -nostdlib \
+        --just-symbols="$BUILD_DIR/kernel.elf" \
+        "$BUILD_DIR/command-$command.o" -o "$BUILD_DIR/command-$command.elf"
+    "$OBJCOPY" -O binary "$BUILD_DIR/command-$command.elf" \
+        "$BUILD_DIR/command-$command.img"
+done
+
 "$LD_LLD" -m elf_i386 --image-base=0 --section-start=.filesystem=0x20000 \
     --entry=filesystem_start --build-id=none -nostdlib \
     "$BUILD_DIR/filesystem.o" -o "$BUILD_DIR/filesystem.elf"
 "$OBJCOPY" -O binary "$BUILD_DIR/boot.elf" "$BUILD_DIR/boot.img"
 "$OBJCOPY" -O binary "$BUILD_DIR/kernel.elf" "$BUILD_DIR/kernel.img"
 "$OBJCOPY" -O binary "$BUILD_DIR/filesystem.elf" "$BUILD_DIR/filesystem.seed.img"
+
+write_u32() {
+    output=$1
+    position=$2
+    value=$3
+    byte0=$((value & 255))
+    byte1=$(((value >> 8) & 255))
+    byte2=$(((value >> 16) & 255))
+    byte3=$(((value >> 24) & 255))
+    encoded=$(printf '\\%03o\\%03o\\%03o\\%03o' \
+        "$byte0" "$byte1" "$byte2" "$byte3")
+    printf '%b' "$encoded" | dd of="$output" bs=1 seek="$position" \
+        conv=notrunc >/dev/null 2>&1
+}
+
+command_index=2
+for command in vi ls cat chmod chown; do
+    command_image="$BUILD_DIR/command-$command.img"
+    command_size=$(wc -c < "$command_image" | tr -d ' ')
+    if [ "$command_size" -gt 196608 ]; then
+        echo "$command command exceeds the 192 KiB runtime command area: $command_size bytes" >&2
+        exit 1
+    fi
+    seed_size=$(wc -c < "$BUILD_DIR/filesystem.seed.img" | tr -d ' ')
+    command_offset=$(((seed_size + 15) / 16 * 16))
+    if [ "$command_offset" -gt "$seed_size" ]; then
+        dd if=/dev/zero of="$BUILD_DIR/filesystem.seed.img" bs=1 count=0 \
+            seek="$command_offset" >/dev/null 2>&1
+    fi
+    dd if="$command_image" of="$BUILD_DIR/filesystem.seed.img" bs=1 \
+        seek="$command_offset" conv=notrunc >/dev/null 2>&1
+    entry_offset=$((16 + command_index * 48))
+    write_u32 "$BUILD_DIR/filesystem.seed.img" $((entry_offset + 36)) "$command_offset"
+    write_u32 "$BUILD_DIR/filesystem.seed.img" $((entry_offset + 40)) "$command_size"
+    write_u32 "$BUILD_DIR/filesystem.seed.img" $((entry_offset + 44)) "$command_size"
+    command_index=$((command_index + 1))
+done
+filesystem_used=$(wc -c < "$BUILD_DIR/filesystem.seed.img" | tr -d ' ')
+write_u32 "$BUILD_DIR/filesystem.seed.img" 8 "$filesystem_used"
 
 size=$(wc -c < "$BUILD_DIR/boot.img" | tr -d ' ')
 if [ "$size" -ne 512 ]; then
@@ -165,5 +223,6 @@ printf '%s\n' "$FILESYSTEM_KIB" > "$BUILD_DIR/filesystem_kib"
 echo "Built $BUILD_DIR/disk.img"
 echo "  boot sector: 512 bytes, BIOS signature 55aa"
 echo "  loaded kernel: $kernel_size bytes in sectors 2-97"
+echo "  native commands: /bin/ls /bin/cat /bin/chmod /bin/chown /bin/vi"
 echo "  MFS2 filesystem: $filesystem_size bytes ($filesystem_sectors sectors) from LBA 100"
 echo "  disk image: $disk_size bytes"

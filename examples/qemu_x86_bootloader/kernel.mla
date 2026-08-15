@@ -1,11 +1,6 @@
 /// A separately linked 32-bit kernel loaded by boot.mla at physical 0x10000.
 /// Hardware entry and COM1 primitives use module assembly; the terminal command
 /// loop below is ordinary MLang code.
-mod vi;
-use vi::edit_file;
-use vi::report_edit_result;
-use vi::write_decimal;
-
 asm x86(".code16
 .section .kernel,\"ax\",@progbits
 .globl kernel_start
@@ -1673,6 +1668,52 @@ __mlang_std_exceptions_pop_frame:
 __mlang_std_exceptions_rethrow_current:
     jmp terminal_halt
 
+.set COMMAND_BASE, 0x00050000
+.set COMMAND_CAPACITY, 0x00030000
+
+.globl command_exec
+command_exec:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    pushl 8(%ebp)
+    call fs_entry_size
+    addl $4, %esp
+    testl %eax, %eax
+    jle .Lcommand_exec_invalid
+    cmpl $COMMAND_CAPACITY, %eax
+    ja .Lcommand_exec_invalid
+    movl %eax, %ebx
+    pushl 8(%ebp)
+    call fs_entry_data
+    addl $4, %esp
+    testl %eax, %eax
+    jz .Lcommand_exec_invalid
+    movl %eax, %esi
+    movl $COMMAND_BASE, %edi
+    xorl %eax, %eax
+    movl $COMMAND_CAPACITY / 4, %ecx
+    cld
+    rep stosl
+    movl $COMMAND_BASE, %edi
+    movl %ebx, %ecx
+    rep movsb
+    pushl 12(%ebp)
+    movl $COMMAND_BASE, %eax
+    call *%eax
+    addl $4, %esp
+    jmp .Lcommand_exec_done
+.Lcommand_exec_invalid:
+    movl $-1, %eax
+.Lcommand_exec_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    leave
+    ret
+
 .section .rodata,\"a\",@progbits
 ansi_empty:
     .asciz \"\"
@@ -1744,6 +1785,7 @@ extern fn terminal_split_argument(argument: str8) -> str8;
 extern fn terminal_parse_mode(mode: str8) -> i32;
 extern fn terminal_reboot() -> void;
 extern fn terminal_halt() -> void;
+extern fn command_exec(index: i32, arguments: str8) -> i32;
 extern fn fs_load() -> i32;
 extern fn fs_mount() -> i32;
 extern fn fs_entry_count() -> i32;
@@ -1795,88 +1837,6 @@ fn switch_user(name: str8) -> i32 {
     return -1;
 }
 
-fn write_mode_bit(mode: i32, mask: i32, shown: i32) -> void {
-    if (mode & mask) != 0 {
-        serial_write_char(shown);
-    } else {
-        serial_write_char(45);
-    }
-}
-
-fn write_long_entry(index: i32) -> void {
-    if fs_entry_type(index) == 2 {
-        serial_write_char(100);
-    } else {
-        serial_write_char(45);
-    }
-    let mode: i32 = fs_entry_mode(index);
-    write_mode_bit(mode, 256, 114);
-    write_mode_bit(mode, 128, 119);
-    write_mode_bit(mode, 64, 120);
-    write_mode_bit(mode, 32, 114);
-    write_mode_bit(mode, 16, 119);
-    write_mode_bit(mode, 8, 120);
-    write_mode_bit(mode, 4, 114);
-    write_mode_bit(mode, 2, 119);
-    write_mode_bit(mode, 1, 120);
-    serial_write("  ");
-    serial_write(user_name(fs_entry_owner(index)));
-    serial_write("  ");
-    write_decimal(fs_entry_size(index));
-    serial_write("  ");
-}
-
-fn list_directory(request: str8, long_format: i32) -> i32 {
-    let directory: str8 = fs_resolve(request);
-    let directory_index: i32 = fs_find(directory);
-    if directory_index < 0 {
-        return -1;
-    }
-    if fs_entry_type(directory_index) != 2 {
-        return -2;
-    }
-    if fs_can_access(directory_index, 5) != 1 {
-        return -3;
-    }
-
-    var index: i32 = 0;
-    let count: i32 = fs_entry_count();
-    while index < count {
-        let path: str8 = fs_entry_path(index);
-        if fs_is_direct_child(directory, path) == 1 {
-            if long_format == 1 {
-                write_long_entry(index);
-            }
-            serial_write(fs_basename(path));
-            if fs_entry_type(index) == 2 {
-                serial_write("/");
-            }
-            serial_write("\r\n");
-        }
-        index = index + 1;
-    }
-    return 0;
-}
-
-fn cat_file(request: str8) -> i32 {
-    let path: str8 = fs_resolve(request);
-    let index: i32 = fs_find(path);
-    if index < 0 {
-        return -1;
-    }
-    if fs_entry_type(index) != 1 {
-        return -2;
-    }
-    if fs_can_access(index, 4) != 1 {
-        return -3;
-    }
-    serial_write(fs_entry_data(index));
-    if fs_entry_ends_lf(index) == 0 {
-        serial_write("\r\n");
-    }
-    return 0;
-}
-
 fn change_directory(request: str8) -> i32 {
     let path: str8 = fs_resolve(request);
     let index: i32 = fs_find(path);
@@ -1913,55 +1873,50 @@ fn touch_file(request: str8) -> i32 {
     return 1;
 }
 
-fn change_mode(mode_text: str8, request: str8) -> i32 {
-    let mode: i32 = terminal_parse_mode(mode_text);
-    if mode < 0 {
-        return -3;
+fn native_command_path(name: str8) -> str8 {
+    if terminal_command_eq(name, "ls") == 1 || terminal_command_eq(name, "/bin/ls") == 1 {
+        return "/bin/ls";
     }
-    let index: i32 = fs_find(fs_resolve(request));
-    if index < 0 {
-        return -1;
+    if terminal_command_eq(name, "cat") == 1 || terminal_command_eq(name, "/bin/cat") == 1 {
+        return "/bin/cat";
     }
-    let changed: i32 = fs_chmod(index, mode);
-    if changed != 1 {
-        return changed;
+    if terminal_command_eq(name, "chmod") == 1 || terminal_command_eq(name, "/bin/chmod") == 1 {
+        return "/bin/chmod";
     }
-    if fs_flush() != 1 {
-        return -4;
+    if terminal_command_eq(name, "chown") == 1 || terminal_command_eq(name, "/bin/chown") == 1 {
+        return "/bin/chown";
     }
-    return 1;
+    if terminal_command_eq(name, "vi") == 1 || terminal_command_eq(name, "/bin/vi") == 1 {
+        return "/bin/vi";
+    }
+    return "";
 }
 
-fn change_owner(owner_text: str8, request: str8) -> i32 {
-    var uid: i32 = -1;
-    if terminal_command_eq(owner_text, "root") == 1 {
-        uid = 0;
-    } else if terminal_command_eq(owner_text, "user") == 1 {
-        uid = 1;
-    }
-    if uid < 0 {
-        return -3;
-    }
-    let index: i32 = fs_find(fs_resolve(request));
-    if index < 0 {
+fn run_native_command(command: str8) -> i32 {
+    let arguments: str8 = terminal_split_argument(command);
+    let path: str8 = native_command_path(command);
+    if terminal_command_eq(path, "") == 1 {
         return -1;
     }
-    let changed: i32 = fs_chown(index, uid);
-    if changed != 1 {
-        return changed;
-    }
-    if fs_flush() != 1 {
-        return -4;
-    }
-    return 1;
-}
 
-fn launch_editor(request: str8) -> i32 {
-    let executable: i32 = fs_find("/bin/vi");
-    if executable < 0 || fs_can_access(executable, 1) != 1 {
-        return -7;
+    let executable: i32 = fs_find(path);
+    if executable < 0 || fs_entry_type(executable) != 3 {
+        serial_write(command);
+        serial_write(": command not found\r\n");
+        return 0;
     }
-    return edit_file(request);
+    if fs_can_access(executable, 1) != 1 {
+        serial_write(command);
+        serial_write(": permission denied\r\n");
+        return 0;
+    }
+
+    let result: i32 = command_exec(executable, arguments);
+    if result == -1 {
+        serial_write(command);
+        serial_write(": invalid executable\r\n");
+    }
+    return result;
 }
 
 fn terminal_main() -> i32 {
@@ -2013,28 +1968,6 @@ fn terminal_main() -> i32 {
             } else if result == -2 {
                 serial_write("su: permission denied\r\n");
             }
-        } else if terminal_command_eq(command, "ls") == 1 {
-            let _ = list_directory(fs_pwd(), 1);
-        } else if terminal_command_eq(command, "ls -l") == 1 {
-            let _ = list_directory(fs_pwd(), 1);
-        } else if terminal_command_prefix(command, "ls -l ") == 1 {
-            let result: i32 = list_directory(terminal_argument(command, 6), 1);
-            if result == -1 {
-                serial_write("ls: directory not found\r\n");
-            } else if result == -2 {
-                serial_write("ls: not a directory\r\n");
-            } else if result == -3 {
-                serial_write("ls: permission denied\r\n");
-            }
-        } else if terminal_command_prefix(command, "ls ") == 1 {
-            let result: i32 = list_directory(terminal_argument(command, 3), 1);
-            if result == -1 {
-                serial_write("ls: directory not found\r\n");
-            } else if result == -2 {
-                serial_write("ls: not a directory\r\n");
-            } else if result == -3 {
-                serial_write("ls: permission denied\r\n");
-            }
         } else if terminal_command_eq(command, "cd") == 1 {
             serial_write("usage: cd <directory>\r\n");
         } else if terminal_command_prefix(command, "cd ") == 1 {
@@ -2043,17 +1976,6 @@ fn terminal_main() -> i32 {
                 serial_write("cd: directory not found\r\n");
             } else if result == -2 {
                 serial_write("cd: permission denied\r\n");
-            }
-        } else if terminal_command_eq(command, "cat") == 1 {
-            serial_write("usage: cat <file>\r\n");
-        } else if terminal_command_prefix(command, "cat ") == 1 {
-            let result: i32 = cat_file(terminal_argument(command, 4));
-            if result == -1 {
-                serial_write("cat: file not found\r\n");
-            } else if result == -2 {
-                serial_write("cat: is a directory\r\n");
-            } else if result == -3 {
-                serial_write("cat: permission denied\r\n");
             }
         } else if terminal_command_eq(command, "touch") == 1 {
             serial_write("usage: touch <file>\r\n");
@@ -2070,50 +1992,6 @@ fn terminal_main() -> i32 {
             } else if result == -4 {
                 serial_write("touch: permission denied\r\n");
             }
-        } else if terminal_command_eq(command, "chmod") == 1 {
-            serial_write("usage: chmod <mode> <path>\r\n");
-        } else if terminal_command_prefix(command, "chmod ") == 1 {
-            let mode_text: str8 = terminal_argument(command, 6);
-            let path: str8 = terminal_split_argument(mode_text);
-            if terminal_command_eq(path, "") == 1 {
-                serial_write("usage: chmod <mode> <path>\r\n");
-            } else {
-                let result: i32 = change_mode(mode_text, path);
-                if result == -1 {
-                    serial_write("chmod: file not found\r\n");
-                } else if result == -2 {
-                    serial_write("chmod: permission denied\r\n");
-                } else if result == -3 {
-                    serial_write("chmod: invalid mode\r\n");
-                } else if result == -4 {
-                    serial_write("chmod: disk flush failed\r\n");
-                }
-            }
-        } else if terminal_command_eq(command, "chown") == 1 {
-            serial_write("usage: chown <root|user> <path>\r\n");
-        } else if terminal_command_prefix(command, "chown ") == 1 {
-            let owner_text: str8 = terminal_argument(command, 6);
-            let path: str8 = terminal_split_argument(owner_text);
-            if terminal_command_eq(path, "") == 1 {
-                serial_write("usage: chown <root|user> <path>\r\n");
-            } else {
-                let result: i32 = change_owner(owner_text, path);
-                if result == -1 {
-                    serial_write("chown: file not found\r\n");
-                } else if result == -2 {
-                    serial_write("chown: permission denied\r\n");
-                } else if result == -3 {
-                    serial_write("chown: unknown user\r\n");
-                } else if result == -4 {
-                    serial_write("chown: disk flush failed\r\n");
-                }
-            }
-        } else if terminal_command_eq(command, "vi") == 1 || terminal_command_eq(command, "/bin/vi") == 1 {
-            serial_write("usage: vi <file>\r\n");
-        } else if terminal_command_prefix(command, "vi ") == 1 {
-            report_edit_result(launch_editor(terminal_argument(command, 3)));
-        } else if terminal_command_prefix(command, "/bin/vi ") == 1 {
-            report_edit_result(launch_editor(terminal_argument(command, 8)));
         } else if terminal_command_eq(command, "sync") == 1 {
             if fs_flush() == 1 {
                 serial_write("MFS2 synchronized to disk.\r\n");
@@ -2127,7 +2005,9 @@ fn terminal_main() -> i32 {
             serial_write("CPU halted.\r\n");
             terminal_halt();
         } else if terminal_command_eq(command, "") != 1 {
-            serial_write("Unknown command. Type 'help'.\r\n");
+            if run_native_command(command) == -1 {
+                serial_write("Unknown command. Type 'help'.\r\n");
+            }
         }
     }
 

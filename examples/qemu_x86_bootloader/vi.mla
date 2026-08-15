@@ -1,5 +1,11 @@
 /// Full-screen modal editor for the freestanding x86 kernel.
 
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_vi__str8
+");
+
 mod std::esc::freestanding;
 use std::esc::freestanding::*;
 
@@ -537,4 +543,14 @@ pub fn report_edit_result(result: i32) -> void {
     } else {
         serial_write("vi: saved\r\n");
     }
+}
+
+pub fn run_vi(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "") == 1 {
+        serial_write("usage: vi <file>\r\n");
+        return -1;
+    }
+    let result: i32 = edit_file(arguments);
+    report_edit_result(result);
+    return result;
 }

@@ -1,0 +1,123 @@
+/// Native MFS2 directory-listing command.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_ls__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn serial_write_char(ch: i32) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn terminal_command_prefix(actual: str8, prefix: str8) -> i32;
+extern fn terminal_argument(command: str8, offset: i32) -> str8;
+extern fn fs_entry_count() -> i32;
+extern fn fs_entry_path(index: i32) -> str8;
+extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_entry_owner(index: i32) -> i32;
+extern fn fs_entry_mode(index: i32) -> i32;
+extern fn fs_entry_size(index: i32) -> i32;
+extern fn fs_can_access(index: i32, mask: i32) -> i32;
+extern fn fs_pwd() -> str8;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_basename(path: str8) -> str8;
+extern fn fs_is_direct_child(directory: str8, candidate: str8) -> i32;
+
+fn ls_user_name(uid: i32) -> str8 {
+    if uid == 1 {
+        return "user";
+    }
+    return "root";
+}
+
+fn write_size(value: i32) -> void {
+    var divisor: i32 = 1;
+    while divisor <= value / 10 {
+        divisor = divisor * 10;
+    }
+    while divisor > 0 {
+        serial_write_char(48 + (value / divisor) % 10);
+        divisor = divisor / 10;
+    }
+}
+
+fn write_mode_bit(mode: i32, mask: i32, shown: i32) -> void {
+    if (mode & mask) != 0 {
+        serial_write_char(shown);
+    } else {
+        serial_write_char(45);
+    }
+}
+
+fn write_entry(index: i32) -> void {
+    if fs_entry_type(index) == 2 {
+        serial_write_char(100);
+    } else {
+        serial_write_char(45);
+    }
+    let mode: i32 = fs_entry_mode(index);
+    write_mode_bit(mode, 256, 114);
+    write_mode_bit(mode, 128, 119);
+    write_mode_bit(mode, 64, 120);
+    write_mode_bit(mode, 32, 114);
+    write_mode_bit(mode, 16, 119);
+    write_mode_bit(mode, 8, 120);
+    write_mode_bit(mode, 4, 114);
+    write_mode_bit(mode, 2, 119);
+    write_mode_bit(mode, 1, 120);
+    serial_write("  ");
+    serial_write(ls_user_name(fs_entry_owner(index)));
+    serial_write("  ");
+    write_size(fs_entry_size(index));
+    serial_write("  ");
+    serial_write(fs_basename(fs_entry_path(index)));
+    if fs_entry_type(index) == 2 {
+        serial_write("/");
+    }
+    serial_write("\r\n");
+}
+
+fn list_directory(request: str8) -> i32 {
+    let directory: str8 = fs_resolve(request);
+    let directory_index: i32 = fs_find(directory);
+    if directory_index < 0 {
+        return -1;
+    }
+    if fs_entry_type(directory_index) != 2 {
+        return -2;
+    }
+    if fs_can_access(directory_index, 5) != 1 {
+        return -3;
+    }
+
+    var index: i32 = 0;
+    let count: i32 = fs_entry_count();
+    while index < count {
+        let path: str8 = fs_entry_path(index);
+        if fs_is_direct_child(directory, path) == 1 {
+            write_entry(index);
+        }
+        index = index + 1;
+    }
+    return 0;
+}
+
+pub fn run_ls(arguments: str8) -> i32 {
+    var request: str8 = arguments;
+    if terminal_command_eq(arguments, "") == 1 || terminal_command_eq(arguments, "-l") == 1 {
+        request = fs_pwd();
+    } else if terminal_command_prefix(arguments, "-l ") == 1 {
+        request = terminal_argument(arguments, 3);
+    }
+
+    let result: i32 = list_directory(request);
+    if result == -1 {
+        serial_write("ls: directory not found\r\n");
+    } else if result == -2 {
+        serial_write("ls: not a directory\r\n");
+    } else if result == -3 {
+        serial_write("ls: permission denied\r\n");
+    }
+    return result;
+}

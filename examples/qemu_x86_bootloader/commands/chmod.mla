@@ -1,0 +1,49 @@
+/// Native MFS2 mode-changing command.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_chmod__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn terminal_split_argument(argument: str8) -> str8;
+extern fn terminal_parse_mode(mode: str8) -> i32;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_chmod(index: i32, mode: i32) -> i32;
+extern fn fs_flush() -> i32;
+
+pub fn run_chmod(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "") == 1 {
+        serial_write("usage: chmod <mode> <path>\r\n");
+        return -5;
+    }
+
+    let path: str8 = terminal_split_argument(arguments);
+    if terminal_command_eq(path, "") == 1 {
+        serial_write("usage: chmod <mode> <path>\r\n");
+        return -5;
+    }
+    let mode: i32 = terminal_parse_mode(arguments);
+    if mode < 0 {
+        serial_write("chmod: invalid mode\r\n");
+        return -3;
+    }
+    let index: i32 = fs_find(fs_resolve(path));
+    if index < 0 {
+        serial_write("chmod: file not found\r\n");
+        return -1;
+    }
+    let changed: i32 = fs_chmod(index, mode);
+    if changed != 1 {
+        serial_write("chmod: permission denied\r\n");
+        return -2;
+    }
+    if fs_flush() != 1 {
+        serial_write("chmod: disk flush failed\r\n");
+        return -4;
+    }
+    return 0;
+}

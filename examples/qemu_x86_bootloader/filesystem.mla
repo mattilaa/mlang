@@ -3,7 +3,7 @@ asm x86(".section .filesystem,\"a\",@progbits
 .globl filesystem_start
 filesystem_start:
     .ascii \"MFS2\"
-    .word 10
+    .word 14
     .word 32
     .long filesystem_end - filesystem_start
     .long 0
@@ -31,6 +31,46 @@ bin_path:
 vi_path:
     .asciz \"/bin/vi\"
     .zero 32 - (. - vi_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+ls_path:
+    .asciz \"/bin/ls\"
+    .zero 32 - (. - ls_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+cat_path:
+    .asciz \"/bin/cat\"
+    .zero 32 - (. - cat_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+chmod_path:
+    .asciz \"/bin/chmod\"
+    .zero 32 - (. - chmod_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+chown_path:
+    .asciz \"/bin/chown\"
+    .zero 32 - (. - chown_path)
     .byte 3
     .byte 0
     .word 0x01ed
