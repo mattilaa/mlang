@@ -59,7 +59,7 @@ The default MFS2 capacity is 1 MiB. Override it in KiB for either `build` or
 ../../build/mlang pkg run demo --option filesystem_kib=65536
 ```
 
-This example creates a 64 MiB filesystem. Supported values range from 40 KiB
+This example creates a 64 MiB filesystem. Supported values range from 44 KiB
 through 1 GiB. The run script derives the QEMU memory allocation from this
 value so the kernel has room for both MFS2 and the editor workspace.
 
@@ -101,7 +101,7 @@ Every command accepts `-h` and `--help` for command-specific usage.
 - `cp <source> <destination>`: copy and persist a regular file; an existing destination directory uses the source filename
 - `mv <source> <destination>`: rename and persist a regular file while preserving its metadata
 - `wc <path>`: print newline, word, and byte counts for a regular file
-- `ping <IPv4-address>`: send four ICMP echo requests over the QEMU user network
+- `ping <host-or-IPv4-address>`: resolve an A record when needed and send four ICMP echo requests
 - `vi <path>` or `/bin/vi <path>`: edit and persist text in a full-screen modal editor
 - `sync`: flush the used MFS2 data and metadata to the IDE disk image
 - `reboot`: reset the virtual machine through the keyboard controller
@@ -112,9 +112,10 @@ the serial connection to raw-key handling while its full-screen view is open.
 Press `Ctrl-c` to stop QEMU after using `halt`.
 
 `run.sh` attaches a polled NE2000 ISA adapter to QEMU user networking. The
-guest uses `10.0.2.15/24`, with `10.0.2.2` as its gateway. The script detects
-the first non-loopback host MAC address and derives a locally administered
-unicast address for the guest. Override detection when needed:
+guest uses `10.0.2.15/24`, with `10.0.2.2` as its gateway and `10.0.2.3` as its
+virtual DNS server. The script detects the first non-loopback host MAC address
+and derives a locally administered unicast address for the guest. Override
+detection when needed:
 
 ```sh
 MLANG_QEMU_MAC=02:00:00:00:00:01 ./run.sh --no-build
@@ -130,6 +131,18 @@ reply from 10.0.2.2: icmp_seq=1 ttl=255
 reply from 10.0.2.2: icmp_seq=2 ttl=255
 reply from 10.0.2.2: icmp_seq=3 ttl=255
 reply from 10.0.2.2: icmp_seq=4 ttl=255
+4 packets transmitted, 4 received
+```
+
+Hostnames are resolved through a minimal UDP DNS client. It requests IPv4 A
+records from QEMU's virtual resolver and falls back to `8.8.8.8` when that
+resolver is unavailable:
+
+```text
+$ ping www.google.com
+PING www.google.com (<resolved-IPv4-address>) (8 data bytes)
+reply from <resolved-IPv4-address>: icmp_seq=1 ttl=255
+...
 4 packets transmitted, 4 received
 ```
 
@@ -331,9 +344,11 @@ destination directory; `mv` requires an explicit new path and does not
 overwrite. `echo` writes only to the terminal
 because the shell does not implement redirection. The example does not yet
 support `mkdir -p`, multiple path operands, independent groups, password
-authentication, DHCP, DNS names, IPv6, TCP, or UDP. `ping` accepts IPv4
-literals. QEMU user networking guarantees ICMP to its local `10.0.2.2` router;
-external ICMP availability depends on the host platform and configuration.
+authentication, DHCP, IPv6, TCP, or general UDP applications. The resolver
+supports DNS A records and compressed answer names; it does not implement
+IPv6 AAAA records or a system-wide resolver API. QEMU user networking
+guarantees ICMP to its local `10.0.2.2` router; external DNS and ICMP
+availability depends on the host platform and configuration.
 
 ## Module assembly
 

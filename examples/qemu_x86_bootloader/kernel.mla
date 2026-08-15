@@ -2654,7 +2654,7 @@ fn terminal_main() -> i32 {
             serial_write("cp     copy a file: cp <source> <destination>\r\n");
             serial_write("mv     rename a file: mv <source> <destination>\r\n");
             serial_write("wc     count text: wc <path>\r\n");
-            serial_write("ping   test IPv4 reachability: ping <address>\r\n");
+            serial_write("ping   test IPv4 reachability: ping <host-or-address>\r\n");
             serial_write("vi     edit a text file: vi <path>\r\n");
             serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");

@@ -24,8 +24,8 @@ case "$FILESYSTEM_KIB" in
         exit 1
         ;;
 esac
-if [ "$FILESYSTEM_KIB" -lt 40 ]; then
-    echo "filesystem size must be at least 40 KiB for the native /bin commands" >&2
+if [ "$FILESYSTEM_KIB" -lt 44 ]; then
+    echo "filesystem size must be at least 44 KiB for the native /bin commands" >&2
     exit 1
 fi
 FILESYSTEM_SIZE=$((FILESYSTEM_KIB * 1024))

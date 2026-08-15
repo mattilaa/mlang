@@ -69,6 +69,17 @@ fn ping_write_unsigned(value: i32) -> void {
     }
 }
 
+fn ping_write_ipv4(address: i32) -> void {
+    var index: i32 = 0;
+    while index < 4 {
+        if index > 0 {
+            serial_write_char(46);
+        }
+        ping_write_unsigned((address >> ((3 - index) * 8)) & 255);
+        index = index + 1;
+    }
+}
+
 fn ping_parse_ipv4(text: str8) -> i32 {
     var address: i32 = 0;
     var part: i32 = 0;
@@ -114,6 +125,10 @@ fn ping_set_u16(data: str8, offset: i32, value: i32) -> void {
     ping_set_byte(data, offset + 1, value & 255);
 }
 
+fn ping_get_u16(data: str8, offset: i32) -> i32 {
+    return (ping_byte_at(data, offset) << 8) | ping_byte_at(data, offset + 1);
+}
+
 fn ping_checksum(data: str8, offset: i32, length: i32) -> i32 {
     var sum: i32 = 0;
     var index: i32 = 0;
@@ -129,6 +144,29 @@ fn ping_checksum(data: str8, offset: i32, length: i32) -> i32 {
         sum = (sum & 65535) + (sum >> 16);
     }
     return 65535 - sum;
+}
+
+fn ping_udp_checksum(data: str8, offset: i32, length: i32, source: i32, destination: i32) -> i32 {
+    var sum: i32 = ((source >> 16) & 65535) + (source & 65535);
+    sum = sum + ((destination >> 16) & 65535) + (destination & 65535);
+    sum = sum + 17 + length;
+    var index: i32 = 0;
+    while index < length {
+        var word: i32 = ping_byte_at(data, offset + index) << 8;
+        if index + 1 < length {
+            word = word | ping_byte_at(data, offset + index + 1);
+        }
+        sum = sum + word;
+        index = index + 2;
+    }
+    while (sum >> 16) != 0 {
+        sum = (sum & 65535) + (sum >> 16);
+    }
+    let result: i32 = 65535 - sum;
+    if result == 0 {
+        return 65535;
+    }
+    return result;
 }
 
 fn ping_clear(data: str8, length: i32) -> void {
@@ -221,6 +259,204 @@ fn ping_resolve(target: i32) -> i32 {
     return 0;
 }
 
+fn ping_dns_character(ch: i32) -> i32 {
+    if ch >= 48 && ch <= 57 {
+        return 1;
+    }
+    if ch >= 65 && ch <= 90 {
+        return 1;
+    }
+    if ch >= 97 && ch <= 122 {
+        return 1;
+    }
+    if ch == 45 {
+        return 1;
+    }
+    return 0;
+}
+
+fn ping_build_dns_query(host: str8, server: i32) -> i32 {
+    let frame: str8 = ping_tx_buffer_ptr();
+    let peer: str8 = ping_peer_mac_ptr();
+    ping_clear(frame, 256);
+    var index: i32 = 0;
+    while index < 6 {
+        ping_set_byte(frame, index, ping_byte_at(peer, index));
+        index = index + 1;
+    }
+    ping_set_local_mac(frame, 6);
+    ping_set_u16(frame, 12, 0x0800);
+    ping_set_byte(frame, 14, 0x45);
+    ping_set_u16(frame, 18, 0x4d44);
+    ping_set_byte(frame, 22, 64);
+    ping_set_byte(frame, 23, 17);
+    ping_set_ip(frame, 26, 0x0a00020f);
+    ping_set_ip(frame, 30, server);
+    ping_set_u16(frame, 34, 0xc001);
+    ping_set_u16(frame, 36, 53);
+    ping_set_u16(frame, 40, 0);
+    ping_set_u16(frame, 42, 0x4d4c);
+    ping_set_u16(frame, 44, 0x0100);
+    ping_set_u16(frame, 46, 1);
+    ping_set_u16(frame, 48, 0);
+    ping_set_u16(frame, 50, 0);
+    ping_set_u16(frame, 52, 0);
+
+    var input: i32 = 0;
+    var output: i32 = 55;
+    var label_offset: i32 = 54;
+    var label_length: i32 = 0;
+    while true {
+        let ch: i32 = ping_byte_at(host, input);
+        if ch == 46 || ch == 0 {
+            if label_length == 0 || label_length > 63 {
+                return 0;
+            }
+            ping_set_byte(frame, label_offset, label_length);
+            if ch == 0 {
+                break;
+            }
+            label_offset = output;
+            output = output + 1;
+            label_length = 0;
+        } else {
+            if ping_dns_character(ch) != 1 || output >= 250 {
+                return 0;
+            }
+            ping_set_byte(frame, output, ch);
+            output = output + 1;
+            label_length = label_length + 1;
+        }
+        input = input + 1;
+    }
+    ping_set_byte(frame, output, 0);
+    output = output + 1;
+    ping_set_u16(frame, output, 1);
+    ping_set_u16(frame, output + 2, 1);
+    output = output + 4;
+    let dns_length: i32 = output - 42;
+    let udp_length: i32 = dns_length + 8;
+    let ip_length: i32 = udp_length + 20;
+    ping_set_u16(frame, 38, udp_length);
+    ping_set_u16(frame, 40, ping_udp_checksum(frame, 34, udp_length, 0x0a00020f, server));
+    ping_set_u16(frame, 16, ip_length);
+    ping_set_u16(frame, 24, ping_checksum(frame, 14, 20));
+    return output;
+}
+
+fn ping_dns_skip_name(data: str8, offset: i32, end: i32) -> i32 {
+    var cursor: i32 = offset;
+    while cursor < end {
+        let length: i32 = ping_byte_at(data, cursor);
+        if length == 0 {
+            return cursor + 1;
+        }
+        if (length & 0xc0) == 0xc0 {
+            if cursor + 1 < end {
+                return cursor + 2;
+            }
+            return 0;
+        }
+        if length > 63 || cursor + length + 1 > end {
+            return 0;
+        }
+        cursor = cursor + length + 1;
+    }
+    return 0;
+}
+
+fn ping_dns_answer(data: str8, length: i32, server: i32) -> i32 {
+    if length < 58 {
+        return 0;
+    }
+    if ping_byte_at(data, 12) != 8 || ping_byte_at(data, 13) != 0 {
+        return 0;
+    }
+    if ping_byte_at(data, 23) != 17 || ping_ip_matches(data, 26, server) != 1 {
+        return 0;
+    }
+    if ping_get_u16(data, 34) != 53 || ping_get_u16(data, 42) != 0x4d4c {
+        return 0;
+    }
+    if (ping_get_u16(data, 44) & 0x800f) != 0x8000 {
+        return 0;
+    }
+    let udp_length: i32 = ping_get_u16(data, 38);
+    let end: i32 = 34 + udp_length;
+    if udp_length < 20 || end > length {
+        return 0;
+    }
+    let questions: i32 = ping_get_u16(data, 46);
+    let answers: i32 = ping_get_u16(data, 48);
+    var cursor: i32 = 54;
+    var item: i32 = 0;
+    while item < questions {
+        cursor = ping_dns_skip_name(data, cursor, end);
+        if cursor == 0 || cursor + 4 > end {
+            return 0;
+        }
+        cursor = cursor + 4;
+        item = item + 1;
+    }
+    item = 0;
+    while item < answers {
+        cursor = ping_dns_skip_name(data, cursor, end);
+        if cursor == 0 || cursor + 10 > end {
+            return 0;
+        }
+        let record_type: i32 = ping_get_u16(data, cursor);
+        let record_class: i32 = ping_get_u16(data, cursor + 2);
+        let data_length: i32 = ping_get_u16(data, cursor + 8);
+        cursor = cursor + 10;
+        if cursor + data_length > end {
+            return 0;
+        }
+        if record_type == 1 && record_class == 1 && data_length == 4 {
+            return (ping_byte_at(data, cursor) << 24) |
+                (ping_byte_at(data, cursor + 1) << 16) |
+                (ping_byte_at(data, cursor + 2) << 8) |
+                ping_byte_at(data, cursor + 3);
+        }
+        cursor = cursor + data_length;
+        item = item + 1;
+    }
+    return 0;
+}
+
+fn ping_dns_lookup_at(host: str8, server: i32) -> i32 {
+    var next_hop: i32 = 0x0a000202;
+    if (server & 0xffffff00) == 0x0a000200 {
+        next_hop = server;
+    }
+    if ping_resolve(next_hop) != 1 {
+        return 0;
+    }
+    let frame: str8 = ping_tx_buffer_ptr();
+    let length: i32 = ping_build_dns_query(host, server);
+    if length == 0 || network_send(frame, length) != 1 {
+        return 0;
+    }
+    let reply: str8 = ping_rx_buffer_ptr();
+    var attempt: i32 = 0;
+    while attempt < 1 {
+        let reply_length: i32 = network_receive(reply, 1600);
+        let address: i32 = ping_dns_answer(reply, reply_length, server);
+        if address != 0 {
+            return address;
+        }
+        attempt = attempt + 1;
+    }
+    return 0;
+}
+
+fn ping_dns_lookup(host: str8) -> i32 {
+    var address: i32 = ping_dns_lookup_at(host, 0x0a000203);
+    if address == 0 {
+        address = ping_dns_lookup_at(host, 0x08080808);
+    }
+    return address;
+}
+
 fn ping_build_echo(target: i32, sequence: i32) -> i32 {
     let frame: str8 = ping_tx_buffer_ptr();
     let peer: str8 = ping_peer_mac_ptr();
@@ -296,22 +532,27 @@ fn ping_once(target: i32, sequence: i32) -> i32 {
 
 pub fn run_ping(arguments: str8) -> i32 {
     if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
-        serial_write("usage: ping <IPv4-address>\r\n");
-        serial_write("send four ICMP echo requests over the QEMU user network\r\n");
+        serial_write("usage: ping <host-or-IPv4-address>\r\n");
+        serial_write("resolve a host and send four ICMP echo requests\r\n");
         return 0;
     }
     if terminal_command_eq(arguments, "") == 1 {
-        serial_write("usage: ping <IPv4-address>\r\n");
+        serial_write("usage: ping <host-or-IPv4-address>\r\n");
         return -1;
-    }
-    let target: i32 = ping_parse_ipv4(arguments);
-    if target == 0 {
-        serial_write("ping: invalid IPv4 address\r\n");
-        return -2;
     }
     if network_init() != 1 {
         serial_write("ping: NE2000 network device not found\r\n");
         return -3;
+    }
+    var target: i32 = ping_parse_ipv4(arguments);
+    var resolved_name: i32 = 0;
+    if target == 0 {
+        target = ping_dns_lookup(arguments);
+        if target == 0 {
+            serial_write("ping: cannot resolve host\r\n");
+            return -2;
+        }
+        resolved_name = 1;
     }
     var next_hop: i32 = 0x0a000202;
     if (target & 0xffffff00) == 0x0a000200 {
@@ -319,6 +560,11 @@ pub fn run_ping(arguments: str8) -> i32 {
     }
     serial_write("PING ");
     serial_write(arguments);
+    if resolved_name == 1 {
+        serial_write(" (");
+        ping_write_ipv4(target);
+        serial_write(")");
+    }
     serial_write(" (8 data bytes)\r\n");
     if ping_resolve(next_hop) != 1 {
         serial_write("ping: ARP resolution timed out\r\n");
@@ -330,7 +576,7 @@ pub fn run_ping(arguments: str8) -> i32 {
         let result: i32 = ping_once(target, sequence);
         if result > 0 {
             serial_write("reply from ");
-            serial_write(arguments);
+            ping_write_ipv4(target);
             serial_write(": icmp_seq=");
             ping_write_unsigned(sequence);
             serial_write(" ttl=");
