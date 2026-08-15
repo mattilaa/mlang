@@ -506,7 +506,7 @@ terminal_split_argument:
     movl %edx, %eax
     ret
 .Lsplit_missing:
-    movl $empty_file, %eax
+    movl $ansi_empty, %eax
     ret
 
 .globl terminal_parse_mode
@@ -794,7 +794,7 @@ fs_entry_data:
     addl $MFS_BASE, %eax
     ret
 .Lfs_entry_empty:
-    movl $empty_file, %eax
+    movl $ansi_empty, %eax
     ret
 .Lfs_entry_data_invalid:
     xorl %eax, %eax
@@ -2073,8 +2073,6 @@ parent_path:
     .skip 32
 joined_path:
     .skip 32
-empty_file:
-    .skip 1
 editor_length:
     .skip 4
 editor_command_length:
