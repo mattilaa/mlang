@@ -1,0 +1,98 @@
+/// Native MFS2 regular-file copy command.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_cp__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn terminal_split_argument(argument: str8) -> str8;
+extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_entry_size(index: i32) -> i32;
+extern fn fs_entry_data(index: i32) -> str8;
+extern fn fs_can_access(index: i32, mask: i32) -> i32;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_parent(path: str8) -> str8;
+extern fn fs_create_empty(path: str8) -> i32;
+extern fn fs_remove_entry(index: i32) -> i32;
+extern fn fs_write_text(index: i32, text: str8, length: i32) -> i32;
+extern fn fs_flush() -> i32;
+
+pub fn run_cp(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
+        serial_write("usage: cp <source> <destination>\r\n");
+        serial_write("copy a regular file\r\n");
+        return 0;
+    }
+    let destination_request: str8 = terminal_split_argument(arguments);
+    if terminal_command_eq(arguments, "") == 1 || terminal_command_eq(destination_request, "") == 1 {
+        serial_write("usage: cp <source> <destination>\r\n");
+        return -1;
+    }
+
+    let source: i32 = fs_find(fs_resolve(arguments));
+    if source < 0 {
+        serial_write("cp: source file not found\r\n");
+        return -2;
+    }
+    if fs_entry_type(source) != 1 {
+        serial_write("cp: source is not a regular file\r\n");
+        return -3;
+    }
+    if fs_can_access(source, 4) != 1 {
+        serial_write("cp: permission denied\r\n");
+        return -4;
+    }
+
+    let destination_path: str8 = fs_resolve(destination_request);
+    var destination: i32 = fs_find(destination_path);
+    var created: i32 = 0;
+    if destination >= 0 {
+        if fs_entry_type(destination) != 1 {
+            serial_write("cp: destination is not a regular file\r\n");
+            return -3;
+        }
+        if fs_can_access(destination, 2) != 1 {
+            serial_write("cp: permission denied\r\n");
+            return -4;
+        }
+    } else {
+        let parent: i32 = fs_find(fs_parent(destination_path));
+        if parent < 0 || fs_entry_type(parent) != 2 {
+            serial_write("cp: destination directory not found\r\n");
+            return -5;
+        }
+        if fs_can_access(parent, 3) != 1 {
+            serial_write("cp: permission denied\r\n");
+            return -4;
+        }
+        let create_result: i32 = fs_create_empty(destination_path);
+        if create_result != 1 {
+            serial_write("cp: cannot create destination\r\n");
+            return -6;
+        }
+        destination = fs_find(destination_path);
+        created = 1;
+    }
+
+    let write_result: i32 = fs_write_text(destination, fs_entry_data(source), fs_entry_size(source));
+    if write_result != 1 {
+        if created == 1 {
+            fs_remove_entry(destination);
+        }
+        if write_result == -2 {
+            serial_write("cp: filesystem data area is full\r\n");
+        } else {
+            serial_write("cp: copy failed\r\n");
+        }
+        return -7;
+    }
+    if fs_flush() != 1 {
+        serial_write("cp: copied in memory but disk flush failed\r\n");
+        return -8;
+    }
+    return 0;
+}

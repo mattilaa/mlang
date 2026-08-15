@@ -3,7 +3,7 @@ asm x86(".section .filesystem,\"a\",@progbits
 .globl filesystem_start
 filesystem_start:
     .ascii \"MFS2\"
-    .word 16
+    .word 20
     .word 32
     .long filesystem_end - filesystem_start
     .long 0
@@ -91,6 +91,46 @@ mkdir_path:
 rm_path:
     .asciz \"/bin/rm\"
     .zero 32 - (. - rm_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+echo_path:
+    .asciz \"/bin/echo\"
+    .zero 32 - (. - echo_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+cp_path:
+    .asciz \"/bin/cp\"
+    .zero 32 - (. - cp_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+mv_path:
+    .asciz \"/bin/mv\"
+    .zero 32 - (. - mv_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+wc_path:
+    .asciz \"/bin/wc\"
+    .zero 32 - (. - wc_path)
     .byte 3
     .byte 0
     .word 0x01ed

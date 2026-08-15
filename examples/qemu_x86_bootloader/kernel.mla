@@ -1207,6 +1207,43 @@ fs_create_directory:
     popl %esi
     ret
 
+.globl fs_rename_entry
+fs_rename_entry:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl 16(%esp), %ebx
+    cmpl $1, %ebx
+    jl .Lrename_invalid
+    movzwl MFS_BASE + 4, %eax
+    cmpl %eax, %ebx
+    jae .Lrename_invalid
+    movl %ebx, %eax
+    imull $48, %eax, %eax
+    leal MFS_BASE + 16(%eax), %edi
+    movl 20(%esp), %esi
+    movl $31, %ecx
+.Lrename_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jz .Lrename_timestamp
+    decl %ecx
+    jnz .Lrename_copy
+    movb $0, (%edi)
+.Lrename_timestamp:
+    call terminal_timestamp
+    movl %eax, MFS_TIMESTAMP_BASE(,%ebx,4)
+    movl $1, %eax
+    jmp .Lrename_done
+.Lrename_invalid:
+    movl $-1, %eax
+.Lrename_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
 .globl fs_remove_entry
 fs_remove_entry:
     pushl %ebx
@@ -2135,6 +2172,18 @@ fn native_command_path(name: str8) -> str8 {
     if terminal_command_eq(name, "rm") == 1 || terminal_command_eq(name, "/bin/rm") == 1 {
         return "/bin/rm";
     }
+    if terminal_command_eq(name, "echo") == 1 || terminal_command_eq(name, "/bin/echo") == 1 {
+        return "/bin/echo";
+    }
+    if terminal_command_eq(name, "cp") == 1 || terminal_command_eq(name, "/bin/cp") == 1 {
+        return "/bin/cp";
+    }
+    if terminal_command_eq(name, "mv") == 1 || terminal_command_eq(name, "/bin/mv") == 1 {
+        return "/bin/mv";
+    }
+    if terminal_command_eq(name, "wc") == 1 || terminal_command_eq(name, "/bin/wc") == 1 {
+        return "/bin/wc";
+    }
     if terminal_command_eq(name, "vi") == 1 || terminal_command_eq(name, "/bin/vi") == 1 {
         return "/bin/vi";
     }
@@ -2226,6 +2275,10 @@ fn terminal_main() -> i32 {
             serial_write("chown  change owner: chown <user> <path>\r\n");
             serial_write("mkdir  create a directory: mkdir <path>\r\n");
             serial_write("rm     remove a file or tree: rm [-f] [-r] <path>\r\n");
+            serial_write("echo   write text: echo [text]\r\n");
+            serial_write("cp     copy a file: cp <source> <destination>\r\n");
+            serial_write("mv     rename a file: mv <source> <destination>\r\n");
+            serial_write("wc     count text: wc <path>\r\n");
             serial_write("vi     edit a text file: vi <path>\r\n");
             serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");

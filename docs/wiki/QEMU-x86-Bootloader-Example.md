@@ -8,9 +8,9 @@ image from disk sectors 2-97 into physical address `0x10000`, then transfers
 control to it. The kernel switches to 32-bit protected mode and enters the
 ordinary MLang `terminal_main()` function. Architecture-qualified module
 assembly defines the hardware entry and I/O primitives that cannot live in a
-normal function. `ls`, `cat`, `chmod`, `chown`, `mkdir`, `rm`, and `vi` are
-compiled as independent MLang command images and stored as executable files
-under `/bin`:
+normal function. `ls`, `cat`, `chmod`, `chown`, `mkdir`, `rm`, `echo`, `cp`,
+`mv`, `wc`, and `vi` are compiled as independent MLang command images and
+stored as executable files under `/bin`:
 
 ```rust
 asm x86(".code16
@@ -97,6 +97,10 @@ Every command accepts `-h` and `--help` for command-specific usage.
 - `rm -r <path>`: recursively remove and persist a directory tree
 - `rm -f <path>`: remove a file without reporting a missing path
 - `rm -rf <path>` or `rm -fr <path>`: recursively remove a tree without reporting a missing path
+- `echo [text]`: write command-line text to the terminal
+- `cp <source> <destination>`: copy and persist a regular file
+- `mv <source> <destination>`: rename and persist a regular file while preserving its metadata
+- `wc <path>`: print newline, word, and byte counts for a regular file
 - `vi <path>` or `/bin/vi <path>`: edit and persist text in a full-screen modal editor
 - `sync`: flush the used MFS2 data and metadata to the IDE disk image
 - `reboot`: reset the virtual machine through the keyboard controller
@@ -162,10 +166,14 @@ The initial tree is:
 |   |-- cat
 |   |-- chmod
 |   |-- chown
+|   |-- cp
+|   |-- echo
 |   |-- ls
 |   |-- mkdir
+|   |-- mv
 |   |-- rm
-|   `-- vi
+|   |-- vi
+|   `-- wc
 |-- etc/
 |   `-- motd
 |-- home/
@@ -193,6 +201,12 @@ drwxr-xr-x  1 root  root      0B Aug 15 10:41 drafts/
 $ rm session.log
 $ rm -rf drafts
 $ ls --help
+$ cp readme.txt readme-copy.txt
+$ wc readme-copy.txt
+1 10 60 readme-copy.txt
+$ mv readme-copy.txt archived.txt
+$ echo files updated
+files updated
 $ vi notes.txt
 # press i, type two lines, press Esc, then type :wq and Enter
 vi: saved
@@ -255,12 +269,14 @@ changes. Canceling a new file with `:q!` does not create it.
 Each fixed-size directory entry stores a 32-byte absolute path, entry type,
 owner UID, mode, data offset, size, and capacity. The image reserves 32
 directory slots and a matching 32-entry timestamp table.
-`touch` and `mkdir` allocate entries in the mounted RAM copy. On save, the editor reserves
-exactly the file's required bytes from the remaining data area. Later saves
-overwrite that allocation when they fit or append a larger allocation when
-needed. `rm` compacts directory and timestamp metadata but does not reclaim an
-allocated file's data block. Mutating commands use the kernel's protected-mode
-ATA PIO driver to write the contiguous used MFS2 sectors back to `disk.img`.
+`touch`, `mkdir`, and `cp` allocate entries in the mounted RAM copy. On save,
+the editor reserves exactly the file's required bytes from the remaining data
+area. Later saves and copies overwrite an allocation when they fit or append a
+larger allocation when needed. `mv` renames an entry without moving its data or
+changing its owner and mode. `rm` compacts directory and timestamp metadata but
+does not reclaim an allocated file's data block. Mutating commands use the
+kernel's protected-mode ATA PIO driver to write the contiguous used MFS2
+sectors back to `disk.img`.
 `sync` exposes the same flush operation explicitly; unused configured capacity
 is not transferred.
 
@@ -276,7 +292,7 @@ The `resume` task requires an existing `build/disk.img`; run the `build` or
 `demo` task once first. Re-running `build` resets the image to the files defined
 in `filesystem.mla`. Disk images produced by the earlier floppy-backed version,
 the earlier LBA 68 MFS2 layout, the marker-only `/bin/vi` layout, the
-pre-timestamp MFS2 layout, or images without the `mkdir` and `rm` binaries are
+pre-timestamp MFS2 layout, or images without the current native command set are
 not compatible with this executable layout; rebuild once before using `resume`.
 
 There is no separate per-file size setting or fixed editor limit. A file may
@@ -285,8 +301,12 @@ line reader accepts at most 63 printable characters per command; the editor's
 raw input path has no per-line limit and can collect as many lines as fit in
 the image. Because this version has no compaction, growing an existing
 allocation leaves its smaller old block unused. Removed file data is likewise
-not reclaimed. The example does not yet support `mkdir -p`, multiple path
-operands, independent groups, or password authentication.
+not reclaimed. `cp` and `mv` currently accept regular files and explicit
+destination paths; they do not recurse, move directories, overwrite with `mv`,
+or interpret a destination directory. `echo` writes only to the terminal
+because the shell does not implement redirection. The example does not yet
+support `mkdir -p`, multiple path operands, independent groups, or password
+authentication.
 
 ## Module assembly
 
