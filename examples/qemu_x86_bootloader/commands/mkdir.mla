@@ -1,0 +1,54 @@
+/// Native MFS2 directory-creation command.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_mkdir__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_can_access(index: i32, mask: i32) -> i32;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_parent(path: str8) -> str8;
+extern fn fs_create_directory(path: str8) -> i32;
+extern fn fs_flush() -> i32;
+
+pub fn run_mkdir(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "") == 1 {
+        serial_write("usage: mkdir <directory>\r\n");
+        return -1;
+    }
+
+    let path: str8 = fs_resolve(arguments);
+    if fs_find(path) >= 0 {
+        serial_write("mkdir: file exists\r\n");
+        return -2;
+    }
+    let parent: str8 = fs_parent(path);
+    let parent_index: i32 = fs_find(parent);
+    if parent_index < 0 || fs_entry_type(parent_index) != 2 {
+        serial_write("mkdir: parent directory not found\r\n");
+        return -3;
+    }
+    if fs_can_access(parent_index, 3) != 1 {
+        serial_write("mkdir: permission denied\r\n");
+        return -4;
+    }
+    let created: i32 = fs_create_directory(path);
+    if created == -2 {
+        serial_write("mkdir: filesystem directory is full\r\n");
+        return -5;
+    }
+    if created != 1 {
+        serial_write("mkdir: cannot create directory\r\n");
+        return -6;
+    }
+    if fs_flush() != 1 {
+        serial_write("mkdir: created in memory but disk flush failed\r\n");
+        return -7;
+    }
+    return 0;
+}

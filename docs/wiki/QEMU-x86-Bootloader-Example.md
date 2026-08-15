@@ -8,8 +8,9 @@ image from disk sectors 2-97 into physical address `0x10000`, then transfers
 control to it. The kernel switches to 32-bit protected mode and enters the
 ordinary MLang `terminal_main()` function. Architecture-qualified module
 assembly defines the hardware entry and I/O primitives that cannot live in a
-normal function. `ls`, `cat`, `chmod`, `chown`, and `vi` are compiled as
-independent MLang command images and stored as executable files under `/bin`:
+normal function. `ls`, `cat`, `chmod`, `chown`, `mkdir`, `rm`, and `vi` are
+compiled as independent MLang command images and stored as executable files
+under `/bin`:
 
 ```rust
 asm x86(".code16
@@ -89,6 +90,9 @@ The terminal supports:
 - `touch <path>`: create and persist an empty file
 - `chmod <mode> <path>`: change a mode as root or the file owner
 - `chown <root|user> <path>`: change ownership as root
+- `mkdir <path>`: create and persist a directory
+- `rm <path>`: remove and persist a regular file
+- `rm -r <path>`: recursively remove and persist a directory tree
 - `vi <path>` or `/bin/vi <path>`: edit and persist text in a full-screen modal editor
 - `sync`: flush the used MFS2 data and metadata to the IDE disk image
 - `reboot`: reset the virtual machine through the keyboard controller
@@ -155,6 +159,8 @@ The initial tree is:
 |   |-- chmod
 |   |-- chown
 |   |-- ls
+|   |-- mkdir
+|   |-- rm
 |   `-- vi
 |-- etc/
 |   `-- motd
@@ -174,9 +180,14 @@ $ pwd
 $ cat readme.txt
 This file lives in /home/user on the MFS2 root filesystem.
 $ touch session.log
+$ mkdir drafts
+$ touch drafts/first.txt
 $ ls
 -rw-r--r--  1 user  users    60B Aug 15 10:41 readme.txt
 -rw-r--r--  1 root  root      0B Aug 15 10:41 session.log
+drwxr-xr-x  1 root  root      0B Aug 15 10:41 drafts/
+$ rm session.log
+$ rm -r drafts
 $ vi notes.txt
 # press i, type two lines, press Esc, then type :wq and Enter
 vi: saved
@@ -199,15 +210,17 @@ the display-only `root` or `users` group name from the owner.
 
 A parallel timestamp table stores a compact modification date and time for
 each of the 32 directory slots. Seed entries use the local build time. Creating
-a file or writing it through `vi` reads the QEMU RTC and updates its timestamp;
-QEMU is started with a local-time RTC. `ls` displays `B`, `K`, `M`, or `G`
+a file or directory, or writing through `vi`, reads the QEMU RTC and updates
+its timestamp; QEMU is started with a local-time RTC. `ls` displays `B`, `K`, `M`, or `G`
 sizes in a right-aligned six-character column. It does not print the `@` suffix
 used by macOS because MFS2 does not implement extended attributes.
 
 Reading requires `r`, writing or saving through `vi` requires `w`, changing
 directory requires `x`, listing requires `r+x`, and creating a file requires
-`w+x` on its parent directory. Only root may use `chown`; `chmod` is available
-to root and the entry owner.
+`w+x` on its parent directory. Creating a directory and removing an entry also
+require `w+x` on the parent. Recursive removal preflights every affected parent
+before changing metadata. Only root may use `chown`; `chmod` is available to
+root and the entry owner. `rm` refuses `/` and the current directory tree.
 
 The editor uses the alternate screen through [`std::esc::freestanding`](Stdlib-Esc) and
 opens in normal mode. It probes the serial terminal dimensions and reserves the
@@ -237,12 +250,14 @@ changes. Canceling a new file with `:q!` does not create it.
 Each fixed-size directory entry stores a 32-byte absolute path, entry type,
 owner UID, mode, data offset, size, and capacity. The image reserves 32
 directory slots and a matching 32-entry timestamp table.
-`touch` allocates an entry in the mounted RAM copy. On save, the editor reserves
+`touch` and `mkdir` allocate entries in the mounted RAM copy. On save, the editor reserves
 exactly the file's required bytes from the remaining data area. Later saves
 overwrite that allocation when they fit or append a larger allocation when
-needed. Both commands use the kernel's protected-mode ATA PIO driver to write
-the contiguous used MFS2 sectors back to `disk.img`. `sync` exposes the same
-flush operation explicitly; unused configured capacity is not transferred.
+needed. `rm` compacts directory and timestamp metadata but does not reclaim an
+allocated file's data block. Mutating commands use the kernel's protected-mode
+ATA PIO driver to write the contiguous used MFS2 sectors back to `disk.img`.
+`sync` exposes the same flush operation explicitly; unused configured capacity
+is not transferred.
 
 Created files survive the kernel's `reboot` command. The ordinary `demo` task
 rebuilds the baseline disk before QEMU starts. To boot the existing image and
@@ -255,17 +270,18 @@ retain changes across QEMU process restarts, use:
 The `resume` task requires an existing `build/disk.img`; run the `build` or
 `demo` task once first. Re-running `build` resets the image to the files defined
 in `filesystem.mla`. Disk images produced by the earlier floppy-backed version,
-the earlier LBA 68 MFS2 layout, the marker-only `/bin/vi` layout, or the
-pre-timestamp MFS2 layout are not compatible with this executable layout;
-rebuild once before using `resume`.
+the earlier LBA 68 MFS2 layout, the marker-only `/bin/vi` layout, the
+pre-timestamp MFS2 layout, or images without the `mkdir` and `rm` binaries are
+not compatible with this executable layout; rebuild once before using `resume`.
 
 There is no separate per-file size setting or fixed editor limit. A file may
 grow until the configured MFS2 data area runs out of free bytes. The shell's
 line reader accepts at most 63 printable characters per command; the editor's
 raw input path has no per-line limit and can collect as many lines as fit in
 the image. Because this version has no compaction, growing an existing
-allocation leaves its smaller old block unused. It also has no deletion,
-dynamic directory creation, groups, or password authentication.
+allocation leaves its smaller old block unused. Removed file data is likewise
+not reclaimed. The example does not yet support `mkdir -p`, multiple path
+operands, independent groups, or password authentication.
 
 ## Module assembly
 

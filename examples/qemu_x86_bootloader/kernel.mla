@@ -1076,6 +1076,45 @@ fs_is_direct_child:
     popl %esi
     ret
 
+.globl fs_is_descendant
+fs_is_descendant:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl 16(%esp), %edi
+    cmpb $47, (%esi)
+    jne .Ldescendant_compare
+    cmpb $0, 1(%esi)
+    jne .Ldescendant_compare
+    cmpb $47, (%edi)
+    jne .Ldescendant_no
+    cmpb $0, 1(%edi)
+    je .Ldescendant_no
+    jmp .Ldescendant_yes
+.Ldescendant_compare:
+    movb (%esi), %al
+    testb %al, %al
+    jz .Ldescendant_prefix_done
+    cmpb (%edi), %al
+    jne .Ldescendant_no
+    incl %esi
+    incl %edi
+    jmp .Ldescendant_compare
+.Ldescendant_prefix_done:
+    cmpb $47, (%edi)
+    jne .Ldescendant_no
+    cmpb $0, 1(%edi)
+    je .Ldescendant_no
+.Ldescendant_yes:
+    movl $1, %eax
+    jmp .Ldescendant_done
+.Ldescendant_no:
+    xorl %eax, %eax
+.Ldescendant_done:
+    popl %edi
+    popl %esi
+    ret
+
 .globl fs_create_empty
 fs_create_empty:
     pushl %esi
@@ -1120,6 +1159,98 @@ fs_create_empty:
     popl %ebx
     popl %edi
     popl %esi
+    ret
+
+.globl fs_create_directory
+fs_create_directory:
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 16(%esp), %esi
+    movzwl MFS_BASE + 4, %eax
+    movzwl MFS_BASE + 6, %ecx
+    cmpl %ecx, %eax
+    jae .Lmkdir_full
+    imull $48, %eax, %eax
+    addl $MFS_BASE + 16, %eax
+    movl %eax, %edi
+    movl %edi, %ebx
+    xorl %eax, %eax
+    movl $12, %ecx
+    rep stosl
+    movl %ebx, %edi
+    movl $31, %ecx
+.Lmkdir_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jz .Lmkdir_type
+    decl %ecx
+    jnz .Lmkdir_copy
+    movb $0, (%edi)
+.Lmkdir_type:
+    movb $2, 32(%ebx)
+    movb current_user_id, %al
+    movb %al, 33(%ebx)
+    movw $0x01ed, 34(%ebx)
+    call terminal_timestamp
+    movzwl MFS_BASE + 4, %edx
+    movl %eax, MFS_TIMESTAMP_BASE(,%edx,4)
+    incw MFS_BASE + 4
+    movl $1, %eax
+    jmp .Lmkdir_done
+.Lmkdir_full:
+    movl $-2, %eax
+.Lmkdir_done:
+    popl %ebx
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_remove_entry
+fs_remove_entry:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl 16(%esp), %ebx
+    cmpl $1, %ebx
+    jl .Lremove_invalid
+    movzwl MFS_BASE + 4, %edx
+    cmpl %edx, %ebx
+    jae .Lremove_invalid
+    movl %ebx, %eax
+    imull $48, %eax, %eax
+    leal MFS_BASE + 16(%eax), %edi
+    addl $48, %eax
+    leal MFS_BASE + 16(%eax), %esi
+    movl %edx, %ecx
+    subl %ebx, %ecx
+    decl %ecx
+    imull $48, %ecx, %ecx
+    cld
+    rep movsb
+    decl %edx
+    movl %edx, %eax
+    imull $48, %eax, %eax
+    leal MFS_BASE + 16(%eax), %edi
+    xorl %eax, %eax
+    movl $12, %ecx
+    rep stosl
+    leal MFS_TIMESTAMP_BASE(,%ebx,4), %edi
+    leal MFS_TIMESTAMP_BASE + 4(,%ebx,4), %esi
+    movl %edx, %ecx
+    subl %ebx, %ecx
+    rep movsl
+    movl $0, MFS_TIMESTAMP_BASE(,%edx,4)
+    decw MFS_BASE + 4
+    movl $1, %eax
+    jmp .Lremove_done
+.Lremove_invalid:
+    movl $-1, %eax
+.Lremove_done:
+    popl %edi
+    popl %esi
+    popl %ebx
     ret
 
 .globl fs_write_text
@@ -1998,6 +2129,12 @@ fn native_command_path(name: str8) -> str8 {
     if terminal_command_eq(name, "chown") == 1 || terminal_command_eq(name, "/bin/chown") == 1 {
         return "/bin/chown";
     }
+    if terminal_command_eq(name, "mkdir") == 1 || terminal_command_eq(name, "/bin/mkdir") == 1 {
+        return "/bin/mkdir";
+    }
+    if terminal_command_eq(name, "rm") == 1 || terminal_command_eq(name, "/bin/rm") == 1 {
+        return "/bin/rm";
+    }
     if terminal_command_eq(name, "vi") == 1 || terminal_command_eq(name, "/bin/vi") == 1 {
         return "/bin/vi";
     }
@@ -2057,6 +2194,8 @@ fn terminal_main() -> i32 {
             serial_write("touch  create an empty file\r\n");
             serial_write("chmod  change mode: chmod <mode> <path>\r\n");
             serial_write("chown  change owner: chown <user> <path>\r\n");
+            serial_write("mkdir  create a directory: mkdir <path>\r\n");
+            serial_write("rm     remove a file or tree: rm [-r] <path>\r\n");
             serial_write("vi     edit a text file: vi <path>\r\n");
             serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");

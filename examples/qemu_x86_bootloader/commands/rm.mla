@@ -1,0 +1,114 @@
+/// Native MFS2 file and recursive directory removal command.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_rm__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn terminal_command_prefix(actual: str8, prefix: str8) -> i32;
+extern fn terminal_split_argument(argument: str8) -> str8;
+extern fn fs_entry_count() -> i32;
+extern fn fs_entry_path(index: i32) -> str8;
+extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_can_access(index: i32, mask: i32) -> i32;
+extern fn fs_pwd() -> str8;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_parent(path: str8) -> str8;
+extern fn fs_is_descendant(directory: str8, candidate: str8) -> i32;
+extern fn fs_remove_entry(index: i32) -> i32;
+extern fn fs_flush() -> i32;
+
+fn rm_parent_writable(path: str8) -> i32 {
+    let parent: str8 = fs_parent(path);
+    let parent_index: i32 = fs_find(parent);
+    if parent_index < 0 || fs_entry_type(parent_index) != 2 {
+        return 0;
+    }
+    return fs_can_access(parent_index, 3);
+}
+
+fn rm_tree_permissions(path: str8) -> i32 {
+    var index: i32 = fs_entry_count() - 1;
+    while index > 0 {
+        let candidate: str8 = fs_entry_path(index);
+        if fs_is_descendant(path, candidate) == 1 && rm_parent_writable(candidate) != 1 {
+            return 0;
+        }
+        index = index - 1;
+    }
+    return 1;
+}
+
+fn rm_tree(path: str8) -> i32 {
+    var index: i32 = fs_entry_count() - 1;
+    while index > 0 {
+        let candidate: str8 = fs_entry_path(index);
+        if fs_is_descendant(path, candidate) == 1 {
+            if fs_remove_entry(index) != 1 {
+                return 0;
+            }
+        }
+        index = index - 1;
+    }
+    return 1;
+}
+
+pub fn run_rm(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "") == 1 || terminal_command_eq(arguments, "-r") == 1 {
+        serial_write("usage: rm [-r] <path>\r\n");
+        return -1;
+    }
+
+    var recursive: i32 = 0;
+    var request: str8 = arguments;
+    if terminal_command_prefix(arguments, "-r ") == 1 {
+        recursive = 1;
+        request = terminal_split_argument(arguments);
+    }
+    let path: str8 = fs_resolve(request);
+    if terminal_command_eq(path, "/") == 1 {
+        serial_write("rm: cannot remove root directory\r\n");
+        return -2;
+    }
+    let index: i32 = fs_find(path);
+    if index < 0 {
+        serial_write("rm: file not found\r\n");
+        return -3;
+    }
+    if terminal_command_eq(path, fs_pwd()) == 1 || fs_is_descendant(path, fs_pwd()) == 1 {
+        serial_write("rm: cannot remove current directory\r\n");
+        return -4;
+    }
+    if rm_parent_writable(path) != 1 {
+        serial_write("rm: permission denied\r\n");
+        return -5;
+    }
+    if fs_entry_type(index) == 2 {
+        if recursive != 1 {
+            serial_write("rm: is a directory; use -r\r\n");
+            return -6;
+        }
+        if rm_tree_permissions(path) != 1 {
+            serial_write("rm: permission denied\r\n");
+            return -5;
+        }
+        if rm_tree(path) != 1 {
+            serial_write("rm: removal failed\r\n");
+            return -7;
+        }
+    }
+    let target: i32 = fs_find(path);
+    if target < 1 || fs_remove_entry(target) != 1 {
+        serial_write("rm: removal failed\r\n");
+        return -7;
+    }
+    if fs_flush() != 1 {
+        serial_write("rm: removed in memory but disk flush failed\r\n");
+        return -8;
+    }
+    return 0;
+}
