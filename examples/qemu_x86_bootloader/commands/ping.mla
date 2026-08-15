@@ -1,0 +1,354 @@
+/// Native IPv4 ICMP echo command for the QEMU NE2000 user network.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_ping__str8
+
+.globl ping_tx_buffer_ptr
+ping_tx_buffer_ptr:
+    movl $ping_tx_buffer, %eax
+    ret
+
+.globl ping_rx_buffer_ptr
+ping_rx_buffer_ptr:
+    movl $ping_rx_buffer, %eax
+    ret
+
+.globl ping_peer_mac_ptr
+ping_peer_mac_ptr:
+    movl $ping_peer_mac, %eax
+    ret
+
+.globl ping_byte_at
+ping_byte_at:
+    movl 4(%esp), %edx
+    movl 8(%esp), %ecx
+    movzbl (%edx,%ecx), %eax
+    ret
+
+.globl ping_set_byte
+ping_set_byte:
+    movl 4(%esp), %edx
+    movl 8(%esp), %ecx
+    movb 12(%esp), %al
+    movb %al, (%edx,%ecx)
+    ret
+
+.section .bss,\"aw\",@nobits
+.balign 4
+ping_tx_buffer:
+    .skip 1600
+ping_rx_buffer:
+    .skip 1600
+ping_peer_mac:
+    .skip 6
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn serial_write_char(ch: i32) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn network_init() -> i32;
+extern fn network_mac_byte(index: i32) -> i32;
+extern fn network_send(frame: str8, length: i32) -> i32;
+extern fn network_receive(frame: str8, capacity: i32) -> i32;
+extern fn ping_tx_buffer_ptr() -> str8;
+extern fn ping_rx_buffer_ptr() -> str8;
+extern fn ping_peer_mac_ptr() -> str8;
+extern fn ping_byte_at(data: str8, index: i32) -> i32;
+extern fn ping_set_byte(data: str8, index: i32, value: i32) -> void;
+
+fn ping_write_unsigned(value: i32) -> void {
+    var divisor: i32 = 1;
+    while divisor <= value / 10 {
+        divisor = divisor * 10;
+    }
+    while divisor > 0 {
+        serial_write_char(48 + (value / divisor) % 10);
+        divisor = divisor / 10;
+    }
+}
+
+fn ping_parse_ipv4(text: str8) -> i32 {
+    var address: i32 = 0;
+    var part: i32 = 0;
+    var parts: i32 = 0;
+    var digits: i32 = 0;
+    var index: i32 = 0;
+    while true {
+        let ch: i32 = ping_byte_at(text, index);
+        if ch >= 48 && ch <= 57 {
+            part = part * 10 + ch - 48;
+            if part > 255 {
+                return 0;
+            }
+            digits = digits + 1;
+        } else if ch == 46 || ch == 0 {
+            if digits == 0 || parts >= 4 {
+                return 0;
+            }
+            address = (address << 8) | part;
+            parts = parts + 1;
+            if ch == 0 {
+                if parts == 4 {
+                    return address;
+                }
+                return 0;
+            }
+            part = 0;
+            digits = 0;
+        } else {
+            return 0;
+        }
+        index = index + 1;
+    }
+    return 0;
+}
+
+fn ping_ip_byte(address: i32, index: i32) -> i32 {
+    return (address >> ((3 - index) * 8)) & 255;
+}
+
+fn ping_set_u16(data: str8, offset: i32, value: i32) -> void {
+    ping_set_byte(data, offset, (value >> 8) & 255);
+    ping_set_byte(data, offset + 1, value & 255);
+}
+
+fn ping_checksum(data: str8, offset: i32, length: i32) -> i32 {
+    var sum: i32 = 0;
+    var index: i32 = 0;
+    while index < length {
+        var word: i32 = ping_byte_at(data, offset + index) << 8;
+        if index + 1 < length {
+            word = word | ping_byte_at(data, offset + index + 1);
+        }
+        sum = sum + word;
+        index = index + 2;
+    }
+    while (sum >> 16) != 0 {
+        sum = (sum & 65535) + (sum >> 16);
+    }
+    return 65535 - sum;
+}
+
+fn ping_clear(data: str8, length: i32) -> void {
+    var index: i32 = 0;
+    while index < length {
+        ping_set_byte(data, index, 0);
+        index = index + 1;
+    }
+}
+
+fn ping_set_local_mac(data: str8, offset: i32) -> void {
+    var index: i32 = 0;
+    while index < 6 {
+        ping_set_byte(data, offset + index, network_mac_byte(index));
+        index = index + 1;
+    }
+}
+
+fn ping_set_ip(data: str8, offset: i32, address: i32) -> void {
+    var index: i32 = 0;
+    while index < 4 {
+        ping_set_byte(data, offset + index, ping_ip_byte(address, index));
+        index = index + 1;
+    }
+}
+
+fn ping_ip_matches(data: str8, offset: i32, address: i32) -> i32 {
+    var index: i32 = 0;
+    while index < 4 {
+        if ping_byte_at(data, offset + index) != ping_ip_byte(address, index) {
+            return 0;
+        }
+        index = index + 1;
+    }
+    return 1;
+}
+
+fn ping_arp_reply(data: str8, length: i32, target: i32) -> i32 {
+    if length < 42 {
+        return 0;
+    }
+    if ping_byte_at(data, 12) != 8 || ping_byte_at(data, 13) != 6 {
+        return 0;
+    }
+    if ping_byte_at(data, 20) != 0 || ping_byte_at(data, 21) != 2 {
+        return 0;
+    }
+    if ping_ip_matches(data, 28, target) != 1 || ping_ip_matches(data, 38, 0x0a00020f) != 1 {
+        return 0;
+    }
+    let peer: str8 = ping_peer_mac_ptr();
+    var index: i32 = 0;
+    while index < 6 {
+        ping_set_byte(peer, index, ping_byte_at(data, 22 + index));
+        index = index + 1;
+    }
+    return 1;
+}
+
+fn ping_resolve(target: i32) -> i32 {
+    let frame: str8 = ping_tx_buffer_ptr();
+    ping_clear(frame, 64);
+    var index: i32 = 0;
+    while index < 6 {
+        ping_set_byte(frame, index, 255);
+        index = index + 1;
+    }
+    ping_set_local_mac(frame, 6);
+    ping_set_u16(frame, 12, 0x0806);
+    ping_set_u16(frame, 14, 1);
+    ping_set_u16(frame, 16, 0x0800);
+    ping_set_byte(frame, 18, 6);
+    ping_set_byte(frame, 19, 4);
+    ping_set_u16(frame, 20, 1);
+    ping_set_local_mac(frame, 22);
+    ping_set_ip(frame, 28, 0x0a00020f);
+    ping_set_ip(frame, 38, target);
+    if network_send(frame, 42) != 1 {
+        return 0;
+    }
+    let reply: str8 = ping_rx_buffer_ptr();
+    var attempt: i32 = 0;
+    while attempt < 4 {
+        let length: i32 = network_receive(reply, 1600);
+        if ping_arp_reply(reply, length, target) == 1 {
+            return 1;
+        }
+        attempt = attempt + 1;
+    }
+    return 0;
+}
+
+fn ping_build_echo(target: i32, sequence: i32) -> i32 {
+    let frame: str8 = ping_tx_buffer_ptr();
+    let peer: str8 = ping_peer_mac_ptr();
+    ping_clear(frame, 64);
+    var index: i32 = 0;
+    while index < 6 {
+        ping_set_byte(frame, index, ping_byte_at(peer, index));
+        index = index + 1;
+    }
+    ping_set_local_mac(frame, 6);
+    ping_set_u16(frame, 12, 0x0800);
+    ping_set_byte(frame, 14, 0x45);
+    ping_set_u16(frame, 16, 36);
+    ping_set_u16(frame, 18, 0x4d4c);
+    ping_set_u16(frame, 20, 0);
+    ping_set_byte(frame, 22, 64);
+    ping_set_byte(frame, 23, 1);
+    ping_set_ip(frame, 26, 0x0a00020f);
+    ping_set_ip(frame, 30, target);
+    ping_set_u16(frame, 24, ping_checksum(frame, 14, 20));
+    ping_set_byte(frame, 34, 8);
+    ping_set_byte(frame, 35, 0);
+    ping_set_u16(frame, 38, 0x4d4c);
+    ping_set_u16(frame, 40, sequence);
+    index = 0;
+    while index < 8 {
+        ping_set_byte(frame, 42 + index, 65 + index);
+        index = index + 1;
+    }
+    ping_set_u16(frame, 36, ping_checksum(frame, 34, 16));
+    return 50;
+}
+
+fn ping_echo_reply(data: str8, length: i32, target: i32, sequence: i32) -> i32 {
+    if length < 50 {
+        return 0;
+    }
+    if ping_byte_at(data, 12) != 8 || ping_byte_at(data, 13) != 0 {
+        return 0;
+    }
+    if ping_byte_at(data, 23) != 1 || ping_ip_matches(data, 26, target) != 1 {
+        return 0;
+    }
+    if ping_byte_at(data, 34) != 0 || ping_byte_at(data, 35) != 0 {
+        return 0;
+    }
+    if ping_byte_at(data, 38) != 0x4d || ping_byte_at(data, 39) != 0x4c {
+        return 0;
+    }
+    if ping_byte_at(data, 40) != ((sequence >> 8) & 255) || ping_byte_at(data, 41) != (sequence & 255) {
+        return 0;
+    }
+    return ping_byte_at(data, 22) + 1;
+}
+
+fn ping_once(target: i32, sequence: i32) -> i32 {
+    let frame: str8 = ping_tx_buffer_ptr();
+    if network_send(frame, ping_build_echo(target, sequence)) != 1 {
+        return 0;
+    }
+    let reply: str8 = ping_rx_buffer_ptr();
+    var attempt: i32 = 0;
+    while attempt < 4 {
+        let length: i32 = network_receive(reply, 1600);
+        let result: i32 = ping_echo_reply(reply, length, target, sequence);
+        if result > 0 {
+            return result;
+        }
+        attempt = attempt + 1;
+    }
+    return 0;
+}
+
+pub fn run_ping(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
+        serial_write("usage: ping <IPv4-address>\r\n");
+        serial_write("send four ICMP echo requests over the QEMU user network\r\n");
+        return 0;
+    }
+    if terminal_command_eq(arguments, "") == 1 {
+        serial_write("usage: ping <IPv4-address>\r\n");
+        return -1;
+    }
+    let target: i32 = ping_parse_ipv4(arguments);
+    if target == 0 {
+        serial_write("ping: invalid IPv4 address\r\n");
+        return -2;
+    }
+    if network_init() != 1 {
+        serial_write("ping: NE2000 network device not found\r\n");
+        return -3;
+    }
+    var next_hop: i32 = 0x0a000202;
+    if (target & 0xffffff00) == 0x0a000200 {
+        next_hop = target;
+    }
+    serial_write("PING ");
+    serial_write(arguments);
+    serial_write(" (8 data bytes)\r\n");
+    if ping_resolve(next_hop) != 1 {
+        serial_write("ping: ARP resolution timed out\r\n");
+        return -4;
+    }
+    var sequence: i32 = 1;
+    var received: i32 = 0;
+    while sequence <= 4 {
+        let result: i32 = ping_once(target, sequence);
+        if result > 0 {
+            serial_write("reply from ");
+            serial_write(arguments);
+            serial_write(": icmp_seq=");
+            ping_write_unsigned(sequence);
+            serial_write(" ttl=");
+            ping_write_unsigned(result - 1);
+            serial_write("\r\n");
+            received = received + 1;
+        } else {
+            serial_write("request timeout for icmp_seq=");
+            ping_write_unsigned(sequence);
+            serial_write("\r\n");
+        }
+        sequence = sequence + 1;
+    }
+    serial_write("4 packets transmitted, ");
+    ping_write_unsigned(received);
+    serial_write(" received\r\n");
+    if received == 0 {
+        return -5;
+    }
+    return 0;
+}

@@ -2034,6 +2034,336 @@ command_exec:
     leave
     ret
 
+.globl network_init
+network_init:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movw $0x31f, %dx
+    inb %dx, %al
+    outb %al, %dx
+    movl $0x00010000, %ecx
+.Lnet_reset_wait:
+    movw $0x307, %dx
+    inb %dx, %al
+    testb $0x80, %al
+    jnz .Lnet_reset_ready
+    loop .Lnet_reset_wait
+    xorl %eax, %eax
+    jmp .Lnet_init_done
+.Lnet_reset_ready:
+    movw $0x300, %dx
+    movb $0x21, %al
+    outb %al, %dx
+    movw $0x30e, %dx
+    movb $0x49, %al
+    outb %al, %dx
+    movw $0x30a, %dx
+    xorb %al, %al
+    outb %al, %dx
+    incw %dx
+    outb %al, %dx
+    movw $0x30c, %dx
+    movb $0x20, %al
+    outb %al, %dx
+    movw $0x30d, %dx
+    movb $0x02, %al
+    outb %al, %dx
+    movw $0x308, %dx
+    xorb %al, %al
+    outb %al, %dx
+    incw %dx
+    outb %al, %dx
+    movw $0x30a, %dx
+    movb $12, %al
+    outb %al, %dx
+    incw %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x0a, %al
+    outb %al, %dx
+    movw $0x310, %dx
+    movl $network_mac, %edi
+    movl $6, %ecx
+.Lnet_prom_read:
+    inw %dx, %ax
+    stosb
+    loop .Lnet_prom_read
+    movw $0x300, %dx
+    movb $0x21, %al
+    outb %al, %dx
+    movw $0x301, %dx
+    movb $0x46, %al
+    outb %al, %dx
+    incw %dx
+    movb $0x80, %al
+    outb %al, %dx
+    incw %dx
+    movb $0x46, %al
+    outb %al, %dx
+    movw $0x304, %dx
+    movb $0x40, %al
+    outb %al, %dx
+    movw $0x307, %dx
+    movb $0xff, %al
+    outb %al, %dx
+    movw $0x30f, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x61, %al
+    outb %al, %dx
+    movw $0x301, %dx
+    movl $network_mac, %esi
+    movl $6, %ecx
+.Lnet_mac_program:
+    lodsb
+    outb %al, %dx
+    incw %dx
+    loop .Lnet_mac_program
+    movw $0x307, %dx
+    movb $0x47, %al
+    outb %al, %dx
+    movw $0x308, %dx
+    movl $8, %ecx
+.Lnet_multicast_clear:
+    xorb %al, %al
+    outb %al, %dx
+    incw %dx
+    loop .Lnet_multicast_clear
+    movw $0x300, %dx
+    movb $0x22, %al
+    outb %al, %dx
+    movw $0x30d, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x30c, %dx
+    movb $0x04, %al
+    outb %al, %dx
+    movl $1, %eax
+.Lnet_init_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl network_mac_byte
+network_mac_byte:
+    movl 4(%esp), %ecx
+    cmpl $6, %ecx
+    jae .Lnet_mac_invalid
+    movzbl network_mac(,%ecx), %eax
+    ret
+.Lnet_mac_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl network_send
+network_send:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl 8(%ebp), %esi
+    movl 12(%ebp), %ebx
+    testl %ebx, %ebx
+    jle .Lnet_send_fail
+    cmpl $1518, %ebx
+    ja .Lnet_send_fail
+    cmpl $60, %ebx
+    jae .Lnet_send_size_ready
+    movl $60, %ebx
+.Lnet_send_size_ready:
+    movl %ebx, %edi
+    addl $1, %edi
+    andl $-2, %edi
+    movw $0x307, %dx
+    movb $0x40, %al
+    outb %al, %dx
+    movw $0x308, %dx
+    xorb %al, %al
+    outb %al, %dx
+    incw %dx
+    movb $0x40, %al
+    outb %al, %dx
+    movw $0x30a, %dx
+    movl %edi, %eax
+    outb %al, %dx
+    incw %dx
+    shrl $8, %eax
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x12, %al
+    outb %al, %dx
+    movw $0x310, %dx
+    movl %edi, %ecx
+    shrl $1, %ecx
+    cld
+    rep outsw
+    movl $0x00100000, %ecx
+.Lnet_dma_wait:
+    movw $0x307, %dx
+    inb %dx, %al
+    testb $0x40, %al
+    jnz .Lnet_dma_done
+    loop .Lnet_dma_wait
+    jmp .Lnet_send_fail
+.Lnet_dma_done:
+    movb $0x40, %al
+    outb %al, %dx
+    movw $0x304, %dx
+    movb $0x40, %al
+    outb %al, %dx
+    incw %dx
+    movb %bl, %al
+    outb %al, %dx
+    incw %dx
+    movl %ebx, %eax
+    shrl $8, %eax
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x26, %al
+    outb %al, %dx
+    movl $0x00100000, %ecx
+.Lnet_tx_wait:
+    movw $0x307, %dx
+    inb %dx, %al
+    testb $0x02, %al
+    jnz .Lnet_send_ok
+    testb $0x08, %al
+    jnz .Lnet_send_fail
+    loop .Lnet_tx_wait
+    jmp .Lnet_send_fail
+.Lnet_send_ok:
+    movb $0x0a, %al
+    outb %al, %dx
+    movl $1, %eax
+    jmp .Lnet_send_done
+.Lnet_send_fail:
+    xorl %eax, %eax
+.Lnet_send_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    leave
+    ret
+
+.globl network_receive
+network_receive:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    subl $16, %esp
+    movl 8(%ebp), %ebx
+    movl 12(%ebp), %edi
+    movl $0x00400000, %esi
+.Lnet_rx_poll:
+    movw $0x300, %dx
+    movb $0x62, %al
+    outb %al, %dx
+    movw $0x307, %dx
+    inb %dx, %al
+    movzbl %al, %eax
+    movl %eax, -16(%ebp)
+    movw $0x300, %dx
+    movb $0x22, %al
+    outb %al, %dx
+    movw $0x303, %dx
+    inb %dx, %al
+    movzbl %al, %eax
+    incl %eax
+    cmpl $0x80, %eax
+    jb .Lnet_rx_page_ready
+    movl $0x46, %eax
+.Lnet_rx_page_ready:
+    cmpl -16(%ebp), %eax
+    jne .Lnet_rx_packet
+    decl %esi
+    jnz .Lnet_rx_poll
+    xorl %eax, %eax
+    jmp .Lnet_rx_done
+.Lnet_rx_packet:
+    movl %eax, -28(%ebp)
+    movw $0x308, %dx
+    xorb %al, %al
+    outb %al, %dx
+    incw %dx
+    movl -28(%ebp), %eax
+    outb %al, %dx
+    movw $0x30a, %dx
+    movb $4, %al
+    outb %al, %dx
+    incw %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x0a, %al
+    outb %al, %dx
+    movw $0x310, %dx
+    inw %dx, %ax
+    movzbl %ah, %ecx
+    movl %ecx, -20(%ebp)
+    inw %dx, %ax
+    movzwl %ax, %eax
+    subl $4, %eax
+    movl %eax, -24(%ebp)
+    testl %eax, %eax
+    jle .Lnet_rx_consume_bad
+    cmpl %edi, %eax
+    ja .Lnet_rx_consume_bad
+    cmpl $1518, %eax
+    ja .Lnet_rx_consume_bad
+    movl %eax, %ecx
+    addl $1, %ecx
+    andl $-2, %ecx
+    movw $0x308, %dx
+    movb $4, %al
+    outb %al, %dx
+    incw %dx
+    movl -28(%ebp), %eax
+    outb %al, %dx
+    movw $0x30a, %dx
+    movl %ecx, %eax
+    outb %al, %dx
+    incw %dx
+    shrl $8, %eax
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x0a, %al
+    outb %al, %dx
+    movw $0x310, %dx
+    movl %ebx, %edi
+    shrl $1, %ecx
+    cld
+    rep insw
+    jmp .Lnet_rx_consume_ok
+.Lnet_rx_consume_bad:
+    movl $0, -24(%ebp)
+.Lnet_rx_consume_ok:
+    movl -20(%ebp), %eax
+    decl %eax
+    cmpl $0x46, %eax
+    jae .Lnet_rx_boundary_ready
+    movl $0x7f, %eax
+.Lnet_rx_boundary_ready:
+    movw $0x303, %dx
+    outb %al, %dx
+    movw $0x307, %dx
+    movb $0x41, %al
+    outb %al, %dx
+    movl -24(%ebp), %eax
+.Lnet_rx_done:
+    addl $16, %esp
+    popl %edi
+    popl %esi
+    popl %ebx
+    leave
+    ret
+
 .section .rodata,\"a\",@progbits
 ansi_empty:
     .asciz \"\"
@@ -2073,6 +2403,8 @@ parent_path:
     .skip 32
 joined_path:
     .skip 32
+network_mac:
+    .skip 6
 editor_length:
     .skip 4
 editor_command_length:
@@ -2224,6 +2556,9 @@ fn native_command_path(name: str8) -> str8 {
     if terminal_command_eq(name, "wc") == 1 || terminal_command_eq(name, "/bin/wc") == 1 {
         return "/bin/wc";
     }
+    if terminal_command_eq(name, "ping") == 1 || terminal_command_eq(name, "/bin/ping") == 1 {
+        return "/bin/ping";
+    }
     if terminal_command_eq(name, "vi") == 1 || terminal_command_eq(name, "/bin/vi") == 1 {
         return "/bin/vi";
     }
@@ -2319,6 +2654,7 @@ fn terminal_main() -> i32 {
             serial_write("cp     copy a file: cp <source> <destination>\r\n");
             serial_write("mv     rename a file: mv <source> <destination>\r\n");
             serial_write("wc     count text: wc <path>\r\n");
+            serial_write("ping   test IPv4 reachability: ping <address>\r\n");
             serial_write("vi     edit a text file: vi <path>\r\n");
             serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");

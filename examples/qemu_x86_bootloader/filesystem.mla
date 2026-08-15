@@ -3,7 +3,7 @@ asm x86(".section .filesystem,\"a\",@progbits
 .globl filesystem_start
 filesystem_start:
     .ascii \"MFS2\"
-    .word 20
+    .word 21
     .word 32
     .long filesystem_end - filesystem_start
     .long 0
@@ -131,6 +131,16 @@ mv_path:
 wc_path:
     .asciz \"/bin/wc\"
     .zero 32 - (. - wc_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+ping_path:
+    .asciz \"/bin/ping\"
+    .zero 32 - (. - ping_path)
     .byte 3
     .byte 0
     .word 0x01ed
