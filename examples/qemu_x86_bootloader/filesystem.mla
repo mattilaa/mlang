@@ -149,6 +149,8 @@ example_path:
     .long example_end - example_data
 
     .org 16 + (32 * 48)
+filesystem_timestamps:
+    .zero 32 * 4
 filesystem_data:
 motd_data:
     .ascii \"Welcome to the MLang protected-mode kernel.\"

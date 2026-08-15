@@ -132,6 +132,21 @@ write_u32() {
         conv=notrunc >/dev/null 2>&1
 }
 
+set -- $(date '+%y %m %d %H %M')
+timestamp_year=$((1$1 - 100))
+timestamp_month=$((1$2 - 100))
+timestamp_day=$((1$3 - 100))
+timestamp_hour=$((1$4 - 100))
+timestamp_minute=$((1$5 - 100))
+seed_timestamp=$(((timestamp_year << 20) | (timestamp_month << 16) | \
+    (timestamp_day << 11) | (timestamp_hour << 6) | timestamp_minute))
+timestamp_index=0
+while [ "$timestamp_index" -lt 14 ]; do
+    write_u32 "$BUILD_DIR/filesystem.seed.img" \
+        $((16 + 32 * 48 + timestamp_index * 4)) "$seed_timestamp"
+    timestamp_index=$((timestamp_index + 1))
+done
+
 command_index=2
 for command in vi ls cat chmod chown; do
     command_image="$BUILD_DIR/command-$command.img"

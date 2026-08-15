@@ -83,7 +83,7 @@ The terminal supports:
 - `pwd`: print the current working directory
 - `whoami`: print the current user (`root` by default)
 - `su <root|user>`: switch from `root` to a supported user
-- `ls [-l] [path]`: list mode, owner, byte size, and name for direct children
+- `ls [-l] [path]`: list aligned mode, owner, group, human size, modification time, and name columns
 - `cd <path>`: change the current working directory; `cd ..` is supported
 - `cat <path>`: print a file's contents
 - `touch <path>`: create and persist an empty file
@@ -175,8 +175,8 @@ $ cat readme.txt
 This file lives in /home/user on the MFS2 root filesystem.
 $ touch session.log
 $ ls
--rw-r--r--  user  60  readme.txt
--rw-r--r--  root  0  session.log
+-rw-r--r--  1 user  users    60B Aug 15 10:41 readme.txt
+-rw-r--r--  1 root  root      0B Aug 15 10:41 session.log
 $ vi notes.txt
 # press i, type two lines, press Esc, then type :wq and Enter
 vi: saved
@@ -184,8 +184,8 @@ $ cat notes.txt
 first line
 second line
 $ ls -l
--rw-r--r--  user  60  readme.txt
--rw-r--r--  root  23  notes.txt
+-rw-r--r--  1 user  users    60B Aug 15 10:41 readme.txt
+-rw-r--r--  1 root  root     23B Aug 15 10:42 notes.txt
 ```
 
 MFS2 stores an owner UID and a Unix-style nine-bit mode in each directory
@@ -193,8 +193,16 @@ entry. Directories and `/bin` executables default to `0755`, ordinary files to
 `0644`, and `/tmp` to `0777`. `/home/user` and its initial `readme.txt` belong
 to `user`; the remaining seed entries belong to `root`. New files use `0644`
 and belong to the current user. Access checks use owner bits for the owner and
-other bits for everyone else; group bits are stored and displayed but this
-small user model does not yet define groups.
+other bits for everyone else. Permission group bits are stored and displayed,
+but there is no independent group ownership or membership yet; `ls` derives
+the display-only `root` or `users` group name from the owner.
+
+A parallel timestamp table stores a compact modification date and time for
+each of the 32 directory slots. Seed entries use the local build time. Creating
+a file or writing it through `vi` reads the QEMU RTC and updates its timestamp;
+QEMU is started with a local-time RTC. `ls` displays `B`, `K`, `M`, or `G`
+sizes in a right-aligned six-character column. It does not print the `@` suffix
+used by macOS because MFS2 does not implement extended attributes.
 
 Reading requires `r`, writing or saving through `vi` requires `w`, changing
 directory requires `x`, listing requires `r+x`, and creating a file requires
@@ -228,7 +236,7 @@ changes. Canceling a new file with `:q!` does not create it.
 
 Each fixed-size directory entry stores a 32-byte absolute path, entry type,
 owner UID, mode, data offset, size, and capacity. The image reserves 32
-directory slots.
+directory slots and a matching 32-entry timestamp table.
 `touch` allocates an entry in the mounted RAM copy. On save, the editor reserves
 exactly the file's required bytes from the remaining data area. Later saves
 overwrite that allocation when they fit or append a larger allocation when
@@ -247,8 +255,9 @@ retain changes across QEMU process restarts, use:
 The `resume` task requires an existing `build/disk.img`; run the `build` or
 `demo` task once first. Re-running `build` resets the image to the files defined
 in `filesystem.mla`. Disk images produced by the earlier floppy-backed version,
-the earlier LBA 68 MFS2 layout, or the marker-only `/bin/vi` layout are not
-compatible with this executable layout; rebuild once before using `resume`.
+the earlier LBA 68 MFS2 layout, the marker-only `/bin/vi` layout, or the
+pre-timestamp MFS2 layout are not compatible with this executable layout;
+rebuild once before using `resume`.
 
 There is no separate per-file size setting or fixed editor limit. A file may
 grow until the configured MFS2 data area runs out of free bytes. The shell's

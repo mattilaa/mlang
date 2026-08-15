@@ -17,6 +17,7 @@ extern fn fs_entry_type(index: i32) -> i32;
 extern fn fs_entry_owner(index: i32) -> i32;
 extern fn fs_entry_mode(index: i32) -> i32;
 extern fn fs_entry_size(index: i32) -> i32;
+extern fn fs_entry_timestamp(index: i32) -> i32;
 extern fn fs_can_access(index: i32, mask: i32) -> i32;
 extern fn fs_pwd() -> str8;
 extern fn fs_resolve(path: str8) -> str8;
@@ -31,7 +32,32 @@ fn ls_user_name(uid: i32) -> str8 {
     return "root";
 }
 
-fn write_size(value: i32) -> void {
+fn ls_group_name(uid: i32) -> str8 {
+    if uid == 1 {
+        return "users";
+    }
+    return "root";
+}
+
+fn ls_decimal_digits(value: i32) -> i32 {
+    var digits: i32 = 1;
+    var remaining: i32 = value;
+    while remaining >= 10 {
+        remaining = remaining / 10;
+        digits = digits + 1;
+    }
+    return digits;
+}
+
+fn ls_write_spaces(count: i32) -> void {
+    var remaining: i32 = count;
+    while remaining > 0 {
+        serial_write_char(32);
+        remaining = remaining - 1;
+    }
+}
+
+fn ls_write_unsigned(value: i32) -> void {
     var divisor: i32 = 1;
     while divisor <= value / 10 {
         divisor = divisor * 10;
@@ -40,6 +66,132 @@ fn write_size(value: i32) -> void {
         serial_write_char(48 + (value / divisor) % 10);
         divisor = divisor / 10;
     }
+}
+
+fn ls_size_scale(unit: i32) -> i32 {
+    if unit == 3 {
+        return 1073741824;
+    }
+    if unit == 2 {
+        return 1048576;
+    }
+    if unit == 1 {
+        return 1024;
+    }
+    return 1;
+}
+
+fn ls_size_unit(value: i32) -> i32 {
+    if value >= 1073741824 {
+        return 3;
+    }
+    if value >= 1048576 {
+        return 2;
+    }
+    if value >= 1024 {
+        return 1;
+    }
+    return 0;
+}
+
+fn ls_unit_character(unit: i32) -> i32 {
+    if unit == 3 {
+        return 71;
+    }
+    if unit == 2 {
+        return 77;
+    }
+    if unit == 1 {
+        return 75;
+    }
+    return 66;
+}
+
+fn ls_human_size_width(value: i32) -> i32 {
+    let unit: i32 = ls_size_unit(value);
+    if unit == 0 {
+        return ls_decimal_digits(value) + 1;
+    }
+    let scale: i32 = ls_size_scale(unit);
+    let whole: i32 = value / scale;
+    if whole < 10 {
+        return 4;
+    }
+    var rounded: i32 = whole;
+    if value % scale >= scale / 2 {
+        rounded = rounded + 1;
+    }
+    return ls_decimal_digits(rounded) + 1;
+}
+
+fn ls_write_human_size(value: i32) -> void {
+    let width: i32 = ls_human_size_width(value);
+    ls_write_spaces(6 - width);
+    let unit: i32 = ls_size_unit(value);
+    if unit == 0 {
+        ls_write_unsigned(value);
+    } else {
+        let scale: i32 = ls_size_scale(unit);
+        let whole: i32 = value / scale;
+        if whole < 10 {
+            ls_write_unsigned(whole);
+            serial_write_char(46);
+            var decimal: i32 = (value % scale) / (scale / 10);
+            if decimal > 9 {
+                decimal = 9;
+            }
+            ls_write_unsigned(decimal);
+        } else {
+            var rounded: i32 = whole;
+            if value % scale >= scale / 2 {
+                rounded = rounded + 1;
+            }
+            ls_write_unsigned(rounded);
+        }
+    }
+    serial_write_char(ls_unit_character(unit));
+}
+
+fn ls_month_name(month: i32) -> str8 {
+    if month == 1 { return "Jan"; }
+    if month == 2 { return "Feb"; }
+    if month == 3 { return "Mar"; }
+    if month == 4 { return "Apr"; }
+    if month == 5 { return "May"; }
+    if month == 6 { return "Jun"; }
+    if month == 7 { return "Jul"; }
+    if month == 8 { return "Aug"; }
+    if month == 9 { return "Sep"; }
+    if month == 10 { return "Oct"; }
+    if month == 11 { return "Nov"; }
+    if month == 12 { return "Dec"; }
+    return "---";
+}
+
+fn ls_write_two_digits(value: i32) -> void {
+    serial_write_char(48 + (value / 10) % 10);
+    serial_write_char(48 + value % 10);
+}
+
+fn ls_write_timestamp(value: i32) -> void {
+    if value == 0 {
+        serial_write("--- -- --:--");
+        return;
+    }
+    let month: i32 = (value >> 16) & 15;
+    let day: i32 = (value >> 11) & 31;
+    let hour: i32 = (value >> 6) & 31;
+    let minute: i32 = value & 63;
+    serial_write(ls_month_name(month));
+    serial_write_char(32);
+    if day < 10 {
+        serial_write_char(32);
+    }
+    ls_write_unsigned(day);
+    serial_write_char(32);
+    ls_write_two_digits(hour);
+    serial_write_char(58);
+    ls_write_two_digits(minute);
 }
 
 fn write_mode_bit(mode: i32, mask: i32, shown: i32) -> void {
@@ -66,11 +218,20 @@ fn write_entry(index: i32) -> void {
     write_mode_bit(mode, 4, 114);
     write_mode_bit(mode, 2, 119);
     write_mode_bit(mode, 1, 120);
+    let owner: i32 = fs_entry_owner(index);
+    serial_write("  1 ");
+    serial_write(ls_user_name(owner));
     serial_write("  ");
-    serial_write(ls_user_name(fs_entry_owner(index)));
-    serial_write("  ");
-    write_size(fs_entry_size(index));
-    serial_write("  ");
+    serial_write(ls_group_name(owner));
+    if owner == 1 {
+        serial_write_char(32);
+    } else {
+        serial_write("  ");
+    }
+    ls_write_human_size(fs_entry_size(index));
+    serial_write_char(32);
+    ls_write_timestamp(fs_entry_timestamp(index));
+    serial_write_char(32);
     serial_write(fs_basename(fs_entry_path(index)));
     if fs_entry_type(index) == 2 {
         serial_write("/");
@@ -106,7 +267,7 @@ fn list_directory(request: str8) -> i32 {
 pub fn run_ls(arguments: str8) -> i32 {
     var request: str8 = arguments;
     if terminal_command_eq(arguments, "") == 1 || terminal_command_eq(arguments, "-l") == 1 {
-        request = fs_pwd();
+        request = ".";
     } else if terminal_command_prefix(arguments, "-l ") == 1 {
         request = terminal_argument(arguments, 3);
     }

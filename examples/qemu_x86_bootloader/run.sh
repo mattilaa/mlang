@@ -59,6 +59,7 @@ exec qemu-system-i386 \
     -m "${memory_mib}M" \
     -drive format=raw,file="$EXAMPLE_DIR/build/disk.img",if=ide,index=0,media=disk \
     -display none \
+    -rtc base=localtime \
     -serial stdio \
     -monitor none \
     -debugcon file:"$EXAMPLE_DIR/build/debugcon.log"

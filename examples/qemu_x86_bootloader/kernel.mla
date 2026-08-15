@@ -41,6 +41,7 @@ protected_entry:
     jmp terminal_halt
 
 .set MFS_BASE, 0x00100000
+.set MFS_TIMESTAMP_BASE, MFS_BASE + 16 + (32 * 48)
 
 .Lserial_init:
     movw $0x3f9, %dx
@@ -64,6 +65,97 @@ protected_entry:
     movw $0x3fc, %dx
     movb $0x0b, %al
     outb %al, %dx
+    ret
+
+.Lcmos_read:
+    pushl %edx
+    movw $0x70, %dx
+    outb %al, %dx
+    incw %dx
+    inb %dx, %al
+    popl %edx
+    ret
+
+.Lrtc_decode:
+    movzbl %al, %eax
+    testb $4, %bl
+    jnz .Lrtc_decode_done
+    movl %eax, %edx
+    andl $15, %eax
+    shrl $4, %edx
+    imull $10, %edx
+    addl %edx, %eax
+.Lrtc_decode_done:
+    ret
+
+.globl terminal_timestamp
+terminal_timestamp:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    pushl %ebp
+    subl $20, %esp
+.Lrtc_wait:
+    movb $0x0a, %al
+    call .Lcmos_read
+    testb $0x80, %al
+    jnz .Lrtc_wait
+    movb $0x0b, %al
+    call .Lcmos_read
+    movb %al, %bl
+    movb $2, %al
+    call .Lcmos_read
+    call .Lrtc_decode
+    movl %eax, 0(%esp)
+    movb $4, %al
+    call .Lcmos_read
+    movb %al, %bh
+    andb $0x7f, %al
+    call .Lrtc_decode
+    testb $2, %bl
+    jnz .Lrtc_hour_ready
+    cmpl $12, %eax
+    jne .Lrtc_hour_not_noon
+    xorl %eax, %eax
+.Lrtc_hour_not_noon:
+    testb $0x80, %bh
+    jz .Lrtc_hour_ready
+    addl $12, %eax
+.Lrtc_hour_ready:
+    movl %eax, 4(%esp)
+    movb $7, %al
+    call .Lcmos_read
+    call .Lrtc_decode
+    movl %eax, 8(%esp)
+    movb $8, %al
+    call .Lcmos_read
+    call .Lrtc_decode
+    movl %eax, 12(%esp)
+    movb $9, %al
+    call .Lcmos_read
+    call .Lrtc_decode
+    andl $127, %eax
+    shll $20, %eax
+    movl 12(%esp), %edx
+    andl $15, %edx
+    shll $16, %edx
+    orl %edx, %eax
+    movl 8(%esp), %edx
+    andl $31, %edx
+    shll $11, %edx
+    orl %edx, %eax
+    movl 4(%esp), %edx
+    andl $31, %edx
+    shll $6, %edx
+    orl %edx, %eax
+    movl 0(%esp), %edx
+    andl $63, %edx
+    orl %edx, %eax
+    addl $20, %esp
+    popl %ebp
+    popl %edi
+    popl %esi
+    popl %ebx
     ret
 
 .Lserial_putc:
@@ -572,6 +664,20 @@ fs_entry_size:
     xorl %eax, %eax
     ret
 
+.globl fs_entry_timestamp
+fs_entry_timestamp:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_timestamp_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_timestamp_invalid
+    movl MFS_TIMESTAMP_BASE(,%eax,4), %eax
+    ret
+.Lfs_entry_timestamp_invalid:
+    xorl %eax, %eax
+    ret
+
 .globl fs_current_uid
 fs_current_uid:
     movzbl current_user_id, %eax
@@ -1002,6 +1108,9 @@ fs_create_empty:
     movb current_user_id, %al
     movb %al, 33(%ebx)
     movw $0x01a4, 34(%ebx)
+    call terminal_timestamp
+    movzwl MFS_BASE + 4, %edx
+    movl %eax, MFS_TIMESTAMP_BASE(,%edx,4)
     incw MFS_BASE + 4
     movl $1, %eax
     jmp .Lcreate_done
@@ -1064,6 +1173,9 @@ fs_write_text:
     rep movsb
     movb $0, (%edi)
     movl %edx, 40(%ebx)
+    call terminal_timestamp
+    movl 8(%ebp), %ecx
+    movl %eax, MFS_TIMESTAMP_BASE(,%ecx,4)
     movl $1, %eax
     jmp .Lwrite_done
 .Lwrite_invalid:
@@ -1706,7 +1818,7 @@ command_exec:
     addl $4, %esp
     jmp .Lcommand_exec_done
 .Lcommand_exec_invalid:
-    movl $-1, %eax
+    movl $-127, %eax
 .Lcommand_exec_done:
     popl %edi
     popl %esi
@@ -1912,11 +2024,11 @@ fn run_native_command(command: str8) -> i32 {
     }
 
     let result: i32 = command_exec(executable, arguments);
-    if result == -1 {
+    if result == -127 {
         serial_write(command);
         serial_write(": invalid executable\r\n");
     }
-    return result;
+    return 0;
 }
 
 fn terminal_main() -> i32 {
