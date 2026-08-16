@@ -1,0 +1,53 @@
+/// Process termination command for the QEMU x86 example.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_kill__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn serial_write_char(ch: i32) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn terminal_argument(command: str8, offset: i32) -> str8;
+extern fn process_kill(pid: i32) -> i32;
+
+asm x86(".globl kill_parse_byte
+kill_parse_byte:
+    movl 4(%esp), %edx
+    movl 8(%esp), %ecx
+    movzbl (%edx,%ecx), %eax
+    ret
+");
+extern fn kill_parse_byte(text: str8, index: i32) -> i32;
+
+fn kill_parse_pid(text: str8) -> i32 {
+    var pid: i32 = 0;
+    var index: i32 = 0;
+    var digits: i32 = 0;
+    while true {
+        let ch: i32 = kill_parse_byte(text, index);
+        if ch == 0 { break; }
+        if ch < 48 || ch > 57 { return -1; }
+        pid = pid * 10 + ch - 48;
+        digits = digits + 1;
+        index = index + 1;
+    }
+    if digits == 0 { return -1; }
+    return pid;
+}
+
+pub fn run_kill(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "-h") == 1 || terminal_command_eq(arguments, "--help") == 1 {
+        serial_write("usage: kill <pid>\r\n");
+        serial_write("mark a cooperative process as killed\r\n");
+        return 0;
+    }
+    let pid: i32 = kill_parse_pid(arguments);
+    if pid <= 1 || process_kill(pid) != 1 {
+        serial_write("kill: process not found\r\n");
+        return 1;
+    }
+    serial_write("process killed\r\n");
+    return 0;
+}

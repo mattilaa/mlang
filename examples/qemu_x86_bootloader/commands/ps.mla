@@ -1,0 +1,52 @@
+/// Process-table listing command for the QEMU x86 example.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_ps__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn serial_write_char(ch: i32) -> void;
+extern fn process_count() -> i32;
+extern fn process_pid_at(slot: i32) -> i32;
+extern fn process_entry_at(slot: i32) -> i32;
+extern fn process_state_at(slot: i32) -> i32;
+extern fn process_exit_at(slot: i32) -> i32;
+extern fn fs_entry_path(index: i32) -> str8;
+
+fn ps_number(value: i32) -> void {
+    if value == 0 { serial_write_char(48); return; }
+    var divisor: i32 = 1;
+    while divisor <= value / 10 { divisor = divisor * 10; }
+    while divisor > 0 {
+        serial_write_char(48 + (value / divisor) % 10);
+        divisor = divisor / 10;
+    }
+}
+
+fn ps_state(state: i32) -> str8 {
+    if state == 1 { return "RUN"; }
+    if state == 3 { return "KIL"; }
+    return "EXIT";
+}
+
+pub fn run_ps(arguments: str8) -> i32 {
+    serial_write("PID  STATE  COMMAND\r\n");
+    serial_write("1    RUN    shell\r\n");
+    var slot: i32 = 0;
+    while slot < process_count() {
+        if process_pid_at(slot) != 0 {
+            ps_number(process_pid_at(slot));
+            serial_write("    ");
+            serial_write(ps_state(process_state_at(slot)));
+            serial_write("    ");
+            serial_write(fs_entry_path(process_entry_at(slot)));
+            serial_write(" (exit=");
+            ps_number(process_exit_at(slot));
+            serial_write(")\r\n");
+        }
+        slot = slot + 1;
+    }
+    return 0;
+}

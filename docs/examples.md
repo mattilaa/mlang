@@ -49,6 +49,9 @@ following additional programs are useful runnable showcases:
   terminal and a configurable hierarchical filesystem supporting persistent
   text writes through a full-screen modal `/bin/vi` built on
   `std::esc::freestanding`, plus `touch`, `pwd`, `ls`, `cd`, `cat`, and `sync`.
+  The kernel also assigns PIDs to native command images and includes MLang
+  `ps`, `kill`, and `sleep` commands backed by a small cooperative process
+  table.
   Build and run it through `mlang.toml` with:
 
   ```sh

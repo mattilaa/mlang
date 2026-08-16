@@ -7,7 +7,7 @@ control to it. The kernel switches to 32-bit protected mode and enters the
 ordinary MLang `terminal_main()` function. Architecture-qualified module
 assembly defines the hardware entry and I/O primitives that cannot live in a
 normal function. `ls`, `cat`, `chmod`, `chown`, `mkdir`, `rm`, `echo`, `cp`,
-`mv`, `wc`, `ping`, and `vi` are compiled as independent MLang command images
+`mv`, `wc`, `ping`, `ps`, `kill`, `sleep`, and `vi` are compiled as independent MLang command images
 and stored as executable files under `/bin`:
 
 ```mla
@@ -97,9 +97,12 @@ Every command accepts `-h` and `--help` for command-specific usage.
 - `rm -rf <path>` or `rm -fr <path>`: recursively remove a tree without reporting a missing path
 - `echo [text]`: write command-line text to the terminal
 - `cp <source> <destination>`: copy and persist a regular file; an existing destination directory uses the source filename
-- `mv <source> <destination>`: rename and persist a regular file while preserving its metadata
+- `mv <source> <destination>`: rename and persist a regular file while preserving its metadata; an existing destination directory receives the source basename
 - `wc <path>`: print newline, word, and byte counts for a regular file
 - `ping [-i seconds] <host-or-IPv4-address>`: resolve an A record when needed and send four ICMP echo requests, spaced one second apart by default
+- `ps`: list process IDs, states, command paths, and exit codes
+- `kill <pid>`: mark a cooperative process as killed
+- `sleep <seconds>`: small native process binary for lifecycle demonstrations
 - `vi <path>` or `/bin/vi <path>`: edit and persist text in a full-screen modal editor
 - `sync`: flush the used MFS2 data and metadata to the IDE disk image
 - `reboot`: reset the virtual machine through the keyboard controller
@@ -155,6 +158,11 @@ The shell starts as UID 0 (`root`). `su user` enters the unprivileged UID 1
 account; switching from `user` back to `root` is denied because this minimal
 kernel has no password authentication. Use `reboot` to return to the default
 root session. Root bypasses file permission checks.
+
+Native commands receive a PID from the kernel's eight-slot process table. The
+shell is PID 1; command invocations are recorded as `RUN`, then become `EXIT`
+when they return (or `KIL` when terminated). This is a deliberately cooperative
+process model for the small single-core example, not preemptive multitasking.
 
 Build without starting QEMU:
 

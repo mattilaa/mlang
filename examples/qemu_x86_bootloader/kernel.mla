@@ -2037,6 +2037,125 @@ __mlang_std_exceptions_rethrow_current:
 
 .set COMMAND_BASE, 0x00050000
 .set COMMAND_CAPACITY, 0x00030000
+.set PROCESS_MAX, 8
+
+.globl process_start
+process_start:
+    pushl %ebx
+    pushl %ecx
+    pushl %edx
+    xorl %ecx, %ecx
+.Lprocess_start_scan:
+    cmpl $PROCESS_MAX, %ecx
+    jae .Lprocess_start_full
+    // Reuse an exited/killed slot; only RUN records are protected.
+    cmpl $1, process_state_table(,%ecx,4)
+    jne .Lprocess_start_slot
+    incl %ecx
+    jmp .Lprocess_start_scan
+.Lprocess_start_slot:
+    movl process_next_pid, %eax
+    testl %eax, %eax
+    jnz .Lprocess_start_pid_ready
+    movl $2, %eax
+.Lprocess_start_pid_ready:
+    movl %eax, process_pid_table(,%ecx,4)
+    movl 16(%esp), %edx
+    movl %edx, process_entry_table(,%ecx,4)
+    movl $1, process_state_table(,%ecx,4)
+    movl $0, process_exit_table(,%ecx,4)
+    incl process_next_pid
+    popl %edx
+    popl %ecx
+    popl %ebx
+    ret
+.Lprocess_start_full:
+    movl $-1, %eax
+    popl %edx
+    popl %ecx
+    popl %ebx
+    ret
+
+.globl process_finish
+process_finish:
+    pushl %ebx
+    pushl %ecx
+    pushl %edx
+    xorl %ecx, %ecx
+.Lprocess_finish_scan:
+    cmpl $PROCESS_MAX, %ecx
+    jae .Lprocess_finish_missing
+    movl process_pid_table(,%ecx,4), %eax
+    cmpl 16(%esp), %eax
+    jne .Lprocess_finish_next
+    cmpl $3, process_state_table(,%ecx,4)
+    je .Lprocess_finish_found
+    movl $2, process_state_table(,%ecx,4)
+    movl 20(%esp), %edx
+    movl %edx, process_exit_table(,%ecx,4)
+.Lprocess_finish_found:
+    movl $1, %eax
+    jmp .Lprocess_finish_done
+.Lprocess_finish_next:
+    incl %ecx
+    jmp .Lprocess_finish_scan
+.Lprocess_finish_missing:
+    xorl %eax, %eax
+.Lprocess_finish_done:
+    popl %edx
+    popl %ecx
+    popl %ebx
+    ret
+
+.globl process_kill
+process_kill:
+    pushl %ebx
+    pushl %ecx
+    xorl %ecx, %ecx
+.Lprocess_kill_scan:
+    cmpl $PROCESS_MAX, %ecx
+    jae .Lprocess_kill_missing
+    movl process_pid_table(,%ecx,4), %eax
+    cmpl 12(%esp), %eax
+    jne .Lprocess_kill_next
+    movl $3, process_state_table(,%ecx,4)
+    movl $143, process_exit_table(,%ecx,4)
+    movl $1, %eax
+    jmp .Lprocess_kill_done
+.Lprocess_kill_next:
+    incl %ecx
+    jmp .Lprocess_kill_scan
+.Lprocess_kill_missing:
+    xorl %eax, %eax
+.Lprocess_kill_done:
+    popl %ecx
+    popl %ebx
+    ret
+
+.globl process_count
+process_count:
+    movl $PROCESS_MAX, %eax
+    ret
+.globl process_pid_at
+process_pid_at:
+    movl 4(%esp), %ecx
+    movl process_pid_table(,%ecx,4), %eax
+    ret
+.globl process_entry_at
+process_entry_at:
+    movl 4(%esp), %ecx
+    movl process_entry_table(,%ecx,4), %eax
+    ret
+.globl process_state_at
+process_state_at:
+    movl 4(%esp), %ecx
+    movl process_state_table(,%ecx,4), %eax
+    ret
+.globl process_exit_at
+process_exit_at:
+    movl 4(%esp), %ecx
+    movl process_exit_table(,%ecx,4), %eax
+    ret
 
 .globl command_exec
 command_exec:
@@ -2437,6 +2556,16 @@ ansi_size_query:
 
 .section .bss,\"aw\",@nobits
 .balign 16
+process_next_pid:
+    .skip 4
+process_pid_table:
+    .skip 8 * 4
+process_entry_table:
+    .skip 8 * 4
+process_state_table:
+    .skip 8 * 4
+process_exit_table:
+    .skip 8 * 4
 input_buffer:
     .skip 64
 current_directory:
@@ -2515,6 +2644,18 @@ extern fn editor_clear() -> void;
 extern fn editor_append_line(line: str8) -> i32;
 extern fn editor_data() -> str8;
 extern fn editor_size() -> i32;
+
+// A deliberately small cooperative process table.  Its storage and ABI
+// helpers are in the kernel assembly below so native MLang command images can
+// inspect the same table.
+extern fn process_start(entry: i32) -> i32;
+extern fn process_finish(pid: i32, exit_code: i32) -> i32;
+extern fn process_kill(pid: i32) -> i32;
+extern fn process_count() -> i32;
+extern fn process_pid_at(slot: i32) -> i32;
+extern fn process_entry_at(slot: i32) -> i32;
+extern fn process_state_at(slot: i32) -> i32;
+extern fn process_exit_at(slot: i32) -> i32;
 
 fn user_name(uid: i32) -> str8 {
     if uid == 1 {
@@ -2606,6 +2747,15 @@ fn native_command_path(name: str8) -> str8 {
     if terminal_command_eq(name, "ping") == 1 || terminal_command_eq(name, "/bin/ping") == 1 {
         return "/bin/ping";
     }
+    if terminal_command_eq(name, "ps") == 1 || terminal_command_eq(name, "/bin/ps") == 1 {
+        return "/bin/ps";
+    }
+    if terminal_command_eq(name, "kill") == 1 || terminal_command_eq(name, "/bin/kill") == 1 {
+        return "/bin/kill";
+    }
+    if terminal_command_eq(name, "sleep") == 1 || terminal_command_eq(name, "/bin/sleep") == 1 {
+        return "/bin/sleep";
+    }
     if terminal_command_eq(name, "vi") == 1 || terminal_command_eq(name, "/bin/vi") == 1 {
         return "/bin/vi";
     }
@@ -2631,7 +2781,13 @@ fn run_native_command(command: str8) -> i32 {
         return 0;
     }
 
+    let pid: i32 = process_start(executable);
+    if pid < 0 {
+        serial_write("process table full\r\n");
+        return 0;
+    }
     let result: i32 = command_exec(executable, arguments);
+    process_finish(pid, result);
     if result == -127 {
         serial_write(command);
         serial_write(": invalid executable\r\n");
@@ -2702,6 +2858,9 @@ fn terminal_main() -> i32 {
             serial_write("mv     rename a file: mv <source> <destination>\r\n");
             serial_write("wc     count text: wc <path>\r\n");
             serial_write("ping   test IPv4 reachability: ping [-i seconds] <host>\r\n");
+            serial_write("ps     list process IDs and states\r\n");
+            serial_write("kill   terminate a process: kill <pid>\r\n");
+            serial_write("sleep  small process example: sleep <seconds>\r\n");
             serial_write("vi     edit a text file: vi <path>\r\n");
             serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");

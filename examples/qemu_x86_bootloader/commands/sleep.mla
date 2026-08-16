@@ -1,0 +1,43 @@
+/// Small process binary used to demonstrate process lifecycle records.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_sleep__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn serial_write_char(ch: i32) -> void;
+extern fn terminal_wait_ms(milliseconds: i32) -> void;
+
+asm x86(".globl sleep_parse_byte
+sleep_parse_byte:
+    movl 4(%esp), %edx
+    movl 8(%esp), %ecx
+    movzbl (%edx,%ecx), %eax
+    ret
+");
+extern fn sleep_parse_byte(text: str8, index: i32) -> i32;
+
+fn sleep_seconds(text: str8) -> i32 {
+    var value: i32 = 0;
+    var index: i32 = 0;
+    while true {
+        let ch: i32 = sleep_parse_byte(text, index);
+        if ch == 0 { break; }
+        if ch < 48 || ch > 57 { return -1; }
+        value = value * 10 + ch - 48;
+        index = index + 1;
+    }
+    return value;
+}
+
+pub fn run_sleep(arguments: str8) -> i32 {
+    let seconds: i32 = sleep_seconds(arguments);
+    if seconds < 0 || seconds > 60 {
+        serial_write("usage: sleep <seconds> (0..60)\r\n");
+        return 1;
+    }
+    terminal_wait_ms(seconds * 1000);
+    return 0;
+}
