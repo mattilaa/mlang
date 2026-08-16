@@ -54,7 +54,8 @@ following additional programs are useful runnable showcases:
   [`std::esc::freestanding`](Stdlib-Esc), plus `touch`, `pwd`, `ls`, `cd`, `cat`, and `sync`.
   The kernel also assigns PIDs to native command images and includes MLang
   `ps`, `kill`, and `sleep` commands backed by a small cooperative process
-  table.
+  table, plus root-only `adduser` and `addgroup` commands for the demo account
+  database.
   Build and run it through `mlang.toml` with:
 
   ```sh

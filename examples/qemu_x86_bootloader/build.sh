@@ -93,7 +93,7 @@ mkdir -p "$BUILD_DIR"
     --entry=kernel_start --build-id=none -nostdlib "$BUILD_DIR/kernel.o" \
     -o "$BUILD_DIR/kernel.elf"
 
-for command in ls cat chmod chown mkdir rm echo cp mv wc ping ps kill sleep vi; do
+for command in ls cat chmod chown mkdir rm echo cp mv wc ping ps kill sleep adduser addgroup deluser delgroup vi; do
     command_source="$EXAMPLE_DIR/commands/$command.mla"
     if [ "$command" = "vi" ]; then
         command_source="$EXAMPLE_DIR/vi.mla"
@@ -141,14 +141,14 @@ timestamp_minute=$((1$5 - 100))
 seed_timestamp=$(((timestamp_year << 20) | (timestamp_month << 16) | \
     (timestamp_day << 11) | (timestamp_hour << 6) | timestamp_minute))
 timestamp_index=0
-while [ "$timestamp_index" -lt 24 ]; do
+while [ "$timestamp_index" -lt 28 ]; do
     write_u32 "$BUILD_DIR/filesystem.seed.img" \
         $((16 + 32 * 48 + timestamp_index * 4)) "$seed_timestamp"
     timestamp_index=$((timestamp_index + 1))
 done
 
 command_index=2
-for command in vi ls cat chmod chown mkdir rm echo cp mv wc ping ps kill sleep; do
+for command in vi ls cat chmod chown mkdir rm echo cp mv wc ping ps kill sleep adduser addgroup deluser delgroup; do
     command_image="$BUILD_DIR/command-$command.img"
     command_size=$(wc -c < "$command_image" | tr -d ' ')
     if [ "$command_size" -gt 196608 ]; then
@@ -238,6 +238,6 @@ printf '%s\n' "$FILESYSTEM_KIB" > "$BUILD_DIR/filesystem_kib"
 echo "Built $BUILD_DIR/disk.img"
 echo "  boot sector: 512 bytes, BIOS signature 55aa"
 echo "  loaded kernel: $kernel_size bytes in sectors 2-97"
-echo "  native commands: /bin/ls /bin/cat /bin/chmod /bin/chown /bin/mkdir /bin/rm /bin/echo /bin/cp /bin/mv /bin/wc /bin/ping /bin/ps /bin/kill /bin/sleep /bin/vi"
+echo "  native commands: /bin/ls /bin/cat /bin/chmod /bin/chown /bin/mkdir /bin/rm /bin/echo /bin/cp /bin/mv /bin/wc /bin/ping /bin/ps /bin/kill /bin/sleep /bin/adduser /bin/addgroup /bin/deluser /bin/delgroup /bin/vi"
 echo "  MFS2 filesystem: $filesystem_size bytes ($filesystem_sectors sectors) from LBA 100"
 echo "  disk image: $disk_size bytes"

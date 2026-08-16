@@ -1,0 +1,34 @@
+/// Create a group in the small QEMU demo account database.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_addgroup__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn group_add(name: str8) -> i32;
+
+pub fn run_addgroup(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "") == 1 || terminal_command_eq(arguments, "-h") == 1 || terminal_command_eq(arguments, "--help") == 1 {
+        serial_write("usage: addgroup <name>\r\n");
+        serial_write("create a group as root\r\n");
+        return 0;
+    }
+    let gid: i32 = group_add(arguments);
+    if gid == -4 {
+        serial_write("addgroup: permission denied\r\n");
+        return 1;
+    }
+    if gid == -2 {
+        serial_write("addgroup: group already exists\r\n");
+        return 1;
+    }
+    if gid < 0 {
+        serial_write("addgroup: group database is full\r\n");
+        return 1;
+    }
+    serial_write("group created\r\n");
+    return 0;
+}

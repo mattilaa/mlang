@@ -13,6 +13,7 @@ extern fn fs_resolve(path: str8) -> str8;
 extern fn fs_find(path: str8) -> i32;
 extern fn fs_chown(index: i32, uid: i32) -> i32;
 extern fn fs_flush() -> i32;
+extern fn user_find(name: str8) -> i32;
 
 pub fn run_chown(arguments: str8) -> i32 {
     if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
@@ -30,12 +31,7 @@ pub fn run_chown(arguments: str8) -> i32 {
         serial_write("usage: chown <root|user> <path>\r\n");
         return -5;
     }
-    var uid: i32 = -1;
-    if terminal_command_eq(arguments, "root") == 1 {
-        uid = 0;
-    } else if terminal_command_eq(arguments, "user") == 1 {
-        uid = 1;
-    }
+    let uid: i32 = user_find(arguments);
     if uid < 0 {
         serial_write("chown: unknown user\r\n");
         return -3;

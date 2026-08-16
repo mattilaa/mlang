@@ -1,0 +1,25 @@
+/// Remove a dynamically created group from the QEMU demo account database.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_delgroup__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn group_remove(name: str8) -> i32;
+
+pub fn run_delgroup(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "") == 1 || terminal_command_eq(arguments, "-h") == 1 || terminal_command_eq(arguments, "--help") == 1 {
+        serial_write("usage: delgroup <name>\r\n");
+        serial_write("remove a non-system group as root\r\n");
+        return 0;
+    }
+    let result: i32 = group_remove(arguments);
+    if result == -4 { serial_write("delgroup: permission denied\r\n"); return 1; }
+    if result == -2 { serial_write("delgroup: system group cannot be removed\r\n"); return 1; }
+    if result != 1 { serial_write("delgroup: group not found\r\n"); return 1; }
+    serial_write("group removed\r\n");
+    return 0;
+}

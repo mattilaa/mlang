@@ -3,7 +3,7 @@ asm x86(".section .filesystem,\"a\",@progbits
 .globl filesystem_start
 filesystem_start:
     .ascii \"MFS2\"
-    .word 24
+    .word 28
     .word 32
     .long filesystem_end - filesystem_start
     .long 0
@@ -174,6 +174,46 @@ sleep_path:
     .byte 3
     .byte 0
     .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+adduser_path:
+    .asciz \"/bin/adduser\"
+    .zero 32 - (. - adduser_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+addgroup_path:
+    .asciz \"/bin/addgroup\"
+    .zero 32 - (. - addgroup_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+
+deluser_path:
+    .asciz \"/bin/deluser\"
+    .zero 32 - (. - deluser_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+delgroup_path:
+    .asciz \"/bin/delgroup\"
+    .zero 32 - (. - delgroup_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
     .long 0
     .long 0
     .long 0

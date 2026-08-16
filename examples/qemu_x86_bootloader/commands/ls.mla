@@ -24,20 +24,8 @@ extern fn fs_resolve(path: str8) -> str8;
 extern fn fs_find(path: str8) -> i32;
 extern fn fs_basename(path: str8) -> str8;
 extern fn fs_is_direct_child(directory: str8, candidate: str8) -> i32;
-
-fn ls_user_name(uid: i32) -> str8 {
-    if uid == 1 {
-        return "user";
-    }
-    return "root";
-}
-
-fn ls_group_name(uid: i32) -> str8 {
-    if uid == 1 {
-        return "users";
-    }
-    return "root";
-}
+extern fn user_name_by_uid(uid: i32) -> str8;
+extern fn group_name_by_uid(gid: i32) -> str8;
 
 fn ls_decimal_digits(value: i32) -> i32 {
     var digits: i32 = 1;
@@ -220,9 +208,9 @@ fn write_entry(index: i32) -> void {
     write_mode_bit(mode, 1, 120);
     let owner: i32 = fs_entry_owner(index);
     serial_write("  1 ");
-    serial_write(ls_user_name(owner));
+    serial_write(user_name_by_uid(owner));
     serial_write("  ");
-    serial_write(ls_group_name(owner));
+    serial_write(group_name_by_uid(owner));
     if owner == 1 {
         serial_write_char(32);
     } else {

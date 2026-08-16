@@ -2157,6 +2157,358 @@ process_exit_at:
     movl process_exit_table(,%ecx,4), %eax
     ret
 
+.globl user_find
+user_find:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    call user_table_init
+    movl 20(%esp), %esi
+    xorl %ecx, %ecx
+.Luser_find_scan:
+    cmpl $8, %ecx
+    jae .Luser_find_missing
+    cmpb $0, user_active(,%ecx,1)
+    je .Luser_find_next
+    movl %ecx, %edi
+    shll $4, %edi
+    addl $user_names, %edi
+.Luser_find_compare:
+    movb (%esi), %al
+    cmpb (%edi), %al
+    jne .Luser_find_next
+    testb %al, %al
+    jz .Luser_find_found
+    incl %esi
+    incl %edi
+    jmp .Luser_find_compare
+.Luser_find_next:
+    incl %ecx
+    movl 20(%esp), %esi
+    jmp .Luser_find_scan
+.Luser_find_found:
+    movl %ecx, %eax
+    jmp .Luser_find_done
+.Luser_find_missing:
+    movl $-1, %eax
+.Luser_find_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl user_add
+user_add:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    cmpb $0, current_user_id
+    jne .Luser_add_denied
+    call user_table_init
+    movl 20(%esp), %esi
+    pushl %esi
+    call user_find
+    addl $4, %esp
+    cmpl $-1, %eax
+    jne .Luser_add_exists
+    xorl %ecx, %ecx
+.Luser_add_scan:
+    cmpl $8, %ecx
+    jae .Luser_add_full
+    cmpb $0, user_active(,%ecx,1)
+    je .Luser_add_slot
+    incl %ecx
+    jmp .Luser_add_scan
+.Luser_add_slot:
+    movl %ecx, %edi
+    shll $4, %edi
+    addl $user_names, %edi
+    movl $15, %ebx
+.Luser_add_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jz .Luser_add_done_copy
+    decl %ebx
+    jnz .Luser_add_copy
+    movb $0, (%edi)
+.Luser_add_done_copy:
+    movb $1, user_active(,%ecx,1)
+    movl %ecx, %eax
+    jmp .Luser_add_done
+.Luser_add_exists:
+    movl $-2, %eax
+    jmp .Luser_add_done
+.Luser_add_full:
+    movl $-3, %eax
+.Luser_add_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+.Luser_add_denied:
+    movl $-4, %eax
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl user_name_by_uid
+user_name_by_uid:
+    pushl %ebx
+    movl 8(%esp), %ebx
+    call user_table_init
+    cmpl $0, %ebx
+    jl .Luser_name_unknown
+    cmpl $8, %ebx
+    jae .Luser_name_unknown
+    cmpb $0, user_active(,%ebx,1)
+    je .Luser_name_unknown
+    movl %ebx, %eax
+    shll $4, %eax
+    addl $user_names, %eax
+    popl %ebx
+    ret
+.Luser_name_unknown:
+    movl $unknown_user_name, %eax
+    popl %ebx
+    ret
+
+.globl user_remove
+user_remove:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl 16(%esp), %esi
+    cmpb $0, current_user_id
+    jne .Luser_remove_denied
+    pushl %esi
+    call user_find
+    addl $4, %esp
+    cmpl $2, %eax
+    jl .Luser_remove_protected
+    cmpl $8, %eax
+    jae .Luser_remove_missing
+    movl %eax, %ebx
+    movb $0, user_active(,%ebx,1)
+    shll $4, %ebx
+    addl $user_names, %ebx
+    movl %ebx, %edi
+    xorl %eax, %eax
+    movl $4, %ecx
+    rep stosl
+    movl $1, %eax
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+.Luser_remove_protected:
+    movl $-2, %eax
+    jmp .Luser_remove_done
+.Luser_remove_missing:
+    movl $-1, %eax
+    jmp .Luser_remove_done
+.Luser_remove_denied:
+    movl $-4, %eax
+.Luser_remove_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl group_find
+group_find:
+    pushl %esi
+    pushl %edi
+    call group_table_init
+    movl 12(%esp), %esi
+    xorl %ecx, %ecx
+.Lgroup_find_scan:
+    cmpl $8, %ecx
+    jae .Lgroup_find_missing
+    cmpb $0, group_active(,%ecx,1)
+    je .Lgroup_find_next
+    movl %ecx, %edi
+    shll $4, %edi
+    addl $group_names, %edi
+.Lgroup_find_compare:
+    movb (%esi), %al
+    cmpb (%edi), %al
+    jne .Lgroup_find_next
+    testb %al, %al
+    jz .Lgroup_find_found
+    incl %esi
+    incl %edi
+    jmp .Lgroup_find_compare
+.Lgroup_find_next:
+    incl %ecx
+    movl 12(%esp), %esi
+    jmp .Lgroup_find_scan
+.Lgroup_find_found:
+    movl %ecx, %eax
+    jmp .Lgroup_find_done
+.Lgroup_find_missing:
+    movl $-1, %eax
+.Lgroup_find_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl group_add
+group_add:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    cmpb $0, current_user_id
+    jne .Lgroup_add_denied
+    call group_table_init
+    movl 20(%esp), %esi
+    pushl %esi
+    call group_find
+    addl $4, %esp
+    cmpl $-1, %eax
+    jne .Lgroup_add_exists
+    xorl %ecx, %ecx
+.Lgroup_add_scan:
+    cmpl $8, %ecx
+    jae .Lgroup_add_full
+    cmpb $0, group_active(,%ecx,1)
+    je .Lgroup_add_slot
+    incl %ecx
+    jmp .Lgroup_add_scan
+.Lgroup_add_slot:
+    movl %ecx, %edi
+    shll $4, %edi
+    addl $group_names, %edi
+    movl $15, %ebx
+.Lgroup_add_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jz .Lgroup_add_done_copy
+    decl %ebx
+    jnz .Lgroup_add_copy
+    movb $0, (%edi)
+.Lgroup_add_done_copy:
+    movb $1, group_active(,%ecx,1)
+    movl %ecx, %eax
+    jmp .Lgroup_add_done
+.Lgroup_add_exists:
+    movl $-2, %eax
+    jmp .Lgroup_add_done
+.Lgroup_add_full:
+    movl $-3, %eax
+.Lgroup_add_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+.Lgroup_add_denied:
+    movl $-4, %eax
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl group_name_by_uid
+group_name_by_uid:
+    pushl %ebx
+    movl 8(%esp), %ebx
+    call group_table_init
+    cmpl $0, %ebx
+    jl .Lgroup_name_unknown
+    cmpl $8, %ebx
+    jae .Lgroup_name_unknown
+    cmpb $0, group_active(,%ebx,1)
+    je .Lgroup_name_unknown
+    movl %ebx, %eax
+    shll $4, %eax
+    addl $group_names, %eax
+    popl %ebx
+    ret
+
+.globl group_remove
+group_remove:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl 16(%esp), %esi
+    cmpb $0, current_user_id
+    jne .Lgroup_remove_denied
+    pushl %esi
+    call group_find
+    addl $4, %esp
+    cmpl $2, %eax
+    jl .Lgroup_remove_protected
+    cmpl $8, %eax
+    jae .Lgroup_remove_missing
+    movl %eax, %ebx
+    movb $0, group_active(,%ebx,1)
+    shll $4, %ebx
+    addl $group_names, %ebx
+    movl %ebx, %edi
+    xorl %eax, %eax
+    movl $4, %ecx
+    rep stosl
+    movl $1, %eax
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+.Lgroup_remove_protected:
+    movl $-2, %eax
+    jmp .Lgroup_remove_done
+.Lgroup_remove_missing:
+    movl $-1, %eax
+    jmp .Lgroup_remove_done
+.Lgroup_remove_denied:
+    movl $-4, %eax
+.Lgroup_remove_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+.Lgroup_name_unknown:
+    movl $unknown_group_name, %eax
+    popl %ebx
+    ret
+
+.globl user_table_init
+user_table_init:
+    cmpb $1, user_initialized
+    je .Luser_init_done
+    movb $1, user_initialized
+    movb $1, user_active
+    movb $1, user_active + 1
+    movl $root_user_name, %esi
+    movl $user_names, %edi
+    movl $16, %ecx
+    rep movsb
+    movl $normal_user_name, %esi
+    movl $user_names + 16, %edi
+    movl $16, %ecx
+    rep movsb
+.Luser_init_done:
+    ret
+
+.globl group_table_init
+group_table_init:
+    cmpb $1, group_initialized
+    je .Lgroup_init_done
+    movb $1, group_initialized
+    movb $1, group_active
+    movb $1, group_active + 1
+    movl $root_group_name, %esi
+    movl $group_names, %edi
+    movl $16, %ecx
+    rep movsb
+    movl $users_group_name, %esi
+    movl $group_names + 16, %edi
+    movl $16, %ecx
+    rep movsb
+.Lgroup_init_done:
+    ret
+
 .globl command_exec
 command_exec:
     pushl %ebp
@@ -2531,6 +2883,22 @@ network_receive:
     ret
 
 .section .rodata,\"a\",@progbits
+root_user_name:
+    .asciz \"root\"
+    .zero 16 - (. - root_user_name)
+normal_user_name:
+    .asciz \"user\"
+    .zero 16 - (. - normal_user_name)
+root_group_name:
+    .asciz \"root\"
+    .zero 16 - (. - root_group_name)
+users_group_name:
+    .asciz \"users\"
+    .zero 16 - (. - users_group_name)
+unknown_user_name:
+    .asciz \"unknown\"
+unknown_group_name:
+    .asciz \"unknown\"
 ansi_empty:
     .asciz \"\"
 ansi_reset:
@@ -2556,6 +2924,18 @@ ansi_size_query:
 
 .section .bss,\"aw\",@nobits
 .balign 16
+user_initialized:
+    .skip 1
+user_active:
+    .skip 8
+user_names:
+    .skip 8 * 16
+group_initialized:
+    .skip 1
+group_active:
+    .skip 8
+group_names:
+    .skip 8 * 16
 process_next_pid:
     .skip 4
 process_pid_table:
@@ -2656,25 +3036,18 @@ extern fn process_pid_at(slot: i32) -> i32;
 extern fn process_entry_at(slot: i32) -> i32;
 extern fn process_state_at(slot: i32) -> i32;
 extern fn process_exit_at(slot: i32) -> i32;
-
-fn user_name(uid: i32) -> str8 {
-    if uid == 1 {
-        return "user";
-    }
-    return "root";
-}
+extern fn user_find(name: str8) -> i32;
+extern fn user_name_by_uid(uid: i32) -> str8;
 
 fn switch_user(name: str8) -> i32 {
-    if terminal_command_eq(name, "user") == 1 {
-        return fs_set_current_uid(1);
+    let uid: i32 = user_find(name);
+    if uid < 0 {
+        return -1;
     }
-    if terminal_command_eq(name, "root") == 1 {
-        if fs_current_uid() != 0 {
-            return -2;
-        }
-        return fs_set_current_uid(0);
+    if uid == 0 && fs_current_uid() != 0 {
+        return -2;
     }
-    return -1;
+    return fs_set_current_uid(uid);
 }
 
 fn change_directory(request: str8) -> i32 {
@@ -2755,6 +3128,18 @@ fn native_command_path(name: str8) -> str8 {
     }
     if terminal_command_eq(name, "sleep") == 1 || terminal_command_eq(name, "/bin/sleep") == 1 {
         return "/bin/sleep";
+    }
+    if terminal_command_eq(name, "adduser") == 1 || terminal_command_eq(name, "useradd") == 1 || terminal_command_eq(name, "/bin/adduser") == 1 {
+        return "/bin/adduser";
+    }
+    if terminal_command_eq(name, "addgroup") == 1 || terminal_command_eq(name, "groupadd") == 1 || terminal_command_eq(name, "/bin/addgroup") == 1 {
+        return "/bin/addgroup";
+    }
+    if terminal_command_eq(name, "deluser") == 1 || terminal_command_eq(name, "userdel") == 1 || terminal_command_eq(name, "/bin/deluser") == 1 {
+        return "/bin/deluser";
+    }
+    if terminal_command_eq(name, "delgroup") == 1 || terminal_command_eq(name, "groupdel") == 1 || terminal_command_eq(name, "/bin/delgroup") == 1 {
+        return "/bin/delgroup";
     }
     if terminal_command_eq(name, "vi") == 1 || terminal_command_eq(name, "/bin/vi") == 1 {
         return "/bin/vi";
@@ -2861,6 +3246,10 @@ fn terminal_main() -> i32 {
             serial_write("ps     list process IDs and states\r\n");
             serial_write("kill   terminate a process: kill <pid>\r\n");
             serial_write("sleep  small process example: sleep <seconds>\r\n");
+            serial_write("adduser create a user: adduser <name>\r\n");
+            serial_write("addgroup create a group: addgroup <name>\r\n");
+            serial_write("deluser remove a user: deluser <name>\r\n");
+            serial_write("delgroup remove a group: delgroup <name>\r\n");
             serial_write("vi     edit a text file: vi <path>\r\n");
             serial_write("sync   flush MFS2 metadata to disk\r\n");
             serial_write("reboot restart the virtual machine\r\n");
@@ -2874,7 +3263,7 @@ fn terminal_main() -> i32 {
             serial_write(fs_pwd());
             serial_write("\r\n");
         } else if terminal_command_eq(command, "whoami") == 1 {
-            serial_write(user_name(fs_current_uid()));
+            serial_write(user_name_by_uid(fs_current_uid()));
             serial_write("\r\n");
         } else if terminal_command_eq(command, "su") == 1 {
             serial_write("usage: su <root|user>\r\n");

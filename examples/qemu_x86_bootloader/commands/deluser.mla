@@ -1,0 +1,44 @@
+/// Remove a dynamically created user from the QEMU demo account database.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_deluser__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn user_remove(name: str8) -> i32;
+extern fn fs_join_path(directory: str8, name: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_remove_entry(index: i32) -> i32;
+extern fn fs_flush() -> i32;
+extern fn fs_entry_count() -> i32;
+extern fn fs_entry_path(index: i32) -> str8;
+extern fn fs_is_direct_child(directory: str8, candidate: str8) -> i32;
+
+pub fn run_deluser(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "") == 1 || terminal_command_eq(arguments, "-h") == 1 || terminal_command_eq(arguments, "--help") == 1 {
+        serial_write("usage: deluser <name>\r\n");
+        serial_write("remove a non-system user and its home directory as root\r\n");
+        return 0;
+    }
+    let home: str8 = fs_join_path("/home", arguments);
+    var child: i32 = 0;
+    while child < fs_entry_count() {
+        if fs_is_direct_child(home, fs_entry_path(child)) == 1 {
+            serial_write("deluser: home directory is not empty\r\n");
+            return 1;
+        }
+        child = child + 1;
+    }
+    let result: i32 = user_remove(arguments);
+    if result == -4 { serial_write("deluser: permission denied\r\n"); return 1; }
+    if result == -2 { serial_write("deluser: system user cannot be removed\r\n"); return 1; }
+    if result != 1 { serial_write("deluser: user not found\r\n"); return 1; }
+    let home_index: i32 = fs_find(home);
+    if home_index >= 0 { fs_remove_entry(home_index); }
+    if fs_flush() != 1 { serial_write("deluser: removed in memory but disk flush failed\r\n"); return 1; }
+    serial_write("user removed\r\n");
+    return 0;
+}

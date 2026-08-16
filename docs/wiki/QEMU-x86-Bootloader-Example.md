@@ -9,7 +9,7 @@ control to it. The kernel switches to 32-bit protected mode and enters the
 ordinary MLang `terminal_main()` function. Architecture-qualified module
 assembly defines the hardware entry and I/O primitives that cannot live in a
 normal function. `ls`, `cat`, `chmod`, `chown`, `mkdir`, `rm`, `echo`, `cp`,
-`mv`, `wc`, `ping`, `ps`, `kill`, `sleep`, and `vi` are compiled as independent MLang command images
+`mv`, `wc`, `ping`, `ps`, `kill`, `sleep`, `adduser`, `addgroup`, `deluser`, `delgroup`, and `vi` are compiled as independent MLang command images
 and stored as executable files under `/bin`:
 
 ```rust
@@ -92,6 +92,10 @@ Every command accepts `-h` and `--help` for command-specific usage.
 - `touch <path>`: create and persist an empty file
 - `chmod <mode> <path>`: change a mode as root or the file owner
 - `chown <root|user> <path>`: change ownership as root
+- `adduser <name>` (also `useradd`): create a user and `/home/<name>` as root
+- `addgroup <name>` (also `groupadd`): create a group as root
+- `deluser <name>` (also `userdel`): remove a non-system user and its home directory as root
+- `delgroup <name>` (also `groupdel`): remove a non-system group as root
 - `mkdir <path>`: create and persist a directory
 - `rm <path>`: remove and persist a regular file
 - `rm -r <path>`: recursively remove and persist a directory tree
@@ -165,6 +169,16 @@ Native commands receive a PID from the kernel's eight-slot process table. The
 shell is PID 1; command invocations are recorded as `RUN`, then become `EXIT`
 when they return (or `KIL` when terminated). This is a deliberately cooperative
 process model for the small single-core example, not preemptive multitasking.
+
+The account database is also intentionally small: it starts with `root` (UID
+0) and `user` (UID 1), and supports up to six additional users and six
+additional groups per boot. `adduser alice` creates UID 2 and `/home/alice`; use `su alice`
+and `chown alice <path>` afterward. `addgroup developers` registers a group
+name for ownership display and future extension, but this demo does not yet
+implement supplementary group membership or passwords. `deluser alice` and
+`delgroup developers` remove dynamically created entries; `root`, `user`, and
+`users` are protected system entries. Accounts and groups live in memory and
+reset when the VM reboots.
 
 Build without starting QEMU:
 
