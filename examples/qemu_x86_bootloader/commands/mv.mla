@@ -1,0 +1,70 @@
+/// Native MFS2 regular-file rename command.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_mv__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn terminal_split_argument(argument: str8) -> str8;
+extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_can_access(index: i32, mask: i32) -> i32;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_parent(path: str8) -> str8;
+extern fn fs_rename_entry(index: i32, path: str8) -> i32;
+extern fn fs_flush() -> i32;
+
+pub fn run_mv(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
+        serial_write("usage: mv <source> <destination>\r\n");
+        serial_write("rename a regular file\r\n");
+        return 0;
+    }
+    let destination_request: str8 = terminal_split_argument(arguments);
+    if terminal_command_eq(arguments, "") == 1 || terminal_command_eq(destination_request, "") == 1 {
+        serial_write("usage: mv <source> <destination>\r\n");
+        return -1;
+    }
+
+    let source: i32 = fs_find(fs_resolve(arguments));
+    if source < 0 {
+        serial_write("mv: source file not found\r\n");
+        return -2;
+    }
+    if fs_entry_type(source) != 1 {
+        serial_write("mv: source is not a regular file\r\n");
+        return -3;
+    }
+    let source_parent: i32 = fs_find(fs_parent(fs_resolve(arguments)));
+    if source_parent < 0 || fs_can_access(source_parent, 3) != 1 {
+        serial_write("mv: permission denied\r\n");
+        return -4;
+    }
+
+    let destination_path: str8 = fs_resolve(destination_request);
+    if fs_find(destination_path) >= 0 {
+        serial_write("mv: destination already exists\r\n");
+        return -5;
+    }
+    let destination_parent: i32 = fs_find(fs_parent(destination_path));
+    if destination_parent < 0 || fs_entry_type(destination_parent) != 2 {
+        serial_write("mv: destination directory not found\r\n");
+        return -6;
+    }
+    if fs_can_access(destination_parent, 3) != 1 {
+        serial_write("mv: permission denied\r\n");
+        return -4;
+    }
+    if fs_rename_entry(source, destination_path) != 1 {
+        serial_write("mv: rename failed\r\n");
+        return -7;
+    }
+    if fs_flush() != 1 {
+        serial_write("mv: renamed in memory but disk flush failed\r\n");
+        return -8;
+    }
+    return 0;
+}

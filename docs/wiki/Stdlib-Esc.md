@@ -38,6 +38,40 @@ Ownership note:
 - `cursor(cmd: cursor_command) -> str8`
 - `cursor_move(dir: cursor_direction, amount: i32) -> str8`
 
+### Freestanding API
+
+[`std::esc::freestanding`](Stdlib-Esc) provides the allocation-free screen subset for
+bare-metal targets that cannot link the hosted [`std::term`](Stdlib-Term), formatting, and
+allocator runtimes:
+
+```rust
+mod std::esc::freestanding;
+use std::esc::freestanding::*;
+
+serial_write(ansi_alt_screen_on());
+serial_write(ansi_cursor(ansi_cmd_clear_screen()));
+serial_write(ansi_cursor_pos(1, 1));
+serial_write(ansi_inverse_on());
+serial_write("bare-metal TUI");
+serial_write(ansi_reset());
+```
+
+It exposes `ansi_alt_screen_on`, `ansi_alt_screen_off`, `ansi_cmd_home`,
+`ansi_cmd_clear_screen`, `ansi_cmd_clear_line`, `ansi_cmd_hide`,
+`ansi_cmd_show`, `ansi_cursor`, `ansi_cursor_pos`, `ansi_inverse_on`,
+`ansi_reset`, `ansi_cursor_blink_bar`, and `ansi_cursor_reset_shape`. The
+explicit prefix avoids symbol collisions when hosted and freestanding escape
+modules are imported together. The target provides allocation-free
+implementations of these native hooks:
+
+- `__mlang_std_esc_cursor_code`
+- `__mlang_std_esc_cursor_pos`
+- `__mlang_std_esc_sgr_code`
+- `__mlang_std_esc_reset`
+
+The QEMU x86 bootloader example provides a serial-terminal implementation and
+uses this API for `/bin/vi`.
+
 ### ACS (ncurses-style line drawing)
 - `acs_hline() -> str8`
 - `acs_vline() -> str8`

@@ -569,8 +569,13 @@ _start:
 ```
 
 The qualifier must match `--target-arch`. Module assembly has no operands or
-result value. See `examples/qemu_x86_bootloader` for a complete BIOS boot
-sector built through `mlang.toml`.
+result value. See `examples/qemu_x86_bootloader` for a two-stage BIOS loader
+and separately linked MLang kernel with an interactive serial terminal, built
+through `mlang.toml`. The example mounts a small hierarchical filesystem and
+provides `pwd`, `ls`, `cd`, `cat`, `touch`, and a full-screen modal `/bin/vi`
+text editor built on [`std::esc::freestanding`](Stdlib-Esc).
+The configurable MFS2 image is writable, and its protected-mode ATA driver
+persists file metadata and text contents to the disk image.
 
 ## Package Manager (MLang Backend Default)
 `mlang pkg ...` now prefers the MLang implementation in

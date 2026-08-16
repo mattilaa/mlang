@@ -1,0 +1,36 @@
+/// \file freestanding.mla
+/// \brief Allocation-free ANSI controls for freestanding MLang targets.
+
+use type CursorCommand = i32;
+
+extern fn __mlang_std_esc_cursor_code(code: i32) -> str8;
+extern fn __mlang_std_esc_cursor_pos(row1: i32, col1: i32) -> str8;
+extern fn __mlang_std_esc_sgr_code(code: i32) -> str8;
+extern fn __mlang_std_esc_reset() -> str8;
+
+pub fn ansi_cmd_home() -> CursorCommand { return 0; }
+pub fn ansi_cmd_clear_screen() -> CursorCommand { return 1; }
+pub fn ansi_cmd_clear_line() -> CursorCommand { return 2; }
+pub fn ansi_cmd_hide() -> CursorCommand { return 3; }
+pub fn ansi_cmd_show() -> CursorCommand { return 4; }
+
+pub fn ansi_cursor(command: CursorCommand) -> str8 {
+    return __mlang_std_esc_cursor_code(command);
+}
+
+pub fn ansi_cursor_pos(row1: i32, col1: i32) -> str8 {
+    return __mlang_std_esc_cursor_pos(row1, col1);
+}
+
+pub fn ansi_inverse_on() -> str8 {
+    return __mlang_std_esc_sgr_code(7);
+}
+
+pub fn ansi_reset() -> str8 {
+    return __mlang_std_esc_reset();
+}
+
+pub fn ansi_alt_screen_on() -> str8 { return "\x1b[?1049h"; }
+pub fn ansi_alt_screen_off() -> str8 { return "\x1b[?1049l"; }
+pub fn ansi_cursor_blink_bar() -> str8 { return "\x1b[5 q"; }
+pub fn ansi_cursor_reset_shape() -> str8 { return "\x1b[0 q"; }

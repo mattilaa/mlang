@@ -1,0 +1,58 @@
+/// Native MFS2 owner-changing command.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_chown__str8
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn terminal_split_argument(argument: str8) -> str8;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_chown(index: i32, uid: i32) -> i32;
+extern fn fs_flush() -> i32;
+
+pub fn run_chown(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
+        serial_write("usage: chown <root|user> <path>\r\n");
+        serial_write("change file ownership as root\r\n");
+        return 0;
+    }
+    if terminal_command_eq(arguments, "") == 1 {
+        serial_write("usage: chown <root|user> <path>\r\n");
+        return -5;
+    }
+
+    let path: str8 = terminal_split_argument(arguments);
+    if terminal_command_eq(path, "") == 1 {
+        serial_write("usage: chown <root|user> <path>\r\n");
+        return -5;
+    }
+    var uid: i32 = -1;
+    if terminal_command_eq(arguments, "root") == 1 {
+        uid = 0;
+    } else if terminal_command_eq(arguments, "user") == 1 {
+        uid = 1;
+    }
+    if uid < 0 {
+        serial_write("chown: unknown user\r\n");
+        return -3;
+    }
+    let index: i32 = fs_find(fs_resolve(path));
+    if index < 0 {
+        serial_write("chown: file not found\r\n");
+        return -1;
+    }
+    let changed: i32 = fs_chown(index, uid);
+    if changed != 1 {
+        serial_write("chown: permission denied\r\n");
+        return -2;
+    }
+    if fs_flush() != 1 {
+        serial_write("chown: disk flush failed\r\n");
+        return -4;
+    }
+    return 0;
+}

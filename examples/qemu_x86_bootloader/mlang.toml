@@ -7,13 +7,22 @@ min_mlang_version = "0.2.95"
 target_arch = "x86"
 build_dir = "build"
 
+[tool.mlang.options]
+filesystem_kib = "1024"
+
 [[task]]
 name = "build"
-print = "[example] Building the MLang x86 BIOS boot sector"
-commands = ["./build.sh"]
+print = "[example] Building the MLang x86 kernel and native /bin commands with a {{option.filesystem_kib}} KiB MFS2 image"
+commands = ["./build.sh --filesystem-kib '{{option.filesystem_kib}}'"]
 
 [[task]]
 name = "demo"
-print = "[example] Booting the MLang x86 BIOS image under QEMU"
+print = "[example] Booting the MLang x86 loader with a {{option.filesystem_kib}} KiB MFS2 image"
 log_output = false
-commands = ["./run.sh"]
+commands = ["./run.sh --filesystem-kib '{{option.filesystem_kib}}'"]
+
+[[task]]
+name = "resume"
+print = "[example] Booting the existing disk image with persisted MFS2 changes"
+log_output = false
+commands = ["./run.sh --no-build"]

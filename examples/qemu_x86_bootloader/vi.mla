@@ -1,0 +1,561 @@
+/// Full-screen modal editor for the freestanding x86 kernel.
+
+asm x86(".section .command_entry,\"ax\",@progbits
+.globl command_start
+command_start:
+    jmp run_vi__str8
+");
+
+mod std::esc::freestanding;
+use std::esc::freestanding::*;
+
+extern fn serial_write(message: str8) -> void;
+extern fn serial_write_char(ch: i32) -> void;
+extern fn terminal_read_key() -> i32;
+extern fn terminal_measure() -> void;
+extern fn terminal_rows() -> i32;
+extern fn terminal_columns() -> i32;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_parent(path: str8) -> str8;
+extern fn fs_can_access(index: i32, mask: i32) -> i32;
+extern fn fs_create_empty(path: str8) -> i32;
+extern fn fs_write_text(index: i32, text: str8, length: i32) -> i32;
+extern fn fs_flush() -> i32;
+extern fn editor_load(index: i32) -> i32;
+extern fn editor_clear() -> void;
+extern fn editor_data() -> str8;
+extern fn editor_size() -> i32;
+extern fn editor_char(index: i32) -> i32;
+extern fn editor_insert_char(index: i32, ch: i32) -> i32;
+extern fn editor_insert_newline(index: i32) -> i32;
+extern fn editor_delete_char(index: i32) -> i32;
+extern fn editor_command_clear() -> void;
+extern fn editor_command_append(ch: i32) -> i32;
+extern fn editor_command_backspace() -> void;
+extern fn editor_command_data() -> str8;
+
+fn line_start(position: i32) -> i32 {
+    var p: i32 = position;
+    let size: i32 = editor_size();
+    if p > size {
+        p = size;
+    }
+    while p > 0 && editor_char(p - 1) != 10 {
+        p = p - 1;
+    }
+    return p;
+}
+
+fn line_end(position: i32) -> i32 {
+    var p: i32 = position;
+    let size: i32 = editor_size();
+    while p < size {
+        let ch: i32 = editor_char(p);
+        if ch == 13 || ch == 10 {
+            return p;
+        }
+        p = p + 1;
+    }
+    return p;
+}
+
+fn next_line(position: i32) -> i32 {
+    var p: i32 = line_end(position);
+    let size: i32 = editor_size();
+    if p < size && editor_char(p) == 13 {
+        p = p + 1;
+        if p < size && editor_char(p) == 10 {
+            p = p + 1;
+        }
+    } else if p < size && editor_char(p) == 10 {
+        p = p + 1;
+    }
+    return p;
+}
+
+fn previous_line(position: i32) -> i32 {
+    let start: i32 = line_start(position);
+    if start <= 0 {
+        return 0;
+    }
+    var p: i32 = start;
+    if p > 0 && editor_char(p - 1) == 10 {
+        p = p - 1;
+    }
+    if p > 0 && editor_char(p - 1) == 13 {
+        p = p - 1;
+    }
+    return line_start(p);
+}
+
+fn move_vertical(position: i32, direction: i32) -> i32 {
+    let start: i32 = line_start(position);
+    let column: i32 = position - start;
+    var target: i32 = start;
+    if direction < 0 {
+        if start == 0 {
+            return position;
+        }
+        target = previous_line(position);
+    } else {
+        target = next_line(position);
+        if target >= editor_size() && line_start(position) == target {
+            return position;
+        }
+    }
+    let target_end: i32 = line_end(target);
+    if target + column < target_end {
+        return target + column;
+    }
+    return target_end;
+}
+
+fn visible_row(scroll: i32, cursor_offset: i32) -> i32 {
+    var p: i32 = scroll;
+    var row: i32 = 0;
+    while p < cursor_offset {
+        if editor_char(p) == 10 {
+            row = row + 1;
+        }
+        p = p + 1;
+    }
+    return row;
+}
+
+fn adjust_scroll(scroll_value: i32, cursor_offset: i32, content_rows: i32) -> i32 {
+    var scroll: i32 = scroll_value;
+    if cursor_offset < scroll {
+        return line_start(cursor_offset);
+    }
+    var row: i32 = visible_row(scroll, cursor_offset);
+    while row >= content_rows {
+        let advanced: i32 = next_line(scroll);
+        if advanced == scroll {
+            return scroll;
+        }
+        scroll = advanced;
+        row = row - 1;
+    }
+    return scroll;
+}
+
+fn mode_indicator(mode: i32) -> str8 {
+    if mode == 1 {
+        return "--INSERT--";
+    }
+    return "--NORMAL--";
+}
+
+fn decimal_digits(value: i32) -> i32 {
+    var digits: i32 = 1;
+    var remaining: i32 = value;
+    while remaining >= 10 {
+        remaining = remaining / 10;
+        digits = digits + 1;
+    }
+    return digits;
+}
+
+pub fn write_decimal(value: i32) -> void {
+    var divisor: i32 = 1;
+    while divisor <= value / 10 {
+        divisor = divisor * 10;
+    }
+    while divisor > 0 {
+        serial_write_char(48 + (value / divisor) % 10);
+        divisor = divisor / 10;
+    }
+}
+
+fn cursor_line_number(cursor_offset: i32) -> i32 {
+    var position: i32 = 0;
+    var line: i32 = 1;
+    while position < cursor_offset {
+        if editor_char(position) == 10 {
+            line = line + 1;
+        }
+        position = position + 1;
+    }
+    return line;
+}
+
+fn render_line(start: i32, horizontal: i32, exists: i32,
+               cursor_offset: i32, columns: i32) -> i32 {
+    if exists == 0 {
+        serial_write("~");
+        return start;
+    }
+    let end: i32 = line_end(start);
+    var p: i32 = start;
+    var skipped: i32 = 0;
+    while p < end && skipped < horizontal {
+        p = p + 1;
+        skipped = skipped + 1;
+    }
+    var column: i32 = 0;
+    while p < end && column < columns {
+        let ch: i32 = editor_char(p);
+        if p == cursor_offset {
+            serial_write(ansi_inverse_on());
+        }
+        if ch >= 32 && ch <= 126 {
+            serial_write_char(ch);
+        } else {
+            serial_write_char(32);
+        }
+        if p == cursor_offset {
+            serial_write(ansi_reset());
+        }
+        p = p + 1;
+        column = column + 1;
+    }
+    if cursor_offset == end && column < columns && cursor_offset - start >= horizontal {
+        serial_write(ansi_inverse_on());
+        serial_write(" ");
+        serial_write(ansi_reset());
+    }
+    return next_line(start);
+}
+
+fn render_editor(path: str8, mode: i32, dirty: i32, cursor_offset: i32,
+                 scroll: i32, status: str8) -> void {
+    let start: i32 = line_start(cursor_offset);
+    let cursor_column: i32 = cursor_offset - start;
+    let rows: i32 = terminal_rows();
+    let columns: i32 = terminal_columns();
+    let content_rows: i32 = rows - 2;
+    var horizontal: i32 = 0;
+    if cursor_column >= columns {
+        horizontal = cursor_column - columns + 1;
+    }
+
+    var row: i32 = 0;
+    var line: i32 = scroll;
+    let size: i32 = editor_size();
+    while row < content_rows {
+        serial_write(ansi_cursor_pos(row + 1, 1));
+        var exists: i32 = line < size ? 1 : 0;
+        if line == size && cursor_offset == size && line_start(cursor_offset) == size {
+            exists = 1;
+        }
+        let advanced: i32 = render_line(line, horizontal, exists, cursor_offset, columns);
+        serial_write("\x1b[K");
+        if advanced == line {
+            line = size + 1;
+        } else {
+            line = advanced;
+        }
+        row = row + 1;
+    }
+
+    serial_write(ansi_cursor_pos(rows - 1, 1));
+    serial_write(mode_indicator(mode));
+    serial_write("  ");
+    serial_write(path);
+    if dirty == 1 {
+        serial_write("  modified");
+    }
+    serial_write("\x1b[K");
+    let cursor_line: i32 = cursor_line_number(cursor_offset);
+    let status_column: i32 = cursor_offset - line_start(cursor_offset) + 1;
+    let position_width: i32 = decimal_digits(status_column) + decimal_digits(cursor_line) + 1;
+    serial_write(ansi_cursor_pos(rows - 1, columns - position_width + 1));
+    write_decimal(status_column);
+    serial_write(":");
+    write_decimal(cursor_line);
+    serial_write("\x1b[K");
+
+    serial_write(ansi_cursor_pos(rows, 1));
+    if mode == 2 {
+        serial_write(":");
+        serial_write(editor_command_data());
+    } else if terminal_command_eq(status, "") != 1 {
+        serial_write(status);
+    }
+    serial_write("\x1b[K");
+
+}
+
+fn leave_screen() -> void {
+    serial_write(ansi_reset());
+    serial_write(ansi_cursor_reset_shape());
+    serial_write(ansi_cursor(ansi_cmd_show()));
+    serial_write(ansi_alt_screen_off());
+}
+
+fn save_file(path: str8, index_value: i32) -> i32 {
+    var index: i32 = index_value;
+    if index < 0 {
+        let created: i32 = fs_create_empty(path);
+        if created != 1 {
+            return -3;
+        }
+        index = fs_find(path);
+    }
+    let written: i32 = fs_write_text(index, editor_data(), editor_size());
+    if written == -2 {
+        return -5;
+    }
+    if written == -3 {
+        return -7;
+    }
+    if written != 1 {
+        return -4;
+    }
+    if fs_flush() != 1 {
+        return -6;
+    }
+    return index + 100;
+}
+
+pub fn edit_file(request: str8) -> i32 {
+    let path: str8 = fs_resolve(request);
+    var index: i32 = fs_find(path);
+    if index >= 0 && fs_entry_type(index) != 1 {
+        return -2;
+    }
+    if index < 0 {
+        let parent: str8 = fs_parent(path);
+        let parent_index: i32 = fs_find(parent);
+        if parent_index < 0 || fs_entry_type(parent_index) != 2 {
+            return -1;
+        }
+        if fs_can_access(parent_index, 3) != 1 {
+            return -7;
+        }
+        editor_clear();
+    } else {
+        if fs_can_access(index, 4) != 1 {
+            return -7;
+        }
+        if editor_load(index) != 1 {
+            return -4;
+        }
+    }
+
+    var mode: i32 = 0;
+    var dirty: i32 = 0;
+    var cursor_offset: i32 = 0;
+    var scroll: i32 = 0;
+    var pending_g: i32 = 0;
+    var status: str8 = "";
+    serial_write(ansi_alt_screen_on());
+    serial_write(ansi_cursor(ansi_cmd_hide()));
+    serial_write(ansi_cursor(ansi_cmd_home()));
+    serial_write(ansi_cursor(ansi_cmd_clear_screen()));
+    terminal_measure();
+
+    while true {
+        scroll = adjust_scroll(scroll, cursor_offset, terminal_rows() - 2);
+        render_editor(path, mode, dirty, cursor_offset, scroll, status);
+        let key: i32 = terminal_read_key();
+        status = "";
+
+        if mode == 1 {
+            if key == 27 {
+                mode = 0;
+            } else if key == 1004 {
+                if cursor_offset > line_start(cursor_offset) {
+                    cursor_offset = cursor_offset - 1;
+                }
+            } else if key == 1003 {
+                if cursor_offset < line_end(cursor_offset) {
+                    cursor_offset = cursor_offset + 1;
+                }
+            } else if key == 1001 {
+                cursor_offset = move_vertical(cursor_offset, -1);
+            } else if key == 1002 {
+                cursor_offset = move_vertical(cursor_offset, 1);
+            } else if key == 1006 {
+                cursor_offset = line_start(cursor_offset);
+            } else if key == 1007 {
+                cursor_offset = line_end(cursor_offset);
+            } else if key == 8 || key == 127 {
+                if cursor_offset > 0 {
+                    if editor_char(cursor_offset - 1) == 10 && cursor_offset > 1 && editor_char(cursor_offset - 2) == 13 {
+                        let _ = editor_delete_char(cursor_offset - 2);
+                        let _ = editor_delete_char(cursor_offset - 2);
+                        cursor_offset = cursor_offset - 2;
+                    } else {
+                        let _ = editor_delete_char(cursor_offset - 1);
+                        cursor_offset = cursor_offset - 1;
+                    }
+                    dirty = 1;
+                }
+            } else if key == 1005 {
+                if editor_delete_char(cursor_offset) == 1 {
+                    dirty = 1;
+                }
+            } else if key == 13 || key == 10 {
+                if editor_insert_newline(cursor_offset) == 1 {
+                    cursor_offset = cursor_offset + 2;
+                    dirty = 1;
+                } else {
+                    status = "filesystem-sized editor buffer is full";
+                }
+            } else if key >= 32 && key <= 126 {
+                if editor_insert_char(cursor_offset, key) == 1 {
+                    cursor_offset = cursor_offset + 1;
+                    dirty = 1;
+                } else {
+                    status = "filesystem-sized editor buffer is full";
+                }
+            }
+        } else if mode == 2 {
+            if key == 27 {
+                mode = 0;
+                editor_command_clear();
+            } else if key == 8 || key == 127 {
+                editor_command_backspace();
+            } else if key == 13 || key == 10 {
+                let command: str8 = editor_command_data();
+                if terminal_command_eq(command, "q!") == 1 {
+                    leave_screen();
+                    return 0;
+                } else if terminal_command_eq(command, "q") == 1 {
+                    if dirty == 1 {
+                        status = "No write since last change; use :q! to discard";
+                        mode = 0;
+                    } else {
+                        leave_screen();
+                        return 2;
+                    }
+                } else if terminal_command_eq(command, "w") == 1 || terminal_command_eq(command, "wq") == 1 {
+                    let saved: i32 = save_file(path, index);
+                    if saved < 0 {
+                        leave_screen();
+                        return saved;
+                    }
+                    index = saved - 100;
+                    dirty = 0;
+                    if terminal_command_eq(command, "wq") == 1 {
+                        leave_screen();
+                        return 1;
+                    }
+                    status = "written";
+                    mode = 0;
+                } else {
+                    status = "Not an editor command";
+                    mode = 0;
+                }
+                editor_command_clear();
+            } else if key >= 32 && key <= 126 {
+                let _ = editor_command_append(key);
+            }
+        } else {
+            if key == 105 {
+                mode = 1;
+            } else if key == 97 {
+                let end: i32 = line_end(cursor_offset);
+                if cursor_offset < end {
+                    cursor_offset = cursor_offset + 1;
+                }
+                mode = 1;
+            } else if key == 65 {
+                cursor_offset = line_end(cursor_offset);
+                mode = 1;
+            } else if key == 104 || key == 1004 {
+                if cursor_offset > line_start(cursor_offset) {
+                    cursor_offset = cursor_offset - 1;
+                }
+                pending_g = 0;
+            } else if key == 108 || key == 1003 {
+                if cursor_offset < line_end(cursor_offset) {
+                    cursor_offset = cursor_offset + 1;
+                }
+                pending_g = 0;
+            } else if key == 107 || key == 1001 {
+                cursor_offset = move_vertical(cursor_offset, -1);
+                pending_g = 0;
+            } else if key == 106 || key == 1002 {
+                cursor_offset = move_vertical(cursor_offset, 1);
+                pending_g = 0;
+            } else if key == 48 || key == 1006 {
+                cursor_offset = line_start(cursor_offset);
+                pending_g = 0;
+            } else if key == 36 || key == 1007 {
+                cursor_offset = line_end(cursor_offset);
+                pending_g = 0;
+            } else if key == 120 || key == 1005 {
+                let end: i32 = line_end(cursor_offset);
+                if cursor_offset < end && editor_delete_char(cursor_offset) == 1 {
+                    dirty = 1;
+                }
+                pending_g = 0;
+            } else if key == 111 {
+                let end: i32 = line_end(cursor_offset);
+                let below: i32 = next_line(cursor_offset);
+                if editor_insert_newline(below) == 1 {
+                    if below == end {
+                        cursor_offset = below + 2;
+                    } else {
+                        cursor_offset = below;
+                    }
+                    dirty = 1;
+                    mode = 1;
+                }
+                pending_g = 0;
+            } else if key == 71 {
+                cursor_offset = line_start(editor_size());
+                pending_g = 0;
+            } else if key == 103 {
+                if pending_g == 1 {
+                    cursor_offset = 0;
+                    pending_g = 0;
+                } else {
+                    pending_g = 1;
+                    status = "g";
+                }
+            } else if key == 58 {
+                editor_command_clear();
+                mode = 2;
+                pending_g = 0;
+            } else {
+                pending_g = 0;
+            }
+        }
+    }
+    return 0;
+}
+
+pub fn report_edit_result(result: i32) -> void {
+    if result == 0 {
+        serial_write("vi: changes discarded\r\n");
+    } else if result == 2 {
+        serial_write("vi: closed\r\n");
+    } else if result == -1 {
+        serial_write("vi: parent directory not found\r\n");
+    } else if result == -2 {
+        serial_write("vi: is a directory\r\n");
+    } else if result == -3 {
+        serial_write("vi: filesystem directory is full\r\n");
+    } else if result == -4 {
+        serial_write("vi: file is too large for the configured image\r\n");
+    } else if result == -5 {
+        serial_write("vi: filesystem data area is full\r\n");
+    } else if result == -6 {
+        serial_write("vi: saved in memory but disk flush failed\r\n");
+    } else if result == -7 {
+        serial_write("vi: permission denied\r\n");
+    } else {
+        serial_write("vi: saved\r\n");
+    }
+}
+
+pub fn run_vi(arguments: str8) -> i32 {
+    if terminal_command_eq(arguments, "--help") == 1 || terminal_command_eq(arguments, "-h") == 1 {
+        serial_write("usage: vi <file>\r\n");
+        serial_write("edit a text file in a full-screen modal editor\r\n");
+        return 0;
+    }
+    if terminal_command_eq(arguments, "") == 1 {
+        serial_write("usage: vi <file>\r\n");
+        return -1;
+    }
+    let result: i32 = edit_file(arguments);
+    report_edit_result(result);
+    return result;
+}

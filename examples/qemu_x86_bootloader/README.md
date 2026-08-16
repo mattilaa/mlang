@@ -1,8 +1,14 @@
 # MLang x86 BIOS bootloader example
 
-This example builds a complete 512-byte legacy x86 BIOS boot sector from the
-MLang source in `boot.mla`. It uses architecture-qualified module assembly to
-define code and data outside a normal function:
+This example builds a two-stage legacy x86 BIOS disk image entirely from MLang
+sources. The 512-byte loader in `boot.mla` reads the separate `kernel.mla`
+image from disk sectors 2-97 into physical address `0x10000`, then transfers
+control to it. The kernel switches to 32-bit protected mode and enters the
+ordinary MLang `terminal_main()` function. Architecture-qualified module
+assembly defines the hardware entry and I/O primitives that cannot live in a
+normal function. `ls`, `cat`, `chmod`, `chown`, `mkdir`, `rm`, `echo`, `cp`,
+`mv`, `wc`, `ping`, and `vi` are compiled as independent MLang command images
+and stored as executable files under `/bin`:
 
 ```mla
 asm x86(".code16
@@ -12,9 +18,13 @@ _start:
 ");
 ```
 
-The boot sector initializes its real-mode segments and stack, prints through
-BIOS video interrupt `0x10` and QEMU's debug console, then halts. The build
-checks both the 512-byte image size and the final `55 aa` BIOS signature.
+The boot sector initializes its real-mode segments and stack, preserves the
+BIOS boot-drive number, and loads the kernel with the BIOS extended LBA read.
+The kernel installs a Global Descriptor Table, enters protected mode,
+initializes COM1, loads MFS2 through ATA PIO, mounts it at `/`, and provides a
+line-oriented terminal over QEMU's serial console. The build checks the loader
+size, `55 aa` signature, kernel size, configured filesystem size, and final IDE
+disk image size.
 
 ## Requirements
 
@@ -40,13 +50,111 @@ cd examples/qemu_x86_bootloader
 ../../build/mlang pkg run demo
 ```
 
+The default MFS2 capacity is 1 MiB. Override it in KiB for either `build` or
+`demo`:
+
+```sh
+../../build/mlang pkg run demo --option filesystem_kib=65536
+```
+
+This example creates a 64 MiB filesystem. Supported values range from 44 KiB
+through 1 GiB. The run script derives the QEMU memory allocation from this
+value so the kernel has room for both MFS2 and the editor workspace.
+
 Expected output:
 
 ```text
-Hello from an x86 MLang bootloader!
+MLang bootloader: loading kernel...
+MLang bootloader: kernel loaded.
+
+MLang virtual terminal
+Mounted writable MFS2 at /.
+Type 'help' for available commands.
+
+$
 ```
 
-Press `Ctrl-c` to stop QEMU after the boot sector halts.
+The terminal supports:
+
+Every command accepts `-h` and `--help` for command-specific usage.
+
+- `help`: list commands
+- `about`: show kernel information
+- `clear`: clear the serial terminal with ANSI control sequences
+- `pwd`: print the current working directory
+- `whoami`: print the current user (`root` by default)
+- `su <root|user>`: switch from `root` to a supported user
+- `ls [-l] [path]`: list aligned mode, owner, group, human size, modification time, and name columns
+- `cd <path>`: change the current working directory; `cd ..` is supported
+- `cat <path>`: print a file's contents
+- `touch <path>`: create and persist an empty file
+- `chmod <mode> <path>`: change a mode as root or the file owner
+- `chown <root|user> <path>`: change ownership as root
+- `mkdir <path>`: create and persist a directory
+- `rm <path>`: remove and persist a regular file
+- `rm -r <path>`: recursively remove and persist a directory tree
+- `rm -f <path>`: remove a file without reporting a missing path
+- `rm -rf <path>` or `rm -fr <path>`: recursively remove a tree without reporting a missing path
+- `echo [text]`: write command-line text to the terminal
+- `cp <source> <destination>`: copy and persist a regular file; an existing destination directory uses the source filename
+- `mv <source> <destination>`: rename and persist a regular file while preserving its metadata
+- `wc <path>`: print newline, word, and byte counts for a regular file
+- `ping [-i seconds] <host-or-IPv4-address>`: resolve an A record when needed and send four ICMP echo requests, spaced one second apart by default
+- `vi <path>` or `/bin/vi <path>`: edit and persist text in a full-screen modal editor
+- `sync`: flush the used MFS2 data and metadata to the IDE disk image
+- `reboot`: reset the virtual machine through the keyboard controller
+- `halt`: halt the virtual CPU
+
+The shell supports printable input and backspace editing. `/bin/vi` switches
+the serial connection to raw-key handling while its full-screen view is open.
+Press `Ctrl-c` to stop QEMU after using `halt`.
+
+`run.sh` attaches a polled NE2000 ISA adapter to QEMU user networking. The
+guest uses `10.0.2.15/24`, with `10.0.2.2` as its gateway and `10.0.2.3` as its
+virtual DNS server. The script detects the first non-loopback host MAC address
+and derives a locally administered unicast address for the guest. Override
+detection when needed:
+
+```sh
+MLANG_QEMU_MAC=02:00:00:00:00:01 ./run.sh --no-build
+```
+
+The kernel reads the effective address from the NE2000 PROM; it is not compiled
+into the image. Test the local QEMU router with:
+
+```text
+$ ping 10.0.2.2
+PING 10.0.2.2 (8 data bytes)
+reply from 10.0.2.2: icmp_seq=1 ttl=255
+reply from 10.0.2.2: icmp_seq=2 ttl=255
+reply from 10.0.2.2: icmp_seq=3 ttl=255
+reply from 10.0.2.2: icmp_seq=4 ttl=255
+4 packets transmitted, 4 received
+```
+
+Hostnames are resolved through a minimal UDP DNS client. It requests IPv4 A
+records from QEMU's virtual resolver and falls back to `8.8.8.8` when that
+resolver is unavailable:
+
+```text
+$ ping www.google.com
+PING www.google.com (<resolved-IPv4-address>) (8 data bytes)
+reply from <resolved-IPv4-address>: icmp_seq=1 ttl=255
+...
+4 packets transmitted, 4 received
+```
+
+Use `-i` or `--interval` to select an integer delay from zero through 60
+seconds between requests. For example, this sends requests two seconds apart:
+
+```text
+$ ping -i 2 www.google.com
+```
+
+The shell starts as UID 0 (`root`). `su user` enters the unprivileged UID 1
+account; switching from `user` back to `root` is denied because this minimal
+kernel has no password authentication. Use `reboot` to return to the default
+root session. Root bypasses file permission checks.
 
 Build without starting QEMU:
 
@@ -54,7 +162,198 @@ Build without starting QEMU:
 ../../build/mlang pkg run build
 ```
 
-The generated `boot.elf` and `boot.img` are written under `build/`.
+The scripts expose the same option directly:
+
+```sh
+./build.sh --filesystem-kib 16384
+./run.sh --filesystem-kib 16384
+```
+
+The generated boot-sector, protected-mode kernel, command ELFs and flat command
+images, filesystem, and final `disk.img` are written under `build/`.
+
+## Native command binaries
+
+The `build` task in `mlang.toml` runs `build.sh`, which compiles each source in
+`commands/` plus `vi.mla` independently from the kernel. `command.ld` links
+each command for the transient address `0x50000`. The linker resolves only the
+kernel ABI functions used by the command; the resulting flat image is embedded
+as the data of its matching MFS2 `/bin` entry.
+
+When the shell invokes a command, the kernel resolves `/bin/<name>`, verifies
+that it is an executable entry and that the current user has execute access,
+copies its bytes to the command area, and enters the image with its argument
+string. Commands return to the shell normally. They are real files rather than
+markers or code linked into the kernel, so `ls /bin` reports their actual byte
+sizes and changing an executable's mode affects dispatch.
+
+This is an initial executable ABI, not process isolation: commands run in the
+kernel address space and call a narrow set of exported filesystem and terminal
+functions. There is currently one transient command area, so commands run one
+at a time.
+
+## MFS2 filesystem
+
+`filesystem.mla` defines the initial hierarchical filesystem contents. The
+build pads that seed to the configured capacity and writes it from LBA 100 of
+the IDE disk. The protected-mode kernel reads the used sectors into physical
+address `0x100000`, validates the `MFS2` header, and mounts it at `/`.
+
+The initial tree is:
+
+```text
+/
+|-- bin/
+|   |-- cat
+|   |-- chmod
+|   |-- chown
+|   |-- cp
+|   |-- echo
+|   |-- ls
+|   |-- mkdir
+|   |-- mv
+|   |-- ping
+|   |-- rm
+|   |-- vi
+|   `-- wc
+|-- etc/
+|   `-- motd
+|-- home/
+|   `-- user/
+|       `-- readme.txt
+`-- tmp/
+    `-- example.txt
+```
+
+For example:
+
+```text
+$ cd /home/user
+$ pwd
+/home/user
+$ cat readme.txt
+This file lives in /home/user on the MFS2 root filesystem.
+$ touch session.log
+$ mkdir drafts
+$ touch drafts/first.txt
+$ ls
+-rw-r--r--  1 user  users    60B Aug 15 10:41 readme.txt
+-rw-r--r--  1 root  root      0B Aug 15 10:41 session.log
+drwxr-xr-x  1 root  root      0B Aug 15 10:41 drafts/
+$ rm session.log
+$ rm -rf drafts
+$ ls --help
+$ cp readme.txt readme-copy.txt
+$ wc readme-copy.txt
+1 10 60 readme-copy.txt
+$ mv readme-copy.txt archived.txt
+$ echo files updated
+files updated
+$ vi notes.txt
+# press i, type two lines, press Esc, then type :wq and Enter
+vi: saved
+$ cat notes.txt
+first line
+second line
+$ ls -l
+-rw-r--r--  1 user  users    60B Aug 15 10:41 readme.txt
+-rw-r--r--  1 root  root     23B Aug 15 10:42 notes.txt
+```
+
+MFS2 stores an owner UID and a Unix-style nine-bit mode in each directory
+entry. Directories and `/bin` executables default to `0755`, ordinary files to
+`0644`, and `/tmp` to `0777`. `/home/user` and its initial `readme.txt` belong
+to `user`; the remaining seed entries belong to `root`. New files use `0644`
+and belong to the current user. Access checks use owner bits for the owner and
+other bits for everyone else. Permission group bits are stored and displayed,
+but there is no independent group ownership or membership yet; `ls` derives
+the display-only `root` or `users` group name from the owner.
+
+A parallel timestamp table stores a compact modification date and time for
+each of the 32 directory slots. Seed entries use the local build time. Creating
+a file or directory, or writing through `vi`, reads the QEMU RTC and updates
+its timestamp; QEMU is started with a local-time RTC. `ls` displays `B`, `K`, `M`, or `G`
+sizes in a right-aligned six-character column. It does not print the `@` suffix
+used by macOS because MFS2 does not implement extended attributes.
+
+Reading requires `r`, writing or saving through `vi` requires `w`, changing
+directory requires `x`, listing requires `r+x`, and creating a file requires
+`w+x` on its parent directory. Creating a directory and removing an entry also
+require `w+x` on the parent. Recursive removal preflights every affected parent
+before changing metadata. Only root may use `chown`; `chmod` is available to
+root and the entry owner. `rm` refuses `/` and the current directory tree.
+
+The editor uses the alternate screen through `std::esc::freestanding` and
+opens in normal mode. It probes the serial terminal dimensions and reserves the
+last two rows: `rows - 1` shows mode, filename, dirty state, and a right-aligned
+`column:line` position, while `rows` contains status messages or the command
+prompt. The remaining rows form a vertically and horizontally scrolling text
+viewport. A `24x80` fallback is used if the terminal does not answer the size
+probe. The alternate screen is cleared once when opening; later frames update
+rows in place to avoid blank flashes on serial terminals. The visible cursor
+is rendered in the selected text cell while the terminal hardware cursor
+remains hidden, avoiding cursor-row drift.
+
+Normal mode supports:
+
+- `i`, `a`, and `A`: enter insert mode at, after, or at the end of the line
+- `h`, `j`, `k`, `l` or arrow keys: move the cursor
+- `0`, `$`, `gg`, and `G`: move to line/file boundaries
+- `x` or Delete: delete the character under the cursor
+- `o`: open a line below and enter insert mode
+- `:`: enter command mode
+
+Insert mode accepts printable text, Enter, Backspace, Delete, Home, End, and
+arrow keys. Pressing the physical `Esc` key returns to normal mode. Command
+mode supports `:w`, `:q`, `:q!`, and `:wq`; `:q` refuses to discard unsaved
+changes. Canceling a new file with `:q!` does not create it.
+
+Each fixed-size directory entry stores a 32-byte absolute path, entry type,
+owner UID, mode, data offset, size, and capacity. The image reserves 32
+directory slots and a matching 32-entry timestamp table.
+`touch`, `mkdir`, and `cp` allocate entries in the mounted RAM copy. On save,
+the editor reserves exactly the file's required bytes from the remaining data
+area. Later saves and copies overwrite an allocation when they fit or append a
+larger allocation when needed. `mv` renames an entry without moving its data or
+changing its owner and mode. `rm` compacts directory and timestamp metadata but
+does not reclaim an allocated file's data block. Mutating commands use the
+kernel's protected-mode ATA PIO driver to write the contiguous used MFS2
+sectors back to `disk.img`.
+`sync` exposes the same flush operation explicitly; unused configured capacity
+is not transferred.
+
+Created files survive the kernel's `reboot` command. The ordinary `demo` task
+rebuilds the baseline disk before QEMU starts. To boot the existing image and
+retain changes across QEMU process restarts, use:
+
+```sh
+../../build/mlang pkg run resume
+```
+
+The `resume` task requires an existing `build/disk.img`; run the `build` or
+`demo` task once first. Re-running `build` resets the image to the files defined
+in `filesystem.mla`. Disk images produced by the earlier floppy-backed version,
+the earlier LBA 68 MFS2 layout, the marker-only `/bin/vi` layout, the
+pre-timestamp MFS2 layout, or images without the current native command set are
+not compatible with this executable layout; rebuild once before using `resume`.
+
+There is no separate per-file size setting or fixed editor limit. A file may
+grow until the configured MFS2 data area runs out of free bytes. The shell's
+line reader accepts at most 63 printable characters per command; the editor's
+raw input path has no per-line limit and can collect as many lines as fit in
+the image. Because this version has no compaction, growing an existing
+allocation leaves its smaller old block unused. Removed file data is likewise
+not reclaimed. `cp` and `mv` currently accept regular files and do not recurse
+or move directories. `cp` accepts an explicit destination path or an existing
+destination directory; `mv` requires an explicit new path and does not
+overwrite. `echo` writes only to the terminal
+because the shell does not implement redirection. The example does not yet
+support `mkdir -p`, multiple path operands, independent groups, password
+authentication, DHCP, IPv6, TCP, or general UDP applications. The resolver
+supports DNS A records and compressed answer names; it does not implement
+IPv6 AAAA records or a system-wide resolver API. QEMU user networking
+guarantees ICMP to its local `10.0.2.2` router; external DNS and ICMP
+availability depends on the host platform and configuration.
 
 ## Module assembly
 

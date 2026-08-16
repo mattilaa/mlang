@@ -1,0 +1,241 @@
+/// Seed data for a build-sized MFS2 image with writable directory slots.
+asm x86(".section .filesystem,\"a\",@progbits
+.globl filesystem_start
+filesystem_start:
+    .ascii \"MFS2\"
+    .word 21
+    .word 32
+    .long filesystem_end - filesystem_start
+    .long 0
+
+root_path:
+    .asciz \"/\"
+    .zero 32 - (. - root_path)
+    .byte 2
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+bin_path:
+    .asciz \"/bin\"
+    .zero 32 - (. - bin_path)
+    .byte 2
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+vi_path:
+    .asciz \"/bin/vi\"
+    .zero 32 - (. - vi_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+ls_path:
+    .asciz \"/bin/ls\"
+    .zero 32 - (. - ls_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+cat_path:
+    .asciz \"/bin/cat\"
+    .zero 32 - (. - cat_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+chmod_path:
+    .asciz \"/bin/chmod\"
+    .zero 32 - (. - chmod_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+chown_path:
+    .asciz \"/bin/chown\"
+    .zero 32 - (. - chown_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+mkdir_path:
+    .asciz \"/bin/mkdir\"
+    .zero 32 - (. - mkdir_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+rm_path:
+    .asciz \"/bin/rm\"
+    .zero 32 - (. - rm_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+echo_path:
+    .asciz \"/bin/echo\"
+    .zero 32 - (. - echo_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+cp_path:
+    .asciz \"/bin/cp\"
+    .zero 32 - (. - cp_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+mv_path:
+    .asciz \"/bin/mv\"
+    .zero 32 - (. - mv_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+wc_path:
+    .asciz \"/bin/wc\"
+    .zero 32 - (. - wc_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+ping_path:
+    .asciz \"/bin/ping\"
+    .zero 32 - (. - ping_path)
+    .byte 3
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+etc_path:
+    .asciz \"/etc\"
+    .zero 32 - (. - etc_path)
+    .byte 2
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+home_path:
+    .asciz \"/home\"
+    .zero 32 - (. - home_path)
+    .byte 2
+    .byte 0
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+user_path:
+    .asciz \"/home/user\"
+    .zero 32 - (. - user_path)
+    .byte 2
+    .byte 1
+    .word 0x01ed
+    .long 0
+    .long 0
+    .long 0
+
+tmp_path:
+    .asciz \"/tmp\"
+    .zero 32 - (. - tmp_path)
+    .byte 2
+    .byte 0
+    .word 0x01ff
+    .long 0
+    .long 0
+    .long 0
+
+motd_path:
+    .asciz \"/etc/motd\"
+    .zero 32 - (. - motd_path)
+    .byte 1
+    .byte 0
+    .word 0x01a4
+    .long motd_data - filesystem_start
+    .long motd_end - motd_data - 1
+    .long motd_end - motd_data
+
+readme_path:
+    .asciz \"/home/user/readme.txt\"
+    .zero 32 - (. - readme_path)
+    .byte 1
+    .byte 1
+    .word 0x01a4
+    .long readme_data - filesystem_start
+    .long readme_end - readme_data - 1
+    .long readme_end - readme_data
+
+example_path:
+    .asciz \"/tmp/example.txt\"
+    .zero 32 - (. - example_path)
+    .byte 1
+    .byte 0
+    .word 0x01a4
+    .long example_data - filesystem_start
+    .long example_end - example_data - 1
+    .long example_end - example_data
+
+    .org 16 + (32 * 48)
+filesystem_timestamps:
+    .zero 32 * 4
+filesystem_data:
+motd_data:
+    .ascii \"Welcome to the MLang protected-mode kernel.\"
+    .byte 13, 10, 0
+motd_end:
+
+readme_data:
+    .ascii \"This file lives in /home/user on the MFS2 root filesystem.\"
+    .byte 13, 10, 0
+readme_end:
+
+example_data:
+    .ascii \"Files created with touch are writable in memory until reboot.\"
+    .byte 13, 10, 0
+example_end:
+
+filesystem_end:
+");

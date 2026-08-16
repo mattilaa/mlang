@@ -1,0 +1,2773 @@
+/// A separately linked 32-bit kernel loaded by boot.mla at physical 0x10000.
+/// Hardware entry and COM1 primitives use module assembly; the terminal command
+/// loop below is ordinary MLang code.
+asm x86(".code16
+.section .kernel,\"ax\",@progbits
+.globl kernel_start
+kernel_start:
+    cli
+    movw %cs, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %ss
+    movw $0xfffe, %sp
+    lgdt (gdt_descriptor - kernel_start)
+    movl %cr0, %eax
+    orl $1, %eax
+    movl %eax, %cr0
+    ljmpl $0x08, $protected_entry
+
+.balign 8
+gdt_start:
+    .quad 0x0000000000000000
+    .quad 0x00cf9a000000ffff
+    .quad 0x00cf92000000ffff
+gdt_end:
+gdt_descriptor:
+    .word gdt_end - gdt_start - 1
+    .long gdt_start
+
+.code32
+protected_entry:
+    movw $0x10, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %fs
+    movw %ax, %gs
+    movw %ax, %ss
+    movl $0x00090000, %esp
+    call .Lserial_init
+    call terminal_main__void
+    jmp terminal_halt
+
+.set MFS_BASE, 0x00100000
+.set MFS_TIMESTAMP_BASE, MFS_BASE + 16 + (32 * 48)
+
+.Lserial_init:
+    movw $0x3f9, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x3fb, %dx
+    movb $0x80, %al
+    outb %al, %dx
+    movw $0x3f8, %dx
+    movb $1, %al
+    outb %al, %dx
+    movw $0x3f9, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x3fb, %dx
+    movb $3, %al
+    outb %al, %dx
+    movw $0x3fa, %dx
+    movb $0xc7, %al
+    outb %al, %dx
+    movw $0x3fc, %dx
+    movb $0x0b, %al
+    outb %al, %dx
+    ret
+
+.Lcmos_read:
+    pushl %edx
+    movw $0x70, %dx
+    outb %al, %dx
+    incw %dx
+    inb %dx, %al
+    popl %edx
+    ret
+
+.Lrtc_decode:
+    movzbl %al, %eax
+    testb $4, %bl
+    jnz .Lrtc_decode_done
+    movl %eax, %edx
+    andl $15, %eax
+    shrl $4, %edx
+    imull $10, %edx
+    addl %edx, %eax
+.Lrtc_decode_done:
+    ret
+
+.globl terminal_timestamp
+terminal_timestamp:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    pushl %ebp
+    subl $20, %esp
+.Lrtc_wait:
+    movb $0x0a, %al
+    call .Lcmos_read
+    testb $0x80, %al
+    jnz .Lrtc_wait
+    movb $0x0b, %al
+    call .Lcmos_read
+    movb %al, %bl
+    movb $2, %al
+    call .Lcmos_read
+    call .Lrtc_decode
+    movl %eax, 0(%esp)
+    movb $4, %al
+    call .Lcmos_read
+    movb %al, %bh
+    andb $0x7f, %al
+    call .Lrtc_decode
+    testb $2, %bl
+    jnz .Lrtc_hour_ready
+    cmpl $12, %eax
+    jne .Lrtc_hour_not_noon
+    xorl %eax, %eax
+.Lrtc_hour_not_noon:
+    testb $0x80, %bh
+    jz .Lrtc_hour_ready
+    addl $12, %eax
+.Lrtc_hour_ready:
+    movl %eax, 4(%esp)
+    movb $7, %al
+    call .Lcmos_read
+    call .Lrtc_decode
+    movl %eax, 8(%esp)
+    movb $8, %al
+    call .Lcmos_read
+    call .Lrtc_decode
+    movl %eax, 12(%esp)
+    movb $9, %al
+    call .Lcmos_read
+    call .Lrtc_decode
+    andl $127, %eax
+    shll $20, %eax
+    movl 12(%esp), %edx
+    andl $15, %edx
+    shll $16, %edx
+    orl %edx, %eax
+    movl 8(%esp), %edx
+    andl $31, %edx
+    shll $11, %edx
+    orl %edx, %eax
+    movl 4(%esp), %edx
+    andl $31, %edx
+    shll $6, %edx
+    orl %edx, %eax
+    movl 0(%esp), %edx
+    andl $63, %edx
+    orl %edx, %eax
+    addl $20, %esp
+    popl %ebp
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl terminal_wait_ms
+terminal_wait_ms:
+    pushl %ebx
+    pushl %esi
+    movl 12(%esp), %esi
+    testl %esi, %esi
+    jle .Lwait_ms_done
+    movw $0x61, %dx
+    inb %dx, %al
+    movb %al, %bl
+.Lwait_ms_chunk:
+    movl %esi, %ecx
+    cmpl $50, %ecx
+    jbe .Lwait_ms_size_ready
+    movl $50, %ecx
+.Lwait_ms_size_ready:
+    movw $0x61, %dx
+    inb %dx, %al
+    andb $0xfc, %al
+    outb %al, %dx
+    movw $0x43, %dx
+    movb $0xb0, %al
+    outb %al, %dx
+    movl %ecx, %eax
+    imull $1193, %eax, %eax
+    movw $0x42, %dx
+    outb %al, %dx
+    movb %ah, %al
+    outb %al, %dx
+    movw $0x61, %dx
+    inb %dx, %al
+    andb $0xfd, %al
+    orb $0x01, %al
+    outb %al, %dx
+.Lwait_ms_poll:
+    inb %dx, %al
+    testb $0x20, %al
+    jz .Lwait_ms_poll
+    subl %ecx, %esi
+    jg .Lwait_ms_chunk
+    movb %bl, %al
+    outb %al, %dx
+.Lwait_ms_done:
+    popl %esi
+    popl %ebx
+    ret
+
+.Lserial_putc:
+    pushl %edx
+    pushl %eax
+.Lserial_putc_wait:
+    movw $0x3fd, %dx
+    inb %dx, %al
+    testb $0x20, %al
+    jz .Lserial_putc_wait
+    popl %eax
+    movw $0x3f8, %dx
+    outb %al, %dx
+    popl %edx
+    ret
+
+.Lserial_getc:
+    pushl %edx
+.Lserial_getc_wait:
+    movw $0x3fd, %dx
+    inb %dx, %al
+    testb $1, %al
+    jz .Lserial_getc_wait
+    movw $0x3f8, %dx
+    inb %dx, %al
+    popl %edx
+    ret
+
+.globl serial_write
+serial_write:
+    pushl %esi
+    movl 8(%esp), %esi
+.Lserial_write_next:
+    lodsb
+    testb %al, %al
+    jz .Lserial_write_done
+    call .Lserial_putc
+    jmp .Lserial_write_next
+.Lserial_write_done:
+    popl %esi
+    ret
+
+.globl terminal_read_line
+terminal_read_line:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %edi
+    movl $input_buffer, %edi
+    xorl %ebx, %ebx
+.Lread_key:
+    call .Lserial_getc
+    cmpb $13, %al
+    je .Lread_done
+    cmpb $10, %al
+    je .Lread_done
+    cmpb $8, %al
+    je .Lread_backspace
+    cmpb $127, %al
+    je .Lread_backspace
+    cmpb $32, %al
+    jb .Lread_key
+    cmpb $126, %al
+    ja .Lread_key
+    cmpl $63, %ebx
+    jae .Lread_key
+    movb %al, (%edi,%ebx)
+    incl %ebx
+    call .Lserial_putc
+    jmp .Lread_key
+.Lread_backspace:
+    testl %ebx, %ebx
+    jz .Lread_key
+    decl %ebx
+    movb $8, %al
+    call .Lserial_putc
+    movb $32, %al
+    call .Lserial_putc
+    movb $8, %al
+    call .Lserial_putc
+    jmp .Lread_key
+.Lread_done:
+    movb $0, (%edi,%ebx)
+    movb $13, %al
+    call .Lserial_putc
+    movb $10, %al
+    call .Lserial_putc
+    movl %edi, %eax
+    popl %edi
+    popl %ebx
+    leave
+    ret
+
+.globl serial_write_char
+serial_write_char:
+    movb 4(%esp), %al
+    call .Lserial_putc
+    ret
+
+.Lserial_try_getc:
+    movl $0x00040000, %ecx
+    movw $0x3fd, %dx
+.Lserial_try_loop:
+    inb %dx, %al
+    testb $1, %al
+    jnz .Lserial_try_ready
+    loop .Lserial_try_loop
+    movl $-1, %eax
+    ret
+.Lserial_try_ready:
+    movw $0x3f8, %dx
+    inb %dx, %al
+    movzbl %al, %eax
+    ret
+
+.globl terminal_read_key
+terminal_read_key:
+.Lkey_read:
+    cmpl $0, pending_key_valid
+    jne .Lkey_pending
+    call .Lserial_getc
+    movzbl %al, %eax
+    cmpl $10, %eax
+    jne .Lkey_check_cr
+    cmpl $0, pending_cr
+    je .Lkey_clear_cr
+    movl $0, pending_cr
+    jmp .Lkey_read
+.Lkey_check_cr:
+    cmpl $13, %eax
+    jne .Lkey_clear_cr
+    movl $1, pending_cr
+    ret
+.Lkey_clear_cr:
+    movl $0, pending_cr
+    cmpl $27, %eax
+    jne .Lkey_done
+    call .Lserial_try_getc
+    cmpl $-1, %eax
+    je .Lkey_escape
+    cmpl $91, %eax
+    jne .Lkey_save_pending
+    call .Lserial_try_getc
+    cmpl $-1, %eax
+    je .Lkey_escape
+    cmpl $65, %eax
+    je .Lkey_up
+    cmpl $66, %eax
+    je .Lkey_down
+    cmpl $67, %eax
+    je .Lkey_right
+    cmpl $100, %eax
+    je .Lkey_left
+    cmpl $72, %eax
+    je .Lkey_home
+    cmpl $70, %eax
+    je .Lkey_end
+    cmpl $51, %eax
+    jne .Lkey_escape
+    call .Lserial_try_getc
+    cmpl $126, %eax
+    jne .Lkey_escape
+    movl $1005, %eax
+    ret
+.Lkey_save_pending:
+    movl %eax, pending_key
+    movl $1, pending_key_valid
+.Lkey_escape:
+    movl $27, %eax
+    ret
+.Lkey_up:
+    movl $1001, %eax
+    ret
+.Lkey_down:
+    movl $1002, %eax
+    ret
+.Lkey_right:
+    movl $1003, %eax
+    ret
+.Lkey_left:
+    movl $1004, %eax
+    ret
+.Lkey_home:
+    movl $1006, %eax
+    ret
+.Lkey_end:
+    movl $1007, %eax
+    ret
+.Lkey_pending:
+    movl pending_key, %eax
+    movl $0, pending_key_valid
+.Lkey_done:
+    ret
+
+.globl terminal_measure
+terminal_measure:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl $24, terminal_row_count
+    movl $80, terminal_column_count
+    movl $ansi_size_query, %esi
+.Lsize_query_write:
+    lodsb
+    testb %al, %al
+    jz .Lsize_expect_escape
+    call .Lserial_putc
+    jmp .Lsize_query_write
+.Lsize_expect_escape:
+    call .Lserial_try_getc
+    cmpl $27, %eax
+    jne .Lsize_done
+    call .Lserial_try_getc
+    cmpl $91, %eax
+    jne .Lsize_done
+    xorl %ebx, %ebx
+.Lsize_read_rows:
+    call .Lserial_try_getc
+    cmpl $59, %eax
+    je .Lsize_rows_done
+    cmpl $48, %eax
+    jb .Lsize_done
+    cmpl $57, %eax
+    ja .Lsize_done
+    imull $10, %ebx, %ebx
+    subl $48, %eax
+    addl %eax, %ebx
+    jmp .Lsize_read_rows
+.Lsize_rows_done:
+    xorl %edi, %edi
+.Lsize_read_columns:
+    call .Lserial_try_getc
+    cmpl $82, %eax
+    je .Lsize_columns_done
+    cmpl $48, %eax
+    jb .Lsize_done
+    cmpl $57, %eax
+    ja .Lsize_done
+    imull $10, %edi, %edi
+    subl $48, %eax
+    addl %eax, %edi
+    jmp .Lsize_read_columns
+.Lsize_columns_done:
+    cmpl $3, %ebx
+    jb .Lsize_done
+    cmpl $99, %ebx
+    ja .Lsize_done
+    cmpl $20, %edi
+    jb .Lsize_done
+    cmpl $99, %edi
+    ja .Lsize_done
+    movl %ebx, terminal_row_count
+    movl %edi, terminal_column_count
+.Lsize_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl terminal_rows
+terminal_rows:
+    movl terminal_row_count, %eax
+    ret
+
+.globl terminal_columns
+terminal_columns:
+    movl terminal_column_count, %eax
+    ret
+
+.globl terminal_command_eq
+terminal_command_eq:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl 16(%esp), %edi
+.Lcommand_eq_next:
+    movb (%esi), %al
+    cmpb (%edi), %al
+    jne .Lcommand_not_equal
+    testb %al, %al
+    jz .Lcommand_equal
+    incl %esi
+    incl %edi
+    jmp .Lcommand_eq_next
+.Lcommand_not_equal:
+    xorl %eax, %eax
+    jmp .Lcommand_eq_done
+.Lcommand_equal:
+    movl $1, %eax
+.Lcommand_eq_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl terminal_command_prefix
+terminal_command_prefix:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl 16(%esp), %edi
+.Lprefix_next:
+    movb (%edi), %al
+    testb %al, %al
+    jz .Lprefix_match
+    cmpb (%esi), %al
+    jne .Lprefix_no_match
+    incl %esi
+    incl %edi
+    jmp .Lprefix_next
+.Lprefix_no_match:
+    xorl %eax, %eax
+    jmp .Lprefix_done
+.Lprefix_match:
+    movl $1, %eax
+.Lprefix_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl terminal_argument
+terminal_argument:
+    movl 4(%esp), %eax
+    addl 8(%esp), %eax
+    ret
+
+.globl terminal_split_argument
+terminal_split_argument:
+    movl 4(%esp), %edx
+.Lsplit_find_space:
+    movb (%edx), %al
+    testb %al, %al
+    jz .Lsplit_missing
+    cmpb $32, %al
+    je .Lsplit_found
+    incl %edx
+    jmp .Lsplit_find_space
+.Lsplit_found:
+    movb $0, (%edx)
+    incl %edx
+.Lsplit_skip_spaces:
+    cmpb $32, (%edx)
+    jne .Lsplit_ready
+    incl %edx
+    jmp .Lsplit_skip_spaces
+.Lsplit_ready:
+    cmpb $0, (%edx)
+    je .Lsplit_missing
+    movl %edx, %eax
+    ret
+.Lsplit_missing:
+    movl $ansi_empty, %eax
+    ret
+
+.globl terminal_parse_mode
+terminal_parse_mode:
+    pushl %ebx
+    movl 8(%esp), %edx
+    cmpb $48, (%edx)
+    jne .Lmode_parse_start
+    cmpb $0, 3(%edx)
+    je .Lmode_parse_start
+    incl %edx
+.Lmode_parse_start:
+    xorl %eax, %eax
+    xorl %ecx, %ecx
+.Lmode_parse_digit:
+    movzbl (%edx), %ebx
+    testb %bl, %bl
+    jz .Lmode_parse_done
+    cmpb $48, %bl
+    jb .Lmode_parse_invalid
+    cmpb $55, %bl
+    ja .Lmode_parse_invalid
+    cmpl $3, %ecx
+    jae .Lmode_parse_invalid
+    shll $3, %eax
+    subl $48, %ebx
+    addl %ebx, %eax
+    incl %ecx
+    incl %edx
+    jmp .Lmode_parse_digit
+.Lmode_parse_done:
+    cmpl $3, %ecx
+    jne .Lmode_parse_invalid
+    popl %ebx
+    ret
+.Lmode_parse_invalid:
+    movl $-1, %eax
+    popl %ebx
+    ret
+
+.globl fs_mount
+fs_mount:
+    xorl %eax, %eax
+    cmpl $0x3253464d, MFS_BASE
+    jne .Lfs_mount_done
+    movzwl MFS_BASE + 4, %ecx
+    movzwl MFS_BASE + 6, %edx
+    cmpl %edx, %ecx
+    ja .Lfs_mount_done
+    cmpl $32, %edx
+    ja .Lfs_mount_done
+    movb $47, current_directory
+    movb $0, current_directory + 1
+    movb $0, current_user_id
+    xorl %edx, %edx
+.Lfs_mount_mode_loop:
+    cmpl %ecx, %edx
+    jae .Lfs_mount_ready
+    movl %edx, %eax
+    imull $48, %eax, %eax
+    cmpw $0, MFS_BASE + 50(%eax)
+    jne .Lfs_mount_mode_next
+    movw $0x01a4, MFS_BASE + 50(%eax)
+    cmpb $2, MFS_BASE + 48(%eax)
+    je .Lfs_mount_executable
+    cmpb $3, MFS_BASE + 48(%eax)
+    jne .Lfs_mount_mode_next
+.Lfs_mount_executable:
+    movw $0x01ed, MFS_BASE + 50(%eax)
+.Lfs_mount_mode_next:
+    incl %edx
+    jmp .Lfs_mount_mode_loop
+.Lfs_mount_ready:
+    movl $1, %eax
+.Lfs_mount_done:
+    ret
+
+.globl fs_entry_count
+fs_entry_count:
+    movzwl MFS_BASE + 4, %eax
+    ret
+
+.globl fs_entry_path
+fs_entry_path:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_path_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_path_invalid
+    imull $48, %eax, %eax
+    addl $MFS_BASE + 16, %eax
+    ret
+.Lfs_entry_path_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl fs_entry_type
+fs_entry_type:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_type_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_type_invalid
+    imull $48, %eax, %eax
+    movzbl MFS_BASE + 48(%eax), %eax
+    ret
+.Lfs_entry_type_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl fs_entry_owner
+fs_entry_owner:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_owner_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_owner_invalid
+    imull $48, %eax, %eax
+    movzbl MFS_BASE + 49(%eax), %eax
+    ret
+.Lfs_entry_owner_invalid:
+    movl $-1, %eax
+    ret
+
+.globl fs_entry_mode
+fs_entry_mode:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_mode_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_mode_invalid
+    imull $48, %eax, %eax
+    movzwl MFS_BASE + 50(%eax), %eax
+    ret
+.Lfs_entry_mode_invalid:
+    movl $-1, %eax
+    ret
+
+.globl fs_entry_size
+fs_entry_size:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_size_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_size_invalid
+    imull $48, %eax, %eax
+    movl MFS_BASE + 56(%eax), %eax
+    ret
+.Lfs_entry_size_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl fs_entry_timestamp
+fs_entry_timestamp:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_timestamp_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_timestamp_invalid
+    movl MFS_TIMESTAMP_BASE(,%eax,4), %eax
+    ret
+.Lfs_entry_timestamp_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl fs_current_uid
+fs_current_uid:
+    movzbl current_user_id, %eax
+    ret
+
+.globl fs_set_current_uid
+fs_set_current_uid:
+    movl 4(%esp), %eax
+    cmpl $1, %eax
+    ja .Lfs_set_uid_invalid
+    movb %al, current_user_id
+    movl $1, %eax
+    ret
+.Lfs_set_uid_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl fs_can_access
+fs_can_access:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_access_no
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_access_no
+    imull $48, %eax, %eax
+    movzbl current_user_id, %ecx
+    testl %ecx, %ecx
+    jz .Lfs_access_yes
+    cmpb MFS_BASE + 49(%eax), %cl
+    jne .Lfs_access_other
+    movzwl MFS_BASE + 50(%eax), %eax
+    shrl $6, %eax
+    jmp .Lfs_access_check
+.Lfs_access_other:
+    movzwl MFS_BASE + 50(%eax), %eax
+.Lfs_access_check:
+    andl $7, %eax
+    movl 8(%esp), %ecx
+    andl %ecx, %eax
+    cmpl %ecx, %eax
+    jne .Lfs_access_no
+.Lfs_access_yes:
+    movl $1, %eax
+    ret
+.Lfs_access_no:
+    xorl %eax, %eax
+    ret
+
+.globl fs_chmod
+fs_chmod:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_chmod_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_chmod_invalid
+    movl 8(%esp), %edx
+    cmpl $0x01ff, %edx
+    ja .Lfs_chmod_invalid
+    imull $48, %eax, %eax
+    movzbl current_user_id, %ecx
+    testl %ecx, %ecx
+    jz .Lfs_chmod_store
+    cmpb MFS_BASE + 49(%eax), %cl
+    jne .Lfs_chmod_denied
+.Lfs_chmod_store:
+    movw %dx, MFS_BASE + 50(%eax)
+    movl $1, %eax
+    ret
+.Lfs_chmod_denied:
+    movl $-2, %eax
+    ret
+.Lfs_chmod_invalid:
+    movl $-1, %eax
+    ret
+
+.globl fs_chown
+fs_chown:
+    cmpb $0, current_user_id
+    jne .Lfs_chown_denied
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_chown_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_chown_invalid
+    movl 8(%esp), %edx
+    cmpl $1, %edx
+    ja .Lfs_chown_invalid
+    imull $48, %eax, %eax
+    movb %dl, MFS_BASE + 49(%eax)
+    movl $1, %eax
+    ret
+.Lfs_chown_denied:
+    movl $-2, %eax
+    ret
+.Lfs_chown_invalid:
+    movl $-1, %eax
+    ret
+
+.globl fs_entry_data
+fs_entry_data:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_data_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_data_invalid
+    imull $48, %eax, %eax
+    cmpl $0, MFS_BASE + 56(%eax)
+    je .Lfs_entry_empty
+    movl MFS_BASE + 52(%eax), %eax
+    addl $MFS_BASE, %eax
+    ret
+.Lfs_entry_empty:
+    movl $ansi_empty, %eax
+    ret
+.Lfs_entry_data_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl fs_entry_ends_lf
+fs_entry_ends_lf:
+    movl 4(%esp), %eax
+    testl %eax, %eax
+    js .Lfs_entry_ends_lf_no
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lfs_entry_ends_lf_no
+    imull $48, %eax, %eax
+    movl MFS_BASE + 56(%eax), %ecx
+    testl %ecx, %ecx
+    jz .Lfs_entry_ends_lf_no
+    movl MFS_BASE + 52(%eax), %edx
+    addl $MFS_BASE, %edx
+    cmpb $10, -1(%edx,%ecx)
+    sete %al
+    movzbl %al, %eax
+    ret
+.Lfs_entry_ends_lf_no:
+    xorl %eax, %eax
+    ret
+
+.globl fs_pwd
+fs_pwd:
+    movl $current_directory, %eax
+    ret
+
+.globl fs_resolve
+fs_resolve:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 8(%ebp), %esi
+    movl $resolved_path, %edi
+    movl $31, %ecx
+    cmpb $0, (%esi)
+    je .Lresolve_current
+    cmpb $46, (%esi)
+    jne .Lresolve_not_dot
+    cmpb $0, 1(%esi)
+    je .Lresolve_current
+    cmpb $46, 1(%esi)
+    jne .Lresolve_not_dot
+    cmpb $0, 2(%esi)
+    je .Lresolve_parent
+.Lresolve_not_dot:
+    cmpb $47, (%esi)
+    je .Lresolve_copy
+    pushl %esi
+    movl $current_directory, %esi
+.Lresolve_copy_cwd:
+    lodsb
+    testb %al, %al
+    jz .Lresolve_cwd_done
+    stosb
+    decl %ecx
+    jz .Lresolve_finish
+    jmp .Lresolve_copy_cwd
+.Lresolve_cwd_done:
+    popl %esi
+    cmpb $47, -1(%edi)
+    je .Lresolve_copy
+    movb $47, (%edi)
+    incl %edi
+    decl %ecx
+.Lresolve_copy:
+    lodsb
+    testb %al, %al
+    jz .Lresolve_finish
+    stosb
+    decl %ecx
+    jnz .Lresolve_copy
+    jmp .Lresolve_finish
+.Lresolve_current:
+    movl $current_directory, %esi
+    jmp .Lresolve_copy
+.Lresolve_parent:
+    movl $current_directory, %esi
+.Lresolve_parent_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jnz .Lresolve_parent_copy
+    cmpl $resolved_path + 2, %edi
+    jbe .Lresolve_return
+    subl $2, %edi
+.Lresolve_parent_scan:
+    cmpb $47, (%edi)
+    je .Lresolve_parent_found
+    decl %edi
+    cmpl $resolved_path, %edi
+    ja .Lresolve_parent_scan
+.Lresolve_parent_found:
+    cmpl $resolved_path, %edi
+    jne .Lresolve_parent_trim
+    incl %edi
+.Lresolve_parent_trim:
+    movb $0, (%edi)
+    jmp .Lresolve_return
+.Lresolve_finish:
+    movb $0, (%edi)
+    cmpl $resolved_path + 1, %edi
+    jbe .Lresolve_return
+    cmpb $47, -1(%edi)
+    jne .Lresolve_return
+    movb $0, -1(%edi)
+.Lresolve_return:
+    movl $resolved_path, %eax
+    popl %ebx
+    popl %edi
+    popl %esi
+    leave
+    ret
+
+.globl fs_find
+fs_find:
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 16(%esp), %ebx
+    xorl %edx, %edx
+    movzwl MFS_BASE + 4, %ecx
+.Lfs_find_entry:
+    cmpl %ecx, %edx
+    jae .Lfs_find_missing
+    movl %edx, %eax
+    imull $48, %eax, %eax
+    addl $MFS_BASE + 16, %eax
+    movl %eax, %esi
+    movl %ebx, %edi
+.Lfs_find_compare:
+    movb (%esi), %al
+    cmpb (%edi), %al
+    jne .Lfs_find_next
+    testb %al, %al
+    jz .Lfs_find_found
+    incl %esi
+    incl %edi
+    jmp .Lfs_find_compare
+.Lfs_find_next:
+    incl %edx
+    jmp .Lfs_find_entry
+.Lfs_find_found:
+    movl %edx, %eax
+    jmp .Lfs_find_done
+.Lfs_find_missing:
+    movl $-1, %eax
+.Lfs_find_done:
+    popl %ebx
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_set_cwd
+fs_set_cwd:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl $current_directory, %edi
+    movl $31, %ecx
+.Lset_cwd_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jz .Lset_cwd_done
+    decl %ecx
+    jnz .Lset_cwd_copy
+    movb $0, (%edi)
+.Lset_cwd_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_basename
+fs_basename:
+    movl 4(%esp), %eax
+    movl %eax, %edx
+.Lbasename_scan:
+    movb (%edx), %cl
+    testb %cl, %cl
+    jz .Lbasename_done
+    cmpb $47, %cl
+    jne .Lbasename_next
+    leal 1(%edx), %eax
+.Lbasename_next:
+    incl %edx
+    jmp .Lbasename_scan
+.Lbasename_done:
+    ret
+
+.globl fs_join_path
+fs_join_path:
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 16(%esp), %esi
+    movl $joined_path, %edi
+    movl $31, %ecx
+.Ljoin_directory:
+    lodsb
+    testb %al, %al
+    jz .Ljoin_separator
+    stosb
+    decl %ecx
+    jnz .Ljoin_directory
+    jmp .Ljoin_finish
+.Ljoin_separator:
+    cmpb $47, -1(%edi)
+    je .Ljoin_name_start
+    movb $47, (%edi)
+    incl %edi
+    decl %ecx
+    jz .Ljoin_finish
+.Ljoin_name_start:
+    movl 20(%esp), %esi
+.Ljoin_name:
+    lodsb
+    testb %al, %al
+    jz .Ljoin_finish
+    stosb
+    decl %ecx
+    jnz .Ljoin_name
+.Ljoin_finish:
+    movb $0, (%edi)
+    movl $joined_path, %eax
+    popl %ebx
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_parent
+fs_parent:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl $parent_path, %edi
+.Lparent_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jnz .Lparent_copy
+    subl $2, %edi
+    cmpl $parent_path, %edi
+    jbe .Lparent_root
+.Lparent_scan:
+    cmpb $47, (%edi)
+    je .Lparent_found
+    decl %edi
+    cmpl $parent_path, %edi
+    ja .Lparent_scan
+.Lparent_found:
+    cmpl $parent_path, %edi
+    jne .Lparent_trim
+.Lparent_root:
+    movb $47, parent_path
+    movb $0, parent_path + 1
+    jmp .Lparent_done
+.Lparent_trim:
+    movb $0, (%edi)
+.Lparent_done:
+    movl $parent_path, %eax
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_is_direct_child
+fs_is_direct_child:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl 16(%esp), %edi
+    cmpb $47, (%esi)
+    jne .Lchild_non_root
+    cmpb $0, 1(%esi)
+    jne .Lchild_non_root
+    cmpb $47, (%edi)
+    jne .Lchild_no
+    incl %edi
+    cmpb $0, (%edi)
+    je .Lchild_no
+    jmp .Lchild_remainder
+.Lchild_non_root:
+    movb (%esi), %al
+    testb %al, %al
+    jz .Lchild_prefix_done
+    cmpb (%edi), %al
+    jne .Lchild_no
+    incl %esi
+    incl %edi
+    jmp .Lchild_non_root
+.Lchild_prefix_done:
+    cmpb $47, (%edi)
+    jne .Lchild_no
+    incl %edi
+    cmpb $0, (%edi)
+    je .Lchild_no
+.Lchild_remainder:
+    movb (%edi), %al
+    testb %al, %al
+    jz .Lchild_yes
+    cmpb $47, %al
+    je .Lchild_no
+    incl %edi
+    jmp .Lchild_remainder
+.Lchild_yes:
+    movl $1, %eax
+    jmp .Lchild_done
+.Lchild_no:
+    xorl %eax, %eax
+.Lchild_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_is_descendant
+fs_is_descendant:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %esi
+    movl 16(%esp), %edi
+    cmpb $47, (%esi)
+    jne .Ldescendant_compare
+    cmpb $0, 1(%esi)
+    jne .Ldescendant_compare
+    cmpb $47, (%edi)
+    jne .Ldescendant_no
+    cmpb $0, 1(%edi)
+    je .Ldescendant_no
+    jmp .Ldescendant_yes
+.Ldescendant_compare:
+    movb (%esi), %al
+    testb %al, %al
+    jz .Ldescendant_prefix_done
+    cmpb (%edi), %al
+    jne .Ldescendant_no
+    incl %esi
+    incl %edi
+    jmp .Ldescendant_compare
+.Ldescendant_prefix_done:
+    cmpb $47, (%edi)
+    jne .Ldescendant_no
+    cmpb $0, 1(%edi)
+    je .Ldescendant_no
+.Ldescendant_yes:
+    movl $1, %eax
+    jmp .Ldescendant_done
+.Ldescendant_no:
+    xorl %eax, %eax
+.Ldescendant_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_create_empty
+fs_create_empty:
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 16(%esp), %esi
+    movzwl MFS_BASE + 4, %eax
+    movzwl MFS_BASE + 6, %ecx
+    cmpl %ecx, %eax
+    jae .Lcreate_full
+    imull $48, %eax, %eax
+    addl $MFS_BASE + 16, %eax
+    movl %eax, %edi
+    movl %edi, %ebx
+    xorl %eax, %eax
+    movl $12, %ecx
+    rep stosl
+    movl %ebx, %edi
+    movl $31, %ecx
+.Lcreate_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jz .Lcreate_type
+    decl %ecx
+    jnz .Lcreate_copy
+    movb $0, (%edi)
+.Lcreate_type:
+    movb $1, 32(%ebx)
+    movb current_user_id, %al
+    movb %al, 33(%ebx)
+    movw $0x01a4, 34(%ebx)
+    call terminal_timestamp
+    movzwl MFS_BASE + 4, %edx
+    movl %eax, MFS_TIMESTAMP_BASE(,%edx,4)
+    incw MFS_BASE + 4
+    movl $1, %eax
+    jmp .Lcreate_done
+.Lcreate_full:
+    movl $-2, %eax
+.Lcreate_done:
+    popl %ebx
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_create_directory
+fs_create_directory:
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 16(%esp), %esi
+    movzwl MFS_BASE + 4, %eax
+    movzwl MFS_BASE + 6, %ecx
+    cmpl %ecx, %eax
+    jae .Lmkdir_full
+    imull $48, %eax, %eax
+    addl $MFS_BASE + 16, %eax
+    movl %eax, %edi
+    movl %edi, %ebx
+    xorl %eax, %eax
+    movl $12, %ecx
+    rep stosl
+    movl %ebx, %edi
+    movl $31, %ecx
+.Lmkdir_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jz .Lmkdir_type
+    decl %ecx
+    jnz .Lmkdir_copy
+    movb $0, (%edi)
+.Lmkdir_type:
+    movb $2, 32(%ebx)
+    movb current_user_id, %al
+    movb %al, 33(%ebx)
+    movw $0x01ed, 34(%ebx)
+    call terminal_timestamp
+    movzwl MFS_BASE + 4, %edx
+    movl %eax, MFS_TIMESTAMP_BASE(,%edx,4)
+    incw MFS_BASE + 4
+    movl $1, %eax
+    jmp .Lmkdir_done
+.Lmkdir_full:
+    movl $-2, %eax
+.Lmkdir_done:
+    popl %ebx
+    popl %edi
+    popl %esi
+    ret
+
+.globl fs_rename_entry
+fs_rename_entry:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl 16(%esp), %ebx
+    cmpl $1, %ebx
+    jl .Lrename_invalid
+    movzwl MFS_BASE + 4, %eax
+    cmpl %eax, %ebx
+    jae .Lrename_invalid
+    movl %ebx, %eax
+    imull $48, %eax, %eax
+    leal MFS_BASE + 16(%eax), %edi
+    movl 20(%esp), %esi
+    movl $31, %ecx
+.Lrename_copy:
+    lodsb
+    stosb
+    testb %al, %al
+    jz .Lrename_timestamp
+    decl %ecx
+    jnz .Lrename_copy
+    movb $0, (%edi)
+.Lrename_timestamp:
+    call terminal_timestamp
+    movl %eax, MFS_TIMESTAMP_BASE(,%ebx,4)
+    movl $1, %eax
+    jmp .Lrename_done
+.Lrename_invalid:
+    movl $-1, %eax
+.Lrename_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl fs_remove_entry
+fs_remove_entry:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl 16(%esp), %ebx
+    cmpl $1, %ebx
+    jl .Lremove_invalid
+    movzwl MFS_BASE + 4, %edx
+    cmpl %edx, %ebx
+    jae .Lremove_invalid
+    movl %ebx, %eax
+    imull $48, %eax, %eax
+    leal MFS_BASE + 16(%eax), %edi
+    addl $48, %eax
+    leal MFS_BASE + 16(%eax), %esi
+    movl %edx, %ecx
+    subl %ebx, %ecx
+    decl %ecx
+    imull $48, %ecx, %ecx
+    cld
+    rep movsb
+    decl %edx
+    movl %edx, %eax
+    imull $48, %eax, %eax
+    leal MFS_BASE + 16(%eax), %edi
+    xorl %eax, %eax
+    movl $12, %ecx
+    rep stosl
+    leal MFS_TIMESTAMP_BASE(,%ebx,4), %edi
+    leal MFS_TIMESTAMP_BASE + 4(,%ebx,4), %esi
+    movl %edx, %ecx
+    subl %ebx, %ecx
+    rep movsl
+    movl $0, MFS_TIMESTAMP_BASE(,%edx,4)
+    decw MFS_BASE + 4
+    movl $1, %eax
+    jmp .Lremove_done
+.Lremove_invalid:
+    movl $-1, %eax
+.Lremove_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl fs_write_text
+fs_write_text:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    pushl $2
+    pushl 8(%ebp)
+    call fs_can_access
+    addl $8, %esp
+    testl %eax, %eax
+    jz .Lwrite_denied
+    movl 8(%ebp), %eax
+    testl %eax, %eax
+    js .Lwrite_invalid
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Lwrite_invalid
+    imull $48, %eax, %eax
+    addl $MFS_BASE + 16, %eax
+    movl %eax, %ebx
+    cmpb $1, 32(%ebx)
+    jne .Lwrite_invalid
+    movl 16(%ebp), %edx
+    leal 1(%edx), %ecx
+    testl %ecx, %ecx
+    jz .Lwrite_no_space
+    cmpl 44(%ebx), %ecx
+    jbe .Lwrite_copy
+    movl MFS_BASE + 8, %eax
+    addl $15, %eax
+    jc .Lwrite_no_space
+    andl $-16, %eax
+    addl %eax, %ecx
+    jc .Lwrite_no_space
+    cmpl MFS_BASE + 12, %ecx
+    ja .Lwrite_no_space
+    movl %eax, 36(%ebx)
+    movl 16(%ebp), %eax
+    incl %eax
+    movl %eax, 44(%ebx)
+    movl %ecx, MFS_BASE + 8
+.Lwrite_copy:
+    movl 12(%ebp), %esi
+    movl 36(%ebx), %edi
+    addl $MFS_BASE, %edi
+    movl %edx, %ecx
+    rep movsb
+    movb $0, (%edi)
+    movl %edx, 40(%ebx)
+    call terminal_timestamp
+    movl 8(%ebp), %ecx
+    movl %eax, MFS_TIMESTAMP_BASE(,%ecx,4)
+    movl $1, %eax
+    jmp .Lwrite_done
+.Lwrite_invalid:
+    movl $-1, %eax
+    jmp .Lwrite_done
+.Lwrite_no_space:
+    movl $-2, %eax
+    jmp .Lwrite_done
+.Lwrite_denied:
+    movl $-3, %eax
+.Lwrite_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    leave
+    ret
+
+.globl editor_load
+editor_load:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %eax
+    testl %eax, %eax
+    js .Leditor_load_empty
+    movzwl MFS_BASE + 4, %ecx
+    cmpl %ecx, %eax
+    jae .Leditor_load_empty
+    imull $48, %eax, %eax
+    movl MFS_BASE + 56(%eax), %ecx
+    cmpl MFS_BASE + 12, %ecx
+    jae .Leditor_load_too_large
+    movl %ecx, editor_length
+    testl %ecx, %ecx
+    jz .Leditor_load_empty_data
+    movl MFS_BASE + 52(%eax), %esi
+    addl $MFS_BASE, %esi
+    movl MFS_BASE + 12, %edi
+    addl $MFS_BASE, %edi
+    rep movsb
+    movb $0, (%edi)
+    movl $1, %eax
+    jmp .Leditor_load_done
+.Leditor_load_empty:
+    movl $0, editor_length
+.Leditor_load_empty_data:
+    movl MFS_BASE + 12, %eax
+    movb $0, MFS_BASE(%eax)
+    movl $1, %eax
+    jmp .Leditor_load_done
+.Leditor_load_too_large:
+    xorl %eax, %eax
+.Leditor_load_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl editor_clear
+editor_clear:
+    movl $0, editor_length
+    movl MFS_BASE + 12, %eax
+    movb $0, MFS_BASE(%eax)
+    ret
+
+.globl editor_append_line
+editor_append_line:
+    pushl %esi
+    pushl %edi
+    pushl %ebx
+    movl 16(%esp), %esi
+    xorl %ecx, %ecx
+.Leditor_measure:
+    cmpb $0, (%esi,%ecx)
+    je .Leditor_measured
+    incl %ecx
+    jmp .Leditor_measure
+.Leditor_measured:
+    movl editor_length, %ebx
+    leal 2(%ebx,%ecx), %eax
+    jc .Leditor_append_full
+    cmpl MFS_BASE + 12, %eax
+    jae .Leditor_append_full
+    movl MFS_BASE + 12, %edi
+    addl $MFS_BASE, %edi
+    addl %ebx, %edi
+    movl 16(%esp), %esi
+    rep movsb
+    movb $13, (%edi)
+    movb $10, 1(%edi)
+    movb $0, 2(%edi)
+    movl %eax, editor_length
+    movl $1, %eax
+    jmp .Leditor_append_done
+.Leditor_append_full:
+    xorl %eax, %eax
+.Leditor_append_done:
+    popl %ebx
+    popl %edi
+    popl %esi
+    ret
+
+.globl editor_data
+editor_data:
+    movl MFS_BASE + 12, %eax
+    addl $MFS_BASE, %eax
+    ret
+
+.globl editor_size
+editor_size:
+    movl editor_length, %eax
+    ret
+
+.globl editor_char
+editor_char:
+    movl 4(%esp), %ecx
+    cmpl editor_length, %ecx
+    jae .Leditor_char_invalid
+    movl MFS_BASE + 12, %eax
+    movzbl MFS_BASE(%eax,%ecx), %eax
+    ret
+.Leditor_char_invalid:
+    movl $-1, %eax
+    ret
+
+.globl editor_insert_char
+editor_insert_char:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %edx
+    movl editor_length, %eax
+    cmpl %eax, %edx
+    ja .Leditor_insert_full
+    leal 1(%eax), %ecx
+    cmpl MFS_BASE + 12, %ecx
+    jae .Leditor_insert_full
+    movl MFS_BASE + 12, %edi
+    addl $MFS_BASE, %edi
+    movl %edi, %esi
+    addl %eax, %edi
+    leal -1(%edi), %esi
+    movl %eax, %ecx
+    subl %edx, %ecx
+    testl %ecx, %ecx
+    jz .Leditor_insert_store
+    std
+    rep movsb
+    cld
+.Leditor_insert_store:
+    movl MFS_BASE + 12, %edi
+    addl $MFS_BASE, %edi
+    movb 16(%esp), %al
+    movb %al, (%edi,%edx)
+    incl editor_length
+    movl editor_length, %eax
+    movb $0, (%edi,%eax)
+    movl $1, %eax
+    jmp .Leditor_insert_done
+.Leditor_insert_full:
+    xorl %eax, %eax
+.Leditor_insert_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl editor_insert_newline
+editor_insert_newline:
+    pushl %ebx
+    movl 8(%esp), %ebx
+    movl editor_length, %eax
+    addl $2, %eax
+    cmpl MFS_BASE + 12, %eax
+    jae .Leditor_newline_full
+    pushl $13
+    pushl %ebx
+    call editor_insert_char
+    addl $8, %esp
+    testl %eax, %eax
+    jz .Leditor_newline_full
+    incl %ebx
+    pushl $10
+    pushl %ebx
+    call editor_insert_char
+    addl $8, %esp
+    jmp .Leditor_newline_done
+.Leditor_newline_full:
+    xorl %eax, %eax
+.Leditor_newline_done:
+    popl %ebx
+    ret
+
+.globl editor_delete_char
+editor_delete_char:
+    pushl %esi
+    pushl %edi
+    movl 12(%esp), %edx
+    movl editor_length, %eax
+    cmpl %eax, %edx
+    jae .Leditor_delete_invalid
+    movl MFS_BASE + 12, %edi
+    addl $MFS_BASE, %edi
+    leal 1(%edi,%edx), %esi
+    addl %edx, %edi
+    movl %eax, %ecx
+    subl %edx, %ecx
+    cld
+    rep movsb
+    decl editor_length
+    movl $1, %eax
+    jmp .Leditor_delete_done
+.Leditor_delete_invalid:
+    xorl %eax, %eax
+.Leditor_delete_done:
+    popl %edi
+    popl %esi
+    ret
+
+.globl editor_command_clear
+editor_command_clear:
+    movl $0, editor_command_length
+    movb $0, editor_command_buffer
+    ret
+
+.globl editor_command_append
+editor_command_append:
+    movl editor_command_length, %ecx
+    cmpl $62, %ecx
+    jae .Leditor_command_full
+    movb 4(%esp), %al
+    movb %al, editor_command_buffer(%ecx)
+    incl %ecx
+    movl %ecx, editor_command_length
+    movb $0, editor_command_buffer(%ecx)
+    movl $1, %eax
+    ret
+.Leditor_command_full:
+    xorl %eax, %eax
+    ret
+
+.globl editor_command_backspace
+editor_command_backspace:
+    movl editor_command_length, %ecx
+    testl %ecx, %ecx
+    jz .Leditor_command_backspace_done
+    decl %ecx
+    movl %ecx, editor_command_length
+    movb $0, editor_command_buffer(%ecx)
+.Leditor_command_backspace_done:
+    ret
+
+.globl editor_command_data
+editor_command_data:
+    movl $editor_command_buffer, %eax
+    ret
+
+.globl __mlang_std_term_stdout_supports_ansi
+__mlang_std_term_stdout_supports_ansi:
+    movl $1, %eax
+    ret
+
+.globl __mlang_std_esc_reset
+__mlang_std_esc_reset:
+    movl $ansi_reset, %eax
+    ret
+
+.globl __mlang_std_esc_sgr_code
+__mlang_std_esc_sgr_code:
+    movl $ansi_inverse, %eax
+    ret
+
+.globl __mlang_std_esc_cursor_code
+__mlang_std_esc_cursor_code:
+    movl 4(%esp), %eax
+    cmpl $0, %eax
+    je .Lansi_home
+    cmpl $1, %eax
+    je .Lansi_clear
+    cmpl $2, %eax
+    je .Lansi_clear_line
+    cmpl $3, %eax
+    je .Lansi_hide
+    cmpl $4, %eax
+    je .Lansi_show
+    cmpl $5, %eax
+    je .Lansi_save
+    cmpl $6, %eax
+    je .Lansi_restore
+    movl $ansi_empty, %eax
+    ret
+.Lansi_home:
+    movl $ansi_home, %eax
+    ret
+.Lansi_clear:
+    movl $ansi_clear, %eax
+    ret
+.Lansi_clear_line:
+    movl $ansi_clear_line, %eax
+    ret
+.Lansi_hide:
+    movl $ansi_hide, %eax
+    ret
+.Lansi_show:
+    movl $ansi_show, %eax
+    ret
+.Lansi_save:
+    movl $ansi_save, %eax
+    ret
+.Lansi_restore:
+    movl $ansi_restore, %eax
+    ret
+
+.globl __mlang_std_esc_cursor_pos
+__mlang_std_esc_cursor_pos:
+    pushl %ebx
+    pushl %edi
+    movl $ansi_position, %edi
+    movb $27, (%edi)
+    movb $91, 1(%edi)
+    movl 12(%esp), %eax
+    cmpl $1, %eax
+    jge .Lansi_row_positive
+    movl $1, %eax
+.Lansi_row_positive:
+    cmpl $99, %eax
+    jle .Lansi_row_ready
+    movl $99, %eax
+.Lansi_row_ready:
+    xorl %edx, %edx
+    movl $10, %ebx
+    divl %ebx
+    addb $48, %al
+    addb $48, %dl
+    movb %al, 2(%edi)
+    movb %dl, 3(%edi)
+    movb $59, 4(%edi)
+    movl 16(%esp), %eax
+    cmpl $1, %eax
+    jge .Lansi_col_positive
+    movl $1, %eax
+.Lansi_col_positive:
+    cmpl $99, %eax
+    jle .Lansi_col_ready
+    movl $99, %eax
+.Lansi_col_ready:
+    xorl %edx, %edx
+    divl %ebx
+    addb $48, %al
+    addb $48, %dl
+    movb %al, 5(%edi)
+    movb %dl, 6(%edi)
+    movb $72, 7(%edi)
+    movb $0, 8(%edi)
+    movl %edi, %eax
+    popl %edi
+    popl %ebx
+    ret
+
+.Lata_wait_idle:
+    movl $0x01000000, %ecx
+    movw $0x1f7, %dx
+.Lata_idle_loop:
+    inb %dx, %al
+    testb $0x80, %al
+    jz .Lata_idle_ready
+    loop .Lata_idle_loop
+    xorl %eax, %eax
+    ret
+.Lata_idle_ready:
+    movl $1, %eax
+    ret
+
+.Lata_wait_complete:
+    movl $0x01000000, %ecx
+    movw $0x1f7, %dx
+.Lata_complete_loop:
+    inb %dx, %al
+    testb $0x80, %al
+    jnz .Lata_complete_next
+    testb $0x21, %al
+    jnz .Lata_wait_failed
+    movl $1, %eax
+    ret
+.Lata_complete_next:
+    loop .Lata_complete_loop
+    xorl %eax, %eax
+    ret
+
+.Lata_wait_data:
+    movl $0x01000000, %ecx
+    movw $0x1f7, %dx
+.Lata_data_loop:
+    inb %dx, %al
+    testb $0x21, %al
+    jnz .Lata_wait_failed
+    testb $0x80, %al
+    jnz .Lata_data_next
+    testb $0x08, %al
+    jnz .Lata_wait_ready
+.Lata_data_next:
+    loop .Lata_data_loop
+.Lata_wait_failed:
+    xorl %eax, %eax
+    ret
+.Lata_wait_ready:
+    movl $1, %eax
+    ret
+
+.Lata_program_lba:
+    movw $0x1f2, %dx
+    movb $1, %al
+    outb %al, %dx
+    incl %edx
+    movb %bl, %al
+    outb %al, %dx
+    shrl $8, %ebx
+    incl %edx
+    movb %bl, %al
+    outb %al, %dx
+    shrl $8, %ebx
+    incl %edx
+    movb %bl, %al
+    outb %al, %dx
+    shrl $8, %ebx
+    incl %edx
+    movb %bl, %al
+    andb $0x0f, %al
+    orb $0xe0, %al
+    outb %al, %dx
+    ret
+
+.Lata_read_sector:
+    pushl %ebx
+    pushl %ecx
+    pushl %edx
+    movl %eax, %ebx
+    call .Lata_wait_idle
+    testl %eax, %eax
+    jz .Lata_read_done
+    call .Lata_program_lba
+    movw $0x1f7, %dx
+    movb $0x20, %al
+    outb %al, %dx
+    call .Lata_wait_data
+    testl %eax, %eax
+    jz .Lata_read_done
+    movw $0x1f0, %dx
+    movl $256, %ecx
+    rep insw
+    call .Lata_wait_complete
+.Lata_read_done:
+    popl %edx
+    popl %ecx
+    popl %ebx
+    ret
+
+.Lata_write_sector:
+    pushl %ebx
+    pushl %ecx
+    pushl %edx
+    movl %eax, %ebx
+    call .Lata_wait_idle
+    testl %eax, %eax
+    jz .Lata_write_done
+    call .Lata_program_lba
+    movw $0x1f7, %dx
+    movb $0x30, %al
+    outb %al, %dx
+    call .Lata_wait_data
+    testl %eax, %eax
+    jz .Lata_write_done
+    movw $0x1f0, %dx
+    movl $256, %ecx
+    rep outsw
+    call .Lata_wait_complete
+.Lata_write_done:
+    popl %edx
+    popl %ecx
+    popl %ebx
+    ret
+
+.globl fs_load
+fs_load:
+    pushl %ebx
+    pushl %edi
+    pushl %ebp
+    movl $MFS_BASE, %edi
+    movl $100, %eax
+    call .Lata_read_sector
+    testl %eax, %eax
+    jz .Lata_load_failed
+    cmpl $0x3253464d, MFS_BASE
+    jne .Lata_load_failed
+    movl MFS_BASE + 8, %eax
+    cmpl MFS_BASE + 12, %eax
+    ja .Lata_load_failed
+    addl $511, %eax
+    jc .Lata_load_failed
+    shrl $9, %eax
+    testl %eax, %eax
+    jz .Lata_load_failed
+    movl %eax, %ebx
+    decl %ebx
+    movl $101, %ebp
+.Lata_load_loop:
+    testl %ebx, %ebx
+    jz .Lata_load_ok
+    movl %ebp, %eax
+    call .Lata_read_sector
+    testl %eax, %eax
+    jz .Lata_load_failed
+    incl %ebp
+    decl %ebx
+    jmp .Lata_load_loop
+.Lata_load_ok:
+    movl $1, %eax
+    jmp .Lata_load_done
+.Lata_load_failed:
+    xorl %eax, %eax
+.Lata_load_done:
+    popl %ebp
+    popl %edi
+    popl %ebx
+    ret
+
+.globl fs_flush
+fs_flush:
+    pushl %ebx
+    pushl %esi
+    pushl %ebp
+    movl MFS_BASE + 8, %eax
+    cmpl MFS_BASE + 12, %eax
+    ja .Lata_flush_failed
+    addl $511, %eax
+    jc .Lata_flush_failed
+    shrl $9, %eax
+    movl %eax, %ebx
+    movl $MFS_BASE, %esi
+    movl $100, %ebp
+.Lata_flush_loop:
+    testl %ebx, %ebx
+    jz .Lata_flush_cache
+    movl %ebp, %eax
+    call .Lata_write_sector
+    testl %eax, %eax
+    jz .Lata_flush_failed
+    incl %ebp
+    decl %ebx
+    jmp .Lata_flush_loop
+.Lata_flush_cache:
+    call .Lata_wait_idle
+    testl %eax, %eax
+    jz .Lata_flush_failed
+    movw $0x1f7, %dx
+    movb $0xe7, %al
+    outb %al, %dx
+    call .Lata_wait_complete
+    testl %eax, %eax
+    jz .Lata_flush_failed
+    movl $1, %eax
+    jmp .Lata_flush_done
+.Lata_flush_failed:
+    xorl %eax, %eax
+.Lata_flush_done:
+    popl %ebp
+    popl %esi
+    popl %ebx
+    ret
+
+.globl terminal_reboot
+terminal_reboot:
+    cli
+.Lreboot_wait:
+    movw $0x64, %dx
+    inb %dx, %al
+    testb $2, %al
+    jnz .Lreboot_wait
+    movb $0xfe, %al
+    outb %al, %dx
+    jmp terminal_halt
+
+.globl terminal_halt
+terminal_halt:
+    cli
+.Lterminal_halt_loop:
+    hlt
+    jmp .Lterminal_halt_loop
+
+.globl __mlang_std_exceptions_push_frame
+__mlang_std_exceptions_push_frame:
+    xorl %eax, %eax
+    ret
+.globl __mlang_std_exceptions_frame_env
+__mlang_std_exceptions_frame_env:
+    movl $__mlang_boot_jmp_buffer, %eax
+    ret
+.globl _setjmp
+_setjmp:
+    xorl %eax, %eax
+    ret
+.globl __mlang_std_exceptions_pop_frame
+__mlang_std_exceptions_pop_frame:
+    ret
+.globl __mlang_std_exceptions_rethrow_current
+__mlang_std_exceptions_rethrow_current:
+    jmp terminal_halt
+
+.set COMMAND_BASE, 0x00050000
+.set COMMAND_CAPACITY, 0x00030000
+
+.globl command_exec
+command_exec:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    pushl 8(%ebp)
+    call fs_entry_size
+    addl $4, %esp
+    testl %eax, %eax
+    jle .Lcommand_exec_invalid
+    cmpl $COMMAND_CAPACITY, %eax
+    ja .Lcommand_exec_invalid
+    movl %eax, %ebx
+    pushl 8(%ebp)
+    call fs_entry_data
+    addl $4, %esp
+    testl %eax, %eax
+    jz .Lcommand_exec_invalid
+    movl %eax, %esi
+    movl $COMMAND_BASE, %edi
+    xorl %eax, %eax
+    movl $COMMAND_CAPACITY / 4, %ecx
+    cld
+    rep stosl
+    movl $COMMAND_BASE, %edi
+    movl %ebx, %ecx
+    rep movsb
+    pushl 12(%ebp)
+    movl $COMMAND_BASE, %eax
+    call *%eax
+    addl $4, %esp
+    jmp .Lcommand_exec_done
+.Lcommand_exec_invalid:
+    movl $-127, %eax
+.Lcommand_exec_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    leave
+    ret
+
+.globl network_init
+network_init:
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movw $0x31f, %dx
+    inb %dx, %al
+    outb %al, %dx
+    movl $0x00010000, %ecx
+.Lnet_reset_wait:
+    movw $0x307, %dx
+    inb %dx, %al
+    testb $0x80, %al
+    jnz .Lnet_reset_ready
+    loop .Lnet_reset_wait
+    xorl %eax, %eax
+    jmp .Lnet_init_done
+.Lnet_reset_ready:
+    movw $0x300, %dx
+    movb $0x21, %al
+    outb %al, %dx
+    movw $0x30e, %dx
+    movb $0x49, %al
+    outb %al, %dx
+    movw $0x30a, %dx
+    xorb %al, %al
+    outb %al, %dx
+    incw %dx
+    outb %al, %dx
+    movw $0x30c, %dx
+    movb $0x20, %al
+    outb %al, %dx
+    movw $0x30d, %dx
+    movb $0x02, %al
+    outb %al, %dx
+    movw $0x308, %dx
+    xorb %al, %al
+    outb %al, %dx
+    incw %dx
+    outb %al, %dx
+    movw $0x30a, %dx
+    movb $12, %al
+    outb %al, %dx
+    incw %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x0a, %al
+    outb %al, %dx
+    movw $0x310, %dx
+    movl $network_mac, %edi
+    movl $6, %ecx
+.Lnet_prom_read:
+    inw %dx, %ax
+    stosb
+    loop .Lnet_prom_read
+    movw $0x300, %dx
+    movb $0x21, %al
+    outb %al, %dx
+    movw $0x301, %dx
+    movb $0x46, %al
+    outb %al, %dx
+    incw %dx
+    movb $0x80, %al
+    outb %al, %dx
+    incw %dx
+    movb $0x46, %al
+    outb %al, %dx
+    movw $0x304, %dx
+    movb $0x40, %al
+    outb %al, %dx
+    movw $0x307, %dx
+    movb $0xff, %al
+    outb %al, %dx
+    movw $0x30f, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x61, %al
+    outb %al, %dx
+    movw $0x301, %dx
+    movl $network_mac, %esi
+    movl $6, %ecx
+.Lnet_mac_program:
+    lodsb
+    outb %al, %dx
+    incw %dx
+    loop .Lnet_mac_program
+    movw $0x307, %dx
+    movb $0x47, %al
+    outb %al, %dx
+    movw $0x308, %dx
+    movl $8, %ecx
+.Lnet_multicast_clear:
+    xorb %al, %al
+    outb %al, %dx
+    incw %dx
+    loop .Lnet_multicast_clear
+    movw $0x300, %dx
+    movb $0x22, %al
+    outb %al, %dx
+    movw $0x30d, %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x30c, %dx
+    movb $0x04, %al
+    outb %al, %dx
+    movl $1, %eax
+.Lnet_init_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    ret
+
+.globl network_mac_byte
+network_mac_byte:
+    movl 4(%esp), %ecx
+    cmpl $6, %ecx
+    jae .Lnet_mac_invalid
+    movzbl network_mac(,%ecx), %eax
+    ret
+.Lnet_mac_invalid:
+    xorl %eax, %eax
+    ret
+
+.globl network_send
+network_send:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    movl 8(%ebp), %esi
+    movl 12(%ebp), %ebx
+    testl %ebx, %ebx
+    jle .Lnet_send_fail
+    cmpl $1518, %ebx
+    ja .Lnet_send_fail
+    cmpl $60, %ebx
+    jae .Lnet_send_size_ready
+    movl $60, %ebx
+.Lnet_send_size_ready:
+    movl %ebx, %edi
+    addl $1, %edi
+    andl $-2, %edi
+    movw $0x307, %dx
+    movb $0x40, %al
+    outb %al, %dx
+    movw $0x308, %dx
+    xorb %al, %al
+    outb %al, %dx
+    incw %dx
+    movb $0x40, %al
+    outb %al, %dx
+    movw $0x30a, %dx
+    movl %edi, %eax
+    outb %al, %dx
+    incw %dx
+    shrl $8, %eax
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x12, %al
+    outb %al, %dx
+    movw $0x310, %dx
+    movl %edi, %ecx
+    shrl $1, %ecx
+    cld
+    rep outsw
+    movl $0x00100000, %ecx
+.Lnet_dma_wait:
+    movw $0x307, %dx
+    inb %dx, %al
+    testb $0x40, %al
+    jnz .Lnet_dma_done
+    loop .Lnet_dma_wait
+    jmp .Lnet_send_fail
+.Lnet_dma_done:
+    movb $0x40, %al
+    outb %al, %dx
+    movw $0x304, %dx
+    movb $0x40, %al
+    outb %al, %dx
+    incw %dx
+    movb %bl, %al
+    outb %al, %dx
+    incw %dx
+    movl %ebx, %eax
+    shrl $8, %eax
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x26, %al
+    outb %al, %dx
+    movl $0x00100000, %ecx
+.Lnet_tx_wait:
+    movw $0x307, %dx
+    inb %dx, %al
+    testb $0x02, %al
+    jnz .Lnet_send_ok
+    testb $0x08, %al
+    jnz .Lnet_send_fail
+    loop .Lnet_tx_wait
+    jmp .Lnet_send_fail
+.Lnet_send_ok:
+    movb $0x0a, %al
+    outb %al, %dx
+    movl $1, %eax
+    jmp .Lnet_send_done
+.Lnet_send_fail:
+    xorl %eax, %eax
+.Lnet_send_done:
+    popl %edi
+    popl %esi
+    popl %ebx
+    leave
+    ret
+
+.globl network_receive
+network_receive:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+    subl $16, %esp
+    movl 8(%ebp), %ebx
+    movl 12(%ebp), %edi
+    movl $0x00400000, %esi
+.Lnet_rx_poll:
+    movw $0x300, %dx
+    movb $0x62, %al
+    outb %al, %dx
+    movw $0x307, %dx
+    inb %dx, %al
+    movzbl %al, %eax
+    movl %eax, -16(%ebp)
+    movw $0x300, %dx
+    movb $0x22, %al
+    outb %al, %dx
+    movw $0x303, %dx
+    inb %dx, %al
+    movzbl %al, %eax
+    incl %eax
+    cmpl $0x80, %eax
+    jb .Lnet_rx_page_ready
+    movl $0x46, %eax
+.Lnet_rx_page_ready:
+    cmpl -16(%ebp), %eax
+    jne .Lnet_rx_packet
+    decl %esi
+    jnz .Lnet_rx_poll
+    xorl %eax, %eax
+    jmp .Lnet_rx_done
+.Lnet_rx_packet:
+    movl %eax, -28(%ebp)
+    movw $0x308, %dx
+    xorb %al, %al
+    outb %al, %dx
+    incw %dx
+    movl -28(%ebp), %eax
+    outb %al, %dx
+    movw $0x30a, %dx
+    movb $4, %al
+    outb %al, %dx
+    incw %dx
+    xorb %al, %al
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x0a, %al
+    outb %al, %dx
+    movw $0x310, %dx
+    inw %dx, %ax
+    movzbl %ah, %ecx
+    movl %ecx, -20(%ebp)
+    inw %dx, %ax
+    movzwl %ax, %eax
+    subl $4, %eax
+    movl %eax, -24(%ebp)
+    testl %eax, %eax
+    jle .Lnet_rx_consume_bad
+    cmpl %edi, %eax
+    ja .Lnet_rx_consume_bad
+    cmpl $1518, %eax
+    ja .Lnet_rx_consume_bad
+    movl %eax, %ecx
+    addl $1, %ecx
+    andl $-2, %ecx
+    movw $0x308, %dx
+    movb $4, %al
+    outb %al, %dx
+    incw %dx
+    movl -28(%ebp), %eax
+    outb %al, %dx
+    movw $0x30a, %dx
+    movl %ecx, %eax
+    outb %al, %dx
+    incw %dx
+    shrl $8, %eax
+    outb %al, %dx
+    movw $0x300, %dx
+    movb $0x0a, %al
+    outb %al, %dx
+    movw $0x310, %dx
+    movl %ebx, %edi
+    shrl $1, %ecx
+    cld
+    rep insw
+    jmp .Lnet_rx_consume_ok
+.Lnet_rx_consume_bad:
+    movl $0, -24(%ebp)
+.Lnet_rx_consume_ok:
+    movl -20(%ebp), %eax
+    decl %eax
+    cmpl $0x46, %eax
+    jae .Lnet_rx_boundary_ready
+    movl $0x7f, %eax
+.Lnet_rx_boundary_ready:
+    movw $0x303, %dx
+    outb %al, %dx
+    movw $0x307, %dx
+    movb $0x41, %al
+    outb %al, %dx
+    movl -24(%ebp), %eax
+.Lnet_rx_done:
+    addl $16, %esp
+    popl %edi
+    popl %esi
+    popl %ebx
+    leave
+    ret
+
+.section .rodata,\"a\",@progbits
+ansi_empty:
+    .asciz \"\"
+ansi_reset:
+    .asciz \"\\033[0m\"
+ansi_inverse:
+    .asciz \"\\033[7m\"
+ansi_home:
+    .asciz \"\\033[H\"
+ansi_clear:
+    .asciz \"\\033[2J\"
+ansi_clear_line:
+    .asciz \"\\033[2K\"
+ansi_hide:
+    .asciz \"\\033[?25l\"
+ansi_show:
+    .asciz \"\\033[?25h\"
+ansi_save:
+    .asciz \"\\033[s\"
+ansi_restore:
+    .asciz \"\\033[u\"
+ansi_size_query:
+    .asciz \"\\033[99;99H\\033[6n\"
+
+.section .bss,\"aw\",@nobits
+.balign 16
+input_buffer:
+    .skip 64
+current_directory:
+    .skip 32
+current_user_id:
+    .skip 1
+.balign 4
+resolved_path:
+    .skip 32
+parent_path:
+    .skip 32
+joined_path:
+    .skip 32
+network_mac:
+    .skip 6
+editor_length:
+    .skip 4
+editor_command_length:
+    .skip 4
+editor_command_buffer:
+    .skip 64
+pending_key:
+    .skip 4
+pending_key_valid:
+    .skip 4
+pending_cr:
+    .skip 4
+terminal_row_count:
+    .skip 4
+terminal_column_count:
+    .skip 4
+ansi_position:
+    .skip 12
+__mlang_boot_jmp_buffer:
+    .skip 256
+");
+
+extern fn serial_write(message: str8) -> void;
+extern fn serial_write_char(ch: i32) -> void;
+extern fn terminal_read_line() -> str8;
+extern fn terminal_command_eq(actual: str8, expected: str8) -> i32;
+extern fn terminal_command_prefix(actual: str8, prefix: str8) -> i32;
+extern fn terminal_argument(command: str8, offset: i32) -> str8;
+extern fn terminal_split_argument(argument: str8) -> str8;
+extern fn terminal_parse_mode(mode: str8) -> i32;
+extern fn terminal_reboot() -> void;
+extern fn terminal_halt() -> void;
+extern fn command_exec(index: i32, arguments: str8) -> i32;
+extern fn fs_load() -> i32;
+extern fn fs_mount() -> i32;
+extern fn fs_entry_count() -> i32;
+extern fn fs_entry_path(index: i32) -> str8;
+extern fn fs_entry_type(index: i32) -> i32;
+extern fn fs_entry_owner(index: i32) -> i32;
+extern fn fs_entry_mode(index: i32) -> i32;
+extern fn fs_entry_size(index: i32) -> i32;
+extern fn fs_entry_data(index: i32) -> str8;
+extern fn fs_entry_ends_lf(index: i32) -> i32;
+extern fn fs_current_uid() -> i32;
+extern fn fs_set_current_uid(uid: i32) -> i32;
+extern fn fs_can_access(index: i32, mask: i32) -> i32;
+extern fn fs_chmod(index: i32, mode: i32) -> i32;
+extern fn fs_chown(index: i32, uid: i32) -> i32;
+extern fn fs_pwd() -> str8;
+extern fn fs_resolve(path: str8) -> str8;
+extern fn fs_find(path: str8) -> i32;
+extern fn fs_set_cwd(path: str8) -> void;
+extern fn fs_basename(path: str8) -> str8;
+extern fn fs_parent(path: str8) -> str8;
+extern fn fs_is_direct_child(directory: str8, candidate: str8) -> i32;
+extern fn fs_create_empty(path: str8) -> i32;
+extern fn fs_write_text(index: i32, text: str8, length: i32) -> i32;
+extern fn fs_flush() -> i32;
+extern fn editor_load(index: i32) -> i32;
+extern fn editor_clear() -> void;
+extern fn editor_append_line(line: str8) -> i32;
+extern fn editor_data() -> str8;
+extern fn editor_size() -> i32;
+
+fn user_name(uid: i32) -> str8 {
+    if uid == 1 {
+        return "user";
+    }
+    return "root";
+}
+
+fn switch_user(name: str8) -> i32 {
+    if terminal_command_eq(name, "user") == 1 {
+        return fs_set_current_uid(1);
+    }
+    if terminal_command_eq(name, "root") == 1 {
+        if fs_current_uid() != 0 {
+            return -2;
+        }
+        return fs_set_current_uid(0);
+    }
+    return -1;
+}
+
+fn change_directory(request: str8) -> i32 {
+    let path: str8 = fs_resolve(request);
+    let index: i32 = fs_find(path);
+    if index < 0 || fs_entry_type(index) != 2 {
+        return -1;
+    }
+    if fs_can_access(index, 1) != 1 {
+        return -2;
+    }
+    fs_set_cwd(path);
+    return 1;
+}
+
+fn touch_file(request: str8) -> i32 {
+    let path: str8 = fs_resolve(request);
+    if fs_find(path) >= 0 {
+        return 0;
+    }
+    let parent: str8 = fs_parent(path);
+    let parent_index: i32 = fs_find(parent);
+    if parent_index < 0 || fs_entry_type(parent_index) != 2 {
+        return -1;
+    }
+    if fs_can_access(parent_index, 3) != 1 {
+        return -4;
+    }
+    let created: i32 = fs_create_empty(path);
+    if created != 1 {
+        return created;
+    }
+    if fs_flush() != 1 {
+        return -3;
+    }
+    return 1;
+}
+
+fn native_command_path(name: str8) -> str8 {
+    if terminal_command_eq(name, "ls") == 1 || terminal_command_eq(name, "/bin/ls") == 1 {
+        return "/bin/ls";
+    }
+    if terminal_command_eq(name, "cat") == 1 || terminal_command_eq(name, "/bin/cat") == 1 {
+        return "/bin/cat";
+    }
+    if terminal_command_eq(name, "chmod") == 1 || terminal_command_eq(name, "/bin/chmod") == 1 {
+        return "/bin/chmod";
+    }
+    if terminal_command_eq(name, "chown") == 1 || terminal_command_eq(name, "/bin/chown") == 1 {
+        return "/bin/chown";
+    }
+    if terminal_command_eq(name, "mkdir") == 1 || terminal_command_eq(name, "/bin/mkdir") == 1 {
+        return "/bin/mkdir";
+    }
+    if terminal_command_eq(name, "rm") == 1 || terminal_command_eq(name, "/bin/rm") == 1 {
+        return "/bin/rm";
+    }
+    if terminal_command_eq(name, "echo") == 1 || terminal_command_eq(name, "/bin/echo") == 1 {
+        return "/bin/echo";
+    }
+    if terminal_command_eq(name, "cp") == 1 || terminal_command_eq(name, "/bin/cp") == 1 {
+        return "/bin/cp";
+    }
+    if terminal_command_eq(name, "mv") == 1 || terminal_command_eq(name, "/bin/mv") == 1 {
+        return "/bin/mv";
+    }
+    if terminal_command_eq(name, "wc") == 1 || terminal_command_eq(name, "/bin/wc") == 1 {
+        return "/bin/wc";
+    }
+    if terminal_command_eq(name, "ping") == 1 || terminal_command_eq(name, "/bin/ping") == 1 {
+        return "/bin/ping";
+    }
+    if terminal_command_eq(name, "vi") == 1 || terminal_command_eq(name, "/bin/vi") == 1 {
+        return "/bin/vi";
+    }
+    return "";
+}
+
+fn run_native_command(command: str8) -> i32 {
+    let arguments: str8 = terminal_split_argument(command);
+    let path: str8 = native_command_path(command);
+    if terminal_command_eq(path, "") == 1 {
+        return -1;
+    }
+
+    let executable: i32 = fs_find(path);
+    if executable < 0 || fs_entry_type(executable) != 3 {
+        serial_write(command);
+        serial_write(": command not found\r\n");
+        return 0;
+    }
+    if fs_can_access(executable, 1) != 1 {
+        serial_write(command);
+        serial_write(": permission denied\r\n");
+        return 0;
+    }
+
+    let result: i32 = command_exec(executable, arguments);
+    if result == -127 {
+        serial_write(command);
+        serial_write(": invalid executable\r\n");
+    }
+    return 0;
+}
+
+fn terminal_builtin_help(command: str8) -> i32 {
+    if terminal_command_eq(command, "help -h") == 1 || terminal_command_eq(command, "help --help") == 1 {
+        serial_write("usage: help\r\nlist available commands\r\n");
+    } else if terminal_command_eq(command, "about -h") == 1 || terminal_command_eq(command, "about --help") == 1 {
+        serial_write("usage: about\r\nshow kernel information\r\n");
+    } else if terminal_command_eq(command, "clear -h") == 1 || terminal_command_eq(command, "clear --help") == 1 {
+        serial_write("usage: clear\r\nclear the terminal\r\n");
+    } else if terminal_command_eq(command, "pwd -h") == 1 || terminal_command_eq(command, "pwd --help") == 1 {
+        serial_write("usage: pwd\r\nprint the current directory\r\n");
+    } else if terminal_command_eq(command, "whoami -h") == 1 || terminal_command_eq(command, "whoami --help") == 1 {
+        serial_write("usage: whoami\r\nprint the current user\r\n");
+    } else if terminal_command_eq(command, "su -h") == 1 || terminal_command_eq(command, "su --help") == 1 {
+        serial_write("usage: su <root|user>\r\nswitch the current user\r\n");
+    } else if terminal_command_eq(command, "cd -h") == 1 || terminal_command_eq(command, "cd --help") == 1 {
+        serial_write("usage: cd <directory>\r\nchange the current directory\r\n");
+    } else if terminal_command_eq(command, "touch -h") == 1 || terminal_command_eq(command, "touch --help") == 1 {
+        serial_write("usage: touch <file>\r\ncreate an empty file\r\n");
+    } else if terminal_command_eq(command, "sync -h") == 1 || terminal_command_eq(command, "sync --help") == 1 {
+        serial_write("usage: sync\r\nflush MFS2 metadata and data to disk\r\n");
+    } else if terminal_command_eq(command, "reboot -h") == 1 || terminal_command_eq(command, "reboot --help") == 1 {
+        serial_write("usage: reboot\r\nrestart the virtual machine\r\n");
+    } else if terminal_command_eq(command, "halt -h") == 1 || terminal_command_eq(command, "halt --help") == 1 {
+        serial_write("usage: halt\r\nstop the virtual CPU\r\n");
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+fn terminal_main() -> i32 {
+    serial_write("\r\nMLang virtual terminal\r\n");
+    if fs_load() == 1 && fs_mount() == 1 {
+        serial_write("Mounted writable MFS2 at /.\r\n");
+    } else {
+        serial_write("MFS2 mount failed.\r\n");
+    }
+    serial_write("Type 'help' for available commands.\r\n\r\n");
+
+    while true {
+        serial_write("$ ");
+        let command: str8 = terminal_read_line();
+
+        let help_result: i32 = terminal_builtin_help(command);
+        if help_result != 1 && terminal_command_eq(command, "help") == 1 {
+            serial_write("help   show available commands\r\n");
+            serial_write("about  show kernel information\r\n");
+            serial_write("clear  clear the terminal\r\n");
+            serial_write("pwd    print working directory\r\n");
+            serial_write("whoami print the current user\r\n");
+            serial_write("su     switch user: su <root|user>\r\n");
+            serial_write("ls     list a directory: ls [-l] [path]\r\n");
+            serial_write("cd     change directory: cd <path>\r\n");
+            serial_write("cat    print a file: cat <path>\r\n");
+            serial_write("touch  create an empty file\r\n");
+            serial_write("chmod  change mode: chmod <mode> <path>\r\n");
+            serial_write("chown  change owner: chown <user> <path>\r\n");
+            serial_write("mkdir  create a directory: mkdir <path>\r\n");
+            serial_write("rm     remove a file or tree: rm [-f] [-r] <path>\r\n");
+            serial_write("echo   write text: echo [text]\r\n");
+            serial_write("cp     copy a file: cp <source> <destination>\r\n");
+            serial_write("mv     rename a file: mv <source> <destination>\r\n");
+            serial_write("wc     count text: wc <path>\r\n");
+            serial_write("ping   test IPv4 reachability: ping [-i seconds] <host>\r\n");
+            serial_write("vi     edit a text file: vi <path>\r\n");
+            serial_write("sync   flush MFS2 metadata to disk\r\n");
+            serial_write("reboot restart the virtual machine\r\n");
+            serial_write("halt   stop the virtual CPU\r\n");
+            serial_write("Use <command> -h or --help for command help.\r\n");
+        } else if terminal_command_eq(command, "about") == 1 {
+            serial_write("MLang 32-bit protected-mode kernel loaded by BIOS.\r\n");
+        } else if terminal_command_eq(command, "clear") == 1 {
+            serial_write("\x1b[2J\x1b[H");
+        } else if terminal_command_eq(command, "pwd") == 1 {
+            serial_write(fs_pwd());
+            serial_write("\r\n");
+        } else if terminal_command_eq(command, "whoami") == 1 {
+            serial_write(user_name(fs_current_uid()));
+            serial_write("\r\n");
+        } else if terminal_command_eq(command, "su") == 1 {
+            serial_write("usage: su <root|user>\r\n");
+        } else if terminal_command_prefix(command, "su ") == 1 {
+            let result: i32 = switch_user(terminal_argument(command, 3));
+            if result == -1 {
+                serial_write("su: unknown user\r\n");
+            } else if result == -2 {
+                serial_write("su: permission denied\r\n");
+            }
+        } else if terminal_command_eq(command, "cd") == 1 {
+            serial_write("usage: cd <directory>\r\n");
+        } else if terminal_command_prefix(command, "cd ") == 1 {
+            let result: i32 = change_directory(terminal_argument(command, 3));
+            if result == -1 {
+                serial_write("cd: directory not found\r\n");
+            } else if result == -2 {
+                serial_write("cd: permission denied\r\n");
+            }
+        } else if terminal_command_eq(command, "touch") == 1 {
+            serial_write("usage: touch <file>\r\n");
+        } else if terminal_command_prefix(command, "touch ") == 1 {
+            let result: i32 = touch_file(terminal_argument(command, 6));
+            if result == 0 {
+                serial_write("touch: file already exists\r\n");
+            } else if result == -1 {
+                serial_write("touch: parent directory not found\r\n");
+            } else if result == -2 {
+                serial_write("touch: filesystem directory is full\r\n");
+            } else if result == -3 {
+                serial_write("touch: created in memory but disk flush failed\r\n");
+            } else if result == -4 {
+                serial_write("touch: permission denied\r\n");
+            }
+        } else if terminal_command_eq(command, "sync") == 1 {
+            if fs_flush() == 1 {
+                serial_write("MFS2 synchronized to disk.\r\n");
+            } else {
+                serial_write("sync: ATA disk write failed\r\n");
+            }
+        } else if terminal_command_eq(command, "reboot") == 1 {
+            serial_write("Rebooting...\r\n");
+            terminal_reboot();
+        } else if terminal_command_eq(command, "halt") == 1 {
+            serial_write("CPU halted.\r\n");
+            terminal_halt();
+        } else if help_result != 1 && terminal_command_eq(command, "") != 1 {
+            if run_native_command(command) == -1 {
+                serial_write("Unknown command. Type 'help'.\r\n");
+            }
+        }
+    }
+
+    return 0;
+}
