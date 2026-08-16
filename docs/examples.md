@@ -18,6 +18,30 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 
 ## Example programs
 
+The feature-oriented index in [New Features Guide](new_features.md) covers
+language and standard-library examples that are not all repeated below. The
+following additional programs are useful runnable showcases:
+
+- `examples/argparser_demo.mla`, `examples/std_compiler_demo.mla` — argument
+  parsing and compiler-session API usage.
+- `examples/chat_tui_demo.mla`, `examples/minimal_vim_demo.mla`,
+  `examples/notepad_demo.mla`, and `examples/game_of_life.mla` — interactive
+  terminal applications built with `std::esc`, `std::term`, and related
+  modules.
+- `examples/std_algorithm_genetic_demo.mla` and
+  `examples/std_algorithm_genetic_esc_tsp_demo.mla` — direct genetic-algorithm
+  population helpers and an animated TSP application.
+- `examples/enum_backing_valid.mla`,
+  `examples/enum_backing_fail_u8_explicit.mla`, and
+  `examples/enum_backing_fail_u8_implicit.mla` — valid and diagnostic enum
+  backing-type cases.
+- `examples/update_expression.mla` — prefix/postfix `++` and `--` semantics.
+- `examples/closure_thread.mla` and `examples/closures_demo.mla` — closures
+  passed to worker threads and ordinary closure captures.
+- `examples/ffi_add.mla`, `examples/ffi_cos.mla`,
+  `examples/c_lib_usage.mla`, and `examples/c_type_mappings.mla` — C ABI and
+  type-mapping examples.
+
 ### Bare metal and QEMU
 
 - `examples/qemu_x86_bootloader` — two-stage x86 BIOS disk image whose MLang

@@ -36,7 +36,7 @@ fn main() -> i32 {
 
     // Fold-based reductions over computed lists.
     let weight_sum: i32 = (... + weights_for_sum);
-    let weight_product: i32 = (weights_for_product * ...);
+    let weight_product: i32 = (weights_for_product *...);
     let all_even: bool = (... * even_flags_i32) == 1;
     let any_big: bool = (... + big_flags_i32) > 0;
 
@@ -48,11 +48,11 @@ fn main() -> i32 {
     let empty_i32: list<i32> = [];
     let empty_bool: list<bool> = [];
     println!(
-        "empty_sum={} empty_mul={} empty_all={} empty_any={}",
-        (... + empty_i32),
-        (... * empty_i32),
-        (... && empty_bool),
-        (... || empty_bool)
+            "empty_sum={} empty_mul={} empty_all={} empty_any={}",
+            (... + empty_i32),
+            (... * empty_i32),
+            (... && empty_bool),
+            (... || empty_bool)
     );
 
     return 0;

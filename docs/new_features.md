@@ -19,6 +19,7 @@ focused `.mla` example was added under `examples/`.
 | Typed `var` zero initialization | Declare mutable typed storage with implicit zero initialization or explicit `{}` zero initialization; see [`examples/zero_init_demo.mla`](../examples/zero_init_demo.mla). Reference: [Language Syntax](language_syntax.md#typed-var-declarations-without-initializers). |
 | Type-name `.name` property | Read a value's static type name through `.name`, while real `name` fields still win; see [`examples/type_name_property_demo.mla`](../examples/type_name_property_demo.mla). Reference: [Language Syntax](language_syntax.md#type-name-property-name). |
 | Field brace initialization | Put defaults directly on struct fields and override nested fields with dotted paths; see [`examples/field_brace_init_demo.mla`](../examples/field_brace_init_demo.mla). |
+| Prefix and postfix update expressions | Use `++` and `--` in prefix or postfix form, including their value-result semantics; see [`examples/update_expression.mla`](../examples/update_expression.mla). |
 | Associated functions and method visibility | Define module-backed associated functions and visibility-scoped methods; see [`examples/associated_functions_demo/main.mla`](../examples/associated_functions_demo/main.mla) and [`examples/method_visibility_demo/main.mla`](../examples/method_visibility_demo/main.mla). |
 
 ## Control Flow and Expressions
@@ -30,6 +31,7 @@ focused `.mla` example was added under `examples/`.
 | `switch` / `case` | Use switch-style branching for integral and enum-like values; see [`examples/switch_demo.mla`](../examples/switch_demo.mla). Reference: [Language Syntax](language_syntax.md#switch--case). |
 | Ternary operator | Use `condition ? a : b` for expression-level selection; see [`examples/ternary_example.mla`](../examples/ternary_example.mla). |
 | `break` and `continue` | Control loop flow explicitly; see [`examples/break_continue.mla`](../examples/break_continue.mla). |
+| Block-pattern rendering | Use fixed arrays, nested loops, and indexed patterns for terminal rendering; see [`examples/block_pattern_demo.mla`](../examples/block_pattern_demo.mla). |
 | `for` loops and ranges | Iterate ranges and containers directly; see [`examples/for_loop_example.mla`](../examples/for_loop_example.mla). |
 | Pipe operator `|>` | Compose function calls left-to-right; see [`examples/pipe_operator_demo.mla`](../examples/pipe_operator_demo.mla). Reference: [Language Syntax](language_syntax.md#pipe_operator). |
 | Lambdas, closures, and folds | Use inline lambdas, captured state, and fold expressions over lists; see [`examples/lambda_fold_demo.mla`](../examples/lambda_fold_demo.mla), [`examples/lambda_fold_advanced.mla`](../examples/lambda_fold_advanced.mla), [`examples/lambda_fold_patterns.mla`](../examples/lambda_fold_patterns.mla), and [`examples/functional_closure_fold_demo.mla`](../examples/functional_closure_fold_demo.mla). Reference: [Language Syntax](language_syntax.md#lambda--fold-expressions). |
@@ -50,6 +52,7 @@ focused `.mla` example was added under `examples/`.
 | `bit` and `size_of` | Use packed bit fields and compile-time/runtime size queries; see [`examples/bit_packed_struct_demo.mla`](../examples/bit_packed_struct_demo.mla) and [`examples/bit_sizeof_demo.mla`](../examples/bit_sizeof_demo.mla). Reference: [Language Syntax](language_syntax.md#bit-and-size_of). |
 | Builder object syntax | Build structured nested objects with full `struct` clauses or compact `field` clauses; see [`examples/builder_object_json_demo.mla`](../examples/builder_object_json_demo.mla) and [`examples/builder_object_field_demo.mla`](../examples/builder_object_field_demo.mla). Reference: [Language Syntax](language_syntax.md#builder_syntax). |
 | `@property(...)` fields | Generate accessor methods and property metadata for fields, including hidden/protected behavior; see [`examples/property_fields_demo.mla`](../examples/property_fields_demo.mla). Reference: [Language Attributes](language_attributes.md#property). |
+| Explicit enum backing diagnostics | Reject out-of-range or invalid explicit backing declarations; see [`examples/enum_backing_fail_u8_explicit.mla`](../examples/enum_backing_fail_u8_explicit.mla) and [`examples/enum_backing_fail_u8_implicit.mla`](../examples/enum_backing_fail_u8_implicit.mla). Reference: [Compiler Diagnostics](compiler_diagnostics.md). |
 
 ## Safety, Ownership, and Low-Level Control
 
@@ -101,6 +104,7 @@ focused `.mla` example was added under `examples/`.
 | Multilanguage package builds | Build packages that combine MLang with C/C++ sources and native linker settings; see [`examples/package_manager_multilanguage_example`](../examples/package_manager_multilanguage_example), [`examples/package_manager_static_cjson`](../examples/package_manager_static_cjson), [`examples/package_manager_git_cjson`](../examples/package_manager_git_cjson), and [`examples/package_manager_oscilloscope_demo`](../examples/package_manager_oscilloscope_demo). |
 | Cross/architecture package examples | Configure architecture-specific package builds and native SDK demos; see [`examples/package_manager_linux_aarch64_qemu`](../examples/package_manager_linux_aarch64_qemu), [`examples/package_manager_vst3_sdk_example`](../examples/package_manager_vst3_sdk_example), and [`examples/package_manager_vst3_coreaudio_synth`](../examples/package_manager_vst3_coreaudio_synth). |
 | Compiler API and LSP workflows | Query compiler/editor services and validate LSP behavior through transcript tests; see [`examples/std_compiler_demo.mla`](../examples/std_compiler_demo.mla), [`tests/lsp_mlangd-mla_hover_transcript.py`](../tests/lsp_mlangd-mla_hover_transcript.py), [`tests/lsp_mlangd-mla_completion_docs_transcript.py`](../tests/lsp_mlangd-mla_completion_docs_transcript.py), and [`tests/lsp_mlangd-mla_rename_transcript.py`](../tests/lsp_mlangd-mla_rename_transcript.py). Reference: [Stdlib Module API](stdlib/std_compiler.md). |
+| Interactive terminal applications | Build full-screen chat, editor, and cellular-automaton applications with the terminal/ESC stack; see [`examples/chat_tui_demo.mla`](../examples/chat_tui_demo.mla), [`examples/minimal_vim_demo.mla`](../examples/minimal_vim_demo.mla), [`examples/notepad_demo.mla`](../examples/notepad_demo.mla), and [`examples/game_of_life.mla`](../examples/game_of_life.mla). |
 
 ## See Also
 
