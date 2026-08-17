@@ -156,3 +156,11 @@ Pass a file with `--audio-path PATH`, or with `--option audio_path=PATH` when
 using the package task. Input paths beginning with `~/` are expanded by
 `std::audio`. Use `--list-devices` to enumerate CoreAudio output ids and
 `--device ID` to select one. Device `-1` uses the current system default.
+
+## Ladder synth sequence
+
+[`examples/package_manager_moog_ladder_sequence`](../../examples/package_manager_moog_ladder_sequence)
+generates an alternating square/saw bass sequence. It applies an amplitude
+ADSR and a separate per-note filter ADSR, then moves the filter envelope depth
+with a continuous 16-step triangle sweep. Both 12 and 24 dB ladder modes are
+available from the command line, with compensated bass enabled.
