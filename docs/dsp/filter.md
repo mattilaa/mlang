@@ -36,9 +36,9 @@ let output: f32 = filter.process(input);
 
 ## Moog-style ladder filter
 
-`MoogLadder` is a topology-preserving four-stage low-pass ladder with a
-zero-delay resonance feedback path. The second and fourth stage outputs give
-12 dB/octave and 24 dB/octave responses from the same API:
+`MoogLadder` is a topology-preserving low-pass ladder with a zero-delay
+resonance feedback path. The 12 dB mode closes feedback around two stages; the
+24 dB mode closes feedback around all four stages:
 
 ```mla
 use dsp::filter::MoogLadder;
@@ -51,6 +51,13 @@ let output24: f32 = ladder.process_24db(input);
 Call `process_12db` instead for the two-pole output. Use separate instances if
 both slopes are needed for the same input stream, because each call advances
 the ladder state by one sample.
+
+The ladder defaults to full resonance-dependent bass compensation, keeping
+the low passband near unity gain as resonance rises. This gives the filter the
+deeper weight expected from musical Moog-style emulations. Use
+`set_bass_compensation(0.0f)` for the uncompensated ladder response, which
+loses low-frequency level as resonance increases, or a value between `0` and
+`1` to blend between the two responses.
 
 `set_lowpass` preserves the four integrator states, so cutoff and resonance may
 be changed for every sample by a `LinearRamp` without zipper noise. Resonance

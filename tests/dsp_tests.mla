@@ -202,6 +202,25 @@ fn test_dsp_moog_ladder_12db_and_24db_dc() {
     }
     verify(approx_f32(output12, 1.0f, 0.002f));
     verify(approx_f32(output24, 1.0f, 0.002f));
+    verify(approx_f32(ladder12.state_3(), 0.0f, 0.000001f));
+    verify(approx_f32(ladder12.state_4(), 0.0f, 0.000001f));
+}
+
+#[test]
+fn test_dsp_moog_ladder_bass_compensation() {
+    var deep: MoogLadder = MoogLadder::new();
+    deep.set_lowpass(1000.0f, 30.0f, 48000.0f);
+    var uncompensated: MoogLadder = MoogLadder::new();
+    uncompensated.set_bass_compensation(0.0f);
+    uncompensated.set_lowpass(1000.0f, 30.0f, 48000.0f);
+    var deep_output: f32 = 0.0f;
+    var thin_output: f32 = 0.0f;
+    for i in 0..16384 {
+        deep_output = deep.process_24db(1.0f);
+        thin_output = uncompensated.process_24db(1.0f);
+    }
+    verify(approx_f32(deep_output, 1.0f, 0.01f));
+    verify(deep_output > thin_output * 3.0f);
 }
 
 #[test]
