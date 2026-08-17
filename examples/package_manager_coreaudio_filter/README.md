@@ -38,7 +38,7 @@ Run the requested AIFF configuration:
 
 ```sh
 ../../build/mlang pkg run demo \
-  --option filter=lowpass24 \
+  --option filter=moog24 \
   --option interpolation=hermite \
   --option playback_rate=1 \
   --option audio_path=~/Desktop/1995-Short.aif
@@ -55,8 +55,9 @@ Other examples:
   --option audio_path=/path/to/input.wav
 ```
 
-Supported filters are `lowpass12`, `lowpass24`, `highpass12`, `highpass24`,
-`bandpass12`, and `bandpass24`. Supported interpolation modes are `nearest`,
+Supported filters are the Moog-style ladder modes `moog12` and `moog24`, plus
+`lowpass12`, `lowpass24`, `highpass12`, `highpass24`, `bandpass12`, and
+`bandpass24`. (`ladder12` and `ladder24` are aliases.) Supported interpolation modes are `nearest`,
 `linear`, `hermite`, `cubic`, and `bicubic`. For a one-dimensional waveform,
 `cubic` and `bicubic` use the same four-point Hermite/Catmull-Rom polynomial.
 
@@ -88,7 +89,7 @@ After building, the executable can also be invoked directly:
 ./build/coreaudio_filter_sweeps_mlang --help
 ./build/coreaudio_filter_sweeps_mlang --list-devices
 ./build/coreaudio_filter_sweeps_mlang \
-  --filter highpass24 \
+  --filter moog24 \
   --interpolation hermite \
   --playback-rate 1 \
   --audio-path /path/to/input.aif

@@ -14,6 +14,7 @@ use dsp::filter::Bandpass24;
 use dsp::filter::Highpass24;
 use dsp::filter::LinearRamp;
 use dsp::filter::Lowpass24;
+use dsp::filter::MoogLadder;
 use dsp::filter::SmoothedLowpass;
 use dsp::filter::cubic_interpolate_f32;
 use dsp::filter::bicubic_interpolate_f32;
@@ -185,6 +186,38 @@ fn test_dsp_24db_filter_dc_responses() {
     verify(approx_f32(low_output, 1.0f, 0.002f));
     verify(approx_f32(high_output, 0.0f, 0.002f));
     verify(approx_f32(band_output, 0.0f, 0.002f));
+}
+
+#[test]
+fn test_dsp_moog_ladder_12db_and_24db_dc() {
+    var ladder12: MoogLadder = MoogLadder::new();
+    ladder12.set_lowpass(1000.0f, 0.0f, 48000.0f);
+    var output12: f32 = 0.0f;
+    var ladder24: MoogLadder = MoogLadder::new();
+    ladder24.set_lowpass(1000.0f, 0.0f, 48000.0f);
+    var output24: f32 = 0.0f;
+    for i in 0..8192 {
+        output12 = ladder12.process_12db(1.0f);
+        output24 = ladder24.process_24db(1.0f);
+    }
+    verify(approx_f32(output12, 1.0f, 0.002f));
+    verify(approx_f32(output24, 1.0f, 0.002f));
+}
+
+#[test]
+fn test_dsp_moog_ladder_resonant_sweep_stays_finite() {
+    var ladder: MoogLadder = MoogLadder::new();
+    var cutoff: LinearRamp = LinearRamp::new(80.0f);
+    cutoff.set_target(16000.0f, 48000);
+    var energy: f32 = 0.0f;
+    for i in 0..48000 {
+        ladder.set_lowpass(cutoff.next(), 30.0f, 48000.0f);
+        let input: f32 = i == 0 ? 1.0f : 0.0f;
+        let output: f32 = ladder.process_24db(input);
+        verify(output == output);
+        energy = energy + output * output;
+    }
+    verify(energy > 0.000001f);
 }
 
 #[test]

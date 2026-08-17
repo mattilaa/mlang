@@ -34,6 +34,28 @@ filter.set_lowpass(1200.0f, 6.0f, 48000.0f);
 let output: f32 = filter.process(input);
 ```
 
+## Moog-style ladder filter
+
+`MoogLadder` is a topology-preserving four-stage low-pass ladder with a
+zero-delay resonance feedback path. The second and fourth stage outputs give
+12 dB/octave and 24 dB/octave responses from the same API:
+
+```mla
+use dsp::filter::MoogLadder;
+
+var ladder: MoogLadder = MoogLadder::new();
+ladder.set_lowpass(1200.0f, 12.0f, 48000.0f);
+let output24: f32 = ladder.process_24db(input);
+```
+
+Call `process_12db` instead for the two-pole output. Use separate instances if
+both slopes are needed for the same input stream, because each call advances
+the ladder state by one sample.
+
+`set_lowpass` preserves the four integrator states, so cutoff and resonance may
+be changed for every sample by a `LinearRamp` without zipper noise. Resonance
+uses `0 .. 36 dB`; the upper endpoint approaches the self-oscillation boundary.
+
 ## 24 dB filters
 
 The fourth-order filters cascade two biquads. Low-pass and high-pass use the
@@ -99,9 +121,9 @@ two-dimensional DSP parameter tables.
 
 [`examples/package_manager_coreaudio_filter`](../../examples/package_manager_coreaudio_filter)
 loads `examples/fft_example/illusion.wav` and runs 12 or 24 dB/octave cutoff
-sweeps. Select `lowpass12`, `highpass12`, `bandpass12`, `lowpass24`,
-`highpass24`, or `bandpass24` with `--filter`. The shorter names remain aliases
-for the 24 dB modes. The processor keeps filter history across sweep sections
+sweeps. Select `moog12`, `moog24`, `lowpass12`, `highpass12`, `bandpass12`, `lowpass24`,
+`highpass24`, or `bandpass24` with `--filter`; `ladder12` and `ladder24` are
+aliases for the Moog-style modes. The processor keeps filter history across sweep sections
 and crossfades from the dry reference to filtered output to avoid transition
 clicks. All file decoding and buffer allocation happens before the CoreAudio
 callback starts.
@@ -123,9 +145,7 @@ does not introduce a sudden coefficient change. Values above the default can
 produce strong peaks and require additional gain reduction.
 
 Input may be mono or stereo 16-bit PCM WAV, AIFF, or uncompressed AIFF-C.
-Use `--validate PATH` to check decoding without opening an audio device.
-Input paths beginning with `~/` are expanded by the binary, including paths
-provided through the package task's `audio_path` option.
-Use `--list-devices` to enumerate CoreAudio outputs and
-`--output-device NAME_OR_UID` to select one. If no output is specified, the
-current system default is used.
+Pass a file with `--audio-path PATH`, or with `--option audio_path=PATH` when
+using the package task. Input paths beginning with `~/` are expanded by
+`std::audio`. Use `--list-devices` to enumerate CoreAudio output ids and
+`--device ID` to select one. Device `-1` uses the current system default.

@@ -5,6 +5,7 @@
 mod dsp::filter;
 
 use dsp::filter::Biquad;
+use dsp::filter::MoogLadder;
 use dsp::filter::hermite_interpolate_f32;
 use dsp::filter::linear_interpolate_f32;
 use dsp::filter::nearest_interpolate_f32;
@@ -42,6 +43,14 @@ var g_right_stage2_x1: f32 = 0.0f;
 var g_right_stage2_x2: f32 = 0.0f;
 var g_right_stage2_y1: f32 = 0.0f;
 var g_right_stage2_y2: f32 = 0.0f;
+var g_left_ladder1: f32 = 0.0f;
+var g_left_ladder2: f32 = 0.0f;
+var g_left_ladder3: f32 = 0.0f;
+var g_left_ladder4: f32 = 0.0f;
+var g_right_ladder1: f32 = 0.0f;
+var g_right_ladder2: f32 = 0.0f;
+var g_right_ladder3: f32 = 0.0f;
+var g_right_ladder4: f32 = 0.0f;
 
 pub fn mlang_dsp_interpolate_nearest(x0: f32, x1: f32, fraction: f32) -> f32 {
     return nearest_interpolate_f32(x0, x1, fraction);
@@ -106,6 +115,14 @@ pub fn mlang_dsp_filter_reset(filter_mode: i32, sample_rate_hz: f32, cutoff_hz: 
     g_right_stage2_x2 = 0.0f;
     g_right_stage2_y1 = 0.0f;
     g_right_stage2_y2 = 0.0f;
+    g_left_ladder1 = 0.0f;
+    g_left_ladder2 = 0.0f;
+    g_left_ladder3 = 0.0f;
+    g_left_ladder4 = 0.0f;
+    g_right_ladder1 = 0.0f;
+    g_right_ladder2 = 0.0f;
+    g_right_ladder3 = 0.0f;
+    g_right_ladder4 = 0.0f;
 }
 
 pub fn mlang_dsp_filter_set_target(cutoff_hz: f32, resonance_db: f32, ramp_samples: i64) {
@@ -160,6 +177,17 @@ pub fn mlang_dsp_filter_begin_frame() {
 }
 
 pub fn mlang_dsp_filter_process_left(input: f32) -> f32 {
+    if g_filter_mode == 7 || g_filter_mode == 8 {
+        var ladder: MoogLadder = MoogLadder::new();
+        ladder.restore_state(g_left_ladder1, g_left_ladder2, g_left_ladder3, g_left_ladder4);
+        ladder.set_lowpass(g_cutoff_hz, g_resonance_db, g_sample_rate_hz);
+        let wet: f32 = g_filter_mode == 7 ? ladder.process_12db(input) : ladder.process_24db(input);
+        g_left_ladder1 = ladder.state_1();
+        g_left_ladder2 = ladder.state_2();
+        g_left_ladder3 = ladder.state_3();
+        g_left_ladder4 = ladder.state_4();
+        return input + (wet - input) * g_wet_mix;
+    }
     var stage1: Biquad = Biquad::new();
     var stage2: Biquad = Biquad::new();
     let is_12_db: bool = g_filter_mode >= 4;
@@ -200,6 +228,17 @@ pub fn mlang_dsp_filter_process_left(input: f32) -> f32 {
 }
 
 pub fn mlang_dsp_filter_process_right(input: f32) -> f32 {
+    if g_filter_mode == 7 || g_filter_mode == 8 {
+        var ladder: MoogLadder = MoogLadder::new();
+        ladder.restore_state(g_right_ladder1, g_right_ladder2, g_right_ladder3, g_right_ladder4);
+        ladder.set_lowpass(g_cutoff_hz, g_resonance_db, g_sample_rate_hz);
+        let wet: f32 = g_filter_mode == 7 ? ladder.process_12db(input) : ladder.process_24db(input);
+        g_right_ladder1 = ladder.state_1();
+        g_right_ladder2 = ladder.state_2();
+        g_right_ladder3 = ladder.state_3();
+        g_right_ladder4 = ladder.state_4();
+        return input + (wet - input) * g_wet_mix;
+    }
     var stage1: Biquad = Biquad::new();
     var stage2: Biquad = Biquad::new();
     let is_12_db: bool = g_filter_mode >= 4;
