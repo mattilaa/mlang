@@ -3,5 +3,7 @@
 
 extern pub fn sinf(value: f32) -> f32;
 extern pub fn cosf(value: f32) -> f32;
+extern pub fn tanf(value: f32) -> f32;
+extern pub fn tanhf(value: f32) -> f32;
 extern pub fn expf(value: f32) -> f32;
 extern pub fn llroundf(value: f32) -> i64;

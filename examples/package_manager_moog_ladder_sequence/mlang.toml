@@ -1,0 +1,79 @@
+[package]
+name = "moog_ladder_sequence"
+version = "0.1.0"
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+module_paths = ["../../modules"]
+
+[tool.mlang.options]
+audio_output = ""
+variant = "deep"
+bpm = "112"
+duration = "24"
+slope = "24"
+resonance_db = "18"
+cutoff_low = "55"
+cutoff_high = "6500"
+attack_ms = "8"
+decay_ms = "65"
+sustain = "0.58"
+release_ms = "75"
+distortion_drive_db = "-1"
+
+[[task]]
+name = "toolchain-check"
+commands = [
+  "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler first.; exit 1; fi'",
+  "sh -c 'if ! command -v c++ >/dev/null 2>&1; then echo Missing required linker driver: c++; exit 1; fi'"
+]
+
+[[task]]
+name = "prepare"
+depends_on = ["toolchain-check"]
+commands = ["mkdir -p {{build_dir}}/obj"]
+
+[[task]]
+name = "compile"
+phase = "compile"
+depends_on = ["prepare"]
+language = "mlang"
+source = "src/main.mla"
+output = "{{build_dir}}/obj/main.o"
+compile_only = true
+opt_level = "O2"
+
+[[task]]
+name = "link"
+phase = "build"
+depends_on = ["compile"]
+language = "c++"
+output = "{{build_dir}}/moog_ladder_sequence"
+inputs = ["{{build_dir}}/obj/main.o"]
+lib_paths = ["../../build"]
+libs = ["mlang_std"]
+
+[task.host.darwin]
+linker_flags = [
+  "-framework CoreAudio",
+  "-framework AudioToolbox",
+  "-framework CoreFoundation"
+]
+
+[task.host.linux]
+libs = ["m", "dl"]
+
+[[task]]
+name = "demo"
+depends_on = ["link"]
+log_output = false
+shell = [
+  "audio_output='{{option.audio_output}}'; set -- --variant '{{option.variant}}' --bpm '{{option.bpm}}' --duration '{{option.duration}}' --slope '{{option.slope}}' --resonance-db '{{option.resonance_db}}' --cutoff-low '{{option.cutoff_low}}' --cutoff-high '{{option.cutoff_high}}' --attack-ms '{{option.attack_ms}}' --decay-ms '{{option.decay_ms}}' --sustain '{{option.sustain}}' --release-ms '{{option.release_ms}}' --distortion-drive-db '{{option.distortion_drive_db}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/moog_ladder_sequence \"$@\""
+]
+
+[[task]]
+name = "list-devices"
+depends_on = ["link"]
+log_output = false
+shell = ["exec {{build_dir}}/moog_ladder_sequence --list-devices"]

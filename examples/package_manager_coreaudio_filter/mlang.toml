@@ -10,7 +10,7 @@ module_paths = ["../../modules"]
 [tool.mlang.options]
 audio_path = "../../examples/fft_example/illusion.wav"
 audio_output = ""
-filter = "lowpass24"
+filter = "moog24"
 max_resonance_db = "12"
 interpolation = "hermite"
 playback_rate = "1"

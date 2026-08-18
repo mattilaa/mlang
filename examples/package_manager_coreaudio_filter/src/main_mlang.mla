@@ -38,6 +38,8 @@ fn filter_mode(name: str8) -> i32 {
     if eq(name, "lowpass12") == 1 { return 4; }
     if eq(name, "highpass12") == 1 { return 5; }
     if eq(name, "bandpass12") == 1 { return 6; }
+    if eq(name, "moog12") == 1 || eq(name, "ladder12") == 1 { return 7; }
+    if eq(name, "moog24") == 1 || eq(name, "ladder24") == 1 { return 8; }
     return 0;
 }
 
@@ -138,7 +140,7 @@ fn start_device(dev: AudioDevice) -> bool {
 
 fn main(argc: i32, args: list<str8>) -> i32 {
     var ap: ArgParser = ArgParser::new("coreaudio_filter_sweeps_mlang", "MLang realtime dsp::filter sweeps through std::audio.");
-    ap.option("filter", "f", "lowpass12/24, highpass12/24, or bandpass12/24", "lowpass24");
+    ap.option("filter", "f", "moog12/24, lowpass12/24, highpass12/24, or bandpass12/24", "moog24");
     ap.option("max-resonance-db", "q", "Maximum ramped resonance peak from 0 to 36 dB", "12");
     ap.option("interpolation", "i", "nearest, linear, hermite, cubic, or bicubic", "hermite");
     ap.option("playback-rate", "r", "Fractional source playback rate from 0.25 to 4", "1");

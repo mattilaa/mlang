@@ -1,0 +1,107 @@
+/// \file distortion.mla
+/// \brief Allocation-free analog-style saturation for realtime audio.
+///
+/// @defgroup dsp_distortion dsp::distortion
+/// @ingroup dsp
+/// @brief Asymmetric soft clipping, coupling-capacitor DC blocking, and tone filtering.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+use dsp::detail::expf;
+use dsp::detail::tanf;
+use dsp::detail::tanhf;
+/// \endcond
+
+fn clamp_distortion_f32(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+/// @brief Analog-style asymmetric soft-clipping distortion.
+///
+/// The signal passes through a biased hyperbolic-tangent transfer curve, a
+/// one-pole tone filter, and a coupling-capacitor-style DC blocker. Parameter
+/// setters allocate nothing and retain processing history.
+pub struct AnalogDistortion {
+    var drive_gain: f32;
+    var bias: f32;
+    var mix: f32;
+    var output_gain: f32;
+    var tone_coefficient: f32;
+    var tone_state: f32;
+    var dc_input_1: f32;
+    var dc_output_1: f32;
+};
+
+impl AnalogDistortion {
+    /// @brief Create a distortion with unity drive and a 12 kHz tone filter.
+    pub fn new(sample_rate_hz: f32) -> AnalogDistortion {
+        var distortion: AnalogDistortion = AnalogDistortion {
+            drive_gain: 1.0f,
+            bias: 0.0f,
+            mix: 1.0f,
+            output_gain: 1.0f,
+            tone_coefficient: 0.0f,
+            tone_state: 0.0f,
+            dc_input_1: 0.0f,
+            dc_output_1: 0.0f
+        };
+        distortion.set_tone_hz(12000.0f, sample_rate_hz);
+        return distortion;
+    }
+
+    /// @brief Set pre-saturation gain from 0 to 36 dB.
+    pub fn set_drive_db(self: &mut Self, drive_db: f32) -> void {
+        let db: f32 = clamp_distortion_f32(drive_db, 0.0f, 36.0f);
+        self.drive_gain = expf(0.11512925464970228420f * db);
+    }
+
+    /// @brief Set transfer-curve asymmetry from -0.5 to +0.5.
+    pub fn set_bias(self: &mut Self, bias: f32) -> void {
+        self.bias = clamp_distortion_f32(bias, -0.5f, 0.5f);
+    }
+
+    /// @brief Set dry/wet blend from 0 to 1.
+    pub fn set_mix(self: &mut Self, mix: f32) -> void {
+        self.mix = clamp_distortion_f32(mix, 0.0f, 1.0f);
+    }
+
+    /// @brief Set post-effect output gain from -24 to +12 dB.
+    pub fn set_output_gain_db(self: &mut Self, output_db: f32) -> void {
+        let db: f32 = clamp_distortion_f32(output_db, -24.0f, 12.0f);
+        self.output_gain = expf(0.11512925464970228420f * db);
+    }
+
+    /// @brief Set the one-pole tone cutoff without clearing its history.
+    pub fn set_tone_hz(self: &mut Self, cutoff_hz: f32, sample_rate_hz: f32) -> void {
+        let safe_rate: f32 = sample_rate_hz < 1000.0f ? 1000.0f : sample_rate_hz;
+        let cutoff: f32 = clamp_distortion_f32(cutoff_hz, 20.0f, safe_rate * 0.495f);
+        let g: f32 = tanf(3.14159265358979323846f * cutoff / safe_rate);
+        self.tone_coefficient = g / (1.0f + g);
+    }
+
+    /// @brief Clear tone and DC-blocker history without changing parameters.
+    pub fn reset(self: &mut Self) -> void {
+        self.tone_state = 0.0f;
+        self.dc_input_1 = 0.0f;
+        self.dc_output_1 = 0.0f;
+    }
+
+    /// @brief Process one sample without allocating or locking.
+    pub fn process(self: &mut Self, input: f32) -> f32 {
+        let bias_offset: f32 = tanhf(self.bias);
+        let saturated: f32 = tanhf(input * self.drive_gain + self.bias) - bias_offset;
+        let tone: f32 = self.tone_coefficient * saturated +
+            (1.0f - self.tone_coefficient) * self.tone_state;
+        self.tone_state = 2.0f * tone - self.tone_state;
+        let dc_blocked: f32 = tone - self.dc_input_1 + 0.995f * self.dc_output_1;
+        self.dc_input_1 = tone;
+        self.dc_output_1 = dc_blocked;
+        let wet: f32 = dc_blocked * self.output_gain;
+        return input + (wet - input) * self.mix;
+    }
+}
+
+/// @}

@@ -1,0 +1,356 @@
+/// \file main.mla
+/// \ingroup examples
+/// \brief Square/saw sequence with ADSR envelopes and deep Moog ladder sweeps.
+
+mod dsp::filter;
+mod dsp::distortion;
+mod std::argparser;
+mod std::audio;
+mod std::strbuf;
+mod std::time;
+
+use dsp::distortion::AnalogDistortion;
+use dsp::filter::MoogLadder;
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::audio::AudioDevice;
+use std::audio::PcmBlock;
+use std::audio::backend_name;
+use std::audio::default_output_device_id;
+use std::audio::device_count;
+use std::audio::device_name;
+use std::strbuf::eq;
+use std::time::sleep_ms;
+
+extern fn atof(value: str8) -> f64;
+
+fn clamp_f32(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+fn attack_decay_level(frame: i64, attack_frames: i64,
+                      decay_frames: i64, sustain: f32) -> f32 {
+    if attack_frames > 0 && frame < attack_frames {
+        return f32(frame) / f32(attack_frames);
+    }
+    if decay_frames > 0 && frame < attack_frames + decay_frames {
+        let position: f32 = f32(frame - attack_frames) / f32(decay_frames);
+        return 1.0f + (sustain - 1.0f) * position;
+    }
+    return sustain;
+}
+
+/// Return one ADSR sample. Release starts from the exact level at gate-off.
+fn adsr(frame: i64, attack_frames: i64, decay_frames: i64, sustain: f32,
+        gate_frames: i64, release_frames: i64) -> f32 {
+    if frame < gate_frames {
+        return attack_decay_level(frame, attack_frames, decay_frames, sustain);
+    }
+    if release_frames <= 0 || frame >= gate_frames + release_frames {
+        return 0.0f;
+    }
+    let gate_level: f32 = attack_decay_level(
+        gate_frames, attack_frames, decay_frames, sustain);
+    let release_position: f32 = f32(frame - gate_frames) / f32(release_frames);
+    return gate_level * (1.0f - release_position);
+}
+
+fn triangle(position: i64, length: i64) -> f32 {
+    if length <= 1 { return 0.0f; }
+    let half: i64 = length / 2;
+    if position < half {
+        return f32(position) / f32(half);
+    }
+    return f32(length - position) / f32(length - half);
+}
+
+fn print_devices() -> void {
+    let count: i64 = device_count();
+    let default_id: i64 = default_output_device_id();
+    println!("output devices: count={} default_id={}", count, default_id);
+    var id: i64 = 0;
+    while id < count {
+        println!("  [{}] {}", id, device_name(id));
+        id = id + 1;
+    }
+}
+
+fn start_device(device: AudioDevice) -> bool {
+    let result: result<i32, str8> = device.start();
+    if result.is_err() {
+        println!("audio start failed: {}", result.unwrap_err());
+        return false;
+    }
+    return true;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new(
+        "moog_ladder_sequence",
+        "Play deep ladder sweeps or an original TB-303-style acid sequence."
+    );
+    ap.option("variant", "v", "Sequence voice: deep or tb303", "deep");
+    ap.option("bpm", "b", "Sequence tempo", "112");
+    ap.option("duration", "t", "Playback duration in seconds", "24");
+    ap.option("slope", "s", "Ladder slope: 12, 18, or 24 dB/octave (tb303 forces 18)", "24");
+    ap.option("resonance-db", "q", "Ladder resonance from 0 to 36 dB", "18");
+    ap.option("cutoff-low", "l", "Bottom of the deep cutoff sweep in Hz", "55");
+    ap.option("cutoff-high", "x", "Top of the cutoff sweep in Hz", "6500");
+    ap.option("attack-ms", "a", "Amplitude ADSR attack in milliseconds", "8");
+    ap.option("decay-ms", "c", "Amplitude ADSR decay in milliseconds", "65");
+    ap.option("sustain", "u", "Amplitude ADSR sustain level from 0 to 1", "0.58");
+    ap.option("release-ms", "r", "Amplitude ADSR release in milliseconds", "75");
+    ap.option("distortion-drive-db", "g", "Analog distortion drive: 0..36 dB; -1 uses variant default", "-1");
+    ap.option("device", "d", "Output device id; -1 uses the default", "-1");
+    ap.flag("list-devices", "L", "List output device ids and exit");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        println!("Error: {}", parsed.error());
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 2;
+    }
+    if parsed.flag("list-devices") {
+        print_devices();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+
+    let variant: str8 = parsed.get("variant");
+    let is_tb303: bool = eq(variant, "tb303") == 1;
+    let is_deep: bool = eq(variant, "deep") == 1;
+    let bpm: i64 = parsed.get_i64("bpm");
+    let duration_seconds: i64 = parsed.get_i64("duration");
+    let slope: i64 = parsed.get_i64("slope");
+    let resonance_db: f32 = f32(atof(parsed.get("resonance-db")));
+    let cutoff_low: f32 = f32(atof(parsed.get("cutoff-low")));
+    let cutoff_high: f32 = f32(atof(parsed.get("cutoff-high")));
+    let attack_ms: i64 = parsed.get_i64("attack-ms");
+    let decay_ms: i64 = parsed.get_i64("decay-ms");
+    let sustain: f32 = f32(atof(parsed.get("sustain")));
+    let release_ms: i64 = parsed.get_i64("release-ms");
+    let requested_distortion_db: f32 = f32(atof(parsed.get("distortion-drive-db")));
+    let requested_device: i64 = parsed.get_i64("device");
+    if (!is_tb303 && !is_deep) || bpm <= 0 || duration_seconds <= 0 ||
+       (slope != 12 && slope != 18 && slope != 24) ||
+       resonance_db < 0.0f || resonance_db > 36.0f || cutoff_low < 20.0f ||
+       cutoff_high <= cutoff_low || sustain < 0.0f || sustain > 1.0f ||
+       attack_ms < 0 || decay_ms < 0 || release_ms < 0 ||
+       requested_distortion_db < -1.0f || requested_distortion_db > 36.0f {
+        println!("invalid variant, tempo, duration, slope, cutoff, resonance, ADSR, or distortion option");
+        parsed.free();
+        ap.free();
+        return 2;
+    }
+
+    let device_r: result<AudioDevice, str8> = requested_device >= 0
+        ? AudioDevice::open_with_config(requested_device, "mlang_moog_sequence", 48000, 512)
+        : AudioDevice::open_default_with_config("mlang_moog_sequence", 48000, 512);
+    if device_r.is_err() {
+        println!("audio open failed: {}", device_r.unwrap_err());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let device: AudioDevice = device_r.unwrap();
+    let sample_rate: i64 = device.sample_rate();
+    let buffer_frames: i64 = device.buffer_frames();
+    let total_frames: i64 = sample_rate * duration_seconds;
+    // The deep voice uses eighth notes; the acid voice uses a 16-step sixteenth-note pattern.
+    let step_frames: i64 = is_tb303 ? sample_rate * 15 / bpm : sample_rate * 30 / bpm;
+    let gate_frames: i64 = step_frames * 3 / 4;
+    let attack_frames: i64 = sample_rate * attack_ms / 1000;
+    let decay_frames: i64 = sample_rate * decay_ms / 1000;
+    let release_requested: i64 = sample_rate * release_ms / 1000;
+    let release_available: i64 = step_frames - gate_frames;
+    let release_frames: i64 = release_requested < release_available ? release_requested : release_available;
+    // The cutoff envelope is deliberately punchier and deeper than the amp ADSR.
+    let filter_attack_frames: i64 = sample_rate / 200;
+    let filter_decay_frames: i64 = step_frames * 2 / 3;
+    let sweep_frames: i64 = step_frames * 16;
+    let notes: list<f32> = [55.0f, 65.406f, 73.416f, 82.407f,
+                            97.999f, 82.407f, 73.416f, 65.406f];
+    // Original acid pattern: pitches, rests, accents, and outgoing slides.
+    // It evokes early acid sequencing without transcribing an existing track.
+    let acid_notes: list<f32> = [
+        73.416f, 73.416f, 110.0f, 87.307f, 97.999f, 146.832f, 110.0f, 87.307f,
+        73.416f, 97.999f, 130.813f, 87.307f, 110.0f, 82.407f, 97.999f, 146.832f
+    ];
+    let acid_gates: list<i64> = [1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1];
+    let acid_accents: list<i64> = [1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1];
+    let acid_slides: list<i64> = [0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0];
+
+    let block_r: result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
+    if block_r.is_err() {
+        println!("PCM block allocation failed: {}", block_r.unwrap_err());
+        device.close();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let block: PcmBlock = block_r.unwrap();
+    var ladder: MoogLadder = MoogLadder::new();
+    // The acid voice retains some resonance-related bass loss; the deep voice
+    // keeps the full modern compensation requested by the original demo.
+    let bass_compensation: f32 = is_tb303 ? 0.55f : 1.0f;
+    ladder.set_bass_compensation(bass_compensation);
+    let effective_slope: i64 = is_tb303 ? 18 : slope;
+    let distortion_db: f32 = requested_distortion_db < 0.0f
+        ? (is_tb303 ? 14.0f : 0.0f)
+        : requested_distortion_db;
+    var distortion: AnalogDistortion = AnalogDistortion::new(f32(sample_rate));
+    distortion.set_drive_db(distortion_db);
+    distortion.set_bias(is_tb303 ? 0.14f : 0.05f);
+    distortion.set_tone_hz(is_tb303 ? 5200.0f : 9000.0f, f32(sample_rate));
+    distortion.set_output_gain_db(is_tb303 ? -7.0f : -3.0f);
+    distortion.set_mix(distortion_db > 0.0f ? 1.0f : 0.0f);
+
+    println!("MLang ladder sequence: {} variant", variant);
+    println!("backend: {}; output: {} Hz, {} frame buffer", backend_name(), sample_rate, buffer_frames);
+    println!("pattern: {}", is_tb303
+        ? "original 16-step acid line with rests, accents, and slides"
+        : "square / saw alternating eighth notes");
+    println!("tempo: {} BPM", bpm);
+    println!("filter: {} dB/octave, resonance={} dB, bass compensation={}",
+        effective_slope, resonance_db, bass_compensation);
+    println!("cutoff: {}..{} Hz, continuous phrase ramp + per-note filter ADSR", cutoff_low, cutoff_high);
+    println!("amp ADSR: A={} ms D={} ms S={} R={} ms", attack_ms, decay_ms, sustain, release_ms);
+    println!("analog distortion: drive={} dB", distortion_db);
+
+    var rendered: i64 = 0;
+    var phase: f32 = 0.0f;
+    var started: bool = false;
+    while rendered < total_frames {
+        if device.pcm_queued_frames() >= buffer_frames * 4 ||
+           device.pcm_available_frames() < buffer_frames {
+            sleep_ms(1);
+            continue;
+        }
+        var frame: i64 = 0;
+        while frame < buffer_frames {
+            if rendered < total_frames {
+                let sequence_step: i64 = rendered / step_frames;
+                let note_frame: i64 = rendered % step_frames;
+                let acid_index: i64 = sequence_step % 16;
+                let previous_acid_index: i64 = (sequence_step + 15) % 16;
+                let gate_on: bool = !is_tb303 || acid_gates[acid_index] == 1;
+                let accented: bool = is_tb303 && acid_accents[acid_index] == 1;
+                let incoming_slide: bool = is_tb303 && acid_slides[previous_acid_index] == 1 &&
+                    acid_gates[previous_acid_index] == 1 && gate_on;
+                let outgoing_slide: bool = is_tb303 && acid_slides[acid_index] == 1 && gate_on;
+                let target_frequency: f32 = is_tb303
+                    ? acid_notes[acid_index]
+                    : notes[sequence_step % notes.len()];
+                var frequency: f32 = target_frequency;
+                if incoming_slide {
+                    let slide_position: f32 = f32(note_frame) / f32(step_frames);
+                    frequency = acid_notes[previous_acid_index] +
+                        (target_frequency - acid_notes[previous_acid_index]) * slide_position;
+                }
+                let active_gate_frames: i64 = outgoing_slide ? step_frames : gate_frames;
+                var amp_envelope: f32 = gate_on
+                    ? adsr(note_frame, attack_frames, decay_frames,
+                        sustain, active_gate_frames, release_frames)
+                    : 0.0f;
+                if incoming_slide { amp_envelope = 0.72f; }
+                if accented { amp_envelope = amp_envelope * 1.32f; }
+                var filter_envelope: f32 = gate_on
+                    ? adsr(note_frame, filter_attack_frames,
+                        filter_decay_frames, is_tb303 ? 0.05f : 0.12f,
+                        active_gate_frames, release_frames)
+                    : 0.0f;
+                if is_tb303 {
+                    // Squared decay gives the short, biting 303-style filter contour.
+                    filter_envelope = filter_envelope * filter_envelope;
+                    if accented { filter_envelope = clamp_f32(filter_envelope * 1.35f, 0.0f, 1.0f); }
+                }
+                let phrase_sweep: f32 = triangle(rendered % sweep_frames, sweep_frames);
+                let sweep_depth: f32 = 0.18f + 0.82f * phrase_sweep;
+                let cutoff: f32 = cutoff_low +
+                    (cutoff_high - cutoff_low) * filter_envelope * sweep_depth;
+                let active_resonance: f32 = clamp_f32(
+                    resonance_db + (accented ? 3.0f : 0.0f), 0.0f, 36.0f);
+                ladder.set_lowpass(cutoff, active_resonance, f32(sample_rate));
+
+                let square: f32 = phase < 0.5f ? 1.0f : -1.0f;
+                let saw: f32 = phase * 2.0f - 1.0f;
+                let oscillator: f32 = is_tb303
+                    ? (acid_index < 8 ? saw : square)
+                    : (sequence_step % 2 == 0 ? square : saw);
+                let input: f32 = oscillator * amp_envelope * (is_tb303 ? 0.18f : 0.16f);
+                var output: f32 = effective_slope == 12
+                    ? ladder.process_12db(input)
+                    : (effective_slope == 18
+                        ? ladder.process_18db(input)
+                        : ladder.process_24db(input));
+                output = distortion.process(output);
+                output = clamp_f32(output, -0.96f, 0.96f);
+                block.set_stereo(frame, output, output);
+
+                phase = phase + frequency / f32(sample_rate);
+                if phase >= 1.0f { phase = phase - 1.0f; }
+                rendered = rendered + 1;
+            } else {
+                block.set_stereo(frame, 0.0f, 0.0f);
+            }
+            frame = frame + 1;
+        }
+        let queued_r: result<i64, str8> = device.queue_pcm_block(block, buffer_frames);
+        if queued_r.is_err() {
+            println!("PCM queue failed: {}", queued_r.unwrap_err());
+            block.close();
+            device.close();
+            parsed.free();
+            ap.free();
+            return 1;
+        }
+        if !started && (device.pcm_queued_frames() >= buffer_frames * 3 || rendered >= total_frames) {
+            if !start_device(device) {
+                block.close();
+                device.close();
+                parsed.free();
+                ap.free();
+                return 1;
+            }
+            started = true;
+        }
+    }
+
+    block.clear();
+    var tail_blocks: i64 = 0;
+    while tail_blocks < 3 {
+        if device.pcm_available_frames() < buffer_frames {
+            sleep_ms(1);
+            continue;
+        }
+        let tail_r: result<i64, str8> = device.queue_pcm_block(block, buffer_frames);
+        if tail_r.is_err() { break; }
+        tail_blocks = tail_blocks + 1;
+    }
+    if !started && !start_device(device) {
+        block.close();
+        device.close();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    while device.pcm_queued_frames() > 0 { sleep_ms(5); }
+    device.stop();
+    println!("PCM callback underruns: {}", device.pcm_underrun_count());
+    block.close();
+    device.close();
+    parsed.free();
+    ap.free();
+    return 0;
+}

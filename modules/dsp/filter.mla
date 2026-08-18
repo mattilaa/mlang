@@ -3,13 +3,14 @@
 ///
 /// @defgroup dsp_filter dsp::filter
 /// @ingroup dsp
-/// @brief Stateful biquad filters and allocation-free control smoothing.
+/// @brief Stateful biquad and ladder filters with allocation-free control smoothing.
 /// @{
 
 /// \cond INTERNAL_IMPORTS
 mod dsp::detail;
 use dsp::detail::sinf;
 use dsp::detail::cosf;
+use dsp::detail::tanf;
 use dsp::detail::expf;
 use dsp::detail::llroundf;
 /// \endcond
@@ -302,6 +303,151 @@ impl Biquad {
         self.y2 = self.y1;
         self.y1 = output;
         return output;
+    }
+}
+
+/// @brief Resonant four-stage low-pass ladder with 12, 18, and 24 dB outputs.
+///
+/// This topology-preserving-transform (TPT) model solves the ladder feedback
+/// path without a sample delay. `resonance_db` uses the same `0 .. 36 dB`
+/// control range as the other filters in this module; 36 dB approaches the
+/// self-oscillation boundary. Resonance-dependent input compensation preserves
+/// the low-frequency weight that otherwise falls by `1 / (1 + feedback)`.
+/// Read stages two, three, or four for 12, 18, or 24 dB/octave responses.
+pub struct MoogLadder {
+    var stage1: f32;
+    var stage2: f32;
+    var stage3: f32;
+    var stage4: f32;
+    var coefficient: f32;
+    var feedback: f32;
+    var bass_compensation: f32;
+};
+
+impl MoogLadder {
+    /// @brief Create a cleared ladder with a safe default cutoff.
+    pub fn new() -> MoogLadder {
+        var ladder: MoogLadder = MoogLadder {
+            stage1: 0.0f, stage2: 0.0f, stage3: 0.0f, stage4: 0.0f,
+            coefficient: 0.0f, feedback: 0.0f, bass_compensation: 1.0f
+        };
+        ladder.set_lowpass(1000.0f, 0.0f, 48000.0f);
+        return ladder;
+    }
+
+    /// @brief Set cutoff and resonance without clearing filter history.
+    ///
+    /// Cutoff is clamped below Nyquist. Resonance is clamped to `0 .. 36 dB`;
+    /// the upper endpoint stays just below the unstable feedback boundary.
+    pub fn set_lowpass(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
+        let safe_rate: f32 = sample_rate_hz < 1000.0f ? 1000.0f : sample_rate_hz;
+        let cutoff: f32 = clamp_f32(cutoff_hz, 1.0f, safe_rate * 0.495f);
+        let g: f32 = tanf(3.14159265358979323846f * cutoff / safe_rate);
+        self.coefficient = g / (1.0f + g);
+        self.feedback = 3.96f * clamp_f32(resonance_db, 0.0f, 36.0f) / 36.0f;
+    }
+
+    /// @brief Set resonance-dependent low-frequency gain compensation.
+    ///
+    /// `1` (the default) maintains approximately unity DC/passband gain as
+    /// resonance rises, producing a deeper modern Moog-style response. `0`
+    /// leaves the uncompensated analog ladder gain loss, and intermediate
+    /// values blend between those behaviors.
+    pub fn set_bass_compensation(self: &mut Self, amount: f32) -> void {
+        self.bass_compensation = clamp_f32(amount, 0.0f, 1.0f);
+    }
+
+    /// @brief Clear all four integrator states without changing parameters.
+    pub fn reset(self: &mut Self) -> void {
+        self.stage1 = 0.0f;
+        self.stage2 = 0.0f;
+        self.stage3 = 0.0f;
+        self.stage4 = 0.0f;
+    }
+
+    /// @brief Restore integrator state, primarily for FFI-owned state.
+    pub fn restore_state(self: &mut Self, stage1: f32, stage2: f32, stage3: f32, stage4: f32) -> void {
+        self.stage1 = stage1;
+        self.stage2 = stage2;
+        self.stage3 = stage3;
+        self.stage4 = stage4;
+    }
+
+    /// @brief Return the first integrator state.
+    pub fn state_1(self: MoogLadder) -> f32 { return self.stage1; }
+
+    /// @brief Return the second integrator state.
+    pub fn state_2(self: MoogLadder) -> f32 { return self.stage2; }
+
+    /// @brief Return the third integrator state.
+    pub fn state_3(self: MoogLadder) -> f32 { return self.stage3; }
+
+    /// @brief Return the fourth integrator state.
+    pub fn state_4(self: MoogLadder) -> f32 { return self.stage4; }
+
+    fn process_stages(self: &mut Self, input: f32, poles: i32) -> f32 {
+        let g: f32 = self.coefficient;
+        let one_minus_g: f32 = 1.0f - g;
+        let g2: f32 = g * g;
+        let compensated_input: f32 = input *
+            (1.0f + self.feedback * self.bass_compensation);
+
+        if poles <= 2 {
+            let memory2: f32 = one_minus_g * (g * self.stage1 + self.stage2);
+            let ladder_input2: f32 = (compensated_input - self.feedback * memory2) /
+                (1.0f + self.feedback * g2);
+            let output1_2: f32 = g * ladder_input2 + one_minus_g * self.stage1;
+            self.stage1 = 2.0f * output1_2 - self.stage1;
+            let output2_2: f32 = g * output1_2 + one_minus_g * self.stage2;
+            self.stage2 = 2.0f * output2_2 - self.stage2;
+            return output2_2;
+        }
+
+        let g3: f32 = g2 * g;
+        if poles == 3 {
+            let memory3: f32 = one_minus_g *
+                (g2 * self.stage1 + g * self.stage2 + self.stage3);
+            let ladder_input3: f32 = (compensated_input - self.feedback * memory3) /
+                (1.0f + self.feedback * g3);
+            let output1_3: f32 = g * ladder_input3 + one_minus_g * self.stage1;
+            self.stage1 = 2.0f * output1_3 - self.stage1;
+            let output2_3: f32 = g * output1_3 + one_minus_g * self.stage2;
+            self.stage2 = 2.0f * output2_3 - self.stage2;
+            let output3_3: f32 = g * output2_3 + one_minus_g * self.stage3;
+            self.stage3 = 2.0f * output3_3 - self.stage3;
+            return output3_3;
+        }
+
+        let g4: f32 = g2 * g2;
+        let memory: f32 = one_minus_g * (
+            g3 * self.stage1 + g2 * self.stage2 + g * self.stage3 + self.stage4);
+        let ladder_input: f32 = (compensated_input - self.feedback * memory) /
+            (1.0f + self.feedback * g4);
+
+        let output1: f32 = g * ladder_input + one_minus_g * self.stage1;
+        self.stage1 = 2.0f * output1 - self.stage1;
+        let output2: f32 = g * output1 + one_minus_g * self.stage2;
+        self.stage2 = 2.0f * output2 - self.stage2;
+        let output3: f32 = g * output2 + one_minus_g * self.stage3;
+        self.stage3 = 2.0f * output3 - self.stage3;
+        let output4: f32 = g * output3 + one_minus_g * self.stage4;
+        self.stage4 = 2.0f * output4 - self.stage4;
+        return output4;
+    }
+
+    /// @brief Process one sample using the two-pole 12 dB/octave output.
+    pub fn process_12db(self: &mut Self, input: f32) -> f32 {
+        return self.process_stages(input, 2);
+    }
+
+    /// @brief Process one sample using the three-pole 18 dB/octave output.
+    pub fn process_18db(self: &mut Self, input: f32) -> f32 {
+        return self.process_stages(input, 3);
+    }
+
+    /// @brief Process one sample using the four-pole 24 dB/octave output.
+    pub fn process_24db(self: &mut Self, input: f32) -> f32 {
+        return self.process_stages(input, 4);
     }
 }
 
