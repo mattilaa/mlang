@@ -41,6 +41,7 @@ Run the requested AIFF configuration:
   --option filter=moog24 \
   --option interpolation=hermite \
   --option playback_rate=1 \
+  --option dry_wet=0.8 \
   --option audio_path=~/Desktop/1995-Short.aif
 ```
 
@@ -64,6 +65,10 @@ Supported filters are the Moog-style ladder modes `moog12` and `moog24`, plus
 The playback rate must be from `0.25` to `4`, and the maximum resonance must be
 from `0` to `36` dB. At `1.0x`, source positions are integers, so interpolation
 modes produce the same source values.
+
+`dry_wet` ranges from `0` (fully dry) to `1` (fully filtered). The first demo
+section remains a fully dry reference. Each later section uses a short
+sample-accurate crossfade to the selected mix.
 
 ## Output devices
 
@@ -92,6 +97,7 @@ After building, the executable can also be invoked directly:
   --filter moog24 \
   --interpolation hermite \
   --playback-rate 1 \
+  --dry-wet 0.8 \
   --audio-path /path/to/input.aif
 ```
 

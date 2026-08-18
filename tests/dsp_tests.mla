@@ -331,6 +331,24 @@ fn test_dsp_pingpong_delay_crosses_channels() {
 }
 
 #[test]
+fn test_dsp_delay_filters_first_wet_repeat() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(0.0f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::Lowpass);
+    delay.set_filter_cutoff_hz(100.0f);
+    delay.set_damping(1.0f);
+    var first_echo: f32 = 0.0f;
+    for i in 0..6 {
+        let frame: DelayFrame = delay.process_stereo(i == 0 ? 1.0f : 0.0f, 0.0f);
+        if i == 4 { first_echo = frame.left(); }
+    }
+    verify(first_echo > 0.0f);
+    verify(first_echo < 0.99f);
+}
+
+#[test]
 fn test_dsp_resonant_feedback_delay_stays_finite() {
     var delay: StereoDelay = StereoDelay::new(48000.0f, 100.0f);
     delay.set_delay_ms(7.0f);
@@ -349,6 +367,35 @@ fn test_dsp_resonant_feedback_delay_stays_finite() {
         energy = energy + frame.left() * frame.left() + frame.right() * frame.right();
     }
     verify(energy > 0.001f);
+}
+
+#[test]
+fn test_dsp_delay_jitter_is_smooth_and_finite() {
+    var exact: StereoDelay = StereoDelay::new(1000.0f, 20.0f);
+    exact.set_delay_ms(10.0f);
+    exact.set_mix(1.0f);
+    exact.set_feedback(0.65f);
+    exact.set_filter(FeedbackFilter::None);
+
+    var analog: StereoDelay = StereoDelay::new(1000.0f, 20.0f);
+    analog.set_delay_ms(10.0f);
+    analog.set_jitter_ms(2.0f);
+    analog.set_mix(1.0f);
+    analog.set_feedback(0.65f);
+    analog.set_filter(FeedbackFilter::None);
+
+    var difference: f32 = 0.0f;
+    for i in 0..800 {
+        let input: f32 = i == 0 ? 1.0f : 0.0f;
+        let exact_frame: DelayFrame = exact.process_stereo(input, input);
+        let analog_frame: DelayFrame = analog.process_stereo(input, input);
+        verify(analog_frame.left() == analog_frame.left());
+        verify(analog_frame.right() == analog_frame.right());
+        var delta: f32 = analog_frame.left() - exact_frame.left();
+        if delta < 0.0f { delta = 0.0f - delta; }
+        difference = difference + delta;
+    }
+    verify(difference > 0.0001f);
 }
 
 #[test]

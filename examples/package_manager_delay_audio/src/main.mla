@@ -89,8 +89,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     ap.option("audio-path", "a", "Mono/stereo WAV, AIFF, or AIFF-C input", "../../examples/fft_example/illusion.wav");
     ap.option("mode", "m", "Delay routing: forward or pingpong", "pingpong");
     ap.option("delay-ms", "t", "Delay time in milliseconds", "375");
+    ap.option("bpm", "b", "Tempo sync in BPM; 0 uses --delay-ms", "0");
+    ap.option("delay-beats", "", "Synced length in quarter-note beats; 0.5=eighth, 0.75=dotted eighth", "0.75");
+    ap.option("jitter-ms", "j", "Analog-style delay-time wander depth in milliseconds", "0");
     ap.option("feedback", "f", "Feedback from 0 to 0.98", "0.58");
-    ap.option("mix", "w", "Wet mix from 0 to 1", "0.45");
+    ap.option("dry-wet", "w", "Dry/wet crossfade: 0 is direct input, 1 is delay only", "0.45");
+    ap.option("mix", "", "Compatibility alias for --dry-wet", "");
     ap.option("filter", "p", "Feedback filter: none, lowpass, or highpass", "lowpass");
     ap.option("filter-cutoff", "c", "Feedback-filter cutoff in Hz", "4200");
     ap.option("filter-resonance", "r", "Feedback-filter resonance from 0 to 1", "0.25");
@@ -123,9 +127,16 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let audio_path: str8 = parsed.get("audio-path");
     let mode_name: str8 = parsed.get("mode");
     let filter_name: str8 = parsed.get("filter");
-    let delay_ms: f32 = f32(atof(parsed.get("delay-ms")));
+    let manual_delay_ms: f32 = f32(atof(parsed.get("delay-ms")));
+    let bpm: f32 = f32(atof(parsed.get("bpm")));
+    let delay_beats: f32 = f32(atof(parsed.get("delay-beats")));
+    let tempo_sync: bool = bpm > 0.0f;
+    let delay_ms: f32 = tempo_sync ? 60000.0f * delay_beats / bpm : manual_delay_ms;
+    let jitter_ms: f32 = f32(atof(parsed.get("jitter-ms")));
     let feedback: f32 = f32(atof(parsed.get("feedback")));
-    let mix: f32 = f32(atof(parsed.get("mix")));
+    let mix_alias: str8 = parsed.get("mix");
+    let dry_wet: f32 = eq(mix_alias, "") == 1
+        ? f32(atof(parsed.get("dry-wet"))) : f32(atof(mix_alias));
     let filter_cutoff: f32 = f32(atof(parsed.get("filter-cutoff")));
     let filter_resonance: f32 = f32(atof(parsed.get("filter-resonance")));
     let damping: f32 = f32(atof(parsed.get("damping")));
@@ -134,11 +145,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let mode_valid: bool = eq(mode_name, "forward") == 1 || eq(mode_name, "pingpong") == 1;
     let filter_valid: bool = eq(filter_name, "none") == 1 ||
         eq(filter_name, "lowpass") == 1 || eq(filter_name, "highpass") == 1;
-    if !mode_valid || !filter_valid || delay_ms < 1.0f || delay_ms > 5000.0f ||
-       feedback < 0.0f || feedback > 0.98f || mix < 0.0f || mix > 1.0f ||
+    if !mode_valid || !filter_valid || bpm < 0.0f || bpm > 400.0f ||
+       delay_beats <= 0.0f || delay_beats > 16.0f ||
+       delay_ms < 1.0f || delay_ms > 5000.0f ||
+       jitter_ms < 0.0f || jitter_ms > 50.0f ||
+       feedback < 0.0f || feedback > 0.98f || dry_wet < 0.0f || dry_wet > 1.0f ||
        filter_cutoff < 20.0f || filter_resonance < 0.0f || filter_resonance > 1.0f ||
        damping < 0.0f || damping > 1.0f || tail_ms < 0 {
-        println!("invalid mode, filter, delay, feedback, mix, cutoff, damping, or tail option");
+        println!("invalid mode, filter, delay, BPM, beat length, jitter, feedback, dry/wet, cutoff, damping, or tail option");
         parsed.free();
         ap.free();
         return 2;
@@ -184,11 +198,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
     let block: PcmBlock = block_r.unwrap();
-    var delay: StereoDelay = StereoDelay::new(f32(output_rate), delay_ms + 1.0f);
+    var delay: StereoDelay = StereoDelay::new(f32(output_rate), delay_ms + jitter_ms + 1.0f);
     delay.set_delay_ms(delay_ms);
+    delay.set_jitter_ms(jitter_ms);
     delay.set_mode(eq(mode_name, "pingpong") == 1 ? DelayMode::PingPong : DelayMode::Forward);
     delay.set_feedback(feedback);
-    delay.set_mix(mix);
+    delay.set_mix(dry_wet);
     if eq(filter_name, "lowpass") == 1 { delay.set_filter(FeedbackFilter::Lowpass); }
     else if eq(filter_name, "highpass") == 1 { delay.set_filter(FeedbackFilter::Highpass); }
     else { delay.set_filter(FeedbackFilter::None); }
@@ -199,7 +214,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     println!("MLang dsp::delay WAV/AIFF demo");
     println!("backend: {}; output: {} Hz, {} frame buffer", backend_name(), output_rate, buffer_frames);
     println!("source: {} ({} Hz, {} channel(s), {} frames)", audio_path, source_rate, channels, source_frames);
-    println!("delay: mode={}, time={} ms, feedback={}, mix={}", mode_name, delay_ms, feedback, mix);
+    println!("delay: mode={}, time={} ms, feedback={}, dry/wet={}",
+        mode_name, delay_ms, feedback, dry_wet);
+    println!("analog delay-time jitter is {} ms", jitter_ms);
+    println!("tempo sync enabled={}, BPM={}, quarter-note beats={} (BPM 0 uses --delay-ms)",
+        tempo_sync, bpm, delay_beats);
     println!("feedback filter: {}, cutoff={} Hz, resonance={}, damping={}",
         filter_name, filter_cutoff, filter_resonance, damping);
     println!("tail: {} ms", tail_ms);
