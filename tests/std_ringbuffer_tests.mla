@@ -1,0 +1,35 @@
+mod std::ringbuffer;
+mod std::testing;
+
+use std::ringbuffer::RingBufferF32;
+use std::ringbuffer::ring_buffer_f32;
+use std::testing::verify;
+
+#[test]
+fn test_ringbuffer_history_and_overwrite() {
+    var ring: RingBufferF32 = RingBufferF32::new(3);
+    verify(ring.capacity() == 3);
+    verify(ring.is_empty());
+    ring.write(1.0f);
+    ring.write(2.0f);
+    verify(ring.len() == 2);
+    verify(ring.read(1) == 2.0f);
+    verify(ring.read(2) == 1.0f);
+    verify(ring.read(3) == 0.0f);
+    ring.write(3.0f);
+    ring.write(4.0f);
+    verify(ring.read(1) == 4.0f);
+    verify(ring.read(2) == 3.0f);
+    verify(ring.read(3) == 2.0f);
+}
+
+#[test]
+fn test_ringbuffer_process_and_clear() {
+    var ring: ring_buffer_f32 = ring_buffer_f32::new(2);
+    verify(ring.process(5.0f) == 0.0f);
+    verify(ring.process(6.0f) == 0.0f);
+    verify(ring.process(7.0f) == 5.0f);
+    ring.clear();
+    verify(ring.is_empty());
+    verify(ring.read(1) == 0.0f);
+}

@@ -1,0 +1,86 @@
+/// \file ringbuffer.mla
+/// \brief Fixed-capacity f32 ring buffer for numeric and realtime DSP work.
+///
+/// @defgroup std_ringbuffer std::ringbuffer
+/// @ingroup stdlib
+/// @brief Allocation-free reads and writes after construction.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod std::vec;
+use std::vec::set_f32;
+/// \endcond
+
+/// @brief Fixed-capacity ring buffer specialized for f32 samples.
+pub struct RingBufferF32 {
+    var values: list<f32>;
+    var write_index: i64;
+    var value_count: i64;
+};
+
+/// @brief Lowercase stdlib type alias for `RingBufferF32`.
+alias ring_buffer_f32 = RingBufferF32;
+
+impl RingBufferF32 {
+    /// @brief Allocate a zero-filled ring buffer with at least one slot.
+    pub fn new(capacity: i64) -> RingBufferF32 {
+        let safe_capacity: i64 = capacity < 1 ? 1 : capacity;
+        return RingBufferF32 {
+            values: [0.0f; safe_capacity],
+            write_index: 0,
+            value_count: 0
+        };
+    }
+
+    /// @brief Return fixed storage capacity.
+    pub fn capacity(self: RingBufferF32) -> i64 { return self.values.len(); }
+
+    /// @brief Return number of valid values, up to capacity.
+    pub fn len(self: RingBufferF32) -> i64 { return self.value_count; }
+
+    /// @brief Return whether no values have been written since construction/reset.
+    pub fn is_empty(self: RingBufferF32) -> bool { return self.value_count == 0; }
+
+    /// @brief Write one value, overwriting the oldest value when full.
+    pub fn write(self: &mut Self, value: f32) -> void {
+        set_f32(self.values, self.write_index, value);
+        self.write_index = self.write_index + 1;
+        if self.write_index >= self.values.len() { self.write_index = 0; }
+        if self.value_count < self.values.len() { self.value_count = self.value_count + 1; }
+    }
+
+    /// @brief Read a past value without removing it.
+    ///
+    /// `delay=1` returns the most recently written value. Returns zero when
+    /// `delay` is outside `1..len()`.
+    pub fn read(self: RingBufferF32, delay: i64) -> f32 {
+        if delay < 1 || delay > self.value_count { return 0.0f; }
+        var index: i64 = self.write_index - delay;
+        if index < 0 { index = index + self.values.len(); }
+        return self.values[index];
+    }
+
+    /// @brief Write one value and return the overwritten value once full.
+    ///
+    /// Before the buffer fills, the returned value is zero.
+    pub fn process(self: &mut Self, value: f32) -> f32 {
+        let output: f32 = self.value_count < self.values.len()
+            ? 0.0f
+            : self.values[self.write_index];
+        self.write(value);
+        return output;
+    }
+
+    /// @brief Zero storage and mark the buffer empty without reallocating.
+    pub fn clear(self: &mut Self) -> void {
+        var i: i64 = 0;
+        while i < self.values.len() {
+            set_f32(self.values, i, 0.0f);
+            i = i + 1;
+        }
+        self.write_index = 0;
+        self.value_count = 0;
+    }
+}
+
+/// @}

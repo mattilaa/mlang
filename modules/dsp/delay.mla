@@ -1,0 +1,188 @@
+/// \file delay.mla
+/// \brief Realtime-safe stereo forward and ping-pong delay.
+///
+/// @defgroup dsp_delay dsp::delay
+/// @ingroup dsp
+/// @brief Stereo delay with filtered, damped feedback.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+mod std::ringbuffer;
+use dsp::detail::llroundf;
+use dsp::detail::tanf;
+use std::ringbuffer::RingBufferF32;
+/// \endcond
+
+fn delay_clamp(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+/// @brief Feedback routing topology.
+pub enum DelayMode : i32 {
+    Forward = 0,
+    PingPong = 1
+};
+
+/// @brief Filter applied inside the feedback path.
+pub enum FeedbackFilter : i32 {
+    None = 0,
+    Lowpass = 1,
+    Highpass = 2
+};
+
+/// @brief One processed stereo sample.
+pub struct DelayFrame {
+    var left_value: f32;
+    var right_value: f32;
+};
+
+impl DelayFrame {
+    /// @brief Return the left output sample.
+    pub fn left(self: DelayFrame) -> f32 { return self.left_value; }
+
+    /// @brief Return the right output sample.
+    pub fn right(self: DelayFrame) -> f32 { return self.right_value; }
+}
+
+/// @brief Stereo delay with forward/ping-pong routing and damped feedback filtering.
+///
+/// Storage is allocated only by `new()`. Processing and parameter changes do
+/// not allocate or lock. Configure delay time before audio starts; changing it
+/// while processing can produce the expected tape-head-style discontinuity.
+pub struct StereoDelay {
+    var left_buffer: RingBufferF32;
+    var right_buffer: RingBufferF32;
+    var delay_samples: i64;
+    var sample_rate_hz: f32;
+    var mode: DelayMode;
+    var feedback: f32;
+    var mix: f32;
+    var filter_type: FeedbackFilter;
+    var damping: f32;
+    var filter_coefficient: f32;
+    var left_filter_state: f32;
+    var right_filter_state: f32;
+};
+
+impl StereoDelay {
+    /// @brief Allocate a stereo delay with a maximum duration in milliseconds.
+    pub fn new(sample_rate_hz: f32, max_delay_ms: f32) -> StereoDelay {
+        let safe_rate: f32 = sample_rate_hz < 1000.0f ? 1000.0f : sample_rate_hz;
+        let safe_max_ms: f32 = delay_clamp(max_delay_ms, 1.0f, 60000.0f);
+        let capacity: i64 = llroundf(safe_rate * safe_max_ms / 1000.0f) + 1;
+        var delay: StereoDelay = StereoDelay {
+            left_buffer: RingBufferF32::new(capacity),
+            right_buffer: RingBufferF32::new(capacity),
+            delay_samples: 1,
+            sample_rate_hz: safe_rate,
+            mode: DelayMode::Forward,
+            feedback: 0.45f,
+            mix: 0.35f,
+            filter_type: FeedbackFilter::Lowpass,
+            damping: 0.65f,
+            filter_coefficient: 0.0f,
+            left_filter_state: 0.0f,
+            right_filter_state: 0.0f
+        };
+        delay.set_delay_ms(safe_max_ms < 375.0f ? safe_max_ms : 375.0f);
+        delay.set_filter_cutoff_hz(5000.0f);
+        return delay;
+    }
+
+    /// @brief Set the active delay time, clamped to allocated capacity.
+    pub fn set_delay_ms(self: &mut Self, delay_ms: f32) -> void {
+        var samples: i64 = llroundf(self.sample_rate_hz *
+            delay_clamp(delay_ms, 0.020833333f, 60000.0f) / 1000.0f);
+        if samples < 1 { samples = 1; }
+        if samples >= self.left_buffer.capacity() { samples = self.left_buffer.capacity() - 1; }
+        if samples < 1 { samples = 1; }
+        self.delay_samples = samples;
+    }
+
+    /// @brief Select independent-channel forward or cross-fed ping-pong routing.
+    pub fn set_mode(self: &mut Self, mode: DelayMode) -> void { self.mode = mode; }
+
+    /// @brief Set repeat feedback from 0 to 0.98.
+    pub fn set_feedback(self: &mut Self, feedback: f32) -> void {
+        self.feedback = delay_clamp(feedback, 0.0f, 0.98f);
+    }
+
+    /// @brief Set dry/wet mix from 0 to 1.
+    pub fn set_mix(self: &mut Self, mix: f32) -> void {
+        self.mix = delay_clamp(mix, 0.0f, 1.0f);
+    }
+
+    /// @brief Select no feedback filter, low-pass damping, or high-pass thinning.
+    pub fn set_filter(self: &mut Self, filter_type: FeedbackFilter) -> void {
+        self.filter_type = filter_type;
+    }
+
+    /// @brief Set feedback-filter cutoff in Hz.
+    pub fn set_filter_cutoff_hz(self: &mut Self, cutoff_hz: f32) -> void {
+        let cutoff: f32 = delay_clamp(cutoff_hz, 20.0f, self.sample_rate_hz * 0.495f);
+        let g: f32 = tanf(3.14159265358979323846f * cutoff / self.sample_rate_hz);
+        self.filter_coefficient = g / (1.0f + g);
+    }
+
+    /// @brief Blend filtered feedback over dry feedback from 0 to 1.
+    pub fn set_damping(self: &mut Self, damping: f32) -> void {
+        self.damping = delay_clamp(damping, 0.0f, 1.0f);
+    }
+
+    /// @brief Clear delay and filter histories while retaining parameters.
+    pub fn reset(self: &mut Self) -> void {
+        self.left_buffer.clear();
+        self.right_buffer.clear();
+        self.left_filter_state = 0.0f;
+        self.right_filter_state = 0.0f;
+    }
+
+    fn filter_feedback_left(self: &mut Self, input: f32) -> f32 {
+        if self.filter_type == FeedbackFilter::None { return input; }
+        let low: f32 = self.filter_coefficient * input +
+            (1.0f - self.filter_coefficient) * self.left_filter_state;
+        self.left_filter_state = 2.0f * low - self.left_filter_state;
+        let filtered: f32 = self.filter_type == FeedbackFilter::Lowpass ? low : input - low;
+        return input + (filtered - input) * self.damping;
+    }
+
+    fn filter_feedback_right(self: &mut Self, input: f32) -> f32 {
+        if self.filter_type == FeedbackFilter::None { return input; }
+        let low: f32 = self.filter_coefficient * input +
+            (1.0f - self.filter_coefficient) * self.right_filter_state;
+        self.right_filter_state = 2.0f * low - self.right_filter_state;
+        let filtered: f32 = self.filter_type == FeedbackFilter::Lowpass ? low : input - low;
+        return input + (filtered - input) * self.damping;
+    }
+
+    /// @brief Process one stereo sample.
+    ///
+    /// Forward mode feeds each channel back into itself. Ping-pong mode seeds
+    /// the left delay from mono input and cross-feeds repeats between channels.
+    pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> DelayFrame {
+        let delayed_left: f32 = self.left_buffer.read(self.delay_samples);
+        let delayed_right: f32 = self.right_buffer.read(self.delay_samples);
+        let feedback_left: f32 = self.filter_feedback_left(delayed_left);
+        let feedback_right: f32 = self.filter_feedback_right(delayed_right);
+
+        var write_left: f32 = input_left + feedback_left * self.feedback;
+        var write_right: f32 = input_right + feedback_right * self.feedback;
+        if self.mode == DelayMode::PingPong {
+            let mono_input: f32 = (input_left + input_right) * 0.5f;
+            write_left = mono_input + feedback_right * self.feedback;
+            write_right = feedback_left * self.feedback;
+        }
+        self.left_buffer.write(write_left);
+        self.right_buffer.write(write_right);
+
+        return DelayFrame {
+            left_value: input_left + (delayed_left - input_left) * self.mix,
+            right_value: input_right + (delayed_right - input_right) * self.mix
+        };
+    }
+}
+
+/// @}

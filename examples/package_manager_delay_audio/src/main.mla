@@ -1,0 +1,294 @@
+/// \file main.mla
+/// \ingroup examples
+/// \brief Play WAV/AIFF input through dsp::delay using std::audio.
+
+mod dsp::delay;
+mod std::argparser;
+mod std::ascii;
+mod std::audio;
+mod std::io;
+mod std::strbuf;
+mod std::term;
+mod std::time;
+
+use dsp::delay::DelayFrame;
+use dsp::delay::DelayMode;
+use dsp::delay::FeedbackFilter;
+use dsp::delay::StereoDelay;
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::ascii::AsciiKey;
+use std::audio::AudioDevice;
+use std::audio::PcmAudio;
+use std::audio::PcmBlock;
+use std::audio::backend_name;
+use std::audio::default_output_device_id;
+use std::audio::device_count;
+use std::audio::device_name;
+use std::io::Stdin;
+use std::io::read_keycode_nonblocking;
+use std::io::stdin;
+use std::strbuf::eq;
+use std::term::stdin_enable_cbreak;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::time::sleep_ms;
+
+extern fn atof(value: str8) -> f64;
+extern fn llround(value: f64) -> i64;
+
+fn clamp_audio(value: f32) -> f32 {
+    if value < -0.98f { return -0.98f; }
+    if value > 0.98f { return 0.98f; }
+    return value;
+}
+
+fn source_sample(samples: &list<f32>, channels: i64, frames: i64,
+                 position: f64, channel: i64) -> f32 {
+    if position < 0.0 || position >= f64(frames) { return 0.0f; }
+    let frame0: i64 = position < 1.0 ? 0 : llround(position - 0.5);
+    let frame1: i64 = frame0 + 1 < frames ? frame0 + 1 : frame0;
+    let fraction: f32 = f32(position - f64(frame0));
+    let safe_channel: i64 = channel < channels ? channel : 0;
+    let sample0: f32 = samples[frame0 * channels + safe_channel];
+    let sample1: f32 = samples[frame1 * channels + safe_channel];
+    return sample0 + (sample1 - sample0) * fraction;
+}
+
+fn print_devices() -> void {
+    let count: i64 = device_count();
+    let default_id: i64 = default_output_device_id();
+    println!("output devices: count={} default_id={}", count, default_id);
+    var id: i64 = 0;
+    while id < count {
+        println!("  [{}] {}", id, device_name(id));
+        id = id + 1;
+    }
+}
+
+fn start_device(device: AudioDevice) -> bool {
+    let result: result<i32, str8> = device.start();
+    if result.is_err() {
+        println!("audio start failed: {}", result.unwrap_err());
+        return false;
+    }
+    return true;
+}
+
+fn restore_keyboard(enabled: bool) -> void {
+    if enabled {
+        let _ = stdin_restore();
+    }
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new(
+        "delay_audio_demo",
+        "Play a WAV or AIFF file through forward or ping-pong dsp::delay."
+    );
+    ap.option("audio-path", "a", "Mono/stereo WAV, AIFF, or AIFF-C input", "../../examples/fft_example/illusion.wav");
+    ap.option("mode", "m", "Delay routing: forward or pingpong", "pingpong");
+    ap.option("delay-ms", "t", "Delay time in milliseconds", "375");
+    ap.option("feedback", "f", "Feedback from 0 to 0.98", "0.58");
+    ap.option("mix", "w", "Wet mix from 0 to 1", "0.45");
+    ap.option("filter", "p", "Feedback filter: none, lowpass, or highpass", "lowpass");
+    ap.option("filter-cutoff", "c", "Feedback-filter cutoff in Hz", "4200");
+    ap.option("damping", "q", "Filtered-feedback blend from 0 to 1", "0.75");
+    ap.option("tail-ms", "e", "Silence rendered after input for delay tail", "3000");
+    ap.option("device", "d", "Output device id; -1 uses the default", "-1");
+    ap.flag("list-devices", "l", "List output device ids and exit");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        println!("Error: {}", parsed.error());
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 2;
+    }
+    if parsed.flag("list-devices") {
+        print_devices();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+
+    let audio_path: str8 = parsed.get("audio-path");
+    let mode_name: str8 = parsed.get("mode");
+    let filter_name: str8 = parsed.get("filter");
+    let delay_ms: f32 = f32(atof(parsed.get("delay-ms")));
+    let feedback: f32 = f32(atof(parsed.get("feedback")));
+    let mix: f32 = f32(atof(parsed.get("mix")));
+    let filter_cutoff: f32 = f32(atof(parsed.get("filter-cutoff")));
+    let damping: f32 = f32(atof(parsed.get("damping")));
+    let tail_ms: i64 = parsed.get_i64("tail-ms");
+    let requested_device: i64 = parsed.get_i64("device");
+    let mode_valid: bool = eq(mode_name, "forward") == 1 || eq(mode_name, "pingpong") == 1;
+    let filter_valid: bool = eq(filter_name, "none") == 1 ||
+        eq(filter_name, "lowpass") == 1 || eq(filter_name, "highpass") == 1;
+    if !mode_valid || !filter_valid || delay_ms < 1.0f || delay_ms > 5000.0f ||
+       feedback < 0.0f || feedback > 0.98f || mix < 0.0f || mix > 1.0f ||
+       filter_cutoff < 20.0f || damping < 0.0f || damping > 1.0f || tail_ms < 0 {
+        println!("invalid mode, filter, delay, feedback, mix, cutoff, damping, or tail option");
+        parsed.free();
+        ap.free();
+        return 2;
+    }
+
+    let audio_r: result<PcmAudio, str8> = PcmAudio::load(audio_path);
+    if audio_r.is_err() {
+        println!("audio load failed: {}", audio_r.unwrap_err());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let audio: PcmAudio = audio_r.unwrap();
+    let source_rate: i64 = audio.sample_rate();
+    let channels: i64 = audio.channels();
+    let source_frames: i64 = audio.frame_count();
+    let samples: list<f32> = audio.samples();
+    audio.close();
+
+    let device_r: result<AudioDevice, str8> = requested_device >= 0
+        ? AudioDevice::open_with_config(requested_device, "mlang_delay_audio", source_rate, 512)
+        : AudioDevice::open_default_with_config("mlang_delay_audio", source_rate, 512);
+    if device_r.is_err() {
+        println!("audio open failed: {}", device_r.unwrap_err());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let device: AudioDevice = device_r.unwrap();
+    let output_rate: i64 = device.sample_rate();
+    let buffer_frames: i64 = device.buffer_frames();
+    let source_step: f64 = f64(source_rate) / f64(output_rate);
+    let source_output_frames: i64 = llround(f64(source_frames) / source_step + 0.499999);
+    let tail_frames: i64 = output_rate * tail_ms / 1000;
+    let total_frames: i64 = source_output_frames + tail_frames;
+
+    let block_r: result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
+    if block_r.is_err() {
+        println!("PCM block allocation failed: {}", block_r.unwrap_err());
+        device.close();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let block: PcmBlock = block_r.unwrap();
+    var delay: StereoDelay = StereoDelay::new(f32(output_rate), delay_ms + 1.0f);
+    delay.set_delay_ms(delay_ms);
+    delay.set_mode(eq(mode_name, "pingpong") == 1 ? DelayMode::PingPong : DelayMode::Forward);
+    delay.set_feedback(feedback);
+    delay.set_mix(mix);
+    if eq(filter_name, "lowpass") == 1 { delay.set_filter(FeedbackFilter::Lowpass); }
+    else if eq(filter_name, "highpass") == 1 { delay.set_filter(FeedbackFilter::Highpass); }
+    else { delay.set_filter(FeedbackFilter::None); }
+    delay.set_filter_cutoff_hz(filter_cutoff);
+    delay.set_damping(damping);
+
+    println!("MLang dsp::delay WAV/AIFF demo");
+    println!("backend: {}; output: {} Hz, {} frame buffer", backend_name(), output_rate, buffer_frames);
+    println!("source: {} ({} Hz, {} channel(s), {} frames)", audio_path, source_rate, channels, source_frames);
+    println!("delay: mode={}, time={} ms, feedback={}, mix={}", mode_name, delay_ms, feedback, mix);
+    println!("feedback filter: {}, cutoff={} Hz, damping={}", filter_name, filter_cutoff, damping);
+    println!("tail: {} ms", tail_ms);
+
+    let input_stream: Stdin = stdin();
+    let keyboard_enabled: bool = stdin_is_tty() == 1 && stdin_enable_cbreak() == 0;
+    if keyboard_enabled {
+        println!("control: press Space to pause/resume source input; delay feedback keeps running");
+    } else {
+        println!("control: Space pause/resume unavailable because stdin is not an interactive terminal");
+    }
+
+    var rendered: i64 = 0;
+    var source_rendered: i64 = 0;
+    var tail_rendered: i64 = 0;
+    var source_position: f64 = 0.0;
+    var started: bool = false;
+    var paused: bool = false;
+    while source_rendered < source_output_frames || tail_rendered < tail_frames {
+        if keyboard_enabled {
+            let key: i32 = read_keycode_nonblocking(input_stream);
+            if key == AsciiKey::Space {
+                paused = !paused;
+                println!("source input: {} (delay tail continues)", paused ? "PAUSED" : "PLAYING");
+            }
+        }
+        if device.pcm_queued_frames() >= buffer_frames * 4 ||
+           device.pcm_available_frames() < buffer_frames {
+            sleep_ms(1);
+            continue;
+        }
+        var frames_this_block: i64 = buffer_frames;
+        if !paused {
+            let remaining: i64 = (source_output_frames - source_rendered) +
+                (tail_frames - tail_rendered);
+            if remaining < frames_this_block { frames_this_block = remaining; }
+        }
+        var frame: i64 = 0;
+        while frame < frames_this_block {
+            var input_left: f32 = 0.0f;
+            var input_right: f32 = 0.0f;
+            if !paused && source_rendered < source_output_frames {
+                input_left = source_sample(samples, channels, source_frames, source_position, 0);
+                input_right = channels > 1
+                    ? source_sample(samples, channels, source_frames, source_position, 1)
+                    : input_left;
+                source_position = source_position + source_step;
+                source_rendered = source_rendered + 1;
+            } else if !paused {
+                tail_rendered = tail_rendered + 1;
+            }
+            let output: DelayFrame = delay.process_stereo(input_left, input_right);
+            block.set_stereo(frame, clamp_audio(output.left()), clamp_audio(output.right()));
+            rendered = rendered + 1;
+            frame = frame + 1;
+        }
+        let queued_r: result<i64, str8> = device.queue_pcm_block(block, frames_this_block);
+        if queued_r.is_err() {
+            println!("PCM queue failed: {}", queued_r.unwrap_err());
+            restore_keyboard(keyboard_enabled);
+            block.close();
+            device.close();
+            parsed.free();
+            ap.free();
+            return 1;
+        }
+        if !started && (device.pcm_queued_frames() >= buffer_frames * 3 || rendered >= total_frames) {
+            if !start_device(device) {
+                restore_keyboard(keyboard_enabled);
+                block.close();
+                device.close();
+                parsed.free();
+                ap.free();
+                return 1;
+            }
+            started = true;
+        }
+    }
+
+    if !started && !start_device(device) {
+        restore_keyboard(keyboard_enabled);
+        block.close();
+        device.close();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    while device.pcm_queued_frames() > 0 { sleep_ms(5); }
+    device.stop();
+    restore_keyboard(keyboard_enabled);
+    println!("PCM callback underruns: {}", device.pcm_underrun_count());
+    block.close();
+    device.close();
+    parsed.free();
+    ap.free();
+    return 0;
+}

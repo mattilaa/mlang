@@ -16,6 +16,8 @@ Currently provided:
   (`do_not_optimize_i64`, `do_not_optimize_i32`, `clobber_memory`).
 - `std/array.mla`: documentation/navigation anchors for the compiler-provided
   fixed-capacity `array<T, N>` type.
+- `std/ringbuffer.mla`: fixed-capacity `f32` history storage for numeric and
+  realtime DSP algorithms, with allocation-free reads/writes after creation.
 - `std/testing.mla`: GoogleTest-like expectation helpers
   (`expect_true`, `expect_false`, `expect_eq`, `expect_not_eq`,
   `expect_array_eq`, `expect_array_not_eq`; and fatal

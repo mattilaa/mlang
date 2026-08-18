@@ -5,6 +5,7 @@
 /// - `dsp::convolution`
 /// - `dsp::filter`
 /// - `dsp::distortion`
+/// - `dsp::delay`
 /// - `dsp::fft`
 /// - `dsp::reverb`
 ///
@@ -16,6 +17,7 @@
 mod dsp::convolution;
 mod dsp::filter;
 mod dsp::distortion;
+mod dsp::delay;
 mod dsp::fft;
 mod dsp::reverb;
 /// \endcond
