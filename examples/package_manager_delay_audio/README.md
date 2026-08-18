@@ -8,7 +8,16 @@ sample rate that differs from the active output rate.
 While it is running in an interactive terminal, press **Space** to pause or
 resume the source file. Pausing sends silence into the delay but keeps delay
 processing and feedback active, so you hear the existing repeats decay after
-the source cuts out. Playback resumes from the same file position.
+the source cuts out. Playback resumes from the same file position. Press
+**q** or **Q** to stop playback, restore the terminal, and exit immediately.
+
+The program prints this control summary when it starts:
+
+```text
+interactive controls:
+  Space  pause/resume source input (delay feedback keeps running)
+  q/Q    stop playback and exit
+```
 
 ## Ping-pong delay
 
@@ -22,6 +31,7 @@ cd examples/package_manager_delay_audio
   --option mix=0.45 \
   --option filter=lowpass \
   --option filter_cutoff=4200 \
+  --option filter_resonance=0.35 \
   --option damping=0.75
 ```
 
@@ -39,10 +49,12 @@ stereo.
   --option feedback=0.42 \
   --option filter=highpass \
   --option filter_cutoff=650 \
+  --option filter_resonance=0.2 \
   --option damping=0.55
 ```
 
-Filters are `none`, `lowpass`, or `highpass`. Damping `0` leaves feedback
+Filters are `none`, `lowpass`, or `highpass`. `filter_resonance` ranges from
+`0` for a broadly damped response to `1` for a strong cutoff peak. Damping `0` leaves feedback
 unfiltered; `1` applies the selected filter fully. `tail_ms` controls how long
 silence is processed after the source ends so repeats can decay naturally.
 

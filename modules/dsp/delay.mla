@@ -62,9 +62,12 @@ pub struct StereoDelay {
     var mix: f32;
     var filter_type: FeedbackFilter;
     var damping: f32;
-    var filter_coefficient: f32;
-    var left_filter_state: f32;
-    var right_filter_state: f32;
+    var filter_g: f32;
+    var filter_k: f32;
+    var left_filter_state1: f32;
+    var left_filter_state2: f32;
+    var right_filter_state1: f32;
+    var right_filter_state2: f32;
 };
 
 impl StereoDelay {
@@ -83,12 +86,16 @@ impl StereoDelay {
             mix: 0.35f,
             filter_type: FeedbackFilter::Lowpass,
             damping: 0.65f,
-            filter_coefficient: 0.0f,
-            left_filter_state: 0.0f,
-            right_filter_state: 0.0f
+            filter_g: 0.0f,
+            filter_k: 2.0f,
+            left_filter_state1: 0.0f,
+            left_filter_state2: 0.0f,
+            right_filter_state1: 0.0f,
+            right_filter_state2: 0.0f
         };
         delay.set_delay_ms(safe_max_ms < 375.0f ? safe_max_ms : 375.0f);
         delay.set_filter_cutoff_hz(5000.0f);
+        delay.set_filter_resonance(0.0f);
         return delay;
     }
 
@@ -123,8 +130,15 @@ impl StereoDelay {
     /// @brief Set feedback-filter cutoff in Hz.
     pub fn set_filter_cutoff_hz(self: &mut Self, cutoff_hz: f32) -> void {
         let cutoff: f32 = delay_clamp(cutoff_hz, 20.0f, self.sample_rate_hz * 0.495f);
-        let g: f32 = tanf(3.14159265358979323846f * cutoff / self.sample_rate_hz);
-        self.filter_coefficient = g / (1.0f + g);
+        self.filter_g = tanf(3.14159265358979323846f * cutoff / self.sample_rate_hz);
+    }
+
+    /// @brief Set feedback-filter resonance from 0 to 1.
+    ///
+    /// Zero is broadly damped (`Q = 0.5`); one approaches a strong but bounded
+    /// resonant peak (`Q` approximately 10).
+    pub fn set_filter_resonance(self: &mut Self, resonance: f32) -> void {
+        self.filter_k = 2.0f - 1.9f * delay_clamp(resonance, 0.0f, 1.0f);
     }
 
     /// @brief Blend filtered feedback over dry feedback from 0 to 1.
@@ -136,25 +150,47 @@ impl StereoDelay {
     pub fn reset(self: &mut Self) -> void {
         self.left_buffer.clear();
         self.right_buffer.clear();
-        self.left_filter_state = 0.0f;
-        self.right_filter_state = 0.0f;
+        self.left_filter_state1 = 0.0f;
+        self.left_filter_state2 = 0.0f;
+        self.right_filter_state1 = 0.0f;
+        self.right_filter_state2 = 0.0f;
     }
 
     fn filter_feedback_left(self: &mut Self, input: f32) -> f32 {
         if self.filter_type == FeedbackFilter::None { return input; }
-        let low: f32 = self.filter_coefficient * input +
-            (1.0f - self.filter_coefficient) * self.left_filter_state;
-        self.left_filter_state = 2.0f * low - self.left_filter_state;
-        let filtered: f32 = self.filter_type == FeedbackFilter::Lowpass ? low : input - low;
+        let g: f32 = self.filter_g;
+        let a1: f32 = 1.0f / (1.0f + g * (g + self.filter_k));
+        let a2: f32 = g * a1;
+        let a3: f32 = g * a2;
+        let v3: f32 = input - self.left_filter_state2;
+        let band: f32 = a1 * self.left_filter_state1 + a2 * v3;
+        let low: f32 = self.left_filter_state2 +
+            a2 * self.left_filter_state1 + a3 * v3;
+        self.left_filter_state1 = 2.0f * band - self.left_filter_state1;
+        self.left_filter_state2 = 2.0f * low - self.left_filter_state2;
+        let high: f32 = input - self.filter_k * band - low;
+        let resonance_gain: f32 = self.filter_k < 1.0f ? self.filter_k : 1.0f;
+        let filtered: f32 = (self.filter_type == FeedbackFilter::Lowpass ? low : high) *
+            resonance_gain;
         return input + (filtered - input) * self.damping;
     }
 
     fn filter_feedback_right(self: &mut Self, input: f32) -> f32 {
         if self.filter_type == FeedbackFilter::None { return input; }
-        let low: f32 = self.filter_coefficient * input +
-            (1.0f - self.filter_coefficient) * self.right_filter_state;
-        self.right_filter_state = 2.0f * low - self.right_filter_state;
-        let filtered: f32 = self.filter_type == FeedbackFilter::Lowpass ? low : input - low;
+        let g: f32 = self.filter_g;
+        let a1: f32 = 1.0f / (1.0f + g * (g + self.filter_k));
+        let a2: f32 = g * a1;
+        let a3: f32 = g * a2;
+        let v3: f32 = input - self.right_filter_state2;
+        let band: f32 = a1 * self.right_filter_state1 + a2 * v3;
+        let low: f32 = self.right_filter_state2 +
+            a2 * self.right_filter_state1 + a3 * v3;
+        self.right_filter_state1 = 2.0f * band - self.right_filter_state1;
+        self.right_filter_state2 = 2.0f * low - self.right_filter_state2;
+        let high: f32 = input - self.filter_k * band - low;
+        let resonance_gain: f32 = self.filter_k < 1.0f ? self.filter_k : 1.0f;
+        let filtered: f32 = (self.filter_type == FeedbackFilter::Lowpass ? low : high) *
+            resonance_gain;
         return input + (filtered - input) * self.damping;
     }
 
