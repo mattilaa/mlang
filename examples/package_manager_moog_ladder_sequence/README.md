@@ -6,8 +6,14 @@ and a separate filter ADSR. A continuous triangle ramp moves the filter
 envelope's maximum cutoff across the 16-step phrase, producing a smooth, deep
 sweep without zipper noise.
 
-The default filter is the compensated 24 dB/octave ladder. The compensated
-passband retains bass weight as resonance increases.
+The default `deep` variant uses the compensated 24 dB/octave ladder. The
+compensated passband retains bass weight as resonance increases.
+
+The `tb303` option switches to an original D-centered 16-step acid pattern
+with rests, accents, constant-time pitch slides, a sharper filter contour, and
+the 18 dB ladder output. Accents increase amplitude, filter-envelope depth,
+and resonance together. This voice also enables the DSP library's asymmetric
+analog-style distortion by default.
 
 ## Run
 
@@ -15,6 +21,19 @@ From this directory:
 
 ```sh
 ../../build/mlang pkg run demo
+```
+
+Run the old-school acid variant at the 95 BPM pace associated with “Acid
+Bites.” The pattern captures that sparse, biting character but is an original
+sequence, not a transcription:
+
+```sh
+../../build/mlang pkg run demo \
+  --option variant=tb303 \
+  --option bpm=95 \
+  --option resonance_db=25 \
+  --option cutoff_low=60 \
+  --option cutoff_high=7200
 ```
 
 Change the ladder and envelope from package options:
@@ -31,6 +50,15 @@ Change the ladder and envelope from package options:
   --option release_ms=90
 ```
 
+Set analog distortion explicitly for either voice. A value of `-1` selects
+the variant default (`0 dB`/bypassed for `deep`, `14 dB` for `tb303`):
+
+```sh
+../../build/mlang pkg run demo \
+  --option variant=tb303 \
+  --option distortion_drive_db=20
+```
+
 Select an output device:
 
 ```sh
@@ -43,9 +71,10 @@ After building, the executable also exposes ordinary command-line options:
 ```sh
 ./build/moog_ladder_sequence --help
 ./build/moog_ladder_sequence \
-  --slope 24 --bpm 108 --resonance-db 21 \
+  --variant tb303 --bpm 95 --resonance-db 25 \
   --cutoff-low 50 --cutoff-high 7000 \
-  --attack-ms 8 --decay-ms 80 --sustain 0.55 --release-ms 70
+  --attack-ms 8 --decay-ms 80 --sustain 0.55 --release-ms 70 \
+  --distortion-drive-db 16
 ```
 
 The generated oscillators are intentionally raw square and saw waves so the

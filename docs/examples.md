@@ -186,8 +186,9 @@ following additional programs are useful runnable showcases:
   Its `demo` task and DSP processor are written in MLang and use `std::audio`.
 - `examples/package_manager_moog_ladder_sequence` — alternating square/saw bass
   sequence with amplitude and filter ADSRs, a continuous phrase-length cutoff
-  sweep, and compensated 12/24 dB Moog-style ladder filtering through
-  `std::audio`.
+  sweep, and compensated 12/18/24 dB ladder filtering through `std::audio`.
+  Its optional `tb303` voice adds an original 16-step acid pattern with rests,
+  accents, slides, and asymmetric analog-style distortion.
 - `examples/package_manager_reverb_techno` — MLang-only 130 BPM techno
   sequencer using included kick and clap WAV samples. It sends the clap through
   selectable hall, room, plate, gated, reverse, or nonlinear `dsp::reverb`

@@ -9,6 +9,7 @@ module_paths = ["../../modules"]
 
 [tool.mlang.options]
 audio_output = ""
+variant = "deep"
 bpm = "112"
 duration = "24"
 slope = "24"
@@ -19,6 +20,7 @@ attack_ms = "8"
 decay_ms = "65"
 sustain = "0.58"
 release_ms = "75"
+distortion_drive_db = "-1"
 
 [[task]]
 name = "toolchain-check"
@@ -67,7 +69,7 @@ name = "demo"
 depends_on = ["link"]
 log_output = false
 shell = [
-  "audio_output='{{option.audio_output}}'; set -- --bpm '{{option.bpm}}' --duration '{{option.duration}}' --slope '{{option.slope}}' --resonance-db '{{option.resonance_db}}' --cutoff-low '{{option.cutoff_low}}' --cutoff-high '{{option.cutoff_high}}' --attack-ms '{{option.attack_ms}}' --decay-ms '{{option.decay_ms}}' --sustain '{{option.sustain}}' --release-ms '{{option.release_ms}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/moog_ladder_sequence \"$@\""
+  "audio_output='{{option.audio_output}}'; set -- --variant '{{option.variant}}' --bpm '{{option.bpm}}' --duration '{{option.duration}}' --slope '{{option.slope}}' --resonance-db '{{option.resonance_db}}' --cutoff-low '{{option.cutoff_low}}' --cutoff-high '{{option.cutoff_high}}' --attack-ms '{{option.attack_ms}}' --decay-ms '{{option.decay_ms}}' --sustain '{{option.sustain}}' --release-ms '{{option.release_ms}}' --distortion-drive-db '{{option.distortion_drive_db}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/moog_ladder_sequence \"$@\""
 ]
 
 [[task]]

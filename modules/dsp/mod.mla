@@ -4,6 +4,7 @@
 /// Submodules:
 /// - `dsp::convolution`
 /// - `dsp::filter`
+/// - `dsp::distortion`
 /// - `dsp::fft`
 /// - `dsp::reverb`
 ///
@@ -14,6 +15,7 @@
 /// \cond INTERNAL_IMPORTS
 mod dsp::convolution;
 mod dsp::filter;
+mod dsp::distortion;
 mod dsp::fft;
 mod dsp::reverb;
 /// \endcond

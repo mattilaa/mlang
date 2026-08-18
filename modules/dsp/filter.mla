@@ -306,15 +306,14 @@ impl Biquad {
     }
 }
 
-/// @brief Resonant four-stage low-pass ladder with 12 and 24 dB outputs.
+/// @brief Resonant four-stage low-pass ladder with 12, 18, and 24 dB outputs.
 ///
 /// This topology-preserving-transform (TPT) model solves the ladder feedback
 /// path without a sample delay. `resonance_db` uses the same `0 .. 36 dB`
 /// control range as the other filters in this module; 36 dB approaches the
 /// self-oscillation boundary. Resonance-dependent input compensation preserves
 /// the low-frequency weight that otherwise falls by `1 / (1 + feedback)`.
-/// Read stage two for a 12 dB/octave response or stage four for the classic
-/// 24 dB/octave response.
+/// Read stages two, three, or four for 12, 18, or 24 dB/octave responses.
 pub struct MoogLadder {
     var stage1: f32;
     var stage2: f32;
@@ -386,14 +385,14 @@ impl MoogLadder {
     /// @brief Return the fourth integrator state.
     pub fn state_4(self: MoogLadder) -> f32 { return self.stage4; }
 
-    fn process_stages(self: &mut Self, input: f32, use_four_poles: bool) -> f32 {
+    fn process_stages(self: &mut Self, input: f32, poles: i32) -> f32 {
         let g: f32 = self.coefficient;
         let one_minus_g: f32 = 1.0f - g;
         let g2: f32 = g * g;
         let compensated_input: f32 = input *
             (1.0f + self.feedback * self.bass_compensation);
 
-        if !use_four_poles {
+        if poles <= 2 {
             let memory2: f32 = one_minus_g * (g * self.stage1 + self.stage2);
             let ladder_input2: f32 = (compensated_input - self.feedback * memory2) /
                 (1.0f + self.feedback * g2);
@@ -405,6 +404,20 @@ impl MoogLadder {
         }
 
         let g3: f32 = g2 * g;
+        if poles == 3 {
+            let memory3: f32 = one_minus_g *
+                (g2 * self.stage1 + g * self.stage2 + self.stage3);
+            let ladder_input3: f32 = (compensated_input - self.feedback * memory3) /
+                (1.0f + self.feedback * g3);
+            let output1_3: f32 = g * ladder_input3 + one_minus_g * self.stage1;
+            self.stage1 = 2.0f * output1_3 - self.stage1;
+            let output2_3: f32 = g * output1_3 + one_minus_g * self.stage2;
+            self.stage2 = 2.0f * output2_3 - self.stage2;
+            let output3_3: f32 = g * output2_3 + one_minus_g * self.stage3;
+            self.stage3 = 2.0f * output3_3 - self.stage3;
+            return output3_3;
+        }
+
         let g4: f32 = g2 * g2;
         let memory: f32 = one_minus_g * (
             g3 * self.stage1 + g2 * self.stage2 + g * self.stage3 + self.stage4);
@@ -424,12 +437,17 @@ impl MoogLadder {
 
     /// @brief Process one sample using the two-pole 12 dB/octave output.
     pub fn process_12db(self: &mut Self, input: f32) -> f32 {
-        return self.process_stages(input, false);
+        return self.process_stages(input, 2);
+    }
+
+    /// @brief Process one sample using the three-pole 18 dB/octave output.
+    pub fn process_18db(self: &mut Self, input: f32) -> f32 {
+        return self.process_stages(input, 3);
     }
 
     /// @brief Process one sample using the four-pole 24 dB/octave output.
     pub fn process_24db(self: &mut Self, input: f32) -> f32 {
-        return self.process_stages(input, true);
+        return self.process_stages(input, 4);
     }
 }
 
