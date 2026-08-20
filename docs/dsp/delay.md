@@ -37,6 +37,7 @@ delay.set_filter_cutoff_target_hz(1800.0f, 3840); // 80 ms at 48 kHz
 delay.set_filter_resonance(0.35f);
 delay.set_filter_resonance_target(0.8f, 3840);
 delay.set_damping(0.75f);
+delay.set_damping_target(0.9f, 3840); // smooth 80 ms damping change
 
 let output: DelayFrame = delay.process_stereo(input_left, input_right);
 ```
@@ -60,6 +61,10 @@ sample-accurate, smoothly retargetable behavior for resonance. The immediate
 
 `set_mix_target(mix, ramp_samples)` smoothly retargets the dry/wet crossfade
 from its current in-flight value. `set_mix()` remains the immediate setter.
+
+`set_damping_target(damping, ramp_samples)` smoothly changes how strongly the
+selected filter colors the feedback loop. Retargeting continues from the
+current blend; `set_damping()` remains the immediate setter.
 
 `FeedbackFilter` includes `None`, `Lowpass`, `Bandpass`, and `Highpass`.
 `set_filter_target(type, ramp_samples)` crossfades their simultaneous
@@ -92,7 +97,8 @@ the immediate source to the delayed signal; the package task spells this option
 `dry_wet`.
 
 During interactive playback, `z/x` lower or raise the feedback-filter cutoff,
-`c/v` change resonance, `j/k` change jitter depth, and `u/i` change delay time.
+`c/v` change resonance, `j/k` change jitter depth, `u/i` change delay time, and
+`f/g` lower or raise damping.
 The corresponding ramp options provide smoothly retargetable, sample-accurate
 changes. `a/s` lower or raise feedback. The `d` key clears the loop and restores
 the example's safe `reset_feedback` value. The example applies other updated

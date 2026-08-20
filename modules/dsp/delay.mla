@@ -84,6 +84,9 @@ pub struct StereoDelay {
     var filter_type_ramp_remaining: i64;
     var filter_wet_output: bool;
     var damping: f32;
+    var damping_target: f32;
+    var damping_step: f32;
+    var damping_ramp_remaining: i64;
     var filter_g: f32;
     var filter_g_target: f32;
     var filter_g_step: f32;
@@ -148,6 +151,9 @@ impl StereoDelay {
             filter_type_ramp_remaining: 0,
             filter_wet_output: true,
             damping: 0.65f,
+            damping_target: 0.65f,
+            damping_step: 0.0f,
+            damping_ramp_remaining: 0,
             filter_g: 0.0f,
             filter_g_target: 0.0f,
             filter_g_step: 0.0f,
@@ -391,6 +397,30 @@ impl StereoDelay {
     /// @brief Blend filtered feedback over dry feedback from 0 to 1.
     pub fn set_damping(self: &mut Self, damping: f32) -> void {
         self.damping = delay_clamp(damping, 0.0f, 1.0f);
+        self.damping_target = self.damping;
+        self.damping_step = 0.0f;
+        self.damping_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp the filtered-feedback blend over a sample count.
+    ///
+    /// Retargeting continues from the current in-flight blend. Zero or
+    /// negative ramp lengths apply the new damping value immediately.
+    pub fn set_damping_target(self: &mut Self, damping: f32,
+                              ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_damping(damping);
+            return;
+        }
+        self.damping_target = delay_clamp(damping, 0.0f, 1.0f);
+        self.damping_step = (self.damping_target - self.damping) /
+            f32(ramp_samples);
+        self.damping_ramp_remaining = ramp_samples;
+    }
+
+    /// @brief Return the current in-flight filtered-feedback blend.
+    pub fn damping_value(self: StereoDelay) -> f32 {
+        return self.damping;
     }
 
     /// @brief Clear delay and filter histories while retaining parameters.
@@ -483,6 +513,16 @@ impl StereoDelay {
         if self.jitter_depth_ramp_remaining == 0 {
             self.jitter_depth_samples = self.jitter_depth_target_samples;
             self.jitter_depth_step_samples = 0.0f;
+        }
+    }
+
+    fn advance_damping(self: &mut Self) -> void {
+        if self.damping_ramp_remaining <= 0 { return; }
+        self.damping = self.damping + self.damping_step;
+        self.damping_ramp_remaining = self.damping_ramp_remaining - 1;
+        if self.damping_ramp_remaining == 0 {
+            self.damping = self.damping_target;
+            self.damping_step = 0.0f;
         }
     }
 
@@ -619,6 +659,7 @@ impl StereoDelay {
     pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> DelayFrame {
         self.advance_delay_time();
         self.advance_jitter_depth();
+        self.advance_damping();
         self.advance_mix();
         self.advance_filter_cutoff();
         self.advance_filter_resonance();

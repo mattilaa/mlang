@@ -1,7 +1,0 @@
-# MLang delay automation session v1
-# elapsed_us keycode
-# 32=Space 122/120=cutoff-down/up 99/118=resonance-down/up
-# 108=lowpass 98=bandpass 104=highpass 110/109=dry-wet-down/up
-# 106/107=jitter-down/up 117/105=delay-down/up
-# 97/115=feedback-down/up 100=reset-loop 113=quit; uppercase keycodes are also valid
-5537959 113

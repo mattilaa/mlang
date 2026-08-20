@@ -81,6 +81,8 @@ fn is_session_key(key: i32) -> bool {
         key == AsciiKey::LowerK || key == AsciiKey::UpperK ||
         key == AsciiKey::LowerU || key == AsciiKey::UpperU ||
         key == AsciiKey::LowerI || key == AsciiKey::UpperI ||
+        key == AsciiKey::LowerF || key == AsciiKey::UpperF ||
+        key == AsciiKey::LowerG || key == AsciiKey::UpperG ||
         key == AsciiKey::LowerD || key == AsciiKey::UpperD ||
         key == AsciiKey::LowerA || key == AsciiKey::UpperA ||
         key == AsciiKey::LowerS || key == AsciiKey::UpperS;
@@ -116,7 +118,7 @@ fn load_session(path: str8) -> SessionData {
 }
 
 fn begin_session_recording(path: str8) -> bool {
-    let header: str8 = "# MLang delay automation session v1\n# elapsed_us keycode\n# 32=Space 122/120=cutoff-down/up 99/118=resonance-down/up\n# 108=lowpass 98=bandpass 104=highpass 110/109=dry-wet-down/up\n# 106/107=jitter-down/up 117/105=delay-down/up\n# 97/115=feedback-down/up 100=reset-loop 113=quit; uppercase keycodes are also valid\n";
+    let header: str8 = "# MLang delay automation session v1\n# elapsed_us keycode\n# 32=Space 122/120=cutoff-down/up 99/118=resonance-down/up\n# 108=lowpass 98=bandpass 104=highpass 110/109=dry-wet-down/up\n# 106/107=jitter-down/up 117/105=delay-down/up 102/103=damping-down/up\n# 97/115=feedback-down/up 100=reset-loop 113=quit; uppercase keycodes are also valid\n";
     let result: result<i32, str8> = write_all_text(path, header);
     if result.is_err() {
         println!("session recording create failed: {}", path);
@@ -210,7 +212,16 @@ fn draw_slider(label: str8, value: f32, minimum: f32, maximum: f32,
             let red: i32 = label_r + i32(amount) * (255 - label_r) / 255;
             let green: i32 = label_g + i32(amount) * (60 - label_g) / 255;
             let blue: i32 = label_b + i32(amount) * (55 - label_b) / 255;
-            print!("{}█", fg_rgb(red, green, blue));
+            let fade_distance: i64 = filled - cell;
+            if fade_distance == 1 {
+                print!("{}░", fg_rgb(red, green, blue));
+            } else if fade_distance == 2 {
+                print!("{}▒", fg_rgb(red, green, blue));
+            } else if fade_distance == 3 {
+                print!("{}▓", fg_rgb(red, green, blue));
+            } else {
+                print!("{}█", fg_rgb(red, green, blue));
+            }
         } else {
             let track_r: i32 = 20 + label_r / 6;
             let track_g: i32 = 20 + label_g / 6;
@@ -252,6 +263,7 @@ fn draw_performance_ui(mode_name: str8, filter_scope_name: str8,
     println!("  filter  [l] low-pass   [b] band-pass   [h] high-pass");
     println!("  cutoff [z/x]   resonance [c/v]   feedback [a/s]");
     println!("  mix [n/m]      jitter [j/k]      delay time [u/i]");
+    println!("  damping [f/g]");
     println!("  [Space] pause/resume   [d] clear loop   [q] save/quit");
     println!("");
     println!("  session: {}   replay: {}   WAV output: {}",
@@ -301,6 +313,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     ap.option("filter-resonance", "r", "Feedback-filter resonance from 0 to 1", "0.25");
     ap.option("resonance-ramp-ms", "", "Live resonance-key smoothing time in milliseconds", "80");
     ap.option("damping", "q", "Filtered-feedback blend from 0 to 1", "0.75");
+    ap.option("damping-ramp-ms", "", "Live f/g damping smoothing duration", "80");
     ap.option("tail-ms", "e", "Silence rendered after input for delay tail", "3000");
     ap.option("device", "d", "Output device id; -1 uses the default", "-1");
     ap.option("record-session", "", "Write live control automation to this text file", "");
@@ -352,7 +365,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let cutoff_ramp_ms: i64 = parsed.get_i64("cutoff-ramp-ms");
     var filter_resonance: f32 = f32(atof(parsed.get("filter-resonance")));
     let resonance_ramp_ms: i64 = parsed.get_i64("resonance-ramp-ms");
-    let damping: f32 = f32(atof(parsed.get("damping")));
+    var damping: f32 = f32(atof(parsed.get("damping")));
+    let damping_ramp_ms: i64 = parsed.get_i64("damping-ramp-ms");
     let tail_ms: i64 = parsed.get_i64("tail-ms");
     let requested_device: i64 = parsed.get_i64("device");
     let record_session_path: str8 = parsed.get("record-session");
@@ -380,7 +394,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
        filter_type_ramp_ms < 0 || filter_type_ramp_ms > 2000 ||
        filter_resonance < 0.0f || filter_resonance > 1.0f ||
        resonance_ramp_ms < 0 || resonance_ramp_ms > 2000 ||
-       damping < 0.0f || damping > 1.0f || tail_ms < 0 ||
+       damping < 0.0f || damping > 1.0f ||
+       damping_ramp_ms < 0 || damping_ramp_ms > 2000 || tail_ms < 0 ||
        (recording_enabled && replay_enabled) {
         println!("invalid mode, filter, filter scope, delay, BPM, beat length, jitter, feedback, dry/wet, cutoff, damping, or tail option");
         parsed.free();
@@ -438,6 +453,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let mix_ramp_samples: i64 = output_rate * mix_ramp_ms / 1000;
     let delay_ramp_samples: i64 = output_rate * delay_ramp_ms / 1000;
     let jitter_ramp_samples: i64 = output_rate * jitter_ramp_ms / 1000;
+    let damping_ramp_samples: i64 = output_rate * damping_ramp_ms / 1000;
     if filter_cutoff > max_filter_cutoff { filter_cutoff = max_filter_cutoff; }
     let source_step: f64 = f64(source_rate) / f64(output_rate);
     let source_output_frames: i64 = llround(f64(source_frames) / source_step + 0.499999);
@@ -495,6 +511,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     println!("live dry/wet ramp: {} ms", mix_ramp_ms);
     println!("live delay-time ramp: {} ms", delay_ramp_ms);
     println!("live jitter-depth ramp: {} ms", jitter_ramp_ms);
+    println!("live damping ramp: {} ms", damping_ramp_ms);
     println!("tail: {} ms", tail_ms);
     if recording_enabled { println!("recording control session to {}", record_session_path); }
     if replay_enabled {
@@ -512,6 +529,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         println!("  n/m    lower/raise dry-wet mix smoothly");
         println!("  j/k    lower/raise analog jitter smoothly");
         println!("  u/i    lower/raise delay time smoothly");
+        println!("  f/g    lower/raise feedback-filter damping smoothly");
         println!("  a/s    lower/raise delay feedback");
         println!("  d/D    clear the loop and restore safe feedback");
         println!("  q/Q    stop playback and exit");
@@ -614,6 +632,16 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 if delay_ms > 5000.0f { delay_ms = 5000.0f; }
                 delay.set_delay_target_ms(delay_ms, delay_ramp_samples);
                 if !ui_enabled { println!("delay time raised smoothly to {} ms", delay_ms); }
+            } else if key == AsciiKey::LowerF || key == AsciiKey::UpperF {
+                damping = damping - 0.05f;
+                if damping < 0.0f { damping = 0.0f; }
+                delay.set_damping_target(damping, damping_ramp_samples);
+                if !ui_enabled { println!("filter damping lowered smoothly to {}", damping); }
+            } else if key == AsciiKey::LowerG || key == AsciiKey::UpperG {
+                damping = damping + 0.05f;
+                if damping > 1.0f { damping = 1.0f; }
+                delay.set_damping_target(damping, damping_ramp_samples);
+                if !ui_enabled { println!("filter damping raised smoothly to {}", damping); }
             } else if key == AsciiKey::LowerZ || key == AsciiKey::UpperZ {
                 filter_cutoff = filter_cutoff / 1.25f;
                 if filter_cutoff < 20.0f { filter_cutoff = 20.0f; }
@@ -659,7 +687,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         if ui_enabled && (ui_dirty || rendered >= next_ui_frame) {
             draw_performance_ui(mode_name, filter_scope_name, active_filter_name,
                 paused, filter_cutoff, max_filter_cutoff, filter_resonance,
-                feedback, dry_wet, damping, delay.delay_ms(), delay.jitter_ms(),
+                feedback, dry_wet, delay.damping_value(), delay.delay_ms(), delay.jitter_ms(),
                 source_rendered, source_output_frames, recording_enabled,
                 replay_enabled, output_enabled);
             ui_dirty = false;

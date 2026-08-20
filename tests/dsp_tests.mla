@@ -527,6 +527,25 @@ fn test_dsp_delay_jitter_depth_ramp_is_sample_accurate() {
 }
 
 #[test]
+fn test_dsp_delay_damping_ramp_is_sample_accurate_and_retargetable() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(10.0f);
+    delay.set_damping(0.0f);
+    delay.set_damping_target(1.0f, 20);
+    for _i in 0..10 {
+        let _ = delay.process_stereo(0.0f, 0.0f);
+    }
+    verify(approx_f32(delay.damping_value(), 0.5f, 0.001f));
+    delay.set_damping_target(0.25f, 10);
+    for _i in 0..10 {
+        let frame: DelayFrame = delay.process_stereo(0.0f, 0.0f);
+        verify(frame.left() == frame.left());
+        verify(frame.right() == frame.right());
+    }
+    verify(approx_f32(delay.damping_value(), 0.25f, 0.001f));
+}
+
+#[test]
 fn test_dsp_delay_high_resonance_preserves_passband_gain() {
     var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
     delay.set_delay_ms(4.0f);

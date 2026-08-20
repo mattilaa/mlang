@@ -29,6 +29,7 @@ interactive controls:
   n/m    lower/raise dry-wet mix smoothly
   j/k    lower/raise analog jitter smoothly
   u/i    lower/raise delay time smoothly
+  f/g    lower/raise feedback-filter damping smoothly
   a/s    lower/raise delay feedback
   d/D    clear the loop and restore safe feedback
   q/Q    stop playback and exit
@@ -69,6 +70,10 @@ delay interpolation to avoid clicks. The existing `b` and `v` assignments stay
 available for band-pass selection and resonance-up. Jitter and delay-time keys
 are included in recorded and replayed sessions.
 
+Each `f` or `g` press lowers or raises damping by `0.05` in its `0..1` range.
+The transition uses `damping_ramp_ms` (80 ms by default), supports smooth
+retargeting during an active ramp, and is stored in session recordings.
+
 ## Ping-pong delay
 
 ```sh
@@ -92,7 +97,8 @@ cd examples/package_manager_delay_audio
   --option cutoff_ramp_ms=80 \
   --option filter_resonance=0.35 \
   --option resonance_ramp_ms=80 \
-  --option damping=0.75
+  --option damping=0.75 \
+  --option damping_ramp_ms=80
 ```
 
 Ping-pong mode sums the input to mono for the wet path, sends the first repeat
