@@ -203,14 +203,14 @@ fn draw_slider(label: str8, value: f32, minimum: f32, maximum: f32,
     while cell < width {
         if cell < filled {
             let amount: i64 = cell * 255 / (width - 1);
-            let red: i32 = i32(35 + amount * 220 / 255);
-            let green: i32 = i32(105 - amount * 55 / 255);
-            let blue: i32 = i32(245 - amount * 190 / 255);
+            let red: i32 = label_r + i32(amount) * (255 - label_r) / 255;
+            let green: i32 = label_g + i32(amount) * (60 - label_g) / 255;
+            let blue: i32 = label_b + i32(amount) * (55 - label_b) / 255;
             print!("{}█", fg_rgb(red, green, blue));
         } else {
-            let track_r: i32 = 48 + (row % 3) * 5;
-            let track_g: i32 = 55 + (row % 3) * 4;
-            let track_b: i32 = 72 + (row % 3) * 7;
+            let track_r: i32 = 20 + label_r / 6;
+            let track_g: i32 = 20 + label_g / 6;
+            let track_b: i32 = 24 + label_b / 6;
             print!("{}·", fg_rgb(track_r, track_g, track_b));
         }
         cell = cell + 1;
