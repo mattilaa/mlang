@@ -12,9 +12,11 @@ audio_path = "../../examples/fft_example/illusion.wav"
 audio_output = ""
 mode = "pingpong"
 delay_ms = "375"
+delay_ramp_ms = "120"
 bpm = "0"
 delay_beats = "0.75"
 jitter_ms = "0"
+jitter_ramp_ms = "120"
 feedback = "0.58"
 reset_feedback = "0.68"
 dry_wet = "0.60"
@@ -79,7 +81,7 @@ name = "demo"
 depends_on = ["link"]
 log_output = false
 shell = [
-  "audio_output='{{option.audio_output}}'; record_session='{{option.record_session}}'; replay_session='{{option.replay_session}}'; output_file='{{option.output_file}}'; set -- --audio-path '{{option.audio_path}}' --mode '{{option.mode}}' --delay-ms '{{option.delay_ms}}' --bpm '{{option.bpm}}' --delay-beats '{{option.delay_beats}}' --jitter-ms '{{option.jitter_ms}}' --feedback '{{option.feedback}}' --reset-feedback '{{option.reset_feedback}}' --dry-wet '{{option.dry_wet}}' --mix-ramp-ms '{{option.mix_ramp_ms}}' --filter '{{option.filter}}' --filter-scope '{{option.filter_scope}}' --filter-type-ramp-ms '{{option.filter_type_ramp_ms}}' --filter-cutoff '{{option.filter_cutoff}}' --cutoff-ramp-ms '{{option.cutoff_ramp_ms}}' --filter-resonance '{{option.filter_resonance}}' --resonance-ramp-ms '{{option.resonance_ramp_ms}}' --damping '{{option.damping}}' --tail-ms '{{option.tail_ms}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; if [ -n \"$record_session\" ]; then set -- \"$@\" --record-session \"$record_session\"; fi; if [ -n \"$replay_session\" ]; then set -- \"$@\" --replay-session \"$replay_session\"; fi; if [ -n \"$output_file\" ]; then set -- \"$@\" --output-file \"$output_file\"; fi; exec {{build_dir}}/delay_audio_demo \"$@\""
+  "audio_output='{{option.audio_output}}'; record_session='{{option.record_session}}'; replay_session='{{option.replay_session}}'; output_file='{{option.output_file}}'; set -- --audio-path '{{option.audio_path}}' --mode '{{option.mode}}' --delay-ms '{{option.delay_ms}}' --delay-ramp-ms '{{option.delay_ramp_ms}}' --bpm '{{option.bpm}}' --delay-beats '{{option.delay_beats}}' --jitter-ms '{{option.jitter_ms}}' --jitter-ramp-ms '{{option.jitter_ramp_ms}}' --feedback '{{option.feedback}}' --reset-feedback '{{option.reset_feedback}}' --dry-wet '{{option.dry_wet}}' --mix-ramp-ms '{{option.mix_ramp_ms}}' --filter '{{option.filter}}' --filter-scope '{{option.filter_scope}}' --filter-type-ramp-ms '{{option.filter_type_ramp_ms}}' --filter-cutoff '{{option.filter_cutoff}}' --cutoff-ramp-ms '{{option.cutoff_ramp_ms}}' --filter-resonance '{{option.filter_resonance}}' --resonance-ramp-ms '{{option.resonance_ramp_ms}}' --damping '{{option.damping}}' --tail-ms '{{option.tail_ms}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; if [ -n \"$record_session\" ]; then set -- \"$@\" --record-session \"$record_session\"; fi; if [ -n \"$replay_session\" ]; then set -- \"$@\" --replay-session \"$replay_session\"; fi; if [ -n \"$output_file\" ]; then set -- \"$@\" --output-file \"$output_file\"; fi; exec {{build_dir}}/delay_audio_demo \"$@\""
 ]
 
 [[task]]

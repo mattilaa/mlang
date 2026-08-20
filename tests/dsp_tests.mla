@@ -481,6 +481,52 @@ fn test_dsp_delay_dry_wet_mix_ramp_is_sample_accurate() {
 }
 
 #[test]
+fn test_dsp_delay_time_ramp_is_smooth_and_retargetable() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(10.0f);
+    delay.set_feedback(0.0f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::None);
+    delay.set_delay_target_ms(30.0f, 20);
+    var previous: f32 = 0.0f;
+    for i in 0..10 {
+        let input: f32 = f32(i) * 0.001f;
+        let frame: DelayFrame = delay.process_stereo(input, input);
+        previous = frame.left();
+    }
+    verify(approx_f32(delay.delay_ms(), 20.0f, 0.001f));
+    delay.set_delay_target_ms(15.0f, 10);
+    for i in 10..20 {
+        let input: f32 = f32(i) * 0.001f;
+        let frame: DelayFrame = delay.process_stereo(input, input);
+        var jump: f32 = frame.left() - previous;
+        if jump < 0.0f { jump = 0.0f - jump; }
+        verify(jump < 0.01f);
+        previous = frame.left();
+    }
+    verify(approx_f32(delay.delay_ms(), 15.0f, 0.001f));
+}
+
+#[test]
+fn test_dsp_delay_jitter_depth_ramp_is_sample_accurate() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(20.0f);
+    delay.set_jitter_ms(0.0f);
+    delay.set_jitter_target_ms(4.0f, 20);
+    for _i in 0..10 {
+        let _ = delay.process_stereo(0.0f, 0.0f);
+    }
+    verify(approx_f32(delay.jitter_ms(), 2.0f, 0.001f));
+    delay.set_jitter_target_ms(1.0f, 10);
+    for _i in 0..10 {
+        let frame: DelayFrame = delay.process_stereo(0.0f, 0.0f);
+        verify(frame.left() == frame.left());
+        verify(frame.right() == frame.right());
+    }
+    verify(approx_f32(delay.jitter_ms(), 1.0f, 0.001f));
+}
+
+#[test]
 fn test_dsp_delay_high_resonance_preserves_passband_gain() {
     var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
     delay.set_delay_ms(4.0f);

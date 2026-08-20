@@ -27,6 +27,8 @@ interactive controls:
   c/v    lower/raise feedback-filter resonance
   l/b/h  select low-pass/band-pass/high-pass smoothly
   n/m    lower/raise dry-wet mix smoothly
+  j/k    lower/raise analog jitter smoothly
+  u/i    lower/raise delay time smoothly
   a/s    lower/raise delay feedback
   d/D    clear the loop and restore safe feedback
   q/Q    stop playback and exit
@@ -59,6 +61,14 @@ the sample-accurate `mix_ramp_ms` duration (80 ms by default), and repeated
 keypresses smoothly retarget a mix ramp already in progress. Dry/wet changes
 are also stored in control-session recordings.
 
+Each `j` or `k` press lowers or raises jitter depth by `0.25` ms, clamped to
+`0..50` ms. Each `u` or `i` press lowers or raises delay time by `10` ms,
+clamped to `1..5000` ms. Both controls use sample-accurate, retargetable DSP
+ramps (`jitter_ramp_ms` and `delay_ramp_ms`, 120 ms by default), with fractional
+delay interpolation to avoid clicks. The existing `b` and `v` assignments stay
+available for band-pass selection and resonance-up. Jitter and delay-time keys
+are included in recorded and replayed sessions.
+
 ## Ping-pong delay
 
 ```sh
@@ -68,7 +78,9 @@ cd examples/package_manager_delay_audio
   --option mode=pingpong \
   --option bpm=120 \
   --option delay_beats=0.75 \
+  --option delay_ramp_ms=120 \
   --option jitter_ms=1.2 \
+  --option jitter_ramp_ms=120 \
   --option feedback=0.58 \
   --option reset_feedback=0.68 \
   --option dry_wet=0.60 \

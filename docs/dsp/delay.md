@@ -22,7 +22,9 @@ use dsp::delay::StereoDelay;
 
 var delay: StereoDelay = StereoDelay::new(48000.0f, 2000.0f);
 delay.set_delay_ms(375.0f);
+delay.set_delay_target_ms(500.0f, 5760); // smooth 120 ms time change
 delay.set_jitter_ms(1.2f);
+delay.set_jitter_target_ms(2.0f, 5760); // smooth 120 ms depth change
 delay.set_mode(DelayMode::PingPong);
 delay.set_feedback(0.58f);
 delay.set_mix(0.45f);
@@ -64,11 +66,17 @@ from its current in-flight value. `set_mix()` remains the immediate setter.
 state-variable-filter taps without clearing filter history. This makes live
 filter-type changes continuous; `set_filter()` remains the immediate setter.
 
+`set_delay_target_ms(time, ramp_samples)` moves the fractional delay tap one
+sample at a time and can be retargeted during an active ramp. This keeps live
+time changes continuous and produces smooth tape-style pitch movement instead
+of a click. `set_delay_ms()` remains the immediate setter.
+
 `set_jitter_ms(depth)` adds slow, band-limited random modulation to the delay
 time. Fractional delay interpolation keeps the movement smooth and creates
 subtle analog-style pitch drift instead of abrupt whole-sample jumps. Use zero
 to disable it. Allocate `max_delay_ms` with enough room for the base delay plus
-the requested jitter depth.
+the requested jitter depth. `set_jitter_target_ms(depth, ramp_samples)` also
+smooths realtime depth changes and supports in-flight retargeting.
 
 Delay storage is allocated by `new(sample_rate_hz, max_delay_ms)`. Feedback is
 clamped to `0..1.20`; mix and damping are clamped to `0..1`. Above `0.98`, the
@@ -83,12 +91,12 @@ the library's analog-style delay-time wander. `--dry-wet 0..1` crossfades from
 the immediate source to the delayed signal; the package task spells this option
 `dry_wet`.
 
-During interactive playback, `z/x` lower or raise the feedback-filter cutoff
-using the sample-accurate `cutoff_ramp_ms` smoothing time, `c/v` lower or raise
-resonance using `resonance_ramp_ms`, and `a/s` lower or raise feedback. The
-`d` key clears the loop and restores the example's safe `reset_feedback` value.
-The example applies other updated parameters without stopping or resetting the
-delay tail.
+During interactive playback, `z/x` lower or raise the feedback-filter cutoff,
+`c/v` change resonance, `j/k` change jitter depth, and `u/i` change delay time.
+The corresponding ramp options provide smoothly retargetable, sample-accurate
+changes. `a/s` lower or raise feedback. The `d` key clears the loop and restores
+the example's safe `reset_feedback` value. The example applies other updated
+parameters without stopping or resetting the delay tail.
 
 The example can write timestamped control actions with
 `--record-session path.txt` and apply them again with

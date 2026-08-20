@@ -52,14 +52,18 @@ impl DelayFrame {
 /// @brief Stereo delay with routing, damped feedback filtering, and smooth time jitter.
 ///
 /// Storage is allocated only by `new()`. Processing and parameter changes do
-/// not allocate or lock. Configure delay time before audio starts; changing it
-/// while processing can produce the expected tape-head-style discontinuity.
+/// not allocate or lock. Delay time and jitter depth can be ramped while audio
+/// runs, using fractional reads for continuous tape-head-style movement.
 pub struct StereoDelay {
     var left_buffer: RingBufferF32;
     var right_buffer: RingBufferF32;
     var left_first_repeat_buffer: RingBufferF32;
     var right_first_repeat_buffer: RingBufferF32;
     var delay_samples: i64;
+    var delay_read_samples: f32;
+    var delay_target_samples: f32;
+    var delay_step_samples: f32;
+    var delay_ramp_remaining: i64;
     var sample_rate_hz: f32;
     var mode: DelayMode;
     var feedback: f32;
@@ -97,6 +101,9 @@ pub struct StereoDelay {
     var right_loop_filter_state1: f32;
     var right_loop_filter_state2: f32;
     var jitter_depth_samples: f32;
+    var jitter_depth_target_samples: f32;
+    var jitter_depth_step_samples: f32;
+    var jitter_depth_ramp_remaining: i64;
     var jitter_value: f32;
     var jitter_target: f32;
     var jitter_slew: f32;
@@ -117,6 +124,10 @@ impl StereoDelay {
             left_first_repeat_buffer: RingBufferF32::new(capacity),
             right_first_repeat_buffer: RingBufferF32::new(capacity),
             delay_samples: 1,
+            delay_read_samples: 1.0f,
+            delay_target_samples: 1.0f,
+            delay_step_samples: 0.0f,
+            delay_ramp_remaining: 0,
             sample_rate_hz: safe_rate,
             mode: DelayMode::Forward,
             feedback: 0.45f,
@@ -154,6 +165,9 @@ impl StereoDelay {
             right_loop_filter_state1: 0.0f,
             right_loop_filter_state2: 0.0f,
             jitter_depth_samples: 0.0f,
+            jitter_depth_target_samples: 0.0f,
+            jitter_depth_step_samples: 0.0f,
+            jitter_depth_ramp_remaining: 0,
             jitter_value: 0.0f,
             jitter_target: 0.0f,
             jitter_slew: 1.0f / (safe_rate * 0.12f),
@@ -175,6 +189,32 @@ impl StereoDelay {
         if samples >= self.left_buffer.capacity() { samples = self.left_buffer.capacity() - 1; }
         if samples < 1 { samples = 1; }
         self.delay_samples = samples;
+        self.delay_read_samples = f32(samples);
+        self.delay_target_samples = self.delay_read_samples;
+        self.delay_step_samples = 0.0f;
+        self.delay_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp delay time to a target over a sample count.
+    ///
+    /// Fractional buffer reads make the moving tap continuous. Retargeting an
+    /// active ramp starts from its current in-flight position. Zero or negative
+    /// ramp lengths apply the target immediately.
+    pub fn set_delay_target_ms(self: &mut Self, delay_ms: f32,
+                               ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_delay_ms(delay_ms);
+            return;
+        }
+        var target: f32 = self.sample_rate_hz *
+            delay_clamp(delay_ms, 0.020833333f, 60000.0f) / 1000.0f;
+        let maximum: f32 = f32(self.left_buffer.capacity() - 1);
+        if target < 1.0f { target = 1.0f; }
+        if target > maximum { target = maximum; }
+        self.delay_target_samples = target;
+        self.delay_step_samples = (target - self.delay_read_samples) /
+            f32(ramp_samples);
+        self.delay_ramp_remaining = ramp_samples;
     }
 
     /// @brief Set slow random delay-time modulation depth in milliseconds.
@@ -185,6 +225,37 @@ impl StereoDelay {
     pub fn set_jitter_ms(self: &mut Self, jitter_ms: f32) -> void {
         self.jitter_depth_samples = self.sample_rate_hz *
             delay_clamp(jitter_ms, 0.0f, 1000.0f) / 1000.0f;
+        self.jitter_depth_target_samples = self.jitter_depth_samples;
+        self.jitter_depth_step_samples = 0.0f;
+        self.jitter_depth_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp jitter depth to a target over a sample count.
+    ///
+    /// Retargeting continues from the current in-flight depth so realtime
+    /// changes do not introduce a modulation discontinuity.
+    pub fn set_jitter_target_ms(self: &mut Self, jitter_ms: f32,
+                                ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_jitter_ms(jitter_ms);
+            return;
+        }
+        self.jitter_depth_target_samples = self.sample_rate_hz *
+            delay_clamp(jitter_ms, 0.0f, 1000.0f) / 1000.0f;
+        self.jitter_depth_step_samples =
+            (self.jitter_depth_target_samples - self.jitter_depth_samples) /
+            f32(ramp_samples);
+        self.jitter_depth_ramp_remaining = ramp_samples;
+    }
+
+    /// @brief Return the current in-flight delay time in milliseconds.
+    pub fn delay_ms(self: StereoDelay) -> f32 {
+        return self.delay_read_samples * 1000.0f / self.sample_rate_hz;
+    }
+
+    /// @brief Return the current in-flight jitter depth in milliseconds.
+    pub fn jitter_ms(self: StereoDelay) -> f32 {
+        return self.jitter_depth_samples * 1000.0f / self.sample_rate_hz;
     }
 
     /// @brief Select independent-channel forward or cross-fed ping-pong routing.
@@ -343,7 +414,7 @@ impl StereoDelay {
     }
 
     fn jittered_delay_samples(self: &mut Self) -> f32 {
-        if self.jitter_depth_samples <= 0.0f { return f32(self.delay_samples); }
+        if self.jitter_depth_samples <= 0.0f { return self.delay_read_samples; }
         self.jitter_counter = self.jitter_counter - 1;
         if self.jitter_counter <= 0 {
             self.jitter_rng_state = (self.jitter_rng_state * 16807) % 2147483647;
@@ -354,12 +425,13 @@ impl StereoDelay {
         self.jitter_value = self.jitter_value +
             (self.jitter_target - self.jitter_value) * self.jitter_slew;
         var depth: f32 = self.jitter_depth_samples;
-        let lower_room: f32 = f32(self.delay_samples - 1);
-        let upper_room: f32 = f32(self.left_buffer.capacity() - 1 - self.delay_samples);
+        let lower_room: f32 = self.delay_read_samples - 1.0f;
+        let upper_room: f32 = f32(self.left_buffer.capacity() - 1) -
+            self.delay_read_samples;
         if depth > lower_room { depth = lower_room; }
         if depth > upper_room { depth = upper_room; }
         if depth < 0.0f { depth = 0.0f; }
-        return f32(self.delay_samples) + self.jitter_value * depth;
+        return self.delay_read_samples + self.jitter_value * depth;
     }
 
     fn read_fractional(self: StereoDelay, buffer: RingBufferF32, position: f32) -> f32 {
@@ -389,6 +461,28 @@ impl StereoDelay {
         if self.mix_ramp_remaining == 0 {
             self.mix = self.mix_target;
             self.mix_step = 0.0f;
+        }
+    }
+
+    fn advance_delay_time(self: &mut Self) -> void {
+        if self.delay_ramp_remaining <= 0 { return; }
+        self.delay_read_samples = self.delay_read_samples + self.delay_step_samples;
+        self.delay_ramp_remaining = self.delay_ramp_remaining - 1;
+        if self.delay_ramp_remaining == 0 {
+            self.delay_read_samples = self.delay_target_samples;
+            self.delay_step_samples = 0.0f;
+        }
+        self.delay_samples = llroundf(self.delay_read_samples);
+    }
+
+    fn advance_jitter_depth(self: &mut Self) -> void {
+        if self.jitter_depth_ramp_remaining <= 0 { return; }
+        self.jitter_depth_samples = self.jitter_depth_samples +
+            self.jitter_depth_step_samples;
+        self.jitter_depth_ramp_remaining = self.jitter_depth_ramp_remaining - 1;
+        if self.jitter_depth_ramp_remaining == 0 {
+            self.jitter_depth_samples = self.jitter_depth_target_samples;
+            self.jitter_depth_step_samples = 0.0f;
         }
     }
 
@@ -523,6 +617,8 @@ impl StereoDelay {
     /// Forward mode feeds each channel back into itself. Ping-pong mode seeds
     /// the left delay from mono input and cross-feeds repeats between channels.
     pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> DelayFrame {
+        self.advance_delay_time();
+        self.advance_jitter_depth();
         self.advance_mix();
         self.advance_filter_cutoff();
         self.advance_filter_resonance();
