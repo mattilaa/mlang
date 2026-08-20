@@ -34,6 +34,14 @@ pub struct PcmBlock {
 /// @brief Lowercase stdlib type alias for `PcmBlock`.
 alias pcm_block = PcmBlock;
 
+/// @brief Streaming stereo 16-bit PCM WAV file writer.
+pub struct PcmWavWriter {
+    var handle: i64;
+};
+
+/// @brief Lowercase stdlib type alias for `PcmWavWriter`.
+alias pcm_wav_writer = PcmWavWriter;
+
 
 /// @brief Return the compiled/default std::audio backend name.
 pub fn backend_name() -> str8 {
@@ -126,6 +134,43 @@ impl PcmBlock {
     /// @brief Release the native block.
     pub fn close(self: PcmBlock) -> i32 {
         return __mlang_std_audio_pcm_block_close(self.handle);
+    }
+}
+
+impl PcmWavWriter {
+    /// @brief Create or replace a stereo 16-bit PCM WAV output file.
+    ///
+    /// Paths beginning with `~/` are expanded using the current home directory.
+    /// Call `close()` to finalize the RIFF and data sizes in the WAV header.
+    pub fn create(path: str8, sample_rate: i64) -> result<PcmWavWriter, str8> {
+        let h: i64 = __mlang_std_audio_pcm_wav_writer_new(path, sample_rate);
+        if h == 0 {
+            return Err<PcmWavWriter, str8>(last_error());
+        }
+        return Ok<PcmWavWriter, str8>(PcmWavWriter { handle: h });
+    }
+
+    /// @brief Append frames from a reusable stereo PCM block.
+    pub fn write_pcm_block(self: PcmWavWriter, block: PcmBlock, frames: i64) -> result<i64, str8> {
+        let written: i64 = __mlang_std_audio_pcm_wav_writer_write_block(self.handle, block.handle, frames);
+        if written < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(written);
+    }
+
+    /// @brief Return the number of stereo frames written so far.
+    pub fn frames_written(self: PcmWavWriter) -> i64 {
+        return __mlang_std_audio_pcm_wav_writer_frames_written(self.handle);
+    }
+
+    /// @brief Finalize the WAV header, close the file, and release the writer.
+    pub fn close(self: PcmWavWriter) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_pcm_wav_writer_close(self.handle);
+        if rc != 0 {
+            return Err<i32, str8>(last_error());
+        }
+        return Ok<i32, str8>(0);
     }
 }
 

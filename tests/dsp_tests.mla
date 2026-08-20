@@ -349,6 +349,157 @@ fn test_dsp_delay_filters_first_wet_repeat() {
 }
 
 #[test]
+fn test_dsp_delay_feedback_only_filter_preserves_first_repeat() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(0.5f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::Lowpass);
+    delay.set_filter_wet_output(false);
+    delay.set_filter_cutoff_hz(100.0f);
+    delay.set_damping(1.0f);
+    var first_echo: f32 = 0.0f;
+    var second_echo: f32 = 0.0f;
+    for i in 0..9 {
+        let frame: DelayFrame = delay.process_stereo(i == 0 ? 1.0f : 0.0f, 0.0f);
+        if i == 4 { first_echo = frame.left(); }
+        if i == 8 { second_echo = frame.left(); }
+    }
+    verify(approx_f32(first_echo, 1.0f, 0.000001f));
+    verify(second_echo > 0.0f);
+    verify(second_echo < 0.5f);
+}
+
+#[test]
+fn test_dsp_delay_feedback_only_controls_color_regenerated_repeats() {
+    var dark: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    dark.set_delay_ms(4.0f);
+    dark.set_feedback(0.7f);
+    dark.set_mix(1.0f);
+    dark.set_filter(FeedbackFilter::Lowpass);
+    dark.set_filter_wet_output(false);
+    dark.set_filter_cutoff_hz(60.0f);
+    dark.set_filter_resonance(0.1f);
+    dark.set_damping(1.0f);
+
+    var bright: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    bright.set_delay_ms(4.0f);
+    bright.set_feedback(0.7f);
+    bright.set_mix(1.0f);
+    bright.set_filter(FeedbackFilter::Lowpass);
+    bright.set_filter_wet_output(false);
+    bright.set_filter_cutoff_hz(350.0f);
+    bright.set_filter_resonance(0.9f);
+    bright.set_damping(1.0f);
+
+    var difference: f32 = 0.0f;
+    for i in 0..40 {
+        let input: f32 = i == 0 ? 0.5f : 0.0f;
+        let dark_frame: DelayFrame = dark.process_stereo(input, 0.0f);
+        let bright_frame: DelayFrame = bright.process_stereo(input, 0.0f);
+        if i >= 8 {
+            var delta: f32 = bright_frame.left() - dark_frame.left();
+            if delta < 0.0f { delta = 0.0f - delta; }
+            difference = difference + delta;
+        }
+    }
+    verify(difference > 0.01f);
+}
+
+#[test]
+fn test_dsp_delay_bandpass_filter_produces_wet_repeat() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(0.0f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::Bandpass);
+    delay.set_filter_cutoff_hz(120.0f);
+    delay.set_filter_resonance(0.5f);
+    delay.set_damping(1.0f);
+    var energy: f32 = 0.0f;
+    for i in 0..100 {
+        let frame: DelayFrame = delay.process_stereo(i == 0 ? 0.5f : 0.0f, 0.0f);
+        energy = energy + frame.left() * frame.left();
+        verify(frame.left() == frame.left());
+    }
+    verify(energy > 0.0001f);
+}
+
+#[test]
+fn test_dsp_delay_filter_type_crossfade_is_smooth() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(0.0f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::Lowpass);
+    delay.set_filter_cutoff_hz(100.0f);
+    delay.set_filter_resonance(0.4f);
+    delay.set_damping(1.0f);
+    var before: f32 = 0.0f;
+    for i in 0..100 {
+        let before_frame: DelayFrame = delay.process_stereo(0.1f, 0.1f);
+        before = before_frame.left();
+    }
+    delay.set_filter_target(FeedbackFilter::Bandpass, 20);
+    let first_frame: DelayFrame = delay.process_stereo(0.1f, 0.1f);
+    let first: f32 = first_frame.left();
+    var first_delta: f32 = first - before;
+    if first_delta < 0.0f { first_delta = 0.0f - first_delta; }
+    verify(first_delta < 0.02f);
+    for i in 0..30 {
+        let frame: DelayFrame = delay.process_stereo(0.1f, 0.1f);
+        verify(frame.left() == frame.left());
+    }
+    delay.set_filter_target(FeedbackFilter::Highpass, 20);
+    for i in 0..30 {
+        let frame: DelayFrame = delay.process_stereo(0.1f, 0.1f);
+        verify(frame.left() == frame.left());
+    }
+    delay.set_filter_target(FeedbackFilter::Lowpass, 20);
+    for i in 0..30 {
+        let frame: DelayFrame = delay.process_stereo(0.1f, 0.1f);
+        verify(frame.left() == frame.left());
+    }
+}
+
+#[test]
+fn test_dsp_delay_dry_wet_mix_ramp_is_sample_accurate() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(0.0f);
+    delay.set_mix(0.0f);
+    delay.set_filter(FeedbackFilter::None);
+    let initial: DelayFrame = delay.process_stereo(1.0f, 0.0f);
+    verify(approx_f32(initial.left(), 1.0f, 0.000001f));
+    delay.set_mix_target(1.0f, 10);
+    var echo: f32 = 0.0f;
+    for i in 1..5 {
+        let frame: DelayFrame = delay.process_stereo(0.0f, 0.0f);
+        if i == 4 { echo = frame.left(); }
+    }
+    verify(approx_f32(echo, 0.4f, 0.0001f));
+}
+
+#[test]
+fn test_dsp_delay_high_resonance_preserves_passband_gain() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(0.0f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::Lowpass);
+    delay.set_filter_cutoff_hz(300.0f);
+    delay.set_filter_resonance(0.95f);
+    delay.set_damping(1.0f);
+    var impulse_sum: f32 = 0.0f;
+    for i in 0..200 {
+        let frame: DelayFrame = delay.process_stereo(i == 0 ? 0.01f : 0.0f, 0.0f);
+        impulse_sum = impulse_sum + frame.left();
+    }
+    verify(impulse_sum > 0.0075f);
+    verify(impulse_sum < 0.0125f);
+}
+
+#[test]
 fn test_dsp_delay_cutoff_ramp_can_be_retargeted() {
     var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
     delay.set_delay_ms(4.0f);
@@ -410,6 +561,79 @@ fn test_dsp_resonant_feedback_delay_stays_finite() {
         energy = energy + frame.left() * frame.left() + frame.right() * frame.right();
     }
     verify(energy > 0.001f);
+}
+
+#[test]
+fn test_dsp_resonant_feedback_below_unity_decays() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(0.94f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::Lowpass);
+    delay.set_filter_cutoff_hz(300.0f);
+    delay.set_filter_resonance(0.95f);
+    delay.set_damping(0.85f);
+    var late_energy: f32 = 0.0f;
+    for i in 0..4000 {
+        let frame: DelayFrame = delay.process_stereo(i == 0 ? 0.5f : 0.0f, 0.0f);
+        if i >= 3000 { late_energy = late_energy + frame.left() * frame.left(); }
+    }
+    verify(late_energy < 0.000001f);
+}
+
+#[test]
+fn test_dsp_lowering_feedback_stops_resonant_self_oscillation() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(1.2f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::Lowpass);
+    delay.set_filter_cutoff_hz(300.0f);
+    delay.set_filter_resonance(0.95f);
+    delay.set_damping(0.85f);
+    var late_energy: f32 = 0.0f;
+    for i in 0..5000 {
+        if i == 1000 { delay.set_feedback(0.5f); }
+        let frame: DelayFrame = delay.process_stereo(i == 0 ? 0.5f : 0.0f, 0.0f);
+        if i >= 4000 { late_energy = late_energy + frame.left() * frame.left(); }
+    }
+    verify(late_energy < 0.000001f);
+}
+
+#[test]
+fn test_dsp_dub_feedback_self_oscillation_is_bounded() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(1.2f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::None);
+    var late_energy: f32 = 0.0f;
+    for i in 0..5000 {
+        let input: f32 = i == 0 ? 1.0f : 0.0f;
+        let frame: DelayFrame = delay.process_stereo(input, input);
+        verify(frame.left() == frame.left());
+        verify(frame.left() > -2.0f && frame.left() < 2.0f);
+        if i > 4000 { late_energy = late_energy + frame.left() * frame.left(); }
+    }
+    verify(late_energy > 0.01f);
+}
+
+#[test]
+fn test_dsp_delay_reset_kills_regenerative_loop() {
+    var delay: StereoDelay = StereoDelay::new(1000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(1.2f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::None);
+    for i in 0..100 {
+        let _ = delay.process_stereo(i == 0 ? 1.0f : 0.0f, 0.0f);
+    }
+    delay.reset();
+    for i in 0..20 {
+        let frame: DelayFrame = delay.process_stereo(0.0f, 0.0f);
+        verify(approx_f32(frame.left(), 0.0f, 0.000001f));
+        verify(approx_f32(frame.right(), 0.0f, 0.000001f));
+    }
 }
 
 #[test]

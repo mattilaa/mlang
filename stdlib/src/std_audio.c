@@ -15,6 +15,7 @@
 typedef struct mlang_audio_device mlang_audio_device_t;
 typedef struct mlang_pcm_audio mlang_pcm_audio_t;
 typedef struct mlang_pcm_block mlang_pcm_block_t;
+typedef struct mlang_pcm_wav_writer mlang_pcm_wav_writer_t;
 
 typedef struct
 {
@@ -64,6 +65,13 @@ struct mlang_pcm_block
 {
     float* samples;
     int64_t capacity_frames;
+};
+
+struct mlang_pcm_wav_writer
+{
+    FILE* file;
+    uint32_t sample_rate;
+    uint64_t frames_written;
 };
 
 static char g_audio_last_error[512];
@@ -209,6 +217,39 @@ static uint32_t audio_read_u32_le(const unsigned char* p)
 {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static void audio_write_u16_le(unsigned char* p, uint16_t value)
+{
+    p[0] = (unsigned char)(value & 0xffu);
+    p[1] = (unsigned char)((value >> 8) & 0xffu);
+}
+
+static void audio_write_u32_le(unsigned char* p, uint32_t value)
+{
+    p[0] = (unsigned char)(value & 0xffu);
+    p[1] = (unsigned char)((value >> 8) & 0xffu);
+    p[2] = (unsigned char)((value >> 16) & 0xffu);
+    p[3] = (unsigned char)((value >> 24) & 0xffu);
+}
+
+static int audio_write_wav_header(FILE* file, uint32_t sample_rate,
+                                  uint32_t data_bytes)
+{
+    unsigned char header[44] = {0};
+    memcpy(header, "RIFF", 4);
+    audio_write_u32_le(header + 4, 36u + data_bytes);
+    memcpy(header + 8, "WAVEfmt ", 8);
+    audio_write_u32_le(header + 16, 16u);
+    audio_write_u16_le(header + 20, 1u);
+    audio_write_u16_le(header + 22, 2u);
+    audio_write_u32_le(header + 24, sample_rate);
+    audio_write_u32_le(header + 28, sample_rate * 4u);
+    audio_write_u16_le(header + 32, 4u);
+    audio_write_u16_le(header + 34, 16u);
+    memcpy(header + 36, "data", 4);
+    audio_write_u32_le(header + 40, data_bytes);
+    return fwrite(header, 1u, sizeof(header), file) == sizeof(header) ? 0 : -1;
 }
 
 static uint16_t audio_read_u16_be(const unsigned char* p)
@@ -591,6 +632,132 @@ int32_t __mlang_std_audio_pcm_block_close(int64_t handle)
         return 0;
     free(block->samples);
     free(block);
+    return 0;
+}
+
+int64_t __mlang_std_audio_pcm_wav_writer_new(const char* path,
+                                             int64_t sample_rate)
+{
+    if(!path || !path[0] || sample_rate < 8000 || sample_rate > 384000)
+    {
+        audio_set_error("std::audio WAV writer path or sample rate is invalid");
+        return 0;
+    }
+    char* expanded = audio_expand_path(path);
+    if(!expanded)
+    {
+        audio_set_error("std::audio WAV writer path allocation failed");
+        return 0;
+    }
+    FILE* file = fopen(expanded, "wb+");
+    if(!file)
+    {
+        (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
+                       "std::audio cannot create %s", expanded);
+        free(expanded);
+        return 0;
+    }
+    free(expanded);
+    mlang_pcm_wav_writer_t* writer =
+        (mlang_pcm_wav_writer_t*)calloc(1u, sizeof(*writer));
+    if(!writer)
+    {
+        fclose(file);
+        audio_set_error("std::audio WAV writer allocation failed");
+        return 0;
+    }
+    writer->file = file;
+    writer->sample_rate = (uint32_t)sample_rate;
+    if(audio_write_wav_header(file, writer->sample_rate, 0u) != 0)
+    {
+        fclose(file);
+        free(writer);
+        audio_set_error("std::audio failed to write WAV header");
+        return 0;
+    }
+    audio_clear_error();
+    return (int64_t)(intptr_t)writer;
+}
+
+int64_t __mlang_std_audio_pcm_wav_writer_write_block(
+    int64_t writer_handle, int64_t block_handle, int64_t frames)
+{
+    mlang_pcm_wav_writer_t* writer =
+        (mlang_pcm_wav_writer_t*)(intptr_t)writer_handle;
+    const mlang_pcm_block_t* block =
+        (const mlang_pcm_block_t*)(intptr_t)block_handle;
+    if(!writer || !writer->file || !block || !block->samples || frames < 0 ||
+       frames > block->capacity_frames)
+    {
+        audio_set_error("std::audio WAV writer block or frame count is invalid");
+        return -1;
+    }
+    if(writer->frames_written + (uint64_t)frames >
+       ((uint64_t)UINT32_MAX - 36u) / 4u)
+    {
+        audio_set_error("std::audio WAV output exceeds the 4 GiB RIFF limit");
+        return -1;
+    }
+    unsigned char encoded[4096];
+    int64_t frame_offset = 0;
+    while(frame_offset < frames)
+    {
+        int64_t chunk_frames = frames - frame_offset;
+        if(chunk_frames > 1024)
+            chunk_frames = 1024;
+        for(int64_t frame = 0; frame < chunk_frames; ++frame)
+        {
+            for(int channel = 0; channel < 2; ++channel)
+            {
+                float sample = block->samples[(frame_offset + frame) * 2 + channel];
+                if(sample < -1.0f)
+                    sample = -1.0f;
+                else if(sample > 1.0f)
+                    sample = 1.0f;
+                const int16_t pcm = (int16_t)lrintf(sample * 32767.0f);
+                audio_write_u16_le(encoded + (frame * 2 + channel) * 2,
+                                   (uint16_t)pcm);
+            }
+        }
+        const size_t bytes = (size_t)chunk_frames * 4u;
+        if(fwrite(encoded, 1u, bytes, writer->file) != bytes)
+        {
+            audio_set_error("std::audio failed to write WAV samples");
+            return -1;
+        }
+        frame_offset += chunk_frames;
+    }
+    writer->frames_written += (uint64_t)frames;
+    audio_clear_error();
+    return frames;
+}
+
+int64_t __mlang_std_audio_pcm_wav_writer_frames_written(int64_t handle)
+{
+    const mlang_pcm_wav_writer_t* writer =
+        (const mlang_pcm_wav_writer_t*)(intptr_t)handle;
+    return writer ? (int64_t)writer->frames_written : 0;
+}
+
+int32_t __mlang_std_audio_pcm_wav_writer_close(int64_t handle)
+{
+    mlang_pcm_wav_writer_t* writer =
+        (mlang_pcm_wav_writer_t*)(intptr_t)handle;
+    if(!writer)
+        return 0;
+    const uint32_t data_bytes = (uint32_t)(writer->frames_written * 4u);
+    int failed = fseek(writer->file, 0, SEEK_SET) != 0 ||
+                 audio_write_wav_header(writer->file, writer->sample_rate,
+                                        data_bytes) != 0;
+    if(fclose(writer->file) != 0)
+        failed = 1;
+    free(writer);
+    if(failed)
+    {
+        audio_set_error("std::audio failed to finalize WAV output");
+        return -1;
+    }
+    audio_clear_error();
     return 0;
 }
 
