@@ -16,8 +16,23 @@ The program prints this control summary when it starts:
 ```text
 interactive controls:
   Space  pause/resume source input (delay feedback keeps running)
+  z/x    lower/raise feedback-filter cutoff
+  c/v    lower/raise feedback-filter resonance
+  a/s    lower/raise delay feedback
   q/Q    stop playback and exit
 ```
+
+Each `z` or `x` press divides or multiplies the cutoff by `1.25`, clamped from
+20 Hz to just below the output Nyquist frequency. The DSP ramps sample by sample
+to the new cutoff over `cutoff_ramp_ms` (80 ms by default), including when a new
+keypress redirects a ramp already in progress. Set it to `0` for immediate
+changes. Each `a` or `s` press changes feedback by `0.02`, clamped to the safe
+`0..0.98` range. Uppercase keys work as well, and the program prints the new
+value after every adjustment.
+
+Each `c` or `v` press lowers or raises resonance by `0.05` in its `0..1` range.
+The transition uses the sample-accurate `resonance_ramp_ms` duration (80 ms by
+default), and rapid keypresses smoothly retarget an active ramp.
 
 ## Ping-pong delay
 
@@ -33,7 +48,9 @@ cd examples/package_manager_delay_audio
   --option dry_wet=0.45 \
   --option filter=lowpass \
   --option filter_cutoff=4200 \
+  --option cutoff_ramp_ms=80 \
   --option filter_resonance=0.35 \
+  --option resonance_ramp_ms=80 \
   --option damping=0.75
 ```
 

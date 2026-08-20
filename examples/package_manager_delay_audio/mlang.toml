@@ -19,7 +19,9 @@ feedback = "0.58"
 dry_wet = "0.45"
 filter = "lowpass"
 filter_cutoff = "4200"
+cutoff_ramp_ms = "80"
 filter_resonance = "0.25"
+resonance_ramp_ms = "80"
 damping = "0.75"
 tail_ms = "3000"
 
@@ -70,7 +72,7 @@ name = "demo"
 depends_on = ["link"]
 log_output = false
 shell = [
-  "audio_output='{{option.audio_output}}'; set -- --audio-path '{{option.audio_path}}' --mode '{{option.mode}}' --delay-ms '{{option.delay_ms}}' --bpm '{{option.bpm}}' --delay-beats '{{option.delay_beats}}' --jitter-ms '{{option.jitter_ms}}' --feedback '{{option.feedback}}' --dry-wet '{{option.dry_wet}}' --filter '{{option.filter}}' --filter-cutoff '{{option.filter_cutoff}}' --filter-resonance '{{option.filter_resonance}}' --damping '{{option.damping}}' --tail-ms '{{option.tail_ms}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/delay_audio_demo \"$@\""
+  "audio_output='{{option.audio_output}}'; set -- --audio-path '{{option.audio_path}}' --mode '{{option.mode}}' --delay-ms '{{option.delay_ms}}' --bpm '{{option.bpm}}' --delay-beats '{{option.delay_beats}}' --jitter-ms '{{option.jitter_ms}}' --feedback '{{option.feedback}}' --dry-wet '{{option.dry_wet}}' --filter '{{option.filter}}' --filter-cutoff '{{option.filter_cutoff}}' --cutoff-ramp-ms '{{option.cutoff_ramp_ms}}' --filter-resonance '{{option.filter_resonance}}' --resonance-ramp-ms '{{option.resonance_ramp_ms}}' --damping '{{option.damping}}' --tail-ms '{{option.tail_ms}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/delay_audio_demo \"$@\""
 ]
 
 [[task]]

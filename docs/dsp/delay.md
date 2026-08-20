@@ -28,7 +28,9 @@ delay.set_feedback(0.58f);
 delay.set_mix(0.45f);
 delay.set_filter(FeedbackFilter::Lowpass);
 delay.set_filter_cutoff_hz(4200.0f);
+delay.set_filter_cutoff_target_hz(1800.0f, 3840); // 80 ms at 48 kHz
 delay.set_filter_resonance(0.35f);
+delay.set_filter_resonance_target(0.8f, 3840);
 delay.set_damping(0.75f);
 
 let output: DelayFrame = delay.process_stereo(input_left, input_right);
@@ -37,6 +39,15 @@ let output: DelayFrame = delay.process_stereo(input_left, input_right);
 The low-pass and high-pass modes use a topology-preserving two-pole filter.
 `set_filter_resonance(0..1)` moves from a broadly damped response to a strong,
 bounded peak around the selected cutoff.
+
+`set_filter_cutoff_target_hz(cutoff, ramp_samples)` linearly ramps the internal
+filter coefficient from its current value. Retargeting during an active ramp
+continues smoothly from the in-flight value; `set_filter_cutoff_hz()` remains
+the immediate setter.
+
+`set_filter_resonance_target(resonance, ramp_samples)` provides the same
+sample-accurate, smoothly retargetable behavior for resonance. The immediate
+`set_filter_resonance()` setter remains available.
 
 `set_jitter_ms(depth)` adds slow, band-limited random modulation to the delay
 time. Fractional delay interpolation keeps the movement smooth and creates
@@ -54,3 +65,9 @@ The WAV/AIFF delay example supports tempo-synchronized timing with `--bpm` and
 the library's analog-style delay-time wander. `--dry-wet 0..1` crossfades from
 the immediate source to the delayed signal; the package task spells this option
 `dry_wet`.
+
+During interactive playback, `z/x` lower or raise the feedback-filter cutoff
+using the sample-accurate `cutoff_ramp_ms` smoothing time, `c/v` lower or raise
+resonance using `resonance_ramp_ms`, and `a/s` lower or raise feedback. The
+example applies the updated parameters without stopping or resetting the delay
+tail.

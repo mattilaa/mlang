@@ -63,7 +63,13 @@ pub struct StereoDelay {
     var filter_type: FeedbackFilter;
     var damping: f32;
     var filter_g: f32;
+    var filter_g_target: f32;
+    var filter_g_step: f32;
+    var filter_ramp_remaining: i64;
     var filter_k: f32;
+    var filter_k_target: f32;
+    var filter_k_step: f32;
+    var resonance_ramp_remaining: i64;
     var left_filter_state1: f32;
     var left_filter_state2: f32;
     var right_filter_state1: f32;
@@ -94,7 +100,13 @@ impl StereoDelay {
             filter_type: FeedbackFilter::Lowpass,
             damping: 0.65f,
             filter_g: 0.0f,
+            filter_g_target: 0.0f,
+            filter_g_step: 0.0f,
+            filter_ramp_remaining: 0,
             filter_k: 2.0f,
+            filter_k_target: 2.0f,
+            filter_k_step: 0.0f,
+            resonance_ramp_remaining: 0,
             left_filter_state1: 0.0f,
             left_filter_state2: 0.0f,
             right_filter_state1: 0.0f,
@@ -155,6 +167,25 @@ impl StereoDelay {
     pub fn set_filter_cutoff_hz(self: &mut Self, cutoff_hz: f32) -> void {
         let cutoff: f32 = delay_clamp(cutoff_hz, 20.0f, self.sample_rate_hz * 0.495f);
         self.filter_g = tanf(3.14159265358979323846f * cutoff / self.sample_rate_hz);
+        self.filter_g_target = self.filter_g;
+        self.filter_g_step = 0.0f;
+        self.filter_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp feedback-filter cutoff to a target over a sample count.
+    ///
+    /// A new target starts from the current in-flight value. Zero or negative
+    /// ramp lengths apply the cutoff immediately.
+    pub fn set_filter_cutoff_target_hz(self: &mut Self, cutoff_hz: f32,
+                                       ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_filter_cutoff_hz(cutoff_hz);
+            return;
+        }
+        let cutoff: f32 = delay_clamp(cutoff_hz, 20.0f, self.sample_rate_hz * 0.495f);
+        self.filter_g_target = tanf(3.14159265358979323846f * cutoff / self.sample_rate_hz);
+        self.filter_g_step = (self.filter_g_target - self.filter_g) / f32(ramp_samples);
+        self.filter_ramp_remaining = ramp_samples;
     }
 
     /// @brief Set feedback-filter resonance from 0 to 1.
@@ -163,6 +194,24 @@ impl StereoDelay {
     /// resonant peak (`Q` approximately 10).
     pub fn set_filter_resonance(self: &mut Self, resonance: f32) -> void {
         self.filter_k = 2.0f - 1.9f * delay_clamp(resonance, 0.0f, 1.0f);
+        self.filter_k_target = self.filter_k;
+        self.filter_k_step = 0.0f;
+        self.resonance_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp feedback-filter resonance to a target over a sample count.
+    ///
+    /// Retargeting starts from the current in-flight value. Zero or negative
+    /// ramp lengths apply resonance immediately.
+    pub fn set_filter_resonance_target(self: &mut Self, resonance: f32,
+                                       ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_filter_resonance(resonance);
+            return;
+        }
+        self.filter_k_target = 2.0f - 1.9f * delay_clamp(resonance, 0.0f, 1.0f);
+        self.filter_k_step = (self.filter_k_target - self.filter_k) / f32(ramp_samples);
+        self.resonance_ramp_remaining = ramp_samples;
     }
 
     /// @brief Blend filtered feedback over dry feedback from 0 to 1.
@@ -214,6 +263,26 @@ impl StereoDelay {
         return sample0 + (sample1 - sample0) * blend;
     }
 
+    fn advance_filter_cutoff(self: &mut Self) -> void {
+        if self.filter_ramp_remaining <= 0 { return; }
+        self.filter_g = self.filter_g + self.filter_g_step;
+        self.filter_ramp_remaining = self.filter_ramp_remaining - 1;
+        if self.filter_ramp_remaining == 0 {
+            self.filter_g = self.filter_g_target;
+            self.filter_g_step = 0.0f;
+        }
+    }
+
+    fn advance_filter_resonance(self: &mut Self) -> void {
+        if self.resonance_ramp_remaining <= 0 { return; }
+        self.filter_k = self.filter_k + self.filter_k_step;
+        self.resonance_ramp_remaining = self.resonance_ramp_remaining - 1;
+        if self.resonance_ramp_remaining == 0 {
+            self.filter_k = self.filter_k_target;
+            self.filter_k_step = 0.0f;
+        }
+    }
+
     fn filter_feedback_left(self: &mut Self, input: f32) -> f32 {
         if self.filter_type == FeedbackFilter::None { return input; }
         let g: f32 = self.filter_g;
@@ -257,6 +326,8 @@ impl StereoDelay {
     /// Forward mode feeds each channel back into itself. Ping-pong mode seeds
     /// the left delay from mono input and cross-feeds repeats between channels.
     pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> DelayFrame {
+        self.advance_filter_cutoff();
+        self.advance_filter_resonance();
         let read_position: f32 = self.jittered_delay_samples();
         let delayed_left: f32 = self.read_fractional(self.left_buffer, read_position);
         let delayed_right: f32 = self.read_fractional(self.right_buffer, read_position);
