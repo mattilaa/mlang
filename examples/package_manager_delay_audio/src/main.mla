@@ -42,6 +42,8 @@ use std::fs::File;
 use std::fs::free_lines;
 use std::fs::write_all_text;
 use std::strbuf::eq;
+use std::strbuf::fit_right;
+use std::strbuf::free;
 use std::strbuf::len;
 use std::strbuf::starts_with;
 use std::term::stdin_enable_cbreak;
@@ -176,20 +178,41 @@ fn restore_terminal(keyboard_enabled: bool, ui_enabled: bool) -> void {
     }
 }
 
-fn draw_slider(label: str8, value: f32, minimum: f32, maximum: f32) -> void {
+fn draw_slider(label: str8, value: f32, minimum: f32, maximum: f32,
+               row: i32) -> void {
     var normalized: f32 = maximum > minimum
         ? (value - minimum) / (maximum - minimum) : 0.0f;
     if normalized < 0.0f { normalized = 0.0f; }
     if normalized > 1.0f { normalized = 1.0f; }
     let width: i64 = 36;
     let filled: i64 = llround(f64(normalized * f32(width)));
-    print!("  {} [", label);
+    var label_r: i32 = 120;
+    var label_g: i32 = 185;
+    var label_b: i32 = 255;
+    if row % 4 == 1 {
+        label_r = 175; label_g = 145; label_b = 255;
+    } else if row % 4 == 2 {
+        label_r = 245; label_g = 135; label_b = 210;
+    } else if row % 4 == 3 {
+        label_r = 255; label_g = 165; label_b = 120;
+    }
+    let aligned_label: str8 = fit_right(label, 10, " ");
+    print!("  {}{}{} [", fg_rgb(label_r, label_g, label_b), aligned_label, reset());
+    free(aligned_label);
     var cell: i64 = 0;
-    print!("{}", fg_rgb(60, 210, 180));
     while cell < width {
-        if cell == filled { print!("{}", fg_rgb(70, 78, 88)); }
-        if cell < filled { print!("█"); }
-        else { print!("·"); }
+        if cell < filled {
+            let amount: i64 = cell * 255 / (width - 1);
+            let red: i32 = i32(35 + amount * 220 / 255);
+            let green: i32 = i32(105 - amount * 55 / 255);
+            let blue: i32 = i32(245 - amount * 190 / 255);
+            print!("{}█", fg_rgb(red, green, blue));
+        } else {
+            let track_r: i32 = 48 + (row % 3) * 5;
+            let track_g: i32 = 55 + (row % 3) * 4;
+            let track_b: i32 = 72 + (row % 3) * 7;
+            print!("{}·", fg_rgb(track_r, track_g, track_b));
+        }
         cell = cell + 1;
     }
     println!("{}]  {}{}", reset(), value, clear_eol());
@@ -211,16 +234,16 @@ fn draw_performance_ui(mode_name: str8, filter_scope_name: str8,
         paused ? "PAUSED " : "PLAYING", clear_eol());
     println!("");
     draw_slider("cutoff Hz", filter_cutoff, 20.0f,
-        max_filter_cutoff < 10000.0f ? max_filter_cutoff : 10000.0f);
-    draw_slider("resonance", filter_resonance, 0.0f, 1.0f);
-    draw_slider("feedback", feedback, 0.0f, 1.20f);
-    draw_slider("dry / wet", dry_wet, 0.0f, 1.0f);
-    draw_slider("damping", damping, 0.0f, 1.0f);
-    draw_slider("delay ms", delay_ms, 1.0f, 2000.0f);
-    draw_slider("jitter ms", jitter_ms, 0.0f, 10.0f);
+        max_filter_cutoff < 10000.0f ? max_filter_cutoff : 10000.0f, 0);
+    draw_slider("resonance", filter_resonance, 0.0f, 1.0f, 1);
+    draw_slider("feedback", feedback, 0.0f, 1.20f, 2);
+    draw_slider("dry / wet", dry_wet, 0.0f, 1.0f, 3);
+    draw_slider("damping", damping, 0.0f, 1.0f, 4);
+    draw_slider("delay ms", delay_ms, 1.0f, 2000.0f, 5);
+    draw_slider("jitter ms", jitter_ms, 0.0f, 10.0f, 6);
     let progress: f32 = source_output_frames > 0
         ? f32(source_rendered) / f32(source_output_frames) : 0.0f;
-    draw_slider("source", progress, 0.0f, 1.0f);
+    draw_slider("source", progress, 0.0f, 1.0f, 7);
     println!("");
     println!("  filter  [l] low-pass   [b] band-pass   [h] high-pass");
     println!("  cutoff [z/x]   resonance [c/v]   feedback [a/s]   mix [n/m]");
