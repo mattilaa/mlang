@@ -197,8 +197,9 @@ following additional programs are useful runnable showcases:
   selectable hall, room, plate, gated, reverse, or nonlinear `dsp::reverb`
   modes and streams a 30-second render through `std::audio`, with clap dry/wet
   control, output device selection, and sample-rate conversion.
-- `examples/package_manager_reverb2_trance` — 138 BPM bass-drum and trance-clap
-  sequence using the independently implemented `dsp::reverb2`. It includes the
+- `examples/package_manager_reverb2_trance` — configurable-BPM bass-drum,
+  trance-clap, and randomized sixteenth-note closed/open hi-hat sequence using
+  the independently implemented `dsp::reverb2`. It includes the
   original seven preset names plus custom and infinite-hall modes, with detailed
   gate, decay, diffusion, tone, modulation, stereo, predelay, and mix controls.
   An adjustable analog-color stage feeds a linked-stereo look-ahead limiter on
@@ -206,9 +207,13 @@ following additional programs are useful runnable showcases:
 
   ```sh
   ../../build/mlang pkg run demo \
+    --option bpm=138 \
     --option reverb_type=gated \
     --option kick_gain_db=0 \
     --option clap_gain_db=12 \
+    --option hihat_gain_db=-3 \
+    --option hihat_randomization=0.12 \
+    --option hihat_seed=-1 \
     --option clap_mix=0.72 \
     --option limiter_threshold_db=-6 \
     --option limiter_release_ms=180 \

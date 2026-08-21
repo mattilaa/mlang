@@ -1,14 +1,14 @@
 # MLang Reverb2 Trance Sequence
 
-This example copies the bass-drum and clap source sounds from the earlier
-`package_manager_reverb_techno` example, schedules them at 138 BPM, and sends
-the clap through `dsp::reverb2`. The default is the more controllable gated
-preset intended for tight trance claps.
+This example schedules bass drum, clap, and closed/open TR-909-style hi-hat
+samples at a configurable BPM and sends the clap through `dsp::reverb2`. The
+default is the more controllable gated preset intended for tight trance claps.
 
 Pattern:
 
 ```text
 BD...BD+CL...BD...BD+CL
+CH-OH-CH-CH-OH-CH-CH-OH-CH-OH-CH-CH-OH-CH-CH-OH
 ```
 
 ## Build and run
@@ -17,10 +17,14 @@ From this directory, run the gated-clap preset:
 
 ```sh
 ../../build/mlang pkg run demo \
+  --option bpm=138 \
   --option reverb_type=gated \
   --option clap_mix=0.82 \
   --option kick_gain_db=0 \
   --option clap_gain_db=3 \
+  --option hihat_gain_db=-3 \
+  --option hihat_randomization=0.12 \
+  --option hihat_seed=-1 \
   --option limiter_threshold_db=-3 \
   --option limiter_release_ms=120 \
   --option distortion_drive_db=6 \
@@ -71,8 +75,15 @@ preset value.” Gate controls are `gate`, `gate_attack_ms`, `gate_hold_ms`,
 decay, damping, bass decay, diffusion, bandwidth, predelay, early/late balance,
 stereo width, modulation, gain, and freeze.
 
-`kick_gain_db` and `clap_gain_db` control the sample levels before the clap is
-sent to the reverb. The clap defaults to `+3 dB`; both accept `-60..+24 dB`.
+`kick_gain_db`, `clap_gain_db`, and `hihat_gain_db` control sample levels. The
+clap defaults to `+3 dB`, hats to `-3 dB`, and all accept `-60..+24 dB`.
+
+The hi-hats run from the same `bpm` clock as the kick and clap, with one event
+per sixteenth note. They share one centered mono voice: an open-hat step stops
+the closed hat, and every closed-hat step chokes the open hat. The base pattern
+is shown above. `hihat_randomization=0..1` is the probability of swapping CH
+and OH on each step; `0` plays the exact pattern. `hihat_seed=-1` varies each
+run, while a fixed integer makes the variations reproducible.
 
 The complete kick, dry clap, and reverberated clap mix passes through a
 linked-stereo `dsp::limiter`. `limiter_threshold_db` controls maximizer drive
@@ -93,9 +104,10 @@ master. This stage adds saturation and tonal color, not record noise or clicks.
 - `clap-pre-reverb` processes the clap first, then sends that colored clap to
   both the dry clap path and `dsp::reverb2`. The resulting reverb return bypasses
   distortion and goes directly to the master limiter. `clap` is a short alias.
-- `drums-pre-reverb` processes the kick and clap with independent distortion
-  state, but still sends only the colored clap into `dsp::reverb2`. The clean
-  reverb return joins the colored drums before limiting. `drums` is an alias.
+- `drums-pre-reverb` processes the kick, clap, and shared hi-hat voice with
+  independent distortion state, but still sends only the colored clap into
+  `dsp::reverb2`. The clean reverb return joins the colored drums before
+  limiting. `drums` is an alias.
 
 List or select an output device:
 

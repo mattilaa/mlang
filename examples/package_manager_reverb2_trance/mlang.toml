@@ -15,6 +15,9 @@ reverb_type = "gated"
 clap_mix = "0.72"
 kick_gain_db = "0"
 clap_gain_db = "3"
+hihat_gain_db = "-3"
+hihat_randomization = "0.12"
+hihat_seed = "-1"
 limiter_threshold_db = "-3"
 limiter_release_ms = "120"
 distortion_drive_db = "6"
@@ -24,6 +27,8 @@ distortion_tone_hz = "9000"
 distortion_scope = "master"
 kick_path = "samples/bassdrum.WAV"
 clap_path = "samples/clap.WAV"
+closed_hihat_path = "samples/closed_hihat.WAV"
+open_hihat_path = "samples/open_hihat.WAV"
 size = "-1"
 decay_seconds = "-1"
 damping = "-1"
@@ -91,7 +96,7 @@ name = "demo"
 depends_on = ["link"]
 log_output = false
 shell = [
-  "audio_output='{{option.audio_output}}'; set -- --bpm '{{option.bpm}}' --duration '{{option.duration}}' --reverb-type '{{option.reverb_type}}' --clap-mix '{{option.clap_mix}}' --kick-gain-db '{{option.kick_gain_db}}' --clap-gain-db '{{option.clap_gain_db}}' --limiter-threshold-db '{{option.limiter_threshold_db}}' --limiter-release-ms '{{option.limiter_release_ms}}' --distortion-drive-db '{{option.distortion_drive_db}}' --distortion-mix '{{option.distortion_mix}}' --distortion-bias '{{option.distortion_bias}}' --distortion-tone-hz '{{option.distortion_tone_hz}}' --distortion-scope '{{option.distortion_scope}}' --kick '{{option.kick_path}}' --clap '{{option.clap_path}}' --size '{{option.size}}' --decay-seconds '{{option.decay_seconds}}' --damping '{{option.damping}}' --bass-multiplier '{{option.bass_multiplier}}' --diffusion '{{option.diffusion}}' --bandwidth '{{option.bandwidth}}' --predelay-ms '{{option.predelay_ms}}' --early-mix '{{option.early_mix}}' --width '{{option.width}}' --mod-depth-ms '{{option.mod_depth_ms}}' --mod-rate-hz '{{option.mod_rate_hz}}' --gain '{{option.gain}}' --gate '{{option.gate}}' --gate-attack-ms '{{option.gate_attack_ms}}' --gate-hold-ms '{{option.gate_hold_ms}}' --gate-release-ms '{{option.gate_release_ms}}' --gate-threshold '{{option.gate_threshold}}' --gate-depth '{{option.gate_depth}}' --freeze '{{option.freeze}}'; case "$audio_output" in '') ;; -1|[0-9]*) set -- "$@" --device "$audio_output" ;; *) set -- "$@" --device-name "$audio_output" ;; esac; exec {{build_dir}}/reverb2_trance_sequence "$@""
+  "audio_output='{{option.audio_output}}'; set -- --bpm '{{option.bpm}}' --duration '{{option.duration}}' --reverb-type '{{option.reverb_type}}' --clap-mix '{{option.clap_mix}}' --kick-gain-db '{{option.kick_gain_db}}' --clap-gain-db '{{option.clap_gain_db}}' --hihat-gain-db '{{option.hihat_gain_db}}' --hihat-randomization '{{option.hihat_randomization}}' --hihat-seed '{{option.hihat_seed}}' --limiter-threshold-db '{{option.limiter_threshold_db}}' --limiter-release-ms '{{option.limiter_release_ms}}' --distortion-drive-db '{{option.distortion_drive_db}}' --distortion-mix '{{option.distortion_mix}}' --distortion-bias '{{option.distortion_bias}}' --distortion-tone-hz '{{option.distortion_tone_hz}}' --distortion-scope '{{option.distortion_scope}}' --kick '{{option.kick_path}}' --clap '{{option.clap_path}}' --closed-hihat '{{option.closed_hihat_path}}' --open-hihat '{{option.open_hihat_path}}' --size '{{option.size}}' --decay-seconds '{{option.decay_seconds}}' --damping '{{option.damping}}' --bass-multiplier '{{option.bass_multiplier}}' --diffusion '{{option.diffusion}}' --bandwidth '{{option.bandwidth}}' --predelay-ms '{{option.predelay_ms}}' --early-mix '{{option.early_mix}}' --width '{{option.width}}' --mod-depth-ms '{{option.mod_depth_ms}}' --mod-rate-hz '{{option.mod_rate_hz}}' --gain '{{option.gain}}' --gate '{{option.gate}}' --gate-attack-ms '{{option.gate_attack_ms}}' --gate-hold-ms '{{option.gate_hold_ms}}' --gate-release-ms '{{option.gate_release_ms}}' --gate-threshold '{{option.gate_threshold}}' --gate-depth '{{option.gate_depth}}' --freeze '{{option.freeze}}'; case "$audio_output" in '') ;; -1|[0-9]*) set -- "$@" --device "$audio_output" ;; *) set -- "$@" --device-name "$audio_output" ;; esac; exec {{build_dir}}/reverb2_trance_sequence "$@""
 ]
 
 [[task]]

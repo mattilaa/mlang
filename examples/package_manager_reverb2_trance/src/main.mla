@@ -9,6 +9,7 @@ mod std::argparser;
 mod std::audio;
 mod std::strbuf;
 mod std::time;
+mod std::rand;
 
 use dsp::reverb2::Reverb2;
 use dsp::reverb2::Reverb2Frame;
@@ -28,6 +29,9 @@ use std::audio::device_name;
 use std::strbuf::contains;
 use std::strbuf::eq;
 use std::time::sleep_ms;
+use std::rand::next_f64;
+use std::rand::seed;
+use std::rand::seed_auto;
 
 extern fn atof(value: str8) -> f64;
 extern fn expf(value: f32) -> f32;
@@ -70,6 +74,11 @@ fn distortion_scope_id(name: str8) -> i32 {
     if eq(name, "clap-pre-reverb") == 1 || eq(name, "clap") == 1 { return 2; }
     if eq(name, "drums-pre-reverb") == 1 || eq(name, "drums") == 1 { return 3; }
     return 0;
+}
+
+fn open_hihat_step(step: i64) -> bool {
+    return step == 1 || step == 4 || step == 7 ||
+           step == 9 || step == 12 || step == 15;
 }
 
 fn apply_type(reverb: Reverb2, id: i32) -> Reverb2 {
@@ -174,16 +183,21 @@ fn override_controls(reverb: Reverb2, parsed: ParseResult) -> Reverb2 {
 fn main(argc: i32, args: list<str8>) -> i32 {
     var ap: ArgParser = ArgParser::new(
         "reverb2_trance_sequence",
-        "Play bass drum and trance clap samples through the independent dsp::reverb2."
+        "Play bass drum, clap, and randomized hi-hats through reverb2, analog color, and limiting."
     );
     ap.option("kick", "k", "Bass-drum WAV path", "samples/bassdrum.WAV");
     ap.option("clap", "c", "Clap WAV path", "samples/clap.WAV");
+    ap.option("closed-hihat", "", "Closed hi-hat WAV path", "samples/closed_hihat.WAV");
+    ap.option("open-hihat", "", "Open hi-hat WAV path", "samples/open_hihat.WAV");
     ap.option("bpm", "b", "Sequence tempo", "138");
     ap.option("duration", "t", "Playback duration in seconds", "30");
     ap.option("reverb-type", "r", "hall, room, plate, gated, reverse, nonlinear-short, nonlinear-long, custom, or infinite-hall", "gated");
     ap.option("clap-mix", "m", "Clap reverb mix from 0 to 1", "0.72");
     ap.option("kick-gain-db", "", "Bass-drum gain in dB (-60..24)", "0");
     ap.option("clap-gain-db", "", "Clap gain in dB (-60..24)", "3");
+    ap.option("hihat-gain-db", "", "Closed/open hi-hat gain in dB (-60..24)", "-3");
+    ap.option("hihat-randomization", "", "Chance to swap CH/OH at each step (0..1)", "0.12");
+    ap.option("hihat-seed", "", "Random seed; -1 seeds from the clock", "-1");
     ap.option("limiter-threshold-db", "", "Master limiter threshold in dB (-60..0)", "-3");
     ap.option("limiter-release-ms", "", "Master limiter release time (5..5000 ms)", "120");
     ap.option("distortion-drive-db", "", "Analog-color drive in dB (0..36)", "6");
@@ -224,6 +238,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     let kick_path: str8 = parsed.get("kick");
     let clap_path: str8 = parsed.get("clap");
+    let closed_hihat_path: str8 = parsed.get("closed-hihat");
+    let open_hihat_path: str8 = parsed.get("open-hihat");
     let bpm: i64 = parsed.get_i64("bpm");
     let duration: i64 = parsed.get_i64("duration");
     let type_name: str8 = parsed.get("reverb-type");
@@ -231,6 +247,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let clap_mix: f32 = f32(atof(parsed.get("clap-mix")));
     let kick_gain_db: f32 = f32(atof(parsed.get("kick-gain-db")));
     let clap_gain_db: f32 = f32(atof(parsed.get("clap-gain-db")));
+    let hihat_gain_db: f32 = f32(atof(parsed.get("hihat-gain-db")));
+    let hihat_randomization: f32 = f32(atof(parsed.get("hihat-randomization")));
+    let hihat_seed: i64 = parsed.get_i64("hihat-seed");
     let limiter_threshold_db: f32 = f32(atof(parsed.get("limiter-threshold-db")));
     let limiter_release_ms: f32 = f32(atof(parsed.get("limiter-release-ms")));
     let distortion_drive_db: f32 = f32(atof(parsed.get("distortion-drive-db")));
@@ -243,6 +262,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
        clap_mix < 0.0f || clap_mix > 1.0f ||
        kick_gain_db < -60.0f || kick_gain_db > 24.0f ||
        clap_gain_db < -60.0f || clap_gain_db > 24.0f ||
+       hihat_gain_db < -60.0f || hihat_gain_db > 24.0f ||
+       hihat_randomization < 0.0f || hihat_randomization > 1.0f ||
        limiter_threshold_db < -60.0f || limiter_threshold_db > 0.0f ||
        limiter_release_ms < 5.0f || limiter_release_ms > 5000.0f ||
        distortion_drive_db < 0.0f || distortion_drive_db > 36.0f ||
@@ -255,6 +276,10 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     let kick_gain: f32 = db_to_gain(kick_gain_db);
     let clap_gain: f32 = db_to_gain(clap_gain_db);
+    let hihat_gain: f32 = db_to_gain(hihat_gain_db);
+    var active_hihat_seed: i64 = hihat_seed;
+    if active_hihat_seed < 0 { active_hihat_seed = seed_auto(); }
+    else { seed(active_hihat_seed); }
 
     let kick_r: result<PcmAudio, str8> = PcmAudio::load(kick_path);
     if kick_r.is_err() { println!("bass drum load failed: {}", kick_r.unwrap_err()); parsed.free(); ap.free(); return 1; }
@@ -272,6 +297,22 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let clap_frames: i64 = clap_audio.frame_count();
     let clap_samples: list<f32> = clap_audio.samples();
     clap_audio.close();
+    let closed_hihat_r: result<PcmAudio, str8> = PcmAudio::load(closed_hihat_path);
+    if closed_hihat_r.is_err() { println!("closed hi-hat load failed: {}", closed_hihat_r.unwrap_err()); parsed.free(); ap.free(); return 1; }
+    let closed_hihat_audio: PcmAudio = closed_hihat_r.unwrap();
+    let closed_hihat_rate: i64 = closed_hihat_audio.sample_rate();
+    let closed_hihat_channels: i64 = closed_hihat_audio.channels();
+    let closed_hihat_frames: i64 = closed_hihat_audio.frame_count();
+    let closed_hihat_samples: list<f32> = closed_hihat_audio.samples();
+    closed_hihat_audio.close();
+    let open_hihat_r: result<PcmAudio, str8> = PcmAudio::load(open_hihat_path);
+    if open_hihat_r.is_err() { println!("open hi-hat load failed: {}", open_hihat_r.unwrap_err()); parsed.free(); ap.free(); return 1; }
+    let open_hihat_audio: PcmAudio = open_hihat_r.unwrap();
+    let open_hihat_rate: i64 = open_hihat_audio.sample_rate();
+    let open_hihat_channels: i64 = open_hihat_audio.channels();
+    let open_hihat_frames: i64 = open_hihat_audio.frame_count();
+    let open_hihat_samples: list<f32> = open_hihat_audio.samples();
+    open_hihat_audio.close();
 
     var device_id: i64 = parsed.get_i64("device");
     let requested_name: str8 = parsed.get("device-name");
@@ -288,8 +329,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let buffer_frames: i64 = device.buffer_frames();
     let total_frames: i64 = output_rate * duration;
     let beat_frames: f64 = 60.0 * f64(output_rate) / f64(bpm);
+    let sixteenth_frames: f64 = beat_frames * 0.25;
     let kick_step: f64 = f64(kick_rate) / f64(output_rate);
     let clap_step: f64 = f64(clap_rate) / f64(output_rate);
+    let closed_hihat_sample_step: f64 = f64(closed_hihat_rate) / f64(output_rate);
+    let open_hihat_sample_step: f64 = f64(open_hihat_rate) / f64(output_rate);
     let block_r: result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
     if block_r.is_err() { println!("PCM block allocation failed: {}", block_r.unwrap_err()); device.close(); parsed.free(); ap.free(); return 1; }
     let block: PcmBlock = block_r.unwrap();
@@ -304,36 +348,47 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var distortion_right: AnalogDistortion = AnalogDistortion::new(f32(output_rate));
     var distortion_kick: AnalogDistortion = AnalogDistortion::new(f32(output_rate));
     var distortion_clap: AnalogDistortion = AnalogDistortion::new(f32(output_rate));
+    var distortion_hihat: AnalogDistortion = AnalogDistortion::new(f32(output_rate));
     distortion_left.set_drive_db(distortion_drive_db);
     distortion_right.set_drive_db(distortion_drive_db);
     distortion_kick.set_drive_db(distortion_drive_db);
     distortion_clap.set_drive_db(distortion_drive_db);
+    distortion_hihat.set_drive_db(distortion_drive_db);
     distortion_left.set_mix(distortion_mix);
     distortion_right.set_mix(distortion_mix);
     distortion_kick.set_mix(distortion_mix);
     distortion_clap.set_mix(distortion_mix);
+    distortion_hihat.set_mix(distortion_mix);
     distortion_left.set_bias(distortion_bias);
     distortion_right.set_bias(distortion_bias);
     distortion_kick.set_bias(distortion_bias);
     distortion_clap.set_bias(distortion_bias);
+    distortion_hihat.set_bias(distortion_bias);
     distortion_left.set_tone_hz(distortion_tone_hz, f32(output_rate));
     distortion_right.set_tone_hz(distortion_tone_hz, f32(output_rate));
     distortion_kick.set_tone_hz(distortion_tone_hz, f32(output_rate));
     distortion_clap.set_tone_hz(distortion_tone_hz, f32(output_rate));
+    distortion_hihat.set_tone_hz(distortion_tone_hz, f32(output_rate));
 
-    println!("MLang dsp::reverb2 trance clap sequence");
+    println!("MLang dsp::reverb2 trance drum sequence");
     println!("backend={}; output={} Hz; BPM={}; duration={} s", backend_name(), output_rate, bpm, duration);
-    println!("pattern: BD...BD+CL...BD...BD+CL; preset={}; clap mix={}", type_name, clap_mix);
-    println!("drum gain: kick={} dB; clap={} dB", kick_gain_db, clap_gain_db);
+    println!("pattern: BD...BD+CL...BD...BD+CL; hats=CH-OH-CH-CH-OH-CH-CH-OH-CH-OH-CH-CH-OH-CH-CH-OH");
+    println!("preset={}; clap mix={}; BPM={}", type_name, clap_mix, bpm);
+    println!("drum gain: kick={} dB; clap={} dB; hats={} dB", kick_gain_db, clap_gain_db, hihat_gain_db);
+    println!("hi-hat randomization={}; seed={}; one mono choked voice", hihat_randomization, active_hihat_seed);
     println!("master limiter: threshold={} dB; release={} ms; ceiling=-0.3 dB", limiter_threshold_db, limiter_release_ms);
     println!("analog color: scope={}; drive={} dB; mix={}; bias={}; tone={} Hz", distortion_scope_name, distortion_drive_db, distortion_mix, distortion_bias, distortion_tone_hz);
-    println!("samples: bassdrum={} clap={}", kick_path, clap_path);
+    println!("samples: bassdrum={} clap={} closed-hihat={} open-hihat={}", kick_path, clap_path, closed_hihat_path, open_hihat_path);
 
     var rendered: i64 = 0;
     var beat: i64 = 0;
     var next_beat: i64 = 0;
+    var hihat_tick: i64 = 0;
+    var next_hihat: i64 = 0;
     var kick_position: f64 = -1.0;
     var clap_position: f64 = -1.0;
+    var closed_hihat_position: f64 = -1.0;
+    var open_hihat_position: f64 = -1.0;
     var started: bool = false;
     while rendered < total_frames {
         if device.pcm_queued_frames() >= buffer_frames * 8 ||
@@ -350,18 +405,43 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 beat = beat + 1;
                 next_beat = llround(f64(beat) * beat_frames);
             }
+            if rendered >= next_hihat {
+                let pattern_step: i64 = hihat_tick % 16;
+                var play_open_hihat: bool = open_hihat_step(pattern_step);
+                if hihat_randomization > 0.0f &&
+                   next_f64() < f64(hihat_randomization) {
+                    play_open_hihat = !play_open_hihat;
+                }
+                if play_open_hihat {
+                    open_hihat_position = 0.0;
+                    closed_hihat_position = -1.0;
+                } else {
+                    closed_hihat_position = 0.0;
+                    open_hihat_position = -1.0;
+                }
+                hihat_tick = hihat_tick + 1;
+                next_hihat = llround(f64(hihat_tick) * sixteenth_frames);
+            }
             let kick: f32 = sample_mono(kick_samples, kick_channels, kick_frames, kick_position) * kick_gain;
             let clap: f32 = sample_mono(clap_samples, clap_channels, clap_frames, clap_position) * clap_gain;
+            let closed_hihat: f32 = sample_mono(closed_hihat_samples, closed_hihat_channels,
+                closed_hihat_frames, closed_hihat_position) * hihat_gain;
+            let open_hihat: f32 = sample_mono(open_hihat_samples, open_hihat_channels,
+                open_hihat_frames, open_hihat_position) * hihat_gain;
+            let hihat: f32 = closed_hihat + open_hihat;
             var colored_kick: f32 = kick;
             var colored_clap: f32 = clap;
+            var colored_hihat: f32 = hihat;
             if distortion_scope == 2 || distortion_scope == 3 {
                 colored_clap = distortion_clap.process(clap);
             }
             if distortion_scope == 3 {
                 colored_kick = distortion_kick.process(kick);
+                colored_hihat = distortion_hihat.process(hihat);
             }
             let wet: Reverb2Frame = reverb.process_stereo(colored_clap * 0.72f, colored_clap * 0.72f);
-            let dry: f32 = colored_kick * 0.68f + colored_clap * 0.44f * (1.0f - clap_mix);
+            let dry: f32 = colored_kick * 0.68f +
+                colored_clap * 0.44f * (1.0f - clap_mix) + colored_hihat * 0.34f;
             var master_left: f32 = dry + wet.left() * 0.58f * clap_mix;
             var master_right: f32 = dry + wet.right() * 0.58f * clap_mix;
             if distortion_scope == 1 {
@@ -373,6 +453,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 limited.left(), limited.right());
             if kick_position >= 0.0 { kick_position = kick_position + kick_step; }
             if clap_position >= 0.0 { clap_position = clap_position + clap_step; }
+            if closed_hihat_position >= 0.0 {
+                closed_hihat_position = closed_hihat_position + closed_hihat_sample_step;
+            }
+            if open_hihat_position >= 0.0 {
+                open_hihat_position = open_hihat_position + open_hihat_sample_step;
+            }
             rendered = rendered + 1; frame = frame + 1;
         }
         let queued: result<i64, str8> = device.queue_pcm_block(block, count);
