@@ -1,0 +1,94 @@
+[package]
+name = "reverb2_trance_sequence"
+version = "0.1.0"
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+module_paths = ["../../modules"]
+
+[tool.mlang.options]
+audio_output = ""
+bpm = "138"
+duration = "30"
+reverb_type = "gated"
+clap_mix = "0.72"
+kick_gain_db = "0"
+clap_gain_db = "3"
+kick_path = "samples/bassdrum.WAV"
+clap_path = "samples/clap.WAV"
+size = "-1"
+decay_seconds = "-1"
+damping = "-1"
+bass_multiplier = "-1"
+diffusion = "-1"
+bandwidth = "-1"
+predelay_ms = "-1"
+early_mix = "-1"
+width = "-1"
+mod_depth_ms = "-1"
+mod_rate_hz = "-1"
+gain = "-1"
+gate = "-1"
+gate_attack_ms = "-1"
+gate_hold_ms = "-1"
+gate_release_ms = "-1"
+gate_threshold = "-1"
+gate_depth = "-1"
+freeze = "-1"
+
+[[task]]
+name = "toolchain-check"
+commands = [
+  "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler first.; exit 1; fi'",
+  "sh -c 'if ! command -v c++ >/dev/null 2>&1; then echo Missing required linker driver: c++; exit 1; fi'"
+]
+
+[[task]]
+name = "prepare"
+depends_on = ["toolchain-check"]
+commands = ["mkdir -p {{build_dir}}/obj"]
+
+[[task]]
+name = "compile"
+phase = "compile"
+depends_on = ["prepare"]
+language = "mlang"
+source = "src/main.mla"
+output = "{{build_dir}}/obj/main.o"
+compile_only = true
+opt_level = "O2"
+
+[[task]]
+name = "link"
+phase = "build"
+depends_on = ["compile"]
+language = "c++"
+output = "{{build_dir}}/reverb2_trance_sequence"
+inputs = ["{{build_dir}}/obj/main.o"]
+lib_paths = ["../../build"]
+libs = ["mlang_std"]
+
+[task.host.darwin]
+linker_flags = [
+  "-framework CoreAudio",
+  "-framework AudioToolbox",
+  "-framework CoreFoundation"
+]
+
+[task.host.linux]
+libs = ["m", "dl"]
+
+[[task]]
+name = "demo"
+depends_on = ["link"]
+log_output = false
+shell = [
+  "audio_output='{{option.audio_output}}'; set -- --bpm '{{option.bpm}}' --duration '{{option.duration}}' --reverb-type '{{option.reverb_type}}' --clap-mix '{{option.clap_mix}}' --kick-gain-db '{{option.kick_gain_db}}' --clap-gain-db '{{option.clap_gain_db}}' --kick '{{option.kick_path}}' --clap '{{option.clap_path}}' --size '{{option.size}}' --decay-seconds '{{option.decay_seconds}}' --damping '{{option.damping}}' --bass-multiplier '{{option.bass_multiplier}}' --diffusion '{{option.diffusion}}' --bandwidth '{{option.bandwidth}}' --predelay-ms '{{option.predelay_ms}}' --early-mix '{{option.early_mix}}' --width '{{option.width}}' --mod-depth-ms '{{option.mod_depth_ms}}' --mod-rate-hz '{{option.mod_rate_hz}}' --gain '{{option.gain}}' --gate '{{option.gate}}' --gate-attack-ms '{{option.gate_attack_ms}}' --gate-hold-ms '{{option.gate_hold_ms}}' --gate-release-ms '{{option.gate_release_ms}}' --gate-threshold '{{option.gate_threshold}}' --gate-depth '{{option.gate_depth}}' --freeze '{{option.freeze}}'; case "$audio_output" in '') ;; -1|[0-9]*) set -- "$@" --device "$audio_output" ;; *) set -- "$@" --device-name "$audio_output" ;; esac; exec {{build_dir}}/reverb2_trance_sequence "$@""
+]
+
+[[task]]
+name = "list-devices"
+depends_on = ["link"]
+log_output = false
+shell = ["exec {{build_dir}}/reverb2_trance_sequence --list-devices"]

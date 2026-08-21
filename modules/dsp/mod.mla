@@ -8,6 +8,7 @@
 /// - `dsp::delay`
 /// - `dsp::fft`
 /// - `dsp::reverb`
+/// - `dsp::reverb2`
 ///
 /// @defgroup dsp dsp
 /// @brief Digital signal processing helpers.
@@ -20,6 +21,7 @@ mod dsp::distortion;
 mod dsp::delay;
 mod dsp::fft;
 mod dsp::reverb;
+mod dsp::reverb2;
 /// \endcond
 
 /// @}

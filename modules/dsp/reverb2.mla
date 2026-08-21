@@ -1,0 +1,594 @@
+/// \file reverb2.mla
+/// \brief Independent, allocation-free stereo feedback-delay-network reverb.
+///
+/// This implementation does not contain or derive from MVerb source code.
+/// It uses general published reverberation techniques: input allpass diffusion,
+/// an eight-line Householder feedback-delay network, damping filters, early
+/// reflection taps, and slowly modulated fractional delay reads.
+///
+/// @defgroup dsp_reverb2 dsp::reverb2
+/// @ingroup dsp
+/// @brief Flexible stereo FDN reverb with transient gating and infinite hold.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+mod std::vec;
+use dsp::detail::cosf;
+use dsp::detail::expf;
+use dsp::detail::llroundf;
+use dsp::detail::sinf;
+use dsp::detail::tanhf;
+use std::vec::set_f32;
+/// \endcond
+
+fn reverb2_clamp(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+fn reverb2_max_i64(a: i64, b: i64) -> i64 { return a > b ? a : b; }
+
+struct Reverb2DelayLine {
+    var buffer: list<f32>;
+    var length: i64;
+    var write_index: i64;
+    var low_state: f32;
+};
+
+impl Reverb2DelayLine {
+    fn new(capacity: i64) -> Reverb2DelayLine {
+        let safe: i64 = reverb2_max_i64(capacity, 4);
+        return Reverb2DelayLine {
+            buffer: [0.0f; safe], length: safe - 2,
+            write_index: 0, low_state: 0.0f
+        };
+    }
+
+    fn capacity(self: Reverb2DelayLine) -> i64 { return self.buffer.len(); }
+
+    fn set_length(self: &mut Self, samples: i64) -> void {
+        var safe: i64 = samples;
+        if safe < 1 { safe = 1; }
+        if safe > self.capacity() - 2 { safe = self.capacity() - 2; }
+        self.length = safe;
+    }
+
+    fn clear(self: &mut Self) -> void {
+        var i: i64 = 0;
+        while i < self.buffer.len() {
+            set_f32(self.buffer, i, 0.0f);
+            i = i + 1;
+        }
+        self.write_index = 0;
+        self.low_state = 0.0f;
+    }
+
+    fn read_integer(self: Reverb2DelayLine, delay: i64) -> f32 {
+        var safe: i64 = delay;
+        if safe < 1 { safe = 1; }
+        if safe > self.capacity() - 1 { safe = self.capacity() - 1; }
+        var index: i64 = self.write_index - safe;
+        while index < 0 { index = index + self.capacity(); }
+        return self.buffer[index];
+    }
+
+    fn read_modulated(self: Reverb2DelayLine, offset: f32) -> f32 {
+        var position: f32 = f32(self.length) + offset;
+        if position < 1.0f { position = 1.0f; }
+        let maximum: f32 = f32(self.capacity() - 2);
+        if position > maximum { position = maximum; }
+        let center: i64 = llroundf(position);
+        let delta: f32 = position - f32(center);
+        let adjacent: i64 = delta < 0.0f ? center - 1 : center + 1;
+        let blend: f32 = delta < 0.0f ? 0.0f - delta : delta;
+        let first: f32 = self.read_integer(center);
+        let second: f32 = self.read_integer(adjacent);
+        return first + (second - first) * blend;
+    }
+
+    fn write(self: &mut Self, value: f32) -> void {
+        set_f32(self.buffer, self.write_index, value);
+        self.write_index = self.write_index + 1;
+        if self.write_index >= self.capacity() { self.write_index = 0; }
+    }
+
+    fn process(self: &mut Self, value: f32) -> f32 {
+        let output: f32 = self.read_integer(self.length);
+        self.write(value);
+        return output;
+    }
+
+    fn damp(self: &mut Self, value: f32, coefficient: f32) -> f32 {
+        self.low_state = self.low_state + (value - self.low_state) * coefficient;
+        return self.low_state;
+    }
+}
+
+struct Reverb2Allpass {
+    var delay: Reverb2DelayLine;
+    var feedback: f32;
+};
+
+impl Reverb2Allpass {
+    fn new(capacity: i64) -> Reverb2Allpass {
+        return Reverb2Allpass {
+            delay: Reverb2DelayLine::new(capacity), feedback: 0.6f
+        };
+    }
+
+    fn set_length(self: &mut Self, length: i64) -> void { self.delay.set_length(length); }
+    fn set_feedback(self: &mut Self, value: f32) -> void {
+        self.feedback = reverb2_clamp(value, 0.0f, 0.88f);
+    }
+    fn clear(self: &mut Self) -> void { self.delay.clear(); }
+
+    fn process(self: &mut Self, input: f32) -> f32 {
+        let delayed: f32 = self.delay.read_integer(self.delay.length);
+        let output: f32 = delayed - input * self.feedback;
+        self.delay.write(input + output * self.feedback);
+        return output;
+    }
+}
+
+/// @brief Acoustic, nonlinear, custom, and infinite-hold presets.
+pub enum Reverb2Type : i32 {
+    Hall = 0,
+    Room = 1,
+    Plate = 2,
+    Gated = 3,
+    Reverse = 4,
+    NonlinearShort = 5,
+    NonlinearLong = 6,
+    Custom = 7,
+    InfiniteHall = 8
+};
+
+/// @brief One processed stereo frame.
+pub struct Reverb2Frame {
+    var left_sample: f32;
+    var right_sample: f32;
+};
+
+impl Reverb2Frame {
+    pub fn left(self: Reverb2Frame) -> f32 { return self.left_sample; }
+    pub fn right(self: Reverb2Frame) -> f32 { return self.right_sample; }
+}
+
+/// @brief Independent eight-line FDN stereo reverb.
+///
+/// All delay storage is allocated by `new()`. `process_stereo()` performs no
+/// allocation, locking, or I/O. Setters may be used between audio blocks.
+pub struct Reverb2 {
+    var sample_rate: f32;
+    var reverb_type: Reverb2Type;
+    var size: f32;
+    var decay_seconds: f32;
+    var damping: f32;
+    var bass_multiplier: f32;
+    var diffusion: f32;
+    var input_bandwidth: f32;
+    var predelay_ms: f32;
+    var early_mix: f32;
+    var stereo_width: f32;
+    var modulation_depth_ms: f32;
+    var modulation_rate_hz: f32;
+    var mix: f32;
+    var gain: f32;
+    var freeze: bool;
+    var input_low_left: f32;
+    var input_low_right: f32;
+    var mix_smooth: f32;
+    var early_smooth: f32;
+    var width_smooth: f32;
+    var lfo_phase: f32;
+    var feedback_gain: f32;
+    var gate_enabled: bool;
+    var gate_attack_ms: f32;
+    var gate_hold_ms: f32;
+    var gate_release_ms: f32;
+    var gate_threshold: f32;
+    var gate_depth: f32;
+    var gate_gain: f32;
+    var gate_hold_remaining: i64;
+    var shape_mode: i32;
+    var shape_counter: i64;
+    var shape_length: i64;
+    var shape_armed: bool;
+    var predelay: Reverb2DelayLine;
+    var early_left: Reverb2DelayLine;
+    var early_right: Reverb2DelayLine;
+    var diffuser0: Reverb2Allpass;
+    var diffuser1: Reverb2Allpass;
+    var diffuser2: Reverb2Allpass;
+    var diffuser3: Reverb2Allpass;
+    var line0: Reverb2DelayLine;
+    var line1: Reverb2DelayLine;
+    var line2: Reverb2DelayLine;
+    var line3: Reverb2DelayLine;
+    var line4: Reverb2DelayLine;
+    var line5: Reverb2DelayLine;
+    var line6: Reverb2DelayLine;
+    var line7: Reverb2DelayLine;
+};
+
+impl Reverb2 {
+    /// @brief Allocate a reverb for sample rates from 8 kHz to 384 kHz.
+    pub fn new(sample_rate_hz: f32) -> Reverb2 {
+        let sr: f32 = reverb2_clamp(sample_rate_hz, 8000.0f, 384000.0f);
+        let diffuser_capacity: i64 = llroundf(sr * 0.030f) + 4;
+        let tank_capacity: i64 = llroundf(sr * 0.240f) + 4;
+        let predelay_capacity: i64 = llroundf(sr * 0.505f) + 4;
+        let early_capacity: i64 = llroundf(sr * 0.120f) + 4;
+        var result: Reverb2 = Reverb2 {
+            sample_rate: sr, reverb_type: Reverb2Type::Hall,
+            size: 0.72f, decay_seconds: 3.8f, damping: 0.38f,
+            bass_multiplier: 1.08f, diffusion: 0.78f,
+            input_bandwidth: 0.92f, predelay_ms: 24.0f,
+            early_mix: 0.30f, stereo_width: 0.92f,
+            modulation_depth_ms: 0.45f, modulation_rate_hz: 0.27f,
+            mix: 0.35f, gain: 1.0f, freeze: false,
+            input_low_left: 0.0f, input_low_right: 0.0f,
+            mix_smooth: 0.35f, early_smooth: 0.30f, width_smooth: 0.92f,
+            lfo_phase: 0.0f, feedback_gain: 0.85f,
+            gate_enabled: false, gate_attack_ms: 2.0f,
+            gate_hold_ms: 180.0f, gate_release_ms: 55.0f,
+            gate_threshold: 0.015f, gate_depth: 0.0f,
+            gate_gain: 1.0f, gate_hold_remaining: 0,
+            shape_mode: 0, shape_counter: 0, shape_length: 0,
+            shape_armed: true,
+            predelay: Reverb2DelayLine::new(predelay_capacity),
+            early_left: Reverb2DelayLine::new(early_capacity),
+            early_right: Reverb2DelayLine::new(early_capacity),
+            diffuser0: Reverb2Allpass::new(diffuser_capacity),
+            diffuser1: Reverb2Allpass::new(diffuser_capacity),
+            diffuser2: Reverb2Allpass::new(diffuser_capacity),
+            diffuser3: Reverb2Allpass::new(diffuser_capacity),
+            line0: Reverb2DelayLine::new(tank_capacity),
+            line1: Reverb2DelayLine::new(tank_capacity),
+            line2: Reverb2DelayLine::new(tank_capacity),
+            line3: Reverb2DelayLine::new(tank_capacity),
+            line4: Reverb2DelayLine::new(tank_capacity),
+            line5: Reverb2DelayLine::new(tank_capacity),
+            line6: Reverb2DelayLine::new(tank_capacity),
+            line7: Reverb2DelayLine::new(tank_capacity)
+        };
+        result.configure_delays();
+        result.update_feedback_gain();
+        result.reset();
+        return result;
+    }
+
+    fn configure_delays(self: &mut Self) -> void {
+        let sr: f32 = self.sample_rate;
+        let scale: f32 = 0.48f + self.size * 1.92f;
+        self.diffuser0.set_length(llroundf(sr * 0.0031f));
+        self.diffuser1.set_length(llroundf(sr * 0.0049f));
+        self.diffuser2.set_length(llroundf(sr * 0.0077f));
+        self.diffuser3.set_length(llroundf(sr * 0.0119f));
+        let ap_feedback: f32 = 0.28f + self.diffusion * 0.52f;
+        self.diffuser0.set_feedback(ap_feedback);
+        self.diffuser1.set_feedback(ap_feedback * 0.97f);
+        self.diffuser2.set_feedback(ap_feedback * 0.91f);
+        self.diffuser3.set_feedback(ap_feedback * 0.88f);
+        self.line0.set_length(llroundf(sr * 0.0313f * scale));
+        self.line1.set_length(llroundf(sr * 0.0371f * scale));
+        self.line2.set_length(llroundf(sr * 0.0419f * scale));
+        self.line3.set_length(llroundf(sr * 0.0467f * scale));
+        self.line4.set_length(llroundf(sr * 0.0539f * scale));
+        self.line5.set_length(llroundf(sr * 0.0601f * scale));
+        self.line6.set_length(llroundf(sr * 0.0673f * scale));
+        self.line7.set_length(llroundf(sr * 0.0739f * scale));
+        self.predelay.set_length(llroundf(sr * self.predelay_ms / 1000.0f) + 1);
+        self.early_left.set_length(llroundf(sr * 0.097f));
+        self.early_right.set_length(llroundf(sr * 0.103f));
+    }
+
+    fn update_feedback_gain(self: &mut Self) -> void {
+        if self.freeze {
+            self.feedback_gain = 1.0f;
+            return;
+        }
+        let scale: f32 = 0.48f + self.size * 1.92f;
+        let average_delay_seconds: f32 = 0.0516f * scale;
+        let rt60: f32 = reverb2_clamp(self.decay_seconds, 0.08f, 120.0f);
+        self.feedback_gain = expf(-6.907755279f * average_delay_seconds / rt60);
+        self.feedback_gain = reverb2_clamp(self.feedback_gain, 0.02f, 0.99985f);
+    }
+
+    /// @brief Clear all histories without reallocating.
+    pub fn reset(self: &mut Self) -> void {
+        self.predelay.clear(); self.early_left.clear(); self.early_right.clear();
+        self.diffuser0.clear(); self.diffuser1.clear();
+        self.diffuser2.clear(); self.diffuser3.clear();
+        self.line0.clear(); self.line1.clear(); self.line2.clear(); self.line3.clear();
+        self.line4.clear(); self.line5.clear(); self.line6.clear(); self.line7.clear();
+        self.input_low_left = 0.0f; self.input_low_right = 0.0f;
+        self.lfo_phase = 0.0f; self.gate_hold_remaining = 0;
+        self.gate_gain = self.gate_enabled ? self.gate_depth : 1.0f;
+        self.shape_counter = self.shape_length;
+        self.shape_armed = true;
+        self.configure_delays();
+        self.update_feedback_gain();
+    }
+
+    /// @brief Apply a preset. Custom preserves the current parameter values.
+    pub fn set_type(self: &mut Self, value: Reverb2Type) -> void {
+        self.reverb_type = value;
+        self.freeze = false; self.gate_enabled = false; self.shape_mode = 0;
+        if value == Reverb2Type::Custom {
+            self.reset();
+            return;
+        }
+        // Start every named preset from deterministic neutral values so that
+        // switching presets never inherits hidden controls from the last one.
+        self.bass_multiplier = 1.0f;
+        self.input_bandwidth = 0.92f;
+        self.gate_attack_ms = 2.0f; self.gate_hold_ms = 180.0f;
+        self.gate_release_ms = 55.0f; self.gate_threshold = 0.015f;
+        self.gate_depth = 0.0f; self.shape_length = 0;
+        if value == Reverb2Type::Hall {
+            self.size = 0.72f; self.decay_seconds = 3.8f; self.damping = 0.38f;
+            self.bass_multiplier = 1.08f; self.diffusion = 0.78f;
+            self.input_bandwidth = 0.92f; self.predelay_ms = 24.0f;
+            self.early_mix = 0.30f; self.stereo_width = 0.92f;
+            self.modulation_depth_ms = 0.45f; self.modulation_rate_hz = 0.27f;
+        } else if value == Reverb2Type::Room {
+            self.size = 0.30f; self.decay_seconds = 1.15f; self.damping = 0.48f;
+            self.bass_multiplier = 0.98f; self.diffusion = 0.62f;
+            self.input_bandwidth = 0.86f; self.predelay_ms = 7.0f;
+            self.early_mix = 0.62f; self.stereo_width = 0.74f;
+            self.modulation_depth_ms = 0.10f; self.modulation_rate_hz = 0.44f;
+        } else if value == Reverb2Type::Plate {
+            self.size = 0.56f; self.decay_seconds = 2.9f; self.damping = 0.23f;
+            self.bass_multiplier = 0.94f; self.diffusion = 0.92f;
+            self.input_bandwidth = 0.97f; self.predelay_ms = 15.0f;
+            self.early_mix = 0.16f; self.stereo_width = 1.0f;
+            self.modulation_depth_ms = 0.28f; self.modulation_rate_hz = 0.51f;
+        } else if value == Reverb2Type::Gated {
+            self.size = 0.52f; self.decay_seconds = 3.2f; self.damping = 0.24f;
+            self.bass_multiplier = 0.92f; self.diffusion = 0.90f;
+            self.input_bandwidth = 0.96f; self.predelay_ms = 18.0f;
+            self.early_mix = 0.22f; self.stereo_width = 1.0f;
+            self.modulation_depth_ms = 0.18f; self.modulation_rate_hz = 0.38f;
+            self.gate_enabled = true; self.gate_attack_ms = 1.5f;
+            self.gate_hold_ms = 165.0f; self.gate_release_ms = 52.0f;
+            self.gate_threshold = 0.012f; self.gate_depth = 0.0f;
+        } else if value == Reverb2Type::Reverse {
+            self.size = 0.58f; self.decay_seconds = 3.0f; self.damping = 0.30f;
+            self.diffusion = 0.86f; self.predelay_ms = 8.0f;
+            self.early_mix = 0.14f; self.stereo_width = 0.96f;
+            self.modulation_depth_ms = 0.22f; self.modulation_rate_hz = 0.31f;
+            self.shape_mode = 1; self.shape_length = llroundf(self.sample_rate * 0.46f);
+        } else if value == Reverb2Type::NonlinearShort {
+            self.size = 0.34f; self.decay_seconds = 1.8f; self.damping = 0.20f;
+            self.diffusion = 0.94f; self.predelay_ms = 4.0f;
+            self.early_mix = 0.30f; self.stereo_width = 0.90f;
+            self.modulation_depth_ms = 0.08f; self.modulation_rate_hz = 0.72f;
+            self.shape_mode = 2; self.shape_length = llroundf(self.sample_rate * 0.24f);
+        } else if value == Reverb2Type::NonlinearLong {
+            self.size = 0.70f; self.decay_seconds = 5.8f; self.damping = 0.40f;
+            self.diffusion = 0.91f; self.predelay_ms = 28.0f;
+            self.early_mix = 0.18f; self.stereo_width = 1.0f;
+            self.modulation_depth_ms = 0.52f; self.modulation_rate_hz = 0.22f;
+            self.shape_mode = 3; self.shape_length = llroundf(self.sample_rate * 0.72f);
+        } else {
+            self.size = 0.88f; self.decay_seconds = 120.0f; self.damping = 0.0f;
+            self.bass_multiplier = 1.0f; self.diffusion = 0.86f;
+            self.input_bandwidth = 0.94f; self.predelay_ms = 35.0f;
+            self.early_mix = 0.08f; self.stereo_width = 1.0f;
+            self.modulation_depth_ms = 0.0f; self.modulation_rate_hz = 0.10f;
+            self.freeze = true;
+        }
+        self.reset();
+    }
+
+    pub fn get_type(self: Reverb2) -> Reverb2Type { return self.reverb_type; }
+    pub fn set_size(self: &mut Self, value: f32) -> void {
+        self.size = reverb2_clamp(value, 0.0f, 1.0f); self.reset();
+    }
+    pub fn set_decay_seconds(self: &mut Self, value: f32) -> void {
+        self.decay_seconds = reverb2_clamp(value, 0.08f, 120.0f);
+        self.update_feedback_gain();
+    }
+    pub fn set_damping(self: &mut Self, value: f32) -> void {
+        self.damping = reverb2_clamp(value, 0.0f, 1.0f);
+    }
+    pub fn set_bass_multiplier(self: &mut Self, value: f32) -> void {
+        self.bass_multiplier = reverb2_clamp(value, 0.5f, 1.2f);
+    }
+    pub fn set_diffusion(self: &mut Self, value: f32) -> void {
+        self.diffusion = reverb2_clamp(value, 0.0f, 1.0f); self.configure_delays();
+    }
+    pub fn set_input_bandwidth(self: &mut Self, value: f32) -> void {
+        self.input_bandwidth = reverb2_clamp(value, 0.0f, 1.0f);
+    }
+    pub fn set_predelay_ms(self: &mut Self, value: f32) -> void {
+        self.predelay_ms = reverb2_clamp(value, 0.0f, 500.0f);
+        self.predelay.set_length(llroundf(self.sample_rate * self.predelay_ms / 1000.0f) + 1);
+    }
+    pub fn set_early_mix(self: &mut Self, value: f32) -> void {
+        self.early_mix = reverb2_clamp(value, 0.0f, 1.0f);
+    }
+    pub fn set_stereo_width(self: &mut Self, value: f32) -> void {
+        self.stereo_width = reverb2_clamp(value, 0.0f, 1.0f);
+    }
+    pub fn set_modulation(self: &mut Self, depth_ms: f32, rate_hz: f32) -> void {
+        self.modulation_depth_ms = reverb2_clamp(depth_ms, 0.0f, 5.0f);
+        self.modulation_rate_hz = reverb2_clamp(rate_hz, 0.01f, 5.0f);
+    }
+    pub fn set_mix(self: &mut Self, value: f32) -> void {
+        self.mix = reverb2_clamp(value, 0.0f, 1.0f);
+    }
+    pub fn set_gain(self: &mut Self, value: f32) -> void {
+        self.gain = reverb2_clamp(value, 0.0f, 2.0f);
+    }
+    pub fn set_freeze(self: &mut Self, enabled: bool) -> void {
+        self.freeze = enabled; self.update_feedback_gain();
+    }
+    pub fn set_gate_enabled(self: &mut Self, enabled: bool) -> void {
+        self.gate_enabled = enabled;
+        if !enabled { self.gate_gain = 1.0f; }
+    }
+    pub fn set_gate(self: &mut Self, attack_ms: f32, hold_ms: f32,
+                    release_ms: f32, threshold: f32, depth: f32) -> void {
+        self.gate_attack_ms = reverb2_clamp(attack_ms, 0.1f, 500.0f);
+        self.gate_hold_ms = reverb2_clamp(hold_ms, 0.0f, 5000.0f);
+        self.gate_release_ms = reverb2_clamp(release_ms, 0.1f, 5000.0f);
+        self.gate_threshold = reverb2_clamp(threshold, 0.00001f, 1.0f);
+        self.gate_depth = reverb2_clamp(depth, 0.0f, 1.0f);
+    }
+
+    fn input_filter(self: &mut Self, left: f32, right: f32) -> f32 {
+        let coefficient: f32 = 0.01f + self.input_bandwidth * self.input_bandwidth * 0.98f;
+        self.input_low_left = self.input_low_left + (left - self.input_low_left) * coefficient;
+        self.input_low_right = self.input_low_right + (right - self.input_low_right) * coefficient;
+        return (self.input_low_left + self.input_low_right) * 0.5f;
+    }
+
+    fn update_gate(self: &mut Self, left: f32, right: f32) -> f32 {
+        if !self.gate_enabled { return 1.0f; }
+        var magnitude: f32 = left < 0.0f ? 0.0f - left : left;
+        let right_abs: f32 = right < 0.0f ? 0.0f - right : right;
+        if right_abs > magnitude { magnitude = right_abs; }
+        if magnitude >= self.gate_threshold {
+            self.gate_hold_remaining = llroundf(self.sample_rate * self.gate_hold_ms / 1000.0f);
+        } else if self.gate_hold_remaining > 0 {
+            self.gate_hold_remaining = self.gate_hold_remaining - 1;
+        }
+        let target: f32 = self.gate_hold_remaining > 0 ? 1.0f : self.gate_depth;
+        let time_ms: f32 = target > self.gate_gain ? self.gate_attack_ms : self.gate_release_ms;
+        let samples: f32 = self.sample_rate * time_ms / 1000.0f;
+        let step: f32 = samples <= 1.0f ? 1.0f : 1.0f / samples;
+        if self.gate_gain < target {
+            self.gate_gain = self.gate_gain + step;
+            if self.gate_gain > target { self.gate_gain = target; }
+        } else if self.gate_gain > target {
+            self.gate_gain = self.gate_gain - step;
+            if self.gate_gain < target { self.gate_gain = target; }
+        }
+        return self.gate_gain;
+    }
+
+    fn shape_gain(self: &mut Self, left: f32, right: f32) -> f32 {
+        if self.shape_mode == 0 || self.shape_length <= 0 { return 1.0f; }
+        var magnitude: f32 = left < 0.0f ? 0.0f - left : left;
+        let right_abs: f32 = right < 0.0f ? 0.0f - right : right;
+        if right_abs > magnitude { magnitude = right_abs; }
+        if magnitude > self.gate_threshold && self.shape_armed {
+            self.shape_counter = 0; self.shape_armed = false;
+        } else if magnitude < self.gate_threshold * 0.4f {
+            self.shape_armed = true;
+        }
+        if self.shape_counter >= self.shape_length { return 0.0f; }
+        let phase: f32 = f32(self.shape_counter) / f32(self.shape_length);
+        self.shape_counter = self.shape_counter + 1;
+        if self.shape_mode == 1 { return phase * phase; }
+        if self.shape_mode == 2 {
+            if phase < 0.12f { return phase / 0.12f; }
+            if phase < 0.62f { return 1.0f; }
+            return (1.0f - phase) / 0.38f;
+        }
+        if phase < 0.20f { return phase / 0.20f; }
+        if phase < 0.78f { return 1.0f; }
+        return (1.0f - phase) / 0.22f;
+    }
+
+    /// @brief Process one stereo frame without allocation or locking.
+    pub fn process_stereo(self: &mut Self, input_left: f32,
+                          input_right: f32) -> Reverb2Frame {
+        let smooth: f32 = reverb2_clamp(1000.0f / self.sample_rate, 0.001f, 1.0f);
+        self.mix_smooth = self.mix_smooth + (self.mix - self.mix_smooth) * smooth;
+        self.early_smooth = self.early_smooth + (self.early_mix - self.early_smooth) * smooth;
+        self.width_smooth = self.width_smooth + (self.stereo_width - self.width_smooth) * smooth;
+        let gate: f32 = self.update_gate(input_left, input_right);
+        let shape: f32 = self.shape_gain(input_left, input_right);
+
+        let filtered_input: f32 = self.input_filter(input_left, input_right);
+        let predelayed: f32 = self.predelay.process(filtered_input);
+        var diffused: f32 = self.diffuser0.process(predelayed);
+        diffused = self.diffuser1.process(diffused);
+        diffused = self.diffuser2.process(diffused);
+        diffused = self.diffuser3.process(diffused);
+
+        let early_input_left: f32 = input_left * 0.68f + input_right * 0.22f;
+        let early_input_right: f32 = input_right * 0.68f + input_left * 0.22f;
+        let early_l0: f32 = self.early_left.read_integer(llroundf(self.sample_rate * 0.0083f));
+        let early_l1: f32 = self.early_left.read_integer(llroundf(self.sample_rate * 0.0217f));
+        let early_l2: f32 = self.early_left.read_integer(llroundf(self.sample_rate * 0.0479f));
+        let early_r0: f32 = self.early_right.read_integer(llroundf(self.sample_rate * 0.0111f));
+        let early_r1: f32 = self.early_right.read_integer(llroundf(self.sample_rate * 0.0289f));
+        let early_r2: f32 = self.early_right.read_integer(llroundf(self.sample_rate * 0.0533f));
+        self.early_left.write(early_input_left);
+        self.early_right.write(early_input_right);
+        let early_left: f32 = early_l0 * 0.52f + early_l1 * 0.31f + early_l2 * 0.17f;
+        let early_right: f32 = early_r0 * 0.52f + early_r1 * 0.31f + early_r2 * 0.17f;
+
+        let depth_samples: f32 = self.sample_rate * self.modulation_depth_ms / 1000.0f;
+        let phase_step: f32 = 6.283185307f * self.modulation_rate_hz / self.sample_rate;
+        self.lfo_phase = self.lfo_phase + phase_step;
+        if self.lfo_phase >= 6.283185307f { self.lfo_phase = self.lfo_phase - 6.283185307f; }
+        let m0: f32 = sinf(self.lfo_phase) * depth_samples;
+        let m1: f32 = cosf(self.lfo_phase * 0.83f) * depth_samples;
+        let m2: f32 = sinf(self.lfo_phase * 0.71f + 1.3f) * depth_samples;
+        let m3: f32 = cosf(self.lfo_phase * 0.59f + 2.1f) * depth_samples;
+        let r0: f32 = self.line0.read_modulated(m0);
+        let r1: f32 = self.line1.read_modulated(0.0f - m1);
+        let r2: f32 = self.line2.read_modulated(m2);
+        let r3: f32 = self.line3.read_modulated(0.0f - m3);
+        let r4: f32 = self.line4.read_modulated(0.0f - m0 * 0.77f);
+        let r5: f32 = self.line5.read_modulated(m1 * 0.69f);
+        let r6: f32 = self.line6.read_modulated(0.0f - m2 * 0.63f);
+        let r7: f32 = self.line7.read_modulated(m3 * 0.57f);
+
+        let damping_coefficient: f32 = 0.015f +
+            (1.0f - self.damping) * (1.0f - self.damping) * 0.82f;
+        let l0: f32 = self.line0.damp(r0, damping_coefficient);
+        let l1: f32 = self.line1.damp(r1, damping_coefficient);
+        let l2: f32 = self.line2.damp(r2, damping_coefficient);
+        let l3: f32 = self.line3.damp(r3, damping_coefficient);
+        let l4: f32 = self.line4.damp(r4, damping_coefficient);
+        let l5: f32 = self.line5.damp(r5, damping_coefficient);
+        let l6: f32 = self.line6.damp(r6, damping_coefficient);
+        let l7: f32 = self.line7.damp(r7, damping_coefficient);
+        var bass_gain: f32 = self.feedback_gain * self.bass_multiplier;
+        if bass_gain > 0.99985f { bass_gain = 0.99985f; }
+        if self.freeze { bass_gain = 1.0f; }
+        let f0: f32 = self.freeze ? r0 : (r0 - l0) * self.feedback_gain + l0 * bass_gain;
+        let f1: f32 = self.freeze ? r1 : (r1 - l1) * self.feedback_gain + l1 * bass_gain;
+        let f2: f32 = self.freeze ? r2 : (r2 - l2) * self.feedback_gain + l2 * bass_gain;
+        let f3: f32 = self.freeze ? r3 : (r3 - l3) * self.feedback_gain + l3 * bass_gain;
+        let f4: f32 = self.freeze ? r4 : (r4 - l4) * self.feedback_gain + l4 * bass_gain;
+        let f5: f32 = self.freeze ? r5 : (r5 - l5) * self.feedback_gain + l5 * bass_gain;
+        let f6: f32 = self.freeze ? r6 : (r6 - l6) * self.feedback_gain + l6 * bass_gain;
+        let f7: f32 = self.freeze ? r7 : (r7 - l7) * self.feedback_gain + l7 * bass_gain;
+        let sum: f32 = f0 + f1 + f2 + f3 + f4 + f5 + f6 + f7;
+        let injection: f32 = diffused * (self.freeze ? 0.10f : 0.24f + self.diffusion * 0.18f);
+        self.line0.write(tanhf(f0 - sum * 0.25f + injection));
+        self.line1.write(tanhf(f1 - sum * 0.25f - injection));
+        self.line2.write(tanhf(f2 - sum * 0.25f + injection * 0.91f));
+        self.line3.write(tanhf(f3 - sum * 0.25f - injection * 0.83f));
+        self.line4.write(tanhf(f4 - sum * 0.25f + injection * 0.77f));
+        self.line5.write(tanhf(f5 - sum * 0.25f - injection * 0.69f));
+        self.line6.write(tanhf(f6 - sum * 0.25f + injection * 0.61f));
+        self.line7.write(tanhf(f7 - sum * 0.25f - injection * 0.53f));
+
+        let late_left: f32 = (r0 - r1 + r2 - r3 + r4 - r5 + r6 - r7) * 0.25f;
+        let late_right: f32 = (r0 + r1 - r2 - r3 + r4 + r5 - r6 - r7) * 0.25f;
+        var wet_left: f32 = early_left * self.early_smooth + late_left * (1.0f - self.early_smooth);
+        var wet_right: f32 = early_right * self.early_smooth + late_right * (1.0f - self.early_smooth);
+        let wet_mid: f32 = (wet_left + wet_right) * 0.5f;
+        wet_left = wet_mid + (wet_left - wet_mid) * self.width_smooth;
+        wet_right = wet_mid + (wet_right - wet_mid) * self.width_smooth;
+        let envelope: f32 = gate * shape;
+        wet_left = wet_left * envelope;
+        wet_right = wet_right * envelope;
+        return Reverb2Frame {
+            left_sample: (input_left + (wet_left - input_left) * self.mix_smooth) * self.gain,
+            right_sample: (input_right + (wet_right - input_right) * self.mix_smooth) * self.gain
+        };
+    }
+}
+
+/// @}

@@ -126,6 +126,7 @@ PAGES: list[Page] = [
     Page(Path("docs/dsp/convolution.md"), "dsp::convolution", "DSP-Convolution", "DSP Library"),
     Page(Path("docs/dsp/fft.md"), "dsp::fft", "DSP-FFT", "DSP Library"),
     Page(Path("docs/dsp/reverb.md"), "dsp::reverb", "DSP-Reverb", "DSP Library"),
+    Page(Path("docs/dsp/reverb2.md"), "dsp::reverb2", "DSP-Reverb2", "DSP Library"),
 ] + [
     Page(
         Path("docs/stdlib") / filename,
@@ -321,6 +322,8 @@ def inline_code_link(token: str) -> str | None:
             return "DSP-Convolution"
         if token.startswith("dsp::fft"):
             return "DSP-FFT"
+        if token.startswith("dsp::reverb2"):
+            return "DSP-Reverb2"
         if token.startswith("dsp::reverb"):
             return "DSP-Reverb"
         return "DSP"
