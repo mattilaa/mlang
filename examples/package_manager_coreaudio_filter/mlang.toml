@@ -14,6 +14,7 @@ filter = "moog24"
 max_resonance_db = "12"
 interpolation = "hermite"
 playback_rate = "1"
+dry_wet = "1"
 
 [[task]]
 name = "toolchain-check"
@@ -77,7 +78,7 @@ name = "demo"
 depends_on = ["link-mlang-demo"]
 log_output = false
 shell = [
-  "audio_output='{{option.audio_output}}'; set -- --filter '{{option.filter}}' --max-resonance-db '{{option.max_resonance_db}}' --interpolation '{{option.interpolation}}' --playback-rate '{{option.playback_rate}}' --audio-path '{{option.audio_path}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/coreaudio_filter_sweeps_mlang \"$@\""
+  "audio_output='{{option.audio_output}}'; set -- --filter '{{option.filter}}' --max-resonance-db '{{option.max_resonance_db}}' --interpolation '{{option.interpolation}}' --playback-rate '{{option.playback_rate}}' --dry-wet '{{option.dry_wet}}' --audio-path '{{option.audio_path}}'; if [ -n \"$audio_output\" ]; then set -- \"$@\" --device \"$audio_output\"; fi; exec {{build_dir}}/coreaudio_filter_sweeps_mlang \"$@\""
 ]
 
 [[task]]

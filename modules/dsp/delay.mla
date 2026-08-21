@@ -1,0 +1,708 @@
+/// \file delay.mla
+/// \brief Realtime-safe stereo forward and ping-pong delay.
+///
+/// @defgroup dsp_delay dsp::delay
+/// @ingroup dsp
+/// @brief Stereo delay with filtered, damped feedback and analog time jitter.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+mod std::ringbuffer;
+use dsp::detail::llroundf;
+use dsp::detail::tanf;
+use dsp::detail::tanhf;
+use std::ringbuffer::RingBufferF32;
+/// \endcond
+
+fn delay_clamp(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+/// @brief Feedback routing topology.
+pub enum DelayMode : i32 {
+    Forward = 0,
+    PingPong = 1
+};
+
+/// @brief Filter applied inside the feedback path.
+pub enum FeedbackFilter : i32 {
+    None = 0,
+    Lowpass = 1,
+    Highpass = 2,
+    Bandpass = 3
+};
+
+/// @brief One processed stereo sample.
+pub struct DelayFrame {
+    var left_value: f32;
+    var right_value: f32;
+};
+
+impl DelayFrame {
+    /// @brief Return the left output sample.
+    pub fn left(self: DelayFrame) -> f32 { return self.left_value; }
+
+    /// @brief Return the right output sample.
+    pub fn right(self: DelayFrame) -> f32 { return self.right_value; }
+}
+
+/// @brief Stereo delay with routing, damped feedback filtering, and smooth time jitter.
+///
+/// Storage is allocated only by `new()`. Processing and parameter changes do
+/// not allocate or lock. Delay time and jitter depth can be ramped while audio
+/// runs, using fractional reads for continuous tape-head-style movement.
+pub struct StereoDelay {
+    var left_buffer: RingBufferF32;
+    var right_buffer: RingBufferF32;
+    var left_first_repeat_buffer: RingBufferF32;
+    var right_first_repeat_buffer: RingBufferF32;
+    var delay_samples: i64;
+    var delay_read_samples: f32;
+    var delay_target_samples: f32;
+    var delay_step_samples: f32;
+    var delay_ramp_remaining: i64;
+    var sample_rate_hz: f32;
+    var mode: DelayMode;
+    var feedback: f32;
+    var mix: f32;
+    var mix_target: f32;
+    var mix_step: f32;
+    var mix_ramp_remaining: i64;
+    var filter_type: FeedbackFilter;
+    var filter_low_mix: f32;
+    var filter_band_mix: f32;
+    var filter_high_mix: f32;
+    var filter_low_target: f32;
+    var filter_band_target: f32;
+    var filter_high_target: f32;
+    var filter_low_step: f32;
+    var filter_band_step: f32;
+    var filter_high_step: f32;
+    var filter_type_ramp_remaining: i64;
+    var filter_wet_output: bool;
+    var damping: f32;
+    var damping_target: f32;
+    var damping_step: f32;
+    var damping_ramp_remaining: i64;
+    var filter_g: f32;
+    var filter_g_target: f32;
+    var filter_g_step: f32;
+    var filter_ramp_remaining: i64;
+    var filter_k: f32;
+    var filter_k_target: f32;
+    var filter_k_step: f32;
+    var resonance_ramp_remaining: i64;
+    var left_filter_state1: f32;
+    var left_filter_state2: f32;
+    var right_filter_state1: f32;
+    var right_filter_state2: f32;
+    var left_loop_filter_state1: f32;
+    var left_loop_filter_state2: f32;
+    var right_loop_filter_state1: f32;
+    var right_loop_filter_state2: f32;
+    var jitter_depth_samples: f32;
+    var jitter_depth_target_samples: f32;
+    var jitter_depth_step_samples: f32;
+    var jitter_depth_ramp_remaining: i64;
+    var jitter_value: f32;
+    var jitter_target: f32;
+    var jitter_slew: f32;
+    var jitter_counter: i64;
+    var jitter_interval_samples: i64;
+    var jitter_rng_state: i64;
+};
+
+impl StereoDelay {
+    /// @brief Allocate a stereo delay with a maximum duration in milliseconds.
+    pub fn new(sample_rate_hz: f32, max_delay_ms: f32) -> StereoDelay {
+        let safe_rate: f32 = sample_rate_hz < 1000.0f ? 1000.0f : sample_rate_hz;
+        let safe_max_ms: f32 = delay_clamp(max_delay_ms, 1.0f, 60000.0f);
+        let capacity: i64 = llroundf(safe_rate * safe_max_ms / 1000.0f) + 1;
+        var delay: StereoDelay = StereoDelay {
+            left_buffer: RingBufferF32::new(capacity),
+            right_buffer: RingBufferF32::new(capacity),
+            left_first_repeat_buffer: RingBufferF32::new(capacity),
+            right_first_repeat_buffer: RingBufferF32::new(capacity),
+            delay_samples: 1,
+            delay_read_samples: 1.0f,
+            delay_target_samples: 1.0f,
+            delay_step_samples: 0.0f,
+            delay_ramp_remaining: 0,
+            sample_rate_hz: safe_rate,
+            mode: DelayMode::Forward,
+            feedback: 0.45f,
+            mix: 0.35f,
+            mix_target: 0.35f,
+            mix_step: 0.0f,
+            mix_ramp_remaining: 0,
+            filter_type: FeedbackFilter::Lowpass,
+            filter_low_mix: 1.0f,
+            filter_band_mix: 0.0f,
+            filter_high_mix: 0.0f,
+            filter_low_target: 1.0f,
+            filter_band_target: 0.0f,
+            filter_high_target: 0.0f,
+            filter_low_step: 0.0f,
+            filter_band_step: 0.0f,
+            filter_high_step: 0.0f,
+            filter_type_ramp_remaining: 0,
+            filter_wet_output: true,
+            damping: 0.65f,
+            damping_target: 0.65f,
+            damping_step: 0.0f,
+            damping_ramp_remaining: 0,
+            filter_g: 0.0f,
+            filter_g_target: 0.0f,
+            filter_g_step: 0.0f,
+            filter_ramp_remaining: 0,
+            filter_k: 2.0f,
+            filter_k_target: 2.0f,
+            filter_k_step: 0.0f,
+            resonance_ramp_remaining: 0,
+            left_filter_state1: 0.0f,
+            left_filter_state2: 0.0f,
+            right_filter_state1: 0.0f,
+            right_filter_state2: 0.0f,
+            left_loop_filter_state1: 0.0f,
+            left_loop_filter_state2: 0.0f,
+            right_loop_filter_state1: 0.0f,
+            right_loop_filter_state2: 0.0f,
+            jitter_depth_samples: 0.0f,
+            jitter_depth_target_samples: 0.0f,
+            jitter_depth_step_samples: 0.0f,
+            jitter_depth_ramp_remaining: 0,
+            jitter_value: 0.0f,
+            jitter_target: 0.0f,
+            jitter_slew: 1.0f / (safe_rate * 0.12f),
+            jitter_counter: 1,
+            jitter_interval_samples: llroundf(safe_rate * 0.04f),
+            jitter_rng_state: 13579
+        };
+        delay.set_delay_ms(safe_max_ms < 375.0f ? safe_max_ms : 375.0f);
+        delay.set_filter_cutoff_hz(5000.0f);
+        delay.set_filter_resonance(0.0f);
+        return delay;
+    }
+
+    /// @brief Set the active delay time, clamped to allocated capacity.
+    pub fn set_delay_ms(self: &mut Self, delay_ms: f32) -> void {
+        var samples: i64 = llroundf(self.sample_rate_hz *
+            delay_clamp(delay_ms, 0.020833333f, 60000.0f) / 1000.0f);
+        if samples < 1 { samples = 1; }
+        if samples >= self.left_buffer.capacity() { samples = self.left_buffer.capacity() - 1; }
+        if samples < 1 { samples = 1; }
+        self.delay_samples = samples;
+        self.delay_read_samples = f32(samples);
+        self.delay_target_samples = self.delay_read_samples;
+        self.delay_step_samples = 0.0f;
+        self.delay_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp delay time to a target over a sample count.
+    ///
+    /// Fractional buffer reads make the moving tap continuous. Retargeting an
+    /// active ramp starts from its current in-flight position. Zero or negative
+    /// ramp lengths apply the target immediately.
+    pub fn set_delay_target_ms(self: &mut Self, delay_ms: f32,
+                               ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_delay_ms(delay_ms);
+            return;
+        }
+        var target: f32 = self.sample_rate_hz *
+            delay_clamp(delay_ms, 0.020833333f, 60000.0f) / 1000.0f;
+        let maximum: f32 = f32(self.left_buffer.capacity() - 1);
+        if target < 1.0f { target = 1.0f; }
+        if target > maximum { target = maximum; }
+        self.delay_target_samples = target;
+        self.delay_step_samples = (target - self.delay_read_samples) /
+            f32(ramp_samples);
+        self.delay_ramp_remaining = ramp_samples;
+    }
+
+    /// @brief Set slow random delay-time modulation depth in milliseconds.
+    ///
+    /// The modulation is band-limited and fractionally interpolated to avoid
+    /// hard sample jumps. Zero disables jitter. The usable depth is limited by
+    /// the allocated delay capacity and the active base delay time.
+    pub fn set_jitter_ms(self: &mut Self, jitter_ms: f32) -> void {
+        self.jitter_depth_samples = self.sample_rate_hz *
+            delay_clamp(jitter_ms, 0.0f, 1000.0f) / 1000.0f;
+        self.jitter_depth_target_samples = self.jitter_depth_samples;
+        self.jitter_depth_step_samples = 0.0f;
+        self.jitter_depth_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp jitter depth to a target over a sample count.
+    ///
+    /// Retargeting continues from the current in-flight depth so realtime
+    /// changes do not introduce a modulation discontinuity.
+    pub fn set_jitter_target_ms(self: &mut Self, jitter_ms: f32,
+                                ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_jitter_ms(jitter_ms);
+            return;
+        }
+        self.jitter_depth_target_samples = self.sample_rate_hz *
+            delay_clamp(jitter_ms, 0.0f, 1000.0f) / 1000.0f;
+        self.jitter_depth_step_samples =
+            (self.jitter_depth_target_samples - self.jitter_depth_samples) /
+            f32(ramp_samples);
+        self.jitter_depth_ramp_remaining = ramp_samples;
+    }
+
+    /// @brief Return the current in-flight delay time in milliseconds.
+    pub fn delay_ms(self: StereoDelay) -> f32 {
+        return self.delay_read_samples * 1000.0f / self.sample_rate_hz;
+    }
+
+    /// @brief Return the current in-flight jitter depth in milliseconds.
+    pub fn jitter_ms(self: StereoDelay) -> f32 {
+        return self.jitter_depth_samples * 1000.0f / self.sample_rate_hz;
+    }
+
+    /// @brief Select independent-channel forward or cross-fed ping-pong routing.
+    pub fn set_mode(self: &mut Self, mode: DelayMode) -> void { self.mode = mode; }
+
+    /// @brief Set repeat feedback from 0 to 1.20.
+    ///
+    /// Values above 1 can produce dub-style self-oscillation. The regenerative
+    /// loop uses soft saturation above 0.98 to remain bounded.
+    pub fn set_feedback(self: &mut Self, feedback: f32) -> void {
+        self.feedback = delay_clamp(feedback, 0.0f, 1.20f);
+    }
+
+    /// @brief Set dry/wet mix from 0 to 1.
+    pub fn set_mix(self: &mut Self, mix: f32) -> void {
+        self.mix = delay_clamp(mix, 0.0f, 1.0f);
+        self.mix_target = self.mix;
+        self.mix_step = 0.0f;
+        self.mix_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp the dry/wet mix to a target over a sample count.
+    ///
+    /// Retargeting continues from the current in-flight value. Zero or
+    /// negative ramp lengths apply the new mix immediately.
+    pub fn set_mix_target(self: &mut Self, mix: f32, ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_mix(mix);
+            return;
+        }
+        self.mix_target = delay_clamp(mix, 0.0f, 1.0f);
+        self.mix_step = (self.mix_target - self.mix) / f32(ramp_samples);
+        self.mix_ramp_remaining = ramp_samples;
+    }
+
+    /// @brief Select no filter, low-pass, band-pass, or high-pass immediately.
+    pub fn set_filter(self: &mut Self, filter_type: FeedbackFilter) -> void {
+        self.filter_type = filter_type;
+        self.filter_low_mix = filter_type == FeedbackFilter::Lowpass ? 1.0f : 0.0f;
+        self.filter_band_mix = filter_type == FeedbackFilter::Bandpass ? 1.0f : 0.0f;
+        self.filter_high_mix = filter_type == FeedbackFilter::Highpass ? 1.0f : 0.0f;
+        self.filter_low_target = self.filter_low_mix;
+        self.filter_band_target = self.filter_band_mix;
+        self.filter_high_target = self.filter_high_mix;
+        self.filter_low_step = 0.0f;
+        self.filter_band_step = 0.0f;
+        self.filter_high_step = 0.0f;
+        self.filter_type_ramp_remaining = 0;
+    }
+
+    /// @brief Crossfade smoothly to another feedback-filter response.
+    ///
+    /// The low-pass, band-pass, and high-pass taps share one state-variable
+    /// filter, so this transition does not reset state or allocate memory.
+    pub fn set_filter_target(self: &mut Self, filter_type: FeedbackFilter,
+                             ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_filter(filter_type);
+            return;
+        }
+        self.filter_type = filter_type;
+        self.filter_low_target = filter_type == FeedbackFilter::Lowpass ? 1.0f : 0.0f;
+        self.filter_band_target = filter_type == FeedbackFilter::Bandpass ? 1.0f : 0.0f;
+        self.filter_high_target = filter_type == FeedbackFilter::Highpass ? 1.0f : 0.0f;
+        self.filter_low_step = (self.filter_low_target - self.filter_low_mix) /
+            f32(ramp_samples);
+        self.filter_band_step = (self.filter_band_target - self.filter_band_mix) /
+            f32(ramp_samples);
+        self.filter_high_step = (self.filter_high_target - self.filter_high_mix) /
+            f32(ramp_samples);
+        self.filter_type_ramp_remaining = ramp_samples;
+    }
+
+    /// @brief Choose whether the selected filter also colors the audible wet tap.
+    ///
+    /// Disable this for classic feedback-only damping: the first repeat is
+    /// unfiltered and each regenerated repeat is filtered progressively.
+    pub fn set_filter_wet_output(self: &mut Self, enabled: bool) -> void {
+        self.filter_wet_output = enabled;
+    }
+
+    /// @brief Set feedback-filter cutoff in Hz.
+    pub fn set_filter_cutoff_hz(self: &mut Self, cutoff_hz: f32) -> void {
+        let cutoff: f32 = delay_clamp(cutoff_hz, 20.0f, self.sample_rate_hz * 0.495f);
+        self.filter_g = tanf(3.14159265358979323846f * cutoff / self.sample_rate_hz);
+        self.filter_g_target = self.filter_g;
+        self.filter_g_step = 0.0f;
+        self.filter_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp feedback-filter cutoff to a target over a sample count.
+    ///
+    /// A new target starts from the current in-flight value. Zero or negative
+    /// ramp lengths apply the cutoff immediately.
+    pub fn set_filter_cutoff_target_hz(self: &mut Self, cutoff_hz: f32,
+                                       ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_filter_cutoff_hz(cutoff_hz);
+            return;
+        }
+        let cutoff: f32 = delay_clamp(cutoff_hz, 20.0f, self.sample_rate_hz * 0.495f);
+        self.filter_g_target = tanf(3.14159265358979323846f * cutoff / self.sample_rate_hz);
+        self.filter_g_step = (self.filter_g_target - self.filter_g) / f32(ramp_samples);
+        self.filter_ramp_remaining = ramp_samples;
+    }
+
+    /// @brief Set feedback-filter resonance from 0 to 1.
+    ///
+    /// Zero is broadly damped (`Q = 0.5`); one approaches a strong but bounded
+    /// resonant peak (`Q` approximately 10).
+    pub fn set_filter_resonance(self: &mut Self, resonance: f32) -> void {
+        self.filter_k = 2.0f - 1.9f * delay_clamp(resonance, 0.0f, 1.0f);
+        self.filter_k_target = self.filter_k;
+        self.filter_k_step = 0.0f;
+        self.resonance_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp feedback-filter resonance to a target over a sample count.
+    ///
+    /// Retargeting starts from the current in-flight value. Zero or negative
+    /// ramp lengths apply resonance immediately.
+    pub fn set_filter_resonance_target(self: &mut Self, resonance: f32,
+                                       ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_filter_resonance(resonance);
+            return;
+        }
+        self.filter_k_target = 2.0f - 1.9f * delay_clamp(resonance, 0.0f, 1.0f);
+        self.filter_k_step = (self.filter_k_target - self.filter_k) / f32(ramp_samples);
+        self.resonance_ramp_remaining = ramp_samples;
+    }
+
+    /// @brief Blend filtered feedback over dry feedback from 0 to 1.
+    pub fn set_damping(self: &mut Self, damping: f32) -> void {
+        self.damping = delay_clamp(damping, 0.0f, 1.0f);
+        self.damping_target = self.damping;
+        self.damping_step = 0.0f;
+        self.damping_ramp_remaining = 0;
+    }
+
+    /// @brief Ramp the filtered-feedback blend over a sample count.
+    ///
+    /// Retargeting continues from the current in-flight blend. Zero or
+    /// negative ramp lengths apply the new damping value immediately.
+    pub fn set_damping_target(self: &mut Self, damping: f32,
+                              ramp_samples: i64) -> void {
+        if ramp_samples <= 0 {
+            self.set_damping(damping);
+            return;
+        }
+        self.damping_target = delay_clamp(damping, 0.0f, 1.0f);
+        self.damping_step = (self.damping_target - self.damping) /
+            f32(ramp_samples);
+        self.damping_ramp_remaining = ramp_samples;
+    }
+
+    /// @brief Return the current in-flight filtered-feedback blend.
+    pub fn damping_value(self: StereoDelay) -> f32 {
+        return self.damping;
+    }
+
+    /// @brief Clear delay and filter histories while retaining parameters.
+    pub fn reset(self: &mut Self) -> void {
+        self.left_buffer.clear();
+        self.right_buffer.clear();
+        self.left_first_repeat_buffer.clear();
+        self.right_first_repeat_buffer.clear();
+        self.left_filter_state1 = 0.0f;
+        self.left_filter_state2 = 0.0f;
+        self.right_filter_state1 = 0.0f;
+        self.right_filter_state2 = 0.0f;
+        self.left_loop_filter_state1 = 0.0f;
+        self.left_loop_filter_state2 = 0.0f;
+        self.right_loop_filter_state1 = 0.0f;
+        self.right_loop_filter_state2 = 0.0f;
+        self.jitter_value = 0.0f;
+        self.jitter_target = 0.0f;
+        self.jitter_counter = 1;
+        self.jitter_rng_state = 13579;
+    }
+
+    fn jittered_delay_samples(self: &mut Self) -> f32 {
+        if self.jitter_depth_samples <= 0.0f { return self.delay_read_samples; }
+        self.jitter_counter = self.jitter_counter - 1;
+        if self.jitter_counter <= 0 {
+            self.jitter_rng_state = (self.jitter_rng_state * 16807) % 2147483647;
+            self.jitter_target = f32(self.jitter_rng_state) / 1073741823.5f - 1.0f;
+            self.jitter_counter = self.jitter_interval_samples < 1
+                ? 1 : self.jitter_interval_samples;
+        }
+        self.jitter_value = self.jitter_value +
+            (self.jitter_target - self.jitter_value) * self.jitter_slew;
+        var depth: f32 = self.jitter_depth_samples;
+        let lower_room: f32 = self.delay_read_samples - 1.0f;
+        let upper_room: f32 = f32(self.left_buffer.capacity() - 1) -
+            self.delay_read_samples;
+        if depth > lower_room { depth = lower_room; }
+        if depth > upper_room { depth = upper_room; }
+        if depth < 0.0f { depth = 0.0f; }
+        return self.delay_read_samples + self.jitter_value * depth;
+    }
+
+    fn read_fractional(self: StereoDelay, buffer: RingBufferF32, position: f32) -> f32 {
+        let center: i64 = llroundf(position);
+        let offset: f32 = position - f32(center);
+        let adjacent: i64 = offset < 0.0f ? center - 1 : center + 1;
+        let blend: f32 = offset < 0.0f ? 0.0f - offset : offset;
+        let sample0: f32 = buffer.read(center);
+        let sample1: f32 = buffer.read(adjacent);
+        return sample0 + (sample1 - sample0) * blend;
+    }
+
+    fn advance_filter_cutoff(self: &mut Self) -> void {
+        if self.filter_ramp_remaining <= 0 { return; }
+        self.filter_g = self.filter_g + self.filter_g_step;
+        self.filter_ramp_remaining = self.filter_ramp_remaining - 1;
+        if self.filter_ramp_remaining == 0 {
+            self.filter_g = self.filter_g_target;
+            self.filter_g_step = 0.0f;
+        }
+    }
+
+    fn advance_mix(self: &mut Self) -> void {
+        if self.mix_ramp_remaining <= 0 { return; }
+        self.mix = self.mix + self.mix_step;
+        self.mix_ramp_remaining = self.mix_ramp_remaining - 1;
+        if self.mix_ramp_remaining == 0 {
+            self.mix = self.mix_target;
+            self.mix_step = 0.0f;
+        }
+    }
+
+    fn advance_delay_time(self: &mut Self) -> void {
+        if self.delay_ramp_remaining <= 0 { return; }
+        self.delay_read_samples = self.delay_read_samples + self.delay_step_samples;
+        self.delay_ramp_remaining = self.delay_ramp_remaining - 1;
+        if self.delay_ramp_remaining == 0 {
+            self.delay_read_samples = self.delay_target_samples;
+            self.delay_step_samples = 0.0f;
+        }
+        self.delay_samples = llroundf(self.delay_read_samples);
+    }
+
+    fn advance_jitter_depth(self: &mut Self) -> void {
+        if self.jitter_depth_ramp_remaining <= 0 { return; }
+        self.jitter_depth_samples = self.jitter_depth_samples +
+            self.jitter_depth_step_samples;
+        self.jitter_depth_ramp_remaining = self.jitter_depth_ramp_remaining - 1;
+        if self.jitter_depth_ramp_remaining == 0 {
+            self.jitter_depth_samples = self.jitter_depth_target_samples;
+            self.jitter_depth_step_samples = 0.0f;
+        }
+    }
+
+    fn advance_damping(self: &mut Self) -> void {
+        if self.damping_ramp_remaining <= 0 { return; }
+        self.damping = self.damping + self.damping_step;
+        self.damping_ramp_remaining = self.damping_ramp_remaining - 1;
+        if self.damping_ramp_remaining == 0 {
+            self.damping = self.damping_target;
+            self.damping_step = 0.0f;
+        }
+    }
+
+    fn advance_filter_resonance(self: &mut Self) -> void {
+        if self.resonance_ramp_remaining <= 0 { return; }
+        self.filter_k = self.filter_k + self.filter_k_step;
+        self.resonance_ramp_remaining = self.resonance_ramp_remaining - 1;
+        if self.resonance_ramp_remaining == 0 {
+            self.filter_k = self.filter_k_target;
+            self.filter_k_step = 0.0f;
+        }
+    }
+
+    fn advance_filter_type(self: &mut Self) -> void {
+        if self.filter_type_ramp_remaining <= 0 { return; }
+        self.filter_low_mix = self.filter_low_mix + self.filter_low_step;
+        self.filter_band_mix = self.filter_band_mix + self.filter_band_step;
+        self.filter_high_mix = self.filter_high_mix + self.filter_high_step;
+        self.filter_type_ramp_remaining = self.filter_type_ramp_remaining - 1;
+        if self.filter_type_ramp_remaining == 0 {
+            self.filter_low_mix = self.filter_low_target;
+            self.filter_band_mix = self.filter_band_target;
+            self.filter_high_mix = self.filter_high_target;
+            self.filter_low_step = 0.0f;
+            self.filter_band_step = 0.0f;
+            self.filter_high_step = 0.0f;
+        }
+    }
+
+    fn filter_feedback_left(self: &mut Self, input: f32) -> f32 {
+        let g: f32 = self.filter_g;
+        let a1: f32 = 1.0f / (1.0f + g * (g + self.filter_k));
+        let a2: f32 = g * a1;
+        let a3: f32 = g * a2;
+        let v3: f32 = input - self.left_filter_state2;
+        let band: f32 = a1 * self.left_filter_state1 + a2 * v3;
+        let low: f32 = self.left_filter_state2 +
+            a2 * self.left_filter_state1 + a3 * v3;
+        self.left_filter_state1 = 2.0f * band - self.left_filter_state1;
+        self.left_filter_state2 = 2.0f * low - self.left_filter_state2;
+        let high: f32 = input - self.filter_k * band - low;
+        let filter_mix: f32 = self.filter_low_mix + self.filter_band_mix +
+            self.filter_high_mix;
+        let raw_filtered: f32 = low * self.filter_low_mix +
+            band * self.filter_band_mix + high * self.filter_high_mix;
+        let resonance_amount: f32 = delay_clamp((1.0f - self.filter_k) / 0.9f,
+                                                 0.0f, 1.0f);
+        let limited: f32 = tanhf(raw_filtered);
+        let colored: f32 = raw_filtered +
+            (limited - raw_filtered) * resonance_amount;
+        let filtered: f32 = input * (1.0f - filter_mix) + colored;
+        return input + (filtered - input) * self.damping;
+    }
+
+    fn filter_feedback_right(self: &mut Self, input: f32) -> f32 {
+        let g: f32 = self.filter_g;
+        let a1: f32 = 1.0f / (1.0f + g * (g + self.filter_k));
+        let a2: f32 = g * a1;
+        let a3: f32 = g * a2;
+        let v3: f32 = input - self.right_filter_state2;
+        let band: f32 = a1 * self.right_filter_state1 + a2 * v3;
+        let low: f32 = self.right_filter_state2 +
+            a2 * self.right_filter_state1 + a3 * v3;
+        self.right_filter_state1 = 2.0f * band - self.right_filter_state1;
+        self.right_filter_state2 = 2.0f * low - self.right_filter_state2;
+        let high: f32 = input - self.filter_k * band - low;
+        let filter_mix: f32 = self.filter_low_mix + self.filter_band_mix +
+            self.filter_high_mix;
+        let raw_filtered: f32 = low * self.filter_low_mix +
+            band * self.filter_band_mix + high * self.filter_high_mix;
+        let resonance_amount: f32 = delay_clamp((1.0f - self.filter_k) / 0.9f,
+                                                 0.0f, 1.0f);
+        let limited: f32 = tanhf(raw_filtered);
+        let colored: f32 = raw_filtered +
+            (limited - raw_filtered) * resonance_amount;
+        let filtered: f32 = input * (1.0f - filter_mix) + colored;
+        return input + (filtered - input) * self.damping;
+    }
+
+    fn filter_loop_left(self: &mut Self, input: f32) -> f32 {
+        let g: f32 = self.filter_g;
+        let loop_k: f32 = self.filter_k < 1.41421356237f
+            ? 1.41421356237f : self.filter_k;
+        let a1: f32 = 1.0f / (1.0f + g * (g + loop_k));
+        let a2: f32 = g * a1;
+        let a3: f32 = g * a2;
+        let v3: f32 = input - self.left_loop_filter_state2;
+        let band: f32 = a1 * self.left_loop_filter_state1 + a2 * v3;
+        let low: f32 = self.left_loop_filter_state2 +
+            a2 * self.left_loop_filter_state1 + a3 * v3;
+        self.left_loop_filter_state1 = 2.0f * band - self.left_loop_filter_state1;
+        self.left_loop_filter_state2 = 2.0f * low - self.left_loop_filter_state2;
+        let high: f32 = input - loop_k * band - low;
+        let filter_mix: f32 = self.filter_low_mix + self.filter_band_mix +
+            self.filter_high_mix;
+        let filtered: f32 = input * (1.0f - filter_mix) +
+            low * self.filter_low_mix + band * self.filter_band_mix +
+            high * self.filter_high_mix;
+        return input + (filtered - input) * self.damping;
+    }
+
+    fn filter_loop_right(self: &mut Self, input: f32) -> f32 {
+        let g: f32 = self.filter_g;
+        let loop_k: f32 = self.filter_k < 1.41421356237f
+            ? 1.41421356237f : self.filter_k;
+        let a1: f32 = 1.0f / (1.0f + g * (g + loop_k));
+        let a2: f32 = g * a1;
+        let a3: f32 = g * a2;
+        let v3: f32 = input - self.right_loop_filter_state2;
+        let band: f32 = a1 * self.right_loop_filter_state1 + a2 * v3;
+        let low: f32 = self.right_loop_filter_state2 +
+            a2 * self.right_loop_filter_state1 + a3 * v3;
+        self.right_loop_filter_state1 = 2.0f * band - self.right_loop_filter_state1;
+        self.right_loop_filter_state2 = 2.0f * low - self.right_loop_filter_state2;
+        let high: f32 = input - loop_k * band - low;
+        let filter_mix: f32 = self.filter_low_mix + self.filter_band_mix +
+            self.filter_high_mix;
+        let filtered: f32 = input * (1.0f - filter_mix) +
+            low * self.filter_low_mix + band * self.filter_band_mix +
+            high * self.filter_high_mix;
+        return input + (filtered - input) * self.damping;
+    }
+
+    fn loop_feedback(self: StereoDelay, input: f32) -> f32 {
+        let regenerated: f32 = input * self.feedback;
+        if self.feedback <= 0.98f { return regenerated; }
+        return tanhf(regenerated * 1.25f) / 1.25f;
+    }
+
+    /// @brief Process one stereo sample.
+    ///
+    /// Forward mode feeds each channel back into itself. Ping-pong mode seeds
+    /// the left delay from mono input and cross-feeds repeats between channels.
+    pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> DelayFrame {
+        self.advance_delay_time();
+        self.advance_jitter_depth();
+        self.advance_damping();
+        self.advance_mix();
+        self.advance_filter_cutoff();
+        self.advance_filter_resonance();
+        self.advance_filter_type();
+        let read_position: f32 = self.jittered_delay_samples();
+        let delayed_left: f32 = self.read_fractional(self.left_buffer, read_position);
+        let delayed_right: f32 = self.read_fractional(self.right_buffer, read_position);
+        let first_repeat_left: f32 = self.read_fractional(
+            self.left_first_repeat_buffer, read_position);
+        let first_repeat_right: f32 = self.read_fractional(
+            self.right_first_repeat_buffer, read_position);
+        let regenerated_left: f32 = delayed_left - first_repeat_left;
+        let regenerated_right: f32 = delayed_right - first_repeat_right;
+        let feedback_left: f32 = self.filter_wet_output
+            ? self.filter_feedback_left(delayed_left)
+            : first_repeat_left + self.filter_feedback_left(regenerated_left);
+        let feedback_right: f32 = self.filter_wet_output
+            ? self.filter_feedback_right(delayed_right)
+            : first_repeat_right + self.filter_feedback_right(regenerated_right);
+        let loop_left: f32 = self.loop_feedback(self.filter_loop_left(delayed_left));
+        let loop_right: f32 = self.loop_feedback(self.filter_loop_right(delayed_right));
+
+        var write_left: f32 = input_left + loop_left;
+        var write_right: f32 = input_right + loop_right;
+        var first_write_left: f32 = input_left;
+        var first_write_right: f32 = input_right;
+        if self.mode == DelayMode::PingPong {
+            let mono_input: f32 = (input_left + input_right) * 0.5f;
+            write_left = mono_input + loop_right;
+            write_right = loop_left;
+            first_write_left = mono_input;
+            first_write_right = 0.0f;
+        }
+        self.left_buffer.write(write_left);
+        self.right_buffer.write(write_right);
+        self.left_first_repeat_buffer.write(first_write_left);
+        self.right_first_repeat_buffer.write(first_write_right);
+
+        return DelayFrame {
+            left_value: input_left + (feedback_left - input_left) * self.mix,
+            right_value: input_right + (feedback_right - input_right) * self.mix
+        };
+    }
+}
+
+/// @}

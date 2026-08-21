@@ -1,0 +1,797 @@
+/// \file main.mla
+/// \ingroup examples
+/// \brief Play WAV/AIFF input through dsp::delay using std::audio.
+
+mod dsp::delay;
+mod std::argparser;
+mod std::ascii;
+mod std::audio;
+mod std::esc;
+mod std::fs;
+mod std::strbuf;
+mod std::term;
+mod std::time;
+
+use dsp::delay::DelayFrame;
+use dsp::delay::DelayMode;
+use dsp::delay::FeedbackFilter;
+use dsp::delay::StereoDelay;
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::ascii::AsciiKey;
+use std::audio::AudioDevice;
+use std::audio::PcmAudio;
+use std::audio::PcmBlock;
+use std::audio::PcmWavWriter;
+use std::audio::backend_name;
+use std::audio::default_output_device_id;
+use std::audio::device_count;
+use std::audio::device_name;
+use std::esc::alt_screen_off;
+use std::esc::alt_screen_on;
+use std::esc::bold_on;
+use std::esc::clear_eol;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_show;
+use std::esc::fg_rgb;
+use std::esc::reset;
+use std::fs::BufReader;
+use std::fs::File;
+use std::fs::free_lines;
+use std::fs::write_all_text;
+use std::strbuf::eq;
+use std::strbuf::fit_right;
+use std::strbuf::free;
+use std::strbuf::len;
+use std::strbuf::starts_with;
+use std::term::stdin_enable_cbreak;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::term::supports_ansi;
+use std::time::sleep_ms;
+
+extern fn atof(value: str8) -> f64;
+extern fn __mlang_std_esc_cursor_code(code: i32) -> str8;
+extern fn __mlang_std_io_stdin_read_byte_nonblocking() -> i32;
+extern fn __mlang_std_io_stdout_flush() -> i32;
+extern fn llround(value: f64) -> i64;
+extern fn sscanf(text: str8, format: str8, ...) -> i32;
+
+struct SessionData {
+    var times_us: list<i64>;
+    var keys: list<i32>;
+    var valid: bool;
+};
+
+fn is_session_key(key: i32) -> bool {
+    return key == AsciiKey::Space ||
+        key == AsciiKey::LowerQ || key == AsciiKey::UpperQ ||
+        key == AsciiKey::LowerZ || key == AsciiKey::UpperZ ||
+        key == AsciiKey::LowerX || key == AsciiKey::UpperX ||
+        key == AsciiKey::LowerC || key == AsciiKey::UpperC ||
+        key == AsciiKey::LowerV || key == AsciiKey::UpperV ||
+        key == AsciiKey::LowerL || key == AsciiKey::UpperL ||
+        key == AsciiKey::LowerB || key == AsciiKey::UpperB ||
+        key == AsciiKey::LowerH || key == AsciiKey::UpperH ||
+        key == AsciiKey::LowerN || key == AsciiKey::UpperN ||
+        key == AsciiKey::LowerM || key == AsciiKey::UpperM ||
+        key == AsciiKey::LowerJ || key == AsciiKey::UpperJ ||
+        key == AsciiKey::LowerK || key == AsciiKey::UpperK ||
+        key == AsciiKey::LowerU || key == AsciiKey::UpperU ||
+        key == AsciiKey::LowerI || key == AsciiKey::UpperI ||
+        key == AsciiKey::LowerF || key == AsciiKey::UpperF ||
+        key == AsciiKey::LowerG || key == AsciiKey::UpperG ||
+        key == AsciiKey::LowerD || key == AsciiKey::UpperD ||
+        key == AsciiKey::LowerA || key == AsciiKey::UpperA ||
+        key == AsciiKey::LowerS || key == AsciiKey::UpperS;
+}
+
+fn load_session(path: str8) -> SessionData {
+    var data: SessionData = SessionData { times_us: [], keys: [], valid: false };
+    let file_r: result<File, str8> = File::open(path);
+    if file_r.is_err() {
+        println!("session replay open failed: {}", path);
+        return data;
+    }
+    let reader: BufReader = BufReader::new(file_r.unwrap());
+    let lines: list<str8> = reader.lines();
+    var previous_time: i64 = -1;
+    data.valid = true;
+    for line in lines {
+        if len(line) == 0 || starts_with(line, "#") == 1 { continue; }
+        var time_us: i64 = 0;
+        var key: i32 = 0;
+        if sscanf(line, "%lld %d", &time_us, &key) != 2 ||
+           time_us < previous_time || !is_session_key(key) {
+            println!("invalid session replay line: {}", line);
+            data.valid = false;
+            break;
+        }
+        data.times_us.push(time_us);
+        data.keys.push(key);
+        previous_time = time_us;
+    }
+    free_lines(lines);
+    return data;
+}
+
+fn begin_session_recording(path: str8) -> bool {
+    let header: str8 = "# MLang delay automation session v1\n# elapsed_us keycode\n# 32=Space 122/120=cutoff-down/up 99/118=resonance-down/up\n# 108=lowpass 98=bandpass 104=highpass 110/109=dry-wet-down/up\n# 106/107=jitter-down/up 117/105=delay-down/up 102/103=damping-down/up\n# 97/115=feedback-down/up 100=reset-loop 113=quit; uppercase keycodes are also valid\n";
+    let result: result<i32, str8> = write_all_text(path, header);
+    if result.is_err() {
+        println!("session recording create failed: {}", path);
+        return false;
+    }
+    return true;
+}
+
+fn record_session_event(path: str8, elapsed_us: i64, key: i32) -> bool {
+    let file_r: result<File, str8> = File::append(path);
+    if file_r.is_err() { return false; }
+    let file: File = file_r.unwrap();
+    let written: result<i64, str8> = file.write_line(format!("{} {}", elapsed_us, key));
+    let close_result: i32 = file.close();
+    return written.is_ok() && close_result == 0;
+}
+
+fn clamp_audio(value: f32) -> f32 {
+    if value < -0.98f { return -0.98f; }
+    if value > 0.98f { return 0.98f; }
+    return value;
+}
+
+fn source_sample(samples: &list<f32>, channels: i64, frames: i64,
+                 position: f64, channel: i64) -> f32 {
+    if position < 0.0 || position >= f64(frames) { return 0.0f; }
+    let frame0: i64 = position < 1.0 ? 0 : llround(position - 0.5);
+    let frame1: i64 = frame0 + 1 < frames ? frame0 + 1 : frame0;
+    let fraction: f32 = f32(position - f64(frame0));
+    let safe_channel: i64 = channel < channels ? channel : 0;
+    let sample0: f32 = samples[frame0 * channels + safe_channel];
+    let sample1: f32 = samples[frame1 * channels + safe_channel];
+    return sample0 + (sample1 - sample0) * fraction;
+}
+
+fn print_devices() -> void {
+    let count: i64 = device_count();
+    let default_id: i64 = default_output_device_id();
+    println!("output devices: count={} default_id={}", count, default_id);
+    var id: i64 = 0;
+    while id < count {
+        println!("  [{}] {}", id, device_name(id));
+        id = id + 1;
+    }
+}
+
+fn start_device(device: AudioDevice) -> bool {
+    let result: result<i32, str8> = device.start();
+    if result.is_err() {
+        println!("audio start failed: {}", result.unwrap_err());
+        return false;
+    }
+    return true;
+}
+
+fn restore_terminal(keyboard_enabled: bool, ui_enabled: bool) -> void {
+    if keyboard_enabled {
+        let _ = stdin_restore();
+    }
+    if ui_enabled {
+        print!("{}{}{}", reset(), __mlang_std_esc_cursor_code(cmd_show()), alt_screen_off());
+        let _ = __mlang_std_io_stdout_flush();
+    }
+}
+
+fn draw_slider(label: str8, value: f32, minimum: f32, maximum: f32,
+               row: i32) -> void {
+    var normalized: f32 = maximum > minimum
+        ? (value - minimum) / (maximum - minimum) : 0.0f;
+    if normalized < 0.0f { normalized = 0.0f; }
+    if normalized > 1.0f { normalized = 1.0f; }
+    let width: i64 = 36;
+    let filled: i64 = llround(f64(normalized * f32(width)));
+    var label_r: i32 = 120;
+    var label_g: i32 = 185;
+    var label_b: i32 = 255;
+    if row % 4 == 1 {
+        label_r = 175; label_g = 145; label_b = 255;
+    } else if row % 4 == 2 {
+        label_r = 245; label_g = 135; label_b = 210;
+    } else if row % 4 == 3 {
+        label_r = 255; label_g = 165; label_b = 120;
+    }
+    let aligned_label: str8 = fit_right(label, 10, " ");
+    print!("  {}{}{} [", fg_rgb(label_r, label_g, label_b), aligned_label, reset());
+    free(aligned_label);
+    var cell: i64 = 0;
+    while cell < width {
+        if cell < filled {
+            let amount: i64 = cell * 255 / (width - 1);
+            let red: i32 = label_r + i32(amount) * (255 - label_r) / 255;
+            let green: i32 = label_g + i32(amount) * (60 - label_g) / 255;
+            let blue: i32 = label_b + i32(amount) * (55 - label_b) / 255;
+            let fade_distance: i64 = filled - cell;
+            if fade_distance == 1 {
+                print!("{}░", fg_rgb(red, green, blue));
+            } else if fade_distance == 2 {
+                print!("{}▒", fg_rgb(red, green, blue));
+            } else if fade_distance == 3 {
+                print!("{}▓", fg_rgb(red, green, blue));
+            } else {
+                print!("{}█", fg_rgb(red, green, blue));
+            }
+        } else {
+            let track_r: i32 = 20 + label_r / 6;
+            let track_g: i32 = 20 + label_g / 6;
+            let track_b: i32 = 24 + label_b / 6;
+            print!("{}·", fg_rgb(track_r, track_g, track_b));
+        }
+        cell = cell + 1;
+    }
+    println!("{}]  {}{}", reset(), value, clear_eol());
+}
+
+fn draw_performance_ui(mode_name: str8, filter_scope_name: str8,
+                       active_filter_name: str8, paused: bool,
+                       filter_cutoff: f32, max_filter_cutoff: f32,
+                       filter_resonance: f32, feedback: f32,
+                       dry_wet: f32, damping: f32, delay_ms: f32,
+                       jitter_ms: f32, source_rendered: i64,
+                       source_output_frames: i64, recording_enabled: bool,
+                       replay_enabled: bool, output_enabled: bool) -> void {
+    print!("{}", __mlang_std_esc_cursor_code(cmd_home()));
+    println!("{}{}MLang Ping-Pong Delay Performance{}",
+        bold_on(), fg_rgb(80, 220, 200), reset());
+    println!("mode={}   filter={}   scope={}   source={}{}",
+        mode_name, active_filter_name, filter_scope_name,
+        paused ? "PAUSED " : "PLAYING", clear_eol());
+    println!("");
+    draw_slider("cutoff Hz", filter_cutoff, 20.0f,
+        max_filter_cutoff < 10000.0f ? max_filter_cutoff : 10000.0f, 0);
+    draw_slider("resonance", filter_resonance, 0.0f, 1.0f, 1);
+    draw_slider("feedback", feedback, 0.0f, 1.20f, 2);
+    draw_slider("dry / wet", dry_wet, 0.0f, 1.0f, 3);
+    draw_slider("damping", damping, 0.0f, 1.0f, 4);
+    draw_slider("delay ms", delay_ms, 1.0f, 5000.0f, 5);
+    draw_slider("jitter ms", jitter_ms, 0.0f, 50.0f, 6);
+    let progress: f32 = source_output_frames > 0
+        ? f32(source_rendered) / f32(source_output_frames) : 0.0f;
+    draw_slider("source", progress, 0.0f, 1.0f, 7);
+    println!("");
+    println!("  filter  [l] low-pass   [b] band-pass   [h] high-pass");
+    println!("  cutoff [z/x]   resonance [c/v]   feedback [a/s]");
+    println!("  mix [n/m]      jitter [j/k]      delay time [u/i]");
+    println!("  damping [f/g]");
+    println!("  [Space] pause/resume   [d] clear loop   [q] save/quit");
+    println!("");
+    println!("  session: {}   replay: {}   WAV output: {}",
+        recording_enabled ? "RECORDING" : "off",
+        replay_enabled ? "ACTIVE" : "off",
+        output_enabled ? "RECORDING" : "off");
+    let _ = __mlang_std_io_stdout_flush();
+}
+
+fn finalize_output(writer_r: result<PcmWavWriter, str8>, enabled: bool,
+                   path: str8, report: bool) -> bool {
+    if !enabled { return true; }
+    let writer: PcmWavWriter = writer_r.unwrap();
+    let frames: i64 = writer.frames_written();
+    let close_r: result<i32, str8> = writer.close();
+    if close_r.is_err() {
+        println!("output WAV finalize failed: {}", close_r.unwrap_err());
+        return false;
+    }
+    if report { println!("saved {} processed stereo frame(s) to {}", frames, path); }
+    return true;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new(
+        "delay_audio_demo",
+        "Play a WAV or AIFF file through forward or ping-pong dsp::delay."
+    );
+    ap.option("audio-path", "a", "Mono/stereo WAV, AIFF, or AIFF-C input", "../../examples/fft_example/illusion.wav");
+    ap.option("mode", "m", "Delay routing: forward or pingpong", "pingpong");
+    ap.option("delay-ms", "t", "Delay time in milliseconds", "375");
+    ap.option("delay-ramp-ms", "", "Live u/i delay-time smoothing duration", "120");
+    ap.option("bpm", "b", "Tempo sync in BPM; 0 uses --delay-ms", "0");
+    ap.option("delay-beats", "", "Synced length in quarter-note beats; 0.5=eighth, 0.75=dotted eighth", "0.75");
+    ap.option("jitter-ms", "j", "Analog-style delay-time wander depth in milliseconds", "0");
+    ap.option("jitter-ramp-ms", "", "Live j/k jitter-depth smoothing duration", "120");
+    ap.option("feedback", "f", "Feedback from 0 to 1.20; values above 1 self-oscillate", "0.58");
+    ap.option("reset-feedback", "", "Feedback restored by the d reset key", "0.68");
+    ap.option("dry-wet", "w", "Dry/wet crossfade: 0 is direct input, 1 is delay only", "0.60");
+    ap.option("mix-ramp-ms", "", "Live n/m dry-wet smoothing time in milliseconds", "80");
+    ap.option("mix", "", "Compatibility alias for --dry-wet", "");
+    ap.option("filter", "p", "Feedback filter: none, lowpass, bandpass, or highpass", "lowpass");
+    ap.option("filter-scope", "", "Filter routing: delay colors the wet tap; feedback filters repeats progressively", "delay");
+    ap.option("filter-type-ramp-ms", "", "Live l/b/h filter-type crossfade time in milliseconds", "80");
+    ap.option("filter-cutoff", "c", "Feedback-filter cutoff in Hz", "4200");
+    ap.option("cutoff-ramp-ms", "", "Live cutoff-key smoothing time in milliseconds", "80");
+    ap.option("filter-resonance", "r", "Feedback-filter resonance from 0 to 1", "0.25");
+    ap.option("resonance-ramp-ms", "", "Live resonance-key smoothing time in milliseconds", "80");
+    ap.option("damping", "q", "Filtered-feedback blend from 0 to 1", "0.75");
+    ap.option("damping-ramp-ms", "", "Live f/g damping smoothing duration", "80");
+    ap.option("tail-ms", "e", "Silence rendered after input for delay tail", "3000");
+    ap.option("device", "d", "Output device id; -1 uses the default", "-1");
+    ap.option("record-session", "", "Write live control automation to this text file", "");
+    ap.option("replay-session", "", "Replay control automation from this text file", "");
+    ap.option("output-file", "", "Save processed realtime output as a stereo 16-bit WAV", "");
+    ap.flag("list-devices", "l", "List output device ids and exit");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        println!("Error: {}", parsed.error());
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 2;
+    }
+    if parsed.flag("list-devices") {
+        print_devices();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+
+    let audio_path: str8 = parsed.get("audio-path");
+    let mode_name: str8 = parsed.get("mode");
+    let filter_name: str8 = parsed.get("filter");
+    let filter_scope_name: str8 = parsed.get("filter-scope");
+    let filter_type_ramp_ms: i64 = parsed.get_i64("filter-type-ramp-ms");
+    let manual_delay_ms: f32 = f32(atof(parsed.get("delay-ms")));
+    let bpm: f32 = f32(atof(parsed.get("bpm")));
+    let delay_beats: f32 = f32(atof(parsed.get("delay-beats")));
+    let tempo_sync: bool = bpm > 0.0f;
+    var delay_ms: f32 = tempo_sync ? 60000.0f * delay_beats / bpm : manual_delay_ms;
+    let delay_ramp_ms: i64 = parsed.get_i64("delay-ramp-ms");
+    var jitter_ms: f32 = f32(atof(parsed.get("jitter-ms")));
+    let jitter_ramp_ms: i64 = parsed.get_i64("jitter-ramp-ms");
+    var feedback: f32 = f32(atof(parsed.get("feedback")));
+    let reset_feedback: f32 = f32(atof(parsed.get("reset-feedback")));
+    let mix_alias: str8 = parsed.get("mix");
+    var dry_wet: f32 = eq(mix_alias, "") == 1
+        ? f32(atof(parsed.get("dry-wet"))) : f32(atof(mix_alias));
+    let mix_ramp_ms: i64 = parsed.get_i64("mix-ramp-ms");
+    var filter_cutoff: f32 = f32(atof(parsed.get("filter-cutoff")));
+    let cutoff_ramp_ms: i64 = parsed.get_i64("cutoff-ramp-ms");
+    var filter_resonance: f32 = f32(atof(parsed.get("filter-resonance")));
+    let resonance_ramp_ms: i64 = parsed.get_i64("resonance-ramp-ms");
+    var damping: f32 = f32(atof(parsed.get("damping")));
+    let damping_ramp_ms: i64 = parsed.get_i64("damping-ramp-ms");
+    let tail_ms: i64 = parsed.get_i64("tail-ms");
+    let requested_device: i64 = parsed.get_i64("device");
+    let record_session_path: str8 = parsed.get("record-session");
+    let replay_session_path: str8 = parsed.get("replay-session");
+    let output_path: str8 = parsed.get("output-file");
+    let recording_enabled: bool = len(record_session_path) > 0;
+    let replay_enabled: bool = len(replay_session_path) > 0;
+    let output_enabled: bool = len(output_path) > 0;
+    let mode_valid: bool = eq(mode_name, "forward") == 1 || eq(mode_name, "pingpong") == 1;
+    let filter_valid: bool = eq(filter_name, "none") == 1 ||
+        eq(filter_name, "lowpass") == 1 || eq(filter_name, "bandpass") == 1 ||
+        eq(filter_name, "highpass") == 1;
+    let filter_scope_valid: bool = eq(filter_scope_name, "delay") == 1 ||
+        eq(filter_scope_name, "feedback") == 1;
+    if !mode_valid || !filter_valid || !filter_scope_valid || bpm < 0.0f || bpm > 400.0f ||
+       delay_beats <= 0.0f || delay_beats > 16.0f ||
+       delay_ms < 1.0f || delay_ms > 5000.0f ||
+       delay_ramp_ms < 0 || delay_ramp_ms > 2000 ||
+       jitter_ms < 0.0f || jitter_ms > 50.0f ||
+       jitter_ramp_ms < 0 || jitter_ramp_ms > 2000 ||
+       feedback < 0.0f || feedback > 1.20f ||
+       reset_feedback < 0.0f || reset_feedback > 0.98f ||
+       dry_wet < 0.0f || dry_wet > 1.0f || mix_ramp_ms < 0 || mix_ramp_ms > 2000 ||
+       filter_cutoff < 20.0f || cutoff_ramp_ms < 0 || cutoff_ramp_ms > 2000 ||
+       filter_type_ramp_ms < 0 || filter_type_ramp_ms > 2000 ||
+       filter_resonance < 0.0f || filter_resonance > 1.0f ||
+       resonance_ramp_ms < 0 || resonance_ramp_ms > 2000 ||
+       damping < 0.0f || damping > 1.0f ||
+       damping_ramp_ms < 0 || damping_ramp_ms > 2000 || tail_ms < 0 ||
+       (recording_enabled && replay_enabled) {
+        println!("invalid mode, filter, filter scope, delay, BPM, beat length, jitter, feedback, dry/wet, cutoff, damping, or tail option");
+        parsed.free();
+        ap.free();
+        return 2;
+    }
+
+    var replay_data: SessionData = SessionData { times_us: [], keys: [], valid: true };
+    if replay_enabled {
+        replay_data = load_session(replay_session_path);
+        if !replay_data.valid {
+            parsed.free();
+            ap.free();
+            return 2;
+        }
+    }
+    if recording_enabled {
+        if !begin_session_recording(record_session_path) {
+            parsed.free();
+            ap.free();
+            return 1;
+        }
+    }
+
+    let audio_r: result<PcmAudio, str8> = PcmAudio::load(audio_path);
+    if audio_r.is_err() {
+        println!("audio load failed: {}", audio_r.unwrap_err());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let audio: PcmAudio = audio_r.unwrap();
+    let source_rate: i64 = audio.sample_rate();
+    let channels: i64 = audio.channels();
+    let source_frames: i64 = audio.frame_count();
+    let samples: list<f32> = audio.samples();
+    audio.close();
+
+    let device_r: result<AudioDevice, str8> = requested_device >= 0
+        ? AudioDevice::open_with_config(requested_device, "mlang_delay_audio", source_rate, 512)
+        : AudioDevice::open_default_with_config("mlang_delay_audio", source_rate, 512);
+    if device_r.is_err() {
+        println!("audio open failed: {}", device_r.unwrap_err());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let device: AudioDevice = device_r.unwrap();
+    let output_rate: i64 = device.sample_rate();
+    let buffer_frames: i64 = device.buffer_frames();
+    let max_filter_cutoff: f32 = f32(output_rate) * 0.495f;
+    let cutoff_ramp_samples: i64 = output_rate * cutoff_ramp_ms / 1000;
+    let resonance_ramp_samples: i64 = output_rate * resonance_ramp_ms / 1000;
+    let filter_type_ramp_samples: i64 = output_rate * filter_type_ramp_ms / 1000;
+    let mix_ramp_samples: i64 = output_rate * mix_ramp_ms / 1000;
+    let delay_ramp_samples: i64 = output_rate * delay_ramp_ms / 1000;
+    let jitter_ramp_samples: i64 = output_rate * jitter_ramp_ms / 1000;
+    let damping_ramp_samples: i64 = output_rate * damping_ramp_ms / 1000;
+    if filter_cutoff > max_filter_cutoff { filter_cutoff = max_filter_cutoff; }
+    let source_step: f64 = f64(source_rate) / f64(output_rate);
+    let source_output_frames: i64 = llround(f64(source_frames) / source_step + 0.499999);
+    let tail_frames: i64 = output_rate * tail_ms / 1000;
+    let total_frames: i64 = source_output_frames + tail_frames;
+
+    let block_r: result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
+    if block_r.is_err() {
+        println!("PCM block allocation failed: {}", block_r.unwrap_err());
+        device.close();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    let block: PcmBlock = block_r.unwrap();
+    let output_writer_r: result<PcmWavWriter, str8> = output_enabled
+        ? PcmWavWriter::create(output_path, output_rate)
+        : Err<PcmWavWriter, str8>("output recording disabled");
+    if output_enabled && output_writer_r.is_err() {
+        println!("output WAV create failed: {}", output_writer_r.unwrap_err());
+        block.close();
+        device.close();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    var delay: StereoDelay = StereoDelay::new(f32(output_rate), 5051.0f);
+    delay.set_delay_ms(delay_ms);
+    delay.set_jitter_ms(jitter_ms);
+    delay.set_mode(eq(mode_name, "pingpong") == 1 ? DelayMode::PingPong : DelayMode::Forward);
+    delay.set_feedback(feedback);
+    delay.set_mix(dry_wet);
+    if eq(filter_name, "lowpass") == 1 { delay.set_filter(FeedbackFilter::Lowpass); }
+    else if eq(filter_name, "bandpass") == 1 { delay.set_filter(FeedbackFilter::Bandpass); }
+    else if eq(filter_name, "highpass") == 1 { delay.set_filter(FeedbackFilter::Highpass); }
+    else { delay.set_filter(FeedbackFilter::None); }
+    delay.set_filter_wet_output(eq(filter_scope_name, "delay") == 1);
+    delay.set_filter_cutoff_hz(filter_cutoff);
+    delay.set_filter_resonance(filter_resonance);
+    delay.set_damping(damping);
+
+    println!("MLang dsp::delay WAV/AIFF demo");
+    println!("backend: {}; output: {} Hz, {} frame buffer", backend_name(), output_rate, buffer_frames);
+    println!("source: {} ({} Hz, {} channel(s), {} frames)", audio_path, source_rate, channels, source_frames);
+    println!("delay: mode={}, time={} ms, feedback={}, dry/wet={}",
+        mode_name, delay_ms, feedback, dry_wet);
+    println!("analog delay-time jitter is {} ms", jitter_ms);
+    println!("tempo sync enabled={}, BPM={}, quarter-note beats={} (BPM 0 uses --delay-ms)",
+        tempo_sync, bpm, delay_beats);
+    println!("feedback filter: {}, scope={}, cutoff={} Hz, resonance={}, damping={}",
+        filter_name, filter_scope_name, filter_cutoff, filter_resonance, damping);
+    println!("live cutoff ramp: {} ms", cutoff_ramp_ms);
+    println!("live resonance ramp: {} ms", resonance_ramp_ms);
+    println!("live filter-type ramp: {} ms", filter_type_ramp_ms);
+    println!("live dry/wet ramp: {} ms", mix_ramp_ms);
+    println!("live delay-time ramp: {} ms", delay_ramp_ms);
+    println!("live jitter-depth ramp: {} ms", jitter_ramp_ms);
+    println!("live damping ramp: {} ms", damping_ramp_ms);
+    println!("tail: {} ms", tail_ms);
+    if recording_enabled { println!("recording control session to {}", record_session_path); }
+    if replay_enabled {
+        println!("replaying {} control event(s) from {}", replay_data.keys.len(), replay_session_path);
+    }
+    if output_enabled { println!("saving processed realtime output to {}", output_path); }
+
+    let keyboard_enabled: bool = stdin_is_tty() == 1 && stdin_enable_cbreak() == 0;
+    if keyboard_enabled {
+        println!("interactive controls:");
+        println!("  Space  pause/resume source input (delay feedback keeps running)");
+        println!("  z/x    lower/raise feedback-filter cutoff");
+        println!("  c/v    lower/raise feedback-filter resonance");
+        println!("  l/b/h  select low-pass/band-pass/high-pass smoothly");
+        println!("  n/m    lower/raise dry-wet mix smoothly");
+        println!("  j/k    lower/raise analog jitter smoothly");
+        println!("  u/i    lower/raise delay time smoothly");
+        println!("  f/g    lower/raise feedback-filter damping smoothly");
+        println!("  a/s    lower/raise delay feedback");
+        println!("  d/D    clear the loop and restore safe feedback");
+        println!("  q/Q    stop playback and exit");
+    } else {
+        println!("interactive controls unavailable because stdin is not a terminal");
+    }
+
+    let ui_enabled: bool = keyboard_enabled && supports_ansi() != 0;
+    if ui_enabled {
+        print!("{}{}{}", alt_screen_on(), __mlang_std_esc_cursor_code(cmd_clear_screen()),
+            __mlang_std_esc_cursor_code(cmd_hide()));
+        let _ = __mlang_std_io_stdout_flush();
+    }
+
+    var rendered: i64 = 0;
+    var source_rendered: i64 = 0;
+    var tail_rendered: i64 = 0;
+    var source_position: f64 = 0.0;
+    var started: bool = false;
+    var paused: bool = false;
+    var quit_requested: bool = false;
+    var replay_index: i64 = 0;
+    var active_filter_name: str8 = filter_name;
+    var ui_dirty: bool = true;
+    var next_ui_frame: i64 = 0;
+    while !quit_requested &&
+          (source_rendered < source_output_frames || tail_rendered < tail_frames) {
+        var key: i32 = -1;
+        if keyboard_enabled { key = __mlang_std_io_stdin_read_byte_nonblocking(); }
+        if replay_enabled {
+            let manual_quit: bool = key == AsciiKey::LowerQ || key == AsciiKey::UpperQ;
+            key = manual_quit ? key : -1;
+            if !manual_quit && replay_index < replay_data.keys.len() {
+                let elapsed_us: i64 = rendered * 1000000 / output_rate;
+                if elapsed_us >= replay_data.times_us[replay_index] {
+                    key = replay_data.keys[replay_index];
+                    if !ui_enabled {
+                        println!("replay event at {} us: keycode={}",
+                            replay_data.times_us[replay_index], key);
+                    }
+                    replay_index = replay_index + 1;
+                }
+            }
+        }
+        if key >= 0 {
+            if recording_enabled && is_session_key(key) {
+                let elapsed_us: i64 = rendered * 1000000 / output_rate;
+                if !record_session_event(record_session_path, elapsed_us, key) {
+                    println!("session recording write failed: {}", record_session_path);
+                }
+            }
+            if key == AsciiKey::Space {
+                paused = !paused;
+                if !ui_enabled {
+                    println!("source input: {} (delay tail continues)", paused ? "PAUSED" : "PLAYING");
+                }
+            } else if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ {
+                quit_requested = true;
+                if !ui_enabled { println!("stopping playback..."); }
+                continue;
+            } else if key == AsciiKey::LowerL || key == AsciiKey::UpperL {
+                delay.set_filter_target(FeedbackFilter::Lowpass, filter_type_ramp_samples);
+                active_filter_name = "lowpass";
+                if !ui_enabled { println!("feedback filter changing smoothly to low-pass"); }
+            } else if key == AsciiKey::LowerB || key == AsciiKey::UpperB {
+                delay.set_filter_target(FeedbackFilter::Bandpass, filter_type_ramp_samples);
+                active_filter_name = "bandpass";
+                if !ui_enabled { println!("feedback filter changing smoothly to band-pass"); }
+            } else if key == AsciiKey::LowerH || key == AsciiKey::UpperH {
+                delay.set_filter_target(FeedbackFilter::Highpass, filter_type_ramp_samples);
+                active_filter_name = "highpass";
+                if !ui_enabled { println!("feedback filter changing smoothly to high-pass"); }
+            } else if key == AsciiKey::LowerN || key == AsciiKey::UpperN {
+                dry_wet = dry_wet - 0.05f;
+                if dry_wet < 0.0f { dry_wet = 0.0f; }
+                delay.set_mix_target(dry_wet, mix_ramp_samples);
+                if !ui_enabled { println!("dry/wet mix lowered smoothly to {}", dry_wet); }
+            } else if key == AsciiKey::LowerM || key == AsciiKey::UpperM {
+                dry_wet = dry_wet + 0.05f;
+                if dry_wet > 1.0f { dry_wet = 1.0f; }
+                delay.set_mix_target(dry_wet, mix_ramp_samples);
+                if !ui_enabled { println!("dry/wet mix raised smoothly to {}", dry_wet); }
+            } else if key == AsciiKey::LowerJ || key == AsciiKey::UpperJ {
+                jitter_ms = jitter_ms - 0.25f;
+                if jitter_ms < 0.0f { jitter_ms = 0.0f; }
+                delay.set_jitter_target_ms(jitter_ms, jitter_ramp_samples);
+                if !ui_enabled { println!("jitter lowered smoothly to {} ms", jitter_ms); }
+            } else if key == AsciiKey::LowerK || key == AsciiKey::UpperK {
+                jitter_ms = jitter_ms + 0.25f;
+                if jitter_ms > 50.0f { jitter_ms = 50.0f; }
+                delay.set_jitter_target_ms(jitter_ms, jitter_ramp_samples);
+                if !ui_enabled { println!("jitter raised smoothly to {} ms", jitter_ms); }
+            } else if key == AsciiKey::LowerU || key == AsciiKey::UpperU {
+                delay_ms = delay_ms - 10.0f;
+                if delay_ms < 1.0f { delay_ms = 1.0f; }
+                delay.set_delay_target_ms(delay_ms, delay_ramp_samples);
+                if !ui_enabled { println!("delay time lowered smoothly to {} ms", delay_ms); }
+            } else if key == AsciiKey::LowerI || key == AsciiKey::UpperI {
+                delay_ms = delay_ms + 10.0f;
+                if delay_ms > 5000.0f { delay_ms = 5000.0f; }
+                delay.set_delay_target_ms(delay_ms, delay_ramp_samples);
+                if !ui_enabled { println!("delay time raised smoothly to {} ms", delay_ms); }
+            } else if key == AsciiKey::LowerF || key == AsciiKey::UpperF {
+                damping = damping - 0.05f;
+                if damping < 0.0f { damping = 0.0f; }
+                delay.set_damping_target(damping, damping_ramp_samples);
+                if !ui_enabled { println!("filter damping lowered smoothly to {}", damping); }
+            } else if key == AsciiKey::LowerG || key == AsciiKey::UpperG {
+                damping = damping + 0.05f;
+                if damping > 1.0f { damping = 1.0f; }
+                delay.set_damping_target(damping, damping_ramp_samples);
+                if !ui_enabled { println!("filter damping raised smoothly to {}", damping); }
+            } else if key == AsciiKey::LowerZ || key == AsciiKey::UpperZ {
+                filter_cutoff = filter_cutoff / 1.25f;
+                if filter_cutoff < 20.0f { filter_cutoff = 20.0f; }
+                delay.set_filter_cutoff_target_hz(filter_cutoff, cutoff_ramp_samples);
+                if !ui_enabled { println!("feedback-filter cutoff lowered to {} Hz", filter_cutoff); }
+            } else if key == AsciiKey::LowerX || key == AsciiKey::UpperX {
+                filter_cutoff = filter_cutoff * 1.25f;
+                if filter_cutoff > max_filter_cutoff { filter_cutoff = max_filter_cutoff; }
+                delay.set_filter_cutoff_target_hz(filter_cutoff, cutoff_ramp_samples);
+                if !ui_enabled { println!("feedback-filter cutoff raised to {} Hz", filter_cutoff); }
+            } else if key == AsciiKey::LowerC || key == AsciiKey::UpperC {
+                filter_resonance = filter_resonance - 0.05f;
+                if filter_resonance < 0.0f { filter_resonance = 0.0f; }
+                delay.set_filter_resonance_target(filter_resonance, resonance_ramp_samples);
+                if !ui_enabled { println!("feedback-filter resonance lowered to {}", filter_resonance); }
+            } else if key == AsciiKey::LowerV || key == AsciiKey::UpperV {
+                filter_resonance = filter_resonance + 0.05f;
+                if filter_resonance > 1.0f { filter_resonance = 1.0f; }
+                delay.set_filter_resonance_target(filter_resonance, resonance_ramp_samples);
+                if !ui_enabled { println!("feedback-filter resonance raised to {}", filter_resonance); }
+            } else if key == AsciiKey::LowerA || key == AsciiKey::UpperA {
+                let released_oscillation: bool = feedback > 0.98f;
+                feedback = released_oscillation ? 0.96f : feedback - 0.02f;
+                if feedback < 0.0f { feedback = 0.0f; }
+                delay.set_feedback(feedback);
+                if !ui_enabled {
+                    println!("delay feedback lowered to {}{}", feedback,
+                        released_oscillation ? " (self-oscillation released)" : "");
+                }
+            } else if key == AsciiKey::LowerS || key == AsciiKey::UpperS {
+                feedback = feedback + 0.02f;
+                if feedback > 1.20f { feedback = 1.20f; }
+                delay.set_feedback(feedback);
+                if !ui_enabled { println!("delay feedback raised to {}", feedback); }
+            } else if key == AsciiKey::LowerD || key == AsciiKey::UpperD {
+                feedback = reset_feedback;
+                delay.set_feedback(feedback);
+                delay.reset();
+                if !ui_enabled { println!("delay loop cleared; feedback restored to {}", feedback); }
+            }
+            ui_dirty = true;
+        }
+        if ui_enabled && (ui_dirty || rendered >= next_ui_frame) {
+            draw_performance_ui(mode_name, filter_scope_name, active_filter_name,
+                paused, filter_cutoff, max_filter_cutoff, filter_resonance,
+                feedback, dry_wet, delay.damping_value(), delay.delay_ms(), delay.jitter_ms(),
+                source_rendered, source_output_frames, recording_enabled,
+                replay_enabled, output_enabled);
+            ui_dirty = false;
+            next_ui_frame = rendered + output_rate / 10;
+        }
+        if device.pcm_queued_frames() >= buffer_frames * 4 ||
+           device.pcm_available_frames() < buffer_frames {
+            sleep_ms(1);
+            continue;
+        }
+        var frames_this_block: i64 = buffer_frames;
+        if !paused {
+            let remaining: i64 = (source_output_frames - source_rendered) +
+                (tail_frames - tail_rendered);
+            if remaining < frames_this_block { frames_this_block = remaining; }
+        }
+        var frame: i64 = 0;
+        while frame < frames_this_block {
+            var input_left: f32 = 0.0f;
+            var input_right: f32 = 0.0f;
+            if !paused && source_rendered < source_output_frames {
+                input_left = source_sample(samples, channels, source_frames, source_position, 0);
+                input_right = channels > 1
+                    ? source_sample(samples, channels, source_frames, source_position, 1)
+                    : input_left;
+                source_position = source_position + source_step;
+                source_rendered = source_rendered + 1;
+            } else if !paused {
+                tail_rendered = tail_rendered + 1;
+            }
+            let output: DelayFrame = delay.process_stereo(input_left, input_right);
+            block.set_stereo(frame, clamp_audio(output.left()), clamp_audio(output.right()));
+            rendered = rendered + 1;
+            frame = frame + 1;
+        }
+        let queued_r: result<i64, str8> = device.queue_pcm_block(block, frames_this_block);
+        if queued_r.is_err() {
+            println!("PCM queue failed: {}", queued_r.unwrap_err());
+            restore_terminal(keyboard_enabled, ui_enabled);
+            finalize_output(output_writer_r, output_enabled, output_path, false);
+            block.close();
+            device.close();
+            parsed.free();
+            ap.free();
+            return 1;
+        }
+        if output_enabled {
+            let output_writer: PcmWavWriter = output_writer_r.unwrap();
+            let write_r: result<i64, str8> = output_writer.write_pcm_block(block, frames_this_block);
+            if write_r.is_err() {
+                println!("output WAV write failed: {}", write_r.unwrap_err());
+                if started { device.stop(); }
+                restore_terminal(keyboard_enabled, ui_enabled);
+                finalize_output(output_writer_r, true, output_path, false);
+                block.close();
+                device.close();
+                parsed.free();
+                ap.free();
+                return 1;
+            }
+        }
+        if !started && (device.pcm_queued_frames() >= buffer_frames * 3 || rendered >= total_frames) {
+            if !start_device(device) {
+                restore_terminal(keyboard_enabled, ui_enabled);
+                finalize_output(output_writer_r, output_enabled, output_path, false);
+                block.close();
+                device.close();
+                parsed.free();
+                ap.free();
+                return 1;
+            }
+            started = true;
+        }
+    }
+
+    if quit_requested {
+        if started { device.stop(); }
+        restore_terminal(keyboard_enabled, ui_enabled);
+        let output_ok: bool = finalize_output(output_writer_r, output_enabled, output_path, true);
+        block.close();
+        device.close();
+        parsed.free();
+        ap.free();
+        println!("playback stopped by user");
+        return output_ok ? 0 : 1;
+    }
+
+    if !started && !start_device(device) {
+        restore_terminal(keyboard_enabled, ui_enabled);
+        finalize_output(output_writer_r, output_enabled, output_path, false);
+        block.close();
+        device.close();
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    while device.pcm_queued_frames() > 0 { sleep_ms(5); }
+    device.stop();
+    restore_terminal(keyboard_enabled, ui_enabled);
+    println!("PCM callback underruns: {}", device.pcm_underrun_count());
+    let output_ok: bool = finalize_output(output_writer_r, output_enabled, output_path, true);
+    block.close();
+    device.close();
+    parsed.free();
+    ap.free();
+    return output_ok ? 0 : 1;
+}

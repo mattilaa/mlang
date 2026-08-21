@@ -189,6 +189,9 @@ following additional programs are useful runnable showcases:
   sweep, and compensated 12/18/24 dB ladder filtering through `std::audio`.
   Its optional `tb303` voice adds an original 16-step acid pattern with rests,
   accents, slides, and asymmetric analog-style distortion.
+- `examples/package_manager_delay_audio` — WAV/AIFF playback through selectable
+  forward or stereo ping-pong delay, with low-pass/high-pass feedback filtering,
+  damping, feedback, wet mix, and rendered tail controls.
 - `examples/package_manager_reverb_techno` — MLang-only 130 BPM techno
   sequencer using included kick and clap WAV samples. It sends the clap through
   selectable hall, room, plate, gated, reverse, or nonlinear `dsp::reverb`

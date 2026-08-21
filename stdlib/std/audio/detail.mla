@@ -33,4 +33,8 @@ extern pub fn __mlang_std_audio_pcm_block_capacity_frames(handle: i64) -> i64;
 extern pub fn __mlang_std_audio_pcm_block_set_stereo(handle: i64, frame: i64, left: f32, right: f32) -> i32;
 extern pub fn __mlang_std_audio_pcm_block_clear(handle: i64) -> i32;
 extern pub fn __mlang_std_audio_pcm_block_close(handle: i64) -> i32;
+extern pub fn __mlang_std_audio_pcm_wav_writer_new(path: str8, sample_rate: i64) -> i64;
+extern pub fn __mlang_std_audio_pcm_wav_writer_write_block(writer_handle: i64, block_handle: i64, frames: i64) -> i64;
+extern pub fn __mlang_std_audio_pcm_wav_writer_frames_written(handle: i64) -> i64;
+extern pub fn __mlang_std_audio_pcm_wav_writer_close(handle: i64) -> i32;
 extern pub fn __mlang_std_audio_queue_pcm_block(handle: i64, block_handle: i64, frames: i64) -> i64;

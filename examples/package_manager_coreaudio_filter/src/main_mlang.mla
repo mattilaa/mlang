@@ -118,12 +118,13 @@ fn announce_sweep(index: i32, total_frames: i64, sample_rate: i64, filter: str8,
     }
 }
 
-fn enter_sweep(index: i32, total_frames: i64, sample_rate: i64, max_resonance_db: f32) -> void {
+fn enter_sweep(index: i32, total_frames: i64, sample_rate: i64,
+               max_resonance_db: f32, dry_wet: f32) -> void {
     let start_frame: i64 = index == 0 ? 0 : sweep_end(index - 1, total_frames);
     let frames: i64 = sweep_end(index, total_frames) - start_frame;
     let cutoff_end: f32 = index == 1 || index == 3 ? 180.0f : 12000.0f;
     let resonance: f32 = index >= 3 ? max_resonance_db : 0.0f;
-    let wet: f32 = index == 0 ? 0.0f : 1.0f;
+    let wet: f32 = index == 0 ? 0.0f : dry_wet;
     let crossfade_frames: i64 = frames < sample_rate / 50 ? frames : sample_rate / 50;
     mlang_dsp_filter_set_target__f32_f32_i64(cutoff_end, resonance, frames);
     mlang_dsp_filter_set_wet_target__f32_i64(wet, crossfade_frames);
@@ -144,6 +145,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     ap.option("max-resonance-db", "q", "Maximum ramped resonance peak from 0 to 36 dB", "12");
     ap.option("interpolation", "i", "nearest, linear, hermite, cubic, or bicubic", "hermite");
     ap.option("playback-rate", "r", "Fractional source playback rate from 0.25 to 4", "1");
+    ap.option("dry-wet", "w", "Filtered signal mix: 0 is dry, 1 is fully wet", "1");
     ap.option("audio-path", "a", "Mono/stereo 16-bit PCM WAV, AIFF, or AIFF-C input", "../../examples/fft_example/illusion.wav");
     ap.option("device", "d", "std::audio output device id; -1 uses the default", "-1");
     ap.flag("list-devices", "l", "List std::audio output device ids and exit");
@@ -183,9 +185,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let interpolation: i32 = interpolation_mode(interpolation_name);
     let max_resonance_db: f32 = f32(atof(parsed.get("max-resonance-db")));
     let playback_rate: f64 = atof(parsed.get("playback-rate"));
+    let dry_wet: f32 = f32(atof(parsed.get("dry-wet")));
     let device_id: i64 = parsed.get_i64("device");
-    if mode == 0 || interpolation == 0 || max_resonance_db < 0.0f || max_resonance_db > 36.0f || playback_rate < 0.25 || playback_rate > 4.0 {
-        println!("invalid filter, interpolation, resonance, or playback-rate option");
+    if mode == 0 || interpolation == 0 || max_resonance_db < 0.0f || max_resonance_db > 36.0f ||
+       playback_rate < 0.25 || playback_rate > 4.0 || dry_wet < 0.0f || dry_wet > 1.0f {
+        println!("invalid filter, interpolation, resonance, playback-rate, or dry-wet option");
         ap.print_help();
         parsed.free();
         ap.free();
@@ -222,6 +226,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     println!("audio filter: {}", filter_name);
     println!("interpolation filter: {}", interpolation_name);
     println!("playback rate: {}x", playback_rate);
+    println!("filtered dry/wet mix: {}", dry_wet);
     println!("source: {} ({} Hz, {} channel(s), {} frames)", audio_path, sample_rate, channels, source_frames);
     println!("maximum resonance peak: +{} dB (realtime ramped)", max_resonance_db);
     println!("demo duration: {} seconds (full source)", f64(total_frames) / f64(sample_rate));
@@ -260,7 +265,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 sweep = sweep_for_frame(rendered, total_frames);
                 if sweep != active_sweep {
                     active_sweep = sweep;
-                    enter_sweep(sweep, total_frames, sample_rate, max_resonance_db);
+                    enter_sweep(sweep, total_frames, sample_rate, max_resonance_db, dry_wet);
                     announce_sweep(sweep, total_frames, sample_rate, filter_name, max_resonance_db);
                 }
                 left = interpolated_sample(samples, channels, source_frames, source_position, 0, interpolation);

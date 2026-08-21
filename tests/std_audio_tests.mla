@@ -8,6 +8,7 @@ use std::audio::device_count;
 use std::audio::last_error;
 use std::audio::PcmAudio;
 use std::audio::PcmBlock;
+use std::audio::PcmWavWriter;
 use std::strbuf::len;
 use std::testing::verify;
 
@@ -51,4 +52,39 @@ fn test_audio_pcm_block() {
     verify(block.set_stereo(64, 0.0f, 0.0f) != 0);
     verify(block.clear() == 0);
     verify(block.close() == 0);
+}
+
+#[test]
+fn test_audio_pcm_wav_writer() {
+    let block_r: result<PcmBlock, str8> = PcmBlock::new(3);
+    verify(block_r.is_ok());
+    if block_r.is_err() { return; }
+    let block: PcmBlock = block_r.unwrap();
+    block.set_stereo(0, 0.25f, -0.25f);
+    block.set_stereo(1, 0.5f, -0.5f);
+    block.set_stereo(2, 0.0f, 0.0f);
+
+    let path: str8 = "/tmp/mlang_std_audio_writer_test.wav";
+    let writer_r: result<PcmWavWriter, str8> = PcmWavWriter::create(path, 48000);
+    verify(writer_r.is_ok());
+    if writer_r.is_err() {
+        block.close();
+        return;
+    }
+    let writer: PcmWavWriter = writer_r.unwrap();
+    let written_r: result<i64, str8> = writer.write_pcm_block(block, 3);
+    verify(written_r.is_ok());
+    verify(writer.frames_written() == 3);
+    let close_r: result<i32, str8> = writer.close();
+    verify(close_r.is_ok());
+    block.close();
+
+    let audio_r: result<PcmAudio, str8> = PcmAudio::load(path);
+    verify(audio_r.is_ok());
+    if audio_r.is_err() { return; }
+    let audio: PcmAudio = audio_r.unwrap();
+    verify(audio.sample_rate() == 48000);
+    verify(audio.channels() == 2);
+    verify(audio.frame_count() == 3);
+    audio.close();
 }

@@ -137,7 +137,8 @@ sweeps. Select `moog12`, `moog24`, `lowpass12`, `highpass12`, `bandpass12`, `low
 `highpass24`, or `bandpass24` with `--filter`; `ladder12` and `ladder24` are
 aliases for the Moog-style modes. The processor keeps filter history across sweep sections
 and crossfades from the dry reference to filtered output to avoid transition
-clicks. All file decoding and buffer allocation happens before the CoreAudio
+clicks. `--dry-wet 0..1` selects the filtered-section mix while leaving the
+initial reference section dry. All file decoding and buffer allocation happens before the CoreAudio
 callback starts.
 
 Sampler interpolation is selected independently with `--interpolation` using
