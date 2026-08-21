@@ -21,6 +21,13 @@ From this directory, run the gated-clap preset:
   --option clap_mix=0.82 \
   --option kick_gain_db=0 \
   --option clap_gain_db=3 \
+  --option limiter_threshold_db=-3 \
+  --option limiter_release_ms=120 \
+  --option distortion_drive_db=6 \
+  --option distortion_mix=0.12 \
+  --option distortion_bias=0.04 \
+  --option distortion_tone_hz=9000 \
+  --option distortion_scope=master \
   --option gate_attack_ms=1 \
   --option gate_hold_ms=145 \
   --option gate_release_ms=45 \
@@ -66,6 +73,29 @@ stereo width, modulation, gain, and freeze.
 
 `kick_gain_db` and `clap_gain_db` control the sample levels before the clap is
 sent to the reverb. The clap defaults to `+3 dB`; both accept `-60..+24 dB`.
+
+The complete kick, dry clap, and reverberated clap mix passes through a
+linked-stereo `dsp::limiter`. `limiter_threshold_db` controls maximizer drive
+from `-60..0 dB`: lower values make the result louder and cause more limiting.
+`limiter_release_ms` controls gain recovery from `5..5000 ms`. Defaults are
+`-3 dB` and `120 ms`; the limiter uses 5 ms look-ahead and a `-0.3 dB` ceiling.
+
+Before limiting, the stereo master passes through two matched
+`AnalogDistortion` processors for adjustable vinyl-like harmonic color. The
+controls are `distortion_drive_db` (`0..36`), `distortion_mix` (`0..1`),
+`distortion_bias` (`-0.5..0.5`), and `distortion_tone_hz`. The subtle defaults
+are `6 dB`, `0.12`, `0.04`, and `9000 Hz`. Set `distortion_mix=0` for a clean
+master. This stage adds saturation and tonal color, not record noise or clicks.
+
+`distortion_scope` selects where the color is inserted:
+
+- `master` processes the dry drums and completed reverb return before limiting.
+- `clap-pre-reverb` processes the clap first, then sends that colored clap to
+  both the dry clap path and `dsp::reverb2`. The resulting reverb return bypasses
+  distortion and goes directly to the master limiter. `clap` is a short alias.
+- `drums-pre-reverb` processes the kick and clap with independent distortion
+  state, but still sends only the colored clap into `dsp::reverb2`. The clean
+  reverb return joins the colored drums before limiting. `drums` is an alias.
 
 List or select an output device:
 

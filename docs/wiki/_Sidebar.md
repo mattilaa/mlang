@@ -31,6 +31,7 @@
 - [[dsp::filter|DSP-Filter]]
 - [[dsp::convolution|DSP-Convolution]]
 - [[dsp::fft|DSP-FFT]]
+- [[dsp::limiter|DSP-Limiter]]
 - [[dsp::reverb|DSP-Reverb]]
 - [[dsp::reverb2|DSP-Reverb2]]
 

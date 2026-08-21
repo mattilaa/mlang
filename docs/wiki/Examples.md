@@ -204,6 +204,8 @@ following additional programs are useful runnable showcases:
   sequence using the independently implemented [`dsp::reverb2`](DSP-Reverb2). It includes the
   original seven preset names plus custom and infinite-hall modes, with detailed
   gate, decay, diffusion, tone, modulation, stereo, predelay, and mix controls.
+  An adjustable analog-color stage feeds a linked-stereo look-ahead limiter on
+  the final master output.
 
   ```sh
   ../../build/mlang pkg run demo \
@@ -211,6 +213,13 @@ following additional programs are useful runnable showcases:
     --option kick_gain_db=0 \
     --option clap_gain_db=12 \
     --option clap_mix=0.72 \
+    --option limiter_threshold_db=-6 \
+    --option limiter_release_ms=180 \
+    --option distortion_drive_db=7 \
+    --option distortion_mix=0.15 \
+    --option distortion_bias=0.04 \
+    --option distortion_tone_hz=8500 \
+    --option distortion_scope=drums-pre-reverb \
     --option gate_release_ms=180 \
     --option gate_threshold=0.001 \
     --option predelay_ms=20 \

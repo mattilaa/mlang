@@ -3,6 +3,8 @@
 /// \brief Bass-drum and trance-clap sequence processed with dsp::reverb2.
 
 mod dsp::reverb2;
+mod dsp::limiter;
+mod dsp::distortion;
 mod std::argparser;
 mod std::audio;
 mod std::strbuf;
@@ -11,6 +13,9 @@ mod std::time;
 use dsp::reverb2::Reverb2;
 use dsp::reverb2::Reverb2Frame;
 use dsp::reverb2::Reverb2Type;
+use dsp::limiter::LimiterFrame;
+use dsp::limiter::StereoLimiter;
+use dsp::distortion::AnalogDistortion;
 use std::argparser::ArgParser;
 use std::argparser::ParseResult;
 use std::audio::AudioDevice;
@@ -47,12 +52,6 @@ fn sample_mono(samples: &list<f32>, channels: i64, frames: i64,
     return value0 + (value1 - value0) * fraction;
 }
 
-fn clip(value: f32) -> f32 {
-    if value < -0.98f { return -0.98f; }
-    if value > 0.98f { return 0.98f; }
-    return value;
-}
-
 fn type_id(name: str8) -> i32 {
     if eq(name, "hall") == 1 { return 1; }
     if eq(name, "room") == 1 { return 2; }
@@ -63,6 +62,13 @@ fn type_id(name: str8) -> i32 {
     if eq(name, "nonlinear-long") == 1 { return 7; }
     if eq(name, "custom") == 1 { return 8; }
     if eq(name, "infinite-hall") == 1 { return 9; }
+    return 0;
+}
+
+fn distortion_scope_id(name: str8) -> i32 {
+    if eq(name, "master") == 1 { return 1; }
+    if eq(name, "clap-pre-reverb") == 1 || eq(name, "clap") == 1 { return 2; }
+    if eq(name, "drums-pre-reverb") == 1 || eq(name, "drums") == 1 { return 3; }
     return 0;
 }
 
@@ -178,6 +184,13 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     ap.option("clap-mix", "m", "Clap reverb mix from 0 to 1", "0.72");
     ap.option("kick-gain-db", "", "Bass-drum gain in dB (-60..24)", "0");
     ap.option("clap-gain-db", "", "Clap gain in dB (-60..24)", "3");
+    ap.option("limiter-threshold-db", "", "Master limiter threshold in dB (-60..0)", "-3");
+    ap.option("limiter-release-ms", "", "Master limiter release time (5..5000 ms)", "120");
+    ap.option("distortion-drive-db", "", "Analog-color drive in dB (0..36)", "6");
+    ap.option("distortion-mix", "", "Analog-color dry/wet mix (0..1)", "0.12");
+    ap.option("distortion-bias", "", "Analog asymmetry (-0.5..0.5)", "0.04");
+    ap.option("distortion-tone-hz", "", "Analog-color tone cutoff", "9000");
+    ap.option("distortion-scope", "", "Distortion routing: master, clap-pre-reverb, or drums-pre-reverb", "master");
     ap.option("size", "", "Override room size 0..1; -1 keeps preset", "-1");
     ap.option("decay-seconds", "", "Override RT60-like decay 0.08..120; -1 keeps preset", "-1");
     ap.option("damping", "", "Override high-frequency damping 0..1", "-1");
@@ -218,11 +231,26 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let clap_mix: f32 = f32(atof(parsed.get("clap-mix")));
     let kick_gain_db: f32 = f32(atof(parsed.get("kick-gain-db")));
     let clap_gain_db: f32 = f32(atof(parsed.get("clap-gain-db")));
+    let limiter_threshold_db: f32 = f32(atof(parsed.get("limiter-threshold-db")));
+    let limiter_release_ms: f32 = f32(atof(parsed.get("limiter-release-ms")));
+    let distortion_drive_db: f32 = f32(atof(parsed.get("distortion-drive-db")));
+    let distortion_mix: f32 = f32(atof(parsed.get("distortion-mix")));
+    let distortion_bias: f32 = f32(atof(parsed.get("distortion-bias")));
+    let distortion_tone_hz: f32 = f32(atof(parsed.get("distortion-tone-hz")));
+    let distortion_scope_name: str8 = parsed.get("distortion-scope");
+    let distortion_scope: i32 = distortion_scope_id(distortion_scope_name);
     if bpm <= 0 || duration <= 0 || selected_type == 0 ||
        clap_mix < 0.0f || clap_mix > 1.0f ||
        kick_gain_db < -60.0f || kick_gain_db > 24.0f ||
-       clap_gain_db < -60.0f || clap_gain_db > 24.0f {
-        println!("invalid BPM, duration, reverb type, clap mix, or drum gain");
+       clap_gain_db < -60.0f || clap_gain_db > 24.0f ||
+       limiter_threshold_db < -60.0f || limiter_threshold_db > 0.0f ||
+       limiter_release_ms < 5.0f || limiter_release_ms > 5000.0f ||
+       distortion_drive_db < 0.0f || distortion_drive_db > 36.0f ||
+       distortion_mix < 0.0f || distortion_mix > 1.0f ||
+       distortion_bias < -0.5f || distortion_bias > 0.5f ||
+       distortion_tone_hz < 20.0f || distortion_tone_hz > 20000.0f ||
+       distortion_scope == 0 {
+        println!("invalid BPM, duration, reverb, gain, limiter, or distortion control");
         parsed.free(); ap.free(); return 2;
     }
     let kick_gain: f32 = db_to_gain(kick_gain_db);
@@ -269,11 +297,36 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     reverb = apply_type(reverb, selected_type);
     reverb = override_controls(reverb, parsed);
     reverb.set_mix(1.0f);
+    var limiter: StereoLimiter = StereoLimiter::new(f32(output_rate));
+    limiter.set_threshold_db(limiter_threshold_db);
+    limiter.set_release_ms(limiter_release_ms);
+    var distortion_left: AnalogDistortion = AnalogDistortion::new(f32(output_rate));
+    var distortion_right: AnalogDistortion = AnalogDistortion::new(f32(output_rate));
+    var distortion_kick: AnalogDistortion = AnalogDistortion::new(f32(output_rate));
+    var distortion_clap: AnalogDistortion = AnalogDistortion::new(f32(output_rate));
+    distortion_left.set_drive_db(distortion_drive_db);
+    distortion_right.set_drive_db(distortion_drive_db);
+    distortion_kick.set_drive_db(distortion_drive_db);
+    distortion_clap.set_drive_db(distortion_drive_db);
+    distortion_left.set_mix(distortion_mix);
+    distortion_right.set_mix(distortion_mix);
+    distortion_kick.set_mix(distortion_mix);
+    distortion_clap.set_mix(distortion_mix);
+    distortion_left.set_bias(distortion_bias);
+    distortion_right.set_bias(distortion_bias);
+    distortion_kick.set_bias(distortion_bias);
+    distortion_clap.set_bias(distortion_bias);
+    distortion_left.set_tone_hz(distortion_tone_hz, f32(output_rate));
+    distortion_right.set_tone_hz(distortion_tone_hz, f32(output_rate));
+    distortion_kick.set_tone_hz(distortion_tone_hz, f32(output_rate));
+    distortion_clap.set_tone_hz(distortion_tone_hz, f32(output_rate));
 
     println!("MLang dsp::reverb2 trance clap sequence");
     println!("backend={}; output={} Hz; BPM={}; duration={} s", backend_name(), output_rate, bpm, duration);
     println!("pattern: BD...BD+CL...BD...BD+CL; preset={}; clap mix={}", type_name, clap_mix);
     println!("drum gain: kick={} dB; clap={} dB", kick_gain_db, clap_gain_db);
+    println!("master limiter: threshold={} dB; release={} ms; ceiling=-0.3 dB", limiter_threshold_db, limiter_release_ms);
+    println!("analog color: scope={}; drive={} dB; mix={}; bias={}; tone={} Hz", distortion_scope_name, distortion_drive_db, distortion_mix, distortion_bias, distortion_tone_hz);
     println!("samples: bassdrum={} clap={}", kick_path, clap_path);
 
     var rendered: i64 = 0;
@@ -299,11 +352,25 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             }
             let kick: f32 = sample_mono(kick_samples, kick_channels, kick_frames, kick_position) * kick_gain;
             let clap: f32 = sample_mono(clap_samples, clap_channels, clap_frames, clap_position) * clap_gain;
-            let wet: Reverb2Frame = reverb.process_stereo(clap * 0.72f, clap * 0.72f);
-            let dry: f32 = kick * 0.68f + clap * 0.44f * (1.0f - clap_mix);
+            var colored_kick: f32 = kick;
+            var colored_clap: f32 = clap;
+            if distortion_scope == 2 || distortion_scope == 3 {
+                colored_clap = distortion_clap.process(clap);
+            }
+            if distortion_scope == 3 {
+                colored_kick = distortion_kick.process(kick);
+            }
+            let wet: Reverb2Frame = reverb.process_stereo(colored_clap * 0.72f, colored_clap * 0.72f);
+            let dry: f32 = colored_kick * 0.68f + colored_clap * 0.44f * (1.0f - clap_mix);
+            var master_left: f32 = dry + wet.left() * 0.58f * clap_mix;
+            var master_right: f32 = dry + wet.right() * 0.58f * clap_mix;
+            if distortion_scope == 1 {
+                master_left = distortion_left.process(master_left);
+                master_right = distortion_right.process(master_right);
+            }
+            let limited: LimiterFrame = limiter.process_stereo(master_left, master_right);
             block.set_stereo(frame,
-                clip(dry + wet.left() * 0.58f * clap_mix),
-                clip(dry + wet.right() * 0.58f * clap_mix));
+                limited.left(), limited.right());
             if kick_position >= 0.0 { kick_position = kick_position + kick_step; }
             if clap_position >= 0.0 { clap_position = clap_position + clap_step; }
             rendered = rendered + 1; frame = frame + 1;
