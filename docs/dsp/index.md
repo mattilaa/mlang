@@ -11,9 +11,11 @@ Submodules:
 - [dsp::delay](delay.md)
 - [dsp::fft](fft.md)
 - [dsp::reverb](reverb.md)
+- [dsp::reverb2](reverb2.md)
 
 Import specific DSP modules such as `dsp::convolution`, `dsp::filter`,
-`dsp::distortion`, `dsp::delay`, `dsp::fft`, and `dsp::reverb` in application code. This library is installed and discovered
+`dsp::distortion`, `dsp::delay`, `dsp::fft`, `dsp::reverb`, and
+`dsp::reverb2` in application code. This library is installed and discovered
 separately from the `std` namespace.
 
 The compiler searches the repository's `modules/` directory in source builds,

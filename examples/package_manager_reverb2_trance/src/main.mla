@@ -1,0 +1,324 @@
+/// \file main.mla
+/// \ingroup examples
+/// \brief Bass-drum and trance-clap sequence processed with dsp::reverb2.
+
+mod dsp::reverb2;
+mod std::argparser;
+mod std::audio;
+mod std::strbuf;
+mod std::time;
+
+use dsp::reverb2::Reverb2;
+use dsp::reverb2::Reverb2Frame;
+use dsp::reverb2::Reverb2Type;
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::audio::AudioDevice;
+use std::audio::PcmAudio;
+use std::audio::PcmBlock;
+use std::audio::backend_name;
+use std::audio::default_output_device_id;
+use std::audio::device_count;
+use std::audio::device_name;
+use std::strbuf::contains;
+use std::strbuf::eq;
+use std::time::sleep_ms;
+
+extern fn atof(value: str8) -> f64;
+extern fn expf(value: f32) -> f32;
+extern fn llround(value: f64) -> i64;
+
+fn db_to_gain(decibels: f32) -> f32 {
+    return expf(0.11512925464970228420f * decibels);
+}
+
+fn sample_mono(samples: &list<f32>, channels: i64, frames: i64,
+               position: f64) -> f32 {
+    if position < 0.0 || position >= f64(frames) { return 0.0f; }
+    let frame0: i64 = position < 1.0 ? 0 : llround(position - 0.5);
+    let frame1: i64 = frame0 + 1 < frames ? frame0 + 1 : frame0;
+    let fraction: f32 = f32(position - f64(frame0));
+    let left0: f32 = samples[frame0 * channels];
+    let left1: f32 = samples[frame1 * channels];
+    let value0: f32 = channels > 1
+        ? (left0 + samples[frame0 * channels + 1]) * 0.5f : left0;
+    let value1: f32 = channels > 1
+        ? (left1 + samples[frame1 * channels + 1]) * 0.5f : left1;
+    return value0 + (value1 - value0) * fraction;
+}
+
+fn clip(value: f32) -> f32 {
+    if value < -0.98f { return -0.98f; }
+    if value > 0.98f { return 0.98f; }
+    return value;
+}
+
+fn type_id(name: str8) -> i32 {
+    if eq(name, "hall") == 1 { return 1; }
+    if eq(name, "room") == 1 { return 2; }
+    if eq(name, "plate") == 1 { return 3; }
+    if eq(name, "gated") == 1 { return 4; }
+    if eq(name, "reverse") == 1 { return 5; }
+    if eq(name, "nonlinear-short") == 1 { return 6; }
+    if eq(name, "nonlinear-long") == 1 { return 7; }
+    if eq(name, "custom") == 1 { return 8; }
+    if eq(name, "infinite-hall") == 1 { return 9; }
+    return 0;
+}
+
+fn apply_type(reverb: Reverb2, id: i32) -> Reverb2 {
+    if id == 1 { reverb.set_type(Reverb2Type::Hall); }
+    else if id == 2 { reverb.set_type(Reverb2Type::Room); }
+    else if id == 3 { reverb.set_type(Reverb2Type::Plate); }
+    else if id == 4 { reverb.set_type(Reverb2Type::Gated); }
+    else if id == 5 { reverb.set_type(Reverb2Type::Reverse); }
+    else if id == 6 { reverb.set_type(Reverb2Type::NonlinearShort); }
+    else if id == 7 { reverb.set_type(Reverb2Type::NonlinearLong); }
+    else if id == 8 { reverb.set_type(Reverb2Type::Custom); }
+    else { reverb.set_type(Reverb2Type::InfiniteHall); }
+    return reverb;
+}
+
+fn print_devices() -> void {
+    let count: i64 = device_count();
+    println!("output devices: count={} default_id={}", count, default_output_device_id());
+    var id: i64 = 0;
+    while id < count {
+        println!("  [{}] {}", id, device_name(id));
+        id = id + 1;
+    }
+}
+
+fn find_device(name: str8) -> i64 {
+    let count: i64 = device_count();
+    var id: i64 = 0;
+    while id < count {
+        if eq(device_name(id), name) == 1 { return id; }
+        id = id + 1;
+    }
+    var found: i64 = -1;
+    var matches: i64 = 0;
+    id = 0;
+    while id < count {
+        if contains(device_name(id), name) == 1 {
+            found = id; matches = matches + 1;
+        }
+        id = id + 1;
+    }
+    return matches == 1 ? found : -1;
+}
+
+fn start_device(device: AudioDevice) -> bool {
+    let started: result<i32, str8> = device.start();
+    if started.is_err() {
+        println!("audio start failed: {}", started.unwrap_err());
+        return false;
+    }
+    return true;
+}
+
+fn override_controls(reverb: Reverb2, parsed: ParseResult) -> Reverb2 {
+    let size: f32 = f32(atof(parsed.get("size")));
+    let decay: f32 = f32(atof(parsed.get("decay-seconds")));
+    let damping: f32 = f32(atof(parsed.get("damping")));
+    let bass: f32 = f32(atof(parsed.get("bass-multiplier")));
+    let diffusion: f32 = f32(atof(parsed.get("diffusion")));
+    let bandwidth: f32 = f32(atof(parsed.get("bandwidth")));
+    let predelay: f32 = f32(atof(parsed.get("predelay-ms")));
+    let early: f32 = f32(atof(parsed.get("early-mix")));
+    let width: f32 = f32(atof(parsed.get("width")));
+    let mod_depth: f32 = f32(atof(parsed.get("mod-depth-ms")));
+    let mod_rate: f32 = f32(atof(parsed.get("mod-rate-hz")));
+    let gain: f32 = f32(atof(parsed.get("gain")));
+    if size >= 0.0f { reverb.set_size(size); }
+    if decay >= 0.0f { reverb.set_decay_seconds(decay); }
+    if damping >= 0.0f { reverb.set_damping(damping); }
+    if bass >= 0.0f { reverb.set_bass_multiplier(bass); }
+    if diffusion >= 0.0f { reverb.set_diffusion(diffusion); }
+    if bandwidth >= 0.0f { reverb.set_input_bandwidth(bandwidth); }
+    if predelay >= 0.0f { reverb.set_predelay_ms(predelay); }
+    if early >= 0.0f { reverb.set_early_mix(early); }
+    if width >= 0.0f { reverb.set_stereo_width(width); }
+    if mod_depth >= 0.0f || mod_rate >= 0.0f {
+        reverb.set_modulation(mod_depth >= 0.0f ? mod_depth : 0.3f,
+                              mod_rate >= 0.0f ? mod_rate : 0.3f);
+    }
+    if gain >= 0.0f { reverb.set_gain(gain); }
+
+    let gate: i64 = parsed.get_i64("gate");
+    if gate >= 0 { reverb.set_gate_enabled(gate != 0); }
+    let gate_attack: f32 = f32(atof(parsed.get("gate-attack-ms")));
+    let gate_hold: f32 = f32(atof(parsed.get("gate-hold-ms")));
+    let gate_release: f32 = f32(atof(parsed.get("gate-release-ms")));
+    let gate_threshold: f32 = f32(atof(parsed.get("gate-threshold")));
+    let gate_depth: f32 = f32(atof(parsed.get("gate-depth")));
+    if gate_attack >= 0.0f || gate_hold >= 0.0f || gate_release >= 0.0f ||
+       gate_threshold >= 0.0f || gate_depth >= 0.0f {
+        reverb.set_gate(gate_attack >= 0.0f ? gate_attack : 1.5f,
+                        gate_hold >= 0.0f ? gate_hold : 165.0f,
+                        gate_release >= 0.0f ? gate_release : 52.0f,
+                        gate_threshold >= 0.0f ? gate_threshold : 0.012f,
+                        gate_depth >= 0.0f ? gate_depth : 0.0f);
+    }
+    let freeze: i64 = parsed.get_i64("freeze");
+    if freeze >= 0 { reverb.set_freeze(freeze != 0); }
+    return reverb;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new(
+        "reverb2_trance_sequence",
+        "Play bass drum and trance clap samples through the independent dsp::reverb2."
+    );
+    ap.option("kick", "k", "Bass-drum WAV path", "samples/bassdrum.WAV");
+    ap.option("clap", "c", "Clap WAV path", "samples/clap.WAV");
+    ap.option("bpm", "b", "Sequence tempo", "138");
+    ap.option("duration", "t", "Playback duration in seconds", "30");
+    ap.option("reverb-type", "r", "hall, room, plate, gated, reverse, nonlinear-short, nonlinear-long, custom, or infinite-hall", "gated");
+    ap.option("clap-mix", "m", "Clap reverb mix from 0 to 1", "0.72");
+    ap.option("kick-gain-db", "", "Bass-drum gain in dB (-60..24)", "0");
+    ap.option("clap-gain-db", "", "Clap gain in dB (-60..24)", "3");
+    ap.option("size", "", "Override room size 0..1; -1 keeps preset", "-1");
+    ap.option("decay-seconds", "", "Override RT60-like decay 0.08..120; -1 keeps preset", "-1");
+    ap.option("damping", "", "Override high-frequency damping 0..1", "-1");
+    ap.option("bass-multiplier", "", "Override low-frequency decay multiplier 0.5..1.2", "-1");
+    ap.option("diffusion", "", "Override diffusion 0..1", "-1");
+    ap.option("bandwidth", "", "Override input bandwidth 0..1", "-1");
+    ap.option("predelay-ms", "", "Override predelay 0..500 ms", "-1");
+    ap.option("early-mix", "", "Override early/late balance 0..1", "-1");
+    ap.option("width", "", "Override stereo width 0..1", "-1");
+    ap.option("mod-depth-ms", "", "Override tank modulation depth 0..5 ms", "-1");
+    ap.option("mod-rate-hz", "", "Override tank modulation rate 0.01..5 Hz", "-1");
+    ap.option("gain", "", "Override output gain 0..2", "-1");
+    ap.option("gate", "", "Gate override: -1 preset, 0 off, 1 on", "-1");
+    ap.option("gate-attack-ms", "", "Gate attack override", "-1");
+    ap.option("gate-hold-ms", "", "Gate hold override", "-1");
+    ap.option("gate-release-ms", "", "Gate release override", "-1");
+    ap.option("gate-threshold", "", "Gate detector threshold override", "-1");
+    ap.option("gate-depth", "", "Closed-gate wet level 0..1", "-1");
+    ap.option("freeze", "", "Infinite tank override: -1 preset, 0 off, 1 on", "-1");
+    ap.option("device", "d", "Output device id; -1 uses default", "-1");
+    ap.option("device-name", "n", "Exact or uniquely matching output device", "");
+    ap.flag("list-devices", "l", "List output devices and exit");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() { ap.print_help(); parsed.free(); ap.free(); return 0; }
+    if parsed.has_error() {
+        println!("Error: {}", parsed.error()); ap.print_help();
+        parsed.free(); ap.free(); return 2;
+    }
+    if parsed.flag("list-devices") { print_devices(); parsed.free(); ap.free(); return 0; }
+
+    let kick_path: str8 = parsed.get("kick");
+    let clap_path: str8 = parsed.get("clap");
+    let bpm: i64 = parsed.get_i64("bpm");
+    let duration: i64 = parsed.get_i64("duration");
+    let type_name: str8 = parsed.get("reverb-type");
+    let selected_type: i32 = type_id(type_name);
+    let clap_mix: f32 = f32(atof(parsed.get("clap-mix")));
+    let kick_gain_db: f32 = f32(atof(parsed.get("kick-gain-db")));
+    let clap_gain_db: f32 = f32(atof(parsed.get("clap-gain-db")));
+    if bpm <= 0 || duration <= 0 || selected_type == 0 ||
+       clap_mix < 0.0f || clap_mix > 1.0f ||
+       kick_gain_db < -60.0f || kick_gain_db > 24.0f ||
+       clap_gain_db < -60.0f || clap_gain_db > 24.0f {
+        println!("invalid BPM, duration, reverb type, clap mix, or drum gain");
+        parsed.free(); ap.free(); return 2;
+    }
+    let kick_gain: f32 = db_to_gain(kick_gain_db);
+    let clap_gain: f32 = db_to_gain(clap_gain_db);
+
+    let kick_r: result<PcmAudio, str8> = PcmAudio::load(kick_path);
+    if kick_r.is_err() { println!("bass drum load failed: {}", kick_r.unwrap_err()); parsed.free(); ap.free(); return 1; }
+    let kick_audio: PcmAudio = kick_r.unwrap();
+    let kick_rate: i64 = kick_audio.sample_rate();
+    let kick_channels: i64 = kick_audio.channels();
+    let kick_frames: i64 = kick_audio.frame_count();
+    let kick_samples: list<f32> = kick_audio.samples();
+    kick_audio.close();
+    let clap_r: result<PcmAudio, str8> = PcmAudio::load(clap_path);
+    if clap_r.is_err() { println!("clap load failed: {}", clap_r.unwrap_err()); parsed.free(); ap.free(); return 1; }
+    let clap_audio: PcmAudio = clap_r.unwrap();
+    let clap_rate: i64 = clap_audio.sample_rate();
+    let clap_channels: i64 = clap_audio.channels();
+    let clap_frames: i64 = clap_audio.frame_count();
+    let clap_samples: list<f32> = clap_audio.samples();
+    clap_audio.close();
+
+    var device_id: i64 = parsed.get_i64("device");
+    let requested_name: str8 = parsed.get("device-name");
+    if eq(requested_name, "") != 1 {
+        device_id = find_device(requested_name);
+        if device_id < 0 { println!("output device not found or ambiguous: {}", requested_name); print_devices(); parsed.free(); ap.free(); return 1; }
+    }
+    let device_r: result<AudioDevice, str8> = device_id >= 0
+        ? AudioDevice::open_with_config(device_id, "mlang_reverb2_trance", kick_rate, 512)
+        : AudioDevice::open_default_with_config("mlang_reverb2_trance", kick_rate, 512);
+    if device_r.is_err() { println!("audio open failed: {}", device_r.unwrap_err()); parsed.free(); ap.free(); return 1; }
+    let device: AudioDevice = device_r.unwrap();
+    let output_rate: i64 = device.sample_rate();
+    let buffer_frames: i64 = device.buffer_frames();
+    let total_frames: i64 = output_rate * duration;
+    let beat_frames: f64 = 60.0 * f64(output_rate) / f64(bpm);
+    let kick_step: f64 = f64(kick_rate) / f64(output_rate);
+    let clap_step: f64 = f64(clap_rate) / f64(output_rate);
+    let block_r: result<PcmBlock, str8> = PcmBlock::new(buffer_frames);
+    if block_r.is_err() { println!("PCM block allocation failed: {}", block_r.unwrap_err()); device.close(); parsed.free(); ap.free(); return 1; }
+    let block: PcmBlock = block_r.unwrap();
+    var reverb: Reverb2 = Reverb2::new(f32(output_rate));
+    reverb = apply_type(reverb, selected_type);
+    reverb = override_controls(reverb, parsed);
+    reverb.set_mix(1.0f);
+
+    println!("MLang dsp::reverb2 trance clap sequence");
+    println!("backend={}; output={} Hz; BPM={}; duration={} s", backend_name(), output_rate, bpm, duration);
+    println!("pattern: BD...BD+CL...BD...BD+CL; preset={}; clap mix={}", type_name, clap_mix);
+    println!("drum gain: kick={} dB; clap={} dB", kick_gain_db, clap_gain_db);
+    println!("samples: bassdrum={} clap={}", kick_path, clap_path);
+
+    var rendered: i64 = 0;
+    var beat: i64 = 0;
+    var next_beat: i64 = 0;
+    var kick_position: f64 = -1.0;
+    var clap_position: f64 = -1.0;
+    var started: bool = false;
+    while rendered < total_frames {
+        if device.pcm_queued_frames() >= buffer_frames * 8 ||
+           device.pcm_available_frames() < buffer_frames {
+            sleep_ms(1); continue;
+        }
+        let remaining: i64 = total_frames - rendered;
+        let count: i64 = remaining < buffer_frames ? remaining : buffer_frames;
+        var frame: i64 = 0;
+        while frame < count {
+            if rendered >= next_beat {
+                kick_position = 0.0;
+                if beat % 2 == 1 { clap_position = 0.0; }
+                beat = beat + 1;
+                next_beat = llround(f64(beat) * beat_frames);
+            }
+            let kick: f32 = sample_mono(kick_samples, kick_channels, kick_frames, kick_position) * kick_gain;
+            let clap: f32 = sample_mono(clap_samples, clap_channels, clap_frames, clap_position) * clap_gain;
+            let wet: Reverb2Frame = reverb.process_stereo(clap * 0.72f, clap * 0.72f);
+            let dry: f32 = kick * 0.68f + clap * 0.44f * (1.0f - clap_mix);
+            block.set_stereo(frame,
+                clip(dry + wet.left() * 0.58f * clap_mix),
+                clip(dry + wet.right() * 0.58f * clap_mix));
+            if kick_position >= 0.0 { kick_position = kick_position + kick_step; }
+            if clap_position >= 0.0 { clap_position = clap_position + clap_step; }
+            rendered = rendered + 1; frame = frame + 1;
+        }
+        let queued: result<i64, str8> = device.queue_pcm_block(block, count);
+        if queued.is_err() { println!("PCM queue failed: {}", queued.unwrap_err()); block.close(); device.close(); parsed.free(); ap.free(); return 1; }
+        if !started && (device.pcm_queued_frames() >= buffer_frames * 6 || rendered >= total_frames) {
+            if !start_device(device) { block.close(); device.close(); parsed.free(); ap.free(); return 1; }
+            started = true;
+        }
+    }
+    if !started && !start_device(device) { block.close(); device.close(); parsed.free(); ap.free(); return 1; }
+    while device.pcm_queued_frames() > 0 { sleep_ms(5); }
+    device.stop();
+    println!("finished: {} frames; underruns={}", total_frames, device.pcm_underrun_count());
+    block.close(); device.close(); parsed.free(); ap.free();
+    return 0;
+}

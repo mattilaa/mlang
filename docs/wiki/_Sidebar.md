@@ -32,6 +32,7 @@
 - [[dsp::convolution|DSP-Convolution]]
 - [[dsp::fft|DSP-FFT]]
 - [[dsp::reverb|DSP-Reverb]]
+- [[dsp::reverb2|DSP-Reverb2]]
 
 ## Stdlib Modules
 - [[std::algorithm::genetic|Stdlib-Algorithm-Genetic]]

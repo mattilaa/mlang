@@ -4,6 +4,7 @@ mod dsp::distortion;
 mod dsp::delay;
 mod dsp::filter;
 mod dsp::reverb;
+mod dsp::reverb2;
 
 use dsp::convolution::full_f32;
 use dsp::convolution::full_f64;
@@ -31,6 +32,9 @@ use dsp::filter::nearest_interpolate_f32;
 use dsp::reverb::Reverb;
 use dsp::reverb::ReverbType;
 use dsp::reverb::StereoFrame;
+use dsp::reverb2::Reverb2;
+use dsp::reverb2::Reverb2Frame;
+use dsp::reverb2::Reverb2Type;
 use std::testing::verify;
 
 fn approx_f32(a: f32, b: f32, eps: f32) -> bool {
@@ -801,6 +805,94 @@ fn test_dsp_reverb_types_and_gated_tail() {
     verify(approx_f32(last_left, 0.0f, 0.0001f));
     verify(approx_f32(last_right, 0.0f, 0.0001f));
     verify(reverb.get_type() == ReverbType::Gated);
+}
+
+#[test]
+fn test_dsp_reverb2_presets_are_finite() {
+    var reverb: Reverb2 = Reverb2::new(8000.0f);
+    reverb.set_mix(1.0f);
+    var preset: i32 = 0;
+    while preset < 9 {
+        if preset == 0 { reverb.set_type(Reverb2Type::Hall); }
+        else if preset == 1 { reverb.set_type(Reverb2Type::Room); }
+        else if preset == 2 { reverb.set_type(Reverb2Type::Plate); }
+        else if preset == 3 { reverb.set_type(Reverb2Type::Gated); }
+        else if preset == 4 { reverb.set_type(Reverb2Type::Reverse); }
+        else if preset == 5 { reverb.set_type(Reverb2Type::NonlinearShort); }
+        else if preset == 6 { reverb.set_type(Reverb2Type::NonlinearLong); }
+        else if preset == 7 { reverb.set_type(Reverb2Type::Custom); }
+        else { reverb.set_type(Reverb2Type::InfiniteHall); }
+        reverb.set_mix(1.0f);
+        var i: i64 = 0;
+        while i < 5000 {
+            let input: f32 = i == 0 ? 0.8f : 0.0f;
+            let frame: Reverb2Frame = reverb.process_stereo(input, input * 0.7f);
+            verify(frame.left() == frame.left());
+            verify(frame.right() == frame.right());
+            verify(frame.left() < 4.0f && frame.left() > -4.0f);
+            verify(frame.right() < 4.0f && frame.right() > -4.0f);
+            i = i + 1;
+        }
+        preset = preset + 1;
+    }
+}
+
+#[test]
+fn test_dsp_reverb2_controllable_gate_closes_wet_tail() {
+    var reverb: Reverb2 = Reverb2::new(8000.0f);
+    reverb.set_type(Reverb2Type::Gated);
+    reverb.set_mix(1.0f);
+    reverb.set_predelay_ms(0.0f);
+    reverb.set_gate(0.5f, 20.0f, 10.0f, 0.01f, 0.0f);
+    var open_energy: f32 = 0.0f;
+    var closed_energy: f32 = 0.0f;
+    var i: i64 = 0;
+    while i < 2400 {
+        let input: f32 = i == 0 ? 1.0f : 0.0f;
+        let frame: Reverb2Frame = reverb.process_stereo(input, input);
+        if i >= 60 && i < 240 {
+            open_energy = open_energy + frame.left() * frame.left() + frame.right() * frame.right();
+        }
+        if i >= 1200 {
+            closed_energy = closed_energy + frame.left() * frame.left() + frame.right() * frame.right();
+        }
+        i = i + 1;
+    }
+    verify(open_energy > 0.0001f);
+    verify(closed_energy < 0.000001f);
+}
+
+#[test]
+fn test_dsp_reverb2_custom_and_infinite_hall() {
+    var reverb: Reverb2 = Reverb2::new(8000.0f);
+    reverb.set_type(Reverb2Type::Custom);
+    reverb.set_size(0.82f);
+    reverb.set_decay_seconds(7.5f);
+    reverb.set_damping(0.22f);
+    reverb.set_bass_multiplier(1.12f);
+    reverb.set_diffusion(0.88f);
+    reverb.set_input_bandwidth(0.90f);
+    reverb.set_predelay_ms(5.0f);
+    reverb.set_early_mix(0.12f);
+    reverb.set_stereo_width(1.0f);
+    reverb.set_modulation(0.6f, 0.2f);
+    reverb.set_gain(0.9f);
+    verify(reverb.get_type() == Reverb2Type::Custom);
+
+    reverb.set_type(Reverb2Type::InfiniteHall);
+    reverb.set_mix(1.0f);
+    var late_energy: f32 = 0.0f;
+    var i: i64 = 0;
+    while i < 32000 {
+        let input: f32 = i == 0 ? 0.7f : 0.0f;
+        let frame: Reverb2Frame = reverb.process_stereo(input, input * 0.8f);
+        if i >= 24000 {
+            late_energy = late_energy + frame.left() * frame.left() + frame.right() * frame.right();
+        }
+        i = i + 1;
+    }
+    verify(reverb.get_type() == Reverb2Type::InfiniteHall);
+    verify(late_energy > 0.000001f);
 }
 
 #[test]

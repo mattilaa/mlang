@@ -9,11 +9,15 @@ Digital signal processing namespace root.
 Submodules:
 - [dsp::convolution](DSP-Convolution)
 - [dsp::filter](DSP-Filter)
+- [dsp::distortion](https://github.com/mattilaa/mlang/blob/main/docs/dsp/distortion.md)
+- [dsp::delay](https://github.com/mattilaa/mlang/blob/main/docs/dsp/delay.md)
 - [dsp::fft](DSP-FFT)
 - [dsp::reverb](DSP-Reverb)
+- [dsp::reverb2](DSP-Reverb2)
 
 Import specific DSP modules such as [`dsp::convolution`](DSP-Convolution), [`dsp::filter`](DSP-Filter),
-[`dsp::fft`](DSP-FFT), and [`dsp::reverb`](DSP-Reverb) in application code. This library is installed and discovered
+[`dsp::distortion`](DSP), [`dsp::delay`](DSP), [`dsp::fft`](DSP-FFT), [`dsp::reverb`](DSP-Reverb), and
+[`dsp::reverb2`](DSP-Reverb2) in application code. This library is installed and discovered
 separately from the `std` namespace.
 
 The compiler searches the repository's `modules/` directory in source builds,
