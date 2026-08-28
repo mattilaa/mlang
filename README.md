@@ -1,6 +1,8 @@
 # mlang
 MLang - Programming Language
 
+For more documentation, visit the [MLang GitHub Wiki](https://github.com/mattilaa/mlang/wiki).
+
 ## Table Of Contents
 - [What Is Mlang](#what-is-mlang)
 - [Compile-Time Evaluation With `cexpr`](#compile-time-evaluation-with-cexpr)
