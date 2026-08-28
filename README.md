@@ -750,6 +750,66 @@ Use `--tasks` to preview the resolved order without executing commands:
 mlang pkg run build-app --tasks
 ```
 
+For a slightly more involved workflow, two independent preparation tasks can
+feed a build task, which then feeds a packaging task:
+
+```toml
+[tool.mlang]
+build_dir = "build-release"
+
+[tool.mlang.options]
+profile = "release"
+
+[[task]]
+name = "generate-version"
+shell = [
+  "mkdir -p {{build_dir}}/generated",
+  "printf '%s\\n' '{{option.profile}}' > {{build_dir}}/generated/version.txt"
+]
+
+[[task]]
+name = "prepare-assets"
+commands = [
+  ["cmake", "-E", "make_directory", "{{build_dir}}/assets"],
+  ["cmake", "-E", "copy_directory", "assets", "{{build_dir}}/assets"]
+]
+
+[[task]]
+name = "build-app"
+depends_on = ["generate-version", "prepare-assets"]
+parallel = true
+language = "mlang"
+source = "src/main.mla"
+output = "{{build_dir}}/app"
+opt_level = "O3"
+
+[[task]]
+name = "package-app"
+depends_on = ["build-app"]
+commands = [
+  [
+    "tar",
+    "-czf",
+    "{{build_dir}}/app.tar.gz",
+    "-C",
+    "{{build_dir}}",
+    "app",
+    "assets",
+    "generated"
+  ]
+]
+```
+
+Run the final task to execute the complete dependency chain:
+
+```sh
+mlang pkg run package-app --option profile=release
+```
+
+Here, `generate-version` and `prepare-assets` run first (in parallel because
+`build-app` sets `parallel = true`), `build-app` starts only after both succeed,
+and `package-app` runs last.
+
 Permission-fixup example:
 
 ```toml
