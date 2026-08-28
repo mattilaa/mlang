@@ -51,7 +51,7 @@ through the seed compiler. The repository also retains C++ utilities such as
 MLang supports explicit compile-time evaluation with `cexpr(expr)` and
 `cexpr fn`.
 
-```mla
+```rust
 cexpr fn twice(x: i32) -> i32 {
     return x * 2;
 }
@@ -65,7 +65,7 @@ fn main() -> i32 {
 
 The equivalent postfix declaration form is also accepted:
 
-```mla
+```rust
 fn twice(x: i32) cexpr -> i32 {
     return x * 2;
 }
@@ -74,7 +74,7 @@ fn twice(x: i32) cexpr -> i32 {
 Floating-point compile-time functions are supported in the same first-version
 subset:
 
-```mla
+```rust
 cexpr fn midpoint(a: f32, b: f32) -> f32 {
     return (a + b) / 2.0f;
 }
@@ -82,7 +82,7 @@ cexpr fn midpoint(a: f32, b: f32) -> f32 {
 
 Compile-time values use the same keyword:
 
-```mla
+```rust
 cexpr Steps: i32 = 21;
 
 fn main() -> i32 {
@@ -93,7 +93,7 @@ fn main() -> i32 {
 
 Compile-time branches use `cexpr if`:
 
-```mla
+```rust
 cexpr UseFastPath: bool = true;
 
 fn main() -> i32 {
@@ -110,7 +110,7 @@ fn main() -> i32 {
 Compile-time functions can also be generic and dispatch on concrete argument
 types with `type_id(T)`:
 
-```mla
+```rust
 alias SomeType = i64;
 
 struct Marker {
@@ -146,7 +146,7 @@ Current first-version scope:
 fill initializers are checked at compile time, so the compiler rejects
 initializers with more than `N` elements.
 
-```mla
+```rust
 let fixed: array<i32, 6> = {1, 3, 4, 5, 6, 7};
 var scratch: array<i32, 6> = {};
 scratch.push(10);
@@ -575,7 +575,7 @@ lowers it straight to LLVM inline asm, so there is no extra C wrapper boundary.
 
 Supported forms:
 
-```mla
+```rust
 let value: i64 = 9;
 let copy: i64 = asm(i64, "", value);
 asm volatile(void, "", value);
@@ -591,7 +591,7 @@ Current first-version constraints:
 Architecture-qualified module assembly is available for freestanding entry
 code and definitions that cannot live inside a normal function:
 
-```mla
+```rust
 asm x86(".code16
 .globl _start
 _start:
@@ -1667,7 +1667,7 @@ follows a Doxygen-style structure: `@brief`, `@details`, `@code` (example),
 > that public entry point is itself called from a different module.
 
 > **@code**
-```mla
+```rust
 // lib/counter.mla
 pub struct Counter {
     var value: i32;
@@ -1690,7 +1690,7 @@ impl Counter {
 }
 ```
 
-```mla
+```rust
 // main.mla
 mod lib::counter;
 use lib::counter::Counter;
@@ -1725,7 +1725,7 @@ fn main() -> i32 {
 > specific instance.
 
 > **@code**
-```mla
+```rust
 pub struct Counter {
     var value: i32;
 };
@@ -1792,7 +1792,7 @@ method 'Post::summarize' does not match trait 'Summary': return type 'i32' does 
 method 'Post::summarize' does not match trait 'Summary': expected instance method
 ```
 
-```mla
+```rust
 trait Summary {
     fn summarize(self: Self) -> str8;
 }
@@ -1830,7 +1830,7 @@ impl Summary for Post {
 > compile error.
 
 > **@code**
-```mla
+```rust
 trait Summary {
     fn summarize(self: Self) -> str8;
 }
@@ -1894,7 +1894,7 @@ fn main() -> i32 {
 > structs.
 
 > **@code**
-```mla
+```rust
 trait Summary {
     fn score(self: Self) -> i32;
 }
@@ -1969,7 +1969,7 @@ fn main() -> i32 {
 > work whether the `use` import is present or not.
 
 > **@code**
-```mla
+```rust
 mod lib::summary;
 use lib::summary::Post;
 use lib::summary::Holder;
@@ -2015,7 +2015,7 @@ fn main() -> i32 {
 > high-level operations as defaults.
 
 > **@code**
-```mla
+```rust
 trait Greeter {
     fn name(self: Self) -> str8;
 
@@ -2069,7 +2069,7 @@ impl Greeter for Robot {
 > ```
 
 > **@code**
-```mla
+```rust
 trait Display {
     fn show(self: Self) -> str8;
 }
@@ -2117,7 +2117,7 @@ impl Loud for Word {
 > ```
 
 > **@code**
-```mla
+```rust
 trait A { fn a(self: Self) -> i32; }
 trait B { fn b(self: Self) -> i32; }
 
@@ -2162,7 +2162,7 @@ Mlang currently supports these Rust-like attributes:
 
 ### `#[derive(Debug)]`
 
-```mla
+```rust
 #[derive(Debug)]
 struct Point {
     var x: i32;
@@ -2182,7 +2182,7 @@ fn main() -> i32 {
 
 ### `#[derive(Json)]`
 
-```mla
+```rust
 #[derive(Json)]
 struct Base {
     @property(hidden) var secret: i32;
@@ -2219,7 +2219,7 @@ described in a sibling `@property` metadata tree in the emitted JSON.
 ### `#[test]`
 Test functions should take no parameters and return `void` or `i32`:
 
-```mla
+```rust
 #[test]
 fn test_addition() -> i32 {
     let x: i32 = 2 + 2;
@@ -2847,7 +2847,7 @@ Workspace example:
 
 Inline asm can be pinned to a target architecture directly in source:
 
-```mla
+```rust
 let sum: i64 = asm aarch64(i64, "add $0, $1, $2", base, delta);
 asm volatile aarch64(void, "yield");
 ```
