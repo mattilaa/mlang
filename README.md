@@ -715,6 +715,41 @@ Current task graph features:
   runtime mode switches such as alternate guest userspaces
 - `[task.host.darwin]`, `[task.host.linux]`, `[task.host.windows]` for host-specific overrides
 
+### Task Prerequisites With `depends_on`
+
+Use `depends_on` when a task must complete successfully before another task
+starts. The value is a list of task names, so a task can have one or several
+prerequisites:
+
+```toml
+[[task]]
+name = "generate-config"
+commands = [
+  ["python3", "scripts/generate_config.py"]
+]
+
+[[task]]
+name = "build-app"
+depends_on = ["generate-config"]
+commands = [
+  ["cmake", "--build", "{{build_dir}}"]
+]
+```
+
+Running the dependent task resolves and executes its prerequisites first:
+
+```sh
+mlang pkg run build-app
+```
+
+In this example, `generate-config` must succeed before `build-app` runs. Add
+more names to the `depends_on` array when the task has multiple prerequisites.
+Use `--tasks` to preview the resolved order without executing commands:
+
+```sh
+mlang pkg run build-app --tasks
+```
+
 Permission-fixup example:
 
 ```toml
