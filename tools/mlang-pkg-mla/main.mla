@@ -725,6 +725,9 @@ fn parse_tool_mlang_list(content: str8, wanted_key: str8) -> list<str8> {
 }
 
 fn manifest_uses_build_config(content: str8) -> i32 {
+    if (contains(content, "[tool.mlang.toolchains]") == 1) {
+        return 1;
+    }
     if (contains(content, "[tool.mlang]") != 1) {
         return 0;
     }

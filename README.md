@@ -687,6 +687,27 @@ print = "Booting QEMU with {{option.userspace}} userspace"
 mlang pkg run qemu-run --option userspace=gnu
 ```
 
+Packages can declare required host tools and minimum versions under
+`[tool.mlang.toolchains]`. Before `fetch`, `build`, or `run`, the package
+manager prints a CMake-style discovery summary and stops with the configured
+install hints if a tool is missing or too old:
+
+```toml
+[tool.mlang.toolchains]
+cmake = { name = "CMake", command = "cmake", min_version = "3.20", install = "brew install cmake" }
+ninja = { name = "Ninja", command = "ninja", min_version = "1.10", install = "brew install ninja" }
+pkg_config_linux = { name = "pkg-config", command = "pkg-config", host = "linux", install = "sudo apt-get install pkg-config" }
+```
+
+Example output:
+
+```text
+-- Checking dependency toolchains for /path/to/mlang.toml
+-- Found CMake: /usr/local/bin/cmake (version 3.31.6, requires >= 3.20)
+-- Missing Ninja: command 'ninja' was not found in PATH
+   Install: brew install ninja
+```
+
 Custom task workflows can be declared in `mlang.toml` and run with:
 
 ```sh

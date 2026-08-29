@@ -888,7 +888,7 @@ struct BuildConfig
     std::string targetArch;
     std::string minMlangVersion;
     std::string compilerProgram;
-    std::string makeProgram = "make";
+    std::string makeProgram;
     std::string buildDir;
     std::string depsDir;
     std::string logDir;
@@ -911,6 +911,16 @@ struct BuildConfig
     // 2 = force-sign (codesign --force --sign -). Macro-stable so it can be
     // copied through value semantics and merged with apply_cli_overrides.
     int signMode = 0;
+};
+
+struct ToolchainRequirement
+{
+    std::string name;
+    std::string command;
+    std::string minVersion;
+    std::string versionArgs = "--version";
+    std::string host;
+    std::string install;
 };
 
 struct BuildTarget
@@ -2443,6 +2453,49 @@ parse_inline_table(const std::string& line)
     return kv;
 }
 
+static std::vector<ToolchainRequirement>
+parse_toolchain_requirements(const std::string& content)
+{
+    std::istringstream in(content);
+    std::string line;
+    std::string section;
+    std::vector<ToolchainRequirement> requirements;
+    while(std::getline(in, line))
+    {
+        const std::string text = strip_toml_comment(line);
+        if(text.empty())
+            continue;
+        if(text.front() == '[' && text.back() == ']')
+        {
+            section = text.substr(1, text.size() - 2);
+            continue;
+        }
+        if(section != "tool.mlang.toolchains")
+            continue;
+
+        const auto assignment = parse_toml_assignment(text, in);
+        if(!assignment.has_value())
+            continue;
+        const auto values = parse_inline_table(assignment->value);
+        ToolchainRequirement requirement;
+        requirement.name = assignment->key;
+        if(const auto it = values.find("name"); it != values.end())
+            requirement.name = it->second;
+        if(const auto it = values.find("command"); it != values.end())
+            requirement.command = it->second;
+        if(const auto it = values.find("min_version"); it != values.end())
+            requirement.minVersion = it->second;
+        if(const auto it = values.find("version_args"); it != values.end())
+            requirement.versionArgs = it->second;
+        if(const auto it = values.find("host"); it != values.end())
+            requirement.host = it->second;
+        if(const auto it = values.find("install"); it != values.end())
+            requirement.install = it->second;
+        requirements.push_back(std::move(requirement));
+    }
+    return requirements;
+}
+
 static int parse_int_or_default(const std::string& text, int fallback)
 {
     if(text.empty())
@@ -3159,6 +3212,8 @@ static int stream_inline_output_command(ProgressSpinner& spinner,
         return 1;
     }
 
+    std::vector<std::string> recentOutput;
+    constexpr size_t maxRecentLines = 20;
     char buffer[512];
     while(fgets(buffer, sizeof(buffer), pipe))
     {
@@ -3166,11 +3221,22 @@ static int stream_inline_output_command(ProgressSpinner& spinner,
         if(line.empty())
             continue;
         spinner.set_detail(line);
+        recentOutput.push_back(line);
+        if(recentOutput.size() > maxRecentLines)
+            recentOutput.erase(recentOutput.begin());
         if(logChildOutput)
             append_log_line(current_package_log_state().stdoutLog, line);
     }
 
-    return pclose(pipe);
+    const int rc = pclose(pipe);
+    if(rc != 0 && !recentOutput.empty())
+    {
+        spinner.stop("[failed]");
+        pkg_error_line("Last command output:");
+        for(const auto& line : recentOutput)
+            pkg_error_line("  " + line);
+    }
+    return rc;
 }
 
 static std::string join_path_entries(const std::vector<std::string>& entries)
@@ -3285,6 +3351,22 @@ static std::optional<std::string> run_command_capture(const std::string& cmd)
 }
 
 static std::optional<std::string>
+run_command_capture_with_stderr(const std::string& cmd)
+{
+    FILE* pipe = popen((cmd + " 2>&1").c_str(), "r");
+    if(!pipe)
+        return std::nullopt;
+    std::string out;
+    char buf[256];
+    while(fgets(buf, sizeof(buf), pipe))
+        out += buf;
+    const int rc = pclose(pipe);
+    if(rc != 0)
+        return std::nullopt;
+    return out;
+}
+
+static std::optional<std::string>
 run_command_capture_with_paths(const std::string& cmd,
                                const std::vector<std::string>& entries)
 {
@@ -3341,6 +3423,140 @@ static void append_shell_fragment(std::string& cmd, const std::string& fragment)
     }
     for(const auto& token : tokens)
         cmd += " " + shell_quote(token);
+}
+
+static std::optional<std::string>
+extract_toolchain_version(const std::string& output)
+{
+    for(size_t start = 0; start < output.size(); ++start)
+    {
+        if(!std::isdigit(static_cast<unsigned char>(output[start])))
+            continue;
+        size_t end = start;
+        bool hasDot = false;
+        while(end < output.size())
+        {
+            const char c = output[end];
+            if(std::isdigit(static_cast<unsigned char>(c)))
+            {
+                ++end;
+                continue;
+            }
+            if(c == '.')
+            {
+                hasDot = true;
+                ++end;
+                continue;
+            }
+            break;
+        }
+        while(end > start && output[end - 1] == '.')
+            --end;
+        if(!hasDot || end <= start)
+            continue;
+        const std::string candidate = output.substr(start, end - start);
+        if(parse_semver_components(candidate).has_value())
+            return candidate;
+        start = end;
+    }
+    return std::nullopt;
+}
+
+static int validate_toolchain_requirements(const PackageManifest& pkg,
+                                           const BuildConfig& buildConfig)
+{
+    const auto requirements = parse_toolchain_requirements(pkg.content);
+    if(requirements.empty())
+        return 0;
+
+    const std::string hostName = current_host_name();
+    bool failed = false;
+    pkg_info_line("-- Checking dependency toolchains for " +
+                  pkg.manifestPath.string());
+    for(const auto& requirement : requirements)
+    {
+        if(!requirement.host.empty() && requirement.host != hostName)
+            continue;
+
+        const std::string displayName =
+            requirement.name.empty() ? requirement.command : requirement.name;
+        if(requirement.command.empty())
+        {
+            pkg_error_line("-- Invalid toolchain " + displayName +
+                           ": missing command");
+            failed = true;
+            continue;
+        }
+        if(!requirement.minVersion.empty() &&
+           !parse_semver_components(requirement.minVersion).has_value())
+        {
+            pkg_error_line("-- Invalid minimum version for " + displayName +
+                           ": " + requirement.minVersion);
+            failed = true;
+            continue;
+        }
+
+        const auto executable = run_command_capture_with_paths(
+            "command -v " + shell_quote(requirement.command),
+            buildConfig.pathEntries);
+        if(!executable.has_value() || trim(*executable).empty())
+        {
+            pkg_error_line("-- Missing " + displayName + ": command '" +
+                           requirement.command + "' was not found in PATH");
+            if(!requirement.install.empty())
+                pkg_error_line("   Install: " + requirement.install);
+            failed = true;
+            continue;
+        }
+
+        const std::string executablePath = trim(*executable);
+        if(requirement.minVersion.empty())
+        {
+            pkg_info_line("-- Found " + displayName + ": " + executablePath);
+            continue;
+        }
+
+        std::string versionCommand = shell_quote(executablePath);
+        append_shell_fragment(versionCommand, requirement.versionArgs);
+        const auto versionOutput =
+            run_command_capture_with_stderr(versionCommand);
+        const auto version = versionOutput.has_value()
+                                 ? extract_toolchain_version(*versionOutput)
+                                 : std::nullopt;
+        if(!version.has_value())
+        {
+            pkg_error_line("-- Found " + displayName + ": " + executablePath +
+                           ", but its version could not be determined");
+            if(!requirement.install.empty())
+                pkg_error_line("   Install: " + requirement.install);
+            failed = true;
+            continue;
+        }
+
+        if(compare_semver(*version, requirement.minVersion) < 0)
+        {
+            pkg_error_line("-- Found " + displayName + ": " + executablePath +
+                           " (version " + *version + ", requires >= " +
+                           requirement.minVersion + ")");
+            if(!requirement.install.empty())
+                pkg_error_line("   Install or upgrade: " +
+                               requirement.install);
+            failed = true;
+            continue;
+        }
+        pkg_info_line("-- Found " + displayName + ": " + executablePath +
+                      " (version " + *version + ", requires >= " +
+                      requirement.minVersion + ")");
+    }
+
+    if(failed)
+    {
+        pkg_error_line("Required dependency toolchains are missing or too old. "
+                       "Install or upgrade them before continuing.");
+        return 1;
+    }
+    pkg_info_line("-- Dependency toolchain check completed");
+    return 0;
 }
 
 static std::filesystem::path
@@ -3897,6 +4113,8 @@ static int fetch_for_manifest(const PackageManifest& pkg,
 {
     const BuildConfig effectiveBuildConfig =
         materialize_build_config_for_package(pkg, buildConfig);
+    if(validate_toolchain_requirements(pkg, effectiveBuildConfig) != 0)
+        return 1;
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, effectiveBuildConfig));
     auto deps = parse_source_deps(pkg.content);
@@ -4078,6 +4296,8 @@ static int build_for_manifest(const PackageManifest& pkg,
 {
     const BuildConfig effectivePackageBuildConfig =
         materialize_build_config_for_package(pkg, packageBuildConfig);
+    if(validate_toolchain_requirements(pkg, effectivePackageBuildConfig) != 0)
+        return 1;
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, effectivePackageBuildConfig));
     const auto packageEntry =
@@ -4450,6 +4670,43 @@ struct TaskRunState
     };
 
     Status status = not_started;
+};
+
+class TaskRunStateGuard
+{
+  public:
+    TaskRunStateGuard(std::map<std::string, TaskRunState>& states,
+                      std::mutex& mutex, std::condition_variable& cv,
+                      std::string taskName)
+        : states_(states), mutex_(mutex), cv_(cv), taskName_(std::move(taskName))
+    {
+    }
+
+    ~TaskRunStateGuard()
+    {
+        bool changed = false;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto state = states_.find(taskName_);
+            if(state != states_.end() &&
+               state->second.status == TaskRunState::running)
+            {
+                state->second.status = TaskRunState::failed;
+                changed = true;
+            }
+        }
+        if(changed)
+            cv_.notify_all();
+    }
+
+    TaskRunStateGuard(const TaskRunStateGuard&) = delete;
+    TaskRunStateGuard& operator=(const TaskRunStateGuard&) = delete;
+
+  private:
+    std::map<std::string, TaskRunState>& states_;
+    std::mutex& mutex_;
+    std::condition_variable& cv_;
+    std::string taskName_;
 };
 
 static std::string format_task_elapsed(std::chrono::milliseconds elapsed)
@@ -5252,6 +5509,7 @@ static int run_task_for_manifest_impl(
             return 1;
         state.status = TaskRunState::running;
     }
+    TaskRunStateGuard taskStateGuard(taskStates, taskMutex, taskCv, taskName);
 
     for(const auto& task : tasks)
     {

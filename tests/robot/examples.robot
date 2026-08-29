@@ -6529,6 +6529,60 @@ Pkg PkgConfig Parity (CPP vs MLA)
     Should Be Equal As Integers    ${mla_run.rc}    0
     Should Contain    ${mla_run.stdout}    pkg workflow ok
 
+Pkg Dependency Toolchains Report Found Missing And Old Versions
+    [Documentation]    Verify dependency toolchain preflight output, minimum
+    ...                versions, install hints, and MLA-to-C++ delegation.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_toolchains
+    ${fakebin}=    Catenate    SEPARATOR=    ${base}/fakebin
+    ${manifest}=    Catenate    SEPARATOR=    ${base}/mlang.toml
+    ${path_env}=    Catenate    SEPARATOR=    ${fakebin}:%{PATH}
+    Create Directory    ${fakebin}
+
+    ${tool_script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "fixture-tool version 2.4.1"
+    Create File    ${fakebin}/fixture-tool    ${tool_script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x '${fakebin}/fixture-tool'
+    Should Be Equal As Integers    ${chmod.rc}    0
+
+    ${passing_manifest}=    Catenate    SEPARATOR=\n
+    ...    [package]
+    ...    name = "toolchain_fixture"
+    ...    version = "0.1.0"
+    ...    [dependencies]
+    ...    [tool.mlang.toolchains]
+    ...    fixture = { name = "Fixture Tool", command = "fixture-tool", min_version = "2.0", install = "install fixture-tool" }
+    Create File    ${manifest}    ${passing_manifest}
+
+    ${found}=    Run Process    ${MLANG}    pkg    fetch
+    ...    cwd=${base}    env:PATH=${path_env}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${found.rc}    0
+    ...    msg=Toolchain success case failed (rc=${found.rc})\nSTDOUT:\n${found.stdout}\nSTDERR:\n${found.stderr}
+    Should Contain    ${found.stdout}    -- Checking dependency toolchains for
+    Should Contain    ${found.stdout}    -- Found Fixture Tool:
+    Should Contain    ${found.stdout}    (version 2.4.1, requires >= 2.0)
+    Should Contain    ${found.stdout}    -- Dependency toolchain check completed
+
+    ${failing_manifest}=    Catenate    SEPARATOR=\n
+    ...    [package]
+    ...    name = "toolchain_fixture"
+    ...    version = "0.1.0"
+    ...    [dependencies]
+    ...    [tool.mlang.toolchains]
+    ...    old = { name = "Old Fixture Tool", command = "fixture-tool", min_version = "9.0", install = "upgrade fixture-tool" }
+    ...    missing = { name = "Missing Fixture Tool", command = "fixture-tool-missing", install = "install fixture-tool-missing" }
+    Create File    ${manifest}    ${failing_manifest}
+
+    ${failed}=    Run Process    ${MLANG}    pkg    fetch
+    ...    cwd=${base}    env:MLANG_PKG_IMPL=mla    env:PATH=${path_env}    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${failed.rc}    0
+    Should Contain    ${failed.stderr}    -- Found Old Fixture Tool:
+    Should Contain    ${failed.stderr}    requires >= 9.0
+    Should Contain    ${failed.stderr}    Install or upgrade: upgrade fixture-tool
+    Should Contain    ${failed.stderr}    -- Missing Missing Fixture Tool:
+    Should Contain    ${failed.stderr}    Install: install fixture-tool-missing
+    Should Contain    ${failed.stderr}    Required dependency toolchains are missing or too old.
+
 *** Keywords ***
 Initialize Artifact Dir
     ${artifact_dir}=    Set Variable    ${OUTPUT DIR}

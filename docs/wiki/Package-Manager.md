@@ -560,6 +560,45 @@ build-release/app     # alternate output directory from CLI override
 /tmp/my-pkg-logs/     # package-manager stdout/stderr/warn logs
 ```
 
+### `[tool.mlang.toolchains]`
+
+Declare host tools that a package needs before dependency fetching, building,
+or task execution. The package manager checks every requirement that applies
+to the current host before doing any work. It prints each lookup in a
+CMake-style configuration summary, including the resolved executable path and
+detected version when a minimum version is specified.
+
+```toml
+[tool.mlang.toolchains]
+cmake = { name = "CMake", command = "cmake", min_version = "3.20", install = "brew install cmake" }
+ninja = { name = "Ninja", command = "ninja", min_version = "1.10", install = "brew install ninja" }
+pkg_config_linux = { name = "pkg-config", command = "pkg-config", host = "linux", install = "sudo apt-get install pkg-config" }
+```
+
+Each entry is an inline table with these keys:
+
+- `command` (required): executable name to find in `PATH`
+- `name`: display name; defaults to the entry key
+- `min_version`: optional minimum dotted version
+- `version_args`: optional arguments used to query the version; defaults to
+  `--version`
+- `host`: optional host filter such as `darwin`, `linux`, or `windows`
+- `install`: optional command or instruction shown when the tool is missing,
+  too old, or its version cannot be determined
+
+Configured `[tool.mlang].path_entries` are prepended during discovery, so the
+check resolves the same preferred tools that dependency builds and tasks use.
+All applicable tools are checked in one pass, allowing the user to install or
+upgrade everything before retrying. For example:
+
+```text
+-- Checking dependency toolchains for /path/to/mlang.toml
+-- Found CMake: /usr/local/bin/cmake (version 3.31.6, requires >= 3.20)
+-- Missing Ninja: command 'ninja' was not found in PATH
+   Install: brew install ninja
+Required dependency toolchains are missing or too old. Install or upgrade them before continuing.
+```
+
 ### `[[task]]`
 
 Custom tasks are executed with `mlang pkg run <task-name>`.

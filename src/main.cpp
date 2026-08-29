@@ -1196,6 +1196,8 @@ static bool manifest_requires_cpp_pkg_frontend()
 
     if(content.find("[workspace]") != std::string::npos)
         return true;
+    if(content.find("[tool.mlang.toolchains]") != std::string::npos)
+        return true;
     if(content.find("[[bin]]") != std::string::npos)
         return true;
     if(content.find("[[task]]") != std::string::npos)
