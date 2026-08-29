@@ -177,6 +177,32 @@ demo directory so its `mlang.toml` is selected automatically.
 | `examples/package_manager_vst3_sdk_example` | Fetching the Steinberg SDK and calling a small C++ metadata bridge from MLang without building a full plug-in. | `(cd examples/package_manager_vst3_sdk_example && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_workspace_fetch` | Recursive workspace discovery with one Git-backed and one tarball-backed cJSON subpackage. | `./examples/package_manager_workspace_fetch/run_demo.sh` |
 
+### Verify the dynamic-library package
+
+The dynamic-library demo requires no external dependency download. Build and
+run it from the repository root:
+
+```sh
+cd examples/package_manager_dynamic_library
+../../build/mlang pkg build
+./build/dynamic_library_demo
+```
+
+The result verifies calls through the generated dynamic library:
+
+```text
+dynamic library results: sum=42, product=42
+```
+
+You can also inspect the generated library directly:
+
+```sh
+find build -maxdepth 1 -type f -name '*arithmetic*' -print
+```
+
+Expect `libarithmetic.dylib` on macOS, `libarithmetic.so` on Linux, or
+`arithmetic.dll` plus `libarithmetic.dll.a` on Windows/MinGW.
+
 For configurable audio demos, use `pkg run list-devices` in the corresponding
 directory to inspect available outputs. Their local README files document
 additional `--option key=value` controls.

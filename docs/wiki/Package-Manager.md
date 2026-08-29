@@ -878,6 +878,21 @@ mlang --shared src/arithmetic.mla -o build/libarithmetic.dylib
 When `-o` is omitted, `--shared` selects the platform's default dynamic
 library name and extension from the source filename.
 
+The repository includes a complete runnable package at
+`examples/package_manager_dynamic_library`. From the repository root:
+
+```sh
+cd examples/package_manager_dynamic_library
+../../build/mlang pkg build
+./build/dynamic_library_demo
+```
+
+Successful dynamic loading and symbol calls produce:
+
+```text
+dynamic library results: sum=42, product=42
+```
+
 ### `[[bin]]`
 
 Packages can declare multiple executable targets with `[[bin]]`:

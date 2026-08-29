@@ -235,6 +235,38 @@ following additional programs are useful runnable showcases:
     --option gate_hold_ms=145
   ```
 
+### Package-manager dynamic library
+
+`examples/package_manager_dynamic_library` builds the `arithmetic` MLang
+dynamic library before linking it into `dynamic_library_demo`. From the
+repository root, build and run it with:
+
+```sh
+cd examples/package_manager_dynamic_library
+../../build/mlang pkg build
+./build/dynamic_library_demo
+```
+
+A successful run prints:
+
+```text
+dynamic library results: sum=42, product=42
+```
+
+The build directory should contain the executable and the platform-specific
+library. Verify the artifacts with:
+
+```sh
+find build -maxdepth 1 -type f -name '*arithmetic*' -print
+test -x build/dynamic_library_demo
+```
+
+The library is named `libarithmetic.dylib` on macOS,
+`libarithmetic.so` on Linux, or `arithmetic.dll` with
+`libarithmetic.dll.a` on Windows/MinGW. The executable runs without setting a
+separate library-path environment variable because the package manager embeds
+a loader-relative runtime path.
+
 ## Focused regression examples
 
 Some new features are best represented by compact compiler regression tests
