@@ -99,7 +99,7 @@ Currently provided:
     including flat-population genome extraction/replacement.
 - `std/esc.mla`: ANSI terminal escape helpers with named color/cursor values
   cursor control (`fg/bg/reset`, `bold_on/off`, `underline_on/off`,
-  `cursor`, `cursor_move`), auto-disabled when `std::term::supports_ansi()`
+  `cursor_code`, `cursor_move`), auto-disabled when `std::term::supports_ansi()`
   is false.
 - `std/term.mla`: terminal capability + termios helpers
   (`stdin/stdout/stderr` tty detection, size, color level/truecolor, and

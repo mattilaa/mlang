@@ -36,6 +36,40 @@ filter.set_lowpass(1200.0f, 6.0f, 48000.0f);
 let output: f32 = filter.process(input);
 ```
 
+## Moog-style ladder filter
+
+`MoogLadder` is a topology-preserving low-pass ladder with a zero-delay
+resonance feedback path. The 12, 18, and 24 dB modes close feedback around two,
+three, and four stages respectively:
+
+```rust
+use dsp::filter::MoogLadder;
+
+var ladder: MoogLadder = MoogLadder::new();
+ladder.set_lowpass(1200.0f, 12.0f, 48000.0f);
+let output24: f32 = ladder.process_24db(input);
+```
+
+Call `process_12db` instead for the two-pole output. Use separate instances if
+multiple slopes are needed for the same input stream; `process_18db` selects
+the three-pole output. Each processing call advances
+the ladder state by one sample.
+
+The three-pole `process_18db` mode is also used by the ladder sequence demo's
+`tb303` variant. That variant adds per-step rests, accents, pitch slides, a
+sharper filter envelope, and post-filter [`dsp::distortion`](DSP) processing.
+
+The ladder defaults to full resonance-dependent bass compensation, keeping
+the low passband near unity gain as resonance rises. This gives the filter the
+deeper weight expected from musical Moog-style emulations. Use
+`set_bass_compensation(0.0f)` for the uncompensated ladder response, which
+loses low-frequency level as resonance increases, or a value between `0` and
+`1` to blend between the two responses.
+
+`set_lowpass` preserves the four integrator states, so cutoff and resonance may
+be changed for every sample by a `LinearRamp` without zipper noise. Resonance
+uses `0 .. 36 dB`; the upper endpoint approaches the self-oscillation boundary.
+
 ## 24 dB filters
 
 The fourth-order filters cascade two biquads. Low-pass and high-pass use the
@@ -101,11 +135,12 @@ two-dimensional DSP parameter tables.
 
 [`examples/package_manager_coreaudio_filter`](https://github.com/mattilaa/mlang/blob/main/examples/package_manager_coreaudio_filter)
 loads `examples/fft_example/illusion.wav` and runs 12 or 24 dB/octave cutoff
-sweeps. Select `lowpass12`, `highpass12`, `bandpass12`, `lowpass24`,
-`highpass24`, or `bandpass24` with `--filter`. The shorter names remain aliases
-for the 24 dB modes. The processor keeps filter history across sweep sections
+sweeps. Select `moog12`, `moog24`, `lowpass12`, `highpass12`, `bandpass12`, `lowpass24`,
+`highpass24`, or `bandpass24` with `--filter`; `ladder12` and `ladder24` are
+aliases for the Moog-style modes. The processor keeps filter history across sweep sections
 and crossfades from the dry reference to filtered output to avoid transition
-clicks. All file decoding and buffer allocation happens before the CoreAudio
+clicks. `--dry-wet 0..1` selects the filtered-section mix while leaving the
+initial reference section dry. All file decoding and buffer allocation happens before the CoreAudio
 callback starts.
 
 Sampler interpolation is selected independently with `--interpolation` using
@@ -125,9 +160,15 @@ does not introduce a sudden coefficient change. Values above the default can
 produce strong peaks and require additional gain reduction.
 
 Input may be mono or stereo 16-bit PCM WAV, AIFF, or uncompressed AIFF-C.
-Use `--validate PATH` to check decoding without opening an audio device.
-Input paths beginning with `~/` are expanded by the binary, including paths
-provided through the package task's `audio_path` option.
-Use `--list-devices` to enumerate CoreAudio outputs and
-`--output-device NAME_OR_UID` to select one. If no output is specified, the
-current system default is used.
+Pass a file with `--audio-path PATH`, or with `--option audio_path=PATH` when
+using the package task. Input paths beginning with `~/` are expanded by
+[`std::audio`](Stdlib-Audio). Use `--list-devices` to enumerate CoreAudio output ids and
+`--device ID` to select one. Device `-1` uses the current system default.
+
+## Ladder synth sequence
+
+[`examples/package_manager_moog_ladder_sequence`](https://github.com/mattilaa/mlang/blob/main/examples/package_manager_moog_ladder_sequence)
+generates an alternating square/saw bass sequence. It applies an amplitude
+ADSR and a separate per-note filter ADSR, then moves the filter envelope depth
+with a continuous 16-step triangle sweep. Both 12 and 24 dB ladder modes are
+available from the command line, with compensated bass enabled.

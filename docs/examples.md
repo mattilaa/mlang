@@ -12,6 +12,10 @@ mlang <path> -L ~/.local/lib/mlang -lmlang_std
 
 (Add any extra flags the example's header documents.)
 
+Multi-file projects, package manifests, helper-script applications, and other
+subdirectory-based showcases are indexed separately in
+[Directory-Based Demos](demos.md).
+
 ## Example pages
 
 - @subpage uml_ui_generator — TOML-driven UML diagram/UI generator example.

@@ -245,7 +245,7 @@ pub fn inverse_off() -> str8 {
 }
 
 /// @brief Return a cursor control escape sequence. Returns a borrowed/static string; do not free.
-pub fn cursor(cmd: CursorCommand) -> str8 {
+pub fn cursor_code(cmd: CursorCommand) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_code(cmd);
 }

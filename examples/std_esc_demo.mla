@@ -13,19 +13,19 @@ use std::esc::cmd_show;
 use std::esc::color_black;
 use std::esc::color_bright_cyan;
 use std::esc::color_bright_green;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::cursor_move;
 use std::esc::dir_down;
 use std::esc::fg;
 use std::esc::reset;
 
 fn main() -> i32 {
-    println!("{}{}", cursor(cmd_clear_screen()), cursor(cmd_home()));
+    println!("{}{}", cursor_code(cmd_clear_screen()), cursor_code(cmd_home()));
     println!("{}std::esc demo{}", bold_on(), reset());
     println!("{}green text{}", fg(color_bright_green()), reset());
     println!("{}{}cyan on black{}", fg(color_bright_cyan()), bg(color_black()), reset());
     println!("{}", cursor_move(dir_down(), 1));
-    println!("{}", cursor(cmd_hide()));
-    println!("{}", cursor(cmd_show()));
+    println!("{}", cursor_code(cmd_hide()));
+    println!("{}", cursor_code(cmd_show()));
     return 0;
 }

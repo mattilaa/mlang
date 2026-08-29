@@ -19,7 +19,7 @@ use std::esc::cmd_home;
 use std::esc::cmd_show;
 use std::esc::color_black;
 use std::esc::color_white;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::fg;
 use std::esc::fg_rgb;
 use std::esc::bg_rgb;
@@ -241,7 +241,7 @@ fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32, d
 }
 
 fn cursor_force(cmd: i32) -> str8 {
-    let gated: str8 = cursor(cmd);
+    let gated: str8 = cursor_code(cmd);
     if len(gated) > 0 {
         return gated;
     }

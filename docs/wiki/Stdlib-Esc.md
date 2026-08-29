@@ -35,7 +35,7 @@ Ownership note:
 - `alt_screen_off() -> str8`
 
 ### cursor API
-- `cursor(cmd: cursor_command) -> str8`
+- `cursor_code(cmd: cursor_command) -> str8`
 - `cursor_move(dir: cursor_direction, amount: i32) -> str8`
 
 ### Freestanding API
@@ -97,7 +97,7 @@ use std::esc::cmd_clear_screen;
 use std::esc::cmd_hide;
 use std::esc::cmd_home;
 use std::esc::cmd_show;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::reset;
 use std::term::stdin_enable_raw;
 use std::term::stdin_is_tty;
@@ -114,7 +114,7 @@ pub fn tui_enter() -> TuiGuard {
             raw = 1;
         }
     }
-    print!("{}{}{}{}", alt_screen_on(), cursor(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
+    print!("{}{}{}{}", alt_screen_on(), cursor_code(cmd_hide()), cursor_code(cmd_home()), cursor_code(cmd_clear_screen()));
     return TuiGuard { raw_enabled: raw };
 }
 
@@ -122,7 +122,7 @@ pub fn tui_leave(g: TuiGuard) -> void {
     if g.raw_enabled == 1 {
         let _ = stdin_restore();
     }
-    print!("{}{}{}{}\n", reset(), cursor(cmd_show()), cursor(cmd_home()), alt_screen_off());
+    print!("{}{}{}{}\n", reset(), cursor_code(cmd_show()), cursor_code(cmd_home()), alt_screen_off());
 }
 ```
 

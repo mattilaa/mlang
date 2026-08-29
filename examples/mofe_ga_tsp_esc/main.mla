@@ -41,7 +41,7 @@ use std::esc::color_bright_yellow;
 use std::esc::bg;
 use std::esc::color_black;
 use std::esc::color_bright_blue;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::fg;
 use std::esc::reset;
 use std::gps::distance_m;
@@ -1675,7 +1675,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     visual_phase_start_ms = start_ms;
     let wrap_off: str8 = "\x1b[?7l";
     let wrap_on: str8 = "\x1b[?7h";
-    print!("{}{}{}{}{}", alt_screen_on(), wrap_off, cursor(cmd_hide()), cursor(cmd_clear_screen()), cursor(cmd_home()));
+    print!("{}{}{}{}{}", alt_screen_on(), wrap_off, cursor_code(cmd_hide()), cursor_code(cmd_clear_screen()), cursor_code(cmd_home()));
     let input: Stdin = stdin();
     var raw_enabled: i32 = 0;
     if stdin_is_tty() == 1 {
@@ -1913,8 +1913,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
 
         let builder: i64 = builder_new(65536);
-        bput(builder, cursor(cmd_clear_screen()));
-        bput(builder, cursor(cmd_home()));
+        bput(builder, cursor_code(cmd_clear_screen()));
+        bput(builder, cursor_code(cmd_home()));
         if compact_mode == 0 {
             bput_fullwidth_logo(builder, "M.O.F.E.", cols);
             let l0: str8 = format!(
@@ -2212,6 +2212,6 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     if raw_enabled == 1 {
         let _ = stdin_restore();
     }
-    print!("{}{}{}{}{}\n", reset(), wrap_on, cursor(cmd_show()), cursor(cmd_home()), alt_screen_off());
+    print!("{}{}{}{}{}\n", reset(), wrap_on, cursor_code(cmd_show()), cursor_code(cmd_home()), alt_screen_off());
     return 0;
 }

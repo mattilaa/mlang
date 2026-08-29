@@ -16,7 +16,7 @@ use std::esc::alt_screen_off;
 use std::esc::alt_screen_on;
 use std::esc::cmd_hide;
 use std::esc::cmd_show;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::reset;
 use std::io::Stdin;
 use std::io::read_keycode_nonblocking;
@@ -58,7 +58,7 @@ fn main() -> i32 {
 
     let _ = stdin_enable_raw();
     let _ = write(stdout(), alt_screen_on());
-    let _ = write(stdout(), cursor(cmd_hide()));
+    let _ = write(stdout(), cursor_code(cmd_hide()));
 
     var running: i32 = 1;
     while running == 1 {
@@ -93,7 +93,7 @@ fn main() -> i32 {
     }
 
     let _ = write(stdout(), reset());
-    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = write(stdout(), cursor_code(cmd_show()));
     let _ = write(stdout(), alt_screen_off());
     let _ = stdin_restore();
     ui.close();

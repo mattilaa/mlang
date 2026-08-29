@@ -26,7 +26,7 @@ use std::esc::color_bright_yellow;
 use std::esc::color_cyan;
 use std::esc::color_green;
 use std::esc::color_white;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::cursor_move;
 use std::esc::dir_down;
 use std::esc::dir_right;
@@ -831,7 +831,7 @@ fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_m
 }
 
 fn ansi_cursor_pos(row1: i64, col1: i64) -> str8 {
-    let home: str8 = cursor(cmd_home());
+    let home: str8 = cursor_code(cmd_home());
     let down: str8 = cursor_move(dir_down(), row1 - 1);
     let right: str8 = cursor_move(dir_right(), col1 - 1);
     return format!("{}{}{}", home, down, right);
@@ -1382,7 +1382,7 @@ last_action: str8) -> str8 {
         free(h);
     }
     let _ = builder_append(overlay_builder, reset());
-    let _ = builder_append(overlay_builder, cursor(cmd_home()));
+    let _ = builder_append(overlay_builder, cursor_code(cmd_home()));
     let overlay: str8 = builder_take_string(overlay_builder);
     builder_free(overlay_builder);
 

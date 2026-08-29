@@ -44,6 +44,7 @@ If you are new to MLang, read these pages in this order:
 5. [Package Manager](package_manager.md)
 6. [Stdlib Module API](stdlib_mlang_api.md)
 7. [DSP Library](dsp/index.md)
+8. [Directory Demos](demos.md)
 
 ## Quick Links
 
@@ -72,6 +73,9 @@ If you are new to MLang, read these pages in this order:
   configuration keys.
 - [UML UI Generator Example](uml_ui_generator.md)
   TOML schema and sample files for the PNG UML example renderer.
+- [Directory Demos](demos.md)
+  Every multi-file project under `examples/<name>/`, with a short description
+  and its build or run command.
 - [Ownership Model Notes](ownership_model.h)
   Current ownership and move/copy model notes used by the compiler.
 
@@ -229,5 +233,6 @@ The language is intentionally pragmatic rather than ideological.
 - [Language Attributes](language_attributes.md)
 - [Package Manager](package_manager.md)
 - [UML UI Generator Example](uml_ui_generator.md)
+- [Directory Demos](demos.md)
 - [Stdlib Module API](stdlib_mlang_api.md)
 - root project `README.md` for build, test, and workflow commands

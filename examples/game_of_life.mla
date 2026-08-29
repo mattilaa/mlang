@@ -25,7 +25,7 @@ use std::esc::cmd_home;
 use std::esc::cmd_restore;
 use std::esc::cmd_save;
 use std::esc::cmd_show;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::fg_rgb;
 use std::esc::reset;
 use std::io::Stdin;
@@ -273,9 +273,9 @@ fn render_frame_into(builder: StringBuilder, board: BitSet, width: i64, height: 
     let inner_width: i64 = gcols + 2;
     let _ = builder_clear(builder);
 
-    let _ = builder_append(builder, cursor(cmd_home()));
+    let _ = builder_append(builder, cursor_code(cmd_home()));
     if clear_before_draw == 1 {
-        let _ = builder_append(builder, cursor(cmd_clear_screen()));
+        let _ = builder_append(builder, cursor_code(cmd_clear_screen()));
     }
     let _ = builder_append(builder, bg_rgb(20, 40, 60));
     let _ = builder_append(builder, fg_rgb(226, 234, 248));
@@ -336,11 +336,11 @@ fn main() -> i32 {
     let _seed: i64 = seed_auto();
     let input: Stdin = stdin();
     let _ = stdin_enable_raw();
-    let _ = write_unflushed(stdout(), cursor(cmd_save()));
+    let _ = write_unflushed(stdout(), cursor_code(cmd_save()));
     let on: str8 = alt_screen_on_real();
     let _ = write_unflushed(stdout(), on);
     free(on);
-    let _ = write_unflushed(stdout(), cursor(cmd_hide()));
+    let _ = write_unflushed(stdout(), cursor_code(cmd_hide()));
     let _ = flush(stdout());
 
     var width: i64 = 0;
@@ -350,11 +350,11 @@ fn main() -> i32 {
     if current_r.is_err() || next_r.is_err() {
         println!("BitSet init failed");
         let _ = write_unflushed(stdout(), reset());
-        let _ = write_unflushed(stdout(), cursor(cmd_show()));
+        let _ = write_unflushed(stdout(), cursor_code(cmd_show()));
         let off: str8 = alt_screen_off_real();
         let _ = write_unflushed(stdout(), off);
         free(off);
-        let _ = write_unflushed(stdout(), cursor(cmd_restore()));
+        let _ = write_unflushed(stdout(), cursor_code(cmd_restore()));
         let _ = flush(stdout());
         let _ = stdin_restore();
         return 1;
@@ -433,11 +433,11 @@ fn main() -> i32 {
     }
 
     let _ = write_unflushed(stdout(), reset());
-    let _ = write_unflushed(stdout(), cursor(cmd_show()));
+    let _ = write_unflushed(stdout(), cursor_code(cmd_show()));
     let off2: str8 = alt_screen_off_real();
     let _ = write_unflushed(stdout(), off2);
     free(off2);
-    let _ = write_unflushed(stdout(), cursor(cmd_restore()));
+    let _ = write_unflushed(stdout(), cursor_code(cmd_restore()));
     let _ = write_unflushed(stdout(), "\n");
     let _ = flush(stdout());
     let _ = stdin_restore();

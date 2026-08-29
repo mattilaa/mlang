@@ -17,7 +17,7 @@ use std::esc::cmd_clear_screen;
 use std::esc::cmd_home;
 use std::esc::cmd_hide;
 use std::esc::cmd_show;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::alt_screen_off;
 use std::esc::alt_screen_on;
 use std::esc::reset;
@@ -672,7 +672,7 @@ fn main() -> i32 {
     var skip_lf_after_cr: i32 = 0;
     var last_action: str8 = format!("{}", "(none)");
 
-    print!("{}{}{}{}", alt_screen_on(), cursor(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
+    print!("{}{}{}{}", alt_screen_on(), cursor_code(cmd_hide()), cursor_code(cmd_home()), cursor_code(cmd_clear_screen()));
     while quit == 0 {
         let n: i64 = __mlang_std_sync_lfqueue_try_recv(qh, ev_buf, 32);
         if n == -2 {
@@ -1633,7 +1633,7 @@ fn main() -> i32 {
             file_dialog_cwd, file_dialog_input, file_dialog_filter, file_dialog_filter_mode,
             file_dialog_entries, file_dialog_kind, file_dialog_match_idx, file_dialog_sel, file_dialog_scroll,
             last_action);
-        let clear_home: str8 = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
+        let clear_home: str8 = format!("{}{}", cursor_code(cmd_home()), cursor_code(cmd_clear_screen()));
         let payload: str8 = concat(clear_home, frame);
         write(out, payload);
         free(payload);
@@ -1705,6 +1705,6 @@ fn main() -> i32 {
     __mlang_std_sync_lfqueue_close(qh);
     __mlang_std_sync_lfqueue_free(qh);
     if raw_enabled == 1 { stdin_restore(); }
-    print!("{}{}{}{}\n", reset(), cursor(cmd_show()), cursor(cmd_home()), alt_screen_off());
+    print!("{}{}{}{}\n", reset(), cursor_code(cmd_show()), cursor_code(cmd_home()), alt_screen_off());
     return 0;
 }

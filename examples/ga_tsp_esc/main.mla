@@ -36,7 +36,7 @@ use std::esc::color_bright_yellow;
 use std::esc::bg;
 use std::esc::color_black;
 use std::esc::color_bright_blue;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::fg;
 use std::esc::reset;
 use std::io::read_keycode_nonblocking;
@@ -536,7 +536,7 @@ fn main() -> i32 {
     let start_ms: i64 = now_ms();
     let wrap_off: str8 = "\x1b[?7l";
     let wrap_on: str8 = "\x1b[?7h";
-    print!("{}{}{}{}{}", alt_screen_on(), wrap_off, cursor(cmd_hide()), cursor(cmd_clear_screen()), cursor(cmd_home()));
+    print!("{}{}{}{}{}", alt_screen_on(), wrap_off, cursor_code(cmd_hide()), cursor_code(cmd_clear_screen()), cursor_code(cmd_home()));
     let input: Stdin = stdin();
     var raw_enabled: i32 = 0;
     if stdin_is_tty() == 1 {
@@ -643,8 +643,8 @@ fn main() -> i32 {
         let route_preview_n: i64 = cols >= 130 ? 8 : cols >= 110 ? 6 : cols >= 90 ? 5 : 4;
 
         let builder: i64 = builder_new(65536);
-        bput(builder, cursor(cmd_clear_screen()));
-        bput(builder, cursor(cmd_home()));
+        bput(builder, cursor_code(cmd_clear_screen()));
+        bput(builder, cursor_code(cmd_home()));
         let l0: str8 = format!("TSP+GA ESC  q=quit  gen={}/{}  t={}ms", gen, generations_total, elapsed_ms);
         bput_line_fit(builder, l0, cols - 2);
         free(l0);
@@ -835,6 +835,6 @@ fn main() -> i32 {
     if raw_enabled == 1 {
         let _ = stdin_restore();
     }
-    print!("{}{}{}{}{}\n", reset(), wrap_on, cursor(cmd_show()), cursor(cmd_home()), alt_screen_off());
+    print!("{}{}{}{}{}\n", reset(), wrap_on, cursor_code(cmd_show()), cursor_code(cmd_home()), alt_screen_off());
     return 0;
 }

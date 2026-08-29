@@ -20,7 +20,7 @@ use std::esc::cmd_clear_screen;
 use std::esc::cmd_hide;
 use std::esc::cmd_home;
 use std::esc::cmd_show;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::cursor_color_reset;
 use std::esc::cursor_pos;
 use std::esc::fg;
@@ -987,9 +987,9 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
     let gutter_width: i64 = gutter_digits + 2;
     let code_cols: i64 = max_i64(1, cols - gutter_width);
     let b: StringBuilder = builder_new(4096);
-    let _ = builder_append(b, cursor(cmd_home()));
-    let _ = builder_append(b, cursor(cmd_clear_screen()));
-    let _ = builder_append(b, cursor(cmd_hide()));
+    let _ = builder_append(b, cursor_code(cmd_home()));
+    let _ = builder_append(b, cursor_code(cmd_clear_screen()));
+    let _ = builder_append(b, cursor_code(cmd_hide()));
     let _ = builder_append(b, cursor_color_reset());
 
     let tab_builder: StringBuilder = builder_new(512);
@@ -2134,7 +2134,7 @@ fn main() -> i32 {
 
     let _ = stdin_restore();
     let _ = write(stdout(), reset());
-    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = write(stdout(), cursor_code(cmd_show()));
     let _ = write(stdout(), cursor_color_reset());
     let _ = write(stdout(), alt_screen_off_real());
     let _ = write(stdout(), "\n");

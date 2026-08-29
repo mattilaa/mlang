@@ -1,0 +1,236 @@
+# Directory-Based Demos {#directory_demos_page}
+
+This page covers every runnable or instructional demo kept in an immediate
+subdirectory of `examples/`. These projects are documented separately because
+they usually contain multiple source files, assets, helper scripts, native
+bridges, or an `mlang.toml` task graph.
+
+The standalone `examples/*.mla` programs remain on the [Examples](examples.md)
+page. Unit tests, benchmarks, and regression fixtures under `tests/` remain on
+the [Tests](../tests/README.md) page. Directory-based language demos that are
+also exercised by the Robot suite are included here because they are runnable
+demonstrations in their own right.
+
+Commands below assume the repository root is the current directory unless the
+command explicitly changes directories. Build the compiler and runtime first:
+
+```sh
+cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target mlang mlang_std
+```
+
+Package-manager demos may fetch external dependencies. Audio, VST3, kernel,
+and QEMU demos also require the platform tools described in their local
+README files.
+
+## Language and CLI demos
+
+| Directory | What it demonstrates | How to run |
+|---|---|---|
+| `examples/associated_functions_demo` | Associated constructors such as `Counter::new`, private associated helpers, and ordinary instance methods across a module boundary. | `./build/mlang examples/associated_functions_demo/main.mla -L build -lmlang_std -o /tmp/associated_functions_demo && /tmp/associated_functions_demo` |
+| `examples/dyn_trait_demo` | Runtime dispatch through `dyn Trait` parameters and return values. | `./build/mlang examples/dyn_trait_demo/main.mla -L build -lmlang_std -o /tmp/dyn_trait_demo && /tmp/dyn_trait_demo` |
+| `examples/dyn_trait_field_demo` | Storing a `dyn Trait` value in a struct field and invoking its method. | `./build/mlang examples/dyn_trait_field_demo/main.mla -L build -lmlang_std -o /tmp/dyn_trait_field_demo && /tmp/dyn_trait_field_demo` |
+| `examples/env_help_demo` | `std::env` argument access and aligned command-line help rendering. | `./examples/env_help_demo/run_demo.sh --help` |
+| `examples/generic_trait_bounds_demo` | A generic `Holder<T>` constrained by a trait and static dispatch through that bound. | `./build/mlang examples/generic_trait_bounds_demo/main.mla -L build -lmlang_std -o /tmp/generic_trait_bounds_demo && /tmp/generic_trait_bounds_demo` |
+| `examples/method_visibility_demo` | Public and private methods in an `impl` block across module boundaries. | `./build/mlang examples/method_visibility_demo/main.mla -L build -lmlang_std -o /tmp/method_visibility_demo && /tmp/method_visibility_demo` |
+| `examples/module_path_generic_static_demo` | Fully qualified associated calls on a generic type imported from another module. | `./build/mlang examples/module_path_generic_static_demo/main.mla -L build -lmlang_std -o /tmp/module_path_generic_static_demo && /tmp/module_path_generic_static_demo` |
+| `examples/trait_advanced_demo` | Default trait methods, super-traits, and a generic type with multiple trait bounds. | `./build/mlang examples/trait_advanced_demo/main.mla -L build -lmlang_std -o /tmp/trait_advanced_demo && /tmp/trait_advanced_demo` |
+
+## Terminal, networking, route, and audio demos
+
+### `examples/esc_widgets`
+
+A retro tracker-style terminal interface built from reusable `std::esc`
+widgets. Function keys open menus, `j`/`k` changes the selection, and `q`
+quits. Run:
+
+```sh
+./examples/esc_widgets/run_demo.sh
+```
+
+See [the local README](../examples/esc_widgets/README.md) for the complete key
+map and terminal cleanup behavior.
+
+### `examples/fft_example`
+
+A real-time stereo FFT spectrum visualizer. It plays the bundled WAV through
+JACK2, uses a C bridge for audio, and renders the spectrum in the terminal.
+The runner can decode other input formats through `ffmpeg`.
+
+```sh
+./examples/fft_example/run_demo.sh
+```
+
+Pass a custom file or renderer options after the script, for example:
+
+```sh
+./examples/fft_example/run_demo.sh /path/to/audio.m4a --music --buffer=64
+```
+
+### `examples/ga_tsp`
+
+A compact travelling-salesman solver using `std::algorithm::genetic`:
+
+```sh
+./examples/ga_tsp/run_demo.sh
+```
+
+### `examples/ga_tsp_esc`
+
+An animated terminal visualization of genetic travelling-salesman search.
+Press `q` to exit before its default run completes.
+
+```sh
+./examples/ga_tsp_esc/run_demo.sh
+```
+
+### `examples/kallio_pub_crawl_esc`
+
+An animated Kallio and Vaasankatu pub-crawl route optimizer. Its score
+combines venue hours, walking distance, elevation, time budget, and alcohol
+settings.
+
+```sh
+./examples/kallio_pub_crawl_esc/run_demo.sh Thu 18:00 budget=180
+```
+
+See [the local README](../examples/kallio_pub_crawl_esc/README.md) for venue,
+GPS, tolerance, and display arguments.
+
+### `examples/mofe_ga_tsp_esc`
+
+An animated M.O.F.E. crawl planner using the same genetic route model with
+weekday, start-venue, walking, elevation, and alcohol controls.
+
+```sh
+./examples/mofe_ga_tsp_esc/run_demo.sh Thu 13:00
+```
+
+### `examples/protocol_mt`
+
+A framed TCP protocol demo with a multithreaded server and a multi-client load
+generator. The helper builds both programs and performs a local round trip.
+
+```sh
+./examples/protocol_mt/run_demo.sh
+```
+
+Tune the workload with environment variables:
+
+```sh
+PORT=19111 CLIENTS=2 ROUNDS=5 ./examples/protocol_mt/run_demo.sh
+```
+
+### `examples/sampler_example`
+
+A JACK2 drum-machine sampler. MLang parses the sequence and sample schema,
+while the C bridge handles JACK audio and lock-free tick events.
+
+```sh
+cc -O2 -I./include $(pkg-config --cflags jack) -c examples/sampler_example/jack2_drum_machine_bridge.c -o /tmp/jack2_drum_machine_bridge.o
+ar rcs /tmp/libjack2_drum_machine.a /tmp/jack2_drum_machine_bridge.o
+./build/mlang examples/sampler_example/jack2_drum_machine.mla -L /tmp -ljack2_drum_machine $(pkg-config --libs jack) -o /tmp/jack2_drum_machine_demo
+/tmp/jack2_drum_machine_demo
+```
+
+Start JACK before running it. Press Space to start or stop the sequencer and
+`q` to exit.
+
+### `examples/macos_stdio_driver`
+
+A macOS-oriented user-space driver simulation controlled through stdin/stdout.
+It models power, fault state, and four readable/writable registers; it is not a
+DriverKit or kernel driver.
+
+```sh
+./examples/macos_stdio_driver/attach_driver.sh
+./examples/macos_stdio_driver/send_command.sh status
+./examples/macos_stdio_driver/send_command.sh "write 0 0x2a"
+./examples/macos_stdio_driver/send_command.sh "read 0"
+./examples/macos_stdio_driver/detach_driver.sh
+```
+
+## Package-manager demos
+
+Run these commands from the repository root. Each subshell changes into the
+demo directory so its `mlang.toml` is selected automatically.
+
+| Directory | What it demonstrates | How to run |
+|---|---|---|
+| `examples/package_manager_coreaudio_filter` | macOS CoreAudio playback with MLang low-pass, high-pass, band-pass, and Moog-style filter sweeps. | `(cd examples/package_manager_coreaudio_filter && ../../build/mlang pkg run demo)` |
+| `examples/package_manager_delay_audio` | WAV/AIFF playback through forward or ping-pong delay with live feedback, filtering, damping, jitter, recording, and replay controls. | `(cd examples/package_manager_delay_audio && ../../build/mlang pkg run demo)` |
+| `examples/package_manager_git_cjson` | Fetching and building cJSON from Git while also using system libcurl. | `(cd examples/package_manager_git_cjson && ../../build/mlang pkg fetch && ../../build/mlang pkg build && ./build/cjson_demo)` |
+| `examples/package_manager_linux_aarch64_qemu` | Fetching and building a Linux AArch64 kernel, constructing BusyBox or GNU initramfs userspace, and booting it with QEMU. This is a large, toolchain-heavy demo. | `(cd examples/package_manager_linux_aarch64_qemu && ../../build/mlang pkg run boot-flow)` |
+| `examples/package_manager_moog_ladder_sequence` | A generated bass sequence with amplitude/filter envelopes, Moog-style ladder filtering, and an optional TB-303-inspired voice. | `(cd examples/package_manager_moog_ladder_sequence && ../../build/mlang pkg run demo)` |
+| `examples/package_manager_multi_bins` | Multiple `[[bin]]` targets with target-specific build settings and fetched dependencies. | `(cd examples/package_manager_multi_bins && ../../build/mlang pkg fetch && ../../build/mlang pkg build && ./build/hello && ./build/inspect)` |
+| `examples/package_manager_multilanguage_example` | One task graph compiling MLang, C, and C++ sources and linking them into an audio application. | `(cd examples/package_manager_multilanguage_example && ../../build/mlang pkg run play-sample)` |
+| `examples/package_manager_oscilloscope_demo` | A macOS CoreAudio waveform oscilloscope with an MLang frontend and C++ audio/rendering bridge. | `(cd examples/package_manager_oscilloscope_demo && ../../build/mlang pkg run demo)` |
+| `examples/package_manager_reverb2_trance` | A trance drum sequence using the independent `dsp::reverb2`, analog-color processing, and a look-ahead limiter. | `(cd examples/package_manager_reverb2_trance && ../../build/mlang pkg run demo)` |
+| `examples/package_manager_reverb_techno` | A sample-based techno sequence with selectable `dsp::reverb` algorithms and CoreAudio/JACK playback. | `(cd examples/package_manager_reverb_techno && ../../build/mlang pkg run demo)` |
+| `examples/package_manager_static_cjson` | Fetching a cJSON tarball, building a static archive, and linking it into an MLang executable. | `(cd examples/package_manager_static_cjson && ./run_demo.sh)` |
+| `examples/package_manager_task_graph` | Named task branches, `join_on`, phases, and phase barriers. | `(cd examples/package_manager_task_graph && ../../build/mlang pkg run workflow)` |
+| `examples/package_manager_vst3_coreaudio_synth` | Fetching the Steinberg VST3 SDK, building an MLang-powered VST3 instrument, and previewing the same DSP through CoreAudio. | `(cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square)` |
+| `examples/package_manager_vst3_sdk_example` | Fetching the Steinberg SDK and calling a small C++ metadata bridge from MLang without building a full plug-in. | `(cd examples/package_manager_vst3_sdk_example && ../../build/mlang pkg run demo)` |
+| `examples/package_manager_workspace_fetch` | Recursive workspace discovery with one Git-backed and one tarball-backed cJSON subpackage. | `./examples/package_manager_workspace_fetch/run_demo.sh` |
+
+For configurable audio demos, use `pkg run list-devices` in the corresponding
+directory to inspect available outputs. Their local README files document
+additional `--option key=value` controls.
+
+## Bare-metal and QEMU demos
+
+### `examples/qemu_aarch64_bootloader`
+
+A minimal freestanding AArch64 image that enters MLang code and writes to the
+QEMU serial console.
+
+```sh
+./examples/qemu_aarch64_bootloader/run.sh
+```
+
+The equivalent manifest workflow is:
+
+```sh
+(cd examples/qemu_aarch64_bootloader && ../../build/mlang pkg run demo)
+```
+
+### `examples/qemu_x86_bootloader`
+
+A two-stage x86 BIOS loader and 32-bit MLang kernel with an interactive serial
+terminal, native MLang commands, a writable MFS2 filesystem, and a modal text
+editor.
+
+```sh
+(cd examples/qemu_x86_bootloader && ../../build/mlang pkg run demo)
+```
+
+Resume the existing disk image without rebuilding it:
+
+```sh
+(cd examples/qemu_x86_bootloader && ../../build/mlang pkg run resume)
+```
+
+## Diagram generator demo
+
+### `examples/uml_ui_generator`
+
+A mixed MLang/C command-line tool that reads TOML and renders activity,
+sequence, class, and package diagrams as PNG files.
+
+```sh
+(cd examples/uml_ui_generator && ../../build/mlang pkg run render-sample)
+```
+
+Other bundled tasks are `render-complex-sample`, `render-sequence-sample`,
+`render-class-sample`, and `render-package-sample`. See
+[the local README](../examples/uml_ui_generator/README.md) for the TOML schema
+and direct command-line usage.
+
+## Adding future directory demos
+
+Keep each new multi-file demo in its own immediate `examples/<name>/`
+directory, provide a local README when it has external prerequisites or many
+options, and add its purpose and shortest reliable run command to this page.
+The GitHub Wiki generator validates that every immediate example directory is
+mentioned here, so newly added demos cannot silently disappear from the Demos
+topic.

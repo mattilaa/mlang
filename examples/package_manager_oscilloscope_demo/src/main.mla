@@ -30,7 +30,7 @@ use std::esc::cmd_home;
 use std::esc::cmd_restore;
 use std::esc::cmd_save;
 use std::esc::cmd_show;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::cursor_pos;
 use std::esc::fg_rgb;
 use std::esc::reset;
@@ -696,9 +696,9 @@ fn choose_output_device(term: TermSize, currentOutput: str8) -> str8 {
         let top: i64 = max_i64(2, (term.rows - boxHeight) / 2);
         let shadowFill: str8 = fit_right("", boxWidth, " ");
 
-        bput(builder, cursor(cmd_home()));
+        bput(builder, cursor_code(cmd_home()));
         bput(builder, bg_rgb(10, 22, 42));
-        bput(builder, cursor(cmd_clear_screen()));
+        bput(builder, cursor_code(cmd_clear_screen()));
 
         for row in 0..boxHeight {
             bput(builder, cursor_pos(top + row + 2, left + 2));
@@ -854,8 +854,8 @@ fn restore_terminal(rawEnabled: i32) {
     let off: str8 = alt_screen_off_real();
     let _ = write(stdout(), off);
     let _ = write(stdout(), reset());
-    let _ = write(stdout(), cursor(cmd_restore()));
-    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = write(stdout(), cursor_code(cmd_restore()));
+    let _ = write(stdout(), cursor_code(cmd_show()));
     let _ = flush(stdout());
     free(off);
 }
@@ -885,7 +885,7 @@ oscilloscopeOn: i32, colorMode: i32, term: TermSize) {
     let ll: str8 = acs_llcorner();
     let lr: str8 = acs_lrcorner();
     let vl: str8 = acs_vline();
-    bput(builder, cursor(cmd_home()));
+    bput(builder, cursor_code(cmd_home()));
     bput(builder, bg_rgb(13, 34, 52));
     bput(builder, fg_rgb(255, 170, 84));
     bput(builder, bold_on());
@@ -1199,12 +1199,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
     }
 
-    let _ = write(stdout(), cursor(cmd_save()));
+    let _ = write(stdout(), cursor_code(cmd_save()));
     let on: str8 = alt_screen_on_real();
     let _ = write(stdout(), on);
-    let _ = write(stdout(), cursor(cmd_hide()));
-    let _ = write(stdout(), cursor(cmd_home()));
-    let _ = write(stdout(), cursor(cmd_clear_screen()));
+    let _ = write(stdout(), cursor_code(cmd_hide()));
+    let _ = write(stdout(), cursor_code(cmd_home()));
+    let _ = write(stdout(), cursor_code(cmd_clear_screen()));
     let _ = flush(stdout());
     free(on);
 

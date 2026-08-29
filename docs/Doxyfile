@@ -5,7 +5,7 @@ GENERATE_LATEX = NO
 QUIET = YES
 WARN_IF_UNDOCUMENTED = NO
 WARN_IF_DOC_ERROR = NO
-INPUT = docs/compiler_diagnostics.md docs/stdlib_mlang_api.md docs/language_attributes.md docs/language_syntax.md docs/quick_guide.md docs/package_manager.md docs/uml_ui_generator.md docs/stdlib_misc_modules.md docs/examples.md docs/examples_group.dox docs/README.md docs/dsp stdlib/std stdlib/src stdlib/types.mla modules/dsp tools/mlang-frontend-mla/main.mla tools/mlang-pkg-mla/main.mla tests/test_sample.mla tests/bench_stdlib.mla examples
+INPUT = docs/compiler_diagnostics.md docs/stdlib_mlang_api.md docs/language_attributes.md docs/language_syntax.md docs/quick_guide.md docs/package_manager.md docs/uml_ui_generator.md docs/stdlib_misc_modules.md docs/examples.md docs/demos.md docs/examples_group.dox docs/README.md docs/dsp stdlib/std stdlib/src stdlib/types.mla modules/dsp tools/mlang-frontend-mla/main.mla tools/mlang-pkg-mla/main.mla tests/test_sample.mla tests/bench_stdlib.mla examples
 FILE_PATTERNS = *.h *.c *.md *.mla *.dox
 EXTENSION_MAPPING = mla=C++
 RECURSIVE = YES

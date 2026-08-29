@@ -29,7 +29,7 @@ use std::esc::color_bright_black;
 use std::esc::color_bright_cyan;
 use std::esc::color_bright_green;
 use std::esc::color_bright_yellow;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::fg;
 use std::esc::reset;
 use std::time::sleep_ms;
@@ -187,7 +187,7 @@ fn draw_city(order: i64, city: i64) -> void {
 fn draw_frame(generation: i64, best_cost: i64, best_route: &list<i64>, xs: &list<i64>, ys: &list<i64>) -> void {
     let width: i64 = 24;
     let height: i64 = 10;
-    print!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
+    print!("{}{}", cursor_code(cmd_home()), cursor_code(cmd_clear_screen()));
     println!("{}std::algorithm::genetic + std::esc TSP demo{}", bold_on(), reset());
     println!("generation={} best_cost={}", generation, best_cost);
     println!("");
@@ -232,7 +232,7 @@ fn main() -> i32 {
     var best_cost: i64 = 999999999;
     var best_route: list<i64> = nearest_neighbor_route(0, city_count, xs, ys);
 
-    print!("{}{}{}", alt_screen_on(), cursor(cmd_hide()), cursor(cmd_clear_screen()));
+    print!("{}{}{}", alt_screen_on(), cursor_code(cmd_hide()), cursor_code(cmd_clear_screen()));
     for generation in 0..generations {
         let fitness: list<i64> = score_population(population, pop_size, city_count, xs, ys);
         let best_index: i64 = argmax_i64(fitness);
@@ -267,6 +267,6 @@ fn main() -> i32 {
     draw_frame(generations, best_cost, best_route, xs, ys);
     println!("");
     println!("done");
-    print!("{}{}{}", reset(), cursor(cmd_show()), alt_screen_off());
+    print!("{}{}{}", reset(), cursor_code(cmd_show()), alt_screen_off());
     return 0;
 }

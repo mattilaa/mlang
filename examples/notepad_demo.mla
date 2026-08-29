@@ -17,7 +17,7 @@ use std::esc::cmd_clear_screen;
 use std::esc::cmd_hide;
 use std::esc::cmd_home;
 use std::esc::cmd_show;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::cursor_color_reset;
 use std::esc::cursor_color_rgb;
 use std::esc::cursor_pos;
@@ -390,9 +390,9 @@ fn render_frame(cols: i64, rows: i64, lines: &list<str8>, filename: str8, status
                 dirty: i32, blink_visible: i32) -> str8 {
     let editor_rows: i64 = max_i64(1, rows - 3);
     let b: StringBuilder = builder_new(4096);
-    let _ = builder_append(b, cursor(cmd_home()));
-    let _ = builder_append(b, cursor(cmd_clear_screen()));
-    let _ = builder_append(b, cursor(cmd_hide()));
+    let _ = builder_append(b, cursor_code(cmd_home()));
+    let _ = builder_append(b, cursor_code(cmd_clear_screen()));
+    let _ = builder_append(b, cursor_code(cmd_hide()));
     let _ = builder_append(b, cursor_color_reset());
 
     let file_tab: str8 = menu_line(" File ", menu_open == 1 ? 1 : 0);
@@ -814,7 +814,7 @@ fn main() -> i32 {
 
     let _ = stdin_restore();
     let _ = write(stdout(), reset());
-    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = write(stdout(), cursor_code(cmd_show()));
     let _ = write(stdout(), cursor_color_reset());
     let _ = write(stdout(), alt_screen_off_real());
     let _ = write(stdout(), "\r\n");

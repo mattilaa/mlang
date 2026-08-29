@@ -15,7 +15,7 @@ use std::esc::cmd_home;
 use std::esc::cmd_hide;
 use std::esc::cmd_show;
 use std::esc::bold_on;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::reset;
 use std::event_loop::EventLoop;
 use std::fs::BufReader;
@@ -58,7 +58,7 @@ extern fn jack2_sampler_start(cmd_queue_handle: i64,
 extern fn jack2_sampler_stop() -> i32;
 
 fn cursor_force(cmd: i32) -> str8 {
-    let gated: str8 = cursor(cmd);
+    let gated: str8 = cursor_code(cmd);
     if len(gated) > 0 {
         return gated;
     }
@@ -294,7 +294,7 @@ fn draw_ui(bpm: i32,
            sample_names: Vec<str8>,
            track_keys: Vec<str8>,
            track_values: Vec<str8>) -> void {
-    print!("{}{}{}", cursor_force(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
+    print!("{}{}{}", cursor_force(cmd_hide()), cursor_code(cmd_home()), cursor_code(cmd_clear_screen()));
     print!("\r[drum] SPACE=start/stop q=quit bpm={} spb={} pattern={} steps={} tracks={}\n",
            bpm, steps_per_beat, pattern_id, pattern_steps, sample_names.len());
     if running {

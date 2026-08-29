@@ -55,6 +55,7 @@ mod std::process;
 mod std::protocol;
 mod std::rand;
 mod std::regex;
+mod std::ringbuffer;
 mod std::sed;
 mod std::serde;
 mod std::simd;
@@ -109,6 +110,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/protocol.mla`
 - `stdlib/std/rand.mla`
 - `stdlib/std/regex.mla`
+- `stdlib/std/ringbuffer.mla`
 - `stdlib/std/sed.mla`
 - `stdlib/std/serde.mla`
 - `stdlib/std/simd.mla`
@@ -129,6 +131,7 @@ The source-of-truth implementation files are:
 - [std::algorithm::numeric](Stdlib-Algorithm-Numeric)
 - [std::math](Stdlib-Math)
 - [std::rand](Stdlib-Rand)
+- [std::ringbuffer](https://github.com/mattilaa/mlang/blob/main/docs/stdlib/std_ringbuffer.md)
 - [std::simd](Stdlib-Simd)
 
 ## Algorithms

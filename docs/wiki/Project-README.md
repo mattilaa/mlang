@@ -3,7 +3,10 @@
 # mlang
 MLang - Programming Language
 
+For more documentation, visit the [MLang GitHub Wiki](https://github.com/mattilaa/mlang/wiki).
+
 ## Table Of Contents
+
 - [What Is Mlang](#what-is-mlang)
 - [Compile-Time Evaluation With `cexpr`](#compile-time-evaluation-with-cexpr)
 - [Fixed-Capacity Arrays](#fixed-capacity-arrays)
@@ -14,6 +17,7 @@ MLang - Programming Language
 - [C++ LSP](#c-lsp)
 - [Mlangd (Mlang Scaffold)](#mlangd-mlang-scaffold)
 - [Compiler Frontend (Primary MLang CLI)](#compiler-frontend-primary-mlang-cli)
+- [Inline Assembly](#inline-assembly)
 - [Package Manager (MLang Backend Default)](#package-manager-mlang-backend-default)
 - [Stdlib Linking](#stdlib-linking)
 - [Build + Install](#build--install)
@@ -27,6 +31,7 @@ MLang - Programming Language
 - [Advanced Protocol Stack Demo (Local)](#advanced-protocol-stack-demo-local)
 - [Examples](#examples)
 - [Object-Oriented Language Features](#object-oriented-language-features)
+- [Rust-like Attributes](#rust-like-attributes)
 - [Package Manager (C++)](#package-manager-c)
 - [Package Workspaces And Fetched Subprojects](#package-workspaces-and-fetched-subprojects)
 
@@ -38,10 +43,10 @@ the same toolchain.
 
 The toolchain is **self-hosted in stages**: a small C++ "seed compiler"
 (`mlang`) and its static stdlib (`mlang_std`) are built first via CMake.
-Every other tool in `tools/` is then itself an MLang program — those
-binaries are produced by feeding their `.mla` source through the seed
-compiler. The bootstrap launcher in `bootstrap/` is a thin wrapper around
-`mlang pkg` that orchestrates this in the right order.
+The self-hosted tools are then produced by feeding their `.mla` sources
+through the seed compiler. The repository also retains C++ utilities such as
+`mlang-config` and the legacy `mlangd` server. The bootstrap manifest in
+`bootstrap/` uses `mlang pkg` to orchestrate the self-hosted build order.
 
 ## Compile-Time Evaluation With [`cexpr`](Language-Syntax)
 
@@ -157,25 +162,35 @@ scratch.fill(1); // fills all 6 slots
 
 | Binary                | Source                              | Built By           | What It Does                                                                                       | Why It Exists                                                                                                                           |
 | --------------------- | ----------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `mlang`               | `src/main.cpp` + `src/ir.cpp` (C++) | CMake              | Compiler driver: lex → parse → IR → LLVM → object/exec. Also routes `mlang test`, `mlang pkg`, etc.| The seed compiler. Everything else is built by feeding `.mla` source through this. Without it nothing else can be produced.             |
-| `libmlang_std.a`      | `stdlib/src/*.{c,cpp}` + `stdlib/std/*.mla` (C/C++ runtime) | CMake | Static library implementing the `std::*` modules — testing, fs, json, time, threads, etc.          | The runtime every MLang program links against (`-lmlang_std`). Built once by CMake; consumed by every binary the bootstrap produces.    |
+| `mlang`               | `src/*.cpp` + generated lexer/parser sources | CMake              | Compiler driver: lex → parse → IR → LLVM → object/exec. Also routes `mlang test`, `mlang pkg`, etc.| The seed compiler used to build the self-hosted MLang tools.                                                                             |
+| `libmlang_std.a`      | `stdlib/src/*.{c,cpp}` plus compiler-runtime sources | CMake | Native runtime backing the MLang modules under `stdlib/std/`.                                     | The runtime MLang programs link against with `-lmlang_std`; the `.mla` module sources are installed separately.                        |
+| `mlang-config`        | `tools/mlang_config.cpp`             | CMake              | Writes the reusable bootstrap and CMake configuration files under the build directory.            | Provides the interactive and non-interactive configuration step used by the root build scripts.                                       |
+| `mlangd`              | `tools/mlang_lsp_cpp/main.cpp` + compiler sources | CMake       | Legacy C++ language server using LSP over stdio.                                                   | Provides the native C++ LSP implementation alongside `mlangd-mla`.                                                                      |
 | `mlang-frontend-mla`  | `tools/mlang-frontend-mla/main.mla` | bootstrap          | Higher-level CLI that wraps `mlang`: directory test/bench mode, stdlib auto-linking, pkg routing.  | Demonstrates self-hosting: the user-facing CLI written in MLang. Routed via `MLANG_FRONTEND_IMPL=mla` or installed as `mlang-frontend`. |
 | `mlang-frontend`      | shell launcher generated by bootstrap | bootstrap        | Thin shim that execs `mlang-frontend-mla` with the seed compiler as backend.                       | Lets users run the MLang-implemented frontend without typing `--backend mlang` every time.                                              |
 | `mlang-format`        | `tools/mlang-format-mla/main.mla`   | bootstrap          | Source formatter (reads `.mlang-format`, applies via stdin/stdout or in-place).                    | Code style enforcement. Used standalone and by `mlangd-mla` to satisfy LSP `textDocument/formatting`.                                   |
 | `mlangd-mla`          | `tools/mlangd-mla/main.mla`         | bootstrap          | MLang language server (LSP-over-stdio): diagnostics, hover, definition, references, formatting.   | Editor integration. Drives features for VS Code, UVim, Helix, etc. via JSON-RPC.                                                        |
-| `mlangpkg` / `mlang-pkg-mla` | `tools/mlang-pkg-mla/main.mla` (MLang) **and** `src/package_manager.cpp` (C++) | seed compiler **or** bootstrap | Package manager: `init`, `add`, `fetch`, `build`, `clean`, plus a task runner for tasks declared in `mlang.toml`. | Drives dependency fetching, builds, and the bootstrap itself. The MLang implementation is preferred (`MLANG_PKG_IMPL=mla`); the C++ backend handles task trees and CMake/Ninja orchestration. Reachable as `mlang pkg ...`. |
+| `mlang-pkg-mla`       | `tools/mlang-pkg-mla/main.mla`       | compiled on demand | Preferred MLang frontend for `mlang pkg`; it delegates supported operations to the package-manager backend. | Selected by default for `mlang pkg` and controlled with `MLANG_PKG_IMPL`; the C++ implementation lives in `src/package_manager.cpp`. |
+| `mlangpkg`            | `tools/mlangpkg/mlangpkg.mla`        | root build scripts | Separate Cargo-like package-manager prototype using `mlangpkg.toml` and `.mlangpkg/`.              | Standalone experimental tool; it is not the implementation reached through `mlang pkg`.                                               |
 | `bootstrap/run-bootstrap.sh` | shell wrapper                | (no compile)       | Optional convenience shim that forwards to `mlang pkg --config bootstrap/mlang.toml run <task>`. | Pre-existing helper for users who prefer a shell entry point. Everything in this README uses `mlang pkg` directly so the build steps work the same way once `mlang` is installed. |
 
-A clean checkout produces these binaries under `./build/`:
+Running `bootstrap.sh` followed by `build.sh` produces these files under
+`./build/`:
 
 ```sh
 build/mlang                  ← seed compiler (CMake)
 build/libmlang_std.a         ← runtime stdlib (CMake)
+build/mlang-config           ← bootstrap configuration utility (CMake)
 build/mlangd-mla             ← LSP server          (bootstrap, depends on seed)
 build/mlang-frontend-mla     ← MLang frontend CLI  (bootstrap, depends on seed)
 build/mlang-frontend         ← bash shim → mlang-frontend-mla
 build/mlang-format           ← formatter           (bootstrap, depends on seed)
+build/mlangpkg               ← standalone package-manager prototype
 ```
+
+A normal all-target CMake build also produces the legacy C++ `build/mlangd`.
+The bootstrap manifest's `build-all` task builds the three self-hosted tooling
+components and launcher, but not the separate `mlangpkg` prototype.
 
 ## Build From Scratch (Step By Step)
 
@@ -251,7 +266,9 @@ Useful non-interactive forms:
 ./build.ps1 --build-dir build --install
 ```
 
-The lower-level manual commands below are the same stages written out by hand.
+The lower-level manual commands below cover the seed compiler and the
+bootstrap-managed toolchain. The standalone `mlangpkg` prototype is built by
+the root `build.sh` / `build.ps1` scripts, not by `bootstrap/mlang.toml`.
 
 ### 1. Build the seed compiler and stdlib (CMake)
 
@@ -274,20 +291,28 @@ The bootstrap launcher needs to find a working `mlang`. Pick one:
 
 **Option A — install to `~/.local/bin`:**
 ```sh
-cmake --install build --prefix "$HOME/.local"
+cmake --install build --component mlang-core --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 mlang --version
 ```
 
-**Option B — point the bootstrap at the build tree:**
+Using the `mlang-core` component here installs only the seed compiler, runtime,
+and module sources. A full install also expects the self-hosted binaries built
+in step 3.
+
+**Option B — use the compiler directly from the build tree:**
 ```sh
-export MLANG_BOOTSTRAP_BIN="$(pwd)/build/mlang"
+export PATH="$(pwd)/build:$PATH"
 ```
+
+If you use `bootstrap/run-bootstrap.sh` instead of the direct `mlang pkg`
+commands below, you may alternatively set
+`MLANG_BOOTSTRAP_BIN="$(pwd)/build/mlang"`.
 
 ### 3. Build the MLang-native tools
 
-Now that `mlang` (and therefore `mlang pkg`) is available, drive every
-remaining tool through the bootstrap manifest at `bootstrap/mlang.toml`.
+Now that `mlang` (and therefore `mlang pkg`) is available, drive the
+bootstrap-managed tools through the manifest at `bootstrap/mlang.toml`.
 The package manager resolves the task graph and compiles each MLang
 source through the seed compiler in the right order.
 
@@ -313,7 +338,10 @@ mlang pkg --config bootstrap/mlang.toml run build-mlang-format
 mlang pkg --config bootstrap/mlang.toml run build-mlang-frontend
 ```
 
-(All three depend on `build-mlang`, which `build-all` already covers.)
+The individual tasks above use the fresh-build task chain and therefore run
+`build-mlang` when needed. Because steps 1 and 2 already produced the seed,
+`build-all` deliberately uses the corresponding `*-existing` tasks to avoid
+re-running CMake.
 
 ### 4. Run the test suite (optional, recommended)
 
@@ -357,36 +385,41 @@ man -l docs/man/mlang.1
 man -l build/man/man1/mlang-format.1
 ```
 
-Install them together with the tools:
-- `cmake --install build --prefix "$HOME/.local"` installs the native pages
-  for `mlang`, `mlang-pkg`, `mlangd`, and `mlang-format`
+Install them together with the tools after completing step 3:
+- `cmake --install build --prefix "$HOME/.local"` installs the CMake-managed
+  tools and native pages for `mlang`, `mlang-pkg`, `mlangd`, and `mlang-format`
 - `mlang pkg --config bootstrap/mlang.toml run install-all ...` also installs
   the bootstrap-managed pages for `mlangd-mla`, `mlang-frontend`, and
   `mlang-frontend-mla`
 
 ### 6. Install everything
 
-This installs `mlangd-mla`, `mlang-frontend`, and `mlang-format` to
-`~/.local/bin` (or wherever `install_prefix` points). `mlang` itself was
-already installed by `cmake --install` in step 2. Man pages are installed under
-`$install_prefix/share/man/man1`, so commands such as `man mlang`,
+First complete the full CMake install now that step 3 has produced its required
+self-hosted binaries, then install the bootstrap-managed frontend and its man
+pages. This installs the tools to `~/.local/bin` by default. Man pages are
+installed under `$install_prefix/share/man/man1`, so commands such as `man mlang`,
 `man mlang-pkg`, `man mlangd`, `man mlang-format`, `man mlangd-mla`, and
 `man mlang-frontend` work after installation.
 
 ```sh
+cmake --install build --prefix "$HOME/.local"
 mlang pkg --config bootstrap/mlang.toml run install-all
 ```
 
-To do build + install in one shot (after step 2):
+To build and install the bootstrap-managed tools in one command (after step 2):
 ```sh
 mlang pkg --config bootstrap/mlang.toml run build-and-install
 ```
+
+Run the full `cmake --install` command afterward if you also want
+`mlang-config` and all CMake-managed man pages.
 
 Custom prefix:
 ```sh
 mlang pkg --config bootstrap/mlang.toml run build-and-install \
     --option install_prefix=$HOME/.local \
     --option bin_dir=$HOME/.local/bin
+cmake --install build --prefix "$HOME/.local"
 ```
 
 After install, verify the full toolchain:
@@ -405,7 +438,7 @@ man mlang-format
 ```sh
 step 0:  install host deps                                            (system pkg manager)
 step 1:  cmake → mlang + libmlang_std.a                               (CMake)
-step 2:  install / export PATH                                        (cmake --install)
+step 2:  install mlang-core / export PATH                             (cmake --install)
 step 3:  mlang pkg ... run build-all
             ├── mlangd-mla         (uses build/mlang + build/libmlang_std.a)
             ├── mlang-frontend-mla (uses build/mlang + build/libmlang_std.a)
@@ -413,7 +446,7 @@ step 3:  mlang pkg ... run build-all
             └── mlang-format       (uses build/mlang + build/libmlang_std.a)
 step 4:  mlang pkg ... run unit-tests / robot-tests                   (optional)
 step 5:  mlang pkg ... run docs                                       (optional, doxygen)
-step 6:  mlang pkg ... run install-all                                (copies to ~/.local/bin)
+step 6:  full CMake install + mlang pkg ... run install-all            (tools + man pages)
 ```
 
 The bootstrap phases are intentionally split, so you can run only what you
@@ -428,10 +461,11 @@ need (each is `mlang pkg --config bootstrap/mlang.toml run <name>`):
 - `install-mlang`, `install-mlangd-mla`, `install-mlang-format`, `install-mlang-frontend` — install one tool at a time
 - `build-and-install` — `build-all` + `install-all` chained together
 
-`mlang pkg --config bootstrap/mlang.toml --help` lists every task with its
-description and dependencies. A thin shell convenience wrapper exists at
-`bootstrap/run-bootstrap.sh` that forwards to the same `mlang pkg run`
-calls; the commands above are what it runs internally.
+`mlang pkg bootstrap/mlang.toml --tasks` lists the runnable task entrypoints.
+Use `mlang pkg --config bootstrap/mlang.toml run <name> --tasks` to preview a
+specific task's dependencies and execution order. A thin shell convenience
+wrapper exists at `bootstrap/run-bootstrap.sh` and forwards to the same
+`mlang pkg run` calls; the commands above are what it runs internally.
 
 ## LSP
 Primary LSP servers:
@@ -683,6 +717,101 @@ Current task graph features:
   runtime mode switches such as alternate guest userspaces
 - `[task.host.darwin]`, `[task.host.linux]`, `[task.host.windows]` for host-specific overrides
 
+### Task Prerequisites With `depends_on`
+
+Use `depends_on` when a task must complete successfully before another task
+starts. The value is a list of task names, so a task can have one or several
+prerequisites:
+
+```toml
+[[task]]
+name = "generate-config"
+commands = [
+  ["python3", "scripts/generate_config.py"]
+]
+
+[[task]]
+name = "build-app"
+depends_on = ["generate-config"]
+commands = [
+  ["cmake", "--build", "{{build_dir}}"]
+]
+```
+
+Running the dependent task resolves and executes its prerequisites first:
+
+```sh
+mlang pkg run build-app
+```
+
+In this example, `generate-config` must succeed before `build-app` runs. Add
+more names to the `depends_on` array when the task has multiple prerequisites.
+Use `--tasks` to preview the resolved order without executing commands:
+
+```sh
+mlang pkg run build-app --tasks
+```
+
+For a slightly more involved workflow, two independent preparation tasks can
+feed a build task, which then feeds a packaging task:
+
+```toml
+[tool.mlang]
+build_dir = "build-release"
+
+[tool.mlang.options]
+profile = "release"
+
+[[task]]
+name = "generate-version"
+shell = [
+  "mkdir -p {{build_dir}}/generated",
+  "printf '%s\\n' '{{option.profile}}' > {{build_dir}}/generated/version.txt"
+]
+
+[[task]]
+name = "prepare-assets"
+commands = [
+  ["cmake", "-E", "make_directory", "{{build_dir}}/assets"],
+  ["cmake", "-E", "copy_directory", "assets", "{{build_dir}}/assets"]
+]
+
+[[task]]
+name = "build-app"
+depends_on = ["generate-version", "prepare-assets"]
+parallel = true
+language = "mlang"
+source = "src/main.mla"
+output = "{{build_dir}}/app"
+opt_level = "O3"
+
+[[task]]
+name = "package-app"
+depends_on = ["build-app"]
+commands = [
+  [
+    "tar",
+    "-czf",
+    "{{build_dir}}/app.tar.gz",
+    "-C",
+    "{{build_dir}}",
+    "app",
+    "assets",
+    "generated"
+  ]
+]
+```
+
+Run the final task to execute the complete dependency chain:
+
+```sh
+mlang pkg run package-app --option profile=release
+```
+
+Here, `generate-version` and `prepare-assets` run first (in parallel because
+`build-app` sets `parallel = true`), `build-app` starts only after both succeed,
+and `package-app` runs last.
+
 Permission-fixup example:
 
 ```toml
@@ -826,7 +955,7 @@ That gives you a local compiler at `./build/mlang`.
 Install the compiler and stdlib to a custom prefix such as `~/.local`:
 
 ```sh
-cmake --install build --prefix "$HOME/.local"
+cmake --install build --component mlang-core --prefix "$HOME/.local"
 ```
 
 If you specifically want the binary under `~/.local/bin`, ensure that
@@ -893,7 +1022,7 @@ mlang pkg --config bootstrap/mlang.toml run unit-tests
 mlang pkg --config bootstrap/mlang.toml run robot-tests
 ```
 
-The current bootstrap task set covers:
+Common bootstrap task entrypoints include:
 - `build-mlang`
 - `build-mlangd-mla`
 - `build-mlang-format`
@@ -928,7 +1057,7 @@ or `Doxyfile`, then runs Doxygen from that project root. Use
 The generated site mirrors the Markdown sources under `docs/`, stdlib sources
 (`stdlib/std/`, `stdlib/src/`), and MLang tool sources
 (`tools/mlang-frontend-mla/main.mla`, `tools/mlang-pkg-mla/main.mla`). Open
-`docs/out/index.html` in a browser after running the command.
+`docs/out/html/index.html` in a browser after running the command.
 
 Compiler diagnostic reference lives in `docs/compiler_diagnostics.md` and is
 published in the generated site as `docs/out/html/compiler_diagnostics.html`.
@@ -1305,8 +1434,9 @@ terminal width, enable it explicitly:
 ROBOT_CUSTOM_PROGRESS=1 ROBOT_TRUNCATE_NAMES=1 ./tests/run_examples_robot.sh
 ```
 
-`tests/run_examples_robot.sh` writes logs and machine-readable output into `results/`
-(and any temporary binaries under `*bin`), but those directories/files are ignored by
+`tests/run_examples_robot.sh` writes logs and machine-readable output into
+`artifacts/robot/` by default (and temporary binaries under the configured
+artifact tree), but those directories/files are ignored by
 `.gitignore`, so the working tree stays clean after the suite finishes.
 
 ### Running the new Multithreaded TCP Robot slice
@@ -2103,8 +2233,9 @@ fn test_addition() -> i32 {
 ```
 
 ### Related
+
 - Full attribute notes and contributor guide: `docs/language_attributes.md`
-- Runnable example: `examples/rust_attributes.mla`
+- Runnable example: `examples/mlang_attributes.mla`
 
 Enable debug-only logging (`debug!`) with:
 
@@ -2568,6 +2699,10 @@ Supported `[[task]]` keys:
 - `inputs`
 - `compile_only`
 - `parallel`
+- `log_output`
+- `inline_output`
+- `supported_hosts`
+- `unsupported_message`
 - `depends_on`
 - `phase_depends_on`
 - `next`
@@ -2587,6 +2722,9 @@ Supported `[[task]]` keys:
 - `static_cpp_runtime`
 - `command`
 - `commands`
+- `chmod`
+- `chmod_path` / `chmod_paths`
+- `sign`
 
 Host-conditional task overrides:
 
@@ -2637,11 +2775,11 @@ paths for that package.
 is supported as an alias. This is useful for long task graphs and for making
 progress visible without embedding `echo` in shell.
 
-`mlang pkg run <task>` also honors task dependencies. If a task declares
+`mlang pkg run <task>` fetches configured source dependencies before running
+and also honors task dependencies. If a task declares
 `depends_on`, `phase_depends_on`, `join_on`, or `phase_join_on`, those tasks
-run before the requested task body starts. `mlang pkg run` does not
-implicitly run `mlang pkg fetch`, so a clean workspace should fetch first if
-tasks expect sources under `{{deps_dir}}`.
+run before the requested task body starts. Use a separate `mlang pkg fetch`
+when you want to fetch without executing the task graph.
 
 CLI overrides are available on `pkg fetch`, `pkg build`, `pkg run`, and
 `pkg clean`: `--log-dir DIR`, `--stdout-log FILE`, `--stderr-log FILE`,

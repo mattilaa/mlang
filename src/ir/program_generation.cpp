@@ -484,7 +484,17 @@ void CodeGenerator::generateCode(ProgramNode* program)
         substArgs.reserve(typeParams.size() + 1);
         for(const auto& typeParam : typeParams)
             substArgs.push_back(new StructTypeRefNode(typeParam));
-        substArgs.push_back(new StructTypeRefNode(selfTypeName));
+        if(typeParams.empty())
+        {
+            substArgs.push_back(new StructTypeRefNode(selfTypeName));
+        }
+        else
+        {
+            auto* selfType = new GenericStructTypeRefNode(selfTypeName);
+            for(const auto& typeParam : typeParams)
+                selfType->typeArgs.push_back(new StructTypeRefNode(typeParam));
+            substArgs.push_back(selfType);
+        }
 
         TypeNode* lhsResolved =
             substituteTypeParams(lhs, substParams, substArgs);

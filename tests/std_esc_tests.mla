@@ -13,7 +13,7 @@ use std::esc::cmd_home;
 use std::esc::cmd_show;
 use std::esc::color_blue;
 use std::esc::color_red;
-use std::esc::cursor;
+use std::esc::cursor_code;
 use std::esc::cursor_move;
 use std::esc::dir_right;
 use std::esc::dir_up;
@@ -53,10 +53,10 @@ fn test_esc_style_codes() {
 
 #[test]
 fn test_esc_cursor_commands() {
-    let home: str8 = cursor(cmd_home());
-    let hide: str8 = cursor(cmd_hide());
-    let show: str8 = cursor(cmd_show());
-    let clear: str8 = cursor(cmd_clear_screen());
+    let home: str8 = cursor_code(cmd_home());
+    let hide: str8 = cursor_code(cmd_hide());
+    let show: str8 = cursor_code(cmd_show());
+    let clear: str8 = cursor_code(cmd_clear_screen());
     if supports_ansi() == 1: {
         verify(!(find(home, "[H") != 1));
         verify(!(find(hide, "[?25l") != 1));
