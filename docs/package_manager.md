@@ -834,6 +834,47 @@ Key details:
 - libraries declared in `libs` are validated before the real package link step
   so missing `-l...` entries fail early with a clearer error
 
+### `[[lib]]` and internal target dependencies
+
+Use `[[lib]]` to build an MLang dynamic library. A `[[bin]]` or another
+`[[lib]]` target can declare it in `depends_on`; the package manager then
+builds libraries first, adds the build directory to the library search path,
+links each dependent with `-l<name>`, and embeds a loader-relative runtime
+search path.
+
+```toml
+# Declaration order does not matter: depends_on builds arithmetic first.
+[[bin]]
+name = "calculator"
+entry = "src/main.mla"
+depends_on = ["arithmetic"]
+
+[[lib]]
+name = "arithmetic"
+entry = "src/arithmetic.mla"
+```
+
+Outputs use the platform convention: `libarithmetic.dylib` on macOS,
+`libarithmetic.so` on Linux, and `arithmetic.dll` plus a MinGW import library
+on Windows. `[[lib]]`
+supports the same target-scoped build configuration as `[[bin]]`, including
+`libs`, `lib_paths`, and fetched or system dependencies. Every name in
+`depends_on` must identify a `[[lib]]` target; unknown targets and dependency
+cycles are reported before compilation.
+
+MLang functions use overload-safe ABI symbols. For example,
+`pub fn add(i32, i32)` is callable from another target with an
+`extern fn add__i32_i32(...)` declaration.
+
+The compiler mode behind library targets is also available directly:
+
+```sh
+mlang --shared src/arithmetic.mla -o build/libarithmetic.dylib
+```
+
+When `-o` is omitted, `--shared` selects the platform's default dynamic
+library name and extension from the source filename.
+
 ### `[[bin]]`
 
 Packages can declare multiple executable targets with `[[bin]]`:
@@ -866,6 +907,7 @@ Supported target-scoped keys inside `[[bin]]`:
 - `libs`
 - `static_deps`
 - `static_cpp_runtime`
+- `depends_on` (names of internal `[[lib]]` targets)
 
 Merge behavior:
 
@@ -1287,6 +1329,9 @@ Workspace example in this repository:
 - `examples/package_manager_multi_bins`
   Demonstrates `[[bin]]` targets, target-scoped config overrides, and mixed
   GitHub `git` plus `tar.gz` source dependencies in one package.
+- `examples/package_manager_dynamic_library`
+  Demonstrates an MLang `[[lib]]` target built first and linked automatically
+  into a dependent `[[bin]]` target.
 - `examples/package_manager_multilanguage_example`
   Demonstrates a task-driven single-binary build that compiles MLang, C, and
   C++ sources in separate phases, fetches `miniaudio` and `AudioFile`, and

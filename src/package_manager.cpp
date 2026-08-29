@@ -12,6 +12,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <iomanip>
 #include <iostream>
@@ -925,8 +926,16 @@ struct ToolchainRequirement
 
 struct BuildTarget
 {
+    enum Kind
+    {
+        executable,
+        dynamic_library,
+    };
+
     std::string name;
     std::string entry;
+    Kind kind = executable;
+    std::vector<std::string> dependsOn;
     BuildConfig config;
 };
 
@@ -1736,7 +1745,7 @@ static void pkg_task_print_line(const std::string& text)
         append_log_line(current_package_log_state().stdoutLog, text);
 }
 
-static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
+static std::vector<BuildTarget> parse_build_targets(const std::string& content)
 {
     std::istringstream in(content);
     std::string line;
@@ -1755,10 +1764,12 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
         std::string t = strip_toml_comment(line);
         if(t.empty())
             continue;
-        if(t == "[[bin]]")
+        if(t == "[[bin]]" || t == "[[lib]]")
         {
             flush_current();
             current = BuildTarget{};
+            current->kind = t == "[[lib]]" ? BuildTarget::dynamic_library
+                                            : BuildTarget::executable;
             continue;
         }
         if(t.front() == '[' && t.back() == ']')
@@ -1782,6 +1793,10 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
         {
             current->entry = unquote(value);
         }
+        else if(key == "depends_on")
+        {
+            append_toml_string_list_value(value, current->dependsOn);
+        }
         else
         {
             parse_build_config_key_value(current->config, key, value);
@@ -1789,6 +1804,93 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
     }
     flush_current();
     return targets;
+}
+
+static std::optional<std::vector<BuildTarget>>
+order_build_targets(const std::vector<BuildTarget>& targets,
+                    const std::filesystem::path& manifestPath)
+{
+    std::map<std::string, size_t> byName;
+    for(size_t i = 0; i < targets.size(); ++i)
+    {
+        if(targets[i].name.empty())
+            continue;
+        if(!byName.emplace(targets[i].name, i).second)
+        {
+            pkg_error_line("Duplicate package target name '" +
+                           targets[i].name + "' in " + manifestPath.string());
+            return std::nullopt;
+        }
+    }
+
+    std::vector<int> state(targets.size(), 0);
+    std::vector<BuildTarget> ordered;
+    std::function<bool(size_t)> visit = [&](size_t index)
+    {
+        if(state[index] == 2)
+            return true;
+        if(state[index] == 1)
+        {
+            pkg_error_line("Package target dependency cycle involving '" +
+                           targets[index].name + "' in " +
+                           manifestPath.string());
+            return false;
+        }
+        state[index] = 1;
+        for(const auto& dependencyName : targets[index].dependsOn)
+        {
+            const auto dependency = byName.find(dependencyName);
+            if(dependency == byName.end())
+            {
+                pkg_error_line("Unknown package target '" + dependencyName +
+                               "' in depends_on for target '" +
+                               targets[index].name + "'");
+                return false;
+            }
+            if(targets[dependency->second].kind !=
+               BuildTarget::dynamic_library)
+            {
+                pkg_error_line("Package target '" + targets[index].name +
+                               "' can only depend_on [[lib]] targets; '" +
+                               dependencyName + "' is not a library");
+                return false;
+            }
+            if(!visit(dependency->second))
+                return false;
+        }
+        state[index] = 2;
+        ordered.push_back(targets[index]);
+        return true;
+    };
+
+    for(size_t i = 0; i < targets.size(); ++i)
+    {
+        if(!visit(i))
+            return std::nullopt;
+    }
+    return ordered;
+}
+
+static std::string dynamic_library_filename(const std::string& name)
+{
+#if defined(__APPLE__)
+    return "lib" + name + ".dylib";
+#elif defined(_WIN32)
+    return name + ".dll";
+#else
+    return "lib" + name + ".so";
+#endif
+}
+
+static std::string package_target_rpath_flag()
+{
+#if defined(__APPLE__)
+    return "-Wl,-rpath,@loader_path";
+#elif defined(_WIN32)
+    return "";
+#else
+    return "-Wl,-rpath,$ORIGIN";
+#endif
 }
 
 static std::vector<TaskSpec> parse_task_specs(const std::string& content)
@@ -4300,6 +4402,8 @@ static int build_for_manifest(const PackageManifest& pkg,
         return 1;
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, effectivePackageBuildConfig));
+    std::vector<BuildTarget> targets = parse_build_targets(pkg.content);
+    const bool hasExplicitTargets = !targets.empty();
     const auto packageEntry =
         find_section_toml_string(pkg.content, "package", "entry");
     const bool hasExplicitPackageEntry =
@@ -4314,7 +4418,7 @@ static int build_for_manifest(const PackageManifest& pkg,
         packageLabel = *name;
     }
     std::string entryError;
-    if(!taskOnlyPackage &&
+    if(!taskOnlyPackage && !hasExplicitTargets &&
        !ensure_package_entry_stub(pkg.manifestPath, pkg.content, packageLabel,
                                   entryError))
     {
@@ -4324,7 +4428,6 @@ static int build_for_manifest(const PackageManifest& pkg,
 
     auto deps = parse_source_deps(pkg.content);
     auto cdeps = parse_c_deps(pkg.content);
-    std::vector<BuildTarget> targets = parse_bin_targets(pkg.content);
     if(targets.empty() && !taskOnlyPackage)
     {
         BuildTarget defaultTarget;
@@ -4341,6 +4444,34 @@ static int build_for_manifest(const PackageManifest& pkg,
             defaultTarget.entry = v.value();
         }
         targets.push_back(defaultTarget);
+    }
+    for(const auto& target : targets)
+    {
+        const char* sectionName = target.kind == BuildTarget::dynamic_library
+                                      ? "[[lib]]"
+                                      : "[[bin]]";
+        if(target.name.empty())
+        {
+            pkg_error_line("Missing name in " + std::string(sectionName) +
+                           " target for " + pkg.manifestPath.string());
+            return 1;
+        }
+        if(target.entry.empty())
+        {
+            pkg_error_line("Missing entry in " + std::string(sectionName) +
+                           " target '" + target.name + "' for " +
+                           pkg.manifestPath.string());
+            return 1;
+        }
+    }
+    if(auto ordered = order_build_targets(targets, pkg.manifestPath);
+       ordered.has_value())
+    {
+        targets = std::move(*ordered);
+    }
+    else
+    {
+        return 1;
     }
 
     bool effectiveUseNinja =
@@ -4429,7 +4560,8 @@ static int build_for_manifest(const PackageManifest& pkg,
             return 0;
         }
 
-        pkg_error_line("No package entry, [[bin]] targets, or phase=\"build\" "
+        pkg_error_line("No package entry, [[bin]]/[[lib]] targets, or "
+                       "phase=\"build\" "
                        "tasks found for " +
                        pkg.manifestPath.string());
         return 1;
@@ -4444,19 +4576,6 @@ static int build_for_manifest(const PackageManifest& pkg,
 
     for(const auto& target : targets)
     {
-        if(target.name.empty())
-        {
-            pkg_error_line("Missing name in [[bin]] target for " +
-                           pkg.manifestPath.string());
-            return 1;
-        }
-        if(target.entry.empty())
-        {
-            pkg_error_line("Missing entry in [[bin]] target '" + target.name +
-                           "' for " + pkg.manifestPath.string());
-            return 1;
-        }
-
         BuildConfig buildConfig =
             merge_build_config(effectivePackageBuildConfig, target.config);
         apply_asan_overrides(buildConfig,
@@ -4474,11 +4593,17 @@ static int build_for_manifest(const PackageManifest& pkg,
         if(optFlag.empty())
             optFlag = buildConfig.optLevel;
 
-        const std::filesystem::path outputPath = buildDir / target.name;
+        const std::filesystem::path outputPath =
+            buildDir /
+            (target.kind == BuildTarget::dynamic_library
+                 ? dynamic_library_filename(target.name)
+                 : target.name);
         std::string output = outputPath.string();
         std::string cmd = shell_quote(backend) + " " +
                           shell_quote(target.entry) + " -o " +
                           shell_quote(output);
+        if(target.kind == BuildTarget::dynamic_library)
+            cmd += " --shared";
         if(!buildConfig.targetArch.empty())
             cmd += " --target-arch " + shell_quote(buildConfig.targetArch);
         if(!optFlag.empty())
@@ -4489,6 +4614,15 @@ static int build_for_manifest(const PackageManifest& pkg,
             cmd += " -L" + shell_quote(dir);
         for(const auto& lib : buildConfig.libs)
             cmd += " -l" + shell_quote(lib);
+        if(!target.dependsOn.empty())
+        {
+            cmd += " -L" + shell_quote(buildDir.string());
+            for(const auto& dependencyName : target.dependsOn)
+                cmd += " -l" + shell_quote(dependencyName);
+            const std::string rpath = package_target_rpath_flag();
+            if(!rpath.empty())
+                cmd += " " + shell_quote(rpath);
+        }
         if(buildConfig.staticDeps.value_or(false))
         {
             for(const auto& archive : linkFlags.staticArchives)
@@ -4511,7 +4645,11 @@ static int build_for_manifest(const PackageManifest& pkg,
             cmd += " " + shell_quote(flag);
 
         int rc = run_status_command_in_dir_with_paths(
-            execution_step_label("Compiling target '" + target.name +
+            execution_step_label(std::string(
+                                     target.kind == BuildTarget::dynamic_library
+                                         ? "Building dynamic library target '"
+                                         : "Compiling target '") +
+                                 target.name +
                                  "' from " + target.entry + " -> " + output),
             pkg.packageDir, cmd, buildConfig.pathEntries, true);
         if(rc != 0)

@@ -45,6 +45,17 @@ Write the output executable, object, assembly, or IR to
 .B \-c
 Compile to an object file only and skip the final link step.
 .TP
+.B \-\-shared
+Build a dynamic/shared library and do not require an executable
+.B main
+function. The default output extension is
+.B .dylib
+on macOS,
+.B .so
+on Linux, and
+.B .dll
+on Windows; MinGW builds also emit the corresponding import library.
+.TP
 .B \-S
 Emit assembly instead of an executable.
 .TP

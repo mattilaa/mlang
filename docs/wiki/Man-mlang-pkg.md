@@ -157,6 +157,26 @@ Declare a dependency as system-provided.
 .TP
 .B \-\-add\-lib
 Also add the dependency as a linkable package library entry.
+.SH LIBRARY TARGETS
+Declare an MLang dynamic library with
+.BR [[lib]] .
+A
+.B [[bin]]
+or another library lists internal library targets with
+.BR depends_on .
+The package manager builds those libraries first, links them automatically,
+and adds a loader-relative runtime search path.
+.PP
+.nf
+[[bin]]
+name = "calculator"
+entry = "src/main.mla"
+depends_on = ["arithmetic"]
+
+[[lib]]
+name = "arithmetic"
+entry = "src/arithmetic.mla"
+.fi
 .SH MANIFEST MODES
 When one or more manifest paths are passed directly instead of a primary
 subcommand,

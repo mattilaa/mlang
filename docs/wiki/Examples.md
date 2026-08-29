@@ -146,6 +146,8 @@ following additional programs are useful runnable showcases:
 - `examples/platform_inline_asm_demo.mla` — platform macros with
   architecture-specific inline assembly.
 - `examples/package_manager_multi_bins` — manifest with multiple binaries.
+- `examples/package_manager_dynamic_library` — manifest-built MLang dynamic
+  library linked into a dependent executable target.
 - `examples/package_manager_workspace_fetch` — workspace dependency fetching.
 - `examples/package_manager_task_graph` — package task graph configuration.
 - `examples/package_manager_multilanguage_example` — package build combining

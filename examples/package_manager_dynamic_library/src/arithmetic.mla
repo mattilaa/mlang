@@ -1,0 +1,9 @@
+/// Functions in MLang libraries use MLang's overload-safe symbol names.
+/// `add(i32, i32)` is exported as `add__i32_i32` for extern callers.
+pub fn add(left: i32, right: i32) -> i32 {
+    return left + right;
+}
+
+pub fn multiply(left: i32, right: i32) -> i32 {
+    return left * right;
+}

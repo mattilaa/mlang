@@ -817,6 +817,8 @@ public:
     bool emitBitcode(const std::string& filename);
     bool compileToExecutable(const std::string& outputFile,
                              const std::vector<std::string>& linkArgs);
+    bool compileToSharedLibrary(const std::string& outputFile,
+                                const std::vector<std::string>& linkArgs);
     void optimize(const std::string& level);
     std::string getTargetTriple() const
     {
@@ -833,6 +835,9 @@ private:
     bool linkExecutable(const std::string& objectFile,
                         const std::string& outputFile,
                         const std::vector<std::string>& linkArgs);
+    bool linkSharedLibrary(const std::string& objectFile,
+                           const std::string& outputFile,
+                           const std::vector<std::string>& linkArgs);
 };
 
 #endif // IR_H

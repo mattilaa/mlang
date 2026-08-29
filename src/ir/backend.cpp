@@ -4,6 +4,7 @@
 #include <array>
 #include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/Config/llvm-config.h>
@@ -353,6 +354,68 @@ bool Backend::compileToExecutable(const std::string& outputFile,
     }
 
     return linkExecutable(objectFile, outputFile, linkArgs);
+}
+
+bool Backend::linkSharedLibrary(const std::string& objectFile,
+                                const std::string& outputFile,
+                                const std::vector<std::string>& linkArgs)
+{
+    mlang::ir_detail::ensure_artifact_parent_directory(outputFile);
+    llvm::Triple triple(targetTriple);
+    std::string command = "c++ ";
+    if(triple.isOSDarwin())
+    {
+        const std::string libraryName =
+            std::filesystem::path(outputFile).filename().string();
+        command += "-dynamiclib -Wl,-install_name,@rpath/" + libraryName;
+    }
+    else if(triple.isOSWindows())
+    {
+        const std::filesystem::path outputPath(outputFile);
+        const std::string importName =
+            "lib" + outputPath.stem().string() + ".dll.a";
+        const std::filesystem::path importPath =
+            outputPath.parent_path() / importName;
+        command += "-shared -Wl,--out-implib," + importPath.string();
+    }
+    else
+    {
+        command += "-shared";
+    }
+    command += " -o " + outputFile + " " + objectFile;
+    if(const char* extraLinkFlags = std::getenv("MLANG_LINK_FLAGS"))
+    {
+        if(extraLinkFlags[0] != '\0')
+        {
+            command += " ";
+            command += extraLinkFlags;
+        }
+    }
+    for(const auto& arg : linkArgs)
+        command += " " + arg;
+    command += " 2>&1";
+    std::cout << "Linking shared library: " << command << std::endl;
+
+    const int result = system(command.c_str());
+    if(result != 0)
+    {
+        std::cerr << "Shared-library linking failed with error code: " << result
+                  << std::endl;
+        return false;
+    }
+
+    std::cout << "Shared library created: " << outputFile << std::endl;
+    return true;
+}
+
+bool Backend::compileToSharedLibrary(
+    const std::string& outputFile, const std::vector<std::string>& linkArgs)
+{
+    const std::string objectFile =
+        mlang::ir_detail::build_intermediate_object_path(outputFile);
+    if(!emitObjectFile(objectFile))
+        return false;
+    return linkSharedLibrary(objectFile, outputFile, linkArgs);
 }
 
 void Backend::optimize(const std::string& levelName)

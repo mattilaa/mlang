@@ -54,8 +54,9 @@ void printUsage(const char* programName)
     std::cerr << "Usage: " << programName << " [options] <input_file>\n"
               << "Version: " << MLANG_VERSION << "\n"
               << "\nOptions:\n"
-              << "  -o <file>     Output file name (default: a.out)\n"
+              << "  -o <file>     Output file name (default: a.out; platform library name with --shared)\n"
               << "  -c            Compile to object file only (don't link)\n"
+              << "  --shared      Build a dynamic/shared library (no main required)\n"
               << "  -S            Emit assembly file\n"
               << "  -emit-llvm    Emit LLVM IR file (.ll)\n"
               << "  -emit-bc      Emit LLVM bitcode file (.bc)\n"
@@ -140,6 +141,8 @@ void printUsage(const char* programName)
               << " -S test.mla           # Emit assembly\n"
               << "  " << programName
               << " -emit-llvm test.mla   # Emit LLVM IR\n"
+              << "  " << programName
+              << " --shared math.mla     # Build a dynamic/shared library\n"
               << "\nStdlib linking:\n"
               << "  " << programName << " main.mla -L ~/.local/lib/mlang -lmlang_std\n"
               << "  (or set MLANG_STDLIB_LIB_PATH=~/.local/lib/mlang)\n"
@@ -1200,6 +1203,8 @@ static bool manifest_requires_cpp_pkg_frontend()
         return true;
     if(content.find("[[bin]]") != std::string::npos)
         return true;
+    if(content.find("[[lib]]") != std::string::npos)
+        return true;
     if(content.find("[[task]]") != std::string::npos)
         return true;
     if(content.find("opt_level") != std::string::npos)
@@ -1806,6 +1811,7 @@ int main(int argc, char** argv)
     std::string outputFile = "a.out";
     bool outputPathExplicit = false;
     bool emitObjectOnly = false;
+    bool emitSharedLibrary = false;
     bool emitAssembly = false;
     bool emitLLVMIR = false;
     bool emitBitcode = false;
@@ -1853,6 +1859,10 @@ int main(int argc, char** argv)
         else if(arg == "-c")
         {
             emitObjectOnly = true;
+        }
+        else if(arg == "--shared")
+        {
+            emitSharedLibrary = true;
         }
         else if(arg == "-S")
         {
@@ -2026,6 +2036,18 @@ int main(int argc, char** argv)
 
     if(report_directory_input_argument(inputFile))
         return 1;
+
+    if(emitSharedLibrary && !outputPathExplicit)
+    {
+        const std::string stem = std::filesystem::path(inputFile).stem().string();
+#if defined(__APPLE__)
+        outputFile = "lib" + stem + ".dylib";
+#elif defined(_WIN32)
+        outputFile = stem + ".dll";
+#else
+        outputFile = "lib" + stem + ".so";
+#endif
+    }
 
     std::string generatedTestRoot;
     const char* artifactDirEnv = std::getenv("MLANG_ARTIFACT_DIR");
@@ -2243,6 +2265,7 @@ int main(int argc, char** argv)
         generator.setWarnPlainColonWhile(warnPlainColonWhile);
         generator.setWarnResultUnwrap(warnResultUnwrap);
         generator.setRequireMain(!testMode && !emitObjectOnly &&
+                                 !emitSharedLibrary &&
                                  !emitAssembly && !emitLLVMIR &&
                                  !emitBitcode);
         generator.setModuleLoader(moduleLoader.get());
@@ -2351,6 +2374,11 @@ int main(int argc, char** argv)
                         default_build_artifact_path(inputFile, ".o").string();
                 }
                 success = backend.emitObjectFile(objFile);
+            }
+            else if(emitSharedLibrary)
+            {
+                success =
+                    backend.compileToSharedLibrary(outputFile, linkArgs);
             }
             else
             {
