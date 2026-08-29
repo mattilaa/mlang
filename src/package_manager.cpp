@@ -3753,11 +3753,25 @@ static bool append_pkg_config_flags(const CDepSpec& dep,
 {
     if(!dep.usePkgConfig || dep.pkgConfig.empty())
         return true;
+
+    auto pkgConfigPath = run_command_capture_with_paths(
+        "command -v pkg-config", pathEntries);
+    if(!pkgConfigPath.has_value() || trim(*pkgConfigPath).empty())
+    {
+        std::cerr << "pkg-config executable not found while resolving: "
+                  << dep.pkgConfig << "\n"
+                  << "Install pkg-config (Homebrew: brew install pkg-config) "
+                     "and ensure it is available in PATH.\n";
+        return false;
+    }
+
     std::string cmd = "pkg-config --cflags --libs " + dep.pkgConfig;
     auto result = run_command_capture_with_paths(cmd, pathEntries);
     if(!result.has_value())
     {
-        std::cerr << "pkg-config failed for: " << dep.pkgConfig << "\n";
+        std::cerr << "pkg-config could not resolve: " << dep.pkgConfig << "\n"
+                  << "Install the library's development package or add the "
+                     "directory containing its .pc file to PKG_CONFIG_PATH.\n";
         return false;
     }
     for(const auto& token : split_shell_tokens(result.value()))

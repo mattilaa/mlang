@@ -41,7 +41,12 @@ Common libcurl externs are collected in `curl.mla` and imported by `src/main.mla
 macOS (Homebrew):
 ```sh
 brew install git cmake pkg-config curl
+export PKG_CONFIG_PATH="$(brew --prefix curl)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 ```
+
+Homebrew installs curl as a keg-only formula. Keep the `PKG_CONFIG_PATH`
+setting in the shell where you run `mlang pkg build` so `pkg-config` can find
+`libcurl.pc`.
 
 Ubuntu/Debian:
 ```sh

@@ -466,6 +466,16 @@ curl = { pkg_config = "libcurl" }
 zlib = { system = true }
 ```
 
+The `pkg-config` executable must be available in `PATH`, and each requested
+package must be discoverable through pkg-config's default search paths or
+`PKG_CONFIG_PATH`. Homebrew installs curl as a keg-only formula, so macOS users
+may need:
+
+```sh
+brew install pkg-config curl
+export PKG_CONFIG_PATH="$(brew --prefix curl)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+```
+
 ### `[tool.mlang]`
 
 This section provides package-build defaults for `mlang pkg build`.

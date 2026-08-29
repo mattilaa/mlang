@@ -1261,6 +1261,13 @@ Prereqs for this example:
 See `examples/package_manager_git_cjson/README.md` for distro-specific install
 commands.
 
+On macOS with Homebrew, curl is keg-only. After installing the prerequisites,
+make its package metadata visible in the shell used for the build:
+
+```sh
+export PKG_CONFIG_PATH="$(brew --prefix curl)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+```
+
 ## Testing
 Run tests with the built-in runner. Mark test functions with `#[test]` and
 return `0` for pass, non-zero for failure.
