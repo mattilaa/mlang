@@ -44,6 +44,12 @@ warn_log = "pkg.warn.log"
 [tool.mlang.options]
 userspace = "busybox"
 
+[tool.mlang.toolchains]
+gnu_make_darwin = { name = "GNU Make", command = "make", min_version = "4.0", host = "darwin", install = "brew install make" }
+qemu_darwin = { name = "QEMU AArch64", command = "qemu-system-aarch64", min_version = "8.0", host = "darwin", install = "brew install qemu" }
+gnu_make_linux = { name = "GNU Make", command = "make", min_version = "4.0", host = "linux", install = "sudo apt-get install make" }
+qemu_linux = { name = "QEMU AArch64", command = "qemu-system-aarch64", host = "linux", install = "sudo apt-get install qemu-system-arm" }
+
 [[task]]
 name = "kernel-build"
 commands = [
@@ -66,6 +72,7 @@ commands = [
 [[task]]
 name = "boot-flow"
 parallel = true
+depends_on = ["toolchain-check"]
 next = ["kernel-build", "initramfs", "qemu-run"]
 
 [[task]]
@@ -103,7 +110,7 @@ name = "qemu-run"
 join_on = ["kernel-build", "initramfs"]
 
 [tool.mlang]
-make_program = "gmake"
+make_program = "make"
 path_entries = [
   "/opt/homebrew/opt/gnu-sed/libexec/gnubin",
   "/usr/local/opt/gnu-sed/libexec/gnubin",
@@ -126,12 +133,20 @@ shell = [
 
 ## Install
 
+The manifest declares its command-line dependencies under
+`[tool.mlang.toolchains]`. Every `pkg fetch`, `pkg build`, and `pkg run`
+prints the applicable tools, resolved paths, and versions before starting. If
+anything is missing or too old, it reports the relevant installation command
+and stops before downloading or building.
+
 - `make`
-- `gmake` on macOS if Homebrew `make` is installed and `make_program = "gmake"`
+- Homebrew GNU `make` on macOS; `path_entries` selects it as `make`
 - GNU `sed` on macOS
 - `llvm`, `lld`, and `libelf` on macOS
 - `cpio`
 - `gzip`
+- `curl`
+- `tar`
 - `qemu-system-aarch64`
 - an AArch64-capable kernel toolchain
 
@@ -243,7 +258,8 @@ If you pass only `--log-dir`, pkg uses the default filenames
 The `qemu-run` task sets `log_output = false`, so QEMU's live serial output
 stays on the console instead of being redirected into the package log files.
 
-`boot-flow` fans out into `kernel-build`, `initramfs`, and `qemu-run`.
+`boot-flow` first runs `toolchain-check`, then fans out into `kernel-build`,
+`initramfs`, and `qemu-run`.
 Because `qemu-run` declares `join_on = ["kernel-build", "initramfs"]`, it
 waits until the kernel image and initramfs are both ready. With
 `parallel = true`, the independent branches can run concurrently before QEMU

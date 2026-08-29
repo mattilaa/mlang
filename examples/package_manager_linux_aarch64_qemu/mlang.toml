@@ -10,20 +10,12 @@ linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.g
 
 [tool.mlang]
 min_mlang_version = "0.2.0"
-make_program = "gmake"
+make_program = "make"
 # Full-line TOML comments work anywhere outside quoted strings.
 log_dir = "/tmp/mlang-linux-aarch64-qemu"
 stdout_log = "pkg.stdout.log"
 stderr_log = "pkg.stderr.log"
 warn_log = "pkg.warn.log"
-
-[tool.mlang.options]
-# Select the guest userspace from the command line:
-#   ../../build/mlang pkg run qemu-run --option userspace=busybox
-#   ../../build/mlang pkg run qemu-run --option userspace=gnu
-userspace = "busybox"
-
-[tool.mlang]
 path_entries = [
   "/opt/homebrew/opt/gnu-sed/libexec/gnubin", # Prefer GNU sed when available
   "/usr/local/opt/gnu-sed/libexec/gnubin",
@@ -37,6 +29,37 @@ path_entries = [
   "/usr/local/bin"
 ]
 
+[tool.mlang.options]
+# Select the guest userspace from the command line:
+#   ../../build/mlang pkg run qemu-run --option userspace=busybox
+#   ../../build/mlang pkg run qemu-run --option userspace=gnu
+userspace = "busybox"
+
+# Package-manager-native dependency toolchain checks run before fetch, build,
+# or task execution. Each result is printed in a CMake-style discovery list.
+[tool.mlang.toolchains]
+gnu_make_darwin = { name = "GNU Make", command = "make", min_version = "4.0", host = "darwin", install = "brew install make" }
+gnu_sed_darwin = { name = "GNU sed", command = "sed", min_version = "4.0", host = "darwin", install = "brew install gnu-sed" }
+clang_darwin = { name = "Homebrew LLVM clang", command = "clang", min_version = "17.0", host = "darwin", install = "brew install llvm" }
+lld_darwin = { name = "LLVM linker", command = "ld.lld", min_version = "17.0", host = "darwin", install = "brew install lld" }
+llvm_ar_darwin = { name = "LLVM archiver", command = "llvm-ar", min_version = "17.0", host = "darwin", install = "brew install llvm" }
+llvm_nm_darwin = { name = "LLVM nm", command = "llvm-nm", min_version = "17.0", host = "darwin", install = "brew install llvm" }
+llvm_objcopy_darwin = { name = "LLVM objcopy", command = "llvm-objcopy", min_version = "17.0", host = "darwin", install = "brew install llvm" }
+llvm_ranlib_darwin = { name = "LLVM ranlib", command = "llvm-ranlib", min_version = "17.0", host = "darwin", install = "brew install llvm" }
+llvm_strip_darwin = { name = "LLVM strip", command = "llvm-strip", min_version = "17.0", host = "darwin", install = "brew install llvm" }
+qemu_darwin = { name = "QEMU AArch64", command = "qemu-system-aarch64", min_version = "8.0", host = "darwin", install = "brew install qemu" }
+python_darwin = { name = "Python", command = "python3", min_version = "3.9", host = "darwin", install = "brew install python" }
+curl_darwin = { name = "curl", command = "curl", host = "darwin", install = "brew install curl" }
+tar_darwin = { name = "tar", command = "tar", host = "darwin", install = "brew install gnu-tar" }
+cpio_darwin = { name = "cpio", command = "cpio", host = "darwin", install = "brew install cpio" }
+gzip_darwin = { name = "gzip", command = "gzip", host = "darwin", install = "brew install gzip" }
+gnu_make_linux = { name = "GNU Make", command = "make", min_version = "4.0", host = "linux", install = "sudo apt-get install make" }
+qemu_linux = { name = "QEMU AArch64", command = "qemu-system-aarch64", host = "linux", install = "sudo apt-get install qemu-system-arm" }
+curl_linux = { name = "curl", command = "curl", host = "linux", install = "sudo apt-get install curl" }
+tar_linux = { name = "tar", command = "tar", host = "linux", install = "sudo apt-get install tar" }
+cpio_linux = { name = "cpio", command = "cpio", host = "linux", install = "sudo apt-get install cpio" }
+gzip_linux = { name = "gzip", command = "gzip", host = "linux", install = "sudo apt-get install gzip" }
+
 [[task]]
 name = "toolchain-check"
 print = "[example] Checking required build tools in PATH"
@@ -48,35 +71,12 @@ commands = [
     'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi'
   ],
 ]
-commands += [
-  [
-    'sh',
-    '-c',
-    'if ! command -v {{make}} >/dev/null 2>&1; then echo Missing required tool in PATH: {{make}}; exit 1; fi'
-  ],
-]
 
 [task.host.darwin]
 shell = [
-  "for tool in {{make}} clang ld.lld llvm-ar llvm-nm llvm-objcopy llvm-ranlib llvm-strip; do",
-  "  if ! command -v $tool >/dev/null 2>&1; then",
-  "    echo Missing required tool in PATH: $tool",
-  "    echo On Apple Silicon macOS install: brew install llvm lld libelf gnu-sed make qemu cpio",
-  "    exit 1",
-  "  fi",
-  "done",
-  "if ! sed --version >/dev/null 2>&1; then",
-  "  echo GNU sed is required. Ensure Homebrew gnu-sed is installed and ahead of /usr/bin in path_entries.",
-  "  echo Install with: brew install gnu-sed",
-  "  exit 1",
-  "fi",
   "if [ ! -d /opt/homebrew/opt/libelf/include ] && [ ! -d /usr/local/opt/libelf/include ]; then",
   "  echo Homebrew libelf headers were not found under /opt/homebrew/opt/libelf or /usr/local/opt/libelf.",
   "  echo Install with: brew install libelf",
-  "  exit 1",
-  "fi",
-  "if ! clang --version | grep -qi llvm; then",
-  "  echo clang in PATH is not the Homebrew LLVM clang. Check path_entries ordering in mlang.toml.",
   "  exit 1",
   "fi"
 ]
@@ -270,6 +270,7 @@ shell = [
   "if [ '{{option.userspace}}' = 'gnu' ]; then",
   "  mkdir -p {{build_dir}}/initramfs",
   "  cp -a {{build_dir}}/gnu-rootfs/. {{build_dir}}/initramfs/",
+  "  mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp {{build_dir}}/initramfs/usr/bin {{build_dir}}/initramfs/usr/sbin",
   "  mkdir -p {{build_dir}}/initramfs/opt/nvim",
   "  cp -a {{build_dir}}/nvim-linux-arm64/. {{build_dir}}/initramfs/opt/nvim/",
   "  ln -sf /opt/nvim/bin/nvim {{build_dir}}/initramfs/usr/bin/nvim",
@@ -324,12 +325,10 @@ shell = [
   "  chmod +x {{build_dir}}/initramfs/bin/guest-login",
   "  echo 'GNU userspace selected: Ubuntu Base ARM64 with a serial login prompt. Default users: admin/admin, user/user, root/root.' > {{build_dir}}/initramfs/etc/mlang-userspace.txt",
   "else",
-  "  mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/usr/bin",
+  "  mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp {{build_dir}}/initramfs/usr/bin {{build_dir}}/initramfs/usr/sbin",
   "  CONSOLE_CMD='/bin/cttyhack /bin/sh'",
   "  echo 'BusyBox userspace selected.' > {{build_dir}}/initramfs/etc/mlang-userspace.txt",
   "fi",
-  "# Add the runtime directories that both userspaces need for boot.",
-  "mkdir -p {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp {{build_dir}}/initramfs/usr/bin {{build_dir}}/initramfs/usr/sbin",
   "# Ensure the guest always has a baseline account database, even in the tiny BusyBox-only mode.",
   "if [ ! -f {{build_dir}}/initramfs/etc/passwd ]; then printf 'root:x:0:0:root:/root:/bin/sh\\n' > {{build_dir}}/initramfs/etc/passwd; fi",
   "if [ ! -f {{build_dir}}/initramfs/etc/group ]; then printf 'root:x:0:\\nusers:x:100:\\nadmin:x:101:admin\\n' > {{build_dir}}/initramfs/etc/group; fi",
@@ -603,6 +602,7 @@ shell = [
 name = "boot-flow"
 workdir = "{{root}}"
 parallel = true
+depends_on = ["toolchain-check"]
 next = ["kernel-build", "initramfs", "qemu-run"]
 print = "[example] Starting Linux AArch64 build and QEMU boot flow"
 commands = [
