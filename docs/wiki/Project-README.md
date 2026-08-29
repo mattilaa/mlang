@@ -710,6 +710,24 @@ Example output:
    Install: brew install ninja
 ```
 
+MLang packages can also build dynamic libraries and link them into dependent
+executables directly from the manifest:
+
+```toml
+[[bin]]
+name = "calculator"
+entry = "src/main.mla"
+depends_on = ["arithmetic"]
+
+[[lib]]
+name = "arithmetic"
+entry = "src/arithmetic.mla"
+```
+
+`depends_on` builds `arithmetic` first, links it into `calculator`, and embeds
+a loader-relative runtime search path. See
+`examples/package_manager_dynamic_library` for a complete runnable package.
+
 Custom task workflows can be declared in `mlang.toml` and run with:
 
 ```sh
@@ -2414,6 +2432,27 @@ opt_level = "O0"
 linker_flags = ["-Wl,-dead_strip"]
 ```
 
+Dynamic MLang libraries use `[[lib]]`; dependent targets name them with
+`depends_on`:
+
+```toml
+[[bin]]
+name = "calculator"
+entry = "src/main.mla"
+depends_on = ["arithmetic"]
+
+[[lib]]
+name = "arithmetic"
+entry = "src/arithmetic.mla"
+```
+
+The library is built first as `libarithmetic.dylib` on macOS,
+`libarithmetic.so` on Linux, or `arithmetic.dll` plus its MinGW import library
+on Windows. The dependent
+target automatically receives the library search path, `-larithmetic`, and a
+loader-relative runtime path. The underlying compiler mode is `mlang
+--shared <source> -o <library>`.
+
 When `[[bin]]` entries are present, `mlang pkg build` builds each executable
 into `<build_dir>/<bin-name>`.
 
@@ -2430,6 +2469,7 @@ Target-scoped config keys supported inside `[[bin]]` are:
 - `libs`
 - `static_deps`
 - `static_cpp_runtime`
+- `depends_on` (names of internal `[[lib]]` targets)
 
 Target-scoped values are merged with `[tool.mlang]` defaults:
 
@@ -2866,6 +2906,9 @@ Workspace example:
 - `examples/package_manager_multi_bins`
   Demonstrates `[[bin]]` targets, target-scoped build config overrides, and
   mixed GitHub `git` plus `tar.gz` source dependencies in one package.
+- `examples/package_manager_dynamic_library`
+  Demonstrates an MLang `[[lib]]` built before and linked automatically into
+  a dependent `[[bin]]` target.
 - `examples/package_manager_multilanguage_example`
   Demonstrates a task-driven single-binary build that compiles MLang, C, and
   C++ sources in separate phases, fetches `miniaudio` and `AudioFile`, and

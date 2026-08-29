@@ -1,0 +1,9 @@
+extern fn add__i32_i32(left: i32, right: i32) -> i32;
+extern fn multiply__i32_i32(left: i32, right: i32) -> i32;
+
+fn main() -> i32 {
+    let sum: i32 = add__i32_i32(20, 22);
+    let product: i32 = multiply__i32_i32(6, 7);
+    println!("dynamic library results: sum={}, product={}", sum, product);
+    return sum == 42 && product == 42 ? 0 : 1;
+}

@@ -6583,6 +6583,37 @@ Pkg Dependency Toolchains Report Found Missing And Old Versions
     Should Contain    ${failed.stderr}    Install: install fixture-tool-missing
     Should Contain    ${failed.stderr}    Required dependency toolchains are missing or too old.
 
+Pkg Builds And Links MLang Dynamic Library Target
+    [Documentation]    Verify [[lib]] output, depends_on build ordering,
+    ...                automatic linking, and loader-relative execution.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_dynamic_library
+    ${setup}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${base}' && cp -R '${EXECDIR}/examples/package_manager_dynamic_library' '${base}'
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup.rc}    0
+    ...    msg=Dynamic-library fixture setup failed\n${setup.stdout}\n${setup.stderr}
+
+    ${build}=    Run Process    ${MLANG}    pkg    build
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Dynamic-library package build failed (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    Should Contain    ${build.stdout}    Building dynamic library target 'arithmetic'
+    Should Contain    ${build.stdout}    Compiling target 'dynamic_library_demo'
+    ${library_index}=    Evaluate    """${build.stdout}""".find("Building dynamic library target 'arithmetic'")
+    ${binary_index}=    Evaluate    """${build.stdout}""".find("Compiling target 'dynamic_library_demo'")
+    Should Be True    ${library_index} >= 0 and ${library_index} < ${binary_index}
+
+    ${suffix}=    Evaluate    '.dylib' if __import__('platform').system() == 'Darwin' else ('.dll' if __import__('platform').system() == 'Windows' else '.so')
+    ${prefix}=    Evaluate    '' if __import__('platform').system() == 'Windows' else 'lib'
+    File Should Exist    ${base}/build/${prefix}arithmetic${suffix}
+    File Should Exist    ${base}/build/dynamic_library_demo
+
+    ${run}=    Run Process    ${base}/build/dynamic_library_demo
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=Dynamic-library demo failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    dynamic library results: sum=42, product=42
+
 *** Keywords ***
 Initialize Artifact Dir
     ${artifact_dir}=    Set Variable    ${OUTPUT DIR}

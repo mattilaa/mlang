@@ -143,6 +143,8 @@ following additional programs are useful runnable showcases:
 - `examples/platform_inline_asm_demo.mla` — platform macros with
   architecture-specific inline assembly.
 - `examples/package_manager_multi_bins` — manifest with multiple binaries.
+- `examples/package_manager_dynamic_library` — manifest-built MLang dynamic
+  library linked into a dependent executable target.
 - `examples/package_manager_workspace_fetch` — workspace dependency fetching.
 - `examples/package_manager_task_graph` — package task graph configuration.
 - `examples/package_manager_multilanguage_example` — package build combining
@@ -232,6 +234,38 @@ following additional programs are useful runnable showcases:
     --option gate_attack_ms=1 \
     --option gate_hold_ms=145
   ```
+
+### Package-manager dynamic library
+
+`examples/package_manager_dynamic_library` builds the `arithmetic` MLang
+dynamic library before linking it into `dynamic_library_demo`. From the
+repository root, build and run it with:
+
+```sh
+cd examples/package_manager_dynamic_library
+../../build/mlang pkg build
+./build/dynamic_library_demo
+```
+
+A successful run prints:
+
+```text
+dynamic library results: sum=42, product=42
+```
+
+The build directory should contain the executable and the platform-specific
+library. Verify the artifacts with:
+
+```sh
+find build -maxdepth 1 -type f -name '*arithmetic*' -print
+test -x build/dynamic_library_demo
+```
+
+The library is named `libarithmetic.dylib` on macOS,
+`libarithmetic.so` on Linux, or `arithmetic.dll` with
+`libarithmetic.dll.a` on Windows/MinGW. The executable runs without setting a
+separate library-path environment variable because the package manager embeds
+a loader-relative runtime path.
 
 ## Focused regression examples
 

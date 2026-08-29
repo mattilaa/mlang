@@ -1,0 +1,23 @@
+[package]
+name = "dynamic_library_demo"
+version = "0.1.0"
+
+[dependencies]
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+opt_level = "O2"
+
+# This executable is intentionally declared before its library. `depends_on`
+# makes the package manager build the library first, add build/ as a library
+# search path, link -larithmetic, and embed a loader-relative runtime path.
+[[bin]]
+name = "dynamic_library_demo"
+entry = "src/main.mla"
+depends_on = ["arithmetic"]
+
+[[lib]]
+name = "arithmetic"
+entry = "src/arithmetic.mla"

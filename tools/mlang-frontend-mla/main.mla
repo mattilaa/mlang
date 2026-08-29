@@ -46,8 +46,9 @@ fn print_usage(program: str8) -> void {
     println!("Version: {}", version());
     println!("");
     println!("Options:");
-    println!("  -o <file>     Output file name (default: a.out)");
+    println!("  -o <file>     Output file name (default: a.out; platform library name with --shared)");
     println!("  -c            Compile to object file only (don't link)");
+    println!("  --shared      Build a dynamic/shared library (no main required)");
     println!("  -S            Emit assembly file");
     println!("  -emit-llvm    Emit LLVM IR file (.ll)");
     println!("  -emit-bc      Emit LLVM bitcode file (.bc)");
@@ -101,6 +102,7 @@ fn print_usage(program: str8) -> void {
     println!("  {} -o myprogram test.mla # Compile to myprogram", program);
     println!("  {} -S test.mla           # Emit assembly", program);
     println!("  {} -emit-llvm test.mla   # Emit LLVM IR", program);
+    println!("  {} --shared math.mla     # Build a dynamic/shared library", program);
     println!("");
     println!("Stdlib linking:");
     println!("  {} main.mla -L ~/.local/lib -lmlang_std", program);
@@ -821,6 +823,7 @@ fn is_valid_target_arch(a: str8) -> i32 {
 
 fn is_known_test_or_bench_flag(a: str8) -> i32 {
     if eq(a, "-c") == 1 { return 1; }
+    if eq(a, "--shared") == 1 { return 1; }
     if eq(a, "-S") == 1 { return 1; }
     if eq(a, "-emit-llvm") == 1 { return 1; }
     if eq(a, "-emit-bc") == 1 { return 1; }

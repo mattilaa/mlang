@@ -160,6 +160,7 @@ demo directory so its `mlang.toml` is selected automatically.
 
 | Directory | What it demonstrates | How to run |
 |---|---|---|
+| `examples/package_manager_dynamic_library` | An MLang `[[lib]]` dynamic library built before and linked automatically into a dependent `[[bin]]` target. | `(cd examples/package_manager_dynamic_library && ../../build/mlang pkg build && ./build/dynamic_library_demo)` |
 | `examples/package_manager_coreaudio_filter` | macOS CoreAudio playback with MLang low-pass, high-pass, band-pass, and Moog-style filter sweeps. | `(cd examples/package_manager_coreaudio_filter && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_delay_audio` | WAV/AIFF playback through forward or ping-pong delay with live feedback, filtering, damping, jitter, recording, and replay controls. | `(cd examples/package_manager_delay_audio && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_git_cjson` | Fetching and building cJSON from Git while also using system libcurl. | `(cd examples/package_manager_git_cjson && ../../build/mlang pkg fetch && ../../build/mlang pkg build && ./build/cjson_demo)` |
@@ -175,6 +176,32 @@ demo directory so its `mlang.toml` is selected automatically.
 | `examples/package_manager_vst3_coreaudio_synth` | Fetching the Steinberg VST3 SDK, building an MLang-powered VST3 instrument, and previewing the same DSP through CoreAudio. | `(cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square)` |
 | `examples/package_manager_vst3_sdk_example` | Fetching the Steinberg SDK and calling a small C++ metadata bridge from MLang without building a full plug-in. | `(cd examples/package_manager_vst3_sdk_example && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_workspace_fetch` | Recursive workspace discovery with one Git-backed and one tarball-backed cJSON subpackage. | `./examples/package_manager_workspace_fetch/run_demo.sh` |
+
+### Verify the dynamic-library package
+
+The dynamic-library demo requires no external dependency download. Build and
+run it from the repository root:
+
+```sh
+cd examples/package_manager_dynamic_library
+../../build/mlang pkg build
+./build/dynamic_library_demo
+```
+
+The result verifies calls through the generated dynamic library:
+
+```text
+dynamic library results: sum=42, product=42
+```
+
+You can also inspect the generated library directly:
+
+```sh
+find build -maxdepth 1 -type f -name '*arithmetic*' -print
+```
+
+Expect `libarithmetic.dylib` on macOS, `libarithmetic.so` on Linux, or
+`arithmetic.dll` plus `libarithmetic.dll.a` on Windows/MinGW.
 
 For configurable audio demos, use `pkg run list-devices` in the corresponding
 directory to inspect available outputs. Their local README files document
