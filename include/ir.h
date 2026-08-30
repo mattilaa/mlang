@@ -819,6 +819,7 @@ public:
                              const std::vector<std::string>& linkArgs);
     bool compileToSharedLibrary(const std::string& outputFile,
                                 const std::vector<std::string>& linkArgs);
+    bool compileToStaticLibrary(const std::string& outputFile);
     void optimize(const std::string& level);
     std::string getTargetTriple() const
     {

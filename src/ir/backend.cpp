@@ -70,6 +70,20 @@ constexpr std::array<std::pair<OptLevelAlias, std::string_view>, 7>
                       {OptLevelAlias::Os, "-Os"},
                       {OptLevelAlias::Oz, "-Oz"}}};
 
+static std::string shell_quote(const std::string& value)
+{
+    std::string quoted = "'";
+    for(const char c : value)
+    {
+        if(c == '\'')
+            quoted += "'\\''";
+        else
+            quoted += c;
+    }
+    quoted += "'";
+    return quoted;
+}
+
 } // namespace
 
 Backend::Backend(std::unique_ptr<llvm::Module>& m,
@@ -416,6 +430,30 @@ bool Backend::compileToSharedLibrary(
     if(!emitObjectFile(objectFile))
         return false;
     return linkSharedLibrary(objectFile, outputFile, linkArgs);
+}
+
+bool Backend::compileToStaticLibrary(const std::string& outputFile)
+{
+    mlang::ir_detail::ensure_artifact_parent_directory(outputFile);
+    const std::string objectFile =
+        mlang::ir_detail::build_intermediate_object_path(outputFile);
+    if(!emitObjectFile(objectFile))
+        return false;
+
+    const std::string command =
+        "ar rcs " + shell_quote(outputFile) + " " + shell_quote(objectFile) +
+        " 2>&1";
+    std::cout << "Archiving static library: " << command << std::endl;
+    const int result = system(command.c_str());
+    if(result != 0)
+    {
+        std::cerr << "Static-library archiving failed with error code: "
+                  << result << std::endl;
+        return false;
+    }
+
+    std::cout << "Static library created: " << outputFile << std::endl;
+    return true;
 }
 
 void Backend::optimize(const std::string& levelName)

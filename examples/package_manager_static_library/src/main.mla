@@ -1,0 +1,9 @@
+extern fn subtract__i32_i32(left: i32, right: i32) -> i32;
+extern fn square__i32(value: i32) -> i32;
+
+fn main() -> i32 {
+    let difference: i32 = subtract__i32_i32(50, 8);
+    let squared: i32 = square__i32(7);
+    println!("static library results: difference={}, square={}", difference, squared);
+    return difference == 42 && squared == 49 ? 0 : 1;
+}

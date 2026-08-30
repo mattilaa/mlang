@@ -54,9 +54,10 @@ void printUsage(const char* programName)
     std::cerr << "Usage: " << programName << " [options] <input_file>\n"
               << "Version: " << MLANG_VERSION << "\n"
               << "\nOptions:\n"
-              << "  -o <file>     Output file name (default: a.out; platform library name with --shared)\n"
+              << "  -o <file>     Output file name (default: a.out; library name in library modes)\n"
               << "  -c            Compile to object file only (don't link)\n"
               << "  --shared      Build a dynamic/shared library (no main required)\n"
+              << "  --static-library  Build a static .a library (no main required)\n"
               << "  -S            Emit assembly file\n"
               << "  -emit-llvm    Emit LLVM IR file (.ll)\n"
               << "  -emit-bc      Emit LLVM bitcode file (.bc)\n"
@@ -143,6 +144,8 @@ void printUsage(const char* programName)
               << " -emit-llvm test.mla   # Emit LLVM IR\n"
               << "  " << programName
               << " --shared math.mla     # Build a dynamic/shared library\n"
+              << "  " << programName
+              << " --static-library math.mla # Build a static library\n"
               << "\nStdlib linking:\n"
               << "  " << programName << " main.mla -L ~/.local/lib/mlang -lmlang_std\n"
               << "  (or set MLANG_STDLIB_LIB_PATH=~/.local/lib/mlang)\n"
@@ -1812,6 +1815,7 @@ int main(int argc, char** argv)
     bool outputPathExplicit = false;
     bool emitObjectOnly = false;
     bool emitSharedLibrary = false;
+    bool emitStaticLibrary = false;
     bool emitAssembly = false;
     bool emitLLVMIR = false;
     bool emitBitcode = false;
@@ -1863,6 +1867,10 @@ int main(int argc, char** argv)
         else if(arg == "--shared")
         {
             emitSharedLibrary = true;
+        }
+        else if(arg == "--static-library")
+        {
+            emitStaticLibrary = true;
         }
         else if(arg == "-S")
         {
@@ -2037,6 +2045,22 @@ int main(int argc, char** argv)
     if(report_directory_input_argument(inputFile))
         return 1;
 
+    if(emitSharedLibrary && emitStaticLibrary)
+    {
+        std::cerr << "Error: --shared and --static-library are mutually "
+                     "exclusive"
+                  << std::endl;
+        return 1;
+    }
+    if((emitSharedLibrary || emitStaticLibrary) &&
+       (emitObjectOnly || emitAssembly || emitLLVMIR || emitBitcode))
+    {
+        std::cerr << "Error: library build modes cannot be combined with -c, "
+                     "-S, -emit-llvm, or -emit-bc"
+                  << std::endl;
+        return 1;
+    }
+
     if(emitSharedLibrary && !outputPathExplicit)
     {
         const std::string stem = std::filesystem::path(inputFile).stem().string();
@@ -2047,6 +2071,11 @@ int main(int argc, char** argv)
 #else
         outputFile = "lib" + stem + ".so";
 #endif
+    }
+    else if(emitStaticLibrary && !outputPathExplicit)
+    {
+        const std::string stem = std::filesystem::path(inputFile).stem().string();
+        outputFile = "lib" + stem + ".a";
     }
 
     std::string generatedTestRoot;
@@ -2266,6 +2295,7 @@ int main(int argc, char** argv)
         generator.setWarnResultUnwrap(warnResultUnwrap);
         generator.setRequireMain(!testMode && !emitObjectOnly &&
                                  !emitSharedLibrary &&
+                                 !emitStaticLibrary &&
                                  !emitAssembly && !emitLLVMIR &&
                                  !emitBitcode);
         generator.setModuleLoader(moduleLoader.get());
@@ -2379,6 +2409,10 @@ int main(int argc, char** argv)
             {
                 success =
                     backend.compileToSharedLibrary(outputFile, linkArgs);
+            }
+            else if(emitStaticLibrary)
+            {
+                success = backend.compileToStaticLibrary(outputFile);
             }
             else
             {

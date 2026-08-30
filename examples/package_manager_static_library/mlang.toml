@@ -1,0 +1,29 @@
+[package]
+name = "static_library_demo"
+version = "0.1.0"
+
+[dependencies]
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+opt_level = "O2"
+
+[tool.mlang.toolchains]
+archiver_darwin = { name = "Static archiver", command = "ar", host = "darwin", install = "xcode-select --install" }
+cxx_darwin = { name = "C++ linker", command = "c++", host = "darwin", install = "xcode-select --install" }
+archiver_linux = { name = "Static archiver", command = "ar", host = "linux", install = "sudo apt-get install binutils" }
+cxx_linux = { name = "C++ linker", command = "c++", host = "linux", install = "sudo apt-get install build-essential" }
+
+# Declaration order is intentionally reversed. `depends_on` builds and links
+# the static library before this executable.
+[[bin]]
+name = "static_library_demo"
+entry = "src/main.mla"
+depends_on = ["arithmetic_static"]
+
+[[lib]]
+name = "arithmetic_static"
+entry = "src/arithmetic.mla"
+type = "static"
