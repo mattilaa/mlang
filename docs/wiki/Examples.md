@@ -148,6 +148,8 @@ following additional programs are useful runnable showcases:
 - `examples/package_manager_multi_bins` — manifest with multiple binaries.
 - `examples/package_manager_dynamic_library` — manifest-built MLang dynamic
   library linked into a dependent executable target.
+- `examples/package_manager_static_library` — manifest-built MLang static
+  archive linked into a dependent executable target.
 - `examples/package_manager_workspace_fetch` — workspace dependency fetching.
 - `examples/package_manager_task_graph` — package task graph configuration.
 - `examples/package_manager_multilanguage_example` — package build combining
@@ -269,6 +271,36 @@ The library is named `libarithmetic.dylib` on macOS,
 `libarithmetic.dll.a` on Windows/MinGW. The executable runs without setting a
 separate library-path environment variable because the package manager embeds
 a loader-relative runtime path.
+
+### Package-manager static library
+
+`examples/package_manager_static_library` archives MLang code into
+`libarithmetic_static.a` and links it into `static_library_demo`:
+
+```sh
+cd examples/package_manager_static_library
+../../build/mlang pkg build
+test -f build/libarithmetic_static.a
+./build/static_library_demo
+```
+
+A successful run prints:
+
+```text
+static library results: difference=42, square=49
+```
+
+Inspect the archive and verify the binary does not reference the internal
+library dynamically:
+
+```sh
+ar -t build/libarithmetic_static.a
+if command -v otool >/dev/null 2>&1; then
+  ! otool -L build/static_library_demo | grep -q arithmetic_static
+elif command -v ldd >/dev/null 2>&1; then
+  ! ldd build/static_library_demo | grep -q arithmetic_static
+fi
+```
 
 ## Focused regression examples
 

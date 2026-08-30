@@ -710,7 +710,7 @@ Example output:
    Install: brew install ninja
 ```
 
-MLang packages can also build dynamic libraries and link them into dependent
+MLang packages can build dynamic or static libraries and link them into dependent
 executables directly from the manifest:
 
 ```toml
@@ -722,11 +722,14 @@ depends_on = ["arithmetic"]
 [[lib]]
 name = "arithmetic"
 entry = "src/arithmetic.mla"
+type = "static"
 ```
 
-`depends_on` builds `arithmetic` first, links it into `calculator`, and embeds
-a loader-relative runtime search path. See
-`examples/package_manager_dynamic_library` for a complete runnable package.
+`depends_on` builds `arithmetic` first and links `libarithmetic.a` directly
+into `calculator`. Omit `type` or set `type = "dynamic"` for a shared library
+with a loader-relative runtime path. See
+`examples/package_manager_static_library` and
+`examples/package_manager_dynamic_library` for complete runnable packages.
 
 Custom task workflows can be declared in `mlang.toml` and run with:
 
@@ -2432,8 +2435,8 @@ opt_level = "O0"
 linker_flags = ["-Wl,-dead_strip"]
 ```
 
-Dynamic MLang libraries use `[[lib]]`; dependent targets name them with
-`depends_on`:
+MLang libraries use `[[lib]]`; dependent targets name them with `depends_on`.
+Libraries default to dynamic, while `type = "static"` selects an archive:
 
 ```toml
 [[bin]]
@@ -2444,14 +2447,15 @@ depends_on = ["arithmetic"]
 [[lib]]
 name = "arithmetic"
 entry = "src/arithmetic.mla"
+type = "static"
 ```
 
-The library is built first as `libarithmetic.dylib` on macOS,
+The static library is built first as `libarithmetic.a` and passed directly to
+the executable link. Dynamic libraries use `libarithmetic.dylib` on macOS,
 `libarithmetic.so` on Linux, or `arithmetic.dll` plus its MinGW import library
-on Windows. The dependent
-target automatically receives the library search path, `-larithmetic`, and a
-loader-relative runtime path. The underlying compiler mode is `mlang
---shared <source> -o <library>`.
+on Windows; dependents receive `-larithmetic` and a loader-relative runtime
+path. The compiler modes are `mlang --static-library <source> -o <archive>`
+and `mlang --shared <source> -o <library>`.
 
 When `[[bin]]` entries are present, `mlang pkg build` builds each executable
 into `<build_dir>/<bin-name>`.
@@ -2909,6 +2913,9 @@ Workspace example:
 - `examples/package_manager_dynamic_library`
   Demonstrates an MLang `[[lib]]` built before and linked automatically into
   a dependent `[[bin]]` target.
+- `examples/package_manager_static_library`
+  Demonstrates an MLang `[[lib]] type = "static"` archive linked directly
+  into a runnable dependent binary.
 - `examples/package_manager_multilanguage_example`
   Demonstrates a task-driven single-binary build that compiles MLang, C, and
   C++ sources in separate phases, fetches `miniaudio` and `AudioFile`, and

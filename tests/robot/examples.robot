@@ -6614,6 +6614,45 @@ Pkg Builds And Links MLang Dynamic Library Target
     ...    msg=Dynamic-library demo failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    dynamic library results: sum=42, product=42
 
+Pkg Builds And Links MLang Static Library Target
+    [Documentation]    Verify [[lib]] type=static archive output, depends_on
+    ...                ordering, direct archive linking, and execution.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_static_library
+    ${setup}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${base}' && cp -R '${EXECDIR}/examples/package_manager_static_library' '${base}'
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup.rc}    0
+    ...    msg=Static-library fixture setup failed\n${setup.stdout}\n${setup.stderr}
+
+    ${build}=    Run Process    ${MLANG}    pkg    build
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Static-library package build failed (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    Should Contain    ${build.stdout}    Building static library target 'arithmetic_static'
+    Should Contain    ${build.stdout}    Compiling target 'static_library_demo'
+    ${library_index}=    Evaluate    """${build.stdout}""".find("Building static library target 'arithmetic_static'")
+    ${binary_index}=    Evaluate    """${build.stdout}""".find("Compiling target 'static_library_demo'")
+    Should Be True    ${library_index} >= 0 and ${library_index} < ${binary_index}
+
+    File Should Exist    ${base}/build/libarithmetic_static.a
+    File Should Exist    ${base}/build/static_library_demo
+    ${archive}=    Run Process    ar    -t    ${base}/build/libarithmetic_static.a
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${archive.rc}    0
+    Should Not Be Empty    ${archive.stdout}
+
+    ${run}=    Run Process    ${base}/build/static_library_demo
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=Static-library demo failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    static library results: difference=42, square=49
+
+    ${dynamic_check}=    Run Process    /bin/sh    -lc
+    ...    if command -v otool >/dev/null 2>&1; then ! otool -L '${base}/build/static_library_demo' | grep -q arithmetic_static; elif command -v ldd >/dev/null 2>&1; then ! ldd '${base}/build/static_library_demo' | grep -q arithmetic_static; fi
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${dynamic_check.rc}    0
+    ...    msg=Executable unexpectedly depends dynamically on arithmetic_static\n${dynamic_check.stdout}\n${dynamic_check.stderr}
+
 *** Keywords ***
 Initialize Artifact Dir
     ${artifact_dir}=    Set Variable    ${OUTPUT DIR}

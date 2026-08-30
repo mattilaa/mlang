@@ -1,0 +1,7 @@
+pub fn subtract(left: i32, right: i32) -> i32 {
+    return left - right;
+}
+
+pub fn square(value: i32) -> i32 {
+    return value * value;
+}

@@ -154,8 +154,13 @@ Declare a dependency as system-provided.
 .B \-\-add\-lib
 Also add the dependency as a linkable package library entry.
 .SH LIBRARY TARGETS
-Declare an MLang dynamic library with
+Declare an MLang library with
 .BR [[lib]] .
+Libraries are dynamic by default; set
+.B type = "static"
+to build a
+.B .a
+archive.
 A
 .B [[bin]]
 or another library lists internal library targets with

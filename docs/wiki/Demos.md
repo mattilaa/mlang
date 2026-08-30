@@ -171,6 +171,7 @@ demo directory so its `mlang.toml` is selected automatically.
 | `examples/package_manager_oscilloscope_demo` | A macOS CoreAudio waveform oscilloscope with an MLang frontend and C++ audio/rendering bridge. | `(cd examples/package_manager_oscilloscope_demo && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_reverb2_trance` | A trance drum sequence using the independent [`dsp::reverb2`](DSP-Reverb2), analog-color processing, and a look-ahead limiter. | `(cd examples/package_manager_reverb2_trance && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_reverb_techno` | A sample-based techno sequence with selectable [`dsp::reverb`](DSP-Reverb) algorithms and CoreAudio/JACK playback. | `(cd examples/package_manager_reverb_techno && ../../build/mlang pkg run demo)` |
+| `examples/package_manager_static_library` | An MLang `[[lib]]` archived as a static `.a` library and linked into a dependent executable. | `(cd examples/package_manager_static_library && ../../build/mlang pkg build && ./build/static_library_demo)` |
 | `examples/package_manager_static_cjson` | Fetching a cJSON tarball, building a static archive, and linking it into an MLang executable. | `(cd examples/package_manager_static_cjson && ./run_demo.sh)` |
 | `examples/package_manager_task_graph` | Named task branches, `join_on`, phases, and phase barriers. | `(cd examples/package_manager_task_graph && ../../build/mlang pkg run workflow)` |
 | `examples/package_manager_vst3_coreaudio_synth` | Fetching the Steinberg VST3 SDK, building an MLang-powered VST3 instrument, and previewing the same DSP through CoreAudio. | `(cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square)` |
@@ -202,6 +203,27 @@ find build -maxdepth 1 -type f -name '*arithmetic*' -print
 
 Expect `libarithmetic.dylib` on macOS, `libarithmetic.so` on Linux, or
 `arithmetic.dll` plus `libarithmetic.dll.a` on Windows/MinGW.
+
+### Verify the static-library package
+
+Build the MLang archive, link it into the executable, and run it:
+
+```sh
+cd examples/package_manager_static_library
+../../build/mlang pkg build
+test -f build/libarithmetic_static.a
+./build/static_library_demo
+```
+
+Expected output:
+
+```text
+static library results: difference=42, square=49
+```
+
+`ar -t build/libarithmetic_static.a` lists the compiled MLang object. The
+executable does not require `libarithmetic_static` at runtime because the
+archive's required object code is copied into the binary during linking.
 
 For configurable audio demos, use `pkg run list-devices` in the corresponding
 directory to inspect available outputs. Their local README files document

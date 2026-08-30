@@ -836,11 +836,10 @@ Key details:
 
 ### `[[lib]]` and internal target dependencies
 
-Use `[[lib]]` to build an MLang dynamic library. A `[[bin]]` or another
-`[[lib]]` target can declare it in `depends_on`; the package manager then
-builds libraries first, adds the build directory to the library search path,
-links each dependent with `-l<name>`, and embeds a loader-relative runtime
-search path.
+Use `[[lib]]` to build an MLang library. The default `type = "dynamic"`
+produces a shared library; `type = "static"` produces a `.a` archive. A
+`[[bin]]` or another `[[lib]]` target can declare libraries in `depends_on`,
+which controls build order and automatic linking.
 
 ```toml
 # Declaration order does not matter: depends_on builds arithmetic first.
@@ -852,12 +851,15 @@ depends_on = ["arithmetic"]
 [[lib]]
 name = "arithmetic"
 entry = "src/arithmetic.mla"
+type = "static"
 ```
 
-Outputs use the platform convention: `libarithmetic.dylib` on macOS,
+Static targets produce `libarithmetic.a`, which is passed directly into every
+dependent executable link. Dynamic outputs use the platform convention:
+`libarithmetic.dylib` on macOS,
 `libarithmetic.so` on Linux, and `arithmetic.dll` plus a MinGW import library
-on Windows. `[[lib]]`
-supports the same target-scoped build configuration as `[[bin]]`, including
+on Windows. Dynamic dependents receive `-l<name>` plus a loader-relative
+runtime path. `[[lib]]` supports the same target-scoped build configuration as `[[bin]]`, including
 `libs`, `lib_paths`, and fetched or system dependencies. Every name in
 `depends_on` must identify a `[[lib]]` target; unknown targets and dependency
 cycles are reported before compilation.
@@ -870,6 +872,7 @@ The compiler mode behind library targets is also available directly:
 
 ```sh
 mlang --shared src/arithmetic.mla -o build/libarithmetic.dylib
+mlang --static-library src/arithmetic.mla -o build/libarithmetic.a
 ```
 
 When `-o` is omitted, `--shared` selects the platform's default dynamic
@@ -888,6 +891,21 @@ Successful dynamic loading and symbol calls produce:
 
 ```text
 dynamic library results: sum=42, product=42
+```
+
+The static counterpart is `examples/package_manager_static_library`:
+
+```sh
+cd examples/package_manager_static_library
+../../build/mlang pkg build
+test -f build/libarithmetic_static.a
+./build/static_library_demo
+```
+
+Successful archive linking produces:
+
+```text
+static library results: difference=42, square=49
 ```
 
 ### `[[bin]]`
@@ -1347,6 +1365,9 @@ Workspace example in this repository:
 - `examples/package_manager_dynamic_library`
   Demonstrates an MLang `[[lib]]` target built first and linked automatically
   into a dependent `[[bin]]` target.
+- `examples/package_manager_static_library`
+  Demonstrates `[[lib]] type = "static"`, archive inspection, and a runnable
+  dependent binary with no runtime dependency on the internal library.
 - `examples/package_manager_multilanguage_example`
   Demonstrates a task-driven single-binary build that compiles MLang, C, and
   C++ sources in separate phases, fetches `miniaudio` and `AudioFile`, and

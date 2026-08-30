@@ -930,11 +930,14 @@ struct BuildTarget
     {
         executable,
         dynamic_library,
+        static_library,
     };
 
     std::string name;
     std::string entry;
     Kind kind = executable;
+    std::string invalidLibraryType;
+    bool hasInvalidLibraryType = false;
     std::vector<std::string> dependsOn;
     BuildConfig config;
 };
@@ -1797,6 +1800,19 @@ static std::vector<BuildTarget> parse_build_targets(const std::string& content)
         {
             append_toml_string_list_value(value, current->dependsOn);
         }
+        else if(key == "type" && current->kind != BuildTarget::executable)
+        {
+            const std::string libraryType = unquote(value);
+            if(libraryType == "static")
+                current->kind = BuildTarget::static_library;
+            else if(libraryType == "dynamic" || libraryType == "shared")
+                current->kind = BuildTarget::dynamic_library;
+            else
+            {
+                current->invalidLibraryType = libraryType;
+                current->hasInvalidLibraryType = true;
+            }
+        }
         else
         {
             parse_build_config_key_value(current->config, key, value);
@@ -1847,8 +1863,7 @@ order_build_targets(const std::vector<BuildTarget>& targets,
                                targets[index].name + "'");
                 return false;
             }
-            if(targets[dependency->second].kind !=
-               BuildTarget::dynamic_library)
+            if(targets[dependency->second].kind == BuildTarget::executable)
             {
                 pkg_error_line("Package target '" + targets[index].name +
                                "' can only depend_on [[lib]] targets; '" +
@@ -1880,6 +1895,30 @@ static std::string dynamic_library_filename(const std::string& name)
 #else
     return "lib" + name + ".so";
 #endif
+}
+
+static std::string static_library_filename(const std::string& name)
+{
+    return "lib" + name + ".a";
+}
+
+static void collect_target_link_dependencies(
+    const BuildTarget& target,
+    const std::map<std::string, const BuildTarget*>& targetsByName,
+    std::vector<const BuildTarget*>& dependencies,
+    std::unordered_set<std::string>& seen)
+{
+    for(const auto& dependencyName : target.dependsOn)
+    {
+        if(!seen.insert(dependencyName).second)
+            continue;
+        const auto dependency = targetsByName.find(dependencyName);
+        if(dependency == targetsByName.end())
+            continue;
+        dependencies.push_back(dependency->second);
+        collect_target_link_dependencies(*dependency->second, targetsByName,
+                                         dependencies, seen);
+    }
 }
 
 static std::string package_target_rpath_flag()
@@ -4447,9 +4486,17 @@ static int build_for_manifest(const PackageManifest& pkg,
     }
     for(const auto& target : targets)
     {
-        const char* sectionName = target.kind == BuildTarget::dynamic_library
+        const char* sectionName = target.kind != BuildTarget::executable
                                       ? "[[lib]]"
                                       : "[[bin]]";
+        if(target.hasInvalidLibraryType)
+        {
+            pkg_error_line("Invalid [[lib]] type '" +
+                           target.invalidLibraryType + "' for target '" +
+                           target.name +
+                           "' (expected dynamic, shared, or static)");
+            return 1;
+        }
         if(target.name.empty())
         {
             pkg_error_line("Missing name in " + std::string(sectionName) +
@@ -4570,6 +4617,9 @@ static int build_for_manifest(const PackageManifest& pkg,
     const std::filesystem::path buildDir =
         package_build_dir(pkg.packageDir, effectivePackageBuildConfig);
     std::filesystem::create_directories(buildDir);
+    std::map<std::string, const BuildTarget*> targetsByName;
+    for(const auto& target : targets)
+        targetsByName[target.name] = &target;
     std::string backend = argv0;
     if(argv0.find('/') != std::string::npos)
         backend = std::filesystem::absolute(argv0).string();
@@ -4597,13 +4647,17 @@ static int build_for_manifest(const PackageManifest& pkg,
             buildDir /
             (target.kind == BuildTarget::dynamic_library
                  ? dynamic_library_filename(target.name)
-                 : target.name);
+                 : target.kind == BuildTarget::static_library
+                       ? static_library_filename(target.name)
+                       : target.name);
         std::string output = outputPath.string();
         std::string cmd = shell_quote(backend) + " " +
                           shell_quote(target.entry) + " -o " +
                           shell_quote(output);
         if(target.kind == BuildTarget::dynamic_library)
             cmd += " --shared";
+        else if(target.kind == BuildTarget::static_library)
+            cmd += " --static-library";
         if(!buildConfig.targetArch.empty())
             cmd += " --target-arch " + shell_quote(buildConfig.targetArch);
         if(!optFlag.empty())
@@ -4614,14 +4668,37 @@ static int build_for_manifest(const PackageManifest& pkg,
             cmd += " -L" + shell_quote(dir);
         for(const auto& lib : buildConfig.libs)
             cmd += " -l" + shell_quote(lib);
-        if(!target.dependsOn.empty())
+        if(!target.dependsOn.empty() &&
+           target.kind != BuildTarget::static_library)
         {
-            cmd += " -L" + shell_quote(buildDir.string());
-            for(const auto& dependencyName : target.dependsOn)
-                cmd += " -l" + shell_quote(dependencyName);
-            const std::string rpath = package_target_rpath_flag();
-            if(!rpath.empty())
-                cmd += " " + shell_quote(rpath);
+            std::vector<const BuildTarget*> targetDependencies;
+            std::unordered_set<std::string> seenDependencies;
+            collect_target_link_dependencies(target, targetsByName,
+                                             targetDependencies,
+                                             seenDependencies);
+            bool hasDynamicDependency = false;
+            for(const auto* dependency : targetDependencies)
+            {
+                if(dependency->kind == BuildTarget::static_library)
+                {
+                    cmd += " " + shell_quote(
+                        (buildDir / static_library_filename(dependency->name))
+                            .string());
+                }
+                else
+                {
+                    if(!hasDynamicDependency)
+                        cmd += " -L" + shell_quote(buildDir.string());
+                    cmd += " -l" + shell_quote(dependency->name);
+                    hasDynamicDependency = true;
+                }
+            }
+            if(hasDynamicDependency)
+            {
+                const std::string rpath = package_target_rpath_flag();
+                if(!rpath.empty())
+                    cmd += " " + shell_quote(rpath);
+            }
         }
         if(buildConfig.staticDeps.value_or(false))
         {
@@ -4648,7 +4725,10 @@ static int build_for_manifest(const PackageManifest& pkg,
             execution_step_label(std::string(
                                      target.kind == BuildTarget::dynamic_library
                                          ? "Building dynamic library target '"
-                                         : "Compiling target '") +
+                                         : target.kind ==
+                                                   BuildTarget::static_library
+                                               ? "Building static library target '"
+                                               : "Compiling target '") +
                                  target.name +
                                  "' from " + target.entry + " -> " + output),
             pkg.packageDir, cmd, buildConfig.pathEntries, true);
