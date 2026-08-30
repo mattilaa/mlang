@@ -16,6 +16,17 @@ Multi-file projects, package manifests, helper-script applications, and other
 subdirectory-based showcases are indexed separately in
 [Directory-Based Demos](demos.md).
 
+## Contents
+
+- [Example pages](#example-pages)
+- [Example programs](#example-programs)
+  - [Bare metal and QEMU](#bare-metal-and-qemu)
+  - [Route planning and genetic algorithms](#route-planning-and-genetic-algorithms)
+  - [Package-manager dynamic library](#package-manager-dynamic-library)
+  - [Package-manager static library](#package-manager-static-library)
+- [Focused regression examples](#focused-regression-examples)
+- [Directory-based demos](demos.md)
+
 ## Example pages
 
 - @subpage uml_ui_generator — TOML-driven UML diagram/UI generator example.
