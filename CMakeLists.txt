@@ -42,10 +42,26 @@ endif()
 
 set(MLANG_VERSION_MAJOR 0)
 set(MLANG_VERSION_MINOR 2)
+set(MLANG_RELEASE_VERSION "" CACHE STRING
+    "Exact MAJOR.MINOR.PATCH version for a reproducible release build")
 option(MLANG_AUTO_INCREMENT_BUILD "Auto-increment build number on each CMake configure" ON)
 set(MLANG_VERSION_BUILD 0 CACHE STRING "Build number")
 set(MLANG_BUILD_NUMBER_FILE "${CMAKE_BINARY_DIR}/.mlang_build_number" CACHE FILEPATH
     "Path to persisted auto-increment build number")
+
+if(NOT MLANG_RELEASE_VERSION STREQUAL "")
+    if(NOT MLANG_RELEASE_VERSION MATCHES
+       "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+        message(FATAL_ERROR
+            "MLANG_RELEASE_VERSION must use MAJOR.MINOR.PATCH")
+    endif()
+    set(MLANG_VERSION_MAJOR "${CMAKE_MATCH_1}")
+    set(MLANG_VERSION_MINOR "${CMAKE_MATCH_2}")
+    set(MLANG_VERSION_BUILD "${CMAKE_MATCH_3}" CACHE STRING
+        "Build number" FORCE)
+    set(MLANG_AUTO_INCREMENT_BUILD OFF CACHE BOOL
+        "Auto-increment build number on each CMake configure" FORCE)
+endif()
 
 if(MLANG_AUTO_INCREMENT_BUILD)
     set(_mlang_seed "${MLANG_VERSION_BUILD}")
@@ -188,10 +204,14 @@ find_program(MLANG_CLANGXX_EXE NAMES clang++-17 clang++ REQUIRED)
 
 get_filename_component(MLANG_OPENSSL_SSL_DIR "${OPENSSL_SSL_LIBRARY}" DIRECTORY)
 get_filename_component(MLANG_OPENSSL_CRYPTO_DIR "${OPENSSL_CRYPTO_LIBRARY}" DIRECTORY)
-add_compile_definitions(MLANG_OPENSSL_SSL_LIBRARY="${OPENSSL_SSL_LIBRARY}")
-add_compile_definitions(MLANG_OPENSSL_CRYPTO_LIBRARY="${OPENSSL_CRYPTO_LIBRARY}")
-add_compile_definitions(MLANG_OPENSSL_SSL_DIR="${MLANG_OPENSSL_SSL_DIR}")
-add_compile_definitions(MLANG_OPENSSL_CRYPTO_DIR="${MLANG_OPENSSL_CRYPTO_DIR}")
+option(MLANG_PORTABLE_OPENSSL_LINK_ARGS
+       "Make generated programs discover OpenSSL with -lssl/-lcrypto" OFF)
+if(NOT MLANG_PORTABLE_OPENSSL_LINK_ARGS)
+    add_compile_definitions(MLANG_OPENSSL_SSL_LIBRARY="${OPENSSL_SSL_LIBRARY}")
+    add_compile_definitions(MLANG_OPENSSL_CRYPTO_LIBRARY="${OPENSSL_CRYPTO_LIBRARY}")
+    add_compile_definitions(MLANG_OPENSSL_SSL_DIR="${MLANG_OPENSSL_SSL_DIR}")
+    add_compile_definitions(MLANG_OPENSSL_CRYPTO_DIR="${MLANG_OPENSSL_CRYPTO_DIR}")
+endif()
 
 set(HEADER_FILES
     ${CMAKE_SOURCE_DIR}/include/ast.h

@@ -628,6 +628,24 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
 #ifdef MLANG_OPENSSL_SSL_LIBRARY
     append_unique_link_arg(linkArgs, MLANG_OPENSSL_SSL_LIBRARY);
 #else
+    if(const char* env = std::getenv("MLANG_OPENSSL_LIB_PATH"))
+    {
+        for(const auto& dir : split_env_paths(env))
+            append_unique_link_arg(linkArgs, std::string("-L") + dir);
+    }
+#ifdef __APPLE__
+    const char* portableOpenSSLDirs[] = {
+        "/opt/homebrew/opt/openssl@3/lib",
+        "/usr/local/opt/openssl@3/lib",
+        "/opt/homebrew/opt/openssl/lib",
+        "/usr/local/opt/openssl/lib"};
+    for(const char* dir : portableOpenSSLDirs)
+    {
+        std::error_code ec;
+        if(std::filesystem::is_directory(dir, ec))
+            append_unique_link_arg(linkArgs, std::string("-L") + dir);
+    }
+#endif
     append_unique_link_arg(linkArgs, "-lssl");
 #endif
 #ifdef MLANG_OPENSSL_CRYPTO_LIBRARY

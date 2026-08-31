@@ -20,6 +20,7 @@ For more documentation, visit the [MLang GitHub Wiki](https://github.com/mattila
 - [Package Manager (MLang Backend Default)](#package-manager-mlang-backend-default)
 - [Stdlib Linking](#stdlib-linking)
 - [Build + Install](#build--install)
+- [GitHub Releases](#github-releases)
 - [Documentation](#documentation)
 - [AddressSanitizer Verification](#addresssanitizer-verification)
 - [Codesigning Built Binaries On macOS](#codesigning-built-binaries-on-macos)
@@ -1104,6 +1105,53 @@ Common bootstrap task entrypoints include:
 - `install-mlang-format`
 - `install-mlang-frontend`
 - `install-tooling`
+
+## GitHub Releases
+
+Pushing a tag in `vMAJOR.MINOR.PATCH` form runs the release workflow. It builds
+Linux `x86_64` and macOS `arm64` archives, creates or updates the matching
+GitHub Release, and uploads the archives and SHA-256 checksum files. The macOS
+job also creates an unsigned `.pkg` installer for `/usr/local`.
+
+For the first `v0.2.0` release:
+
+```sh
+git tag -a v0.2.0 -m "MLang v0.2.0"
+git push origin v0.2.0
+```
+
+The archives contain `mlang`, `libmlang_std.a`, standard-library sources,
+standalone modules, the README, license, dependency report, and `INSTALL.txt`.
+Their `bin/mlang` wrapper locates all bundled resources, so an archive can be
+unpacked and run in place:
+
+```sh
+tar -xzf mlang-v0.2.0-linux-x86_64.tar.gz
+./mlang-v0.2.0-linux-x86_64/bin/mlang --version
+```
+
+Native programs produced by MLang still need a C++ linker and OpenSSL
+development libraries on the host. Portable builds discover common Homebrew
+OpenSSL locations automatically; set `MLANG_OPENSSL_LIB_PATH` when OpenSSL is
+installed elsewhere. On macOS, `brew install llvm openssl@3` provides the
+compiler/linker and its native runtime dependencies. Each archive also includes
+`DEPENDENCIES.txt` with the exact libraries used by that build. Verify
+downloaded artifacts before use:
+
+```sh
+shasum -a 256 -c mlang-v0.2.0-macos-arm64.tar.gz.sha256
+```
+
+Build the current-host archive locally with:
+
+```sh
+scripts/build_release.sh --version v0.2.0
+```
+
+For an existing tag, open **Actions > Release binaries > Run workflow** and
+enter that exact tag. The workflow replaces matching assets without requiring
+a new tag. The macOS package is unsigned, so Gatekeeper may require explicit
+approval in **System Settings > Privacy & Security**.
 
 ## Documentation
 

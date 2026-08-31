@@ -1,0 +1,143 @@
+name: Release binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to create or update (for example v0.2.0)"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            runner: ubuntu-22.04
+            artifact: release-linux-x86_64
+          - name: macOS arm64
+            runner: macos-15
+            artifact: release-macos-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      MLANG_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          [[ "$MLANG_RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Release tag must use vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          }
+
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            build-essential clang-15 llvm-15-dev cmake ninja-build \
+            flex bison libssl-dev libzstd-dev libz3-dev zlib1g-dev \
+            python3 rapidjson-dev zip
+          echo "/usr/lib/llvm-15/bin" >> "$GITHUB_PATH"
+
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake ninja llvm flex bison openssl@3 rapidjson
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+
+      - name: Build release archive
+        run: |
+          scripts/build_release.sh \
+            --version "$MLANG_RELEASE_TAG" \
+            --archive-format tar.gz \
+            --jobs 3
+
+      - name: Build macOS installer package
+        if: runner.os == 'macOS'
+        run: |
+          scripts/build_macos_pkg.sh \
+            --root build-release/install-root \
+            --version "$MLANG_RELEASE_TAG" \
+            --output-dir dist
+
+      - name: Verify release archive
+        shell: bash
+        run: |
+          archive="$(find dist -maxdepth 1 -name '*.tar.gz' -print -quit)"
+          [[ -n "$archive" ]]
+          verify_dir="$(mktemp -d)"
+          tar -xzf "$archive" -C "$verify_dir"
+          bundle="$(find "$verify_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          "$bundle/bin/mlang" --version | grep -F "${MLANG_RELEASE_TAG#v}"
+          cd "$verify_dir"
+          printf '%s\n' \
+            'fn main() -> i32 {' \
+            '    println!("release archive works");' \
+            '    return 0;' \
+            '}' > smoke.mla
+          "$bundle/bin/mlang" smoke.mla -o smoke
+          ./smoke | grep -F "release archive works"
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/*.tar.gz
+            dist/*.pkg
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Attach assets to GitHub Release
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create or update release
+        run: |
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "MLang $RELEASE_TAG" \
+              --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
