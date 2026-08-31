@@ -3,11 +3,10 @@
 #include "ir/backend_utils.h"
 #include "ir/common.h"
 #include "ir/return_inference.h"
+#include "llvm_compat.h"
 
 #include <functional>
 #include <llvm/Config/llvm-config.h>
-#include <llvm/TargetParser/Host.h>
-#include <llvm/TargetParser/Triple.h>
 #include <unordered_map>
 #include <unordered_set>
 

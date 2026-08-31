@@ -1,5 +1,6 @@
 #include "ir.h"
 #include "ir/backend_utils.h"
+#include "llvm_compat.h"
 
 #include <array>
 #include <algorithm>
@@ -17,8 +18,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
-#include <llvm/TargetParser/Host.h>
-#include <llvm/TargetParser/Triple.h>
 #include <optional>
 
 namespace

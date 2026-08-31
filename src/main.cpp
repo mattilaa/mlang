@@ -1,6 +1,7 @@
 #include "ast.h"
 #include "diagnostics.h"
 #include "ir.h"
+#include "llvm_compat.h"
 #include "module.h"
 #include "package_manager.h"
 #include "source_filter.h"
@@ -18,7 +19,6 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
-#include <llvm/TargetParser/Host.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
@@ -30,7 +30,6 @@
 #include <vector>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <llvm/TargetParser/Triple.h>
 
 // Declare functions and globals from parser/lexer
 extern int yyparse();

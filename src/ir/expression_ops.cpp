@@ -3,11 +3,10 @@
 #include "ir/backend_utils.h"
 #include "ir/common.h"
 #include "ir/expression_type_kind.h"
+#include "llvm_compat.h"
 
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/InlineAsm.h>
-#include <llvm/TargetParser/Host.h>
-#include <llvm/TargetParser/Triple.h>
 
 using mlang::ir_detail::ast_analysis::contains_unsupported_try_control_flow;
 using mlang::ir_detail::common::Helpers;

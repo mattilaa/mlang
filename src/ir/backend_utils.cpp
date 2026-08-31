@@ -1,4 +1,5 @@
 #include "ir/backend_utils.h"
+#include "llvm_compat.h"
 
 #include <algorithm>
 #include <array>
@@ -6,7 +7,6 @@
 #include <filesystem>
 #include <functional>
 #include <llvm/Config/llvm-config.h>
-#include <llvm/TargetParser/Triple.h>
 #include <optional>
 
 namespace mlang::ir_detail
