@@ -4,9 +4,124 @@
 
 #include <llvm/Config/llvm-config.h>
 #include <functional>
+#include <limits>
 
 using mlang::ir_detail::ast_analysis::contains_update_expression;
 using mlang::ir_detail::common::Helpers;
+
+namespace
+{
+bool isNarrowIntegerKind(TypeNode::TypeKind kind)
+{
+    return kind == TypeNode::TYPE_BIT || kind == TypeNode::TYPE_INT ||
+           kind == TypeNode::TYPE_I8 || kind == TypeNode::TYPE_I16 ||
+           kind == TypeNode::TYPE_I32 || kind == TypeNode::TYPE_I64 ||
+           kind == TypeNode::TYPE_U8 || kind == TypeNode::TYPE_U16 ||
+           kind == TypeNode::TYPE_U32 || kind == TypeNode::TYPE_U64;
+}
+
+std::string narrowTypeName(TypeNode::TypeKind kind)
+{
+    switch(kind)
+    {
+    case TypeNode::TYPE_BIT: return "bit";
+    case TypeNode::TYPE_INT:
+    case TypeNode::TYPE_I32: return "i32";
+    case TypeNode::TYPE_I8: return "i8";
+    case TypeNode::TYPE_I16: return "i16";
+    case TypeNode::TYPE_I64: return "i64";
+    case TypeNode::TYPE_U8: return "u8";
+    case TypeNode::TYPE_U16: return "u16";
+    case TypeNode::TYPE_U32: return "u32";
+    case TypeNode::TYPE_U64: return "u64";
+    default: return "non-integer";
+    }
+}
+
+bool constantFitsIntegerCast(const llvm::ConstantInt* value,
+                            bool sourceUnsigned, unsigned targetBits,
+                            bool targetUnsigned)
+{
+    const llvm::APInt& raw = value->getValue();
+    if(targetUnsigned)
+    {
+        if(!sourceUnsigned && raw.isNegative())
+            return false;
+        if(targetBits >= 64)
+            return true;
+        return raw.getLimitedValue() <= ((uint64_t{1} << targetBits) - 1);
+    }
+
+    const uint64_t targetMax =
+        targetBits >= 64 ? static_cast<uint64_t>(std::numeric_limits<int64_t>::max())
+                         : ((uint64_t{1} << (targetBits - 1)) - 1);
+    if(sourceUnsigned)
+        return raw.getLimitedValue() <= targetMax;
+
+    const int64_t signedValue = raw.getSExtValue();
+    const int64_t targetMin =
+        targetBits >= 64 ? std::numeric_limits<int64_t>::min()
+                         : -(int64_t{1} << (targetBits - 1));
+    return signedValue >= targetMin &&
+           signedValue <= static_cast<int64_t>(targetMax);
+}
+} // namespace
+
+void CodeGenerator::emitNarrowCastRuntimeCheck(CastExpressionNode* node,
+                                               llvm::Value* valid)
+{
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    if(!function)
+    {
+        reportError(node->line,
+                    "narrow_cast runtime check requires a function body");
+        return;
+    }
+
+    llvm::BasicBlock* okBB =
+        llvm::BasicBlock::Create(context, "narrow.ok", function);
+    llvm::BasicBlock* failBB =
+        llvm::BasicBlock::Create(context, "narrow.fail", function);
+    builder.CreateCondBr(valid, okBB, failBB);
+
+    builder.SetInsertPoint(failBB);
+    initializeFormatFunctions();
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(
+        "narrow_cast panic at %s:%d: value cannot be represented as %s\n",
+        "narrow.panic.format");
+    llvm::Value* fileStr = builder.CreateGlobalString(
+        sourceFileName.empty() ? "<input>" : sourceFileName,
+        "narrow.panic.file");
+    llvm::Value* typeStr = builder.CreateGlobalString(
+        narrowTypeName(node->targetType), "narrow.panic.type");
+#else
+    llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+        "narrow_cast panic at %s:%d: value cannot be represented as %s\n",
+        "narrow.panic.format");
+    llvm::Value* fileStr = builder.CreateGlobalStringPtr(
+        sourceFileName.empty() ? "<input>" : sourceFileName,
+        "narrow.panic.file");
+    llvm::Value* typeStr = builder.CreateGlobalStringPtr(
+        narrowTypeName(node->targetType), "narrow.panic.type");
+#endif
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* opaquePtrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Value* stderrVal =
+        builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+    builder.CreateCall(
+        fprintfFunc,
+        {stderrVal, formatStr, fileStr,
+         llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), node->line),
+         typeStr});
+    builder.CreateCall(abortFunc, {});
+    builder.CreateUnreachable();
+    builder.SetInsertPoint(okBB);
+}
 
 llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
 {
@@ -16,6 +131,15 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
 
     TypeNode* sourceTypeNode =
         inferExpressionTypeNode(node->expression, node->line);
+
+    if(node->checkedNarrow &&
+       (!value->getType()->isIntegerTy() ||
+        !isNarrowIntegerKind(node->targetType)))
+    {
+        reportError(node->line,
+                    "narrow_cast requires integer source and target types");
+        return nullptr;
+    }
 
     if(node->targetType == TypeNode::TYPE_BIT)
     {
@@ -35,10 +159,23 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
             const uint64_t raw = ci->getZExtValue();
             if(raw > 1u)
             {
-                reportError(node->line,
-                            "bit cast expects integer value 0 or 1");
+                reportError(
+                    node->line,
+                    node->checkedNarrow
+                        ? "narrow_cast constant value cannot be represented "
+                          "as bit"
+                        : "bit cast expects integer value 0 or 1");
                 return nullptr;
             }
+        }
+
+        if(node->checkedNarrow && checkedNarrowCasts &&
+           !llvm::isa<llvm::ConstantInt>(value))
+        {
+            llvm::Value* valid = builder.CreateICmpULE(
+                value, llvm::ConstantInt::get(value->getType(), 1),
+                "narrow.bit.valid");
+            emitNarrowCastRuntimeCheck(node, valid);
         }
 
         return builder.CreateICmpNE(
@@ -48,16 +185,63 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
     llvm::Type* targetType = getLLVMType(node->targetType);
     llvm::Type* sourceType = value->getType();
 
-    if(sourceType == targetType)
+    if(sourceType == targetType && !node->checkedNarrow)
         return value;
 
     if(sourceType->isIntegerTy() && targetType->isIntegerTy())
     {
-        bool treatAsUnsigned =
+        bool sourceUnsigned =
             sourceType->isIntegerTy(1) ||
             (sourceTypeNode && isUnsignedType(sourceTypeNode->kind));
-        return builder.CreateIntCast(value, targetType, !treatAsUnsigned,
-                                     treatAsUnsigned ? "zextcast" : "sextcast");
+        const bool targetUnsigned = targetType->isIntegerTy(1) ||
+                                    isUnsignedType(node->targetType);
+
+        if(node->checkedNarrow)
+        {
+            if(auto* constant = llvm::dyn_cast<llvm::ConstantInt>(value))
+            {
+                if(!constantFitsIntegerCast(
+                       constant, sourceUnsigned,
+                       targetType->getIntegerBitWidth(), targetUnsigned))
+                {
+                    reportError(node->line,
+                                "narrow_cast constant value cannot be "
+                                "represented as " +
+                                    narrowTypeName(node->targetType));
+                    return nullptr;
+                }
+            }
+        }
+
+        llvm::Value* castValue = builder.CreateIntCast(
+            value, targetType, !sourceUnsigned,
+            sourceUnsigned ? "narrow.zextcast" : "narrow.sextcast");
+
+        if(!node->checkedNarrow || !checkedNarrowCasts ||
+           llvm::isa<llvm::ConstantInt>(value))
+            return castValue;
+
+        llvm::Value* restored = builder.CreateIntCast(
+            castValue, sourceType, !targetUnsigned, "narrow.roundtrip");
+        llvm::Value* valid =
+            builder.CreateICmpEQ(value, restored, "narrow.roundtrip.ok");
+        if(!sourceUnsigned && targetUnsigned)
+        {
+            llvm::Value* nonNegative = builder.CreateICmpSGE(
+                value, llvm::ConstantInt::get(sourceType, 0),
+                "narrow.source.nonnegative");
+            valid = builder.CreateAnd(valid, nonNegative, "narrow.valid");
+        }
+        else if(sourceUnsigned && !targetUnsigned)
+        {
+            llvm::Value* nonNegative = builder.CreateICmpSGE(
+                castValue, llvm::ConstantInt::get(targetType, 0),
+                "narrow.target.nonnegative");
+            valid = builder.CreateAnd(valid, nonNegative, "narrow.valid");
+        }
+
+        emitNarrowCastRuntimeCheck(node, valid);
+        return castValue;
     }
 
     // Integer to float/double

@@ -254,6 +254,7 @@ static int is_try_question_context()
 "u16"           { return U16; }
 "u32"           { return U32; }
 "u64"           { return U64; }
+"narrow_cast"   { return NARROW_CAST; }
 "println!"      { return PRINTLN; }
 "print!"        { return PRINT; }
 "eprintln!"     { return EPRINTLN; }

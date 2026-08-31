@@ -234,3 +234,9 @@ fn test_nested_function_complex_composition() {
     verify_eq_i32(3, normalize(3));
     verify_eq_i32(10, normalize(24));
 }
+
+#[test]
+fn test_checked_narrow_integer_cast() {
+    let value: u32 = narrow_cast<u32>(42i32);
+    verify_eq_i32(42, i32(value));
+}

@@ -9,6 +9,7 @@ For more documentation, visit the [MLang GitHub Wiki](https://github.com/mattila
 
 - [What Is Mlang](#what-is-mlang)
 - [Compile-Time Evaluation With `cexpr`](#compile-time-evaluation-with-cexpr)
+- [Checked Narrow Integer Casts](#checked-narrow-integer-casts)
 - [Fixed-Capacity Arrays](#fixed-capacity-arrays)
 - [Tools Shipped In This Repository](#tools-shipped-in-this-repository)
 - [Build From Scratch (Step By Step)](#build-from-scratch-step-by-step)
@@ -141,6 +142,29 @@ Current first-version scope:
 - `cexpr name: Type = expr;` declares a compile-time value.
 - `cexpr if` selects a branch during compilation.
 - Calling a normal runtime [`fn`](Language-Syntax) from `cexpr(...)` is rejected.
+
+## Checked Narrow Integer Casts
+
+Use `narrow_cast<T>(value)` when converting between integer types where losing
+the value would be an error:
+
+```rust
+fn to_index(value: i32) -> u32 {
+    return narrow_cast<u32>(value);
+}
+```
+
+Constant values are checked in every build. An invalid constant stops
+compilation with `MLANG-E2009`:
+
+```rust
+let impossible: u32 = narrow_cast<u32>(-1i32); // compile error
+```
+
+Runtime values are checked in debug builds (`-O0` and `-Og`). A failed check
+prints the source file and line, then aborts the program. Optimized release
+builds (`-O1`, `-O2`, `-O3`, `-Os`, and `-Oz`) emit the unchecked integer cast;
+code must not rely on a release-mode failure being detected.
 
 ## Fixed-Capacity Arrays
 

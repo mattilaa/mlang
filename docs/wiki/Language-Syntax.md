@@ -192,6 +192,29 @@ let colored: str8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
 
 Use `\xNN` for terminal escape bytes such as `\x1b` (`ESC`).
 
+## Checked Narrow Integer Casts
+
+`narrow_cast<T>(value)` converts between integer types while preserving the
+original numeric value:
+
+```rust
+fn to_index(value: i32) -> u32 {
+    return narrow_cast<u32>(value);
+}
+```
+
+The compiler rejects an out-of-range constant in every build with
+`MLANG-E2009`, including negative-to-unsigned conversions:
+
+```rust
+let invalid: u32 = narrow_cast<u32>(-1i32);
+```
+
+For runtime values, `-O0` and `-Og` insert a representability check. Failure
+prints `narrow_cast panic at <file>:<line>` with the target type and aborts.
+Optimized release builds emit only the unchecked cast. The initial
+implementation supports integer source and target types, including [`bit`](Quick-Guide#types).
+
 ## Platform Macros
 
 MLang supports builtin platform macros for multiplatform source selection:

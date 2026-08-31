@@ -595,9 +595,11 @@ class CastExpressionNode : public ExpressionNode
 public:
     TypeNode::TypeKind targetType;
     ExpressionNode* expression;
+    bool checkedNarrow;
 
-    CastExpressionNode(TypeNode::TypeKind t, ExpressionNode* e)
-        : targetType(t), expression(e)
+    CastExpressionNode(TypeNode::TypeKind t, ExpressionNode* e,
+                       bool narrow = false)
+        : targetType(t), expression(e), checkedNarrow(narrow)
     {
     }
     std::string toString() const override;

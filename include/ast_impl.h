@@ -63,6 +63,8 @@ ASTNode* create_let_declaration_impl(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cexpr_declaration_impl(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration_impl(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression_impl(int type, ASTNode* expr);
+ASTNode* create_narrow_cast_expression_impl(ASTNode* type, ASTNode* expr,
+                                            int line);
 ASTNode* create_struct_def_impl(char* name, char* base_name, ASTNode* members,
                                 int is_public, int derive_debug,
                                 int derive_json);

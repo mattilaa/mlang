@@ -98,6 +98,12 @@ public:
         sourceFileName = file;
     }
 
+    /// Enable runtime validation for narrow_cast in debug builds.
+    void setCheckedNarrowCasts(bool enabled)
+    {
+        checkedNarrowCasts = enabled;
+    }
+
     /// \brief Enable or disable the warning for plain \c if/else-if with
     ///        colon syntax.
     void setWarnPlainColonIf(bool enabled)
@@ -241,6 +247,7 @@ private:
     std::map<std::string, std::string> structDebugDisplayNames;
     bool hasError;
     bool debugEnabled;
+    bool checkedNarrowCasts = false;
     bool testMode = false;             ///< Compile and run \c #[test] functions.
     bool benchmarkMode = false;        ///< Generate benchmark harness instead of test harness.
     int benchmarkIterations = 100000;  ///< Number of timed benchmark iterations.
@@ -674,6 +681,8 @@ private:
     llvm::Value* generateAtomicI64Free(FunctionCallNode* node);
     llvm::Value* generateMethodCall(MethodCallNode* node);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
+    void emitNarrowCastRuntimeCheck(CastExpressionNode* node,
+                                    llvm::Value* valid);
     llvm::Value* generateListLiteral(ListLiteralNode* node,
                                     llvm::Type* declaredElemType = nullptr);
     llvm::Value* generateArrayFill(ArrayFillNode* node,

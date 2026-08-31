@@ -1654,6 +1654,7 @@ ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cexpr_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* mla_ast_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* mla_ast_cast_expression(int type, ASTNode* expr);
+ASTNode* mla_ast_narrow_cast_expression(ASTNode* type, ASTNode* expr, int line);
 ASTNode* mla_ast_field_access_expr(ASTNode* object, char* field_name, int line);
 ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members,
                             int is_public, int derive_debug,
@@ -1903,6 +1904,7 @@ enum UpdatePosition
 %token ITER_METHOD INTO_ITER_METHOD ENUMERATE_METHOD
 %token ITER_ENUMERATE_METHOD INTO_ITER_ENUMERATE_METHOD
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
+%token NARROW_CAST
 %token VEC_MACRO
 %token DERIVE_DEBUG DERIVE_JSON
 %token TEST_ATTR
@@ -3900,6 +3902,8 @@ cast_expression
     | I32 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_I32, $3); }
     | FLOAT LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_FLOAT, $3); }
     | DOUBLE LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_DOUBLE, $3); }
+    | NARROW_CAST GENERIC_LT type GT LPAREN expression RPAREN
+        { $$ = mla_ast_narrow_cast_expression($3, $6, yylineno); }
     ;
 
 list_literal
