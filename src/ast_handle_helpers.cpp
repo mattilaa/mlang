@@ -402,6 +402,12 @@ ASTNode* mla_ast_cast_expression(int type, ASTNode* expr)
     return create_cast_expression_impl(type, expr);
 }
 
+ASTNode* mla_ast_narrow_cast_expression(ASTNode* type, ASTNode* expr,
+                                        int line)
+{
+    return create_narrow_cast_expression_impl(type, expr, line);
+}
+
 ASTNode* mla_ast_range_expression(ASTNode* start, ASTNode* end, int inclusive)
 {
     return create_range_expression_impl(start, end, inclusive);

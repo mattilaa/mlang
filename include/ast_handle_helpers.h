@@ -89,6 +89,8 @@ ASTNode* mla_ast_else_if_with_init(ASTNode* condition_init, ASTNode* condition, 
 ASTNode* mla_ast_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* mla_ast_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* mla_ast_cast_expression(int type, ASTNode* expr);
+ASTNode* mla_ast_narrow_cast_expression(ASTNode* type, ASTNode* expr,
+                                        int line);
 ASTNode* mla_ast_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* mla_ast_print_stmt(int kind, char* format_str, ASTNode* args, int line);
 ASTNode* mla_ast_print_expr_stmt(int kind, ASTNode* expr, int line);

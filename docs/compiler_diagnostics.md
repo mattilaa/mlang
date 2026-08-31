@@ -98,6 +98,10 @@ Invalid `match` structure or incompatible `match` arm typing.
 ### `MLANG-E2008`
 Missing executable entry point. Normal executable builds require a non-extern `fn main() -> i32`; object, assembly, LLVM IR, bitcode, and test-mode builds can omit it.
 
+### `MLANG-E2009`
+Invalid compile-time `narrow_cast`. A constant source value is outside the
+range representable by the requested integer target type.
+
 ### `MLANG-E2999`
 Generic semantic/codegen error that does not yet have a narrower code.
 

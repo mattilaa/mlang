@@ -88,9 +88,12 @@ protected:
 
     // Compile the MLA source file
     // Returns true if compilation succeeded
-    bool compile(bool expectSuccess = true)
+    bool compile(bool expectSuccess = true,
+                 const std::string& options = std::string())
     {
         std::string cmd = compilerPath + " -o " + outputExe + " " + sourceFile;
+        if(!options.empty())
+            cmd += " " + options;
         if(!stdlibLibDir.empty())
             cmd += " -L " + stdlibLibDir + " -lmlang_std";
         cmd += " 2>&1";
@@ -268,6 +271,38 @@ TEST_F(MLATest, MainReturnsExpression)
 // ============================================================================
 // Integer Type Tests
 // ============================================================================
+
+TEST_F(MLATest, NarrowCastRejectsInvalidConstant)
+{
+    writeSource(R"(
+fn main() -> i32 {
+    return narrow_cast<u32>(-1i32);
+}
+)");
+    int exitCode = 0;
+    std::string output = compileCapture(exitCode);
+    EXPECT_NE(exitCode, 0);
+    EXPECT_NE(output.find("MLANG-E2009"), std::string::npos);
+    EXPECT_NE(output.find("narrow_cast constant value cannot be represented as u32"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, NarrowCastDebugFailureReportsSourceLine)
+{
+    writeSource(R"(fn checked(value: i32) -> u32 {
+    return narrow_cast<u32>(value);
+}
+
+fn main() -> i32 {
+    return i32(checked(-1i32));
+}
+)");
+    ASSERT_TRUE(compile(true, "-Og"));
+    std::string output = runStderr();
+    EXPECT_NE(output.find("narrow_cast panic at " + sourceFile +
+                          ":2: value cannot be represented as u32"),
+              std::string::npos);
+}
 
 TEST_F(MLATest, I8MaxValue)
 {

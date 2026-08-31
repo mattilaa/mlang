@@ -2286,6 +2286,8 @@ int main(int argc, char** argv)
         // Initialize code generator
         CodeGenerator generator(context, builder, module, debugMode);
         generator.setSourceFile(inputFile);
+        generator.setCheckedNarrowCasts(optimizationLevel == "-O0" ||
+                                        optimizationLevel == "-Og");
         generator.setTestMode(testMode);
         generator.setBenchmarkMode(benchmarkMode);
         generator.setBenchmarkIterations(benchIterations);

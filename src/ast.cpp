@@ -797,6 +797,18 @@ ASTNode* create_cast_expression_impl(int type, ASTNode* expr)
                                   static_cast<ExpressionNode*>(expr));
 }
 
+ASTNode* create_narrow_cast_expression_impl(ASTNode* type, ASTNode* expr,
+                                            int line)
+{
+    auto* target = dynamic_cast<TypeNode*>(type);
+    auto* value = dynamic_cast<ExpressionNode*>(expr);
+    if(!target || !value)
+        throw std::runtime_error("Invalid narrow_cast operands");
+    auto* node = new CastExpressionNode(target->kind, value, true);
+    node->line = line;
+    return node;
+}
+
 ASTNode* create_struct_list_impl(ASTNode* struct_def)
 {
     auto list = new StructListNode();
@@ -2162,9 +2174,20 @@ std::string CastExpressionNode::toString() const
     case TypeNode::TYPE_DOUBLE:
         typeName = "f64";
         break;
+    case TypeNode::TYPE_I8: typeName = "i8"; break;
+    case TypeNode::TYPE_I16: typeName = "i16"; break;
+    case TypeNode::TYPE_I32: typeName = "i32"; break;
+    case TypeNode::TYPE_I64: typeName = "i64"; break;
+    case TypeNode::TYPE_U8: typeName = "u8"; break;
+    case TypeNode::TYPE_U16: typeName = "u16"; break;
+    case TypeNode::TYPE_U32: typeName = "u32"; break;
+    case TypeNode::TYPE_U64: typeName = "u64"; break;
     default:
         typeName = "unknown";
     }
+    if(checkedNarrow)
+        return "narrow_cast<" + typeName + ">(" + expression->toString() +
+               ")";
     return typeName + "(" + expression->toString() + ")";
 }
 
