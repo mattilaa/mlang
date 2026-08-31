@@ -157,14 +157,16 @@ bool Backend::initializeTarget()
     std::string features = "";
 
     llvm::TargetOptions opt;
-    auto relocModel = std::optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
-    llvm::CodeGenOptLevel codegenOpt = llvm::CodeGenOptLevel::Default;
+    auto relocModel = mlang::llvm_compat::Optional<llvm::Reloc::Model>(
+        llvm::Reloc::PIC_);
+    using CodeGenOptLevel = mlang::llvm_compat::CodeGenOptLevel;
+    CodeGenOptLevel codegenOpt = CodeGenOptLevel::Default;
     bool conservativeCodegen = false;
     if(const char* defaultOptEnv = std::getenv("MLANG_DEFAULT_OPT_LEVEL"))
     {
         if(defaultOptEnv[0] == '0' && defaultOptEnv[1] == '\0')
         {
-            codegenOpt = llvm::CodeGenOptLevel::None;
+            codegenOpt = CodeGenOptLevel::None;
             conservativeCodegen = true;
         }
     }
@@ -178,10 +180,12 @@ bool Backend::initializeTarget()
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Triple tripleObj(targetTriple);
     targetMachine = target->createTargetMachine(
-        tripleObj, cpu, features, opt, relocModel, std::nullopt, codegenOpt);
+        tripleObj, cpu, features, opt, relocModel,
+        mlang::llvm_compat::NoValue, codegenOpt);
 #else
     targetMachine = target->createTargetMachine(
-        targetTriple, cpu, features, opt, relocModel, std::nullopt, codegenOpt);
+        targetTriple, cpu, features, opt, relocModel,
+        mlang::llvm_compat::NoValue, codegenOpt);
 #endif
 
     if(!targetMachine)
