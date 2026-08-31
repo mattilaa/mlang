@@ -531,7 +531,14 @@ add_custom_command(
 )
 
 add_custom_target(mlang_format DEPENDS ${MLANG_FORMAT_STAMP})
-add_dependencies(mlangd mlang_format)
+option(MLANGD_BUILD_FORMATTER_DEPENDENCY
+       "Build the self-hosted formatter whenever the C++ mlangd target is built"
+       OFF)
+message(STATUS
+        "Build self-hosted mlang-format with mlangd: ${MLANGD_BUILD_FORMATTER_DEPENDENCY}")
+if(MLANGD_BUILD_FORMATTER_DEPENDENCY)
+    add_dependencies(mlangd mlang_format)
+endif()
 
 # Bootstrap-built MLang language server scaffold.
 set(MLANGD_MLA_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/main.mla)

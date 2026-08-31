@@ -1,5 +1,6 @@
 #include "module.h"
 #include "source_filter.h"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>

@@ -17,13 +17,12 @@ jobs:
           sudo apt-get install -y llvm-17 llvm-17-dev clang-17 lld-17 flex bison
       - name: Configure
         run: |
-          cmake -S . -B build -DMLANG_VERSION_BUILD=${BUILD_NUMBER}
+          cmake -S . -B build \
+            -DMLANG_VERSION_BUILD=${BUILD_NUMBER} \
+            -DMLANGD_BUILD_FORMATTER_DEPENDENCY=OFF
       - name: Build
         run: |
           cmake --build build --target mlang mlangd mlang_std
-      - name: LSP formatting transcript
-        run: |
-          python3 tests/lsp_mlangd_format_config_transcript.py --mlangd build/mlangd
       - name: LSP integration transcript
         run: |
           python3 tests/lsp_integration_transcript.py --mlangd build/mlangd

@@ -1,6 +1,7 @@
 #include "ast.h"
 #include "ast_handle_helpers.h"
 #include "parser.hpp"
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstring>
