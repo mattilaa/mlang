@@ -882,7 +882,7 @@ static std::string makePropertyLockFieldName(const std::string& fieldName)
 // Synthesize getter (and setter when not readonly) StructMethodNodes for each
 // member tagged with @property. The generated
 // methods participate in the normal struct-method pipeline: IR codegen treats
-// them like any other method, and they surface in mlangd completion via the
+// them like any other method, and they surface in language-server completion via the
 // semantic-symbol collector.
 static void synthesizePropertyMethods(StructDefNode* def)
 {

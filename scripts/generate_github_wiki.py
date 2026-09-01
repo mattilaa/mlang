@@ -151,7 +151,6 @@ MANPAGES: list[tuple[Path, str]] = [
     (Path("docs/man/mlang-frontend-mla.1"), "mlang-frontend-mla"),
     (Path("docs/man/mlang-format.1"), "mlang-format"),
     (Path("docs/man/mlang-pkg.1"), "mlang-pkg"),
-    (Path("docs/man/mlangd.1"), "mlangd"),
     (Path("docs/man/mlangd-mla.1"), "mlangd-mla"),
 ]
 
