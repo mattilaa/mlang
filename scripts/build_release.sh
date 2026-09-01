@@ -89,7 +89,6 @@ configure_args=(
   -DBUILD_TESTS=OFF
   -DMLANG_RELEASE_VERSION="$release_version"
   -DMLANG_PORTABLE_OPENSSL_LINK_ARGS=ON
-  -DMLANGD_BUILD_FORMATTER_DEPENDENCY=OFF
 )
 if [[ "$platform" == macos && -n "$deployment_target" ]]; then
   configure_args+=("-DCMAKE_OSX_DEPLOYMENT_TARGET=$deployment_target")

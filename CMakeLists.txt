@@ -374,48 +374,6 @@ if(APPLE)
         "LINKER:-no_warn_duplicate_libraries")
 endif()
 
-# ============================================================================
-# mlangd (C++ LSP server)
-# ============================================================================
-add_executable(mlangd
-    tools/mlang_lsp_cpp/main.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_handle_helpers.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_bridge.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/incremental_compiler.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ide_query.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/workspace_graph.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_concurrency.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
-    ${LEXER_OUT}
-    ${PARSER_OUT}
-)
-
-add_dependencies(mlangd ParserTarget LexerTarget)
-target_compile_features(mlangd PRIVATE cxx_std_20)
-set_target_properties(mlangd PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
-)
-target_include_directories(mlangd PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(mlangd PRIVATE ${llvm_libs} OpenSSL::SSL OpenSSL::Crypto)
-target_compile_definitions(mlangd PRIVATE
-    MLANG_VERSION="${PROJECT_VERSION}"
-    MLANG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-if(APPLE)
-    target_link_libraries(mlangd PRIVATE
-        ${COREFOUNDATION_FRAMEWORK}
-        ${COREGRAPHICS_FRAMEWORK}
-        ${IMAGEIO_FRAMEWORK}
-    )
-    target_link_options(mlangd PRIVATE
-        "LINKER:-no_warn_duplicate_libraries")
-endif()
-
 add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_handle_helpers.cpp
@@ -531,16 +489,8 @@ add_custom_command(
 )
 
 add_custom_target(mlang_format DEPENDS ${MLANG_FORMAT_STAMP})
-option(MLANGD_BUILD_FORMATTER_DEPENDENCY
-       "Build the self-hosted formatter whenever the C++ mlangd target is built"
-       OFF)
-message(STATUS
-        "Build self-hosted mlang-format with mlangd: ${MLANGD_BUILD_FORMATTER_DEPENDENCY}")
-if(MLANGD_BUILD_FORMATTER_DEPENDENCY)
-    add_dependencies(mlangd mlang_format)
-endif()
 
-# Bootstrap-built MLang language server scaffold.
+# Bootstrap-built MLang language server.
 set(MLANGD_MLA_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/main.mla)
 set(MLANGD_MLA_FORMAT_CONFIG_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/format_config.mla)
@@ -653,13 +603,6 @@ install(TARGETS mlang
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         COMPONENT mlang-core)
 
-option(MLANG_INSTALL_CPP_LSP
-       "Install the legacy C++ mlangd target with cmake --install" OFF)
-if(MLANG_INSTALL_CPP_LSP)
-    install(TARGETS mlangd
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif()
-
 install(PROGRAMS ${MLANG_FORMAT_OUTPUT}
         DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -672,7 +615,6 @@ install(TARGETS mlang-config
 set(MLANG_MANPAGE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang.1
     ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-pkg.1
-    ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd.1
     ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd-mla.1
     ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-format.1
     ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-frontend.1
@@ -690,7 +632,6 @@ add_custom_target(manpages
 install(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang.1
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-pkg.1
-        ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd.1
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlangd-mla.1
         ${CMAKE_CURRENT_SOURCE_DIR}/docs/man/mlang-format.1
         DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)

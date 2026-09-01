@@ -708,10 +708,10 @@ if $run_lsp_tests; then
   log_info "running lsp tests"
   if [[ "$color_logs" == "never" ]]; then
     run_checked_command "mlang-format e2e tests" env NO_COLOR=1 CLICOLOR=0 ASAN_OPTIONS="${ASAN_OPTIONS:-}" python3 tests/mlang_format_spacing_e2e.py --mlang-format "$build_dir/mlang-format"
-    run_checked_command "mlangd transcript tests" env NO_COLOR=1 CLICOLOR=0 ASAN_OPTIONS="${ASAN_OPTIONS:-}" python3 tests/lsp_mlangd-mla_transcripts.py --mlangd "$build_dir/mlangd-mla"
+    run_checked_command "mlangd-mla transcript tests" env NO_COLOR=1 CLICOLOR=0 ASAN_OPTIONS="${ASAN_OPTIONS:-}" python3 tests/lsp_mlangd-mla_transcripts.py --mlangd "$build_dir/mlangd-mla"
   else
     run_checked_command "mlang-format e2e tests" env ASAN_OPTIONS="${ASAN_OPTIONS:-}" python3 tests/mlang_format_spacing_e2e.py --mlang-format "$build_dir/mlang-format"
-    run_checked_command "mlangd transcript tests" env ASAN_OPTIONS="${ASAN_OPTIONS:-}" python3 tests/lsp_mlangd-mla_transcripts.py --mlangd "$build_dir/mlangd-mla"
+    run_checked_command "mlangd-mla transcript tests" env ASAN_OPTIONS="${ASAN_OPTIONS:-}" python3 tests/lsp_mlangd-mla_transcripts.py --mlangd "$build_dir/mlangd-mla"
   fi
 fi
 

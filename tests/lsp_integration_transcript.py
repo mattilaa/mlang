@@ -10,12 +10,12 @@ from lsp_testlib import to_uri
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mlangd", default="build/mlangd")
+    ap.add_argument("--mlangd", default="build/mlangd-mla")
     args = ap.parse_args()
 
     mlangd = Path(args.mlangd)
     if not mlangd.exists():
-        raise SystemExit(f"mlangd not found: {mlangd}")
+        raise SystemExit(f"mlangd-mla not found: {mlangd}")
 
     with tempfile.TemporaryDirectory(prefix="mlangd_lsp_it_") as td:
         root = Path(td)

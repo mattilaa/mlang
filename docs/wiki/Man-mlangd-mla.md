@@ -69,7 +69,6 @@ mlangd-mla --enable-log --log-level INFO --log-dir /tmp
 mlangd-mla --enable-log --log-level VERBOSE --log-colors
 .fi
 .SH SEE ALSO
-.BR mlangd (1),
 .BR mlang-format (1),
 .BR mlang (1)
 ```
