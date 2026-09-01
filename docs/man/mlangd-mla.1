@@ -1,6 +1,6 @@
-.TH MLANGD-MLA 1 "May 2026" "MLang" "User Commands"
+.TH MLANGD-MLA 1 "September 2026" "MLang" "User Commands"
 .SH NAME
-mlangd-mla \- self-hosted MLang Language Server Protocol scaffold
+mlangd-mla \- self-hosted MLang Language Server Protocol server
 .SH SYNOPSIS
 .B mlangd-mla
 [\fB\-v\fR|\fB\-\-version\fR]
@@ -10,15 +10,27 @@ mlangd-mla \- self-hosted MLang Language Server Protocol scaffold
 [\fB\-\-log\-color\fR|\fB\-\-log\-colors\fR]
 .SH DESCRIPTION
 .B mlangd-mla
-is the self-hosted MLang implementation of the language server scaffold. It
-speaks LSP over stdio and is primarily intended for bootstrap, parity work,
-and experimentation alongside the native
-.BR mlangd (1)
-server.
+is the self-hosted MLang language server. It speaks LSP over stdio and provides
+the primary editor integration for MLang source files.
 .PP
 When started without
 .BR \-\-version ,
 the process immediately enters its stdio JSON-RPC loop.
+.PP
+For document and range formatting, the server searches from the source file's
+directory toward the workspace root for the nearest
+.IR .mlang-format
+file. Document formatting honors all supported style keys, including
+.BR IndentWidth ,
+.BR SpaceAfterComma ,
+.BR SpaceAfterColon ,
+.BR SpaceAroundOperators ,
+and
+.BR EnsureTrailingNewline .
+Range formatting does not apply the whole-file trailing-newline setting.
+Formatting is implemented inside the server and does not require a separate
+.BR mlang-format (1)
+process.
 .SH OPTIONS
 .TP
 .BR \-v ", " \-\-version
