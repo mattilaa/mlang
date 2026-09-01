@@ -542,6 +542,8 @@ endif()
 
 # Bootstrap-built MLang language server scaffold.
 set(MLANGD_MLA_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/main.mla)
+set(MLANGD_MLA_FORMAT_CONFIG_SOURCE
+    ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/format_config.mla)
 set(MLANGD_MLA_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla)
 set(MLANGD_LL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.ll)
 set(MLANGD_IR_OBJECT_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla-ir.o)
@@ -574,6 +576,7 @@ add_custom_command(
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:AudioToolbox>
     COMMAND ${CMAKE_COMMAND} -E touch ${MLANGD_MLA_STAMP}
     DEPENDS mlang mlang_std ${MLANGD_MLA_SOURCE}
+            ${MLANGD_MLA_FORMAT_CONFIG_SOURCE}
             ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Building mlangd-mla via LLVM IR + clang++ host link"

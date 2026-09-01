@@ -2,6 +2,10 @@ mod std::compiler;
 mod std::fs;
 mod std::jsonrpc;
 mod std::strbuf;
+mod format_config;
+
+use format_config::format_document_with_file_style;
+use format_config::format_range_with_file_style;
 
 use std::compiler::DefinitionLocation;
 use std::compiler::DocumentSymbol;
@@ -42,7 +46,6 @@ use std::jsonrpc::extract_workspace_query;
 use std::jsonrpc::extract_range_text;
 use std::jsonrpc::find_implementation_pos;
 use std::jsonrpc::format_text_basic;
-use std::jsonrpc::format_text_with_options;
 use std::jsonrpc::line_count;
 use std::jsonrpc::line_length;
 use std::jsonrpc::organize_imports_line_count;
@@ -3814,7 +3817,13 @@ fn handle_formatting(payload: str8) -> str8 {
     if len(text) == 0 { return "[]"; }
     let tab_size: i64 = extract_format_tab_size(payload);
     let insert_spaces: i32 = extract_format_insert_spaces(payload);
-    let formatted: str8 = format_text_with_options(text, tab_size, insert_spaces);
+    let formatted: str8 = format_document_with_file_style(
+        text,
+        file_uri_to_path(uri),
+        root_path_from_store(),
+        tab_size,
+        insert_spaces
+    );
     if eq(formatted, text) == 1 { return "[]"; }
     let lc: i64 = line_count(text);
     var end_line: i64 = lc - 1;
@@ -3844,7 +3853,13 @@ fn handle_range_formatting(payload: str8) -> str8 {
     let raw: str8 = extract_range_text(text, start_line, start_char, end_line, end_char);
     let tab_size: i64 = extract_format_tab_size(payload);
     let insert_spaces: i32 = extract_format_insert_spaces(payload);
-    let formatted: str8 = format_text_with_options(raw, tab_size, insert_spaces);
+    let formatted: str8 = format_range_with_file_style(
+        raw,
+        file_uri_to_path(uri),
+        root_path_from_store(),
+        tab_size,
+        insert_spaces
+    );
     if eq(formatted, raw) == 1 { return "[]"; }
     let fmt_e: str8 = json_escape(formatted);
     return format!(
