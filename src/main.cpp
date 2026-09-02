@@ -1263,6 +1263,9 @@ static bool manifest_requires_cpp_pkg_frontend()
         return true;
     if(content.find("build = \"none\"") != std::string::npos)
         return true;
+    if(content.find("path =") != std::string::npos ||
+       content.find("build = \"mlang\"") != std::string::npos)
+        return true;
     return false;
 }
 
@@ -1295,6 +1298,7 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
             std::string arg = argv[i];
             if(arg == "--url" || arg == "--archive" ||
                arg == "--strip-components" || arg == "--subdir" ||
+               arg == "--path" || arg == "--version" ||
                arg == "--add-lib" || arg == "--project-dir")
             {
                 return std::nullopt;
@@ -1303,7 +1307,9 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
     }
     if(argc >= subIndex + 1 &&
        (std::string(argv[subIndex]) == "lock" ||
-        std::string(argv[subIndex]) == "verify"))
+        std::string(argv[subIndex]) == "verify" ||
+        std::string(argv[subIndex]) == "tree" ||
+        std::string(argv[subIndex]) == "why"))
         return std::nullopt;
     if(argc >= subIndex + 1 &&
        (std::string(argv[subIndex]) == "fetch" ||

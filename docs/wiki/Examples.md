@@ -27,6 +27,7 @@ subdirectory-based showcases are indexed separately in
   - [Route planning and genetic algorithms](#route-planning-and-genetic-algorithms)
   - [Package-manager dynamic library](#package-manager-dynamic-library)
   - [Package-manager static library](#package-manager-static-library)
+  - [Package-manager path dependencies](#package-manager-path-dependencies)
 - [Focused regression examples](#focused-regression-examples)
 - [Directory-based demos](Demos)
 
@@ -315,6 +316,20 @@ elif command -v ldd >/dev/null 2>&1; then
   ! ldd build/static_library_demo | grep -q arithmetic_static
 fi
 ```
+
+### Package-manager path dependencies
+
+`examples/package_manager_path_dependencies` builds three independent MLang
+packages connected by two local dependency edges. It demonstrates transitive
+resolution, semantic version requirements, graph inspection, locking, and
+dynamic-library linkage:
+
+```sh
+./examples/package_manager_path_dependencies/run_demo.sh
+```
+
+The graph is `path_dependency_app -> core -> math`; the final executable
+prints `transitive path dependency result: 42`.
 
 ## Focused regression examples
 

@@ -2622,10 +2622,12 @@ mlang pkg build
 mlang pkg clean
 ```
 
-Source dependencies can now come from Git or from a `tar.gz` URL:
+Source dependencies can come from a local MLang package, Git, or a `tar.gz`
+URL. MLang package dependencies are recursive and version checked:
 
 ```toml
 [dependencies]
+core = { path = "packages/core", version = "^1.2" }
 cjson_git = { git = "https://github.com/DaveGamble/cJSON.git", tag = "v1.7.18", build = "cmake" }
 cjson_tar = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
 ```
@@ -2634,6 +2636,8 @@ Supported source dependency keys are:
 
 - `git`
 - `url`
+- `path`
+- `version`
 - `archive`
 - `rev`
 - `tag`
@@ -2645,10 +2649,24 @@ Supported source dependency keys are:
 If `build = "none"` is set, the dependency is fetched but skipped by the
 built-in dependency builders during `mlang pkg build`.
 
+Path dependencies default to `build = "mlang"`. Their `mlang.toml` files are
+resolved recursively, dependencies are built before dependents, and generated
+libraries are linked into the consuming package. Git and archive packages can
+opt into the same behavior with `build = "mlang"`. Requirements support exact
+versions, partial versions, `^`, `~`, comparison ranges, wildcards, and `||`.
+
+Inspect the resolved graph without changing it:
+
+```sh
+mlang pkg tree
+mlang pkg why math
+```
+
 Dependency fetching is reproducible through a root `mlang.lock`. Normal
 fetch/build/run operations create a missing lock and honor exact Git commits
-and archive SHA-256 checksums from an existing lock. Commit the lockfile and
-use strict or network-free modes in CI:
+and archive SHA-256 checksums from an existing lock. Path and fetched MLang
+packages also lock every transitive edge and resolved semantic version. Commit
+the lockfile and use strict or network-free modes in CI:
 
 ```sh
 mlang pkg lock
@@ -2662,7 +2680,7 @@ it. `--offline` additionally forbids package-manager Git/HTTP access and
 requires all locked sources in the dependency cache. See
 [Reproducible dependency locking](docs/package_manager.md#reproducible-dependency-locking)
 for the lock format, archive cache, verification checks, workspace behavior,
-and limitations for third-party build scripts.
+transitive package versions, and limitations for third-party build scripts.
 
 `pkg add --add-lib` can scaffold the workspace subproject automatically. It:
 

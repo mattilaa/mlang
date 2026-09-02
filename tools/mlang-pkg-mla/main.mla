@@ -102,11 +102,14 @@ fn print_usage() -> void {
     println!("Subcommands:");
     println!("  init                  Scaffold mlang.toml and src/main.mla");
     println!("  add <name> [--git URL [--rev REV] [--tag TAG] [--submodules]]");
+    println!("  add <name> --path DIR [--version REQ] (delegated to the C++ backend)");
     println!("             [--url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]]");
     println!("             [--pkg-config NAME] [--system]");
     println!("             [--add-lib [--project-dir DIR]]");
     println!("  lock      [--offline] (delegated to the C++ backend)");
     println!("  verify    (delegated to the C++ backend)");
+    println!("  tree      (delegated to the C++ backend)");
+    println!("  why NAME  (delegated to the C++ backend)");
     println!("  fetch     [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
     println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
     println!("            [--task-print-to-stdout-log] [--locked] [--offline]");
@@ -1345,9 +1348,16 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return run_init(manifest);
     }
     if (eq(sub, "add") == 1) {
+        var add_i: i64 = idx + 1;
+        while (add_i < argv.len()) {
+            if (eq(argv[add_i], "--path") == 1 || eq(argv[add_i], "--version") == 1) {
+                return delegate_pkg_to_cpp(backend, sub, argv, idx + 1);
+            }
+            add_i = add_i + 1;
+        }
         return run_add(argv, idx, manifest);
     }
-    if (eq(sub, "lock") == 1 || eq(sub, "verify") == 1) {
+    if (eq(sub, "lock") == 1 || eq(sub, "verify") == 1 || eq(sub, "tree") == 1 || eq(sub, "why") == 1) {
         return delegate_pkg_to_cpp(backend, sub, argv, idx + 1);
     }
     if (eq(sub, "fetch") == 1) {

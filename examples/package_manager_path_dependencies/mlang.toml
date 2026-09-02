@@ -1,0 +1,10 @@
+[package]
+name = "path_dependency_app"
+version = "1.0.0"
+entry = "src/main.mla"
+
+[dependencies]
+core = { path = "packages/core", version = "^1.2" }
+
+[tool.mlang]
+opt_level = "O1"

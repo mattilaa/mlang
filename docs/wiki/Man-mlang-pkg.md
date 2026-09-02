@@ -24,6 +24,14 @@ mlang-pkg \- package manager and task runner interface exposed as \fBmlang pkg\f
 .br
 .B mlang
 .B pkg
+[\fB\-\-config\fR \fIFILE\fR] tree
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] why \fIPACKAGE\fR
+.br
+.B mlang
+.B pkg
 [\fB\-\-config\fR \fIFILE\fR] fetch [\fIpath and log options\fR]
 .br
 .B mlang
@@ -66,8 +74,9 @@ Create a new package manifest plus starter
 content.
 .TP
 .B add
-Add a dependency declaration. Supported sources include Git repositories, URL
-archives, pkg-config packages, and system dependencies.
+Add a dependency declaration. Supported sources include local MLang package
+paths, Git repositories, URL archives, pkg-config packages, and system
+dependencies.
 .TP
 .B fetch
 Resolve and download dependencies without building project outputs.
@@ -80,6 +89,14 @@ recording exact Git revisions and archive SHA-256 checksums.
 .B verify
 Check manifest-to-lock consistency and cached dependency integrity without
 network access.
+.TP
+.B tree
+Print direct and transitive dependencies with sources, requirements, and
+resolved package versions.
+.TP
+.B why \fIPACKAGE\fR
+Print every dependency path from the selected root to
+.IR PACKAGE .
 .TP
 .B build
 Build package targets. Supports optimization selection and optional Ninja or
@@ -148,6 +165,12 @@ Request AddressSanitizer build settings when supported by the selected task or
 build flow.
 .SH ADD COMMAND SOURCES
 .TP
+.B \-\-path \fIDIR\fR
+Add an MLang package kept at a local directory or manifest path.
+.TP
+.B \-\-version \fIREQUIREMENT\fR
+Require a semantic package version.
+.TP
 .B \-\-git \fIURL\fR
 Add a Git-based dependency.
 .TP
@@ -194,6 +217,18 @@ in CI to reject missing or stale lockfiles. After an online fetch, use
 .B \-\-offline
 to operate from locked Git objects and cached archives. Workspaces and explicit
 include manifests share the lockfile beside the root manifest.
+.SH MLANG DEPENDENCY MODEL
+Path dependencies default to
+.B build = "mlang"
+and are built before their dependents. Git and archive sources opt into MLang
+package behavior with the same build value. Their manifests are traversed
+recursively, and dependency keys must match the child package names.
+.PP
+Semantic requirements support exact and partial versions, caret and tilde
+ranges, comparison ranges, wildcards, and alternatives separated with
+.BR || .
+Resolved versions and each transitive edge are written to the root lockfile.
+Cycles and different sources selected for the same package name are errors.
 .SH LIBRARY TARGETS
 Declare an MLang library with
 .BR [[lib]] .

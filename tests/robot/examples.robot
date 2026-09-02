@@ -6691,6 +6691,50 @@ Pkg Lock Pins Git And Verifies Archive Checksums Offline
     Should Not Be Equal As Integers    ${verify_tampered.rc}    0
     Should Contain    ${verify_tampered.stderr}    Archive verification failed
 
+Pkg Resolves Transitive Path Packages And Semantic Versions
+    [Documentation]    Verify path MLang packages, transitive builds, semantic
+    ...                constraints, deterministic graph inspection, and locked versions.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_path_dependencies
+    ${setup}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${base}' && cp -R '${EXECDIR}/examples/package_manager_path_dependencies' '${base}'
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup.rc}    0
+
+    ${tree}=    Run Process    ${MLANG}    pkg    tree
+    ...    cwd=${base}    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${tree.rc}    0
+    Should Contain    ${tree.stdout}    core ^1.2
+    Should Contain    ${tree.stdout}    math ~2.1
+    ${why}=    Run Process    ${MLANG}    pkg    why    math
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${why.rc}    0
+    Should Contain    ${why.stdout}    path_dependency_app -> core -> math
+
+    ${lock}=    Run Process    ${MLANG}    pkg    lock
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${lock.rc}    0
+    ${lock_text}=    Get File    ${base}/mlang.lock
+    Should Contain    ${lock_text}    resolved_version = "1.2.4"
+    Should Contain    ${lock_text}    resolved_version = "2.1.3"
+
+    ${build}=    Run Process    ${MLANG}    pkg    build    --locked
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${base}/build/path_dependency_app    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    transitive path dependency result: 42
+    ${verify}=    Run Process    ${MLANG}    pkg    verify
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${verify.rc}    0
+
+    ${bad_version}=    Run Process    /bin/sh    -lc
+    ...    sed 's/version = "~2.1"/version = "^3.0"/' '${base}/packages/core/mlang.toml' > '${base}/packages/core/mlang.toml.new' && mv '${base}/packages/core/mlang.toml.new' '${base}/packages/core/mlang.toml'
+    Should Be Equal As Integers    ${bad_version.rc}    0
+    ${rejected}=    Run Process    ${MLANG}    pkg    build    --locked
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${rejected.rc}    0
+    Should Contain    ${rejected.stderr}    out of date for transitive dependency 'math'
+
 Pkg Builds And Links MLang Dynamic Library Target
     [Documentation]    Verify [[lib]] output, depends_on build ordering,
     ...                automatic linking, and loader-relative execution.

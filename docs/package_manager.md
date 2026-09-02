@@ -181,7 +181,8 @@ lockfile is deterministic and should be committed to version control. It
 records:
 
 - the manifest and dependency name
-- the original Git or archive URL and relevant source options
+- the local path or original Git/archive URL and relevant source options
+- every semantic version requirement and resolved MLang package version
 - the exact detached Git commit selected from a revision, tag, or remote
   default branch
 - a `sha256:...` checksum for every downloaded archive
@@ -230,6 +231,60 @@ consistency, Git origin URLs and current commits, cached archive SHA-256
 values, and extracted archive checksum markers. Workspaces and explicit
 `[[include]]` coordinators use one root lockfile with manifest-qualified
 dependency entries.
+
+### Path packages, transitive dependencies, and versions
+
+An MLang package can depend on another package directory without copying it
+into the dependency cache:
+
+```toml
+[package]
+name = "application"
+version = "1.0.0"
+
+[dependencies]
+core = { path = "packages/core", version = "^1.2" }
+```
+
+The dependency key must match the dependency manifest's `[package].name`.
+Every MLang dependency must declare a valid semantic `[package].version`.
+Path dependencies default to `build = "mlang"`; a fetched Git or archive
+dependency is treated as an MLang package when it specifies
+`build = "mlang"`. `subdir` may point at a package below the source root.
+
+MLang package manifests are resolved recursively. The manager builds leaf
+packages before their dependents, detects dependency cycles and conflicting
+sources for the same package name, and records each edge's requirement and
+resolved version in the root `mlang.lock`.
+
+Path dependencies are deliberately live development sources: the lockfile
+pins their declared path and package version, but does not checksum the working
+tree. Use a locked Git revision or checksummed archive when dependency source
+bytes must be reproducible across machines.
+
+Supported requirement forms include:
+
+- exact versions: `1.2.3` or `=1.2.3`
+- compatible ranges: `^1.2`, `^0.3.4`, `~1.2`
+- comparisons: `>=1.2.0`, `<2.0.0`, or `>=1.2, <2.0`
+- partial and wildcard versions: `1`, `1.2`, `1.2.x`, `1.*`
+- alternatives: `^1.5 || ^2.0`
+
+Use the read-only graph commands before or after fetching:
+
+```sh
+mlang pkg tree
+mlang pkg why math
+```
+
+`pkg tree` prints direct and transitive edges, source locations, requested
+ranges, resolved versions, repeated packages, and cycles. A fetched Git or
+archive package can be expanded; an unfetched source is shown as
+`[not fetched]`. `pkg why NAME` prints every path from a selected root package
+to `NAME`, which is useful when a transitive dependency is unexpected.
+
+For a complete runnable graph, see
+`examples/package_manager_path_dependencies`.
 
 ### `pkg build`
 

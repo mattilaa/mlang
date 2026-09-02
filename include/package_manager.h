@@ -193,6 +193,13 @@
  * refuses lockfile changes, and `--offline` prevents package-manager network
  * fetches while requiring locked sources to exist locally.
  *
+ * MLang packages can depend recursively on local packages with
+ * `name = { path = "packages/name", version = "^1.2" }`. Path dependencies
+ * default to the MLang builder; Git/archive sources can select it with
+ * `build = "mlang"`. `pkg tree` displays the resolved graph and `pkg why`
+ * reports why a direct or transitive package is present. Semantic ranges,
+ * cycles, source conflicts, and resolved versions are validated and locked.
+ *
  * Linux initramfs example using BusyBox as the real `/init` while optionally
  * overlaying a wider GNU userspace selected from the command line:
  * \code{.toml}

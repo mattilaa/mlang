@@ -1386,7 +1386,7 @@ static void print_pkg_usage(const std::string& programName)
     const std::string tool = programName.empty() ? "mlang" : programName;
     std::cerr
         << "Usage: " << tool
-        << " pkg [--config FILE] <init|add|lock|verify|fetch|build|run|clean> "
+        << " pkg [--config FILE] <init|add|lock|verify|tree|why|fetch|build|run|clean> "
            "[options...]\n"
         << "       " << tool
         << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
@@ -1398,7 +1398,9 @@ static void print_pkg_usage(const std::string& programName)
         << "      Scaffold mlang.toml and src/main.mla in the current dir.\n"
         << "  " << tool
         << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] "
-           "[--submodules]\n"
+           "[--submodules] [--version REQ]\n"
+        << "  " << tool
+        << " pkg add <name> --path DIR [--version REQ]\n"
         << "  " << tool
         << " pkg add <name> --url URL [--archive tar.gz] [--strip-components "
            "N] [--subdir DIR]\n"
@@ -1411,6 +1413,10 @@ static void print_pkg_usage(const std::string& programName)
         << "      Resolve exact Git revisions and archive SHA-256 checksums.\n"
         << "  " << tool << " pkg verify\n"
         << "      Verify mlang.lock and fetched dependency sources.\n"
+        << "  " << tool << " pkg tree\n"
+        << "      Print the direct and transitive dependency graph.\n"
+        << "  " << tool << " pkg why <package>\n"
+        << "      Show every dependency path that reaches a package.\n"
         << "  " << tool
         << " pkg fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
         << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log "
@@ -1576,6 +1582,266 @@ static int compare_semver(const std::string& lhs, const std::string& rhs)
             return 1;
     }
     return 0;
+}
+
+struct SemanticVersion
+{
+    int major = 0;
+    int minor = 0;
+    int patch = 0;
+    std::vector<std::string> prerelease;
+};
+
+static std::optional<SemanticVersion> parse_semantic_version(std::string text)
+{
+    text = trim(text);
+    if(!text.empty() && (text.front() == 'v' || text.front() == 'V'))
+        text.erase(text.begin());
+    const size_t plus = text.find('+');
+    if(plus != std::string::npos)
+        text.resize(plus);
+    std::string prerelease;
+    const size_t dash = text.find('-');
+    if(dash != std::string::npos)
+    {
+        prerelease = text.substr(dash + 1);
+        text.resize(dash);
+        if(prerelease.empty())
+            return std::nullopt;
+    }
+    std::vector<int> numbers;
+    size_t start = 0;
+    while(start <= text.size())
+    {
+        const size_t end = text.find('.', start);
+        const std::string part = text.substr(
+            start, end == std::string::npos ? std::string::npos : end - start);
+        if(part.empty() ||
+           !std::all_of(part.begin(), part.end(), [](unsigned char c)
+                        { return std::isdigit(c); }))
+            return std::nullopt;
+        if(part.size() > 1 && part.front() == '0')
+            return std::nullopt;
+        try
+        {
+            numbers.push_back(std::stoi(part));
+        }
+        catch(...)
+        {
+            return std::nullopt;
+        }
+        if(end == std::string::npos)
+            break;
+        start = end + 1;
+    }
+    if(numbers.empty() || numbers.size() > 3)
+        return std::nullopt;
+    SemanticVersion result;
+    result.major = numbers[0];
+    if(numbers.size() > 1)
+        result.minor = numbers[1];
+    if(numbers.size() > 2)
+        result.patch = numbers[2];
+    if(!prerelease.empty())
+    {
+        start = 0;
+        while(start <= prerelease.size())
+        {
+            const size_t end = prerelease.find('.', start);
+            const std::string part = prerelease.substr(
+                start,
+                end == std::string::npos ? std::string::npos : end - start);
+            if(part.empty())
+                return std::nullopt;
+            if(part.size() > 1 && part.front() == '0' &&
+               std::all_of(part.begin(), part.end(), [](unsigned char c)
+                           { return std::isdigit(c); }))
+                return std::nullopt;
+            result.prerelease.push_back(part);
+            if(end == std::string::npos)
+                break;
+            start = end + 1;
+        }
+    }
+    return result;
+}
+
+static int compare_semantic_versions(const SemanticVersion& lhs,
+                                     const SemanticVersion& rhs)
+{
+    if(lhs.major != rhs.major)
+        return lhs.major < rhs.major ? -1 : 1;
+    if(lhs.minor != rhs.minor)
+        return lhs.minor < rhs.minor ? -1 : 1;
+    if(lhs.patch != rhs.patch)
+        return lhs.patch < rhs.patch ? -1 : 1;
+    if(lhs.prerelease.empty() != rhs.prerelease.empty())
+        return lhs.prerelease.empty() ? 1 : -1;
+    for(size_t i = 0; i < std::min(lhs.prerelease.size(),
+                                  rhs.prerelease.size());
+        ++i)
+    {
+        if(lhs.prerelease[i] == rhs.prerelease[i])
+            continue;
+        const bool lhsNumeric =
+            std::all_of(lhs.prerelease[i].begin(), lhs.prerelease[i].end(),
+                        [](unsigned char c) { return std::isdigit(c); });
+        const bool rhsNumeric =
+            std::all_of(rhs.prerelease[i].begin(), rhs.prerelease[i].end(),
+                        [](unsigned char c) { return std::isdigit(c); });
+        if(lhsNumeric && rhsNumeric)
+        {
+            const std::string& a = lhs.prerelease[i];
+            const std::string& b = rhs.prerelease[i];
+            const size_t aFirst = a.find_first_not_of('0');
+            const size_t bFirst = b.find_first_not_of('0');
+            const std::string aNormalized =
+                aFirst == std::string::npos ? "0" : a.substr(aFirst);
+            const std::string bNormalized =
+                bFirst == std::string::npos ? "0" : b.substr(bFirst);
+            if(aNormalized.size() != bNormalized.size())
+                return aNormalized.size() < bNormalized.size() ? -1 : 1;
+            return aNormalized < bNormalized ? -1 : 1;
+        }
+        if(lhsNumeric != rhsNumeric)
+            return lhsNumeric ? -1 : 1;
+        return lhs.prerelease[i] < rhs.prerelease[i] ? -1 : 1;
+    }
+    if(lhs.prerelease.size() == rhs.prerelease.size())
+        return 0;
+    return lhs.prerelease.size() < rhs.prerelease.size() ? -1 : 1;
+}
+
+static bool semantic_version_satisfies_one(const SemanticVersion& version,
+                                           std::string requirement)
+{
+    requirement = trim(requirement);
+    if(requirement.empty() || requirement == "*" || requirement == "x" ||
+       requirement == "X")
+        return version.prerelease.empty();
+    const bool requirementAllowsPrerelease = requirement.find('-') !=
+                                             std::string::npos;
+    if(!version.prerelease.empty() && !requirementAllowsPrerelease)
+        return false;
+    std::string op;
+    for(const char* candidate : {">=", "<=", ">", "<", "=", "^", "~"})
+    {
+        if(requirement.rfind(candidate, 0) == 0)
+        {
+            op = candidate;
+            requirement = trim(requirement.substr(op.size()));
+            break;
+        }
+    }
+    const size_t wildcard = requirement.find_first_of("xX*");
+    if(wildcard != std::string::npos)
+    {
+        const std::string prefix = requirement.substr(0, wildcard);
+        std::ostringstream current;
+        current << version.major << "." << version.minor << "."
+                << version.patch;
+        return current.str().rfind(prefix, 0) == 0;
+    }
+    const std::string normalizedRequirement = requirement;
+    const auto wanted = parse_semantic_version(requirement);
+    if(!wanted.has_value())
+        return false;
+    const int comparison = compare_semantic_versions(version, *wanted);
+    if(op == ">=")
+        return comparison >= 0;
+    if(op == "<=")
+        return comparison <= 0;
+    if(op == ">")
+        return comparison > 0;
+    if(op == "<")
+        return comparison < 0;
+    if(op == "^")
+    {
+        SemanticVersion upper = *wanted;
+        if(upper.major > 0)
+        {
+            ++upper.major;
+            upper.minor = upper.patch = 0;
+        }
+        else if(upper.minor > 0)
+        {
+            ++upper.minor;
+            upper.patch = 0;
+        }
+        else
+        {
+            ++upper.patch;
+        }
+        upper.prerelease.clear();
+        return comparison >= 0 && compare_semantic_versions(version, upper) < 0;
+    }
+    if(op == "~")
+    {
+        SemanticVersion upper = *wanted;
+        ++upper.minor;
+        upper.patch = 0;
+        upper.prerelease.clear();
+        return comparison >= 0 && compare_semantic_versions(version, upper) < 0;
+    }
+    if(op.empty() && normalizedRequirement.find('-') == std::string::npos)
+    {
+        const size_t dots = static_cast<size_t>(std::count(
+            normalizedRequirement.begin(), normalizedRequirement.end(), '.'));
+        if(dots == 0)
+            return version.major == wanted->major;
+        if(dots == 1)
+            return version.major == wanted->major &&
+                   version.minor == wanted->minor;
+    }
+    return comparison == 0;
+}
+
+static bool semantic_version_satisfies(const std::string& versionText,
+                                       const std::string& requirementText)
+{
+    const auto version = parse_semantic_version(versionText);
+    if(!version.has_value())
+        return false;
+    size_t alternativeStart = 0;
+    while(alternativeStart <= requirementText.size())
+    {
+        const size_t alternativeEnd =
+            requirementText.find("||", alternativeStart);
+        std::string alternative = trim(requirementText.substr(
+            alternativeStart,
+            alternativeEnd == std::string::npos
+                ? std::string::npos
+                : alternativeEnd - alternativeStart));
+        std::replace(alternative.begin(), alternative.end(), ',', ' ');
+        std::istringstream terms(alternative);
+        std::string term;
+        bool matches = true;
+        bool sawTerm = false;
+        while(terms >> term)
+        {
+            sawTerm = true;
+            if(!semantic_version_satisfies_one(*version, term))
+                matches = false;
+        }
+        if(matches && sawTerm)
+            return true;
+        if(alternativeEnd == std::string::npos)
+            break;
+        alternativeStart = alternativeEnd + 2;
+    }
+    return trim(requirementText).empty();
+}
+
+static bool is_complete_semantic_version(const std::string& text)
+{
+    std::string core = trim(text);
+    if(!core.empty() && (core.front() == 'v' || core.front() == 'V'))
+        core.erase(core.begin());
+    const size_t suffix = core.find_first_of("-+");
+    if(suffix != std::string::npos)
+        core.resize(suffix);
+    return std::count(core.begin(), core.end(), '.') == 2 &&
+           parse_semantic_version(text).has_value();
 }
 
 static BuildConfig parse_build_config(const std::string& content)
@@ -2237,6 +2503,8 @@ struct DepSpec
     std::string name;
     std::string git;
     std::string url;
+    std::string path;
+    std::string versionRequirement;
     std::string archiveType;
     std::string rev;
     std::string tag;
@@ -2262,7 +2530,8 @@ struct LinkFlags
 };
 
 static std::filesystem::path
-dep_source_dir(const std::filesystem::path& depsDir, const DepSpec& dep);
+dep_source_dir(const PackageManifest& pkg,
+               const std::filesystem::path& depsDir, const DepSpec& dep);
 
 static std::vector<std::string> split_csv(std::string_view input)
 {
@@ -2704,7 +2973,10 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
         auto kv = parse_inline_table(t);
         auto gitIt = kv.find("git");
         auto urlIt = kv.find("url");
-        if(gitIt == kv.end() && urlIt == kv.end())
+        auto pathIt = kv.find("path");
+        const bool hasSource = gitIt != kv.end() || urlIt != kv.end() ||
+                               pathIt != kv.end();
+        if(!hasSource && section == "c-dependencies")
             continue;
         DepSpec dep;
         dep.name = name;
@@ -2712,6 +2984,10 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
             dep.git = gitIt->second;
         if(urlIt != kv.end())
             dep.url = urlIt->second;
+        if(pathIt != kv.end())
+            dep.path = pathIt->second;
+        if(auto it = kv.find("version"); it != kv.end())
+            dep.versionRequirement = it->second;
         if(auto it = kv.find("archive"); it != kv.end())
             dep.archiveType = it->second;
         if(auto it = kv.find("rev"); it != kv.end())
@@ -2740,7 +3016,7 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
                 dep.archiveType = "tar.gz";
         }
         if(dep.build.empty())
-            dep.build = "cmake";
+            dep.build = dep.path.empty() ? "cmake" : "mlang";
         deps.push_back(dep);
     }
     return deps;
@@ -3110,29 +3386,6 @@ static void scan_lib_dir(const std::filesystem::path& dir,
     }
 }
 
-static LinkFlags collect_dep_link_flags(const std::vector<DepSpec>& deps,
-                                        const std::filesystem::path& depsDir)
-{
-    std::unordered_set<std::string> libDirs;
-    std::unordered_set<std::string> libs;
-    std::unordered_set<std::string> staticArchives;
-    for(const auto& dep : deps)
-    {
-        std::filesystem::path path = dep_source_dir(depsDir, dep);
-        scan_lib_dir(path / "build" / "lib", libDirs, libs, staticArchives);
-        scan_lib_dir(path / "build", libDirs, libs, staticArchives);
-        scan_lib_dir(path / "lib", libDirs, libs, staticArchives);
-    }
-    LinkFlags flags;
-    flags.libDirs.assign(libDirs.begin(), libDirs.end());
-    flags.libs.assign(libs.begin(), libs.end());
-    flags.staticArchives.assign(staticArchives.begin(), staticArchives.end());
-    std::sort(flags.libDirs.begin(), flags.libDirs.end());
-    std::sort(flags.libs.begin(), flags.libs.end());
-    std::sort(flags.staticArchives.begin(), flags.staticArchives.end());
-    return flags;
-}
-
 struct PackageManifest
 {
     std::filesystem::path manifestPath;
@@ -3174,6 +3427,9 @@ struct DependencyLockEntry
     std::string name;
     std::string source;
     std::string url;
+    std::string path;
+    std::string versionRequirement;
+    std::string resolvedVersion;
     std::string requestedRev;
     std::string requestedTag;
     std::string revision;
@@ -3192,6 +3448,14 @@ struct DependencyLockContext
     bool offline = false;
     bool dirty = false;
     std::map<std::string, DependencyLockEntry> entries;
+    std::unordered_set<std::string> observedLockKeys;
+    std::unordered_set<std::string> fetchedManifests;
+    std::unordered_set<std::string> activeFetchManifests;
+    std::unordered_set<std::string> verifiedManifests;
+    std::unordered_set<std::string> activeVerifyManifests;
+    std::unordered_set<std::string> builtManifests;
+    std::unordered_set<std::string> activeBuildManifests;
+    std::map<std::string, std::string> packageSources;
 };
 
 static DependencyLockContext*& current_dependency_lock_context()
@@ -3242,8 +3506,12 @@ static DependencyLockEntry make_dependency_lock_entry(
     DependencyLockEntry entry;
     entry.manifest = lock_manifest_name(context, pkg);
     entry.name = dep.name;
-    entry.source = !dep.git.empty() ? "git" : "archive";
+    entry.source = !dep.path.empty()
+                       ? "path"
+                       : (!dep.git.empty() ? "git" : "archive");
     entry.url = !dep.git.empty() ? dep.git : dep.url;
+    entry.path = dep.path;
+    entry.versionRequirement = dep.versionRequirement;
     entry.requestedRev = dep.rev;
     entry.requestedTag = dep.tag;
     entry.archiveType = dep.archiveType;
@@ -3258,6 +3526,8 @@ static bool lock_entry_matches_dependency(const DependencyLockEntry& entry,
 {
     return entry.manifest == expected.manifest && entry.name == expected.name &&
            entry.source == expected.source && entry.url == expected.url &&
+           entry.path == expected.path &&
+           entry.versionRequirement == expected.versionRequirement &&
            entry.requestedRev == expected.requestedRev &&
            entry.requestedTag == expected.requestedTag &&
            entry.archiveType == expected.archiveType &&
@@ -3330,7 +3600,9 @@ static bool read_dependency_lock(const std::filesystem::path& path,
         if(!current.has_value())
             return true;
         if(current->manifest.empty() || current->name.empty() ||
-           current->source.empty() || current->url.empty())
+           current->source.empty() ||
+           (current->source != "path" && current->url.empty()) ||
+           (current->source == "path" && current->path.empty()))
         {
             error = "Invalid incomplete package entry in " + path.string();
             return false;
@@ -3390,6 +3662,12 @@ static bool read_dependency_lock(const std::filesystem::path& path,
             current->source = value;
         else if(assignment->key == "url")
             current->url = value;
+        else if(assignment->key == "path")
+            current->path = value;
+        else if(assignment->key == "requirement")
+            current->versionRequirement = value;
+        else if(assignment->key == "resolved_version")
+            current->resolvedVersion = value;
         else if(assignment->key == "requested_rev")
             current->requestedRev = value;
         else if(assignment->key == "requested_tag")
@@ -3440,7 +3718,16 @@ static bool write_dependency_lock(const DependencyLockContext& context,
         out << "manifest = " << lock_quote(entry.manifest) << "\n";
         out << "name = " << lock_quote(entry.name) << "\n";
         out << "source = " << lock_quote(entry.source) << "\n";
-        out << "url = " << lock_quote(entry.url) << "\n";
+        if(!entry.url.empty())
+            out << "url = " << lock_quote(entry.url) << "\n";
+        if(!entry.path.empty())
+            out << "path = " << lock_quote(entry.path) << "\n";
+        if(!entry.versionRequirement.empty())
+            out << "requirement = " << lock_quote(entry.versionRequirement)
+                << "\n";
+        if(!entry.resolvedVersion.empty())
+            out << "resolved_version = " << lock_quote(entry.resolvedVersion)
+                << "\n";
         if(!entry.requestedRev.empty())
             out << "requested_rev = " << lock_quote(entry.requestedRev) << "\n";
         if(!entry.requestedTag.empty())
@@ -3665,6 +3952,18 @@ static bool prepare_dependency_lock_context(
     std::map<std::string, DependencyLockEntry> expected;
     for(const auto& pkg : manifests)
     {
+        const auto declaredName =
+            find_section_toml_string(pkg.content, "package", "name");
+        const auto declaredVersion =
+            find_section_toml_string(pkg.content, "package", "version");
+        if(!declaredName.has_value() || declaredName->empty() ||
+           !declaredVersion.has_value() ||
+           !is_complete_semantic_version(*declaredVersion))
+        {
+            pkg_error_line("Package manifest requires a name and complete "
+                           "semantic version: " + pkg.manifestPath.string());
+            return false;
+        }
         for(const auto& dep : parse_source_deps(pkg.content))
         {
             DependencyLockEntry entry =
@@ -3674,7 +3973,7 @@ static bool prepare_dependency_lock_context(
         }
     }
 
-    bool stale = context.entries.size() != expected.size();
+    bool stale = false;
     if(!stale)
     {
         for(const auto& [key, wanted] : expected)
@@ -3683,7 +3982,9 @@ static bool prepare_dependency_lock_context(
             if(found == context.entries.end() ||
                !lock_entry_matches_dependency(found->second, wanted) ||
                (wanted.source == "git" && found->second.revision.empty()) ||
-               (wanted.source == "archive" && found->second.checksum.empty()))
+               (wanted.source == "archive" && found->second.checksum.empty()) ||
+               (wanted.source == "path" &&
+                found->second.resolvedVersion.empty()))
             {
                 stale = true;
                 break;
@@ -3721,15 +4022,17 @@ static DependencyLockEntry* dependency_lock_entry(const PackageManifest& pkg,
     if(context == nullptr)
         return nullptr;
     const std::string manifest = lock_manifest_name(*context, pkg);
-    const auto found =
-        context->entries.find(dependency_lock_key(manifest, dep.name));
+    const std::string key = dependency_lock_key(manifest, dep.name);
+    context->observedLockKeys.insert(key);
+    const auto found = context->entries.find(key);
     return found == context->entries.end() ? nullptr : &found->second;
 }
 
 static void record_dependency_lock_entry(const PackageManifest& pkg,
                                          const DepSpec& dep,
                                          const std::string& revision,
-                                         const std::string& checksum)
+                                         const std::string& checksum,
+                                         const std::string& resolvedVersion = "")
 {
     DependencyLockContext* context = current_dependency_lock_context();
     if(context == nullptr)
@@ -3737,11 +4040,16 @@ static void record_dependency_lock_entry(const PackageManifest& pkg,
     DependencyLockEntry entry = make_dependency_lock_entry(*context, pkg, dep);
     entry.revision = revision;
     entry.checksum = checksum;
+    entry.resolvedVersion = resolvedVersion;
     const std::string key = dependency_lock_key(entry.manifest, entry.name);
+    context->observedLockKeys.insert(key);
     const auto found = context->entries.find(key);
+    if(entry.resolvedVersion.empty() && found != context->entries.end())
+        entry.resolvedVersion = found->second.resolvedVersion;
     if(found == context->entries.end() ||
        found->second.revision != entry.revision ||
        found->second.checksum != entry.checksum ||
+       found->second.resolvedVersion != entry.resolvedVersion ||
        !lock_entry_matches_dependency(found->second, entry))
     {
         context->entries[key] = std::move(entry);
@@ -3751,6 +4059,26 @@ static void record_dependency_lock_entry(const PackageManifest& pkg,
 
 static bool finish_dependency_lock_context(DependencyLockContext& context)
 {
+    std::vector<std::string> obsolete;
+    for(const auto& [key, entry] : context.entries)
+    {
+        (void)entry;
+        if(context.observedLockKeys.count(key) == 0)
+            obsolete.push_back(key);
+    }
+    if(!obsolete.empty())
+    {
+        if(context.locked || context.offline)
+        {
+            pkg_error_line("mlang.lock contains dependencies no longer "
+                           "reachable from " + context.rootManifest.string() +
+                           "; rerun 'mlang pkg lock'");
+            return false;
+        }
+        for(const auto& key : obsolete)
+            context.entries.erase(key);
+        context.dirty = true;
+    }
     if(!context.dirty)
         return true;
     if(context.locked || context.offline)
@@ -4320,12 +4648,134 @@ dep_checkout_dir(const std::filesystem::path& depsDir, const DepSpec& dep)
 }
 
 static std::filesystem::path
-dep_source_dir(const std::filesystem::path& depsDir, const DepSpec& dep)
+dep_source_dir(const PackageManifest& pkg,
+               const std::filesystem::path& depsDir, const DepSpec& dep)
 {
-    std::filesystem::path path = dep_checkout_dir(depsDir, dep);
+    std::filesystem::path path;
+    if(!dep.path.empty())
+    {
+        path = dep.path;
+        if(path.is_relative())
+            path = pkg.packageDir / path;
+        path = std::filesystem::absolute(path).lexically_normal();
+        if(path.filename() == "mlang.toml")
+            path = path.parent_path();
+    }
+    else
+    {
+        path = dep_checkout_dir(depsDir, dep);
+    }
     if(!dep.subdir.empty())
         path /= dep.subdir;
     return path;
+}
+
+static std::optional<PackageManifest>
+load_dependency_manifest(const PackageManifest& owner, const DepSpec& dep,
+                         const std::filesystem::path& depsDir,
+                         bool required)
+{
+    namespace fs = std::filesystem;
+    fs::path manifestPath = dep_source_dir(owner, depsDir, dep) / "mlang.toml";
+    std::error_code ec;
+    if(!fs::is_regular_file(manifestPath, ec))
+    {
+        if(required)
+            pkg_error_line("MLang dependency '" + dep.name +
+                           "' has no manifest at " + manifestPath.string());
+        return std::nullopt;
+    }
+    manifestPath = fs::absolute(manifestPath).lexically_normal();
+    std::ifstream in(manifestPath, std::ios::binary);
+    std::string content((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+    if(content.empty() || !has_section(content, "package"))
+    {
+        pkg_error_line("Dependency manifest must declare [package]: " +
+                       manifestPath.string());
+        return std::nullopt;
+    }
+    const auto packageName =
+        find_section_toml_string(content, "package", "name");
+    const auto packageVersion =
+        find_section_toml_string(content, "package", "version");
+    if(!packageName.has_value() || packageName->empty() ||
+       !packageVersion.has_value() || packageVersion->empty())
+    {
+        pkg_error_line("MLang dependency manifest requires package name and "
+                       "version: " + manifestPath.string());
+        return std::nullopt;
+    }
+    if(*packageName != dep.name)
+    {
+        pkg_error_line("Dependency key '" + dep.name +
+                       "' does not match package name '" + *packageName +
+                       "' in " + manifestPath.string());
+        return std::nullopt;
+    }
+    if(!is_complete_semantic_version(*packageVersion))
+    {
+        pkg_error_line("Package '" + dep.name + "' has invalid semantic "
+                       "version '" + *packageVersion + "'");
+        return std::nullopt;
+    }
+    if(!dep.versionRequirement.empty() &&
+       !semantic_version_satisfies(*packageVersion, dep.versionRequirement))
+    {
+        pkg_error_line("Package '" + dep.name + "' version " +
+                       *packageVersion + " does not satisfy '" +
+                       dep.versionRequirement + "' required by " +
+                       owner.manifestPath.string());
+        return std::nullopt;
+    }
+    return PackageManifest{manifestPath, manifestPath.parent_path(), content,
+                           "", {}};
+}
+
+static void collect_transitive_link_flags_impl(
+    const PackageManifest& pkg, const std::filesystem::path& depsDir,
+    std::unordered_set<std::string>& visited,
+    std::unordered_set<std::string>& libDirs,
+    std::unordered_set<std::string>& libs,
+    std::unordered_set<std::string>& staticArchives)
+{
+    for(const auto& dep : parse_source_deps(pkg.content))
+    {
+        const std::filesystem::path path = dep_source_dir(pkg, depsDir, dep);
+        scan_lib_dir(path / "build" / "lib", libDirs, libs, staticArchives);
+        scan_lib_dir(path / "build", libDirs, libs, staticArchives);
+        scan_lib_dir(path / "lib", libDirs, libs, staticArchives);
+        const auto child = load_dependency_manifest(pkg, dep, depsDir, false);
+        if(!child.has_value())
+            continue;
+        const std::string key = child->manifestPath.string();
+        if(!visited.insert(key).second)
+            continue;
+        const BuildConfig childConfig = parse_manifest_build_config(*child);
+        collect_transitive_link_flags_impl(
+            *child, package_deps_dir(child->packageDir, childConfig), visited,
+            libDirs, libs, staticArchives);
+    }
+}
+
+static LinkFlags collect_transitive_dep_link_flags(
+    const PackageManifest& pkg, const std::filesystem::path& depsDir)
+{
+    std::unordered_set<std::string> visited;
+    std::unordered_set<std::string> libDirs;
+    std::unordered_set<std::string> libs;
+    std::unordered_set<std::string> staticArchives;
+    visited.insert(pkg.manifestPath.string());
+    collect_transitive_link_flags_impl(pkg, depsDir, visited, libDirs, libs,
+                                       staticArchives);
+    LinkFlags flags;
+    flags.libDirs.assign(libDirs.begin(), libDirs.end());
+    flags.libs.assign(libs.begin(), libs.end());
+    flags.staticArchives.assign(staticArchives.begin(), staticArchives.end());
+    std::sort(flags.libDirs.begin(), flags.libDirs.end());
+    std::sort(flags.libs.begin(), flags.libs.end());
+    std::sort(flags.staticArchives.begin(), flags.staticArchives.end());
+    return flags;
 }
 
 struct ExecutionProgressState
@@ -4416,7 +4866,8 @@ static std::string shorten_progress_output(const std::string& text)
 static size_t count_fetch_dep_steps(const DepSpec& dep,
                                     const std::filesystem::path& depsDir,
                                     bool updateExisting);
-static size_t count_build_dep_steps(const DepSpec& dep,
+static size_t count_build_dep_steps(const PackageManifest& pkg,
+                                    const DepSpec& dep,
                                     const std::filesystem::path& depsDir);
 static size_t count_reachable_task_steps(const std::vector<TaskSpec>& tasks,
                                          const std::string& hostName,
@@ -4674,12 +5125,102 @@ static int fetch_dep(const PackageManifest& pkg, const DepSpec& dep,
                      bool updateExisting,
                      const std::vector<std::string>& pathEntries)
 {
+    const int sourceCount = static_cast<int>(!dep.path.empty()) +
+                            static_cast<int>(!dep.git.empty()) +
+                            static_cast<int>(!dep.url.empty());
+    if(sourceCount != 1)
+    {
+        pkg_error_line("Dependency '" + dep.name +
+                       "' must select exactly one of path, git, or url");
+        return 1;
+    }
+    if(dep.git.empty() && (!dep.rev.empty() || !dep.tag.empty()))
+    {
+        pkg_error_line("Dependency '" + dep.name +
+                       "' uses rev/tag without a Git source");
+        return 1;
+    }
+    if(!dep.rev.empty() && !dep.tag.empty())
+    {
+        pkg_error_line("Git dependency '" + dep.name +
+                       "' cannot select both rev and tag");
+        return 1;
+    }
+    if(auto* context = current_dependency_lock_context(); context != nullptr)
+    {
+        DependencyLockEntry* entry = dependency_lock_entry(pkg, dep);
+        const DependencyLockEntry expected =
+            make_dependency_lock_entry(*context, pkg, dep);
+        if(entry == nullptr && (context->locked || context->offline))
+        {
+            pkg_error_line("Transitive dependency '" + dep.name +
+                           "' is missing from mlang.lock; rerun 'mlang pkg "
+                           "lock'");
+            return 1;
+        }
+        if(entry != nullptr &&
+           !lock_entry_matches_dependency(*entry, expected))
+        {
+            if(context->locked || context->offline)
+            {
+                pkg_error_line("mlang.lock is out of date for transitive "
+                               "dependency '" + dep.name +
+                               "'; rerun 'mlang pkg lock'");
+                return 1;
+            }
+            const std::string key = dependency_lock_key(expected.manifest,
+                                                        expected.name);
+            context->entries.erase(key);
+            context->dirty = true;
+        }
+    }
+    if(!dep.path.empty())
+    {
+        const auto child = load_dependency_manifest(pkg, dep, depsDir, true);
+        if(!child.has_value())
+            return 1;
+        const std::string resolvedVersion =
+            *find_section_toml_string(child->content, "package", "version");
+        if(auto* lockedEntry = dependency_lock_entry(pkg, dep);
+           lockedEntry != nullptr && !lockedEntry->resolvedVersion.empty() &&
+           lockedEntry->resolvedVersion != resolvedVersion)
+        {
+            DependencyLockContext* context =
+                current_dependency_lock_context();
+            if(context != nullptr && (context->locked || context->offline))
+            {
+                pkg_error_line("Path dependency '" + dep.name +
+                               "' changed version: locked " +
+                               lockedEntry->resolvedVersion + ", found " +
+                               resolvedVersion);
+                return 1;
+            }
+        }
+        if(auto* context = current_dependency_lock_context())
+        {
+            const std::string source =
+                "path:" + child->manifestPath.string();
+            const auto found = context->packageSources.find(dep.name);
+            if(found != context->packageSources.end() && found->second != source)
+            {
+                pkg_error_line("Dependency source conflict for package '" +
+                               dep.name + "': " + found->second + " and " +
+                               source);
+                return 1;
+            }
+            context->packageSources[dep.name] = source;
+        }
+        record_dependency_lock_entry(pkg, dep, "", "", resolvedVersion);
+        pkg_info_line("Using path dependency " + dep.name + " v" +
+                      resolvedVersion + " from " + child->packageDir.string());
+        return 0;
+    }
     if(!dep.git.empty())
         return fetch_git_dep(pkg, dep, depsDir, updateExisting, pathEntries);
     if(!dep.url.empty())
         return fetch_archive_dep(pkg, dep, depsDir, pathEntries);
     pkg_error_line("Dependency '" + dep.name +
-                   "' is missing a supported source (git/url)");
+                   "' is missing a supported source (path/git/url)");
     return 1;
 }
 
@@ -4693,6 +5234,35 @@ static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
         pkg_error_line("Dependency '" + dep.name +
                        "' is missing from mlang.lock");
         return 1;
+    }
+    if(auto* context = current_dependency_lock_context())
+    {
+        const DependencyLockEntry expected =
+            make_dependency_lock_entry(*context, pkg, dep);
+        if(!lock_entry_matches_dependency(*entry, expected))
+        {
+            pkg_error_line("mlang.lock is out of date for dependency '" +
+                           dep.name + "'");
+            return 1;
+        }
+    }
+    if(entry->source == "path")
+    {
+        const auto child = load_dependency_manifest(pkg, dep, depsDir, true);
+        if(!child.has_value())
+            return 1;
+        const std::string version =
+            *find_section_toml_string(child->content, "package", "version");
+        if(version != entry->resolvedVersion)
+        {
+            pkg_error_line("Path dependency '" + dep.name +
+                           "' changed version: expected " +
+                           entry->resolvedVersion + ", got " + version);
+            return 1;
+        }
+        pkg_info_line("Verified path dependency " + dep.name + " v" +
+                      version);
+        return 0;
     }
     const std::filesystem::path checkoutDir = dep_checkout_dir(depsDir, dep);
     if(!std::filesystem::exists(checkoutDir))
@@ -4786,6 +5356,28 @@ static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
 static int verify_manifest_dependencies(const PackageManifest& pkg,
                                         const BuildConfig& buildConfig)
 {
+    DependencyLockContext* traversal = current_dependency_lock_context();
+    const std::string manifestKey =
+        std::filesystem::absolute(pkg.manifestPath).lexically_normal().string();
+    if(traversal != nullptr)
+    {
+        if(traversal->verifiedManifests.count(manifestKey) != 0)
+            return 0;
+        if(!traversal->activeVerifyManifests.insert(manifestKey).second)
+        {
+            pkg_error_line("Transitive dependency cycle reaches " +
+                           pkg.manifestPath.string());
+            return 1;
+        }
+    }
+    const auto finishTraversal = [&](bool success)
+    {
+        if(traversal == nullptr)
+            return;
+        traversal->activeVerifyManifests.erase(manifestKey);
+        if(success)
+            traversal->verifiedManifests.insert(manifestKey);
+    };
     const BuildConfig effectiveBuildConfig =
         materialize_build_config_for_package(pkg, buildConfig);
     const std::filesystem::path depsDir =
@@ -4794,22 +5386,228 @@ static int verify_manifest_dependencies(const PackageManifest& pkg,
     {
         if(verify_dependency(pkg, dep, depsDir,
                              effectiveBuildConfig.pathEntries) != 0)
+        {
+            finishTraversal(false);
+            return 1;
+        }
+        const bool requiresManifest = !dep.path.empty() || dep.build == "mlang";
+        const auto child =
+            load_dependency_manifest(pkg, dep, depsDir, requiresManifest);
+        if(!child.has_value())
+        {
+            if(requiresManifest)
+            {
+                finishTraversal(false);
+                return 1;
+            }
+            continue;
+        }
+        const std::string version =
+            *find_section_toml_string(child->content, "package", "version");
+        DependencyLockEntry* entry = dependency_lock_entry(pkg, dep);
+        if(entry == nullptr || entry->resolvedVersion != version)
+        {
+            pkg_error_line("Resolved version verification failed for '" +
+                           dep.name + "': expected " +
+                           (entry == nullptr ? std::string("<missing>")
+                                             : entry->resolvedVersion) +
+                           ", got " + version);
+            finishTraversal(false);
+            return 1;
+        }
+        BuildConfig childBuildConfig = parse_manifest_build_config(*child);
+        childBuildConfig.compilerProgram = effectiveBuildConfig.compilerProgram;
+        if(verify_manifest_dependencies(*child, childBuildConfig) != 0)
+        {
+            finishTraversal(false);
+            return 1;
+        }
+    }
+    finishTraversal(true);
+    return 0;
+}
+
+static std::string package_name(const PackageManifest& pkg)
+{
+    return find_section_toml_string(pkg.content, "package", "name")
+        .value_or(pkg.packageDir.filename().string());
+}
+
+static std::string package_version(const PackageManifest& pkg)
+{
+    return find_section_toml_string(pkg.content, "package", "version")
+        .value_or("?");
+}
+
+static std::string dependency_source_label(const DepSpec& dep)
+{
+    if(!dep.path.empty())
+        return "path " + dep.path;
+    if(!dep.git.empty())
+        return "git " + dep.git;
+    return "archive " + dep.url;
+}
+
+static int print_dependency_tree_recursive(
+    const PackageManifest& pkg, const std::string& prefix,
+    std::unordered_set<std::string>& expanded,
+    std::unordered_set<std::string>& active)
+{
+    const std::string key =
+        std::filesystem::absolute(pkg.manifestPath).lexically_normal().string();
+    active.insert(key);
+    const auto deps = parse_source_deps(pkg.content);
+    const BuildConfig config = parse_manifest_build_config(pkg);
+    const std::filesystem::path depsDir =
+        package_deps_dir(pkg.packageDir, config);
+    for(size_t i = 0; i < deps.size(); ++i)
+    {
+        const DepSpec& dep = deps[i];
+        const bool last = i + 1 == deps.size();
+        std::cout << prefix << (last ? "`-- " : "|-- ") << dep.name;
+        if(!dep.versionRequirement.empty())
+            std::cout << " " << dep.versionRequirement;
+        std::cout << " (" << dependency_source_label(dep) << ")";
+        const auto child = load_dependency_manifest(
+            pkg, dep, depsDir, !dep.path.empty() || dep.build == "mlang");
+        if(!child.has_value())
+        {
+            if(!dep.path.empty() || dep.build == "mlang")
+            {
+                std::cout << " [invalid]\n";
+                active.erase(key);
+                return 1;
+            }
+            std::cout << " [not fetched]\n";
+            continue;
+        }
+        std::cout << " => v" << package_version(*child);
+        const std::string childKey = std::filesystem::absolute(
+                                         child->manifestPath)
+                                         .lexically_normal()
+                                         .string();
+        if(active.count(childKey) != 0)
+        {
+            std::cout << " [cycle]\n";
+            active.erase(key);
+            return 1;
+        }
+        if(expanded.count(childKey) != 0)
+        {
+            std::cout << " (*)\n";
+            continue;
+        }
+        std::cout << "\n";
+        expanded.insert(childKey);
+        if(print_dependency_tree_recursive(
+               *child, prefix + (last ? "    " : "|   "), expanded,
+               active) != 0)
+        {
+            active.erase(key);
+            return 1;
+        }
+    }
+    active.erase(key);
+    return 0;
+}
+
+static bool find_dependency_paths_recursive(
+    const PackageManifest& pkg, const std::string& wanted,
+    std::vector<std::string>& chain,
+    std::unordered_set<std::string>& active,
+    std::vector<std::vector<std::string>>& matches)
+{
+    const std::string key =
+        std::filesystem::absolute(pkg.manifestPath).lexically_normal().string();
+    if(!active.insert(key).second)
+        return false;
+    bool foundAny = false;
+    const BuildConfig config = parse_manifest_build_config(pkg);
+    const std::filesystem::path depsDir =
+        package_deps_dir(pkg.packageDir, config);
+    for(const auto& dep : parse_source_deps(pkg.content))
+    {
+        chain.push_back(dep.name);
+        if(dep.name == wanted)
+        {
+            matches.push_back(chain);
+            foundAny = true;
+        }
+        const auto child = load_dependency_manifest(
+            pkg, dep, depsDir, !dep.path.empty() || dep.build == "mlang");
+        if(child.has_value() &&
+           find_dependency_paths_recursive(*child, wanted, chain, active,
+                                           matches))
+            foundAny = true;
+        chain.pop_back();
+    }
+    active.erase(key);
+    return foundAny;
+}
+
+static int print_dependency_tree(const std::vector<PackageManifest>& manifests)
+{
+    for(size_t i = 0; i < manifests.size(); ++i)
+    {
+        const auto& pkg = manifests[i];
+        if(i != 0)
+            std::cout << "\n";
+        std::cout << package_name(pkg) << " v" << package_version(pkg) << "\n";
+        std::unordered_set<std::string> expanded;
+        std::unordered_set<std::string> active;
+        expanded.insert(std::filesystem::absolute(pkg.manifestPath)
+                            .lexically_normal()
+                            .string());
+        if(print_dependency_tree_recursive(pkg, "", expanded, active) != 0)
             return 1;
     }
     return 0;
 }
 
-static int build_git_dep(const DepSpec& dep,
+static int print_dependency_why(const std::vector<PackageManifest>& manifests,
+                                const std::string& wanted)
+{
+    bool found = false;
+    for(const auto& pkg : manifests)
+    {
+        std::vector<std::string> chain{package_name(pkg)};
+        std::unordered_set<std::string> active;
+        std::vector<std::vector<std::string>> matches;
+        find_dependency_paths_recursive(pkg, wanted, chain, active, matches);
+        for(const auto& match : matches)
+        {
+            found = true;
+            for(size_t i = 0; i < match.size(); ++i)
+            {
+                if(i != 0)
+                    std::cout << " -> ";
+                std::cout << match[i];
+            }
+            std::cout << "\n";
+        }
+    }
+    if(!found)
+    {
+        pkg_error_line("Package '" + wanted +
+                       "' is not reachable from the selected manifest");
+        return 1;
+    }
+    return 0;
+}
+
+static int build_git_dep(const PackageManifest& pkg, const DepSpec& dep,
                          const std::filesystem::path& depsDir, bool useNinja,
                          const std::string& makeProgram,
                          const std::vector<std::string>& pathEntries)
 {
-    std::filesystem::path path = dep_source_dir(depsDir, dep);
+    std::filesystem::path path = dep_source_dir(pkg, depsDir, dep);
     if(!std::filesystem::exists(path))
         return 1;
 
     if(dep.build == "none" || dep.build == "skip")
         return 0;
+    if(dep.build == "mlang")
+        return 0; // Built recursively by build_for_manifest.
 
     if(dep.build == "cmake")
     {
@@ -5087,10 +5885,35 @@ validate_mlang_version_requirement(const std::filesystem::path& manifestPath,
 static int fetch_for_manifest(const PackageManifest& pkg,
                               const BuildConfig& buildConfig)
 {
+    DependencyLockContext* traversal = current_dependency_lock_context();
+    const std::string manifestKey =
+        std::filesystem::absolute(pkg.manifestPath).lexically_normal().string();
+    if(traversal != nullptr)
+    {
+        if(traversal->fetchedManifests.count(manifestKey) != 0)
+            return 0;
+        if(!traversal->activeFetchManifests.insert(manifestKey).second)
+        {
+            pkg_error_line("Transitive dependency cycle reaches " +
+                           pkg.manifestPath.string());
+            return 1;
+        }
+    }
+    const auto finishTraversal = [&](bool success)
+    {
+        if(traversal == nullptr)
+            return;
+        traversal->activeFetchManifests.erase(manifestKey);
+        if(success)
+            traversal->fetchedManifests.insert(manifestKey);
+    };
     const BuildConfig effectiveBuildConfig =
         materialize_build_config_for_package(pkg, buildConfig);
     if(validate_toolchain_requirements(pkg, effectiveBuildConfig) != 0)
+    {
+        finishTraversal(false);
         return 1;
+    }
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, effectiveBuildConfig));
     auto deps = parse_source_deps(pkg.content);
@@ -5114,9 +5937,76 @@ static int fetch_for_manifest(const PackageManifest& pkg,
     {
         if(fetch_dep(pkg, dep, depsDir, /*updateExisting=*/true,
                      effectiveBuildConfig.pathEntries) != 0)
+        {
+            finishTraversal(false);
             return 1;
+        }
+        const bool requiresManifest = !dep.path.empty() || dep.build == "mlang";
+        const auto child =
+            load_dependency_manifest(pkg, dep, depsDir, requiresManifest);
+        if(!child.has_value())
+        {
+            if(requiresManifest)
+            {
+                finishTraversal(false);
+                return 1;
+            }
+            continue;
+        }
+        const std::string childVersion =
+            *find_section_toml_string(child->content, "package", "version");
+        if(auto* entry = dependency_lock_entry(pkg, dep))
+        {
+            if(!entry->resolvedVersion.empty() &&
+               entry->resolvedVersion != childVersion)
+            {
+                DependencyLockContext* context =
+                    current_dependency_lock_context();
+                if(context != nullptr &&
+                   (context->locked || context->offline))
+                {
+                    pkg_error_line("MLang dependency '" + dep.name +
+                                   "' changed version: locked " +
+                                   entry->resolvedVersion + ", found " +
+                                   childVersion);
+                    finishTraversal(false);
+                    return 1;
+                }
+            }
+            record_dependency_lock_entry(pkg, dep, entry->revision,
+                                         entry->checksum, childVersion);
+        }
+        if(traversal != nullptr)
+        {
+            std::string sourceIdentity;
+            if(!dep.path.empty())
+                sourceIdentity = "path:" + child->manifestPath.string();
+            else if(!dep.git.empty())
+                sourceIdentity = "git:" + dep.git;
+            else
+                sourceIdentity = "archive:" + dep.url;
+            const auto found = traversal->packageSources.find(dep.name);
+            if(found != traversal->packageSources.end() &&
+               found->second != sourceIdentity)
+            {
+                pkg_error_line("Dependency source conflict for package '" +
+                               dep.name + "': " + found->second + " and " +
+                               sourceIdentity);
+                finishTraversal(false);
+                return 1;
+            }
+            traversal->packageSources[dep.name] = sourceIdentity;
+        }
+        BuildConfig childBuildConfig = parse_manifest_build_config(*child);
+        childBuildConfig.compilerProgram = effectiveBuildConfig.compilerProgram;
+        if(fetch_for_manifest(*child, childBuildConfig) != 0)
+        {
+            finishTraversal(false);
+            return 1;
+        }
     }
     pkg_info_line("Fetch completed for " + pkg.manifestPath.string() + ".");
+    finishTraversal(true);
     return 0;
 }
 
@@ -5270,6 +6160,27 @@ static int build_for_manifest(const PackageManifest& pkg,
                               const std::string& optFlagOverride, bool useNinja,
                               const BuildConfig& packageBuildConfig)
 {
+    DependencyLockContext* buildTraversal =
+        current_dependency_lock_context();
+    const std::string buildManifestKey =
+        std::filesystem::absolute(pkg.manifestPath).lexically_normal().string();
+    if(buildTraversal != nullptr &&
+       !buildTraversal->activeBuildManifests.insert(buildManifestKey).second)
+    {
+        pkg_error_line("Transitive dependency cycle reaches " +
+                       pkg.manifestPath.string());
+        return 1;
+    }
+    struct BuildTraversalGuard
+    {
+        DependencyLockContext* context;
+        std::string key;
+        ~BuildTraversalGuard()
+        {
+            if(context != nullptr)
+                context->activeBuildManifests.erase(key);
+        }
+    } buildTraversalGuard{buildTraversal, buildManifestKey};
     const BuildConfig effectivePackageBuildConfig =
         materialize_build_config_for_package(pkg, packageBuildConfig);
     if(validate_toolchain_requirements(pkg, effectivePackageBuildConfig) != 0)
@@ -5399,7 +6310,7 @@ static int build_for_manifest(const PackageManifest& pkg,
         totalSteps +=
             count_fetch_dep_steps(dep, depsDir, /*updateExisting=*/false);
     for(const auto& dep : deps)
-        totalSteps += count_build_dep_steps(dep, depsDir);
+        totalSteps += count_build_dep_steps(pkg, dep, depsDir);
     if(!targets.empty())
         totalSteps += targets.size();
     else
@@ -5411,16 +6322,71 @@ static int build_for_manifest(const PackageManifest& pkg,
         if(fetch_dep(pkg, dep, depsDir, /*updateExisting=*/false,
                      effectivePackageBuildConfig.pathEntries) != 0)
             return 1;
+        const bool requiresManifest = !dep.path.empty() || dep.build == "mlang";
+        const auto child =
+            load_dependency_manifest(pkg, dep, depsDir, requiresManifest);
+        if(!child.has_value())
+        {
+            if(requiresManifest)
+                return 1;
+            continue;
+        }
+        const std::string version = package_version(*child);
+        if(auto* entry = dependency_lock_entry(pkg, dep))
+        {
+            if(!entry->resolvedVersion.empty() &&
+               entry->resolvedVersion != version)
+            {
+                DependencyLockContext* context =
+                    current_dependency_lock_context();
+                if(context != nullptr &&
+                   (context->locked || context->offline))
+                {
+                    pkg_error_line("MLang dependency '" + dep.name +
+                                   "' changed version: locked " +
+                                   entry->resolvedVersion + ", found " +
+                                   version);
+                    return 1;
+                }
+            }
+            record_dependency_lock_entry(pkg, dep, entry->revision,
+                                         entry->checksum, version);
+        }
     }
     for(const auto& dep : deps)
     {
-        if(build_git_dep(dep, depsDir, effectiveUseNinja,
+        if(dep.build == "mlang")
+        {
+            const auto child =
+                load_dependency_manifest(pkg, dep, depsDir, true);
+            if(!child.has_value())
+                return 1;
+            const std::string childKey = std::filesystem::absolute(
+                                             child->manifestPath)
+                                             .lexically_normal()
+                                             .string();
+            DependencyLockContext* context =
+                current_dependency_lock_context();
+            if(context != nullptr &&
+               context->builtManifests.count(childKey) != 0)
+                continue;
+            BuildConfig childConfig = parse_manifest_build_config(*child);
+            childConfig.compilerProgram =
+                effectivePackageBuildConfig.compilerProgram;
+            if(build_for_manifest(*child, argv0, optFlagOverride, useNinja,
+                                  childConfig) != 0)
+                return 1;
+            if(context != nullptr)
+                context->builtManifests.insert(childKey);
+            continue;
+        }
+        if(build_git_dep(pkg, dep, depsDir, effectiveUseNinja,
                          effectivePackageBuildConfig.makeProgram,
                          effectivePackageBuildConfig.pathEntries) != 0)
             return 1;
     }
 
-    LinkFlags linkFlags = collect_dep_link_flags(deps, depsDir);
+    LinkFlags linkFlags = collect_transitive_dep_link_flags(pkg, depsDir);
     std::vector<std::string> pkgFlags;
     for(const auto& dep : cdeps)
     {
@@ -5944,10 +6910,11 @@ static size_t count_fetch_dep_steps(const DepSpec& dep,
     return 0;
 }
 
-static size_t count_build_dep_steps(const DepSpec& dep,
+static size_t count_build_dep_steps(const PackageManifest& pkg,
+                                    const DepSpec& dep,
                                     const std::filesystem::path& depsDir)
 {
-    const std::filesystem::path path = dep_source_dir(depsDir, dep);
+    const std::filesystem::path path = dep_source_dir(pkg, depsDir, dep);
     if(!std::filesystem::exists(path))
         return 0;
     if(dep.build == "none" || dep.build == "skip")
@@ -6772,7 +7739,7 @@ static int run_task_for_manifest_impl(
             const auto cdeps = parse_c_deps(pkg.content);
             const std::filesystem::path depsDir =
                 package_deps_dir(pkg.packageDir, buildConfig);
-            LinkFlags linkFlags = collect_dep_link_flags(deps, depsDir);
+            LinkFlags linkFlags = collect_transitive_dep_link_flags(pkg, depsDir);
             std::vector<std::string> pkgFlags;
             for(const auto& dep : cdeps)
             {
@@ -7195,8 +8162,9 @@ int PackageManager::run(int argc, char** argv)
     {
         return value == "--help" || value == "-h" || value == "help" ||
                value == "--tests" || value == "init" || value == "add" ||
-               value == "lock" || value == "verify" || value == "fetch" ||
-               value == "build" || value == "run" || value == "clean";
+               value == "lock" || value == "verify" || value == "tree" ||
+               value == "why" || value == "fetch" || value == "build" ||
+               value == "run" || value == "clean";
     };
 
     if(!is_pkg_subcommand(sub))
@@ -7433,7 +8401,10 @@ int PackageManager::run(int argc, char** argv)
         {
             std::cerr << "Usage: " << argv[0]
                       << " pkg [--config FILE] add <name> [--git URL] [--rev "
-                         "REV] [--tag TAG] [--submodules]\n"
+                         "REV] [--tag TAG] [--submodules] [--version REQ]\n"
+                      << "       " << argv[0]
+                      << " pkg [--config FILE] add <name> --path DIR "
+                         "[--version REQ]\n"
                       << "       " << argv[0]
                       << " pkg [--config FILE] add <name> --url URL [--archive "
                          "tar.gz] [--strip-components N] [--subdir DIR]\n"
@@ -7450,6 +8421,8 @@ int PackageManager::run(int argc, char** argv)
         std::string gitUrl;
         std::string archiveUrl;
         std::string archiveType;
+        std::string dependencyPath;
+        std::string versionRequirement;
         std::string rev;
         std::string tag;
         bool gitSubmodules = false;
@@ -7469,6 +8442,10 @@ int PackageManager::run(int argc, char** argv)
                 archiveUrl = argv[++i];
             else if(arg == "--archive" && i + 1 < argc)
                 archiveType = argv[++i];
+            else if(arg == "--path" && i + 1 < argc)
+                dependencyPath = argv[++i];
+            else if(arg == "--version" && i + 1 < argc)
+                versionRequirement = argv[++i];
             else if(arg == "--rev" && i + 1 < argc)
                 rev = argv[++i];
             else if(arg == "--tag" && i + 1 < argc)
@@ -7529,9 +8506,31 @@ int PackageManager::run(int argc, char** argv)
         }
         else
         {
-            line = make_dependency_manifest_line(
-                name, gitUrl, archiveUrl, archiveType, rev, tag, gitSubmodules,
-                depSubdir, stripComponents);
+            const int sourceCount = static_cast<int>(!dependencyPath.empty()) +
+                                    static_cast<int>(!gitUrl.empty()) +
+                                    static_cast<int>(!archiveUrl.empty());
+            if(sourceCount > 1)
+            {
+                std::cerr << "Choose exactly one of --path, --git, or --url.\n";
+                return 1;
+            }
+            if(!dependencyPath.empty())
+            {
+                line = name + " = { path = \"" + dependencyPath + "\"";
+                if(!versionRequirement.empty())
+                    line += ", version = \"" + versionRequirement + "\"";
+                line += " }";
+            }
+            else
+            {
+                line = make_dependency_manifest_line(
+                    name, gitUrl, archiveUrl, archiveType, rev, tag,
+                    gitSubmodules, depSubdir, stripComponents);
+                if(!versionRequirement.empty() && !line.empty() &&
+                   line.back() == '}')
+                    line.insert(line.size() - 1,
+                                ", version = \"" + versionRequirement + "\"");
+            }
         }
 
         if(addLib)
@@ -7594,6 +8593,36 @@ int PackageManager::run(int argc, char** argv)
         return 0;
     }
 
+    if(sub == "tree" || sub == "why")
+    {
+        if(sub == "tree" && subIndex + 1 != argc)
+        {
+            std::cerr << "Usage: " << argv[0]
+                      << " pkg [--config FILE] tree\n";
+            return 1;
+        }
+        if(sub == "why" && subIndex + 2 != argc)
+        {
+            std::cerr << "Usage: " << argv[0]
+                      << " pkg [--config FILE] why <package>\n";
+            return 1;
+        }
+        if(!std::filesystem::exists(manifestPath))
+        {
+            std::cerr << manifestLabel << " not found.\n";
+            return 1;
+        }
+        auto manifests = collect_target_manifests(manifestPath);
+        if(manifests.empty())
+        {
+            std::cerr << "No package manifests found for " << sub << ".\n";
+            return 1;
+        }
+        return sub == "tree"
+                   ? print_dependency_tree(manifests)
+                   : print_dependency_why(manifests, argv[subIndex + 1]);
+    }
+
     if(sub == "lock" || sub == "verify")
     {
         PkgCliOverrides overrides;
@@ -7652,7 +8681,7 @@ int PackageManager::run(int argc, char** argv)
                 return 1;
             }
         }
-        if(!verifyOnly && !finish_dependency_lock_context(lockContext))
+        if(!finish_dependency_lock_context(lockContext))
             return 1;
         pkg_info_line(verifyOnly ? "mlang.lock and fetched dependencies verified."
                                  : "mlang.lock is up to date.");
