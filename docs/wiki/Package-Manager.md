@@ -1159,6 +1159,68 @@ Each listed member is resolved relative to the root manifest. If the member is
 a directory, `mlang pkg fetch`, `mlang pkg build`, and `mlang pkg clean`
 recursively scan for child `mlang.toml` files beneath it.
 
+### Explicit `[[include]]` packages
+
+Use `[[include]]` when a root manifest should select specific package
+manifests instead of recursively discovering every project in a directory.
+Every include requires a path and a unique output target:
+
+```toml
+[[include]]
+path = "apps/editor"
+target = "editor"
+
+[[include]]
+path = "tools/converter/mlang.toml"
+target = "converter"
+```
+
+A directory path resolves to `<path>/mlang.toml`; a manifest file can be
+named directly. Each included manifest must contain `[package]`. Target names
+may contain letters, digits, `-`, and `_`, and duplicate targets are rejected
+before any package operation starts.
+
+Included manifests remain independent packages. Their entries, `[[bin]]` and
+`[[lib]]` declarations, dependencies, and tasks are evaluated relative to the
+child manifest directory. Build artifacts and fetched dependencies are instead
+collected under the root manifest's target namespace:
+
+```text
+build/
+├── editor/
+│   ├── editor
+│   ├── asset-compiler
+│   └── deps/
+└── converter/
+    ├── converter
+    └── deps/
+```
+
+This does not merge source files or link unrelated child packages into one
+binary. If a child declares several binaries or libraries, all of its outputs
+share that child's target directory. Child `[tool.mlang].build_dir` and
+`deps_dir` values do not escape the assigned namespace. A command-line
+`--build-dir out` produces `out/<target>/...`; `--deps-dir cache` produces
+`cache/<target>/...`.
+
+Only listed manifests are included; sibling and nested manifests are not
+scanned automatically. Existing `[workspace].members` remains available when
+recursive discovery is wanted. If the same manifest is both explicitly
+included and discovered as a workspace member, the explicit include wins.
+
+Run all selected packages from the coordinator directory:
+
+```sh
+mlang pkg fetch
+mlang pkg build
+./build/editor/editor
+./build/converter/converter
+mlang pkg clean
+```
+
+See `examples/package_manager_includes` for a runnable example with two
+included packages and three separately built executables.
+
 ## Workspace And Subdirectory Layouts
 
 This topic shows how to organize a workspace root, nested package manifests,
@@ -1360,6 +1422,9 @@ Workspace example in this repository:
 - `examples/package_manager_workspace_fetch`
   Demonstrates recursive workspace package discovery plus GitHub `git` and
   `tar.gz` dependency fetching.
+- `examples/package_manager_includes`
+  Demonstrates explicit `[[include]]` selection and isolated root
+  `build/<target>` output namespaces for independent child packages.
 - `examples/package_manager_static_cjson`
   Demonstrates static linking of a fetched `tar.gz` C dependency.
 - `examples/package_manager_multi_bins`

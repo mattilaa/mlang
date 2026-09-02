@@ -2553,6 +2553,28 @@ Each listed member is treated as a directory root under the current project.
 for `mlang.toml` files under those roots and run package operations for each
 discovered subpackage.
 
+For opt-in selection without recursive scanning, use a required, unique
+output target for each `[[include]]`:
+
+```toml
+[[include]]
+path = "apps/editor"
+target = "editor"
+
+[[include]]
+path = "tools/converter/mlang.toml"
+target = "converter"
+```
+
+A directory path resolves to its `mlang.toml`. Included manifests remain
+independent packages: their sources, targets, dependencies, and tasks stay
+relative to the child directory, while outputs are collected separately as
+`build/editor/...` and `build/converter/...`. No unlisted subdirectory is
+included, and sources from different manifests are not combined into one
+binary. See [Package Manager](docs/package_manager.md#explicit-include-packages)
+and `examples/package_manager_includes` for the complete behavior and runnable
+example.
+
 Directory tree example:
 
 ```text
@@ -2958,6 +2980,9 @@ Workspace example:
 - `examples/package_manager_workspace_fetch`
   Demonstrates recursive workspace member discovery plus GitHub `git` and
   `tar.gz` source fetching in sibling subpackages.
+- `examples/package_manager_includes`
+  Demonstrates explicit child-manifest selection and isolated root
+  `build/<target>` output namespaces.
 - `examples/package_manager_static_cjson`
   Demonstrates static linking of a fetched `tar.gz` C dependency.
 - `examples/package_manager_multi_bins`

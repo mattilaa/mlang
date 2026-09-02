@@ -173,6 +173,20 @@
  * applied recursively to regular files, and directories keep traverse bits so
  * a source tree remains usable after `chmod = "644"`.
  *
+ * A coordinator manifest can explicitly select independent child packages
+ * with `[[include]]`. Each include requires a unique `target`; child sources
+ * and tasks remain relative to their own manifest, while artifacts and
+ * dependencies are collected under the coordinator's `build/<target>`.
+ * \code{.toml}
+ * [[include]]
+ * path = "apps/editor"
+ * target = "editor"
+ *
+ * [[include]]
+ * path = "tools/converter/mlang.toml"
+ * target = "converter"
+ * \endcode
+ *
  * Linux initramfs example using BusyBox as the real `/init` while optionally
  * overlaying a wider GNU userspace selected from the command line:
  * \code{.toml}

@@ -6583,6 +6583,33 @@ Pkg Dependency Toolchains Report Found Missing And Old Versions
     Should Contain    ${failed.stderr}    Install: install fixture-tool-missing
     Should Contain    ${failed.stderr}    Required dependency toolchains are missing or too old.
 
+Pkg Builds Explicitly Included Packages Into Isolated Targets
+    [Documentation]    Verify root [[include]] selection, directory and file
+    ...                paths, MLA frontend delegation, and isolated outputs.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_includes
+    ${setup}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${base}' && cp -R '${EXECDIR}/examples/package_manager_includes' '${base}'
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup.rc}    0
+
+    ${build}=    Run Process    ${MLANG}    pkg    build
+    ...    cwd=${base}    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Included-package build failed (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    Should Not Contain    ${build.stdout}    Build failed.
+    File Should Exist    ${base}/build/editor/editor
+    File Should Exist    ${base}/build/editor/asset-compiler
+    File Should Exist    ${base}/build/converter/converter
+    File Should Not Exist    ${base}/apps/editor/build/editor
+    File Should Not Exist    ${base}/tools/converter/build/converter
+
+    ${editor}=    Run Process    ${base}/build/editor/editor    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${editor.rc}    0
+    Should Contain    ${editor.stdout}    editor package built in its include target
+    ${converter}=    Run Process    ${base}/build/converter/converter    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${converter.rc}    0
+    Should Contain    ${converter.stdout}    converter package built separately
+
 Pkg Builds And Links MLang Dynamic Library Target
     [Documentation]    Verify [[lib]] output, depends_on build ordering,
     ...                automatic linking, and loader-relative execution.

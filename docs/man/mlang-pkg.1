@@ -178,6 +178,30 @@ depends_on = ["arithmetic"]
 name = "arithmetic"
 entry = "src/arithmetic.mla"
 .fi
+.SH EXPLICIT PACKAGE INCLUDES
+A coordinator manifest can select independent child packages without recursive
+workspace discovery. Each
+.B [[include]]
+requires a child manifest path and a unique output target.
+.PP
+.nf
+[[include]]
+path = "apps/editor"
+target = "editor"
+
+[[include]]
+path = "tools/converter/mlang.toml"
+target = "converter"
+.fi
+.PP
+A directory path resolves to its
+.BR mlang.toml .
+The child retains its own source root, dependencies, tasks, and target
+declarations. Artifacts are collected under
+.BR build/<target>/ ,
+and fetched dependencies under
+.BR build/<target>/deps/ .
+Unlisted manifests are not scanned or built.
 .SH MANIFEST MODES
 When one or more manifest paths are passed directly instead of a primary
 subcommand,

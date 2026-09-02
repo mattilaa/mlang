@@ -1,0 +1,7 @@
+[[include]]
+path = "apps/editor"
+target = "editor"
+
+[[include]]
+path = "tools/converter/mlang.toml"
+target = "converter"

@@ -908,6 +908,11 @@ struct BuildConfig
     std::optional<bool> staticCppRuntime;
     std::optional<bool> taskPrintToStdoutLog;
     bool enableLogs = false;
+    // Non-empty only for a manifest selected by a root [[include]]. These
+    // absolute paths keep the included package's artifacts isolated while
+    // source and task paths continue to resolve from its own packageDir.
+    std::string includedBuildDir;
+    std::string includedDepsDir;
     // 0 = off (no codesign), 1 = sign (codesign --sign -),
     // 2 = force-sign (codesign --force --sign -). Macro-stable so it can be
     // copied through value semantics and merged with apply_cli_overrides.
@@ -1614,6 +1619,9 @@ static std::filesystem::path
 package_build_dir(const std::filesystem::path& packageDir,
                   const BuildConfig& config)
 {
+    if(!config.includedBuildDir.empty())
+        return std::filesystem::path(config.includedBuildDir)
+            .lexically_normal();
     return resolve_package_path(packageDir, config.buildDir, "build");
 }
 
@@ -1621,6 +1629,8 @@ static std::filesystem::path
 package_deps_dir(const std::filesystem::path& packageDir,
                  const BuildConfig& config)
 {
+    if(!config.includedDepsDir.empty())
+        return std::filesystem::path(config.includedDepsDir).lexically_normal();
     if(!config.depsDir.empty())
         return resolve_package_path(packageDir, config.depsDir, "build/deps");
     return (package_build_dir(packageDir, config) / "deps").lexically_normal();
@@ -2230,6 +2240,12 @@ struct DepSpec
     bool submodules = false;
 };
 
+struct ManifestInclude
+{
+    std::string path;
+    std::string target;
+};
+
 struct LinkFlags
 {
     std::vector<std::string> libDirs;
@@ -2769,6 +2785,52 @@ parse_workspace_members(const std::string& content)
     return out;
 }
 
+static std::vector<ManifestInclude>
+parse_manifest_includes(const std::string& content)
+{
+    std::istringstream in(content);
+    std::string line;
+    std::vector<ManifestInclude> includes;
+    std::optional<ManifestInclude> current;
+
+    auto flush_current = [&]()
+    {
+        if(current.has_value())
+            includes.push_back(*current);
+        current.reset();
+    };
+
+    while(std::getline(in, line))
+    {
+        const std::string text = strip_toml_comment(line);
+        if(text.empty())
+            continue;
+        if(text == "[[include]]")
+        {
+            flush_current();
+            current = ManifestInclude{};
+            continue;
+        }
+        if(text.front() == '[' && text.back() == ']')
+        {
+            flush_current();
+            continue;
+        }
+        if(!current.has_value())
+            continue;
+
+        const auto assignment = parse_toml_assignment(text, in);
+        if(!assignment.has_value())
+            continue;
+        if(assignment->key == "path")
+            current->path = unquote(assignment->value);
+        else if(assignment->key == "target")
+            current->target = unquote(assignment->value);
+    }
+    flush_current();
+    return includes;
+}
+
 static bool has_section(const std::string& content, const std::string& wanted)
 {
     std::istringstream in(content);
@@ -3068,7 +3130,35 @@ struct PackageManifest
     std::filesystem::path manifestPath;
     std::filesystem::path packageDir;
     std::string content;
+    std::string includeTarget;
+    std::filesystem::path includeRootDir;
 };
+
+static bool valid_include_target(const std::string& target)
+{
+    if(target.empty() || target == "." || target == "..")
+        return false;
+    return std::all_of(target.begin(), target.end(), [](unsigned char c)
+                       { return std::isalnum(c) || c == '-' || c == '_'; });
+}
+
+static void apply_include_output_paths(const PackageManifest& pkg,
+                                       BuildConfig& buildConfig)
+{
+    if(pkg.includeTarget.empty())
+        return;
+    const std::filesystem::path targetDir =
+        (pkg.includeRootDir / "build" / pkg.includeTarget).lexically_normal();
+    buildConfig.includedBuildDir = targetDir.string();
+    buildConfig.includedDepsDir = (targetDir / "deps").string();
+}
+
+static BuildConfig parse_manifest_build_config(const PackageManifest& pkg)
+{
+    BuildConfig buildConfig = parse_build_config(pkg.content);
+    apply_include_output_paths(pkg, buildConfig);
+    return buildConfig;
+}
 
 static std::vector<std::filesystem::path>
 discover_workspace_manifests(const std::filesystem::path& manifestPath,
@@ -3137,14 +3227,77 @@ collect_target_manifests(const std::filesystem::path& manifestPath)
     if(content.empty())
         return out;
 
+    std::unordered_set<std::string> seen;
+    seen.insert(manifestAbs.lexically_normal().string());
+
     if(has_section(content, "package"))
     {
-        out.push_back(
-            PackageManifest{manifestAbs, manifestAbs.parent_path(), content});
+        out.push_back(PackageManifest{
+            manifestAbs, manifestAbs.parent_path(), content, "", {}});
+    }
+
+    std::unordered_set<std::string> includeTargets;
+    for(const auto& include : parse_manifest_includes(content))
+    {
+        if(include.path.empty())
+        {
+            pkg_error_line("Missing path in [[include]] entry in " +
+                           manifestAbs.string());
+            return {};
+        }
+        if(!valid_include_target(include.target))
+        {
+            pkg_error_line("Invalid or missing target in [[include]] for '" +
+                           include.path + "' in " + manifestAbs.string() +
+                           "; use a unique name containing only letters, "
+                           "digits, '-' or '_'");
+            return {};
+        }
+        if(!includeTargets.insert(include.target).second)
+        {
+            pkg_error_line("Duplicate [[include]] target '" + include.target +
+                           "' in " + manifestAbs.string());
+            return {};
+        }
+
+        fs::path childPath = manifestAbs.parent_path() / include.path;
+        std::error_code ec;
+        if(fs::is_directory(childPath, ec))
+            childPath /= "mlang.toml";
+        childPath = fs::absolute(childPath).lexically_normal();
+        if(!fs::is_regular_file(childPath, ec))
+        {
+            pkg_error_line("Included package manifest not found: " +
+                           childPath.string());
+            return {};
+        }
+        const std::string childKey = childPath.string();
+        if(!seen.insert(childKey).second)
+        {
+            pkg_error_line("Package manifest included more than once: " +
+                           childPath.string());
+            return {};
+        }
+
+        std::ifstream childIn(childPath, std::ios::binary);
+        std::string childContent((std::istreambuf_iterator<char>(childIn)),
+                                 std::istreambuf_iterator<char>());
+        if(childContent.empty() || !has_section(childContent, "package"))
+        {
+            pkg_error_line("Included manifest must declare [package]: " +
+                           childPath.string());
+            return {};
+        }
+        out.push_back(PackageManifest{childPath, childPath.parent_path(),
+                                      childContent, include.target,
+                                      manifestAbs.parent_path()});
     }
     for(const auto& child : discover_workspace_manifests(manifestAbs, content))
     {
         fs::path childAbs = fs::absolute(child);
+        const std::string childKey = childAbs.lexically_normal().string();
+        if(!seen.insert(childKey).second)
+            continue;
         std::ifstream childIn(childAbs, std::ios::binary);
         if(!childIn)
             continue;
@@ -3152,8 +3305,8 @@ collect_target_manifests(const std::filesystem::path& manifestPath)
                                  std::istreambuf_iterator<char>());
         if(childContent.empty() || !has_section(childContent, "package"))
             continue;
-        out.push_back(
-            PackageManifest{childAbs, childAbs.parent_path(), childContent});
+        out.push_back(PackageManifest{
+            childAbs, childAbs.parent_path(), childContent, "", {}});
     }
     return out;
 }
@@ -4651,8 +4804,14 @@ static int build_for_manifest(const PackageManifest& pkg,
                        ? static_library_filename(target.name)
                        : target.name);
         std::string output = outputPath.string();
+        const std::filesystem::path compileWorkDir =
+            pkg.includeTarget.empty() ? pkg.packageDir : buildDir;
+        const std::filesystem::path entryPath =
+            pkg.includeTarget.empty()
+                ? std::filesystem::path(target.entry)
+                : (pkg.packageDir / target.entry).lexically_normal();
         std::string cmd = shell_quote(backend) + " " +
-                          shell_quote(target.entry) + " -o " +
+                          shell_quote(entryPath.string()) + " -o " +
                           shell_quote(output);
         if(target.kind == BuildTarget::dynamic_library)
             cmd += " --shared";
@@ -4731,7 +4890,7 @@ static int build_for_manifest(const PackageManifest& pkg,
                                                : "Compiling target '") +
                                  target.name +
                                  "' from " + target.entry + " -> " + output),
-            pkg.packageDir, cmd, buildConfig.pathEntries, true);
+            compileWorkDir, cmd, buildConfig.pathEntries, true);
         if(rc != 0)
         {
             std::string message =
@@ -6185,7 +6344,7 @@ static int run_task_for_manifest(const PackageManifest& pkg,
                                  const std::string& taskName)
 {
     return run_task_for_manifest(pkg, taskName,
-                                 parse_build_config(pkg.content));
+                                 parse_manifest_build_config(pkg));
 }
 
 struct PkgCliOverrides
@@ -6209,10 +6368,39 @@ static void apply_cli_overrides(BuildConfig& buildConfig,
         overrides.logDir.has_value() || overrides.stdoutLog.has_value() ||
         overrides.stderrLog.has_value() || overrides.warnLog.has_value() ||
         overrides.taskPrintToStdoutLog.has_value();
-    if(overrides.buildDir.has_value())
-        buildConfig.buildDir = *overrides.buildDir;
-    if(overrides.depsDir.has_value())
-        buildConfig.depsDir = *overrides.depsDir;
+    if(!buildConfig.includedBuildDir.empty())
+    {
+        namespace fs = std::filesystem;
+        const fs::path currentTargetDir(buildConfig.includedBuildDir);
+        const std::string target = currentTargetDir.filename().string();
+        const fs::path includeRoot =
+            currentTargetDir.parent_path().parent_path();
+        if(overrides.buildDir.has_value())
+        {
+            fs::path base(*overrides.buildDir);
+            if(base.is_relative())
+                base = includeRoot / base;
+            buildConfig.includedBuildDir =
+                (base / target).lexically_normal().string();
+        }
+        buildConfig.includedDepsDir =
+            (fs::path(buildConfig.includedBuildDir) / "deps").string();
+        if(overrides.depsDir.has_value())
+        {
+            fs::path base(*overrides.depsDir);
+            if(base.is_relative())
+                base = includeRoot / base;
+            buildConfig.includedDepsDir =
+                (base / target).lexically_normal().string();
+        }
+    }
+    else
+    {
+        if(overrides.buildDir.has_value())
+            buildConfig.buildDir = *overrides.buildDir;
+        if(overrides.depsDir.has_value())
+            buildConfig.depsDir = *overrides.depsDir;
+    }
     if(overrides.logDir.has_value())
         buildConfig.logDir = *overrides.logDir;
     if(overrides.stdoutLog.has_value())
@@ -6364,7 +6552,7 @@ int PackageManager::run(int argc, char** argv)
                 }
                 for(const auto& pkg : manifests)
                 {
-                    BuildConfig buildConfig = parse_build_config(pkg.content);
+                    BuildConfig buildConfig = parse_manifest_build_config(pkg);
                     buildConfig.compilerProgram = compilerProgram;
                     if(print_task_overview_for_manifest(pkg, buildConfig,
                                                         colorTasks) != 0)
@@ -6445,7 +6633,7 @@ int PackageManager::run(int argc, char** argv)
             bool foundTestsInManifest = false;
             for(const auto& pkg : manifests)
             {
-                BuildConfig buildConfig = parse_build_config(pkg.content);
+                BuildConfig buildConfig = parse_manifest_build_config(pkg);
                 buildConfig.compilerProgram = compilerProgram;
                 const auto tasks = parse_task_specs(pkg.content);
                 const std::string hostName = current_host_name();
@@ -6784,7 +6972,7 @@ int PackageManager::run(int argc, char** argv)
         }
         for(const auto& pkg : manifests)
         {
-            BuildConfig buildConfig = parse_build_config(pkg.content);
+            BuildConfig buildConfig = parse_manifest_build_config(pkg);
             buildConfig.compilerProgram = compilerProgram;
             apply_cli_overrides(buildConfig, overrides);
             if(fetch_for_manifest(pkg, buildConfig) != 0)
@@ -6893,7 +7081,7 @@ int PackageManager::run(int argc, char** argv)
         }
         for(const auto& pkg : manifests)
         {
-            BuildConfig buildConfig = parse_build_config(pkg.content);
+            BuildConfig buildConfig = parse_manifest_build_config(pkg);
             buildConfig.compilerProgram = compilerProgram;
             apply_cli_overrides(buildConfig, overrides);
             if(build_for_manifest(pkg, argv[0], optFlag, useNinja,
@@ -7004,7 +7192,7 @@ int PackageManager::run(int argc, char** argv)
         bool found = false;
         for(const auto& pkg : manifests)
         {
-            BuildConfig buildConfig = parse_build_config(pkg.content);
+            BuildConfig buildConfig = parse_manifest_build_config(pkg);
             buildConfig.compilerProgram = compilerProgram;
             apply_cli_overrides(buildConfig, overrides);
             if(printTasks)
@@ -7138,7 +7326,7 @@ int PackageManager::run(int argc, char** argv)
         }
         for(const auto& pkg : manifests)
         {
-            BuildConfig buildConfig = parse_build_config(pkg.content);
+            BuildConfig buildConfig = parse_manifest_build_config(pkg);
             buildConfig.compilerProgram = compilerProgram;
             apply_cli_overrides(buildConfig, overrides);
             if(clean_for_manifest(pkg, buildConfig) != 0)
