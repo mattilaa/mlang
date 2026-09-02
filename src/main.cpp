@@ -1219,6 +1219,8 @@ static bool manifest_requires_cpp_pkg_frontend()
 
     if(content.find("[workspace]") != std::string::npos)
         return true;
+    if(content.find("[[include]]") != std::string::npos)
+        return true;
     if(content.find("[tool.mlang.toolchains]") != std::string::npos)
         return true;
     if(content.find("[[bin]]") != std::string::npos)
@@ -1300,6 +1302,10 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
         }
     }
     if(argc >= subIndex + 1 &&
+       (std::string(argv[subIndex]) == "lock" ||
+        std::string(argv[subIndex]) == "verify"))
+        return std::nullopt;
+    if(argc >= subIndex + 1 &&
        (std::string(argv[subIndex]) == "fetch" ||
         std::string(argv[subIndex]) == "build" ||
         std::string(argv[subIndex]) == "clean"))
@@ -1307,7 +1313,8 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
         for(int i = subIndex + 1; i < argc; ++i)
         {
             std::string arg = argv[i];
-            if(arg == "--build-dir" || arg == "--deps-dir" || arg == "--deps")
+            if(arg == "--build-dir" || arg == "--deps-dir" || arg == "--deps" ||
+               arg == "--locked" || arg == "--offline")
                 return std::nullopt;
         }
     }

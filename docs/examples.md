@@ -158,7 +158,8 @@ following additional programs are useful runnable showcases:
   library linked into a dependent executable target.
 - `examples/package_manager_static_library` — manifest-built MLang static
   archive linked into a dependent executable target.
-- `examples/package_manager_workspace_fetch` — workspace dependency fetching.
+- `examples/package_manager_workspace_fetch` — workspace dependency fetching,
+  exact Git/archive locking, offline cache use, and verification.
 - `examples/package_manager_includes` — explicit child-manifest includes with
   isolated root output targets.
 - `examples/package_manager_task_graph` — package task graph configuration.

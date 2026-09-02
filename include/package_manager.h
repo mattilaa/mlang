@@ -187,6 +187,12 @@
  * target = "converter"
  * \endcode
  *
+ * Dependency operations share a deterministic `mlang.lock` beside the root
+ * manifest. The lock records exact Git commits and archive SHA-256 checksums.
+ * `pkg lock` resolves it, `pkg verify` checks cached sources, `--locked`
+ * refuses lockfile changes, and `--offline` prevents package-manager network
+ * fetches while requiring locked sources to exist locally.
+ *
  * Linux initramfs example using BusyBox as the real `/init` while optionally
  * overlaying a wider GNU userspace selected from the command line:
  * \code{.toml}

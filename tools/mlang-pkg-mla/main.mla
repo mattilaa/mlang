@@ -105,17 +105,19 @@ fn print_usage() -> void {
     println!("             [--url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]]");
     println!("             [--pkg-config NAME] [--system]");
     println!("             [--add-lib [--project-dir DIR]]");
+    println!("  lock      [--offline] (delegated to the C++ backend)");
+    println!("  verify    (delegated to the C++ backend)");
     println!("  fetch     [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
     println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
-    println!("            [--task-print-to-stdout-log]");
+    println!("            [--task-print-to-stdout-log] [--locked] [--offline]");
     println!("  build     [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]");
     println!("            [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
     println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
-    println!("            [--task-print-to-stdout-log]");
+    println!("            [--task-print-to-stdout-log] [--locked] [--offline]");
     println!("  run <task> [--tasks] [--color] [--asan] [--build-dir DIR] [--deps-dir DIR]");
     println!("            [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE]");
     println!("            [--warn-log FILE] [--task-print-to-stdout-log]");
-    println!("            [--option KEY=VALUE]");
+    println!("            [--option KEY=VALUE] [--locked] [--offline]");
     println!("            (delegated to the C++ backend)");
     println!("  clean     [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
     println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
@@ -753,7 +755,7 @@ fn has_pkg_dir_override_args(argv: list<str8>, start_idx: i64) -> i32 {
     var i: i64 = start_idx;
     while (i < n) {
         let arg: str8 = argv[i];
-        if (eq(arg, "--build-dir") == 1 || eq(arg, "--deps-dir") == 1 || eq(arg, "--deps") == 1) {
+        if (eq(arg, "--build-dir") == 1 || eq(arg, "--deps-dir") == 1 || eq(arg, "--deps") == 1 || eq(arg, "--locked") == 1 || eq(arg, "--offline") == 1) {
             return 1;
         }
         i = i + 1;
@@ -1116,7 +1118,7 @@ fn run_build(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str
             i = i + 1;
             continue;
         }
-        if (eq(arg, "--asan") == 1) {
+        if (eq(arg, "--asan") == 1 || eq(arg, "--locked") == 1 || eq(arg, "--offline") == 1) {
             return delegate_pkg_to_cpp(backend, "build", argv, start_idx + 1);
         }
         println!("Unknown option for 'pkg build': {}", arg);
@@ -1344,6 +1346,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     if (eq(sub, "add") == 1) {
         return run_add(argv, idx, manifest);
+    }
+    if (eq(sub, "lock") == 1 || eq(sub, "verify") == 1) {
+        return delegate_pkg_to_cpp(backend, sub, argv, idx + 1);
     }
     if (eq(sub, "fetch") == 1) {
         return run_fetch(argv, idx, manifest, backend);

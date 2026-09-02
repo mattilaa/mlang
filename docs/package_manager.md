@@ -174,6 +174,63 @@ git -C build/deps/<name> submodule update --init --recursive
 This is useful for repositories such as the Steinberg VST3 SDK that keep
 required source trees in git submodules.
 
+### Reproducible dependency locking
+
+`mlang pkg` writes a shared `mlang.lock` next to the root manifest. The
+lockfile is deterministic and should be committed to version control. It
+records:
+
+- the manifest and dependency name
+- the original Git or archive URL and relevant source options
+- the exact detached Git commit selected from a revision, tag, or remote
+  default branch
+- a `sha256:...` checksum for every downloaded archive
+
+Generate or validate it explicitly with:
+
+```sh
+mlang pkg lock
+mlang pkg verify
+```
+
+Normal `pkg fetch`, `pkg build`, and `pkg run` operations create a missing
+lockfile and honor an existing one. Once a Git dependency is locked, builds
+check out the recorded commit rather than following a moved branch or tag.
+Archive downloads are retained under `build/deps/.archives/`, checked before
+extraction, and annotated with a checksum marker in the extracted source.
+
+Use strict mode in CI:
+
+```sh
+mlang pkg fetch --locked
+mlang pkg build --locked
+```
+
+`--locked` fails before fetching when `mlang.lock` is missing, malformed, or
+out of date with the manifests. It never rewrites the lockfile.
+
+After one successful online fetch, network-free package-manager operation is
+available with:
+
+```sh
+mlang pkg fetch --offline
+mlang pkg build --offline
+mlang pkg run test --offline
+mlang pkg lock --offline
+```
+
+`--offline` requires a current lockfile, the locked Git objects/checkouts, and
+the cached archive bytes. Git submodules are updated with `--no-fetch`.
+Dependency-provided build scripts are still ordinary external programs; MLang
+prevents its own Git and HTTP fetches but cannot guarantee that a third-party
+build script will not attempt network access.
+
+`pkg verify` is always read-only and offline. It checks manifest-to-lock
+consistency, Git origin URLs and current commits, cached archive SHA-256
+values, and extracted archive checksum markers. Workspaces and explicit
+`[[include]]` coordinators use one root lockfile with manifest-qualified
+dependency entries.
+
 ### `pkg build`
 
 Build the package entry defined by the selected manifest:

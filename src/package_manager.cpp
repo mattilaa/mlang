@@ -28,6 +28,9 @@
 #include <unordered_set>
 #include <vector>
 
+#include <llvm/ADT/StringRef.h>
+#include <llvm/Support/SHA256.h>
+
 #ifndef MLANG_VERSION
 #define MLANG_VERSION "0.1.0"
 #endif
@@ -1383,7 +1386,7 @@ static void print_pkg_usage(const std::string& programName)
     const std::string tool = programName.empty() ? "mlang" : programName;
     std::cerr
         << "Usage: " << tool
-        << " pkg [--config FILE] <init|add|fetch|build|run|clean> "
+        << " pkg [--config FILE] <init|add|lock|verify|fetch|build|run|clean> "
            "[options...]\n"
         << "       " << tool
         << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
@@ -1404,24 +1407,29 @@ static void print_pkg_usage(const std::string& programName)
         << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir "
            "DIR]\n"
         << "      Append a dependency entry to the manifest.\n"
+        << "  " << tool << " pkg lock [--offline]\n"
+        << "      Resolve exact Git revisions and archive SHA-256 checksums.\n"
+        << "  " << tool << " pkg verify\n"
+        << "      Verify mlang.lock and fetched dependency sources.\n"
         << "  " << tool
         << " pkg fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
         << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log "
            "FILE]\n"
-        << "           [--task-print-to-stdout-log]\n"
+        << "           [--task-print-to-stdout-log] [--locked] [--offline]\n"
         << "      Fetch dependencies without building.\n"
         << "  " << tool
         << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]\n"
         << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
         << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log "
            "FILE]\n"
-        << "           [--task-print-to-stdout-log]\n"
+        << "           [--task-print-to-stdout-log] [--locked] [--offline]\n"
         << "      Build all configured targets.\n"
         << "  " << tool << " pkg run <task> [--tasks] [--color] [--asan]\n"
         << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
         << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log "
            "FILE]\n"
         << "           [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
+        << "           [--locked] [--offline]\n"
         << "      Run a named task (fetches dependencies first if needed).\n"
         << "      With --tasks, print the dependency/execution tree instead.\n"
         << "  " << tool
@@ -3160,6 +3168,321 @@ static BuildConfig parse_manifest_build_config(const PackageManifest& pkg)
     return buildConfig;
 }
 
+struct DependencyLockEntry
+{
+    std::string manifest;
+    std::string name;
+    std::string source;
+    std::string url;
+    std::string requestedRev;
+    std::string requestedTag;
+    std::string revision;
+    std::string checksum;
+    std::string archiveType;
+    std::string subdir;
+    int stripComponents = 1;
+    bool submodules = false;
+};
+
+struct DependencyLockContext
+{
+    std::filesystem::path rootManifest;
+    std::filesystem::path lockPath;
+    bool locked = false;
+    bool offline = false;
+    bool dirty = false;
+    std::map<std::string, DependencyLockEntry> entries;
+};
+
+static DependencyLockContext*& current_dependency_lock_context()
+{
+    static DependencyLockContext* context = nullptr;
+    return context;
+}
+
+class ScopedDependencyLockContext
+{
+public:
+    explicit ScopedDependencyLockContext(DependencyLockContext& context)
+        : previous_(current_dependency_lock_context())
+    {
+        current_dependency_lock_context() = &context;
+    }
+
+    ~ScopedDependencyLockContext()
+    {
+        current_dependency_lock_context() = previous_;
+    }
+
+private:
+    DependencyLockContext* previous_;
+};
+
+static std::string lock_manifest_name(const DependencyLockContext& context,
+                                      const PackageManifest& pkg)
+{
+    std::error_code ec;
+    std::filesystem::path relative = std::filesystem::relative(
+        pkg.manifestPath, context.rootManifest.parent_path(), ec);
+    if(ec)
+        return pkg.manifestPath.lexically_normal().generic_string();
+    return relative.lexically_normal().generic_string();
+}
+
+static std::string dependency_lock_key(const std::string& manifest,
+                                       const std::string& name)
+{
+    return manifest + "\n" + name;
+}
+
+static DependencyLockEntry make_dependency_lock_entry(
+    const DependencyLockContext& context, const PackageManifest& pkg,
+    const DepSpec& dep)
+{
+    DependencyLockEntry entry;
+    entry.manifest = lock_manifest_name(context, pkg);
+    entry.name = dep.name;
+    entry.source = !dep.git.empty() ? "git" : "archive";
+    entry.url = !dep.git.empty() ? dep.git : dep.url;
+    entry.requestedRev = dep.rev;
+    entry.requestedTag = dep.tag;
+    entry.archiveType = dep.archiveType;
+    entry.subdir = dep.subdir;
+    entry.stripComponents = dep.stripComponents;
+    entry.submodules = dep.submodules;
+    return entry;
+}
+
+static bool lock_entry_matches_dependency(const DependencyLockEntry& entry,
+                                          const DependencyLockEntry& expected)
+{
+    return entry.manifest == expected.manifest && entry.name == expected.name &&
+           entry.source == expected.source && entry.url == expected.url &&
+           entry.requestedRev == expected.requestedRev &&
+           entry.requestedTag == expected.requestedTag &&
+           entry.archiveType == expected.archiveType &&
+           entry.subdir == expected.subdir &&
+           entry.stripComponents == expected.stripComponents &&
+           entry.submodules == expected.submodules;
+}
+
+static std::optional<std::string>
+sha256_file(const std::filesystem::path& path)
+{
+    std::ifstream in(path, std::ios::binary);
+    if(!in)
+        return std::nullopt;
+    llvm::SHA256 sha;
+    std::array<char, 64 * 1024> buffer{};
+    while(in)
+    {
+        in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        const std::streamsize count = in.gcount();
+        if(count > 0)
+            sha.update(llvm::StringRef(buffer.data(),
+                                       static_cast<size_t>(count)));
+    }
+    if(in.bad())
+        return std::nullopt;
+    const auto digest = sha.final();
+    static constexpr char digits[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(digest.size() * 2);
+    for(uint8_t byte : digest)
+    {
+        out.push_back(digits[(byte >> 4) & 0x0f]);
+        out.push_back(digits[byte & 0x0f]);
+    }
+    return out;
+}
+
+static std::string lock_quote(const std::string& value)
+{
+    std::string out = "\"";
+    for(char c : value)
+    {
+        if(c == '\\' || c == '"')
+            out.push_back('\\');
+        if(c == '\n')
+            out += "\\n";
+        else
+            out.push_back(c);
+    }
+    out.push_back('"');
+    return out;
+}
+
+static bool read_dependency_lock(const std::filesystem::path& path,
+                                 DependencyLockContext& context,
+                                 std::string& error)
+{
+    std::ifstream in(path, std::ios::binary);
+    if(!in)
+    {
+        error = "Failed to read lockfile: " + path.string();
+        return false;
+    }
+    std::string line;
+    std::optional<DependencyLockEntry> current;
+    bool versionSeen = false;
+    auto flush = [&]() -> bool
+    {
+        if(!current.has_value())
+            return true;
+        if(current->manifest.empty() || current->name.empty() ||
+           current->source.empty() || current->url.empty())
+        {
+            error = "Invalid incomplete package entry in " + path.string();
+            return false;
+        }
+        const std::string key =
+            dependency_lock_key(current->manifest, current->name);
+        if(!context.entries.emplace(key, *current).second)
+        {
+            error = "Duplicate dependency '" + current->name + "' for " +
+                    current->manifest + " in " + path.string();
+            return false;
+        }
+        current.reset();
+        return true;
+    };
+
+    while(std::getline(in, line))
+    {
+        const std::string text = strip_toml_comment(line);
+        if(text.empty())
+            continue;
+        if(text == "[[package]]")
+        {
+            if(!flush())
+                return false;
+            current = DependencyLockEntry{};
+            continue;
+        }
+        if(text.front() == '[' && text.back() == ']')
+        {
+            error = "Unsupported section in " + path.string() + ": " + text;
+            return false;
+        }
+        const auto assignment = parse_toml_assignment(text, in);
+        if(!assignment.has_value())
+            continue;
+        if(!current.has_value())
+        {
+            if(assignment->key == "version")
+            {
+                if(unquote(assignment->value) != "1")
+                {
+                    error = "Unsupported mlang.lock version in " +
+                            path.string();
+                    return false;
+                }
+                versionSeen = true;
+            }
+            continue;
+        }
+        const std::string value = unquote(assignment->value);
+        if(assignment->key == "manifest")
+            current->manifest = value;
+        else if(assignment->key == "name")
+            current->name = value;
+        else if(assignment->key == "source")
+            current->source = value;
+        else if(assignment->key == "url")
+            current->url = value;
+        else if(assignment->key == "requested_rev")
+            current->requestedRev = value;
+        else if(assignment->key == "requested_tag")
+            current->requestedTag = value;
+        else if(assignment->key == "revision")
+            current->revision = value;
+        else if(assignment->key == "checksum")
+            current->checksum = value.rfind("sha256:", 0) == 0
+                                    ? value.substr(7)
+                                    : value;
+        else if(assignment->key == "archive")
+            current->archiveType = value;
+        else if(assignment->key == "subdir")
+            current->subdir = value;
+        else if(assignment->key == "strip_components")
+            current->stripComponents = parse_int_or_default(value, 1);
+        else if(assignment->key == "submodules")
+            current->submodules = parse_toml_bool_value(value);
+    }
+    if(!flush())
+        return false;
+    if(!versionSeen)
+    {
+        error = "Missing lockfile version in " + path.string();
+        return false;
+    }
+    return true;
+}
+
+static bool write_dependency_lock(const DependencyLockContext& context,
+                                  std::string& error)
+{
+    const std::filesystem::path temporaryPath =
+        context.lockPath.string() + ".tmp";
+    std::ofstream out(temporaryPath, std::ios::binary | std::ios::trunc);
+    if(!out)
+    {
+        error = "Failed to write temporary lockfile: " +
+                temporaryPath.string();
+        return false;
+    }
+    out << "# Generated by mlang pkg. Do not edit manually.\n";
+    out << "version = 1\n";
+    for(const auto& [key, entry] : context.entries)
+    {
+        (void)key;
+        out << "\n[[package]]\n";
+        out << "manifest = " << lock_quote(entry.manifest) << "\n";
+        out << "name = " << lock_quote(entry.name) << "\n";
+        out << "source = " << lock_quote(entry.source) << "\n";
+        out << "url = " << lock_quote(entry.url) << "\n";
+        if(!entry.requestedRev.empty())
+            out << "requested_rev = " << lock_quote(entry.requestedRev) << "\n";
+        if(!entry.requestedTag.empty())
+            out << "requested_tag = " << lock_quote(entry.requestedTag) << "\n";
+        if(!entry.revision.empty())
+            out << "revision = " << lock_quote(entry.revision) << "\n";
+        if(!entry.checksum.empty())
+            out << "checksum = " << lock_quote("sha256:" + entry.checksum)
+                << "\n";
+        if(!entry.archiveType.empty())
+            out << "archive = " << lock_quote(entry.archiveType) << "\n";
+        if(!entry.subdir.empty())
+            out << "subdir = " << lock_quote(entry.subdir) << "\n";
+        if(entry.stripComponents != 1)
+            out << "strip_components = " << entry.stripComponents << "\n";
+        if(entry.submodules)
+            out << "submodules = true\n";
+    }
+    out.close();
+    if(!out)
+    {
+        error = "Failed to finish writing lockfile: " + temporaryPath.string();
+        return false;
+    }
+#if defined(_WIN32)
+    {
+        std::error_code ec;
+        std::filesystem::remove(context.lockPath, ec);
+    }
+#endif
+    if(std::rename(temporaryPath.string().c_str(),
+                   context.lockPath.string().c_str()) != 0)
+    {
+        std::error_code ec;
+        std::filesystem::remove(temporaryPath, ec);
+        error = "Failed to replace lockfile atomically: " +
+                context.lockPath.string();
+        return false;
+    }
+    return true;
+}
+
 static std::vector<std::filesystem::path>
 discover_workspace_manifests(const std::filesystem::path& manifestPath,
                              const std::string& content)
@@ -3309,6 +3632,143 @@ collect_target_manifests(const std::filesystem::path& manifestPath)
             childAbs, childAbs.parent_path(), childContent, "", {}});
     }
     return out;
+}
+
+static bool prepare_dependency_lock_context(
+    const std::filesystem::path& rootManifest,
+    const std::vector<PackageManifest>& manifests, bool locked, bool offline,
+    DependencyLockContext& context)
+{
+    context.rootManifest = std::filesystem::absolute(rootManifest);
+    context.lockPath = context.rootManifest.parent_path() / "mlang.lock";
+    context.locked = locked;
+    context.offline = offline;
+
+    const bool lockExists = std::filesystem::exists(context.lockPath);
+    if(lockExists)
+    {
+        std::string error;
+        if(!read_dependency_lock(context.lockPath, context, error))
+        {
+            pkg_error_line(error);
+            return false;
+        }
+    }
+    else if(locked || offline)
+    {
+        pkg_error_line("mlang.lock not found at " + context.lockPath.string() +
+                       (locked ? "; --locked requires an existing lockfile"
+                               : "; --offline requires an existing lockfile"));
+        return false;
+    }
+
+    std::map<std::string, DependencyLockEntry> expected;
+    for(const auto& pkg : manifests)
+    {
+        for(const auto& dep : parse_source_deps(pkg.content))
+        {
+            DependencyLockEntry entry =
+                make_dependency_lock_entry(context, pkg, dep);
+            expected.emplace(dependency_lock_key(entry.manifest, entry.name),
+                             std::move(entry));
+        }
+    }
+
+    bool stale = context.entries.size() != expected.size();
+    if(!stale)
+    {
+        for(const auto& [key, wanted] : expected)
+        {
+            const auto found = context.entries.find(key);
+            if(found == context.entries.end() ||
+               !lock_entry_matches_dependency(found->second, wanted) ||
+               (wanted.source == "git" && found->second.revision.empty()) ||
+               (wanted.source == "archive" && found->second.checksum.empty()))
+            {
+                stale = true;
+                break;
+            }
+        }
+    }
+
+    if(stale)
+    {
+        if(locked || offline)
+        {
+            pkg_error_line("mlang.lock is out of date for " +
+                           context.rootManifest.string() +
+                           (locked ? "; rerun 'mlang pkg lock'"
+                                   : "; update it before using --offline"));
+            return false;
+        }
+        if(lockExists)
+            pkg_info_line("Dependency declarations changed; regenerating " +
+                          context.lockPath.string());
+        context.entries.clear();
+        context.dirty = true;
+    }
+    else if(!lockExists)
+    {
+        context.dirty = true;
+    }
+    return true;
+}
+
+static DependencyLockEntry* dependency_lock_entry(const PackageManifest& pkg,
+                                                  const DepSpec& dep)
+{
+    DependencyLockContext* context = current_dependency_lock_context();
+    if(context == nullptr)
+        return nullptr;
+    const std::string manifest = lock_manifest_name(*context, pkg);
+    const auto found =
+        context->entries.find(dependency_lock_key(manifest, dep.name));
+    return found == context->entries.end() ? nullptr : &found->second;
+}
+
+static void record_dependency_lock_entry(const PackageManifest& pkg,
+                                         const DepSpec& dep,
+                                         const std::string& revision,
+                                         const std::string& checksum)
+{
+    DependencyLockContext* context = current_dependency_lock_context();
+    if(context == nullptr)
+        return;
+    DependencyLockEntry entry = make_dependency_lock_entry(*context, pkg, dep);
+    entry.revision = revision;
+    entry.checksum = checksum;
+    const std::string key = dependency_lock_key(entry.manifest, entry.name);
+    const auto found = context->entries.find(key);
+    if(found == context->entries.end() ||
+       found->second.revision != entry.revision ||
+       found->second.checksum != entry.checksum ||
+       !lock_entry_matches_dependency(found->second, entry))
+    {
+        context->entries[key] = std::move(entry);
+        context->dirty = true;
+    }
+}
+
+static bool finish_dependency_lock_context(DependencyLockContext& context)
+{
+    if(!context.dirty)
+        return true;
+    if(context.locked || context.offline)
+    {
+        pkg_error_line("Refusing to modify " + context.lockPath.string() +
+                       " in locked/offline mode");
+        return false;
+    }
+    std::string error;
+    if(!write_dependency_lock(context, error))
+    {
+        pkg_error_line(error);
+        return false;
+    }
+    pkg_info_line("Wrote reproducible dependency lockfile " +
+                  context.lockPath.string());
+    context.dirty = false;
+    return true;
 }
 
 static std::string command_with_log_redirection(const std::string& cmd,
@@ -3962,14 +4422,23 @@ static size_t count_reachable_task_steps(const std::vector<TaskSpec>& tasks,
                                          const std::string& hostName,
                                          const std::vector<std::string>& roots);
 
-static int fetch_git_dep(const DepSpec& dep,
+static int fetch_git_dep(const PackageManifest& pkg, const DepSpec& dep,
                          const std::filesystem::path& depsDir,
                          bool updateExisting,
                          const std::vector<std::string>& pathEntries)
 {
+    DependencyLockContext* lockContext = current_dependency_lock_context();
+    DependencyLockEntry* lockEntry = dependency_lock_entry(pkg, dep);
+    const bool offline = lockContext != nullptr && lockContext->offline;
     std::filesystem::path path = dep_checkout_dir(depsDir, dep);
     if(!std::filesystem::exists(path))
     {
+        if(offline)
+        {
+            pkg_error_line("Offline dependency missing from cache: " +
+                           path.string());
+            return 1;
+        }
         std::string cloneCmd = "git clone " + shell_quote(dep.git) + " " +
                                shell_quote(path.string());
         if(run_status_command_with_paths(
@@ -3979,7 +4448,8 @@ static int fetch_git_dep(const DepSpec& dep,
                dep.spinner) != 0)
             return 1;
     }
-    else if(updateExisting)
+    else if(lockEntry == nullptr && !offline &&
+            (updateExisting || (lockContext != nullptr && lockContext->dirty)))
     {
         std::string fetchCmd =
             "git -C " + shell_quote(path.string()) + " fetch --all --tags";
@@ -3991,11 +4461,65 @@ static int fetch_git_dep(const DepSpec& dep,
             return 1;
     }
 
+    auto origin = run_command_capture_with_paths(
+        "git -C " + shell_quote(path.string()) +
+            " config --get remote.origin.url",
+        pathEntries);
+    if(!origin.has_value() || trim(*origin) != dep.git)
+    {
+        pkg_error_line("Git dependency '" + dep.name +
+                       "' has a different origin URL in " + path.string() +
+                       "; clean its dependency cache before continuing");
+        return 1;
+    }
+
+    const std::string requestedRevision =
+        lockEntry != nullptr ? lockEntry->revision : dep.rev;
+    const std::string requestedTag =
+        lockEntry != nullptr ? "" : dep.tag;
+    if(!requestedRevision.empty())
+    {
+        std::string checkout = "git -C " + shell_quote(path.string()) +
+                               " checkout --detach " +
+                               shell_quote(requestedRevision);
+        if(run_status_command_with_paths(
+               execution_step_label("Checking out '" + dep.name +
+                                    "' revision " + requestedRevision),
+               checkout, pathEntries, dep.spinner, dep.spinner,
+               dep.spinner) != 0)
+            return 1;
+    }
+    else if(!requestedTag.empty())
+    {
+        std::string checkout = "git -C " + shell_quote(path.string()) +
+                               " checkout --detach " +
+                               shell_quote("tags/" + requestedTag);
+        if(run_status_command_with_paths(
+               execution_step_label("Checking out '" + dep.name + "' tag " +
+                                    requestedTag),
+               checkout, pathEntries, dep.spinner, dep.spinner,
+               dep.spinner) != 0)
+            return 1;
+    }
+    else if(lockEntry == nullptr)
+    {
+        std::string checkout = "git -C " + shell_quote(path.string()) +
+                               " checkout --detach origin/HEAD";
+        if(run_status_command_with_paths(
+               execution_step_label("Pinning '" + dep.name +
+                                    "' to the remote default revision"),
+               checkout, pathEntries, dep.spinner, dep.spinner,
+               dep.spinner) != 0)
+            return 1;
+    }
+
     if(dep.submodules)
     {
         std::string updateSubmodulesCmd =
             "git -C " + shell_quote(path.string()) +
             " submodule update --init --recursive";
+        if(offline)
+            updateSubmodulesCmd += " --no-fetch";
         if(run_status_command_with_paths(
                execution_step_label("Initializing submodules for '" + dep.name +
                                     "'"),
@@ -4006,32 +4530,28 @@ static int fetch_git_dep(const DepSpec& dep,
         }
     }
 
-    if(!dep.rev.empty())
+    auto resolved = run_command_capture_with_paths(
+        "git -C " + shell_quote(path.string()) + " rev-parse HEAD",
+        pathEntries);
+    if(!resolved.has_value() || trim(*resolved).empty())
     {
-        std::string checkout = "git -C " + shell_quote(path.string()) +
-                               " checkout " + shell_quote(dep.rev);
-        if(run_status_command_with_paths(
-               execution_step_label("Checking out '" + dep.name +
-                                    "' revision " + dep.rev),
-               checkout, pathEntries, dep.spinner, dep.spinner,
-               dep.spinner) != 0)
-            return 1;
+        pkg_error_line("Failed to resolve exact Git revision for dependency '" +
+                       dep.name + "'");
+        return 1;
     }
-    else if(!dep.tag.empty())
+    const std::string revision = trim(*resolved);
+    if(lockEntry != nullptr && revision != lockEntry->revision)
     {
-        std::string checkout = "git -C " + shell_quote(path.string()) +
-                               " checkout " + shell_quote("tags/" + dep.tag);
-        if(run_status_command_with_paths(
-               execution_step_label("Checking out '" + dep.name + "' tag " +
-                                    dep.tag),
-               checkout, pathEntries, dep.spinner, dep.spinner,
-               dep.spinner) != 0)
-            return 1;
+        pkg_error_line("Git dependency '" + dep.name + "' resolved to " +
+                       revision + ", expected locked revision " +
+                       lockEntry->revision);
+        return 1;
     }
+    record_dependency_lock_entry(pkg, dep, revision, "");
     return 0;
 }
 
-static int fetch_archive_dep(const DepSpec& dep,
+static int fetch_archive_dep(const PackageManifest& pkg, const DepSpec& dep,
                              const std::filesystem::path& depsDir,
                              const std::vector<std::string>& pathEntries)
 {
@@ -4044,42 +4564,78 @@ static int fetch_archive_dep(const DepSpec& dep,
         return 1;
     }
 
+    DependencyLockContext* lockContext = current_dependency_lock_context();
+    DependencyLockEntry* lockEntry = dependency_lock_entry(pkg, dep);
+    const bool offline = lockContext != nullptr && lockContext->offline;
+    const std::string expectedChecksum =
+        lockEntry == nullptr ? "" : lockEntry->checksum;
     std::filesystem::path checkoutDir = dep_checkout_dir(depsDir, dep);
     std::error_code ec;
-    if(std::filesystem::exists(checkoutDir, ec))
+    const std::filesystem::path archiveDir = depsDir / ".archives";
+    const std::filesystem::path archivePath =
+        archiveDir / (sanitize_package_name(dep.name) + ".tar.gz");
+    std::optional<std::string> checksum;
+    if(std::filesystem::exists(archivePath, ec))
+        checksum = sha256_file(archivePath);
+    const bool cacheMatches =
+        checksum.has_value() &&
+        !(lockEntry == nullptr && lockContext != nullptr &&
+          lockContext->dirty) &&
+        (expectedChecksum.empty() || *checksum == expectedChecksum);
+
+    if(!cacheMatches)
     {
-        bool hasEntries = false;
-        for(std::filesystem::directory_iterator it(checkoutDir, ec), end;
-            !ec && it != end; it.increment(ec))
+        if(offline)
         {
-            hasEntries = true;
-            break;
-        }
-        if(!ec && hasEntries)
-            return 0;
-        std::filesystem::remove_all(checkoutDir, ec);
-        if(ec)
-        {
-            pkg_error_line("Failed to reset partial archive checkout for '" +
-                           dep.name + "': " + ec.message());
+            pkg_error_line("Offline archive missing or checksum-mismatched for "
+                           "dependency '" +
+                           dep.name + "': " + archivePath.string());
             return 1;
         }
+        std::filesystem::create_directories(archiveDir, ec);
+        std::string downloadCmd = "curl -L --fail " + shell_quote(dep.url) +
+                                  " -o " + shell_quote(archivePath.string());
+        if(run_status_command_with_paths(
+               execution_step_label("Downloading archive dependency '" +
+                                    dep.name + "' from " + dep.url),
+               downloadCmd, pathEntries, dep.spinner, dep.spinner,
+               dep.spinner) != 0)
+            return 1;
+        checksum = sha256_file(archivePath);
+    }
+    if(!checksum.has_value())
+    {
+        pkg_error_line("Failed to compute SHA-256 for dependency '" + dep.name +
+                       "'");
+        return 1;
+    }
+    if(!expectedChecksum.empty() && *checksum != expectedChecksum)
+    {
+        pkg_error_line("Checksum mismatch for dependency '" + dep.name +
+                       "': expected sha256:" + expectedChecksum +
+                       ", got sha256:" + *checksum);
+        return 1;
     }
 
-    std::filesystem::create_directories(depsDir);
-    std::filesystem::path archivePath = depsDir / (dep.name + ".tar.gz");
+    const std::filesystem::path markerPath =
+        checkoutDir / ".mlang-source.sha256";
+    std::string marker;
+    if(std::filesystem::exists(markerPath, ec))
+    {
+        std::ifstream markerIn(markerPath);
+        std::getline(markerIn, marker);
+        marker = trim(marker);
+    }
+    if(std::filesystem::exists(checkoutDir, ec) && marker == *checksum)
+    {
+        record_dependency_lock_entry(pkg, dep, "", *checksum);
+        return 0;
+    }
+
     std::filesystem::path extractDir = depsDir / (dep.name + ".extracting");
     std::filesystem::remove_all(extractDir, ec);
+    std::filesystem::remove_all(checkoutDir, ec);
     std::filesystem::create_directories(extractDir);
-
-    std::string downloadCmd = "curl -L --fail " + shell_quote(dep.url) +
-                              " -o " + shell_quote(archivePath.string());
-    if(run_status_command_with_paths(
-           execution_step_label("Downloading archive dependency '" + dep.name +
-                                "' from " + dep.url),
-           downloadCmd, pathEntries, dep.spinner, dep.spinner,
-           dep.spinner) != 0)
-        return 1;
 
     std::string extractCmd = "tar -xzf " + shell_quote(archivePath.string()) +
                              " -C " + shell_quote(extractDir.string());
@@ -4100,21 +4656,147 @@ static int fetch_archive_dep(const DepSpec& dep,
                        "': " + ec.message());
         return 1;
     }
-    std::filesystem::remove(archivePath, ec);
+    std::ofstream markerOut(checkoutDir / ".mlang-source.sha256",
+                            std::ios::binary | std::ios::trunc);
+    if(!markerOut)
+    {
+        pkg_error_line("Failed to write archive checksum marker for '" +
+                       dep.name + "'");
+        return 1;
+    }
+    markerOut << *checksum << "\n";
+    record_dependency_lock_entry(pkg, dep, "", *checksum);
     return 0;
 }
 
-static int fetch_dep(const DepSpec& dep, const std::filesystem::path& depsDir,
+static int fetch_dep(const PackageManifest& pkg, const DepSpec& dep,
+                     const std::filesystem::path& depsDir,
                      bool updateExisting,
                      const std::vector<std::string>& pathEntries)
 {
     if(!dep.git.empty())
-        return fetch_git_dep(dep, depsDir, updateExisting, pathEntries);
+        return fetch_git_dep(pkg, dep, depsDir, updateExisting, pathEntries);
     if(!dep.url.empty())
-        return fetch_archive_dep(dep, depsDir, pathEntries);
+        return fetch_archive_dep(pkg, dep, depsDir, pathEntries);
     pkg_error_line("Dependency '" + dep.name +
                    "' is missing a supported source (git/url)");
     return 1;
+}
+
+static int verify_dependency(const PackageManifest& pkg, const DepSpec& dep,
+                             const std::filesystem::path& depsDir,
+                             const std::vector<std::string>& pathEntries)
+{
+    DependencyLockEntry* entry = dependency_lock_entry(pkg, dep);
+    if(entry == nullptr)
+    {
+        pkg_error_line("Dependency '" + dep.name +
+                       "' is missing from mlang.lock");
+        return 1;
+    }
+    const std::filesystem::path checkoutDir = dep_checkout_dir(depsDir, dep);
+    if(!std::filesystem::exists(checkoutDir))
+    {
+        pkg_error_line("Fetched dependency is missing: " +
+                       checkoutDir.string());
+        return 1;
+    }
+
+    if(entry->source == "git")
+    {
+        auto origin = run_command_capture_with_paths(
+            "git -C " + shell_quote(checkoutDir.string()) +
+                " config --get remote.origin.url",
+            pathEntries);
+        if(!origin.has_value() || trim(*origin) != entry->url)
+        {
+            pkg_error_line("Git verification failed for '" + dep.name +
+                           "': origin URL does not match mlang.lock");
+            return 1;
+        }
+        auto head = run_command_capture_with_paths(
+            "git -C " + shell_quote(checkoutDir.string()) +
+                " rev-parse HEAD",
+            pathEntries);
+        if(!head.has_value() || trim(*head) != entry->revision)
+        {
+            pkg_error_line("Git verification failed for '" + dep.name +
+                           "': expected revision " + entry->revision +
+                           (head.has_value() ? ", got " + trim(*head)
+                                             : ", checkout is unreadable"));
+            return 1;
+        }
+        if(entry->submodules)
+        {
+            auto status = run_command_capture_with_paths(
+                "git -C " + shell_quote(checkoutDir.string()) +
+                    " submodule status --recursive",
+                pathEntries);
+            if(!status.has_value())
+            {
+                pkg_error_line("Git submodule verification failed for '" +
+                               dep.name + "'");
+                return 1;
+            }
+            std::istringstream lines(*status);
+            std::string line;
+            while(std::getline(lines, line))
+            {
+                if(!line.empty() && line.front() != ' ')
+                {
+                    pkg_error_line("Git submodule is missing or does not match "
+                                   "the locked tree for '" +
+                                   dep.name + "': " + trim(line));
+                    return 1;
+                }
+            }
+        }
+        pkg_info_line("Verified " + dep.name + " at Git revision " +
+                      entry->revision);
+        return 0;
+    }
+
+    const std::filesystem::path archivePath =
+        depsDir / ".archives" /
+        (sanitize_package_name(dep.name) + ".tar.gz");
+    const auto checksum = sha256_file(archivePath);
+    if(!checksum.has_value() || *checksum != entry->checksum)
+    {
+        pkg_error_line("Archive verification failed for '" + dep.name +
+                       "': expected sha256:" + entry->checksum +
+                       (checksum.has_value() ? ", got sha256:" + *checksum
+                                             : ", cached archive is missing"));
+        return 1;
+    }
+    std::ifstream markerIn(checkoutDir / ".mlang-source.sha256");
+    std::string marker;
+    std::getline(markerIn, marker);
+    if(trim(marker) != entry->checksum)
+    {
+        pkg_error_line("Extracted archive verification marker is missing or "
+                       "stale for '" +
+                       dep.name + "'");
+        return 1;
+    }
+    pkg_info_line("Verified " + dep.name + " archive sha256:" +
+                  entry->checksum);
+    return 0;
+}
+
+static int verify_manifest_dependencies(const PackageManifest& pkg,
+                                        const BuildConfig& buildConfig)
+{
+    const BuildConfig effectiveBuildConfig =
+        materialize_build_config_for_package(pkg, buildConfig);
+    const std::filesystem::path depsDir =
+        package_deps_dir(pkg.packageDir, effectiveBuildConfig);
+    for(const auto& dep : parse_source_deps(pkg.content))
+    {
+        if(verify_dependency(pkg, dep, depsDir,
+                             effectiveBuildConfig.pathEntries) != 0)
+            return 1;
+    }
+    return 0;
 }
 
 static int build_git_dep(const DepSpec& dep,
@@ -4430,7 +5112,7 @@ static int fetch_for_manifest(const PackageManifest& pkg,
         scopedProgress.emplace(totalSteps);
     for(const auto& dep : deps)
     {
-        if(fetch_dep(dep, depsDir, /*updateExisting=*/true,
+        if(fetch_dep(pkg, dep, depsDir, /*updateExisting=*/true,
                      effectiveBuildConfig.pathEntries) != 0)
             return 1;
     }
@@ -4726,7 +5408,7 @@ static int build_for_manifest(const PackageManifest& pkg,
     ScopedExecutionProgressState scopedProgress(totalSteps);
     for(const auto& dep : deps)
     {
-        if(fetch_dep(dep, depsDir, /*updateExisting=*/false,
+        if(fetch_dep(pkg, dep, depsDir, /*updateExisting=*/false,
                      effectivePackageBuildConfig.pathEntries) != 0)
             return 1;
     }
@@ -5228,8 +5910,7 @@ static size_t count_fetch_dep_steps(const DepSpec& dep,
             steps += 1;
         if(dep.submodules)
             steps += 1;
-        if(!dep.rev.empty() || !dep.tag.empty())
-            steps += 1;
+        steps += 1; // Exact revision, tag, or remote default checkout.
         return steps;
     }
 
@@ -5238,7 +5919,14 @@ static size_t count_fetch_dep_steps(const DepSpec& dep,
         const std::filesystem::path checkoutDir =
             dep_checkout_dir(depsDir, dep);
         std::error_code ec;
-        if(std::filesystem::exists(checkoutDir, ec))
+        const std::filesystem::path archivePath =
+            depsDir / ".archives" /
+            (sanitize_package_name(dep.name) + ".tar.gz");
+        const std::filesystem::path markerPath =
+            checkoutDir / ".mlang-source.sha256";
+        if(std::filesystem::exists(checkoutDir, ec) &&
+           std::filesystem::exists(archivePath, ec) &&
+           std::filesystem::exists(markerPath, ec))
         {
             bool hasEntries = false;
             for(std::filesystem::directory_iterator it(checkoutDir, ec), end;
@@ -6359,6 +7047,8 @@ struct PkgCliOverrides
     std::optional<bool> asan;
     std::map<std::string, std::string> optionValues;
     std::optional<int> signMode;
+    bool locked = false;
+    bool offline = false;
 };
 
 static void apply_cli_overrides(BuildConfig& buildConfig,
@@ -6505,8 +7195,8 @@ int PackageManager::run(int argc, char** argv)
     {
         return value == "--help" || value == "-h" || value == "help" ||
                value == "--tests" || value == "init" || value == "add" ||
-               value == "fetch" || value == "build" || value == "run" ||
-               value == "clean";
+               value == "lock" || value == "verify" || value == "fetch" ||
+               value == "build" || value == "run" || value == "clean";
     };
 
     if(!is_pkg_subcommand(sub))
@@ -6904,6 +7594,71 @@ int PackageManager::run(int argc, char** argv)
         return 0;
     }
 
+    if(sub == "lock" || sub == "verify")
+    {
+        PkgCliOverrides overrides;
+        for(int i = subIndex + 1; i < argc; ++i)
+        {
+            const std::string arg = argv[i];
+            if(arg == "--build-dir" && i + 1 < argc)
+                overrides.buildDir = argv[++i];
+            else if(arg == "--deps-dir" && i + 1 < argc)
+                overrides.depsDir = argv[++i];
+            else if(arg == "--offline" && sub == "lock")
+                overrides.offline = true;
+            else
+            {
+                std::cerr << "Unknown option for 'pkg " << sub << "': " << arg
+                          << "\nUsage: " << argv[0] << " pkg [--config FILE] "
+                          << sub << " [--build-dir DIR] [--deps-dir DIR]";
+                if(sub == "lock")
+                    std::cerr << " [--offline]";
+                std::cerr << "\n";
+                return 1;
+            }
+        }
+        if(!std::filesystem::exists(manifestPath))
+        {
+            std::cerr << manifestLabel
+                      << " not found. Run 'mlang pkg init' first.\n";
+            return 1;
+        }
+        auto manifests = collect_target_manifests(manifestPath);
+        if(manifests.empty())
+        {
+            std::cerr << "No package manifests found for " << sub << ".\n";
+            return 1;
+        }
+
+        DependencyLockContext lockContext;
+        const bool verifyOnly = sub == "verify";
+        if(!prepare_dependency_lock_context(
+               manifestPath, manifests, verifyOnly,
+               verifyOnly || overrides.offline, lockContext))
+            return 1;
+        ScopedDependencyLockContext scopedLock(lockContext);
+        for(const auto& pkg : manifests)
+        {
+            BuildConfig buildConfig = parse_manifest_build_config(pkg);
+            buildConfig.compilerProgram = compilerProgram;
+            apply_cli_overrides(buildConfig, overrides);
+            if(verifyOnly)
+            {
+                if(verify_manifest_dependencies(pkg, buildConfig) != 0)
+                    return 1;
+            }
+            else if(fetch_for_manifest(pkg, buildConfig) != 0)
+            {
+                return 1;
+            }
+        }
+        if(!verifyOnly && !finish_dependency_lock_context(lockContext))
+            return 1;
+        pkg_info_line(verifyOnly ? "mlang.lock and fetched dependencies verified."
+                                 : "mlang.lock is up to date.");
+        return 0;
+    }
+
     if(sub == "fetch")
     {
         PkgCliOverrides overrides;
@@ -6938,6 +7693,14 @@ int PackageManager::run(int argc, char** argv)
             {
                 overrides.taskPrintToStdoutLog = true;
             }
+            else if(arg == "--locked")
+            {
+                overrides.locked = true;
+            }
+            else if(arg == "--offline")
+            {
+                overrides.offline = true;
+            }
             else
             {
                 std::cerr << "Unknown option for 'pkg fetch': " << arg << "\n"
@@ -6946,7 +7709,8 @@ int PackageManager::run(int argc, char** argv)
                              "[--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
-                          << " [--task-print-to-stdout-log]\n";
+                          << " [--task-print-to-stdout-log] [--locked]"
+                          << " [--offline]\n";
                 return 1;
             }
         }
@@ -6970,6 +7734,12 @@ int PackageManager::run(int argc, char** argv)
             std::cerr << "No package manifests found for fetch.\n";
             return 1;
         }
+        DependencyLockContext lockContext;
+        if(!prepare_dependency_lock_context(manifestPath, manifests,
+                                            overrides.locked,
+                                            overrides.offline, lockContext))
+            return 1;
+        ScopedDependencyLockContext scopedLock(lockContext);
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig = parse_manifest_build_config(pkg);
@@ -6978,6 +7748,8 @@ int PackageManager::run(int argc, char** argv)
             if(fetch_for_manifest(pkg, buildConfig) != 0)
                 return 1;
         }
+        if(!finish_dependency_lock_context(lockContext))
+            return 1;
         return 0;
     }
 
@@ -7042,6 +7814,14 @@ int PackageManager::run(int argc, char** argv)
             {
                 overrides.taskPrintToStdoutLog = true;
             }
+            else if(arg == "--locked")
+            {
+                overrides.locked = true;
+            }
+            else if(arg == "--offline")
+            {
+                overrides.offline = true;
+            }
             else
             {
                 std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
@@ -7052,7 +7832,8 @@ int PackageManager::run(int argc, char** argv)
                           << " [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
-                          << " [--task-print-to-stdout-log]\n";
+                          << " [--task-print-to-stdout-log] [--locked]"
+                          << " [--offline]\n";
                 return 1;
             }
         }
@@ -7079,6 +7860,12 @@ int PackageManager::run(int argc, char** argv)
             std::cerr << "No package manifests found for build.\n";
             return 1;
         }
+        DependencyLockContext lockContext;
+        if(!prepare_dependency_lock_context(manifestPath, manifests,
+                                            overrides.locked,
+                                            overrides.offline, lockContext))
+            return 1;
+        ScopedDependencyLockContext scopedLock(lockContext);
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig = parse_manifest_build_config(pkg);
@@ -7088,6 +7875,8 @@ int PackageManager::run(int argc, char** argv)
                                   buildConfig) != 0)
                 return 1;
         }
+        if(!finish_dependency_lock_context(lockContext))
+            return 1;
         return 0;
     }
 
@@ -7148,6 +7937,10 @@ int PackageManager::run(int argc, char** argv)
                 overrides.signMode = 2;
             else if(arg == "--no-sign")
                 overrides.signMode = 0;
+            else if(arg == "--locked")
+                overrides.locked = true;
+            else if(arg == "--offline")
+                overrides.offline = true;
             else if(arg == "--build-dir" && i + 1 < argc)
                 overrides.buildDir = argv[++i];
             else if(arg == "--deps-dir" && i + 1 < argc)
@@ -7185,9 +7978,20 @@ int PackageManager::run(int argc, char** argv)
                           << " [--stderr-log FILE] [--warn-log FILE]"
                           << " [--task-print-to-stdout-log] [--asan]"
                           << " [--sign|--force-sign|--no-sign]"
-                          << " [--option KEY=VALUE]\n";
+                          << " [--option KEY=VALUE] [--locked] [--offline]\n";
                 return 1;
             }
+        }
+        DependencyLockContext lockContext;
+        std::optional<ScopedDependencyLockContext> scopedLock;
+        if(!printTasks)
+        {
+            if(!prepare_dependency_lock_context(manifestPath, manifests,
+                                                overrides.locked,
+                                                overrides.offline,
+                                                lockContext))
+                return 1;
+            scopedLock.emplace(lockContext);
         }
         bool found = false;
         for(const auto& pkg : manifests)
@@ -7245,6 +8049,8 @@ int PackageManager::run(int argc, char** argv)
             std::cerr << "Task not found: " << taskName << "\n";
             return 1;
         }
+        if(!printTasks && !finish_dependency_lock_context(lockContext))
+            return 1;
         return 0;
     }
 

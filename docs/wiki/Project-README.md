@@ -2647,6 +2647,25 @@ Supported source dependency keys are:
 If `build = "none"` is set, the dependency is fetched but skipped by the
 built-in dependency builders during `mlang pkg build`.
 
+Dependency fetching is reproducible through a root `mlang.lock`. Normal
+fetch/build/run operations create a missing lock and honor exact Git commits
+and archive SHA-256 checksums from an existing lock. Commit the lockfile and
+use strict or network-free modes in CI:
+
+```sh
+mlang pkg lock
+mlang pkg verify
+mlang pkg build --locked
+mlang pkg build --offline
+```
+
+`--locked` rejects a missing, malformed, or stale lockfile without changing
+it. `--offline` additionally forbids package-manager Git/HTTP access and
+requires all locked sources in the dependency cache. See
+[Reproducible dependency locking](Package-Manager#reproducible-dependency-locking)
+for the lock format, archive cache, verification checks, workspace behavior,
+and limitations for third-party build scripts.
+
 `pkg add --add-lib` can scaffold the workspace subproject automatically. It:
 
 - creates `packages/<name>/mlang.toml`

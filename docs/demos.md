@@ -174,7 +174,7 @@ demo directory so its `mlang.toml` is selected automatically.
 | `examples/package_manager_task_graph` | Named task branches, `join_on`, phases, and phase barriers. | `(cd examples/package_manager_task_graph && ../../build/mlang pkg run workflow)` |
 | `examples/package_manager_vst3_coreaudio_synth` | Fetching the Steinberg VST3 SDK, building an MLang-powered VST3 instrument, and previewing the same DSP through CoreAudio. | `(cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square)` |
 | `examples/package_manager_vst3_sdk_example` | Fetching the Steinberg SDK and calling a small C++ metadata bridge from MLang without building a full plug-in. | `(cd examples/package_manager_vst3_sdk_example && ../../build/mlang pkg run demo)` |
-| `examples/package_manager_workspace_fetch` | Recursive workspace discovery with one Git-backed and one tarball-backed cJSON subpackage. | `./examples/package_manager_workspace_fetch/run_demo.sh` |
+| `examples/package_manager_workspace_fetch` | Recursive workspace discovery plus a shared lockfile with an exact Git revision, archive SHA-256, strict build, and verification. | `./examples/package_manager_workspace_fetch/run_demo.sh` |
 
 ### Verify the dynamic-library package
 

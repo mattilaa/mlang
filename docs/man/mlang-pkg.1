@@ -12,6 +12,14 @@ mlang-pkg \- package manager and task runner interface exposed as \fBmlang pkg\f
 .br
 .B mlang
 .B pkg
+[\fB\-\-config\fR \fIFILE\fR] lock [\fB\-\-offline\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] verify
+.br
+.B mlang
+.B pkg
 [\fB\-\-config\fR \fIFILE\fR] fetch [\fIpath and log options\fR]
 .br
 .B mlang
@@ -60,6 +68,15 @@ archives, pkg-config packages, and system dependencies.
 .B fetch
 Resolve and download dependencies without building project outputs.
 .TP
+.B lock
+Resolve sources into a deterministic root
+.IR mlang.lock ,
+recording exact Git revisions and archive SHA-256 checksums.
+.TP
+.B verify
+Check manifest-to-lock consistency and cached dependency integrity without
+network access.
+.TP
 .B build
 Build package targets. Supports optimization selection and optional Ninja or
 AddressSanitizer flows.
@@ -101,6 +118,13 @@ Write warning output to
 .TP
 .B \-\-task\-print\-to\-stdout\-log
 Mirror task-print output into the configured stdout log.
+.TP
+.B \-\-locked
+Require a present, current lockfile and refuse to modify it.
+.TP
+.B \-\-offline
+Require a current lockfile and cached sources, and do not perform Git or HTTP
+fetches.
 .TP
 .B \-\-tasks
 Show the expanded task tree instead of executing silently.
@@ -153,6 +177,19 @@ Declare a dependency as system-provided.
 .TP
 .B \-\-add\-lib
 Also add the dependency as a linkable package library entry.
+.SH REPRODUCIBLE LOCKFILE
+Normal fetch, build, and run operations create a missing
+.I mlang.lock
+and honor exact sources from an existing lock. Git dependencies are checked
+out detached at the recorded commit. Downloaded archives are retained in the
+dependency cache and verified using SHA-256 before extraction.
+.PP
+Use
+.B \-\-locked
+in CI to reject missing or stale lockfiles. After an online fetch, use
+.B \-\-offline
+to operate from locked Git objects and cached archives. Workspaces and explicit
+include manifests share the lockfile beside the root manifest.
 .SH LIBRARY TARGETS
 Declare an MLang library with
 .BR [[lib]] .

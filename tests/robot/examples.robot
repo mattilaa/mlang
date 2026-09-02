@@ -6610,6 +6610,87 @@ Pkg Builds Explicitly Included Packages Into Isolated Targets
     Should Be Equal As Integers    ${converter.rc}    0
     Should Contain    ${converter.stdout}    converter package built separately
 
+Pkg Lock Pins Git And Verifies Archive Checksums Offline
+    [Documentation]    Verify exact Git revisions, archive SHA-256 locking,
+    ...                locked manifest checks, offline cache use, and tamper detection.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_reproducibility
+    ${origin}=    Catenate    SEPARATOR=    ${base}/git-origin
+    ${project}=    Catenate    SEPARATOR=    ${base}/project
+    ${archive}=    Catenate    SEPARATOR=    ${base}/archive_dep.tar.gz
+    ${setup}=    Catenate    SEPARATOR=\n
+    ...    set -e
+    ...    rm -rf '${base}'
+    ...    mkdir -p '${origin}' '${project}/src' '${base}/archive-root/archive_dep'
+    ...    printf 'locked git fixture\n' > '${origin}/README.txt'
+    ...    git -C '${origin}' init -q
+    ...    git -C '${origin}' config user.email fixture@example.invalid
+    ...    git -C '${origin}' config user.name fixture
+    ...    git -C '${origin}' add README.txt
+    ...    git -C '${origin}' commit -qm initial
+    ...    printf 'locked archive fixture\n' > '${base}/archive-root/archive_dep/data.txt'
+    ...    tar -czf '${archive}' -C '${base}/archive-root' archive_dep
+    ...    printf 'fn main() { println!("reproducible package"); }\n' > '${project}/src/main.mla'
+    ...    cat > '${project}/mlang.toml' <<EOF
+    ...    [package]
+    ...    name = "reproducible_package"
+    ...    version = "0.1.0"
+    ...    entry = "src/main.mla"
+    ...    [dependencies]
+    ...    git_dep = { git = "${origin}", build = "none", spinner = false }
+    ...    archive_dep = { url = "file://${archive}", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
+    ...    EOF
+    ${setup_result}=    Run Process    /bin/sh    -lc    ${setup}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup_result.rc}    0
+    ...    msg=Reproducibility fixture setup failed\n${setup_result.stdout}\n${setup_result.stderr}
+
+    ${lock}=    Run Process    ${MLANG}    pkg    lock
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${lock.rc}    0
+    ...    msg=pkg lock failed\n${lock.stdout}\n${lock.stderr}
+    File Should Exist    ${project}/mlang.lock
+    ${lock_text}=    Get File    ${project}/mlang.lock
+    Should Contain    ${lock_text}    source = "git"
+    Should Contain    ${lock_text}    revision = "
+    Should Contain    ${lock_text}    source = "archive"
+    Should Contain    ${lock_text}    checksum = "sha256:
+
+    ${verify}=    Run Process    ${MLANG}    pkg    verify
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${verify.rc}    0
+    Should Contain    ${verify.stdout}    mlang.lock and fetched dependencies verified.
+
+    ${build}=    Run Process    ${MLANG}    pkg    build    --locked
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    File Should Exist    ${project}/build/reproducible_package
+
+    ${remove_origins}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${origin}' '${archive}'
+    Should Be Equal As Integers    ${remove_origins.rc}    0
+    ${offline}=    Run Process    ${MLANG}    pkg    fetch    --offline
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${offline.rc}    0
+    ...    msg=Offline fetch failed\n${offline.stdout}\n${offline.stderr}
+
+    ${stale}=    Run Process    /bin/sh    -lc
+    ...    cp '${project}/mlang.toml' '${project}/mlang.toml.saved' && sed 's/archive = "tar.gz"/archive = "zip"/' '${project}/mlang.toml.saved' > '${project}/mlang.toml'
+    Should Be Equal As Integers    ${stale.rc}    0
+    ${locked_stale}=    Run Process    ${MLANG}    pkg    fetch    --locked
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${locked_stale.rc}    0
+    Should Contain    ${locked_stale.stderr}    mlang.lock is out of date
+    ${restore}=    Run Process    /bin/sh    -lc
+    ...    mv '${project}/mlang.toml.saved' '${project}/mlang.toml'
+    Should Be Equal As Integers    ${restore.rc}    0
+
+    ${tamper}=    Run Process    /bin/sh    -lc
+    ...    printf tampered >> '${project}/build/deps/.archives/archive_dep.tar.gz'
+    Should Be Equal As Integers    ${tamper.rc}    0
+    ${verify_tampered}=    Run Process    ${MLANG}    pkg    verify
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${verify_tampered.rc}    0
+    Should Contain    ${verify_tampered.stderr}    Archive verification failed
+
 Pkg Builds And Links MLang Dynamic Library Target
     [Documentation]    Verify [[lib]] output, depends_on build ordering,
     ...                automatic linking, and loader-relative execution.
