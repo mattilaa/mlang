@@ -420,6 +420,151 @@ the destination for each dependency is replaced at package scope.
 The complete runnable example is
 `examples/package_manager_build_ergonomics`.
 
+### Ecosystem: registry, packaging, install, audit, SBOM, and signing
+
+Configure a registry for a package or workspace with:
+
+```toml
+[registry]
+location = "https://packages.example.com/mlang"
+public_key = "keys/registry-public.pem"
+token_env = "MLANG_REGISTRY_TOKEN"
+```
+
+`location` may also be a local directory or `file://` URL. Relative local
+locations and public keys resolve from the package directory. The public key
+is a client-side trust root and is never learned implicitly from a package.
+`token_env` names an environment variable; its token is not printed in logs.
+
+#### Registry protocol v1
+
+The read protocol is static-file friendly:
+
+```text
+config.toml
+index/<package>.toml
+packages/<package>/<version>/<package>-<version>.tar.gz
+packages/<package>/<version>/<package>-<version>.tar.gz.sig
+advisories.toml
+```
+
+`config.toml` contains `protocol = 1`. A package index contains immutable
+release records:
+
+```toml
+protocol = 1
+name = "hello"
+
+[[version]]
+version = "1.2.0"
+archive = "packages/hello/1.2.0/hello-1.2.0.tar.gz"
+checksum = "sha256:..."
+signature = "packages/hello/1.2.0/hello-1.2.0.tar.gz.sig"
+yanked = false
+```
+
+Clients read these paths over HTTP GET or the filesystem and select the
+highest non-yanked semantic version satisfying the requested range. HTTP
+publication uses an authenticated multipart `PUT
+/v1/packages/<package>/<version>` containing `archive`, `checksum`, optional
+`signature`, and `signature_algorithm=rsa-sha256`. Local publication updates
+the static index atomically. Authorization, namespace ownership, immutability,
+rate limiting, and concurrent index serialization belong to the server.
+The normative field and security requirements are in
+[Registry Protocol v1](Registry-Protocol).
+
+#### Package and publish
+
+```sh
+mlang pkg package
+mlang pkg package --output dist/hello-1.2.0.tar.gz
+mlang pkg package --sign-key private.pem
+mlang pkg publish --registry ./registry --sign-key private.pem
+MLANG_REGISTRY_TOKEN=... mlang pkg publish \
+  --registry https://packages.example.com/mlang \
+  --token-env MLANG_REGISTRY_TOKEN --sign-key private.pem
+```
+
+The default package output is `build/package/<name>-<version>.tar.gz`, with a
+`.sha256` sidecar. Files are sorted, timestamps and ownership are normalized,
+and gzip timestamps are disabled so identical source trees produce identical
+archive bytes. Source-control metadata, build/vendor/cache directories, and
+compiler intermediates are excluded. Symbolic links are rejected. Packages
+with dependencies must contain `mlang.lock`; local path dependencies are
+rejected because they are not immutable publication sources. Existing local
+versions are rejected unless `--allow-existing` is used for a disposable
+development registry.
+
+#### Install and signature policy
+
+```sh
+mlang pkg install 'hello@^1.0' --registry ./registry
+mlang pkg install hello --registry ./registry --root /opt/mlang
+mlang pkg install hello --registry ./registry \
+  --key registry-public.pem --require-signature
+```
+
+The default root is `$HOME/.local`. Executables go to `bin/`, libraries to
+`lib/`, and a JSON receipt goes to `share/mlang/packages/`. Existing files
+require `--force`. Index and archives use the global cache. Checksums are
+mandatory, unsafe absolute or parent-relative archive paths are rejected, and
+declared signatures must verify using `[registry].public_key` or `--key`.
+`--require-signature` also rejects unsigned releases. After one successful
+install, `--offline` uses cached registry material.
+
+Detached signing is also available directly:
+
+```sh
+mlang pkg sign hello-1.2.0.tar.gz --key private.pem
+mlang pkg verify-signature hello-1.2.0.tar.gz --key public.pem
+```
+
+The portable baseline is RSA with SHA-256 through `openssl dgst`; signatures
+default to `<archive>.sig`, overridable with `--signature FILE`.
+
+#### Audit advisories
+
+`pkg audit` checks root and locked transitive MLang package versions against a
+registry `advisories.toml` or explicit `--database`:
+
+```toml
+protocol = 1
+
+[[advisory]]
+id = "MLANG-2026-0001"
+package = "example"
+affected = ">=1.0.0, <1.2.3"
+severity = "high"
+title = "Example vulnerability"
+url = "https://example.com/advisories/MLANG-2026-0001"
+```
+
+```sh
+mlang pkg audit --registry ./registry
+mlang pkg audit --database security/advisories.toml --deny medium
+mlang pkg audit --offline --deny any
+```
+
+The default failure threshold is `high`; accepted policies are `low`,
+`medium`, `high`, `critical`, and `any`. Allowed lower-severity findings are
+still printed.
+
+#### Software bill of materials
+
+```sh
+mlang pkg sbom --output build/project.cdx.json
+mlang pkg sbom -p editor --format cyclonedx-json
+```
+
+This emits CycloneDX 1.5 JSON from selected workspace roots and versions in
+`mlang.lock`; `--output -` writes to stdout. Components use
+`pkg:mlang/<name>@<version>` package URLs and a deterministic document ID. The
+current SBOM covers MLang packages; native system/pkg-config libraries are not
+yet assigned component versions.
+
+The complete signed local-registry example is
+`examples/package_manager_ecosystem`.
+
 ### `pkg build`
 
 Build the package entry defined by the selected manifest:

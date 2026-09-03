@@ -26,6 +26,7 @@ subdirectory-based showcases are indexed separately in
   - [Package-manager static library](#package-manager-static-library)
   - [Package-manager path dependencies](#package-manager-path-dependencies)
   - [Package-manager build ergonomics](#package-manager-build-ergonomics)
+  - [Package-manager ecosystem](#package-manager-ecosystem)
 - [Focused regression examples](#focused-regression-examples)
 - [Directory-based demos](demos.md)
 
@@ -344,6 +345,21 @@ The two applications are selected independently. The script builds and runs
 cache, then vendors the locked dependency graph and runs a `release` build in
 locked offline mode. Successful runs print `ergonomic app result: 42`, cache
 hit messages, and `utility app selected independently`.
+
+### Package-manager ecosystem
+
+`examples/package_manager_ecosystem` creates a temporary RSA key pair and
+local registry, then exercises signed packaging, publication, semantic-version
+installation, checksum/signature verification, an installation receipt,
+CycloneDX output, and advisory severity policies:
+
+```sh
+./examples/package_manager_ecosystem/run_demo.sh
+```
+
+A successful run executes the installed binary and prints `signed registry
+package installed successfully`. Generated secrets and registry/install state
+stay below the example's ignored `build/` directory.
 
 ## Focused regression examples
 

@@ -6764,7 +6764,7 @@ Pkg Supports Profiles Features Selection Cache And Vendoring
     ...    --profile    dev    cwd=${base}    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${clean_app.rc}    0
     ${clean_dep}=    Run Process    ${MLANG}    pkg    clean    --profile    dev
-    ...    cwd=${base}/packages/telemetry    stdout=PIPE    stderr=PIPE
+    ...    cwd=${base}/packages/telemetry
     Should Be Equal As Integers    ${clean_dep.rc}    0
     ${cached}=    Run Process    ${MLANG}    pkg    build    -p    ergonomic_app
     ...    --profile    dev    --features    telemetry    --cache-dir    ${cache}    --locked
@@ -6790,6 +6790,38 @@ Pkg Supports Profiles Features Selection Cache And Vendoring
     ...    cwd=${base}    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${offline.rc}    0
     File Should Exist    ${base}/apps/ergonomic_app/build/release/ergonomic_app
+
+Pkg Supports Signed Registry Install Audit And SBOM
+    [Documentation]    Verify packaging, local registry publication, semantic
+    ...                install, checksums, signatures, audit policy, and CycloneDX.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_ecosystem
+    ${setup}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${base}' && cp -R '${EXECDIR}/examples/package_manager_ecosystem' '${base}'
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup.rc}    0
+
+    ${demo}=    Run Process    /bin/sh    ./run_demo.sh
+    ...    cwd=${base}    env:MLANG=${MLANG}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${demo.rc}    0
+    ...    msg=Ecosystem demo failed\n${demo.stdout}\n${demo.stderr}
+    Should Contain    ${demo.stdout}    Verified package signature
+    Should Contain    ${demo.stdout}    signed registry package installed successfully
+    Should Contain    ${demo.stdout}    MLANG-DEMO-0001 [low]
+    File Should Exist    ${base}/build/ecosystem.cdx.json
+    ${sbom}=    Get File    ${base}/build/ecosystem.cdx.json
+    Should Contain    ${sbom}    "bomFormat": "CycloneDX"
+    Should Contain    ${sbom}    pkg:mlang/ecosystem_hello@1.2.0
+    File Should Exist    ${base}/build/install/share/mlang/packages/ecosystem_hello-1.2.0.json
+
+    ${tamper}=    Run Process    /bin/sh    -lc
+    ...    printf tampered >> '${base}/build/registry/packages/ecosystem_hello/1.2.0/ecosystem_hello-1.2.0.tar.gz'
+    Should Be Equal As Integers    ${tamper.rc}    0
+    ${rejected}=    Run Process    ${MLANG}    pkg    install    ecosystem_hello
+    ...    --config    ${base}/mlang.toml    --root    ${base}/build/tampered-install
+    ...    --cache-dir    ${base}/build/tampered-cache    --require-signature
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${rejected.rc}    0
+    Should Contain    ${rejected.stderr}    Registry checksum mismatch
 
 Pkg Builds And Links MLang Dynamic Library Target
     [Documentation]    Verify [[lib]] output, depends_on build ordering,

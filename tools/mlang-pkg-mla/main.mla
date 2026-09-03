@@ -114,6 +114,8 @@ fn print_usage() -> void {
     println!("  lock      [--offline] (delegated to the C++ backend)");
     println!("  verify    (delegated to the C++ backend)");
     println!("  vendor [DIR] (delegated to the C++ backend)");
+    println!("  package, publish, install, audit, sbom (delegated to C++)");
+    println!("  sign, verify-signature (delegated to the C++ backend)");
     println!("  tree      (delegated to the C++ backend)");
     println!("  why NAME  (delegated to the C++ backend)");
     println!("  fetch     [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
@@ -1363,7 +1365,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
         return run_add(argv, idx, manifest);
     }
-    if (eq(sub, "lock") == 1 || eq(sub, "verify") == 1 || eq(sub, "vendor") == 1 || eq(sub, "tree") == 1 || eq(sub, "why") == 1) {
+    if (eq(sub, "lock") == 1 || eq(sub, "verify") == 1 || eq(sub, "vendor") == 1 || eq(sub, "package") == 1 || eq(sub, "publish") == 1 || eq(sub, "install") == 1 || eq(sub, "audit") == 1 || eq(sub, "sbom") == 1 || eq(sub, "sign") == 1 || eq(sub, "verify-signature") == 1 || eq(sub, "tree") == 1 || eq(sub, "why") == 1) {
         return delegate_pkg_to_cpp(backend, sub, argv, idx + 1);
     }
     if (eq(sub, "fetch") == 1) {

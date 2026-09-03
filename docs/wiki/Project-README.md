@@ -2728,6 +2728,25 @@ for profile inheritance, dependency feature forwarding, `--workspace` /
 The runnable combined example is
 `examples/package_manager_build_ergonomics`.
 
+The ecosystem workflow adds protocol-v1 registries, packaging, publishing,
+installation, advisory auditing, CycloneDX SBOMs, and detached signatures:
+
+```sh
+mlang pkg package --sign-key private.pem
+mlang pkg publish --registry ./registry --sign-key private.pem
+mlang pkg install 'hello@^1.0' --registry ./registry \
+  --key public.pem --require-signature
+mlang pkg audit --registry ./registry --deny high
+mlang pkg sbom --output build/project.cdx.json
+```
+
+Registry installs select the highest matching non-yanked semantic version,
+verify its SHA-256 and optional RSA/SHA-256 signature, reject unsafe archive
+paths, build in the `release` profile, and write an installation receipt. See
+[Package-manager ecosystem](Package-Manager#ecosystem-registry-packaging-install-audit-sbom-and-signing)
+and [Registry Protocol v1](Registry-Protocol), plus the runnable
+`examples/package_manager_ecosystem` demo.
+
 `pkg add --add-lib` can scaffold the workspace subproject automatically. It:
 
 - creates `packages/<name>/mlang.toml`

@@ -142,6 +142,7 @@ PAGES: list[Page] = [
     Page(Path("bootstrap/README.md"), "Bootstrap", "Bootstrap", "Tooling"),
     Page(Path("tools/mlangpkg/README.md"), "mlangpkg", "Mlangpkg", "Tooling"),
     Page(Path("docs/package_manager.md"), "Package Manager", "Package-Manager", "Tooling"),
+    Page(Path("docs/registry_protocol.md"), "Registry Protocol v1", "Registry-Protocol", "Tooling"),
     Page(Path("tests/README.md"), "Tests", "Tests", "Tooling"),
 ]
 

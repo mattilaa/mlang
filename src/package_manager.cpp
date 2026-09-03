@@ -1396,7 +1396,7 @@ static void print_pkg_usage(const std::string& programName)
     const std::string tool = programName.empty() ? "mlang" : programName;
     std::cerr
         << "Usage: " << tool
-        << " pkg [--config FILE] <init|add|lock|verify|vendor|tree|why|fetch|build|run|clean> "
+        << " pkg [--config FILE] <init|add|lock|verify|vendor|tree|why|fetch|build|run|clean|package|publish|install|audit|sbom|sign|verify-signature> "
            "[options...]\n"
         << "       " << tool
         << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
@@ -1437,6 +1437,18 @@ static void print_pkg_usage(const std::string& programName)
         << "      Verify mlang.lock and fetched dependency sources.\n"
         << "  " << tool << " pkg vendor [DIR]\n"
         << "      Copy the complete locked dependency graph for offline use.\n"
+        << "  " << tool << " pkg package [--output FILE] [--sign-key KEY]\n"
+        << "      Create a checksummed source package archive.\n"
+        << "  " << tool << " pkg publish --registry LOCATION [--sign-key KEY]\n"
+        << "      Package and publish a version to a local or HTTP v1 registry.\n"
+        << "  " << tool << " pkg install NAME[@REQ] --registry LOCATION\n"
+        << "      Resolve, verify, build, and install a registry package.\n"
+        << "  " << tool << " pkg audit [--database FILE] [--deny LEVEL]\n"
+        << "      Check the locked package graph against advisories.\n"
+        << "  " << tool << " pkg sbom [--output FILE]\n"
+        << "      Emit a CycloneDX 1.5 JSON software bill of materials.\n"
+        << "  " << tool << " pkg sign ARCHIVE --key PRIVATE_KEY\n"
+        << "  " << tool << " pkg verify-signature ARCHIVE --key PUBLIC_KEY\n"
         << "  " << tool << " pkg tree\n"
         << "      Print the direct and transitive dependency graph.\n"
         << "  " << tool << " pkg why <package>\n"
@@ -9045,6 +9057,1258 @@ static bool prepare_package_build_config(const PackageManifest& pkg,
     return true;
 }
 
+struct RegistrySettings
+{
+    std::string location;
+    std::string publicKey;
+    std::string tokenEnv;
+};
+
+struct RegistryVersionEntry
+{
+    std::string version;
+    std::string archive;
+    std::string checksum;
+    std::string signature;
+    std::string yanked;
+};
+
+struct AdvisoryEntry
+{
+    std::string id;
+    std::string package;
+    std::string affected;
+    std::string severity;
+    std::string title;
+    std::string url;
+};
+
+static RegistrySettings registry_settings(const PackageManifest* pkg,
+                                          const std::string& overrideLocation,
+                                          const std::string& overrideKey)
+{
+    RegistrySettings settings;
+    if(pkg != nullptr)
+    {
+        settings.location =
+            find_section_toml_string(pkg->content, "registry", "location")
+                .value_or("");
+        settings.publicKey =
+            find_section_toml_string(pkg->content, "registry", "public_key")
+                .value_or("");
+        settings.tokenEnv =
+            find_section_toml_string(pkg->content, "registry", "token_env")
+                .value_or("");
+        if(!settings.location.empty() &&
+           settings.location.find("://") == std::string::npos &&
+           std::filesystem::path(settings.location).is_relative())
+            settings.location =
+                (pkg->packageDir / settings.location).lexically_normal().string();
+        if(!settings.publicKey.empty() &&
+           std::filesystem::path(settings.publicKey).is_relative())
+            settings.publicKey =
+                (pkg->packageDir / settings.publicKey).lexically_normal().string();
+    }
+    if(!overrideLocation.empty())
+        settings.location = overrideLocation;
+    if(!overrideKey.empty())
+        settings.publicKey = overrideKey;
+    return settings;
+}
+
+static std::string registry_join(const std::string& root,
+                                 const std::string& relative)
+{
+    if(relative.find("://") != std::string::npos)
+        return relative;
+    if(root.find("://") != std::string::npos)
+        return root + (root.empty() || root.back() == '/' ? "" : "/") +
+               relative;
+    return (std::filesystem::path(root) / relative).lexically_normal().string();
+}
+
+static bool require_ecosystem_tool(const std::string& tool,
+                                   const std::string& installHint)
+{
+    const auto found = run_command_capture_with_paths(
+        "command -v " + shell_quote(tool), {});
+    if(found.has_value() && !trim(*found).empty())
+        return true;
+    pkg_error_line("Required ecosystem tool '" + tool +
+                   "' was not found in PATH. Install it first: " +
+                   installHint);
+    return false;
+}
+
+static bool safe_registry_reference(const std::string& reference)
+{
+    if(reference.find("://") != std::string::npos)
+        return true;
+    const std::filesystem::path path(reference);
+    if(path.is_absolute())
+        return false;
+    for(const auto& component : path.lexically_normal())
+    {
+        if(component == "..")
+            return false;
+    }
+    return true;
+}
+
+static bool copy_or_download_registry_file(const std::string& source,
+                                           const std::filesystem::path& output,
+                                           bool offline, std::string& error)
+{
+    std::error_code ec;
+    std::filesystem::create_directories(output.parent_path(), ec);
+    if(ec)
+    {
+        error = "Failed to create " + output.parent_path().string() + ": " +
+                ec.message();
+        return false;
+    }
+    if(source.find("://") == std::string::npos ||
+       source.rfind("file://", 0) == 0)
+    {
+        const std::filesystem::path input =
+            source.rfind("file://", 0) == 0 ? source.substr(7) : source;
+        std::filesystem::copy_file(
+            input, output, std::filesystem::copy_options::overwrite_existing,
+            ec);
+        if(ec)
+        {
+            error = "Failed to read registry file " + input.string() + ": " +
+                    ec.message();
+            return false;
+        }
+        return true;
+    }
+    if(offline)
+    {
+        error = "Offline mode forbids registry download: " + source;
+        return false;
+    }
+    if(!require_ecosystem_tool("curl", "install curl"))
+    {
+        error = "curl is required for HTTP registry access";
+        return false;
+    }
+    const std::string command = "curl -L --fail --silent --show-error " +
+                                shell_quote(source) + " -o " +
+                                shell_quote(output.string());
+    if(run_command(command) != 0)
+    {
+        error = "Registry download failed: " + source;
+        return false;
+    }
+    return true;
+}
+
+static std::vector<RegistryVersionEntry>
+parse_registry_index(const std::string& content, std::string& packageName,
+                     std::string& error)
+{
+    std::vector<RegistryVersionEntry> entries;
+    std::optional<RegistryVersionEntry> current;
+    std::istringstream in(content);
+    std::string line;
+    std::string section;
+    bool protocolOk = false;
+    auto flush = [&]()
+    {
+        if(current.has_value())
+            entries.push_back(*current);
+        current.reset();
+    };
+    while(std::getline(in, line))
+    {
+        const std::string text = strip_toml_comment(line);
+        if(text.empty())
+            continue;
+        if(text == "[[version]]")
+        {
+            flush();
+            current = RegistryVersionEntry{};
+            section = "version";
+            continue;
+        }
+        if(text.front() == '[' && text.back() == ']')
+        {
+            flush();
+            section = text.substr(1, text.size() - 2);
+            continue;
+        }
+        const auto assignment = parse_toml_assignment(text, in);
+        if(!assignment.has_value())
+            continue;
+        const std::string value = unquote(assignment->value);
+        if(section.empty() && assignment->key == "protocol")
+            protocolOk = value == "1";
+        else if(section.empty() && assignment->key == "name")
+            packageName = value;
+        else if(section == "version" && current.has_value())
+        {
+            if(assignment->key == "version")
+                current->version = value;
+            else if(assignment->key == "archive")
+                current->archive = value;
+            else if(assignment->key == "checksum")
+                current->checksum = value.rfind("sha256:", 0) == 0
+                                        ? value.substr(7)
+                                        : value;
+            else if(assignment->key == "signature")
+                current->signature = value;
+            else if(assignment->key == "yanked")
+                current->yanked = value;
+        }
+    }
+    flush();
+    if(!protocolOk)
+        error = "Unsupported or missing registry protocol version";
+    for(const auto& entry : entries)
+    {
+        if(!is_complete_semantic_version(entry.version) ||
+           entry.archive.empty() || entry.checksum.empty() ||
+           !safe_registry_reference(entry.archive) ||
+           (!entry.signature.empty() &&
+            !safe_registry_reference(entry.signature)))
+        {
+            error = "Registry index contains an incomplete version entry";
+            break;
+        }
+    }
+    return entries;
+}
+
+static std::string json_escape(const std::string& input)
+{
+    std::string output;
+    for(unsigned char c : input)
+    {
+        switch(c)
+        {
+        case '\\': output += "\\\\"; break;
+        case '"': output += "\\\""; break;
+        case '\n': output += "\\n"; break;
+        case '\r': output += "\\r"; break;
+        case '\t': output += "\\t"; break;
+        default:
+            if(c < 0x20)
+            {
+                std::ostringstream escaped;
+                escaped << "\\u" << std::hex << std::setw(4)
+                        << std::setfill('0') << static_cast<int>(c);
+                output += escaped.str();
+            }
+            else
+                output.push_back(static_cast<char>(c));
+        }
+    }
+    return output;
+}
+
+static bool sign_archive(const std::filesystem::path& archive,
+                         const std::filesystem::path& privateKey,
+                         const std::filesystem::path& signature)
+{
+    if(!require_ecosystem_tool("openssl", "install OpenSSL"))
+        return false;
+    const std::string command =
+        "openssl dgst -sha256 -sign " + shell_quote(privateKey.string()) +
+        " -out " + shell_quote(signature.string()) + " " +
+        shell_quote(archive.string());
+    if(run_command(command) != 0)
+    {
+        pkg_error_line("Failed to sign package archive with OpenSSL");
+        return false;
+    }
+    pkg_info_line("Wrote RSA/SHA-256 package signature " +
+                  signature.string());
+    return true;
+}
+
+static bool verify_archive_signature(const std::filesystem::path& archive,
+                                     const std::filesystem::path& publicKey,
+                                     const std::filesystem::path& signature)
+{
+    if(!require_ecosystem_tool("openssl", "install OpenSSL"))
+        return false;
+    const std::string command =
+        "openssl dgst -sha256 -verify " + shell_quote(publicKey.string()) +
+        " -signature " + shell_quote(signature.string()) + " " +
+        shell_quote(archive.string());
+    if(run_command(command) != 0)
+    {
+        pkg_error_line("Package signature verification failed for " +
+                       archive.string());
+        return false;
+    }
+    pkg_info_line("Verified package signature for " + archive.string());
+    return true;
+}
+
+static bool package_manifest_is_publishable(const PackageManifest& pkg)
+{
+    const std::string name = package_name(pkg);
+    const std::string version = package_version(pkg);
+    if(name.empty() || !is_complete_semantic_version(version))
+    {
+        pkg_error_line("Publishing requires [package].name and a complete "
+                       "semantic [package].version");
+        return false;
+    }
+    const auto dependencies = parse_source_deps(pkg.content);
+    if(!dependencies.empty() &&
+       !std::filesystem::is_regular_file(pkg.packageDir / "mlang.lock"))
+    {
+        pkg_error_line("Package '" + name +
+                       "' has dependencies but no mlang.lock; run 'mlang pkg "
+                       "lock' before packaging");
+        return false;
+    }
+    for(const auto& dependency : dependencies)
+    {
+        if(!dependency.path.empty())
+        {
+            pkg_error_line("Package '" + name +
+                           "' has path dependency '" + dependency.name +
+                           "'; publish immutable Git/archive dependencies or "
+                           "vendor the source first");
+            return false;
+        }
+    }
+    std::error_code ec;
+    for(std::filesystem::recursive_directory_iterator iterator(pkg.packageDir,
+                                                               ec), end;
+        !ec && iterator != end; iterator.increment(ec))
+    {
+        const std::string filename = iterator->path().filename().string();
+        if(iterator->is_directory(ec) &&
+           (filename == ".git" || filename == "build" ||
+            filename == "vendor" || filename == ".mlang" ||
+            filename == ".demo-cache"))
+        {
+            iterator.disable_recursion_pending();
+            continue;
+        }
+        if(iterator->is_symlink(ec))
+        {
+            pkg_error_line("Package source contains unsupported symbolic link: " +
+                           iterator->path().string());
+            return false;
+        }
+    }
+    return true;
+}
+
+static std::optional<std::filesystem::path> create_package_archive(
+    const PackageManifest& pkg, const std::filesystem::path& requestedOutput,
+    const std::string& signKey)
+{
+    if(!package_manifest_is_publishable(pkg))
+        return std::nullopt;
+    if(!require_ecosystem_tool("tar", "install tar"))
+        return std::nullopt;
+    if(!require_ecosystem_tool("gzip", "install gzip"))
+        return std::nullopt;
+    const std::string name = sanitize_package_name(package_name(pkg));
+    const std::string version = package_version(pkg);
+    std::filesystem::path output = requestedOutput;
+    if(output.empty())
+        output = pkg.packageDir / "build" / "package" /
+                 (name + "-" + version + ".tar.gz");
+    if(output.is_relative())
+        output = std::filesystem::absolute(output);
+    std::error_code ec;
+    std::filesystem::create_directories(output.parent_path(), ec);
+    if(ec)
+    {
+        pkg_error_line("Failed to create package output directory: " +
+                       ec.message());
+        return std::nullopt;
+    }
+    const std::filesystem::path staging =
+        std::filesystem::temp_directory_path() /
+        ("mlang-package-" + sha256_text(pkg.packageDir.string()).substr(0, 12) +
+         "-" + std::to_string(static_cast<unsigned long long>(std::time(nullptr))) +
+         "-" + std::to_string(static_cast<unsigned long long>(std::rand())));
+    const std::filesystem::path stagingRoot = staging / "root";
+    const std::filesystem::path fileList = staging / "files.txt";
+    std::filesystem::create_directories(stagingRoot, ec);
+    if(ec)
+    {
+        pkg_error_line("Failed to create package staging directory: " +
+                       ec.message());
+        return std::nullopt;
+    }
+    struct StagingCleanup
+    {
+        std::filesystem::path path;
+        ~StagingCleanup()
+        {
+            std::error_code ignored;
+            std::filesystem::remove_all(path, ignored);
+        }
+    } stagingCleanup{staging};
+    std::vector<std::filesystem::path> sourceFiles;
+    for(std::filesystem::recursive_directory_iterator iterator(pkg.packageDir,
+                                                               ec), end;
+        !ec && iterator != end; iterator.increment(ec))
+    {
+        const std::string filename = iterator->path().filename().string();
+        if(iterator->is_directory(ec) &&
+           (filename == ".git" || filename == "build" ||
+            filename == "vendor" || filename == ".mlang" ||
+            filename == ".demo-cache"))
+        {
+            iterator.disable_recursion_pending();
+            continue;
+        }
+        if(iterator->is_regular_file(ec))
+            sourceFiles.push_back(iterator->path());
+    }
+    std::sort(sourceFiles.begin(), sourceFiles.end());
+    std::ofstream listOutput(fileList, std::ios::binary | std::ios::trunc);
+    const auto systemNow = std::chrono::system_clock::now();
+    const auto fileNow = std::filesystem::file_time_type::clock::now();
+    const auto normalizedTime =
+        fileNow - std::chrono::duration_cast<
+                      std::filesystem::file_time_type::duration>(
+                      systemNow.time_since_epoch());
+    for(const auto& source : sourceFiles)
+    {
+        const auto relative =
+            std::filesystem::relative(source, pkg.packageDir, ec);
+        const std::string listed = "./" + relative.generic_string();
+        if(ec || listed.find('\n') != std::string::npos ||
+           listed.find('\r') != std::string::npos)
+        {
+            pkg_error_line("Package contains an unsupported source path");
+            return std::nullopt;
+        }
+        const auto destination = stagingRoot / relative;
+        std::filesystem::create_directories(destination.parent_path(), ec);
+        std::filesystem::copy_file(
+            source, destination,
+            std::filesystem::copy_options::overwrite_existing, ec);
+        if(ec)
+        {
+            pkg_error_line("Failed to stage package file " + source.string() +
+                           ": " + ec.message());
+            return std::nullopt;
+        }
+        std::filesystem::permissions(
+            destination, std::filesystem::status(source, ec).permissions(),
+            std::filesystem::perm_options::replace, ec);
+        std::filesystem::last_write_time(destination, normalizedTime, ec);
+        listOutput << listed << "\n";
+    }
+    listOutput.close();
+    if(!listOutput)
+    {
+        pkg_error_line("Failed to write deterministic package file list");
+        return std::nullopt;
+    }
+    std::string tarOwnership;
+    const auto tarVersion =
+        run_command_capture_with_paths("tar --version 2>&1", {});
+    if(tarVersion.has_value() && tarVersion->find("bsdtar") != std::string::npos)
+        tarOwnership = " --uid 0 --gid 0 --uname root --gname root";
+    else
+        tarOwnership = " --owner=0 --group=0 --numeric-owner";
+    const std::string command =
+        "env COPYFILE_DISABLE=1 tar -cf - --format ustar" + tarOwnership +
+        " -C " + shell_quote(stagingRoot.string()) + " -T " +
+        shell_quote(fileList.string()) + " | gzip -n > " +
+        shell_quote(output.string());
+    if(run_command(command) != 0)
+    {
+        pkg_error_line("Failed to create package archive " + output.string());
+        return std::nullopt;
+    }
+    const auto checksum = sha256_file(output);
+    if(!checksum.has_value())
+    {
+        pkg_error_line("Failed to checksum package archive " + output.string());
+        return std::nullopt;
+    }
+    std::ofstream checksumOut(output.string() + ".sha256",
+                              std::ios::binary | std::ios::trunc);
+    checksumOut << "sha256:" << *checksum << "  "
+                << output.filename().string() << "\n";
+    if(!checksumOut)
+    {
+        pkg_error_line("Failed to write package checksum");
+        return std::nullopt;
+    }
+    if(!signKey.empty() &&
+       !sign_archive(output, signKey, output.string() + ".sig"))
+        return std::nullopt;
+    pkg_info_line("Packaged " + package_name(pkg) + " v" + version + " at " +
+                  output.string());
+    pkg_info_line("Package checksum sha256:" + *checksum);
+    return output;
+}
+
+static bool read_text_file(const std::filesystem::path& path,
+                           std::string& content)
+{
+    std::ifstream input(path, std::ios::binary);
+    if(!input)
+        return false;
+    content.assign(std::istreambuf_iterator<char>(input),
+                   std::istreambuf_iterator<char>());
+    return true;
+}
+
+static std::filesystem::path ecosystem_cache_dir(
+    const PkgCliOverrides& overrides)
+{
+    if(overrides.cacheDir.has_value())
+        return *overrides.cacheDir;
+    if(const char* configuredCache = std::getenv("MLANG_PKG_CACHE"))
+    {
+        if(configuredCache[0] != '\0')
+            return configuredCache;
+    }
+    if(const char* xdgCache = std::getenv("XDG_CACHE_HOME"))
+    {
+        if(xdgCache[0] != '\0')
+            return std::filesystem::path(xdgCache) / "mlang" / "pkg";
+    }
+    if(const char* userHome = std::getenv("HOME"))
+    {
+        if(userHome[0] != '\0')
+            return std::filesystem::path(userHome) / ".cache" / "mlang" /
+                   "pkg";
+    }
+    return std::filesystem::temp_directory_path() / "mlang-pkg-cache";
+}
+
+static int publish_package(const PackageManifest& pkg,
+                           const RegistrySettings& registry,
+                           const std::string& signKey, bool allowExisting)
+{
+    if(registry.location.empty())
+    {
+        pkg_error_line("No registry configured; use --registry LOCATION or "
+                       "[registry].location");
+        return 1;
+    }
+    const auto archive = create_package_archive(pkg, {}, signKey);
+    if(!archive.has_value())
+        return 1;
+    const std::string name = package_name(pkg);
+    const std::string version = package_version(pkg);
+    if(registry.location.find("://") != std::string::npos &&
+       registry.location.rfind("file://", 0) != 0)
+    {
+        if(!require_ecosystem_tool("curl", "install curl"))
+            return 1;
+        if(registry.tokenEnv.empty() ||
+           !std::all_of(registry.tokenEnv.begin(), registry.tokenEnv.end(),
+                        [](unsigned char c)
+                        { return std::isalnum(c) || c == '_'; }) ||
+           std::getenv(registry.tokenEnv.c_str()) == nullptr)
+        {
+            pkg_error_line("Remote publishing requires [registry].token_env "
+                           "naming a populated environment variable");
+            return 1;
+        }
+        const auto checksum = sha256_file(*archive);
+        std::string command =
+            "curl --fail --silent --show-error -X PUT -H \"Authorization: "
+            "Bearer ${" + registry.tokenEnv + "}\" -F archive=@" +
+            shell_quote(archive->string()) + " -F checksum=" +
+            shell_quote("sha256:" + checksum.value_or(""));
+        const std::filesystem::path signature = archive->string() + ".sig";
+        if(std::filesystem::exists(signature))
+            command += " -F signature=@" + shell_quote(signature.string()) +
+                       " -F signature_algorithm=rsa-sha256";
+        command += " " +
+                   shell_quote(registry_join(
+                       registry.location,
+                       "v1/packages/" + sanitize_package_name(name) + "/" +
+                           version));
+        if(run_command(command) != 0)
+        {
+            pkg_error_line("Remote registry rejected " + name + " v" +
+                           version);
+            return 1;
+        }
+        pkg_info_line("Published " + name + " v" + version + " to " +
+                      registry.location);
+        return 0;
+    }
+    const std::filesystem::path registryRoot =
+        registry.location.rfind("file://", 0) == 0
+            ? registry.location.substr(7)
+            : registry.location;
+    const std::filesystem::path indexPath =
+        registryRoot / "index" / (sanitize_package_name(name) + ".toml");
+    std::string existingContent;
+    std::string indexedName;
+    std::string error;
+    std::vector<RegistryVersionEntry> entries;
+    if(std::filesystem::exists(indexPath))
+    {
+        if(!read_text_file(indexPath, existingContent))
+        {
+            pkg_error_line("Failed to read registry index " +
+                           indexPath.string());
+            return 1;
+        }
+        entries = parse_registry_index(existingContent, indexedName, error);
+        if(!error.empty() || (!indexedName.empty() && indexedName != name))
+        {
+            pkg_error_line(error.empty() ? "Registry package name mismatch"
+                                         : error);
+            return 1;
+        }
+    }
+    const auto duplicate = std::find_if(
+        entries.begin(), entries.end(), [&](const RegistryVersionEntry& entry)
+        { return entry.version == version; });
+    if(duplicate != entries.end() && !allowExisting)
+    {
+        pkg_error_line("Registry already contains " + name + " v" + version +
+                       "; use --allow-existing to replace it");
+        return 1;
+    }
+    entries.erase(std::remove_if(entries.begin(), entries.end(),
+                                 [&](const RegistryVersionEntry& entry)
+                                 { return entry.version == version; }),
+                  entries.end());
+    const std::filesystem::path packageDir =
+        registryRoot / "packages" / sanitize_package_name(name) / version;
+    std::error_code ec;
+    std::filesystem::create_directories(packageDir, ec);
+    std::filesystem::create_directories(indexPath.parent_path(), ec);
+    if(ec)
+    {
+        pkg_error_line("Failed to create registry directories: " +
+                       ec.message());
+        return 1;
+    }
+    const std::filesystem::path publishedArchive =
+        packageDir / archive->filename();
+    std::filesystem::copy_file(
+        *archive, publishedArchive,
+        std::filesystem::copy_options::overwrite_existing, ec);
+    if(ec)
+    {
+        pkg_error_line("Failed to publish archive: " + ec.message());
+        return 1;
+    }
+    RegistryVersionEntry published;
+    published.version = version;
+    published.archive = std::filesystem::relative(publishedArchive, registryRoot)
+                            .generic_string();
+    published.checksum = sha256_file(publishedArchive).value_or("");
+    const std::filesystem::path localSignature = archive->string() + ".sig";
+    if(std::filesystem::exists(localSignature))
+    {
+        const std::filesystem::path publishedSignature =
+            packageDir / (archive->filename().string() + ".sig");
+        std::filesystem::copy_file(
+            localSignature, publishedSignature,
+            std::filesystem::copy_options::overwrite_existing, ec);
+        if(ec)
+        {
+            pkg_error_line("Failed to publish signature: " + ec.message());
+            return 1;
+        }
+        published.signature =
+            std::filesystem::relative(publishedSignature, registryRoot)
+                .generic_string();
+    }
+    entries.push_back(published);
+    std::sort(entries.begin(), entries.end(),
+              [](const RegistryVersionEntry& lhs,
+                 const RegistryVersionEntry& rhs)
+              {
+                  const auto a = parse_semantic_version(lhs.version);
+                  const auto b = parse_semantic_version(rhs.version);
+                  return a.has_value() && b.has_value()
+                             ? compare_semantic_versions(*a, *b) < 0
+                             : lhs.version < rhs.version;
+              });
+    const std::filesystem::path tempIndex = indexPath.string() + ".tmp";
+    std::ofstream output(tempIndex, std::ios::binary | std::ios::trunc);
+    output << "protocol = 1\nname = " << lock_quote(name) << "\n";
+    for(const auto& entry : entries)
+    {
+        output << "\n[[version]]\nversion = " << lock_quote(entry.version)
+               << "\narchive = " << lock_quote(entry.archive)
+               << "\nchecksum = "
+               << lock_quote("sha256:" + entry.checksum) << "\n";
+        if(!entry.signature.empty())
+            output << "signature = " << lock_quote(entry.signature) << "\n";
+        if(!entry.yanked.empty())
+            output << "yanked = " << entry.yanked << "\n";
+    }
+    output.close();
+    if(!output)
+    {
+        pkg_error_line("Failed to write registry index");
+        return 1;
+    }
+    std::filesystem::rename(tempIndex, indexPath, ec);
+    if(ec)
+    {
+        std::filesystem::remove(indexPath, ec);
+        ec.clear();
+        std::filesystem::rename(tempIndex, indexPath, ec);
+    }
+    if(ec)
+    {
+        pkg_error_line("Failed to replace registry index: " + ec.message());
+        return 1;
+    }
+    std::ofstream protocol(registryRoot / "config.toml",
+                           std::ios::binary | std::ios::trunc);
+    protocol << "protocol = 1\n";
+    pkg_info_line("Published " + name + " v" + version + " to " +
+                  registryRoot.string());
+    return 0;
+}
+
+static std::optional<RegistryVersionEntry> select_registry_version(
+    const std::vector<RegistryVersionEntry>& entries,
+    const std::string& requirement)
+{
+    std::optional<RegistryVersionEntry> selected;
+    for(const auto& entry : entries)
+    {
+        if(entry.yanked == "true" ||
+           !semantic_version_satisfies(entry.version, requirement))
+            continue;
+        if(!selected.has_value())
+        {
+            selected = entry;
+            continue;
+        }
+        const auto candidate = parse_semantic_version(entry.version);
+        const auto current = parse_semantic_version(selected->version);
+        if(candidate.has_value() && current.has_value() &&
+           compare_semantic_versions(*candidate, *current) > 0)
+            selected = entry;
+    }
+    return selected;
+}
+
+static int install_registry_package(
+    const std::string& requested, const RegistrySettings& registry,
+    const PkgCliOverrides& overrides, const std::string& compilerProgram,
+    const std::filesystem::path& installRoot, bool force,
+    bool requireSignature)
+{
+    if(registry.location.empty())
+    {
+        pkg_error_line("No registry configured; use --registry LOCATION");
+        return 1;
+    }
+    std::string name = requested;
+    std::string requirement = "*";
+    const size_t at = requested.rfind('@');
+    if(at != std::string::npos && at != 0)
+    {
+        name = requested.substr(0, at);
+        requirement = requested.substr(at + 1);
+    }
+    const std::filesystem::path cacheRoot = ecosystem_cache_dir(overrides);
+    const std::string registryId = sha256_text(registry.location);
+    const std::filesystem::path packageCache =
+        cacheRoot / "registry" / registryId / sanitize_package_name(name);
+    const std::filesystem::path indexCache = packageCache / "index.toml";
+    std::string error;
+    const std::string indexSource =
+        registry_join(registry.location,
+                      "index/" + sanitize_package_name(name) + ".toml");
+    if(!overrides.offline || !std::filesystem::exists(indexCache))
+    {
+        if(!copy_or_download_registry_file(indexSource, indexCache,
+                                           overrides.offline, error))
+        {
+            pkg_error_line(error);
+            return 1;
+        }
+    }
+    std::string indexContent;
+    std::string indexedName;
+    if(!read_text_file(indexCache, indexContent))
+    {
+        pkg_error_line("Failed to read cached registry index");
+        return 1;
+    }
+    auto entries = parse_registry_index(indexContent, indexedName, error);
+    if(!error.empty() || indexedName != name)
+    {
+        pkg_error_line(error.empty() ? "Registry index package name mismatch"
+                                     : error);
+        return 1;
+    }
+    const auto selected = select_registry_version(entries, requirement);
+    if(!selected.has_value())
+    {
+        pkg_error_line("No non-yanked version of '" + name + "' satisfies " +
+                       requirement);
+        return 1;
+    }
+    const std::filesystem::path archiveCache =
+        packageCache / selected->version /
+        (sanitize_package_name(name) + "-" + selected->version + ".tar.gz");
+    if(!std::filesystem::exists(archiveCache))
+    {
+        if(!copy_or_download_registry_file(
+               registry_join(registry.location, selected->archive), archiveCache,
+               overrides.offline, error))
+        {
+            pkg_error_line(error);
+            return 1;
+        }
+    }
+    auto checksum = sha256_file(archiveCache);
+    if((!checksum.has_value() || *checksum != selected->checksum) &&
+       !overrides.offline)
+    {
+        if(copy_or_download_registry_file(
+               registry_join(registry.location, selected->archive), archiveCache,
+               false, error))
+            checksum = sha256_file(archiveCache);
+    }
+    if(!checksum.has_value() || *checksum != selected->checksum)
+    {
+        pkg_error_line("Registry checksum mismatch for " + name + " v" +
+                       selected->version + ": expected sha256:" +
+                       selected->checksum +
+                       (checksum.has_value() ? ", got sha256:" + *checksum
+                                             : ", archive unreadable"));
+        return 1;
+    }
+    if(!selected->signature.empty())
+    {
+        if(registry.publicKey.empty())
+        {
+            pkg_error_line("Package is signed but no public key is configured; "
+                           "use --key PUBLIC_KEY");
+            return 1;
+        }
+        const std::filesystem::path signatureCache =
+            archiveCache.string() + ".sig";
+        if(!std::filesystem::exists(signatureCache) &&
+           !copy_or_download_registry_file(
+               registry_join(registry.location, selected->signature),
+               signatureCache, overrides.offline, error))
+        {
+            pkg_error_line(error);
+            return 1;
+        }
+        if(!verify_archive_signature(archiveCache, registry.publicKey,
+                                     signatureCache))
+            return 1;
+    }
+    else if(requireSignature)
+    {
+        pkg_error_line("Registry package " + name + " v" + selected->version +
+                       " is unsigned");
+        return 1;
+    }
+    const std::filesystem::path sourceDir =
+        packageCache / selected->version / "source";
+    if(!require_ecosystem_tool("tar", "install tar"))
+        return 1;
+    std::error_code ec;
+    std::filesystem::remove_all(sourceDir, ec);
+    std::filesystem::create_directories(sourceDir, ec);
+    const auto archiveListing = run_command_capture_with_paths(
+        "tar -tzf " + shell_quote(archiveCache.string()), {});
+    if(!archiveListing.has_value())
+    {
+        pkg_error_line("Failed to inspect registry package archive");
+        return 1;
+    }
+    std::istringstream listed(*archiveListing);
+    std::string archivedPath;
+    while(std::getline(listed, archivedPath))
+    {
+        std::filesystem::path normalized =
+            std::filesystem::path(trim(archivedPath)).lexically_normal();
+        if(normalized.is_absolute() ||
+           std::find(normalized.begin(), normalized.end(), "..") !=
+               normalized.end())
+        {
+            pkg_error_line("Unsafe path in registry package archive: " +
+                           archivedPath);
+            return 1;
+        }
+    }
+    const std::string extract = "tar -xzf " + shell_quote(archiveCache.string()) +
+                                " -C " + shell_quote(sourceDir.string());
+    if(run_command(extract) != 0)
+    {
+        pkg_error_line("Failed to extract registry package");
+        return 1;
+    }
+    const std::filesystem::path installedManifest = sourceDir / "mlang.toml";
+    if(!std::filesystem::exists(installedManifest))
+    {
+        pkg_error_line("Registry archive does not contain mlang.toml");
+        return 1;
+    }
+    std::string installedContent;
+    if(!read_text_file(installedManifest, installedContent))
+    {
+        pkg_error_line("Failed to read installed package manifest");
+        return 1;
+    }
+    std::string build = "MLANG_PKG_IMPL=cpp " + shell_quote(compilerProgram) +
+                        " pkg build --config " +
+                        shell_quote(installedManifest.string()) + " --release";
+    if(overrides.offline && !parse_source_deps(installedContent).empty())
+    {
+        if(!std::filesystem::exists(sourceDir / "mlang.lock"))
+        {
+            pkg_error_line("Offline install requires the published package to "
+                           "contain mlang.lock for its dependencies");
+            return 1;
+        }
+        build += " --offline";
+    }
+    if(overrides.cacheDir.has_value())
+        build += " --cache-dir " + shell_quote(*overrides.cacheDir);
+    if(run_command(build) != 0)
+    {
+        pkg_error_line("Failed to build registry package " + name);
+        return 1;
+    }
+    PackageManifest installed{installedManifest, sourceDir, installedContent,
+                              "", {}};
+    auto targets = parse_build_targets(installed.content);
+    if(targets.empty())
+    {
+        BuildTarget target;
+        target.name = package_name(installed);
+        target.entry = find_section_toml_string(installed.content, "package",
+                                                "entry")
+                           .value_or("src/main.mla");
+        targets.push_back(std::move(target));
+    }
+    bool copied = false;
+    for(const auto& target : targets)
+    {
+        std::filesystem::path source;
+        std::filesystem::path destinationDir;
+        if(target.kind == BuildTarget::executable)
+        {
+            source = sourceDir / "build" / "release" / target.name;
+            destinationDir = installRoot / "bin";
+        }
+        else if(target.kind == BuildTarget::static_library)
+        {
+            source = sourceDir / "build" / "release" /
+                     static_library_filename(target.name);
+            destinationDir = installRoot / "lib";
+        }
+        else
+        {
+            source = sourceDir / "build" / "release" /
+                     dynamic_library_filename(target.name);
+            destinationDir = installRoot / "lib";
+        }
+        if(!std::filesystem::exists(source))
+            continue;
+        std::filesystem::create_directories(destinationDir, ec);
+        const std::filesystem::path destination =
+            destinationDir / source.filename();
+        if(std::filesystem::exists(destination) && !force)
+        {
+            pkg_error_line("Install destination already exists: " +
+                           destination.string() + " (use --force)");
+            return 1;
+        }
+        std::filesystem::copy_file(
+            source, destination,
+            std::filesystem::copy_options::overwrite_existing, ec);
+        if(ec)
+        {
+            pkg_error_line("Failed to install " + destination.string() + ": " +
+                           ec.message());
+            return 1;
+        }
+        std::filesystem::permissions(
+            destination, std::filesystem::status(source, ec).permissions(),
+            std::filesystem::perm_options::replace, ec);
+        pkg_info_line("Installed " + destination.string());
+        if(target.kind == BuildTarget::dynamic_library)
+        {
+            const std::filesystem::path runtimeDir = installRoot / "bin";
+            std::filesystem::create_directories(runtimeDir, ec);
+            const std::filesystem::path runtimeCopy =
+                runtimeDir / source.filename();
+            std::filesystem::copy_file(
+                source, runtimeCopy,
+                std::filesystem::copy_options::overwrite_existing, ec);
+            if(ec)
+            {
+                pkg_error_line("Failed to install runtime library companion " +
+                               runtimeCopy.string() + ": " + ec.message());
+                return 1;
+            }
+        }
+        copied = true;
+    }
+    if(!copied)
+    {
+        pkg_error_line("Package contains no installable binary or library target");
+        return 1;
+    }
+    const std::filesystem::path receiptDir =
+        installRoot / "share" / "mlang" / "packages";
+    std::filesystem::create_directories(receiptDir, ec);
+    std::ofstream receipt(receiptDir /
+                          (sanitize_package_name(name) + "-" +
+                           selected->version + ".json"));
+    receipt << "{\n  \"name\": \"" << json_escape(name)
+            << "\",\n  \"version\": \"" << json_escape(selected->version)
+            << "\",\n  \"checksum\": \"sha256:" << selected->checksum
+            << "\",\n  \"registry\": \""
+            << json_escape(registry.location) << "\"\n}\n";
+    return 0;
+}
+
+static std::map<std::string, std::string> ecosystem_components(
+    const std::filesystem::path& rootManifest,
+    const std::vector<PackageManifest>& manifests)
+{
+    std::map<std::string, std::string> components;
+    for(const auto& manifest : manifests)
+        components[package_name(manifest)] = package_version(manifest);
+    DependencyLockContext context;
+    context.rootManifest = std::filesystem::absolute(rootManifest);
+    context.lockPath = context.rootManifest.parent_path() / "mlang.lock";
+    std::string error;
+    if(std::filesystem::exists(context.lockPath) &&
+       read_dependency_lock(context.lockPath, context, error))
+    {
+        for(const auto& [key, entry] : context.entries)
+        {
+            (void)key;
+            if(!entry.resolvedVersion.empty())
+                components[entry.name] = entry.resolvedVersion;
+        }
+    }
+    return components;
+}
+
+static std::vector<AdvisoryEntry>
+parse_advisories(const std::string& content)
+{
+    std::vector<AdvisoryEntry> advisories;
+    std::optional<AdvisoryEntry> current;
+    std::istringstream input(content);
+    std::string line;
+    auto flush = [&]()
+    {
+        if(current.has_value() && !current->id.empty() &&
+           !current->package.empty() && !current->affected.empty())
+            advisories.push_back(*current);
+        current.reset();
+    };
+    while(std::getline(input, line))
+    {
+        const std::string text = strip_toml_comment(line);
+        if(text.empty())
+            continue;
+        if(text == "[[advisory]]")
+        {
+            flush();
+            current = AdvisoryEntry{};
+            continue;
+        }
+        if(text.front() == '[' && text.back() == ']')
+        {
+            flush();
+            continue;
+        }
+        if(!current.has_value())
+            continue;
+        const auto assignment = parse_toml_assignment(text, input);
+        if(!assignment.has_value())
+            continue;
+        const std::string value = unquote(assignment->value);
+        if(assignment->key == "id") current->id = value;
+        else if(assignment->key == "package") current->package = value;
+        else if(assignment->key == "affected") current->affected = value;
+        else if(assignment->key == "severity") current->severity = value;
+        else if(assignment->key == "title") current->title = value;
+        else if(assignment->key == "url") current->url = value;
+    }
+    flush();
+    return advisories;
+}
+
+static bool advisory_protocol_is_v1(const std::string& content)
+{
+    std::istringstream input(content);
+    std::string line;
+    while(std::getline(input, line))
+    {
+        const std::string text = strip_toml_comment(line);
+        if(text.empty())
+            continue;
+        if(text.front() == '[')
+            break;
+        const auto assignment = parse_toml_assignment(text, input);
+        if(assignment.has_value() && assignment->key == "protocol")
+            return unquote(assignment->value) == "1";
+    }
+    return false;
+}
+
+static int severity_rank(std::string severity)
+{
+    std::transform(severity.begin(), severity.end(), severity.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    if(severity == "critical") return 4;
+    if(severity == "high") return 3;
+    if(severity == "medium" || severity == "moderate") return 2;
+    if(severity == "low") return 1;
+    return 0;
+}
+
+static int audit_packages(const std::filesystem::path& rootManifest,
+                          const std::vector<PackageManifest>& manifests,
+                          const RegistrySettings& registry,
+                          const PkgCliOverrides& overrides,
+                          const std::string& database,
+                          const std::string& denySeverity)
+{
+    std::string source = database;
+    if(source.empty() && !registry.location.empty())
+        source = registry_join(registry.location, "advisories.toml");
+    if(source.empty())
+    {
+        pkg_error_line("No advisory database configured; use --database FILE "
+                       "or configure a registry");
+        return 1;
+    }
+    const std::filesystem::path cached =
+        ecosystem_cache_dir(overrides) / "audit" /
+        (sha256_text(source) + ".toml");
+    std::string error;
+    if(!overrides.offline || !std::filesystem::exists(cached))
+    {
+        if(!copy_or_download_registry_file(source, cached, overrides.offline,
+                                           error))
+        {
+            pkg_error_line(error);
+            return 1;
+        }
+    }
+    std::string content;
+    if(!read_text_file(cached, content))
+    {
+        pkg_error_line("Failed to read advisory database");
+        return 1;
+    }
+    if(!advisory_protocol_is_v1(content))
+    {
+        pkg_error_line("Unsupported or missing advisory protocol version");
+        return 1;
+    }
+    const auto advisories = parse_advisories(content);
+    const auto components = ecosystem_components(rootManifest, manifests);
+    if(denySeverity != "any" && severity_rank(denySeverity) == 0)
+    {
+        pkg_error_line("Unknown audit severity '" + denySeverity +
+                       "' (expected low, medium, high, critical, or any)");
+        return 1;
+    }
+    const int threshold = denySeverity == "any" ? 0 :
+                          severity_rank(denySeverity.empty() ? "high"
+                                                            : denySeverity);
+    size_t findings = 0;
+    bool denied = false;
+    for(const auto& advisory : advisories)
+    {
+        const auto found = components.find(advisory.package);
+        if(found == components.end() ||
+           !semantic_version_satisfies(found->second, advisory.affected))
+            continue;
+        ++findings;
+        const int rank = severity_rank(advisory.severity);
+        denied = denied || (denySeverity == "any" ? true : rank >= threshold);
+        std::cout << advisory.id << " ["
+                  << (advisory.severity.empty() ? "unknown" : advisory.severity)
+                  << "] " << advisory.package << " v" << found->second
+                  << " matches " << advisory.affected;
+        if(!advisory.title.empty())
+            std::cout << ": " << advisory.title;
+        if(!advisory.url.empty())
+            std::cout << " (" << advisory.url << ")";
+        std::cout << "\n";
+    }
+    if(findings == 0)
+        pkg_info_line("Audit found no known vulnerabilities in " +
+                      std::to_string(components.size()) + " packages.");
+    else
+        pkg_info_line("Audit found " + std::to_string(findings) +
+                      " matching advisory(s).");
+    return denied ? 1 : 0;
+}
+
+static int write_sbom(const std::filesystem::path& rootManifest,
+                      const std::vector<PackageManifest>& manifests,
+                      const std::filesystem::path& outputPath)
+{
+    const auto components = ecosystem_components(rootManifest, manifests);
+    std::ostringstream canonical;
+    for(const auto& [name, version] : components)
+        canonical << name << '@' << version << '\n';
+    const std::string digest = sha256_text(canonical.str());
+    std::ostringstream json;
+    json << "{\n"
+         << "  \"bomFormat\": \"CycloneDX\",\n"
+         << "  \"specVersion\": \"1.5\",\n"
+         << "  \"serialNumber\": \"urn:uuid:"
+         << digest.substr(0, 8) << '-' << digest.substr(8, 4) << '-'
+         << digest.substr(12, 4) << '-' << digest.substr(16, 4) << '-'
+         << digest.substr(20, 12) << "\",\n"
+         << "  \"version\": 1,\n"
+         << "  \"metadata\": { \"tools\": [{ \"vendor\": \"MLang\", "
+            "\"name\": \"mlang pkg\", \"version\": \""
+         << json_escape(MLANG_VERSION) << "\" }] },\n"
+         << "  \"components\": [\n";
+    size_t index = 0;
+    for(const auto& [name, version] : components)
+    {
+        if(index++ != 0)
+            json << ",\n";
+        json << "    { \"type\": \"library\", \"name\": \""
+             << json_escape(name) << "\", \"version\": \""
+             << json_escape(version) << "\", \"purl\": \"pkg:mlang/"
+             << json_escape(name) << '@' << json_escape(version) << "\" }";
+    }
+    json << "\n  ]\n}\n";
+    if(outputPath.empty() || outputPath == "-")
+        std::cout << json.str();
+    else
+    {
+        std::error_code ec;
+        std::filesystem::create_directories(outputPath.parent_path(), ec);
+        std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
+        output << json.str();
+        if(!output)
+        {
+            pkg_error_line("Failed to write SBOM " + outputPath.string());
+            return 1;
+        }
+        pkg_info_line("Wrote CycloneDX SBOM to " + outputPath.string());
+    }
+    return 0;
+}
+
 } // namespace
 
 int PackageManager::run(int argc, char** argv)
@@ -9152,6 +10416,16 @@ int PackageManager::run(int argc, char** argv)
             commonOverrides.useGlobalCache = false;
             continue;
         }
+        if(arg == "--locked")
+        {
+            commonOverrides.locked = true;
+            continue;
+        }
+        if(arg == "--offline")
+        {
+            commonOverrides.offline = true;
+            continue;
+        }
         if(arg == "--vendor-dir" && i + 1 < argc)
         {
             commonOverrides.vendorDir = std::filesystem::absolute(argv[++i])
@@ -9184,6 +10458,9 @@ int PackageManager::run(int argc, char** argv)
         return value == "--help" || value == "-h" || value == "help" ||
                value == "--tests" || value == "init" || value == "add" ||
                value == "lock" || value == "verify" || value == "vendor" ||
+               value == "package" || value == "publish" ||
+               value == "install" || value == "audit" || value == "sbom" ||
+               value == "sign" || value == "verify-signature" ||
                value == "tree" || value == "why" || value == "fetch" ||
                value == "build" || value == "run" || value == "clean";
     };
@@ -9383,6 +10660,216 @@ int PackageManager::run(int argc, char** argv)
             }
         }
         return 0;
+    }
+
+    if(sub == "sign" || sub == "verify-signature")
+    {
+        if(subIndex + 1 >= argc)
+        {
+            std::cerr << "Usage: " << argv[0] << " pkg " << sub
+                      << " ARCHIVE --key KEY [--signature FILE]\n";
+            return 1;
+        }
+        const std::filesystem::path archive = argv[subIndex + 1];
+        std::string key;
+        std::filesystem::path signature = archive.string() + ".sig";
+        for(int i = subIndex + 2; i < argc; ++i)
+        {
+            const std::string arg = argv[i];
+            if(arg == "--key" && i + 1 < argc)
+                key = argv[++i];
+            else if(arg == "--signature" && i + 1 < argc)
+                signature = argv[++i];
+            else
+            {
+                pkg_error_line("Unknown option for 'pkg " + sub + "': " + arg);
+                return 1;
+            }
+        }
+        if(key.empty() || !std::filesystem::is_regular_file(archive))
+        {
+            pkg_error_line("An existing archive and --key are required");
+            return 1;
+        }
+        return sub == "sign"
+                   ? (sign_archive(archive, key, signature) ? 0 : 1)
+                   : (verify_archive_signature(archive, key, signature) ? 0
+                                                                        : 1);
+    }
+
+    if(sub == "package" || sub == "publish")
+    {
+        std::filesystem::path output;
+        std::string signKey;
+        std::string registryLocation;
+        std::string publicKey;
+        std::string tokenEnv;
+        bool allowExisting = false;
+        for(int i = subIndex + 1; i < argc; ++i)
+        {
+            const std::string arg = argv[i];
+            if(arg == "--output" && i + 1 < argc)
+                output = argv[++i];
+            else if(arg == "--sign-key" && i + 1 < argc)
+                signKey = argv[++i];
+            else if(arg == "--registry" && i + 1 < argc)
+                registryLocation = argv[++i];
+            else if(arg == "--key" && i + 1 < argc)
+                publicKey = argv[++i];
+            else if(arg == "--token-env" && i + 1 < argc)
+                tokenEnv = argv[++i];
+            else if(arg == "--allow-existing")
+                allowExisting = true;
+            else
+            {
+                pkg_error_line("Unknown option for 'pkg " + sub + "': " + arg);
+                return 1;
+            }
+        }
+        auto manifests = collect_target_manifests(manifestPath);
+        if(manifests.empty())
+        {
+            pkg_error_line("No package manifest found");
+            return 1;
+        }
+        auto selected = select_package_manifests(manifests, commonOverrides);
+        if(!selected.has_value())
+            return 1;
+        if(!output.empty() && selected->size() != 1)
+        {
+            pkg_error_line("--output requires exactly one selected package");
+            return 1;
+        }
+        for(const auto& pkg : *selected)
+        {
+            if(sub == "package")
+            {
+                if(!create_package_archive(pkg, output, signKey).has_value())
+                    return 1;
+            }
+            else
+            {
+                auto registry = registry_settings(
+                    &pkg, registryLocation, publicKey);
+                if(!tokenEnv.empty())
+                    registry.tokenEnv = tokenEnv;
+                if(publish_package(pkg, registry, signKey, allowExisting) != 0)
+                    return 1;
+            }
+        }
+        return 0;
+    }
+
+    if(sub == "install")
+    {
+        if(subIndex + 1 >= argc)
+        {
+            std::cerr << "Usage: " << argv[0]
+                      << " pkg install NAME[@REQ] --registry LOCATION "
+                         "[--root DIR] [--key PUBLIC_KEY] [--force] "
+                         "[--require-signature] [--offline]\n";
+            return 1;
+        }
+        const std::string requested = argv[subIndex + 1];
+        std::string registryLocation;
+        std::string publicKey;
+        std::filesystem::path installRoot;
+        bool force = false;
+        bool requireSignature = false;
+        for(int i = subIndex + 2; i < argc; ++i)
+        {
+            const std::string arg = argv[i];
+            if(arg == "--registry" && i + 1 < argc)
+                registryLocation = argv[++i];
+            else if(arg == "--key" && i + 1 < argc)
+                publicKey = argv[++i];
+            else if(arg == "--root" && i + 1 < argc)
+                installRoot = argv[++i];
+            else if(arg == "--force")
+                force = true;
+            else if(arg == "--require-signature")
+                requireSignature = true;
+            else if(arg == "--offline")
+                commonOverrides.offline = true;
+            else
+            {
+                pkg_error_line("Unknown option for 'pkg install': " + arg);
+                return 1;
+            }
+        }
+        std::optional<PackageManifest> configPackage;
+        const auto available = collect_target_manifests(manifestPath);
+        if(!available.empty())
+            configPackage = available.front();
+        const auto registry = registry_settings(
+            configPackage.has_value() ? &*configPackage : nullptr,
+            registryLocation, publicKey);
+        if(installRoot.empty())
+        {
+            if(const char* userHome = std::getenv("HOME"))
+                installRoot = std::filesystem::path(userHome) / ".local";
+            else
+            {
+                pkg_error_line("--root is required when HOME is not set");
+                return 1;
+            }
+        }
+        return install_registry_package(
+            requested, registry, commonOverrides, compilerProgram,
+            std::filesystem::absolute(installRoot), force, requireSignature);
+    }
+
+    if(sub == "audit" || sub == "sbom")
+    {
+        std::string registryLocation;
+        std::string publicKey;
+        std::string database;
+        std::string denySeverity = "high";
+        std::filesystem::path output = "-";
+        for(int i = subIndex + 1; i < argc; ++i)
+        {
+            const std::string arg = argv[i];
+            if(arg == "--registry" && i + 1 < argc)
+                registryLocation = argv[++i];
+            else if(arg == "--key" && i + 1 < argc)
+                publicKey = argv[++i];
+            else if(arg == "--database" && i + 1 < argc)
+                database = argv[++i];
+            else if(arg == "--deny" && i + 1 < argc)
+                denySeverity = argv[++i];
+            else if(arg == "--output" && i + 1 < argc)
+                output = argv[++i];
+            else if(arg == "--format" && i + 1 < argc)
+            {
+                if(std::string(argv[++i]) != "cyclonedx-json")
+                {
+                    pkg_error_line("Only --format cyclonedx-json is supported");
+                    return 1;
+                }
+            }
+            else if(arg == "--offline")
+                commonOverrides.offline = true;
+            else
+            {
+                pkg_error_line("Unknown option for 'pkg " + sub + "': " + arg);
+                return 1;
+            }
+        }
+        auto manifests = collect_target_manifests(manifestPath);
+        if(manifests.empty())
+        {
+            pkg_error_line("No package manifest found");
+            return 1;
+        }
+        auto selected = select_package_manifests(manifests, commonOverrides);
+        if(!selected.has_value())
+            return 1;
+        if(sub == "sbom")
+            return write_sbom(manifestPath, *selected, output);
+        const auto registry = registry_settings(
+            &selected->front(), registryLocation, publicKey);
+        return audit_packages(manifestPath, *selected, registry,
+                              commonOverrides, database, denySeverity);
     }
 
     if(sub == "init")

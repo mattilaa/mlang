@@ -1,0 +1,5 @@
+fn main() -> i32 {
+    println!("signed registry package installed successfully");
+    return 0;
+}
+

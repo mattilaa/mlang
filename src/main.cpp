@@ -1268,7 +1268,8 @@ static bool manifest_requires_cpp_pkg_frontend()
         return true;
     if(content.find("[profile.") != std::string::npos ||
        content.find("[features]") != std::string::npos ||
-       content.find("optional = true") != std::string::npos)
+       content.find("optional = true") != std::string::npos ||
+       content.find("[registry]") != std::string::npos)
         return true;
     return false;
 }
@@ -1313,6 +1314,13 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
        (std::string(argv[subIndex]) == "lock" ||
         std::string(argv[subIndex]) == "verify" ||
         std::string(argv[subIndex]) == "vendor" ||
+        std::string(argv[subIndex]) == "package" ||
+        std::string(argv[subIndex]) == "publish" ||
+        std::string(argv[subIndex]) == "install" ||
+        std::string(argv[subIndex]) == "audit" ||
+        std::string(argv[subIndex]) == "sbom" ||
+        std::string(argv[subIndex]) == "sign" ||
+        std::string(argv[subIndex]) == "verify-signature" ||
         std::string(argv[subIndex]) == "tree" ||
         std::string(argv[subIndex]) == "why"))
         return std::nullopt;
