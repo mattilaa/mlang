@@ -1,0 +1,10 @@
+protocol = 1
+
+[[advisory]]
+id = "MLANG-DEMO-0001"
+package = "ecosystem_hello"
+affected = "<1.3.0"
+severity = "low"
+title = "Demonstration-only advisory"
+url = "https://example.invalid/MLANG-DEMO-0001"
+

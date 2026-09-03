@@ -1,0 +1,28 @@
+[package]
+name = "ergonomic_app"
+version = "1.0.0"
+entry = "src/main.mla"
+
+[dependencies]
+telemetry = { path = "../../packages/telemetry", version = "^1.0", optional = true }
+
+[features]
+default = []
+telemetry = ["dep:telemetry"]
+full = ["telemetry"]
+
+[profile.dev]
+opt_level = "O0"
+compiler_flags = ["--debug"]
+
+[profile.release]
+opt_level = "O3"
+
+[profile.size]
+inherits = "release"
+opt_level = "Oz"
+
+[[task]]
+name = "show-config"
+print = "profile={{option.profile}} telemetry={{option.feature.telemetry}}"
+command = ["true"]

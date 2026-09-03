@@ -2404,6 +2404,11 @@ Supported keys are:
   stores generated task scripts. Defaults to `build`.
 - `deps_dir`: directory where `pkg fetch` stores sources and `pkg build`
   reuses dependency artifacts. Defaults to `<build_dir>/deps`.
+- `global_cache_dir`: content-addressed artifact, Git mirror, and archive cache
+  directory. Relative paths resolve from the package root.
+- `use_global_cache`: set to `false` to disable shared caching for the package.
+- `vendor_dir`: resolve locked dependencies from this project-local vendor
+  tree. Relative paths resolve from the package root.
 - `log_dir`: base directory for package-manager log files.
 - `stdout_log`: file that receives package-manager info lines and command
   stdout.
@@ -2555,6 +2560,28 @@ Each listed member is treated as a directory root under the current project.
 for `mlang.toml` files under those roots and run package operations for each
 discovered subpackage.
 
+For opt-in selection without recursive scanning, use a required, unique
+output target for each `[[include]]`:
+
+```toml
+[[include]]
+path = "apps/editor"
+target = "editor"
+
+[[include]]
+path = "tools/converter/mlang.toml"
+target = "converter"
+```
+
+A directory path resolves to its `mlang.toml`. Included manifests remain
+independent packages: their sources, targets, dependencies, and tasks stay
+relative to the child directory, while outputs are collected separately as
+`build/editor/...` and `build/converter/...`. No unlisted subdirectory is
+included, and sources from different manifests are not combined into one
+binary. See [Package Manager](Package-Manager#explicit-include-packages)
+and `examples/package_manager_includes` for the complete behavior and runnable
+example.
+
 Directory tree example:
 
 ```text
@@ -2602,10 +2629,12 @@ mlang pkg build
 mlang pkg clean
 ```
 
-Source dependencies can now come from Git or from a `tar.gz` URL:
+Source dependencies can come from a local MLang package, Git, or a `tar.gz`
+URL. MLang package dependencies are recursive and version checked:
 
 ```toml
 [dependencies]
+core = { path = "packages/core", version = "^1.2" }
 cjson_git = { git = "https://github.com/DaveGamble/cJSON.git", tag = "v1.7.18", build = "cmake" }
 cjson_tar = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
 ```
@@ -2614,6 +2643,8 @@ Supported source dependency keys are:
 
 - `git`
 - `url`
+- `path`
+- `version`
 - `archive`
 - `rev`
 - `tag`
@@ -2621,9 +2652,100 @@ Supported source dependency keys are:
 - `cmake_args`
 - `subdir`
 - `strip_components`
+- `features`
+- `optional`
+- `default_features`
 
 If `build = "none"` is set, the dependency is fetched but skipped by the
 built-in dependency builders during `mlang pkg build`.
+
+Path dependencies default to `build = "mlang"`. Their `mlang.toml` files are
+resolved recursively, dependencies are built before dependents, and generated
+libraries are linked into the consuming package. Git and archive packages can
+opt into the same behavior with `build = "mlang"`. Requirements support exact
+versions, partial versions, `^`, `~`, comparison ranges, wildcards, and `||`.
+
+Inspect the resolved graph without changing it:
+
+```sh
+mlang pkg tree
+mlang pkg why math
+```
+
+Dependency fetching is reproducible through a root `mlang.lock`. Normal
+fetch/build/run operations create a missing lock and honor exact Git commits
+and archive SHA-256 checksums from an existing lock. Path and fetched MLang
+packages also lock every transitive edge and resolved semantic version. Commit
+the lockfile and use strict or network-free modes in CI:
+
+```sh
+mlang pkg lock
+mlang pkg verify
+mlang pkg build --locked
+mlang pkg build --offline
+```
+
+`--locked` rejects a missing, malformed, or stale lockfile without changing
+it. `--offline` additionally forbids package-manager Git/HTTP access and
+requires all locked sources in the dependency cache. See
+[Reproducible dependency locking](Package-Manager#reproducible-dependency-locking)
+for the lock format, archive cache, verification checks, workspace behavior,
+transitive package versions, and limitations for third-party build scripts.
+
+Build profiles, feature-gated optional dependencies, workspace package
+selection, a content-addressed global cache, and vendoring are also supported:
+
+```toml
+[dependencies]
+telemetry = { path = "packages/telemetry", version = "^1.0", optional = true }
+
+[features]
+default = []
+telemetry = ["dep:telemetry"]
+
+[profile.dev]
+opt_level = "O0"
+compiler_flags = ["--debug"]
+
+[profile.release]
+opt_level = "O3"
+```
+
+```sh
+mlang pkg build -p app --profile dev --features telemetry
+mlang pkg clean -p app --profile dev
+mlang pkg build -p app --release --cache-dir .pkg/global-cache
+mlang pkg vendor vendor -p app
+mlang pkg build -p app --vendor-dir vendor --locked --offline
+```
+
+Profiled outputs default to `build/<profile>/`. The shared cache defaults to
+`$MLANG_PKG_CACHE`, `$XDG_CACHE_HOME/mlang/pkg`, or
+`$HOME/.cache/mlang/pkg`; disable it with `--no-global-cache`. See
+[Build ergonomics](Package-Manager#build-ergonomics-profiles-and-features)
+for profile inheritance, dependency feature forwarding, `--workspace` /
+`--exclude`, cache keys, manifest settings, and offline vendor verification.
+The runnable combined example is
+`examples/package_manager_build_ergonomics`.
+
+The ecosystem workflow adds protocol-v1 registries, packaging, publishing,
+installation, advisory auditing, CycloneDX SBOMs, and detached signatures:
+
+```sh
+mlang pkg package --sign-key private.pem
+mlang pkg publish --registry ./registry --sign-key private.pem
+mlang pkg install 'hello@^1.0' --registry ./registry \
+  --key public.pem --require-signature
+mlang pkg audit --registry ./registry --deny high
+mlang pkg sbom --output build/project.cdx.json
+```
+
+Registry installs select the highest matching non-yanked semantic version,
+verify its SHA-256 and optional RSA/SHA-256 signature, reject unsafe archive
+paths, build in the `release` profile, and write an installation receipt. See
+[Package-manager ecosystem](Package-Manager#ecosystem-registry-packaging-install-audit-sbom-and-signing)
+and [Registry Protocol v1](Registry-Protocol), plus the runnable
+`examples/package_manager_ecosystem` demo.
 
 `pkg add --add-lib` can scaffold the workspace subproject automatically. It:
 
@@ -2960,6 +3082,9 @@ Workspace example:
 - `examples/package_manager_workspace_fetch`
   Demonstrates recursive workspace member discovery plus GitHub `git` and
   `tar.gz` source fetching in sibling subpackages.
+- `examples/package_manager_includes`
+  Demonstrates explicit child-manifest selection and isolated root
+  `build/<target>` output namespaces.
 - `examples/package_manager_static_cjson`
   Demonstrates static linking of a fetched `tar.gz` C dependency.
 - `examples/package_manager_multi_bins`

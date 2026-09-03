@@ -6583,6 +6583,246 @@ Pkg Dependency Toolchains Report Found Missing And Old Versions
     Should Contain    ${failed.stderr}    Install: install fixture-tool-missing
     Should Contain    ${failed.stderr}    Required dependency toolchains are missing or too old.
 
+Pkg Builds Explicitly Included Packages Into Isolated Targets
+    [Documentation]    Verify root [[include]] selection, directory and file
+    ...                paths, MLA frontend delegation, and isolated outputs.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_includes
+    ${setup}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${base}' && cp -R '${EXECDIR}/examples/package_manager_includes' '${base}'
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup.rc}    0
+
+    ${build}=    Run Process    ${MLANG}    pkg    build
+    ...    cwd=${base}    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Included-package build failed (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    Should Not Contain    ${build.stdout}    Build failed.
+    File Should Exist    ${base}/build/editor/editor
+    File Should Exist    ${base}/build/editor/asset-compiler
+    File Should Exist    ${base}/build/converter/converter
+    File Should Not Exist    ${base}/apps/editor/build/editor
+    File Should Not Exist    ${base}/tools/converter/build/converter
+
+    ${editor}=    Run Process    ${base}/build/editor/editor    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${editor.rc}    0
+    Should Contain    ${editor.stdout}    editor package built in its include target
+    ${converter}=    Run Process    ${base}/build/converter/converter    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${converter.rc}    0
+    Should Contain    ${converter.stdout}    converter package built separately
+
+Pkg Lock Pins Git And Verifies Archive Checksums Offline
+    [Documentation]    Verify exact Git revisions, archive SHA-256 locking,
+    ...                locked manifest checks, offline cache use, and tamper detection.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_reproducibility
+    ${origin}=    Catenate    SEPARATOR=    ${base}/git-origin
+    ${project}=    Catenate    SEPARATOR=    ${base}/project
+    ${archive}=    Catenate    SEPARATOR=    ${base}/archive_dep.tar.gz
+    ${setup}=    Catenate    SEPARATOR=\n
+    ...    set -e
+    ...    rm -rf '${base}'
+    ...    mkdir -p '${origin}' '${project}/src' '${base}/archive-root/archive_dep'
+    ...    printf 'locked git fixture\n' > '${origin}/README.txt'
+    ...    git -C '${origin}' init -q
+    ...    git -C '${origin}' config user.email fixture@example.invalid
+    ...    git -C '${origin}' config user.name fixture
+    ...    git -C '${origin}' add README.txt
+    ...    git -C '${origin}' commit -qm initial
+    ...    printf 'locked archive fixture\n' > '${base}/archive-root/archive_dep/data.txt'
+    ...    tar -czf '${archive}' -C '${base}/archive-root' archive_dep
+    ...    printf 'fn main() { println!("reproducible package"); }\n' > '${project}/src/main.mla'
+    ...    cat > '${project}/mlang.toml' <<EOF
+    ...    [package]
+    ...    name = "reproducible_package"
+    ...    version = "0.1.0"
+    ...    entry = "src/main.mla"
+    ...    [dependencies]
+    ...    git_dep = { git = "${origin}", build = "none", spinner = false }
+    ...    archive_dep = { url = "file://${archive}", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
+    ...    EOF
+    ${setup_result}=    Run Process    /bin/sh    -lc    ${setup}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup_result.rc}    0
+    ...    msg=Reproducibility fixture setup failed\n${setup_result.stdout}\n${setup_result.stderr}
+
+    ${lock}=    Run Process    ${MLANG}    pkg    lock
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${lock.rc}    0
+    ...    msg=pkg lock failed\n${lock.stdout}\n${lock.stderr}
+    File Should Exist    ${project}/mlang.lock
+    ${lock_text}=    Get File    ${project}/mlang.lock
+    Should Contain    ${lock_text}    source = "git"
+    Should Contain    ${lock_text}    revision = "
+    Should Contain    ${lock_text}    source = "archive"
+    Should Contain    ${lock_text}    checksum = "sha256:
+
+    ${verify}=    Run Process    ${MLANG}    pkg    verify
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${verify.rc}    0
+    Should Contain    ${verify.stdout}    mlang.lock and fetched dependencies verified.
+
+    ${build}=    Run Process    ${MLANG}    pkg    build    --locked
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    File Should Exist    ${project}/build/reproducible_package
+
+    ${remove_origins}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${origin}' '${archive}'
+    Should Be Equal As Integers    ${remove_origins.rc}    0
+    ${offline}=    Run Process    ${MLANG}    pkg    fetch    --offline
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${offline.rc}    0
+    ...    msg=Offline fetch failed\n${offline.stdout}\n${offline.stderr}
+
+    ${stale}=    Run Process    /bin/sh    -lc
+    ...    cp '${project}/mlang.toml' '${project}/mlang.toml.saved' && sed 's/archive = "tar.gz"/archive = "zip"/' '${project}/mlang.toml.saved' > '${project}/mlang.toml'
+    Should Be Equal As Integers    ${stale.rc}    0
+    ${locked_stale}=    Run Process    ${MLANG}    pkg    fetch    --locked
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${locked_stale.rc}    0
+    Should Contain    ${locked_stale.stderr}    mlang.lock is out of date
+    ${restore}=    Run Process    /bin/sh    -lc
+    ...    mv '${project}/mlang.toml.saved' '${project}/mlang.toml'
+    Should Be Equal As Integers    ${restore.rc}    0
+
+    ${tamper}=    Run Process    /bin/sh    -lc
+    ...    printf tampered >> '${project}/build/deps/.archives/archive_dep.tar.gz'
+    Should Be Equal As Integers    ${tamper.rc}    0
+    ${verify_tampered}=    Run Process    ${MLANG}    pkg    verify
+    ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${verify_tampered.rc}    0
+    Should Contain    ${verify_tampered.stderr}    Archive verification failed
+
+Pkg Resolves Transitive Path Packages And Semantic Versions
+    [Documentation]    Verify path MLang packages, transitive builds, semantic
+    ...                constraints, deterministic graph inspection, and locked versions.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_path_dependencies
+    ${setup}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${base}' && cp -R '${EXECDIR}/examples/package_manager_path_dependencies' '${base}'
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup.rc}    0
+
+    ${tree}=    Run Process    ${MLANG}    pkg    tree
+    ...    cwd=${base}    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${tree.rc}    0
+    Should Contain    ${tree.stdout}    core ^1.2
+    Should Contain    ${tree.stdout}    math ~2.1
+    ${why}=    Run Process    ${MLANG}    pkg    why    math
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${why.rc}    0
+    Should Contain    ${why.stdout}    path_dependency_app -> core -> math
+
+    ${lock}=    Run Process    ${MLANG}    pkg    lock
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${lock.rc}    0
+    ${lock_text}=    Get File    ${base}/mlang.lock
+    Should Contain    ${lock_text}    resolved_version = "1.2.4"
+    Should Contain    ${lock_text}    resolved_version = "2.1.3"
+
+    ${build}=    Run Process    ${MLANG}    pkg    build    --locked
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${base}/build/path_dependency_app    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    transitive path dependency result: 42
+    ${verify}=    Run Process    ${MLANG}    pkg    verify
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${verify.rc}    0
+
+    ${bad_version}=    Run Process    /bin/sh    -lc
+    ...    sed 's/version = "~2.1"/version = "^3.0"/' '${base}/packages/core/mlang.toml' > '${base}/packages/core/mlang.toml.new' && mv '${base}/packages/core/mlang.toml.new' '${base}/packages/core/mlang.toml'
+    Should Be Equal As Integers    ${bad_version.rc}    0
+    ${rejected}=    Run Process    ${MLANG}    pkg    build    --locked
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${rejected.rc}    0
+    Should Contain    ${rejected.stderr}    out of date for transitive dependency 'math'
+
+Pkg Supports Profiles Features Selection Cache And Vendoring
+    [Documentation]    Verify build profiles, optional feature dependencies,
+    ...                workspace selection, global artifact reuse, and offline vendors.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_build_ergonomics
+    ${cache}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_global_cache
+    ${setup}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${base}' '${cache}' && cp -R '${EXECDIR}/examples/package_manager_build_ergonomics' '${base}'
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup.rc}    0
+
+    ${build}=    Run Process    ${MLANG}    pkg    build    -p    ergonomic_app
+    ...    --profile    dev    --features    telemetry    --cache-dir    ${cache}    --locked
+    ...    cwd=${base}    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Ergonomics build failed\n${build.stdout}\n${build.stderr}
+    File Should Exist    ${base}/apps/ergonomic_app/build/dev/ergonomic_app
+    ${suffix}=    Evaluate    '.dylib' if __import__('platform').system() == 'Darwin' else ('.dll' if __import__('platform').system() == 'Windows' else '.so')
+    ${prefix}=    Evaluate    '' if __import__('platform').system() == 'Windows' else 'lib'
+    File Should Exist    ${base}/packages/telemetry/build/dev/${prefix}telemetry${suffix}
+    File Should Not Exist    ${base}/apps/utility_app/build/dev/utility_app
+    ${run}=    Run Process    ${base}/apps/ergonomic_app/build/dev/ergonomic_app
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    ergonomic app result: 42
+
+    ${clean_app}=    Run Process    ${MLANG}    pkg    clean    -p    ergonomic_app
+    ...    --profile    dev    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${clean_app.rc}    0
+    ${clean_dep}=    Run Process    ${MLANG}    pkg    clean    --profile    dev
+    ...    cwd=${base}/packages/telemetry
+    Should Be Equal As Integers    ${clean_dep.rc}    0
+    ${cached}=    Run Process    ${MLANG}    pkg    build    -p    ergonomic_app
+    ...    --profile    dev    --features    telemetry    --cache-dir    ${cache}    --locked
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cached.rc}    0
+    Should Contain    ${cached.stdout}    Global cache hit for target 'telemetry'
+    Should Contain    ${cached.stdout}    Global cache hit for target 'ergonomic_app'
+
+    ${vendor}=    Run Process    ${MLANG}    pkg    vendor    vendor
+    ...    -p    ergonomic_app    --cache-dir    ${cache}
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${vendor.rc}    0
+    File Should Exist    ${base}/vendor/telemetry/.mlang-vendor-source
+    ${verify}=    Run Process    ${MLANG}    pkg    verify    -p    ergonomic_app
+    ...    --vendor-dir    ${base}/vendor
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${verify.rc}    0
+    Should Contain    ${verify.stdout}    Verified vendored dependency telemetry
+
+    ${offline}=    Run Process    ${MLANG}    pkg    build    -p    ergonomic_app
+    ...    --release    --features    telemetry    --vendor-dir    ${base}/vendor
+    ...    --cache-dir    ${cache}    --locked    --offline
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${offline.rc}    0
+    File Should Exist    ${base}/apps/ergonomic_app/build/release/ergonomic_app
+
+Pkg Supports Signed Registry Install Audit And SBOM
+    [Documentation]    Verify packaging, local registry publication, semantic
+    ...                install, checksums, signatures, audit policy, and CycloneDX.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_ecosystem
+    ${setup}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${base}' && cp -R '${EXECDIR}/examples/package_manager_ecosystem' '${base}'
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup.rc}    0
+
+    ${demo}=    Run Process    /bin/sh    ./run_demo.sh
+    ...    cwd=${base}    env:MLANG=${MLANG}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${demo.rc}    0
+    ...    msg=Ecosystem demo failed\n${demo.stdout}\n${demo.stderr}
+    Should Contain    ${demo.stdout}    Verified package signature
+    Should Contain    ${demo.stdout}    signed registry package installed successfully
+    Should Contain    ${demo.stdout}    MLANG-DEMO-0001 [low]
+    File Should Exist    ${base}/build/ecosystem.cdx.json
+    ${sbom}=    Get File    ${base}/build/ecosystem.cdx.json
+    Should Contain    ${sbom}    "bomFormat": "CycloneDX"
+    Should Contain    ${sbom}    pkg:mlang/ecosystem_hello@1.2.0
+    File Should Exist    ${base}/build/install/share/mlang/packages/ecosystem_hello-1.2.0.json
+
+    ${tamper}=    Run Process    /bin/sh    -lc
+    ...    printf tampered >> '${base}/build/registry/packages/ecosystem_hello/1.2.0/ecosystem_hello-1.2.0.tar.gz'
+    Should Be Equal As Integers    ${tamper.rc}    0
+    ${rejected}=    Run Process    ${MLANG}    pkg    install    ecosystem_hello
+    ...    --config    ${base}/mlang.toml    --root    ${base}/build/tampered-install
+    ...    --cache-dir    ${base}/build/tampered-cache    --require-signature
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${rejected.rc}    0
+    Should Contain    ${rejected.stderr}    Registry checksum mismatch
+
 Pkg Builds And Links MLang Dynamic Library Target
     [Documentation]    Verify [[lib]] output, depends_on build ordering,
     ...                automatic linking, and loader-relative execution.

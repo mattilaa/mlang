@@ -1,0 +1,7 @@
+extern fn core_score__i32(value: i32) -> i32;
+
+fn main() -> i32 {
+    let result: i32 = core_score__i32(20);
+    println!("transitive path dependency result: {}", result);
+    return result == 42 ? 0 : 1;
+}

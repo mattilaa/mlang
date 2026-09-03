@@ -98,24 +98,37 @@ fn print_usage() -> void {
     println!("  --backend <bin>       Compiler binary used by build/delegate (default: mlang)");
     println!("  --config <file>       Manifest path (default: mlang.toml)");
     println!("  --config=<file>       Same, inline form");
+    println!("  --profile NAME, -P NAME, --release");
+    println!("  --features A,B [--all-features] [--no-default-features]");
+    println!("  --package NAME, -p NAME, --workspace, --exclude NAME");
+    println!("  --cache-dir DIR, --no-global-cache, --vendor-dir DIR");
+    println!("                          (delegated to the C++ backend)");
     println!("");
     println!("Subcommands:");
     println!("  init                  Scaffold mlang.toml and src/main.mla");
     println!("  add <name> [--git URL [--rev REV] [--tag TAG] [--submodules]]");
+    println!("  add <name> --path DIR [--version REQ] (delegated to the C++ backend)");
     println!("             [--url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]]");
     println!("             [--pkg-config NAME] [--system]");
     println!("             [--add-lib [--project-dir DIR]]");
+    println!("  lock      [--offline] (delegated to the C++ backend)");
+    println!("  verify    (delegated to the C++ backend)");
+    println!("  vendor [DIR] (delegated to the C++ backend)");
+    println!("  package, publish, install, audit, sbom (delegated to C++)");
+    println!("  sign, verify-signature (delegated to the C++ backend)");
+    println!("  tree      (delegated to the C++ backend)");
+    println!("  why NAME  (delegated to the C++ backend)");
     println!("  fetch     [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
     println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
-    println!("            [--task-print-to-stdout-log]");
+    println!("            [--task-print-to-stdout-log] [--locked] [--offline]");
     println!("  build     [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--asan]");
     println!("            [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
     println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
-    println!("            [--task-print-to-stdout-log]");
+    println!("            [--task-print-to-stdout-log] [--locked] [--offline]");
     println!("  run <task> [--tasks] [--color] [--asan] [--build-dir DIR] [--deps-dir DIR]");
     println!("            [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE]");
     println!("            [--warn-log FILE] [--task-print-to-stdout-log]");
-    println!("            [--option KEY=VALUE]");
+    println!("            [--option KEY=VALUE] [--locked] [--offline]");
     println!("            (delegated to the C++ backend)");
     println!("  clean     [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
     println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
@@ -725,6 +738,9 @@ fn parse_tool_mlang_list(content: str8, wanted_key: str8) -> list<str8> {
 }
 
 fn manifest_uses_build_config(content: str8) -> i32 {
+    if (contains(content, "[[include]]") == 1) {
+        return 1;
+    }
     if (contains(content, "[[lib]]") == 1) {
         return 1;
     }
@@ -750,7 +766,7 @@ fn has_pkg_dir_override_args(argv: list<str8>, start_idx: i64) -> i32 {
     var i: i64 = start_idx;
     while (i < n) {
         let arg: str8 = argv[i];
-        if (eq(arg, "--build-dir") == 1 || eq(arg, "--deps-dir") == 1 || eq(arg, "--deps") == 1) {
+        if (eq(arg, "--build-dir") == 1 || eq(arg, "--deps-dir") == 1 || eq(arg, "--deps") == 1 || eq(arg, "--locked") == 1 || eq(arg, "--offline") == 1) {
             return 1;
         }
         i = i + 1;
@@ -1113,7 +1129,7 @@ fn run_build(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str
             i = i + 1;
             continue;
         }
-        if (eq(arg, "--asan") == 1) {
+        if (eq(arg, "--asan") == 1 || eq(arg, "--locked") == 1 || eq(arg, "--offline") == 1) {
             return delegate_pkg_to_cpp(backend, "build", argv, start_idx + 1);
         }
         println!("Unknown option for 'pkg build': {}", arg);
@@ -1340,7 +1356,17 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return run_init(manifest);
     }
     if (eq(sub, "add") == 1) {
+        var add_i: i64 = idx + 1;
+        while (add_i < argv.len()) {
+            if (eq(argv[add_i], "--path") == 1 || eq(argv[add_i], "--version") == 1) {
+                return delegate_pkg_to_cpp(backend, sub, argv, idx + 1);
+            }
+            add_i = add_i + 1;
+        }
         return run_add(argv, idx, manifest);
+    }
+    if (eq(sub, "lock") == 1 || eq(sub, "verify") == 1 || eq(sub, "vendor") == 1 || eq(sub, "package") == 1 || eq(sub, "publish") == 1 || eq(sub, "install") == 1 || eq(sub, "audit") == 1 || eq(sub, "sbom") == 1 || eq(sub, "sign") == 1 || eq(sub, "verify-signature") == 1 || eq(sub, "tree") == 1 || eq(sub, "why") == 1) {
+        return delegate_pkg_to_cpp(backend, sub, argv, idx + 1);
     }
     if (eq(sub, "fetch") == 1) {
         return run_fetch(argv, idx, manifest, backend);

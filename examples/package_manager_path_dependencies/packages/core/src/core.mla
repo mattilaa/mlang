@@ -1,0 +1,5 @@
+extern fn math_double__i32(value: i32) -> i32;
+
+pub fn core_score(value: i32) -> i32 {
+    return math_double__i32(value) + 2;
+}

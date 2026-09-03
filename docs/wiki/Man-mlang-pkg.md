@@ -2,7 +2,7 @@
 # `mlang-pkg` manual
 
 ```roff
-.TH MLANG-PKG 1 "May 2026" "MLang" "User Commands"
+.TH MLANG-PKG 1 "September 2026" "MLang" "User Commands"
 .SH NAME
 mlang-pkg \- package manager and task runner interface exposed as \fBmlang pkg\fR
 .SH SYNOPSIS
@@ -13,6 +13,26 @@ mlang-pkg \- package manager and task runner interface exposed as \fBmlang pkg\f
 .B mlang
 .B pkg
 [\fB\-\-config\fR \fIFILE\fR] add \fINAME\fR [\fIdependency options\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] lock [\fB\-\-offline\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] verify
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] vendor [\fIDIR\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] tree
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] why \fIPACKAGE\fR
 .br
 .B mlang
 .B pkg
@@ -29,6 +49,28 @@ mlang-pkg \- package manager and task runner interface exposed as \fBmlang pkg\f
 .B mlang
 .B pkg
 [\fB\-\-config\fR \fIFILE\fR] clean [\fIclean options\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] package [\fB\-\-output\fR \fIFILE\fR] [\fB\-\-sign\-key\fR \fIKEY\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] publish \fB\-\-registry\fR \fILOCATION\fR
+.br
+.B mlang
+.B pkg
+install \fINAME
+R[@\fIREQUIREMENT
+R] \fB\-\-registry\fR \fILOCATION\fR
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] audit [\fB\-\-database\fR \fIFILE\fR]
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] sbom [\fB\-\-output\fR \fIFILE\fR]
 .br
 .B mlang
 .B pkg
@@ -58,11 +100,33 @@ Create a new package manifest plus starter
 content.
 .TP
 .B add
-Add a dependency declaration. Supported sources include Git repositories, URL
-archives, pkg-config packages, and system dependencies.
+Add a dependency declaration. Supported sources include local MLang package
+paths, Git repositories, URL archives, pkg-config packages, and system
+dependencies.
 .TP
 .B fetch
 Resolve and download dependencies without building project outputs.
+.TP
+.B lock
+Resolve sources into a deterministic root
+.IR mlang.lock ,
+recording exact Git revisions and archive SHA-256 checksums.
+.TP
+.B verify
+Check manifest-to-lock consistency and cached dependency integrity without
+network access.
+.TP
+.B vendor [\fIDIR\fR]
+Copy the complete locked dependency graph into a project-local tree for
+locked offline builds.
+.TP
+.B tree
+Print direct and transitive dependencies with sources, requirements, and
+resolved package versions.
+.TP
+.B why \fIPACKAGE\fR
+Print every dependency path from the selected root to
+.IR PACKAGE .
 .TP
 .B build
 Build package targets. Supports optimization selection and optional Ninja or
@@ -75,6 +139,23 @@ Execute a named manifest task, honoring declared task dependencies.
 Remove build outputs and, with
 .BR \-\-deps ,
 dependency artifacts.
+.TP
+.B package
+Create a source archive and SHA-256 sidecar, optionally with a detached
+RSA/SHA-256 signature.
+.TP
+.B publish
+Publish an immutable version to a protocol-v1 local or HTTP registry.
+.TP
+.B install
+Resolve the highest matching non-yanked registry version, verify it, build its
+release profile, and install binaries, libraries, and a receipt.
+.TP
+.B audit
+Check root and locked transitive package versions against an advisory feed.
+.TP
+.B sbom
+Write a CycloneDX 1.5 JSON software bill of materials.
 .SH COMMON OPTIONS
 .TP
 .B \-\-config \fIFILE\fR
@@ -86,6 +167,64 @@ Override the build output directory.
 .TP
 .B \-\-deps\-dir \fIDIR\fR
 Override the dependency checkout/cache directory.
+.TP
+.B \-\-profile \fINAME\fR, \-P \fINAME\fR
+Select a named manifest build profile. Profiled outputs default to
+.IR build/NAME .
+.TP
+.B \-\-release
+Alias for
+.BR \-\-profile " release".
+.TP
+.B \-\-features \fIA,B\fR
+Enable a comma-separated set of package features.
+.TP
+.B \-\-all\-features
+Enable all declared package features and optional dependencies.
+.TP
+.B \-\-no\-default\-features
+Do not enable the manifest's default feature set.
+.TP
+.B \-\-package \fINAME\fR, \-p \fINAME\fR
+Select a workspace package by manifest package name. Repeatable.
+.TP
+.B \-\-workspace
+Explicitly select every discovered workspace package.
+.TP
+.B \-\-exclude \fINAME\fR
+Remove a package from the workspace selection. Repeatable.
+.TP
+.B \-\-cache\-dir \fIDIR\fR
+Override the content-addressed global artifact and source cache.
+.TP
+.B \-\-no\-global\-cache
+Disable shared artifact, archive, and Git mirror caching.
+.TP
+.B \-\-vendor\-dir \fIDIR\fR
+Resolve dependencies from a vendor tree. Combine with
+.B \-\-locked \-\-offline
+for network-free reproducible builds.
+.TP
+.B \-\-registry \fILOCATION\fR
+Use a local directory, file URL, or HTTP protocol-v1 registry.
+.TP
+.B \-\-key \fIPUBLIC_KEY\fR
+Set the trusted package-signing public key for installation or verification.
+.TP
+.B \-\-require\-signature
+Reject unsigned registry releases.
+.TP
+.B \-\-root \fIDIR\fR
+Set the installation prefix instead of
+.IR $HOME/.local .
+.TP
+.B \-\-database \fIFILE_OR_URL\fR
+Use an explicit advisory database for
+.BR audit .
+.TP
+.B \-\-deny \fISEVERITY\fR
+Fail audit at low, medium, high, critical, or any matching severity. The
+default is high.
 .TP
 .B \-\-log\-dir \fIDIR\fR
 Write task logs below
@@ -106,6 +245,13 @@ Write warning output to
 .B \-\-task\-print\-to\-stdout\-log
 Mirror task-print output into the configured stdout log.
 .TP
+.B \-\-locked
+Require a present, current lockfile and refuse to modify it.
+.TP
+.B \-\-offline
+Require a current lockfile and cached sources, and do not perform Git or HTTP
+fetches.
+.TP
 .B \-\-tasks
 Show the expanded task tree instead of executing silently.
 .TP
@@ -123,6 +269,12 @@ Pass a task option override to
 Request AddressSanitizer build settings when supported by the selected task or
 build flow.
 .SH ADD COMMAND SOURCES
+.TP
+.B \-\-path \fIDIR\fR
+Add an MLang package kept at a local directory or manifest path.
+.TP
+.B \-\-version \fIREQUIREMENT\fR
+Require a semantic package version.
 .TP
 .B \-\-git \fIURL\fR
 Add a Git-based dependency.
@@ -157,6 +309,45 @@ Declare a dependency as system-provided.
 .TP
 .B \-\-add\-lib
 Also add the dependency as a linkable package library entry.
+.SH REPRODUCIBLE LOCKFILE
+Normal fetch, build, and run operations create a missing
+.I mlang.lock
+and honor exact sources from an existing lock. Git dependencies are checked
+out detached at the recorded commit. Downloaded archives are retained in the
+dependency cache and verified using SHA-256 before extraction.
+.PP
+Use
+.B \-\-locked
+in CI to reject missing or stale lockfiles. After an online fetch, use
+.B \-\-offline
+to operate from locked Git objects and cached archives. Workspaces and explicit
+include manifests share the lockfile beside the root manifest.
+.SH MLANG DEPENDENCY MODEL
+Path dependencies default to
+.B build = "mlang"
+and are built before their dependents. Git and archive sources opt into MLang
+package behavior with the same build value. Their manifests are traversed
+recursively, and dependency keys must match the child package names.
+.PP
+Semantic requirements support exact and partial versions, caret and tilde
+ranges, comparison ranges, wildcards, and alternatives separated with
+.BR || .
+Resolved versions and each transitive edge are written to the root lockfile.
+Cycles and different sources selected for the same package name are errors.
+.SH REGISTRY AND SUPPLY CHAIN
+Registry protocol v1 uses static
+.IR index/<package>.toml
+files that point to immutable archives and mandatory SHA-256 values. Optional
+detached signatures are verified with an explicitly configured trust key.
+HTTP publication sends an authenticated multipart PUT to
+.IR /v1/packages/<package>/<version> ;
+the token is read from the environment variable named by
+.IR [registry].token_env .
+.PP
+Package archives reject path dependencies and symbolic links. Installation
+checks hashes before extraction, rejects unsafe archive paths, and records the
+selected version, registry, and checksum. Audit feeds use semantic version
+ranges, while SBOM output follows CycloneDX 1.5 JSON.
 .SH LIBRARY TARGETS
 Declare an MLang library with
 .BR [[lib]] .
@@ -182,6 +373,30 @@ depends_on = ["arithmetic"]
 name = "arithmetic"
 entry = "src/arithmetic.mla"
 .fi
+.SH EXPLICIT PACKAGE INCLUDES
+A coordinator manifest can select independent child packages without recursive
+workspace discovery. Each
+.B [[include]]
+requires a child manifest path and a unique output target.
+.PP
+.nf
+[[include]]
+path = "apps/editor"
+target = "editor"
+
+[[include]]
+path = "tools/converter/mlang.toml"
+target = "converter"
+.fi
+.PP
+A directory path resolves to its
+.BR mlang.toml .
+The child retains its own source root, dependencies, tasks, and target
+declarations. Artifacts are collected under
+.BR build/<target>/ ,
+and fetched dependencies under
+.BR build/<target>/deps/ .
+Unlisted manifests are not scanned or built.
 .SH MANIFEST MODES
 When one or more manifest paths are passed directly instead of a primary
 subcommand,
@@ -203,12 +418,24 @@ and
 .TP
 .B MLANG_PKG_CACHE_KEY
 Influence the cache key used for compiled helper tool frontends.
+.TP
+.B MLANG_PKG_CACHE
+Set the global content-addressed package artifact, archive, and Git mirror
+cache directory. If unset, XDG_CACHE_HOME or HOME provides the default.
 .SH EXAMPLES
 .nf
 mlang pkg init
 mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
 mlang pkg fetch
 mlang pkg build -O3 --ninja
+mlang pkg build -p editor --profile dev --features telemetry
+mlang pkg vendor vendor
+mlang pkg build --vendor-dir vendor --locked --offline
+mlang pkg package --sign-key private.pem
+mlang pkg publish --registry ./registry --sign-key private.pem
+mlang pkg install 'hello@^1.0' --registry ./registry --key public.pem --require-signature
+mlang pkg audit --registry ./registry --deny high
+mlang pkg sbom --output build/project.cdx.json
 mlang pkg run build-all --tasks
 mlang pkg run qemu-run --option userspace=gnu
 mlang pkg clean --deps

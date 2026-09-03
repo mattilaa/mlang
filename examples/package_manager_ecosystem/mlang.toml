@@ -1,0 +1,14 @@
+[package]
+name = "ecosystem_hello"
+version = "1.2.0"
+entry = "src/main.mla"
+
+[registry]
+location = "build/registry"
+public_key = "build/keys/public.pem"
+
+[dependencies]
+
+[profile.release]
+opt_level = "O2"
+

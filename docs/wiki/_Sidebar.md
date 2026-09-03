@@ -85,6 +85,7 @@
 - [[Bootstrap|Bootstrap]]
 - [[mlangpkg|Mlangpkg]]
 - [[Package Manager|Package-Manager]]
+- [[Registry Protocol v1|Registry-Protocol]]
 - [[Tests|Tests]]
 
 ## Examples
