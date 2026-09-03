@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BUILD_NUMBER: ${{ github.run_number }}
+      CC: clang-17
+      CXX: clang++-17
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -21,7 +23,6 @@ jobs:
             -DMLANG_VERSION_BUILD=${BUILD_NUMBER}
       - name: Build
         run: |
-          echo "Bootstrap stack limit: $(ulimit -s) KiB"
           cmake --build build --target mlang mlangd-mla mlang_std
       - name: LSP integration transcript
         run: |

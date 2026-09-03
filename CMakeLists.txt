@@ -531,46 +531,27 @@ add_custom_command(
 )
 
 add_custom_target(mlang_format DEPENDS ${MLANG_FORMAT_STAMP})
-option(MLANGD_BUILD_FORMATTER_DEPENDENCY
-       "Build the self-hosted formatter whenever the C++ mlangd target is built"
-       OFF)
-message(STATUS
-        "Build self-hosted mlang-format with mlangd: ${MLANGD_BUILD_FORMATTER_DEPENDENCY}")
-if(MLANGD_BUILD_FORMATTER_DEPENDENCY)
-    add_dependencies(mlangd mlang_format)
-endif()
 
-# Bootstrap-built MLang language server scaffold.
+# Bootstrap-built MLang language server.
 set(MLANGD_MLA_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/main.mla)
 set(MLANGD_MLA_FORMAT_CONFIG_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlangd-mla/format_config.mla)
 set(MLANGD_MLA_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla)
-set(MLANGD_LL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.ll)
+set(MLANGD_BC_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.bc)
 set(MLANGD_IR_OBJECT_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla-ir.o)
 set(MLANGD_MLA_STAMP ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.stamp)
 
-# mlangd-mla is a large self-hosted module. LLVM 15/17 bootstrap compilers can
-# overflow Linux's default process stack while lowering it, which appears as an
-# otherwise unexplained exit 139. The resulting server still uses normal limits.
-set(MLANGD_MLA_COMPILER_COMMAND $<TARGET_FILE:mlang>)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set(MLANGD_MLA_COMPILER_COMMAND
-        /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_with_large_stack.sh
-        $<TARGET_FILE:mlang>)
-endif()
-
 add_custom_command(
     OUTPUT ${MLANGD_MLA_STAMP}
-    COMMAND ${MLANGD_MLA_COMPILER_COMMAND}
-            -emit-llvm ${MLANGD_MLA_SOURCE}
+    COMMAND $<TARGET_FILE:mlang> -emit-bc ${MLANGD_MLA_SOURCE}
             --no-tests
             -Wno-unwrap
             -O0
-            -o ${MLANGD_LL_OUTPUT}
+            -o ${MLANGD_BC_OUTPUT}
     COMMAND ${MLANG_CLANGXX_EXE}
             -x ir
             -c
-            ${MLANGD_LL_OUTPUT}
+            ${MLANGD_BC_OUTPUT}
             -o ${MLANGD_IR_OBJECT_OUTPUT}
     COMMAND ${MLANG_CLANGXX_EXE}
             -o ${MLANGD_MLA_OUTPUT}
@@ -588,10 +569,9 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E touch ${MLANGD_MLA_STAMP}
     DEPENDS mlang mlang_std ${MLANGD_MLA_SOURCE}
             ${MLANGD_MLA_FORMAT_CONFIG_SOURCE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_with_large_stack.sh
             ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMENT "Building mlangd-mla via LLVM IR + clang++ host link"
+    COMMENT "Building mlangd-mla via LLVM bitcode + clang++ host link"
     VERBATIM
 )
 
