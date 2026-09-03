@@ -923,11 +923,15 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
     // Emit definitions for module functions that were loaded via `mod` and
     // referenced through fully-qualified calls (e.g. std::x::foo()) even when
-    // they were not pulled in by `use`.
+    // they were not pulled in by `use`. Generating one definition may discover
+    // and append more deferred definitions, so treat the vector as a work queue.
+    // A range-for iterator is invalidated when push_back reallocates the vector
+    // and caused Linux bootstrap builds of mlangd-mla to segfault here.
     if(!deferredModuleFunctionDefs.empty())
     {
-        for(auto* fn : deferredModuleFunctionDefs)
+        for(std::size_t i = 0; i < deferredModuleFunctionDefs.size(); ++i)
         {
+            auto* fn = deferredModuleFunctionDefs[i];
             if(!fn)
                 continue;
             if(fn->isTest && !includeTests)
