@@ -2283,26 +2283,11 @@ fn load_document_symbols(target_uri: str8) -> list<DocumentSymbol> {
     let s: SessionRef = current_session();
     let cr: result<i32, str8> = s.document_symbol_count(target_uri);
     if cr.is_err() { return out; }
-    let n: i32 = match cr {
-        Ok(v) => v,
-        Err(_e) => 0
-    };
+    let n: i32 = cr.unwrap();
     for i in 0..n {
         let sr: result<DocumentSymbol, str8> = s.document_symbol_get(target_uri, i);
         if sr.is_err() { continue; }
-        let sym: DocumentSymbol = match sr {
-            Ok(v) => v,
-            Err(_e) => DocumentSymbol {
-                id: String::new(),
-                name: String::new(),
-                type_info: String::new(),
-                signature: String::new(),
-                documentation: String::new(),
-                kind: 0,
-                line: 0,
-                column: 0
-            }
-        };
+        let sym: DocumentSymbol = sr.unwrap();
         out.push(sym);
     }
     return out;
