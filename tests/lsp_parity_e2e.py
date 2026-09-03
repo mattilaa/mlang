@@ -32,13 +32,13 @@ def open_doc(client: JsonRpcClient, path: Path, text: str, version: int = 1) -> 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mlangd", default="build/mlangd-mla")
+    ap.add_argument("--mlangd", default="build/mlangd")
     ap.add_argument("--bulk-files", type=int, default=220)
     args = ap.parse_args()
 
     mlangd = Path(args.mlangd)
     if not mlangd.exists():
-        raise SystemExit(f"mlangd-mla not found: {mlangd}")
+        raise SystemExit(f"mlangd not found: {mlangd}")
 
     with tempfile.TemporaryDirectory(prefix="mlangd_lsp_parity_") as td:
         root = Path(td)

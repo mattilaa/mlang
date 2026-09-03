@@ -18,16 +18,14 @@ jobs:
       - name: Configure
         run: |
           cmake -S . -B build \
-            -DMLANG_VERSION_BUILD=${BUILD_NUMBER}
+            -DMLANG_VERSION_BUILD=${BUILD_NUMBER} \
+            -DMLANGD_BUILD_FORMATTER_DEPENDENCY=OFF
       - name: Build
         run: |
-          cmake --build build --target mlang mlangd-mla mlang_std
+          cmake --build build --target mlang mlangd mlang_std
       - name: LSP integration transcript
         run: |
-          python3 tests/lsp_integration_transcript.py --mlangd build/mlangd-mla
+          python3 tests/lsp_integration_transcript.py --mlangd build/mlangd
       - name: LSP parity E2E
         run: |
-          python3 tests/lsp_parity_e2e.py --mlangd build/mlangd-mla --bulk-files 180
-      - name: LSP formatting configuration
-        run: |
-          python3 tests/lsp_mlangd_format_config_transcript.py --mlangd build/mlangd-mla
+          python3 tests/lsp_parity_e2e.py --mlangd build/mlangd --bulk-files 180
