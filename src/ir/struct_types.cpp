@@ -87,8 +87,16 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         layouts.push_back(layout);
     }
 
-    llvm::StructType* structType =
-        llvm::StructType::create(context, memberTypes, node->name);
+    llvm::StructType* structType = getStructType(node->name);
+    if(structType)
+    {
+        if(structType->isOpaque())
+            structType->setBody(memberTypes, false);
+    }
+    else
+    {
+        structType = llvm::StructType::create(context, memberTypes, node->name);
+    }
     structTypes[node->name] = structType;
     structMembers[node->name] = members;
     structFieldLayouts[node->name] = layouts;
@@ -391,4 +399,3 @@ llvm::Value* CodeGenerator::coerceTraitObjectValue(llvm::Value* value,
                                         "trait.obj.coerced.vtable");
     return coerced;
 }
-

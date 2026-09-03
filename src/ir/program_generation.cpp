@@ -5,7 +5,9 @@
 #include "ir/return_inference.h"
 #include "llvm_compat.h"
 
+#include <cstdlib>
 #include <functional>
+#include <iostream>
 #include <llvm/Config/llvm-config.h>
 #include <unordered_map>
 #include <unordered_set>
@@ -16,8 +18,18 @@ using mlang::ir_detail::normalize_target_arch_name;
 using mlang::ir_detail::common::Helpers;
 using mlang::ir_detail::return_inference::infer_function_return_type;
 
+namespace
+{
+void trace_generation_phase(const std::string& phase)
+{
+    if(std::getenv("MLANG_TRACE_PHASES") != nullptr)
+        std::cerr << "mlang generation: " << phase << std::endl;
+}
+} // namespace
+
 void CodeGenerator::generateCode(ProgramNode* program)
 {
+    trace_generation_phase("initialize");
     globalNamedValues.clear();
     globalConstantVariables.clear();
     globalVariableTypes.clear();
@@ -63,6 +75,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
         module->appendModuleInlineAsm(moduleAsm->asmTemplate);
     }
 
+    trace_generation_phase("builtins");
     ensureOptionBuiltin(program);
     ensureResultBuiltin(program);
 
@@ -86,8 +99,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
+    trace_generation_phase("type-aliases");
     resolveTypeAliasesInProgram(program);
 
+    trace_generation_phase("constexpr-declarations");
     for(auto* cexprDecl : program->cexprDecls)
     {
         if(cexprDecl)
@@ -108,6 +123,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
     TypeNode::TypeKind mainArgcKind = TypeNode::TYPE_VOID;
     std::vector<FunctionDefNode*> testFunctions;
 
+    trace_generation_phase("return-inference");
     if(program->functionList)
     {
         for(auto* fn : program->functionList->functions)
@@ -284,6 +300,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
+    trace_generation_phase("type-validation");
     // Reserved type keywords and type/name conflicts.
     const std::unordered_set<std::string> reservedTypeNames = {
         "void", "bool", "f32", "f64", "str8", "str16", "list", "map", "tuple",
@@ -387,6 +404,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
+    trace_generation_phase("enum-definitions");
     if(program->enumList)
     {
         for(auto* en : program->enumList->enums)
@@ -456,6 +474,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
     {
         for(auto structDef : program->structList->structs)
         {
+            if(!structDef)
+                continue;
             if(structDef->isGeneric())
             {
                 // Store as template for later instantiation
@@ -703,6 +723,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
     // Repopulate structImplementedTraits after the cleanup above, so the
     // super-trait validation can see all concrete impls in the program.
+    trace_generation_phase("trait-impl-validation");
     if(program->implList)
     {
         for(auto* impl : program->implList->impls)
@@ -726,6 +747,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
     {
         for(auto impl : program->implList->impls)
         {
+            if(!impl)
+                continue;
             if(!impl->typeParams.empty())
             {
                 // This is a generic impl block
@@ -736,26 +759,54 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
     // Generate all NON-GENERIC struct definitions
     // We need to process base structs before derived structs
+    trace_generation_phase("struct-definitions");
     if(program->structList)
     {
         // Build a map of struct names to their definitions
         std::map<std::string, StructDefNode*> structMap;
         for(auto structDef : program->structList->structs)
         {
+            if(!structDef)
+                continue;
             structMap[structDef->name] = structDef;
+            if(!structDef->isGeneric() && !getStructType(structDef->name))
+            {
+                // Create all named types before resolving member layouts.
+                // This permits pointers/references to structs declared later
+                // without attempting to materialize either body recursively.
+                structTypes[structDef->name] =
+                    llvm::StructType::create(context, structDef->name);
+            }
         }
 
         // Process structs in dependency order (bases before derived)
         std::set<std::string> processed;
+        std::set<std::string> processing;
         std::function<void(StructDefNode*)> processStruct =
             [&](StructDefNode* structDef)
         {
+            if(!structDef)
+                return;
             if(processed.count(structDef->name))
                 return;
+
+            // A pair of mutually-referential structs is legal when the
+            // relationship is indirect (for example through a pointer), but
+            // the dependency walk used to recurse forever before either
+            // struct was marked as processed. Apart from overflowing the
+            // stack, that failure presents as a jump into a stack address on
+            // LLVM's signal trace. Named LLVM structs can be forward
+            // referenced, so stop the ordering walk at the cycle and let the
+            // outer invocation emit the definition.
+            if(!processing.insert(structDef->name).second)
+                return;
+
+            trace_generation_phase("struct-definition:" + structDef->name);
 
             // Skip generic structs - they're instantiated on demand
             if(structDef->isGeneric())
             {
+                processing.erase(structDef->name);
                 processed.insert(structDef->name);
                 return;
             }
@@ -775,14 +826,16 @@ void CodeGenerator::generateCode(ProgramNode* program)
             {
                 if(!type)
                     return;
-                if(auto* refType = dynamic_cast<ReferenceTypeNode*>(type))
+                if(dynamic_cast<ReferenceTypeNode*>(type))
                 {
-                    processMemberType(refType->elementType);
+                    // References are indirect and do not require the pointee
+                    // body to be complete.
                     return;
                 }
-                if(auto* ptrType = dynamic_cast<PointerTypeNode*>(type))
+                if(dynamic_cast<PointerTypeNode*>(type))
                 {
-                    processMemberType(ptrType->elementType);
+                    // Pointers are indirect and do not require the pointee
+                    // body to be complete.
                     return;
                 }
                 if(auto* tupleType = dynamic_cast<TupleTypeNode*>(type))
@@ -842,6 +895,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
             structVisibility[structDef->name] =
                 std::make_pair(structDef->isPublic, structDef->sourceModule);
             generateStructDefinition(structDef);
+            processing.erase(structDef->name);
             processed.insert(structDef->name);
         };
 
@@ -852,10 +906,13 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 
     // Generate forward declarations for all functions first
+    trace_generation_phase("function-declarations");
     if(program->functionList)
     {
         for(auto funcDef : program->functionList->functions)
         {
+            if(!funcDef)
+                continue;
             if(funcDef->isTest && !includeTests)
                 continue;
             if(!funcDef->typeParams.empty() && funcDef->isCexpr)
@@ -869,10 +926,13 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 
     // Generate NON-GENERIC struct method declarations and track visibility
+    trace_generation_phase("struct-method-declarations");
     if(program->structList)
     {
         for(auto structDef : program->structList->structs)
         {
+            if(!structDef)
+                continue;
             if(!structDef->isGeneric())
             {
                 generateStructMethods(structDef);
@@ -881,10 +941,13 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 
     // Process non-generic impl blocks (add methods to existing structs)
+    trace_generation_phase("impl-method-declarations");
     if(program->implList)
     {
         for(auto impl : program->implList->impls)
         {
+            if(!impl)
+                continue;
             if(impl->typeParams.empty())
             {
                 if(!impl->traitName.empty())
@@ -895,7 +958,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 // Non-generic impl block - process immediately
                 for(auto method : impl->methods)
                 {
-                    if(method && method->sourceModule.empty())
+                    if(!method)
+                        continue;
+                    if(method->sourceModule.empty())
                         method->sourceModule = currentModule;
                     // Register the method with the struct
                     structMethods[impl->structName][method->name] =
@@ -909,14 +974,18 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 
     // Then generate all function bodies
+    trace_generation_phase("function-bodies");
     if(program->functionList)
     {
         for(auto funcDef : program->functionList->functions)
         {
+            if(!funcDef)
+                continue;
             if(funcDef->isTest && !includeTests)
                 continue;
             if(!funcDef->typeParams.empty() && funcDef->isCexpr)
                 continue;
+            trace_generation_phase("function-body:" + funcDef->name);
             generateFunctionDefinition(funcDef);
         }
     }
@@ -927,6 +996,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
     // and append more deferred definitions, so treat the vector as a work queue.
     // A range-for iterator is invalidated when push_back reallocates the vector
     // and caused Linux bootstrap builds of mlangd-mla to segfault here.
+    trace_generation_phase("deferred-function-bodies");
     if(!deferredModuleFunctionDefs.empty())
     {
         for(std::size_t i = 0; i < deferredModuleFunctionDefs.size(); ++i)
@@ -936,6 +1006,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             if(fn->isTest && !includeTests)
                 continue;
+            trace_generation_phase("deferred-function-body:" + fn->name);
             generateFunctionDefinition(fn);
         }
     }
@@ -1105,14 +1176,22 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 
     // Generate NON-GENERIC struct method bodies
+    trace_generation_phase("struct-method-bodies");
     if(program->structList)
     {
         for(auto structDef : program->structList->structs)
         {
+            if(!structDef)
+                continue;
             if(!structDef->isGeneric() && structDef->members)
             {
                 for(auto method : structDef->members->methods)
                 {
+                    if(!method)
+                        continue;
+                    trace_generation_phase("struct-method-body:" +
+                                           structDef->name + "::" +
+                                           method->name);
                     generateMethodDefinition(structDef->name, method);
                 }
             }
@@ -1120,17 +1199,26 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 
     // Generate non-generic impl block method bodies
+    trace_generation_phase("impl-method-bodies");
     if(program->implList)
     {
         for(auto impl : program->implList->impls)
         {
+            if(!impl)
+                continue;
             if(impl->typeParams.empty())
             {
                 for(auto method : impl->methods)
                 {
+                    if(!method)
+                        continue;
+                    trace_generation_phase("impl-method-body:" +
+                                           impl->structName + "::" +
+                                           method->name);
                     generateMethodDefinition(impl->structName, method);
                 }
             }
         }
     }
+    trace_generation_phase("complete");
 }

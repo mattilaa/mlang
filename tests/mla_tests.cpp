@@ -1620,6 +1620,23 @@ TEST_F(MLATest, PointerAccess)
     EXPECT_EQ(compileAndRun(code), "22\n7\n");
 }
 
+TEST_F(MLATest, MutuallyReferentialStructPointers)
+{
+    std::string code = R"(
+        struct Left { var right: ptr<Right>; };
+        struct Right { var left: ptr<Left>; };
+
+        fn main() -> i32 {
+            var left: Left {};
+            var right: Right {};
+            left.right = &right;
+            right.left = &left;
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "");
+}
+
 TEST_F(MLATest, LetCannotReassign)
 {
     std::string code = R"(

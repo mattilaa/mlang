@@ -351,7 +351,7 @@ private:
     llvm::FunctionCallee fprintfFunc;
     llvm::FunctionCallee snprintfFunc;
     llvm::FunctionCallee strbufAlignFunc;
-    llvm::Value* stderrPtr;
+    llvm::Value* stderrPtr = nullptr;
     // Stdlib support
     bool stdlibInitialized;
     llvm::FunctionCallee mallocFunc;
