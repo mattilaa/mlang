@@ -1292,77 +1292,89 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     argVal =
                         builder.CreateFPCast(argVal, expectedType, "fpcast");
                 }
-                else if(best->node &&
-                        paramIdx <
-                            (size_t)best->node->parameters->parameters.size())
+                else
                 {
-                    auto* declParam =
-                        best->node->parameters->parameters[paramIdx];
-                    if(auto* traitObj =
-                           dynamic_cast<TraitObjectTypeNode*>(declParam->type))
+                    bool convertedTraitObject = false;
+                    if(best->node && best->node->parameters &&
+                       paramIdx <
+                           (size_t)best->node->parameters->parameters.size())
                     {
-                        llvm::Value* traitObjVal = nullptr;
-                        TypeNode* actualSemantic =
-                            semanticArgumentType(node->arguments[paramIdx]);
-                        if(dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
+                        auto* declParam =
+                            best->node->parameters->parameters[paramIdx];
+                        if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(
+                               declParam ? declParam->type : nullptr))
                         {
-                            traitObjVal = coerceTraitObjectValue(
-                                argVal, expectedType, node->line);
+                            llvm::Value* traitObjVal = nullptr;
+                            TypeNode* actualSemantic = semanticArgumentType(
+                                node->arguments[paramIdx]);
+                            if(dynamic_cast<TraitObjectTypeNode*>(actualSemantic))
+                            {
+                                traitObjVal = coerceTraitObjectValue(
+                                    argVal, expectedType, node->line);
+                            }
+                            else
+                            {
+                                traitObjVal = buildTraitObjectValue(
+                                    node->arguments[paramIdx],
+                                    traitObj->traitName, node->line);
+                            }
+                            if(!traitObjVal)
+                                return nullptr;
+                            args.push_back(traitObjVal);
+                            paramIdx++;
+                            convertedTraitObject = true;
                         }
-                        else
-                        {
-                            traitObjVal = buildTraitObjectValue(
-                                node->arguments[paramIdx], traitObj->traitName,
-                                node->line);
-                        }
-                        if(!traitObjVal)
-                            return nullptr;
-                        args.push_back(traitObjVal);
-                        paramIdx++;
-                        continue;
                     }
-                }
-                else if(!(actualType->isPointerTy() &&
-                          expectedType->isPointerTy()))
-                {
-                    std::string actualStr, expectedStr;
 
-                    if(actualType->isStructTy())
-                        actualStr = actualType->getStructName().str().empty()
-                                        ? "struct"
-                                        : actualType->getStructName().str();
-                    else if(actualType->isIntegerTy())
-                        actualStr = "i" + std::to_string(
-                                              actualType->getIntegerBitWidth());
-                    else if(actualType->isFloatTy())
-                        actualStr = "f32";
-                    else if(actualType->isDoubleTy())
-                        actualStr = "f64";
+                    if(convertedTraitObject)
+                        continue;
+
+                    if(actualType->isPointerTy() && expectedType->isPointerTy())
+                    {
+                        argVal = builder.CreateBitCast(argVal, expectedType,
+                                                       "arg.ptrcast");
+                    }
                     else
-                        actualStr = "unknown";
+                    {
+                        std::string actualStr, expectedStr;
 
-                    if(expectedType->isStructTy())
-                        expectedStr =
-                            expectedType->getStructName().str().empty()
-                                ? "struct"
-                                : expectedType->getStructName().str();
-                    else if(expectedType->isIntegerTy())
-                        expectedStr =
-                            "i" +
-                            std::to_string(expectedType->getIntegerBitWidth());
-                    else if(expectedType->isFloatTy())
-                        expectedStr = "f32";
-                    else if(expectedType->isDoubleTy())
-                        expectedStr = "f64";
-                    else
-                        expectedStr = "unknown";
+                        if(actualType->isStructTy())
+                            actualStr = actualType->getStructName().str().empty()
+                                            ? "struct"
+                                            : actualType->getStructName().str();
+                        else if(actualType->isIntegerTy())
+                            actualStr = "i" + std::to_string(
+                                                  actualType->getIntegerBitWidth());
+                        else if(actualType->isFloatTy())
+                            actualStr = "f32";
+                        else if(actualType->isDoubleTy())
+                            actualStr = "f64";
+                        else
+                            actualStr = "unknown";
 
-                    reportError(node->line,
-                                "argument " + std::to_string(paramIdx + 1) +
-                                    " of function '" + node->name +
-                                    "' has wrong type: expected '" +
-                                    expectedStr + "', got '" + actualStr + "'");
-                    return nullptr;
+                        if(expectedType->isStructTy())
+                            expectedStr =
+                                expectedType->getStructName().str().empty()
+                                    ? "struct"
+                                    : expectedType->getStructName().str();
+                        else if(expectedType->isIntegerTy())
+                            expectedStr = "i" + std::to_string(
+                                                       expectedType->getIntegerBitWidth());
+                        else if(expectedType->isFloatTy())
+                            expectedStr = "f32";
+                        else if(expectedType->isDoubleTy())
+                            expectedStr = "f64";
+                        else
+                            expectedStr = "unknown";
+
+                        reportError(
+                            node->line,
+                            "argument " + std::to_string(paramIdx + 1) +
+                                " of function '" + node->name +
+                                "' has wrong type: expected '" + expectedStr +
+                                "', got '" + actualStr + "'");
+                        return nullptr;
+                    }
                 }
             }
         }
