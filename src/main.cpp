@@ -20,6 +20,7 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/FileSystem.h>
+#include <llvm/Support/Signals.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
 #include <optional>
@@ -1733,6 +1734,10 @@ int main(int argc, char** argv)
 #define MLANG_VERSION "0.1.0"
 #endif
 
+    // Make compiler crashes actionable in non-interactive builders such as
+    // GitHub Actions. LLVM invokes the platform symbolizer when available.
+    llvm::sys::PrintStackTraceOnErrorSignal(argv[0] ? argv[0] : "mlang");
+
     std::vector<std::string> filteredArgStorage;
     filteredArgStorage.reserve(static_cast<std::size_t>(argc));
     filteredArgStorage.emplace_back(argv[0] ? argv[0] : "mlang");
@@ -2363,12 +2368,21 @@ int main(int argc, char** argv)
         // Generate LLVM IR
         if(auto* program = dynamic_cast<ProgramNode*>(programRoot))
         {
+            const bool traceCompilerPhases =
+                std::getenv("MLANG_TRACE_PHASES") != nullptr;
+            auto tracePhase = [&](const char* phase)
+            {
+                if(traceCompilerPhases)
+                    std::cerr << "mlang phase: " << phase << std::endl;
+            };
             if(verbose)
             {
                 std::cout << "Generating LLVM IR..." << std::endl;
             }
 
+            tracePhase("generate-ir:start");
             generator.generateCode(program);
+            tracePhase("generate-ir:complete");
 
             // Check for semantic errors
             if(generator.hadError())
@@ -2387,8 +2401,13 @@ int main(int argc, char** argv)
                 std::cout << program->toString() << std::endl;
             }
 
-            // Initialize backend
-            Backend backend(module, targetArch);
+            // Textual IR and bitcode serialization do not require native
+            // target discovery or a TargetMachine. Avoid that unrelated path
+            // for bootstrap tools and cross-platform IR generation.
+            tracePhase("backend:start");
+            Backend backend(module, targetArch,
+                            !emitLLVMIR && !emitBitcode);
+            tracePhase("backend:complete");
 
             if(verbose)
             {
@@ -2437,7 +2456,9 @@ int main(int argc, char** argv)
                     bcFile =
                         default_build_artifact_path(inputFile, ".bc").string();
                 }
+                tracePhase("emit-bitcode:start");
                 success = backend.emitBitcode(bcFile);
+                tracePhase("emit-bitcode:complete");
             }
             else if(emitAssembly)
             {
