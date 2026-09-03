@@ -160,6 +160,7 @@ demo directory so its `mlang.toml` is selected automatically.
 
 | Directory | What it demonstrates | How to run |
 |---|---|---|
+| `examples/package_manager_build_ergonomics` | Named profiles, feature-gated optional dependencies, workspace package selection, content-addressed global cache reuse, and a vendored locked offline build. | `./examples/package_manager_build_ergonomics/run_demo.sh` |
 | `examples/package_manager_dynamic_library` | An MLang `[[lib]]` dynamic library built before and linked automatically into a dependent `[[bin]]` target. | `(cd examples/package_manager_dynamic_library && ../../build/mlang pkg build && ./build/dynamic_library_demo)` |
 | `examples/package_manager_coreaudio_filter` | macOS CoreAudio playback with MLang low-pass, high-pass, band-pass, and Moog-style filter sweeps. | `(cd examples/package_manager_coreaudio_filter && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_delay_audio` | WAV/AIFF playback through forward or ping-pong delay with live feedback, filtering, damping, jitter, recording, and replay controls. | `(cd examples/package_manager_delay_audio && ../../build/mlang pkg run demo)` |

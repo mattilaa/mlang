@@ -98,6 +98,11 @@ fn print_usage() -> void {
     println!("  --backend <bin>       Compiler binary used by build/delegate (default: mlang)");
     println!("  --config <file>       Manifest path (default: mlang.toml)");
     println!("  --config=<file>       Same, inline form");
+    println!("  --profile NAME, -P NAME, --release");
+    println!("  --features A,B [--all-features] [--no-default-features]");
+    println!("  --package NAME, -p NAME, --workspace, --exclude NAME");
+    println!("  --cache-dir DIR, --no-global-cache, --vendor-dir DIR");
+    println!("                          (delegated to the C++ backend)");
     println!("");
     println!("Subcommands:");
     println!("  init                  Scaffold mlang.toml and src/main.mla");
@@ -108,6 +113,7 @@ fn print_usage() -> void {
     println!("             [--add-lib [--project-dir DIR]]");
     println!("  lock      [--offline] (delegated to the C++ backend)");
     println!("  verify    (delegated to the C++ backend)");
+    println!("  vendor [DIR] (delegated to the C++ backend)");
     println!("  tree      (delegated to the C++ backend)");
     println!("  why NAME  (delegated to the C++ backend)");
     println!("  fetch     [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
@@ -1357,7 +1363,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
         return run_add(argv, idx, manifest);
     }
-    if (eq(sub, "lock") == 1 || eq(sub, "verify") == 1 || eq(sub, "tree") == 1 || eq(sub, "why") == 1) {
+    if (eq(sub, "lock") == 1 || eq(sub, "verify") == 1 || eq(sub, "vendor") == 1 || eq(sub, "tree") == 1 || eq(sub, "why") == 1) {
         return delegate_pkg_to_cpp(backend, sub, argv, idx + 1);
     }
     if (eq(sub, "fetch") == 1) {

@@ -1,4 +1,4 @@
-.TH MLANG-PKG 1 "May 2026" "MLang" "User Commands"
+.TH MLANG-PKG 1 "September 2026" "MLang" "User Commands"
 .SH NAME
 mlang-pkg \- package manager and task runner interface exposed as \fBmlang pkg\fR
 .SH SYNOPSIS
@@ -17,6 +17,10 @@ mlang-pkg \- package manager and task runner interface exposed as \fBmlang pkg\f
 .B mlang
 .B pkg
 [\fB\-\-config\fR \fIFILE\fR] verify
+.br
+.B mlang
+.B pkg
+[\fB\-\-config\fR \fIFILE\fR] vendor [\fIDIR\fR]
 .br
 .B mlang
 .B pkg
@@ -86,6 +90,10 @@ recording exact Git revisions and archive SHA-256 checksums.
 Check manifest-to-lock consistency and cached dependency integrity without
 network access.
 .TP
+.B vendor [\fIDIR\fR]
+Copy the complete locked dependency graph into a project-local tree for
+locked offline builds.
+.TP
 .B tree
 Print direct and transitive dependencies with sources, requirements, and
 resolved package versions.
@@ -116,6 +124,43 @@ Override the build output directory.
 .TP
 .B \-\-deps\-dir \fIDIR\fR
 Override the dependency checkout/cache directory.
+.TP
+.B \-\-profile \fINAME\fR, \-P \fINAME\fR
+Select a named manifest build profile. Profiled outputs default to
+.IR build/NAME .
+.TP
+.B \-\-release
+Alias for
+.BR \-\-profile " release".
+.TP
+.B \-\-features \fIA,B\fR
+Enable a comma-separated set of package features.
+.TP
+.B \-\-all\-features
+Enable all declared package features and optional dependencies.
+.TP
+.B \-\-no\-default\-features
+Do not enable the manifest's default feature set.
+.TP
+.B \-\-package \fINAME\fR, \-p \fINAME\fR
+Select a workspace package by manifest package name. Repeatable.
+.TP
+.B \-\-workspace
+Explicitly select every discovered workspace package.
+.TP
+.B \-\-exclude \fINAME\fR
+Remove a package from the workspace selection. Repeatable.
+.TP
+.B \-\-cache\-dir \fIDIR\fR
+Override the content-addressed global artifact and source cache.
+.TP
+.B \-\-no\-global\-cache
+Disable shared artifact, archive, and Git mirror caching.
+.TP
+.B \-\-vendor\-dir \fIDIR\fR
+Resolve dependencies from a vendor tree. Combine with
+.B \-\-locked \-\-offline
+for network-free reproducible builds.
 .TP
 .B \-\-log\-dir \fIDIR\fR
 Write task logs below
@@ -295,12 +340,19 @@ and
 .TP
 .B MLANG_PKG_CACHE_KEY
 Influence the cache key used for compiled helper tool frontends.
+.TP
+.B MLANG_PKG_CACHE
+Set the global content-addressed package artifact, archive, and Git mirror
+cache directory. If unset, XDG_CACHE_HOME or HOME provides the default.
 .SH EXAMPLES
 .nf
 mlang pkg init
 mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
 mlang pkg fetch
 mlang pkg build -O3 --ninja
+mlang pkg build -p editor --profile dev --features telemetry
+mlang pkg vendor vendor
+mlang pkg build --vendor-dir vendor --locked --offline
 mlang pkg run build-all --tasks
 mlang pkg run qemu-run --option userspace=gnu
 mlang pkg clean --deps

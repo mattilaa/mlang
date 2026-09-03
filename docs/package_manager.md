@@ -286,6 +286,137 @@ to `NAME`, which is useful when a transitive dependency is unexpected.
 For a complete runnable graph, see
 `examples/package_manager_path_dependencies`.
 
+### Build ergonomics: profiles and features
+
+Named profiles keep build policy in the manifest. `dev` and `release` have
+built-in defaults (`O0` plus debug checks, and `O3`, respectively), and either
+can be extended. Custom profiles may inherit another profile:
+
+```toml
+[profile.dev]
+opt_level = "O0"
+compiler_flags = ["--debug"]
+
+[profile.release]
+opt_level = "O3"
+
+[profile.size]
+inherits = "release"
+opt_level = "Oz"
+```
+
+Select one with `--profile NAME` (or `-P NAME`). `--release` is shorthand for
+`--profile release`. Unless `build_dir` is explicitly configured, profiled
+outputs go to `build/<profile>/`, so debug and release artifacts can coexist.
+Profile inheritance cycles are diagnosed before building. Profile sections
+accept the same build keys as `[tool.mlang]`.
+
+Features group opt-in behavior and can activate optional dependencies:
+
+```toml
+[dependencies]
+telemetry = { path = "packages/telemetry", version = "^1.0", optional = true }
+
+[features]
+default = []
+telemetry = ["dep:telemetry"]
+full = ["telemetry"]
+```
+
+Build with a comma-separated feature list, all features, or without the
+default feature set:
+
+```sh
+mlang pkg build --features telemetry
+mlang pkg build --features telemetry,json
+mlang pkg build --all-features
+mlang pkg build --no-default-features
+```
+
+Feature aliases are expanded recursively. A `dep:name` member enables an
+optional dependency without requiring a same-named public feature. Dependency
+tables also accept `features = ["..."]` and `default_features = false`; those
+settings control the features selected while recursively building that MLang
+dependency. Tasks can inspect resolved state with `{{option.profile}}` and
+`{{option.feature.NAME}}`, whose feature value is `0` or `1`.
+
+Lock generation records optional/default-feature metadata and resolves the
+complete feature graph. An ordinary build only fetches and builds optional
+dependencies enabled for that invocation.
+
+### Workspace package selection
+
+Workspace-aware commands accept repeatable package selectors:
+
+```sh
+mlang pkg build -p editor
+mlang pkg build --package editor --package converter
+mlang pkg build --workspace --exclude benchmarks
+mlang pkg clean -p editor --profile dev
+```
+
+`--package NAME` and `-p NAME` select packages by `[package].name`.
+`--workspace` explicitly selects every discovered member; it cannot be mixed
+with `--package`. `--exclude NAME` removes members from the selected set.
+Unknown names and an empty final selection are errors. With no selector, all
+members remain selected for compatibility. Partial locked operations validate
+the shared lockfile without deleting lock entries belonging to unselected
+workspace packages.
+
+### Incremental global cache
+
+Package builds use a content-addressed global cache in addition to the local
+`build/` tree. The default is `$MLANG_PKG_CACHE` when set, otherwise
+`$XDG_CACHE_HOME/mlang/pkg`, or finally `$HOME/.cache/mlang/pkg`.
+
+```sh
+mlang pkg build --cache-dir /mnt/build-cache/mlang
+mlang pkg build --no-global-cache
+```
+
+`[tool.mlang]` may set `global_cache_dir` and `use_global_cache = false`.
+Relative manifest paths are resolved from that package's directory. Cached
+artifacts are keyed by MLang version, package sources, target kind, profile,
+enabled features, compiler/link settings, pkg-config flags, and hashes of
+linked package libraries. A cache hit restores the output and prints
+`Global cache hit for target ...`. `pkg clean` removes local outputs but does
+not discard this shared cache.
+
+The same cache stores downloaded archives by locked SHA-256 and bare Git
+mirrors by source URL. This allows separate build directories and workspaces
+to avoid repeated downloads. The artifact key retains the absolute package
+path because generated runtime search paths can be location-dependent.
+
+### Vendoring dependencies
+
+Create a project-local copy of the complete locked dependency graph with:
+
+```sh
+mlang pkg vendor
+mlang pkg vendor third_party/vendor -p editor
+```
+
+The default destination is `vendor/`. Each package is copied into
+`<vendor-dir>/<package-name>` without its `.git`, `build`, `.mlang`, or nested
+`vendor` directories. A small `.mlang-vendor-source` file records the locked
+source, revision/checksum, and resolved package version.
+
+Build exclusively from that tree using `--vendor-dir`:
+
+```sh
+mlang pkg build --vendor-dir vendor --locked --offline
+```
+
+`[tool.mlang].vendor_dir` provides the same setting and resolves relative to
+the package directory. In locked/offline mode, missing vendor packages or
+metadata that disagrees with `mlang.lock` are errors. `pkg verify
+--vendor-dir vendor` verifies the vendor metadata without contacting the
+network. Re-run `pkg vendor` after changing dependency sources or the lockfile;
+the destination for each dependency is replaced at package scope.
+
+The complete runnable example is
+`examples/package_manager_build_ergonomics`.
+
 ### `pkg build`
 
 Build the package entry defined by the selected manifest:
@@ -313,6 +444,17 @@ Current CLI options:
 - `--ninja`
 - `--build-dir DIR`
 - `--deps-dir DIR`
+- `--profile NAME` / `-P NAME`
+- `--release`
+- `--features A,B`
+- `--all-features`
+- `--no-default-features`
+- `--package NAME` / `-p NAME`
+- `--workspace`
+- `--exclude NAME`
+- `--cache-dir DIR`
+- `--no-global-cache`
+- `--vendor-dir DIR`
 
 The output binary or IR file is written under the configured build directory.
 By default this is `build/`.
@@ -525,6 +667,8 @@ Currently supported dependency keys:
 
 - `git`
 - `url`
+- `path`
+- `version`
 - `archive`
 - `rev`
 - `tag`
@@ -533,12 +677,16 @@ Currently supported dependency keys:
 - `subdir`
 - `strip_components`
 - `spinner`
+- `optional`
+- `features`
+- `default_features`
 
 Current supported build systems:
 
 - `cmake`
 - `meson`
 - `make`
+- `mlang`
 
 If `build` is omitted, `cmake` is used.
 
@@ -597,6 +745,9 @@ Supported keys:
 - `target_arch`
 - `build_dir`
 - `deps_dir`
+- `global_cache_dir`
+- `use_global_cache`
+- `vendor_dir`
 - `log_dir`
 - `stdout_log`
 - `stderr_log`

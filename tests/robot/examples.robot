@@ -6735,6 +6735,62 @@ Pkg Resolves Transitive Path Packages And Semantic Versions
     Should Not Be Equal As Integers    ${rejected.rc}    0
     Should Contain    ${rejected.stderr}    out of date for transitive dependency 'math'
 
+Pkg Supports Profiles Features Selection Cache And Vendoring
+    [Documentation]    Verify build profiles, optional feature dependencies,
+    ...                workspace selection, global artifact reuse, and offline vendors.
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_build_ergonomics
+    ${cache}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_global_cache
+    ${setup}=    Run Process    /bin/sh    -lc
+    ...    rm -rf '${base}' '${cache}' && cp -R '${EXECDIR}/examples/package_manager_build_ergonomics' '${base}'
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup.rc}    0
+
+    ${build}=    Run Process    ${MLANG}    pkg    build    -p    ergonomic_app
+    ...    --profile    dev    --features    telemetry    --cache-dir    ${cache}    --locked
+    ...    cwd=${base}    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Ergonomics build failed\n${build.stdout}\n${build.stderr}
+    File Should Exist    ${base}/apps/ergonomic_app/build/dev/ergonomic_app
+    ${suffix}=    Evaluate    '.dylib' if __import__('platform').system() == 'Darwin' else ('.dll' if __import__('platform').system() == 'Windows' else '.so')
+    ${prefix}=    Evaluate    '' if __import__('platform').system() == 'Windows' else 'lib'
+    File Should Exist    ${base}/packages/telemetry/build/dev/${prefix}telemetry${suffix}
+    File Should Not Exist    ${base}/apps/utility_app/build/dev/utility_app
+    ${run}=    Run Process    ${base}/apps/ergonomic_app/build/dev/ergonomic_app
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    ergonomic app result: 42
+
+    ${clean_app}=    Run Process    ${MLANG}    pkg    clean    -p    ergonomic_app
+    ...    --profile    dev    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${clean_app.rc}    0
+    ${clean_dep}=    Run Process    ${MLANG}    pkg    clean    --profile    dev
+    ...    cwd=${base}/packages/telemetry    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${clean_dep.rc}    0
+    ${cached}=    Run Process    ${MLANG}    pkg    build    -p    ergonomic_app
+    ...    --profile    dev    --features    telemetry    --cache-dir    ${cache}    --locked
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cached.rc}    0
+    Should Contain    ${cached.stdout}    Global cache hit for target 'telemetry'
+    Should Contain    ${cached.stdout}    Global cache hit for target 'ergonomic_app'
+
+    ${vendor}=    Run Process    ${MLANG}    pkg    vendor    vendor
+    ...    -p    ergonomic_app    --cache-dir    ${cache}
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${vendor.rc}    0
+    File Should Exist    ${base}/vendor/telemetry/.mlang-vendor-source
+    ${verify}=    Run Process    ${MLANG}    pkg    verify    -p    ergonomic_app
+    ...    --vendor-dir    ${base}/vendor
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${verify.rc}    0
+    Should Contain    ${verify.stdout}    Verified vendored dependency telemetry
+
+    ${offline}=    Run Process    ${MLANG}    pkg    build    -p    ergonomic_app
+    ...    --release    --features    telemetry    --vendor-dir    ${base}/vendor
+    ...    --cache-dir    ${cache}    --locked    --offline
+    ...    cwd=${base}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${offline.rc}    0
+    File Should Exist    ${base}/apps/ergonomic_app/build/release/ergonomic_app
+
 Pkg Builds And Links MLang Dynamic Library Target
     [Documentation]    Verify [[lib]] output, depends_on build ordering,
     ...                automatic linking, and loader-relative execution.

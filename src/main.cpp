@@ -1266,6 +1266,10 @@ static bool manifest_requires_cpp_pkg_frontend()
     if(content.find("path =") != std::string::npos ||
        content.find("build = \"mlang\"") != std::string::npos)
         return true;
+    if(content.find("[profile.") != std::string::npos ||
+       content.find("[features]") != std::string::npos ||
+       content.find("optional = true") != std::string::npos)
+        return true;
     return false;
 }
 
@@ -1308,6 +1312,7 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
     if(argc >= subIndex + 1 &&
        (std::string(argv[subIndex]) == "lock" ||
         std::string(argv[subIndex]) == "verify" ||
+        std::string(argv[subIndex]) == "vendor" ||
         std::string(argv[subIndex]) == "tree" ||
         std::string(argv[subIndex]) == "why"))
         return std::nullopt;
@@ -1323,6 +1328,17 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
                arg == "--locked" || arg == "--offline")
                 return std::nullopt;
         }
+    }
+    for(int i = 2; i < argc; ++i)
+    {
+        const std::string arg = argv[i];
+        if(arg == "--profile" || arg == "-P" || arg == "--release" ||
+           arg == "--features" || arg == "--all-features" ||
+           arg == "--no-default-features" || arg == "--package" ||
+           arg == "-p" || arg == "--workspace" || arg == "--exclude" ||
+           arg == "--cache-dir" || arg == "--no-global-cache" ||
+           arg == "--vendor-dir")
+            return std::nullopt;
     }
     if(manifest_requires_cpp_pkg_frontend())
         return std::nullopt;

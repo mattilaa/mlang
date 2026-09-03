@@ -2404,6 +2404,11 @@ Supported keys are:
   stores generated task scripts. Defaults to `build`.
 - `deps_dir`: directory where `pkg fetch` stores sources and `pkg build`
   reuses dependency artifacts. Defaults to `<build_dir>/deps`.
+- `global_cache_dir`: content-addressed artifact, Git mirror, and archive cache
+  directory. Relative paths resolve from the package root.
+- `use_global_cache`: set to `false` to disable shared caching for the package.
+- `vendor_dir`: resolve locked dependencies from this project-local vendor
+  tree. Relative paths resolve from the package root.
 - `log_dir`: base directory for package-manager log files.
 - `stdout_log`: file that receives package-manager info lines and command
   stdout.
@@ -2647,6 +2652,9 @@ Supported source dependency keys are:
 - `cmake_args`
 - `subdir`
 - `strip_components`
+- `features`
+- `optional`
+- `default_features`
 
 If `build = "none"` is set, the dependency is fetched but skipped by the
 built-in dependency builders during `mlang pkg build`.
@@ -2683,6 +2691,42 @@ requires all locked sources in the dependency cache. See
 [Reproducible dependency locking](Package-Manager#reproducible-dependency-locking)
 for the lock format, archive cache, verification checks, workspace behavior,
 transitive package versions, and limitations for third-party build scripts.
+
+Build profiles, feature-gated optional dependencies, workspace package
+selection, a content-addressed global cache, and vendoring are also supported:
+
+```toml
+[dependencies]
+telemetry = { path = "packages/telemetry", version = "^1.0", optional = true }
+
+[features]
+default = []
+telemetry = ["dep:telemetry"]
+
+[profile.dev]
+opt_level = "O0"
+compiler_flags = ["--debug"]
+
+[profile.release]
+opt_level = "O3"
+```
+
+```sh
+mlang pkg build -p app --profile dev --features telemetry
+mlang pkg clean -p app --profile dev
+mlang pkg build -p app --release --cache-dir .pkg/global-cache
+mlang pkg vendor vendor -p app
+mlang pkg build -p app --vendor-dir vendor --locked --offline
+```
+
+Profiled outputs default to `build/<profile>/`. The shared cache defaults to
+`$MLANG_PKG_CACHE`, `$XDG_CACHE_HOME/mlang/pkg`, or
+`$HOME/.cache/mlang/pkg`; disable it with `--no-global-cache`. See
+[Build ergonomics](Package-Manager#build-ergonomics-profiles-and-features)
+for profile inheritance, dependency feature forwarding, `--workspace` /
+`--exclude`, cache keys, manifest settings, and offline vendor verification.
+The runnable combined example is
+`examples/package_manager_build_ergonomics`.
 
 `pkg add --add-lib` can scaffold the workspace subproject automatically. It:
 

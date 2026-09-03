@@ -25,6 +25,7 @@ subdirectory-based showcases are indexed separately in
   - [Package-manager dynamic library](#package-manager-dynamic-library)
   - [Package-manager static library](#package-manager-static-library)
   - [Package-manager path dependencies](#package-manager-path-dependencies)
+  - [Package-manager build ergonomics](#package-manager-build-ergonomics)
 - [Focused regression examples](#focused-regression-examples)
 - [Directory-based demos](demos.md)
 
@@ -327,6 +328,22 @@ dynamic-library linkage:
 
 The graph is `path_dependency_app -> core -> math`; the final executable
 prints `transitive path dependency result: 42`.
+
+### Package-manager build ergonomics
+
+`examples/package_manager_build_ergonomics` combines named profiles, an
+optional dependency activated by a feature, workspace package selection,
+content-addressed artifact reuse, and vendoring:
+
+```sh
+./examples/package_manager_build_ergonomics/run_demo.sh
+```
+
+The two applications are selected independently. The script builds and runs
+`ergonomic_app` in `dev`, cleans its local outputs, rebuilds it from the global
+cache, then vendors the locked dependency graph and runs a `release` build in
+locked offline mode. Successful runs print `ergonomic app result: 42`, cache
+hit messages, and `utility app selected independently`.
 
 ## Focused regression examples
 

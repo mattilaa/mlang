@@ -1,0 +1,8 @@
+[package]
+name = "utility_app"
+version = "1.0.0"
+entry = "src/main.mla"
+
+[profile.release]
+opt_level = "Os"
+
