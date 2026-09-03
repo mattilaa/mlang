@@ -549,9 +549,20 @@ set(MLANGD_LL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.ll)
 set(MLANGD_IR_OBJECT_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla-ir.o)
 set(MLANGD_MLA_STAMP ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.stamp)
 
+# mlangd-mla is a large self-hosted module. LLVM 15/17 bootstrap compilers can
+# overflow Linux's default process stack while lowering it, which appears as an
+# otherwise unexplained exit 139. The resulting server still uses normal limits.
+set(MLANGD_MLA_COMPILER_COMMAND $<TARGET_FILE:mlang>)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(MLANGD_MLA_COMPILER_COMMAND
+        /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_with_large_stack.sh
+        $<TARGET_FILE:mlang>)
+endif()
+
 add_custom_command(
     OUTPUT ${MLANGD_MLA_STAMP}
-    COMMAND $<TARGET_FILE:mlang> -emit-llvm ${MLANGD_MLA_SOURCE}
+    COMMAND ${MLANGD_MLA_COMPILER_COMMAND}
+            -emit-llvm ${MLANGD_MLA_SOURCE}
             --no-tests
             -Wno-unwrap
             -O0
@@ -577,6 +588,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E touch ${MLANGD_MLA_STAMP}
     DEPENDS mlang mlang_std ${MLANGD_MLA_SOURCE}
             ${MLANGD_MLA_FORMAT_CONFIG_SOURCE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_with_large_stack.sh
             ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Building mlangd-mla via LLVM IR + clang++ host link"
