@@ -269,12 +269,32 @@ add_custom_target(
     DEPENDS ${LEXER_OUT}
 )
 
-# Add main.cpp and the generated files to the list of source files
-set(SOURCE_FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
+# Sources used by both the compiler executable and the runtime compiler API.
+# Compile these once: listing them independently on mlang and mlang_std caused
+# CMake to build identical AST/parser objects twice in clean CI builds.
+set(MLANG_FRONTEND_SHARED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_handle_helpers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_bridge.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
+    ${LEXER_OUT}
+    ${PARSER_OUT}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
+)
+add_library(mlang_frontend_objects OBJECT ${MLANG_FRONTEND_SHARED_SOURCES})
+add_dependencies(mlang_frontend_objects ParserTarget LexerTarget)
+target_include_directories(mlang_frontend_objects PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_compile_definitions(mlang_frontend_objects PRIVATE
+    MLANG_VERSION="${PROJECT_VERSION}")
+
+# Add main.cpp and the generated files to the list of source files
+set(SOURCE_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/ast_analysis.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/backend.cpp
@@ -318,17 +338,14 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/validation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/package_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/incremental_compiler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ide_query.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/workspace_graph.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_concurrency.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
-    ${LEXER_OUT}
-    ${PARSER_OUT}
 )
 
-add_executable(mlang ${SOURCE_FILES} ${HEADER_FILES})
+add_executable(mlang ${SOURCE_FILES} ${HEADER_FILES}
+    $<TARGET_OBJECTS:mlang_frontend_objects>)
 target_compile_definitions(mlang PRIVATE MLANG_VERSION="${PROJECT_VERSION}")
 
 # Add dependencies to ensure Flex and Bison run before building the executable
@@ -417,13 +434,7 @@ if(APPLE)
 endif()
 
 add_library(mlang_std STATIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_handle_helpers.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_bridge.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
-    ${LEXER_OUT}
-    ${PARSER_OUT}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
+    $<TARGET_OBJECTS:mlang_frontend_objects>
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_math.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_simd.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fft.c
