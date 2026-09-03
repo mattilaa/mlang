@@ -2,6 +2,8 @@
 #include "ir/ast_analysis.h"
 #include "ir/common.h"
 
+#include <cstdlib>
+#include <iostream>
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Verifier.h>
 
@@ -195,6 +197,20 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
 
 llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
 {
+    const bool traceCompilerPhases =
+        std::getenv("MLANG_TRACE_PHASES") != nullptr;
+    const char* tracedFunction = std::getenv("MLANG_TRACE_FUNCTION");
+    const bool traceThisFunction =
+        traceCompilerPhases &&
+        (!tracedFunction || node->name == tracedFunction);
+    auto traceFunctionStage = [&](const std::string& stage)
+    {
+        if(traceThisFunction)
+            std::cerr << "mlang generation: function-stage:" << node->name
+                      << ":" << stage << std::endl;
+    };
+
+    traceFunctionStage("start");
     std::string symbolName = functionSymbolName(node);
     // Get the function (should already be declared)
     llvm::Function* function = module->getFunction(symbolName);
@@ -206,6 +222,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
 
     if(node->isExtern || !node->body)
     {
+        traceFunctionStage("declaration-only");
         return function;
     }
 
@@ -213,6 +230,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     if(!function->empty())
     {
         // Function already defined, skip
+        traceFunctionStage("already-defined");
         return function;
     }
 
@@ -290,6 +308,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     enterCleanupScope();
 
     initializeStdlibFunctions();
+    traceFunctionStage("stdlib-initialized");
     llvm::BasicBlock* functionBodyBB =
         llvm::BasicBlock::Create(context, "fn.body", function);
     llvm::BasicBlock* functionExceptionBB =
@@ -310,6 +329,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     builder.SetInsertPoint(functionBodyBB);
 
     // Set up parameters
+    traceFunctionStage("parameters:start");
     unsigned paramIdx = 0;
     for(auto& arg : function->args())
     {
@@ -436,6 +456,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         }
         paramIdx++;
     }
+    traceFunctionStage("parameters:complete");
 
     // Generate the function body
     if(node->body)
@@ -443,7 +464,14 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         const auto& bodyStmts = node->body->statements;
         for(size_t si = 0; si < bodyStmts.size(); si++)
         {
+            traceFunctionStage("statement:" + std::to_string(si) + ":line:" +
+                               std::to_string(bodyStmts[si]
+                                                  ? bodyStmts[si]->line
+                                                  : 0) +
+                               ":start");
             generateStatement(bodyStmts[si]);
+            traceFunctionStage("statement:" + std::to_string(si) +
+                               ":generated");
             // NLL: expire borrow variables not referenced in remaining stmts
             if(!pointerBorrowTarget.empty())
             {
@@ -468,6 +496,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 for(const auto& ptr : toClear)
                     clearPointerBorrow(ptr);
             }
+            traceFunctionStage("statement:" + std::to_string(si) +
+                               ":complete");
         }
     }
 
@@ -552,4 +582,3 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     llvm::verifyFunction(*function);
     return function;
 }
-
