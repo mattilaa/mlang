@@ -1642,6 +1642,46 @@ fn is_known_c_stdlib_symbol(name: str8) -> i32 {
     return 0;
 }
 
+fn c_stdlib_location_in_file(path: str8, pattern: str8) -> str8 {
+    if file_exists(path) != 1 { return String::new(); }
+    let text_r: result<str8, str8> = read_all_text(path);
+    if text_r.is_err() { return String::new(); }
+    return first_match_location(path, text_r.unwrap(), pattern);
+}
+
+fn c_stdlib_location_in_header(root: str8, here: str8, header: str8,
+                               pattern: str8) -> str8 {
+    var loc: str8 = String::new();
+    if len(root) > 0 {
+        loc = c_stdlib_location_in_file(
+            concat(root, format!("/{}", header)), pattern);
+        if len(loc) > 0 { return loc; }
+    }
+    loc = c_stdlib_location_in_file(
+        concat(here, format!("/{}", header)), pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_file(
+        concat("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/",
+               header), pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_file(
+        concat("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/",
+               header), pattern);
+    if len(loc) > 0 { return loc; }
+    return c_stdlib_location_in_file(concat("/usr/include/", header), pattern);
+}
+
+fn c_stdlib_location_in_tree(include_root: str8, pattern: str8) -> str8 {
+    if file_exists(include_root) != 1 { return String::new(); }
+    let headers: list<str8> = glob_recursive(include_root, "*.h");
+    for i in 0..headers.len() {
+        let path: str8 = headers[i];
+        let loc: str8 = c_stdlib_location_in_file(path, pattern);
+        if len(loc) > 0 { return loc; }
+    }
+    return String::new();
+}
+
 fn c_stdlib_function_location(name: str8) -> str8 {
     if len(name) == 0 { return String::new(); }
     if starts_with(name, "__mlang_std_") == 1 { return String::new(); }
@@ -1650,66 +1690,48 @@ fn c_stdlib_function_location(name: str8) -> str8 {
     let root: str8 = root_path_from_store();
     let here: str8 = cwd();
     let pattern: str8 = format!("{}(", name);
+    var loc: str8 = String::new();
 
-    var headers: list<str8> = [];
-    headers.push("stdio.h");
-    headers.push("_stdio.h");
-    headers.push("stdlib.h");
-    headers.push("_stdlib.h");
-    headers.push("string.h");
-    headers.push("_string.h");
-    headers.push("strings.h");
-    headers.push("math.h");
-    headers.push("unistd.h");
-    headers.push("_unistd.h");
-    headers.push("fcntl.h");
-    headers.push("sys/stat.h");
-    headers.push("sys/types.h");
-    headers.push("ctype.h");
-    headers.push("time.h");
+    loc = c_stdlib_location_in_header(root, here, "stdio.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "_stdio.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "stdlib.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "_stdlib.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "string.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "_string.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "strings.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "math.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "unistd.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "_unistd.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "fcntl.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "sys/stat.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "sys/types.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "ctype.h", pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_header(root, here, "time.h", pattern);
+    if len(loc) > 0 { return loc; }
 
-    for i in 0..headers.len() {
-        let hname: str8 = headers[i];
-        var candidates: list<str8> = [];
-        if len(root) > 0 {
-            candidates.push(concat(root, format!("/{}", hname)));
-        }
-        candidates.push(concat(here, format!("/{}", hname)));
-        candidates.push(concat("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/", hname));
-        candidates.push(concat("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/", hname));
-        candidates.push(concat("/usr/include/", hname));
-
-        for j in 0..candidates.len() {
-            let hpath: str8 = candidates[j];
-            if file_exists(hpath) != 1 { continue; }
-            let htext_r: result<str8, str8> = read_all_text(hpath);
-            if htext_r.is_err() { continue; }
-            let htext: str8 = htext_r.unwrap();
-            let hloc: str8 = first_match_location(hpath, htext, pattern);
-            if len(hloc) > 0 { return hloc; }
-        }
-    }
-
-    var include_roots: list<str8> = [];
-    include_roots.push("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include");
-    include_roots.push("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
-    include_roots.push("/usr/include");
-
-    for i in 0..include_roots.len() {
-        let inc_root: str8 = include_roots[i];
-        if file_exists(inc_root) != 1 { continue; }
-        let hdrs: list<str8> = glob_recursive(inc_root, "*.h");
-        for j in 0..hdrs.len() {
-            let hpath: str8 = hdrs[j];
-            let htext_r: result<str8, str8> = read_all_text(hpath);
-            if htext_r.is_err() { continue; }
-            let htext: str8 = htext_r.unwrap();
-            let hloc: str8 = first_match_location(hpath, htext, pattern);
-            if len(hloc) > 0 { return hloc; }
-        }
-    }
-
-    return String::new();
+    loc = c_stdlib_location_in_tree(
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
+        pattern);
+    if len(loc) > 0 { return loc; }
+    loc = c_stdlib_location_in_tree(
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include",
+        pattern);
+    if len(loc) > 0 { return loc; }
+    return c_stdlib_location_in_tree("/usr/include", pattern);
 }
 
 fn extract_word_and_prefix(line_text: str8, col0: i64) -> str8 {
