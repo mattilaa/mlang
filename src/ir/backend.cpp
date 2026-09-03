@@ -86,10 +86,14 @@ static std::string shell_quote(const std::string& value)
 } // namespace
 
 Backend::Backend(std::unique_ptr<llvm::Module>& m,
-                 const std::string& archOverride)
+                 const std::string& archOverride,
+                 bool initializeTargetMachine)
     : module(m), targetMachine(nullptr), targetArchOverride(archOverride)
 {
-    initializeTarget();
+    if(initializeTargetMachine)
+        initializeTarget();
+    else
+        targetTriple = mlang::ir_detail::module_target_triple_string(module.get());
 }
 
 bool Backend::initializeTarget()

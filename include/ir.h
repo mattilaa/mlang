@@ -819,7 +819,8 @@ class Backend
 {
 public:
     Backend(std::unique_ptr<llvm::Module>& m,
-            const std::string& archOverride = "");
+            const std::string& archOverride = "",
+            bool initializeTargetMachine = true);
     bool emitObjectFile(const std::string& filename);
     bool emitAssemblyFile(const std::string& filename);
     bool emitLLVMIR(const std::string& filename);

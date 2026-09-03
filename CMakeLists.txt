@@ -543,7 +543,8 @@ set(MLANGD_MLA_STAMP ${CMAKE_CURRENT_BINARY_DIR}/mlangd-mla.stamp)
 
 add_custom_command(
     OUTPUT ${MLANGD_MLA_STAMP}
-    COMMAND $<TARGET_FILE:mlang> -emit-bc ${MLANGD_MLA_SOURCE}
+    COMMAND ${CMAKE_COMMAND} -E env MLANG_TRACE_PHASES=1
+            $<TARGET_FILE:mlang> -emit-bc ${MLANGD_MLA_SOURCE}
             --no-tests
             -Wno-unwrap
             -O0

@@ -11,6 +11,7 @@ jobs:
       BUILD_NUMBER: ${{ github.run_number }}
       CC: clang-17
       CXX: clang++-17
+      LLVM_SYMBOLIZER_PATH: /usr/bin/llvm-symbolizer-17
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
