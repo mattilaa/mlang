@@ -74,7 +74,7 @@ ROBOT_CUSTOM_PROGRESS=1 ROBOT_TRUNCATE_NAMES=1 ./tests/run_examples_robot.sh
 
 ### Option 1c: LSP End-to-End Transcript Test
 
-This runs a JSON-RPC integration script against `mlangd --stdio` and checks:
+This runs a JSON-RPC integration script against `mlangd-mla --stdio` and checks:
 - `textDocument/implementation`
 - `textDocument/references`
 - rename safety (`textDocument/rename` blocked on unsafe rename)
@@ -82,12 +82,12 @@ This runs a JSON-RPC integration script against `mlangd --stdio` and checks:
 - range formatting hook endpoint (`textDocument/rangeFormatting`)
 
 ```bash
-python3 tests/lsp_integration_transcript.py --mlangd build/mlangd
+python3 tests/lsp_integration_transcript.py --mlangd build/mlangd-mla
 ```
 
 ### Option 1d: LSP Parity End-to-End (All Methods + Large Workspace)
 
-This runs a broader JSON-RPC parity suite against `mlangd --stdio`, covering:
+This runs a broader JSON-RPC parity suite against `mlangd-mla --stdio`, covering:
 - all currently advertised request methods (`definition`, `implementation`,
   `references`, `hover`, `documentHighlight`, `completion`, `signatureHelp`,
   `prepareRename`, `rename`, `documentSymbol`, `formatting`,
@@ -98,20 +98,20 @@ This runs a broader JSON-RPC parity suite against `mlangd --stdio`, covering:
 - module resolution via `mlang.toml` `module_paths`
 
 ```bash
-python3 tests/lsp_parity_e2e.py --mlangd build/mlangd
+python3 tests/lsp_parity_e2e.py --mlangd build/mlangd-mla
 # Optional: tune large workspace size
-python3 tests/lsp_parity_e2e.py --mlangd build/mlangd --bulk-files 400
+python3 tests/lsp_parity_e2e.py --mlangd build/mlangd-mla --bulk-files 400
 ```
 
 ### Option 1d2: LSP Formatting Config Transcript (`.mlang-format`)
 
-This focused JSON-RPC transcript for `mlangd --stdio` verifies formatting reads
+This focused JSON-RPC transcript verifies that the selected language server reads
 `.mlang-format` from the workspace and changes `textDocument/formatting`
 output accordingly (indent width, operator/comma/colon spacing, trailing
 newline).
 
 ```bash
-python3 tests/lsp_mlangd_format_config_transcript.py --mlangd build/mlangd
+python3 tests/lsp_mlangd_format_config_transcript.py --mlangd build/mlangd-mla
 ```
 
 ### Option 1e: mlangd-mla organizeImports Transcript (CodeAction)
@@ -144,6 +144,7 @@ Runs both focused `mlangd-mla` transcript checks in one command:
 - rename `documentChanges` + cross-document edits
 - quickfix codeAction for missing semicolon diagnostics
 - document/range formatting edit behavior
+- `.mlang-format` discovery and style options
 - pull diagnostic `resultId` + `kind: unchanged` behavior
 - semantic tokens typed output + modifier bits
 - multi-file implementation/references edge cases

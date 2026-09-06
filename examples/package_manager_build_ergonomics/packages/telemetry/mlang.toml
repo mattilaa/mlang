@@ -1,0 +1,9 @@
+[package]
+name = "telemetry"
+version = "1.1.0"
+
+[[lib]]
+name = "telemetry"
+entry = "src/telemetry.mla"
+type = "dynamic"
+

@@ -1,0 +1,10 @@
+[package]
+name = "math"
+version = "2.1.3"
+
+[dependencies]
+
+[[lib]]
+name = "math"
+entry = "src/math.mla"
+type = "dynamic"

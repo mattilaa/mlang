@@ -157,15 +157,19 @@ demo directory so its `mlang.toml` is selected automatically.
 
 | Directory | What it demonstrates | How to run |
 |---|---|---|
+| `examples/package_manager_build_ergonomics` | Named profiles, feature-gated optional dependencies, workspace package selection, content-addressed global cache reuse, and a vendored locked offline build. | `./examples/package_manager_build_ergonomics/run_demo.sh` |
+| `examples/package_manager_ecosystem` | Signed source packaging, a local protocol-v1 registry, verified install, install receipts, advisory policies, and CycloneDX SBOM generation. | `./examples/package_manager_ecosystem/run_demo.sh` |
 | `examples/package_manager_dynamic_library` | An MLang `[[lib]]` dynamic library built before and linked automatically into a dependent `[[bin]]` target. | `(cd examples/package_manager_dynamic_library && ../../build/mlang pkg build && ./build/dynamic_library_demo)` |
 | `examples/package_manager_coreaudio_filter` | macOS CoreAudio playback with MLang low-pass, high-pass, band-pass, and Moog-style filter sweeps. | `(cd examples/package_manager_coreaudio_filter && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_delay_audio` | WAV/AIFF playback through forward or ping-pong delay with live feedback, filtering, damping, jitter, recording, and replay controls. | `(cd examples/package_manager_delay_audio && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_git_cjson` | Fetching and building cJSON from Git while also using system libcurl. | `(cd examples/package_manager_git_cjson && ../../build/mlang pkg fetch && ../../build/mlang pkg build && ./build/cjson_demo)` |
+| `examples/package_manager_includes` | Explicitly selected independent child manifests collected into isolated root `build/<target>` directories. | `./examples/package_manager_includes/run_demo.sh` |
 | `examples/package_manager_linux_aarch64_qemu` | Fetching and building a Linux AArch64 kernel, constructing BusyBox or GNU initramfs userspace, and booting it with QEMU. This is a large, toolchain-heavy demo. | `(cd examples/package_manager_linux_aarch64_qemu && ../../build/mlang pkg run boot-flow)` |
 | `examples/package_manager_moog_ladder_sequence` | A generated bass sequence with amplitude/filter envelopes, Moog-style ladder filtering, and an optional TB-303-inspired voice. | `(cd examples/package_manager_moog_ladder_sequence && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_multi_bins` | Multiple `[[bin]]` targets with target-specific build settings and fetched dependencies. | `(cd examples/package_manager_multi_bins && ../../build/mlang pkg fetch && ../../build/mlang pkg build && ./build/hello && ./build/inspect)` |
 | `examples/package_manager_multilanguage_example` | One task graph compiling MLang, C, and C++ sources and linking them into an audio application. | `(cd examples/package_manager_multilanguage_example && ../../build/mlang pkg run play-sample)` |
 | `examples/package_manager_oscilloscope_demo` | A macOS CoreAudio waveform oscilloscope with an MLang frontend and C++ audio/rendering bridge. | `(cd examples/package_manager_oscilloscope_demo && ../../build/mlang pkg run demo)` |
+| `examples/package_manager_path_dependencies` | Local MLang packages, a transitive `app -> core -> math` graph, semantic version requirements, locking, `pkg tree`, and `pkg why`. | `./examples/package_manager_path_dependencies/run_demo.sh` |
 | `examples/package_manager_reverb2_trance` | A trance drum sequence using the independent `dsp::reverb2`, analog-color processing, and a look-ahead limiter. | `(cd examples/package_manager_reverb2_trance && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_reverb_techno` | A sample-based techno sequence with selectable `dsp::reverb` algorithms and CoreAudio/JACK playback. | `(cd examples/package_manager_reverb_techno && ../../build/mlang pkg run demo)` |
 | `examples/package_manager_static_library` | An MLang `[[lib]]` archived as a static `.a` library and linked into a dependent executable. | `(cd examples/package_manager_static_library && ../../build/mlang pkg build && ./build/static_library_demo)` |
@@ -173,7 +177,7 @@ demo directory so its `mlang.toml` is selected automatically.
 | `examples/package_manager_task_graph` | Named task branches, `join_on`, phases, and phase barriers. | `(cd examples/package_manager_task_graph && ../../build/mlang pkg run workflow)` |
 | `examples/package_manager_vst3_coreaudio_synth` | Fetching the Steinberg VST3 SDK, building an MLang-powered VST3 instrument, and previewing the same DSP through CoreAudio. | `(cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square)` |
 | `examples/package_manager_vst3_sdk_example` | Fetching the Steinberg SDK and calling a small C++ metadata bridge from MLang without building a full plug-in. | `(cd examples/package_manager_vst3_sdk_example && ../../build/mlang pkg run demo)` |
-| `examples/package_manager_workspace_fetch` | Recursive workspace discovery with one Git-backed and one tarball-backed cJSON subpackage. | `./examples/package_manager_workspace_fetch/run_demo.sh` |
+| `examples/package_manager_workspace_fetch` | Recursive workspace discovery plus a shared lockfile with an exact Git revision, archive SHA-256, strict build, and verification. | `./examples/package_manager_workspace_fetch/run_demo.sh` |
 
 ### Verify the dynamic-library package
 

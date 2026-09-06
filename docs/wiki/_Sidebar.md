@@ -85,6 +85,7 @@
 - [[Bootstrap|Bootstrap]]
 - [[mlangpkg|Mlangpkg]]
 - [[Package Manager|Package-Manager]]
+- [[Registry Protocol v1|Registry-Protocol]]
 - [[Tests|Tests]]
 
 ## Examples
@@ -103,5 +104,4 @@
 - [[`mlang-frontend-mla`|Man-mlang-frontend-mla]]
 - [[`mlang-format`|Man-mlang-format]]
 - [[`mlang-pkg`|Man-mlang-pkg]]
-- [[`mlangd`|Man-mlangd]]
 - [[`mlangd-mla`|Man-mlangd-mla]]

@@ -1219,6 +1219,8 @@ static bool manifest_requires_cpp_pkg_frontend()
 
     if(content.find("[workspace]") != std::string::npos)
         return true;
+    if(content.find("[[include]]") != std::string::npos)
+        return true;
     if(content.find("[tool.mlang.toolchains]") != std::string::npos)
         return true;
     if(content.find("[[bin]]") != std::string::npos)
@@ -1261,6 +1263,14 @@ static bool manifest_requires_cpp_pkg_frontend()
         return true;
     if(content.find("build = \"none\"") != std::string::npos)
         return true;
+    if(content.find("path =") != std::string::npos ||
+       content.find("build = \"mlang\"") != std::string::npos)
+        return true;
+    if(content.find("[profile.") != std::string::npos ||
+       content.find("[features]") != std::string::npos ||
+       content.find("optional = true") != std::string::npos ||
+       content.find("[registry]") != std::string::npos)
+        return true;
     return false;
 }
 
@@ -1293,12 +1303,27 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
             std::string arg = argv[i];
             if(arg == "--url" || arg == "--archive" ||
                arg == "--strip-components" || arg == "--subdir" ||
+               arg == "--path" || arg == "--version" ||
                arg == "--add-lib" || arg == "--project-dir")
             {
                 return std::nullopt;
             }
         }
     }
+    if(argc >= subIndex + 1 &&
+       (std::string(argv[subIndex]) == "lock" ||
+        std::string(argv[subIndex]) == "verify" ||
+        std::string(argv[subIndex]) == "vendor" ||
+        std::string(argv[subIndex]) == "package" ||
+        std::string(argv[subIndex]) == "publish" ||
+        std::string(argv[subIndex]) == "install" ||
+        std::string(argv[subIndex]) == "audit" ||
+        std::string(argv[subIndex]) == "sbom" ||
+        std::string(argv[subIndex]) == "sign" ||
+        std::string(argv[subIndex]) == "verify-signature" ||
+        std::string(argv[subIndex]) == "tree" ||
+        std::string(argv[subIndex]) == "why"))
+        return std::nullopt;
     if(argc >= subIndex + 1 &&
        (std::string(argv[subIndex]) == "fetch" ||
         std::string(argv[subIndex]) == "build" ||
@@ -1307,9 +1332,21 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
         for(int i = subIndex + 1; i < argc; ++i)
         {
             std::string arg = argv[i];
-            if(arg == "--build-dir" || arg == "--deps-dir" || arg == "--deps")
+            if(arg == "--build-dir" || arg == "--deps-dir" || arg == "--deps" ||
+               arg == "--locked" || arg == "--offline")
                 return std::nullopt;
         }
+    }
+    for(int i = 2; i < argc; ++i)
+    {
+        const std::string arg = argv[i];
+        if(arg == "--profile" || arg == "-P" || arg == "--release" ||
+           arg == "--features" || arg == "--all-features" ||
+           arg == "--no-default-features" || arg == "--package" ||
+           arg == "-p" || arg == "--workspace" || arg == "--exclude" ||
+           arg == "--cache-dir" || arg == "--no-global-cache" ||
+           arg == "--vendor-dir")
+            return std::nullopt;
     }
     if(manifest_requires_cpp_pkg_frontend())
         return std::nullopt;

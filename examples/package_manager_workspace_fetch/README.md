@@ -15,6 +15,11 @@ members = ["packages"]
 `mlang pkg fetch` and `mlang pkg build` run from the workspace root and
 discover package manifests recursively under `packages/`.
 
+The demo also exercises reproducible dependency locking. `pkg lock` records
+the exact Git commit and the downloaded archive's SHA-256 in the shared root
+`mlang.lock`; `--locked` prevents a stale lock from being changed, and
+`pkg verify` checks the fetched sources against it.
+
 ## Included packages
 
 - `packages/git_cjson_demo`
@@ -33,8 +38,9 @@ parse JSON at runtime.
 From this directory:
 
 ```sh
-mlang pkg fetch
-mlang pkg build
+mlang pkg lock
+mlang pkg build --locked
+mlang pkg verify
 ./packages/git_cjson_demo/build/git_cjson_demo
 ./packages/tarball_cjson_demo/build/tarball_cjson_demo
 mlang pkg clean
@@ -50,6 +56,9 @@ Or run the helper script:
 
 - The workspace root itself is not a package. It only declares `[workspace]`.
 - Each discovered subpackage keeps its own local `build/` directory.
+- Both workspace members share the root `mlang.lock`.
+- After one successful online fetch, `mlang pkg fetch --offline` reuses the
+  locked Git checkout and cached archive without contacting their origins.
 - The tarball package uses:
 
 ```toml

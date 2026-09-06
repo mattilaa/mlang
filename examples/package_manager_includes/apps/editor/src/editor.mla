@@ -1,0 +1,3 @@
+fn main() {
+    println!("editor package built in its include target");
+}

@@ -142,6 +142,7 @@ PAGES: list[Page] = [
     Page(Path("bootstrap/README.md"), "Bootstrap", "Bootstrap", "Tooling"),
     Page(Path("tools/mlangpkg/README.md"), "mlangpkg", "Mlangpkg", "Tooling"),
     Page(Path("docs/package_manager.md"), "Package Manager", "Package-Manager", "Tooling"),
+    Page(Path("docs/registry_protocol.md"), "Registry Protocol v1", "Registry-Protocol", "Tooling"),
     Page(Path("tests/README.md"), "Tests", "Tests", "Tooling"),
 ]
 
@@ -151,7 +152,6 @@ MANPAGES: list[tuple[Path, str]] = [
     (Path("docs/man/mlang-frontend-mla.1"), "mlang-frontend-mla"),
     (Path("docs/man/mlang-format.1"), "mlang-format"),
     (Path("docs/man/mlang-pkg.1"), "mlang-pkg"),
-    (Path("docs/man/mlangd.1"), "mlangd"),
     (Path("docs/man/mlangd-mla.1"), "mlangd-mla"),
 ]
 

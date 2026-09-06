@@ -1,0 +1,11 @@
+[package]
+name = "editor-tools"
+version = "0.1.0"
+
+[[bin]]
+name = "editor"
+entry = "src/editor.mla"
+
+[[bin]]
+name = "asset-compiler"
+entry = "src/assets.mla"

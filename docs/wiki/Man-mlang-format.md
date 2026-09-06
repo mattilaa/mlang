@@ -103,6 +103,5 @@ mlang-format --root . --style file src/main.mla
 .fi
 .SH SEE ALSO
 .BR mlang (1),
-.BR mlangd (1),
 .BR mlangd-mla (1)
 ```

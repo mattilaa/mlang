@@ -27,6 +27,9 @@ subdirectory-based showcases are indexed separately in
   - [Route planning and genetic algorithms](#route-planning-and-genetic-algorithms)
   - [Package-manager dynamic library](#package-manager-dynamic-library)
   - [Package-manager static library](#package-manager-static-library)
+  - [Package-manager path dependencies](#package-manager-path-dependencies)
+  - [Package-manager build ergonomics](#package-manager-build-ergonomics)
+  - [Package-manager ecosystem](#package-manager-ecosystem)
 - [Focused regression examples](#focused-regression-examples)
 - [Directory-based demos](Demos)
 
@@ -161,7 +164,10 @@ following additional programs are useful runnable showcases:
   library linked into a dependent executable target.
 - `examples/package_manager_static_library` — manifest-built MLang static
   archive linked into a dependent executable target.
-- `examples/package_manager_workspace_fetch` — workspace dependency fetching.
+- `examples/package_manager_workspace_fetch` — workspace dependency fetching,
+  exact Git/archive locking, offline cache use, and verification.
+- `examples/package_manager_includes` — explicit child-manifest includes with
+  isolated root output targets.
 - `examples/package_manager_task_graph` — package task graph configuration.
 - `examples/package_manager_multilanguage_example` — package build combining
   MLang, C, and C++ sources.
@@ -312,6 +318,51 @@ elif command -v ldd >/dev/null 2>&1; then
   ! ldd build/static_library_demo | grep -q arithmetic_static
 fi
 ```
+
+### Package-manager path dependencies
+
+`examples/package_manager_path_dependencies` builds three independent MLang
+packages connected by two local dependency edges. It demonstrates transitive
+resolution, semantic version requirements, graph inspection, locking, and
+dynamic-library linkage:
+
+```sh
+./examples/package_manager_path_dependencies/run_demo.sh
+```
+
+The graph is `path_dependency_app -> core -> math`; the final executable
+prints `transitive path dependency result: 42`.
+
+### Package-manager build ergonomics
+
+`examples/package_manager_build_ergonomics` combines named profiles, an
+optional dependency activated by a feature, workspace package selection,
+content-addressed artifact reuse, and vendoring:
+
+```sh
+./examples/package_manager_build_ergonomics/run_demo.sh
+```
+
+The two applications are selected independently. The script builds and runs
+`ergonomic_app` in `dev`, cleans its local outputs, rebuilds it from the global
+cache, then vendors the locked dependency graph and runs a `release` build in
+locked offline mode. Successful runs print `ergonomic app result: 42`, cache
+hit messages, and `utility app selected independently`.
+
+### Package-manager ecosystem
+
+`examples/package_manager_ecosystem` creates a temporary RSA key pair and
+local registry, then exercises signed packaging, publication, semantic-version
+installation, checksum/signature verification, an installation receipt,
+CycloneDX output, and advisory severity policies:
+
+```sh
+./examples/package_manager_ecosystem/run_demo.sh
+```
+
+A successful run executes the installed binary and prints `signed registry
+package installed successfully`. Generated secrets and registry/install state
+stay below the example's ignored `build/` directory.
 
 ## Focused regression examples
 

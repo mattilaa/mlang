@@ -1,0 +1,257 @@
+mod std::fs;
+mod std::jsonrpc;
+mod std::strbuf;
+
+use std::fs::BufReader;
+use std::fs::File;
+use std::fs::cwd;
+use std::fs::file_exists;
+use std::fs::free_lines;
+use std::fs::parent_dir;
+use std::jsonrpc::format_text_with_style_options;
+use std::strbuf::concat;
+use std::strbuf::ends_with;
+use std::strbuf::eq;
+use std::strbuf::find;
+use std::strbuf::len;
+use std::strbuf::rtrim;
+use std::strbuf::starts_with;
+use std::strbuf::trim;
+
+struct FormatConfig {
+    var indent_width: i64;
+    var continuation_indent_width: i64;
+    var condition_continuation_indent_width: i64;
+    var indent_function_signature_closing_paren: bool;
+    var ensure_trailing_newline: bool;
+    var space_after_comma: bool;
+    var space_after_colon: bool;
+    var space_before_ternary_colon: bool;
+    var space_around_operators: bool;
+    var space_around_relational_operators: bool;
+    var space_inside_braces_single_line: bool;
+    var compact_fat_arrow: bool;
+};
+
+fn default_config() -> FormatConfig {
+    return FormatConfig {
+        indent_width: 4,
+        continuation_indent_width: 4,
+        condition_continuation_indent_width: 3,
+        indent_function_signature_closing_paren: false,
+        ensure_trailing_newline: false,
+        space_after_comma: true,
+        space_after_colon: true,
+        space_before_ternary_colon: true,
+        space_around_operators: true,
+        space_around_relational_operators: true,
+        space_inside_braces_single_line: true,
+        compact_fat_arrow: true
+    };
+}
+
+fn parse_width_option(
+    line: str8,
+    key: str8,
+    fallback: i64,
+    allow_three: bool,
+    allow_zero: bool
+) -> i64 {
+    let prefix: str8 = concat(key, ":");
+    if starts_with(line, prefix) == 0 { return fallback; }
+    if find(line, ": 16") >= 0 { return 16; }
+    if find(line, ":16") >= 0 { return 16; }
+    if find(line, ": 12") >= 0 { return 12; }
+    if find(line, ":12") >= 0 { return 12; }
+    if find(line, ": 10") >= 0 { return 10; }
+    if find(line, ":10") >= 0 { return 10; }
+    if find(line, ": 8") >= 0 { return 8; }
+    if find(line, ":8") >= 0 { return 8; }
+    if find(line, ": 6") >= 0 { return 6; }
+    if find(line, ":6") >= 0 { return 6; }
+    if find(line, ": 4") >= 0 { return 4; }
+    if find(line, ":4") >= 0 { return 4; }
+    if allow_three {
+        if find(line, ": 3") >= 0 { return 3; }
+        if find(line, ":3") >= 0 { return 3; }
+    }
+    if find(line, ": 2") >= 0 { return 2; }
+    if find(line, ":2") >= 0 { return 2; }
+    if allow_zero {
+        if find(line, ": 0") >= 0 { return 0; }
+        if find(line, ":0") >= 0 { return 0; }
+    }
+    return fallback;
+}
+
+fn parse_bool_option(line: str8, key: str8, fallback: bool) -> bool {
+    let prefix: str8 = concat(key, ":");
+    if starts_with(line, prefix) == 0 { return fallback; }
+    if find(line, "true") >= 0 { return true; }
+    if find(line, "True") >= 0 { return true; }
+    if find(line, "false") >= 0 { return false; }
+    if find(line, "False") >= 0 { return false; }
+    return fallback;
+}
+
+fn read_config(path: str8) -> FormatConfig {
+    let open_r: result<File, str8> = File::open(path);
+    if open_r.is_err() { return default_config(); }
+    let file: File = open_r.unwrap();
+    let reader: BufReader = BufReader::new(file);
+    let lines: list<str8> = reader.lines();
+    var cfg: FormatConfig = default_config();
+
+    for raw in lines {
+        let line: str8 = trim(raw);
+        if len(line) == 0 { continue; }
+        if starts_with(line, "#") == 1 { continue; }
+        if starts_with(line, "//") == 1 { continue; }
+
+        cfg.indent_width = parse_width_option(
+            line, "IndentWidth", cfg.indent_width, false, false);
+        cfg.continuation_indent_width = parse_width_option(
+            line,
+            "ContinuationIndentWidth",
+            cfg.continuation_indent_width,
+            false,
+            true
+        );
+        cfg.condition_continuation_indent_width = parse_width_option(
+            line,
+            "ConditionContinuationIndentWidth",
+            cfg.condition_continuation_indent_width,
+            true,
+            true
+        );
+        cfg.indent_function_signature_closing_paren = parse_bool_option(
+            line,
+            "IndentFunctionSignatureClosingParen",
+            cfg.indent_function_signature_closing_paren
+        );
+        cfg.ensure_trailing_newline = parse_bool_option(
+            line, "EnsureTrailingNewline", cfg.ensure_trailing_newline);
+        cfg.space_after_comma = parse_bool_option(
+            line, "SpaceAfterComma", cfg.space_after_comma);
+        cfg.space_after_colon = parse_bool_option(
+            line, "SpaceAfterColon", cfg.space_after_colon);
+        cfg.space_before_ternary_colon = parse_bool_option(
+            line, "SpaceBeforeTernaryColon", cfg.space_before_ternary_colon);
+        cfg.space_around_operators = parse_bool_option(
+            line, "SpaceAroundOperators", cfg.space_around_operators);
+        cfg.space_around_relational_operators = parse_bool_option(
+            line,
+            "SpaceAroundRelationalOperators",
+            cfg.space_around_relational_operators
+        );
+        cfg.space_inside_braces_single_line = parse_bool_option(
+            line,
+            "SpaceInsideBracesSingleLine",
+            cfg.space_inside_braces_single_line
+        );
+        cfg.compact_fat_arrow = parse_bool_option(
+            line, "CompactFatArrow", cfg.compact_fat_arrow);
+    }
+
+    free_lines(lines);
+    return cfg;
+}
+
+fn normalize_start_dir(start_path: str8) -> str8 {
+    if len(start_path) == 0 { return cwd(); }
+    if ends_with(start_path, ".mla") == 1 { return parent_dir(start_path); }
+    if ends_with(start_path, ".mlastub") == 1 { return parent_dir(start_path); }
+    return start_path;
+}
+
+fn find_config(start_path: str8, root_path: str8) -> str8 {
+    var current: str8 = normalize_start_dir(start_path);
+    let root_enabled: bool = len(root_path) > 0;
+    for _i in 0..128 {
+        let candidate: str8 = concat(current, "/.mlang-format");
+        if file_exists(candidate) == 1 { return candidate; }
+        if root_enabled {
+            if eq(current, root_path) == 1 { return ""; }
+        }
+        let parent: str8 = parent_dir(current);
+        if eq(parent, current) == 1 { return ""; }
+        current = parent;
+    }
+    return "";
+}
+
+fn bool_to_int(value: bool) -> i32 {
+    if value { return 1; }
+    return 0;
+}
+
+fn apply_config(
+    text: str8,
+    cfg: FormatConfig,
+    insert_spaces: i32,
+    honor_trailing_newline: bool
+) -> str8 {
+    var formatted: str8 = format_text_with_style_options(
+        text,
+        cfg.indent_width,
+        insert_spaces,
+        cfg.continuation_indent_width,
+        cfg.condition_continuation_indent_width,
+        bool_to_int(cfg.indent_function_signature_closing_paren),
+        bool_to_int(cfg.space_after_comma),
+        bool_to_int(cfg.space_after_colon),
+        bool_to_int(cfg.space_before_ternary_colon),
+        bool_to_int(cfg.space_around_operators),
+        bool_to_int(cfg.space_inside_braces_single_line),
+        bool_to_int(cfg.compact_fat_arrow),
+        bool_to_int(cfg.space_around_relational_operators)
+    );
+    if honor_trailing_newline {
+        if cfg.ensure_trailing_newline {
+            if ends_with(formatted, "\n") == 0 {
+                formatted = concat(formatted, "\n");
+            }
+            return formatted;
+        }
+        return rtrim(formatted);
+    }
+    return formatted;
+}
+
+fn resolved_config(
+    config_path: str8,
+    tab_size: i64
+) -> FormatConfig {
+    if len(config_path) > 0 { return read_config(config_path); }
+    var cfg: FormatConfig = default_config();
+    if tab_size > 0 { cfg.indent_width = tab_size; }
+    return cfg;
+}
+
+pub fn format_document_with_file_style(
+    text: str8,
+    source_path: str8,
+    root_path: str8,
+    tab_size: i64,
+    insert_spaces: i32
+) -> str8 {
+    let config_path: str8 = find_config(source_path, root_path);
+    var cfg: FormatConfig = resolved_config(config_path, tab_size);
+    var effective_insert_spaces: i32 = insert_spaces;
+    if len(config_path) > 0 { effective_insert_spaces = 1; }
+    return apply_config(text, cfg, effective_insert_spaces, true);
+}
+
+pub fn format_range_with_file_style(
+    text: str8,
+    source_path: str8,
+    root_path: str8,
+    tab_size: i64,
+    insert_spaces: i32
+) -> str8 {
+    let config_path: str8 = find_config(source_path, root_path);
+    var cfg: FormatConfig = resolved_config(config_path, tab_size);
+    var effective_insert_spaces: i32 = insert_spaces;
+    if len(config_path) > 0 { effective_insert_spaces = 1; }
+    return apply_config(text, cfg, effective_insert_spaces, false);
+}

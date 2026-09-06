@@ -6,8 +6,9 @@ compiler="$root_dir/../../build/mlang"
 
 cd "$root_dir"
 
-"$compiler" pkg fetch
-"$compiler" pkg build
+"$compiler" pkg lock
+"$compiler" pkg build --locked
+"$compiler" pkg verify
 
 echo
 echo "[git package]"

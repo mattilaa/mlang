@@ -1,0 +1,11 @@
+[package]
+name = "core"
+version = "1.2.4"
+
+[dependencies]
+math = { path = "../math", version = "~2.1" }
+
+[[lib]]
+name = "core"
+entry = "src/core.mla"
+type = "dynamic"

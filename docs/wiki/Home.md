@@ -44,6 +44,7 @@ If you are new to MLang, read these pages in this order:
 3. [Language Syntax](Language-Syntax)
 4. [Language Attributes](Language-Attributes)
 5. [Package Manager](Package-Manager)
+6. [Registry Protocol v1](Registry-Protocol)
 6. [Stdlib Module API](Stdlib-Module-API)
 7. [DSP Library](DSP)
 8. [Directory Demos](Demos)
@@ -71,6 +72,7 @@ If you are new to MLang, read these pages in this order:
   Filtering, convolution, FFT, interpolation, and real-time parameter ramps
   under the standalone [`dsp`](DSP) namespace.
 - [Package Manager](Package-Manager)
+- [Registry Protocol v1](Registry-Protocol)
   `mlang pkg` workflow, subcommands, manifest layout, and package build
   configuration keys.
 - [UML UI Generator Example](UML-UI-Generator)
@@ -234,6 +236,7 @@ The language is intentionally pragmatic rather than ideological.
 - [Language Syntax](Language-Syntax)
 - [Language Attributes](Language-Attributes)
 - [Package Manager](Package-Manager)
+- [Registry Protocol v1](Registry-Protocol)
 - [UML UI Generator Example](UML-UI-Generator)
 - [Directory Demos](Demos)
 - [Stdlib Module API](Stdlib-Module-API)

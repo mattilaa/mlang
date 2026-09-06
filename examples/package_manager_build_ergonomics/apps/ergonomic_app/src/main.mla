@@ -1,0 +1,5 @@
+fn main() -> i32 {
+    let result: i32 = 40 + 2;
+    println!("ergonomic app result: {}", result);
+    return result == 42 ? 0 : 1;
+}

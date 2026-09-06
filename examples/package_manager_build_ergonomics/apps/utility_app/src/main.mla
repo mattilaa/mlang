@@ -1,0 +1,5 @@
+fn main() -> i32 {
+    println!("utility app selected independently");
+    return 0;
+}
+

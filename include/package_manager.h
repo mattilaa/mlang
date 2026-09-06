@@ -173,6 +173,33 @@
  * applied recursively to regular files, and directories keep traverse bits so
  * a source tree remains usable after `chmod = "644"`.
  *
+ * A coordinator manifest can explicitly select independent child packages
+ * with `[[include]]`. Each include requires a unique `target`; child sources
+ * and tasks remain relative to their own manifest, while artifacts and
+ * dependencies are collected under the coordinator's `build/<target>`.
+ * \code{.toml}
+ * [[include]]
+ * path = "apps/editor"
+ * target = "editor"
+ *
+ * [[include]]
+ * path = "tools/converter/mlang.toml"
+ * target = "converter"
+ * \endcode
+ *
+ * Dependency operations share a deterministic `mlang.lock` beside the root
+ * manifest. The lock records exact Git commits and archive SHA-256 checksums.
+ * `pkg lock` resolves it, `pkg verify` checks cached sources, `--locked`
+ * refuses lockfile changes, and `--offline` prevents package-manager network
+ * fetches while requiring locked sources to exist locally.
+ *
+ * MLang packages can depend recursively on local packages with
+ * `name = { path = "packages/name", version = "^1.2" }`. Path dependencies
+ * default to the MLang builder; Git/archive sources can select it with
+ * `build = "mlang"`. `pkg tree` displays the resolved graph and `pkg why`
+ * reports why a direct or transitive package is present. Semantic ranges,
+ * cycles, source conflicts, and resolved versions are validated and locked.
+ *
  * Linux initramfs example using BusyBox as the real `/init` while optionally
  * overlaying a wider GNU userspace selected from the command line:
  * \code{.toml}
