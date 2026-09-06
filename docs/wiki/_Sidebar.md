@@ -104,4 +104,5 @@
 - [[`mlang-frontend-mla`|Man-mlang-frontend-mla]]
 - [[`mlang-format`|Man-mlang-format]]
 - [[`mlang-pkg`|Man-mlang-pkg]]
+- [[`mlangd`|Man-mlangd]]
 - [[`mlangd-mla`|Man-mlangd-mla]]

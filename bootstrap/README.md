@@ -24,7 +24,7 @@ cmake -S . -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release; cmake --build 
 ```
 
 That install step also installs native man pages such as `man mlang`,
-`man mlang-pkg`, `man mlangd-mla`, and `man mlang-format` under
+`man mlang-pkg`, `man mlangd`, and `man mlang-format` under
 `$HOME/.local/share/man/man1`.
 
 The repository also ships checked-in roff sources under `docs/man/`. Stage
@@ -79,6 +79,7 @@ Current task entrypoints:
 
 - `configure`
 - `build-mlang`
+- `build-mlangd` (alias)
 - `build-mlangd-mla`
 - `build-mlang-format`
 - `build-mlang-frontend-mla`
@@ -91,6 +92,7 @@ Current task entrypoints:
 - `docs`
 - `install-mlang`
 - `install-all`
+- `install-mlangd` (alias)
 - `install-mlangd-mla`
 - `install-mlang-format`
 - `install-mlang-frontend`
@@ -100,6 +102,7 @@ Examples:
 
 ```sh
 ./bootstrap/run-bootstrap.sh run build-mlang
+./bootstrap/run-bootstrap.sh run build-mlangd
 ./bootstrap/run-bootstrap.sh run build-mlangd-mla
 ./bootstrap/run-bootstrap.sh run build-mlang-format
 ./bootstrap/run-bootstrap.sh run build-mlang-frontend
@@ -109,7 +112,7 @@ Examples:
 ./bootstrap/run-bootstrap.sh run unit-tests
 ./bootstrap/run-bootstrap.sh run robot-tests
 ./bootstrap/run-bootstrap.sh run docs
-./bootstrap/run-bootstrap.sh run install-mlangd-mla
+./bootstrap/run-bootstrap.sh run install-mlangd
 ./bootstrap/run-bootstrap.sh run install-tooling
 ```
 

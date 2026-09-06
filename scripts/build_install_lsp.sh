@@ -77,7 +77,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 cmake -S . -B "$build_dir" -G "$generator" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
-cmake --build "$build_dir" --target mlangd-mla mlang-config
+cmake --build "$build_dir" --target mlangd mlangd-mla mlang-config
 
 if $install_after_build; then
   if $use_sudo; then

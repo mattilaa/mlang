@@ -226,6 +226,6 @@ modules.
 .SH SEE ALSO
 .BR mlang-pkg (1),
 .BR mlang-format (1),
-.BR mlangd-mla (1),
+.BR mlangd (1),
 .BR mlang-frontend (1)
 ```
