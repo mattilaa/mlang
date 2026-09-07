@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <pthread.h>
 
 using mlang::ir_detail::common::Helpers;
 
