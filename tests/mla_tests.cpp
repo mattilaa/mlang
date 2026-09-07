@@ -695,6 +695,47 @@ TEST_F(MLATest, FixedArrayAllowsBraceInitializerWithinCapacity)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, MultiarraySupportsOneOrMoreFixedDimensions)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let line: multiarray<i32, 3> = {10, 20, 30};
+            let cube: multiarray<i32, 2, 2, 2> = {
+                {{1, 2}, {3, 4}},
+                {{5, 6}, {7, 8}}
+            };
+
+            if line[1] != 20 {
+                return 1;
+            }
+            if cube[0][1][0] != 3 || cube[1][1][1] != 8 {
+                return 2;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MultiarrayRejectsOversizedNestedInitializer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let matrix: multiarray<i32, 2, 2> = {
+                {1, 2, 3},
+                {4, 5}
+            };
+            return matrix[0][0];
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array initializer has 3 elements"), std::string::npos);
+    EXPECT_NE(out.find("array<i32, 2> capacity is 2"), std::string::npos);
+}
+
 TEST_F(MLATest, FixedArrayAllowsPartialBraceInitializer)
 {
     std::string code = R"(
