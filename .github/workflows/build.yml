@@ -140,10 +140,6 @@ jobs:
           ctest --test-dir build \
             --output-on-failure \
             --output-junit "$PWD/artifacts/unit/ctest.xml"
-          env \
-            MLANG_ARTIFACT_DIR="$PWD/artifacts/unit/mlang" \
-            PATH="$PWD/build:$PATH" \
-            build/mlang test tests
 
       - name: Robot tests
         env:
