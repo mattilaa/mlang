@@ -1,6 +1,7 @@
 #include "ir.h"
 #include "ir/ast_analysis.h"
 #include "ir/common.h"
+#include "llvm_compat.h"
 
 #include <llvm/Config/llvm-config.h>
 
@@ -391,7 +392,7 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
         for(auto* stmt : node->tryBlock->statements->statements)
         {
             generateStatement(stmt);
-            if(builder.GetInsertBlock()->getTerminator())
+            if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
         }
     }
@@ -404,7 +405,7 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
     if(node->tryBlock->isUnsafe)
         unsafeDepth--;
     exitCleanupScope();
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
     {
         builder.CreateCall(exceptionsPopFrameFunc, {frameHandle});
         builder.CreateBr(continueBB);
@@ -473,7 +474,7 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
 
     generateStatement(node->catchBlock);
     exitCleanupScope();
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         builder.CreateBr(continueBB);
 
     builder.SetInsertPoint(continueBB);
@@ -636,7 +637,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto thenActiveBorrowers = activeBorrowers;
     auto thenActiveMutBorrower = activeMutBorrower;
     llvm::BasicBlock* thenEnd = builder.GetInsertBlock();
-    bool thenFallsThrough = thenEnd && !thenEnd->getTerminator();
+    bool thenFallsThrough = thenEnd && !mlang::llvm_compat::terminatorOrNull(thenEnd);
 
     // Only add branch if block doesn't already have a terminator
     if(thenFallsThrough)
@@ -690,7 +691,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto elseActiveBorrowers = activeBorrowers;
     auto elseActiveMutBorrower = activeMutBorrower;
     llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
-    bool elseFallsThrough = elseEnd && !elseEnd->getTerminator();
+    bool elseFallsThrough = elseEnd && !mlang::llvm_compat::terminatorOrNull(elseEnd);
 
     // Only add branch if block doesn't already have a terminator
     if(elseFallsThrough)
@@ -920,13 +921,13 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         for(auto* stmt : node->body->statements)
         {
             generateStatement(stmt);
-            if(builder.GetInsertBlock()->getTerminator())
+            if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
         }
         exitCleanupScope();
     }
     llvm::BasicBlock* bodyEnd = builder.GetInsertBlock();
-    bool bodyFallsThrough = bodyEnd && !bodyEnd->getTerminator();
+    bool bodyFallsThrough = bodyEnd && !mlang::llvm_compat::terminatorOrNull(bodyEnd);
     auto bodyMoved = movedVariables;
     auto bodyPointerBorrowTarget = pointerBorrowTarget;
     auto bodyActiveBorrowers = activeBorrowers;
@@ -1137,13 +1138,13 @@ void CodeGenerator::generateForStatement(ForNode* node)
             for(auto stmt : node->body->statements)
             {
                 generateStatement(stmt);
-                if(builder.GetInsertBlock()->getTerminator())
+                if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                     break;
             }
             exitCleanupScope();
         }
 
-        if(!builder.GetInsertBlock()->getTerminator())
+        if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         {
             builder.CreateBr(incBB);
         }
@@ -1491,13 +1492,13 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         for(auto stmt : node->body->statements)
         {
             generateStatement(stmt);
-            if(builder.GetInsertBlock()->getTerminator())
+            if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
         }
         exitCleanupScope();
     }
 
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
     {
         builder.CreateBr(incBB);
     }
@@ -1811,13 +1812,13 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         for(auto stmt : node->body->statements)
         {
             generateStatement(stmt);
-            if(builder.GetInsertBlock()->getTerminator())
+            if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
         }
         exitCleanupScope();
     }
 
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
     {
         builder.CreateBr(incBB);
     }
@@ -2045,13 +2046,13 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
         for(auto stmt : node->body->statements)
         {
             generateStatement(stmt);
-            if(builder.GetInsertBlock()->getTerminator())
+            if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
         }
         exitCleanupScope();
     }
 
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         builder.CreateBr(incBB);
 
     incBB->insertInto(function);
@@ -2294,13 +2295,13 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
         for(auto stmt : node->body->statements)
         {
             generateStatement(stmt);
-            if(builder.GetInsertBlock()->getTerminator())
+            if(mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
         }
         exitCleanupScope();
     }
 
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
     {
         builder.CreateBr(incBB);
     }

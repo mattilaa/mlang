@@ -1,5 +1,6 @@
 #include "ir.h"
 #include "ir/common.h"
+#include "llvm_compat.h"
 
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Verifier.h>
@@ -492,7 +493,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     // Add terminator if needed
     llvm::Type* returnType = function->getReturnType();
     llvm::BasicBlock* currentBlock = builder.GetInsertBlock();
-    if(!currentBlock->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(currentBlock))
     {
         if(returnType->isVoidTy())
         {
@@ -3520,8 +3521,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         "__mlang_std_map_extend_raw", ft);
                     builder.CreateCall(
                         fn, {allocaPtr, srcPtr, keySize, valueSize});
-                    return llvm::Constant::getNullValue(
-                        llvm::Type::getVoidTy(context));
+                    return successfulVoidExpression(context);
                 }
                 if(node->methodName == "len")
                 {
@@ -4565,8 +4565,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     "__mlang_std_map_extend_raw", ft);
                 builder.CreateCall(fn,
                                    {recvPtr, srcPtr, keySize, valueSize});
-                return llvm::Constant::getNullValue(
-                    llvm::Type::getVoidTy(context));
+                return successfulVoidExpression(context);
             }
             if(node->methodName == "len")
             {

@@ -9,6 +9,7 @@
 #include <iostream>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/Config/llvm-config.h>
+#include <llvm/IR/Attributes.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/MC/TargetRegistry.h>
@@ -491,6 +492,10 @@ void Backend::optimize(const std::string& levelName)
 
     llvm::OptimizationLevel optLevel;
     bool runPipeline = true;
+#if LLVM_VERSION_MAJOR >= 23
+    bool optimizeForSize = false;
+    bool minimizeSize = false;
+#endif
     std::string normalized = level;
     if(!normalized.empty() && normalized[0] != '-')
         normalized = "-" + normalized;
@@ -524,12 +529,37 @@ void Backend::optimize(const std::string& levelName)
         optLevel = llvm::OptimizationLevel::O3;
         break;
     case OptLevelAlias::Os:
+#if LLVM_VERSION_MAJOR >= 23
+        optLevel = llvm::OptimizationLevel::O2;
+        optimizeForSize = true;
+#else
         optLevel = llvm::OptimizationLevel::Os;
+#endif
         break;
     case OptLevelAlias::Oz:
+#if LLVM_VERSION_MAJOR >= 23
+        optLevel = llvm::OptimizationLevel::O2;
+        optimizeForSize = true;
+        minimizeSize = true;
+#else
         optLevel = llvm::OptimizationLevel::Oz;
+#endif
         break;
     }
+
+#if LLVM_VERSION_MAJOR >= 23
+    if(optimizeForSize)
+    {
+        for(llvm::Function& function : *module)
+        {
+            if(function.isDeclaration())
+                continue;
+            function.addFnAttr(llvm::Attribute::OptimizeForSize);
+            if(minimizeSize)
+                function.addFnAttr(llvm::Attribute::MinSize);
+        }
+    }
+#endif
 
     llvm::ModulePassManager MPM;
     if(runPipeline)

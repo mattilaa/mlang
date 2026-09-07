@@ -2582,7 +2582,7 @@ TEST_F(MLATest, LegacyRuntimeHandleTypesAreNotBuiltins)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let handle: Handle<Thread>;
+            var handle: Handle<Thread>;
             return 0;
         }
     )";
@@ -3047,11 +3047,12 @@ TEST_F(MLATest, OwnershipHandleFreeDoubleFreeReportsError)
 {
     std::string code = R"(
         mod std::thread;
+        use std::thread::*;
 
         fn main() -> i32 {
-            let a: std::thread::atomic64 = std::thread::atomic_new(1);
-            std::thread::atomic_free_handle(a);
-            std::thread::atomic_free_handle(a);
+            let a: atomic64 = atomic_new(1);
+            atomic_i64_free(a.raw);
+            atomic_i64_free(a.raw);
             return 0;
         }
     )";

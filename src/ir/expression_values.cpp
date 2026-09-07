@@ -1,6 +1,7 @@
 #include "ir.h"
 #include "ir/ast_analysis.h"
 #include "ir/common.h"
+#include "llvm_compat.h"
 
 #include <llvm/Config/llvm-config.h>
 #include <functional>
@@ -1862,7 +1863,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(!okValue)
             return nullptr;
         llvm::BasicBlock* okEnd = builder.GetInsertBlock();
-        bool okFallsThrough = (okEnd->getTerminator() == nullptr);
+        bool okFallsThrough = (mlang::llvm_compat::terminatorOrNull(okEnd) == nullptr);
         if(okFallsThrough)
             builder.CreateBr(mergeBB);
 
@@ -1876,7 +1877,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(!errValue)
             return nullptr;
         llvm::BasicBlock* errEnd = builder.GetInsertBlock();
-        bool errFallsThrough = (errEnd->getTerminator() == nullptr);
+        bool errFallsThrough = (mlang::llvm_compat::terminatorOrNull(errEnd) == nullptr);
         if(errFallsThrough)
             builder.CreateBr(mergeBB);
 
@@ -1915,7 +1916,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             llvm::Type* src = val->getType();
             if(src == target)
                 return val;
-            llvm::IRBuilder<> castBuilder(block->getTerminator());
+            llvm::IRBuilder<> castBuilder(mlang::llvm_compat::terminatorOrNull(block));
             if(src->isIntegerTy() && target->isIntegerTy())
             {
                 unsigned srcBits = src->getIntegerBitWidth();
@@ -2096,7 +2097,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(!someValue)
             return nullptr;
         llvm::BasicBlock* someEnd = builder.GetInsertBlock();
-        bool someFallsThrough = (someEnd->getTerminator() == nullptr);
+        bool someFallsThrough = (mlang::llvm_compat::terminatorOrNull(someEnd) == nullptr);
         if(someFallsThrough)
             builder.CreateBr(mergeBB);
 
@@ -2110,7 +2111,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(!noneValue)
             return nullptr;
         llvm::BasicBlock* noneEnd = builder.GetInsertBlock();
-        bool noneFallsThrough = (noneEnd->getTerminator() == nullptr);
+        bool noneFallsThrough = (mlang::llvm_compat::terminatorOrNull(noneEnd) == nullptr);
         if(noneFallsThrough)
             builder.CreateBr(mergeBB);
 
@@ -2149,7 +2150,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             llvm::Type* src = val->getType();
             if(src == target)
                 return val;
-            llvm::IRBuilder<> castBuilder(block->getTerminator());
+            llvm::IRBuilder<> castBuilder(mlang::llvm_compat::terminatorOrNull(block));
             if(src->isIntegerTy() && target->isIntegerTy())
             {
                 unsigned srcBits = src->getIntegerBitWidth();
@@ -2360,7 +2361,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(!armVal)
             return nullptr;
         llvm::BasicBlock* armEnd = builder.GetInsertBlock();
-        if(!armEnd->getTerminator())
+        if(!mlang::llvm_compat::terminatorOrNull(armEnd))
         {
             armMovedStates.push_back(movedVariables);
             armPointerBorrowStates.push_back(pointerBorrowTarget);
@@ -2389,7 +2390,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(!armVal)
             return nullptr;
         llvm::BasicBlock* wildcardEnd = builder.GetInsertBlock();
-        if(!wildcardEnd->getTerminator())
+        if(!mlang::llvm_compat::terminatorOrNull(wildcardEnd))
         {
             armMovedStates.push_back(movedVariables);
             armPointerBorrowStates.push_back(pointerBorrowTarget);
@@ -2508,7 +2509,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         llvm::BasicBlock* blk = pair.second;
         if(val->getType() == commonType)
             continue;
-        llvm::IRBuilder<> castBuilder(blk->getTerminator());
+        llvm::IRBuilder<> castBuilder(mlang::llvm_compat::terminatorOrNull(blk));
         llvm::Value* casted = val;
         llvm::Type* src = val->getType();
         if(src->isIntegerTy() && commonType->isIntegerTy())

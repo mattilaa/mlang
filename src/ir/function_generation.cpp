@@ -1,6 +1,7 @@
 #include "ir.h"
 #include "ir/ast_analysis.h"
 #include "ir/common.h"
+#include "llvm_compat.h"
 
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Verifier.h>
@@ -482,7 +483,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     // If the function is void and doesn't have a return, add one
     llvm::Type* returnType = function->getReturnType();
     llvm::BasicBlock* currentBlock = builder.GetInsertBlock();
-    if(!currentBlock->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(currentBlock))
     {
         if(currentFunctionExceptionFrame)
             builder.CreateCall(exceptionsPopFrameFunc,

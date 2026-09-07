@@ -1,11 +1,13 @@
 #include "ir.h"
 #include "ir/common.h"
+#include "llvm_compat.h"
 #include "module.h"
 
 #include <llvm/Config/llvm-config.h>
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <pthread.h>
 
 using mlang::ir_detail::common::Helpers;
 
@@ -694,7 +696,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 {
                     generateStatement(stmt);
                     if(builder.GetInsertBlock() &&
-                       builder.GetInsertBlock()->getTerminator())
+                       mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                         break;
                 }
             }
@@ -1503,14 +1505,14 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
         {
             generateStatement(stmt);
             if(builder.GetInsertBlock() &&
-               builder.GetInsertBlock()->getTerminator())
+               mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
                 break;
         }
     }
 
     exitCleanupScope();
 
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         builder.CreateRetVoid();
 
     // Restore caller state

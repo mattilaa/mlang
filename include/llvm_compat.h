@@ -1,6 +1,8 @@
 #pragma once
 
 #include <llvm/Config/llvm-config.h>
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/Instruction.h>
 #include <llvm/Support/CodeGen.h>
 #include <optional>
 
@@ -37,4 +39,27 @@ inline constexpr auto NoValue = std::nullopt;
 template<typename T> using Optional = llvm::Optional<T>;
 inline constexpr auto NoValue = llvm::None;
 #endif
+
+inline llvm::Instruction* terminatorOrNull(llvm::BasicBlock* block)
+{
+    if(!block)
+        return nullptr;
+#if LLVM_VERSION_MAJOR >= 23
+    return block->getTerminatorOrNull();
+#else
+    return block->getTerminator();
+#endif
+}
+
+inline const llvm::Instruction*
+terminatorOrNull(const llvm::BasicBlock* block)
+{
+    if(!block)
+        return nullptr;
+#if LLVM_VERSION_MAJOR >= 23
+    return block->getTerminatorOrNull();
+#else
+    return block->getTerminator();
+#endif
+}
 }
