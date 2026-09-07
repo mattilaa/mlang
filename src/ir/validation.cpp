@@ -109,6 +109,27 @@ bool CodeGenerator::validateFixedArrayInitializer(TypeNode* declaredType,
         return false;
     }
 
+    auto* nestedArray =
+        dynamic_cast<ArrayTypeNode*>(arrayType->elementType);
+    auto* listLiteral = dynamic_cast<ListLiteralNode*>(expr);
+    if(nestedArray && listLiteral && listLiteral->elements)
+    {
+        for(auto* element : listLiteral->elements->elements)
+        {
+            auto* nestedLiteral = dynamic_cast<ListLiteralNode*>(element);
+            if(!nestedLiteral)
+            {
+                reportError(line,
+                            "multiarray initializer requires nested braces "
+                            "for every dimension");
+                return false;
+            }
+            if(!validateFixedArrayInitializer(nestedArray, nestedLiteral,
+                                              line))
+                return false;
+        }
+    }
+
     return true;
 }
 

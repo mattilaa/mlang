@@ -684,7 +684,8 @@ private:
     void emitNarrowCastRuntimeCheck(CastExpressionNode* node,
                                     llvm::Value* valid);
     llvm::Value* generateListLiteral(ListLiteralNode* node,
-                                    llvm::Type* declaredElemType = nullptr);
+                                    llvm::Type* declaredElemType = nullptr,
+                                    TypeNode* declaredElemTypeNode = nullptr);
     llvm::Value* generateArrayFill(ArrayFillNode* node,
                                    llvm::Type* declaredElemType = nullptr);
     llvm::Value* generateMapLiteral(MapLiteralNode* node,

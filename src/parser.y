@@ -826,6 +826,48 @@ static TypeNode* make_array_type(ASTNode* elementType, long long capacity,
                              capacity < 0 ? 0 : capacity);
 }
 
+static ASTNode* make_multiarray_dimensions(long long dimension)
+{
+    auto* dimensions = new ListElementsNode();
+    dimensions->addElement(new IntLiteralNode(dimension));
+    return dimensions;
+}
+
+static ASTNode* add_multiarray_dimension(ASTNode* dimensions,
+                                         long long dimension)
+{
+    static_cast<ListElementsNode*>(dimensions)->addElement(
+        new IntLiteralNode(dimension));
+    return dimensions;
+}
+
+static TypeNode* make_multiarray_type(ASTNode* elementType,
+                                      ASTNode* dimensionList, int line,
+                                      int col)
+{
+    auto* dimensions = static_cast<ListElementsNode*>(dimensionList);
+    TypeNode* result = static_cast<TypeNode*>(elementType);
+
+    for(auto it = dimensions->elements.rbegin();
+        it != dimensions->elements.rend(); ++it)
+    {
+        auto* literal = dynamic_cast<IntLiteralNode*>(*it);
+        const int64_t extent = literal ? literal->value : -1;
+        if(extent < 0)
+        {
+            fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+                    col > 0 ? col : 1,
+                    mlang::diag::format_message_with_code(
+                        "MLANG-E1016",
+                        "multiarray dimensions must be non-negative")
+                        .c_str());
+            parseHadError = true;
+        }
+        result = new ArrayTypeNode(result, extent < 0 ? 0 : extent);
+    }
+    return result;
+}
+
 static void report_colon_semicolon_typo(int line, int col)
 {
     const std::string msg =
@@ -1875,7 +1917,7 @@ enum UpdatePosition
 %token <ast> TYPED_INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL BIT FLOAT DOUBLE STR8 STR16 ARRAY LIST MAP TUPLE PTR STRUCT ENUM FIELD
+%token FUNCTION RETURN IF ELSE VOID BOOL BIT FLOAT DOUBLE STR8 STR16 ARRAY MULTIARRAY LIST MAP TUPLE PTR STRUCT ENUM FIELD
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
@@ -1945,6 +1987,7 @@ enum UpdatePosition
 %type <ast> global_var_statement static_var_statement
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
+%type <ast> multiarray_dimensions brace_array_initializer brace_array_elements brace_array_element
 %type <ast> map_iterator
 %type <ast> type_param_list impl_block impl_method_list struct_literal struct_field_init_list trait_def trait_method_decl_list trait_method_decl
 %type <ast> match_expression match_arm_list match_arm match_pattern match_target match_atom match_binary_expression
@@ -2675,6 +2718,8 @@ type
     | STR16  { $$ = mla_ast_type_node(TypeNode::TYPE_STR16); }
     | ARRAY GENERIC_LT type COMMA INT_LITERAL GT
         { $$ = make_array_type($3, $5, yylineno, yycolumn_token); }
+    | MULTIARRAY GENERIC_LT type COMMA multiarray_dimensions GT
+        { $$ = make_multiarray_type($3, $5, yylineno, yycolumn_token); }
     | LIST   { $$ = mla_ast_list_type(); }
     | LIST GENERIC_LT type GT { $$ = mla_ast_generic_list_type($3); }
     | MAP GENERIC_LT type COMMA type GT { $$ = mla_ast_map_type($3, $5); }
@@ -2708,6 +2753,12 @@ type
             else
                 $$ = mla_ast_generic_struct_type_ref($1, $3);
         }
+    ;
+
+multiarray_dimensions
+    : INT_LITERAL { $$ = make_multiarray_dimensions($1); }
+    | multiarray_dimensions COMMA INT_LITERAL
+        { $$ = add_multiarray_dimension($1, $3); }
     ;
 
 tuple_type
@@ -2787,17 +2838,11 @@ nested_function_statement
 let_statement
     : LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = create_let_declaration($4, $2, $6); }
-    | LET IDENTIFIER COLON type ASSIGN LBRACE list_elements RBRACE SEMICOLON
+    | LET IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
             report_brace_list_initializer_suggestion(
                 static_cast<TypeNode*>($4), yylineno, yycolumn_token);
-            $$ = create_let_declaration($4, $2, mla_ast_list_literal($7));
-        }
-    | LET IDENTIFIER COLON type ASSIGN LBRACE RBRACE SEMICOLON
-        {
-            report_brace_list_initializer_suggestion(
-                static_cast<TypeNode*>($4), yylineno, yycolumn_token);
-            $$ = create_let_declaration($4, $2, mla_ast_list_literal(NULL));
+            $$ = create_let_declaration($4, $2, $6);
         }
     | LET IDENTIFIER ASSIGN expression SEMICOLON
         { $$ = create_let_declaration(NULL, $2, $4); }
@@ -2819,17 +2864,11 @@ cexpr_declaration
 var_statement
     : VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = mla_ast_var_declaration($4, $2, $6); }
-    | VAR IDENTIFIER COLON type ASSIGN LBRACE list_elements RBRACE SEMICOLON
+    | VAR IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
             report_brace_list_initializer_suggestion(
                 static_cast<TypeNode*>($4), yylineno, yycolumn_token);
-            $$ = mla_ast_var_declaration($4, $2, mla_ast_list_literal($7));
-        }
-    | VAR IDENTIFIER COLON type ASSIGN LBRACE RBRACE SEMICOLON
-        {
-            report_brace_list_initializer_suggestion(
-                static_cast<TypeNode*>($4), yylineno, yycolumn_token);
-            $$ = mla_ast_var_declaration($4, $2, mla_ast_list_literal(NULL));
+            $$ = mla_ast_var_declaration($4, $2, $6);
         }
     | VAR IDENTIFIER ASSIGN expression SEMICOLON
         { $$ = mla_ast_var_declaration(NULL, $2, $4); }
@@ -2858,19 +2897,11 @@ global_var_statement
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
                 n->isGlobalStorage = true;
         }
-    | VAR IDENTIFIER COLON type ASSIGN LBRACE list_elements RBRACE SEMICOLON
+    | VAR IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
             report_brace_list_initializer_suggestion(
                 static_cast<TypeNode*>($4), yylineno, yycolumn_token);
-            $$ = mla_ast_var_declaration($4, $2, mla_ast_list_literal($7));
-            if(auto* n = dynamic_cast<VarDeclNode*>($$))
-                n->isGlobalStorage = true;
-        }
-    | VAR IDENTIFIER COLON type ASSIGN LBRACE RBRACE SEMICOLON
-        {
-            report_brace_list_initializer_suggestion(
-                static_cast<TypeNode*>($4), yylineno, yycolumn_token);
-            $$ = mla_ast_var_declaration($4, $2, mla_ast_list_literal(NULL));
+            $$ = mla_ast_var_declaration($4, $2, $6);
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
                 n->isGlobalStorage = true;
         }
@@ -2904,19 +2935,11 @@ static_var_statement
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
                 n->isStaticStorage = true;
         }
-    | STATIC VAR IDENTIFIER COLON type ASSIGN LBRACE list_elements RBRACE SEMICOLON
+    | STATIC VAR IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
             report_brace_list_initializer_suggestion(
                 static_cast<TypeNode*>($5), yylineno, yycolumn_token);
-            $$ = mla_ast_var_declaration($5, $3, mla_ast_list_literal($8));
-            if(auto* n = dynamic_cast<VarDeclNode*>($$))
-                n->isStaticStorage = true;
-        }
-    | STATIC VAR IDENTIFIER COLON type ASSIGN LBRACE RBRACE SEMICOLON
-        {
-            report_brace_list_initializer_suggestion(
-                static_cast<TypeNode*>($5), yylineno, yycolumn_token);
-            $$ = mla_ast_var_declaration($5, $3, mla_ast_list_literal(NULL));
+            $$ = mla_ast_var_declaration($5, $3, $7);
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
                 n->isStaticStorage = true;
         }
@@ -3921,6 +3944,27 @@ list_literal
 list_elements
     : expression { $$ = mla_ast_list_element_list($1); }
     | list_elements COMMA expression { $$ = mla_ast_list_element_list_add($1, $3); }
+    ;
+
+brace_array_initializer
+    : LBRACE brace_array_elements RBRACE
+        { $$ = mla_ast_list_literal($2); }
+    | LBRACE RBRACE
+        { $$ = mla_ast_list_literal(NULL); }
+    ;
+
+brace_array_elements
+    : brace_array_element
+        { $$ = mla_ast_list_element_list($1); }
+    | brace_array_elements COMMA brace_array_element
+        { $$ = mla_ast_list_element_list_add($1, $3); }
+    ;
+
+brace_array_element
+    : expression
+        { $$ = $1; }
+    | brace_array_initializer
+        { $$ = $1; }
     ;
 
 map_literal

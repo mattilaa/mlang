@@ -1919,6 +1919,7 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "utf16") == 1 { return 22; }
     if eq(label, "list") == 1 { return 22; }
     if eq(label, "array") == 1 { return 22; }
+    if eq(label, "multiarray") == 1 { return 22; }
     if eq(label, "map") == 1 { return 22; }
     if eq(label, "tuple") == 1 { return 22; }
     if eq(label, "ptr") == 1 { return 22; }
@@ -1975,6 +1976,7 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "utf16") == 1 { return "builtin UTF-16 string type alias"; }
     if eq(label, "list") == 1 { return "builtin generic list type"; }
     if eq(label, "array") == 1 { return "builtin fixed-capacity array type"; }
+    if eq(label, "multiarray") == 1 { return "builtin fixed-size multidimensional array type"; }
     if eq(label, "map") == 1 { return "builtin generic map type"; }
     if eq(label, "tuple") == 1 { return "builtin tuple type"; }
     if eq(label, "ptr") == 1 { return "builtin pointer type"; }
@@ -2080,6 +2082,9 @@ fn completion_documentation(label: str8) -> str8 {
     }
     if eq(label, "array") == 1 {
         return "Fixed-capacity sequence type: array<T, N>. Initializer element counts are checked at compile time. size_of(array<T, N>) returns N * size_of(T).";
+    }
+    if eq(label, "multiarray") == 1 {
+        return "Fixed-size multidimensional array type: multiarray<T, D1, ..., DN>. Every extent is checked at compile time; use nested braces and chained indexes.";
     }
     if eq(label, "Vec") == 1 {
         return "Vec<T> is a stdlib alias for list<T>. It has the same method surface and runtime representation as list<T>.";

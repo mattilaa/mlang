@@ -240,6 +240,7 @@ static int is_try_question_context()
 "str8"          { return STR8; }
 "str16"         { return STR16; }
 "array"         { return ARRAY; }
+"multiarray"    { return MULTIARRAY; }
 "list"          { return LIST; }
 "map"           { return MAP; }
 "tuple"         { return TUPLE; }

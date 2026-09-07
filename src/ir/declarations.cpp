@@ -96,9 +96,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     llvm::Value* initValue = nullptr;
     if(auto* genListType = dynamic_cast<GenericListTypeNode*>(node->type))
     {
-        llvm::Type* declElem = getLLVMType(genListType->elementType->kind);
+        llvm::Type* declElem = getLLVMTypeFromNode(genListType->elementType);
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->expression))
-            initValue = generateListLiteral(listLit, declElem);
+            initValue = generateListLiteral(listLit, declElem,
+                                            genListType->elementType);
         else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(node->expression))
             initValue = generateArrayFill(arrFill, declElem);
     }
@@ -1561,10 +1562,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         if(node->initExpr)
         {
-            llvm::Type* declElem = getLLVMType(genListType->elementType->kind);
+            llvm::Type* declElem =
+                getLLVMTypeFromNode(genListType->elementType);
             llvm::Value* initValue = nullptr;
             if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->initExpr))
-                initValue = generateListLiteral(listLit, declElem);
+                initValue = generateListLiteral(listLit, declElem,
+                                                genListType->elementType);
             else if(auto* arrFill =
                         dynamic_cast<ArrayFillNode*>(node->initExpr))
                 initValue = generateArrayFill(arrFill, declElem);
