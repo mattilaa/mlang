@@ -7,6 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       BUILD_NUMBER: ${{ github.run_number }}
       CC: clang-17
@@ -16,18 +17,50 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y llvm-17 llvm-17-dev clang-17 lld-17 flex bison
+          sudo apt-get install -y llvm-17 llvm-17-dev clang-17 lld-17 flex bison python3-venv
+      - name: Install Robot Framework
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r tests/requirements.txt
       - name: Configure
         run: |
           cmake -S . -B build \
             -DMLANG_VERSION_BUILD=${BUILD_NUMBER} \
+            -DBUILD_TESTS=ON \
             -DMLANGD_BUILD_FORMATTER_DEPENDENCY=OFF
       - name: Build
         run: |
-          cmake --build build --target mlangd-mla
+          cmake --build build --target mlangd-mla mla_tests --parallel 2
+      - name: Unit tests
+        run: |
+          mkdir -p artifacts/unit
+          ctest --test-dir build \
+            --output-on-failure \
+            --output-junit "$PWD/artifacts/unit/ctest.xml"
+          env \
+            MLANG_ARTIFACT_DIR="$PWD/artifacts/unit/mlang" \
+            PATH="$PWD/build:$PATH" \
+            build/mlang test tests
+      - name: Robot tests
+        env:
+          MLANG_BIN: ${{ github.workspace }}/build/mlang
+          MLANG_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/robot/mlang
+          ROBOT_RESULTS_DIR: ${{ github.workspace }}/artifacts/robot
+          ROBOT_JOBS: 2
+          ROBOT_ALLOW_FLAKY_PASS: 0
+          ROBOT_COLOR_LOGS: never
+        run: ./tests/run_examples_robot.sh
       - name: LSP integration transcript
         run: |
           python3 tests/lsp_integration_transcript.py --mlangd build/mlangd-mla
       - name: LSP parity E2E
         run: |
           python3 tests/lsp_parity_e2e.py --mlangd build/mlangd-mla --bulk-files 180
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux
+          path: artifacts
+          if-no-files-found: ignore
