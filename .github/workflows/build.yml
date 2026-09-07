@@ -14,25 +14,45 @@ permissions:
 
 jobs:
   build:
-    name: Build binaries
-    runs-on: ubuntu-latest
+    name: Build binaries (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-latest
+            cc: clang-17
+            cxx: clang++-17
+          - platform: macos
+            os: macos-latest
+            cc: clang
+            cxx: clang++
     env:
       BUILD_NUMBER: ${{ github.run_number }}
-      CC: clang-17
-      CXX: clang++-17
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             llvm-17 llvm-17-dev clang-17 lld-17 flex bison \
             libssl-dev libzstd-dev libz3-dev zlib1g-dev \
             rapidjson-dev ninja-build python3
+
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macos'
+        run: |
+          brew install llvm openssl@3 zstd z3 rapidjson ninja
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix llvm);$(brew --prefix openssl@3);$(brew --prefix zstd);$(brew --prefix z3);$(brew --prefix rapidjson)" >> "$GITHUB_ENV"
 
       - name: Configure CMake
         run: |
@@ -75,21 +95,23 @@ jobs:
           ls -la dist/lib
 
       - name: Package build tree for test job
+        if: matrix.platform == 'linux'
         run: |
           tar -czf build-cache.tar.gz build
 
       - name: Upload compiled binaries
         uses: actions/upload-artifact@v4
         with:
-          name: mlang-binaries-linux
+          name: mlang-binaries-${{ matrix.platform }}
           path: dist
           if-no-files-found: error
           retention-days: 14
 
       - name: Upload build tree for testing
+        if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v4
         with:
-          name: mlang-build-tree
+          name: mlang-build-tree-linux
           path: build-cache.tar.gz
           if-no-files-found: error
           retention-days: 1
@@ -124,7 +146,7 @@ jobs:
       - name: Download build tree
         uses: actions/download-artifact@v4
         with:
-          name: mlang-build-tree
+          name: mlang-build-tree-linux
 
       - name: Extract build tree
         run: |
