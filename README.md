@@ -181,6 +181,26 @@ scratch.pop();
 scratch.fill(1); // fills all 6 slots
 ```
 
+`multiarray<T, D1, ..., DN>` extends the same fixed-capacity model to one or
+more dimensions. Every dimension is a compile-time capacity, nested brace
+initializers are checked at each level, and chained indexing is supported:
+
+```rust
+let matrix: multiarray<i32, 3, 3> = {
+    {1, 2, 3},
+    {4, 5, 6},
+    {7, 8, 9}
+};
+println!("{}", matrix[2][2]); // 9
+```
+
+Run the complete example with:
+
+```sh
+./build/mlang examples/multiarray.mla -L build -lmlang_std -o /tmp/multiarray
+/tmp/multiarray
+```
+
 ## Tools Shipped In This Repository
 
 | Binary                | Source                              | Built By           | What It Does                                                                                       | Why It Exists                                                                                                                           |

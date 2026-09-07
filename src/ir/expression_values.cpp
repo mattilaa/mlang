@@ -272,7 +272,8 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
 }
 
 llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
-                                                llvm::Type* declaredElemType)
+                                                llvm::Type* declaredElemType,
+                                                TypeNode* declaredElemTypeNode)
 {
     initializeStdlibFunctions();
 
@@ -311,7 +312,19 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
 
     for(auto* elem : node->elements->elements)
     {
-        llvm::Value* val = generateExpression(elem);
+        llvm::Value* val = nullptr;
+        if(auto* nested = dynamic_cast<ListLiteralNode*>(elem))
+        {
+            if(auto* nestedType = dynamic_cast<GenericListTypeNode*>(
+                   declaredElemTypeNode))
+            {
+                val = generateListLiteral(
+                    nested, getLLVMTypeFromNode(nestedType->elementType),
+                    nestedType->elementType);
+            }
+        }
+        if(!val)
+            val = generateExpression(elem);
         if(!val)
             return nullptr;
         if(!elementType)
@@ -613,8 +626,13 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
 
     auto* baseId = dynamic_cast<IdentifierNode*>(node->base);
     TypeNode* baseType = getLValueType(node->base, node->line);
-    llvm::Value* basePtr = getLValuePointer(node->base, node->line);
-    if(!basePtr)
+    llvm::Value* baseValue = nullptr;
+    llvm::Value* basePtr = nullptr;
+    if(dynamic_cast<IndexExpressionNode*>(node->base))
+        baseValue = generateExpression(node->base);
+    else
+        basePtr = getLValuePointer(node->base, node->line);
+    if(!baseValue && !basePtr)
         return nullptr;
 
     llvm::Value* indexVal = generateExpression(node->index);
@@ -701,8 +719,10 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
             llvm::StructType::get(context, listStructTypes);
 
         // Load list struct
-        llvm::Value* listStruct =
-            builder.CreateLoad(listStructType, basePtr, "list");
+        llvm::Value* listStruct = baseValue
+                                      ? baseValue
+                                      : builder.CreateLoad(listStructType,
+                                                           basePtr, "list");
         llvm::Value* listSize =
             builder.CreateExtractValue(listStruct, 0, "size");
         llvm::Value* dataPtr =
@@ -818,8 +838,10 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
             llvm::StructType::get(context, mapStructTypes);
 
         // Load map struct
-        llvm::Value* mapStruct =
-            builder.CreateLoad(mapStructType, basePtr, "map");
+        llvm::Value* mapStruct = baseValue
+                                     ? baseValue
+                                     : builder.CreateLoad(mapStructType,
+                                                          basePtr, "map");
         llvm::Value* mapSize = builder.CreateExtractValue(mapStruct, 0, "size");
         llvm::Value* keysPtr = builder.CreateExtractValue(mapStruct, 1, "keys");
         llvm::Value* valsPtr = builder.CreateExtractValue(mapStruct, 2, "vals");

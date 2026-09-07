@@ -27,6 +27,8 @@
 /// - `list<T>`: growable sequence container.
 /// - `array<T, N>`: fixed-capacity, list-compatible sequence. Literal
 ///   initializers are checked at compile time so they cannot exceed `N`.
+/// - `multiarray<T, D1, ..., DN>`: one-or-more-dimensional fixed-capacity
+///   array with nested brace initialization and chained indexing.
 /// - `map<K, V>`: associative container.
 /// - `tuple<T1, T2, ...>`: fixed-size heterogeneous product type.
 /// - `ptr<T>`: pointer type.
@@ -115,6 +117,11 @@
 
 // @builtin map
 // Generic map type: map<K, V>.
+
+// @builtin multiarray
+// Fixed-size multidimensional array: multiarray<T, D1, ..., DN>.
+// Each dimension is a compile-time capacity. Initialize all dimensions with
+// nested braces and access elements with chained indexes such as matrix[1][2].
 
 // @builtin tuple
 // Tuple type: tuple<T1, T2, ...>.

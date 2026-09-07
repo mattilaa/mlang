@@ -996,6 +996,19 @@ Indexing is checked too. Constant indexes that are known to be out of bounds are
 compile-time errors, while dynamic indexes keep a runtime bounds guard before
 loading.
 
+Use `multiarray<T, D1, ..., DN>` for one or more fixed dimensions. It expands
+to nested fixed-capacity arrays, so every initializer level is checked against
+its declared extent:
+
+```mla
+let matrix: multiarray<i32, 3, 3> = {
+    {1, 2, 3},
+    {4, 5, 6},
+    {7, 8, 9}
+};
+let value: i32 = matrix[2][2];
+```
+
 Supported fold operators:
 - `+`
 - `*`
