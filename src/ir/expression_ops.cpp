@@ -1902,7 +1902,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     auto thenPointerBorrowTarget = pointerBorrowTarget;
     auto thenActiveBorrowers = activeBorrowers;
     auto thenActiveMutBorrower = activeMutBorrower;
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         builder.CreateBr(mergeBB);
     llvm::BasicBlock* thenEnd = builder.GetInsertBlock();
 
@@ -1920,7 +1920,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     auto elsePointerBorrowTarget = pointerBorrowTarget;
     auto elseActiveBorrowers = activeBorrowers;
     auto elseActiveMutBorrower = activeMutBorrower;
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         builder.CreateBr(mergeBB);
     llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
 
@@ -2028,7 +2028,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
 
     if(thenVal->getType() != commonType)
     {
-        llvm::IRBuilder<> castBuilder(thenEnd->getTerminator());
+        llvm::IRBuilder<> castBuilder(mlang::llvm_compat::terminatorOrNull(thenEnd));
         llvm::Type* src = thenVal->getType();
         if(src->isIntegerTy() && commonType->isIntegerTy())
         {
@@ -2055,7 +2055,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
 
     if(elseVal->getType() != commonType)
     {
-        llvm::IRBuilder<> castBuilder(elseEnd->getTerminator());
+        llvm::IRBuilder<> castBuilder(mlang::llvm_compat::terminatorOrNull(elseEnd));
         llvm::Type* src = elseVal->getType();
         if(src->isIntegerTy() && commonType->isIntegerTy())
         {

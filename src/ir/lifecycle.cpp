@@ -1,5 +1,6 @@
 #include "ir.h"
 #include "diagnostics.h"
+#include "llvm_compat.h"
 
 #include <iostream>
 
@@ -63,7 +64,7 @@ void CodeGenerator::exitCleanupScope()
             variableScopeDepth.erase(it->varName);
     }
 
-    if(!builder.GetInsertBlock() || builder.GetInsertBlock()->getTerminator())
+    if(!builder.GetInsertBlock() || mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         return;
 
     for(auto it = actions.rbegin(); it != actions.rend(); ++it)
@@ -100,7 +101,7 @@ void CodeGenerator::exitCleanupScope()
 
 void CodeGenerator::emitAllActiveCleanups()
 {
-    if(!builder.GetInsertBlock() || builder.GetInsertBlock()->getTerminator())
+    if(!builder.GetInsertBlock() || mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         return;
 
     for(auto scopeIt = cleanupScopes.rbegin(); scopeIt != cleanupScopes.rend();
@@ -143,7 +144,7 @@ void CodeGenerator::emitAllActiveCleanups()
 
 void CodeGenerator::emitActiveCleanupsDeeperThan(int scopeDepth)
 {
-    if(!builder.GetInsertBlock() || builder.GetInsertBlock()->getTerminator())
+    if(!builder.GetInsertBlock() || mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
         return;
 
     for(int depth = static_cast<int>(cleanupScopes.size()); depth > scopeDepth;
