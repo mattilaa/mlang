@@ -8,6 +8,18 @@
 
 using mlang::ir_detail::common::Helpers;
 
+namespace
+{
+llvm::Value* successfulVoidExpression(llvm::LLVMContext& context)
+{
+    // Expression generators use nullptr to signal failure. Void-returning
+    // built-ins therefore need a valid, non-null success sentinel. LLVM has
+    // no Constant value of type void; asking Constant::getNullValue(void) is
+    // invalid and crashes on LLVM 17.
+    return llvm::ConstantInt::getFalse(context);
+}
+} // namespace
+
 void CodeGenerator::generateStructMethods(StructDefNode* node)
 {
     if(!node->members)
@@ -2599,7 +2611,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fn =
                         module->getOrInsertFunction(fnName, ft);
                     builder.CreateCall(fn, {allocaPtr2});
-                    return llvm::Constant::getNullValue(voidType2);
+                    return successfulVoidExpression(context);
                 };
                 auto emitNonEmptyCheck2 =
                     [&](llvm::Value* count,
@@ -2702,7 +2714,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         builder.CreateCall(
                             fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
-                        return llvm::Constant::getNullValue(voidType2);
+                        return successfulVoidExpression(context);
                     }
                     if(elemIsI64)
                     {
@@ -2717,7 +2729,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         builder.CreateCall(
                             fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
-                        return llvm::Constant::getNullValue(voidType2);
+                        return successfulVoidExpression(context);
                     }
                     if(elemKind2 == TypeNode::TYPE_INT ||
                        elemKind2 == TypeNode::TYPE_I32 ||
@@ -2739,7 +2751,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         builder.CreateCall(
                             fn, {allocaPtr2, val2, arrayCapacity2});
                         updateKnownArrayLength2(arrayCapIt2->second);
-                        return llvm::Constant::getNullValue(voidType2);
+                        return successfulVoidExpression(context);
                     }
 
                     llvm::Type* elemLlvmType =
@@ -2772,7 +2784,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                        {allocaPtr2, elemPtrAsOpaque, elemSize,
                                         arrayCapacity2});
                     updateKnownArrayLength2(arrayCapIt2->second);
-                    return llvm::Constant::getNullValue(voidType2);
+                    return successfulVoidExpression(context);
                 }
                 // --- push(val) ---
                 if(node->methodName == "push")
@@ -2873,7 +2885,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             if(lenIt != arrayKnownLengths.end())
                                 updateKnownArrayLength2(lenIt->second + 1);
                         }
-                        return llvm::Constant::getNullValue(voidType2);
+                        return successfulVoidExpression(context);
                     }
                     llvm::FunctionType* ft2 = llvm::FunctionType::get(
                         voidType2,
@@ -2905,7 +2917,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         if(lenIt != arrayKnownLengths.end())
                             updateKnownArrayLength2(lenIt->second + 1);
                     }
-                    return llvm::Constant::getNullValue(voidType2);
+                    return successfulVoidExpression(context);
                 }
                 // --- extend(list_or_array) ---
                 if(node->methodName == "extend")
@@ -3055,7 +3067,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             else
                                 updateKnownArrayLength2(std::nullopt);
                         }
-                        return llvm::Constant::getNullValue(voidType2);
+                        return successfulVoidExpression(context);
                     }
                     llvm::FunctionType* ft = llvm::FunctionType::get(
                         voidType2,
@@ -3082,7 +3094,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         else
                             updateKnownArrayLength2(std::nullopt);
                     }
-                    return llvm::Constant::getNullValue(voidType2);
+                    return successfulVoidExpression(context);
                 }
                 // --- pop() ---
                 if(node->methodName == "pop")
@@ -3813,7 +3825,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fn = module->getOrInsertFunction(
                         "__mlang_std_array_fill_str", ft);
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
-                    return llvm::Constant::getNullValue(voidType);
+                    return successfulVoidExpression(context);
                 }
                 if(elemIsI64)
                 {
@@ -3824,7 +3836,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fn = module->getOrInsertFunction(
                         "__mlang_std_array_fill_i64", ft);
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
-                    return llvm::Constant::getNullValue(voidType);
+                    return successfulVoidExpression(context);
                 }
                 if(elemIsI32Like)
                 {
@@ -3835,7 +3847,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fn = module->getOrInsertFunction(
                         "__mlang_std_array_fill_i32", ft);
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
-                    return llvm::Constant::getNullValue(voidType);
+                    return successfulVoidExpression(context);
                 }
 
                 llvm::Type* elemLlvmType =
@@ -3866,7 +3878,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 builder.CreateCall(fnRaw,
                                    {recvPtr, elemPtrAsOpaque, elemSize,
                                     arrayCapacity});
-                return llvm::Constant::getNullValue(voidType);
+                return successfulVoidExpression(context);
             }
             if(node->methodName == "push")
             {
@@ -3945,7 +3957,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                 builder.CreateCall(fnRaw,
                                                    {recvPtr, elemPtrAsOpaque,
                                                     elemSize});
-                            return llvm::Constant::getNullValue(voidType);
+                            return successfulVoidExpression(context);
                         }
                     }
                     fnName = "__mlang_std_vec_push_i32";
@@ -3975,7 +3987,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     builder.CreateCall(fn, {recvPtr, val, arrayCapacity});
                 else
                     builder.CreateCall(fn, {recvPtr, val});
-                return llvm::Constant::getNullValue(voidType);
+                return successfulVoidExpression(context);
             }
             if(node->methodName == "extend")
             {
@@ -4118,7 +4130,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                             arrayCapacity});
                     else
                         builder.CreateCall(fnRaw, {recvPtr, srcPtr, elemSize});
-                    return llvm::Constant::getNullValue(voidType);
+                    return successfulVoidExpression(context);
                 }
                 llvm::FunctionType* ft = llvm::FunctionType::get(
                     voidType,
@@ -4134,7 +4146,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     builder.CreateCall(fn, {recvPtr, srcPtr, arrayCapacity});
                 else
                     builder.CreateCall(fn, {recvPtr, srcPtr});
-                return llvm::Constant::getNullValue(voidType);
+                return successfulVoidExpression(context);
             }
             if(node->methodName == "first")
             {
@@ -4309,7 +4321,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionCallee fn =
                     module->getOrInsertFunction("__mlang_std_vec_clear", ft);
                 builder.CreateCall(fn, {recvPtr});
-                return llvm::Constant::getNullValue(voidType);
+                return successfulVoidExpression(context);
             }
             if(node->methodName == "contains")
             {
@@ -4393,7 +4405,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                               : "__mlang_std_vec_sort_i32",
                     ft);
                 builder.CreateCall(fn, {recvPtr});
-                return llvm::Constant::getNullValue(voidType);
+                return successfulVoidExpression(context);
             }
             if(node->methodName == "sort_desc")
             {
@@ -4410,7 +4422,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                               : "__mlang_std_vec_sort_desc_i32",
                     ft);
                 builder.CreateCall(fn, {recvPtr});
-                return llvm::Constant::getNullValue(voidType);
+                return successfulVoidExpression(context);
             }
             if(node->methodName == "reverse")
             {
@@ -4427,7 +4439,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                 : "__mlang_std_vec_reverse_i32",
                     ft);
                 builder.CreateCall(fn, {recvPtr});
-                return llvm::Constant::getNullValue(voidType);
+                return successfulVoidExpression(context);
             }
             if(node->methodName == "dedup")
             {
@@ -4441,7 +4453,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionCallee fn = module->getOrInsertFunction(
                     "__mlang_std_vec_dedup_i32", ft);
                 builder.CreateCall(fn, {recvPtr});
-                return llvm::Constant::getNullValue(voidType);
+                return successfulVoidExpression(context);
             }
             reportError(node->line,
                         "Vec has no method named '" + node->methodName + "'");

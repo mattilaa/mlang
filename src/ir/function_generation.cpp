@@ -552,4 +552,3 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     llvm::verifyFunction(*function);
     return function;
 }
-
