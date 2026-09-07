@@ -769,6 +769,19 @@ TEST_F(MLATest, FixedArrayEmptyBraceInitializerIsMutable)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, StringListPushUsesAValidVoidSuccessSentinel)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var headers: list<str8> = [];
+            headers.push("stdio.h");
+            headers.push("stdlib.h");
+            return headers.len() == 2 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, FixedArrayFillSetsAllSlots)
 {
     std::string code = R"(
