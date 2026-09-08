@@ -681,6 +681,8 @@ private:
     llvm::Value* generateAtomicI64Add(FunctionCallNode* node);
     llvm::Value* generateAtomicI64Free(FunctionCallNode* node);
     llvm::Value* generateMethodCall(MethodCallNode* node);
+    llvm::Value* generateMultiarrayGet(MethodCallNode* node,
+                                       MultiArrayTypeNode* multiarrayType);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
     void emitNarrowCastRuntimeCheck(CastExpressionNode* node,
                                     llvm::Value* valid);

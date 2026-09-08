@@ -1385,8 +1385,135 @@ bool CodeGenerator::generateJsonValueDeserializerMethodBody(
     return true;
 }
 
+llvm::Value*
+CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
+                                     MultiArrayTypeNode* multiarrayType)
+{
+    std::vector<ArrayTypeNode*> dimensions;
+    TypeNode* scalarTypeNode = multiarrayType;
+    while(auto* dimension = dynamic_cast<ArrayTypeNode*>(scalarTypeNode))
+    {
+        dimensions.push_back(dimension);
+        scalarTypeNode = dimension->elementType;
+    }
+    if(node->arguments.size() != dimensions.size())
+    {
+        reportError(node->line,
+                    "mutmultiarray.get() expects " +
+                        std::to_string(dimensions.size()) + " indexes, got " +
+                        std::to_string(node->arguments.size()));
+        return nullptr;
+    }
+
+    llvm::Type* scalarType = getLLVMTypeFromNode(scalarTypeNode);
+    llvm::Value* currentPointer =
+        getLValuePointer(node->object, node->line);
+    if(!scalarType || !currentPointer)
+        return nullptr;
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::Type* boolType = llvm::Type::getInt1Ty(context);
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType = llvm::PointerType::get(scalarType, 0);
+#endif
+    llvm::StructType* listStructType =
+        llvm::StructType::get(context, {i64Type, ptrType});
+    llvm::AllocaInst* found = builder.CreateAlloca(boolType, nullptr,
+                                                   "multiarray.get.found");
+    llvm::AllocaInst* result = builder.CreateAlloca(
+        scalarType, nullptr, "multiarray.get.value");
+    builder.CreateStore(llvm::ConstantInt::getFalse(context), found);
+    builder.CreateStore(llvm::Constant::getNullValue(scalarType), result);
+
+    llvm::BasicBlock* endBlock =
+        llvm::BasicBlock::Create(context, "multiarray.get.end");
+    for(size_t dimensionIndex = 0; dimensionIndex < dimensions.size();
+        ++dimensionIndex)
+    {
+        llvm::Value* listValue = builder.CreateLoad(
+            listStructType, currentPointer, "multiarray.get.dimension");
+        llvm::Value* length =
+            builder.CreateExtractValue(listValue, 0, "multiarray.get.len");
+        llvm::Value* data =
+            builder.CreateExtractValue(listValue, 1, "multiarray.get.data");
+        llvm::Value* index =
+            generateExpression(node->arguments[dimensionIndex]);
+        if(!index)
+            return nullptr;
+        if(index->getType() != i64Type)
+            index = builder.CreateSExtOrTrunc(index, i64Type,
+                                              "multiarray.get.index");
+
+        llvm::Value* nonNegative = builder.CreateICmpSGE(
+            index, llvm::ConstantInt::get(i64Type, 0));
+        llvm::Value* belowLength = builder.CreateICmpSLT(index, length);
+        llvm::Value* inBounds =
+            builder.CreateAnd(nonNegative, belowLength,
+                              "multiarray.get.in_bounds");
+        llvm::BasicBlock* presentBlock = llvm::BasicBlock::Create(
+            context, "multiarray.get.present", function);
+        llvm::BasicBlock* missingBlock = llvm::BasicBlock::Create(
+            context, "multiarray.get.missing", function);
+        builder.CreateCondBr(inBounds, presentBlock, missingBlock);
+
+        builder.SetInsertPoint(missingBlock);
+        builder.CreateBr(endBlock);
+
+        builder.SetInsertPoint(presentBlock);
+        llvm::Type* elementType =
+            getLLVMTypeFromNode(dimensions[dimensionIndex]->elementType);
+        currentPointer = builder.CreateGEP(elementType, data, index,
+                                           "multiarray.get.element");
+        if(dimensionIndex + 1 == dimensions.size())
+        {
+            llvm::Value* value = builder.CreateLoad(
+                scalarType, currentPointer, "multiarray.get.loaded");
+            builder.CreateStore(value, result);
+            builder.CreateStore(llvm::ConstantInt::getTrue(context), found);
+            builder.CreateBr(endBlock);
+        }
+    }
+
+    endBlock->insertInto(function);
+    builder.SetInsertPoint(endBlock);
+    std::vector<TypeNode*> optionArguments = {cloneTypeNode(scalarTypeNode)};
+    std::string optionName =
+        getOrCreateMonomorphizedStruct("option", optionArguments);
+    llvm::StructType* optionType = getStructType(optionName);
+    if(!optionType || optionType->getNumElements() < 2)
+    {
+        reportError(node->line,
+                    "failed to construct option for mutmultiarray.get()");
+        return nullptr;
+    }
+    llvm::Value* optionValue = llvm::UndefValue::get(optionType);
+    optionValue = builder.CreateInsertValue(
+        optionValue, builder.CreateLoad(boolType, found), 0);
+    optionValue = builder.CreateInsertValue(
+        optionValue, builder.CreateLoad(scalarType, result), 1);
+    return optionValue;
+}
+
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
+    if(node->methodName == "get")
+    {
+        TypeNode* directReceiverType =
+            getLValueType(node->object, node->line);
+        auto* multiarrayType =
+            dynamic_cast<MultiArrayTypeNode*>(directReceiverType);
+        if(!multiarrayType || !multiarrayType->elementsMutable)
+        {
+            reportError(node->line,
+                        "get() is available on mutmultiarray values");
+            return nullptr;
+        }
+        return generateMultiarrayGet(node, multiarrayType);
+    }
+
     if(auto* receiver = dynamic_cast<IdentifierNode*>(node->object))
     {
         auto mutability = multiarrayMutability.find(receiver->name);
@@ -4652,6 +4779,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         return it != mangledToGenericName.end() && it->second == "result";
     };
 
+    auto isOptionType = [&](const std::string& typeName) -> bool
+    {
+        if(typeName == "option")
+            return true;
+        auto it = mangledToGenericName.find(typeName);
+        return it != mangledToGenericName.end() && it->second == "option";
+    };
+
     auto loadStructField = [&](llvm::Value* basePtr,
                                const std::string& ownerTypeName,
                                const std::string& fieldName) -> llvm::Value*
@@ -4693,6 +4828,84 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             fieldName + "_ptr");
         return builder.CreateLoad(llvmFieldType, fieldPtr, fieldName);
     };
+
+    if(isOptionType(structTypeName))
+    {
+        if(node->methodName == "is_some" ||
+           node->methodName == "is_none")
+        {
+            if(!node->arguments.empty())
+            {
+                reportError(node->line, node->methodName +
+                                            "() takes no arguments");
+                return nullptr;
+            }
+            llvm::Value* isSome =
+                loadStructField(objPtr, structTypeName, "is_some");
+            if(!isSome)
+                return nullptr;
+            return node->methodName == "is_some"
+                       ? isSome
+                       : builder.CreateNot(isSome, "is_none");
+        }
+        if(node->methodName == "unwrap")
+        {
+            if(!node->arguments.empty())
+            {
+                reportError(node->line, "unwrap() takes no arguments");
+                return nullptr;
+            }
+            llvm::Value* isSome =
+                loadStructField(objPtr, structTypeName, "is_some");
+            if(!isSome)
+                return nullptr;
+
+            llvm::Function* function = builder.GetInsertBlock()->getParent();
+            llvm::BasicBlock* valueBlock =
+                llvm::BasicBlock::Create(context, "option.unwrap.value",
+                                         function);
+            llvm::BasicBlock* panicBlock =
+                llvm::BasicBlock::Create(context, "option.unwrap.panic",
+                                         function);
+            builder.CreateCondBr(isSome, valueBlock, panicBlock);
+
+            builder.SetInsertPoint(panicBlock);
+            initializeFormatFunctions();
+#if LLVM_VERSION_MAJOR >= 21
+            llvm::Value* formatStr = builder.CreateGlobalString(
+                "option.unwrap() panic at %s:%d: value is None\n",
+                "option.unwrap.format");
+            llvm::Value* fileStr = builder.CreateGlobalString(
+                sourceFileName.empty() ? "<input>" : sourceFileName,
+                "option.unwrap.file");
+#else
+            llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+                "option.unwrap() panic at %s:%d: value is None\n",
+                "option.unwrap.format");
+            llvm::Value* fileStr = builder.CreateGlobalStringPtr(
+                sourceFileName.empty() ? "<input>" : sourceFileName,
+                "option.unwrap.file");
+#endif
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
+#else
+            llvm::Type* opaquePtrType = llvm::PointerType::get(
+                llvm::Type::getInt8Ty(context), 0);
+#endif
+            llvm::Value* stderrValue =
+                builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+            builder.CreateCall(
+                fprintfFunc,
+                {stderrValue, formatStr, fileStr,
+                 llvm::ConstantInt::get(llvm::Type::getInt32Ty(context),
+                                        node->line)});
+            builder.CreateCall(abortFunc, {});
+            builder.CreateUnreachable();
+
+            builder.SetInsertPoint(valueBlock);
+            return loadStructField(objPtr, structTypeName, "value");
+        }
+    }
 
     if(isResultType(structTypeName))
     {

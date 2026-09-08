@@ -64,6 +64,8 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::limits", "std_limits.md"),
     ("std::log", "std_log.md"),
     ("std::math", "std_math.md"),
+    ("std::multiarray", "std_multiarray.md"),
+    ("std::mutmultiarray", "std_mutmultiarray.md"),
     ("std::net", "std_net.md"),
     ("std::platform", "std_platform.md"),
     ("std::printf", "std_printf.md"),
@@ -222,6 +224,8 @@ STDLIB_TYPE_TOKENS = {
     "span<T>",
     "HashMap",
     "BitSet",
+    "multiarray",
+    "mutmultiarray",
 }
 
 STDLIB_MODULE_LINKS = {
@@ -238,6 +242,8 @@ STDLIB_TYPE_LINKS = {
     "span<T>": STDLIB_MODULE_LINKS["std::span"],
     "HashMap": STDLIB_MODULE_LINKS["std::unordered"],
     "BitSet": STDLIB_MODULE_LINKS["std::bitset"],
+    "multiarray": STDLIB_MODULE_LINKS["std::multiarray"],
+    "mutmultiarray": STDLIB_MODULE_LINKS["std::mutmultiarray"],
 }
 
 STDLIB_MODULES = {
@@ -268,6 +274,8 @@ STDLIB_MODULES = {
     "std::json",
     "std::jsonrpc",
     "std::math",
+    "std::multiarray",
+    "std::mutmultiarray",
     "std::net",
     "std::path",
     "std::platform",

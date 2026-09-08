@@ -1,3 +1,6 @@
+mod std::multiarray;
+mod std::mutmultiarray;
+
 fn main() -> i32 {
     let matrix: multiarray<i32, 3, 3> = {
         {1, 2, 3},
@@ -13,8 +16,13 @@ fn main() -> i32 {
     mutable_matrix[0][1] = 42;
     println!("changed value: {}", mutable_matrix[0][1]);
 
+    var row: i32 = 1;
+    let checked: i32 = mutable_matrix.get(row, 0).unwrap();
+    let missing: bool = mutable_matrix.get(2, 0).is_none();
+    println!("checked value: {}, missing: {}", checked, missing);
+
     return matrix[0][0] == 1 && matrix[2][2] == 9 &&
-                   mutable_matrix[0][1] == 42
+                   mutable_matrix[0][1] == 42 && checked == 3 && missing
                ? 0
                : 1;
 }

@@ -1,0 +1,38 @@
+/// \file mutmultiarray.mla
+/// \brief Mutable fixed-size multidimensional arrays (std::mutmultiarray).
+///
+/// `mutmultiarray<T, D1, ..., DN>` has the same fixed shape as `multiarray`,
+/// but permits indexed and compound writes when declared with `var`.
+///
+/// ```mlang
+/// mod std::mutmultiarray;
+///
+/// var matrix: mutmultiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+/// matrix[0][1] = 42;
+/// matrix[1][0] += 10;
+/// ```
+///
+/// Constant invalid `[]` indexes are compile-time errors. Dynamic `[]`
+/// accesses abort at runtime when out of bounds. For recoverable access,
+/// `get(i1, ..., iN)` returns `option<T>`:
+///
+/// ```mlang
+/// var row: i32 = 1;
+/// let value: i32 = matrix.get(row, 0).unwrap();
+/// let missing: bool = matrix.get(2, 0).is_none();
+/// ```
+///
+/// `is_some()` and `is_none()` inspect the result without panicking.
+/// `unwrap()` returns the element or reports its source location and aborts if
+/// the result is `None`. The number of `get` indexes must match the number of
+/// dimensions. A `let` binding remains immutable.
+
+// @builtin mutmultiarray
+// Mutable fixed-size multidimensional array:
+// mutmultiarray<T, D1, ..., DN>.
+// This module is a documentation/navigation anchor for
+// `mod std::mutmultiarray;`.
+
+/// \cond INTERNAL_IMPORTS
+extern pub fn __mutmultiarray_module_anchor() -> void;
+/// \endcond
