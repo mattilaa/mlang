@@ -4,6 +4,9 @@
 #include "llvm_compat.h"
 
 #include <llvm/Config/llvm-config.h>
+#include <llvm/IR/MDBuilder.h>
+
+#include <cstdint>
 
 using mlang::ir_detail::ast_analysis::contains_unsupported_try_control_flow;
 using mlang::ir_detail::ast_analysis::strip_iter_methods;
@@ -610,7 +613,20 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     llvm::BasicBlock* elseBB = llvm::BasicBlock::Create(context, "else");
     llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create(context, "ifcont");
 
-    builder.CreateCondBr(condValue, thenBB, elseBB);
+    llvm::BranchInst* branch = builder.CreateCondBr(condValue, thenBB, elseBB);
+    if(node->branchPrediction != BranchPrediction::None)
+    {
+        constexpr uint32_t preferredWeight = 2000;
+        constexpr uint32_t otherWeight = 1;
+        llvm::MDBuilder metadata(context);
+        const bool trueIsLikely =
+            node->branchPrediction == BranchPrediction::Likely;
+        branch->setMetadata(
+            llvm::LLVMContext::MD_prof,
+            metadata.createBranchWeights(
+                trueIsLikely ? preferredWeight : otherWeight,
+                trueIsLikely ? otherWeight : preferredWeight));
+    }
 
     // Generate 'then' block
     builder.SetInsertPoint(thenBB);

@@ -929,6 +929,13 @@ public:
     std::string toString() const override;
 };
 
+enum class BranchPrediction
+{
+    None,
+    Likely,
+    Unlikely,
+};
+
 class IfNode : public StatementNode
 {
 public:
@@ -938,12 +945,14 @@ public:
     IfNode* elseIfBranch;
     StatementListNode* elseBranch;
     bool usesColonWithoutGuard;
+    BranchPrediction branchPrediction;
 
     IfNode(StatementNode* ci, ExpressionNode* c, StatementListNode* t,
            IfNode* ei = nullptr, StatementListNode* e = nullptr,
            bool usesColonNoGuard = false)
         : conditionInit(ci), condition(c), thenBranch(t), elseIfBranch(ei),
-          elseBranch(e), usesColonWithoutGuard(usesColonNoGuard)
+          elseBranch(e), usesColonWithoutGuard(usesColonNoGuard),
+          branchPrediction(BranchPrediction::None)
     {
     }
     std::string toString() const override;

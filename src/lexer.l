@@ -9,6 +9,9 @@
 
 extern bool parseHadError;
 extern const char* g_sourceFile;
+int mlaBranchHintPending = 0;
+int mlaBranchHintLine = 0;
+int mlaBranchHintColumn = 0;
 
 // Parse the type-suffix portion of a typed integer literal (e.g. "i64",
 // "u8") into a TypeNode::TypeKind. Returns TYPE_VOID for unrecognized
@@ -202,7 +205,9 @@ static int is_try_question_context()
 "trait"         { return TRAIT; }
 "dyn"           { return DYN; }
 "return"        { return RETURN; }
-"if"            { return IF; }
+"likely"        { mlaBranchHintPending = 1; mlaBranchHintLine = yylineno; mlaBranchHintColumn = yycolumn_token; return LIKELY; }
+"unlikely"      { mlaBranchHintPending = 2; mlaBranchHintLine = yylineno; mlaBranchHintColumn = yycolumn_token; return UNLIKELY; }
+"if"            { mlaBranchHintPending = 0; mlaBranchHintLine = 0; mlaBranchHintColumn = 0; return IF; }
 "else"          { return ELSE; }
 "try"           { return TRY; }
 "catch"         { return CATCH; }

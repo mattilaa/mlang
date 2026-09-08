@@ -2089,7 +2089,12 @@ std::string MatchExpressionNode::toString() const
 
 std::string IfNode::toString() const
 {
-    std::string result = "if ";
+    std::string result;
+    if(branchPrediction == BranchPrediction::Likely)
+        result = "likely ";
+    else if(branchPrediction == BranchPrediction::Unlikely)
+        result = "unlikely ";
+    result += "if ";
     if(conditionInit)
     {
         std::string initText = conditionInit->toString();
