@@ -837,6 +837,9 @@ TEST_F(MLATest, MultiarrayRejectsConstantOutOfBoundsIndex)
 TEST_F(MLATest, MutableMultiarrayGetSupportsOptionChecksAndUnwrap)
 {
     std::string code = R"(
+        mod std::multiarray;
+        mod std::mutmultiarray;
+
         fn main() -> i32 {
             var matrix: mutmultiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
             var row: i32 = 1;

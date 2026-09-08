@@ -1988,7 +1988,7 @@ enum UpdatePosition
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression function_call fold_expression asm_expression pipe_expression
 %type <ast> mod_declaration use_declaration
-%type <sval> module_path trait_bound_chain
+%type <sval> module_path mod_module_path trait_bound_chain
 %type <ast> print_statement argument_list format_argument format_argument_list assert_eq_statement assert_statement static_assert_statement
 %type <ast> global_var_statement static_var_statement
 %type <ast> map_literal map_entries map_entry index_expression
@@ -2064,8 +2064,27 @@ module_path
         { $$ = join_module_path($1, $3); }
     ;
 
+mod_module_path
+    : IDENTIFIER
+        { $$ = resolve_namespace_alias_cstr($1); }
+    | ARRAY
+        { $$ = strdup("array"); }
+    | MULTIARRAY
+        { $$ = strdup("multiarray"); }
+    | MUTMULTIARRAY
+        { $$ = strdup("mutmultiarray"); }
+    | mod_module_path COLONCOLON IDENTIFIER
+        { $$ = join_module_path($1, $3); }
+    | mod_module_path COLONCOLON ARRAY
+        { $$ = join_module_path($1, strdup("array")); }
+    | mod_module_path COLONCOLON MULTIARRAY
+        { $$ = join_module_path($1, strdup("multiarray")); }
+    | mod_module_path COLONCOLON MUTMULTIARRAY
+        { $$ = join_module_path($1, strdup("mutmultiarray")); }
+    ;
+
 mod_declaration
-    : MOD module_path SEMICOLON
+    : MOD mod_module_path SEMICOLON
         { $$ = mla_ast_mod_declaration($2, yylineno); }
     ;
 
