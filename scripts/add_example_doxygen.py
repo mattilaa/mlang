@@ -11,6 +11,7 @@ import sys
 
 # path (relative to repo root) -> brief sentence
 BRIEFS: dict[str, str] = {
+    "examples/branch_prediction_demo.mla": "Branch prediction hints using likely and unlikely runtime if statements.",
     "examples/kallio_pub_crawl_esc/main.mla": "Terminal 'pub crawl' walking-map demo rendered with std::esc.",
     "examples/switch_demo.mla": "Enum-dispatch style switch/match demo using std::strbuf.",
     "examples/thread_mutex_atomic.mla": "Threaded counter demo contrasting mutex and atomic operations.",

@@ -38,6 +38,7 @@ focused `.mla` example was added under `examples/`.
 | Feature | Description |
 |---|---|
 | Plain block `if` / `else if` | Prefer colon-free block conditionals; see [`examples/block_pattern_demo.mla`](../examples/block_pattern_demo.mla). Reference: [Language Syntax](language_syntax.md#if--else-if-syntax). |
+| `likely` / `unlikely` branch hints | Mark the expected result of a runtime `if` so LLVM optimization and code-layout passes can favor that path; see [`examples/branch_prediction_demo.mla`](../examples/branch_prediction_demo.mla). Reference: [Language Syntax](language_syntax.md#branch-prediction-hints). |
 | Guarded `if let` / `if var` and guarded `while` | Add guard expressions to bindings and loops; see [`examples/guarded_if_while_demo.mla`](../examples/guarded_if_while_demo.mla). Reference: [Language Syntax](language_syntax.md#guarded-if-forms). |
 | `switch` / `case` | Use switch-style branching for integral and enum-like values; see [`examples/switch_demo.mla`](../examples/switch_demo.mla). Reference: [Language Syntax](language_syntax.md#switch--case). |
 | Ternary operator | Use `condition ? a : b` for expression-level selection; see [`examples/ternary_example.mla`](../examples/ternary_example.mla). |

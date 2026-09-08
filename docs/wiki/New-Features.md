@@ -41,6 +41,7 @@ focused `.mla` example was added under `examples/`.
 | Feature | Description |
 |---|---|
 | Plain block [`if`](Language-Syntax) / `else if` | Prefer colon-free block conditionals; see [`examples/block_pattern_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/block_pattern_demo.mla). Reference: [Language Syntax](Language-Syntax#if--else-if-syntax). |
+| `likely` / `unlikely` branch hints | Mark the expected result of a runtime [`if`](Language-Syntax) so LLVM optimization and code-layout passes can favor that path; see [`examples/branch_prediction_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/branch_prediction_demo.mla). Reference: [Language Syntax](Language-Syntax#branch-prediction-hints). |
 | Guarded `if let` / `if var` and guarded [`while`](Language-Syntax) | Add guard expressions to bindings and loops; see [`examples/guarded_if_while_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/guarded_if_while_demo.mla). Reference: [Language Syntax](Language-Syntax#guarded-if-forms). |
 | [`switch`](Language-Syntax) / [`case`](Language-Syntax) | Use switch-style branching for integral and enum-like values; see [`examples/switch_demo.mla`](https://github.com/mattilaa/mlang/blob/main/examples/switch_demo.mla). Reference: [Language Syntax](Language-Syntax#switch--case). |
 | Ternary operator | Use `condition ? a : b` for expression-level selection; see [`examples/ternary_example.mla`](https://github.com/mattilaa/mlang/blob/main/examples/ternary_example.mla). |

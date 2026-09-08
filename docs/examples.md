@@ -40,6 +40,8 @@ The feature-oriented index in [New Features Guide](new_features.md) covers
 language and standard-library examples that are not all repeated below. The
 following additional programs are useful runnable showcases:
 
+- `examples/branch_prediction_demo.mla` — `likely` and `unlikely` runtime
+  branch optimization hints.
 - `examples/argparser_demo.mla`, `examples/std_compiler_demo.mla` — argument
   parsing and compiler-session API usage.
 - `examples/chat.mla`, `examples/minimal_vim_demo.mla`,
