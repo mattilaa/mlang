@@ -819,6 +819,64 @@ TEST_F(MLATest, MutableMultiarrayWriteChecksDynamicIndex)
     EXPECT_NE(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, MultiarrayRejectsConstantOutOfBoundsIndex)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let matrix: multiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+            return matrix[2][0];
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("array index out of bounds"), std::string::npos);
+}
+
+TEST_F(MLATest, MutableMultiarrayGetSupportsOptionChecksAndUnwrap)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var matrix: mutmultiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+            var row: i32 = 1;
+            var column: i32 = 0;
+            if !matrix.get(row, column).is_some() {
+                return 1;
+            }
+            if matrix.get(2, 0).is_none() == false {
+                return 2;
+            }
+            return matrix.get(row, column).unwrap() == 3 ? 0 : 3;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MutableMultiarrayGetReturnsNoneWithoutPanicking)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var matrix: mutmultiarray<i32, 1, 2> = {{1, 2}};
+            var column: i32 = 2;
+            return matrix.get(0, column).is_none() ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MutableMultiarrayGetUnwrapPanicsOutOfBounds)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var matrix: mutmultiarray<i32, 1, 2> = {{1, 2}};
+            var column: i32 = 2;
+            return matrix.get(0, column).unwrap();
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, FixedArrayAllowsPartialBraceInitializer)
 {
     std::string code = R"(
