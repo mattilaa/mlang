@@ -62,6 +62,8 @@
 - [[std::jsonrpc|Stdlib-Jsonrpc]]
 - [[std::limits|Stdlib-Limits]]
 - [[std::log|Stdlib-Log]]
+- [[std::multiarray|Stdlib-Multiarray]]
+- [[std::mutmultiarray|Stdlib-Mutmultiarray]]
 - [[std::net|Stdlib-Net]]
 - [[std::platform|Stdlib-Platform]]
 - [[std::printf|Stdlib-Printf]]

@@ -48,6 +48,8 @@ mod std::jsonrpc;
 mod std::limits;
 mod std::log;
 mod std::math;
+mod std::multiarray;
+mod std::mutmultiarray;
 mod std::net;
 mod std::platform;
 mod std::printf;
@@ -103,6 +105,8 @@ The source-of-truth implementation files are:
 - `stdlib/std/limits.mla`
 - `stdlib/std/log.mla`
 - `stdlib/std/math.mla`
+- `stdlib/std/multiarray.mla`
+- `stdlib/std/mutmultiarray.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/platform.mla`
 - `stdlib/std/printf.mla`
@@ -143,6 +147,8 @@ The source-of-truth implementation files are:
 ## Collections and Data
 
 - [std::array](Stdlib-Array)
+- [std::multiarray](Stdlib-Multiarray)
+- [std::mutmultiarray](Stdlib-Mutmultiarray)
 - [std::bits](Stdlib-Bits)
 - [std::bitset](Stdlib-Bitset)
 - [std::bytes](Stdlib-Bytes)

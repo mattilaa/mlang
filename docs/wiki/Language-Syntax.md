@@ -1014,8 +1014,8 @@ let matrix: multiarray<i32, 3, 3> = {
 let value: i32 = matrix[2][2];
 ```
 
-`multiarray` does not permit indexed writes. For runtime mutation, declare a
-`var` with the `mutmultiarray` type:
+[`multiarray`](Stdlib-Multiarray) does not permit indexed writes. For runtime mutation, declare a
+[`var`](Language-Syntax) with the [`mutmultiarray`](Stdlib-Mutmultiarray) type:
 
 ```rust
 var matrix: mutmultiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
@@ -1029,10 +1029,10 @@ let value: i32 = matrix.get(row, 0).unwrap();
 Every read and write retains bounds checks for each index. A constant invalid
 index is diagnosed at compile time, while a dynamic invalid `[]` index aborts
 at runtime. For recoverable access, `mutmultiarray.get(i1, ..., iN)` returns an
-`option<T>` instead: `is_some()` and `is_none()` inspect it without panicking,
+[`option<T>`](Quick-Guide#types) instead: `is_some()` and `is_none()` inspect it without panicking,
 and `unwrap()` returns the element or reports its source location and aborts
 when the index was out of bounds. The number of indexes passed to `get` must
-match the number of dimensions. Declaring a `mutmultiarray` with `let` does not
+match the number of dimensions. Declaring a [`mutmultiarray`](Stdlib-Mutmultiarray) with [`let`](Language-Syntax) does not
 make the binding mutable.
 
 Supported fold operators:
