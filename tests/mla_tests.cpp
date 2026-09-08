@@ -2534,6 +2534,27 @@ TEST_F(MLATest, TypedVarGenericStructBraceZeroInit)
     EXPECT_EQ(runExitCode(), 0);
 }
 
+TEST_F(MLATest, GenericStructGetMethodIsNotTreatedAsMultiarrayGet)
+{
+    std::string code = R"(
+        struct Box<T> {
+            var value: T;
+        };
+
+        impl<T> Box {
+            pub fn get(self: Box<T>) -> T {
+                return self.value;
+            }
+        }
+
+        fn main() -> i32 {
+            let boxed: Box<i32> = Box<i32> { value: 42 };
+            return boxed.get() == 42 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, TypedVarScalarImplicitZeroInitWarns)
 {
     std::string code = R"(
