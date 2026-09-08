@@ -6,6 +6,57 @@
 This page documents the current `mlang pkg` workflow and the manifest keys used
 by package builds.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Project setup and fetching](#project-setup-and-fetching)
+  - [`pkg init`](#pkg-init)
+  - [`pkg add`](#pkg-add)
+  - [`pkg fetch`](#pkg-fetch)
+- [Dependency management](#dependency-management)
+  - [Reproducible dependency locking](#reproducible-dependency-locking)
+  - [Path packages, transitive dependencies, and versions](#path-packages-transitive-dependencies-and-versions)
+- [Build ergonomics](#build-ergonomics)
+  - [Profiles and features](#profiles-and-features)
+  - [Workspace package selection](#workspace-package-selection)
+  - [Incremental global cache](#incremental-global-cache)
+  - [Vendoring dependencies](#vendoring-dependencies)
+- [Registry and supply chain](#registry-and-supply-chain)
+  - [Registry configuration and protocol](#registry-configuration-and-protocol)
+  - [Package and publish](#package-and-publish)
+  - [Install and signature policy](#install-and-signature-policy)
+  - [Audit advisories](#audit-advisories)
+  - [Software bill of materials](#software-bill-of-materials)
+- [Build and task commands](#build-and-task-commands)
+  - [`pkg build`](#pkg-build)
+  - [`pkg run`](#pkg-run)
+  - [`pkg --tests`](#pkg---tests)
+  - [`pkg clean`](#pkg-clean)
+- [Manifest layout](#manifest-layout)
+- [Manifest reference](#manifest-reference)
+  - [`[package]`](#package)
+  - [`[dependencies]`](#dependencies)
+  - [`[c-dependencies]`](#c-dependencies)
+  - [`[tool.mlang]`](#toolmlang)
+  - [`[tool.mlang.toolchains]`](#toolmlangtoolchains)
+  - [`[[task]]` schema and execution graph](#task-schema-and-execution-graph)
+  - [`[[lib]]` and internal target dependencies](#lib-and-internal-target-dependencies)
+  - [`[[bin]]`](#bin)
+  - [`[[task]]` platform configuration](#task-platform-configuration)
+  - [`[workspace]`](#workspace)
+  - [Explicit `[[include]]` packages](#explicit-include-packages)
+- [Workspace and subdirectory layouts](#workspace-and-subdirectory-layouts)
+  - [Basic workspace tree](#basic-workspace-tree)
+  - [Workspace with fetched subprojects](#workspace-with-fetched-subprojects)
+  - [Generate a subproject with `pkg add --add-lib`](#generate-a-subproject-with-pkg-add---add-lib)
+- [Example workflow](#example-workflow)
+- [See also](#see-also)
+
+Unless a block is explicitly identified as a registry index, advisory
+database, or lockfile, every `toml` block on this page is an `mlang.toml`
+example. Short blocks are composable manifest fragments; the
+[Manifest layout](#manifest-layout) section provides a complete file.
+
 ## Overview
 
 `mlang pkg` is the package-manager entrypoint exposed by the main compiler
@@ -56,7 +107,7 @@ order. Passing `--color` on its own implies `--tasks`, so
 `mlang pkg --color my.toml` is equivalent to `mlang pkg --tasks --color
 my.toml`.
 
-## Subcommands
+## Project Setup and Fetching
 
 ### `pkg init`
 
@@ -152,6 +203,22 @@ mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib --pr
 Clone or update git dependencies into the configured dependency cache
 directory. By default this is `build/deps/`:
 
+For example, this manifest fetches one Git checkout and one release archive:
+
+```toml
+[package]
+name = "image_tool"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { git = "https://github.com/DaveGamble/cJSON.git", tag = "v1.7.18", build = "cmake" }
+zlib = { url = "https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
+
+[tool.mlang]
+deps_dir = ".pkg/deps"
+```
+
 If you do not set `build_dir`, `deps_dir`, or any CLI overrides, `pkg fetch`
 uses the legacy default layout and stores dependencies under `build/deps/`.
 
@@ -177,7 +244,9 @@ git -C build/deps/<name> submodule update --init --recursive
 This is useful for repositories such as the Steinberg VST3 SDK that keep
 required source trees in git submodules.
 
-### Reproducible dependency locking
+## Dependency Management
+
+### Reproducible Dependency Locking
 
 `mlang pkg` writes a shared `mlang.lock` next to the root manifest. The
 lockfile is deterministic and should be committed to version control. It
@@ -189,6 +258,20 @@ records:
 - the exact detached Git commit selected from a revision, tag, or remote
   default branch
 - a `sha256:...` checksum for every downloaded archive
+
+Pin movable inputs in `mlang.toml`; the generated lockfile records the exact
+Git commit and archive checksum:
+
+```toml
+[package]
+name = "locked_app"
+version = "1.0.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { git = "https://github.com/DaveGamble/cJSON.git", tag = "v1.7.18", build = "cmake" }
+zlib = { url = "https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
+```
 
 Generate or validate it explicitly with:
 
@@ -235,7 +318,7 @@ values, and extracted archive checksum markers. Workspaces and explicit
 `[[include]]` coordinators use one root lockfile with manifest-qualified
 dependency entries.
 
-### Path packages, transitive dependencies, and versions
+### Path Packages, Transitive Dependencies, and Versions
 
 An MLang package can depend on another package directory without copying it
 into the dependency cache:
@@ -289,7 +372,9 @@ to `NAME`, which is useful when a transitive dependency is unexpected.
 For a complete runnable graph, see
 `examples/package_manager_path_dependencies`.
 
-### Build ergonomics: profiles and features
+## Build Ergonomics
+
+### Profiles and Features
 
 Named profiles keep build policy in the manifest. `dev` and `release` have
 built-in defaults (`O0` plus debug checks, and `O3`, respectively), and either
@@ -351,6 +436,11 @@ dependencies enabled for that invocation.
 
 Workspace-aware commands accept repeatable package selectors:
 
+```toml
+[workspace]
+members = ["apps", "packages"]
+```
+
 ```sh
 mlang pkg build -p editor
 mlang pkg build --package editor --package converter
@@ -371,6 +461,15 @@ workspace packages.
 Package builds use a content-addressed global cache in addition to the local
 `build/` tree. The default is `$MLANG_PKG_CACHE` when set, otherwise
 `$XDG_CACHE_HOME/mlang/pkg`, or finally `$HOME/.cache/mlang/pkg`.
+
+Configure a shared cache in `mlang.toml` when a project needs a stable
+location independent of the developer's environment:
+
+```toml
+[tool.mlang]
+global_cache_dir = ".cache/mlang-pkg"
+use_global_cache = true
+```
 
 ```sh
 mlang pkg build --cache-dir /mnt/build-cache/mlang
@@ -393,6 +492,11 @@ path because generated runtime search paths can be location-dependent.
 ### Vendoring dependencies
 
 Create a project-local copy of the complete locked dependency graph with:
+
+```toml
+[tool.mlang]
+vendor_dir = "third_party/vendor"
+```
 
 ```sh
 mlang pkg vendor
@@ -420,7 +524,9 @@ the destination for each dependency is replaced at package scope.
 The complete runnable example is
 `examples/package_manager_build_ergonomics`.
 
-### Ecosystem: registry, packaging, install, audit, SBOM, and signing
+## Registry and Supply Chain
+
+### Registry Configuration and Protocol
 
 Configure a registry for a package or workspace with:
 
@@ -436,7 +542,7 @@ locations and public keys resolve from the package directory. The public key
 is a client-side trust root and is never learned implicitly from a package.
 `token_env` names an environment variable; its token is not printed in logs.
 
-#### Registry protocol v1
+#### Registry Protocol v1
 
 The read protocol is static-file friendly:
 
@@ -473,7 +579,7 @@ rate limiting, and concurrent index serialization belong to the server.
 The normative field and security requirements are in
 [Registry Protocol v1](Registry-Protocol).
 
-#### Package and publish
+### Package and Publish
 
 ```sh
 mlang pkg package
@@ -495,7 +601,7 @@ rejected because they are not immutable publication sources. Existing local
 versions are rejected unless `--allow-existing` is used for a disposable
 development registry.
 
-#### Install and signature policy
+### Install and Signature Policy
 
 ```sh
 mlang pkg install 'hello@^1.0' --registry ./registry
@@ -522,7 +628,7 @@ mlang pkg verify-signature hello-1.2.0.tar.gz --key public.pem
 The portable baseline is RSA with SHA-256 through `openssl dgst`; signatures
 default to `<archive>.sig`, overridable with `--signature FILE`.
 
-#### Audit advisories
+### Audit Advisories
 
 `pkg audit` checks root and locked transitive MLang package versions against a
 registry `advisories.toml` or explicit `--database`:
@@ -549,7 +655,7 @@ The default failure threshold is `high`; accepted policies are `low`,
 `medium`, `high`, `critical`, and `any`. Allowed lower-severity findings are
 still printed.
 
-#### Software bill of materials
+### Software Bill of Materials
 
 ```sh
 mlang pkg sbom --output build/project.cdx.json
@@ -565,9 +671,22 @@ yet assigned component versions.
 The complete signed local-registry example is
 `examples/package_manager_ecosystem`.
 
+## Build and Task Commands
+
 ### `pkg build`
 
 Build the package entry defined by the selected manifest:
+
+```toml
+[package]
+name = "hello"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[tool.mlang]
+opt_level = "O2"
+build_dir = "build"
+```
 
 ```sh
 mlang pkg build
@@ -614,6 +733,17 @@ read from `build/deps/`.
 ### `pkg run`
 
 Run a custom package task declared with `[[task]]`:
+
+```toml
+[[task]]
+name = "generate-assets"
+commands = ["python3 tools/generate_assets.py"]
+
+[[task]]
+name = "serve"
+depends_on = ["generate-assets"]
+commands = ["./build/hello --serve"]
+```
 
 ```sh
 mlang pkg run kernel-build
@@ -741,6 +871,12 @@ listed, `mlang pkg --tests` processes them in the given order.
 
 Remove the package-local artifact tree created by `fetch` and `build`:
 
+```toml
+[tool.mlang]
+build_dir = "build-release"
+deps_dir = ".pkg/deps"
+```
+
 ```sh
 mlang pkg clean
 mlang pkg --config arm64.toml clean
@@ -788,7 +924,7 @@ linker_flags = ["-Wl,-rpath,vendor/lib"]
 compiler_flags = ["-Wno-unwrap"]
 ```
 
-## Manifest Sections
+## Manifest Reference
 
 ### `[package]`
 
@@ -1007,7 +1143,7 @@ upgrade everything before retrying. For example:
 Required dependency toolchains are missing or too old. Install or upgrade them before continuing.
 ```
 
-### `[[task]]`
+### `[[task]]` Schema and Execution Graph
 
 Custom tasks are executed with `mlang pkg run <task-name>`.
 
@@ -1081,9 +1217,8 @@ Task semantics:
 - `mlang pkg run <task>` honors task dependencies. If a task declares
   `depends_on`, `phase_depends_on`, `join_on`, or `phase_join_on`, those tasks
   are run before the requested task body starts.
-- `mlang pkg run` does not implicitly fetch package dependencies. Run
-  `mlang pkg fetch` first on a clean workspace if tasks expect files under
-  `{{deps_dir}}`.
+- `mlang pkg run` fetches configured package dependencies before it executes
+  the task graph, so tasks may use fetched files under `{{deps_dir}}`.
 - TOML list-valued task keys such as `inputs`, `libs`, `compiler_flags`,
   `linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
   comma-separated arrays, nested command token arrays, and `+=` append syntax.
@@ -1181,8 +1316,8 @@ tasks are complete because of `join_on`.
 That same rule applies when running a later task directly. For example, if
 `qemu-run` has `join_on = ["kernel-build", "initramfs"]`, then
 `mlang pkg run qemu-run` first runs `kernel-build` and `initramfs`, then
-starts QEMU after they succeed. It still does not run `mlang pkg fetch`
-automatically, so a clean workspace must fetch dependencies first.
+starts QEMU after they succeed. Configured dependencies are fetched first, so
+the same command also works from a clean workspace.
 
 Phase example:
 
@@ -1359,7 +1494,7 @@ Merge behavior:
 - list values append after package defaults
 - explicit target booleans override package defaults
 
-### `[[task]]`
+### `[[task]]` Platform Configuration
 
 Packages can define shell-driven tasks:
 
@@ -1444,7 +1579,6 @@ Supported host names are currently:
 - `darwin`
 - `linux`
 - `windows`
-- `commands`
 
 Host-conditional task overrides:
 
@@ -1629,7 +1763,7 @@ mlang pkg clean
 See `examples/package_manager_includes` for a runnable example with two
 included packages and three separately built executables.
 
-## Workspace And Subdirectory Layouts
+## Workspace and Subdirectory Layouts
 
 This topic shows how to organize a workspace root, nested package manifests,
 and fetched source subprojects.
@@ -1681,7 +1815,7 @@ mlang pkg build
 mlang pkg clean
 ```
 
-### Workspace With Fetched Subprojects
+### Workspace with Fetched Subprojects
 
 Each discovered subpackage can fetch its own sources from GitHub or from a
 release archive URL.
@@ -1744,7 +1878,7 @@ mlang pkg build
 
 See `examples/package_manager_workspace_fetch` for a complete working example.
 
-### Generate A Subproject With `pkg add --add-lib`
+### Generate a Subproject with `pkg add --add-lib`
 
 You can generate the subdirectory tree instead of creating it manually.
 
