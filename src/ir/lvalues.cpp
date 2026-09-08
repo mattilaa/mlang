@@ -288,6 +288,94 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
 void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 {
+    if(auto* indexTarget = dynamic_cast<IndexExpressionNode*>(node->target))
+    {
+        ExpressionNode* root = indexTarget;
+        while(auto* index = dynamic_cast<IndexExpressionNode*>(root))
+            root = index->base;
+        auto* rootIdentifier = dynamic_cast<IdentifierNode*>(root);
+        if(!rootIdentifier)
+        {
+            reportError(node->line,
+                        "mutable multiarray assignment requires a named "
+                        "multiarray root");
+            return;
+        }
+
+        auto mutability = multiarrayMutability.find(rootIdentifier->name);
+        if(mutability == multiarrayMutability.end() || !mutability->second)
+        {
+            reportError(node->line,
+                        "indexed assignment requires mutmultiarray; '" +
+                            rootIdentifier->name + "' is immutable");
+            return;
+        }
+        if(constantVariables.count(rootIdentifier->name) != 0)
+        {
+            reportError(node->line,
+                        "cannot mutate multiarray '" + rootIdentifier->name +
+                            "' because it was declared with let; use var");
+            return;
+        }
+        auto sharedBorrowers = activeBorrowers.find(rootIdentifier->name);
+        if(sharedBorrowers != activeBorrowers.end() &&
+           !sharedBorrowers->second.empty())
+        {
+            reportError(node->line,
+                        "cannot mutate multiarray '" + rootIdentifier->name +
+                            "' while it is borrowed");
+            return;
+        }
+        if(activeMutBorrower.count(rootIdentifier->name) != 0)
+        {
+            reportError(node->line,
+                        "cannot mutate multiarray '" + rootIdentifier->name +
+                            "' directly while it is mutably borrowed");
+            return;
+        }
+
+        TypeNode* elementTypeNode = nullptr;
+        llvm::Value* elementPointer =
+            generateListIndexPointer(indexTarget, elementTypeNode);
+        if(!elementPointer || !elementTypeNode)
+            return;
+
+        llvm::Type* targetType = getLLVMTypeFromNode(elementTypeNode);
+        llvm::Value* value = generateExpression(node->expression);
+        if(!targetType || !value)
+            return;
+
+        if(value->getType() != targetType)
+        {
+            if(value->getType()->isIntegerTy() && targetType->isIntegerTy())
+                value = builder.CreateSExtOrTrunc(value, targetType,
+                                                  "index.assign.int");
+            else if(value->getType()->isFloatingPointTy() &&
+                    targetType->isFloatingPointTy())
+                value = builder.CreateFPCast(value, targetType,
+                                             "index.assign.float");
+            else if(value->getType()->isIntegerTy() &&
+                    targetType->isFloatingPointTy())
+                value = builder.CreateSIToFP(value, targetType,
+                                             "index.assign.sitofp");
+            else if(value->getType()->isFloatingPointTy() &&
+                    targetType->isIntegerTy())
+                value = builder.CreateFPToSI(value, targetType,
+                                             "index.assign.fptosi");
+            else
+            {
+                reportError(node->line,
+                            "type mismatch in mutable multiarray assignment");
+                return;
+            }
+        }
+
+        consumeMoveFromExpression(node->expression, node->line,
+                                  "assigning mutable multiarray element");
+        builder.CreateStore(value, elementPointer);
+        return;
+    }
+
     llvm::Value* structPtr;
     std::string structTypeName;
     std::string fieldName;

@@ -48,8 +48,15 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             }
             auto capIt = arrayCapacities.find(id->name);
             if(capIt != arrayCapacities.end())
+            {
+                auto multiIt = multiarrayMutability.find(id->name);
+                if(multiIt != multiarrayMutability.end())
+                    return new MultiArrayTypeNode(
+                        cloneTypeNode(listIt->second), capIt->second,
+                        multiIt->second);
                 return new ArrayTypeNode(cloneTypeNode(listIt->second),
                                          capIt->second);
+            }
             return new GenericListTypeNode(cloneTypeNode(listIt->second));
         }
         if(kind == TypeNode::TYPE_MAP)

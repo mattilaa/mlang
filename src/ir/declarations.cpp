@@ -516,6 +516,12 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(genListType))
         {
             arrayCapacities[node->name] = arrayType->capacity;
+            if(auto* multiarrayType =
+                   dynamic_cast<MultiArrayTypeNode*>(arrayType))
+                multiarrayMutability[node->name] =
+                    multiarrayType->elementsMutable;
+            else
+                multiarrayMutability.erase(node->name);
             if(auto size = fixedArrayExpressionKnownLength(node->expression))
                 arrayKnownLengths[node->name] = *size;
             else
@@ -1540,6 +1546,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(genListType))
         {
             arrayCapacities[node->name] = arrayType->capacity;
+            if(auto* multiarrayType =
+                   dynamic_cast<MultiArrayTypeNode*>(arrayType))
+                multiarrayMutability[node->name] =
+                    multiarrayType->elementsMutable;
+            else
+                multiarrayMutability.erase(node->name);
             if(auto size = fixedArrayExpressionKnownLength(node->initExpr))
                 arrayKnownLengths[node->name] = *size;
             else

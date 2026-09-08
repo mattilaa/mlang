@@ -736,6 +736,89 @@ TEST_F(MLATest, MultiarrayRejectsOversizedNestedInitializer)
     EXPECT_NE(out.find("array<i32, 2> capacity is 2"), std::string::npos);
 }
 
+TEST_F(MLATest, MutableMultiarraySupportsCheckedRuntimeAssignment)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var matrix: mutmultiarray<i32, 2, 3> = {
+                {1, 2, 3},
+                {4, 5, 6}
+            };
+            matrix[0][1] = 42;
+            matrix[1][2] += 10;
+            var row: i32 = 1;
+            matrix[row][0] = 99;
+            if matrix[0][1] != 42 || matrix[1][2] != 16 {
+                return 1;
+            }
+            return matrix[1][0] == 99 ? 0 : 2;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ImmutableMultiarrayRejectsIndexedAssignment)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var matrix: multiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+            matrix[0][1] = 42;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("indexed assignment requires mutmultiarray"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, ImmutableMultiarrayRejectsMutatingMethods)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var matrix: multiarray<i32, 1, 2> = {{1, 2}};
+            matrix.clear();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("mutation requires mutmultiarray"), std::string::npos);
+}
+
+TEST_F(MLATest, LetMutableMultiarrayRejectsMutation)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let matrix: mutmultiarray<i32, 1, 2> = {{1, 2}};
+            matrix[0][0] = 7;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("declared with let; use var"), std::string::npos);
+}
+
+TEST_F(MLATest, MutableMultiarrayWriteChecksDynamicIndex)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var matrix: mutmultiarray<i32, 1, 2> = {{1, 2}};
+            var column: i32 = 2;
+            matrix[0][column] = 7;
+            return 0;
+        }
+    )";
+    EXPECT_NE(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, FixedArrayAllowsPartialBraceInitializer)
 {
     std::string code = R"(

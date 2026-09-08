@@ -415,6 +415,14 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             {
                 listElementTypes[std::string(arg.getName())] =
                     genListType->elementType;
+                if(auto* arrayType =
+                       dynamic_cast<ArrayTypeNode*>(genListType))
+                    arrayCapacities[std::string(arg.getName())] =
+                        arrayType->capacity;
+                if(auto* multiarrayType =
+                       dynamic_cast<MultiArrayTypeNode*>(genListType))
+                    multiarrayMutability[std::string(arg.getName())] =
+                        multiarrayType->elementsMutable;
             }
             if(auto* mapType = dynamic_cast<MapTypeNode*>(paramNode->type))
             {

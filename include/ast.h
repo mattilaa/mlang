@@ -148,6 +148,19 @@ public:
     std::string toString() const override;
 };
 
+// Fixed multidimensional array. Only the outer node carries element
+// mutability; its element type is the nested fixed-array shape.
+class MultiArrayTypeNode : public ArrayTypeNode
+{
+public:
+    bool elementsMutable;
+    MultiArrayTypeNode(TypeNode* elemType, int64_t cap, bool isMutable)
+        : ArrayTypeNode(elemType, cap), elementsMutable(isMutable)
+    {
+    }
+    std::string toString() const override;
+};
+
 // Map type node: map<K, V>
 class MapTypeNode : public TypeNode
 {

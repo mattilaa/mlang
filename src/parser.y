@@ -843,7 +843,7 @@ static ASTNode* add_multiarray_dimension(ASTNode* dimensions,
 
 static TypeNode* make_multiarray_type(ASTNode* elementType,
                                       ASTNode* dimensionList, int line,
-                                      int col)
+                                      int col, bool elementsMutable)
 {
     auto* dimensions = static_cast<ListElementsNode*>(dimensionList);
     TypeNode* result = static_cast<TypeNode*>(elementType);
@@ -863,7 +863,13 @@ static TypeNode* make_multiarray_type(ASTNode* elementType,
                         .c_str());
             parseHadError = true;
         }
-        result = new ArrayTypeNode(result, extent < 0 ? 0 : extent);
+        const bool isOuterDimension =
+            std::next(it) == dimensions->elements.rend();
+        if(isOuterDimension)
+            result = new MultiArrayTypeNode(result, extent < 0 ? 0 : extent,
+                                            elementsMutable);
+        else
+            result = new ArrayTypeNode(result, extent < 0 ? 0 : extent);
     }
     return result;
 }
@@ -1917,7 +1923,7 @@ enum UpdatePosition
 %token <ast> TYPED_INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL BIT FLOAT DOUBLE STR8 STR16 ARRAY MULTIARRAY LIST MAP TUPLE PTR STRUCT ENUM FIELD
+%token FUNCTION RETURN IF ELSE VOID BOOL BIT FLOAT DOUBLE STR8 STR16 ARRAY MULTIARRAY MUTMULTIARRAY LIST MAP TUPLE PTR STRUCT ENUM FIELD
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
@@ -2719,7 +2725,9 @@ type
     | ARRAY GENERIC_LT type COMMA INT_LITERAL GT
         { $$ = make_array_type($3, $5, yylineno, yycolumn_token); }
     | MULTIARRAY GENERIC_LT type COMMA multiarray_dimensions GT
-        { $$ = make_multiarray_type($3, $5, yylineno, yycolumn_token); }
+        { $$ = make_multiarray_type($3, $5, yylineno, yycolumn_token, false); }
+    | MUTMULTIARRAY GENERIC_LT type COMMA multiarray_dimensions GT
+        { $$ = make_multiarray_type($3, $5, yylineno, yycolumn_token, true); }
     | LIST   { $$ = mla_ast_list_type(); }
     | LIST GENERIC_LT type GT { $$ = mla_ast_generic_list_type($3); }
     | MAP GENERIC_LT type COMMA type GT { $$ = mla_ast_map_type($3, $5); }

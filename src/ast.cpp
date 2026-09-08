@@ -2795,6 +2795,23 @@ std::string ArrayTypeNode::toString() const
            std::to_string(capacity) + ">";
 }
 
+std::string MultiArrayTypeNode::toString() const
+{
+    std::vector<int64_t> dimensions;
+    const TypeNode* scalarType = this;
+    while(auto* arrayType = dynamic_cast<const ArrayTypeNode*>(scalarType))
+    {
+        dimensions.push_back(arrayType->capacity);
+        scalarType = arrayType->elementType;
+    }
+
+    std::string result = elementsMutable ? "mutmultiarray<" : "multiarray<";
+    result += scalarType ? scalarType->toString() : "unknown";
+    for(int64_t dimension : dimensions)
+        result += ", " + std::to_string(dimension);
+    return result + ">";
+}
+
 // Map type
 ASTNode* create_map_type_impl(ASTNode* key_type, ASTNode* value_type)
 {

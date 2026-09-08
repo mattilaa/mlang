@@ -489,6 +489,10 @@ CodeGenerator::substituteTypeParams(TypeNode* type,
     {
         TypeNode* newElemType =
             substituteTypeParams(listType->elementType, typeParams, typeArgs);
+        if(auto* multiarrayType = dynamic_cast<MultiArrayTypeNode*>(type))
+            return new MultiArrayTypeNode(
+                newElemType, multiarrayType->capacity,
+                multiarrayType->elementsMutable);
         if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(type))
             return new ArrayTypeNode(newElemType, arrayType->capacity);
         return new GenericListTypeNode(newElemType);

@@ -221,6 +221,7 @@ private:
     std::map<std::string, TypeNode*> listElementTypes;
     std::map<std::string, int64_t> arrayCapacities;
     std::map<std::string, int64_t> arrayKnownLengths;
+    std::map<std::string, bool> multiarrayMutability;
     std::map<std::string, std::pair<TypeNode*, TypeNode*>> mapKeyValueTypes;
     // Track element types for pointers
     std::map<std::string, TypeNode*> pointerElementTypes;
@@ -692,6 +693,8 @@ private:
                                     llvm::Type* declaredKeyType = nullptr,
                                     llvm::Type* declaredValueType = nullptr);
     llvm::Value* generateIndexExpression(IndexExpressionNode* node);
+    llvm::Value* generateListIndexPointer(IndexExpressionNode* node,
+                                          TypeNode*& elementType);
     llvm::Value* generateTupleLiteral(TupleLiteralNode* node);
     llvm::Value* generateTupleAccess(TupleAccessNode* node);
     llvm::Value* generateStructLiteral(StructLiteralNode* node);

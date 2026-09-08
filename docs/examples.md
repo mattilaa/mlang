@@ -148,8 +148,8 @@ following additional programs are useful runnable showcases:
 - `examples/functional_closure_fold_demo.mla` — closure-driven fold workflow.
 - `examples/array_demo.mla` — fixed-capacity `array<T, N>` initialization,
   indexing, and mutation checks.
-- `examples/multiarray.mla` — fixed-size multidimensional arrays, nested-brace
-  initialization, and chained indexing.
+- `examples/multiarray.mla` — immutable and mutable fixed-size multidimensional
+  arrays, nested-brace initialization, chained indexing, and checked writes.
 - `examples/borrowing_demo.mla` — borrowing syntax and compiler-enforced
   ownership behavior.
 - `examples/borrow_patterns.mla` — practical borrow patterns for containers

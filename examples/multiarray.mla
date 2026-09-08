@@ -9,5 +9,12 @@ fn main() -> i32 {
     println!("middle row: {} {} {}", middle[0], middle[1], middle[2]);
     println!("bottom-right: {}", matrix[2][2]);
 
-    return matrix[0][0] == 1 && matrix[2][2] == 9 ? 0 : 1;
+    var mutable_matrix: mutmultiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+    mutable_matrix[0][1] = 42;
+    println!("changed value: {}", mutable_matrix[0][1]);
+
+    return matrix[0][0] == 1 && matrix[2][2] == 9 &&
+                   mutable_matrix[0][1] == 42
+               ? 0
+               : 1;
 }
