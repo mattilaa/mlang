@@ -4299,7 +4299,8 @@ static bool isKeywordToken(std::string_view token)
 {
     static constexpr std::string_view kKeywords[] = {
         "fn",     "cexpr", "let",   "var", "struct", "mod", "namespace",
-        "use",    "alias", "if",    "else", "while",  "for", "return",
+        "use",    "alias", "if",    "else", "likely", "unlikely",
+        "while",  "for",   "return",
     };
     for(const auto kw : kKeywords)
     {
@@ -4404,7 +4405,8 @@ computeSemanticCompletions(const DocumentSemantic& current,
 {
     static constexpr std::string_view kKeywords[] = {
         "fn",     "cexpr", "let",   "var", "struct", "mod", "namespace",
-        "use",    "alias", "if",    "else", "while",  "for", "return",
+        "use",    "alias", "if",    "else", "likely", "unlikely",
+        "while",  "for",   "return",
     };
 
     const std::optional<size_t> offset =
