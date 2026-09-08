@@ -1014,6 +1014,18 @@ let matrix: multiarray<i32, 3, 3> = {
 let value: i32 = matrix[2][2];
 ```
 
+`multiarray` does not permit indexed writes. For runtime mutation, declare a
+`var` with the `mutmultiarray` type:
+
+```rust
+var matrix: mutmultiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+matrix[0][1] = 42;
+matrix[1][0] += 10;
+```
+
+Every write retains bounds checks for each index. Declaring a
+`mutmultiarray` with `let` does not make the binding mutable.
+
 Supported fold operators:
 - `+`
 - `*`

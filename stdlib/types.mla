@@ -29,6 +29,8 @@
 ///   initializers are checked at compile time so they cannot exceed `N`.
 /// - `multiarray<T, D1, ..., DN>`: one-or-more-dimensional fixed-capacity
 ///   array with nested brace initialization and chained indexing.
+/// - `mutmultiarray<T, D1, ..., DN>`: mutable-element variant of `multiarray`;
+///   declare it with `var` to enable checked indexed assignment.
 /// - `map<K, V>`: associative container.
 /// - `tuple<T1, T2, ...>`: fixed-size heterogeneous product type.
 /// - `ptr<T>`: pointer type.
@@ -122,6 +124,11 @@
 // Fixed-size multidimensional array: multiarray<T, D1, ..., DN>.
 // Each dimension is a compile-time capacity. Initialize all dimensions with
 // nested braces and access elements with chained indexes such as matrix[1][2].
+
+// @builtin mutmultiarray
+// Mutable-element multidimensional array: mutmultiarray<T, D1, ..., DN>.
+// The binding must use var. Indexed and compound assignments are bounds
+// checked at every dimension.
 
 // @builtin tuple
 // Tuple type: tuple<T1, T2, ...>.

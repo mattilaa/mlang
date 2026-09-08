@@ -194,6 +194,19 @@ let matrix: multiarray<i32, 3, 3> = {
 println!("{}", matrix[2][2]); // 9
 ```
 
+`multiarray` elements are immutable, including when the binding uses `var`.
+Use `var` together with `mutmultiarray` when elements must change at runtime:
+
+```rust
+var board: mutmultiarray<i32, 2, 3> = {{1, 2, 3}, {4, 5, 6}};
+board[0][1] = 42;
+board[1][2] += 10;
+```
+
+Mutable indexed writes use the same compile-time and runtime bounds checks as
+reads. A `let` binding remains immutable even when its type is
+`mutmultiarray`.
+
 Run the complete example with:
 
 ```sh
