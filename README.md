@@ -2811,7 +2811,7 @@ mlang pkg sbom --output build/project.cdx.json
 Registry installs select the highest matching non-yanked semantic version,
 verify its SHA-256 and optional RSA/SHA-256 signature, reject unsafe archive
 paths, build in the `release` profile, and write an installation receipt. See
-[Package-manager ecosystem](docs/package_manager.md#ecosystem-registry-packaging-install-audit-sbom-and-signing)
+[Package-manager ecosystem](docs/package_manager.md#registry-and-supply-chain)
 and [Registry Protocol v1](docs/registry_protocol.md), plus the runnable
 `examples/package_manager_ecosystem` demo.
 
