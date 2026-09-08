@@ -134,5 +134,5 @@ the index. Offline resolution performs no HTTP request and requires cached
 metadata and artifacts. Cached archive bytes are always rehashed, and cached
 signatures are always reverified before installation.
 
-See [Package Manager](package_manager.md#ecosystem-registry-packaging-install-audit-sbom-and-signing)
+See [Package Manager](package_manager.md#registry-and-supply-chain)
 for user-facing commands and manifest configuration.

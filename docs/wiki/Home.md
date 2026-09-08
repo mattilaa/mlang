@@ -14,6 +14,23 @@ The project goal is straightforward:
 This documentation is split into a small guided entry path and deeper reference
 pages.
 
+## Table of Contents
+
+- [What MLang is](#what-mlang-is)
+- [Start here](#start-here)
+- [Quick links](#quick-links)
+- [First example](#first-example)
+- [C interop example](#c-interop-example)
+- [Safety and modern features](#safety-and-modern-features)
+- [Feature guide](#feature-guide)
+  - [Core language](#core-language)
+  - [Testing and benchmarking](#testing-and-benchmarking)
+  - [Standard library](#standard-library)
+  - [DSP library](#dsp-library)
+  - [Practical examples](#practical-examples)
+- [Design direction](#design-direction)
+- [See also](#see-also)
+
 ## What MLang Is
 
 MLang is intended for native programs, tooling, CLIs, servers, and experiments
@@ -45,9 +62,9 @@ If you are new to MLang, read these pages in this order:
 4. [Language Attributes](Language-Attributes)
 5. [Package Manager](Package-Manager)
 6. [Registry Protocol v1](Registry-Protocol)
-6. [Stdlib Module API](Stdlib-Module-API)
-7. [DSP Library](DSP)
-8. [Directory Demos](Demos)
+7. [Stdlib Module API](Stdlib-Module-API)
+8. [DSP Library](DSP)
+9. [Directory Demos](Demos)
 
 ## Quick Links
 
@@ -72,9 +89,10 @@ If you are new to MLang, read these pages in this order:
   Filtering, convolution, FFT, interpolation, and real-time parameter ramps
   under the standalone [`dsp`](DSP) namespace.
 - [Package Manager](Package-Manager)
-- [Registry Protocol v1](Registry-Protocol)
-  `mlang pkg` workflow, subcommands, manifest layout, and package build
+  `mlang pkg` workflows, subcommands, manifest layout, and package build
   configuration keys.
+- [Registry Protocol v1](Registry-Protocol)
+  Registry index, archive, publishing, integrity, and trust requirements.
 - [UML UI Generator Example](UML-UI-Generator)
   TOML schema and sample files for the PNG UML example renderer.
 - [Directory Demos](Demos)
@@ -119,7 +137,7 @@ examples, see the example programs in the repository such as:
 - `examples/c_lib_file_io_demo.mla`
 - `examples/c_lib_text_parse_demo.mla`
 
-## Safety + Modern Features
+## Safety and Modern Features
 
 MLang is not only a thin C wrapper. It also includes language features intended
 to make low-level code safer and easier to reason about:

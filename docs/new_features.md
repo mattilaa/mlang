@@ -5,6 +5,17 @@ entry describes the feature and links directly to an example that demonstrates
 the behavior. When a feature did not already have a standalone example, a
 focused `.mla` example was added under `examples/`.
 
+## Table of Contents
+
+- [Core language](#core-language)
+- [Control flow and expressions](#control-flow-and-expressions)
+- [Data types and containers](#data-types-and-containers)
+- [Safety, ownership, and low-level control](#safety-ownership-and-low-level-control)
+- [Attributes, tests, and derived code](#attributes-tests-and-derived-code)
+- [Standard library feature examples](#standard-library-feature-examples)
+- [Package and tooling examples](#package-and-tooling-examples)
+- [See also](#see-also)
+
 ## Core Language
 
 | Feature | Description |
@@ -104,7 +115,7 @@ focused `.mla` example was added under `examples/`.
 |---|---|
 | Package manager basics | Use manifests, bins, tasks, dependency fetching, builds, runs, and tests; see [`examples/package_manager_multi_bins`](../examples/package_manager_multi_bins), [`examples/package_manager_workspace_fetch`](../examples/package_manager_workspace_fetch), and [`examples/package_manager_task_graph`](../examples/package_manager_task_graph). Reference: [Package Manager](package_manager.md). |
 | Reproducible package workflows | Use profiles, features, package selection, shared caches, vendoring, lockfiles, semantic dependency graphs, and inspection commands; see [`examples/package_manager_build_ergonomics`](../examples/package_manager_build_ergonomics) and [`examples/package_manager_path_dependencies`](../examples/package_manager_path_dependencies). |
-| Registry and supply chain | Package, sign, publish, install, audit, and emit CycloneDX SBOMs using the protocol-v1 registry workflow; see [`examples/package_manager_ecosystem`](../examples/package_manager_ecosystem). Reference: [Package Manager](package_manager.md#ecosystem-registry-packaging-install-audit-sbom-and-signing). |
+| Registry and supply chain | Package, sign, publish, install, audit, and emit CycloneDX SBOMs using the protocol-v1 registry workflow; see [`examples/package_manager_ecosystem`](../examples/package_manager_ecosystem). Reference: [Package Manager](package_manager.md#registry-and-supply-chain). |
 | Multilanguage package builds | Build packages that combine MLang with C/C++ sources and native linker settings; see [`examples/package_manager_multilanguage_example`](../examples/package_manager_multilanguage_example), [`examples/package_manager_static_cjson`](../examples/package_manager_static_cjson), [`examples/package_manager_git_cjson`](../examples/package_manager_git_cjson), and [`examples/package_manager_oscilloscope_demo`](../examples/package_manager_oscilloscope_demo). |
 | Cross/architecture package examples | Configure architecture-specific package builds and native SDK demos; see [`examples/package_manager_linux_aarch64_qemu`](../examples/package_manager_linux_aarch64_qemu), [`examples/package_manager_vst3_sdk_example`](../examples/package_manager_vst3_sdk_example), and [`examples/package_manager_vst3_coreaudio_synth`](../examples/package_manager_vst3_coreaudio_synth). |
 | Compiler API and LSP workflows | Query compiler/editor services and validate LSP behavior through transcript tests; see [`examples/std_compiler_demo.mla`](../examples/std_compiler_demo.mla), [`tests/lsp_mlangd-mla_hover_transcript.py`](../tests/lsp_mlangd-mla_hover_transcript.py), [`tests/lsp_mlangd-mla_completion_docs_transcript.py`](../tests/lsp_mlangd-mla_completion_docs_transcript.py), and [`tests/lsp_mlangd-mla_rename_transcript.py`](../tests/lsp_mlangd-mla_rename_transcript.py). Reference: [Stdlib Module API](stdlib/std_compiler.md). |
