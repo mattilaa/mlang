@@ -1,4 +1,5 @@
 #include "ast.h"
+#include "diagnostics.h"
 #include "source_filter.h"
 
 #include <algorithm>
@@ -4731,6 +4732,124 @@ computeSyntaxDiagnostics(std::string_view text)
 
     auto push_diag = [&out](int l, int c, std::string msg)
     { out.push_back(SyntaxDiagnostic{l, c, std::move(msg)}); };
+
+    struct SyntaxToken
+    {
+        std::string_view text;
+        int line = 1;
+        int column = 1;
+    };
+    std::vector<SyntaxToken> tokens;
+    bool token_in_string = false;
+    bool token_escape = false;
+    bool token_line_comment = false;
+    bool token_block_comment = false;
+    int token_line = 1;
+    int token_column = 1;
+    for(size_t i = 0; i < text.size();)
+    {
+        const char ch = text[i];
+        const char next = i + 1 < text.size() ? text[i + 1] : '\0';
+        if(ch == '\n')
+        {
+            ++token_line;
+            token_column = 1;
+            token_line_comment = false;
+            ++i;
+            continue;
+        }
+        if(token_line_comment)
+        {
+            ++token_column;
+            ++i;
+            continue;
+        }
+        if(token_block_comment)
+        {
+            if(ch == '*' && next == '/')
+            {
+                token_block_comment = false;
+                token_column += 2;
+                i += 2;
+            }
+            else
+            {
+                ++token_column;
+                ++i;
+            }
+            continue;
+        }
+        if(token_in_string)
+        {
+            if(token_escape)
+                token_escape = false;
+            else if(ch == '\\')
+                token_escape = true;
+            else if(ch == '"')
+                token_in_string = false;
+            ++token_column;
+            ++i;
+            continue;
+        }
+        if(ch == '/' && next == '/')
+        {
+            token_line_comment = true;
+            token_column += 2;
+            i += 2;
+            continue;
+        }
+        if(ch == '/' && next == '*')
+        {
+            token_block_comment = true;
+            token_column += 2;
+            i += 2;
+            continue;
+        }
+        if(ch == '"')
+        {
+            tokens.push_back({text.substr(i, 1), token_line, token_column});
+            token_in_string = true;
+            ++token_column;
+            ++i;
+            continue;
+        }
+        if(isIdentStart(ch))
+        {
+            const size_t start = i;
+            const int start_column = token_column;
+            ++i;
+            ++token_column;
+            while(i < text.size() && isIdentContinue(text[i]))
+            {
+                ++i;
+                ++token_column;
+            }
+            tokens.push_back(
+                {text.substr(start, i - start), token_line, start_column});
+            continue;
+        }
+        if(std::isspace(static_cast<unsigned char>(ch)) == 0)
+            tokens.push_back({text.substr(i, 1), token_line, token_column});
+        ++token_column;
+        ++i;
+    }
+
+    for(size_t i = 0; i < tokens.size(); ++i)
+    {
+        const SyntaxToken& token = tokens[i];
+        if(token.text != "likely" && token.text != "unlikely")
+            continue;
+        const bool valid_target = i + 1 < tokens.size() &&
+            (tokens[i + 1].text == "if" || tokens[i + 1].text == "let" ||
+             tokens[i + 1].text == "var");
+        if(valid_target)
+            continue;
+        const std::string message = "'" + std::string(token.text) +
+            "' must appear immediately before an if, let, or var statement";
+        push_diag(token.line, token.column,
+                  mlang::diag::format_message_with_code("MLANG-E1018",
+                                                        message));
+    }
 
     for(size_t i = 0; i < text.size(); ++i)
     {

@@ -39,12 +39,25 @@ def main() -> int:
         file_path = root / "diag_case.mla"
         uri = to_uri(file_path)
 
-        text_ok = "fn ok() -> i32 { return 1; }\n"
+        text_ok = (
+            "fn check(value: i32) -> bool { return value > 0; }\n"
+            "fn ok() -> i32 {\n"
+            "    likely /* expected value */ let ready: bool = check(1);\n"
+            "    unlikely\n"
+            "        if ready == false { return 1; }\n"
+            "    return 0;\n"
+            "}\n"
+        )
         text_bad = "fn bad( -> i32 { return 1; }\n"
         text_warn = (
             "fn warn(queue_handle: i64) -> i32 {\n"
             "    if queue_handle == 0: { return 1; }\n"
             "    return 0;\n"
+            "}\n"
+        )
+        text_bad_hint = (
+            "fn bad_hint() -> i32 {\n"
+            "    likely return 1;\n"
             "}\n"
         )
         file_path.write_text(text_ok)
@@ -144,6 +157,32 @@ def main() -> int:
                 for item in pull_warn_items
                 if isinstance(item, dict)
             ), f"plain colon warning missing from pull diagnostics: {res5!r}"
+
+            client.notify(
+                "textDocument/didChange",
+                {
+                    "textDocument": {"uri": uri, "version": 4},
+                    "contentChanges": [{"text": text_bad_hint}],
+                },
+            )
+            hint_push = client.read_until_notification("textDocument/publishDiagnostics")
+            assert hint_push.get("uri") == uri, (
+                f"unexpected branch-hint diagnostic uri: {hint_push!r}"
+            )
+            hint_push_items = hint_push.get("diagnostics")
+            assert isinstance(hint_push_items, list) and any(
+                "MLANG-E1018" in item.get("message", "")
+                for item in hint_push_items
+                if isinstance(item, dict)
+            ), f"branch-hint placement diagnostic missing from push: {hint_push!r}"
+
+            res6 = client.request("textDocument/diagnostic", {"textDocument": {"uri": uri}})
+            _rid4, hint_pull_items = require_full(res6)
+            assert any(
+                "MLANG-E1018" in item.get("message", "")
+                for item in hint_pull_items
+                if isinstance(item, dict)
+            ), f"branch-hint placement diagnostic missing from pull: {res6!r}"
 
             client.notify(
                 "textDocument/didClose",
