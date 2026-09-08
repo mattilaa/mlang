@@ -148,6 +148,44 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     if(auto* methodCall = dynamic_cast<MethodCallNode*>(expr))
     {
+        if(methodCall->methodName == "get")
+        {
+            TypeNode* objectType = getLValueType(methodCall->object, line);
+            auto* multiarrayType =
+                dynamic_cast<MultiArrayTypeNode*>(objectType);
+            if(multiarrayType && multiarrayType->elementsMutable)
+            {
+                TypeNode* elementType = multiarrayType;
+                size_t dimensions = 0;
+                while(auto* arrayType =
+                          dynamic_cast<ArrayTypeNode*>(elementType))
+                {
+                    ++dimensions;
+                    elementType = arrayType->elementType;
+                }
+                if(methodCall->arguments.size() == dimensions)
+                {
+                    auto* optionType =
+                        new GenericStructTypeRefNode("option");
+                    optionType->typeArgs.push_back(cloneTypeNode(elementType));
+                    return optionType;
+                }
+            }
+        }
+        if(methodCall->methodName == "unwrap")
+        {
+            TypeNode* objectType = getLValueType(methodCall->object, line);
+            if(auto* genericType =
+                   dynamic_cast<GenericStructTypeRefNode*>(objectType))
+            {
+                if(genericType->structName == "option" &&
+                   genericType->typeArgs.size() == 1)
+                    return cloneTypeNode(genericType->typeArgs.front());
+            }
+        }
+        if(methodCall->methodName == "is_some" ||
+           methodCall->methodName == "is_none")
+            return new TypeNode(TypeNode::TYPE_BOOL);
         if(methodCall->methodName == "first" ||
            methodCall->methodName == "last" ||
            methodCall->methodName == "pop")
@@ -449,7 +487,8 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
         if(methodCall->methodName == "is_empty" ||
            methodCall->methodName == "is_ok" ||
            methodCall->methodName == "is_err" ||
-           methodCall->methodName == "is_some")
+           methodCall->methodName == "is_some" ||
+           methodCall->methodName == "is_none")
             return new TypeNode(TypeNode::TYPE_BOOL);
     }
 

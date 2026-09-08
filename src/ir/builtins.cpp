@@ -96,6 +96,40 @@ void CodeGenerator::ensureOptionBuiltin(ProgramNode* program)
     members->addMember(new StructMemberNode(false, new StructTypeRefNode("T"),
                                             "value", nullptr));
 
+    auto make_self_param = []() -> ParameterNode*
+    {
+        auto* selfType = new GenericStructTypeRefNode("option");
+        selfType->typeArgs.push_back(new StructTypeRefNode("T"));
+        return new ParameterNode(selfType, "self");
+    };
+
+    auto make_simple_method = [&](const std::string& name, TypeNode* retType,
+                                  ExpressionNode* retExpr) -> StructMethodNode*
+    {
+        auto* params = new ParameterListNode();
+        params->parameters.push_back(make_self_param());
+        auto* retStmt = new ReturnNode(retExpr);
+        auto* body = new StatementListNode();
+        body->statements.push_back(retStmt);
+        return new StructMethodNode(retType, name, params, body, true, false);
+    };
+
+    members->addMethod(make_simple_method(
+        "is_some", new TypeNode(TypeNode::TYPE_BOOL),
+        static_cast<ExpressionNode*>(create_field_access_expr(
+            new IdentifierNode("self"), strdup("is_some"), 0))));
+    members->addMethod(make_simple_method(
+        "is_none", new TypeNode(TypeNode::TYPE_BOOL),
+        new BinaryOpNode(BinaryOpNode::OP_EQ,
+                         static_cast<ExpressionNode*>(create_field_access_expr(
+                             new IdentifierNode("self"), strdup("is_some"),
+                             0)),
+                         new BoolLiteralNode(false))));
+    members->addMethod(make_simple_method(
+        "unwrap", new StructTypeRefNode("T"),
+        static_cast<ExpressionNode*>(create_field_access_expr(
+            new IdentifierNode("self"), strdup("value"), 0))));
+
     auto* optionDef = new StructDefNode("option", "", members, true);
     optionDef->typeParams = {"T"};
     optionDef->sourceModule = "";
