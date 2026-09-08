@@ -613,6 +613,127 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node,
     return mapStruct;
 }
 
+llvm::Value* CodeGenerator::generateListIndexPointer(IndexExpressionNode* node,
+                                                     TypeNode*& elementTypeNode)
+{
+    if(contains_update_expression(node->index))
+    {
+        reportError(node->line,
+                    "index expression does not allow pre/post ++/--; update "
+                    "the index in a separate statement to avoid off-by-one "
+                    "and bounds bugs");
+        return nullptr;
+    }
+
+    auto* baseId = dynamic_cast<IdentifierNode*>(node->base);
+    TypeNode* baseType = getLValueType(node->base, node->line);
+    auto* listType = dynamic_cast<GenericListTypeNode*>(baseType);
+    if(!listType)
+    {
+        reportError(node->line,
+                    "indexed assignment target must be an array");
+        return nullptr;
+    }
+
+    llvm::Value* basePtr = nullptr;
+    if(auto* nestedIndex = dynamic_cast<IndexExpressionNode*>(node->base))
+    {
+        TypeNode* nestedElementType = nullptr;
+        basePtr = generateListIndexPointer(nestedIndex, nestedElementType);
+    }
+    else
+    {
+        basePtr = getLValuePointer(node->base, node->line);
+    }
+    if(!basePtr)
+        return nullptr;
+
+    llvm::Value* indexValue = generateExpression(node->index);
+    if(!indexValue)
+        return nullptr;
+
+    auto* arrayType = dynamic_cast<ArrayTypeNode*>(baseType);
+    if(arrayType)
+    {
+        int64_t constantIndex = 0;
+        if(evaluateCompileTimeInt(node->index, constantIndex) &&
+           (constantIndex < 0 || constantIndex >= arrayType->capacity))
+        {
+            reportError(node->line,
+                        "array index out of bounds: index=" +
+                            std::to_string(constantIndex) + " capacity=" +
+                            std::to_string(arrayType->capacity));
+            return nullptr;
+        }
+    }
+
+    elementTypeNode = listType->elementType;
+    llvm::Type* elementType = getLLVMTypeFromNode(elementTypeNode);
+    if(!elementType)
+    {
+        reportError(node->line,
+                    "cannot index array with unresolved element type '" +
+                        Helpers::type_name_for_error(elementTypeNode) + "'");
+        return nullptr;
+    }
+
+    initializeFormatFunctions();
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType = llvm::PointerType::get(elementType, 0);
+#endif
+    llvm::StructType* listStructType =
+        llvm::StructType::get(context, {i64Type, ptrType});
+    llvm::Value* listStruct =
+        builder.CreateLoad(listStructType, basePtr, "index.base");
+    llvm::Value* listSize =
+        builder.CreateExtractValue(listStruct, 0, "index.size");
+    llvm::Value* dataPtr =
+        builder.CreateExtractValue(listStruct, 1, "index.data");
+
+    if(indexValue->getType() != i64Type)
+        indexValue =
+            builder.CreateSExtOrTrunc(indexValue, i64Type, "index.i64");
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* okBlock =
+        llvm::BasicBlock::Create(context, "index.assign.ok", function);
+    llvm::BasicBlock* failBlock =
+        llvm::BasicBlock::Create(context, "index.assign.fail", function);
+    llvm::Value* nonNegative = builder.CreateICmpSGE(
+        indexValue, llvm::ConstantInt::get(i64Type, 0), "index.nonnegative");
+    llvm::Value* belowLength =
+        builder.CreateICmpSLT(indexValue, listSize, "index.below_length");
+    builder.CreateCondBr(builder.CreateAnd(nonNegative, belowLength), okBlock,
+                         failBlock);
+
+    builder.SetInsertPoint(failBlock);
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* message = builder.CreateGlobalString(
+        "list/span index out of bounds\n", "index.assign.bounds.msg");
+#else
+    llvm::Value* message = builder.CreateGlobalStringPtr(
+        "list/span index out of bounds\n", "index.assign.bounds.msg");
+#endif
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* opaquePtrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Value* stderrValue =
+        builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+    builder.CreateCall(fprintfFunc, {stderrValue, message});
+    builder.CreateCall(abortFunc, {});
+    builder.CreateUnreachable();
+
+    builder.SetInsertPoint(okBlock);
+    return builder.CreateGEP(elementType, dataPtr, indexValue,
+                             "index.element.ptr");
+}
+
 llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
 {
     if(contains_update_expression(node->index))

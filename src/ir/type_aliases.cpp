@@ -28,6 +28,14 @@ std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
     if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
         return "ptr_" + typeMangle(ptrType->elementType);
 
+    if(auto* multiarrayType = dynamic_cast<MultiArrayTypeNode*>(typeNode))
+    {
+        return std::string(multiarrayType->elementsMutable ? "mutmultiarray_"
+                                                           : "multiarray_") +
+               typeMangle(multiarrayType->elementType) + "_" +
+               std::to_string(multiarrayType->capacity);
+    }
+
     if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode))
     {
         return "array_" + typeMangle(arrayType->elementType) + "_" +
@@ -138,6 +146,13 @@ TypeNode* CodeGenerator::cloneTypeNode(TypeNode* typeNode)
 
     if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(typeNode))
         return new TraitObjectTypeNode(traitObj->traitName);
+
+    if(auto* multiarrayType = dynamic_cast<MultiArrayTypeNode*>(typeNode))
+    {
+        return new MultiArrayTypeNode(
+            cloneTypeNode(multiarrayType->elementType),
+            multiarrayType->capacity, multiarrayType->elementsMutable);
+    }
 
     if(auto* arrayType = dynamic_cast<ArrayTypeNode*>(typeNode))
     {

@@ -671,6 +671,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        dynamic_cast<GenericListTypeNode*>(param->type))
                 {
                     listElementTypes[param->name] = genListType->elementType;
+                    if(auto* arrayType =
+                           dynamic_cast<ArrayTypeNode*>(genListType))
+                        arrayCapacities[param->name] = arrayType->capacity;
+                    if(auto* multiarrayType =
+                           dynamic_cast<MultiArrayTypeNode*>(genListType))
+                        multiarrayMutability[param->name] =
+                            multiarrayType->elementsMutable;
                 }
                 if(auto* mapType = dynamic_cast<MapTypeNode*>(param->type))
                 {

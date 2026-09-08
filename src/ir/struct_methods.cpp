@@ -409,6 +409,14 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                 {
                     listElementTypes[std::string(arg.getName())] =
                         genListType->elementType;
+                    if(auto* arrayType =
+                           dynamic_cast<ArrayTypeNode*>(genListType))
+                        arrayCapacities[std::string(arg.getName())] =
+                            arrayType->capacity;
+                    if(auto* multiarrayType =
+                           dynamic_cast<MultiArrayTypeNode*>(genListType))
+                        multiarrayMutability[std::string(arg.getName())] =
+                            multiarrayType->elementsMutable;
                 }
                 if(auto* mapType = dynamic_cast<MapTypeNode*>(paramNode->type))
                 {
@@ -1379,6 +1387,34 @@ bool CodeGenerator::generateJsonValueDeserializerMethodBody(
 
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
+    if(auto* receiver = dynamic_cast<IdentifierNode*>(node->object))
+    {
+        auto mutability = multiarrayMutability.find(receiver->name);
+        const bool mutatingMethod =
+            node->methodName == "push" || node->methodName == "pop" ||
+            node->methodName == "clear" || node->methodName == "fill" ||
+            node->methodName == "extend" || node->methodName == "sort" ||
+            node->methodName == "sort_desc" ||
+            node->methodName == "reverse";
+        if(mutability != multiarrayMutability.end() && mutatingMethod)
+        {
+            if(!mutability->second)
+            {
+                reportError(node->line,
+                            "mutation requires mutmultiarray; '" +
+                                receiver->name + "' is immutable");
+                return nullptr;
+            }
+            if(constantVariables.count(receiver->name) != 0)
+            {
+                reportError(node->line,
+                            "cannot mutate multiarray '" + receiver->name +
+                                "' because it was declared with let; use var");
+                return nullptr;
+            }
+        }
+    }
+
     auto resolveStructAliasName = [&](const std::string& typeName)
     {
         std::string current = typeName;

@@ -241,6 +241,7 @@ static int is_try_question_context()
 "str16"         { return STR16; }
 "array"         { return ARRAY; }
 "multiarray"    { return MULTIARRAY; }
+"mutmultiarray" { return MUTMULTIARRAY; }
 "list"          { return LIST; }
 "map"           { return MAP; }
 "tuple"         { return TUPLE; }
