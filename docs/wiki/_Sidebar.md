@@ -45,7 +45,6 @@
 - [[std::bits|Stdlib-Bits]]
 - [[std::bitset|Stdlib-Bitset]]
 - [[std::bytes|Stdlib-Bytes]]
-- [[std::chat|Stdlib-Chat]]
 - [[std::compiler|Stdlib-Compiler]]
 - [[std::date|Stdlib-Date]]
 - [[std::env|Stdlib-Env]]
