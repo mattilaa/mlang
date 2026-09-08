@@ -68,6 +68,12 @@ A typed [`list<T>`](Quick-Guide#types) declaration used `{...}` after `=`. Use `
 ### `MLANG-E1017`
 A statement ended with `:` where `;` was expected. Use `;` to terminate ordinary statements; `:` is only valid in syntax forms that explicitly use colon blocks or labels.
 
+### `MLANG-E1018`
+The `likely` or `unlikely` branch prediction keyword was used somewhere other
+than immediately before an [`if`](Language-Syntax), [`let`](Language-Syntax), or [`var`](Language-Syntax) statement. Use
+`likely if condition { ... }`, `else unlikely if condition { ... }`, or a
+boolean declaration such as `likely let ready: bool = check();`.
+
 ### `MLANG-E1100`
 Unexpected character produced by the lexer before parsing could continue.
 

@@ -1885,6 +1885,8 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "var") == 1 { return 14; }
     if eq(label, "if") == 1 { return 14; }
     if eq(label, "else") == 1 { return 14; }
+    if eq(label, "likely") == 1 { return 14; }
+    if eq(label, "unlikely") == 1 { return 14; }
     if eq(label, "asm") == 1 { return 14; }
     if eq(label, "volatile") == 1 { return 14; }
     if eq(label, "for") == 1 { return 14; }
@@ -1944,6 +1946,8 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "var") == 1 { return "keyword: mutable binding"; }
     if eq(label, "if") == 1 { return "keyword: conditional branch"; }
     if eq(label, "else") == 1 { return "keyword: alternate branch"; }
+    if eq(label, "likely") == 1 { return "keyword: predicts a boolean value is usually true"; }
+    if eq(label, "unlikely") == 1 { return "keyword: predicts a boolean value is usually false"; }
     if eq(label, "asm") == 1 { return "keyword: inline assembly expression"; }
     if eq(label, "volatile") == 1 { return "keyword: marks inline assembly as side-effecting"; }
     if eq(label, "for") == 1 { return "keyword: loop over range/iterable"; }
@@ -2150,6 +2154,12 @@ fn completion_documentation(label: str8) -> str8 {
     }
     if eq(label, "cexpr") == 1 {
         return "Compile-time evaluation keyword. Use cexpr(expr) to require compile-time folding, or mark functions callable from compile-time contexts.";
+    }
+    if eq(label, "likely") == 1 {
+        return "Optimization hint. Write likely if condition { ... } or likely let value: bool = expression; to mark true as expected.";
+    }
+    if eq(label, "unlikely") == 1 {
+        return "Optimization hint. Write unlikely if condition { ... } or unlikely var value: bool = expression; to mark false as expected.";
     }
     if eq(label, "is_ok") == 1 {
         return "result<T, E>.is_ok() returns true when the value is Ok.";

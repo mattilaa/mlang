@@ -7,6 +7,7 @@ For more documentation, visit the [MLang GitHub Wiki](https://github.com/mattila
 
 - [What Is Mlang](#what-is-mlang)
 - [Compile-Time Evaluation With `cexpr`](#compile-time-evaluation-with-cexpr)
+- [`likely` And `unlikely` Branch Hints](#likely-and-unlikely-branch-hints)
 - [Checked Narrow Integer Casts](#checked-narrow-integer-casts)
 - [Fixed-Capacity Arrays](#fixed-capacity-arrays)
 - [Tools Shipped In This Repository](#tools-shipped-in-this-repository)
@@ -141,6 +142,49 @@ Current first-version scope:
 - `cexpr name: Type = expr;` declares a compile-time value.
 - `cexpr if` selects a branch during compilation.
 - Calling a normal runtime `fn` from `cexpr(...)` is rejected.
+
+## `likely` And `unlikely` Branch Hints
+
+Prefix a runtime `if` with `likely` or `unlikely` to tell the optimizer which
+condition result is expected most often:
+
+```rust
+likely if value > 0 {
+    return 1;
+} else unlikely if value == 0 {
+    return 0;
+} else {
+    return -1;
+}
+```
+
+The same prefixes can describe the expected initial value of a boolean `let`
+or `var` binding:
+
+```rust
+likely let connected: bool = connect(input);
+unlikely var retry: bool = should_retry(input);
+```
+
+For `var`, the hint applies only to the initializer; later assignments are not
+implicitly predicted. Inferred boolean declarations are supported as well.
+
+The hint does not change program behavior. It adds LLVM branch-weight metadata
+for `if`, or an `llvm.expect.i1` hint for a boolean initializer. Optimization
+and code-layout passes can use this information. Whitespace, newlines, and
+comments are allowed between the hint and `if`, `let`, or `var`. For an
+`else if`, place the hint after `else`; a plain `else` cannot be annotated
+because it has no condition. Using either keyword anywhere else produces
+`MLANG-E1018`. Applying a declaration hint to a non-boolean value produces
+`MLANG-E2002`.
+
+Run the complete example with:
+
+```bash
+./build/mlang examples/branch_prediction_demo.mla \
+  -L build -lmlang_std -o build/branch_prediction_demo
+./build/branch_prediction_demo
+```
 
 ## Checked Narrow Integer Casts
 

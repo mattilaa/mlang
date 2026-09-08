@@ -1,0 +1,22 @@
+/// \file branch_prediction_demo.mla
+/// @ingroup examples
+/// \brief Demonstrates likely/unlikely hints on branches and bool bindings.
+
+fn classify(value: i32) -> i32 {
+    likely let positive: bool = value > 0;
+    unlikely var zero: bool = value == 0;
+
+    likely if positive {
+        return 1;
+    } else unlikely if zero {
+        return 0;
+    } else {
+        return -1;
+    }
+}
+
+fn main() -> i32 {
+    println!("positive={}, zero={}, negative={}",
+             classify(42), classify(0), classify(-7));
+    return 0;
+}

@@ -14,8 +14,27 @@ ASTNode* create_identifier_at(char* name, int line, int col);
 ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
 extern int yycolumn_token;
 extern const char* g_sourceFile;
+extern int mlaBranchHintPending;
+extern int mlaBranchHintLine;
+extern int mlaBranchHintColumn;
+extern int mlaDeclarationBranchPrediction;
 extern "C" {
     extern bool parseHadError;
+}
+
+static ASTNode* apply_declaration_branch_prediction(ASTNode* node,
+                                                    int prediction)
+{
+    if(prediction == 0 || !node)
+        return node;
+    const BranchPrediction value = prediction == 1
+        ? BranchPrediction::Likely
+        : BranchPrediction::Unlikely;
+    if(auto* letDecl = dynamic_cast<LetDeclNode*>(node))
+        letDecl->branchPrediction = value;
+    else if(auto* varDecl = dynamic_cast<VarDeclNode*>(node))
+        varDecl->branchPrediction = value;
+    return node;
 }
 
 static char* join_module_path(char* left, char* right)
@@ -1923,7 +1942,7 @@ enum UpdatePosition
 %token <ast> TYPED_INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL BIT FLOAT DOUBLE STR8 STR16 ARRAY MULTIARRAY MUTMULTIARRAY LIST MAP TUPLE PTR STRUCT ENUM FIELD
+%token FUNCTION RETURN IF ELSE LIKELY UNLIKELY VOID BOOL BIT FLOAT DOUBLE STR8 STR16 ARRAY MULTIARRAY MUTMULTIARRAY LIST MAP TUPLE PTR STRUCT ENUM FIELD
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
@@ -1979,10 +1998,11 @@ enum UpdatePosition
 %type <ast> condition_additive
 %type <ast> condition_multiplicative condition_unary condition_postfix
 %type <ast> condition_primary
-%type <ast> if_statement cexpr_if_statement cexpr_else_if_list cexpr_else_if else_if_list else_if optional_else cexpr_optional_else
+%type <ast> if_statement raw_if_statement cexpr_if_statement cexpr_else_if_list cexpr_else_if else_if_list else_if raw_else_if optional_else cexpr_optional_else
 %type <ast> struct_member_list struct_member struct_method struct_init
 %type <ast> list_literal list_elements
 %type <ast> let_statement cexpr_declaration var_statement assignment_statement expression_statement nested_function_statement
+%type <ival> optional_branch_prediction
 %type <ast> return_statement block_statement colon_block_statement colon_statement for_statement while_statement range_expression
 %type <ast> throw_statement try_catch_statement switch_statement switch_case_list switch_case switch_default_case
 %type <ast> break_statement continue_statement
@@ -2863,23 +2883,25 @@ nested_function_statement
     ;
 
 let_statement
-    : LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
-        { $$ = create_let_declaration($4, $2, $6); }
-    | LET IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
+    : optional_branch_prediction LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        { $$ = apply_declaration_branch_prediction(create_let_declaration($5, $3, $7), $1); }
+    | optional_branch_prediction LET IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
             report_brace_list_initializer_suggestion(
-                static_cast<TypeNode*>($4), yylineno, yycolumn_token);
-            $$ = create_let_declaration($4, $2, $6);
+                static_cast<TypeNode*>($5), yylineno, yycolumn_token);
+            $$ = create_let_declaration($5, $3, $7);
+            $$ = apply_declaration_branch_prediction($$, $1);
         }
-    | LET IDENTIFIER ASSIGN expression SEMICOLON
-        { $$ = create_let_declaration(NULL, $2, $4); }
-    | LET IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
-        { $$ = create_let_declaration($4, $2, $6); }
-    | LET IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
+    | optional_branch_prediction LET IDENTIFIER ASSIGN expression SEMICOLON
+        { $$ = apply_declaration_branch_prediction(create_let_declaration(NULL, $3, $5), $1); }
+    | optional_branch_prediction LET IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
+        { $$ = apply_declaration_branch_prediction(create_let_declaration($5, $3, $7), $1); }
+    | optional_branch_prediction LET IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
         {
-            ASTNode* lit = mla_ast_struct_literal($4, NULL, $6, yylineno);
-            ASTNode* typeRef = mla_ast_struct_type_ref($4);
-            $$ = create_let_declaration(typeRef, $2, lit);
+            ASTNode* lit = mla_ast_struct_literal($5, NULL, $7, yylineno);
+            ASTNode* typeRef = mla_ast_struct_type_ref($5);
+            $$ = create_let_declaration(typeRef, $3, lit);
+            $$ = apply_declaration_branch_prediction($$, $1);
         }
     ;
 
@@ -2889,31 +2911,44 @@ cexpr_declaration
     ;
 
 var_statement
-    : VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
-        { $$ = mla_ast_var_declaration($4, $2, $6); }
-    | VAR IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
+    : optional_branch_prediction VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, $7), $1); }
+    | optional_branch_prediction VAR IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
             report_brace_list_initializer_suggestion(
-                static_cast<TypeNode*>($4), yylineno, yycolumn_token);
-            $$ = mla_ast_var_declaration($4, $2, $6);
+                static_cast<TypeNode*>($5), yylineno, yycolumn_token);
+            $$ = mla_ast_var_declaration($5, $3, $7);
+            $$ = apply_declaration_branch_prediction($$, $1);
         }
-    | VAR IDENTIFIER ASSIGN expression SEMICOLON
-        { $$ = mla_ast_var_declaration(NULL, $2, $4); }
-    | VAR IDENTIFIER COLON type SEMICOLON
-        { $$ = mla_ast_var_declaration($4, $2, NULL); }
-    | VAR IDENTIFIER COLON type LBRACE RBRACE SEMICOLON
+    | optional_branch_prediction VAR IDENTIFIER ASSIGN expression SEMICOLON
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration(NULL, $3, $5), $1); }
+    | optional_branch_prediction VAR IDENTIFIER COLON type SEMICOLON
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, NULL), $1); }
+    | optional_branch_prediction VAR IDENTIFIER COLON type LBRACE RBRACE SEMICOLON
         {
-            $$ = mla_ast_var_declaration($4, $2, NULL);
+            $$ = mla_ast_var_declaration($5, $3, NULL);
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
+            {
                 n->isExplicitZeroInit = true;
+            }
+            $$ = apply_declaration_branch_prediction($$, $1);
         }
-    | VAR IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
-        { $$ = mla_ast_var_declaration($4, $2, $6); }
-    | VAR IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
+    | optional_branch_prediction VAR IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, $7), $1); }
+    | optional_branch_prediction VAR IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
         {
-            ASTNode* lit = mla_ast_struct_literal($4, NULL, $6, yylineno);
-            ASTNode* typeRef = mla_ast_struct_type_ref($4);
-            $$ = mla_ast_var_declaration(typeRef, $2, lit);
+            ASTNode* lit = mla_ast_struct_literal($5, NULL, $7, yylineno);
+            ASTNode* typeRef = mla_ast_struct_type_ref($5);
+            $$ = mla_ast_var_declaration(typeRef, $3, lit);
+            $$ = apply_declaration_branch_prediction($$, $1);
+        }
+    ;
+
+optional_branch_prediction
+    :
+        {
+            $$ = mlaDeclarationBranchPrediction;
+            mlaDeclarationBranchPrediction = 0;
         }
     ;
 
@@ -3264,6 +3299,14 @@ format_argument_list
     ;
 
 if_statement
+    : raw_if_statement { $$ = $1; }
+    | LIKELY raw_if_statement
+        { $$ = $2; static_cast<IfNode*>($$)->branchPrediction = BranchPrediction::Likely; }
+    | UNLIKELY raw_if_statement
+        { $$ = $2; static_cast<IfNode*>($$)->branchPrediction = BranchPrediction::Unlikely; }
+    ;
+
+raw_if_statement
     : IF block_condition_expression colon_block_statement else_if_list optional_else
         { $$ = mla_ast_if_statement($2, $3, $4, $5); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF block_condition_expression COLON block_condition_expression block_statement else_if_list optional_else
@@ -3334,30 +3377,38 @@ else_if_list
     ;
 
 else_if
-    : ELSE IF block_condition_expression colon_block_statement { $$ = mla_ast_else_if($3, $4); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF block_condition_expression COLON block_condition_expression colon_statement { $$ = mla_ast_else_if(mla_ast_binary_op(AMP_AMP, $3, $5), mla_ast_statement_list_create($6)); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF block_condition_expression COLON block_condition_expression block_statement { $$ = mla_ast_else_if(mla_ast_binary_op(AMP_AMP, $3, $5), $6); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF block_condition_expression block_statement { $$ = mla_ast_else_if($3, $4); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON block_condition_expression COLON colon_statement
-        { ASTNode* __init = mla_ast_let_declaration($6, $4, $8); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $10, mla_ast_statement_list_create($12)); }
-    | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON block_condition_expression colon_block_statement
-        { ASTNode* __init = mla_ast_let_declaration($6, $4, $8); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $10, $11); }
-    | ELSE IF LET IDENTIFIER ASSIGN expression COLON block_condition_expression COLON colon_statement
-        { ASTNode* __init = mla_ast_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, mla_ast_statement_list_create($10)); }
-    | ELSE IF LET IDENTIFIER ASSIGN expression COLON block_condition_expression colon_block_statement
-        { ASTNode* __init = mla_ast_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, $9); }
-    | ELSE IF LET IDENTIFIER EQ expression COLON block_condition_expression colon_statement
-        { ASTNode* __init = mla_ast_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, mla_ast_statement_list_create($9)); }
-    | ELSE IF LET IDENTIFIER EQ expression COLON block_condition_expression block_statement
-        { ASTNode* __init = mla_ast_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, $9); }
-    | ELSE IF VAR IDENTIFIER COLON type ASSIGN expression COLON block_condition_expression COLON colon_statement
-        { ASTNode* __init = mla_ast_var_declaration($6, $4, $8); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $10, mla_ast_statement_list_create($12)); }
-    | ELSE IF VAR IDENTIFIER COLON type ASSIGN expression COLON block_condition_expression colon_block_statement
-        { ASTNode* __init = mla_ast_var_declaration($6, $4, $8); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $10, $11); }
-    | ELSE IF VAR IDENTIFIER ASSIGN expression COLON block_condition_expression COLON colon_statement
-        { ASTNode* __init = mla_ast_var_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, mla_ast_statement_list_create($10)); }
-    | ELSE IF VAR IDENTIFIER ASSIGN expression COLON block_condition_expression colon_block_statement
-        { ASTNode* __init = mla_ast_var_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, $9); }
+    : ELSE raw_else_if { $$ = $2; }
+    | ELSE LIKELY raw_else_if
+        { $$ = $3; static_cast<IfNode*>($$)->branchPrediction = BranchPrediction::Likely; }
+    | ELSE UNLIKELY raw_else_if
+        { $$ = $3; static_cast<IfNode*>($$)->branchPrediction = BranchPrediction::Unlikely; }
+    ;
+
+raw_else_if
+    : IF block_condition_expression colon_block_statement { $$ = mla_ast_else_if($2, $3); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | IF block_condition_expression COLON block_condition_expression colon_statement { $$ = mla_ast_else_if(mla_ast_binary_op(AMP_AMP, $2, $4), mla_ast_statement_list_create($5)); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | IF block_condition_expression COLON block_condition_expression block_statement { $$ = mla_ast_else_if(mla_ast_binary_op(AMP_AMP, $2, $4), $5); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | IF block_condition_expression block_statement { $$ = mla_ast_else_if($2, $3); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | IF LET IDENTIFIER COLON type ASSIGN expression COLON block_condition_expression COLON colon_statement
+        { ASTNode* __init = mla_ast_let_declaration($5, $3, $7); __init->line = @2.first_line; $$ = mla_ast_else_if_with_init(__init, $9, mla_ast_statement_list_create($11)); }
+    | IF LET IDENTIFIER COLON type ASSIGN expression COLON block_condition_expression colon_block_statement
+        { ASTNode* __init = mla_ast_let_declaration($5, $3, $7); __init->line = @2.first_line; $$ = mla_ast_else_if_with_init(__init, $9, $10); }
+    | IF LET IDENTIFIER ASSIGN expression COLON block_condition_expression COLON colon_statement
+        { ASTNode* __init = mla_ast_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = mla_ast_else_if_with_init(__init, $7, mla_ast_statement_list_create($9)); }
+    | IF LET IDENTIFIER ASSIGN expression COLON block_condition_expression colon_block_statement
+        { ASTNode* __init = mla_ast_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = mla_ast_else_if_with_init(__init, $7, $8); }
+    | IF LET IDENTIFIER EQ expression COLON block_condition_expression colon_statement
+        { ASTNode* __init = mla_ast_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = mla_ast_else_if_with_init(__init, $7, mla_ast_statement_list_create($8)); }
+    | IF LET IDENTIFIER EQ expression COLON block_condition_expression block_statement
+        { ASTNode* __init = mla_ast_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = mla_ast_else_if_with_init(__init, $7, $8); }
+    | IF VAR IDENTIFIER COLON type ASSIGN expression COLON block_condition_expression COLON colon_statement
+        { ASTNode* __init = mla_ast_var_declaration($5, $3, $7); __init->line = @2.first_line; $$ = mla_ast_else_if_with_init(__init, $9, mla_ast_statement_list_create($11)); }
+    | IF VAR IDENTIFIER COLON type ASSIGN expression COLON block_condition_expression colon_block_statement
+        { ASTNode* __init = mla_ast_var_declaration($5, $3, $7); __init->line = @2.first_line; $$ = mla_ast_else_if_with_init(__init, $9, $10); }
+    | IF VAR IDENTIFIER ASSIGN expression COLON block_condition_expression COLON colon_statement
+        { ASTNode* __init = mla_ast_var_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = mla_ast_else_if_with_init(__init, $7, mla_ast_statement_list_create($9)); }
+    | IF VAR IDENTIFIER ASSIGN expression COLON block_condition_expression colon_block_statement
+        { ASTNode* __init = mla_ast_var_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = mla_ast_else_if_with_init(__init, $7, $8); }
     ;
 
 block_condition_expression
@@ -4051,6 +4102,22 @@ static bool is_reserved_type_keyword(const char* s)
 void yyerror(const char* s) {
     parseHadError = true;
     int col = yycolumn_token > 0 ? yycolumn_token : 1;
+    if(mlaBranchHintPending != 0 ||
+       (yytext && (strcmp(yytext, "likely") == 0 ||
+                   strcmp(yytext, "unlikely") == 0)))
+    {
+        const char* hint = mlaBranchHintPending == 2 ? "unlikely" : "likely";
+        const std::string msg = "'" + std::string(hint) +
+            "' must appear immediately before an if, let, or var statement";
+        const int hintLine = mlaBranchHintLine > 0 ? mlaBranchHintLine : yylineno;
+        const int hintCol = mlaBranchHintColumn > 0 ? mlaBranchHintColumn : col;
+        fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, hintLine, hintCol,
+                mlang::diag::format_message_with_code("MLANG-E1018", msg).c_str());
+        mlaBranchHintPending = 0;
+        mlaBranchHintLine = 0;
+        mlaBranchHintColumn = 0;
+        return;
+    }
     if(is_reserved_type_keyword(yytext))
     {
         const std::string msg =

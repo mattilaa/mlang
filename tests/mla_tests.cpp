@@ -2109,6 +2109,123 @@ TEST_F(MLATest, IfElseIfElse)
     EXPECT_EQ(compileAndRun(code), "other\n");
 }
 
+TEST_F(MLATest, BranchPredictionHintsPreserveRuntimeBehavior)
+{
+    std::string code = R"(
+        fn is_positive(value: i32) -> bool {
+            return value > 0;
+        }
+
+        fn classify(value: i32) -> i32 {
+            likely
+                /* This declaration is expected to initialize to true. */
+                let positive: bool = is_positive(value);
+            unlikely
+                var zero: bool = value == 0;
+            likely if positive {
+                return 1;
+            } else unlikely if zero {
+                return 0;
+            } else {
+                return -1;
+            }
+        }
+
+        fn main() -> i32 {
+            return classify(4) + classify(0) + classify(-2) == 0 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, BranchPredictionHintsEmitLLVMWeights)
+{
+    writeSource(R"(
+        fn positive(value: i32) -> i32 {
+            likely if value > 0 { return 1; } else { return 0; }
+        }
+
+        fn zero(value: i32) -> i32 {
+            unlikely if value == 0 { return 1; } else { return 0; }
+        }
+
+        fn predicted_values(value: i32) -> bool {
+            likely let positive: bool = value > 0;
+            unlikely var zero = value == 0;
+            return positive || zero;
+        }
+
+        fn main() -> i32 {
+            return positive(1) == 1 && zero(2) == 0 && predicted_values(1)
+                ? 0 : 1;
+        }
+    )");
+
+    const fs::path irFile = fs::path(testDir) / "branch_hints.ll";
+    std::string cmd = compilerPath + " -O0 -emit-llvm -o " + irFile.string() +
+                      " " + sourceFile + " 2>&1";
+    ASSERT_EQ(system(cmd.c_str()), 0);
+
+    std::ifstream input(irFile);
+    std::stringstream buffer;
+    buffer << input.rdbuf();
+    const std::string ir = buffer.str();
+    EXPECT_NE(ir.find("branch_weights\", i32 2000, i32 1"),
+              std::string::npos);
+    EXPECT_NE(ir.find("branch_weights\", i32 1, i32 2000"),
+              std::string::npos);
+    EXPECT_NE(ir.find("@llvm.expect.i1(i1"), std::string::npos);
+    EXPECT_NE(ir.find("i1 true)"), std::string::npos);
+    EXPECT_NE(ir.find("i1 false)"), std::string::npos);
+}
+
+TEST_F(MLATest, BranchPredictionKeywordRejectsNonIfStatement)
+{
+    writeSource(R"(
+        fn main() -> i32 {
+            likely while true {
+                return 0;
+            }
+            return 1;
+        }
+    )");
+    int exitCode = 0;
+    std::string out = compileCapture(exitCode);
+    EXPECT_NE(exitCode, 0);
+    EXPECT_NE(out.find("MLANG-E1018"), std::string::npos);
+    EXPECT_NE(out.find("must appear immediately before an if, let, or var statement"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, BranchPredictionKeywordRejectsExpressionUse)
+{
+    writeSource(R"(
+        fn main() -> i32 {
+            let value: bool = unlikely;
+            return value ? 0 : 1;
+        }
+    )");
+    int exitCode = 0;
+    std::string out = compileCapture(exitCode);
+    EXPECT_NE(exitCode, 0);
+    EXPECT_NE(out.find("MLANG-E1018"), std::string::npos);
+}
+
+TEST_F(MLATest, BranchPredictionDeclarationRequiresBooleanInitializer)
+{
+    writeSource(R"(
+        fn main() -> i32 {
+            likely let value: i32 = 42;
+            return value;
+        }
+    )");
+    int exitCode = 0;
+    std::string out = compileCapture(exitCode);
+    EXPECT_NE(exitCode, 0);
+    EXPECT_NE(out.find("MLANG-E2002"), std::string::npos);
+    EXPECT_NE(out.find("requires a bool declaration"), std::string::npos);
+}
+
 TEST_F(MLATest, NestedIf)
 {
     std::string code = R"(

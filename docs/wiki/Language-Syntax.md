@@ -24,6 +24,7 @@ the compiler.
   - [cexpr compile-time evaluation](#cexpr-compile-time-evaluation)
 - [Control flow and errors](#control-flow-and-errors)
   - [if / else if](#if--else-if-syntax)
+  - [Branch prediction hints](#branch-prediction-hints)
   - [Guarded if forms](#guarded-if-forms)
   - [Empty block warning](#empty-block-warning)
   - [while guards](#while-guard-syntax)
@@ -566,6 +567,57 @@ present:
 ```rust
 if x == 1: { println!("one"); } // warning: plain if/else-if with ':' is discouraged
 ```
+
+### Branch Prediction Hints
+
+Prefix a runtime [`if`](Language-Syntax) with `likely` when its condition is expected to be true
+most of the time, or with `unlikely` when it is expected to be false:
+
+```rust
+likely if value > 0 {
+    handle_positive(value);
+} else unlikely if value == 0 {
+    handle_zero();
+} else {
+    handle_negative(value);
+}
+```
+
+The prefix is an optimization hint only: it does not change condition results
+or which branch executes. The compiler emits LLVM branch-weight metadata so
+optimization and code-layout passes can favor the expected path.
+
+The hint can also describe the expected initial value of a boolean binding:
+
+```rust
+likely let connected: bool = connect(input);
+unlikely var retry: bool = should_retry(input);
+likely let inferred = input.is_valid();
+```
+
+These forms emit the corresponding `llvm.expect.i1` intrinsic. For a mutable
+[`var`](Language-Syntax), the prediction applies only to its initializer; later assignments do
+not inherit it. Both explicitly typed and inferred boolean declarations are
+accepted. A non-boolean initializer is rejected with `MLANG-E2002`.
+
+Whitespace and comments may appear between the hint and [`if`](Language-Syntax), [`let`](Language-Syntax), or [`var`](Language-Syntax),
+so an indented or split form is equivalent:
+
+```rust
+likely
+    if ready {
+        run_fast_path();
+    }
+```
+
+For an `else if` chain, put the hint after [`else`](Language-Syntax), as in
+`else likely if condition { ... }`. A plain [`else`](Language-Syntax) cannot take a hint because
+it has no condition of its own. `likely` and `unlikely` are reserved keywords;
+using either anywhere other than immediately before a runtime [`if`](Language-Syntax) or boolean
+[`let`](Language-Syntax)/[`var`](Language-Syntax) declaration produces `MLANG-E1018`.
+
+See @ref examples/branch_prediction_demo.mla
+"branch_prediction_demo.mla" for a runnable example.
 
 ### Guarded [`if`](Language-Syntax) Forms
 

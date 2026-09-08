@@ -3,8 +3,68 @@
 #include "ir/expression_type_kind.h"
 
 #include <llvm/Config/llvm-config.h>
+#include <llvm/IR/Intrinsics.h>
 
 using mlang::ir_detail::common::Helpers;
+
+bool CodeGenerator::validateBooleanBranchPrediction(
+    BranchPrediction prediction, TypeNode* declaredType,
+    ExpressionNode* initializer, int line, int col)
+{
+    if(prediction == BranchPrediction::None)
+        return true;
+    if(!initializer)
+    {
+        reportError(line, col,
+                    "type mismatch: branch prediction hint requires a "
+                    "boolean initializer");
+        return false;
+    }
+    if(declaredType && Helpers::normalizeInferredKind(declaredType->kind) !=
+                           TypeNode::TYPE_BOOL)
+    {
+        reportError(line, col,
+                    "type mismatch: branch prediction hint requires a bool "
+                    "declaration");
+        return false;
+    }
+    TypeNode* initializerType = inferExpressionTypeNode(initializer, line);
+    if(initializerType &&
+       Helpers::normalizeInferredKind(initializerType->kind) !=
+           TypeNode::TYPE_BOOL)
+    {
+        reportError(line, col,
+                    "type mismatch: branch prediction hint requires a bool "
+                    "initializer");
+        return false;
+    }
+    return true;
+}
+
+llvm::Value* CodeGenerator::applyBooleanBranchPrediction(
+    llvm::Value* value, BranchPrediction prediction, int line, int col)
+{
+    if(!value || prediction == BranchPrediction::None)
+        return value;
+    if(!value->getType()->isIntegerTy(1))
+    {
+        reportError(line, col,
+                    "type mismatch: branch prediction hint requires a bool "
+                    "initializer");
+        return nullptr;
+    }
+
+#if LLVM_VERSION_MAJOR >= 20
+    llvm::Function* expect = llvm::Intrinsic::getOrInsertDeclaration(
+        module.get(), llvm::Intrinsic::expect, {value->getType()});
+#else
+    llvm::Function* expect = llvm::Intrinsic::getDeclaration(
+        module.get(), llvm::Intrinsic::expect, {value->getType()});
+#endif
+    llvm::Value* expected = llvm::ConstantInt::get(
+        value->getType(), prediction == BranchPrediction::Likely ? 1 : 0);
+    return builder.CreateCall(expect, {value, expected}, "expected.bool");
+}
 
 void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 {
@@ -13,6 +73,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
     if(!validateFixedArrayInitializer(node->type, node->expression,
                                       node->line))
+        return;
+    if(!validateBooleanBranchPrediction(node->branchPrediction, node->type,
+                                        node->expression, node->line,
+                                        node->col))
         return;
 
     // Inline closure: let inc = || { ... }
@@ -105,6 +169,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     }
     if(!initValue)
         initValue = generateExpression(node->expression);
+    if(!initValue)
+        return;
+    initValue = applyBooleanBranchPrediction(
+        initValue, node->branchPrediction, node->line, node->col);
     if(!initValue)
         return;
     // For `let r = &s` where s is a string: getLValuePointer returns the alloca
@@ -925,6 +993,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
     if(!validateFixedArrayInitializer(node->type, node->initExpr, node->line))
         return;
+    if(!validateBooleanBranchPrediction(node->branchPrediction, node->type,
+                                        node->initExpr, node->line,
+                                        node->col))
+        return;
 
     if(auto* traitObj = dynamic_cast<TraitObjectTypeNode*>(node->type))
     {
@@ -1239,6 +1311,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         }
 
         llvm::Value* initValue = generateExpression(node->initExpr);
+        if(!initValue)
+            return;
+        initValue = applyBooleanBranchPrediction(
+            initValue, node->branchPrediction, node->line, node->col);
         if(!initValue)
             return;
 
@@ -1957,6 +2033,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                         builder.CreateFPCast(initValue, targetType, "fpcast");
                 }
             }
+            initValue = applyBooleanBranchPrediction(
+                initValue, node->branchPrediction, node->line, node->col);
+            if(!initValue)
+                return;
             builder.CreateStore(initValue, alloca);
         }
     }
