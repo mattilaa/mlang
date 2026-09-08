@@ -30,7 +30,6 @@ mod std::bench;
 mod std::bits;
 mod std::bitset;
 mod std::bytes;
-mod std::chat;
 mod std::compiler;
 mod std::date;
 mod std::env;
@@ -87,7 +86,6 @@ The source-of-truth implementation files are:
 - `stdlib/std/bits.mla`
 - `stdlib/std/bitset.mla`
 - `stdlib/std/bytes.mla`
-- `stdlib/std/chat.mla`
 - `stdlib/std/compiler.mla`
 - `stdlib/std/date.mla`
 - `stdlib/std/env.mla`
@@ -162,7 +160,6 @@ The source-of-truth implementation files are:
 
 - [std::argparser](Stdlib-Argparser)
 - [std::bench](Stdlib-Bench)
-- [std::chat](Stdlib-Chat)
 - [std::compiler](Stdlib-Compiler)
 - [std::date](Stdlib-Date)
 - [std::env](Stdlib-Env)

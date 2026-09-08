@@ -17,7 +17,7 @@ BRIEFS: dict[str, str] = {
     "examples/jack2_lockfree_thread_demo.mla": "Lock-free thread producer/consumer demo modelled after JACK2 audio.",
     "examples/esc_widgets/widgets.mla": "Reusable TUI widget primitives (boxes, bars, labels) built on std::esc.",
     "examples/esc_widgets/tracker_ui_demo.mla": "Terminal music tracker UI demo built on the esc_widgets toolkit.",
-    "examples/chat_tui_demo.mla": "Full-screen chat-style TUI demo driven by std::chat.",
+    "examples/chat.mla": "Terminal chat example composed from general-purpose stdlib modules.",
     "examples/raii_free_method_demo.mla": "RAII demo showing automatic resource cleanup via a free() method.",
     "examples/for_loop_example.mla": "Basic for-loop iteration example over ranges and lists.",
     "examples/std_vec_demo.mla": "Demonstrates Vec<T> (std::vec) including vec![] literals and helpers.",

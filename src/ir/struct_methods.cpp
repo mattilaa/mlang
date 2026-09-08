@@ -1505,13 +1505,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             getLValueType(node->object, node->line);
         auto* multiarrayType =
             dynamic_cast<MultiArrayTypeNode*>(directReceiverType);
-        if(!multiarrayType || !multiarrayType->elementsMutable)
+        if(multiarrayType && !multiarrayType->elementsMutable)
         {
             reportError(node->line,
                         "get() is available on mutmultiarray values");
             return nullptr;
         }
-        return generateMultiarrayGet(node, multiarrayType);
+        if(multiarrayType)
+            return generateMultiarrayGet(node, multiarrayType);
     }
 
     if(auto* receiver = dynamic_cast<IdentifierNode*>(node->object))

@@ -6,6 +6,7 @@ Suite Setup       Initialize Artifact Dir
 *** Variables ***
 ${MLANG}           ${EXECDIR}/build/mlang
 @{EXAMPLES}
+...    examples/chat.mla
 ...    examples/break_continue.mla
 ...    examples/c_lib_usage.mla
 ...    examples/c_type_mappings.mla

@@ -42,7 +42,7 @@ following additional programs are useful runnable showcases:
 
 - `examples/argparser_demo.mla`, `examples/std_compiler_demo.mla` — argument
   parsing and compiler-session API usage.
-- `examples/chat_tui_demo.mla`, `examples/minimal_vim_demo.mla`,
+- `examples/chat.mla`, `examples/minimal_vim_demo.mla`,
   `examples/notepad_demo.mla`, and `examples/game_of_life.mla` — interactive
   terminal applications built with `std::esc`, `std::term`, and related
   modules.

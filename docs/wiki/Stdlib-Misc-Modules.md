@@ -7,28 +7,6 @@ This page documents several small stdlib modules and example/test files that
 are useful in practice but do not have their own larger standalone reference
 pages.
 
-## [`std::chat`](Stdlib-Chat)
-
-[`std::chat`](Stdlib-Chat) provides an opaque, handle-backed fullscreen chat UI model for
-terminal applications.
-
-What it is for:
-
-- line-oriented terminal chat interfaces
-- status/header/prompt rendering
-- bounded scrollback with input submission handling
-
-Typical flow:
-
-1. `chat_ui::new(max_lines)`
-2. set title/server/channel/nick/prompt fields
-3. push chat lines and feed keycodes
-4. render with `render(rows, cols)`
-
-Source:
-
-- `stdlib/std/chat.mla`
-
 ## [`std::concurrent`](Stdlib-Module-API)
 
 [`std::concurrent`](Stdlib-Module-API) adds higher-level coordination helpers on top of

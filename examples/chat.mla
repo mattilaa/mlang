@@ -1,0 +1,77 @@
+/// \file chat.mla
+/// @ingroup examples
+/// \brief Terminal chat example composed from general-purpose stdlib modules.
+///
+/// Run interactively and enter `/quit` or an empty line to exit:
+///
+/// ```sh
+/// ./build/mlang examples/chat.mla -L build -lmlang_std -o /tmp/mlang-chat
+/// /tmp/mlang-chat
+/// ```
+///
+/// When stdout is not a TTY, the example prints its initial transcript and
+/// exits. This makes it suitable for automated example verification too.
+
+mod std::esc;
+mod std::io;
+mod std::strbuf;
+mod std::term;
+
+use std::esc::bold_on;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_home;
+use std::esc::color_bright_cyan;
+use std::esc::cursor_code;
+use std::esc::fg;
+use std::esc::reset;
+use std::io::Stdin;
+use std::io::read_line_owned;
+use std::io::stdin;
+use std::io::stdout;
+use std::io::write;
+use std::strbuf::eq;
+use std::strbuf::free;
+use std::strbuf::len;
+use std::term::stdout_is_tty;
+
+fn print_transcript(lines: &list<str8>) -> void {
+    println!("{}{}#mlang chat{}", bold_on(), fg(color_bright_cyan()), reset());
+    println!("server: irc.example.test | nick: matti");
+    println!("------------------------------------------------------------");
+    for i in 0..lines.len() {
+        println!("{}", lines[i]);
+    }
+}
+
+fn main() -> i32 {
+    var lines: list<str8> = [
+        "-!- Connected to irc.example.test",
+        "<anna> This chat is an application example, not a stdlib module.",
+        "<teemu> It is built from std::esc, std::io, std::strbuf and std::term."
+    ];
+
+    if stdout_is_tty() == 0 {
+        print_transcript(lines);
+        return 0;
+    }
+
+    let input: Stdin = stdin();
+    var running: i32 = 1;
+    while running == 1 {
+        let _ = write(stdout(), cursor_code(cmd_clear_screen()));
+        let _ = write(stdout(), cursor_code(cmd_home()));
+        print_transcript(lines);
+        let _ = write(stdout(), "\nmessage (/quit or empty line exits)> ");
+
+        let submitted: str8 = read_line_owned(input, 1024);
+        if len(submitted) == 0 || eq(submitted, "/quit") == 1 {
+            running = 0;
+        } else {
+            lines.push(format!("<matti> {}", submitted));
+        }
+        free(submitted);
+    }
+
+    println!("{}", reset());
+    return 0;
+}
