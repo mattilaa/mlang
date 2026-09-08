@@ -48,7 +48,7 @@ def main() -> int:
             "    return 0;\n"
             "}\n"
         )
-        text_bad = "fn bad( -> i32 { return 1; }\n"
+        text_bad = "fn bad() -> i32 { let value: = 1; return value; }\n"
         text_warn = (
             "fn warn(queue_handle: i64) -> i32 {\n"
             "    if queue_handle == 0: { return 1; }\n"
@@ -109,7 +109,12 @@ def main() -> int:
                 f"unexpected change diagnostic uri: {change_push!r}"
             )
             push_items = change_push.get("diagnostics")
-            assert isinstance(push_items, list) and push_items, (
+            assert isinstance(push_items, list) and any(
+                item.get("severity") == 1
+                and "MLANG-E" in item.get("message", "")
+                for item in push_items
+                if isinstance(item, dict)
+            ), (
                 f"invalid document should publish diagnostics: {change_push!r}"
             )
 
@@ -119,7 +124,12 @@ def main() -> int:
             )
             rid2, items2 = require_full(res3)
             assert rid2 != rid1, f"resultId should change after content change: {res3!r}"
-            assert items2, f"expected syntax diagnostics after invalid edit: {res3!r}"
+            assert any(
+                item.get("severity") == 1
+                and "MLANG-E" in item.get("message", "")
+                for item in items2
+                if isinstance(item, dict)
+            ), f"expected error diagnostics after invalid edit: {res3!r}"
 
             res4 = client.request(
                 "textDocument/diagnostic",
@@ -171,7 +181,8 @@ def main() -> int:
             )
             hint_push_items = hint_push.get("diagnostics")
             assert isinstance(hint_push_items, list) and any(
-                "MLANG-E1018" in item.get("message", "")
+                item.get("severity") == 1
+                and "MLANG-E1018" in item.get("message", "")
                 for item in hint_push_items
                 if isinstance(item, dict)
             ), f"branch-hint placement diagnostic missing from push: {hint_push!r}"
@@ -179,7 +190,8 @@ def main() -> int:
             res6 = client.request("textDocument/diagnostic", {"textDocument": {"uri": uri}})
             _rid4, hint_pull_items = require_full(res6)
             assert any(
-                "MLANG-E1018" in item.get("message", "")
+                item.get("severity") == 1
+                and "MLANG-E1018" in item.get("message", "")
                 for item in hint_pull_items
                 if isinstance(item, dict)
             ), f"branch-hint placement diagnostic missing from pull: {res6!r}"

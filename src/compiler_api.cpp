@@ -26,6 +26,8 @@
 
 extern int yyparse();
 extern int yylineno;
+extern int yycolumn;
+extern int yycolumn_token;
 extern "C"
 {
     extern ASTNode* programRoot;
@@ -1523,6 +1525,8 @@ static ProgramNode* parseProgramFromText(std::string_view text,
     programRoot = nullptr;
 
     yylineno = 1;
+    yycolumn = 1;
+    yycolumn_token = 1;
     parseHadError = false;
 
     const std::string filteredText =
@@ -4908,6 +4912,32 @@ computeSyntaxDiagnostics(std::string_view text)
     if(!delimiters.empty())
     {
         push_diag(line, column, "unclosed delimiter");
+    }
+
+    int parse_error_line = 1;
+    mlang::diag::begin_parser_diagnostic_capture();
+    ProgramNode* parsed = parseProgramFromText(text, &parse_error_line);
+    mlang::diag::ParserDiagnostic parser_diag =
+        mlang::diag::end_parser_diagnostic_capture();
+    if(!parsed)
+    {
+        if(parser_diag.message.empty())
+        {
+            parser_diag.line = parse_error_line > 0 ? parse_error_line : 1;
+            parser_diag.column = 1;
+            parser_diag.message = mlang::diag::format_message_with_code(
+                "MLANG-E1999", "syntax error");
+        }
+
+        const bool already_reported =
+            std::any_of(out.begin(), out.end(), [&](const SyntaxDiagnostic& d) {
+                return d.line == parser_diag.line &&
+                       d.column == parser_diag.column &&
+                       d.message == parser_diag.message;
+            });
+        if(!already_reported)
+            push_diag(parser_diag.line, parser_diag.column,
+                      std::move(parser_diag.message));
     }
     return out;
 }

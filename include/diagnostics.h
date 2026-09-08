@@ -4,8 +4,43 @@
 #include <cctype>
 #include <ostream>
 #include <string>
+#include <utility>
 
 namespace mlang::diag {
+
+struct ParserDiagnostic
+{
+    int line = 0;
+    int column = 0;
+    std::string message;
+};
+
+inline thread_local bool parser_diagnostic_capture_enabled = false;
+inline thread_local ParserDiagnostic captured_parser_diagnostic;
+
+inline void begin_parser_diagnostic_capture()
+{
+    parser_diagnostic_capture_enabled = true;
+    captured_parser_diagnostic = {};
+}
+
+inline ParserDiagnostic end_parser_diagnostic_capture()
+{
+    parser_diagnostic_capture_enabled = false;
+    ParserDiagnostic result = std::move(captured_parser_diagnostic);
+    captured_parser_diagnostic = {};
+    return result;
+}
+
+inline bool capture_parser_diagnostic(int line, int column,
+                                      const std::string& message)
+{
+    if(!parser_diagnostic_capture_enabled)
+        return false;
+    if(captured_parser_diagnostic.message.empty())
+        captured_parser_diagnostic = {line, column, message};
+    return true;
+}
 
 inline std::string docs_page()
 {

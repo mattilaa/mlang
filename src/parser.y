@@ -897,9 +897,12 @@ static void report_colon_semicolon_typo(int line, int col)
 {
     const std::string msg =
         "expected ';' to terminate statement, found ':'; use ';' instead of ':'";
-    fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
-            col > 0 ? col : 1,
-            mlang::diag::format_message_with_code("MLANG-E1017", msg).c_str());
+    const int column = col > 0 ? col : 1;
+    const std::string formatted =
+        mlang::diag::format_message_with_code("MLANG-E1017", msg);
+    if(!mlang::diag::capture_parser_diagnostic(line, column, formatted))
+        fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+                column, formatted.c_str());
     parseHadError = true;
 }
 
@@ -4102,6 +4105,11 @@ static bool is_reserved_type_keyword(const char* s)
 void yyerror(const char* s) {
     parseHadError = true;
     int col = yycolumn_token > 0 ? yycolumn_token : 1;
+    auto report = [](int line, int column, const std::string& message) {
+        if(!mlang::diag::capture_parser_diagnostic(line, column, message))
+            fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+                    column, message.c_str());
+    };
     if(mlaBranchHintPending != 0 ||
        (yytext && (strcmp(yytext, "likely") == 0 ||
                    strcmp(yytext, "unlikely") == 0)))
@@ -4111,8 +4119,8 @@ void yyerror(const char* s) {
             "' must appear immediately before an if, let, or var statement";
         const int hintLine = mlaBranchHintLine > 0 ? mlaBranchHintLine : yylineno;
         const int hintCol = mlaBranchHintColumn > 0 ? mlaBranchHintColumn : col;
-        fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, hintLine, hintCol,
-                mlang::diag::format_message_with_code("MLANG-E1018", msg).c_str());
+        report(hintLine, hintCol,
+               mlang::diag::format_message_with_code("MLANG-E1018", msg));
         mlaBranchHintPending = 0;
         mlaBranchHintLine = 0;
         mlaBranchHintColumn = 0;
@@ -4122,10 +4130,8 @@ void yyerror(const char* s) {
     {
         const std::string msg =
             "expected identifier, found keyword '" + std::string(yytext) + "'";
-        fprintf(stderr,
-                "%s:%d:%d: error: %s\n",
-                g_sourceFile, yylineno, col,
-                mlang::diag::format_message_with_code("MLANG-E1001", msg).c_str());
+        report(yylineno, col,
+               mlang::diag::format_message_with_code("MLANG-E1001", msg));
         return;
     }
     if(s && strstr(s, "syntax error") != NULL)
@@ -4133,59 +4139,47 @@ void yyerror(const char* s) {
         if(yytext && strcmp(yytext, ")") == 0)
         {
             const std::string msg = "syntax error (parse phase): unexpected ')'";
-            fprintf(stderr,
-                    "%s:%d:%d: error: %s\n",
-                    g_sourceFile, yylineno, col,
-                    mlang::diag::format_message_with_code("MLANG-E1002", msg).c_str());
+            report(yylineno, col,
+                   mlang::diag::format_message_with_code("MLANG-E1002", msg));
             return;
         }
         if(yytext && strcmp(yytext, "]") == 0)
         {
             const std::string msg = "syntax error (parse phase): unexpected ']'";
-            fprintf(stderr,
-                    "%s:%d:%d: error: %s\n",
-                    g_sourceFile, yylineno, col,
-                    mlang::diag::format_message_with_code("MLANG-E1003", msg).c_str());
+            report(yylineno, col,
+                   mlang::diag::format_message_with_code("MLANG-E1003", msg));
             return;
         }
         if(yytext && strcmp(yytext, ";") == 0)
         {
             const std::string msg =
                 "syntax error: possible missing closing ')' before ';'";
-            fprintf(stderr,
-                    "%s:%d:%d: error: %s\n",
-                    g_sourceFile, yylineno, col,
-                    mlang::diag::format_message_with_code("MLANG-E1004", msg).c_str());
+            report(yylineno, col,
+                   mlang::diag::format_message_with_code("MLANG-E1004", msg));
             return;
         }
         if(yytext && strcmp(yytext, "}") == 0)
         {
             const std::string msg =
                 "syntax error: possible missing closing ')' before '}'";
-            fprintf(stderr,
-                    "%s:%d:%d: error: %s\n",
-                    g_sourceFile, yylineno, col,
-                    mlang::diag::format_message_with_code("MLANG-E1005", msg).c_str());
+            report(yylineno, col,
+                   mlang::diag::format_message_with_code("MLANG-E1005", msg));
             return;
         }
         if(!yytext || yytext[0] == '\0')
         {
             const std::string msg =
                 "syntax error: unexpected end of file (possible missing ')' )";
-            fprintf(stderr,
-                    "%s:%d:%d: error: %s\n",
-                    g_sourceFile, yylineno, col,
-                    mlang::diag::format_message_with_code("MLANG-E1006", msg).c_str());
+            report(yylineno, col,
+                   mlang::diag::format_message_with_code("MLANG-E1006", msg));
             return;
         }
         if(yytext && strcmp(yytext, ",") == 0)
         {
             const std::string msg =
                 "syntax error: unexpected ',' (possible missing expression before or after ',')";
-            fprintf(stderr,
-                    "%s:%d:%d: error: %s\n",
-                    g_sourceFile, yylineno, col,
-                    mlang::diag::format_message_with_code("MLANG-E1007", msg).c_str());
+            report(yylineno, col,
+                   mlang::diag::format_message_with_code("MLANG-E1007", msg));
             return;
         }
         if(yytext && strcmp(yytext, ":") == 0)
@@ -4195,6 +4189,6 @@ void yyerror(const char* s) {
         }
     }
     const std::string msg = s ? std::string(s) : std::string("syntax error");
-    fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, yylineno, col,
-            mlang::diag::format_message_with_code("MLANG-E1999", msg).c_str());
+    report(yylineno, col,
+           mlang::diag::format_message_with_code("MLANG-E1999", msg));
 }

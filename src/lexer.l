@@ -500,9 +500,12 @@ static int mla_lex_peek_branch_declaration()
                     const int col = yycolumn_token > 0 ? yycolumn_token : 1;
                     const std::string msg =
                         "unexpected character: '" + std::string(yytext) + "'";
-                    fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile,
-                            yylineno, col,
-                            mlang::diag::format_message_with_code("MLANG-E1100", msg).c_str());
+                    const std::string formatted =
+                        mlang::diag::format_message_with_code("MLANG-E1100", msg);
+                    if(!mlang::diag::capture_parser_diagnostic(
+                           yylineno, col, formatted))
+                        fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile,
+                                yylineno, col, formatted.c_str());
                 }
 %%
 
