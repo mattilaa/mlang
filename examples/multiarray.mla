@@ -1,3 +1,6 @@
+mod std::multiarray;
+mod std::mutmultiarray;
+
 fn main() -> i32 {
     let matrix: multiarray<i32, 3, 3> = {
         {1, 2, 3},

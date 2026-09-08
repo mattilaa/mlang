@@ -1,0 +1,30 @@
+/// \file multiarray.mla
+/// \brief Immutable fixed-size multidimensional arrays (std::multiarray).
+///
+/// `multiarray<T, D1, ..., DN>` is a compiler-provided multidimensional array
+/// with one or more compile-time dimensions. Nested brace initializers are
+/// checked against every declared extent.
+///
+/// ```mlang
+/// mod std::multiarray;
+///
+/// let matrix: multiarray<i32, 2, 3> = {
+///     {1, 2, 3},
+///     {4, 5, 6}
+/// };
+/// let value: i32 = matrix[1][2];
+/// ```
+///
+/// Elements are immutable even when the binding uses `var`. Use
+/// `mutmultiarray<T, D1, ..., DN>` when indexed writes are required.
+///
+/// Constant out-of-bounds indexes are rejected at compile time. Dynamic
+/// indexes retain a runtime bounds guard and abort before an invalid load.
+
+// @builtin multiarray
+// Immutable fixed-size multidimensional array: multiarray<T, D1, ..., DN>.
+// This module is a documentation/navigation anchor for `mod std::multiarray;`.
+
+/// \cond INTERNAL_IMPORTS
+extern pub fn __multiarray_module_anchor() -> void;
+/// \endcond
