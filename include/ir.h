@@ -609,6 +609,12 @@ private:
     void generateCexprDeclaration(CexprDeclNode* node,
                                   bool emitRuntimeBinding = true);
     void generateVarDeclaration(VarDeclNode* node);
+    bool validateBooleanBranchPrediction(BranchPrediction prediction,
+                                         TypeNode* declaredType,
+                                         ExpressionNode* initializer,
+                                         int line, int col);
+    llvm::Value* applyBooleanBranchPrediction(
+        llvm::Value* value, BranchPrediction prediction, int line, int col);
     void generateAssignment(AssignmentNode* node);
     void generateFieldAssignment(FieldAssignmentNode* node);
     void generateDerefAssignment(DerefAssignmentNode* node);

@@ -17,8 +17,24 @@ extern const char* g_sourceFile;
 extern int mlaBranchHintPending;
 extern int mlaBranchHintLine;
 extern int mlaBranchHintColumn;
+extern int mlaDeclarationBranchPrediction;
 extern "C" {
     extern bool parseHadError;
+}
+
+static ASTNode* apply_declaration_branch_prediction(ASTNode* node,
+                                                    int prediction)
+{
+    if(prediction == 0 || !node)
+        return node;
+    const BranchPrediction value = prediction == 1
+        ? BranchPrediction::Likely
+        : BranchPrediction::Unlikely;
+    if(auto* letDecl = dynamic_cast<LetDeclNode*>(node))
+        letDecl->branchPrediction = value;
+    else if(auto* varDecl = dynamic_cast<VarDeclNode*>(node))
+        varDecl->branchPrediction = value;
+    return node;
 }
 
 static char* join_module_path(char* left, char* right)
@@ -1986,6 +2002,7 @@ enum UpdatePosition
 %type <ast> struct_member_list struct_member struct_method struct_init
 %type <ast> list_literal list_elements
 %type <ast> let_statement cexpr_declaration var_statement assignment_statement expression_statement nested_function_statement
+%type <ival> optional_branch_prediction
 %type <ast> return_statement block_statement colon_block_statement colon_statement for_statement while_statement range_expression
 %type <ast> throw_statement try_catch_statement switch_statement switch_case_list switch_case switch_default_case
 %type <ast> break_statement continue_statement
@@ -2866,23 +2883,25 @@ nested_function_statement
     ;
 
 let_statement
-    : LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
-        { $$ = create_let_declaration($4, $2, $6); }
-    | LET IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
+    : optional_branch_prediction LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        { $$ = apply_declaration_branch_prediction(create_let_declaration($5, $3, $7), $1); }
+    | optional_branch_prediction LET IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
             report_brace_list_initializer_suggestion(
-                static_cast<TypeNode*>($4), yylineno, yycolumn_token);
-            $$ = create_let_declaration($4, $2, $6);
+                static_cast<TypeNode*>($5), yylineno, yycolumn_token);
+            $$ = create_let_declaration($5, $3, $7);
+            $$ = apply_declaration_branch_prediction($$, $1);
         }
-    | LET IDENTIFIER ASSIGN expression SEMICOLON
-        { $$ = create_let_declaration(NULL, $2, $4); }
-    | LET IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
-        { $$ = create_let_declaration($4, $2, $6); }
-    | LET IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
+    | optional_branch_prediction LET IDENTIFIER ASSIGN expression SEMICOLON
+        { $$ = apply_declaration_branch_prediction(create_let_declaration(NULL, $3, $5), $1); }
+    | optional_branch_prediction LET IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
+        { $$ = apply_declaration_branch_prediction(create_let_declaration($5, $3, $7), $1); }
+    | optional_branch_prediction LET IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
         {
-            ASTNode* lit = mla_ast_struct_literal($4, NULL, $6, yylineno);
-            ASTNode* typeRef = mla_ast_struct_type_ref($4);
-            $$ = create_let_declaration(typeRef, $2, lit);
+            ASTNode* lit = mla_ast_struct_literal($5, NULL, $7, yylineno);
+            ASTNode* typeRef = mla_ast_struct_type_ref($5);
+            $$ = create_let_declaration(typeRef, $3, lit);
+            $$ = apply_declaration_branch_prediction($$, $1);
         }
     ;
 
@@ -2892,31 +2911,44 @@ cexpr_declaration
     ;
 
 var_statement
-    : VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
-        { $$ = mla_ast_var_declaration($4, $2, $6); }
-    | VAR IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
+    : optional_branch_prediction VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, $7), $1); }
+    | optional_branch_prediction VAR IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
             report_brace_list_initializer_suggestion(
-                static_cast<TypeNode*>($4), yylineno, yycolumn_token);
-            $$ = mla_ast_var_declaration($4, $2, $6);
+                static_cast<TypeNode*>($5), yylineno, yycolumn_token);
+            $$ = mla_ast_var_declaration($5, $3, $7);
+            $$ = apply_declaration_branch_prediction($$, $1);
         }
-    | VAR IDENTIFIER ASSIGN expression SEMICOLON
-        { $$ = mla_ast_var_declaration(NULL, $2, $4); }
-    | VAR IDENTIFIER COLON type SEMICOLON
-        { $$ = mla_ast_var_declaration($4, $2, NULL); }
-    | VAR IDENTIFIER COLON type LBRACE RBRACE SEMICOLON
+    | optional_branch_prediction VAR IDENTIFIER ASSIGN expression SEMICOLON
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration(NULL, $3, $5), $1); }
+    | optional_branch_prediction VAR IDENTIFIER COLON type SEMICOLON
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, NULL), $1); }
+    | optional_branch_prediction VAR IDENTIFIER COLON type LBRACE RBRACE SEMICOLON
         {
-            $$ = mla_ast_var_declaration($4, $2, NULL);
+            $$ = mla_ast_var_declaration($5, $3, NULL);
             if(auto* n = dynamic_cast<VarDeclNode*>($$))
+            {
                 n->isExplicitZeroInit = true;
+            }
+            $$ = apply_declaration_branch_prediction($$, $1);
         }
-    | VAR IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
-        { $$ = mla_ast_var_declaration($4, $2, $6); }
-    | VAR IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
+    | optional_branch_prediction VAR IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, $7), $1); }
+    | optional_branch_prediction VAR IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
         {
-            ASTNode* lit = mla_ast_struct_literal($4, NULL, $6, yylineno);
-            ASTNode* typeRef = mla_ast_struct_type_ref($4);
-            $$ = mla_ast_var_declaration(typeRef, $2, lit);
+            ASTNode* lit = mla_ast_struct_literal($5, NULL, $7, yylineno);
+            ASTNode* typeRef = mla_ast_struct_type_ref($5);
+            $$ = mla_ast_var_declaration(typeRef, $3, lit);
+            $$ = apply_declaration_branch_prediction($$, $1);
+        }
+    ;
+
+optional_branch_prediction
+    :
+        {
+            $$ = mlaDeclarationBranchPrediction;
+            mlaDeclarationBranchPrediction = 0;
         }
     ;
 
@@ -4076,7 +4108,7 @@ void yyerror(const char* s) {
     {
         const char* hint = mlaBranchHintPending == 2 ? "unlikely" : "likely";
         const std::string msg = "'" + std::string(hint) +
-            "' must appear immediately before an if statement";
+            "' must appear immediately before an if, let, or var statement";
         const int hintLine = mlaBranchHintLine > 0 ? mlaBranchHintLine : yylineno;
         const int hintCol = mlaBranchHintColumn > 0 ? mlaBranchHintColumn : col;
         fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, hintLine, hintCol,

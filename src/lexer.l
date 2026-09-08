@@ -12,6 +12,7 @@ extern const char* g_sourceFile;
 int mlaBranchHintPending = 0;
 int mlaBranchHintLine = 0;
 int mlaBranchHintColumn = 0;
+int mlaDeclarationBranchPrediction = 0;
 
 // Parse the type-suffix portion of a typed integer literal (e.g. "i64",
 // "u8") into a TypeNode::TypeKind. Returns TYPE_VOID for unrecognized
@@ -151,6 +152,66 @@ static int is_try_question_context()
     }
     return 0;
 }
+
+static int mla_lex_peek_branch_declaration()
+{
+    std::string consumed;
+    std::string word;
+    int c = 0;
+    while((c = yyinput()) != 0)
+    {
+        consumed.push_back(static_cast<char>(c));
+        if(std::isspace(static_cast<unsigned char>(c)))
+            continue;
+        if(c == '/')
+        {
+            int next = yyinput();
+            if(next == 0)
+                break;
+            consumed.push_back(static_cast<char>(next));
+            if(next == '/')
+            {
+                while((c = yyinput()) != 0)
+                {
+                    consumed.push_back(static_cast<char>(c));
+                    if(c == '\n')
+                        break;
+                }
+                continue;
+            }
+            if(next == '*')
+            {
+                int previous = 0;
+                while((c = yyinput()) != 0)
+                {
+                    consumed.push_back(static_cast<char>(c));
+                    if(previous == '*' && c == '/')
+                        break;
+                    previous = c;
+                }
+                continue;
+            }
+            break;
+        }
+        if(std::isalpha(static_cast<unsigned char>(c)) || c == '_')
+        {
+            word.push_back(static_cast<char>(c));
+            while((c = yyinput()) != 0)
+            {
+                consumed.push_back(static_cast<char>(c));
+                if(!std::isalnum(static_cast<unsigned char>(c)) && c != '_')
+                    break;
+                word.push_back(static_cast<char>(c));
+            }
+        }
+        break;
+    }
+
+    for(int i = static_cast<int>(consumed.size()) - 1; i >= 0; --i)
+        yyunput(consumed[static_cast<size_t>(i)], yytext);
+
+    return word == "let" || word == "var";
+}
 %}
 
 %option noyywrap
@@ -205,8 +266,8 @@ static int is_try_question_context()
 "trait"         { return TRAIT; }
 "dyn"           { return DYN; }
 "return"        { return RETURN; }
-"likely"        { mlaBranchHintPending = 1; mlaBranchHintLine = yylineno; mlaBranchHintColumn = yycolumn_token; return LIKELY; }
-"unlikely"      { mlaBranchHintPending = 2; mlaBranchHintLine = yylineno; mlaBranchHintColumn = yycolumn_token; return UNLIKELY; }
+"likely"        { mlaBranchHintPending = 1; mlaBranchHintLine = yylineno; mlaBranchHintColumn = yycolumn_token; if(mla_lex_peek_branch_declaration()) { mlaDeclarationBranchPrediction = 1; mlaBranchHintPending = 0; mlaBranchHintLine = 0; mlaBranchHintColumn = 0; } else return LIKELY; }
+"unlikely"      { mlaBranchHintPending = 2; mlaBranchHintLine = yylineno; mlaBranchHintColumn = yycolumn_token; if(mla_lex_peek_branch_declaration()) { mlaDeclarationBranchPrediction = 2; mlaBranchHintPending = 0; mlaBranchHintLine = 0; mlaBranchHintColumn = 0; } else return UNLIKELY; }
 "if"            { mlaBranchHintPending = 0; mlaBranchHintLine = 0; mlaBranchHintColumn = 0; return IF; }
 "else"          { return ELSE; }
 "try"           { return TRY; }
@@ -233,8 +294,8 @@ static int is_try_question_context()
 "alias"         { return ALIAS; }
 "type"          { return TYPE_KW; }
 "object"        { return OBJECT; }
-"let"           { return LET; }
-"var"           { return VAR; }
+"let"           { mlaBranchHintPending = 0; mlaBranchHintLine = 0; mlaBranchHintColumn = 0; return LET; }
+"var"           { mlaBranchHintPending = 0; mlaBranchHintLine = 0; mlaBranchHintColumn = 0; return VAR; }
 "void"          { return VOID; }
 "bool"          { return BOOL; }
 "bit"           { return BIT; }

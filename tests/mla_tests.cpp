@@ -2112,11 +2112,19 @@ TEST_F(MLATest, IfElseIfElse)
 TEST_F(MLATest, BranchPredictionHintsPreserveRuntimeBehavior)
 {
     std::string code = R"(
+        fn is_positive(value: i32) -> bool {
+            return value > 0;
+        }
+
         fn classify(value: i32) -> i32 {
             likely
-                if value > 0 {
+                /* This declaration is expected to initialize to true. */
+                let positive: bool = is_positive(value);
+            unlikely
+                var zero: bool = value == 0;
+            likely if positive {
                 return 1;
-            } else unlikely if value == 0 {
+            } else unlikely if zero {
                 return 0;
             } else {
                 return -1;
@@ -2141,8 +2149,15 @@ TEST_F(MLATest, BranchPredictionHintsEmitLLVMWeights)
             unlikely if value == 0 { return 1; } else { return 0; }
         }
 
+        fn predicted_values(value: i32) -> bool {
+            likely let positive: bool = value > 0;
+            unlikely var zero = value == 0;
+            return positive || zero;
+        }
+
         fn main() -> i32 {
-            return positive(1) == 1 && zero(2) == 0 ? 0 : 1;
+            return positive(1) == 1 && zero(2) == 0 && predicted_values(1)
+                ? 0 : 1;
         }
     )");
 
@@ -2159,6 +2174,9 @@ TEST_F(MLATest, BranchPredictionHintsEmitLLVMWeights)
               std::string::npos);
     EXPECT_NE(ir.find("branch_weights\", i32 1, i32 2000"),
               std::string::npos);
+    EXPECT_NE(ir.find("@llvm.expect.i1(i1"), std::string::npos);
+    EXPECT_NE(ir.find("i1 true)"), std::string::npos);
+    EXPECT_NE(ir.find("i1 false)"), std::string::npos);
 }
 
 TEST_F(MLATest, BranchPredictionKeywordRejectsNonIfStatement)
@@ -2175,7 +2193,7 @@ TEST_F(MLATest, BranchPredictionKeywordRejectsNonIfStatement)
     std::string out = compileCapture(exitCode);
     EXPECT_NE(exitCode, 0);
     EXPECT_NE(out.find("MLANG-E1018"), std::string::npos);
-    EXPECT_NE(out.find("must appear immediately before an if statement"),
+    EXPECT_NE(out.find("must appear immediately before an if, let, or var statement"),
               std::string::npos);
 }
 
@@ -2191,6 +2209,21 @@ TEST_F(MLATest, BranchPredictionKeywordRejectsExpressionUse)
     std::string out = compileCapture(exitCode);
     EXPECT_NE(exitCode, 0);
     EXPECT_NE(out.find("MLANG-E1018"), std::string::npos);
+}
+
+TEST_F(MLATest, BranchPredictionDeclarationRequiresBooleanInitializer)
+{
+    writeSource(R"(
+        fn main() -> i32 {
+            likely let value: i32 = 42;
+            return value;
+        }
+    )");
+    int exitCode = 0;
+    std::string out = compileCapture(exitCode);
+    EXPECT_NE(exitCode, 0);
+    EXPECT_NE(out.find("MLANG-E2002"), std::string::npos);
+    EXPECT_NE(out.find("requires a bool declaration"), std::string::npos);
 }
 
 TEST_F(MLATest, NestedIf)

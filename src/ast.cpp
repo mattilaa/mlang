@@ -2133,12 +2133,17 @@ std::string CexprIfNode::toString() const
 
 std::string LetDeclNode::toString() const
 {
+    std::string result;
+    if(branchPrediction == BranchPrediction::Likely)
+        result = "likely ";
+    else if(branchPrediction == BranchPrediction::Unlikely)
+        result = "unlikely ";
     if(type)
     {
-        return "let " + name + ": " + type->toString() + " = " +
+        return result + "let " + name + ": " + type->toString() + " = " +
                expression->toString() + ";";
     }
-    return "let " + name + " = " + expression->toString() + ";";
+    return result + "let " + name + " = " + expression->toString() + ";";
 }
 
 std::string CexprDeclNode::toString() const
@@ -2154,6 +2159,10 @@ std::string CexprDeclNode::toString() const
 std::string VarDeclNode::toString() const
 {
     std::string result;
+    if(branchPrediction == BranchPrediction::Likely)
+        result = "likely ";
+    else if(branchPrediction == BranchPrediction::Unlikely)
+        result = "unlikely ";
     if(isStaticStorage)
         result += "static ";
     result += "var " + name;

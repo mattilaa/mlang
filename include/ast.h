@@ -827,12 +827,20 @@ public:
     std::string toString() const override;
 };
 
+enum class BranchPrediction
+{
+    None,
+    Likely,
+    Unlikely,
+};
+
 class LetDeclNode : public StatementNode
 {
 public:
     TypeNode* type;
     std::string name;
     ExpressionNode* expression;
+    BranchPrediction branchPrediction = BranchPrediction::None;
 
     LetDeclNode(TypeNode* t, const std::string& n, ExpressionNode* e)
         : type(t), name(n), expression(e)
@@ -860,6 +868,7 @@ public:
     bool isExplicitZeroInit = false;
     bool isStaticStorage = false;
     bool isGlobalStorage = false;
+    BranchPrediction branchPrediction = BranchPrediction::None;
 
     VarDeclNode(TypeNode* t, const std::string& n, ExpressionNode* e)
         : type(t), name(n), initExpr(e)
@@ -927,13 +936,6 @@ public:
     }
 
     std::string toString() const override;
-};
-
-enum class BranchPrediction
-{
-    None,
-    Likely,
-    Unlikely,
 };
 
 class IfNode : public StatementNode
