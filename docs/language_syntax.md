@@ -1,9 +1,56 @@
-# Mlang Language Syntax Updates {#language_syntax}
+# MLang Language Syntax {#language_syntax}
 
 This page documents recent language syntax/features that are now supported by
 the compiler.
 
-## Namespace Blocks
+## Table of Contents
+
+- [Namespaces and type system](#namespaces-and-type-system)
+  - [Namespace blocks](#namespace-blocks)
+  - [Trait objects (dyn Trait)](#trait_objects_dyn)
+  - [Type aliases](#type-aliases-alias--use-type)
+  - [Numeric primitive names](#numeric-primitive-names)
+  - [Checked narrow integer casts](#checked-narrow-integer-casts)
+- [Conditional compilation](#conditional-compilation)
+  - [Platform macros](#platform-macros)
+  - [Architecture-gated functions](#architecture-gated-functions)
+  - [Conditional regions](#conditional-regions)
+- [Compile-time information and declarations](#compile-time-information-and-declarations)
+  - [Type name property](#type-name-property-name)
+  - [Typed var declarations](#typed-var-declarations-without-initializers)
+  - [cexpr compile-time evaluation](#cexpr-compile-time-evaluation)
+- [Control flow and errors](#control-flow-and-errors)
+  - [if / else if](#if--else-if-syntax)
+  - [Guarded if forms](#guarded-if-forms)
+  - [Empty block warning](#empty-block-warning)
+  - [while guards](#while-guard-syntax)
+  - [Enums with explicit backing type](#enums-with-explicit-backing-type)
+  - [switch / case](#switch--case)
+  - [Exceptions](#exceptions-throw-and-trycatch)
+- [Functional pipelines](#functional-pipelines)
+  - [Functional programming subset](#functional-programming-subset)
+    - [Pipe operator](#pipe_operator)
+- [Assembly and function semantics](#assembly-and-function-semantics)
+  - [Inline assembly](#inline-assembly-asm)
+  - [main return type defaulting](#main-return-type-defaulting)
+  - [Function return type inference](#function-return-type-inference)
+- [Lambda and fold expressions](#lambda--fold-expressions)
+  - [Examples](#lambdafold-examples)
+- [Data layout, builders, and properties](#data-layout-builders-and-properties)
+  - [bit and size_of](#bit-and-size_of)
+  - [Builder syntax](#builder_syntax)
+    - [Forms](#forms)
+    - [Declaring clause types](#declaring-clause-types)
+    - [Value types](#value-types)
+    - [Worked examples](#worked-example--full-struct-form)
+    - [Builder diagnostics](#builder-diagnostics)
+    - [Nested-sibling name collisions](#nested-sibling-name-collisions)
+  - [Property fields](#property_fields)
+- [See also](#see-also)
+
+## Namespaces and Type System
+
+### Namespace Blocks
 
 MLang supports C++17-style namespace blocks for grouping declarations under a
 qualified path:
@@ -68,7 +115,7 @@ form is also accepted. Namespace aliases can be declared at top level or inside
 a block/function. They affect qualified names parsed after the declaration, so
 `ga::Reading` resolves as `geometry::units::Reading`.
 
-## Trait Objects (`dyn Trait`) {#trait_objects_dyn}
+### Trait Objects (`dyn Trait`) {#trait_objects_dyn}
 
 MLang supports explicit trait-object types for runtime dispatch at function
 boundaries:
@@ -133,7 +180,7 @@ Use `dyn Trait` when the call boundary should use runtime dispatch. Use
 generic bounds such as `T: Trait` when the type should remain statically
 known and monomorphized.
 
-## Type Aliases (`alias` / `use type`)
+### Type Aliases (`alias` / `use type`)
 
 Global alias:
 
@@ -169,7 +216,7 @@ Notes:
   (`file.mla:row:column`), pointing to both current and previous declarations.
 - Aliases are removed from scope when leaving the defining block.
 
-## Numeric Primitive Names
+### Numeric Primitive Names
 
 Available primitive floating-point types:
 - `f32`
@@ -188,7 +235,7 @@ let colored: str8 = "\x1b[38;2;164;255;82mhello\x1b[0m";
 
 Use `\xNN` for terminal escape bytes such as `\x1b` (`ESC`).
 
-## Checked Narrow Integer Casts
+### Checked Narrow Integer Casts
 
 `narrow_cast<T>(value)` converts between integer types while preserving the
 original numeric value:
@@ -211,7 +258,9 @@ prints `narrow_cast panic at <file>:<line>` with the target type and aborts.
 Optimized release builds emit only the unchecked cast. The initial
 implementation supports integer source and target types, including `bit`.
 
-## Platform Macros
+## Conditional Compilation
+
+### Platform Macros
 
 MLang supports builtin platform macros for multiplatform source selection:
 
@@ -237,7 +286,7 @@ if windows!() {
 }
 ```
 
-## Architecture-Gated Functions
+### Architecture-Gated Functions
 
 MLang supports compile-time architecture-gated function definitions with:
 
@@ -262,7 +311,7 @@ fn arch_sum(lhs: i64, rhs: i64) -> i64 {
 }
 ```
 
-## Conditional Regions
+### Conditional Regions
 
 For `#ifdef`-style source filtering, MLang supports raw conditional regions
 that are removed before parsing.
@@ -294,7 +343,9 @@ fn platform_name() -> str8 {
 Use these regions when non-matching code should be ignored completely by the
 compiler, for example with duplicate definitions or target-specific asm.
 
-## Type Name Property (`.name`)
+## Compile-Time Information and Declarations
+
+### Type Name Property (`.name`)
 
 Values expose a read-only synthetic `.name` property for logging static type
 names:
@@ -312,7 +363,7 @@ For collection values, the returned name includes inner types when available:
 If a struct defines a real field named `name`, normal field access is used
 instead of the synthetic type-name property.
 
-## Typed `var` Declarations Without Initializers
+### Typed `var` Declarations Without Initializers
 
 A typed `var` declaration with no initializer is zero-initialized.
 
@@ -363,7 +414,7 @@ var copy: PairStamp {};  // no warning
 
 Use `{}` when you want the zero-initialization intent to be explicit in source.
 
-## `cexpr` Compile-Time Evaluation
+### `cexpr` Compile-Time Evaluation
 
 MLang supports explicit compile-time evaluation with the `cexpr` keyword.
 
@@ -489,7 +540,9 @@ Current first-version constraints:
   optional `else` block.
 - Calling a non-`cexpr fn` from `cexpr(...)` is rejected.
 
-## `if` / `else if` Syntax
+## Control Flow and Errors
+
+### `if` / `else if` Syntax
 
 Plain block form (preferred):
 
@@ -510,7 +563,7 @@ present:
 if x == 1: { println!("one"); } // warning: plain if/else-if with ':' is discouraged
 ```
 
-## Guarded `if` Forms
+### Guarded `if` Forms
 
 Guard form with explicit condition + trailing guard expression:
 
@@ -543,7 +596,7 @@ else if var i: i32 = some(): i >= 0 && i < 2 {
 
 Complex nested boolean guards are supported in `if` and `else if`.
 
-## Empty Block Warning
+### Empty Block Warning
 
 Empty blocks are valid syntax, but emit a compiler warning:
 
@@ -555,7 +608,7 @@ if flag {
 Diagnostic:
 - `file.mla:row:column: warning: empty block`
 
-## `while` Guard Syntax
+### `while` Guard Syntax
 
 Plain form (preferred):
 
@@ -577,7 +630,7 @@ Notes:
 - `:` is optional for plain `while cond { ... }`.
 - Using `:` without a trailing guard expression is accepted but warns that it is redundant.
 
-## Enums with Explicit Backing Type
+### Enums with Explicit Backing Type
 
 Enums can declare explicit integer backing storage:
 
@@ -622,7 +675,7 @@ See also:
 - `examples/enum_print_demo.mla`
 - `examples/enum_string_hex_demo.mla`
 
-## `switch` / `case`
+### `switch` / `case`
 
 MLang supports block-style `switch` statements with direct `case value: { ... }`
 syntax.
@@ -672,12 +725,14 @@ Notes:
 - The current implementation lowers `switch` into an equivalent `if` / `else if`
   chain, so matching relies on the existing `==` support for the compared type.
 
-## Exceptions: `throw` and `try/catch`
+### Exceptions: `throw` and `try/catch`
 
 MLang supports stack-unwinding exceptions with an explicit payload type from
 `std::exceptions`.
 
-## Functional Programming Subset
+## Functional Pipelines
+
+### Functional Programming Subset
 
 MLang already supports a practical Haskell/OCaml-style subset inside normal
 MLang code:
@@ -690,7 +745,7 @@ MLang code:
 - tuple types and tuple literals
 - fold expressions over lists
 
-### Pipe Operator: `|>` {#pipe_operator}
+#### Pipe Operator: `|>` {#pipe_operator}
 
 MLang supports a functional pipe operator that forwards the value on the left
 as the first argument of the function on the right.
@@ -798,7 +853,9 @@ Notes:
 - Uncaught exceptions terminate the program after printing the exception type,
   message, and source line when available.
 
-## Inline Assembly: `asm`
+## Assembly and Function Semantics
+
+### Inline Assembly: `asm`
 
 MLang supports expression-style inline assembly lowered directly to LLVM inline
 asm, plus architecture-qualified assembly emitted at module scope.
@@ -880,7 +937,7 @@ Reference examples in the repository:
 - `examples/inline_asm_aarch64_data_hello_demo.mla`
 - `examples/qemu_x86_bootloader/boot.mla`
 
-## `main` Return Type Defaulting
+### `main` Return Type Defaulting
 
 Both forms are supported:
 
@@ -899,7 +956,7 @@ fn main() -> i32 {
 `fn main() { ... }` defaults to `-> i32` and returns `0` if no explicit return
 is provided.
 
-## Function Return Type Inference
+### Function Return Type Inference
 
 Non-extern functions can omit `-> Type`, and the compiler infers the return
 type from `return` expressions.
@@ -1049,7 +1106,9 @@ These demonstrate:
 - left/right folds over numeric and boolean lists
 - empty-list identity behavior for folds
 
-## `bit` and `size_of`
+## Data Layout, Builders, and Properties
+
+### `bit` and `size_of`
 
 MLang provides a builtin `bit` type for logical `0` / `1` values:
 
@@ -1089,7 +1148,7 @@ Important distinction:
 - `list<bool>` is a normal list container with ordinary element storage
 - `std::bitset::BitSet` stores values densely at one bit per entry
 
-## Builder Syntax (`add<T>(...)` and clause keys) {#builder_syntax}
+### Builder Syntax (`add<T>(...)` and clause keys) {#builder_syntax}
 
 MLang has a declarative builder syntax for constructing object trees that
 serialize well (for example to JSON via `{:json}` / `{:#json}`). A builder
@@ -1098,7 +1157,7 @@ pipe operator. Every type name used in the expression must be declared
 first — the compiler enforces that the "functional-looking" types in a
 builder are real types with real fields.
 
-### Forms
+#### Forms
 
 - `add<T>()` — starts a builder producing a value of container type `T`.
 - `Name{value}` — a clause that sets a single typed field. `Name` is either
@@ -1118,7 +1177,7 @@ add<Outer>()
     | add<Inner>(ClauseB{valueB})
 ```
 
-### Declaring clause types
+#### Declaring Clause Types
 
 **Option A — full `struct` declaration** (explicit, works for any number of
 fields):
@@ -1142,7 +1201,7 @@ field Priority: i32;
 `struct Foo { var value: T; };` with `#[derive(Debug)]` applied. Use `pub
 field Foo: T;` to export the desugared struct.
 
-### Value types
+#### Value Types
 
 Builder clause values are not limited to strings. The compiler checks the
 supplied value against the clause's declared field type. The following are
@@ -1157,7 +1216,7 @@ supported:
 Numeric literals widen across integer widths (`i64` literal → `i32` field
 is accepted), and string literals widen across string encodings.
 
-### Worked example — full `struct` form
+#### Worked Example — Full `struct` Form
 
 ```mla
 struct Method   { var value: str8; };
@@ -1193,7 +1252,7 @@ fn main() -> i32 {
 See @ref examples/builder_object_json_demo.mla "builder_object_json_demo.mla"
 for the complete runnable program.
 
-### Worked example — `field` form
+#### Worked Example — `field` Form
 
 ```mla
 field Id:       i32;
@@ -1232,7 +1291,35 @@ fn main() -> i32 {
 See @ref examples/builder_object_field_demo.mla
 "builder_object_field_demo.mla".
 
-## Property Fields (`@property`) {#property_fields}
+#### Builder Diagnostics
+
+The compiler rejects ill-formed builders at parse time. Common mistakes:
+
+- `add<Undeclared>()` — `struct Undeclared` has not been declared yet
+  (MLANG-E1014).
+- `Method{42}` when `field Method: str8;` — value type mismatch
+  (MLANG-E1014 — `"builder clause 'Method' expects value of type 'str8'
+  but got 'i64'"`).
+- `struct TwoFields { var a: str8; var b: str8; };` followed by
+  `TwoFields{"x"}` — clause structs must have exactly one field
+  (MLANG-E1014).
+- `add<T>` without the `<T>` — missing type argument (MLANG-E1015).
+
+Because validation is parse-order sensitive, **put type declarations above
+the builder expressions that reference them** (typically at the top of the
+file).
+
+#### Nested-Sibling Name Collisions
+
+Each nested `add<Child>(...)` becomes a field in its parent. The field name
+is taken from the child's `Name{"..."}` clause, falling back to the
+lowercased child type hint. Two siblings of the same type therefore need
+distinct `Name{...}` clauses, otherwise parsing fails with MLANG-E1010
+(`"duplicate or conflicting field path"`). In the HTTP example, the two
+`add<Header>` siblings are distinguished by `Name{"Authorization"}` vs.
+`Name{"ContentType"}`.
+
+### Property Fields (`@property`) {#property_fields}
 
 Struct fields may be annotated with `@property` to synthesize getter/setter
 methods and optionally constrain direct backing-field access.
@@ -1265,30 +1352,10 @@ serialized as normal object fields and a sibling `@property` metadata subtree
 is emitted to describe the active property options (`hidden`, `protected`,
 `atomic`, `mutex`, `recursive`).
 
-### Diagnostics
+## See Also
 
-The compiler rejects ill-formed builders at parse time. Common mistakes:
-
-- `add<Undeclared>()` — `struct Undeclared` has not been declared yet
-  (MLANG-E1014).
-- `Method{42}` when `field Method: str8;` — value type mismatch
-  (MLANG-E1014 — `"builder clause 'Method' expects value of type 'str8'
-  but got 'i64'"`).
-- `struct TwoFields { var a: str8; var b: str8; };` followed by
-  `TwoFields{"x"}` — clause structs must have exactly one field
-  (MLANG-E1014).
-- `add<T>` without the `<T>` — missing type argument (MLANG-E1015).
-
-Because validation is parse-order sensitive, **put type declarations above
-the builder expressions that reference them** (typically at the top of the
-file).
-
-### The nested-sibling name-collision rule
-
-Each nested `add<Child>(...)` becomes a field in its parent. The field name
-is taken from the child's `Name{"..."}` clause, falling back to the
-lowercased child type hint. Two siblings of the same type therefore need
-distinct `Name{...}` clauses, otherwise parsing fails with MLANG-E1010
-(`"duplicate or conflicting field path"`). In the HTTP example, the two
-`add<Header>` siblings are distinguished by `Name{"Authorization"}` vs.
-`Name{"ContentType"}`.
+- [Quick Guide](quick_guide.md)
+- [New Features Guide](new_features.md)
+- [Language Attributes](language_attributes.md)
+- [Language Built-ins](language_builtins.md)
+- [Compiler Diagnostics](compiler_diagnostics.md)
