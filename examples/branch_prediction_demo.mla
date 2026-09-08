@@ -1,11 +1,14 @@
 /// \file branch_prediction_demo.mla
 /// @ingroup examples
-/// \brief Demonstrates likely/unlikely optimization hints on runtime branches.
+/// \brief Demonstrates likely/unlikely hints on branches and bool bindings.
 
 fn classify(value: i32) -> i32 {
-    likely if value > 0 {
+    likely let positive: bool = value > 0;
+    unlikely var zero: bool = value == 0;
+
+    likely if positive {
         return 1;
-    } else unlikely if value == 0 {
+    } else unlikely if zero {
         return 0;
     } else {
         return -1;

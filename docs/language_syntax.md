@@ -583,8 +583,21 @@ The prefix is an optimization hint only: it does not change condition results
 or which branch executes. The compiler emits LLVM branch-weight metadata so
 optimization and code-layout passes can favor the expected path.
 
-Whitespace and comments may appear between the hint and `if`, so an indented
-or split form is equivalent:
+The hint can also describe the expected initial value of a boolean binding:
+
+```mla
+likely let connected: bool = connect(input);
+unlikely var retry: bool = should_retry(input);
+likely let inferred = input.is_valid();
+```
+
+These forms emit the corresponding `llvm.expect.i1` intrinsic. For a mutable
+`var`, the prediction applies only to its initializer; later assignments do
+not inherit it. Both explicitly typed and inferred boolean declarations are
+accepted. A non-boolean initializer is rejected with `MLANG-E2002`.
+
+Whitespace and comments may appear between the hint and `if`, `let`, or `var`,
+so an indented or split form is equivalent:
 
 ```mla
 likely
@@ -596,8 +609,8 @@ likely
 For an `else if` chain, put the hint after `else`, as in
 `else likely if condition { ... }`. A plain `else` cannot take a hint because
 it has no condition of its own. `likely` and `unlikely` are reserved keywords;
-using either anywhere other than immediately before a runtime `if` produces
-`MLANG-E1018`.
+using either anywhere other than immediately before a runtime `if` or boolean
+`let`/`var` declaration produces `MLANG-E1018`.
 
 See @ref examples/branch_prediction_demo.mla
 "branch_prediction_demo.mla" for a runnable example.

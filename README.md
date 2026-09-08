@@ -158,12 +158,25 @@ likely if value > 0 {
 }
 ```
 
+The same prefixes can describe the expected initial value of a boolean `let`
+or `var` binding:
+
+```rust
+likely let connected: bool = connect(input);
+unlikely var retry: bool = should_retry(input);
+```
+
+For `var`, the hint applies only to the initializer; later assignments are not
+implicitly predicted. Inferred boolean declarations are supported as well.
+
 The hint does not change program behavior. It adds LLVM branch-weight metadata
-that optimization and code-layout passes can use. Whitespace, newlines, and
-comments are allowed between the hint and `if`. For an `else if`, place the
-hint after `else`; a plain `else` cannot be annotated because it has no
-condition. Using either keyword anywhere other than immediately before a
-runtime `if` produces `MLANG-E1018`.
+for `if`, or an `llvm.expect.i1` hint for a boolean initializer. Optimization
+and code-layout passes can use this information. Whitespace, newlines, and
+comments are allowed between the hint and `if`, `let`, or `var`. For an
+`else if`, place the hint after `else`; a plain `else` cannot be annotated
+because it has no condition. Using either keyword anywhere else produces
+`MLANG-E1018`. Applying a declaration hint to a non-boolean value produces
+`MLANG-E2002`.
 
 Run the complete example with:
 

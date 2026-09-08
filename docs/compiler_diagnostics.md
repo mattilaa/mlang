@@ -68,8 +68,9 @@ A statement ended with `:` where `;` was expected. Use `;` to terminate ordinary
 
 ### `MLANG-E1018`
 The `likely` or `unlikely` branch prediction keyword was used somewhere other
-than immediately before an `if` statement. Use `likely if condition { ... }`,
-`unlikely if condition { ... }`, or `else likely if condition { ... }`.
+than immediately before an `if`, `let`, or `var` statement. Use
+`likely if condition { ... }`, `else unlikely if condition { ... }`, or a
+boolean declaration such as `likely let ready: bool = check();`.
 
 ### `MLANG-E1100`
 Unexpected character produced by the lexer before parsing could continue.
