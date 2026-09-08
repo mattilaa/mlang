@@ -201,11 +201,19 @@ Use `var` together with `mutmultiarray` when elements must change at runtime:
 var board: mutmultiarray<i32, 2, 3> = {{1, 2, 3}, {4, 5, 6}};
 board[0][1] = 42;
 board[1][2] += 10;
+
+var row: i32 = 1;
+if board.get(row, 2).is_some() {
+    println!("{}", board.get(row, 2).unwrap());
+}
 ```
 
 Mutable indexed writes use the same compile-time and runtime bounds checks as
-reads. A `let` binding remains immutable even when its type is
-`mutmultiarray`.
+reads. Constant out-of-bounds indexes are compile-time errors; dynamic `[]`
+access aborts if an index is invalid. `get(i1, ..., iN)` is the non-panicking
+alternative: it returns `option<T>`, supports `is_some()` and `is_none()`, and
+its `unwrap()` method reports the source location and aborts when the option is
+empty. A `let` binding remains immutable even when its type is `mutmultiarray`.
 
 Run the complete example with:
 

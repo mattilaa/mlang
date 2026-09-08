@@ -128,7 +128,9 @@
 // @builtin mutmultiarray
 // Mutable-element multidimensional array: mutmultiarray<T, D1, ..., DN>.
 // The binding must use var. Indexed and compound assignments are bounds
-// checked at every dimension.
+// checked at every dimension. get(i1, ..., iN) returns option<T>; use
+// is_some()/is_none() for recoverable access or unwrap() for a checked access
+// that reports its source location and aborts on an invalid index.
 
 // @builtin tuple
 // Tuple type: tuple<T1, T2, ...>.
