@@ -288,8 +288,15 @@ Run the complete example with:
 
 ./build/mlang examples/matrix_operations.mla -L build -lmlang_std -o /tmp/matrix_operations
 /tmp/matrix_operations
+/tmp/matrix_operations --batch
 /tmp/matrix_operations --size=6x7
 ```
+
+When attached to a terminal, the default matrix demo opens an interactive
+screen. Press `M` multiply, `F` flip, `I` inverse, `T` transpose, or one of the
+other shortcuts in the black-on-white command bar. Matrix borders are rendered
+in gray. Use `--batch` to print every operation without entering the terminal
+UI; `--size=ROWSxCOLS` runs the larger rectangular batch walkthrough.
 
 ## Tools Shipped In This Repository
 

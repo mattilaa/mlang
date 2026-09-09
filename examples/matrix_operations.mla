@@ -1,14 +1,48 @@
+/// Interactive fixed-size matrix operations viewer.
+///
+/// Run the executable in a terminal and press the keys shown in its command
+/// bar. Use `--batch` for the complete non-interactive walkthrough or
+/// `--size=6x7` for a larger rectangular batch demonstration.
 mod std::env;
+mod std::ascii;
+mod std::esc;
+mod std::io;
 mod std::matrix;
 mod std::strbuf;
+mod std::term;
+mod std::time;
 
+use std::ascii::AsciiKey;
 use std::env::args;
+use std::esc::alt_screen_off;
+use std::esc::alt_screen_on;
+use std::esc::bg;
+use std::esc::color_black;
+use std::esc::color_white;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_show;
+use std::esc::cursor_code;
+use std::esc::fg;
+use std::esc::fg_rgb;
+use std::esc::reset;
+use std::io::flush;
+use std::io::read_keycode_nonblocking;
+use std::io::stdin;
+use std::io::stdout;
 use std::strbuf::find;
 use std::strbuf::pad_i64_left;
 use std::strbuf::pad_left;
+use std::strbuf::pad_right;
 use std::strbuf::repeat;
 use std::strbuf::starts_with;
 use std::strbuf::sub;
+use std::term::stdin_enable_cbreak;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::term::stdout_size;
+use std::time::sleep_ms;
 
 extern fn atoi(value: str8) -> i32;
 
@@ -17,88 +51,98 @@ fn near(value:f64, expected:f64) -> bool {
     return difference > -0.000001 && difference < 0.000001;
 }
 
+fn border_gray() -> str8 {
+    return fg_rgb(145, 145, 145);
+}
+
 fn print_i32_2x3(label: str8, matrix: &multiarray<i32, 2, 3>) -> void {
     println!("{}", label);
-    println!("┌{}┐", repeat("─", 19));
+    println!("{}┌{}┐{}", border_gray(), repeat("─", 19), reset());
     for row in 0..2 {
-        print!("│");
+        print!("{}│{}", border_gray(), reset());
         for column in 0..3 {
             print!(" {}", pad_i64_left(matrix[row][column], 5, " "));
         }
-        println!(" │");
+        println!(" {}│{}", border_gray(), reset());
     }
-    println!("└{}┘", repeat("─", 19));
+    println!("{}└{}┘{}", border_gray(), repeat("─", 19), reset());
     println!("");
 }
 
 fn print_i32_3x2(label: str8, matrix: &multiarray<i32, 3, 2>) -> void {
     println!("{}", label);
-    println!("┌{}┐", repeat("─", 13));
+    println!("{}┌{}┐{}", border_gray(), repeat("─", 13), reset());
     for row in 0..3 {
-        print!("│");
+        print!("{}│{}", border_gray(), reset());
         for column in 0..2 {
             print!(" {}", pad_i64_left(matrix[row][column], 5, " "));
         }
-        println!(" │");
+        println!(" {}│{}", border_gray(), reset());
     }
-    println!("└{}┘", repeat("─", 13));
+    println!("{}└{}┘{}", border_gray(), repeat("─", 13), reset());
     println!("");
 }
 
 fn print_i32_2x2(label: str8, matrix: &multiarray<i32, 2, 2>) -> void {
     println!("{}", label);
-    println!("┌{}┐", repeat("─", 13));
+    println!("{}┌{}┐{}", border_gray(), repeat("─", 13), reset());
     for row in 0..2 {
-        print!("│");
+        print!("{}│{}", border_gray(), reset());
         for column in 0..2 {
             print!(" {}", pad_i64_left(matrix[row][column], 5, " "));
         }
-        println!(" │");
+        println!(" {}│{}", border_gray(), reset());
     }
-    println!("└{}┘", repeat("─", 13));
+    println!("{}└{}┘{}", border_gray(), repeat("─", 13), reset());
     println!("");
 }
 
 fn print_f64_2x2(label: str8, matrix: &multiarray<f64, 2, 2>) -> void {
     println!("{}", label);
-    println!("┌{}┐", repeat("─", 25));
+    println!("{}┌{}┐{}", border_gray(), repeat("─", 25), reset());
     for row in 0..2 {
-        print!("│");
+        print!("{}│{}", border_gray(), reset());
         for column in 0..2 {
             let value: str8 = format!("{}", matrix[row][column]);
             print!(" {}", pad_left(value, 11, " "));
         }
-        println!(" │");
+        println!(" {}│{}", border_gray(), reset());
     }
-    println!("└{}┘", repeat("─", 25));
+    println!("{}└{}┘{}", border_gray(), repeat("─", 25), reset());
     println!("");
 }
 
 fn print_f64_row(label: str8, first:f64, second:f64) -> void {
     println!("{}", label);
-    println!("┌{}┐", repeat("─", 25));
+    println!("{}┌{}┐{}", border_gray(), repeat("─", 25), reset());
     let first_text: str8 = format!("{}", first);
     let second_text: str8 = format!("{}", second);
-    println!("│ {} {} │", pad_left(first_text, 11, " "),
-             pad_left(second_text, 11, " "));
-    println!("└{}┘", repeat("─", 25));
+    print!("{}│{}", border_gray(), reset());
+    print!(" {} {} ", pad_left(first_text, 11, " "),
+           pad_left(second_text, 11, " "));
+    println!("{}│{}", border_gray(), reset());
+    println!("{}└{}┘{}", border_gray(), repeat("─", 25), reset());
     println!("");
 }
 
 fn print_scalar(label: str8, value:f64) -> void {
     println!("{}", label);
-    println!("┌{}┐", repeat("─", 13));
+    println!("{}┌{}┐{}", border_gray(), repeat("─", 13), reset());
     let value_text: str8 = format!("{}", value);
-    println!("│ {} │", pad_left(value_text, 11, " "));
-    println!("└{}┘", repeat("─", 13));
+    print!("{}│{}", border_gray(), reset());
+    print!(" {} ", pad_left(value_text, 11, " "));
+    println!("{}│{}", border_gray(), reset());
+    println!("{}└{}┘{}", border_gray(), repeat("─", 13), reset());
     println!("");
 }
 
 fn print_i32_scalar(label: str8, value:i32) -> void {
     println!("{}", label);
-    println!("┌{}┐", repeat("─", 7));
-    println!("│ {} │", pad_i64_left(value, 5, " "));
-    println!("└{}┘", repeat("─", 7));
+    println!("{}┌{}┐{}", border_gray(), repeat("─", 7), reset());
+    print!("{}│{}", border_gray(), reset());
+    print!(" {} ", pad_i64_left(value, 5, " "));
+    println!("{}│{}", border_gray(), reset());
+    println!("{}└{}┘{}", border_gray(), repeat("─", 7), reset());
     println!("");
 }
 
@@ -107,15 +151,15 @@ fn print_i32_10x10_view(label: str8,
                         rows:i32, columns:i32) -> void {
     let inner_width:i64 = columns * 6 + 1;
     println!("{}", label);
-    println!("┌{}┐", repeat("─", inner_width));
+    println!("{}┌{}┐{}", border_gray(), repeat("─", inner_width), reset());
     for row in 0..rows {
-        print!("│");
+        print!("{}│{}", border_gray(), reset());
         for column in 0..columns {
             print!(" {}", pad_i64_left(matrix[row][column], 5, " "));
         }
-        println!(" │");
+        println!(" {}│{}", border_gray(), reset());
     }
-    println!("└{}┘", repeat("─", inner_width));
+    println!("{}└{}┘{}", border_gray(), repeat("─", inner_width), reset());
     println!("");
 }
 
@@ -270,9 +314,143 @@ fn run_full_walkthrough() -> i32 {
     return editable[1][1] == 10 ? 0 : 7;
 }
 
+fn draw_command_bar() -> void {
+    let size = stdout_size();
+    var width:i64 = size.cols;
+    if width < 58 { width = 58; }
+    let primary: str8 = pad_right(
+        " M Multiply   F Flip   I Inverse   T Transpose   Q Quit ",
+        width, " ");
+    let arithmetic: str8 = pad_right(
+        " A Add   S Subtract   H Hadamard   O Offset   C Scale ",
+        width, " ");
+    let analysis: str8 = pad_right(
+        " D Determinant   E Eigenvectors   V Eigenvalues   U Sum   R Original ",
+        width, " ");
+    println!("{}{}{}{}", fg(color_black()), bg(color_white()),
+             primary, reset());
+    println!("{}{}{}{}", fg(color_black()), bg(color_white()),
+             arithmetic, reset());
+    println!("{}{}{}{}", fg(color_black()), bg(color_white()),
+             analysis, reset());
+}
+
+fn run_interactive() -> i32 {
+    let base: multiarray<f64, 2, 2> = {{4.0, 7.0}, {2.0, 6.0}};
+    let other: multiarray<f64, 2, 2> = {{1.0, 2.0}, {3.0, 4.0}};
+    let symmetric: multiarray<f64, 2, 2> = {{2.0, 1.0}, {1.0, 2.0}};
+    let added: multiarray<f64, 2, 2> = base.add(other);
+    let subtracted: multiarray<f64, 2, 2> = base.subtract(other);
+    let hadamard: multiarray<f64, 2, 2> = base.hadamard(other);
+    let shifted: multiarray<f64, 2, 2> = base.offset(10.0);
+    let scaled: multiarray<f64, 2, 2> = base.scale(2.0);
+    let transposed: multiarray<f64, 2, 2> = base.transpose();
+    let product: multiarray<f64, 2, 2> = base.matmul(other);
+    let inverse: multiarray<f64, 2, 2> = base.inverse();
+    let eigenvalues: multiarray<f64, 2> = symmetric.eigenvalues();
+    let eigenvectors: multiarray<f64, 2, 2> = symmetric.eigenvectors();
+    let flipped: multiarray<f64, 2, 2> = {{6.0, 2.0}, {7.0, 4.0}};
+    let determinant:f64 = base.determinant();
+    let total:f64 = base.sum();
+
+    if stdin_enable_cbreak() != 0 {
+        eprintln!("could not enable terminal keyboard mode; using batch output");
+        return run_full_walkthrough();
+    }
+
+    print!("{}{}{}{}", alt_screen_on(), cursor_code(cmd_hide()),
+           cursor_code(cmd_clear_screen()), cursor_code(cmd_home()));
+    let _ = flush(stdout());
+    var selected:i32 = 0;
+    var running:i32 = 1;
+    while running == 1 {
+        print!("{}{}", cursor_code(cmd_home()), cursor_code(cmd_clear_screen()));
+        println!("MLang fixed-size matrix operations\n");
+        if selected == 0 {
+            print_f64_2x2("Original matrix", base);
+        } else if selected == 1 {
+            print_f64_2x2("multiply(): original × right operand", product);
+        } else if selected == 2 {
+            print_f64_2x2("flip: original rotated 180 degrees", flipped);
+        } else if selected == 3 {
+            print_f64_2x2("inverse()", inverse);
+        } else if selected == 4 {
+            print_f64_2x2("transpose()", transposed);
+        } else if selected == 5 {
+            print_f64_2x2("add()", added);
+        } else if selected == 6 {
+            print_f64_2x2("subtract()", subtracted);
+        } else if selected == 7 {
+            print_f64_2x2("hadamard()", hadamard);
+        } else if selected == 8 {
+            print_f64_2x2("offset(10)", shifted);
+        } else if selected == 9 {
+            print_f64_2x2("scale(2)", scaled);
+        } else if selected == 10 {
+            print_scalar("determinant()", determinant);
+        } else if selected == 11 {
+            print_f64_2x2("eigenvectors() of symmetric [[2, 1], [1, 2]]",
+                          eigenvectors);
+        } else if selected == 12 {
+            print_f64_row("eigenvalues() of symmetric [[2, 1], [1, 2]]",
+                          eigenvalues[0], eigenvalues[1]);
+        } else {
+            print_scalar("sum()", total);
+        }
+        draw_command_bar();
+        let _ = flush(stdout());
+
+        var key:i32 = read_keycode_nonblocking(stdin());
+        while key < 0 {
+            sleep_ms(10);
+            key = read_keycode_nonblocking(stdin());
+        }
+        if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ ||
+           key == AsciiKey::Etx {
+            running = 0;
+        } else if key == AsciiKey::LowerM || key == AsciiKey::UpperM {
+            selected = 1;
+        } else if key == AsciiKey::LowerF || key == AsciiKey::UpperF {
+            selected = 2;
+        } else if key == AsciiKey::LowerI || key == AsciiKey::UpperI {
+            selected = 3;
+        } else if key == AsciiKey::LowerT || key == AsciiKey::UpperT {
+            selected = 4;
+        } else if key == AsciiKey::LowerA || key == AsciiKey::UpperA {
+            selected = 5;
+        } else if key == AsciiKey::LowerS || key == AsciiKey::UpperS {
+            selected = 6;
+        } else if key == AsciiKey::LowerH || key == AsciiKey::UpperH {
+            selected = 7;
+        } else if key == AsciiKey::LowerO || key == AsciiKey::UpperO {
+            selected = 8;
+        } else if key == AsciiKey::LowerC || key == AsciiKey::UpperC {
+            selected = 9;
+        } else if key == AsciiKey::LowerD || key == AsciiKey::UpperD {
+            selected = 10;
+        } else if key == AsciiKey::LowerE || key == AsciiKey::UpperE {
+            selected = 11;
+        } else if key == AsciiKey::LowerV || key == AsciiKey::UpperV {
+            selected = 12;
+        } else if key == AsciiKey::LowerU || key == AsciiKey::UpperU {
+            selected = 13;
+        } else if key == AsciiKey::LowerR || key == AsciiKey::UpperR {
+            selected = 0;
+        }
+    }
+
+    print!("{}{}{}{}", reset(), cursor_code(cmd_show()),
+           cursor_code(cmd_home()), alt_screen_off());
+    let _ = flush(stdout());
+    let _ = stdin_restore();
+    return 0;
+}
+
 fn main() -> i32 {
     let argv: list<str8> = args();
+    var batch:i32 = 0;
     for argument in argv {
+        if argument == "--batch" { batch = 1; }
         if starts_with(argument, "--size=") == 1 {
             let size_text: str8 = sub(argument, 7, len(argument) - 7);
             let separator:i64 = find(size_text, "x");
@@ -291,6 +469,9 @@ fn main() -> i32 {
             }
             return run_sized(rows, columns);
         }
+    }
+    if batch == 0 && stdin_is_tty() == 1 {
+        return run_interactive();
     }
     return run_full_walkthrough();
 }
