@@ -19,6 +19,8 @@ immutable [`multiarray`](Stdlib-Multiarray):
 - `scale(value)` — multiply every element by a scalar.
 - `matmul(other)` / `multiply(other)` — conventional multiplication of
   compatible 2D matrices. For `A<R, K>` and `B<K, C>`, the result is `R × C`.
+- `transpose()` — swap rows and columns of any numeric 2D matrix. An `R × C`
+  input produces an immutable `C × R` matrix.
 - `sum()` — reduce every element to one scalar.
 
 Element-wise operations and `sum` support any number of dimensions. Matrix
@@ -32,6 +34,36 @@ let b: multiarray<i32, 3, 2> = {{7, 8}, {9, 10}, {11, 12}};
 let product: multiarray<i32, 2, 2> = a.matmul(b);
 let shifted: multiarray<i32, 2, 3> = a.offset(10);
 println!("{} {}", product[0][0], shifted.sum()); // 58 81
+```
+
+## Square floating-point operations
+
+Square [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types) matrices provide these additional methods:
+
+- `determinant()` returns the scalar determinant. A zero determinant indicates
+  that the matrix is singular and has no inverse.
+- `inverse()` returns a new immutable matrix. It aborts with a diagnostic when
+  the matrix is singular.
+- `eigenvalues()` returns the real eigenvalues in ascending order.
+- `eigenvectors()` returns a matrix whose columns are normalized eigenvectors;
+  column `i` corresponds to eigenvalue `i` from `eigenvalues()`.
+
+The eigenvalue methods use a Jacobi solver and therefore accept real symmetric
+matrices only. They abort with a diagnostic for a non-symmetric input or if the
+solver does not converge. For repeated eigenvalues, the particular orthonormal
+basis returned for the repeated eigenspace is not guaranteed.
+
+```rust
+mod std::matrix;
+
+let matrix: multiarray<f64, 2, 2> = {{4.0, 7.0}, {2.0, 6.0}};
+let determinant: f64 = matrix.determinant(); // 10.0
+let inverse: multiarray<f64, 2, 2> = matrix.inverse();
+
+let symmetric: multiarray<f64, 2, 2> = {{2.0, 1.0}, {1.0, 2.0}};
+let values: multiarray<f64, 2> = symmetric.eigenvalues(); // {1.0, 3.0}
+let vectors: multiarray<f64, 2, 2> = symmetric.eigenvectors();
+// symmetric.matmul(vectors) scales each vector column by its eigenvalue.
 ```
 
 ## Mutable in-place operations

@@ -5,6 +5,9 @@
 /// `multiarray` and `mutmultiarray`. Element-wise operations work with any
 /// fixed dimensionality. `matmul` (also available as `multiply`) performs
 /// conventional matrix multiplication on compatible two-dimensional values.
+/// Two-dimensional matrices also support `transpose`. Square `f32` and `f64`
+/// matrices support `determinant` and `inverse`; real symmetric square matrices
+/// additionally support `eigenvalues` and `eigenvectors`.
 ///
 /// Value-producing methods return an immutable `multiarray`:
 ///
@@ -14,8 +17,15 @@
 /// let a: multiarray<i32, 2, 3> = {{1, 2, 3}, {4, 5, 6}};
 /// let b: multiarray<i32, 3, 2> = {{7, 8}, {9, 10}, {11, 12}};
 /// let product: multiarray<i32, 2, 2> = a.matmul(b);
+/// let transposed: multiarray<i32, 3, 2> = a.transpose();
 /// let shifted: multiarray<i32, 2, 3> = a.offset(10);
 /// let total: i32 = shifted.sum();
+///
+/// let symmetric: multiarray<f64, 2, 2> = {{2.0, 1.0}, {1.0, 2.0}};
+/// let determinant: f64 = symmetric.determinant();
+/// let inverse: multiarray<f64, 2, 2> = symmetric.inverse();
+/// let values: multiarray<f64, 2> = symmetric.eigenvalues();
+/// let vectors: multiarray<f64, 2, 2> = symmetric.eigenvectors();
 /// ```
 ///
 /// A `var mutmultiarray` also supports `add_assign`, `subtract_assign`,
@@ -23,7 +33,8 @@
 
 // @builtin matrix operations
 // Methods: sum, add, subtract, hadamard, offset, scale, matmul/multiply,
-// and mutable *_assign forms.
+// transpose, determinant, inverse, eigenvalues, eigenvectors, and mutable
+// *_assign forms.
 
 /// \cond INTERNAL_IMPORTS
 extern pub fn __matrix_module_anchor() -> void;

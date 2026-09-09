@@ -262,7 +262,10 @@ empty. A `let` binding remains immutable even when its type is `mutmultiarray`.
 Import `std::matrix` for numeric operations. Element-wise `add`, `subtract`,
 `hadamard`, scalar `offset`/`scale`, and `sum` work with fixed arrays of any
 dimensionality. `matmul` (or `multiply`) performs conventional compatible 2D
-matrix multiplication and returns an immutable `multiarray`. A
+matrix multiplication, and `transpose` swaps rows and columns. Square `f32`
+and `f64` matrices also provide `determinant` and `inverse`; real symmetric
+matrices provide ascending `eigenvalues` and matching column-oriented
+`eigenvectors`. These methods return immutable values. A
 `var mutmultiarray` additionally supports the in-place `_assign` variants.
 
 ```rust
@@ -271,6 +274,7 @@ mod std::matrix;
 let a: multiarray<i32, 2, 3> = {{1, 2, 3}, {4, 5, 6}};
 let b: multiarray<i32, 3, 2> = {{7, 8}, {9, 10}, {11, 12}};
 let product: multiarray<i32, 2, 2> = a.matmul(b);
+let transposed: multiarray<i32, 3, 2> = a.transpose();
 println!("{}", product[0][0]); // 58
 ```
 
