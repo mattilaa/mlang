@@ -80,11 +80,16 @@ Select a larger logical matrix or produce non-interactive output with:
 ```sh
 ./build/matrix_operations --size=6x7
 ./build/matrix_operations --batch --size=6x7
+./build/matrix_operations --usesquarefloats --size=4x4
 ```
 
 Interactive dimensions range from `1x1` through `10x10`. The screen redraws
 only its matrix viewport after a key press, leaving the title and command bar
-in place to prevent flicker.
+in place to prevent flicker. `--usesquarefloats` switches the sized demo to a
+square `f64` matrix and enables `I` inverse, `D` determinant, `E` eigenvectors,
+and `V` eigenvalues. It defaults to `2x2` if `--size` is omitted and reports an
+error when combined with a rectangular size. Add `--batch` to either command
+for sequential output.
 
 ### Bare metal and QEMU
 
@@ -185,7 +190,8 @@ in place to prevent flicker.
   `I` inverse, `T` transpose, and more). Only the matrix viewport is redrawn,
   keeping the title and command bar fixed to avoid flicker. Pass `--size=6x7`
   (up to `10x10`) for a larger rectangular TUI, or combine it with `--batch`
-  for sequential output.
+  for sequential output. Pass `--usesquarefloats --size=4x4` to enable the
+  inverse, determinant, and eigen operations on a sized square `f64` matrix.
 - `examples/borrowing_demo.mla` — borrowing syntax and compiler-enforced
   ownership behavior.
 - `examples/borrow_patterns.mla` — practical borrow patterns for containers

@@ -90,3 +90,15 @@ interactive rectangular operations on a larger logical matrix. Combine the
 options as `--batch --size=6x7` for non-interactive output. Each dimension may
 be from 1 through 10; the example uses fully initialized fixed `10x10` storage
 because [`multiarray`](Stdlib-Multiarray) dimensions are compile-time types.
+
+The regular sized mode uses [`i32`](Quick-Guide#types), so its command bar directs you to launch a
+square floating-point mode for operations that require it:
+
+```sh
+./build/matrix_operations --usesquarefloats --size=4x4
+./build/matrix_operations --batch --usesquarefloats --size=4x4
+```
+
+This enables `I` inverse, `D` determinant, `E` eigenvectors, and `V`
+eigenvalues. The flag defaults to a `2x2` matrix when `--size` is omitted and
+rejects rectangular sizes because these operations require a square matrix.

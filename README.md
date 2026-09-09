@@ -291,6 +291,7 @@ cmake --build build -j4 --target mlang mlang_std
 /tmp/matrix_operations
 /tmp/matrix_operations --batch
 /tmp/matrix_operations --size=6x7
+/tmp/matrix_operations --usesquarefloats --size=4x4
 ```
 
 When attached to a terminal, the default matrix demo opens an interactive
@@ -299,7 +300,11 @@ other shortcuts in the black-on-white command bar. Matrix borders are rendered
 in gray. The title and command bar stay fixed while only the matrix viewport is
 redrawn, which avoids full-screen flicker. `--size=ROWSxCOLS` opens the same UI
 with a logical matrix up to `10x10`; use `--batch` (with or without `--size`)
-to print every operation sequentially instead.
+to print every operation sequentially instead. Add `--usesquarefloats` with a
+square size, for example `--usesquarefloats --size=4x4`, to use `f64` values
+and enable `I` inverse, `D` determinant, `E` eigenvectors, and `V` eigenvalues.
+Without `--size`, the float mode defaults to `2x2`; rectangular float sizes are
+rejected.
 
 ## Tools Shipped In This Repository
 

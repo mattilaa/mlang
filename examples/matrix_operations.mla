@@ -1,8 +1,9 @@
 /// Interactive fixed-size matrix operations viewer.
 ///
 /// Run the executable in a terminal and press the keys shown in its command
-/// bar. Use `--size=6x7` for a larger interactive matrix, or combine it with
-/// `--batch` for the complete non-interactive walkthrough.
+/// bar. Use `--size=6x7` for a larger interactive matrix. Add
+/// `--usesquarefloats` with a square size to enable inverse, determinant, and
+/// eigen operations. Combine either mode with `--batch` for plain output.
 mod std::env;
 mod std::ascii;
 mod std::esc;
@@ -169,6 +170,39 @@ fn print_i32_10x10_view(label: str8,
         }
         println!(" {}│{}", border_gray(), reset());
     }
+    println!("{}└{}┘{}", border_gray(), repeat("─", inner_width), reset());
+    println!("");
+}
+
+fn print_f64_10x10_view(label: str8,
+                        matrix: &multiarray<f64, 10, 10>,
+                        rows:i32, columns:i32) -> void {
+    let inner_width:i64 = columns * 12 + 1;
+    println!("{}", label);
+    println!("{}┌{}┐{}", border_gray(), repeat("─", inner_width), reset());
+    for row in 0..rows {
+        print!("{}│{}", border_gray(), reset());
+        for column in 0..columns {
+            let value: str8 = format!("{}", matrix[row][column]);
+            print!(" {}", pad_left(value, 11, " "));
+        }
+        println!(" {}│{}", border_gray(), reset());
+    }
+    println!("{}└{}┘{}", border_gray(), repeat("─", inner_width), reset());
+    println!("");
+}
+
+fn print_f64_10_row(label: str8, values: &multiarray<f64, 10>,
+                    columns:i32) -> void {
+    let inner_width:i64 = columns * 12 + 1;
+    println!("{}", label);
+    println!("{}┌{}┐{}", border_gray(), repeat("─", inner_width), reset());
+    print!("{}│{}", border_gray(), reset());
+    for column in 0..columns {
+        let value: str8 = format!("{}", values[column]);
+        print!(" {}", pad_left(value, 11, " "));
+    }
+    println!(" {}│{}", border_gray(), reset());
     println!("{}└{}┘{}", border_gray(), repeat("─", inner_width), reset());
     println!("");
 }
@@ -341,6 +375,175 @@ fn run_sized(rows:i32, columns:i32, interactive:i32) -> i32 {
     return 0;
 }
 
+fn run_square_floats(size:i32, interactive:i32) -> i32 {
+    var base_mut: mutmultiarray<f64, 10, 10> = {
+        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
+    };
+    var right_mut: mutmultiarray<f64, 10, 10> = base_mut.offset(0.0);
+    for index in 0..10 {
+        base_mut[index][index] = 1.0;
+        right_mut[index][index] = 1.0;
+    }
+    var logical_sum:f64 = 0.0;
+    for row in 0..size {
+        for column in 0..size {
+            if row == column {
+                base_mut[row][column] = f64(size + row) + 2.0;
+                right_mut[row][column] = 2.0;
+            } else {
+                base_mut[row][column] = 1.0;
+                right_mut[row][column] = 0.5;
+            }
+            logical_sum = logical_sum + base_mut[row][column];
+        }
+    }
+
+    let base: multiarray<f64, 10, 10> = base_mut.offset(0.0);
+    let right: multiarray<f64, 10, 10> = right_mut.offset(0.0);
+    var eigen_source_mut: mutmultiarray<f64, 10, 10> = base.offset(0.0);
+    for hidden in size..10 {
+        eigen_source_mut[hidden][hidden] = 1000.0 + f64(hidden);
+    }
+    let eigen_source: multiarray<f64, 10, 10> =
+        eigen_source_mut.offset(0.0);
+
+    let added: multiarray<f64, 10, 10> = base.add(right);
+    let subtracted: multiarray<f64, 10, 10> = base.subtract(right);
+    let hadamard: multiarray<f64, 10, 10> = base.hadamard(right);
+    let shifted: multiarray<f64, 10, 10> = base.offset(10.0);
+    let scaled: multiarray<f64, 10, 10> = base.scale(2.0);
+    let transposed: multiarray<f64, 10, 10> = base.transpose();
+    let product: multiarray<f64, 10, 10> = base.matmul(right);
+    let inverse: multiarray<f64, 10, 10> = base.inverse();
+    let determinant:f64 = base.determinant();
+    let eigenvalues: multiarray<f64, 10> = eigen_source.eigenvalues();
+    let eigenvectors: multiarray<f64, 10, 10> = eigen_source.eigenvectors();
+    var flipped_mut: mutmultiarray<f64, 10, 10> = base.offset(0.0);
+    for row in 0..size {
+        for column in 0..size {
+            flipped_mut[size - row - 1][size - column - 1] =
+                base[row][column];
+        }
+    }
+    let flipped: multiarray<f64, 10, 10> = flipped_mut.offset(0.0);
+
+    if interactive == 1 {
+        if stdin_enable_cbreak() != 0 {
+            eprintln!("could not enable terminal keyboard mode; using batch output");
+        } else {
+            print!("{}{}{}{}", alt_screen_on(), cursor_code(cmd_hide()),
+                   cursor_code(cmd_clear_screen()), cursor_code(cmd_home()));
+            println!("MLang square f64 matrix operations: {}x{}", size, size);
+            print!("{}", cursor_pos(18, 1));
+            draw_command_bar();
+            let _ = flush(stdout());
+            var selected:i32 = 0;
+            var running:i32 = 1;
+            while running == 1 {
+                clear_matrix_viewport(3, 14);
+                if selected == 0 {
+                    print_f64_10x10_view("Original square matrix", base,
+                                         size, size);
+                } else if selected == 1 {
+                    print_f64_10x10_view("multiply(): original × right operand",
+                                         product, size, size);
+                } else if selected == 2 {
+                    print_f64_10x10_view("flip: rotated 180 degrees", flipped,
+                                         size, size);
+                } else if selected == 3 {
+                    print_f64_10x10_view("inverse()", inverse, size, size);
+                } else if selected == 4 {
+                    print_f64_10x10_view("transpose()", transposed, size, size);
+                } else if selected == 5 {
+                    print_f64_10x10_view("add()", added, size, size);
+                } else if selected == 6 {
+                    print_f64_10x10_view("subtract()", subtracted, size, size);
+                } else if selected == 7 {
+                    print_f64_10x10_view("hadamard()", hadamard, size, size);
+                } else if selected == 8 {
+                    print_f64_10x10_view("offset(10)", shifted, size, size);
+                } else if selected == 9 {
+                    print_f64_10x10_view("scale(2)", scaled, size, size);
+                } else if selected == 10 {
+                    print_scalar("determinant()", determinant);
+                } else if selected == 11 {
+                    print_f64_10x10_view("eigenvectors() (vectors are columns)",
+                                         eigenvectors, size, size);
+                } else if selected == 12 {
+                    print_f64_10_row("eigenvalues() (ascending)", eigenvalues,
+                                     size);
+                } else {
+                    print_scalar("sum()", logical_sum);
+                }
+                let _ = flush(stdout());
+
+                var key:i32 = read_keycode_nonblocking(stdin());
+                while key < 0 {
+                    sleep_ms(10);
+                    key = read_keycode_nonblocking(stdin());
+                }
+                if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ ||
+                   key == AsciiKey::Etx {
+                    running = 0;
+                } else if key == AsciiKey::LowerM || key == AsciiKey::UpperM {
+                    selected = 1;
+                } else if key == AsciiKey::LowerF || key == AsciiKey::UpperF {
+                    selected = 2;
+                } else if key == AsciiKey::LowerI || key == AsciiKey::UpperI {
+                    selected = 3;
+                } else if key == AsciiKey::LowerT || key == AsciiKey::UpperT {
+                    selected = 4;
+                } else if key == AsciiKey::LowerA || key == AsciiKey::UpperA {
+                    selected = 5;
+                } else if key == AsciiKey::LowerS || key == AsciiKey::UpperS {
+                    selected = 6;
+                } else if key == AsciiKey::LowerH || key == AsciiKey::UpperH {
+                    selected = 7;
+                } else if key == AsciiKey::LowerO || key == AsciiKey::UpperO {
+                    selected = 8;
+                } else if key == AsciiKey::LowerC || key == AsciiKey::UpperC {
+                    selected = 9;
+                } else if key == AsciiKey::LowerD || key == AsciiKey::UpperD {
+                    selected = 10;
+                } else if key == AsciiKey::LowerE || key == AsciiKey::UpperE {
+                    selected = 11;
+                } else if key == AsciiKey::LowerV || key == AsciiKey::UpperV {
+                    selected = 12;
+                } else if key == AsciiKey::LowerU || key == AsciiKey::UpperU {
+                    selected = 13;
+                } else if key == AsciiKey::LowerR || key == AsciiKey::UpperR {
+                    selected = 0;
+                }
+            }
+            print!("{}{}{}{}", reset(), cursor_code(cmd_show()),
+                   cursor_code(cmd_home()), alt_screen_off());
+            let _ = flush(stdout());
+            let _ = stdin_restore();
+            return 0;
+        }
+    }
+
+    println!("Square f64 matrix walkthrough: {}x{}\n", size, size);
+    print_f64_10x10_view("Original square matrix", base, size, size);
+    print_f64_10x10_view("Right operand", right, size, size);
+    print_f64_10x10_view("multiply()", product, size, size);
+    print_f64_10x10_view("inverse()", inverse, size, size);
+    print_scalar("determinant()", determinant);
+    print_f64_10x10_view("eigenvectors() (vectors are columns)",
+                         eigenvectors, size, size);
+    print_f64_10_row("eigenvalues() (ascending)", eigenvalues, size);
+    return 0;
+}
+
 fn run_full_walkthrough() -> i32 {
     let left: multiarray<i32, 2, 3> = {{1, 2, 3}, {4, 5, 6}};
     let elementwise_right: multiarray<i32, 2, 3> =
@@ -443,7 +646,7 @@ fn draw_sized_command_bar() -> void {
         " A Add   S Subtract   H Hadamard   O Offset   C Scale ",
         width, " ");
     let analysis: str8 = pad_right(
-        " U Sum   R Original   (I/D/E require square f32/f64 matrices) ",
+        " U Sum   R Original   (launch with --usesquarefloats for I/D/E) ",
         width, " ");
     println!("{}{}{}{}", fg(color_black()), bg(color_white()),
              primary, reset());
@@ -568,10 +771,12 @@ fn run_interactive() -> i32 {
 fn main() -> i32 {
     let argv: list<str8> = args();
     var batch:i32 = 0;
+    var use_square_floats:i32 = 0;
     var requested_rows:i32 = 0;
     var requested_columns:i32 = 0;
     for argument in argv {
         if argument == "--batch" { batch = 1; }
+        if argument == "--usesquarefloats" { use_square_floats = 1; }
         if starts_with(argument, "--size=") == 1 {
             let size_text: str8 = sub(argument, 7, len(argument) - 7);
             let separator:i64 = find(size_text, "x");
@@ -591,6 +796,19 @@ fn main() -> i32 {
             requested_rows = rows;
             requested_columns = columns;
         }
+    }
+    if use_square_floats == 1 {
+        if requested_rows == 0 {
+            requested_rows = 2;
+            requested_columns = 2;
+        }
+        if requested_rows != requested_columns {
+            eprintln!("--usesquarefloats requires a square --size=ROWSxROWS");
+            return 2;
+        }
+        let interactive:i32 =
+            batch == 0 && stdin_is_tty() == 1 ? 1 : 0;
+        return run_square_floats(requested_rows, interactive);
     }
     if requested_rows > 0 {
         let interactive:i32 =
