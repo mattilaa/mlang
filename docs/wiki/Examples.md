@@ -23,6 +23,7 @@ subdirectory-based showcases are indexed separately in
 
 - [Example pages](#example-pages)
 - [Example programs](#example-programs)
+  - [Matrix operations](#matrix-operations)
   - [Bare metal and QEMU](#bare-metal-and-qemu)
   - [Route planning and genetic algorithms](#route-planning-and-genetic-algorithms)
   - [Package-manager dynamic library](#package-manager-dynamic-library)
@@ -64,6 +65,29 @@ following additional programs are useful runnable showcases:
 - `examples/ffi_add.mla`, `examples/ffi_cos.mla`,
   `examples/c_lib_usage.mla`, and `examples/c_type_mappings.mla` — C ABI and
   type-mapping examples.
+
+### Matrix operations
+
+Build the compiler and runtime, compile the demo, and open its interactive
+screen:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j4 --target mlang mlang_std
+./build/mlang examples/matrix_operations.mla -L build -lmlang_std -o build/matrix_operations
+./build/matrix_operations
+```
+
+Select a larger logical matrix or produce non-interactive output with:
+
+```sh
+./build/matrix_operations --size=6x7
+./build/matrix_operations --batch --size=6x7
+```
+
+Interactive dimensions range from `1x1` through `10x10`. The screen redraws
+only its matrix viewport after a key press, leaving the title and command bar
+in place to prevent flicker.
 
 ### Bare metal and QEMU
 
@@ -161,8 +185,10 @@ following additional programs are useful runnable showcases:
   in-place operations. It prints every input and result as a labeled 2D box.
   In a terminal it opens an interactive keyboard-driven screen with gray
   matrix borders and a black-on-white command bar (`M` multiply, `F` flip,
-  `I` inverse, `T` transpose, and more). Pass `--batch` for sequential output,
-  or `--size=6x7` (up to `10x10`) for a larger rectangular batch walkthrough.
+  `I` inverse, `T` transpose, and more). Only the matrix viewport is redrawn,
+  keeping the title and command bar fixed to avoid flicker. Pass `--size=6x7`
+  (up to `10x10`) for a larger rectangular TUI, or combine it with `--batch`
+  for sequential output.
 - `examples/borrowing_demo.mla` — borrowing syntax and compiler-enforced
   ownership behavior.
 - `examples/borrow_patterns.mla` — practical borrow patterns for containers

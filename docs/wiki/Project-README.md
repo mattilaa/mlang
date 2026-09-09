@@ -280,9 +280,12 @@ let transposed: multiarray<i32, 3, 2> = a.transpose();
 println!("{}", product[0][0]); // 58
 ```
 
-Run the complete example with:
+Build the compiler/runtime and then compile the complete examples with:
 
 ```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j4 --target mlang mlang_std
+
 ./build/mlang examples/multiarray.mla -L build -lmlang_std -o /tmp/multiarray
 /tmp/multiarray
 
@@ -295,8 +298,10 @@ Run the complete example with:
 When attached to a terminal, the default matrix demo opens an interactive
 screen. Press `M` multiply, `F` flip, `I` inverse, `T` transpose, or one of the
 other shortcuts in the black-on-white command bar. Matrix borders are rendered
-in gray. Use `--batch` to print every operation without entering the terminal
-UI; `--size=ROWSxCOLS` runs the larger rectangular batch walkthrough.
+in gray. The title and command bar stay fixed while only the matrix viewport is
+redrawn, which avoids full-screen flicker. `--size=ROWSxCOLS` opens the same UI
+with a logical matrix up to `10x10`; use `--batch` (with or without `--size`)
+to print every operation sequentially instead.
 
 ## Tools Shipped In This Repository
 

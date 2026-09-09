@@ -82,9 +82,11 @@ See `examples/matrix_operations.mla` for a runnable visual walkthrough that
 prints the original multiarrays and every matrix result as labeled 2D boxes.
 When run in a terminal, it opens an interactive operation selector: press the
 shortcut shown in its black-on-white command bar to redraw the result, or `Q`
-to quit. The matrix borders use a gray ANSI color. Pass `--batch` to print all
-operations sequentially instead.
+to quit. The matrix borders use a gray ANSI color, and only the matrix viewport
+is repainted so the fixed title and command bar do not flicker. Pass `--batch`
+to print all operations sequentially instead.
 After compiling it, pass `--size=ROWSxCOLS`, such as `--size=6x7`, to run the
-rectangular operations on a larger logical matrix. Each dimension may be from
-1 through 10; the example uses fully initialized fixed `10x10` storage because
-[`multiarray`](Stdlib-Multiarray) dimensions are compile-time types.
+interactive rectangular operations on a larger logical matrix. Combine the
+options as `--batch --size=6x7` for non-interactive output. Each dimension may
+be from 1 through 10; the example uses fully initialized fixed `10x10` storage
+because [`multiarray`](Stdlib-Multiarray) dimensions are compile-time types.

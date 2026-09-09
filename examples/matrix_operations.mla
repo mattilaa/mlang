@@ -1,8 +1,8 @@
 /// Interactive fixed-size matrix operations viewer.
 ///
 /// Run the executable in a terminal and press the keys shown in its command
-/// bar. Use `--batch` for the complete non-interactive walkthrough or
-/// `--size=6x7` for a larger rectangular batch demonstration.
+/// bar. Use `--size=6x7` for a larger interactive matrix, or combine it with
+/// `--batch` for the complete non-interactive walkthrough.
 mod std::env;
 mod std::ascii;
 mod std::esc;
@@ -17,6 +17,7 @@ use std::env::args;
 use std::esc::alt_screen_off;
 use std::esc::alt_screen_on;
 use std::esc::bg;
+use std::esc::clear_eol;
 use std::esc::color_black;
 use std::esc::color_white;
 use std::esc::cmd_clear_screen;
@@ -24,6 +25,7 @@ use std::esc::cmd_hide;
 use std::esc::cmd_home;
 use std::esc::cmd_show;
 use std::esc::cursor_code;
+use std::esc::cursor_pos;
 use std::esc::fg;
 use std::esc::fg_rgb;
 use std::esc::reset;
@@ -53,6 +55,14 @@ fn near(value:f64, expected:f64) -> bool {
 
 fn border_gray() -> str8 {
     return fg_rgb(145, 145, 145);
+}
+
+fn clear_matrix_viewport(top:i32, height:i32) -> void {
+    print!("{}", cursor_pos(top, 1));
+    for _line in 0..height {
+        print!("{}\n", clear_eol());
+    }
+    print!("{}", cursor_pos(top, 1));
 }
 
 fn print_i32_2x3(label: str8, matrix: &multiarray<i32, 2, 3>) -> void {
@@ -163,7 +173,7 @@ fn print_i32_10x10_view(label: str8,
     println!("");
 }
 
-fn run_sized(rows:i32, columns:i32) -> i32 {
+fn run_sized(rows:i32, columns:i32, interactive:i32) -> i32 {
     var left: mutmultiarray<i32, 10, 10> = {
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -225,6 +235,94 @@ fn run_sized(rows:i32, columns:i32) -> i32 {
     let scaled: multiarray<i32, 10, 10> = original.scale(2);
     let transposed: multiarray<i32, 10, 10> = original.transpose();
     let product: multiarray<i32, 10, 10> = original.matmul(multiplier);
+    var flipped_mut: mutmultiarray<i32, 10, 10> = original.offset(0);
+    for row in 0..rows {
+        for column in 0..columns {
+            flipped_mut[rows - row - 1][columns - column - 1] =
+                original[row][column];
+        }
+    }
+    let flipped: multiarray<i32, 10, 10> = flipped_mut.offset(0);
+
+    if interactive == 1 {
+        if stdin_enable_cbreak() != 0 {
+            eprintln!("could not enable terminal keyboard mode; using batch output");
+        } else {
+            print!("{}{}{}{}", alt_screen_on(), cursor_code(cmd_hide()),
+                   cursor_code(cmd_clear_screen()), cursor_code(cmd_home()));
+            println!("MLang sized matrix operations: {}x{}", rows, columns);
+            print!("{}", cursor_pos(18, 1));
+            draw_sized_command_bar();
+            let _ = flush(stdout());
+            var selected:i32 = 0;
+            var running:i32 = 1;
+            while running == 1 {
+                clear_matrix_viewport(3, 14);
+                if selected == 0 {
+                    print_i32_10x10_view("Original", original, rows, columns);
+                } else if selected == 1 {
+                    print_i32_10x10_view("matmul() / multiply()", product,
+                                         rows, rows);
+                } else if selected == 2 {
+                    print_i32_10x10_view("flip: rotated 180 degrees", flipped,
+                                         rows, columns);
+                } else if selected == 3 {
+                    print_i32_10x10_view("transpose()", transposed,
+                                         columns, rows);
+                } else if selected == 4 {
+                    print_i32_10x10_view("add()", added, rows, columns);
+                } else if selected == 5 {
+                    print_i32_10x10_view("subtract()", subtracted,
+                                         rows, columns);
+                } else if selected == 6 {
+                    print_i32_10x10_view("hadamard()", hadamard,
+                                         rows, columns);
+                } else if selected == 7 {
+                    print_i32_10x10_view("offset(10)", shifted, rows, columns);
+                } else if selected == 8 {
+                    print_i32_10x10_view("scale(2)", scaled, rows, columns);
+                } else {
+                    print_i32_scalar("sum()", original.sum());
+                }
+                let _ = flush(stdout());
+
+                var key:i32 = read_keycode_nonblocking(stdin());
+                while key < 0 {
+                    sleep_ms(10);
+                    key = read_keycode_nonblocking(stdin());
+                }
+                if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ ||
+                   key == AsciiKey::Etx {
+                    running = 0;
+                } else if key == AsciiKey::LowerM || key == AsciiKey::UpperM {
+                    selected = 1;
+                } else if key == AsciiKey::LowerF || key == AsciiKey::UpperF {
+                    selected = 2;
+                } else if key == AsciiKey::LowerT || key == AsciiKey::UpperT {
+                    selected = 3;
+                } else if key == AsciiKey::LowerA || key == AsciiKey::UpperA {
+                    selected = 4;
+                } else if key == AsciiKey::LowerS || key == AsciiKey::UpperS {
+                    selected = 5;
+                } else if key == AsciiKey::LowerH || key == AsciiKey::UpperH {
+                    selected = 6;
+                } else if key == AsciiKey::LowerO || key == AsciiKey::UpperO {
+                    selected = 7;
+                } else if key == AsciiKey::LowerC || key == AsciiKey::UpperC {
+                    selected = 8;
+                } else if key == AsciiKey::LowerU || key == AsciiKey::UpperU {
+                    selected = 9;
+                } else if key == AsciiKey::LowerR || key == AsciiKey::UpperR {
+                    selected = 0;
+                }
+            }
+            print!("{}{}{}{}", reset(), cursor_code(cmd_show()),
+                   cursor_code(cmd_home()), alt_screen_off());
+            let _ = flush(stdout());
+            let _ = stdin_restore();
+            return 0;
+        }
+    }
 
     println!("Sized matrix walkthrough: {}x{} logical values in fixed 10x10 storage\n",
              rows, columns);
@@ -335,6 +433,26 @@ fn draw_command_bar() -> void {
              analysis, reset());
 }
 
+fn draw_sized_command_bar() -> void {
+    let size = stdout_size();
+    var width:i64 = size.cols;
+    if width < 58 { width = 58; }
+    let primary: str8 = pad_right(
+        " M Multiply   F Flip   T Transpose   Q Quit ", width, " ");
+    let arithmetic: str8 = pad_right(
+        " A Add   S Subtract   H Hadamard   O Offset   C Scale ",
+        width, " ");
+    let analysis: str8 = pad_right(
+        " U Sum   R Original   (I/D/E require square f32/f64 matrices) ",
+        width, " ");
+    println!("{}{}{}{}", fg(color_black()), bg(color_white()),
+             primary, reset());
+    println!("{}{}{}{}", fg(color_black()), bg(color_white()),
+             arithmetic, reset());
+    println!("{}{}{}{}", fg(color_black()), bg(color_white()),
+             analysis, reset());
+}
+
 fn run_interactive() -> i32 {
     let base: multiarray<f64, 2, 2> = {{4.0, 7.0}, {2.0, 6.0}};
     let other: multiarray<f64, 2, 2> = {{1.0, 2.0}, {3.0, 4.0}};
@@ -360,12 +478,14 @@ fn run_interactive() -> i32 {
 
     print!("{}{}{}{}", alt_screen_on(), cursor_code(cmd_hide()),
            cursor_code(cmd_clear_screen()), cursor_code(cmd_home()));
+    println!("MLang fixed-size matrix operations");
+    print!("{}", cursor_pos(10, 1));
+    draw_command_bar();
     let _ = flush(stdout());
     var selected:i32 = 0;
     var running:i32 = 1;
     while running == 1 {
-        print!("{}{}", cursor_code(cmd_home()), cursor_code(cmd_clear_screen()));
-        println!("MLang fixed-size matrix operations\n");
+        clear_matrix_viewport(3, 6);
         if selected == 0 {
             print_f64_2x2("Original matrix", base);
         } else if selected == 1 {
@@ -397,7 +517,6 @@ fn run_interactive() -> i32 {
         } else {
             print_scalar("sum()", total);
         }
-        draw_command_bar();
         let _ = flush(stdout());
 
         var key:i32 = read_keycode_nonblocking(stdin());
@@ -449,6 +568,8 @@ fn run_interactive() -> i32 {
 fn main() -> i32 {
     let argv: list<str8> = args();
     var batch:i32 = 0;
+    var requested_rows:i32 = 0;
+    var requested_columns:i32 = 0;
     for argument in argv {
         if argument == "--batch" { batch = 1; }
         if starts_with(argument, "--size=") == 1 {
@@ -467,8 +588,14 @@ fn main() -> i32 {
                 eprintln!("--size dimensions must each be between 1 and 10");
                 return 2;
             }
-            return run_sized(rows, columns);
+            requested_rows = rows;
+            requested_columns = columns;
         }
+    }
+    if requested_rows > 0 {
+        let interactive:i32 =
+            batch == 0 && stdin_is_tty() == 1 ? 1 : 0;
+        return run_sized(requested_rows, requested_columns, interactive);
     }
     if batch == 0 && stdin_is_tty() == 1 {
         return run_interactive();
