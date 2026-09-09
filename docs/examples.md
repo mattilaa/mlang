@@ -156,6 +156,7 @@ following additional programs are useful runnable showcases:
   transforms, reduction, rectangular multiplication and transpose,
   determinant/inverse, symmetric eigenvalues/eigenvectors, and mutable
   in-place operations. It prints every input and result as a labeled 2D box.
+  Pass `--size=6x7` (up to `10x10`) for a larger rectangular walkthrough.
 - `examples/borrowing_demo.mla` — borrowing syntax and compiler-enforced
   ownership behavior.
 - `examples/borrow_patterns.mla` — practical borrow patterns for containers

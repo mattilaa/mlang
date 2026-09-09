@@ -78,3 +78,7 @@ values.scale_assign(2); // {{4, 6}, {8, 10}}
 
 See `examples/matrix_operations.mla` for a runnable visual walkthrough that
 prints the original multiarrays and every matrix result as labeled 2D boxes.
+After compiling it, pass `--size=ROWSxCOLS`, such as `--size=6x7`, to run the
+rectangular operations on a larger logical matrix. Each dimension may be from
+1 through 10; the example uses fully initialized fixed `10x10` storage because
+`multiarray` dimensions are compile-time types.

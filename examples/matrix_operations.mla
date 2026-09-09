@@ -1,211 +1,264 @@
+mod std::env;
 mod std::matrix;
+mod std::strbuf;
+
+use std::env::args;
+use std::strbuf::find;
+use std::strbuf::pad_i64_left;
+use std::strbuf::pad_left;
+use std::strbuf::repeat;
+use std::strbuf::starts_with;
+use std::strbuf::sub;
+
+extern fn atoi(value: str8) -> i32;
 
 fn near(value:f64, expected:f64) -> bool {
     let difference:f64 = value - expected;
     return difference > -0.000001 && difference < 0.000001;
 }
 
-fn main() -> i32 {
+fn print_i32_2x3(label: str8, matrix: &multiarray<i32, 2, 3>) -> void {
+    println!("{}", label);
+    println!("┌{}┐", repeat("─", 19));
+    for row in 0..2 {
+        print!("│");
+        for column in 0..3 {
+            print!(" {}", pad_i64_left(matrix[row][column], 5, " "));
+        }
+        println!(" │");
+    }
+    println!("└{}┘", repeat("─", 19));
+    println!("");
+}
+
+fn print_i32_3x2(label: str8, matrix: &multiarray<i32, 3, 2>) -> void {
+    println!("{}", label);
+    println!("┌{}┐", repeat("─", 13));
+    for row in 0..3 {
+        print!("│");
+        for column in 0..2 {
+            print!(" {}", pad_i64_left(matrix[row][column], 5, " "));
+        }
+        println!(" │");
+    }
+    println!("└{}┘", repeat("─", 13));
+    println!("");
+}
+
+fn print_i32_2x2(label: str8, matrix: &multiarray<i32, 2, 2>) -> void {
+    println!("{}", label);
+    println!("┌{}┐", repeat("─", 13));
+    for row in 0..2 {
+        print!("│");
+        for column in 0..2 {
+            print!(" {}", pad_i64_left(matrix[row][column], 5, " "));
+        }
+        println!(" │");
+    }
+    println!("└{}┘", repeat("─", 13));
+    println!("");
+}
+
+fn print_f64_2x2(label: str8, matrix: &multiarray<f64, 2, 2>) -> void {
+    println!("{}", label);
+    println!("┌{}┐", repeat("─", 25));
+    for row in 0..2 {
+        print!("│");
+        for column in 0..2 {
+            let value: str8 = format!("{}", matrix[row][column]);
+            print!(" {}", pad_left(value, 11, " "));
+        }
+        println!(" │");
+    }
+    println!("└{}┘", repeat("─", 25));
+    println!("");
+}
+
+fn print_f64_row(label: str8, first:f64, second:f64) -> void {
+    println!("{}", label);
+    println!("┌{}┐", repeat("─", 25));
+    let first_text: str8 = format!("{}", first);
+    let second_text: str8 = format!("{}", second);
+    println!("│ {} {} │", pad_left(first_text, 11, " "),
+             pad_left(second_text, 11, " "));
+    println!("└{}┘", repeat("─", 25));
+    println!("");
+}
+
+fn print_scalar(label: str8, value:f64) -> void {
+    println!("{}", label);
+    println!("┌{}┐", repeat("─", 13));
+    let value_text: str8 = format!("{}", value);
+    println!("│ {} │", pad_left(value_text, 11, " "));
+    println!("└{}┘", repeat("─", 13));
+    println!("");
+}
+
+fn print_i32_scalar(label: str8, value:i32) -> void {
+    println!("{}", label);
+    println!("┌{}┐", repeat("─", 7));
+    println!("│ {} │", pad_i64_left(value, 5, " "));
+    println!("└{}┘", repeat("─", 7));
+    println!("");
+}
+
+fn print_i32_10x10_view(label: str8,
+                        matrix: &multiarray<i32, 10, 10>,
+                        rows:i32, columns:i32) -> void {
+    let inner_width:i64 = columns * 6 + 1;
+    println!("{}", label);
+    println!("┌{}┐", repeat("─", inner_width));
+    for row in 0..rows {
+        print!("│");
+        for column in 0..columns {
+            print!(" {}", pad_i64_left(matrix[row][column], 5, " "));
+        }
+        println!(" │");
+    }
+    println!("└{}┘", repeat("─", inner_width));
+    println!("");
+}
+
+fn run_sized(rows:i32, columns:i32) -> i32 {
+    var left: mutmultiarray<i32, 10, 10> = {
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+    };
+    var elementwise_right: mutmultiarray<i32, 10, 10> = {
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+    };
+    var multiply_right: mutmultiarray<i32, 10, 10> = {
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+    };
+
+    var next:i32 = 1;
+    for row in 0..rows {
+        for column in 0..columns {
+            left[row][column] = next;
+            elementwise_right[row][column] = rows * columns - next + 1;
+            next = next + 1;
+        }
+    }
+    for row in 0..columns {
+        for column in 0..rows {
+            multiply_right[row][column] = (row + 1) * (column + 1);
+        }
+    }
+
+    let original: multiarray<i32, 10, 10> = left.offset(0);
+    let right: multiarray<i32, 10, 10> = elementwise_right.offset(0);
+    let multiplier: multiarray<i32, 10, 10> = multiply_right.offset(0);
+    let added: multiarray<i32, 10, 10> = original.add(right);
+    let subtracted: multiarray<i32, 10, 10> = original.subtract(right);
+    let hadamard: multiarray<i32, 10, 10> = original.hadamard(right);
+    let shifted: multiarray<i32, 10, 10> = original.offset(10);
+    let scaled: multiarray<i32, 10, 10> = original.scale(2);
+    let transposed: multiarray<i32, 10, 10> = original.transpose();
+    let product: multiarray<i32, 10, 10> = original.matmul(multiplier);
+
+    println!("Sized matrix walkthrough: {}x{} logical values in fixed 10x10 storage\n",
+             rows, columns);
+    print_i32_10x10_view("Original", original, rows, columns);
+    print_i32_10x10_view("Element-wise right operand", right, rows, columns);
+    print_i32_10x10_view("add()", added, rows, columns);
+    print_i32_10x10_view("subtract()", subtracted, rows, columns);
+    print_i32_10x10_view("hadamard()", hadamard, rows, columns);
+    print_i32_10x10_view("offset(10)", shifted, rows, columns);
+    print_i32_10x10_view("scale(2)", scaled, rows, columns);
+    print_i32_10x10_view("transpose()", transposed, columns, rows);
+    print_i32_10x10_view("Right operand for matmul()", multiplier,
+                         columns, rows);
+    print_i32_10x10_view("matmul() / multiply()", product, rows, rows);
+    println!("sum() = {}", original.sum());
+    return 0;
+}
+
+fn run_full_walkthrough() -> i32 {
     let left: multiarray<i32, 2, 3> = {{1, 2, 3}, {4, 5, 6}};
     let elementwise_right: multiarray<i32, 2, 3> =
         {{6, 5, 4}, {3, 2, 1}};
     let multiply_right: multiarray<i32, 3, 2> =
         {{7, 8}, {9, 10}, {11, 12}};
 
-    println!("Original left matrix (multiarray<i32, 2, 3>)");
-    println!("┌             ┐");
-    println!("│  {}   {}   {}  │", left[0][0], left[0][1], left[0][2]);
-    println!("│  {}   {}   {}  │", left[1][0], left[1][1], left[1][2]);
-    println!("└             ┘");
-    println!("");
-
-    println!("Element-wise right matrix (multiarray<i32, 2, 3>)");
-    println!("┌             ┐");
-    println!("│  {}   {}   {}  │", elementwise_right[0][0],
-             elementwise_right[0][1], elementwise_right[0][2]);
-    println!("│  {}   {}   {}  │", elementwise_right[1][0],
-             elementwise_right[1][1], elementwise_right[1][2]);
-    println!("└             ┘");
-    println!("");
+    print_i32_2x3("Original left matrix (multiarray<i32, 2, 3>)", left);
+    print_i32_2x3("Element-wise right matrix", elementwise_right);
 
     let added: multiarray<i32, 2, 3> = left.add(elementwise_right);
-    println!("add()");
-    println!("┌             ┐");
-    println!("│  {}   {}   {}  │", added[0][0], added[0][1], added[0][2]);
-    println!("│  {}   {}   {}  │", added[1][0], added[1][1], added[1][2]);
-    println!("└             ┘");
-    println!("");
-
     let subtracted: multiarray<i32, 2, 3> =
         left.subtract(elementwise_right);
-    println!("subtract()");
-    println!("┌                ┐");
-    println!("│  {}  {}  {}  │", subtracted[0][0], subtracted[0][1],
-             subtracted[0][2]);
-    println!("│   {}   {}   {}  │", subtracted[1][0], subtracted[1][1],
-             subtracted[1][2]);
-    println!("└                ┘");
-    println!("");
-
     let hadamard: multiarray<i32, 2, 3> =
         left.hadamard(elementwise_right);
-    println!("hadamard()");
-    println!("┌                ┐");
-    println!("│  {}  {}  {}  │", hadamard[0][0], hadamard[0][1],
-             hadamard[0][2]);
-    println!("│  {}  {}   {}  │", hadamard[1][0], hadamard[1][1],
-             hadamard[1][2]);
-    println!("└                ┘");
-    println!("");
-
     let shifted: multiarray<i32, 2, 3> = left.offset(10);
-    println!("offset(10)");
-    println!("┌                ┐");
-    println!("│  {}  {}  {}  │", shifted[0][0], shifted[0][1], shifted[0][2]);
-    println!("│  {}  {}  {}  │", shifted[1][0], shifted[1][1], shifted[1][2]);
-    println!("└                ┘");
-    println!("");
-
     let scaled: multiarray<i32, 2, 3> = left.scale(2);
-    println!("scale(2)");
-    println!("┌                ┐");
-    println!("│   {}   {}   {}  │", scaled[0][0], scaled[0][1], scaled[0][2]);
-    println!("│   {}  {}  {}  │", scaled[1][0], scaled[1][1], scaled[1][2]);
-    println!("└                ┘");
-    println!("");
-
     let transposed: multiarray<i32, 3, 2> = left.transpose();
-    println!("transpose()");
-    println!("┌         ┐");
-    println!("│  {}   {}  │", transposed[0][0], transposed[0][1]);
-    println!("│  {}   {}  │", transposed[1][0], transposed[1][1]);
-    println!("│  {}   {}  │", transposed[2][0], transposed[2][1]);
-    println!("└         ┘");
-    println!("");
-
-    println!("Right matrix for matmul() (multiarray<i32, 3, 2>)");
-    println!("┌           ┐");
-    println!("│   {}   {}  │", multiply_right[0][0], multiply_right[0][1]);
-    println!("│   {}  {}  │", multiply_right[1][0], multiply_right[1][1]);
-    println!("│  {}  {}  │", multiply_right[2][0], multiply_right[2][1]);
-    println!("└           ┘");
-    println!("");
-
     let product: multiarray<i32, 2, 2> = left.matmul(multiply_right);
-    println!("matmul() / multiply()");
-    println!("┌             ┐");
-    println!("│   {}   {}  │", product[0][0], product[0][1]);
-    println!("│  {}  {}  │", product[1][0], product[1][1]);
-    println!("└             ┘");
-    println!("");
 
-    println!("sum()");
-    println!("┌      ┐");
-    println!("│  {}  │", left.sum());
-    println!("└      ┘");
-    println!("");
+    print_i32_2x3("add()", added);
+    print_i32_2x3("subtract()", subtracted);
+    print_i32_2x3("hadamard()", hadamard);
+    print_i32_2x3("offset(10)", shifted);
+    print_i32_2x3("scale(2)", scaled);
+    print_i32_3x2("transpose()", transposed);
+    print_i32_3x2("Right matrix for matmul()", multiply_right);
+    print_i32_2x2("matmul() / multiply()", product);
+    print_i32_scalar("sum()", left.sum());
 
     let invertible: multiarray<f64, 2, 2> = {{4.0, 7.0}, {2.0, 6.0}};
-    println!("Original invertible matrix (multiarray<f64, 2, 2>)");
-    println!("┌                         ┐");
-    println!("│  {}  {}  │", invertible[0][0], invertible[0][1]);
-    println!("│  {}  {}  │", invertible[1][0], invertible[1][1]);
-    println!("└                         ┘");
-    println!("");
-
     let determinant:f64 = invertible.determinant();
-    println!("determinant()");
-    println!("┌             ┐");
-    println!("│  {}  │", determinant);
-    println!("└             ┘");
-    println!("");
-
     let inverse: multiarray<f64, 2, 2> = invertible.inverse();
-    println!("inverse()");
-    println!("┌                           ┐");
-    println!("│   {}  {}  │", inverse[0][0], inverse[0][1]);
-    println!("│  {}   {}  │", inverse[1][0], inverse[1][1]);
-    println!("└                           ┘");
-    println!("");
-
     let identity: multiarray<f64, 2, 2> = invertible.matmul(inverse);
-    println!("original.matmul(inverse)");
-    println!("┌                         ┐");
-    println!("│  {}  {}  │", identity[0][0], identity[0][1]);
-    println!("│  {}  {}  │", identity[1][0], identity[1][1]);
-    println!("└                         ┘");
-    println!("");
+    print_f64_2x2("Original invertible matrix", invertible);
+    print_scalar("determinant()", determinant);
+    print_f64_2x2("inverse()", inverse);
+    print_f64_2x2("original.matmul(inverse)", identity);
 
     let symmetric: multiarray<f64, 2, 2> = {{2.0, 1.0}, {1.0, 2.0}};
-    println!("Original symmetric matrix (multiarray<f64, 2, 2>)");
-    println!("┌                         ┐");
-    println!("│  {}  {}  │", symmetric[0][0], symmetric[0][1]);
-    println!("│  {}  {}  │", symmetric[1][0], symmetric[1][1]);
-    println!("└                         ┘");
-    println!("");
-
     let eigenvalues: multiarray<f64, 2> = symmetric.eigenvalues();
-    println!("eigenvalues() (ascending)");
-    println!("┌                         ┐");
-    println!("│  {}  {}  │", eigenvalues[0], eigenvalues[1]);
-    println!("└                         ┘");
-    println!("");
-
     let eigenvectors: multiarray<f64, 2, 2> = symmetric.eigenvectors();
-    println!("eigenvectors() (vectors are columns)");
-    println!("┌                           ┐");
-    println!("│  {}   {}  │", eigenvectors[0][0], eigenvectors[0][1]);
-    println!("│  {}  {}  │", eigenvectors[1][0], eigenvectors[1][1]);
-    println!("└                           ┘");
-    println!("");
+    print_f64_2x2("Original symmetric matrix", symmetric);
+    print_f64_row("eigenvalues() (ascending)",
+                  eigenvalues[0], eigenvalues[1]);
+    print_f64_2x2("eigenvectors() (vectors are columns)", eigenvectors);
 
     var editable: mutmultiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
     let ones: multiarray<i32, 2, 2> = {{1, 1}, {1, 1}};
-    println!("Original mutable matrix (mutmultiarray<i32, 2, 2>)");
-    println!("┌         ┐");
-    println!("│  {}   {}  │", editable[0][0], editable[0][1]);
-    println!("│  {}   {}  │", editable[1][0], editable[1][1]);
-    println!("└         ┘");
-    println!("");
-
+    print_i32_2x2("Original mutable matrix", editable.offset(0));
     editable.add_assign(ones);
-    println!("add_assign(ones)");
-    println!("┌         ┐");
-    println!("│  {}   {}  │", editable[0][0], editable[0][1]);
-    println!("│  {}   {}  │", editable[1][0], editable[1][1]);
-    println!("└         ┘");
-    println!("");
-
+    print_i32_2x2("add_assign(ones)", editable.offset(0));
     editable.subtract_assign(ones);
-    println!("subtract_assign(ones)");
-    println!("┌         ┐");
-    println!("│  {}   {}  │", editable[0][0], editable[0][1]);
-    println!("│  {}   {}  │", editable[1][0], editable[1][1]);
-    println!("└         ┘");
-    println!("");
-
+    print_i32_2x2("subtract_assign(ones)", editable.offset(0));
     editable.hadamard_assign(ones);
-    println!("hadamard_assign(ones)");
-    println!("┌         ┐");
-    println!("│  {}   {}  │", editable[0][0], editable[0][1]);
-    println!("│  {}   {}  │", editable[1][0], editable[1][1]);
-    println!("└         ┘");
-    println!("");
-
+    print_i32_2x2("hadamard_assign(ones)", editable.offset(0));
     editable.offset_assign(1);
-    println!("offset_assign(1)");
-    println!("┌         ┐");
-    println!("│  {}   {}  │", editable[0][0], editable[0][1]);
-    println!("│  {}   {}  │", editable[1][0], editable[1][1]);
-    println!("└         ┘");
-    println!("");
-
+    print_i32_2x2("offset_assign(1)", editable.offset(0));
     editable.scale_assign(2);
-    println!("scale_assign(2)");
-    println!("┌          ┐");
-    println!("│  {}   {}  │", editable[0][0], editable[0][1]);
-    println!("│  {}  {}  │", editable[1][0], editable[1][1]);
-    println!("└          ┘");
+    print_i32_2x2("scale_assign(2)", editable.offset(0));
 
     if added[0][0] != 7 || subtracted[0][0] != -5 { return 1; }
     if hadamard[1][2] != 6 || shifted.sum() != 81 { return 2; }
@@ -215,4 +268,29 @@ fn main() -> i32 {
        !near(identity[1][1], 1.0) { return 5; }
     if !near(eigenvalues[0], 1.0) || !near(eigenvalues[1], 3.0) { return 6; }
     return editable[1][1] == 10 ? 0 : 7;
+}
+
+fn main() -> i32 {
+    let argv: list<str8> = args();
+    for argument in argv {
+        if starts_with(argument, "--size=") == 1 {
+            let size_text: str8 = sub(argument, 7, len(argument) - 7);
+            let separator:i64 = find(size_text, "x");
+            if separator <= 0 || separator + 1 >= len(size_text) {
+                eprintln!("invalid --size value '{}'; expected ROWSxCOLS", size_text);
+                return 2;
+            }
+            let row_text: str8 = sub(size_text, 0, separator);
+            let column_text: str8 =
+                sub(size_text, separator + 1, len(size_text) - separator - 1);
+            let rows:i32 = atoi(row_text);
+            let columns:i32 = atoi(column_text);
+            if rows < 1 || rows > 10 || columns < 1 || columns > 10 {
+                eprintln!("--size dimensions must each be between 1 and 10");
+                return 2;
+            }
+            return run_sized(rows, columns);
+        }
+    }
+    return run_full_walkthrough();
 }

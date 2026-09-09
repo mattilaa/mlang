@@ -286,6 +286,7 @@ Run the complete example with:
 
 ./build/mlang examples/matrix_operations.mla -L build -lmlang_std -o /tmp/matrix_operations
 /tmp/matrix_operations
+/tmp/matrix_operations --size=6x7
 ```
 
 ## Tools Shipped In This Repository
