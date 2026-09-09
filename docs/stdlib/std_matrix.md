@@ -76,4 +76,5 @@ values.offset_assign(1);
 values.scale_assign(2); // {{4, 6}, {8, 10}}
 ```
 
-See `examples/matrix_operations.mla` for a runnable example.
+See `examples/matrix_operations.mla` for a runnable visual walkthrough that
+prints the original multiarrays and every matrix result as labeled 2D boxes.

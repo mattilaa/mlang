@@ -158,7 +158,7 @@ following additional programs are useful runnable showcases:
 - `examples/matrix_operations.mla` — element-wise matrix arithmetic, scalar
   transforms, reduction, rectangular multiplication and transpose,
   determinant/inverse, symmetric eigenvalues/eigenvectors, and mutable
-  in-place operations.
+  in-place operations. It prints every input and result as a labeled 2D box.
 - `examples/borrowing_demo.mla` — borrowing syntax and compiler-enforced
   ownership behavior.
 - `examples/borrow_patterns.mla` — practical borrow patterns for containers
