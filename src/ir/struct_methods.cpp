@@ -1466,6 +1466,109 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
         return builder.CreateExtractValue(list, 1, "matrix.data");
     };
 
+    auto abortUnless = [&](llvm::Value* condition, const std::string& message)
+    {
+        initializeFormatFunctions();
+        llvm::BasicBlock* ok =
+            llvm::BasicBlock::Create(context, "matrix.operation.ok", function);
+        llvm::BasicBlock* fail = llvm::BasicBlock::Create(
+            context, "matrix.operation.fail", function);
+        builder.CreateCondBr(condition, ok, fail);
+        builder.SetInsertPoint(fail);
+#if LLVM_VERSION_MAJOR >= 21
+        llvm::Value* text = builder.CreateGlobalString(
+            (message + "\n").c_str(), "matrix.operation.message");
+#else
+        llvm::Value* text = builder.CreateGlobalStringPtr(
+            (message + "\n").c_str(), "matrix.operation.message");
+#endif
+        llvm::Value* stderrValue =
+            builder.CreateLoad(ptrType, stderrPtr, "stderr");
+        builder.CreateCall(fprintfFunc, {stderrValue, text});
+        builder.CreateCall(abortFunc, {});
+        builder.CreateUnreachable();
+        builder.SetInsertPoint(ok);
+    };
+
+    auto flattenMatrix = [&](int64_t rows, int64_t columns,
+                             const std::string& operation)
+    {
+        uint64_t scalarBytes =
+            module->getDataLayout().getTypeAllocSize(scalarType);
+        llvm::Value* flat = builder.CreateCall(
+            mallocFunc,
+            {llvm::ConstantInt::get(i64Type,
+                                    rows * columns * scalarBytes)},
+            "matrix.flat.data");
+        llvm::Value* rowData =
+            loadListData(receiver, rows, operation);
+        for(int64_t row = 0; row < rows; ++row)
+        {
+            llvm::Value* rowValue = builder.CreateGEP(
+                listType, rowData, llvm::ConstantInt::get(i64Type, row));
+            llvm::Value* values =
+                loadListData(rowValue, columns, operation);
+            for(int64_t column = 0; column < columns; ++column)
+            {
+                llvm::Value* value = builder.CreateLoad(
+                    scalarType,
+                    builder.CreateGEP(
+                        scalarType, values,
+                        llvm::ConstantInt::get(i64Type, column)));
+                builder.CreateStore(
+                    value,
+                    builder.CreateGEP(
+                        scalarType, flat,
+                        llvm::ConstantInt::get(i64Type,
+                                               row * columns + column)));
+            }
+        }
+        return flat;
+    };
+
+    auto buildMatrix = [&](llvm::Value* flat, int64_t rows, int64_t columns)
+    {
+        uint64_t rowBytes = module->getDataLayout().getTypeAllocSize(listType);
+        uint64_t scalarBytes =
+            module->getDataLayout().getTypeAllocSize(scalarType);
+        llvm::Value* outputRows = builder.CreateCall(
+            mallocFunc, {llvm::ConstantInt::get(i64Type, rows * rowBytes)},
+            "matrix.result.rows");
+        for(int64_t row = 0; row < rows; ++row)
+        {
+            llvm::Value* outputData = builder.CreateCall(
+                mallocFunc,
+                {llvm::ConstantInt::get(i64Type, columns * scalarBytes)},
+                "matrix.result.values");
+            for(int64_t column = 0; column < columns; ++column)
+            {
+                llvm::Value* value = builder.CreateLoad(
+                    scalarType,
+                    builder.CreateGEP(
+                        scalarType, flat,
+                        llvm::ConstantInt::get(i64Type,
+                                               row * columns + column)));
+                builder.CreateStore(
+                    value,
+                    builder.CreateGEP(
+                        scalarType, outputData,
+                        llvm::ConstantInt::get(i64Type, column)));
+            }
+            llvm::Value* rowValue = llvm::UndefValue::get(listType);
+            rowValue = builder.CreateInsertValue(
+                rowValue, llvm::ConstantInt::get(i64Type, columns), 0);
+            rowValue = builder.CreateInsertValue(rowValue, outputData, 1);
+            builder.CreateStore(
+                rowValue,
+                builder.CreateGEP(listType, outputRows,
+                                  llvm::ConstantInt::get(i64Type, row)));
+        }
+        llvm::Value* result = llvm::UndefValue::get(listType);
+        result = builder.CreateInsertValue(
+            result, llvm::ConstantInt::get(i64Type, rows), 0);
+        return builder.CreateInsertValue(result, outputRows, 1);
+    };
+
     auto coerceScalar = [&](llvm::Value* value) -> llvm::Value*
     {
         if(!value || value->getType() == scalarType)
@@ -1522,6 +1625,133 @@ CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
                             "' because it was declared with let; use var");
             return nullptr;
         }
+    }
+
+    const bool advancedOperation =
+        method == "transpose" || method == "determinant" ||
+        method == "inverse" || method == "eigenvalues" ||
+        method == "eigenvectors";
+    if(advancedOperation)
+    {
+        if(!node->arguments.empty())
+        {
+            reportError(node->line, method + "() takes no arguments");
+            return nullptr;
+        }
+        if(dimensions.size() != 2)
+        {
+            reportError(node->line,
+                        method + "() requires a two-dimensional matrix");
+            return nullptr;
+        }
+        const int64_t rows = dimensions[0]->capacity;
+        const int64_t columns = dimensions[1]->capacity;
+        if(method != "transpose" && rows != columns)
+        {
+            reportError(node->line,
+                        method + "() requires a square matrix");
+            return nullptr;
+        }
+        if(method != "transpose" && !scalarType->isFloatTy() &&
+           !scalarType->isDoubleTy())
+        {
+            reportError(node->line,
+                        method + "() requires f32 or f64 matrix elements");
+            return nullptr;
+        }
+
+        llvm::Value* input =
+            flattenMatrix(rows, columns, method + "()");
+        uint64_t scalarBytes =
+            module->getDataLayout().getTypeAllocSize(scalarType);
+        if(method == "transpose")
+        {
+            llvm::Value* output = builder.CreateCall(
+                mallocFunc,
+                {llvm::ConstantInt::get(i64Type,
+                                        rows * columns * scalarBytes)},
+                "matrix.transpose.data");
+            for(int64_t row = 0; row < rows; ++row)
+            {
+                for(int64_t column = 0; column < columns; ++column)
+                {
+                    llvm::Value* value = builder.CreateLoad(
+                        scalarType,
+                        builder.CreateGEP(
+                            scalarType, input,
+                            llvm::ConstantInt::get(i64Type,
+                                                   row * columns + column)));
+                    builder.CreateStore(
+                        value,
+                        builder.CreateGEP(
+                            scalarType, output,
+                            llvm::ConstantInt::get(i64Type,
+                                                   column * rows + row)));
+                }
+            }
+            return buildMatrix(output, columns, rows);
+        }
+
+        llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
+        const char* suffix = scalarType->isFloatTy() ? "f32" : "f64";
+        if(method == "determinant")
+        {
+            llvm::FunctionType* helperType = llvm::FunctionType::get(
+                scalarType, {ptrType, i64Type}, false);
+            llvm::FunctionCallee helper = module->getOrInsertFunction(
+                std::string("__mlang_std_matrix_determinant_") + suffix,
+                helperType);
+            return builder.CreateCall(
+                helper, {input, llvm::ConstantInt::get(i64Type, rows)},
+                "matrix.determinant");
+        }
+
+        llvm::Value* output = builder.CreateCall(
+            mallocFunc,
+            {llvm::ConstantInt::get(i64Type,
+                                    rows * columns * scalarBytes)},
+            "matrix.operation.data");
+        if(method == "inverse")
+        {
+            llvm::FunctionType* helperType = llvm::FunctionType::get(
+                i32Type, {ptrType, ptrType, i64Type}, false);
+            llvm::FunctionCallee helper = module->getOrInsertFunction(
+                std::string("__mlang_std_matrix_inverse_") + suffix,
+                helperType);
+            llvm::Value* status = builder.CreateCall(
+                helper,
+                {input, output, llvm::ConstantInt::get(i64Type, rows)},
+                "matrix.inverse.status");
+            abortUnless(builder.CreateICmpEQ(
+                            status, llvm::ConstantInt::get(i32Type, 1)),
+                        "inverse() requires a non-singular matrix");
+            return buildMatrix(output, rows, columns);
+        }
+
+        llvm::Value* values = builder.CreateCall(
+            mallocFunc,
+            {llvm::ConstantInt::get(i64Type, rows * scalarBytes)},
+            "matrix.eigenvalues.data");
+        llvm::FunctionType* helperType = llvm::FunctionType::get(
+            i32Type, {ptrType, ptrType, ptrType, i64Type}, false);
+        llvm::FunctionCallee helper = module->getOrInsertFunction(
+            std::string("__mlang_std_matrix_eigen_symmetric_") + suffix,
+            helperType);
+        llvm::Value* status = builder.CreateCall(
+            helper,
+            {input, values, output, llvm::ConstantInt::get(i64Type, rows)},
+            "matrix.eigen.status");
+        abortUnless(builder.CreateICmpEQ(
+                        status, llvm::ConstantInt::get(i32Type, 1)),
+                    method +
+                        "() requires a real symmetric matrix and a "
+                        "converging eigensolver");
+        if(method == "eigenvectors")
+            return buildMatrix(output, rows, columns);
+        llvm::Value* result = llvm::UndefValue::get(listType);
+        result = builder.CreateInsertValue(
+            result, llvm::ConstantInt::get(i64Type, rows), 0);
+        return builder.CreateInsertValue(result, values, 1);
     }
 
     if(method == "sum")
@@ -1894,6 +2124,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         method == "sum" || method == "add" || method == "subtract" ||
         method == "hadamard" || method == "offset" || method == "scale" ||
         method == "matmul" || method == "multiply" ||
+        method == "transpose" || method == "determinant" ||
+        method == "inverse" || method == "eigenvalues" ||
+        method == "eigenvectors" ||
         method == "add_assign" || method == "subtract_assign" ||
         method == "hadamard_assign" || method == "offset_assign" ||
         method == "scale_assign";

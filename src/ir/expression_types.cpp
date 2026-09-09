@@ -152,7 +152,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         auto* matrixType = dynamic_cast<MultiArrayTypeNode*>(objectType);
         if(matrixType)
         {
-            if(methodCall->methodName == "sum")
+            if(methodCall->methodName == "sum" ||
+               methodCall->methodName == "determinant")
             {
                 TypeNode* scalarType = matrixType;
                 while(auto* dimension =
@@ -164,13 +165,34 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                methodCall->methodName == "subtract" ||
                methodCall->methodName == "hadamard" ||
                methodCall->methodName == "offset" ||
-               methodCall->methodName == "scale")
+               methodCall->methodName == "scale" ||
+               methodCall->methodName == "inverse" ||
+               methodCall->methodName == "eigenvectors")
             {
                 auto* result = dynamic_cast<MultiArrayTypeNode*>(
                     cloneTypeNode(matrixType));
                 if(result)
                     result->elementsMutable = false;
                 return result;
+            }
+            if(methodCall->methodName == "transpose")
+            {
+                auto* columns =
+                    dynamic_cast<ArrayTypeNode*>(matrixType->elementType);
+                if(columns)
+                    return new MultiArrayTypeNode(
+                        new ArrayTypeNode(cloneTypeNode(columns->elementType),
+                                          matrixType->capacity),
+                        columns->capacity, false);
+            }
+            if(methodCall->methodName == "eigenvalues")
+            {
+                TypeNode* scalarType = matrixType;
+                while(auto* dimension =
+                          dynamic_cast<ArrayTypeNode*>(scalarType))
+                    scalarType = dimension->elementType;
+                return new MultiArrayTypeNode(cloneTypeNode(scalarType),
+                                              matrixType->capacity, false);
             }
             if((methodCall->methodName == "matmul" ||
                 methodCall->methodName == "multiply") &&
@@ -526,7 +548,8 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
         TypeNode* objectType = getLValueType(methodCall->object, line);
         if(auto* matrixType = dynamic_cast<MultiArrayTypeNode*>(objectType))
         {
-            if(methodCall->methodName == "sum")
+            if(methodCall->methodName == "sum" ||
+               methodCall->methodName == "determinant")
             {
                 TypeNode* scalarType = matrixType;
                 while(auto* dimension =
@@ -538,13 +561,34 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
                methodCall->methodName == "subtract" ||
                methodCall->methodName == "hadamard" ||
                methodCall->methodName == "offset" ||
-               methodCall->methodName == "scale")
+               methodCall->methodName == "scale" ||
+               methodCall->methodName == "inverse" ||
+               methodCall->methodName == "eigenvectors")
             {
                 auto* result = dynamic_cast<MultiArrayTypeNode*>(
                     cloneTypeNode(matrixType));
                 if(result)
                     result->elementsMutable = false;
                 return result;
+            }
+            if(methodCall->methodName == "transpose")
+            {
+                auto* columns =
+                    dynamic_cast<ArrayTypeNode*>(matrixType->elementType);
+                if(columns)
+                    return new MultiArrayTypeNode(
+                        new ArrayTypeNode(cloneTypeNode(columns->elementType),
+                                          matrixType->capacity),
+                        columns->capacity, false);
+            }
+            if(methodCall->methodName == "eigenvalues")
+            {
+                TypeNode* scalarType = matrixType;
+                while(auto* dimension =
+                          dynamic_cast<ArrayTypeNode*>(scalarType))
+                    scalarType = dimension->elementType;
+                return new MultiArrayTypeNode(cloneTypeNode(scalarType),
+                                              matrixType->capacity, false);
             }
             if((methodCall->methodName == "matmul" ||
                 methodCall->methodName == "multiply") &&

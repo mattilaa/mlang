@@ -781,6 +781,144 @@ TEST_F(MLATest, MultiarrayMatrixMultiplySupportsRectangularShapes)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, MultiarrayMatrixTransposeSupportsRectangularShapes)
+{
+    std::string code = R"(
+        mod std::matrix;
+        fn main() -> i32 {
+            let matrix: multiarray<i32, 2, 3> = {{1, 2, 3}, {4, 5, 6}};
+            let transposed: multiarray<i32, 3, 2> = matrix.transpose();
+            return transposed[0][0] == 1 && transposed[0][1] == 4 &&
+                   transposed[1][0] == 2 && transposed[1][1] == 5 &&
+                   transposed[2][0] == 3 && transposed[2][1] == 6 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MultiarrayMatrixDeterminantAndInverse)
+{
+    std::string code = R"(
+        mod std::matrix;
+
+        fn near(value:f64, expected:f64) -> bool {
+            let difference:f64 = value - expected;
+            return difference > -0.000001 && difference < 0.000001;
+        }
+
+        fn near32(value:f32, expected:f32) -> bool {
+            let difference:f32 = value - expected;
+            let tolerance:f32 = 0.0001;
+            return difference > -tolerance && difference < tolerance;
+        }
+
+        fn main() -> i32 {
+            let matrix: multiarray<f64, 2, 2> = {{4.0, 7.0}, {2.0, 6.0}};
+            if !near(matrix.determinant(), 10.0) { return 1; }
+            let matrix32: multiarray<f32, 2, 2> = {{1.0, 2.0}, {3.0, 4.0}};
+            let expected32:f32 = -2.0;
+            if !near32(matrix32.determinant(), expected32) { return 5; }
+            let inverse: multiarray<f64, 2, 2> = matrix.inverse();
+            if !near(inverse[0][0], 0.6) || !near(inverse[0][1], -0.7) {
+                return 2;
+            }
+            if !near(inverse[1][0], -0.2) || !near(inverse[1][1], 0.4) {
+                return 3;
+            }
+            let identity: multiarray<f64, 2, 2> = matrix.matmul(inverse);
+            return near(identity[0][0], 1.0) && near(identity[0][1], 0.0) &&
+                   near(identity[1][0], 0.0) && near(identity[1][1], 1.0)
+                       ? 0 : 4;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MultiarraySymmetricMatrixEigenvaluesAndEigenvectors)
+{
+    std::string code = R"(
+        mod std::matrix;
+
+        fn near(value:f64, expected:f64) -> bool {
+            let difference:f64 = value - expected;
+            return difference > -0.000001 && difference < 0.000001;
+        }
+
+        fn main() -> i32 {
+            let matrix: multiarray<f64, 2, 2> = {{2.0, 1.0}, {1.0, 2.0}};
+            let values: multiarray<f64, 2> = matrix.eigenvalues();
+            let vectors: multiarray<f64, 2, 2> = matrix.eigenvectors();
+            if !near(values[0], 1.0) || !near(values[1], 3.0) { return 1; }
+            if !near(2.0 * vectors[0][0] + vectors[1][0],
+                     values[0] * vectors[0][0]) ||
+               !near(vectors[0][0] + 2.0 * vectors[1][0],
+                     values[0] * vectors[1][0]) {
+                return 2;
+            }
+            if !near(2.0 * vectors[0][1] + vectors[1][1],
+                     values[1] * vectors[0][1]) ||
+               !near(vectors[0][1] + 2.0 * vectors[1][1],
+                     values[1] * vectors[1][1]) {
+                return 3;
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MultiarrayAdvancedMatrixOperationsValidateInputs)
+{
+    std::string code = R"(
+        mod std::matrix;
+        fn main() -> i32 {
+            let matrix: multiarray<f64, 2, 3> =
+                {{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}};
+            let value = matrix.determinant();
+            return value == 0.0 ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("requires a square matrix"), std::string::npos);
+}
+
+TEST_F(MLATest, MultiarrayInverseRejectsSingularMatrixAtRuntime)
+{
+    std::string code = R"(
+        mod std::matrix;
+        fn main() -> i32 {
+            let matrix: multiarray<f64, 2, 2> = {{1.0, 2.0}, {2.0, 4.0}};
+            let inverse = matrix.inverse();
+            return inverse[0][0] == 0.0 ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    ASSERT_TRUE(compile());
+    EXPECT_NE(runExitCode(), 0);
+    EXPECT_NE(runStderr().find("requires a non-singular matrix"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, MultiarrayEigenOperationsRejectNonSymmetricMatrixAtRuntime)
+{
+    std::string code = R"(
+        mod std::matrix;
+        fn main() -> i32 {
+            let matrix: multiarray<f64, 2, 2> = {{1.0, 2.0}, {3.0, 4.0}};
+            let values = matrix.eigenvalues();
+            return values[0] == 0.0 ? 0 : 1;
+        }
+    )";
+    writeSource(code);
+    ASSERT_TRUE(compile());
+    EXPECT_NE(runExitCode(), 0);
+    EXPECT_NE(runStderr().find("requires a real symmetric matrix"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, MutableMultiarrayMatrixAssignOperations)
 {
     std::string code = R"(
