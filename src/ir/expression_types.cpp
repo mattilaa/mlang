@@ -148,9 +148,52 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     if(auto* methodCall = dynamic_cast<MethodCallNode*>(expr))
     {
+        TypeNode* objectType = getLValueType(methodCall->object, line);
+        auto* matrixType = dynamic_cast<MultiArrayTypeNode*>(objectType);
+        if(matrixType)
+        {
+            if(methodCall->methodName == "sum")
+            {
+                TypeNode* scalarType = matrixType;
+                while(auto* dimension =
+                          dynamic_cast<ArrayTypeNode*>(scalarType))
+                    scalarType = dimension->elementType;
+                return cloneTypeNode(scalarType);
+            }
+            if(methodCall->methodName == "add" ||
+               methodCall->methodName == "subtract" ||
+               methodCall->methodName == "hadamard" ||
+               methodCall->methodName == "offset" ||
+               methodCall->methodName == "scale")
+            {
+                auto* result = dynamic_cast<MultiArrayTypeNode*>(
+                    cloneTypeNode(matrixType));
+                if(result)
+                    result->elementsMutable = false;
+                return result;
+            }
+            if((methodCall->methodName == "matmul" ||
+                methodCall->methodName == "multiply") &&
+               methodCall->arguments.size() == 1)
+            {
+                auto* right = dynamic_cast<MultiArrayTypeNode*>(getLValueType(
+                    methodCall->arguments[0], line));
+                auto* leftColumns =
+                    dynamic_cast<ArrayTypeNode*>(matrixType->elementType);
+                auto* rightColumns = right ? dynamic_cast<ArrayTypeNode*>(
+                                                  right->elementType)
+                                           : nullptr;
+                if(leftColumns && rightColumns &&
+                   leftColumns->capacity == right->capacity)
+                    return new MultiArrayTypeNode(
+                        new ArrayTypeNode(cloneTypeNode(
+                                              leftColumns->elementType),
+                                          rightColumns->capacity),
+                        matrixType->capacity, false);
+            }
+        }
         if(methodCall->methodName == "get")
         {
-            TypeNode* objectType = getLValueType(methodCall->object, line);
             auto* multiarrayType =
                 dynamic_cast<MultiArrayTypeNode*>(objectType);
             if(multiarrayType && multiarrayType->elementsMutable)
@@ -480,6 +523,49 @@ TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
 
     if(auto* methodCall = dynamic_cast<MethodCallNode*>(expr))
     {
+        TypeNode* objectType = getLValueType(methodCall->object, line);
+        if(auto* matrixType = dynamic_cast<MultiArrayTypeNode*>(objectType))
+        {
+            if(methodCall->methodName == "sum")
+            {
+                TypeNode* scalarType = matrixType;
+                while(auto* dimension =
+                          dynamic_cast<ArrayTypeNode*>(scalarType))
+                    scalarType = dimension->elementType;
+                return cloneTypeNode(scalarType);
+            }
+            if(methodCall->methodName == "add" ||
+               methodCall->methodName == "subtract" ||
+               methodCall->methodName == "hadamard" ||
+               methodCall->methodName == "offset" ||
+               methodCall->methodName == "scale")
+            {
+                auto* result = dynamic_cast<MultiArrayTypeNode*>(
+                    cloneTypeNode(matrixType));
+                if(result)
+                    result->elementsMutable = false;
+                return result;
+            }
+            if((methodCall->methodName == "matmul" ||
+                methodCall->methodName == "multiply") &&
+               methodCall->arguments.size() == 1)
+            {
+                auto* right = dynamic_cast<MultiArrayTypeNode*>(getLValueType(
+                    methodCall->arguments[0], line));
+                auto* leftColumns =
+                    dynamic_cast<ArrayTypeNode*>(matrixType->elementType);
+                auto* rightColumns = right ? dynamic_cast<ArrayTypeNode*>(
+                                                  right->elementType)
+                                           : nullptr;
+                if(leftColumns && rightColumns &&
+                   leftColumns->capacity == right->capacity)
+                    return new MultiArrayTypeNode(
+                        new ArrayTypeNode(cloneTypeNode(
+                                              leftColumns->elementType),
+                                          rightColumns->capacity),
+                        matrixType->capacity, false);
+            }
+        }
         if(methodCall->methodName == "clone")
             return inferExpressionTypeNode(methodCall->object, line);
         if(methodCall->methodName == "len")

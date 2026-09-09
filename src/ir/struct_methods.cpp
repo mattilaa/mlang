@@ -1386,6 +1386,396 @@ bool CodeGenerator::generateJsonValueDeserializerMethodBody(
 }
 
 llvm::Value*
+CodeGenerator::generateMultiarrayMath(MethodCallNode* node,
+                                      MultiArrayTypeNode* multiarrayType)
+{
+    initializeStdlibFunctions();
+
+    std::vector<ArrayTypeNode*> dimensions;
+    TypeNode* scalarTypeNode = multiarrayType;
+    while(auto* dimension = dynamic_cast<ArrayTypeNode*>(scalarTypeNode))
+    {
+        dimensions.push_back(dimension);
+        scalarTypeNode = dimension->elementType;
+    }
+
+    llvm::Type* scalarType = getLLVMTypeFromNode(scalarTypeNode);
+    if(!scalarType ||
+       (!scalarType->isIntegerTy() && !scalarType->isFloatingPointTy()))
+    {
+        reportError(node->line,
+                    "matrix operations require numeric multiarray elements");
+        return nullptr;
+    }
+
+    llvm::Value* receiver = getLValuePointer(node->object, node->line);
+    if(!receiver)
+        return nullptr;
+
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::StructType* listType =
+        llvm::StructType::get(context, {i64Type, ptrType});
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+
+    auto abortShapeMismatch =
+        [&](llvm::Value* actual, int64_t expected, const std::string& operation)
+    {
+        initializeFormatFunctions();
+        llvm::BasicBlock* ok =
+            llvm::BasicBlock::Create(context, "matrix.shape.ok", function);
+        llvm::BasicBlock* fail =
+            llvm::BasicBlock::Create(context, "matrix.shape.fail", function);
+        llvm::Value* valid = builder.CreateICmpEQ(
+            actual, llvm::ConstantInt::get(i64Type, expected),
+            "matrix.shape.matches");
+        builder.CreateCondBr(valid, ok, fail);
+        builder.SetInsertPoint(fail);
+#if LLVM_VERSION_MAJOR >= 21
+        llvm::Value* message = builder.CreateGlobalString(
+            (operation + " requires fully initialized matching matrix shapes\n")
+                .c_str(),
+            "matrix.shape.message");
+#else
+        llvm::Value* message = builder.CreateGlobalStringPtr(
+            (operation + " requires fully initialized matching matrix shapes\n")
+                .c_str(),
+            "matrix.shape.message");
+#endif
+        llvm::Value* stderrValue =
+            builder.CreateLoad(ptrType, stderrPtr, "stderr");
+        builder.CreateCall(fprintfFunc, {stderrValue, message});
+        builder.CreateCall(abortFunc, {});
+        builder.CreateUnreachable();
+        builder.SetInsertPoint(ok);
+    };
+
+    auto loadListData = [&](llvm::Value* pointer, int64_t expected,
+                            const std::string& operation)
+    {
+        llvm::Value* list =
+            builder.CreateLoad(listType, pointer, "matrix.dimension");
+        llvm::Value* length =
+            builder.CreateExtractValue(list, 0, "matrix.length");
+        abortShapeMismatch(length, expected, operation);
+        return builder.CreateExtractValue(list, 1, "matrix.data");
+    };
+
+    auto coerceScalar = [&](llvm::Value* value) -> llvm::Value*
+    {
+        if(!value || value->getType() == scalarType)
+            return value;
+        if(value->getType()->isIntegerTy() && scalarType->isIntegerTy())
+            return builder.CreateSExtOrTrunc(value, scalarType,
+                                             "matrix.scalar.cast");
+        if(value->getType()->isFloatingPointTy() &&
+           scalarType->isFloatingPointTy())
+            return builder.CreateFPCast(value, scalarType,
+                                        "matrix.scalar.cast");
+        if(value->getType()->isIntegerTy() && scalarType->isFloatingPointTy())
+            return builder.CreateSIToFP(value, scalarType,
+                                        "matrix.scalar.cast");
+        return nullptr;
+    };
+
+    auto arithmetic = [&](llvm::Value* left, llvm::Value* right,
+                          const std::string& operation) -> llvm::Value*
+    {
+        const bool floating = scalarType->isFloatingPointTy();
+        if(operation == "add" || operation == "offset")
+            return floating ? builder.CreateFAdd(left, right, "matrix.add")
+                            : builder.CreateAdd(left, right, "matrix.add");
+        if(operation == "subtract")
+            return floating ? builder.CreateFSub(left, right, "matrix.sub")
+                            : builder.CreateSub(left, right, "matrix.sub");
+        return floating ? builder.CreateFMul(left, right, "matrix.mul")
+                        : builder.CreateMul(left, right, "matrix.mul");
+    };
+
+    const std::string method = node->methodName;
+    const bool assigning =
+        method == "add_assign" || method == "subtract_assign" ||
+        method == "hadamard_assign" || method == "offset_assign" ||
+        method == "scale_assign";
+    std::string operation = method;
+    if(assigning)
+        operation.resize(operation.size() - 7);
+
+    if(assigning)
+    {
+        auto* id = dynamic_cast<IdentifierNode*>(node->object);
+        if(!multiarrayType->elementsMutable || !id)
+        {
+            reportError(node->line,
+                        method + "() requires a mutmultiarray variable");
+            return nullptr;
+        }
+        if(constantVariables.count(id->name) != 0)
+        {
+            reportError(node->line,
+                        "cannot mutate multiarray '" + id->name +
+                            "' because it was declared with let; use var");
+            return nullptr;
+        }
+    }
+
+    if(method == "sum")
+    {
+        if(!node->arguments.empty())
+        {
+            reportError(node->line, "sum() takes no arguments");
+            return nullptr;
+        }
+        llvm::AllocaInst* total = createEntryBlockAlloca(
+            function, scalarType, "matrix.sum.total");
+        builder.CreateStore(llvm::Constant::getNullValue(scalarType), total);
+
+        std::function<void(size_t, llvm::Value*)> reduce;
+        reduce = [&](size_t depth, llvm::Value* parent)
+        {
+            ArrayTypeNode* dimension = dimensions[depth];
+            llvm::Value* data =
+                loadListData(parent, dimension->capacity, "sum()");
+            llvm::AllocaInst* index = createEntryBlockAlloca(
+                function, i64Type, "matrix.sum.index");
+            builder.CreateStore(llvm::ConstantInt::get(i64Type, 0), index);
+            llvm::BasicBlock* condition =
+                llvm::BasicBlock::Create(context, "matrix.sum.cond", function);
+            llvm::BasicBlock* body =
+                llvm::BasicBlock::Create(context, "matrix.sum.body", function);
+            llvm::BasicBlock* done =
+                llvm::BasicBlock::Create(context, "matrix.sum.done", function);
+            builder.CreateBr(condition);
+            builder.SetInsertPoint(condition);
+            llvm::Value* i = builder.CreateLoad(i64Type, index);
+            builder.CreateCondBr(
+                builder.CreateICmpSLT(
+                    i, llvm::ConstantInt::get(i64Type, dimension->capacity)),
+                body, done);
+            builder.SetInsertPoint(body);
+            llvm::Type* elementType =
+                getLLVMTypeFromNode(dimension->elementType);
+            llvm::Value* element =
+                builder.CreateGEP(elementType, data, i, "matrix.sum.element");
+            if(depth + 1 == dimensions.size())
+            {
+                llvm::Value* previous = builder.CreateLoad(scalarType, total);
+                llvm::Value* value = builder.CreateLoad(scalarType, element);
+                builder.CreateStore(arithmetic(previous, value, "add"), total);
+            }
+            else
+                reduce(depth + 1, element);
+            llvm::Value* next =
+                builder.CreateAdd(i, llvm::ConstantInt::get(i64Type, 1));
+            builder.CreateStore(next, index);
+            builder.CreateBr(condition);
+            builder.SetInsertPoint(done);
+        };
+        reduce(0, receiver);
+        return builder.CreateLoad(scalarType, total, "matrix.sum");
+    }
+
+    const bool scalarOperation = operation == "offset" || operation == "scale";
+    const bool elementwiseOperation = operation == "add" ||
+                                      operation == "subtract" ||
+                                      operation == "hadamard";
+    if(!scalarOperation && !elementwiseOperation && method != "matmul" &&
+       method != "multiply")
+        return nullptr;
+    if(node->arguments.size() != 1)
+    {
+        reportError(node->line, method + "() takes one argument");
+        return nullptr;
+    }
+
+    llvm::Value* scalar = nullptr;
+    llvm::Value* right = nullptr;
+    MultiArrayTypeNode* rightType = nullptr;
+    if(scalarOperation)
+    {
+        scalar = coerceScalar(generateExpression(node->arguments[0]));
+        if(!scalar)
+        {
+            reportError(node->line,
+                        method + "() requires a compatible numeric scalar");
+            return nullptr;
+        }
+    }
+    else
+    {
+        rightType = dynamic_cast<MultiArrayTypeNode*>(
+            getLValueType(node->arguments[0], node->line));
+        right = getLValuePointer(node->arguments[0], node->line);
+        if(!rightType || !right)
+        {
+            reportError(node->line,
+                        method + "() requires a multiarray argument");
+            return nullptr;
+        }
+        if(elementwiseOperation)
+        {
+            std::string leftShape = multiarrayType->toString();
+            std::string rightShape = rightType->toString();
+            leftShape.erase(0, leftShape.find('<'));
+            rightShape.erase(0, rightShape.find('<'));
+            if(leftShape != rightShape)
+            {
+                reportError(node->line,
+                            method + "() requires a multiarray with the same "
+                                     "shape and element type");
+                return nullptr;
+            }
+        }
+    }
+
+    if(method == "matmul" || method == "multiply")
+    {
+        std::vector<ArrayTypeNode*> rightDimensions;
+        TypeNode* rightScalarTypeNode = rightType;
+        while(auto* dimension =
+                  dynamic_cast<ArrayTypeNode*>(rightScalarTypeNode))
+        {
+            rightDimensions.push_back(dimension);
+            rightScalarTypeNode = dimension->elementType;
+        }
+        if(dimensions.size() != 2 || rightDimensions.size() != 2 ||
+           dimensions[1]->capacity != rightDimensions[0]->capacity ||
+           scalarTypeNode->toString() != rightScalarTypeNode->toString())
+        {
+            reportError(node->line,
+                        method + "() requires two numeric 2D matrices whose "
+                                 "inner dimensions and element types match");
+            return nullptr;
+        }
+        const int64_t rows = dimensions[0]->capacity;
+        const int64_t inner = dimensions[1]->capacity;
+        const int64_t columns = rightDimensions[1]->capacity;
+        llvm::Value* leftRows = loadListData(receiver, rows, method + "()");
+        llvm::Value* rightRows = loadListData(right, inner, method + "()");
+        uint64_t rowBytes = module->getDataLayout().getTypeAllocSize(listType);
+        llvm::Value* outputRows = builder.CreateCall(
+            mallocFunc, {llvm::ConstantInt::get(i64Type, rows * rowBytes)},
+            "matrix.matmul.rows");
+        for(int64_t row = 0; row < rows; ++row)
+        {
+            llvm::Value* leftRow = builder.CreateGEP(
+                listType, leftRows, llvm::ConstantInt::get(i64Type, row));
+            llvm::Value* leftData = loadListData(leftRow, inner, method + "()");
+            uint64_t scalarBytes =
+                module->getDataLayout().getTypeAllocSize(scalarType);
+            llvm::Value* outputData = builder.CreateCall(
+                mallocFunc,
+                {llvm::ConstantInt::get(i64Type, columns * scalarBytes)},
+                "matrix.matmul.data");
+            for(int64_t column = 0; column < columns; ++column)
+            {
+                llvm::Value* total = llvm::Constant::getNullValue(scalarType);
+                for(int64_t k = 0; k < inner; ++k)
+                {
+                    llvm::Value* rightRow =
+                        builder.CreateGEP(listType, rightRows,
+                                          llvm::ConstantInt::get(i64Type, k));
+                    llvm::Value* rightData =
+                        loadListData(rightRow, columns, method + "()");
+                    llvm::Value* leftValue = builder.CreateLoad(
+                        scalarType,
+                        builder.CreateGEP(scalarType, leftData,
+                                          llvm::ConstantInt::get(i64Type, k)));
+                    llvm::Value* rightValue = builder.CreateLoad(
+                        scalarType, builder.CreateGEP(scalarType, rightData,
+                                                      llvm::ConstantInt::get(
+                                                          i64Type, column)));
+                    total = arithmetic(
+                        total, arithmetic(leftValue, rightValue, "scale"),
+                        "add");
+                }
+                builder.CreateStore(
+                    total,
+                    builder.CreateGEP(scalarType, outputData,
+                                      llvm::ConstantInt::get(i64Type, column)));
+            }
+            llvm::Value* rowValue = llvm::UndefValue::get(listType);
+            rowValue = builder.CreateInsertValue(
+                rowValue, llvm::ConstantInt::get(i64Type, columns), 0);
+            rowValue = builder.CreateInsertValue(rowValue, outputData, 1);
+            builder.CreateStore(
+                rowValue,
+                builder.CreateGEP(listType, outputRows,
+                                  llvm::ConstantInt::get(i64Type, row)));
+        }
+        llvm::Value* result = llvm::UndefValue::get(listType);
+        result = builder.CreateInsertValue(
+            result, llvm::ConstantInt::get(i64Type, rows), 0);
+        return builder.CreateInsertValue(result, outputRows, 1);
+    }
+
+    std::function<llvm::Value*(size_t, llvm::Value*, llvm::Value*)> transform;
+    transform = [&](size_t depth, llvm::Value* leftParent,
+                    llvm::Value* rightParent) -> llvm::Value*
+    {
+        ArrayTypeNode* dimension = dimensions[depth];
+        llvm::Value* leftData =
+            loadListData(leftParent, dimension->capacity, method + "()");
+        llvm::Value* rightData = nullptr;
+        if(rightParent)
+            rightData =
+                loadListData(rightParent, dimension->capacity, method + "()");
+
+        llvm::Type* elementType = getLLVMTypeFromNode(dimension->elementType);
+        llvm::Value* outputData = leftData;
+        if(!assigning)
+        {
+            uint64_t bytes =
+                module->getDataLayout().getTypeAllocSize(elementType);
+            outputData = builder.CreateCall(
+                mallocFunc,
+                {llvm::ConstantInt::get(i64Type, dimension->capacity * bytes)},
+                "matrix.result.data");
+        }
+        for(int64_t i = 0; i < dimension->capacity; ++i)
+        {
+            llvm::Value* index = llvm::ConstantInt::get(i64Type, i);
+            llvm::Value* leftElement = builder.CreateGEP(
+                elementType, leftData, index, "matrix.left.element");
+            llvm::Value* rightElement =
+                rightData ? builder.CreateGEP(elementType, rightData, index,
+                                              "matrix.right.element")
+                          : nullptr;
+            llvm::Value* value = nullptr;
+            if(depth + 1 == dimensions.size())
+            {
+                llvm::Value* leftValue =
+                    builder.CreateLoad(scalarType, leftElement);
+                llvm::Value* rhs = scalar;
+                if(rightElement)
+                    rhs = builder.CreateLoad(scalarType, rightElement);
+                value = arithmetic(leftValue, rhs, operation);
+            }
+            else
+                value = transform(depth + 1, leftElement, rightElement);
+            llvm::Value* outputElement = builder.CreateGEP(
+                elementType, outputData, index, "matrix.output.element");
+            builder.CreateStore(value, outputElement);
+        }
+        if(assigning)
+            return builder.CreateLoad(listType, leftParent);
+        llvm::Value* result = llvm::UndefValue::get(listType);
+        result = builder.CreateInsertValue(
+            result, llvm::ConstantInt::get(i64Type, dimension->capacity), 0);
+        return builder.CreateInsertValue(result, outputData, 1);
+    };
+
+    llvm::Value* result = transform(0, receiver, right);
+    return assigning ? successfulVoidExpression(context) : result;
+}
+
+
+llvm::Value*
 CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
                                      MultiArrayTypeNode* multiarrayType)
 {
@@ -1499,10 +1889,26 @@ CodeGenerator::generateMultiarrayGet(MethodCallNode* node,
 
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
+    const std::string& method = node->methodName;
+    const bool matrixMethod =
+        method == "sum" || method == "add" || method == "subtract" ||
+        method == "hadamard" || method == "offset" || method == "scale" ||
+        method == "matmul" || method == "multiply" ||
+        method == "add_assign" || method == "subtract_assign" ||
+        method == "hadamard_assign" || method == "offset_assign" ||
+        method == "scale_assign";
+    TypeNode* directReceiverType = nullptr;
+    if(matrixMethod)
+    {
+        directReceiverType = getLValueType(node->object, node->line);
+        if(auto* multiarrayType =
+               dynamic_cast<MultiArrayTypeNode*>(directReceiverType))
+            return generateMultiarrayMath(node, multiarrayType);
+    }
+
     if(node->methodName == "get")
     {
-        TypeNode* directReceiverType =
-            getLValueType(node->object, node->line);
+        directReceiverType = getLValueType(node->object, node->line);
         auto* multiarrayType =
             dynamic_cast<MultiArrayTypeNode*>(directReceiverType);
         if(multiarrayType && !multiarrayType->elementsMutable)

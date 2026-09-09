@@ -736,6 +736,102 @@ TEST_F(MLATest, MultiarrayRejectsOversizedNestedInitializer)
     EXPECT_NE(out.find("array<i32, 2> capacity is 2"), std::string::npos);
 }
 
+TEST_F(MLATest, MultiarrayMatrixElementwiseOperationsAndSum)
+{
+    std::string code = R"(
+        mod std::matrix;
+        fn main() -> i32 {
+            let a: multiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+            let b: multiarray<i32, 2, 2> = {{5, 6}, {7, 8}};
+            let added: multiarray<i32, 2, 2> = a.add(b);
+            let subtracted: multiarray<i32, 2, 2> = b.subtract(a);
+            let products: multiarray<i32, 2, 2> = a.hadamard(b);
+            let shifted: multiarray<i32, 2, 2> = a.offset(2);
+            let scaled: multiarray<i32, 2, 2> = a.scale(3);
+            let cube: multiarray<i32, 2, 1, 2> = {{{1, 2}}, {{3, 4}}};
+            let cube_shifted: multiarray<i32, 2, 1, 2> = cube.offset(1);
+            let floats: multiarray<f64, 1, 2> = {{1.5, 2.0}};
+            let float_scaled: multiarray<f64, 1, 2> = floats.scale(2.0);
+            if added.sum() != 36 || subtracted.sum() != 16 {
+                return 1;
+            }
+            if products[1][1] != 32 || shifted[0][0] != 3 {
+                return 2;
+            }
+            if cube_shifted.sum() != 14 { return 3; }
+            if float_scaled.sum() != 7.0 { return 4; }
+            return scaled[1][0] == 9 ? 0 : 5;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MultiarrayMatrixMultiplySupportsRectangularShapes)
+{
+    std::string code = R"(
+        mod std::matrix;
+        fn main() -> i32 {
+            let a: multiarray<i32, 2, 3> = {{1, 2, 3}, {4, 5, 6}};
+            let b: multiarray<i32, 3, 2> = {{7, 8}, {9, 10}, {11, 12}};
+            let c: multiarray<i32, 2, 2> = a.matmul(b);
+            return c[0][0] == 58 && c[0][1] == 64 &&
+                   c[1][0] == 139 && c[1][1] == 154 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MutableMultiarrayMatrixAssignOperations)
+{
+    std::string code = R"(
+        mod std::matrix;
+        fn main() -> i32 {
+            var a: mutmultiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+            let b: multiarray<i32, 2, 2> = {{2, 3}, {4, 5}};
+            a.add_assign(b);
+            a.offset_assign(1);
+            a.scale_assign(2);
+            return a[0][0] == 8 && a[1][1] == 20 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, MultiarrayMatrixRejectsIncompatibleMultiplyShapes)
+{
+    std::string code = R"(
+        mod std::matrix;
+        fn main() -> i32 {
+            let a: multiarray<i32, 2, 3> = {{1, 2, 3}, {4, 5, 6}};
+            let b: multiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+            let c = a.matmul(b);
+            return c[0][0];
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("inner dimensions"), std::string::npos);
+}
+
+TEST_F(MLATest, MultiarrayMatrixAssignRequiresMutableVar)
+{
+    std::string code = R"(
+        mod std::matrix;
+        fn main() -> i32 {
+            var values: multiarray<i32, 1, 2> = {{1, 2}};
+            values.offset_assign(1);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("requires a mutmultiarray variable"), std::string::npos);
+}
+
 TEST_F(MLATest, MutableMultiarraySupportsCheckedRuntimeAssignment)
 {
     std::string code = R"(
