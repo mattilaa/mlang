@@ -63,6 +63,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::limits", "std_limits.md"),
     ("std::log", "std_log.md"),
     ("std::math", "std_math.md"),
+    ("std::matrix", "std_matrix.md"),
     ("std::multiarray", "std_multiarray.md"),
     ("std::mutmultiarray", "std_mutmultiarray.md"),
     ("std::net", "std_net.md"),
@@ -91,6 +92,7 @@ MATH_DSP_MODULES = {
     "std::algorithm::numeric",
     "std::audio",
     "std::math",
+    "std::matrix",
     "std::rand",
     "std::simd",
 }
@@ -595,7 +597,9 @@ def validate_demo_directory_coverage() -> None:
     directories = {
         path.name
         for path in demos_root.iterdir()
-        if path.is_dir() and not path.name.startswith(".")
+        if path.is_dir()
+        and not path.name.startswith(".")
+        and path.name not in {"build", "artifacts"}
     }
     missing = sorted(directories - documented)
     if missing:

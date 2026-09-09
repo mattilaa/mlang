@@ -46,5 +46,7 @@ let value: i32 = matrix.get(row, 0).unwrap();
 ## See also
 
 - [`std::multiarray`](Stdlib-Multiarray) for immutable multidimensional data.
+- [`std::matrix`](Stdlib-Matrix) for value-producing and in-place numeric
+  matrix operations.
 - [`std::array`](Stdlib-Array) for a one-dimensional fixed-capacity sequence.
 - `examples/multiarray.mla` for a runnable example.

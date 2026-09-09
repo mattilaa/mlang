@@ -37,5 +37,7 @@ runtime bounds guard and abort before an invalid load.
 
 - [`std::mutmultiarray`](std_mutmultiarray.md) for mutable elements and
   recoverable `get(...)` access.
+- [`std::matrix`](std_matrix.md) for numeric transforms, reductions, and
+  matrix multiplication.
 - [`std::array`](std_array.md) for a one-dimensional fixed-capacity sequence.
 - `examples/multiarray.mla` for a runnable example.

@@ -152,6 +152,9 @@ following additional programs are useful runnable showcases:
   indexing, and mutation checks.
 - `examples/multiarray.mla` — immutable and mutable fixed-size multidimensional
   arrays, nested-brace initialization, chained indexing, and checked writes.
+- `examples/matrix_operations.mla` — element-wise matrix arithmetic, scalar
+  transforms, reduction, rectangular matrix multiplication, and mutable
+  in-place operations.
 - `examples/borrowing_demo.mla` — borrowing syntax and compiler-enforced
   ownership behavior.
 - `examples/borrow_patterns.mla` — practical borrow patterns for containers

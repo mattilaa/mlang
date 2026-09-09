@@ -23,6 +23,7 @@
 - [[std::algorithm::numeric|Stdlib-Algorithm-Numeric]]
 - [[std::audio|Stdlib-Audio]]
 - [[std::math|Stdlib-Math]]
+- [[std::matrix|Stdlib-Matrix]]
 - [[std::rand|Stdlib-Rand]]
 - [[std::simd|Stdlib-Simd]]
 
