@@ -425,6 +425,7 @@ add_library(mlang_std STATIC
     ${PARSER_OUT}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_math.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_matrix.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_simd.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fft.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_strbuf.c

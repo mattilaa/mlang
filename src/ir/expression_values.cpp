@@ -344,6 +344,9 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
                 else
                     val = builder.CreateSExt(val, elementType, "elem.ext");
             }
+            else if(val->getType()->isFloatingPointTy() &&
+                    elementType->isFloatingPointTy())
+                val = builder.CreateFPCast(val, elementType, "elem.fpcast");
         }
         elementValues.push_back(val);
     }

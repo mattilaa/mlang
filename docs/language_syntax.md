@@ -1139,6 +1139,15 @@ when the index was out of bounds. The number of indexes passed to `get` must
 match the number of dimensions. Declaring a `mutmultiarray` with `let` does not
 make the binding mutable.
 
+Import `std::matrix` to use numeric methods on these fixed shapes. `sum`,
+element-wise `add`/`subtract`/`hadamard`, and scalar `offset`/`scale` support
+one or more dimensions. `matmul` (also named `multiply`) accepts compatible 2D
+matrices, including rectangular shapes, while `transpose` swaps rows and
+columns. Square `f32`/`f64` matrices additionally support `determinant` and
+`inverse`. Real symmetric matrices support ascending `eigenvalues` and a
+column-oriented `eigenvectors` result. Mutable `_assign` forms require a `var
+mutmultiarray`. See [`std::matrix`](stdlib/std_matrix.md).
+
 Supported fold operators:
 - `+`
 - `*`

@@ -1,0 +1,51 @@
+mod std::matrix;
+
+fn near(value:f64, expected:f64) -> bool {
+    let difference:f64 = value - expected;
+    return difference > -0.000001 && difference < 0.000001;
+}
+
+fn main() -> i32 {
+    let left: multiarray<i32, 2, 3> = {{1, 2, 3}, {4, 5, 6}};
+    let right: multiarray<i32, 3, 2> = {{7, 8}, {9, 10}, {11, 12}};
+
+    let product: multiarray<i32, 2, 2> = left.matmul(right);
+    let transposed: multiarray<i32, 3, 2> = left.transpose();
+    let shifted: multiarray<i32, 2, 3> = left.offset(10);
+    let doubled: multiarray<i32, 2, 3> = left.add(left);
+
+    var editable: mutmultiarray<i32, 2, 2> = {{1, 2}, {3, 4}};
+    editable.offset_assign(1);
+    editable.scale_assign(2);
+
+    let invertible: multiarray<f64, 2, 2> = {{4.0, 7.0}, {2.0, 6.0}};
+    let determinant:f64 = invertible.determinant();
+    let inverse: multiarray<f64, 2, 2> = invertible.inverse();
+    let identity: multiarray<f64, 2, 2> = invertible.matmul(inverse);
+
+    let symmetric: multiarray<f64, 2, 2> = {{2.0, 1.0}, {1.0, 2.0}};
+    let eigenvalues: multiarray<f64, 2> = symmetric.eigenvalues();
+    let eigenvectors: multiarray<f64, 2, 2> = symmetric.eigenvectors();
+
+    println!("product = [[{}, {}], [{}, {}]]",
+             product[0][0], product[0][1], product[1][0], product[1][1]);
+    println!("shifted sum = {}", shifted.sum());
+    println!("editable[1][1] = {}", editable[1][1]);
+    println!("transpose = [[{}, {}], [{}, {}], [{}, {}]]",
+             transposed[0][0], transposed[0][1],
+             transposed[1][0], transposed[1][1],
+             transposed[2][0], transposed[2][1]);
+    println!("determinant = {}", determinant);
+    println!("inverse = [[{}, {}], [{}, {}]]",
+             inverse[0][0], inverse[0][1], inverse[1][0], inverse[1][1]);
+    println!("eigenvalues = [{}, {}]", eigenvalues[0], eigenvalues[1]);
+    println!("first eigenvector = [{}, {}]",
+             eigenvectors[0][0], eigenvectors[1][0]);
+
+    if product[0][0] != 58 || product[1][1] != 154 { return 1; }
+    if shifted.sum() != 81 || doubled[1][2] != 12 { return 2; }
+    if editable[1][1] != 10 || transposed[2][1] != 6 { return 3; }
+    if !near(determinant, 10.0) || !near(identity[0][0], 1.0) ||
+       !near(identity[1][1], 1.0) { return 4; }
+    return near(eigenvalues[0], 1.0) && near(eigenvalues[1], 3.0) ? 0 : 5;
+}

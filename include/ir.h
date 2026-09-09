@@ -689,6 +689,8 @@ private:
     llvm::Value* generateMethodCall(MethodCallNode* node);
     llvm::Value* generateMultiarrayGet(MethodCallNode* node,
                                        MultiArrayTypeNode* multiarrayType);
+    llvm::Value* generateMultiarrayMath(MethodCallNode* node,
+                                        MultiArrayTypeNode* multiarrayType);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
     void emitNarrowCastRuntimeCheck(CastExpressionNode* node,
                                     llvm::Value* valid);
