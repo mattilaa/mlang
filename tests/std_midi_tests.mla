@@ -1,0 +1,49 @@
+mod std::midi;
+mod std::strbuf;
+mod std::testing;
+
+use std::midi::MidiInput;
+use std::midi::MidiOutput;
+use std::midi::backend_name;
+use std::midi::default_input_id;
+use std::midi::default_output_id;
+use std::midi::input_count;
+use std::midi::last_error;
+use std::midi::output_count;
+use std::strbuf::len;
+use std::testing::verify;
+
+#[test]
+fn test_midi_backend_metadata() {
+    verify(len(backend_name()) > 0);
+    verify(input_count() >= 0);
+    verify(output_count() >= 0);
+    verify(default_input_id() >= -1);
+    verify(default_output_id() >= -1);
+    verify(len(last_error()) >= 0);
+}
+
+#[test]
+fn test_midi_invalid_device_ids() {
+    let input: result<MidiInput, str8> =
+        MidiInput::open(9223372036854775807, "mlang_midi_test_in");
+    verify(input.is_err());
+    let output: result<MidiOutput, str8> =
+        MidiOutput::open(9223372036854775807, "mlang_midi_test_out");
+    verify(output.is_err());
+}
+
+#[test]
+fn test_midi_channel_message_validation() {
+    let output: MidiOutput = MidiOutput { handle: 0 };
+    let note_on: result<i64, str8> = output.note_on(-1, 60, 100);
+    let note_off: result<i64, str8> = output.note_off(16, 60, 0);
+    let control: result<i64, str8> = output.control_change(0, 128, 0);
+    let program: result<i64, str8> = output.program_change(0, -1);
+    let bend: result<i64, str8> = output.pitch_bend(0, 16384);
+    verify(note_on.is_err());
+    verify(note_off.is_err());
+    verify(control.is_err());
+    verify(program.is_err());
+    verify(bend.is_err());
+}

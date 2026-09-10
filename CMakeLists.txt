@@ -448,6 +448,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ipc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_audio.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_midi.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ssl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ascii.c
@@ -481,12 +482,14 @@ if(APPLE)
     find_library(IMAGEIO_FRAMEWORK ImageIO)
     find_library(COREAUDIO_FRAMEWORK CoreAudio)
     find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox)
+    find_library(COREMIDI_FRAMEWORK CoreMIDI)
     target_link_libraries(mlang_std PUBLIC
         ${COREFOUNDATION_FRAMEWORK}
         ${COREGRAPHICS_FRAMEWORK}
         ${IMAGEIO_FRAMEWORK}
         ${COREAUDIO_FRAMEWORK}
         ${AUDIOTOOLBOX_FRAMEWORK}
+        ${COREMIDI_FRAMEWORK}
     )
 endif()
 
@@ -522,6 +525,7 @@ add_custom_command(
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:ImageIO>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreAudio>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:AudioToolbox>
+            $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreMIDI>
     COMMAND ${CMAKE_COMMAND} -E touch ${MLANG_FORMAT_STAMP}
     DEPENDS mlang mlang_std ${MLANG_FORMAT_SOURCE}
             ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
@@ -574,6 +578,7 @@ add_custom_command(
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:ImageIO>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreAudio>
             $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:AudioToolbox>
+            $<$<BOOL:${APPLE}>:-framework> $<$<BOOL:${APPLE}>:CoreMIDI>
     COMMAND ${CMAKE_COMMAND} -E touch ${MLANGD_MLA_STAMP}
     DEPENDS mlang mlang_std ${MLANGD_MLA_SOURCE}
             ${MLANGD_MLA_FORMAT_CONFIG_SOURCE}

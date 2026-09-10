@@ -23,6 +23,7 @@ mod std::algorithm::ranges;
 mod std::argparser;
 mod std::array;
 mod std::audio;
+mod std::midi;
 mod std::bench;
 mod std::bits;
 mod std::bitset;
@@ -101,6 +102,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/limits.mla`
 - `stdlib/std/log.mla`
 - `stdlib/std/math.mla`
+- `stdlib/std/midi.mla`
 - `stdlib/std/matrix.mla`
 - `stdlib/std/multiarray.mla`
 - `stdlib/std/mutmultiarray.mla`
@@ -126,9 +128,10 @@ The source-of-truth implementation files are:
 - `stdlib/std/unordered.mla`
 - `stdlib/std/vec.mla`
 
-## Math and Audio
+## Math, Audio, and MIDI
 
 - [std::audio](stdlib/std_audio.md)
+- [std::midi](stdlib/std_midi.md)
 - [std::algorithm::numeric](stdlib/std_algorithm_numeric.md)
 - [std::math](stdlib/std_math.md)
 - [std::rand](stdlib/std_rand.md)

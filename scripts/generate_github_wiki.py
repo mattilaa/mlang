@@ -42,6 +42,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
     ("std::argparser", "std_argparser.md"),
     ("std::array", "std_array.md"),
     ("std::audio", "std_audio.md"),
+    ("std::midi", "std_midi.md"),
     ("std::bench", "std_bench.md"),
     ("std::bits", "std_bits.md"),
     ("std::bitset", "std_bitset.md"),
@@ -91,6 +92,7 @@ STDLIB_MODULE_DOCS: list[tuple[str, str]] = [
 MATH_DSP_MODULES = {
     "std::algorithm::numeric",
     "std::audio",
+    "std::midi",
     "std::math",
     "std::matrix",
     "std::rand",
@@ -255,6 +257,7 @@ STDLIB_MODULES = {
     "std::argparser",
     "std::array",
     "std::audio",
+    "std::midi",
     "std::bench",
     "std::bits",
     "std::bitset",
