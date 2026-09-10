@@ -1,0 +1,21 @@
+/// \file detail.mla
+/// \brief Native bindings for std::midi.
+
+extern pub fn __mlang_std_midi_backend_name() -> str8;
+extern pub fn __mlang_std_midi_last_error() -> str8;
+extern pub fn __mlang_std_midi_input_count() -> i64;
+extern pub fn __mlang_std_midi_output_count() -> i64;
+extern pub fn __mlang_std_midi_default_input_id() -> i64;
+extern pub fn __mlang_std_midi_default_output_id() -> i64;
+extern pub fn __mlang_std_midi_input_name(device_id: i64) -> str8;
+extern pub fn __mlang_std_midi_output_name(device_id: i64) -> str8;
+extern pub fn __mlang_std_midi_open_input(device_id: i64, client_name: str8) -> i64;
+extern pub fn __mlang_std_midi_open_output(device_id: i64, client_name: str8) -> i64;
+extern pub fn __mlang_std_midi_close(handle: i64) -> i32;
+extern pub fn __mlang_std_midi_poll(handle: i64) -> i64;
+extern pub fn __mlang_std_midi_dropped_messages(handle: i64) -> i64;
+extern pub fn __mlang_std_midi_send_bytes(handle: i64, bytes: &list<i32>) -> i64;
+extern pub fn __mlang_std_midi_message_timestamp(handle: i64) -> i64;
+extern pub fn __mlang_std_midi_message_len(handle: i64) -> i64;
+extern pub fn __mlang_std_midi_message_byte(handle: i64, index: i64) -> i32;
+extern pub fn __mlang_std_midi_message_close(handle: i64) -> i32;

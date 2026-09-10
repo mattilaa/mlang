@@ -1,0 +1,168 @@
+/// \file std_midi_demo.mla
+/// @ingroup examples
+/// \brief List MIDI ports, monitor input, or send a short note.
+///
+/// Build and run:
+///   ./build/mlang examples/std_midi_demo.mla -L ./build -lmlang_std -o build/std_midi_demo
+///   ./build/std_midi_demo --list
+///   ./build/std_midi_demo --listen --input 0 --duration 5000
+///   ./build/std_midi_demo --send --output 0 --note 60 --velocity 96
+///
+mod std::argparser;
+mod std::midi;
+mod std::time;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::midi::MidiInput;
+use std::midi::MidiMessage;
+use std::midi::MidiOutput;
+use std::midi::backend_name;
+use std::midi::default_input_id;
+use std::midi::default_output_id;
+use std::midi::input_count;
+use std::midi::input_name;
+use std::midi::output_count;
+use std::midi::output_name;
+use std::time::now_ms;
+use std::time::sleep_ms;
+
+fn print_devices() -> void {
+    println!("std::midi backend: {}", backend_name());
+    let inputs:i64 = input_count();
+    let outputs:i64 = output_count();
+    println!("MIDI inputs: {} (default {})", inputs, default_input_id());
+    for index in 0..inputs {
+        println!("  input  [{}] {}", index, input_name(index));
+    }
+    println!("MIDI outputs: {} (default {})", outputs, default_output_id());
+    for index in 0..outputs {
+        println!("  output [{}] {}", index, output_name(index));
+    }
+}
+
+fn listen(device_id:i64, duration_ms:i64) -> i32 {
+    let opened: result<MidiInput, str8> =
+        MidiInput::open(device_id, "mlang_midi_demo_input");
+    if opened.is_err() {
+        eprintln!("MIDI input open failed: {}", opened.unwrap_err());
+        return 1;
+    }
+    let input: MidiInput = opened.unwrap();
+    println!("Listening on input [{}] {} for {} ms",
+             device_id, input_name(device_id), duration_ms);
+    let deadline:i64 = now_ms() + duration_ms;
+    while now_ms() < deadline {
+        let received: option<MidiMessage> = input.poll();
+        if received.is_some() {
+            let message: MidiMessage = received.unwrap();
+            print!("timestamp={} bytes=", message.timestamp());
+            for index in 0..message.len() {
+                print!("{}{}", index == 0 ? "" : " ", message.byte(index));
+            }
+            println!("");
+            message.close();
+        } else {
+            sleep_ms(1);
+        }
+    }
+    println!("dropped input messages: {}", input.dropped_messages());
+    input.close();
+    return 0;
+}
+
+fn send_note(device_id:i64, channel:i32, note:i32,
+             velocity:i32, duration_ms:i64) -> i32 {
+    let opened: result<MidiOutput, str8> =
+        MidiOutput::open(device_id, "mlang_midi_demo_output");
+    if opened.is_err() {
+        eprintln!("MIDI output open failed: {}", opened.unwrap_err());
+        return 1;
+    }
+    let output: MidiOutput = opened.unwrap();
+    println!("Sending note {} on channel {} to output [{}] {}",
+             note, channel, device_id, output_name(device_id));
+    let on: result<i64, str8> = output.note_on(channel, note, velocity);
+    if on.is_err() {
+        eprintln!("MIDI Note On failed: {}", on.unwrap_err());
+        output.close();
+        return 1;
+    }
+    sleep_ms(duration_ms);
+    let off: result<i64, str8> = output.note_off(channel, note, 0);
+    if off.is_err() {
+        eprintln!("MIDI Note Off failed: {}", off.unwrap_err());
+        output.close();
+        return 1;
+    }
+    sleep_ms(25);
+    output.close();
+    return 0;
+}
+
+fn main(argc:i32, args:list<str8>) -> i32 {
+    var parser: ArgParser = ArgParser::new(
+        "std_midi_demo", "List, monitor, and send MIDI through std::midi.");
+    parser.flag("list", "l", "List MIDI inputs and outputs");
+    parser.flag("listen", "", "Monitor an input for incoming messages");
+    parser.flag("send", "", "Send a Note On followed by Note Off");
+    parser.option("input", "i", "Input id; -1 uses the default", "-1");
+    parser.option("output", "o", "Output id; -1 uses the default", "-1");
+    parser.option("channel", "c", "MIDI channel 0..15", "0");
+    parser.option("note", "n", "MIDI note 0..127", "60");
+    parser.option("velocity", "v", "Note velocity 0..127", "96");
+    parser.option("duration", "t", "Listen/note duration in milliseconds", "1000");
+
+    let parsed: ParseResult = parser.parse(argc, args);
+    if parsed.help_requested() {
+        parser.print_help();
+        parsed.free();
+        parser.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        eprintln!("Error: {}", parsed.error());
+        parser.print_help();
+        parsed.free();
+        parser.free();
+        return 1;
+    }
+
+    let should_list:bool = parsed.flag("list");
+    let should_listen:bool = parsed.flag("listen");
+    let should_send:bool = parsed.flag("send");
+    var input_id:i64 = parsed.get_i64("input");
+    var output_id:i64 = parsed.get_i64("output");
+    let channel:i32 = i32(parsed.get_i64("channel"));
+    let note:i32 = i32(parsed.get_i64("note"));
+    let velocity:i32 = i32(parsed.get_i64("velocity"));
+    let duration_ms:i64 = parsed.get_i64("duration");
+    parsed.free();
+    parser.free();
+
+    if should_list || (!should_listen && !should_send) {
+        print_devices();
+    }
+    if duration_ms < 0 {
+        eprintln!("--duration must be non-negative");
+        return 1;
+    }
+    if should_listen {
+        if input_id < 0 { input_id = default_input_id(); }
+        if input_id < 0 {
+            eprintln!("no MIDI input is available");
+            return 1;
+        }
+        let rc:i32 = listen(input_id, duration_ms);
+        if rc != 0 { return rc; }
+    }
+    if should_send {
+        if output_id < 0 { output_id = default_output_id(); }
+        if output_id < 0 {
+            eprintln!("no MIDI output is available");
+            return 1;
+        }
+        return send_note(output_id, channel, note, velocity, duration_ms);
+    }
+    return 0;
+}

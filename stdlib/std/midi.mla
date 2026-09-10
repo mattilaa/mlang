@@ -1,0 +1,256 @@
+/// \file midi.mla
+/// \brief Portable MIDI input and output (std::midi).
+///
+/// Backends:
+/// - macOS: CoreMIDI sources and destinations.
+/// - Linux: hardware and software JACK MIDI ports through a running server.
+///
+/// Open ports are active immediately. Input delivery uses a bounded native
+/// queue, while JACK output is transferred safely in its process callback.
+
+/// \cond INTERNAL_IMPORTS
+mod std::midi::detail;
+use std::midi::detail::*;
+/// \endcond
+
+/// @brief Owned MIDI input port.
+pub struct MidiInput {
+    var handle: i64;
+};
+
+/// @brief Owned MIDI output port.
+pub struct MidiOutput {
+    var handle: i64;
+};
+
+/// @brief Owned received MIDI packet.
+pub struct MidiMessage {
+    var handle: i64;
+};
+
+alias midi_input = MidiInput;
+alias midi_output = MidiOutput;
+alias midi_message = MidiMessage;
+
+/// @brief Return `coremidi`, `jack-midi`, or `unsupported`.
+pub fn backend_name() -> str8 {
+    return __mlang_std_midi_backend_name();
+}
+
+/// @brief Return the latest native backend error.
+pub fn last_error() -> str8 {
+    return __mlang_std_midi_last_error();
+}
+
+/// @brief Number of selectable MIDI input devices.
+pub fn input_count() -> i64 {
+    return __mlang_std_midi_input_count();
+}
+
+/// @brief Number of selectable MIDI output devices.
+pub fn output_count() -> i64 {
+    return __mlang_std_midi_output_count();
+}
+
+/// @brief Default MIDI input id, or `-1` when no input exists.
+pub fn default_input_id() -> i64 {
+    return __mlang_std_midi_default_input_id();
+}
+
+/// @brief Default MIDI output id, or `-1` when no output exists.
+pub fn default_output_id() -> i64 {
+    return __mlang_std_midi_default_output_id();
+}
+
+/// @brief Human-readable MIDI input device name.
+pub fn input_name(device_id: i64) -> str8 {
+    return __mlang_std_midi_input_name(device_id);
+}
+
+/// @brief Human-readable MIDI output device name.
+pub fn output_name(device_id: i64) -> str8 {
+    return __mlang_std_midi_output_name(device_id);
+}
+
+impl MidiInput {
+    /// @brief Open a selected input, or the default when `device_id < 0`.
+    pub fn open(device_id: i64, client_name: str8) -> result<MidiInput, str8> {
+        let handle: i64 = __mlang_std_midi_open_input(device_id, client_name);
+        if handle == 0 {
+            return Err<MidiInput, str8>(last_error());
+        }
+        return Ok<MidiInput, str8>(MidiInput { handle: handle });
+    }
+
+    /// @brief Open the default input device.
+    pub fn open_default(client_name: str8) -> result<MidiInput, str8> {
+        return MidiInput::open(-1, client_name);
+    }
+
+    /// @brief Poll one queued packet without blocking.
+    ///
+    /// The returned message owns native storage and must be closed.
+    pub fn poll(self: MidiInput) -> option<MidiMessage> {
+        let message: i64 = __mlang_std_midi_poll(self.handle);
+        if message == 0 {
+            return None<MidiMessage>();
+        }
+        return Some<MidiMessage>(MidiMessage { handle: message });
+    }
+
+    /// @brief Number of input packets dropped because the queue was full.
+    pub fn dropped_messages(self: MidiInput) -> i64 {
+        return __mlang_std_midi_dropped_messages(self.handle);
+    }
+
+    /// @brief Close the input and release backend resources.
+    pub fn close(self: MidiInput) -> i32 {
+        return __mlang_std_midi_close(self.handle);
+    }
+}
+
+impl MidiOutput {
+    /// @brief Open a selected output, or the default when `device_id < 0`.
+    pub fn open(device_id: i64, client_name: str8) -> result<MidiOutput, str8> {
+        let handle: i64 = __mlang_std_midi_open_output(device_id, client_name);
+        if handle == 0 {
+            return Err<MidiOutput, str8>(last_error());
+        }
+        return Ok<MidiOutput, str8>(MidiOutput { handle: handle });
+    }
+
+    /// @brief Open the default output device.
+    pub fn open_default(client_name: str8) -> result<MidiOutput, str8> {
+        return MidiOutput::open(-1, client_name);
+    }
+
+    /// @brief Send an arbitrary MIDI 1.0 byte packet (1..1024 bytes).
+    pub fn send_bytes(self: MidiOutput, bytes: &list<i32>) -> result<i64, str8> {
+        let sent: i64 = __mlang_std_midi_send_bytes(self.handle, bytes);
+        if sent < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(sent);
+    }
+
+    /// @brief Send a three-byte channel message.
+    pub fn send(self: MidiOutput, status: i32, data1: i32,
+                data2: i32) -> result<i64, str8> {
+        let bytes: list<i32> = [status, data1, data2];
+        return self.send_bytes(bytes);
+    }
+
+    /// @brief Send Note On on channel 0..15.
+    pub fn note_on(self: MidiOutput, channel: i32, note: i32,
+                   velocity: i32) -> result<i64, str8> {
+        if channel < 0 || channel > 15 || note < 0 || note > 127 ||
+           velocity < 0 || velocity > 127 {
+            return Err<i64, str8>("note_on expects channel 0..15 and data 0..127");
+        }
+        return self.send(144 + channel, note, velocity);
+    }
+
+    /// @brief Send Note Off on channel 0..15.
+    pub fn note_off(self: MidiOutput, channel: i32, note: i32,
+                    velocity: i32) -> result<i64, str8> {
+        if channel < 0 || channel > 15 || note < 0 || note > 127 ||
+           velocity < 0 || velocity > 127 {
+            return Err<i64, str8>("note_off expects channel 0..15 and data 0..127");
+        }
+        return self.send(128 + channel, note, velocity);
+    }
+
+    /// @brief Send Control Change on channel 0..15.
+    pub fn control_change(self: MidiOutput, channel: i32, controller: i32,
+                          value: i32) -> result<i64, str8> {
+        if channel < 0 || channel > 15 || controller < 0 || controller > 127 ||
+           value < 0 || value > 127 {
+            return Err<i64, str8>("control_change expects channel 0..15 and data 0..127");
+        }
+        return self.send(176 + channel, controller, value);
+    }
+
+    /// @brief Send Program Change on channel 0..15.
+    pub fn program_change(self: MidiOutput, channel: i32,
+                          program: i32) -> result<i64, str8> {
+        if channel < 0 || channel > 15 || program < 0 || program > 127 {
+            return Err<i64, str8>("program_change expects channel 0..15 and program 0..127");
+        }
+        let bytes: list<i32> = [192 + channel, program];
+        return self.send_bytes(bytes);
+    }
+
+    /// @brief Send a 14-bit pitch bend value (0..16383).
+    pub fn pitch_bend(self: MidiOutput, channel: i32,
+                      value: i32) -> result<i64, str8> {
+        if channel < 0 || channel > 15 || value < 0 || value > 16383 {
+            return Err<i64, str8>("pitch_bend expects channel 0..15 and value 0..16383");
+        }
+        let bytes: list<i32> = [224 + channel, value % 128, value / 128];
+        return self.send_bytes(bytes);
+    }
+
+    /// @brief Close the output and release backend resources.
+    pub fn close(self: MidiOutput) -> i32 {
+        return __mlang_std_midi_close(self.handle);
+    }
+}
+
+impl MidiMessage {
+    /// @brief Backend timestamp (CoreMIDI host time or JACK frame offset).
+    pub fn timestamp(self: MidiMessage) -> i64 {
+        return __mlang_std_midi_message_timestamp(self.handle);
+    }
+
+    /// @brief Packet length in bytes.
+    pub fn len(self: MidiMessage) -> i64 {
+        return __mlang_std_midi_message_len(self.handle);
+    }
+
+    /// @brief Read one byte, returning `-1` for an invalid index.
+    pub fn byte(self: MidiMessage, index: i64) -> i32 {
+        return __mlang_std_midi_message_byte(self.handle, index);
+    }
+
+    /// @brief Status byte, or `-1` for an empty packet.
+    pub fn status(self: MidiMessage) -> i32 {
+        return self.byte(0);
+    }
+
+    /// @brief MIDI channel 0..15, or `-1` for a non-channel message.
+    pub fn channel(self: MidiMessage) -> i32 {
+        let status: i32 = self.status();
+        if status < 128 || status >= 240 {
+            return -1;
+        }
+        return status % 16;
+    }
+
+    /// @brief First data byte, or `-1` when absent.
+    pub fn data1(self: MidiMessage) -> i32 {
+        return self.byte(1);
+    }
+
+    /// @brief Second data byte, or `-1` when absent.
+    pub fn data2(self: MidiMessage) -> i32 {
+        return self.byte(2);
+    }
+
+    /// @brief Whether this packet is a Note On with nonzero velocity.
+    pub fn is_note_on(self: MidiMessage) -> bool {
+        let status: i32 = self.status();
+        return status >= 144 && status < 160 && self.data2() > 0;
+    }
+
+    /// @brief Whether this packet represents note release.
+    pub fn is_note_off(self: MidiMessage) -> bool {
+        let status: i32 = self.status();
+        return (status >= 128 && status < 144) ||
+               (status >= 144 && status < 160 && self.data2() == 0);
+    }
+
+    /// @brief Release the received packet.
+    pub fn close(self: MidiMessage) -> i32 {
+        return __mlang_std_midi_message_close(self.handle);
+    }
+}
