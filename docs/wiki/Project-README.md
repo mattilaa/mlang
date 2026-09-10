@@ -1142,6 +1142,19 @@ export MLANG_STDLIB_LIB_PATH=~/.local/lib/mlang
 The stdlib module search path is controlled by `MLANG_STDLIB_PATH` and defaults
 to `~/.local/share/mlang/stdlib` when installed.
 
+Hardware modules use the same link command. [`std::audio`](Stdlib-Audio) selects CoreAudio on
+macOS or JACK audio on Linux; [`std::midi`](Stdlib-Midi) selects CoreMIDI on macOS or JACK
+MIDI on Linux. JACK is loaded at runtime, so Linux builds do not require JACK
+development headers, but `libjack` and a running JACK server are needed to
+open audio or MIDI ports.
+
+```sh
+mlang examples/std_midi_demo.mla -L ~/.local/lib/mlang -lmlang_std -o /tmp/std_midi_demo
+/tmp/std_midi_demo --list
+/tmp/std_midi_demo --listen --input 0 --duration 5000
+/tmp/std_midi_demo --send --output 0 --note 60 --velocity 96
+```
+
 Standalone libraries outside the `std` namespace use `MLANG_MODULE_PATH` and
 default to `~/.local/share/mlang/modules`. The bundled [`dsp`](DSP) library is
 installed there and imported with paths such as [`dsp::filter`](DSP-Filter) and [`dsp::fft`](DSP-FFT).

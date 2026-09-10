@@ -1,0 +1,91 @@
+# std::midi
+
+Module file: `stdlib/std/midi.mla`
+
+Portable MIDI 1.0 input and output:
+
+- macOS uses CoreMIDI sources and destinations.
+- Linux uses hardware and software JACK MIDI ports. `libjack` is loaded at runtime, and a
+  JACK server must be running when a port is opened.
+
+Open ports are active immediately. The native backend uses bounded lock-free
+queues between MIDI callbacks and MLang code. Input queue overflow is visible
+through `dropped_messages()`; JACK output returns an error when its queue is
+full.
+
+## Types
+
+- `midi_input`
+- `midi_output`
+- `midi_message`
+
+## Device discovery
+
+- `backend_name() -> str8`
+- `last_error() -> str8`
+- `input_count() -> i64`
+- `output_count() -> i64`
+- `default_input_id() -> i64`
+- `default_output_id() -> i64`
+- `input_name(device_id: i64) -> str8`
+- `output_name(device_id: i64) -> str8`
+
+## Input
+
+- `midi_input::open(device_id, client_name) -> result<midi_input, str8>`
+- `midi_input::open_default(client_name) -> result<midi_input, str8>`
+- `midi_input::poll() -> option<midi_message>`
+- `midi_input::dropped_messages() -> i64`
+- `midi_input::close() -> i32`
+
+`poll()` is nonblocking. Each returned message owns a native packet and must be
+closed after reading it.
+
+## Output
+
+- `midi_output::open(device_id, client_name) -> result<midi_output, str8>`
+- `midi_output::open_default(client_name) -> result<midi_output, str8>`
+- `midi_output::send_bytes(bytes) -> result<i64, str8>`
+- `midi_output::send(status, data1, data2) -> result<i64, str8>`
+- `midi_output::note_on(channel, note, velocity) -> result<i64, str8>`
+- `midi_output::note_off(channel, note, velocity) -> result<i64, str8>`
+- `midi_output::control_change(channel, controller, value) -> result<i64, str8>`
+- `midi_output::program_change(channel, program) -> result<i64, str8>`
+- `midi_output::pitch_bend(channel, value) -> result<i64, str8>`
+- `midi_output::close() -> i32`
+
+Channels use `0..15`, ordinary data bytes use `0..127`, and pitch bend uses
+`0..16383`. `send_bytes` also supports system and SysEx packets from 1 through
+1024 bytes, validating that each list element fits in one byte.
+
+## Received messages
+
+- `midi_message::timestamp() -> i64`
+- `midi_message::len() -> i64`
+- `midi_message::byte(index) -> i32`
+- `midi_message::status() -> i32`
+- `midi_message::channel() -> i32`
+- `midi_message::data1() -> i32`
+- `midi_message::data2() -> i32`
+- `midi_message::is_note_on() -> bool`
+- `midi_message::is_note_off() -> bool`
+- `midi_message::close() -> i32`
+
+The timestamp is backend-native: CoreMIDI host time on macOS and the JACK
+buffer frame offset on Linux.
+
+## Build and run the demo
+
+```sh
+cmake --build build --target mlang mlang_std
+./build/mlang examples/std_midi_demo.mla -L ./build -lmlang_std -o build/std_midi_demo
+./build/std_midi_demo --list
+./build/std_midi_demo --listen --input 0 --duration 5000
+./build/std_midi_demo --send --output 0 --note 60 --velocity 96
+./build/mlang test tests/std_midi_tests.mla
+```
+
+On Debian/Ubuntu Linux, install and start JACK before opening ports, for
+example with `sudo apt install jackd2 libjack-jackd2-0` and your preferred
+JACK server configuration. The MLang build itself does not require JACK
+development headers.

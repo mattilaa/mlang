@@ -18,6 +18,10 @@ Currently provided:
   fixed-capacity `array<T, N>` type.
 - `std/ringbuffer.mla`: fixed-capacity `f32` history storage for numeric and
   realtime DSP algorithms, with allocation-free reads/writes after creation.
+- `std/audio.mla`: CoreAudio/JACK stereo output, decoded PCM files, reusable
+  PCM blocks, and bounded realtime queues.
+- `std/midi.mla`: CoreMIDI/JACK MIDI device discovery, nonblocking input
+  polling, raw MIDI packets, and channel-message output helpers.
 - `std/testing.mla`: GoogleTest-like expectation helpers
   (`expect_true`, `expect_false`, `expect_eq`, `expect_not_eq`,
   `expect_array_eq`, `expect_array_not_eq`; and fatal

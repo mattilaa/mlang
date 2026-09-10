@@ -22,6 +22,7 @@
 ## Math and Audio
 - [[std::algorithm::numeric|Stdlib-Algorithm-Numeric]]
 - [[std::audio|Stdlib-Audio]]
+- [[std::midi|Stdlib-Midi]]
 - [[std::math|Stdlib-Math]]
 - [[std::matrix|Stdlib-Matrix]]
 - [[std::rand|Stdlib-Rand]]

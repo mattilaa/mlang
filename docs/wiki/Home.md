@@ -205,6 +205,7 @@ Use this section as a map into the existing documentation.
   - networking
   - threading and synchronization
   - terminal truecolor image rendering ([`std::image`](Stdlib-Image))
+  - CoreMIDI/JACK MIDI input and output ([`std::midi`](Stdlib-Midi))
   - [`Vec`](Stdlib-Vec), [`BitSet`](Stdlib-Bitset), [`span`](Stdlib-Span), `sed`, and more
 
 ### DSP Library

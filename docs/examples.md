@@ -244,6 +244,8 @@ for sequential output.
 - `examples/std_audio_simd_dsp_demo.mla` — SIMD-shaped DSP block using
   `std::simd` for vector gain/mix/envelope math before previewing through
   `std::audio`, with command-line device/sample-rate/buffer selection.
+- `examples/std_midi_demo.mla` — list CoreMIDI or JACK MIDI ports, monitor a
+  selected input without blocking, and send a configurable Note On/Off pair.
 - `examples/dsp_convolution_demo.mla` — full, same, and valid convolution via
   `dsp::convolution`.
 - `examples/dsp_fft_demo.mla` — forward/inverse transforms via `dsp::fft`.
