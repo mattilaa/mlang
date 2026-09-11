@@ -18,6 +18,20 @@ pub struct AudioDevice {
 /// @brief Lowercase stdlib type alias for `AudioDevice`.
 alias audio_device = AudioDevice;
 
+/// @brief Owned stereo input processing graph with serial inserts and parallel racks.
+pub struct AudioInsertStack {
+    var handle: i64;
+};
+
+/// @brief Non-owning effect-rack reference created by an `AudioInsertStack`.
+pub struct AudioEffectRack {
+    var stack_handle: i64;
+    var rack_id: i64;
+};
+
+alias audio_insert_stack = AudioInsertStack;
+alias audio_effect_rack = AudioEffectRack;
+
 /// @brief Owned decoded mono/stereo 16-bit PCM WAV or AIFF file.
 pub struct PcmAudio {
     var handle: i64;
@@ -126,6 +140,16 @@ impl PcmBlock {
         return __mlang_std_audio_pcm_block_set_stereo(self.handle, frame, left, right);
     }
 
+    /// @brief Read the left sample of a stereo frame.
+    pub fn left(self: PcmBlock, frame: i64) -> f32 {
+        return __mlang_std_audio_pcm_block_sample(self.handle, frame, 0);
+    }
+
+    /// @brief Read the right sample of a stereo frame.
+    pub fn right(self: PcmBlock, frame: i64) -> f32 {
+        return __mlang_std_audio_pcm_block_sample(self.handle, frame, 1);
+    }
+
     /// @brief Fill the complete block with silence.
     pub fn clear(self: PcmBlock) -> i32 {
         return __mlang_std_audio_pcm_block_clear(self.handle);
@@ -171,6 +195,135 @@ impl PcmWavWriter {
             return Err<i32, str8>(last_error());
         }
         return Ok<i32, str8>(0);
+    }
+}
+
+impl AudioInsertStack {
+    /// @brief Create an offline insert stack for deterministic block processing.
+    pub fn new(sample_rate: i64, buffer_frames: i64) -> result<AudioInsertStack, str8> {
+        let h: i64 = __mlang_std_audio_insert_stack_new(sample_rate, buffer_frames);
+        if h == 0 {
+            return Err<AudioInsertStack, str8>(last_error());
+        }
+        return Ok<AudioInsertStack, str8>(AudioInsertStack { handle: h });
+    }
+
+    /// @brief Open the default stereo input and output as a real-time insert stack.
+    pub fn open_default(client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<AudioInsertStack, str8> {
+        let h: i64 = __mlang_std_audio_insert_stack_open_default(client_name, sample_rate, buffer_frames);
+        if h == 0 {
+            return Err<AudioInsertStack, str8>(last_error());
+        }
+        return Ok<AudioInsertStack, str8>(AudioInsertStack { handle: h });
+    }
+
+    /// @brief Add a serial gain insert. `wet` is clamped to `0..1`.
+    pub fn add_gain(self: AudioInsertStack, gain: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_insert_stack_add_gain(self.handle, gain, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    /// @brief Add a serial one-pole low-pass insert.
+    pub fn add_lowpass(self: AudioInsertStack, cutoff_hz: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_insert_stack_add_lowpass(self.handle, cutoff_hz, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    /// @brief Add a serial soft-clipping distortion insert.
+    pub fn add_distortion(self: AudioInsertStack, drive: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_insert_stack_add_distortion(self.handle, drive, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    /// @brief Add a serial feedback delay insert.
+    pub fn add_delay(self: AudioInsertStack, delay_ms: f64, feedback: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_insert_stack_add_delay(self.handle, delay_ms, feedback, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    /// @brief Add a parallel effect-rack track with independent dry/wet gains.
+    ///
+    /// Rack tracks are summed. For conventional auxiliary sends, use a dry gain
+    /// of `1` on one rack and `0` on additional racks to avoid duplicating dry audio.
+    pub fn add_rack(self: AudioInsertStack, dry: f64, wet: f64) -> result<AudioEffectRack, str8> {
+        let id: i64 = __mlang_std_audio_insert_stack_add_rack(self.handle, dry, wet);
+        if id < 0 { return Err<AudioEffectRack, str8>(last_error()); }
+        return Ok<AudioEffectRack, str8>(AudioEffectRack { stack_handle: self.handle, rack_id: id });
+    }
+
+    /// @brief Process stereo PCM through this graph without opening audio hardware.
+    pub fn process_block(self: AudioInsertStack, input: PcmBlock, output: PcmBlock, frames: i64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_insert_stack_process_block(self.handle, input.handle, output.handle, frames);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn insert_count(self: AudioInsertStack) -> i64 {
+        return __mlang_std_audio_insert_stack_insert_count(self.handle);
+    }
+
+    pub fn rack_count(self: AudioInsertStack) -> i64 {
+        return __mlang_std_audio_insert_stack_rack_count(self.handle);
+    }
+
+    pub fn sample_rate(self: AudioInsertStack) -> i64 {
+        return __mlang_std_audio_insert_stack_sample_rate(self.handle);
+    }
+
+    pub fn buffer_frames(self: AudioInsertStack) -> i64 {
+        return __mlang_std_audio_insert_stack_buffer_frames(self.handle);
+    }
+
+    /// @brief Start real-time input processing. Only valid for `open_default()`.
+    pub fn start(self: AudioInsertStack) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_insert_stack_start(self.handle);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn stop(self: AudioInsertStack) -> i32 {
+        return __mlang_std_audio_insert_stack_stop(self.handle);
+    }
+
+    pub fn close(self: AudioInsertStack) -> i32 {
+        return __mlang_std_audio_insert_stack_close(self.handle);
+    }
+}
+
+impl AudioEffectRack {
+    /// @brief Change this rack track's dry/wet gains while the stack is stopped.
+    pub fn set_mix(self: AudioEffectRack, dry: f64, wet: f64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_insert_stack_set_rack_mix(self.stack_handle, self.rack_id, dry, wet);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn add_gain(self: AudioEffectRack, gain: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_insert_stack_rack_add_gain(self.stack_handle, self.rack_id, gain);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    pub fn add_lowpass(self: AudioEffectRack, cutoff_hz: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_insert_stack_rack_add_lowpass(self.stack_handle, self.rack_id, cutoff_hz);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    pub fn add_distortion(self: AudioEffectRack, drive: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_insert_stack_rack_add_distortion(self.stack_handle, self.rack_id, drive);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    pub fn add_delay(self: AudioEffectRack, delay_ms: f64, feedback: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_insert_stack_rack_add_delay(self.stack_handle, self.rack_id, delay_ms, feedback);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
     }
 }
 

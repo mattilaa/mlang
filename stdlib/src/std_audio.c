@@ -16,6 +16,42 @@ typedef struct mlang_audio_device mlang_audio_device_t;
 typedef struct mlang_pcm_audio mlang_pcm_audio_t;
 typedef struct mlang_pcm_block mlang_pcm_block_t;
 typedef struct mlang_pcm_wav_writer mlang_pcm_wav_writer_t;
+typedef struct mlang_audio_insert_stack mlang_audio_insert_stack_t;
+
+#define MLANG_AUDIO_MAX_INSERTS 16
+#define MLANG_AUDIO_MAX_RACKS 8
+#define MLANG_AUDIO_MAX_RACK_EFFECTS 8
+
+enum mlang_audio_effect_kind
+{
+    MLANG_AUDIO_EFFECT_GAIN = 1,
+    MLANG_AUDIO_EFFECT_LOWPASS = 2,
+    MLANG_AUDIO_EFFECT_DISTORTION = 3,
+    MLANG_AUDIO_EFFECT_DELAY = 4
+};
+
+typedef struct
+{
+    int kind;
+    int enabled;
+    float wet;
+    float p1;
+    float p2;
+    float state_l;
+    float state_r;
+    float* delay;
+    uint64_t delay_frames;
+    uint64_t delay_pos;
+} mlang_audio_effect_t;
+
+typedef struct
+{
+    int enabled;
+    float dry;
+    float wet;
+    int effect_count;
+    mlang_audio_effect_t effects[MLANG_AUDIO_MAX_RACK_EFFECTS];
+} mlang_audio_effect_rack_t;
 
 typedef struct
 {
@@ -24,6 +60,7 @@ typedef struct
 } mlang_list_t;
 
 int32_t __mlang_std_audio_close(int64_t handle);
+int32_t __mlang_std_audio_insert_stack_close(int64_t handle);
 
 struct mlang_audio_device
 {
@@ -74,6 +111,35 @@ struct mlang_pcm_wav_writer
     uint64_t frames_written;
 };
 
+struct mlang_audio_insert_stack
+{
+    int backend;
+    _Atomic int running;
+    double sample_rate;
+    int64_t buffer_frames;
+    int insert_count;
+    int rack_count;
+    mlang_audio_effect_t inserts[MLANG_AUDIO_MAX_INSERTS];
+    mlang_audio_effect_rack_t racks[MLANG_AUDIO_MAX_RACKS];
+#if defined(__APPLE__)
+    AudioQueueRef input_queue;
+    AudioQueueRef output_queue;
+    AudioQueueBufferRef input_buffers[3];
+    AudioQueueBufferRef output_buffers[3];
+    float* input_ring;
+    uint64_t input_capacity_frames;
+    _Atomic uint64_t input_read_frame;
+    _Atomic uint64_t input_write_frame;
+#elif defined(__linux__)
+    void* jack_lib;
+    void* jack_client;
+    void* in_l;
+    void* in_r;
+    void* out_l;
+    void* out_r;
+#endif
+};
+
 static char g_audio_last_error[512];
 static char g_audio_device_name[512];
 
@@ -87,6 +153,145 @@ static void audio_clear_error(void)
 {
     g_audio_last_error[0] = '\0';
 }
+
+static float audio_clamp_unit(float value)
+{
+    if(value < 0.0f)
+        return 0.0f;
+    if(value > 1.0f)
+        return 1.0f;
+    return value;
+}
+
+static void audio_effect_release(mlang_audio_effect_t* effect)
+{
+    if(!effect)
+        return;
+    free(effect->delay);
+    effect->delay = NULL;
+    effect->delay_frames = 0;
+    effect->delay_pos = 0;
+}
+
+static void audio_effect_process(mlang_audio_effect_t* effect,
+                                 double sample_rate, float input_l,
+                                 float input_r, float* output_l,
+                                 float* output_r)
+{
+    float processed_l = input_l;
+    float processed_r = input_r;
+    if(!effect || !effect->enabled)
+    {
+        *output_l = input_l;
+        *output_r = input_r;
+        return;
+    }
+
+    switch(effect->kind)
+    {
+        case MLANG_AUDIO_EFFECT_GAIN:
+            processed_l = input_l * effect->p1;
+            processed_r = input_r * effect->p1;
+            break;
+        case MLANG_AUDIO_EFFECT_LOWPASS:
+        {
+            const double two_pi = 6.283185307179586476925286766559;
+            float alpha = (float)(1.0 - exp(-two_pi * (double)effect->p1 /
+                                            sample_rate));
+            effect->state_l += alpha * (input_l - effect->state_l);
+            effect->state_r += alpha * (input_r - effect->state_r);
+            processed_l = effect->state_l;
+            processed_r = effect->state_r;
+            break;
+        }
+        case MLANG_AUDIO_EFFECT_DISTORTION:
+        {
+            float normalization = tanhf(effect->p1);
+            if(fabsf(normalization) < 0.000001f)
+                normalization = 1.0f;
+            processed_l = tanhf(input_l * effect->p1) / normalization;
+            processed_r = tanhf(input_r * effect->p1) / normalization;
+            break;
+        }
+        case MLANG_AUDIO_EFFECT_DELAY:
+            if(effect->delay && effect->delay_frames > 0)
+            {
+                const uint64_t slot = effect->delay_pos * 2u;
+                const float delayed_l = effect->delay[slot];
+                const float delayed_r = effect->delay[slot + 1u];
+                effect->delay[slot] = input_l + delayed_l * effect->p2;
+                effect->delay[slot + 1u] = input_r + delayed_r * effect->p2;
+                effect->delay_pos = (effect->delay_pos + 1u) % effect->delay_frames;
+                processed_l = delayed_l;
+                processed_r = delayed_r;
+            }
+            break;
+        default:
+            break;
+    }
+
+    const float wet = audio_clamp_unit(effect->wet);
+    *output_l = input_l * (1.0f - wet) + processed_l * wet;
+    *output_r = input_r * (1.0f - wet) + processed_r * wet;
+}
+
+static void audio_insert_stack_process_sample(mlang_audio_insert_stack_t* stack,
+                                              float input_l, float input_r,
+                                              float* output_l, float* output_r)
+{
+    if(!stack || !output_l || !output_r)
+        return;
+    float serial_l = input_l;
+    float serial_r = input_r;
+    for(int i = 0; i < stack->insert_count; ++i)
+        audio_effect_process(&stack->inserts[i], stack->sample_rate,
+                             serial_l, serial_r, &serial_l, &serial_r);
+
+    if(stack->rack_count == 0)
+    {
+        *output_l = serial_l;
+        *output_r = serial_r;
+        return;
+    }
+
+    float mixed_l = 0.0f;
+    float mixed_r = 0.0f;
+    for(int rack_index = 0; rack_index < stack->rack_count; ++rack_index)
+    {
+        mlang_audio_effect_rack_t* rack = &stack->racks[rack_index];
+        if(!rack->enabled)
+            continue;
+        float rack_l = serial_l;
+        float rack_r = serial_r;
+        for(int effect_index = 0; effect_index < rack->effect_count;
+            ++effect_index)
+            audio_effect_process(&rack->effects[effect_index],
+                                 stack->sample_rate, rack_l, rack_r,
+                                 &rack_l, &rack_r);
+        mixed_l += serial_l * rack->dry + rack_l * rack->wet;
+        mixed_r += serial_r * rack->dry + rack_r * rack->wet;
+    }
+    *output_l = mixed_l;
+    *output_r = mixed_r;
+}
+
+#if defined(__linux__)
+static void audio_insert_stack_process_frames(mlang_audio_insert_stack_t* stack,
+                                              const float* input_l,
+                                              const float* input_r,
+                                              float* output_l,
+                                              float* output_r,
+                                              uint64_t frames)
+{
+    if(!stack || !output_l || !output_r)
+        return;
+    for(uint64_t frame = 0; frame < frames; ++frame)
+        audio_insert_stack_process_sample(
+            stack, input_l ? input_l[frame] : 0.0f,
+            input_r ? input_r[frame] : (input_l ? input_l[frame] : 0.0f),
+            &output_l[frame], &output_r[frame]);
+}
+#endif
 
 const char* __mlang_std_audio_last_error(void)
 {
@@ -613,6 +818,21 @@ int32_t __mlang_std_audio_pcm_block_set_stereo(
     block->samples[frame * 2] = left;
     block->samples[frame * 2 + 1] = right;
     return 0;
+}
+
+float __mlang_std_audio_pcm_block_sample(int64_t handle, int64_t frame,
+                                         int32_t channel)
+{
+    const mlang_pcm_block_t* block =
+        (const mlang_pcm_block_t*)(intptr_t)handle;
+    if(!block || !block->samples || frame < 0 ||
+       frame >= block->capacity_frames || channel < 0 || channel > 1)
+    {
+        audio_set_error("std::audio PCM block sample is out of range");
+        return 0.0f;
+    }
+    audio_clear_error();
+    return block->samples[frame * 2 + channel];
 }
 
 int32_t __mlang_std_audio_pcm_block_clear(int64_t handle)
@@ -1301,7 +1521,9 @@ int64_t __mlang_std_audio_open_output_device_config(int64_t device_id, const cha
         audio_set_error("std::audio allocation failed");
         return 0;
     }
+#if defined(__APPLE__)
     int requested_sample_rate = sample_rate > 0 ? 1 : 0;
+#endif
     d->sample_rate = (double)audio_normalize_sample_rate(sample_rate);
     d->buffer_frames = audio_normalize_buffer_frames(buffer_frames);
     d->frequency_hz = 440.0;
@@ -1606,6 +1828,707 @@ int32_t __mlang_std_audio_play_sine(int64_t handle, double frequency_hz, double 
         d->frames_left = 1;
     d->running = 1;
     atomic_store_explicit(&d->source_mode, 1, memory_order_release);
+    audio_clear_error();
+    return 0;
+}
+
+static mlang_audio_insert_stack_t* audio_insert_stack_from_handle(int64_t handle)
+{
+    return (mlang_audio_insert_stack_t*)(intptr_t)handle;
+}
+
+static int audio_insert_stack_can_configure(mlang_audio_insert_stack_t* stack,
+                                            const char* operation)
+{
+    if(!stack)
+    {
+        (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
+                       "std::audio %s: invalid insert stack handle", operation);
+        return 0;
+    }
+    if(atomic_load_explicit(&stack->running, memory_order_acquire))
+    {
+        (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
+                       "std::audio %s: stop the insert stack before changing its graph",
+                       operation);
+        return 0;
+    }
+    return 1;
+}
+
+static int audio_effect_initialize(mlang_audio_effect_t* effect, int kind,
+                                   float p1, float p2, float wet,
+                                   double sample_rate)
+{
+    if(!effect)
+        return -1;
+    memset(effect, 0, sizeof(*effect));
+    effect->kind = kind;
+    effect->enabled = 1;
+    effect->wet = audio_clamp_unit(wet);
+    effect->p1 = p1;
+    effect->p2 = p2;
+    if(kind == MLANG_AUDIO_EFFECT_DELAY)
+    {
+        if(p1 < 1.0f || p1 > 5000.0f || p2 < 0.0f || p2 >= 1.0f)
+        {
+            audio_set_error("std::audio delay expects 1..5000 ms and feedback in [0, 1)");
+            return -1;
+        }
+        effect->delay_frames = (uint64_t)(sample_rate * (double)p1 / 1000.0);
+        if(effect->delay_frames < 1u)
+            effect->delay_frames = 1u;
+        effect->delay = (float*)calloc((size_t)effect->delay_frames * 2u,
+                                       sizeof(float));
+        if(!effect->delay)
+        {
+            audio_set_error("std::audio delay buffer allocation failed");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int64_t audio_insert_stack_add_effect(mlang_audio_insert_stack_t* stack,
+                                             int rack_id, int kind, float p1,
+                                             float p2, float wet)
+{
+    if(!audio_insert_stack_can_configure(stack, "add_effect"))
+        return -1;
+    if(kind == MLANG_AUDIO_EFFECT_GAIN && (p1 < 0.0f || p1 > 16.0f))
+    {
+        audio_set_error("std::audio gain expects a linear gain in [0, 16]");
+        return -1;
+    }
+    if(kind == MLANG_AUDIO_EFFECT_LOWPASS &&
+       (p1 < 10.0f || p1 >= (float)(stack->sample_rate * 0.5)))
+    {
+        audio_set_error("std::audio low-pass cutoff must be between 10 Hz and Nyquist");
+        return -1;
+    }
+    if(kind == MLANG_AUDIO_EFFECT_DISTORTION && (p1 < 0.01f || p1 > 100.0f))
+    {
+        audio_set_error("std::audio distortion drive expects a value in [0.01, 100]");
+        return -1;
+    }
+
+    mlang_audio_effect_t* effect = NULL;
+    int64_t id = -1;
+    if(rack_id < 0)
+    {
+        if(stack->insert_count >= MLANG_AUDIO_MAX_INSERTS)
+        {
+            audio_set_error("std::audio insert stack is full (maximum 16 effects)");
+            return -1;
+        }
+        id = stack->insert_count;
+        effect = &stack->inserts[stack->insert_count];
+    }
+    else
+    {
+        if(rack_id >= stack->rack_count)
+        {
+            audio_set_error("std::audio rack effect: invalid rack id");
+            return -1;
+        }
+        mlang_audio_effect_rack_t* rack = &stack->racks[rack_id];
+        if(rack->effect_count >= MLANG_AUDIO_MAX_RACK_EFFECTS)
+        {
+            audio_set_error("std::audio effect rack is full (maximum 8 effects)");
+            return -1;
+        }
+        id = rack->effect_count;
+        effect = &rack->effects[rack->effect_count];
+    }
+    if(audio_effect_initialize(effect, kind, p1, p2, wet,
+                               stack->sample_rate) != 0)
+        return -1;
+    if(rack_id < 0)
+        ++stack->insert_count;
+    else
+        ++stack->racks[rack_id].effect_count;
+    audio_clear_error();
+    return id;
+}
+
+int64_t __mlang_std_audio_insert_stack_new(int64_t sample_rate,
+                                           int64_t buffer_frames)
+{
+    mlang_audio_insert_stack_t* stack =
+        (mlang_audio_insert_stack_t*)calloc(1u, sizeof(*stack));
+    if(!stack)
+    {
+        audio_set_error("std::audio insert stack allocation failed");
+        return 0;
+    }
+    stack->sample_rate = (double)audio_normalize_sample_rate(sample_rate);
+    stack->buffer_frames = audio_normalize_buffer_frames(buffer_frames);
+    atomic_init(&stack->running, 0);
+    audio_clear_error();
+    return (int64_t)(intptr_t)stack;
+}
+
+int64_t __mlang_std_audio_insert_stack_add_gain(int64_t handle, double gain,
+                                                double wet)
+{
+    return audio_insert_stack_add_effect(audio_insert_stack_from_handle(handle),
+                                         -1, MLANG_AUDIO_EFFECT_GAIN,
+                                         (float)gain, 0.0f, (float)wet);
+}
+
+int64_t __mlang_std_audio_insert_stack_add_lowpass(int64_t handle,
+                                                   double cutoff_hz,
+                                                   double wet)
+{
+    return audio_insert_stack_add_effect(audio_insert_stack_from_handle(handle),
+                                         -1, MLANG_AUDIO_EFFECT_LOWPASS,
+                                         (float)cutoff_hz, 0.0f, (float)wet);
+}
+
+int64_t __mlang_std_audio_insert_stack_add_distortion(int64_t handle,
+                                                      double drive,
+                                                      double wet)
+{
+    return audio_insert_stack_add_effect(audio_insert_stack_from_handle(handle),
+                                         -1, MLANG_AUDIO_EFFECT_DISTORTION,
+                                         (float)drive, 0.0f, (float)wet);
+}
+
+int64_t __mlang_std_audio_insert_stack_add_delay(int64_t handle,
+                                                 double delay_ms,
+                                                 double feedback, double wet)
+{
+    return audio_insert_stack_add_effect(audio_insert_stack_from_handle(handle),
+                                         -1, MLANG_AUDIO_EFFECT_DELAY,
+                                         (float)delay_ms, (float)feedback,
+                                         (float)wet);
+}
+
+int64_t __mlang_std_audio_insert_stack_add_rack(int64_t handle, double dry,
+                                                double wet)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    if(!audio_insert_stack_can_configure(stack, "add_rack"))
+        return -1;
+    if(stack->rack_count >= MLANG_AUDIO_MAX_RACKS)
+    {
+        audio_set_error("std::audio insert stack is full (maximum 8 racks)");
+        return -1;
+    }
+    const int id = stack->rack_count++;
+    mlang_audio_effect_rack_t* rack = &stack->racks[id];
+    memset(rack, 0, sizeof(*rack));
+    rack->enabled = 1;
+    rack->dry = audio_clamp_unit((float)dry);
+    rack->wet = audio_clamp_unit((float)wet);
+    audio_clear_error();
+    return id;
+}
+
+int32_t __mlang_std_audio_insert_stack_set_rack_mix(int64_t handle,
+                                                    int64_t rack_id,
+                                                    double dry, double wet)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    if(!audio_insert_stack_can_configure(stack, "set_rack_mix"))
+        return -1;
+    if(rack_id < 0 || rack_id >= stack->rack_count)
+    {
+        audio_set_error("std::audio set_rack_mix: invalid rack id");
+        return -1;
+    }
+    stack->racks[rack_id].dry = audio_clamp_unit((float)dry);
+    stack->racks[rack_id].wet = audio_clamp_unit((float)wet);
+    audio_clear_error();
+    return 0;
+}
+
+int64_t __mlang_std_audio_insert_stack_rack_add_gain(int64_t handle,
+                                                     int64_t rack_id,
+                                                     double gain)
+{
+    return audio_insert_stack_add_effect(audio_insert_stack_from_handle(handle),
+                                         (int)rack_id, MLANG_AUDIO_EFFECT_GAIN,
+                                         (float)gain, 0.0f, 1.0f);
+}
+
+int64_t __mlang_std_audio_insert_stack_rack_add_lowpass(int64_t handle,
+                                                        int64_t rack_id,
+                                                        double cutoff_hz)
+{
+    return audio_insert_stack_add_effect(audio_insert_stack_from_handle(handle),
+                                         (int)rack_id,
+                                         MLANG_AUDIO_EFFECT_LOWPASS,
+                                         (float)cutoff_hz, 0.0f, 1.0f);
+}
+
+int64_t __mlang_std_audio_insert_stack_rack_add_distortion(int64_t handle,
+                                                           int64_t rack_id,
+                                                           double drive)
+{
+    return audio_insert_stack_add_effect(audio_insert_stack_from_handle(handle),
+                                         (int)rack_id,
+                                         MLANG_AUDIO_EFFECT_DISTORTION,
+                                         (float)drive, 0.0f, 1.0f);
+}
+
+int64_t __mlang_std_audio_insert_stack_rack_add_delay(int64_t handle,
+                                                      int64_t rack_id,
+                                                      double delay_ms,
+                                                      double feedback)
+{
+    return audio_insert_stack_add_effect(audio_insert_stack_from_handle(handle),
+                                         (int)rack_id,
+                                         MLANG_AUDIO_EFFECT_DELAY,
+                                         (float)delay_ms, (float)feedback,
+                                         1.0f);
+}
+
+int64_t __mlang_std_audio_insert_stack_insert_count(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    return stack ? stack->insert_count : 0;
+}
+
+int64_t __mlang_std_audio_insert_stack_rack_count(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    return stack ? stack->rack_count : 0;
+}
+
+int64_t __mlang_std_audio_insert_stack_sample_rate(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    return stack ? (int64_t)(stack->sample_rate + 0.5) : 0;
+}
+
+int64_t __mlang_std_audio_insert_stack_buffer_frames(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    return stack ? stack->buffer_frames : 0;
+}
+
+int32_t __mlang_std_audio_insert_stack_process_block(int64_t handle,
+                                                     int64_t input_handle,
+                                                     int64_t output_handle,
+                                                     int64_t frames)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    mlang_pcm_block_t* input = (mlang_pcm_block_t*)(intptr_t)input_handle;
+    mlang_pcm_block_t* output = (mlang_pcm_block_t*)(intptr_t)output_handle;
+    if(!stack || !input || !output || !input->samples || !output->samples ||
+       frames < 0 || frames > input->capacity_frames ||
+       frames > output->capacity_frames)
+    {
+        audio_set_error("std::audio process_block: invalid arguments");
+        return -1;
+    }
+    for(int64_t i = 0; i < frames; ++i)
+    {
+        const float input_l = input->samples[i * 2];
+        const float input_r = input->samples[i * 2 + 1];
+        audio_insert_stack_process_sample(stack, input_l, input_r,
+                                          &output->samples[i * 2],
+                                          &output->samples[i * 2 + 1]);
+    }
+    audio_clear_error();
+    return 0;
+}
+
+#if defined(__APPLE__)
+static void audio_insert_input_callback(void* user_data, AudioQueueRef queue,
+                                        AudioQueueBufferRef buffer,
+                                        const AudioTimeStamp* start_time,
+                                        UInt32 packet_count,
+                                        const AudioStreamPacketDescription* packets)
+{
+    (void)start_time;
+    (void)packet_count;
+    (void)packets;
+    mlang_audio_insert_stack_t* stack =
+        (mlang_audio_insert_stack_t*)user_data;
+    if(stack && buffer && stack->input_ring)
+    {
+        const float* samples = (const float*)buffer->mAudioData;
+        const uint64_t frames = buffer->mAudioDataByteSize /
+                                (2u * (uint64_t)sizeof(float));
+        uint64_t write = atomic_load_explicit(&stack->input_write_frame,
+                                              memory_order_relaxed);
+        uint64_t read = atomic_load_explicit(&stack->input_read_frame,
+                                             memory_order_acquire);
+        for(uint64_t i = 0; i < frames; ++i)
+        {
+            if(write - read >= stack->input_capacity_frames)
+                ++read;
+            const uint64_t slot = write % stack->input_capacity_frames;
+            stack->input_ring[slot * 2u] = samples[i * 2u];
+            stack->input_ring[slot * 2u + 1u] = samples[i * 2u + 1u];
+            ++write;
+        }
+        atomic_store_explicit(&stack->input_read_frame, read,
+                              memory_order_release);
+        atomic_store_explicit(&stack->input_write_frame, write,
+                              memory_order_release);
+    }
+    if(stack && atomic_load_explicit(&stack->running, memory_order_acquire))
+        (void)AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
+}
+
+static void audio_insert_output_fill(mlang_audio_insert_stack_t* stack,
+                                     AudioQueueBufferRef buffer)
+{
+    if(!stack || !buffer)
+        return;
+    const uint64_t frames = stack->buffer_frames > 0
+                                ? (uint64_t)stack->buffer_frames
+                                : 512u;
+    float* samples = (float*)buffer->mAudioData;
+    uint64_t read = atomic_load_explicit(&stack->input_read_frame,
+                                         memory_order_relaxed);
+    const uint64_t write = atomic_load_explicit(&stack->input_write_frame,
+                                                memory_order_acquire);
+    for(uint64_t i = 0; i < frames; ++i)
+    {
+        float input_l = 0.0f;
+        float input_r = 0.0f;
+        if(read < write)
+        {
+            const uint64_t slot = read % stack->input_capacity_frames;
+            input_l = stack->input_ring[slot * 2u];
+            input_r = stack->input_ring[slot * 2u + 1u];
+            ++read;
+        }
+        audio_insert_stack_process_sample(stack, input_l, input_r,
+                                          &samples[i * 2u],
+                                          &samples[i * 2u + 1u]);
+    }
+    atomic_store_explicit(&stack->input_read_frame, read, memory_order_release);
+    buffer->mAudioDataByteSize =
+        (UInt32)(frames * 2u * (uint64_t)sizeof(float));
+}
+
+static void audio_insert_output_callback(void* user_data, AudioQueueRef queue,
+                                         AudioQueueBufferRef buffer)
+{
+    mlang_audio_insert_stack_t* stack =
+        (mlang_audio_insert_stack_t*)user_data;
+    audio_insert_output_fill(stack, buffer);
+    if(stack && atomic_load_explicit(&stack->running, memory_order_acquire))
+        (void)AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
+}
+
+static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack)
+{
+    AudioStreamBasicDescription fmt;
+    memset(&fmt, 0, sizeof(fmt));
+    fmt.mSampleRate = stack->sample_rate;
+    fmt.mFormatID = kAudioFormatLinearPCM;
+    fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat |
+                       kAudioFormatFlagIsPacked;
+    fmt.mBytesPerPacket = 2u * (UInt32)sizeof(float);
+    fmt.mFramesPerPacket = 1;
+    fmt.mBytesPerFrame = 2u * (UInt32)sizeof(float);
+    fmt.mChannelsPerFrame = 2;
+    fmt.mBitsPerChannel = 32;
+
+    OSStatus rc = AudioQueueNewInput(&fmt, audio_insert_input_callback, stack,
+                                     NULL, NULL, 0, &stack->input_queue);
+    if(rc == noErr)
+        rc = AudioQueueNewOutput(&fmt, audio_insert_output_callback, stack,
+                                 NULL, NULL, 0, &stack->output_queue);
+    if(rc != noErr)
+    {
+        (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
+                       "std::audio CoreAudio duplex queue creation failed: %d",
+                       (int)rc);
+        return -1;
+    }
+
+    stack->input_capacity_frames = (uint64_t)stack->buffer_frames * 8u;
+    stack->input_ring = (float*)calloc(
+        (size_t)stack->input_capacity_frames * 2u, sizeof(float));
+    if(!stack->input_ring)
+    {
+        audio_set_error("std::audio CoreAudio input ring allocation failed");
+        return -1;
+    }
+    atomic_init(&stack->input_read_frame, 0u);
+    atomic_init(&stack->input_write_frame, 0u);
+
+    const UInt32 bytes = (UInt32)(stack->buffer_frames * 2 *
+                                  (int64_t)sizeof(float));
+    for(int i = 0; i < 3; ++i)
+    {
+        if(AudioQueueAllocateBuffer(stack->input_queue, bytes,
+                                    &stack->input_buffers[i]) != noErr ||
+           AudioQueueAllocateBuffer(stack->output_queue, bytes,
+                                    &stack->output_buffers[i]) != noErr)
+        {
+            audio_set_error("std::audio CoreAudio duplex buffer allocation failed");
+            return -1;
+        }
+        memset(stack->output_buffers[i]->mAudioData, 0, bytes);
+        stack->output_buffers[i]->mAudioDataByteSize = bytes;
+        if(AudioQueueEnqueueBuffer(stack->input_queue, stack->input_buffers[i],
+                                   0, NULL) != noErr ||
+           AudioQueueEnqueueBuffer(stack->output_queue,
+                                   stack->output_buffers[i], 0, NULL) != noErr)
+        {
+            audio_set_error("std::audio CoreAudio duplex buffer enqueue failed");
+            return -1;
+        }
+    }
+    stack->backend = 1;
+    return 0;
+}
+#endif
+
+#if defined(__linux__)
+static int audio_insert_stack_jack_process(jack_nframes_t nframes, void* arg)
+{
+    mlang_audio_insert_stack_t* stack = (mlang_audio_insert_stack_t*)arg;
+    float* input_l = p_jack_port_get_buffer
+                         ? (float*)p_jack_port_get_buffer(stack->in_l, nframes)
+                         : NULL;
+    float* input_r = p_jack_port_get_buffer
+                         ? (float*)p_jack_port_get_buffer(stack->in_r, nframes)
+                         : NULL;
+    float* output_l = p_jack_port_get_buffer
+                          ? (float*)p_jack_port_get_buffer(stack->out_l, nframes)
+                          : NULL;
+    float* output_r = p_jack_port_get_buffer
+                          ? (float*)p_jack_port_get_buffer(stack->out_r, nframes)
+                          : NULL;
+    audio_insert_stack_process_frames(stack, input_l, input_r, output_l,
+                                      output_r, (uint64_t)nframes);
+    return 0;
+}
+
+static int audio_insert_stack_jack_open(mlang_audio_insert_stack_t* stack,
+                                        const char* client_name)
+{
+    stack->jack_lib = audio_jack_load_query_lib();
+    if(!stack->jack_lib)
+    {
+        audio_set_error("std::audio JACK2 libjack not found");
+        return -1;
+    }
+    jack_client_open_fn open_fn = (jack_client_open_fn)jack_sym(
+        stack->jack_lib, "jack_client_open");
+    p_jack_client_close = (jack_client_close_fn)jack_sym(
+        stack->jack_lib, "jack_client_close");
+    p_jack_activate = (jack_activate_fn)jack_sym(stack->jack_lib,
+                                                 "jack_activate");
+    p_jack_deactivate = (jack_deactivate_fn)jack_sym(stack->jack_lib,
+                                                     "jack_deactivate");
+    jack_port_register_fn register_fn = (jack_port_register_fn)jack_sym(
+        stack->jack_lib, "jack_port_register");
+    jack_set_process_callback_fn callback_fn =
+        (jack_set_process_callback_fn)jack_sym(stack->jack_lib,
+                                               "jack_set_process_callback");
+    jack_get_sample_rate_fn sample_rate_fn = (jack_get_sample_rate_fn)jack_sym(
+        stack->jack_lib, "jack_get_sample_rate");
+    jack_get_buffer_size_fn buffer_size_fn = (jack_get_buffer_size_fn)jack_sym(
+        stack->jack_lib, "jack_get_buffer_size");
+    p_jack_port_get_buffer = (jack_port_get_buffer_fn)jack_sym(
+        stack->jack_lib, "jack_port_get_buffer");
+    p_jack_port_name = (jack_port_name_fn)jack_sym(stack->jack_lib,
+                                                   "jack_port_name");
+    p_jack_get_ports = (jack_get_ports_fn)jack_sym(stack->jack_lib,
+                                                   "jack_get_ports");
+    p_jack_connect = (jack_connect_fn)jack_sym(stack->jack_lib,
+                                               "jack_connect");
+    p_jack_free = (jack_free_fn)jack_sym(stack->jack_lib, "jack_free");
+    if(!open_fn || !p_jack_client_close || !p_jack_activate ||
+       !p_jack_deactivate || !register_fn || !callback_fn ||
+       !sample_rate_fn || !buffer_size_fn || !p_jack_port_get_buffer)
+        return -1;
+
+    jack_status_t status = 0;
+    stack->jack_client = open_fn(
+        client_name && client_name[0] ? client_name : "mlang_audio_inserts",
+        MLANG_JACK_NULL_OPTION, &status);
+    if(!stack->jack_client)
+    {
+        audio_set_error("std::audio JACK2 jack_client_open failed; is jackd running?");
+        return -1;
+    }
+    stack->sample_rate = (double)sample_rate_fn(stack->jack_client);
+    stack->buffer_frames = (int64_t)buffer_size_fn(stack->jack_client);
+    stack->in_l = register_fn(stack->jack_client, "in_l",
+                              MLANG_JACK_DEFAULT_AUDIO_TYPE,
+                              MLANG_JACK_PORT_IS_INPUT, 0);
+    stack->in_r = register_fn(stack->jack_client, "in_r",
+                              MLANG_JACK_DEFAULT_AUDIO_TYPE,
+                              MLANG_JACK_PORT_IS_INPUT, 0);
+    stack->out_l = register_fn(stack->jack_client, "out_l",
+                               MLANG_JACK_DEFAULT_AUDIO_TYPE,
+                               MLANG_JACK_PORT_IS_OUTPUT, 0);
+    stack->out_r = register_fn(stack->jack_client, "out_r",
+                               MLANG_JACK_DEFAULT_AUDIO_TYPE,
+                               MLANG_JACK_PORT_IS_OUTPUT, 0);
+    if(!stack->in_l || !stack->in_r || !stack->out_l || !stack->out_r ||
+       callback_fn(stack->jack_client, audio_insert_stack_jack_process,
+                   stack) != 0)
+    {
+        audio_set_error("std::audio JACK2 duplex port setup failed");
+        return -1;
+    }
+    stack->backend = 2;
+    return 0;
+}
+
+static void audio_insert_stack_jack_autoconnect(
+    mlang_audio_insert_stack_t* stack)
+{
+    if(!stack || !p_jack_get_ports || !p_jack_port_name || !p_jack_connect)
+        return;
+    const char** captures = p_jack_get_ports(
+        stack->jack_client, NULL, MLANG_JACK_DEFAULT_AUDIO_TYPE,
+        MLANG_JACK_PORT_IS_PHYSICAL | MLANG_JACK_PORT_IS_OUTPUT);
+    const char** playbacks = p_jack_get_ports(
+        stack->jack_client, NULL, MLANG_JACK_DEFAULT_AUDIO_TYPE,
+        MLANG_JACK_PORT_IS_PHYSICAL | MLANG_JACK_PORT_IS_INPUT);
+    const char* in_l = p_jack_port_name(stack->in_l);
+    const char* in_r = p_jack_port_name(stack->in_r);
+    const char* out_l = p_jack_port_name(stack->out_l);
+    const char* out_r = p_jack_port_name(stack->out_r);
+    if(captures && captures[0] && in_l)
+        (void)p_jack_connect(stack->jack_client, captures[0], in_l);
+    if(captures && captures[1] && in_r)
+        (void)p_jack_connect(stack->jack_client, captures[1], in_r);
+    else if(captures && captures[0] && in_r)
+        (void)p_jack_connect(stack->jack_client, captures[0], in_r);
+    if(playbacks && playbacks[0] && out_l)
+        (void)p_jack_connect(stack->jack_client, out_l, playbacks[0]);
+    if(playbacks && playbacks[1] && out_r)
+        (void)p_jack_connect(stack->jack_client, out_r, playbacks[1]);
+    else if(playbacks && playbacks[0] && out_r)
+        (void)p_jack_connect(stack->jack_client, out_r, playbacks[0]);
+    if(captures && p_jack_free)
+        p_jack_free((void*)captures);
+    if(playbacks && p_jack_free)
+        p_jack_free((void*)playbacks);
+}
+#endif
+
+int64_t __mlang_std_audio_insert_stack_open_default(const char* client_name,
+                                                     int64_t sample_rate,
+                                                     int64_t buffer_frames)
+{
+    const int64_t handle = __mlang_std_audio_insert_stack_new(sample_rate,
+                                                              buffer_frames);
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    if(!stack)
+        return 0;
+#if defined(__APPLE__)
+    (void)client_name;
+    if(audio_insert_stack_coreaudio_open(stack) != 0)
+    {
+        char saved_error[sizeof(g_audio_last_error)];
+        (void)snprintf(saved_error, sizeof(saved_error), "%s",
+                       g_audio_last_error);
+        __mlang_std_audio_insert_stack_close(handle);
+        audio_set_error(saved_error);
+        return 0;
+    }
+#elif defined(__linux__)
+    if(audio_insert_stack_jack_open(stack, client_name) != 0)
+    {
+        char saved_error[sizeof(g_audio_last_error)];
+        (void)snprintf(saved_error, sizeof(saved_error), "%s",
+                       g_audio_last_error);
+        __mlang_std_audio_insert_stack_close(handle);
+        audio_set_error(saved_error);
+        return 0;
+    }
+#else
+    (void)client_name;
+    __mlang_std_audio_insert_stack_close(handle);
+    audio_set_error("std::audio duplex backend unsupported on this platform");
+    return 0;
+#endif
+    audio_clear_error();
+    return handle;
+}
+
+int32_t __mlang_std_audio_insert_stack_start(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    if(!stack || stack->backend == 0)
+    {
+        audio_set_error("std::audio start: insert stack has no duplex device");
+        return -1;
+    }
+    atomic_store_explicit(&stack->running, 1, memory_order_release);
+#if defined(__APPLE__)
+    OSStatus rc = AudioQueueStart(stack->input_queue, NULL);
+    if(rc == noErr)
+        rc = AudioQueueStart(stack->output_queue, NULL);
+    if(rc != noErr)
+    {
+        atomic_store_explicit(&stack->running, 0, memory_order_release);
+        audio_set_error("std::audio CoreAudio duplex start failed");
+        return -1;
+    }
+#elif defined(__linux__)
+    if(!p_jack_activate || p_jack_activate(stack->jack_client) != 0)
+    {
+        atomic_store_explicit(&stack->running, 0, memory_order_release);
+        audio_set_error("std::audio JACK2 duplex activation failed");
+        return -1;
+    }
+    audio_insert_stack_jack_autoconnect(stack);
+#endif
+    audio_clear_error();
+    return 0;
+}
+
+int32_t __mlang_std_audio_insert_stack_stop(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    if(!stack)
+        return 0;
+    atomic_store_explicit(&stack->running, 0, memory_order_release);
+#if defined(__APPLE__)
+    if(stack->input_queue)
+        (void)AudioQueueStop(stack->input_queue, true);
+    if(stack->output_queue)
+        (void)AudioQueueStop(stack->output_queue, true);
+#elif defined(__linux__)
+    if(stack->jack_client && p_jack_deactivate)
+        (void)p_jack_deactivate(stack->jack_client);
+#endif
+    return 0;
+}
+
+int32_t __mlang_std_audio_insert_stack_close(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    if(!stack)
+        return 0;
+    (void)__mlang_std_audio_insert_stack_stop(handle);
+#if defined(__APPLE__)
+    if(stack->input_queue)
+        AudioQueueDispose(stack->input_queue, true);
+    if(stack->output_queue)
+        AudioQueueDispose(stack->output_queue, true);
+    free(stack->input_ring);
+#elif defined(__linux__)
+    if(stack->jack_client && p_jack_client_close)
+        (void)p_jack_client_close(stack->jack_client);
+    if(stack->jack_lib)
+        dlclose(stack->jack_lib);
+#endif
+    for(int i = 0; i < stack->insert_count; ++i)
+        audio_effect_release(&stack->inserts[i]);
+    for(int rack_index = 0; rack_index < stack->rack_count; ++rack_index)
+        for(int effect_index = 0;
+            effect_index < stack->racks[rack_index].effect_count;
+            ++effect_index)
+            audio_effect_release(
+                &stack->racks[rack_index].effects[effect_index]);
+    free(stack);
     audio_clear_error();
     return 0;
 }

@@ -6,6 +6,8 @@ use std::audio::backend_name;
 use std::audio::default_output_device_id;
 use std::audio::device_count;
 use std::audio::last_error;
+use std::audio::AudioEffectRack;
+use std::audio::AudioInsertStack;
 use std::audio::PcmAudio;
 use std::audio::PcmBlock;
 use std::audio::PcmWavWriter;
@@ -87,4 +89,71 @@ fn test_audio_pcm_wav_writer() {
     verify(audio.channels() == 2);
     verify(audio.frame_count() == 3);
     audio.close();
+}
+
+#[test]
+fn test_audio_serial_insert_stack() {
+    let stack_r: result<AudioInsertStack, str8> = AudioInsertStack::new(48000, 64);
+    verify(stack_r.is_ok());
+    if stack_r.is_err() { return; }
+    let stack: AudioInsertStack = stack_r.unwrap();
+    let gain_r: result<i64, str8> = stack.add_gain(2.0, 1.0);
+    let lowpass_r: result<i64, str8> = stack.add_lowpass(12000.0, 0.0);
+    verify(gain_r.is_ok());
+    verify(lowpass_r.is_ok());
+    verify(stack.insert_count() == 2);
+
+    let input_r: result<PcmBlock, str8> = PcmBlock::new(2);
+    let output_r: result<PcmBlock, str8> = PcmBlock::new(2);
+    verify(input_r.is_ok() && output_r.is_ok());
+    if input_r.is_err() || output_r.is_err() {
+        stack.close();
+        return;
+    }
+    let input: PcmBlock = input_r.unwrap();
+    let output: PcmBlock = output_r.unwrap();
+    input.set_stereo(0, 0.25f, -0.25f);
+    input.set_stereo(1, 0.10f, -0.10f);
+    let process_r: result<i32, str8> = stack.process_block(input, output, 2);
+    verify(process_r.is_ok());
+    verify(output.left(0) > 0.499f && output.left(0) < 0.501f);
+    verify(output.right(0) < -0.499f && output.right(0) > -0.501f);
+    input.close();
+    output.close();
+    stack.close();
+}
+
+#[test]
+fn test_audio_parallel_effect_rack_mix() {
+    let stack_r: result<AudioInsertStack, str8> = AudioInsertStack::new(48000, 64);
+    verify(stack_r.is_ok());
+    if stack_r.is_err() { return; }
+    let stack: AudioInsertStack = stack_r.unwrap();
+    let rack_r: result<AudioEffectRack, str8> = stack.add_rack(0.25, 0.5);
+    verify(rack_r.is_ok());
+    if rack_r.is_err() {
+        stack.close();
+        return;
+    }
+    let rack: AudioEffectRack = rack_r.unwrap();
+    let gain_r: result<i64, str8> = rack.add_gain(2.0);
+    verify(gain_r.is_ok());
+    verify(stack.rack_count() == 1);
+
+    let input_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    let output_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    if input_r.is_err() || output_r.is_err() {
+        stack.close();
+        return;
+    }
+    let input: PcmBlock = input_r.unwrap();
+    let output: PcmBlock = output_r.unwrap();
+    input.set_stereo(0, 0.20f, -0.20f);
+    let process_r: result<i32, str8> = stack.process_block(input, output, 1);
+    verify(process_r.is_ok());
+    verify(output.left(0) > 0.249f && output.left(0) < 0.251f);
+    verify(output.right(0) < -0.249f && output.right(0) > -0.251f);
+    input.close();
+    output.close();
+    stack.close();
 }
