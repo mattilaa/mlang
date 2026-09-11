@@ -67,6 +67,8 @@ extern pub fn __mlang_std_audio_mixer_track_set_input_device(handle: i64, track_
 extern pub fn __mlang_std_audio_mixer_track_set_input_track(handle: i64, track_id: i64, source_id: i64) -> i32;
 extern pub fn __mlang_std_audio_mixer_track_set_output(handle: i64, track_id: i64, destination_id: i64) -> i32;
 extern pub fn __mlang_std_audio_mixer_track_set_gain(handle: i64, track_id: i64, gain: f64) -> i32;
+extern pub fn __mlang_std_audio_mixer_track_set_volume(handle: i64, track_id: i64, volume: f64, ramp_ms: f64) -> i32;
+extern pub fn __mlang_std_audio_mixer_track_set_pan(handle: i64, track_id: i64, pan: f64, ramp_ms: f64) -> i32;
 extern pub fn __mlang_std_audio_mixer_track_set_muted(handle: i64, track_id: i64, muted: i32) -> i32;
 extern pub fn __mlang_std_audio_mixer_set_master_gain(handle: i64, gain: f64) -> i32;
 extern pub fn __mlang_std_audio_mixer_track_set_send(handle: i64, track_id: i64, return_id: i64, level: f64, post_fader: i32) -> i32;

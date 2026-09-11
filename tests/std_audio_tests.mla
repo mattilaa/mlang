@@ -260,3 +260,86 @@ fn test_audio_mixer_track_to_track_route_is_not_duplicated() {
     output.close();
     mixer.close();
 }
+
+#[test]
+fn test_audio_mixer_volume_and_pan_ramps() {
+    let mixer_r: result<AudioMixer, str8> = AudioMixer::new(8000, 64);
+    if mixer_r.is_err() { return; }
+    let mixer: AudioMixer = mixer_r.unwrap();
+    let track_r: result<AudioTrack, str8> = mixer.add_audio_track("Ramp");
+    if track_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let track: AudioTrack = track_r.unwrap();
+    let input_r: result<PcmBlock, str8> = PcmBlock::new(32);
+    let output_r: result<PcmBlock, str8> = PcmBlock::new(32);
+    if input_r.is_err() || output_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let input: PcmBlock = input_r.unwrap();
+    let output: PcmBlock = output_r.unwrap();
+    var frame: i64 = 0;
+    while frame < 32 {
+        input.set_stereo(frame, 1.0f, 1.0f);
+        frame = frame + 1;
+    }
+
+    let volume_r: result<i32, str8> = track.set_volume(0.0, 4.0);
+    let process_volume_r: result<i32, str8> = mixer.process_block(input, output, 32);
+    verify(volume_r.is_ok() && process_volume_r.is_ok());
+    verify(output.left(15) > 0.499f && output.left(15) < 0.501f);
+    verify(output.left(31) > -0.001f && output.left(31) < 0.001f);
+
+    let restore_r: result<i32, str8> = track.set_volume(1.0, 0.0);
+    let pan_r: result<i32, str8> = track.set_pan(1.0, 4.0);
+    let process_pan_r: result<i32, str8> = mixer.process_block(input, output, 32);
+    verify(restore_r.is_ok() && pan_r.is_ok() && process_pan_r.is_ok());
+    verify(output.left(15) > 0.499f && output.left(15) < 0.501f);
+    verify(output.right(15) > 0.999f && output.right(15) < 1.001f);
+    verify(output.left(31) > -0.001f && output.left(31) < 0.001f);
+    verify(output.right(31) > 0.999f && output.right(31) < 1.001f);
+    input.close();
+    output.close();
+    mixer.close();
+}
+
+#[test]
+fn test_audio_mixer_independent_effect_sends() {
+    let mixer_r: result<AudioMixer, str8> = AudioMixer::new(48000, 64);
+    if mixer_r.is_err() { return; }
+    let mixer: AudioMixer = mixer_r.unwrap();
+    let source_r: result<AudioTrack, str8> = mixer.add_audio_track("Source");
+    let a_r: result<AudioReturnTrack, str8> = mixer.add_return_track("A");
+    let b_r: result<AudioReturnTrack, str8> = mixer.add_return_track("B");
+    if source_r.is_err() || a_r.is_err() || b_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let source: AudioTrack = source_r.unwrap();
+    let return_a: AudioReturnTrack = a_r.unwrap();
+    let return_b: AudioReturnTrack = b_r.unwrap();
+    let b_gain: result<i64, str8> = return_b.add_gain(2.0, 1.0);
+    let send_a: result<i32, str8> = source.set_send(return_a, 0.25, true);
+    let send_b: result<i32, str8> = source.set_send(return_b, 0.25, true);
+    verify(b_gain.is_ok() && send_a.is_ok() && send_b.is_ok());
+
+    let input_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    let output_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    if input_r.is_err() || output_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let input: PcmBlock = input_r.unwrap();
+    let output: PcmBlock = output_r.unwrap();
+    input.set_stereo(0, 0.20f, -0.20f);
+    let process_r: result<i32, str8> = mixer.process_block(input, output, 1);
+    verify(process_r.is_ok());
+    // Dry 0.20 + return A 0.05 + return B 0.10.
+    verify(output.left(0) > 0.349f && output.left(0) < 0.351f);
+    verify(output.right(0) < -0.349f && output.right(0) > -0.351f);
+    input.close();
+    output.close();
+    mixer.close();
+}

@@ -451,8 +451,27 @@ impl AudioTrack {
         return Ok<i32, str8>(0);
     }
 
+    /// @brief Set volume immediately. Prefer `set_volume()` for live automation.
     pub fn set_gain(self: AudioTrack, gain: f64) -> result<i32, str8> {
         let rc: i32 = __mlang_std_audio_mixer_track_set_gain(self.mixer_handle, self.track_id, gain);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Ramp volume to `volume` over `ramp_ms` milliseconds.
+    ///
+    /// This method is lock-free and may be called while the mixer is running.
+    pub fn set_volume(self: AudioTrack, volume: f64, ramp_ms: f64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_volume(self.mixer_handle, self.track_id, volume, ramp_ms);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Ramp stereo balance to `pan` (`-1` left, `0` center, `1` right).
+    ///
+    /// This method is lock-free and may be called while the mixer is running.
+    pub fn set_pan(self: AudioTrack, pan: f64, ramp_ms: f64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_pan(self.mixer_handle, self.track_id, pan, ramp_ms);
         if rc != 0 { return Err<i32, str8>(last_error()); }
         return Ok<i32, str8>(0);
     }
@@ -505,17 +524,23 @@ impl AudioReturnTrack {
         return Ok<i32, str8>(0);
     }
 
-    pub fn set_output_track(self: AudioReturnTrack, destination: AudioTrack) -> result<i32, str8> {
-        if self.mixer_handle != destination.mixer_handle {
-            return Err<i32, str8>("audio tracks belong to different mixers");
-        }
-        let rc: i32 = __mlang_std_audio_mixer_track_set_output(self.mixer_handle, self.track_id, destination.track_id);
+    /// @brief Set volume immediately. Prefer `set_volume()` for live automation.
+    pub fn set_gain(self: AudioReturnTrack, gain: f64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_gain(self.mixer_handle, self.track_id, gain);
         if rc != 0 { return Err<i32, str8>(last_error()); }
         return Ok<i32, str8>(0);
     }
 
-    pub fn set_gain(self: AudioReturnTrack, gain: f64) -> result<i32, str8> {
-        let rc: i32 = __mlang_std_audio_mixer_track_set_gain(self.mixer_handle, self.track_id, gain);
+    /// @brief Ramp return volume without discontinuities.
+    pub fn set_volume(self: AudioReturnTrack, volume: f64, ramp_ms: f64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_volume(self.mixer_handle, self.track_id, volume, ramp_ms);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Ramp return stereo balance (`-1` left, `0` center, `1` right).
+    pub fn set_pan(self: AudioReturnTrack, pan: f64, ramp_ms: f64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_pan(self.mixer_handle, self.track_id, pan, ramp_ms);
         if rc != 0 { return Err<i32, str8>(last_error()); }
         return Ok<i32, str8>(0);
     }

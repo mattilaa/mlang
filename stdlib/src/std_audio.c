@@ -160,8 +160,17 @@ typedef struct
     int input_kind;
     int input_track;
     int output_track;
-    float gain;
-    int muted;
+    _Atomic uint64_t volume_command;
+    _Atomic uint64_t pan_command;
+    uint64_t volume_command_seen;
+    uint64_t pan_command_seen;
+    uint32_t volume_frames_left;
+    uint32_t pan_frames_left;
+    float volume_current;
+    float volume_target;
+    float pan_current;
+    float pan_target;
+    _Atomic int muted;
     char name[64];
     int insert_count;
     mlang_audio_effect_t inserts[MLANG_AUDIO_MAX_INSERTS];
@@ -181,9 +190,10 @@ struct mlang_audio_mixer
     double sample_rate;
     int64_t buffer_frames;
     int track_count;
+    int return_count;
     int order_count;
     int order[MLANG_AUDIO_MAX_MIXER_TRACKS];
-    float master_gain;
+    _Atomic float master_gain;
     mlang_audio_mixer_track_t tracks[MLANG_AUDIO_MAX_MIXER_TRACKS];
     mlang_audio_insert_stack_t* io;
 };
@@ -461,6 +471,41 @@ static void audio_render_frames(mlang_audio_device_t* d, float* interleaved,
             &d->pcm_underruns, 1u, memory_order_relaxed);
 }
 
+static uint64_t audio_control_command(float target, uint32_t ramp_frames)
+{
+    uint32_t target_bits = 0;
+    memcpy(&target_bits, &target, sizeof(target_bits));
+    return ((uint64_t)ramp_frames << 32) | (uint64_t)target_bits;
+}
+
+static void audio_control_decode(uint64_t command, float* target,
+                                 uint32_t* ramp_frames)
+{
+    const uint32_t target_bits = (uint32_t)(command & 0xffffffffu);
+    memcpy(target, &target_bits, sizeof(target_bits));
+    *ramp_frames = (uint32_t)(command >> 32);
+}
+
+static float audio_control_next(_Atomic uint64_t* command,
+                                uint64_t* command_seen, float* current,
+                                float* target, uint32_t* frames_left)
+{
+    const uint64_t latest = atomic_load_explicit(command, memory_order_acquire);
+    if(latest != *command_seen)
+    {
+        audio_control_decode(latest, target, frames_left);
+        *command_seen = latest;
+        if(*frames_left == 0)
+            *current = *target;
+    }
+    if(*frames_left > 0)
+    {
+        *current += (*target - *current) / (float)*frames_left;
+        --*frames_left;
+    }
+    return *current;
+}
+
 static void audio_mixer_process_sample(mlang_audio_mixer_t* mixer,
                                        float input_l, float input_r,
                                        float* output_l, float* output_r)
@@ -505,8 +550,20 @@ static void audio_mixer_process_sample(mlang_audio_mixer_t* mixer,
                                  sample_l, sample_r, &sample_l, &sample_r);
         track->pre_l = sample_l;
         track->pre_r = sample_r;
-        track->post_l = track->muted ? 0.0f : sample_l * track->gain;
-        track->post_r = track->muted ? 0.0f : sample_r * track->gain;
+        const float volume = audio_control_next(
+            &track->volume_command, &track->volume_command_seen,
+            &track->volume_current, &track->volume_target,
+            &track->volume_frames_left);
+        const float pan = audio_control_next(
+            &track->pan_command, &track->pan_command_seen,
+            &track->pan_current, &track->pan_target,
+            &track->pan_frames_left);
+        const float pan_l = pan > 0.0f ? 1.0f - pan : 1.0f;
+        const float pan_r = pan < 0.0f ? 1.0f + pan : 1.0f;
+        const int muted = atomic_load_explicit(&track->muted,
+                                               memory_order_relaxed);
+        track->post_l = muted ? 0.0f : sample_l * volume * pan_l;
+        track->post_r = muted ? 0.0f : sample_r * volume * pan_r;
 
         for(int send_index = 0; send_index < track->send_count; ++send_index)
         {
@@ -532,8 +589,10 @@ static void audio_mixer_process_sample(mlang_audio_mixer_t* mixer,
             master_r += track->post_r;
         }
     }
-    *output_l = master_l * mixer->master_gain;
-    *output_r = master_r * mixer->master_gain;
+    const float master_gain = atomic_load_explicit(&mixer->master_gain,
+                                                   memory_order_relaxed);
+    *output_l = master_l * master_gain;
+    *output_r = master_r * master_gain;
 }
 
 static uint16_t audio_read_u16_le(const unsigned char* p)
@@ -2773,7 +2832,7 @@ int64_t __mlang_std_audio_mixer_new(int64_t sample_rate,
     }
     mixer->sample_rate = (double)audio_normalize_sample_rate(sample_rate);
     mixer->buffer_frames = audio_normalize_buffer_frames(buffer_frames);
-    mixer->master_gain = 1.0f;
+    atomic_init(&mixer->master_gain, 1.0f);
     atomic_init(&mixer->running, 0);
     audio_clear_error();
     return (int64_t)(intptr_t)mixer;
@@ -2818,6 +2877,11 @@ static int64_t audio_mixer_add_track(mlang_audio_mixer_t* mixer,
         audio_set_error("std::audio mixer is full (maximum 32 tracks)");
         return -1;
     }
+    if(is_return && mixer->return_count >= MLANG_AUDIO_MAX_TRACK_SENDS)
+    {
+        audio_set_error("std::audio mixer is full (maximum 8 return tracks)");
+        return -1;
+    }
     const int id = mixer->track_count++;
     mlang_audio_mixer_track_t* track = &mixer->tracks[id];
     memset(track, 0, sizeof(*track));
@@ -2826,7 +2890,40 @@ static int64_t audio_mixer_add_track(mlang_audio_mixer_t* mixer,
     track->input_kind = is_return ? 0 : 1;
     track->input_track = -1;
     track->output_track = -1;
-    track->gain = 1.0f;
+    track->volume_current = 1.0f;
+    track->volume_target = 1.0f;
+    track->pan_current = 0.0f;
+    track->pan_target = 0.0f;
+    track->volume_command_seen = audio_control_command(1.0f, 0);
+    track->pan_command_seen = audio_control_command(0.0f, 0);
+    atomic_init(&track->volume_command, track->volume_command_seen);
+    atomic_init(&track->pan_command, track->pan_command_seen);
+    atomic_init(&track->muted, 0);
+    if(is_return)
+    {
+        for(int source_id = 0; source_id < id; ++source_id)
+        {
+            mlang_audio_mixer_track_t* source = &mixer->tracks[source_id];
+            if(source->is_return)
+                continue;
+            mlang_audio_track_send_t* send =
+                &source->sends[source->send_count++];
+            send->return_track = id;
+            send->post_fader = 1;
+        }
+        ++mixer->return_count;
+    }
+    else
+    {
+        for(int target_id = 0; target_id < id; ++target_id)
+        {
+            if(!mixer->tracks[target_id].is_return)
+                continue;
+            mlang_audio_track_send_t* send = &track->sends[track->send_count++];
+            send->return_track = target_id;
+            send->post_fader = 1;
+        }
+    }
     (void)snprintf(track->name, sizeof(track->name), "%s",
                    name && name[0] ? name : (is_return ? "Return" : "Audio"));
     (void)audio_mixer_rebuild_order(mixer);
@@ -2923,9 +3020,23 @@ int32_t __mlang_std_audio_mixer_track_set_output(int64_t handle,
         audio_set_error("std::audio set_output: destination must be master or a track");
         return -1;
     }
-    if(destination_id >= 0 &&
-       !audio_mixer_track(mixer, destination_id, "set_output"))
+    if(track->is_return && destination_id >= 0)
+    {
+        audio_set_error("std::audio return tracks are always routed to master");
         return -1;
+    }
+    if(destination_id >= 0)
+    {
+        mlang_audio_mixer_track_t* destination = audio_mixer_track(
+            mixer, destination_id, "set_output");
+        if(!destination)
+            return -1;
+        if(destination->is_return)
+        {
+            audio_set_error("std::audio effect returns are reached only through sends");
+            return -1;
+        }
+    }
     const int old_output = track->output_track;
     track->output_track = (int)destination_id;
     if(audio_mixer_rebuild_order(mixer) != 0)
@@ -2938,23 +3049,53 @@ int32_t __mlang_std_audio_mixer_track_set_output(int64_t handle,
     return 0;
 }
 
+static int32_t audio_mixer_track_set_control(int64_t handle, int64_t track_id,
+                                             double value, double ramp_ms,
+                                             int is_pan)
+{
+    mlang_audio_mixer_t* mixer = audio_mixer_from_handle(handle);
+    mlang_audio_mixer_track_t* track = audio_mixer_track(
+        mixer, track_id, is_pan ? "set_track_pan" : "set_track_volume");
+    const int value_invalid = is_pan ? (value < -1.0 || value > 1.0)
+                                     : (value < 0.0 || value > 16.0);
+    if(!track || value_invalid || ramp_ms < 0.0 || ramp_ms > 60000.0)
+    {
+        if(track)
+            audio_set_error(is_pan
+                ? "std::audio pan expects [-1, 1] and ramp_ms in [0, 60000]"
+                : "std::audio volume expects [0, 16] and ramp_ms in [0, 60000]");
+        return -1;
+    }
+    uint64_t frames = (uint64_t)(mixer->sample_rate * ramp_ms / 1000.0 + 0.5);
+    if(frames > UINT32_MAX)
+        frames = UINT32_MAX;
+    const uint64_t command = audio_control_command((float)value,
+                                                    (uint32_t)frames);
+    atomic_store_explicit(is_pan ? &track->pan_command : &track->volume_command,
+                          command, memory_order_release);
+    audio_clear_error();
+    return 0;
+}
+
+int32_t __mlang_std_audio_mixer_track_set_volume(int64_t handle,
+                                                 int64_t track_id,
+                                                 double volume,
+                                                 double ramp_ms)
+{
+    return audio_mixer_track_set_control(handle, track_id, volume, ramp_ms, 0);
+}
+
+int32_t __mlang_std_audio_mixer_track_set_pan(int64_t handle,
+                                              int64_t track_id, double pan,
+                                              double ramp_ms)
+{
+    return audio_mixer_track_set_control(handle, track_id, pan, ramp_ms, 1);
+}
+
 int32_t __mlang_std_audio_mixer_track_set_gain(int64_t handle,
                                                int64_t track_id, double gain)
 {
-    mlang_audio_mixer_t* mixer = audio_mixer_from_handle(handle);
-    if(!audio_mixer_can_configure(mixer, "set_track_gain"))
-        return -1;
-    mlang_audio_mixer_track_t* track = audio_mixer_track(
-        mixer, track_id, "set_track_gain");
-    if(!track || gain < 0.0 || gain > 16.0)
-    {
-        if(track)
-            audio_set_error("std::audio track gain expects a value in [0, 16]");
-        return -1;
-    }
-    track->gain = (float)gain;
-    audio_clear_error();
-    return 0;
+    return __mlang_std_audio_mixer_track_set_volume(handle, track_id, gain, 0.0);
 }
 
 int32_t __mlang_std_audio_mixer_track_set_muted(int64_t handle,
@@ -2962,13 +3103,12 @@ int32_t __mlang_std_audio_mixer_track_set_muted(int64_t handle,
                                                 int32_t muted)
 {
     mlang_audio_mixer_t* mixer = audio_mixer_from_handle(handle);
-    if(!audio_mixer_can_configure(mixer, "set_track_muted"))
-        return -1;
     mlang_audio_mixer_track_t* track = audio_mixer_track(
         mixer, track_id, "set_track_muted");
     if(!track)
         return -1;
-    track->muted = muted ? 1 : 0;
+    atomic_store_explicit(&track->muted, muted ? 1 : 0,
+                          memory_order_relaxed);
     audio_clear_error();
     return 0;
 }
@@ -2976,14 +3116,18 @@ int32_t __mlang_std_audio_mixer_track_set_muted(int64_t handle,
 int32_t __mlang_std_audio_mixer_set_master_gain(int64_t handle, double gain)
 {
     mlang_audio_mixer_t* mixer = audio_mixer_from_handle(handle);
-    if(!audio_mixer_can_configure(mixer, "set_master_gain"))
+    if(!mixer)
+    {
+        audio_set_error("std::audio set_master_gain: invalid mixer handle");
         return -1;
+    }
     if(gain < 0.0 || gain > 16.0)
     {
         audio_set_error("std::audio master gain expects a value in [0, 16]");
         return -1;
     }
-    mixer->master_gain = (float)gain;
+    atomic_store_explicit(&mixer->master_gain, (float)gain,
+                          memory_order_relaxed);
     audio_clear_error();
     return 0;
 }
