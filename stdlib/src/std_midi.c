@@ -9,10 +9,13 @@
 #include <CoreMIDI/CoreMIDI.h>
 #elif defined(__linux__)
 #include <dlfcn.h>
+#include <errno.h>
 #endif
 
 #define MLANG_MIDI_QUEUE_CAPACITY 256u
 #define MLANG_MIDI_MAX_MESSAGE_BYTES 1024u
+#define MLANG_MIDI_PATCHBAY_MAX_PORTS 32u
+#define MLANG_MIDI_PATCHBAY_MAX_CONNECTIONS 128u
 
 typedef struct
 {
@@ -50,6 +53,70 @@ typedef struct
 {
     mlang_midi_packet_t packet;
 } mlang_midi_message_t;
+
+typedef struct mlang_midi_patchbay mlang_midi_patchbay_t;
+
+typedef struct
+{
+    mlang_midi_patchbay_t* patchbay;
+    uint32_t index;
+} mlang_midi_patchbay_input_context_t;
+
+typedef struct
+{
+    int64_t device_id;
+    mlang_midi_queue_t queue;
+#if defined(__APPLE__)
+    MIDIEndpointRef endpoint;
+#elif defined(__linux__)
+    void* jack_port;
+    char remote_name[512];
+#endif
+} mlang_midi_patchbay_input_t;
+
+typedef struct
+{
+    int64_t device_id;
+    mlang_midi_queue_t queue;
+#if defined(__APPLE__)
+    MIDIEndpointRef endpoint;
+#elif defined(__linux__)
+    void* jack_port;
+    char remote_name[512];
+#endif
+} mlang_midi_patchbay_output_t;
+
+typedef struct
+{
+    uint32_t input;
+    uint32_t output;
+    _Atomic int active;
+} mlang_midi_patchbay_connection_t;
+
+struct mlang_midi_patchbay
+{
+    _Atomic int started;
+    uint32_t input_count;
+    uint32_t output_count;
+    mlang_midi_patchbay_input_t inputs[MLANG_MIDI_PATCHBAY_MAX_PORTS];
+    mlang_midi_patchbay_output_t outputs[MLANG_MIDI_PATCHBAY_MAX_PORTS];
+    mlang_midi_patchbay_input_context_t
+        input_contexts[MLANG_MIDI_PATCHBAY_MAX_PORTS];
+    mlang_midi_patchbay_connection_t
+        connections[MLANG_MIDI_PATCHBAY_MAX_CONNECTIONS];
+#if defined(__APPLE__)
+    MIDIClientRef client;
+    MIDIPortRef input_port;
+    MIDIPortRef output_port;
+#elif defined(__linux__)
+    void* jack_lib;
+    void* jack_client;
+    uint32_t available_input_count;
+    uint32_t available_output_count;
+    char input_device_names[MLANG_MIDI_PATCHBAY_MAX_PORTS][512];
+    char output_device_names[MLANG_MIDI_PATCHBAY_MAX_PORTS][512];
+#endif
+};
 
 typedef struct
 {
@@ -180,6 +247,45 @@ static void midi_apple_read(const MIDIPacketList* packets, void* context,
     }
 }
 
+static void midi_apple_patchbay_read(const MIDIPacketList* packets,
+                                     void* context, void* source_context)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)context;
+    mlang_midi_patchbay_input_context_t* input_context =
+        (mlang_midi_patchbay_input_context_t*)source_context;
+    if(!patchbay || !input_context || input_context->patchbay != patchbay ||
+       input_context->index >= patchbay->input_count || !packets ||
+       !atomic_load_explicit(&patchbay->started, memory_order_acquire))
+        return;
+
+    const uint32_t input_index = input_context->index;
+    const MIDIPacket* packet = &packets->packet[0];
+    for(UInt32 i = 0; i < packets->numPackets; ++i)
+    {
+        uint32_t length = packet->length;
+        if(length > MLANG_MIDI_MAX_MESSAGE_BYTES)
+            length = MLANG_MIDI_MAX_MESSAGE_BYTES;
+        (void)midi_queue_push(&patchbay->inputs[input_index].queue,
+                              (uint64_t)packet->timeStamp, packet->data,
+                              length);
+        packet = MIDIPacketNext(packet);
+    }
+
+    for(uint32_t i = 0; i < MLANG_MIDI_PATCHBAY_MAX_CONNECTIONS; ++i)
+    {
+        const mlang_midi_patchbay_connection_t* connection =
+            &patchbay->connections[i];
+        if(atomic_load_explicit(&connection->active, memory_order_acquire) &&
+           connection->input == input_index &&
+           connection->output < patchbay->output_count)
+        {
+            (void)MIDISend(patchbay->output_port,
+                           patchbay->outputs[connection->output].endpoint,
+                           packets);
+        }
+    }
+}
+
 static int64_t midi_apple_count(int direction)
 {
     return direction == 1 ? (int64_t)MIDIGetNumberOfSources()
@@ -303,6 +409,10 @@ static midi_jack_get_event_count_fn p_midi_jack_get_event_count;
 static midi_jack_event_get_fn p_midi_jack_event_get;
 static midi_jack_clear_buffer_fn p_midi_jack_clear_buffer;
 static midi_jack_event_write_fn p_midi_jack_event_write;
+static midi_jack_get_ports_fn p_midi_jack_get_ports;
+static midi_jack_port_name_fn p_midi_jack_port_name;
+static midi_jack_connect_fn p_midi_jack_connect;
+static midi_jack_free_fn p_midi_jack_free;
 
 static void* midi_jack_library(void)
 {
@@ -354,6 +464,73 @@ static int midi_jack_process(jack_nframes_t frames, void* context)
     return 0;
 }
 
+static int midi_jack_patchbay_process(jack_nframes_t frames, void* context)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)context;
+    if(!patchbay ||
+       !atomic_load_explicit(&patchbay->started, memory_order_acquire) ||
+       !p_midi_jack_port_get_buffer)
+        return 0;
+
+    void* output_buffers[MLANG_MIDI_PATCHBAY_MAX_PORTS] = {0};
+    for(uint32_t output = 0; output < patchbay->output_count; ++output)
+    {
+        output_buffers[output] = p_midi_jack_port_get_buffer(
+            patchbay->outputs[output].jack_port, frames);
+        if(output_buffers[output] && p_midi_jack_clear_buffer)
+            p_midi_jack_clear_buffer(output_buffers[output]);
+
+        mlang_midi_packet_t queued;
+        while(output_buffers[output] &&
+              midi_queue_pop(&patchbay->outputs[output].queue, &queued) == 1)
+        {
+            if(p_midi_jack_event_write)
+                (void)p_midi_jack_event_write(output_buffers[output], 0,
+                                              queued.data, queued.length);
+        }
+    }
+
+    for(uint32_t input = 0; input < patchbay->input_count; ++input)
+    {
+        void* input_buffer = p_midi_jack_port_get_buffer(
+            patchbay->inputs[input].jack_port, frames);
+        const uint32_t count = input_buffer && p_midi_jack_get_event_count
+                                   ? p_midi_jack_get_event_count(input_buffer)
+                                   : 0u;
+        for(uint32_t event_index = 0; event_index < count; ++event_index)
+        {
+            mlang_jack_midi_event_t event;
+            if(!p_midi_jack_event_get ||
+               p_midi_jack_event_get(&event, input_buffer, event_index) != 0 ||
+               !event.buffer)
+                continue;
+            const uint32_t length = event.size > MLANG_MIDI_MAX_MESSAGE_BYTES
+                                        ? MLANG_MIDI_MAX_MESSAGE_BYTES
+                                        : (uint32_t)event.size;
+            (void)midi_queue_push(&patchbay->inputs[input].queue, event.time,
+                                  event.buffer, length);
+            for(uint32_t route = 0; route < MLANG_MIDI_PATCHBAY_MAX_CONNECTIONS;
+                ++route)
+            {
+                const mlang_midi_patchbay_connection_t* connection =
+                    &patchbay->connections[route];
+                if(atomic_load_explicit(&connection->active,
+                                        memory_order_acquire) &&
+                   connection->input == input &&
+                   connection->output < patchbay->output_count &&
+                   output_buffers[connection->output] &&
+                   p_midi_jack_event_write)
+                {
+                    (void)p_midi_jack_event_write(
+                        output_buffers[connection->output], event.time,
+                        event.buffer, length);
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 static int midi_jack_symbols(void* library)
 {
     p_midi_jack_client_close =
@@ -372,10 +549,18 @@ static int midi_jack_symbols(void* library)
         (midi_jack_clear_buffer_fn)dlsym(library, "jack_midi_clear_buffer");
     p_midi_jack_event_write =
         (midi_jack_event_write_fn)dlsym(library, "jack_midi_event_write");
+    p_midi_jack_get_ports =
+        (midi_jack_get_ports_fn)dlsym(library, "jack_get_ports");
+    p_midi_jack_port_name =
+        (midi_jack_port_name_fn)dlsym(library, "jack_port_name");
+    p_midi_jack_connect = (midi_jack_connect_fn)dlsym(library, "jack_connect");
+    p_midi_jack_free = (midi_jack_free_fn)dlsym(library, "jack_free");
     return p_midi_jack_client_close && p_midi_jack_activate &&
                    p_midi_jack_deactivate && p_midi_jack_port_get_buffer &&
                    p_midi_jack_get_event_count && p_midi_jack_event_get &&
-                   p_midi_jack_clear_buffer && p_midi_jack_event_write
+                   p_midi_jack_clear_buffer && p_midi_jack_event_write &&
+                   p_midi_jack_get_ports && p_midi_jack_port_name &&
+                   p_midi_jack_connect && p_midi_jack_free
                ? 0
                : -1;
 }
@@ -746,6 +931,542 @@ int64_t __mlang_std_midi_send_bytes(int64_t handle, mlang_list_t bytes)
 #endif
     midi_clear_error();
     return length;
+}
+
+int64_t __mlang_std_midi_patchbay_open(const char* client_name)
+{
+    midi_clear_error();
+    mlang_midi_patchbay_t* patchbay =
+        (mlang_midi_patchbay_t*)calloc(1, sizeof(*patchbay));
+    if(!patchbay)
+    {
+        midi_set_error("std::midi patchbay allocation failed");
+        return 0;
+    }
+#if defined(__APPLE__)
+    CFStringRef name = CFStringCreateWithCString(
+        NULL, client_name && client_name[0] ? client_name : "mlang_patchbay",
+        kCFStringEncodingUTF8);
+    OSStatus rc =
+        name ? MIDIClientCreate(name, NULL, NULL, &patchbay->client) : -1;
+    if(name)
+        CFRelease(name);
+    if(rc == noErr)
+        rc = MIDIInputPortCreate(patchbay->client, CFSTR("patchbay inputs"),
+                                 midi_apple_patchbay_read, patchbay,
+                                 &patchbay->input_port);
+    if(rc == noErr)
+        rc = MIDIOutputPortCreate(patchbay->client, CFSTR("patchbay outputs"),
+                                  &patchbay->output_port);
+    if(rc != noErr)
+    {
+        if(patchbay->input_port)
+            (void)MIDIPortDispose(patchbay->input_port);
+        if(patchbay->output_port)
+            (void)MIDIPortDispose(patchbay->output_port);
+        if(patchbay->client)
+            (void)MIDIClientDispose(patchbay->client);
+        free(patchbay);
+        midi_set_error("std::midi CoreMIDI patchbay open failed");
+        return 0;
+    }
+#elif defined(__linux__)
+    patchbay->jack_lib = midi_jack_library();
+    if(!patchbay->jack_lib || midi_jack_symbols(patchbay->jack_lib) != 0)
+    {
+        if(patchbay->jack_lib)
+            dlclose(patchbay->jack_lib);
+        free(patchbay);
+        midi_set_error("std::midi JACK patchbay requires libjack MIDI support");
+        return 0;
+    }
+    midi_jack_client_open_fn open_client =
+        (midi_jack_client_open_fn)dlsym(patchbay->jack_lib, "jack_client_open");
+    midi_jack_set_process_callback_fn set_process =
+        (midi_jack_set_process_callback_fn)dlsym(patchbay->jack_lib,
+                                                 "jack_set_process_callback");
+    jack_status_t status = 0;
+    patchbay->jack_client =
+        open_client
+            ? open_client(client_name && client_name[0] ? client_name
+                                                        : "mlang_patchbay",
+                          MLANG_JACK_NO_START_SERVER, &status)
+            : NULL;
+    if(!patchbay->jack_client || !set_process ||
+       set_process(patchbay->jack_client, midi_jack_patchbay_process,
+                   patchbay) != 0)
+    {
+        if(patchbay->jack_client && p_midi_jack_client_close)
+            (void)p_midi_jack_client_close(patchbay->jack_client);
+        dlclose(patchbay->jack_lib);
+        free(patchbay);
+        midi_set_error(
+            "std::midi JACK patchbay open failed; is jackd running?");
+        return 0;
+    }
+
+    const char** ports = p_midi_jack_get_ports(patchbay->jack_client, NULL,
+                                               MLANG_JACK_DEFAULT_MIDI_TYPE,
+                                               MLANG_JACK_PORT_IS_OUTPUT);
+    while(ports &&
+          patchbay->available_input_count < MLANG_MIDI_PATCHBAY_MAX_PORTS &&
+          ports[patchbay->available_input_count])
+    {
+        const uint32_t index = patchbay->available_input_count++;
+        (void)snprintf(patchbay->input_device_names[index],
+                       sizeof(patchbay->input_device_names[index]), "%s",
+                       ports[index]);
+    }
+    if(ports && p_midi_jack_free)
+        p_midi_jack_free((void*)ports);
+    ports = p_midi_jack_get_ports(patchbay->jack_client, NULL,
+                                  MLANG_JACK_DEFAULT_MIDI_TYPE,
+                                  MLANG_JACK_PORT_IS_INPUT);
+    while(ports &&
+          patchbay->available_output_count < MLANG_MIDI_PATCHBAY_MAX_PORTS &&
+          ports[patchbay->available_output_count])
+    {
+        const uint32_t index = patchbay->available_output_count++;
+        (void)snprintf(patchbay->output_device_names[index],
+                       sizeof(patchbay->output_device_names[index]), "%s",
+                       ports[index]);
+    }
+    if(ports && p_midi_jack_free)
+        p_midi_jack_free((void*)ports);
+#else
+    (void)client_name;
+    free(patchbay);
+    midi_set_error("std::midi patchbay is unsupported on this platform");
+    return 0;
+#endif
+    midi_clear_error();
+    return (int64_t)(intptr_t)patchbay;
+}
+
+static int midi_patchbay_can_configure(mlang_midi_patchbay_t* patchbay)
+{
+    if(!patchbay)
+    {
+        midi_set_error("std::midi patchbay handle is invalid");
+        return 0;
+    }
+    if(atomic_load_explicit(&patchbay->started, memory_order_acquire))
+    {
+        midi_set_error(
+            "std::midi patchbay must be stopped before reconfiguration");
+        return 0;
+    }
+    return 1;
+}
+
+int64_t __mlang_std_midi_patchbay_add_input(int64_t handle, int64_t device_id,
+                                            const char* port_name)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!midi_patchbay_can_configure(patchbay))
+        return -1;
+    if(patchbay->input_count >= MLANG_MIDI_PATCHBAY_MAX_PORTS)
+    {
+        midi_set_error("std::midi patchbay input limit is 32");
+        return -1;
+    }
+    if(device_id < 0)
+        device_id = __mlang_std_midi_default_input_id();
+#if defined(__APPLE__)
+    if(device_id < 0 || device_id >= __mlang_std_midi_input_count())
+    {
+        midi_set_error("std::midi patchbay input device id is invalid");
+        return -1;
+    }
+#elif defined(__linux__)
+    if(device_id < 0 || device_id >= (int64_t)patchbay->available_input_count)
+    {
+        midi_set_error("std::midi patchbay JACK input device id is invalid");
+        return -1;
+    }
+#else
+    (void)port_name;
+    midi_set_error("std::midi patchbay input is unsupported");
+    return -1;
+#endif
+    const uint32_t index = patchbay->input_count;
+    mlang_midi_patchbay_input_t* input = &patchbay->inputs[index];
+    input->device_id = device_id;
+#if defined(__APPLE__)
+    (void)port_name;
+    input->endpoint = midi_apple_endpoint(1, device_id);
+    patchbay->input_contexts[index].patchbay = patchbay;
+    patchbay->input_contexts[index].index = index;
+    if(!input->endpoint ||
+       MIDIPortConnectSource(patchbay->input_port, input->endpoint,
+                             &patchbay->input_contexts[index]) != noErr)
+    {
+        midi_set_error("std::midi CoreMIDI patchbay input connection failed");
+        return -1;
+    }
+#elif defined(__linux__)
+    midi_jack_port_register_fn register_port =
+        (midi_jack_port_register_fn)dlsym(patchbay->jack_lib,
+                                          "jack_port_register");
+    char fallback[32];
+    (void)snprintf(fallback, sizeof(fallback), "input_%u", index);
+    input->jack_port =
+        register_port
+            ? register_port(patchbay->jack_client,
+                            port_name && port_name[0] ? port_name : fallback,
+                            MLANG_JACK_DEFAULT_MIDI_TYPE,
+                            MLANG_JACK_PORT_IS_INPUT, 0)
+            : NULL;
+    if(!input->jack_port)
+    {
+        midi_set_error("std::midi JACK patchbay input registration failed");
+        return -1;
+    }
+    (void)snprintf(input->remote_name, sizeof(input->remote_name), "%s",
+                   patchbay->input_device_names[device_id]);
+#endif
+    ++patchbay->input_count;
+    midi_clear_error();
+    return index;
+}
+
+int64_t __mlang_std_midi_patchbay_add_output(int64_t handle, int64_t device_id,
+                                             const char* port_name)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!midi_patchbay_can_configure(patchbay))
+        return -1;
+    if(patchbay->output_count >= MLANG_MIDI_PATCHBAY_MAX_PORTS)
+    {
+        midi_set_error("std::midi patchbay output limit is 32");
+        return -1;
+    }
+    if(device_id < 0)
+        device_id = __mlang_std_midi_default_output_id();
+#if defined(__APPLE__)
+    if(device_id < 0 || device_id >= __mlang_std_midi_output_count())
+    {
+        midi_set_error("std::midi patchbay output device id is invalid");
+        return -1;
+    }
+#elif defined(__linux__)
+    if(device_id < 0 || device_id >= (int64_t)patchbay->available_output_count)
+    {
+        midi_set_error("std::midi patchbay JACK output device id is invalid");
+        return -1;
+    }
+#else
+    (void)port_name;
+    midi_set_error("std::midi patchbay output is unsupported");
+    return -1;
+#endif
+    const uint32_t index = patchbay->output_count;
+    mlang_midi_patchbay_output_t* output = &patchbay->outputs[index];
+    output->device_id = device_id;
+#if defined(__APPLE__)
+    (void)port_name;
+    output->endpoint = midi_apple_endpoint(2, device_id);
+    if(!output->endpoint)
+    {
+        midi_set_error("std::midi CoreMIDI patchbay output is unavailable");
+        return -1;
+    }
+#elif defined(__linux__)
+    midi_jack_port_register_fn register_port =
+        (midi_jack_port_register_fn)dlsym(patchbay->jack_lib,
+                                          "jack_port_register");
+    char fallback[32];
+    (void)snprintf(fallback, sizeof(fallback), "output_%u", index);
+    output->jack_port =
+        register_port
+            ? register_port(patchbay->jack_client,
+                            port_name && port_name[0] ? port_name : fallback,
+                            MLANG_JACK_DEFAULT_MIDI_TYPE,
+                            MLANG_JACK_PORT_IS_OUTPUT, 0)
+            : NULL;
+    if(!output->jack_port)
+    {
+        midi_set_error("std::midi JACK patchbay output registration failed");
+        return -1;
+    }
+    (void)snprintf(output->remote_name, sizeof(output->remote_name), "%s",
+                   patchbay->output_device_names[device_id]);
+#endif
+    ++patchbay->output_count;
+    midi_clear_error();
+    return index;
+}
+
+int32_t __mlang_std_midi_patchbay_connect(int64_t handle, int64_t input,
+                                          int64_t output)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!midi_patchbay_can_configure(patchbay))
+        return -1;
+    if(input < 0 || input >= patchbay->input_count || output < 0 ||
+       output >= patchbay->output_count)
+    {
+        midi_set_error("std::midi patchbay connection port id is invalid");
+        return -1;
+    }
+    mlang_midi_patchbay_connection_t* free_connection = NULL;
+    for(uint32_t i = 0; i < MLANG_MIDI_PATCHBAY_MAX_CONNECTIONS; ++i)
+    {
+        mlang_midi_patchbay_connection_t* connection =
+            &patchbay->connections[i];
+        if(atomic_load_explicit(&connection->active, memory_order_acquire))
+        {
+            if(connection->input == (uint32_t)input &&
+               connection->output == (uint32_t)output)
+                return 0;
+        }
+        else if(!free_connection)
+        {
+            free_connection = connection;
+        }
+    }
+    if(!free_connection)
+    {
+        midi_set_error("std::midi patchbay connection limit is 128");
+        return -1;
+    }
+    free_connection->input = (uint32_t)input;
+    free_connection->output = (uint32_t)output;
+    atomic_store_explicit(&free_connection->active, 1, memory_order_release);
+    midi_clear_error();
+    return 0;
+}
+
+int32_t __mlang_std_midi_patchbay_disconnect(int64_t handle, int64_t input,
+                                             int64_t output)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!midi_patchbay_can_configure(patchbay))
+        return -1;
+    for(uint32_t i = 0; i < MLANG_MIDI_PATCHBAY_MAX_CONNECTIONS; ++i)
+    {
+        mlang_midi_patchbay_connection_t* connection =
+            &patchbay->connections[i];
+        if(atomic_load_explicit(&connection->active, memory_order_acquire) &&
+           connection->input == (uint32_t)input &&
+           connection->output == (uint32_t)output)
+        {
+            atomic_store_explicit(&connection->active, 0, memory_order_release);
+            midi_clear_error();
+            return 0;
+        }
+    }
+    midi_set_error("std::midi patchbay connection does not exist");
+    return -1;
+}
+
+int64_t __mlang_std_midi_patchbay_connection_count(int64_t handle)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!patchbay)
+        return -1;
+    int64_t count = 0;
+    for(uint32_t i = 0; i < MLANG_MIDI_PATCHBAY_MAX_CONNECTIONS; ++i)
+        if(atomic_load_explicit(&patchbay->connections[i].active,
+                                memory_order_acquire))
+            ++count;
+    return count;
+}
+
+int64_t __mlang_std_midi_patchbay_input_count(int64_t handle)
+{
+    const mlang_midi_patchbay_t* patchbay =
+        (const mlang_midi_patchbay_t*)(intptr_t)handle;
+    return patchbay ? patchbay->input_count : -1;
+}
+
+int64_t __mlang_std_midi_patchbay_output_count(int64_t handle)
+{
+    const mlang_midi_patchbay_t* patchbay =
+        (const mlang_midi_patchbay_t*)(intptr_t)handle;
+    return patchbay ? patchbay->output_count : -1;
+}
+
+int32_t __mlang_std_midi_patchbay_start(int64_t handle)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!patchbay)
+    {
+        midi_set_error("std::midi patchbay handle is invalid");
+        return -1;
+    }
+    if(atomic_load_explicit(&patchbay->started, memory_order_acquire))
+        return 0;
+#if defined(__linux__)
+    if(!p_midi_jack_activate ||
+       p_midi_jack_activate(patchbay->jack_client) != 0)
+    {
+        midi_set_error("std::midi JACK patchbay activation failed");
+        return -1;
+    }
+    for(uint32_t i = 0; i < patchbay->input_count; ++i)
+    {
+        const char* local =
+            p_midi_jack_port_name(patchbay->inputs[i].jack_port);
+        const int rc =
+            local ? p_midi_jack_connect(patchbay->jack_client,
+                                        patchbay->inputs[i].remote_name, local)
+                  : -1;
+        if(rc != 0 && rc != EEXIST)
+        {
+            (void)p_midi_jack_deactivate(patchbay->jack_client);
+            midi_set_error("std::midi JACK patchbay input connection failed");
+            return -1;
+        }
+    }
+    for(uint32_t i = 0; i < patchbay->output_count; ++i)
+    {
+        const char* local =
+            p_midi_jack_port_name(patchbay->outputs[i].jack_port);
+        const int rc =
+            local ? p_midi_jack_connect(patchbay->jack_client, local,
+                                        patchbay->outputs[i].remote_name)
+                  : -1;
+        if(rc != 0 && rc != EEXIST)
+        {
+            (void)p_midi_jack_deactivate(patchbay->jack_client);
+            midi_set_error("std::midi JACK patchbay output connection failed");
+            return -1;
+        }
+    }
+#elif !defined(__APPLE__)
+    midi_set_error("std::midi patchbay is unsupported on this platform");
+    return -1;
+#endif
+    atomic_store_explicit(&patchbay->started, 1, memory_order_release);
+    midi_clear_error();
+    return 0;
+}
+
+int32_t __mlang_std_midi_patchbay_stop(int64_t handle)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!patchbay)
+        return -1;
+    if(!atomic_exchange_explicit(&patchbay->started, 0, memory_order_acq_rel))
+        return 0;
+#if defined(__linux__)
+    if(p_midi_jack_deactivate && patchbay->jack_client)
+        (void)p_midi_jack_deactivate(patchbay->jack_client);
+#endif
+    return 0;
+}
+
+int64_t __mlang_std_midi_patchbay_poll(int64_t handle, int64_t input)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!patchbay || input < 0 || input >= patchbay->input_count)
+    {
+        midi_set_error("std::midi patchbay poll input id is invalid");
+        return 0;
+    }
+    mlang_midi_message_t* message =
+        (mlang_midi_message_t*)malloc(sizeof(*message));
+    if(!message)
+    {
+        midi_set_error("std::midi patchbay message allocation failed");
+        return 0;
+    }
+    if(midi_queue_pop(&patchbay->inputs[input].queue, &message->packet) != 1)
+    {
+        free(message);
+        return 0;
+    }
+    return (int64_t)(intptr_t)message;
+}
+
+int64_t __mlang_std_midi_patchbay_dropped_messages(int64_t handle,
+                                                   int64_t input)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!patchbay || input < 0 || input >= patchbay->input_count)
+        return -1;
+    return (int64_t)atomic_load_explicit(&patchbay->inputs[input].queue.dropped,
+                                         memory_order_relaxed);
+}
+
+int64_t __mlang_std_midi_patchbay_send_bytes(int64_t handle, int64_t output,
+                                             mlang_list_t bytes)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!patchbay || output < 0 || output >= patchbay->output_count)
+    {
+        midi_set_error("std::midi patchbay send output id is invalid");
+        return -1;
+    }
+    if(!atomic_load_explicit(&patchbay->started, memory_order_acquire))
+    {
+        midi_set_error("std::midi patchbay must be started before sending");
+        return -1;
+    }
+    unsigned char data[MLANG_MIDI_MAX_MESSAGE_BYTES];
+    uint32_t length = 0;
+    if(midi_validate_bytes(bytes, data, &length) != 0)
+        return -1;
+#if defined(__APPLE__)
+    const size_t storage_size = sizeof(MIDIPacketList) + length + 32u;
+    MIDIPacketList* list = (MIDIPacketList*)malloc(storage_size);
+    if(!list)
+    {
+        midi_set_error("std::midi CoreMIDI patchbay packet allocation failed");
+        return -1;
+    }
+    MIDIPacket* packet = MIDIPacketListInit(list);
+    packet = MIDIPacketListAdd(list, storage_size, packet, 0, length, data);
+    const OSStatus rc = packet
+                            ? MIDISend(patchbay->output_port,
+                                       patchbay->outputs[output].endpoint, list)
+                            : -1;
+    free(list);
+    if(rc != noErr)
+    {
+        midi_set_error("std::midi CoreMIDI patchbay send failed");
+        return -1;
+    }
+#elif defined(__linux__)
+    if(midi_queue_push(&patchbay->outputs[output].queue, 0, data, length) != 0)
+    {
+        midi_set_error("std::midi JACK patchbay output queue is full");
+        return -1;
+    }
+#else
+    midi_set_error("std::midi patchbay output is unsupported");
+    return -1;
+#endif
+    midi_clear_error();
+    return length;
+}
+
+int32_t __mlang_std_midi_patchbay_close(int64_t handle)
+{
+    mlang_midi_patchbay_t* patchbay = (mlang_midi_patchbay_t*)(intptr_t)handle;
+    if(!patchbay)
+        return -1;
+    (void)__mlang_std_midi_patchbay_stop(handle);
+#if defined(__APPLE__)
+    for(uint32_t i = 0; i < patchbay->input_count; ++i)
+        if(patchbay->inputs[i].endpoint)
+            (void)MIDIPortDisconnectSource(patchbay->input_port,
+                                           patchbay->inputs[i].endpoint);
+    if(patchbay->input_port)
+        (void)MIDIPortDispose(patchbay->input_port);
+    if(patchbay->output_port)
+        (void)MIDIPortDispose(patchbay->output_port);
+    if(patchbay->client)
+        (void)MIDIClientDispose(patchbay->client);
+#elif defined(__linux__)
+    if(patchbay->jack_client && p_midi_jack_client_close)
+        (void)p_midi_jack_client_close(patchbay->jack_client);
+    if(patchbay->jack_lib)
+        dlclose(patchbay->jack_lib);
+#endif
+    free(patchbay);
+    return 0;
 }
 
 int64_t __mlang_std_midi_message_timestamp(int64_t handle)
