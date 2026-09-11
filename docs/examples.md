@@ -244,6 +244,12 @@ for sequential output.
 - `examples/std_audio_simd_dsp_demo.mla` — SIMD-shaped DSP block using
   `std::simd` for vector gain/mix/envelope math before previewing through
   `std::audio`, with command-line device/sample-rate/buffer selection.
+- `examples/std_audio_insert_stack_demo.mla` — process the default stereo input
+  through ordered gain, low-pass, and distortion inserts, then mix a filtered
+  feedback-delay rack into the output with independent dry/wet gains. Build it
+  with `./build/mlang -o build/std_audio_insert_stack_demo examples/std_audio_insert_stack_demo.mla`
+  and run `./build/std_audio_insert_stack_demo` (microphone permission is needed
+  on macOS; a running JACK2 server is needed on Linux).
 - `examples/std_midi_demo.mla` — list CoreMIDI or JACK MIDI ports, monitor a
   selected input without blocking, and send a configurable Note On/Off pair.
 - `examples/std_midi_patchbay_demo.mla` — create multiple MIDI ports inside one

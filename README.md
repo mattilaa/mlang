@@ -1146,6 +1146,12 @@ MIDI on Linux. JACK is loaded at runtime, so Linux builds do not require JACK
 development headers, but `libjack` and a running JACK server are needed to
 open audio or MIDI ports.
 
+`std::audio::AudioInsertStack` can route the default stereo input through up to
+16 ordered gain, low-pass, distortion, or delay inserts before output. It can
+also sum parallel effect-rack tracks with independent dry/wet gains. See the
+[std::audio documentation](docs/stdlib/std_audio.md#insert-stacks-and-effect-racks)
+and `examples/std_audio_insert_stack_demo.mla` for a live CoreAudio/JACK demo.
+
 ```sh
 mlang examples/std_midi_demo.mla -L ~/.local/lib/mlang -lmlang_std -o /tmp/std_midi_demo
 /tmp/std_midi_demo --list

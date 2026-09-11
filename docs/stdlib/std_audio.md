@@ -2,8 +2,8 @@
 
 Module file: `stdlib/std/audio.mla`
 
-Common audio hardware output helpers:
-- macOS uses CoreAudio Audio Queue output.
+Common audio output and duplex processing helpers:
+- macOS uses CoreAudio Audio Queue input/output.
 - Linux uses JACK2 when `libjack` and a running JACK server are available.
 
 Examples:
@@ -11,12 +11,15 @@ Examples:
 - `examples/std_audio_pcm_queue_demo.mla`
 - `examples/std_audio_vst3_style_preview.mla`
 - `examples/std_audio_simd_dsp_demo.mla`
+- `examples/std_audio_insert_stack_demo.mla`
 - Full VST3/CoreAudio package demo: `examples/package_manager_vst3_coreaudio_synth`
 
 ### Types
 - `audio_device`
 - `pcm_audio`
 - `pcm_block`
+- `audio_insert_stack`
+- `audio_effect_rack`
 
 ### API
 - `backend_name() -> str8`
@@ -33,6 +36,8 @@ Examples:
 - `pcm_block::new(capacity_frames: i64) -> result<pcm_block, str8>`
 - `pcm_block::capacity_frames(self: pcm_block) -> i64`
 - `pcm_block::set_stereo(self: pcm_block, frame: i64, left: f32, right: f32) -> i32`
+- `pcm_block::left(self: pcm_block, frame: i64) -> f32`
+- `pcm_block::right(self: pcm_block, frame: i64) -> f32`
 - `pcm_block::clear(self: pcm_block) -> i32`
 - `pcm_block::close(self: pcm_block) -> i32`
 - `audio_device::open_default(client_name: str8) -> result<audio_device, str8>`
@@ -52,6 +57,57 @@ Examples:
 - `audio_device::queue_interleaved_f32(self: audio_device, samples: &list<f32>) -> result<i64, str8>`
 - `audio_device::queue_pcm_block(self: audio_device, block: pcm_block, frames: i64) -> result<i64, str8>`
 - `audio_device::play_sine(self: audio_device, frequency_hz: f64, gain: f64, duration_ms: i64) -> result<i32, str8>`
+- `audio_insert_stack::new(sample_rate: i64, buffer_frames: i64) -> result<audio_insert_stack, str8>`
+- `audio_insert_stack::open_default(client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<audio_insert_stack, str8>`
+- `audio_insert_stack::add_gain(gain: f64, wet: f64) -> result<i64, str8>`
+- `audio_insert_stack::add_lowpass(cutoff_hz: f64, wet: f64) -> result<i64, str8>`
+- `audio_insert_stack::add_distortion(drive: f64, wet: f64) -> result<i64, str8>`
+- `audio_insert_stack::add_delay(delay_ms: f64, feedback: f64, wet: f64) -> result<i64, str8>`
+- `audio_insert_stack::add_rack(dry: f64, wet: f64) -> result<audio_effect_rack, str8>`
+- `audio_insert_stack::process_block(input: pcm_block, output: pcm_block, frames: i64) -> result<i32, str8>`
+- `audio_insert_stack::start()`, `stop()`, and `close()`
+- `audio_effect_rack::set_mix(dry: f64, wet: f64) -> result<i32, str8>`
+- `audio_effect_rack::add_gain(gain: f64) -> result<i64, str8>`
+- `audio_effect_rack::add_lowpass(cutoff_hz: f64) -> result<i64, str8>`
+- `audio_effect_rack::add_distortion(drive: f64) -> result<i64, str8>`
+- `audio_effect_rack::add_delay(delay_ms: f64, feedback: f64) -> result<i64, str8>`
+
+### Insert stacks and effect racks
+
+`AudioInsertStack` receives stereo input, passes every frame through its serial
+inserts in insertion order, then sends that result to zero or more parallel
+effect-rack tracks. Each serial insert has its own `wet` crossfade. Each rack
+has independent dry and wet output gains, and all enabled rack tracks are
+summed into the stereo output.
+
+The built-in real-time effects are linear gain, one-pole low-pass, normalized
+soft-clipping distortion, and stereo feedback delay. Graph configuration and
+delay-buffer allocation happen while stopped; the CoreAudio and JACK callbacks
+do not allocate. A stack supports 16 serial inserts, 8 racks, and 8 effects per
+rack. Stop the stack before changing its graph or rack mix.
+
+For one conventional dry/effect blend, create a rack with `dry=1.0` and the
+desired wet return. For multiple auxiliary-style racks, keep dry at `1.0` on
+one rack and use `dry=0.0` on additional racks so the original signal is not
+summed more than once. Gain values are intentionally not normalized, so the
+caller is responsible for headroom and clipping control.
+
+```rust
+let stack: AudioInsertStack =
+    AudioInsertStack::open_default("my_processor", 48000, 256).unwrap();
+stack.add_gain(1.2, 1.0);
+stack.add_distortion(2.0, 0.15);
+
+let delay: AudioEffectRack = stack.add_rack(1.0, 0.30).unwrap();
+delay.add_delay(240.0, 0.38);
+delay.add_lowpass(5500.0);
+
+stack.start();
+```
+
+`new()` creates the same DSP graph without hardware. Use `process_block()` to
+render preallocated `PcmBlock` values in tests, file renderers, or other offline
+processing. The input and output block may be the same block.
 
 ### PCM queue
 
@@ -88,3 +144,17 @@ cmake --build build --target mlang_std
 On macOS, `--device -1` uses the CoreAudio default output. On Linux, start a
 JACK2 server first; `std::audio` creates stereo JACK output ports and connects
 them to the selected physical output pair.
+
+### Build and run the live insert-stack example
+
+```sh
+cmake --build build --target mlang_std
+./build/mlang -o build/std_audio_insert_stack_demo examples/std_audio_insert_stack_demo.mla
+./build/std_audio_insert_stack_demo
+```
+
+The example processes the default stereo input for ten seconds through gain,
+low-pass, and distortion inserts, then mixes a filtered delay rack into the
+default output. On macOS, grant microphone access when prompted. On Linux,
+start JACK2 first; the demo creates and auto-connects stereo capture and
+playback ports.
