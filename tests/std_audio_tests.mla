@@ -171,6 +171,8 @@ fn test_audio_mixer_track_send_and_return() {
     verify(mixer_r.is_ok());
     if mixer_r.is_err() { return; }
     let mixer: AudioMixer = mixer_r.unwrap();
+    verify(mixer.input_frames_received() == 0);
+    verify(mixer.input_peak() == 0.0);
     let track_r: result<AudioTrack, str8> = mixer.add_audio_track("Input 1");
     let return_r: result<AudioReturnTrack, str8> = mixer.add_return_track("Return A");
     if track_r.is_err() || return_r.is_err() {

@@ -331,6 +331,16 @@ impl AudioInsertStack {
         return __mlang_std_audio_insert_stack_buffer_frames(self.handle);
     }
 
+    /// @brief Number of hardware input frames delivered since the last start.
+    pub fn input_frames_received(self: AudioInsertStack) -> i64 {
+        return __mlang_std_audio_insert_stack_input_frames_received(self.handle);
+    }
+
+    /// @brief Peak absolute input sample in the most recent hardware callback.
+    pub fn input_peak(self: AudioInsertStack) -> f64 {
+        return __mlang_std_audio_insert_stack_input_peak(self.handle);
+    }
+
     /// @brief Start real-time input processing. Only valid for `open_default()`.
     pub fn start(self: AudioInsertStack) -> result<i32, str8> {
         let rc: i32 = __mlang_std_audio_insert_stack_start(self.handle);
@@ -441,6 +451,16 @@ impl AudioMixer {
 
     pub fn buffer_frames(self: AudioMixer) -> i64 {
         return __mlang_std_audio_mixer_buffer_frames(self.handle);
+    }
+
+    /// @brief Number of hardware input frames delivered since the last start.
+    pub fn input_frames_received(self: AudioMixer) -> i64 {
+        return __mlang_std_audio_mixer_input_frames_received(self.handle);
+    }
+
+    /// @brief Peak absolute input sample in the most recent hardware callback.
+    pub fn input_peak(self: AudioMixer) -> f64 {
+        return __mlang_std_audio_mixer_input_peak(self.handle);
     }
 
     pub fn start(self: AudioMixer) -> result<i32, str8> {

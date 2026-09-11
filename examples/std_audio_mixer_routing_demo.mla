@@ -6,7 +6,7 @@
 /// Build and run:
 ///   ./build/mlang -o build/std_audio_mixer_routing_demo examples/std_audio_mixer_routing_demo.mla
 ///   ./build/std_audio_mixer_routing_demo --list
-///   ./build/std_audio_mixer_routing_demo --input=2 --output=0 --buffer=32
+///   ./build/std_audio_mixer_routing_demo --input=1 --output=2 --buffer=32
 
 mod std::argparser;
 mod std::audio;
@@ -141,7 +141,24 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     println!("  Input 1 -> Processing Bus -> Master");
     println!("                    +-> Return A -> Master (30% post-fader send)");
     let first_half: i64 = duration_ms / 2;
-    sleep_ms(first_half);
+    var probe_ms: i64 = 500;
+    if probe_ms > first_half { probe_ms = first_half; }
+    sleep_ms(probe_ms);
+    let received: i64 = mixer.input_frames_received();
+    if received == 0 {
+        eprintln!("no input frames received from [{}] {}", input_device,
+                  input_device_name(input_device));
+        eprintln!("on macOS, allow microphone access for your terminal in System Settings > Privacy & Security > Microphone");
+        mixer.stop();
+        mixer.close();
+        return 1;
+    }
+    println!("input active: {} frames received, latest peak {}", received,
+             mixer.input_peak());
+    if mixer.input_peak() == 0.0 {
+        println!("warning: the input stream is active but currently silent");
+    }
+    sleep_ms(first_half - probe_ms);
     println!("Ramping bus volume and pan over 250 ms...");
     bus.set_volume(0.70, 250.0);
     bus.set_pan(0.50, 250.0);

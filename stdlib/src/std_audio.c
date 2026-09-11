@@ -119,6 +119,8 @@ struct mlang_audio_insert_stack
 {
     int backend;
     _Atomic int running;
+    _Atomic uint64_t input_frames_received;
+    _Atomic uint32_t input_peak_bits;
     int64_t input_device_id;
     int64_t output_device_id;
     double sample_rate;
@@ -1442,7 +1444,15 @@ static int coreaudio_set_queue_device(AudioQueueRef queue, AudioDeviceID id)
     addr.mElement = kAudioObjectPropertyElementMain;
     if(AudioObjectGetPropertyData(id, &addr, 0, NULL, &size, &uid) != noErr || !uid)
         return -1;
-    OSStatus rc = AudioQueueSetProperty(queue, kAudioQueueProperty_CurrentDevice, &uid, sizeof(uid));
+    OSStatus rc = AudioQueueSetProperty(queue, kAudioQueueProperty_CurrentDevice,
+                                        &uid, sizeof(uid));
+    CFStringRef selected_uid = NULL;
+    UInt32 selected_size = sizeof(selected_uid);
+    if(rc == noErr)
+        rc = AudioQueueGetProperty(queue, kAudioQueueProperty_CurrentDevice,
+                                   &selected_uid, &selected_size);
+    if(rc == noErr && (!selected_uid || !CFEqual(uid, selected_uid)))
+        rc = kAudio_ParamError;
     CFRelease(uid);
     return rc == noErr ? 0 : -1;
 }
@@ -2247,6 +2257,27 @@ static mlang_audio_insert_stack_t* audio_insert_stack_from_handle(int64_t handle
     return (mlang_audio_insert_stack_t*)(intptr_t)handle;
 }
 
+static void audio_insert_stack_note_input(mlang_audio_insert_stack_t* stack,
+                                          const float* interleaved,
+                                          uint64_t frames)
+{
+    if(!stack || !interleaved)
+        return;
+    float peak = 0.0f;
+    for(uint64_t i = 0; i < frames * 2u; ++i)
+    {
+        const float level = fabsf(interleaved[i]);
+        if(level > peak)
+            peak = level;
+    }
+    uint32_t peak_bits = 0;
+    memcpy(&peak_bits, &peak, sizeof(peak_bits));
+    atomic_store_explicit(&stack->input_peak_bits, peak_bits,
+                          memory_order_release);
+    (void)atomic_fetch_add_explicit(&stack->input_frames_received, frames,
+                                    memory_order_relaxed);
+}
+
 static int audio_insert_stack_can_configure(mlang_audio_insert_stack_t* stack,
                                             const char* operation)
 {
@@ -2374,6 +2405,8 @@ int64_t __mlang_std_audio_insert_stack_new(int64_t sample_rate,
     stack->sample_rate = (double)audio_normalize_sample_rate(sample_rate);
     stack->buffer_frames = audio_normalize_buffer_frames(buffer_frames);
     atomic_init(&stack->running, 0);
+    atomic_init(&stack->input_frames_received, 0u);
+    atomic_init(&stack->input_peak_bits, 0u);
     audio_clear_error();
     return (int64_t)(intptr_t)stack;
 }
@@ -2518,6 +2551,26 @@ int64_t __mlang_std_audio_insert_stack_buffer_frames(int64_t handle)
     return stack ? stack->buffer_frames : 0;
 }
 
+int64_t __mlang_std_audio_insert_stack_input_frames_received(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    return stack ? (int64_t)atomic_load_explicit(
+                       &stack->input_frames_received, memory_order_acquire)
+                 : 0;
+}
+
+double __mlang_std_audio_insert_stack_input_peak(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    if(!stack)
+        return 0.0;
+    const uint32_t peak_bits = atomic_load_explicit(&stack->input_peak_bits,
+                                                    memory_order_acquire);
+    float peak = 0.0f;
+    memcpy(&peak, &peak_bits, sizeof(peak));
+    return (double)peak;
+}
+
 int32_t __mlang_std_audio_insert_stack_process_block(int64_t handle,
                                                      int64_t input_handle,
                                                      int64_t output_handle,
@@ -2562,6 +2615,7 @@ static void audio_insert_input_callback(void* user_data, AudioQueueRef queue,
         const float* samples = (const float*)buffer->mAudioData;
         const uint64_t frames = buffer->mAudioDataByteSize /
                                 (2u * (uint64_t)sizeof(float));
+        audio_insert_stack_note_input(stack, samples, frames);
         uint64_t write = atomic_load_explicit(&stack->input_write_frame,
                                               memory_order_relaxed);
         uint64_t read = atomic_load_explicit(&stack->input_read_frame,
@@ -2750,6 +2804,22 @@ static int audio_insert_stack_jack_process(jack_nframes_t nframes, void* arg)
     float* output_r = p_jack_port_get_buffer
                           ? (float*)p_jack_port_get_buffer(stack->out_r, nframes)
                           : NULL;
+    float peak = 0.0f;
+    for(uint64_t frame = 0; frame < (uint64_t)nframes; ++frame)
+    {
+        const float left = input_l ? fabsf(input_l[frame]) : 0.0f;
+        const float right = input_r ? fabsf(input_r[frame]) : 0.0f;
+        if(left > peak)
+            peak = left;
+        if(right > peak)
+            peak = right;
+    }
+    uint32_t peak_bits = 0;
+    memcpy(&peak_bits, &peak, sizeof(peak_bits));
+    atomic_store_explicit(&stack->input_peak_bits, peak_bits,
+                          memory_order_release);
+    (void)atomic_fetch_add_explicit(&stack->input_frames_received,
+                                    (uint64_t)nframes, memory_order_relaxed);
     if(stack->mixer)
     {
         for(uint64_t frame = 0; frame < (uint64_t)nframes; ++frame)
@@ -2954,15 +3024,27 @@ int32_t __mlang_std_audio_insert_stack_start(int64_t handle)
         audio_set_error("std::audio start: insert stack has no duplex device");
         return -1;
     }
+    atomic_store_explicit(&stack->input_frames_received, 0u,
+                          memory_order_release);
+    atomic_store_explicit(&stack->input_peak_bits, 0u, memory_order_release);
     atomic_store_explicit(&stack->running, 1, memory_order_release);
 #if defined(__APPLE__)
     OSStatus rc = AudioQueueStart(stack->input_queue, NULL);
-    if(rc == noErr)
-        rc = AudioQueueStart(stack->output_queue, NULL);
     if(rc != noErr)
     {
         atomic_store_explicit(&stack->running, 0, memory_order_release);
-        audio_set_error("std::audio CoreAudio duplex start failed");
+        (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
+                       "std::audio CoreAudio input start failed: %d; check microphone permission",
+                       (int)rc);
+        return -1;
+    }
+    rc = AudioQueueStart(stack->output_queue, NULL);
+    if(rc != noErr)
+    {
+        atomic_store_explicit(&stack->running, 0, memory_order_release);
+        (void)AudioQueueStop(stack->input_queue, true);
+        (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
+                       "std::audio CoreAudio output start failed: %d", (int)rc);
         return -1;
     }
 #elif defined(__linux__)
@@ -3618,6 +3700,24 @@ int64_t __mlang_std_audio_mixer_buffer_frames(int64_t handle)
 {
     mlang_audio_mixer_t* mixer = audio_mixer_from_handle(handle);
     return mixer ? mixer->buffer_frames : 0;
+}
+
+int64_t __mlang_std_audio_mixer_input_frames_received(int64_t handle)
+{
+    mlang_audio_mixer_t* mixer = audio_mixer_from_handle(handle);
+    return mixer && mixer->io
+               ? __mlang_std_audio_insert_stack_input_frames_received(
+                     (int64_t)(intptr_t)mixer->io)
+               : 0;
+}
+
+double __mlang_std_audio_mixer_input_peak(int64_t handle)
+{
+    mlang_audio_mixer_t* mixer = audio_mixer_from_handle(handle);
+    return mixer && mixer->io
+               ? __mlang_std_audio_insert_stack_input_peak(
+                     (int64_t)(intptr_t)mixer->io)
+               : 0.0;
 }
 
 int32_t __mlang_std_audio_mixer_start(int64_t handle)
