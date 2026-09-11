@@ -32,6 +32,27 @@ pub struct AudioEffectRack {
 alias audio_insert_stack = AudioInsertStack;
 alias audio_effect_rack = AudioEffectRack;
 
+/// @brief Ableton-style multi-track routing graph with one master device.
+pub struct AudioMixer {
+    var handle: i64;
+};
+
+/// @brief Non-owning ordinary audio-track reference.
+pub struct AudioTrack {
+    var mixer_handle: i64;
+    var track_id: i64;
+};
+
+/// @brief Non-owning send-only return-track reference.
+pub struct AudioReturnTrack {
+    var mixer_handle: i64;
+    var track_id: i64;
+};
+
+alias audio_mixer = AudioMixer;
+alias audio_track = AudioTrack;
+alias audio_return_track = AudioReturnTrack;
+
 /// @brief Owned decoded mono/stereo 16-bit PCM WAV or AIFF file.
 pub struct PcmAudio {
     var handle: i64;
@@ -322,6 +343,209 @@ impl AudioEffectRack {
 
     pub fn add_delay(self: AudioEffectRack, delay_ms: f64, feedback: f64) -> result<i64, str8> {
         let id: i64 = __mlang_std_audio_insert_stack_rack_add_delay(self.stack_handle, self.rack_id, delay_ms, feedback);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+}
+
+impl AudioMixer {
+    /// @brief Create an offline mixer for block rendering and tests.
+    pub fn new(sample_rate: i64, buffer_frames: i64) -> result<AudioMixer, str8> {
+        let h: i64 = __mlang_std_audio_mixer_new(sample_rate, buffer_frames);
+        if h == 0 { return Err<AudioMixer, str8>(last_error()); }
+        return Ok<AudioMixer, str8>(AudioMixer { handle: h });
+    }
+
+    /// @brief Open one default stereo input and one master output device.
+    pub fn open_default(client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<AudioMixer, str8> {
+        let h: i64 = __mlang_std_audio_mixer_open_default(client_name, sample_rate, buffer_frames);
+        if h == 0 { return Err<AudioMixer, str8>(last_error()); }
+        return Ok<AudioMixer, str8>(AudioMixer { handle: h });
+    }
+
+    /// @brief Add an audio track. Its initial input is the default device and output is master.
+    pub fn add_audio_track(self: AudioMixer, name: str8) -> result<AudioTrack, str8> {
+        let id: i64 = __mlang_std_audio_mixer_add_audio_track(self.handle, name);
+        if id < 0 { return Err<AudioTrack, str8>(last_error()); }
+        return Ok<AudioTrack, str8>(AudioTrack { mixer_handle: self.handle, track_id: id });
+    }
+
+    /// @brief Add a return track fed only by sends. Its initial output is master.
+    pub fn add_return_track(self: AudioMixer, name: str8) -> result<AudioReturnTrack, str8> {
+        let id: i64 = __mlang_std_audio_mixer_add_return_track(self.handle, name);
+        if id < 0 { return Err<AudioReturnTrack, str8>(last_error()); }
+        return Ok<AudioReturnTrack, str8>(AudioReturnTrack { mixer_handle: self.handle, track_id: id });
+    }
+
+    pub fn set_master_gain(self: AudioMixer, gain: f64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_set_master_gain(self.handle, gain);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn process_block(self: AudioMixer, input: PcmBlock, output: PcmBlock, frames: i64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_process_block(self.handle, input.handle, output.handle, frames);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn track_count(self: AudioMixer) -> i64 {
+        return __mlang_std_audio_mixer_track_count(self.handle);
+    }
+
+    pub fn sample_rate(self: AudioMixer) -> i64 {
+        return __mlang_std_audio_mixer_sample_rate(self.handle);
+    }
+
+    pub fn buffer_frames(self: AudioMixer) -> i64 {
+        return __mlang_std_audio_mixer_buffer_frames(self.handle);
+    }
+
+    pub fn start(self: AudioMixer) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_start(self.handle);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn stop(self: AudioMixer) -> i32 {
+        return __mlang_std_audio_mixer_stop(self.handle);
+    }
+
+    pub fn close(self: AudioMixer) -> i32 {
+        return __mlang_std_audio_mixer_close(self.handle);
+    }
+}
+
+impl AudioTrack {
+    /// @brief Select the mixer's default stereo hardware input.
+    pub fn set_input_device(self: AudioTrack) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_input_device(self.mixer_handle, self.track_id);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Select another ordinary track's post-fader signal as input.
+    pub fn set_input_track(self: AudioTrack, source: AudioTrack) -> result<i32, str8> {
+        if self.mixer_handle != source.mixer_handle {
+            return Err<i32, str8>("audio tracks belong to different mixers");
+        }
+        let rc: i32 = __mlang_std_audio_mixer_track_set_input_track(self.mixer_handle, self.track_id, source.track_id);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Route this track directly to the one physical master output.
+    pub fn set_output_master(self: AudioTrack) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_output(self.mixer_handle, self.track_id, -1);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Route this track's post-fader signal into another track.
+    pub fn set_output_track(self: AudioTrack, destination: AudioTrack) -> result<i32, str8> {
+        if self.mixer_handle != destination.mixer_handle {
+            return Err<i32, str8>("audio tracks belong to different mixers");
+        }
+        let rc: i32 = __mlang_std_audio_mixer_track_set_output(self.mixer_handle, self.track_id, destination.track_id);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn set_gain(self: AudioTrack, gain: f64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_gain(self.mixer_handle, self.track_id, gain);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn set_muted(self: AudioTrack, muted: bool) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_muted(self.mixer_handle, self.track_id, i32(muted));
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Set or replace a pre-fader (`false`) or post-fader (`true`) send.
+    pub fn set_send(self: AudioTrack, target: AudioReturnTrack, level: f64, post_fader: bool) -> result<i32, str8> {
+        if self.mixer_handle != target.mixer_handle {
+            return Err<i32, str8>("audio tracks belong to different mixers");
+        }
+        let rc: i32 = __mlang_std_audio_mixer_track_set_send(self.mixer_handle, self.track_id, target.track_id, level, i32(post_fader));
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn add_gain(self: AudioTrack, gain: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_mixer_track_add_gain(self.mixer_handle, self.track_id, gain, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    pub fn add_lowpass(self: AudioTrack, cutoff_hz: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_mixer_track_add_lowpass(self.mixer_handle, self.track_id, cutoff_hz, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    pub fn add_distortion(self: AudioTrack, drive: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_mixer_track_add_distortion(self.mixer_handle, self.track_id, drive, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    pub fn add_delay(self: AudioTrack, delay_ms: f64, feedback: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_mixer_track_add_delay(self.mixer_handle, self.track_id, delay_ms, feedback, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+}
+
+impl AudioReturnTrack {
+    pub fn set_output_master(self: AudioReturnTrack) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_output(self.mixer_handle, self.track_id, -1);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn set_output_track(self: AudioReturnTrack, destination: AudioTrack) -> result<i32, str8> {
+        if self.mixer_handle != destination.mixer_handle {
+            return Err<i32, str8>("audio tracks belong to different mixers");
+        }
+        let rc: i32 = __mlang_std_audio_mixer_track_set_output(self.mixer_handle, self.track_id, destination.track_id);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn set_gain(self: AudioReturnTrack, gain: f64) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_gain(self.mixer_handle, self.track_id, gain);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn set_muted(self: AudioReturnTrack, muted: bool) -> result<i32, str8> {
+        let rc: i32 = __mlang_std_audio_mixer_track_set_muted(self.mixer_handle, self.track_id, i32(muted));
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn add_gain(self: AudioReturnTrack, gain: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_mixer_track_add_gain(self.mixer_handle, self.track_id, gain, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    pub fn add_lowpass(self: AudioReturnTrack, cutoff_hz: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_mixer_track_add_lowpass(self.mixer_handle, self.track_id, cutoff_hz, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    pub fn add_distortion(self: AudioReturnTrack, drive: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_mixer_track_add_distortion(self.mixer_handle, self.track_id, drive, wet);
+        if id < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(id);
+    }
+
+    pub fn add_delay(self: AudioReturnTrack, delay_ms: f64, feedback: f64, wet: f64) -> result<i64, str8> {
+        let id: i64 = __mlang_std_audio_mixer_track_add_delay(self.mixer_handle, self.track_id, delay_ms, feedback, wet);
         if id < 0 { return Err<i64, str8>(last_error()); }
         return Ok<i64, str8>(id);
     }
