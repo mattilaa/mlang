@@ -249,6 +249,8 @@ for sequential output.
   [`std::audio`](Stdlib-Audio), with command-line device/sample-rate/buffer selection.
 - `examples/std_midi_demo.mla` — list CoreMIDI or JACK MIDI ports, monitor a
   selected input without blocking, and send a configurable Note On/Off pair.
+- `examples/std_midi_patchbay_demo.mla` — create multiple MIDI ports inside one
+  backend client and route one input to one or two outputs while monitoring it.
 - `examples/dsp_convolution_demo.mla` — full, same, and valid convolution via
   [`dsp::convolution`](DSP-Convolution).
 - `examples/dsp_fft_demo.mla` — forward/inverse transforms via [`dsp::fft`](DSP-FFT).

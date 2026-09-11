@@ -4,6 +4,7 @@ mod std::testing;
 
 use std::midi::MidiInput;
 use std::midi::MidiOutput;
+use std::midi::MidiPatchbay;
 use std::midi::backend_name;
 use std::midi::default_input_id;
 use std::midi::default_output_id;
@@ -43,6 +44,42 @@ fn test_midi_channel_message_validation() {
     let bend: result<i64, str8> = output.pitch_bend(0, 16384);
     verify(note_on.is_err());
     verify(note_off.is_err());
+    verify(control.is_err());
+    verify(program.is_err());
+    verify(bend.is_err());
+}
+
+#[test]
+fn test_midi_patchbay_lifecycle() {
+    let opened: result<MidiPatchbay, str8> =
+        MidiPatchbay::open("mlang_midi_patchbay_test");
+    // Linux intentionally requires a running JACK server. When no server is
+    // available, the backend error path is the expected test coverage.
+    if opened.is_err() {
+        verify(len(last_error()) > 0);
+        return;
+    }
+    let patchbay: MidiPatchbay = opened.unwrap();
+    verify(patchbay.input_port_count() == 0);
+    verify(patchbay.output_port_count() == 0);
+    verify(patchbay.connection_count() == 0);
+    let invalid: result<i32, str8> = patchbay.connect(0, 0);
+    verify(invalid.is_err());
+    let started: result<i32, str8> = patchbay.start();
+    verify(started.is_ok());
+    verify(patchbay.stop() == 0);
+    verify(patchbay.close() == 0);
+}
+
+#[test]
+fn test_midi_patchbay_message_validation() {
+    let patchbay:MidiPatchbay = MidiPatchbay { handle: 0 };
+    let note:result<i64, str8> = patchbay.note_on(0, 16, 60, 100);
+    let control:result<i64, str8> =
+        patchbay.control_change(0, 0, -1, 64);
+    let program:result<i64, str8> = patchbay.program_change(0, 0, 128);
+    let bend:result<i64, str8> = patchbay.pitch_bend(0, 0, -1);
+    verify(note.is_err());
     verify(control.is_err());
     verify(program.is_err());
     verify(bend.is_err());

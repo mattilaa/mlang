@@ -1,0 +1,141 @@
+/// \file std_midi_patchbay_demo.mla
+/// @ingroup examples
+/// \brief Route one MIDI input to one or two outputs in a shared patchbay.
+///
+/// Build and run:
+///   ./build/mlang examples/std_midi_patchbay_demo.mla -L ./build -lmlang_std -o build/std_midi_patchbay_demo
+///   ./build/std_midi_patchbay_demo --input 0 --output-a 0 --output-b 1 --duration 30000
+///
+mod std::argparser;
+mod std::midi;
+mod std::time;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::midi::MidiMessage;
+use std::midi::MidiPatchbay;
+use std::midi::backend_name;
+use std::midi::default_input_id;
+use std::midi::default_output_id;
+use std::midi::input_name;
+use std::midi::output_name;
+use std::time::now_ms;
+use std::time::sleep_ms;
+
+fn main(argc:i32, args:list<str8>) -> i32 {
+    var parser:ArgParser = ArgParser::new(
+        "std_midi_patchbay_demo",
+        "Route one MIDI source to multiple destinations in one std::midi client.");
+    parser.option("input", "i", "Input device id; -1 uses default", "-1");
+    parser.option("output-a", "a", "First output id; -1 uses default", "-1");
+    parser.option("output-b", "b", "Optional second output id; -2 disables it", "-2");
+    parser.option("duration", "t", "Routing duration in milliseconds", "30000");
+
+    let parsed:ParseResult = parser.parse(argc, args);
+    if parsed.help_requested() {
+        parser.print_help();
+        parsed.free();
+        parser.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        eprintln!("Error: {}", parsed.error());
+        parser.print_help();
+        parsed.free();
+        parser.free();
+        return 1;
+    }
+    var input_device:i64 = parsed.get_i64("input");
+    var output_a_device:i64 = parsed.get_i64("output-a");
+    let output_b_device:i64 = parsed.get_i64("output-b");
+    let duration_ms:i64 = parsed.get_i64("duration");
+    parsed.free();
+    parser.free();
+
+    if input_device < 0 { input_device = default_input_id(); }
+    if output_a_device < 0 { output_a_device = default_output_id(); }
+    if input_device < 0 || output_a_device < 0 || duration_ms < 0 {
+        eprintln!("a MIDI input, an output, and a non-negative duration are required");
+        return 1;
+    }
+
+    println!("std::midi backend: {}", backend_name());
+    let opened:result<MidiPatchbay, str8> =
+        MidiPatchbay::open("mlang_patchbay_demo");
+    if opened.is_err() {
+        eprintln!("patchbay open failed: {}", opened.unwrap_err());
+        return 1;
+    }
+    let patchbay:MidiPatchbay = opened.unwrap();
+
+    let input_result:result<i64, str8> =
+        patchbay.add_input(input_device, "source");
+    let output_a_result:result<i64, str8> =
+        patchbay.add_output(output_a_device, "destination_a");
+    if input_result.is_err() || output_a_result.is_err() {
+        eprintln!("port setup failed: {}", std::midi::last_error());
+        patchbay.close();
+        return 1;
+    }
+    let input_port:i64 = input_result.unwrap();
+    let output_a:i64 = output_a_result.unwrap();
+    let route_a:result<i32, str8> = patchbay.connect(input_port, output_a);
+    if route_a.is_err() {
+        eprintln!("route setup failed: {}", route_a.unwrap_err());
+        patchbay.close();
+        return 1;
+    }
+    println!("route: {} -> {}", input_name(input_device),
+             output_name(output_a_device));
+
+    if output_b_device >= 0 {
+        let output_b_result:result<i64, str8> =
+            patchbay.add_output(output_b_device, "destination_b");
+        if output_b_result.is_err() {
+            eprintln!("second output setup failed: {}",
+                      output_b_result.unwrap_err());
+            patchbay.close();
+            return 1;
+        }
+        let output_b:i64 = output_b_result.unwrap();
+        let route_b:result<i32, str8> = patchbay.connect(input_port, output_b);
+        if route_b.is_err() {
+            eprintln!("second route setup failed: {}", route_b.unwrap_err());
+            patchbay.close();
+            return 1;
+        }
+        println!("route: {} -> {}", input_name(input_device),
+                 output_name(output_b_device));
+    }
+
+    let started:result<i32, str8> = patchbay.start();
+    if started.is_err() {
+        eprintln!("patchbay start failed: {}", started.unwrap_err());
+        patchbay.close();
+        return 1;
+    }
+    println!("routing {} connection(s) for {} ms",
+             patchbay.connection_count(), duration_ms);
+
+    let deadline:i64 = now_ms() + duration_ms;
+    while now_ms() < deadline {
+        let received:option<MidiMessage> = patchbay.poll(input_port);
+        if received.is_some() {
+            let message:MidiMessage = received.unwrap();
+            print!("in[{}]", input_port);
+            for index in 0..message.len() {
+                print!(" {}", message.byte(index));
+            }
+            println!("");
+            message.close();
+        } else {
+            sleep_ms(1);
+        }
+    }
+
+    println!("dropped input packets: {}",
+             patchbay.dropped_messages(input_port));
+    patchbay.stop();
+    patchbay.close();
+    return 0;
+}

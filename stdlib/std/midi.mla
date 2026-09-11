@@ -7,6 +7,8 @@
 ///
 /// Open ports are active immediately. Input delivery uses a bounded native
 /// queue, while JACK output is transferred safely in its process callback.
+/// `MidiPatchbay` instead owns several ports in one stopped client; configure
+/// its routes first and call `start()` to activate callback-level forwarding.
 
 /// \cond INTERNAL_IMPORTS
 mod std::midi::detail;
@@ -28,9 +30,15 @@ pub struct MidiMessage {
     var handle: i64;
 };
 
+/// @brief One backend client containing multiple MIDI ports and routes.
+pub struct MidiPatchbay {
+    var handle: i64;
+};
+
 alias midi_input = MidiInput;
 alias midi_output = MidiOutput;
 alias midi_message = MidiMessage;
+alias midi_patchbay = MidiPatchbay;
 
 /// @brief Return `coremidi`, `jack-midi`, or `unsupported`.
 pub fn backend_name() -> str8 {
@@ -193,6 +201,166 @@ impl MidiOutput {
     /// @brief Close the output and release backend resources.
     pub fn close(self: MidiOutput) -> i32 {
         return __mlang_std_midi_close(self.handle);
+    }
+}
+
+impl MidiPatchbay {
+    /// @brief Create an empty stopped patchbay.
+    ///
+    /// Add ports and routes, then call `start()`. A stopped patchbay can be
+    /// reconfigured and restarted without recreating its backend client.
+    pub fn open(client_name: str8) -> result<MidiPatchbay, str8> {
+        let handle:i64 = __mlang_std_midi_patchbay_open(client_name);
+        if handle == 0 {
+            return Err<MidiPatchbay, str8>(last_error());
+        }
+        return Ok<MidiPatchbay, str8>(MidiPatchbay { handle: handle });
+    }
+
+    /// @brief Attach an input device and return its patchbay-local port id.
+    pub fn add_input(self: MidiPatchbay, device_id:i64,
+                     port_name:str8) -> result<i64, str8> {
+        let port:i64 = __mlang_std_midi_patchbay_add_input(
+            self.handle, device_id, port_name);
+        if port < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(port);
+    }
+
+    /// @brief Attach an output device and return its patchbay-local port id.
+    pub fn add_output(self: MidiPatchbay, device_id:i64,
+                      port_name:str8) -> result<i64, str8> {
+        let port:i64 = __mlang_std_midi_patchbay_add_output(
+            self.handle, device_id, port_name);
+        if port < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(port);
+    }
+
+    /// @brief Route every packet from one local input id to one local output id.
+    pub fn connect(self: MidiPatchbay, input:i64,
+                   output:i64) -> result<i32, str8> {
+        let rc:i32 = __mlang_std_midi_patchbay_connect(
+            self.handle, input, output);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Remove an input-to-output route.
+    pub fn disconnect(self: MidiPatchbay, input:i64,
+                      output:i64) -> result<i32, str8> {
+        let rc:i32 = __mlang_std_midi_patchbay_disconnect(
+            self.handle, input, output);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Number of attached input ports.
+    pub fn input_port_count(self: MidiPatchbay) -> i64 {
+        return __mlang_std_midi_patchbay_input_count(self.handle);
+    }
+
+    /// @brief Number of attached output ports.
+    pub fn output_port_count(self: MidiPatchbay) -> i64 {
+        return __mlang_std_midi_patchbay_output_count(self.handle);
+    }
+
+    /// @brief Number of active internal input-to-output routes.
+    pub fn connection_count(self: MidiPatchbay) -> i64 {
+        return __mlang_std_midi_patchbay_connection_count(self.handle);
+    }
+
+    /// @brief Activate all attached ports and routes.
+    pub fn start(self: MidiPatchbay) -> result<i32, str8> {
+        let rc:i32 = __mlang_std_midi_patchbay_start(self.handle);
+        if rc != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Stop routing so the patchbay can be reconfigured.
+    pub fn stop(self: MidiPatchbay) -> i32 {
+        return __mlang_std_midi_patchbay_stop(self.handle);
+    }
+
+    /// @brief Poll one attached input by its patchbay-local id.
+    pub fn poll(self: MidiPatchbay, input:i64) -> option<MidiMessage> {
+        let message:i64 = __mlang_std_midi_patchbay_poll(self.handle, input);
+        if message == 0 { return None<MidiMessage>(); }
+        return Some<MidiMessage>(MidiMessage { handle: message });
+    }
+
+    /// @brief Dropped packet count for one attached input.
+    pub fn dropped_messages(self: MidiPatchbay, input:i64) -> i64 {
+        return __mlang_std_midi_patchbay_dropped_messages(self.handle, input);
+    }
+
+    /// @brief Send raw bytes through one attached output.
+    pub fn send_bytes(self: MidiPatchbay, output:i64,
+                      bytes:&list<i32>) -> result<i64, str8> {
+        let sent:i64 = __mlang_std_midi_patchbay_send_bytes(
+            self.handle, output, bytes);
+        if sent < 0 { return Err<i64, str8>(last_error()); }
+        return Ok<i64, str8>(sent);
+    }
+
+    /// @brief Send a three-byte channel message through one attached output.
+    pub fn send(self: MidiPatchbay, output:i64, status:i32,
+                data1:i32, data2:i32) -> result<i64, str8> {
+        let bytes:list<i32> = [status, data1, data2];
+        return self.send_bytes(output, bytes);
+    }
+
+    /// @brief Send Note On through one attached output.
+    pub fn note_on(self: MidiPatchbay, output:i64, channel:i32,
+                   note:i32, velocity:i32) -> result<i64, str8> {
+        if channel < 0 || channel > 15 || note < 0 || note > 127 ||
+           velocity < 0 || velocity > 127 {
+            return Err<i64, str8>("note_on expects channel 0..15 and data 0..127");
+        }
+        return self.send(output, 144 + channel, note, velocity);
+    }
+
+    /// @brief Send Note Off through one attached output.
+    pub fn note_off(self: MidiPatchbay, output:i64, channel:i32,
+                    note:i32, velocity:i32) -> result<i64, str8> {
+        if channel < 0 || channel > 15 || note < 0 || note > 127 ||
+           velocity < 0 || velocity > 127 {
+            return Err<i64, str8>("note_off expects channel 0..15 and data 0..127");
+        }
+        return self.send(output, 128 + channel, note, velocity);
+    }
+
+    /// @brief Send Control Change through one attached output.
+    pub fn control_change(self: MidiPatchbay, output:i64, channel:i32,
+                          controller:i32, value:i32) -> result<i64, str8> {
+        if channel < 0 || channel > 15 || controller < 0 || controller > 127 ||
+           value < 0 || value > 127 {
+            return Err<i64, str8>("control_change expects channel 0..15 and data 0..127");
+        }
+        return self.send(output, 176 + channel, controller, value);
+    }
+
+    /// @brief Send Program Change through one attached output.
+    pub fn program_change(self: MidiPatchbay, output:i64, channel:i32,
+                          program:i32) -> result<i64, str8> {
+        if channel < 0 || channel > 15 || program < 0 || program > 127 {
+            return Err<i64, str8>("program_change expects channel 0..15 and program 0..127");
+        }
+        let bytes:list<i32> = [192 + channel, program];
+        return self.send_bytes(output, bytes);
+    }
+
+    /// @brief Send a 14-bit pitch bend through one attached output.
+    pub fn pitch_bend(self: MidiPatchbay, output:i64, channel:i32,
+                      value:i32) -> result<i64, str8> {
+        if channel < 0 || channel > 15 || value < 0 || value > 16383 {
+            return Err<i64, str8>("pitch_bend expects channel 0..15 and value 0..16383");
+        }
+        let bytes:list<i32> = [224 + channel, value % 128, value / 128];
+        return self.send_bytes(output, bytes);
+    }
+
+    /// @brief Stop and close every port in the patchbay client.
+    pub fn close(self: MidiPatchbay) -> i32 {
+        return __mlang_std_midi_patchbay_close(self.handle);
     }
 }
 
