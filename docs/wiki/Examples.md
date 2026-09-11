@@ -255,7 +255,8 @@ for sequential output.
   on macOS; a running JACK2 server is needed on Linux).
 - `examples/std_audio_mixer_routing_demo.mla` — Ableton-style routing from the
   default input through an audio track and processing bus, plus a post-fader
-  send into a filtered delay return, before all paths reach one master output.
+  send into a filtered delay return and live click-free volume/pan automation,
+  before all paths reach one master output.
   Build with `./build/mlang -o build/std_audio_mixer_routing_demo examples/std_audio_mixer_routing_demo.mla`
   and run `./build/std_audio_mixer_routing_demo`; headphones are recommended to
   prevent microphone feedback.

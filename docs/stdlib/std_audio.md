@@ -125,20 +125,37 @@ Each ordinary track has:
 - one selected **Audio From** source: the default stereo hardware input or
   another ordinary track;
 - an ordered insert stack of up to 16 built-in effects;
-- a gain/mute fader stage;
+- a click-free volume/pan stage and mute control;
 - up to 8 pre-fader or post-fader sends to return tracks; and
 - one **Audio To** destination: another ordinary track or the master bus.
 
 A return track has no hardware or track input selector. It receives the sum of
-sends and routed track outputs, processes its own insert stack and fader, then
-uses exactly one output destination: an ordinary track or master. All paths
-eventually converge on the mixer's master output.
+sends, processes its own insert stack and fader, and is always routed directly
+to master. It cannot be routed back into an ordinary track. All paths therefore
+converge on the mixer's single master hardware output.
 
 Routing is compiled into a topological processing order whenever configuration
 changes. A connection that would create direct or indirect audio feedback is
 rejected and the previous valid route is restored. Configure effects and routes
 while stopped. Matching settings such as `bus.set_input_track(input)` and
 `input.set_output_track(bus)` describe one connection and are not mixed twice.
+
+Every ordinary audio track automatically gets an independent, initially
+disabled send slot for each configured return track, regardless of whether the
+audio or return track was created first. Changing the level for Return A does
+not affect Return B or the track's main Audio To route. A pre-fader send is
+taken after inserts but before volume, pan, and mute; a post-fader send includes
+those controls. Return tracks do not send to other returns, and ordinary Audio
+To routes cannot target a return, which keeps the graph equivalent to
+Ableton-style effect returns and prevents return feedback loops.
+
+`set_volume(volume, ramp_ms)` and `set_pan(pan, ramp_ms)` publish lock-free
+automation commands to the audio callback and may be called while playback is
+running. Each parameter has independent state, and the callback interpolates
+linearly for the exact requested number of sample frames. Use `ramp_ms=0` for
+an immediate change. Volume accepts `0..16`; pan accepts `-1..1`, where `-1`
+mutes the right channel and `1` mutes the left channel. Ramps up to 60 seconds
+are supported. `set_gain()` remains an immediate volume compatibility method.
 
 ```rust
 let mixer: AudioMixer = AudioMixer::open_default("session", 48000, 256).unwrap();
@@ -155,12 +172,19 @@ input.add_lowpass(10000.0, 0.25);
 bus.add_distortion(1.8, 0.12);
 return_a.add_delay(260.0, 0.40, 1.0);
 bus.set_send(return_a, 0.30, true); // 30% post-fader send
+bus.set_volume(0.8, 20.0);         // short startup ramp
+bus.set_pan(-0.15, 20.0);
 mixer.start();
+
+// Safe while the audio callback is active.
+bus.set_pan(0.50, 250.0);
 ```
 
 Use `AudioMixer::new()` and `process_block()` for offline rendering. A mixer
-supports 32 total audio/return tracks. Gain staging is explicit: track, send,
-return, and master gains are not automatically normalized or limited.
+supports 32 total audio/return tracks and up to 8 returns, matching the 8
+independent send slots on every ordinary track. Gain staging is explicit:
+track, send, return, and master gains are not automatically normalized or
+limited.
 
 ### PCM queue
 
@@ -221,6 +245,7 @@ cmake --build build --target mlang_std
 ```
 
 The demo uses matching Audio From/Audio To track routing, serial inserts, a
-post-fader send, a filtered delay return, and one master hardware output. Avoid
+post-fader send, a filtered delay return, live click-free volume/pan ramps, and
+one master hardware output. Avoid
 placing the microphone close to the speakers; headphones are recommended for
 live-input testing.

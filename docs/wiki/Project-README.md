@@ -1156,7 +1156,8 @@ and `examples/std_audio_insert_stack_demo.mla` for a live CoreAudio/JACK demo.
 
 For session-style routing, [`std::audio::AudioMixer`](Stdlib-Audio) provides Audio From/Audio To
 track connections, per-track insert stacks, pre/post-fader sends, dedicated
-return tracks, cycle checking, and one master hardware output. See
+master-only return tracks, cycle checking, click-free volume/pan ramps, and one
+master hardware output. See
 `examples/std_audio_mixer_routing_demo.mla` and the
 [track-routing guide](Stdlib-Audio#ableton-style-track-routing).
 
