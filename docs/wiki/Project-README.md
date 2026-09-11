@@ -1153,6 +1153,9 @@ mlang examples/std_midi_demo.mla -L ~/.local/lib/mlang -lmlang_std -o /tmp/std_m
 /tmp/std_midi_demo --list
 /tmp/std_midi_demo --listen --input 0 --duration 5000
 /tmp/std_midi_demo --send --output 0 --note 60 --velocity 96
+
+mlang examples/std_midi_patchbay_demo.mla -L ~/.local/lib/mlang -lmlang_std -o /tmp/std_midi_patchbay_demo
+/tmp/std_midi_patchbay_demo --input 0 --output-a 0 --output-b 1
 ```
 
 Standalone libraries outside the `std` namespace use `MLANG_MODULE_PATH` and

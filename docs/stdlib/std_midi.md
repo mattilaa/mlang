@@ -18,6 +18,7 @@ full.
 - `midi_input`
 - `midi_output`
 - `midi_message`
+- `midi_patchbay`
 
 ## Device discovery
 
@@ -74,6 +75,47 @@ Channels use `0..15`, ordinary data bytes use `0..127`, and pitch bend uses
 The timestamp is backend-native: CoreMIDI host time on macOS and the JACK
 buffer frame offset on Linux.
 
+## Patchbay
+
+`midi_patchbay` owns one CoreMIDI or JACK client and attaches multiple devices
+to it. Each attached device receives a patchbay-local integer port id. Routes
+forward packets inside the native MIDI callback, while every input remains
+available to `poll()` for monitoring.
+
+- `midi_patchbay::open(client_name) -> result<midi_patchbay, str8>`
+- `midi_patchbay::add_input(device_id, port_name) -> result<i64, str8>`
+- `midi_patchbay::add_output(device_id, port_name) -> result<i64, str8>`
+- `midi_patchbay::connect(input, output) -> result<i32, str8>`
+- `midi_patchbay::disconnect(input, output) -> result<i32, str8>`
+- `midi_patchbay::input_port_count() -> i64`
+- `midi_patchbay::output_port_count() -> i64`
+- `midi_patchbay::connection_count() -> i64`
+- `midi_patchbay::start() -> result<i32, str8>`
+- `midi_patchbay::stop() -> i32`
+- `midi_patchbay::poll(input) -> option<midi_message>`
+- `midi_patchbay::dropped_messages(input) -> i64`
+- `midi_patchbay::send_bytes(output, bytes) -> result<i64, str8>`
+- `midi_patchbay::send(output, status, data1, data2) -> result<i64, str8>`
+- `midi_patchbay::note_on(...)`, `note_off(...)`, `control_change(...)`,
+  `program_change(...)`, and `pitch_bend(...)`
+- `midi_patchbay::close() -> i32`
+
+Configure ports and routes while stopped, then call `start()`. Call `stop()`
+before adding or removing routes. A single input can fan out to several
+outputs, and several inputs can target the same output. The current bounded
+implementation supports 32 inputs, 32 outputs, and 128 routes per patchbay.
+
+```rust
+let opened: result<MidiPatchbay, str8> = MidiPatchbay::open("router");
+let patchbay: MidiPatchbay = opened.unwrap();
+let keyboard: i64 = patchbay.add_input(0, "keyboard").unwrap();
+let synth: i64 = patchbay.add_output(0, "synth").unwrap();
+let monitor: i64 = patchbay.add_output(1, "monitor").unwrap();
+patchbay.connect(keyboard, synth);
+patchbay.connect(keyboard, monitor);
+patchbay.start();
+```
+
 ## Build and run the demo
 
 ```sh
@@ -82,6 +124,8 @@ cmake --build build --target mlang mlang_std
 ./build/std_midi_demo --list
 ./build/std_midi_demo --listen --input 0 --duration 5000
 ./build/std_midi_demo --send --output 0 --note 60 --velocity 96
+./build/mlang examples/std_midi_patchbay_demo.mla -L ./build -lmlang_std -o build/std_midi_patchbay_demo
+./build/std_midi_patchbay_demo --input 0 --output-a 0 --output-b 1
 ./build/mlang test tests/std_midi_tests.mla
 ```
 

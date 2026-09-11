@@ -21,7 +21,8 @@ Currently provided:
 - `std/audio.mla`: CoreAudio/JACK stereo output, decoded PCM files, reusable
   PCM blocks, and bounded realtime queues.
 - `std/midi.mla`: CoreMIDI/JACK MIDI device discovery, nonblocking input
-  polling, raw MIDI packets, and channel-message output helpers.
+  polling, raw MIDI packets, channel-message output helpers, and multi-port
+  patchbay routing inside one backend client.
 - `std/testing.mla`: GoogleTest-like expectation helpers
   (`expect_true`, `expect_false`, `expect_eq`, `expect_not_eq`,
   `expect_array_eq`, `expect_array_not_eq`; and fatal
