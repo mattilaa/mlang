@@ -103,6 +103,31 @@ pub fn device_name(device_id: i64) -> str8 {
     return __mlang_std_audio_device_name(device_id);
 }
 
+/// @brief Return the number of selectable stereo input device pairs.
+pub fn input_device_count() -> i64 {
+    return __mlang_std_audio_input_device_count();
+}
+
+/// @brief Return the default input device id, or `-1` if unavailable.
+pub fn default_input_device_id() -> i64 {
+    return __mlang_std_audio_default_input_device_id();
+}
+
+/// @brief Return a printable input device name for an integer device id.
+pub fn input_device_name(device_id: i64) -> str8 {
+    return __mlang_std_audio_input_device_name(device_id);
+}
+
+/// @brief Explicit output-oriented alias for `device_count()`.
+pub fn output_device_count() -> i64 {
+    return device_count();
+}
+
+/// @brief Explicit output-oriented alias for `device_name()`.
+pub fn output_device_name(device_id: i64) -> str8 {
+    return device_name(device_id);
+}
+
 impl PcmAudio {
     /// @brief Decode a mono/stereo 16-bit PCM WAV, AIFF, or AIFF-C file.
     ///
@@ -238,6 +263,13 @@ impl AudioInsertStack {
         return Ok<AudioInsertStack, str8>(AudioInsertStack { handle: h });
     }
 
+    /// @brief Open selected stereo input and output device ids.
+    pub fn open(input_device_id: i64, output_device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<AudioInsertStack, str8> {
+        let h: i64 = __mlang_std_audio_insert_stack_open_devices(input_device_id, output_device_id, client_name, sample_rate, buffer_frames);
+        if h == 0 { return Err<AudioInsertStack, str8>(last_error()); }
+        return Ok<AudioInsertStack, str8>(AudioInsertStack { handle: h });
+    }
+
     /// @brief Add a serial gain insert. `wet` is clamped to `0..1`.
     pub fn add_gain(self: AudioInsertStack, gain: f64, wet: f64) -> result<i64, str8> {
         let id: i64 = __mlang_std_audio_insert_stack_add_gain(self.handle, gain, wet);
@@ -359,6 +391,16 @@ impl AudioMixer {
     /// @brief Open one default stereo input and one master output device.
     pub fn open_default(client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<AudioMixer, str8> {
         let h: i64 = __mlang_std_audio_mixer_open_default(client_name, sample_rate, buffer_frames);
+        if h == 0 { return Err<AudioMixer, str8>(last_error()); }
+        return Ok<AudioMixer, str8>(AudioMixer { handle: h });
+    }
+
+    /// @brief Open selected stereo input and master output device ids.
+    ///
+    /// Pass ids returned by `input_device_count()`/`output_device_count()`.
+    /// Negative ids select the corresponding system default.
+    pub fn open(input_device_id: i64, output_device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<AudioMixer, str8> {
+        let h: i64 = __mlang_std_audio_mixer_open_devices(input_device_id, output_device_id, client_name, sample_rate, buffer_frames);
         if h == 0 { return Err<AudioMixer, str8>(last_error()); }
         return Ok<AudioMixer, str8>(AudioMixer { handle: h });
     }

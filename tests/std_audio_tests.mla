@@ -5,6 +5,8 @@ mod std::testing;
 use std::audio::backend_name;
 use std::audio::default_output_device_id;
 use std::audio::device_count;
+use std::audio::default_input_device_id;
+use std::audio::input_device_count;
 use std::audio::last_error;
 use std::audio::AudioEffectRack;
 use std::audio::AudioInsertStack;
@@ -23,6 +25,8 @@ fn test_audio_backend_metadata() {
     verify(len(backend) > 0);
     verify(device_count() >= 0);
     verify(default_output_device_id() >= -1);
+    verify(input_device_count() >= 0);
+    verify(default_input_device_id() >= -1);
     let err: str8 = last_error();
     verify(len(err) >= 0);
 }
