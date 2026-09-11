@@ -1152,6 +1152,12 @@ also sum parallel effect-rack tracks with independent dry/wet gains. See the
 [std::audio documentation](docs/stdlib/std_audio.md#insert-stacks-and-effect-racks)
 and `examples/std_audio_insert_stack_demo.mla` for a live CoreAudio/JACK demo.
 
+For session-style routing, `std::audio::AudioMixer` provides Audio From/Audio To
+track connections, per-track insert stacks, pre/post-fader sends, dedicated
+return tracks, cycle checking, and one master hardware output. See
+`examples/std_audio_mixer_routing_demo.mla` and the
+[track-routing guide](docs/stdlib/std_audio.md#ableton-style-track-routing).
+
 ```sh
 mlang examples/std_midi_demo.mla -L ~/.local/lib/mlang -lmlang_std -o /tmp/std_midi_demo
 /tmp/std_midi_demo --list

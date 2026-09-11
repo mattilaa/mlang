@@ -1,0 +1,62 @@
+/// Ableton-style audio-track, return-track, and master routing demo.
+///
+/// Default input -> Input track inserts -> Processing Bus inserts -> Master
+///                                      |-> Return A delay --------> Master
+
+mod std::audio;
+mod std::time;
+
+use std::audio::AudioMixer;
+use std::audio::AudioReturnTrack;
+use std::audio::AudioTrack;
+use std::time::sleep_ms;
+
+fn main() -> i32 {
+    let mixer_r: result<AudioMixer, str8> =
+        AudioMixer::open_default("mlang_mixer_demo", 48000, 256);
+    if mixer_r.is_err() {
+        println!("audio mixer open failed: {}", mixer_r.unwrap_err());
+        return 1;
+    }
+    let mixer: AudioMixer = mixer_r.unwrap();
+    let input_r: result<AudioTrack, str8> = mixer.add_audio_track("Input 1");
+    let bus_r: result<AudioTrack, str8> = mixer.add_audio_track("Processing Bus");
+    let return_r: result<AudioReturnTrack, str8> = mixer.add_return_track("Return A");
+    if input_r.is_err() || bus_r.is_err() || return_r.is_err() {
+        println!("track creation failed");
+        mixer.close();
+        return 1;
+    }
+
+    let input: AudioTrack = input_r.unwrap();
+    let bus: AudioTrack = bus_r.unwrap();
+    let return_a: AudioReturnTrack = return_r.unwrap();
+
+    // Matching Audio From / Audio To settings describe a single route.
+    bus.set_input_track(input);
+    input.set_output_track(bus);
+    bus.set_output_master();
+    return_a.set_output_master();
+
+    input.add_gain(1.20, 1.0);
+    input.add_lowpass(10000.0, 0.25);
+    bus.add_distortion(1.8, 0.12);
+    return_a.add_delay(260.0, 0.40, 1.0);
+    return_a.add_lowpass(5000.0, 1.0);
+    bus.set_send(return_a, 0.30, true);
+    mixer.set_master_gain(0.80);
+
+    let start_r: result<i32, str8> = mixer.start();
+    if start_r.is_err() {
+        println!("audio mixer start failed: {}", start_r.unwrap_err());
+        mixer.close();
+        return 1;
+    }
+    println!("Processing for 10 seconds:");
+    println!("  Input 1 -> Processing Bus -> Master");
+    println!("                    +-> Return A -> Master (30% post-fader send)");
+    sleep_ms(10000);
+    mixer.stop();
+    mixer.close();
+    return 0;
+}

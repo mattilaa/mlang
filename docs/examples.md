@@ -250,6 +250,12 @@ for sequential output.
   with `./build/mlang -o build/std_audio_insert_stack_demo examples/std_audio_insert_stack_demo.mla`
   and run `./build/std_audio_insert_stack_demo` (microphone permission is needed
   on macOS; a running JACK2 server is needed on Linux).
+- `examples/std_audio_mixer_routing_demo.mla` — Ableton-style routing from the
+  default input through an audio track and processing bus, plus a post-fader
+  send into a filtered delay return, before all paths reach one master output.
+  Build with `./build/mlang -o build/std_audio_mixer_routing_demo examples/std_audio_mixer_routing_demo.mla`
+  and run `./build/std_audio_mixer_routing_demo`; headphones are recommended to
+  prevent microphone feedback.
 - `examples/std_midi_demo.mla` — list CoreMIDI or JACK MIDI ports, monitor a
   selected input without blocking, and send a configurable Note On/Off pair.
 - `examples/std_midi_patchbay_demo.mla` — create multiple MIDI ports inside one

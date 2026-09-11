@@ -14,6 +14,7 @@ Examples:
 - `examples/std_audio_vst3_style_preview.mla`
 - `examples/std_audio_simd_dsp_demo.mla`
 - `examples/std_audio_insert_stack_demo.mla`
+- `examples/std_audio_mixer_routing_demo.mla`
 - Full VST3/CoreAudio package demo: `examples/package_manager_vst3_coreaudio_synth`
 
 ### Types
@@ -22,6 +23,9 @@ Examples:
 - `pcm_block`
 - `audio_insert_stack`
 - `audio_effect_rack`
+- `audio_mixer`
+- `audio_track`
+- `audio_return_track`
 
 ### API
 - `backend_name() -> str8`
@@ -111,6 +115,55 @@ stack.start();
 render preallocated `PcmBlock` values in tests, file renderers, or other offline
 processing. The input and output block may be the same block.
 
+### Ableton-style track routing
+
+`AudioMixer` owns the complete routing graph and is the only object that opens
+hardware. Its master bus writes to one stereo output device. Ordinary
+`AudioTrack` values and send-only `AudioReturnTrack` values are lightweight
+references owned by that mixer; they must not be used after `mixer.close()`.
+
+Each ordinary track has:
+
+- one selected **Audio From** source: the default stereo hardware input or
+  another ordinary track;
+- an ordered insert stack of up to 16 built-in effects;
+- a gain/mute fader stage;
+- up to 8 pre-fader or post-fader sends to return tracks; and
+- one **Audio To** destination: another ordinary track or the master bus.
+
+A return track has no hardware or track input selector. It receives the sum of
+sends and routed track outputs, processes its own insert stack and fader, then
+uses exactly one output destination: an ordinary track or master. All paths
+eventually converge on the mixer's master output.
+
+Routing is compiled into a topological processing order whenever configuration
+changes. A connection that would create direct or indirect audio feedback is
+rejected and the previous valid route is restored. Configure effects and routes
+while stopped. Matching settings such as `bus.set_input_track(input)` and
+`input.set_output_track(bus)` describe one connection and are not mixed twice.
+
+```rust
+let mixer: AudioMixer = AudioMixer::open_default("session", 48000, 256).unwrap();
+let input: AudioTrack = mixer.add_audio_track("Input 1").unwrap();
+let bus: AudioTrack = mixer.add_audio_track("Processing Bus").unwrap();
+let return_a: AudioReturnTrack = mixer.add_return_track("Return A").unwrap();
+
+bus.set_input_track(input);       // Audio From: Input 1
+input.set_output_track(bus);      // Audio To: Processing Bus
+bus.set_output_master();          // Audio To: Master
+return_a.set_output_master();     // Return tracks have one output
+
+input.add_lowpass(10000.0, 0.25);
+bus.add_distortion(1.8, 0.12);
+return_a.add_delay(260.0, 0.40, 1.0);
+bus.set_send(return_a, 0.30, true); // 30% post-fader send
+mixer.start();
+```
+
+Use `AudioMixer::new()` and `process_block()` for offline rendering. A mixer
+supports 32 total audio/return tracks. Gain staging is explicit: track, send,
+return, and master gains are not automatically normalized or limited.
+
 ### PCM queue
 
 `queue_interleaved_f32` copies `[L0, R0, L1, R1, ...]` stereo samples into a
@@ -160,3 +213,16 @@ low-pass, and distortion inserts, then mixes a filtered delay rack into the
 default output. On macOS, grant microphone access when prompted. On Linux,
 start JACK2 first; the demo creates and auto-connects stereo capture and
 playback ports.
+
+### Build and run the mixer-routing example
+
+```sh
+cmake --build build --target mlang_std
+./build/mlang -o build/std_audio_mixer_routing_demo examples/std_audio_mixer_routing_demo.mla
+./build/std_audio_mixer_routing_demo
+```
+
+The demo uses matching Audio From/Audio To track routing, serial inserts, a
+post-fader send, a filtered delay return, and one master hardware output. Avoid
+placing the microphone close to the speakers; headphones are recommended for
+live-input testing.
