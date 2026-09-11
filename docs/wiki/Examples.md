@@ -258,8 +258,9 @@ for sequential output.
   send into a filtered delay return and live click-free volume/pan automation,
   before all paths reach one master output.
   Build with `./build/mlang -o build/std_audio_mixer_routing_demo examples/std_audio_mixer_routing_demo.mla`
-  and run `./build/std_audio_mixer_routing_demo`; headphones are recommended to
-  prevent microphone feedback.
+  and run `./build/std_audio_mixer_routing_demo --list`, followed by for example
+  `./build/std_audio_mixer_routing_demo --input=2 --output=0 --buffer=32`;
+  headphones are recommended to prevent microphone feedback.
 - `examples/std_midi_demo.mla` — list CoreMIDI or JACK MIDI ports, monitor a
   selected input without blocking, and send a configurable Note On/Off pair.
 - `examples/std_midi_patchbay_demo.mla` — create multiple MIDI ports inside one

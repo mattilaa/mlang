@@ -2,18 +2,102 @@
 ///
 /// Default input -> Input track inserts -> Processing Bus inserts -> Master
 ///                                      |-> Return A delay --------> Master
+///
+/// Build and run:
+///   ./build/mlang -o build/std_audio_mixer_routing_demo examples/std_audio_mixer_routing_demo.mla
+///   ./build/std_audio_mixer_routing_demo --list
+///   ./build/std_audio_mixer_routing_demo --input=2 --output=0 --buffer=32
 
+mod std::argparser;
 mod std::audio;
 mod std::time;
 
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
 use std::audio::AudioMixer;
 use std::audio::AudioReturnTrack;
 use std::audio::AudioTrack;
+use std::audio::backend_name;
+use std::audio::default_input_device_id;
+use std::audio::default_output_device_id;
+use std::audio::input_device_count;
+use std::audio::input_device_name;
+use std::audio::output_device_count;
+use std::audio::output_device_name;
 use std::time::sleep_ms;
 
-fn main() -> i32 {
+fn print_audio_devices() -> void {
+    println!("std::audio backend: {}", backend_name());
+    let inputs: i64 = input_device_count();
+    let outputs: i64 = output_device_count();
+    println!("Audio inputs: {} (default {})", inputs, default_input_device_id());
+    for index in 0..inputs {
+        println!("  input  [{}] {}", index, input_device_name(index));
+    }
+    println!("Audio outputs: {} (default {})", outputs, default_output_device_id());
+    for index in 0..outputs {
+        println!("  output [{}] {}", index, output_device_name(index));
+    }
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var parser: ArgParser = ArgParser::new(
+        "std_audio_mixer_routing_demo",
+        "Route a selected audio input through tracks, a return, and a master output.");
+    parser.flag("list", "l", "List numbered audio input and output devices");
+    parser.option("input", "i", "Input device id; -1 uses the default", "-1");
+    parser.option("output", "o", "Master output device id; -1 uses the default", "-1");
+    parser.option("sample-rate", "r", "Sample rate in Hz; 0 uses the selected device rate", "0");
+    parser.option("buffer", "b", "Latency buffer frames (for example 32, 128, or 256)", "256");
+    parser.option("duration", "t", "Processing duration in milliseconds", "10000");
+
+    let parsed: ParseResult = parser.parse(argc, args);
+    if parsed.help_requested() {
+        parser.print_help();
+        parsed.free();
+        parser.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        eprintln!("Error: {}", parsed.error());
+        parser.print_help();
+        parsed.free();
+        parser.free();
+        return 1;
+    }
+    let should_list: bool = parsed.flag("list");
+    var input_device: i64 = parsed.get_i64("input");
+    var output_device: i64 = parsed.get_i64("output");
+    let sample_rate: i64 = parsed.get_i64("sample-rate");
+    let buffer_frames: i64 = parsed.get_i64("buffer");
+    let duration_ms: i64 = parsed.get_i64("duration");
+    parsed.free();
+    parser.free();
+
+    if should_list {
+        print_audio_devices();
+        return 0;
+    }
+    if input_device < 0 { input_device = default_input_device_id(); }
+    if output_device < 0 { output_device = default_output_device_id(); }
+    if input_device < 0 || input_device >= input_device_count() {
+        eprintln!("invalid or unavailable input device {}; run with --list", input_device);
+        return 1;
+    }
+    if output_device < 0 || output_device >= output_device_count() {
+        eprintln!("invalid or unavailable output device {}; run with --list", output_device);
+        return 1;
+    }
+    if duration_ms <= 0 {
+        eprintln!("duration must be positive");
+        return 1;
+    }
+    println!("selected input [{}] {}", input_device, input_device_name(input_device));
+    println!("selected output [{}] {}", output_device, output_device_name(output_device));
+
     let mixer_r: result<AudioMixer, str8> =
-        AudioMixer::open_default("mlang_mixer_demo", 48000, 256);
+        AudioMixer::open(input_device, output_device, "mlang_mixer_demo",
+                         sample_rate, buffer_frames);
     if mixer_r.is_err() {
         println!("audio mixer open failed: {}", mixer_r.unwrap_err());
         return 1;
@@ -53,14 +137,15 @@ fn main() -> i32 {
         mixer.close();
         return 1;
     }
-    println!("Processing for 10 seconds:");
+    println!("Processing for {} ms:", duration_ms);
     println!("  Input 1 -> Processing Bus -> Master");
     println!("                    +-> Return A -> Master (30% post-fader send)");
-    sleep_ms(5000);
+    let first_half: i64 = duration_ms / 2;
+    sleep_ms(first_half);
     println!("Ramping bus volume and pan over 250 ms...");
     bus.set_volume(0.70, 250.0);
     bus.set_pan(0.50, 250.0);
-    sleep_ms(5000);
+    sleep_ms(duration_ms - first_half);
     mixer.stop();
     mixer.close();
     return 0;

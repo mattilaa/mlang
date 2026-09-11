@@ -33,6 +33,11 @@ Examples:
 - `device_count() -> i64`
 - `default_output_device_id() -> i64`
 - `device_name(device_id: i64) -> str8`
+- `input_device_count() -> i64`
+- `default_input_device_id() -> i64`
+- `input_device_name(device_id: i64) -> str8`
+- `output_device_count() -> i64`
+- `output_device_name(device_id: i64) -> str8`
 - `pcm_audio::load(path: str8) -> result<pcm_audio, str8>`
 - `pcm_audio::sample_rate(self: pcm_audio) -> i64`
 - `pcm_audio::channels(self: pcm_audio) -> i64`
@@ -65,6 +70,7 @@ Examples:
 - `audio_device::play_sine(self: audio_device, frequency_hz: f64, gain: f64, duration_ms: i64) -> result<i32, str8>`
 - `audio_insert_stack::new(sample_rate: i64, buffer_frames: i64) -> result<audio_insert_stack, str8>`
 - `audio_insert_stack::open_default(client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<audio_insert_stack, str8>`
+- `audio_insert_stack::open(input_device_id: i64, output_device_id: i64, client_name: str8, sample_rate: i64, buffer_frames: i64) -> result<audio_insert_stack, str8>`
 - `audio_insert_stack::add_gain(gain: f64, wet: f64) -> result<i64, str8>`
 - `audio_insert_stack::add_lowpass(cutoff_hz: f64, wet: f64) -> result<i64, str8>`
 - `audio_insert_stack::add_distortion(drive: f64, wet: f64) -> result<i64, str8>`
@@ -121,6 +127,14 @@ processing. The input and output block may be the same block.
 hardware. Its master bus writes to one stereo output device. Ordinary
 `AudioTrack` values and send-only `AudioReturnTrack` values are lightweight
 references owned by that mixer; they must not be used after `mixer.close()`.
+
+Use `AudioMixer::open(input_id, output_id, ...)` to choose different capture
+and playback devices, or `open_default()` for both system defaults. Input and
+output ids have separate number spaces; enumerate them with
+`input_device_count()`/`input_device_name()` and
+`output_device_count()`/`output_device_name()`. Passing a negative id selects
+that direction's default. A zero sample-rate request adopts the selected input
+device's nominal rate on CoreAudio and the JACK server rate on Linux.
 
 Each ordinary track has:
 
@@ -243,11 +257,18 @@ playback ports.
 ```sh
 cmake --build build --target mlang_std
 ./build/mlang -o build/std_audio_mixer_routing_demo examples/std_audio_mixer_routing_demo.mla
-./build/std_audio_mixer_routing_demo
+./build/std_audio_mixer_routing_demo --list
+./build/std_audio_mixer_routing_demo --input=2 --output=0 --buffer=32
 ```
 
 The demo uses matching Audio From/Audio To track routing, serial inserts, a
 post-fader send, a filtered delay return, live click-free volume/pan ramps, and
 one master hardware output. Avoid
 placing the microphone close to the speakers; headphones are recommended for
-live-input testing.
+live-input testing. `--list` prints separate numbered input and output tables
+and marks each default id. `--buffer=N` requests the callback/latency buffer in
+frames; try `32` for low latency, then increase to `128` or `256` if audio
+crackles or underruns. Options accept either `--option=N` or `--option N`.
+
+When using different physical CoreAudio devices for input and output over long
+sessions, an Aggregate Device with clock-drift correction is recommended.

@@ -1160,6 +1160,8 @@ master-only return tracks, cycle checking, click-free volume/pan ramps, and one
 master hardware output. See
 `examples/std_audio_mixer_routing_demo.mla` and the
 [track-routing guide](Stdlib-Audio#ableton-style-track-routing).
+The demo supports `--list`, separate `--input=N`/`--output=N` selection, and a
+low-latency buffer request such as `--buffer=32`.
 
 ```sh
 mlang examples/std_midi_demo.mla -L ~/.local/lib/mlang -lmlang_std -o /tmp/std_midi_demo
