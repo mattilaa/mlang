@@ -139,7 +139,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     println!("Processing for {} ms:", duration_ms);
     println!("  Input 1 -> Processing Bus -> Master");
-    println!("                    +-> Return A -> Master (30% post-fader send)");
+    println!("                    +-> Return A -> Master (30 percent post-fader send)");
     let first_half: i64 = duration_ms / 2;
     var probe_ms: i64 = 500;
     if probe_ms > first_half { probe_ms = first_half; }
@@ -156,7 +156,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     println!("input active: {} frames received, latest peak {}", received,
              mixer.input_peak());
     if mixer.input_peak() == 0.0 {
-        println!("warning: the input stream is active but currently silent");
+        eprintln!("warning: the input stream is active but all captured samples are silent");
+        eprintln!("on macOS, if no microphone indicator appears, enable access for the terminal running this program in System Settings > Privacy & Security > Microphone");
     }
     sleep_ms(first_half - probe_ms);
     println!("Ramping bus volume and pan over 250 ms...");

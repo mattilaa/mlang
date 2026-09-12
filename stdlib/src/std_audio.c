@@ -125,6 +125,7 @@ struct mlang_audio_insert_stack
     int64_t output_device_id;
     double sample_rate;
     int64_t buffer_frames;
+    int input_channels;
     int insert_count;
     int rack_count;
     mlang_audio_effect_t inserts[MLANG_AUDIO_MAX_INSERTS];
@@ -1221,6 +1222,32 @@ static int coreaudio_device_has_input(AudioDeviceID id)
     return channels > 0 ? 1 : 0;
 }
 
+static UInt32 coreaudio_input_channel_count(AudioDeviceID id)
+{
+    AudioObjectPropertyAddress addr;
+    addr.mSelector = kAudioDevicePropertyStreamConfiguration;
+    addr.mScope = kAudioDevicePropertyScopeInput;
+    addr.mElement = kAudioObjectPropertyElementMain;
+
+    UInt32 size = 0;
+    if(AudioObjectGetPropertyDataSize(id, &addr, 0, NULL, &size) != noErr ||
+       size == 0)
+        return 0;
+    AudioBufferList* list = (AudioBufferList*)malloc(size);
+    if(!list)
+        return 0;
+    if(AudioObjectGetPropertyData(id, &addr, 0, NULL, &size, list) != noErr)
+    {
+        free(list);
+        return 0;
+    }
+    UInt32 channels = 0;
+    for(UInt32 i = 0; i < list->mNumberBuffers; ++i)
+        channels += list->mBuffers[i].mNumberChannels;
+    free(list);
+    return channels;
+}
+
 static int coreaudio_all_devices(AudioDeviceID** out_ids, UInt32* out_count)
 {
     *out_ids = NULL;
@@ -2257,27 +2284,6 @@ static mlang_audio_insert_stack_t* audio_insert_stack_from_handle(int64_t handle
     return (mlang_audio_insert_stack_t*)(intptr_t)handle;
 }
 
-static void audio_insert_stack_note_input(mlang_audio_insert_stack_t* stack,
-                                          const float* interleaved,
-                                          uint64_t frames)
-{
-    if(!stack || !interleaved)
-        return;
-    float peak = 0.0f;
-    for(uint64_t i = 0; i < frames * 2u; ++i)
-    {
-        const float level = fabsf(interleaved[i]);
-        if(level > peak)
-            peak = level;
-    }
-    uint32_t peak_bits = 0;
-    memcpy(&peak_bits, &peak, sizeof(peak_bits));
-    atomic_store_explicit(&stack->input_peak_bits, peak_bits,
-                          memory_order_release);
-    (void)atomic_fetch_add_explicit(&stack->input_frames_received, frames,
-                                    memory_order_relaxed);
-}
-
 static int audio_insert_stack_can_configure(mlang_audio_insert_stack_t* stack,
                                             const char* operation)
 {
@@ -2613,24 +2619,41 @@ static void audio_insert_input_callback(void* user_data, AudioQueueRef queue,
     if(stack && buffer && stack->input_ring)
     {
         const float* samples = (const float*)buffer->mAudioData;
+        const uint64_t channels = stack->input_channels > 0
+                                      ? (uint64_t)stack->input_channels
+                                      : 2u;
         const uint64_t frames = buffer->mAudioDataByteSize /
-                                (2u * (uint64_t)sizeof(float));
-        audio_insert_stack_note_input(stack, samples, frames);
+                                (channels * (uint64_t)sizeof(float));
+        float peak = 0.0f;
         uint64_t write = atomic_load_explicit(&stack->input_write_frame,
                                               memory_order_relaxed);
-        uint64_t read = atomic_load_explicit(&stack->input_read_frame,
-                                             memory_order_acquire);
+        const uint64_t read = atomic_load_explicit(&stack->input_read_frame,
+                                                   memory_order_acquire);
         for(uint64_t i = 0; i < frames; ++i)
         {
             if(write - read >= stack->input_capacity_frames)
-                ++read;
+                break;
             const uint64_t slot = write % stack->input_capacity_frames;
-            stack->input_ring[slot * 2u] = samples[i * 2u];
-            stack->input_ring[slot * 2u + 1u] = samples[i * 2u + 1u];
+            const float left = samples[i * channels];
+            const float right = channels > 1u
+                                    ? samples[i * channels + 1u]
+                                    : left;
+            stack->input_ring[slot * 2u] = left;
+            stack->input_ring[slot * 2u + 1u] = right;
+            const float left_level = fabsf(left);
+            const float right_level = fabsf(right);
+            if(left_level > peak)
+                peak = left_level;
+            if(right_level > peak)
+                peak = right_level;
             ++write;
         }
-        atomic_store_explicit(&stack->input_read_frame, read,
+        uint32_t peak_bits = 0;
+        memcpy(&peak_bits, &peak, sizeof(peak_bits));
+        atomic_store_explicit(&stack->input_peak_bits, peak_bits,
                               memory_order_release);
+        (void)atomic_fetch_add_explicit(&stack->input_frames_received, frames,
+                                        memory_order_relaxed);
         atomic_store_explicit(&stack->input_write_frame, write,
                               memory_order_release);
     }
@@ -2716,22 +2739,32 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
         else if(output_rate > 0.0)
             stack->sample_rate = output_rate;
     }
-    AudioStreamBasicDescription fmt;
-    memset(&fmt, 0, sizeof(fmt));
-    fmt.mSampleRate = stack->sample_rate;
-    fmt.mFormatID = kAudioFormatLinearPCM;
-    fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat |
-                       kAudioFormatFlagIsPacked;
-    fmt.mBytesPerPacket = 2u * (UInt32)sizeof(float);
-    fmt.mFramesPerPacket = 1;
-    fmt.mBytesPerFrame = 2u * (UInt32)sizeof(float);
-    fmt.mChannelsPerFrame = 2;
-    fmt.mBitsPerChannel = 32;
+    const UInt32 native_input_channels =
+        coreaudio_input_channel_count(input_device);
+    stack->input_channels = native_input_channels == 1u ? 1 : 2;
 
-    OSStatus rc = AudioQueueNewInput(&fmt, audio_insert_input_callback, stack,
+    AudioStreamBasicDescription input_fmt;
+    memset(&input_fmt, 0, sizeof(input_fmt));
+    input_fmt.mSampleRate = stack->sample_rate;
+    input_fmt.mFormatID = kAudioFormatLinearPCM;
+    input_fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat |
+                             kAudioFormatFlagIsPacked;
+    input_fmt.mBytesPerPacket = (UInt32)stack->input_channels *
+                                (UInt32)sizeof(float);
+    input_fmt.mFramesPerPacket = 1;
+    input_fmt.mBytesPerFrame = input_fmt.mBytesPerPacket;
+    input_fmt.mChannelsPerFrame = (UInt32)stack->input_channels;
+    input_fmt.mBitsPerChannel = 32;
+
+    AudioStreamBasicDescription output_fmt = input_fmt;
+    output_fmt.mBytesPerPacket = 2u * (UInt32)sizeof(float);
+    output_fmt.mBytesPerFrame = 2u * (UInt32)sizeof(float);
+    output_fmt.mChannelsPerFrame = 2;
+
+    OSStatus rc = AudioQueueNewInput(&input_fmt, audio_insert_input_callback, stack,
                                      NULL, NULL, 0, &stack->input_queue);
     if(rc == noErr)
-        rc = AudioQueueNewOutput(&fmt, audio_insert_output_callback, stack,
+        rc = AudioQueueNewOutput(&output_fmt, audio_insert_output_callback, stack,
                                  NULL, NULL, 0, &stack->output_queue);
     if(rc != noErr)
     {
@@ -2760,20 +2793,23 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
     atomic_init(&stack->input_read_frame, 0u);
     atomic_init(&stack->input_write_frame, 0u);
 
-    const UInt32 bytes = (UInt32)(stack->buffer_frames * 2 *
-                                  (int64_t)sizeof(float));
+    const UInt32 input_bytes = (UInt32)(stack->buffer_frames *
+                                        stack->input_channels *
+                                        (int64_t)sizeof(float));
+    const UInt32 output_bytes = (UInt32)(stack->buffer_frames * 2 *
+                                         (int64_t)sizeof(float));
     for(int i = 0; i < 3; ++i)
     {
-        if(AudioQueueAllocateBuffer(stack->input_queue, bytes,
+        if(AudioQueueAllocateBuffer(stack->input_queue, input_bytes,
                                     &stack->input_buffers[i]) != noErr ||
-           AudioQueueAllocateBuffer(stack->output_queue, bytes,
+           AudioQueueAllocateBuffer(stack->output_queue, output_bytes,
                                     &stack->output_buffers[i]) != noErr)
         {
             audio_set_error("std::audio CoreAudio duplex buffer allocation failed");
             return -1;
         }
-        memset(stack->output_buffers[i]->mAudioData, 0, bytes);
-        stack->output_buffers[i]->mAudioDataByteSize = bytes;
+        memset(stack->output_buffers[i]->mAudioData, 0, output_bytes);
+        stack->output_buffers[i]->mAudioDataByteSize = output_bytes;
         if(AudioQueueEnqueueBuffer(stack->input_queue, stack->input_buffers[i],
                                    0, NULL) != noErr ||
            AudioQueueEnqueueBuffer(stack->output_queue,

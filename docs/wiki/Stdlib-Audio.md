@@ -258,7 +258,7 @@ playback ports.
 cmake --build build --target mlang_std
 ./build/mlang -o build/std_audio_mixer_routing_demo examples/std_audio_mixer_routing_demo.mla
 ./build/std_audio_mixer_routing_demo --list
-./build/std_audio_mixer_routing_demo --input=2 --output=0 --buffer=32
+./build/std_audio_mixer_routing_demo --input=1 --output=2 --buffer=32
 ```
 
 The demo uses matching Audio From/Audio To track routing, serial inserts, a
@@ -269,6 +269,12 @@ live-input testing. `--list` prints separate numbered input and output tables
 and marks each default id. `--buffer=N` requests the callback/latency buffer in
 frames; try `32` for low latency, then increase to `128` or `256` if audio
 crackles or underruns. Options accept either `--option=N` or `--option N`.
+After startup the demo reports the number of captured frames and the latest
+input peak. If macOS delivers no input frames, allow microphone access for the
+terminal application in **System Settings > Privacy & Security > Microphone**
+and run the demo again. The CoreAudio backend also reads back both selected
+device UIDs during open, so it fails instead of silently falling back to a
+different device.
 
 When using different physical CoreAudio devices for input and output over long
 sessions, an Aggregate Device with clock-drift correction is recommended.

@@ -256,7 +256,9 @@ for sequential output.
   before all paths reach one master output.
   Build with `./build/mlang -o build/std_audio_mixer_routing_demo examples/std_audio_mixer_routing_demo.mla`
   and run `./build/std_audio_mixer_routing_demo --list`, followed by for example
-  `./build/std_audio_mixer_routing_demo --input=2 --output=0 --buffer=32`;
+  `./build/std_audio_mixer_routing_demo --input=1 --output=2 --buffer=32`;
+  after startup it verifies that hardware input frames are arriving and prints
+  the latest input peak;
   headphones are recommended to prevent microphone feedback.
 - `examples/std_midi_demo.mla` — list CoreMIDI or JACK MIDI ports, monitor a
   selected input without blocking, and send a configurable Note On/Off pair.
