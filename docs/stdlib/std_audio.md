@@ -264,15 +264,21 @@ post-fader send, a filtered delay return, live click-free volume/pan ramps, and
 one master hardware output. Avoid
 placing the microphone close to the speakers; headphones are recommended for
 live-input testing. `--list` prints separate numbered input and output tables
-and marks each default id. `--buffer=N` requests the callback/latency buffer in
-frames; try `32` for low latency, then increase to `128` or `256` if audio
+and marks each default id. `--buffer=N` requests the hardware buffer size in
+frames on macOS; the demo prints the actual output buffer size read back from
+the device. Unsupported requests fail during open. This changes the selected
+devices' buffer setting, which may also affect other clients using them.
+Try `32` for low latency, then increase to `128` or `256` if audio
 crackles or underruns. Options accept either `--option=N` or `--option N`.
+The mixer and insert stack use HAL AudioUnit output callbacks without an
+AudioQueue playback queue. When input and output select the same CoreAudio
+device, capture and processing run in the same callback. Separate devices use
+an input ring and independent callbacks; clock drift correction is not
+implemented, so a shared duplex device is preferred for low-latency monitoring.
 After startup the demo reports the number of captured frames and the latest
 input peak. If macOS delivers no input frames, allow microphone access for the
 terminal application in **System Settings > Privacy & Security > Microphone**
-and run the demo again. The CoreAudio backend also reads back both selected
-device UIDs during open, so it fails instead of silently falling back to a
-different device.
+and run the demo again.
 
 When using different physical CoreAudio devices for input and output over long
 sessions, an Aggregate Device with clock-drift correction is recommended.

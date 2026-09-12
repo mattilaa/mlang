@@ -103,6 +103,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
     let mixer: AudioMixer = mixer_r.unwrap();
+    println!("audio configuration: {} Hz, {} output buffer frames",
+             mixer.sample_rate(), mixer.buffer_frames());
     let input_r: result<AudioTrack, str8> = mixer.add_audio_track("Input 1");
     let bus_r: result<AudioTrack, str8> = mixer.add_audio_track("Processing Bus");
     let return_r: result<AudioReturnTrack, str8> = mixer.add_return_track("Return A");

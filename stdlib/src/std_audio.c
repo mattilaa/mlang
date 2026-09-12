@@ -138,8 +138,8 @@ struct mlang_audio_insert_stack
     mlang_audio_mixer_t* mixer;
 #if defined(__APPLE__)
     AudioComponentInstance input_unit;
-    AudioQueueRef output_queue;
-    AudioQueueBufferRef output_buffers[3];
+    AudioComponentInstance output_unit;
+    int shared_device;
     float* input_render_buffer;
     uint64_t input_render_capacity_frames;
     float* input_ring;
@@ -2736,14 +2736,10 @@ static OSStatus audio_insert_input_unit_callback(
 }
 
 static void audio_insert_output_fill(mlang_audio_insert_stack_t* stack,
-                                     AudioQueueBufferRef buffer)
+                                     float* samples, uint64_t frames)
 {
-    if(!stack || !buffer)
+    if(!stack || !samples)
         return;
-    const uint64_t frames = stack->buffer_frames > 0
-                                ? (uint64_t)stack->buffer_frames
-                                : 512u;
-    float* samples = (float*)buffer->mAudioData;
     uint64_t read = atomic_load_explicit(&stack->input_read_frame,
                                          memory_order_relaxed);
     const uint64_t write = atomic_load_explicit(&stack->input_write_frame,
@@ -2776,8 +2772,6 @@ static void audio_insert_output_fill(mlang_audio_insert_stack_t* stack,
             peak = right_level;
     }
     atomic_store_explicit(&stack->input_read_frame, read, memory_order_release);
-    buffer->mAudioDataByteSize =
-        (UInt32)(frames * 2u * (uint64_t)sizeof(float));
     uint32_t peak_bits = 0;
     memcpy(&peak_bits, &peak, sizeof(peak_bits));
     atomic_store_explicit(&stack->output_peak_bits, peak_bits,
@@ -2786,14 +2780,47 @@ static void audio_insert_output_fill(mlang_audio_insert_stack_t* stack,
                                     memory_order_relaxed);
 }
 
-static void audio_insert_output_callback(void* user_data, AudioQueueRef queue,
-                                         AudioQueueBufferRef buffer)
+static OSStatus audio_insert_output_callback(
+    void* user_data, AudioUnitRenderActionFlags* action_flags,
+    const AudioTimeStamp* timestamp, UInt32 bus_number, UInt32 frame_count,
+    AudioBufferList* io_data)
 {
+    (void)bus_number;
     mlang_audio_insert_stack_t* stack =
         (mlang_audio_insert_stack_t*)user_data;
-    audio_insert_output_fill(stack, buffer);
-    if(stack && atomic_load_explicit(&stack->running, memory_order_acquire))
-        (void)AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
+    if(!io_data)
+        return noErr;
+    for(UInt32 i = 0; i < io_data->mNumberBuffers; ++i)
+        if(io_data->mBuffers[i].mData)
+            memset(io_data->mBuffers[i].mData, 0,
+                   io_data->mBuffers[i].mDataByteSize);
+    if(!stack || !atomic_load_explicit(&stack->running, memory_order_acquire))
+        return noErr;
+    if(stack->shared_device)
+    {
+        const OSStatus rc = audio_insert_input_unit_callback(
+            stack, action_flags, timestamp, 1, frame_count, NULL);
+        if(rc != noErr)
+            return rc;
+    }
+    if(io_data->mNumberBuffers == 1 &&
+       io_data->mBuffers[0].mDataByteSize >= frame_count * 2u * sizeof(float))
+        audio_insert_output_fill(stack, io_data->mBuffers[0].mData, frame_count);
+    return noErr;
+}
+
+static OSStatus audio_insert_set_device_buffer(AudioDeviceID device,
+                                               UInt32* frames)
+{
+    AudioObjectPropertyAddress address = {
+        kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain};
+    OSStatus rc = AudioObjectSetPropertyData(device, &address, 0, NULL,
+                                            sizeof(*frames), frames);
+    if(rc != noErr)
+        return rc;
+    UInt32 size = sizeof(*frames);
+    return AudioObjectGetPropertyData(device, &address, 0, NULL, &size, frames);
 }
 
 static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
@@ -2819,6 +2846,21 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
     }
     const double input_rate = coreaudio_nominal_sample_rate(input_device);
     const double output_rate = coreaudio_nominal_sample_rate(output_device);
+    stack->shared_device = input_device == output_device;
+    UInt32 output_frames = (UInt32)stack->buffer_frames;
+    UInt32 input_frames = output_frames;
+    OSStatus buffer_rc = audio_insert_set_device_buffer(output_device,
+                                                        &output_frames);
+    if(buffer_rc == noErr && !stack->shared_device)
+        buffer_rc = audio_insert_set_device_buffer(input_device, &input_frames);
+    if(buffer_rc != noErr)
+    {
+        (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
+                       "std::audio could not configure hardware buffer size: %d",
+                       (int)buffer_rc);
+        return -1;
+    }
+    stack->buffer_frames = output_frames;
     if(!requested_sample_rate)
     {
         if(input_rate > 0.0)
@@ -2849,8 +2891,6 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
     output_fmt.mBytesPerPacket = 2u * (UInt32)sizeof(float);
     output_fmt.mBytesPerFrame = 2u * (UInt32)sizeof(float);
     output_fmt.mChannelsPerFrame = 2;
-    if(!requested_sample_rate && output_rate > 0.0)
-        output_fmt.mSampleRate = output_rate;
 
     AudioComponentDescription input_description;
     memset(&input_description, 0, sizeof(input_description));
@@ -2868,7 +2908,7 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
     OSStatus rc = AudioComponentInstanceNew(input_component,
                                              &stack->input_unit);
     UInt32 enable_input = 1;
-    UInt32 disable_output = 0;
+    UInt32 enable_output = stack->shared_device ? 1u : 0u;
     if(rc == noErr)
         rc = AudioUnitSetProperty(stack->input_unit,
                                   kAudioOutputUnitProperty_EnableIO,
@@ -2877,8 +2917,8 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
     if(rc == noErr)
         rc = AudioUnitSetProperty(stack->input_unit,
                                   kAudioOutputUnitProperty_EnableIO,
-                                  kAudioUnitScope_Output, 0, &disable_output,
-                                  sizeof(disable_output));
+                                  kAudioUnitScope_Output, 0, &enable_output,
+                                  sizeof(enable_output));
     if(rc == noErr)
         rc = AudioUnitSetProperty(stack->input_unit,
                                   kAudioOutputUnitProperty_CurrentDevice,
@@ -2892,34 +2932,59 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
     AURenderCallbackStruct input_callback;
     input_callback.inputProc = audio_insert_input_unit_callback;
     input_callback.inputProcRefCon = stack;
-    if(rc == noErr)
+    if(rc == noErr && !stack->shared_device)
         rc = AudioUnitSetProperty(stack->input_unit,
                                   kAudioOutputUnitProperty_SetInputCallback,
                                   kAudioUnitScope_Global, 0, &input_callback,
                                   sizeof(input_callback));
-    const UInt32 capture_capacity_frames = 4096u;
+    UInt32 capture_capacity_frames = 4096u;
+    if(output_frames > capture_capacity_frames)
+        capture_capacity_frames = output_frames;
+    if(input_frames > capture_capacity_frames)
+        capture_capacity_frames = input_frames;
     if(rc == noErr)
         rc = AudioUnitSetProperty(stack->input_unit,
                                   kAudioUnitProperty_MaximumFramesPerSlice,
                                   kAudioUnitScope_Global, 0,
                                   &capture_capacity_frames,
                                   sizeof(capture_capacity_frames));
+    if(rc == noErr && stack->shared_device)
+        stack->output_unit = stack->input_unit;
+    if(rc == noErr && !stack->shared_device)
+        rc = AudioComponentInstanceNew(input_component, &stack->output_unit);
+    if(rc == noErr && !stack->shared_device)
+        rc = AudioUnitSetProperty(stack->output_unit,
+                                  kAudioOutputUnitProperty_CurrentDevice,
+                                  kAudioUnitScope_Global, 0, &output_device,
+                                  sizeof(output_device));
+    if(rc == noErr)
+        rc = AudioUnitSetProperty(stack->output_unit,
+                                  kAudioUnitProperty_StreamFormat,
+                                  kAudioUnitScope_Input, 0, &output_fmt,
+                                  sizeof(output_fmt));
+    AURenderCallbackStruct output_callback;
+    output_callback.inputProc = audio_insert_output_callback;
+    output_callback.inputProcRefCon = stack;
+    if(rc == noErr)
+        rc = AudioUnitSetProperty(stack->output_unit,
+                                  kAudioUnitProperty_SetRenderCallback,
+                                  kAudioUnitScope_Input, 0, &output_callback,
+                                  sizeof(output_callback));
+    if(rc == noErr)
+        rc = AudioUnitSetProperty(stack->output_unit,
+                                  kAudioUnitProperty_MaximumFramesPerSlice,
+                                  kAudioUnitScope_Global, 0,
+                                  &capture_capacity_frames,
+                                  sizeof(capture_capacity_frames));
     if(rc == noErr)
         rc = AudioUnitInitialize(stack->input_unit);
-    if(rc == noErr)
-        rc = AudioQueueNewOutput(&output_fmt, audio_insert_output_callback,
-                                 stack, NULL, NULL, 0, &stack->output_queue);
+    if(rc == noErr && !stack->shared_device)
+        rc = AudioUnitInitialize(stack->output_unit);
     if(rc != noErr)
     {
         (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
                        "std::audio CoreAudio input/output setup failed: %d",
                        (int)rc);
-        return -1;
-    }
-    if(output_device != kAudioObjectUnknown &&
-       coreaudio_set_queue_device(stack->output_queue, output_device) != 0)
-    {
-        audio_set_error("std::audio CoreAudio failed to select duplex devices");
         return -1;
     }
 
@@ -2938,25 +3003,6 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
     atomic_init(&stack->input_read_frame, 0u);
     atomic_init(&stack->input_write_frame, 0u);
 
-    const UInt32 output_bytes = (UInt32)(stack->buffer_frames * 2 *
-                                         (int64_t)sizeof(float));
-    for(int i = 0; i < 3; ++i)
-    {
-        if(AudioQueueAllocateBuffer(stack->output_queue, output_bytes,
-                                    &stack->output_buffers[i]) != noErr)
-        {
-            audio_set_error("std::audio CoreAudio duplex buffer allocation failed");
-            return -1;
-        }
-        memset(stack->output_buffers[i]->mAudioData, 0, output_bytes);
-        stack->output_buffers[i]->mAudioDataByteSize = output_bytes;
-        if(AudioQueueEnqueueBuffer(stack->output_queue,
-                                   stack->output_buffers[i], 0, NULL) != noErr)
-        {
-            audio_set_error("std::audio CoreAudio duplex buffer enqueue failed");
-            return -1;
-        }
-    }
     stack->backend = 1;
     return 0;
 }
@@ -3215,6 +3261,8 @@ int32_t __mlang_std_audio_insert_stack_start(int64_t handle)
     atomic_store_explicit(&stack->output_peak_bits, 0u, memory_order_release);
     atomic_store_explicit(&stack->running, 1, memory_order_release);
 #if defined(__APPLE__)
+    atomic_store_explicit(&stack->input_read_frame, 0u, memory_order_relaxed);
+    atomic_store_explicit(&stack->input_write_frame, 0u, memory_order_relaxed);
     OSStatus rc = AudioOutputUnitStart(stack->input_unit);
     if(rc != noErr)
     {
@@ -3224,7 +3272,8 @@ int32_t __mlang_std_audio_insert_stack_start(int64_t handle)
                        (int)rc);
         return -1;
     }
-    rc = AudioQueueStart(stack->output_queue, NULL);
+    if(!stack->shared_device)
+        rc = AudioOutputUnitStart(stack->output_unit);
     if(rc != noErr)
     {
         atomic_store_explicit(&stack->running, 0, memory_order_release);
@@ -3255,8 +3304,8 @@ int32_t __mlang_std_audio_insert_stack_stop(int64_t handle)
 #if defined(__APPLE__)
     if(stack->input_unit)
         (void)AudioOutputUnitStop(stack->input_unit);
-    if(stack->output_queue)
-        (void)AudioQueueStop(stack->output_queue, true);
+    if(stack->output_unit && !stack->shared_device)
+        (void)AudioOutputUnitStop(stack->output_unit);
 #elif defined(__linux__)
     if(stack->jack_client && p_jack_deactivate)
         (void)p_jack_deactivate(stack->jack_client);
@@ -3276,8 +3325,11 @@ int32_t __mlang_std_audio_insert_stack_close(int64_t handle)
         (void)AudioUnitUninitialize(stack->input_unit);
         (void)AudioComponentInstanceDispose(stack->input_unit);
     }
-    if(stack->output_queue)
-        AudioQueueDispose(stack->output_queue, true);
+    if(stack->output_unit && !stack->shared_device)
+    {
+        (void)AudioUnitUninitialize(stack->output_unit);
+        (void)AudioComponentInstanceDispose(stack->output_unit);
+    }
     free(stack->input_render_buffer);
     free(stack->input_ring);
 #elif defined(__linux__)
