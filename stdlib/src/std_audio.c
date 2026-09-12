@@ -6,8 +6,11 @@
 #include <string.h>
 
 #if defined(__APPLE__)
+#import <AVFoundation/AVFoundation.h>
 #include <CoreAudio/CoreAudio.h>
 #include <AudioToolbox/AudioToolbox.h>
+#include <AudioUnit/AudioUnit.h>
+#include <dispatch/dispatch.h>
 #elif defined(__linux__)
 #include <dlfcn.h>
 #endif
@@ -121,6 +124,8 @@ struct mlang_audio_insert_stack
     _Atomic int running;
     _Atomic uint64_t input_frames_received;
     _Atomic uint32_t input_peak_bits;
+    _Atomic uint64_t output_frames_rendered;
+    _Atomic uint32_t output_peak_bits;
     int64_t input_device_id;
     int64_t output_device_id;
     double sample_rate;
@@ -132,10 +137,11 @@ struct mlang_audio_insert_stack
     mlang_audio_effect_rack_t racks[MLANG_AUDIO_MAX_RACKS];
     mlang_audio_mixer_t* mixer;
 #if defined(__APPLE__)
-    AudioQueueRef input_queue;
+    AudioComponentInstance input_unit;
     AudioQueueRef output_queue;
-    AudioQueueBufferRef input_buffers[3];
     AudioQueueBufferRef output_buffers[3];
+    float* input_render_buffer;
+    uint64_t input_render_capacity_frames;
     float* input_ring;
     uint64_t input_capacity_frames;
     _Atomic uint64_t input_read_frame;
@@ -1169,6 +1175,31 @@ int32_t __mlang_std_audio_pcm_wav_writer_close(int64_t handle)
 }
 
 #if defined(__APPLE__)
+static int coreaudio_request_microphone_access(void)
+{
+    @autoreleasepool
+    {
+        const AVAuthorizationStatus status =
+            [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
+        if(status == AVAuthorizationStatusAuthorized)
+            return 1;
+        if(status == AVAuthorizationStatusDenied ||
+           status == AVAuthorizationStatusRestricted)
+            return 0;
+
+        __block BOOL granted = NO;
+        dispatch_semaphore_t finished = dispatch_semaphore_create(0);
+        [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio
+                                 completionHandler:^(BOOL allowed) {
+            granted = allowed;
+            dispatch_semaphore_signal(finished);
+        }];
+        const long wait_result = dispatch_semaphore_wait(
+            finished, dispatch_time(DISPATCH_TIME_NOW, 30LL * NSEC_PER_SEC));
+        return wait_result == 0 && granted ? 1 : 0;
+    }
+}
+
 static int coreaudio_device_has_output(AudioDeviceID id)
 {
     AudioObjectPropertyAddress addr;
@@ -2577,6 +2608,26 @@ double __mlang_std_audio_insert_stack_input_peak(int64_t handle)
     return (double)peak;
 }
 
+int64_t __mlang_std_audio_insert_stack_output_frames_rendered(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    return stack ? (int64_t)atomic_load_explicit(
+                       &stack->output_frames_rendered, memory_order_acquire)
+                 : 0;
+}
+
+double __mlang_std_audio_insert_stack_output_peak(int64_t handle)
+{
+    mlang_audio_insert_stack_t* stack = audio_insert_stack_from_handle(handle);
+    if(!stack)
+        return 0.0;
+    const uint32_t peak_bits = atomic_load_explicit(&stack->output_peak_bits,
+                                                    memory_order_acquire);
+    float peak = 0.0f;
+    memcpy(&peak, &peak_bits, sizeof(peak));
+    return (double)peak;
+}
+
 int32_t __mlang_std_audio_insert_stack_process_block(int64_t handle,
                                                      int64_t input_handle,
                                                      int64_t output_handle,
@@ -2605,25 +2656,14 @@ int32_t __mlang_std_audio_insert_stack_process_block(int64_t handle,
 }
 
 #if defined(__APPLE__)
-static void audio_insert_input_callback(void* user_data, AudioQueueRef queue,
-                                        AudioQueueBufferRef buffer,
-                                        const AudioTimeStamp* start_time,
-                                        UInt32 packet_count,
-                                        const AudioStreamPacketDescription* packets)
+static void audio_insert_capture_frames(mlang_audio_insert_stack_t* stack,
+                                        const float* samples, uint64_t frames)
 {
-    (void)start_time;
-    (void)packet_count;
-    (void)packets;
-    mlang_audio_insert_stack_t* stack =
-        (mlang_audio_insert_stack_t*)user_data;
-    if(stack && buffer && stack->input_ring)
+    if(stack && samples && stack->input_ring)
     {
-        const float* samples = (const float*)buffer->mAudioData;
         const uint64_t channels = stack->input_channels > 0
                                       ? (uint64_t)stack->input_channels
                                       : 2u;
-        const uint64_t frames = buffer->mAudioDataByteSize /
-                                (channels * (uint64_t)sizeof(float));
         float peak = 0.0f;
         uint64_t write = atomic_load_explicit(&stack->input_write_frame,
                                               memory_order_relaxed);
@@ -2634,9 +2674,9 @@ static void audio_insert_input_callback(void* user_data, AudioQueueRef queue,
             if(write - read >= stack->input_capacity_frames)
                 break;
             const uint64_t slot = write % stack->input_capacity_frames;
-            const float left = samples[i * channels];
+            const float left = samples[i];
             const float right = channels > 1u
-                                    ? samples[i * channels + 1u]
+                                    ? samples[stack->input_render_capacity_frames + i]
                                     : left;
             stack->input_ring[slot * 2u] = left;
             stack->input_ring[slot * 2u + 1u] = right;
@@ -2657,8 +2697,42 @@ static void audio_insert_input_callback(void* user_data, AudioQueueRef queue,
         atomic_store_explicit(&stack->input_write_frame, write,
                               memory_order_release);
     }
-    if(stack && atomic_load_explicit(&stack->running, memory_order_acquire))
-        (void)AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
+}
+
+static OSStatus audio_insert_input_unit_callback(
+    void* user_data, AudioUnitRenderActionFlags* action_flags,
+    const AudioTimeStamp* timestamp, UInt32 bus_number, UInt32 frame_count,
+    AudioBufferList* io_data)
+{
+    (void)io_data;
+    mlang_audio_insert_stack_t* stack =
+        (mlang_audio_insert_stack_t*)user_data;
+    if(!stack || !stack->input_unit || !stack->input_render_buffer ||
+       frame_count > stack->input_render_capacity_frames)
+        return noErr;
+
+    struct
+    {
+        UInt32 mNumberBuffers;
+        AudioBuffer mBuffers[2];
+    } buffers;
+    memset(&buffers, 0, sizeof(buffers));
+    buffers.mNumberBuffers = (UInt32)stack->input_channels;
+    for(int channel = 0; channel < stack->input_channels; ++channel)
+    {
+        buffers.mBuffers[channel].mNumberChannels = 1;
+        buffers.mBuffers[channel].mDataByteSize =
+            frame_count * (UInt32)sizeof(float);
+        buffers.mBuffers[channel].mData = stack->input_render_buffer +
+            (uint64_t)channel * stack->input_render_capacity_frames;
+    }
+    const OSStatus rc = AudioUnitRender(stack->input_unit, action_flags,
+                                        timestamp, bus_number, frame_count,
+                                        (AudioBufferList*)&buffers);
+    if(rc == noErr)
+        audio_insert_capture_frames(stack, stack->input_render_buffer,
+                                    (uint64_t)frame_count);
+    return rc;
 }
 
 static void audio_insert_output_fill(mlang_audio_insert_stack_t* stack,
@@ -2674,6 +2748,7 @@ static void audio_insert_output_fill(mlang_audio_insert_stack_t* stack,
                                          memory_order_relaxed);
     const uint64_t write = atomic_load_explicit(&stack->input_write_frame,
                                                 memory_order_acquire);
+    float peak = 0.0f;
     for(uint64_t i = 0; i < frames; ++i)
     {
         float input_l = 0.0f;
@@ -2693,10 +2768,22 @@ static void audio_insert_output_fill(mlang_audio_insert_stack_t* stack,
             audio_insert_stack_process_sample(stack, input_l, input_r,
                                               &samples[i * 2u],
                                               &samples[i * 2u + 1u]);
+        const float left_level = fabsf(samples[i * 2u]);
+        const float right_level = fabsf(samples[i * 2u + 1u]);
+        if(left_level > peak)
+            peak = left_level;
+        if(right_level > peak)
+            peak = right_level;
     }
     atomic_store_explicit(&stack->input_read_frame, read, memory_order_release);
     buffer->mAudioDataByteSize =
         (UInt32)(frames * 2u * (uint64_t)sizeof(float));
+    uint32_t peak_bits = 0;
+    memcpy(&peak_bits, &peak, sizeof(peak_bits));
+    atomic_store_explicit(&stack->output_peak_bits, peak_bits,
+                          memory_order_release);
+    (void)atomic_fetch_add_explicit(&stack->output_frames_rendered, frames,
+                                    memory_order_relaxed);
 }
 
 static void audio_insert_output_callback(void* user_data, AudioQueueRef queue,
@@ -2730,10 +2817,10 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
         audio_set_error("std::audio CoreAudio output device id is invalid");
         return -1;
     }
+    const double input_rate = coreaudio_nominal_sample_rate(input_device);
+    const double output_rate = coreaudio_nominal_sample_rate(output_device);
     if(!requested_sample_rate)
     {
-        const double input_rate = coreaudio_nominal_sample_rate(input_device);
-        const double output_rate = coreaudio_nominal_sample_rate(output_device);
         if(input_rate > 0.0)
             stack->sample_rate = input_rate;
         else if(output_rate > 0.0)
@@ -2748,44 +2835,102 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
     input_fmt.mSampleRate = stack->sample_rate;
     input_fmt.mFormatID = kAudioFormatLinearPCM;
     input_fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat |
-                             kAudioFormatFlagIsPacked;
-    input_fmt.mBytesPerPacket = (UInt32)stack->input_channels *
-                                (UInt32)sizeof(float);
+                             kAudioFormatFlagIsPacked |
+                             kAudioFormatFlagIsNonInterleaved;
+    input_fmt.mBytesPerPacket = (UInt32)sizeof(float);
     input_fmt.mFramesPerPacket = 1;
     input_fmt.mBytesPerFrame = input_fmt.mBytesPerPacket;
     input_fmt.mChannelsPerFrame = (UInt32)stack->input_channels;
     input_fmt.mBitsPerChannel = 32;
 
     AudioStreamBasicDescription output_fmt = input_fmt;
+    output_fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat |
+                              kAudioFormatFlagIsPacked;
     output_fmt.mBytesPerPacket = 2u * (UInt32)sizeof(float);
     output_fmt.mBytesPerFrame = 2u * (UInt32)sizeof(float);
     output_fmt.mChannelsPerFrame = 2;
+    if(!requested_sample_rate && output_rate > 0.0)
+        output_fmt.mSampleRate = output_rate;
 
-    OSStatus rc = AudioQueueNewInput(&input_fmt, audio_insert_input_callback, stack,
-                                     NULL, NULL, 0, &stack->input_queue);
+    AudioComponentDescription input_description;
+    memset(&input_description, 0, sizeof(input_description));
+    input_description.componentType = kAudioUnitType_Output;
+    input_description.componentSubType = kAudioUnitSubType_HALOutput;
+    input_description.componentManufacturer = kAudioUnitManufacturer_Apple;
+    AudioComponent input_component =
+        AudioComponentFindNext(NULL, &input_description);
+    if(!input_component)
+    {
+        audio_set_error("std::audio CoreAudio HAL input unit is unavailable");
+        return -1;
+    }
+
+    OSStatus rc = AudioComponentInstanceNew(input_component,
+                                             &stack->input_unit);
+    UInt32 enable_input = 1;
+    UInt32 disable_output = 0;
     if(rc == noErr)
-        rc = AudioQueueNewOutput(&output_fmt, audio_insert_output_callback, stack,
-                                 NULL, NULL, 0, &stack->output_queue);
+        rc = AudioUnitSetProperty(stack->input_unit,
+                                  kAudioOutputUnitProperty_EnableIO,
+                                  kAudioUnitScope_Input, 1, &enable_input,
+                                  sizeof(enable_input));
+    if(rc == noErr)
+        rc = AudioUnitSetProperty(stack->input_unit,
+                                  kAudioOutputUnitProperty_EnableIO,
+                                  kAudioUnitScope_Output, 0, &disable_output,
+                                  sizeof(disable_output));
+    if(rc == noErr)
+        rc = AudioUnitSetProperty(stack->input_unit,
+                                  kAudioOutputUnitProperty_CurrentDevice,
+                                  kAudioUnitScope_Global, 0, &input_device,
+                                  sizeof(input_device));
+    if(rc == noErr)
+        rc = AudioUnitSetProperty(stack->input_unit,
+                                  kAudioUnitProperty_StreamFormat,
+                                  kAudioUnitScope_Output, 1, &input_fmt,
+                                  sizeof(input_fmt));
+    AURenderCallbackStruct input_callback;
+    input_callback.inputProc = audio_insert_input_unit_callback;
+    input_callback.inputProcRefCon = stack;
+    if(rc == noErr)
+        rc = AudioUnitSetProperty(stack->input_unit,
+                                  kAudioOutputUnitProperty_SetInputCallback,
+                                  kAudioUnitScope_Global, 0, &input_callback,
+                                  sizeof(input_callback));
+    const UInt32 capture_capacity_frames = 4096u;
+    if(rc == noErr)
+        rc = AudioUnitSetProperty(stack->input_unit,
+                                  kAudioUnitProperty_MaximumFramesPerSlice,
+                                  kAudioUnitScope_Global, 0,
+                                  &capture_capacity_frames,
+                                  sizeof(capture_capacity_frames));
+    if(rc == noErr)
+        rc = AudioUnitInitialize(stack->input_unit);
+    if(rc == noErr)
+        rc = AudioQueueNewOutput(&output_fmt, audio_insert_output_callback,
+                                 stack, NULL, NULL, 0, &stack->output_queue);
     if(rc != noErr)
     {
         (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
-                       "std::audio CoreAudio duplex queue creation failed: %d",
+                       "std::audio CoreAudio input/output setup failed: %d",
                        (int)rc);
         return -1;
     }
-    if((input_device != kAudioObjectUnknown &&
-        coreaudio_set_queue_device(stack->input_queue, input_device) != 0) ||
-       (output_device != kAudioObjectUnknown &&
-        coreaudio_set_queue_device(stack->output_queue, output_device) != 0))
+    if(output_device != kAudioObjectUnknown &&
+       coreaudio_set_queue_device(stack->output_queue, output_device) != 0)
     {
         audio_set_error("std::audio CoreAudio failed to select duplex devices");
         return -1;
     }
 
-    stack->input_capacity_frames = (uint64_t)stack->buffer_frames * 8u;
+    stack->input_render_capacity_frames = capture_capacity_frames;
+    stack->input_render_buffer = (float*)calloc(
+        (size_t)capture_capacity_frames * (size_t)stack->input_channels,
+        sizeof(float));
+    stack->input_capacity_frames = (uint64_t)capture_capacity_frames * 2u;
     stack->input_ring = (float*)calloc(
         (size_t)stack->input_capacity_frames * 2u, sizeof(float));
-    if(!stack->input_ring)
+    if(!stack->input_render_buffer || !stack->input_ring)
     {
         audio_set_error("std::audio CoreAudio input ring allocation failed");
         return -1;
@@ -2793,16 +2938,11 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
     atomic_init(&stack->input_read_frame, 0u);
     atomic_init(&stack->input_write_frame, 0u);
 
-    const UInt32 input_bytes = (UInt32)(stack->buffer_frames *
-                                        stack->input_channels *
-                                        (int64_t)sizeof(float));
     const UInt32 output_bytes = (UInt32)(stack->buffer_frames * 2 *
                                          (int64_t)sizeof(float));
     for(int i = 0; i < 3; ++i)
     {
-        if(AudioQueueAllocateBuffer(stack->input_queue, input_bytes,
-                                    &stack->input_buffers[i]) != noErr ||
-           AudioQueueAllocateBuffer(stack->output_queue, output_bytes,
+        if(AudioQueueAllocateBuffer(stack->output_queue, output_bytes,
                                     &stack->output_buffers[i]) != noErr)
         {
             audio_set_error("std::audio CoreAudio duplex buffer allocation failed");
@@ -2810,9 +2950,7 @@ static int audio_insert_stack_coreaudio_open(mlang_audio_insert_stack_t* stack,
         }
         memset(stack->output_buffers[i]->mAudioData, 0, output_bytes);
         stack->output_buffers[i]->mAudioDataByteSize = output_bytes;
-        if(AudioQueueEnqueueBuffer(stack->input_queue, stack->input_buffers[i],
-                                   0, NULL) != noErr ||
-           AudioQueueEnqueueBuffer(stack->output_queue,
+        if(AudioQueueEnqueueBuffer(stack->output_queue,
                                    stack->output_buffers[i], 0, NULL) != noErr)
         {
             audio_set_error("std::audio CoreAudio duplex buffer enqueue failed");
@@ -3012,6 +3150,15 @@ int64_t __mlang_std_audio_insert_stack_open_devices(int64_t input_device_id,
         return 0;
     }
 #if defined(__APPLE__)
+    if(!coreaudio_request_microphone_access())
+    {
+        __mlang_std_audio_insert_stack_close(handle);
+        audio_set_error(
+            "std::audio microphone access is denied; allow the terminal "
+            "running this program in System Settings > Privacy & Security > "
+            "Microphone");
+        return 0;
+    }
     (void)client_name;
     if(audio_insert_stack_coreaudio_open(stack, stack->input_device_id,
                                          stack->output_device_id,
@@ -3063,9 +3210,12 @@ int32_t __mlang_std_audio_insert_stack_start(int64_t handle)
     atomic_store_explicit(&stack->input_frames_received, 0u,
                           memory_order_release);
     atomic_store_explicit(&stack->input_peak_bits, 0u, memory_order_release);
+    atomic_store_explicit(&stack->output_frames_rendered, 0u,
+                          memory_order_release);
+    atomic_store_explicit(&stack->output_peak_bits, 0u, memory_order_release);
     atomic_store_explicit(&stack->running, 1, memory_order_release);
 #if defined(__APPLE__)
-    OSStatus rc = AudioQueueStart(stack->input_queue, NULL);
+    OSStatus rc = AudioOutputUnitStart(stack->input_unit);
     if(rc != noErr)
     {
         atomic_store_explicit(&stack->running, 0, memory_order_release);
@@ -3078,7 +3228,7 @@ int32_t __mlang_std_audio_insert_stack_start(int64_t handle)
     if(rc != noErr)
     {
         atomic_store_explicit(&stack->running, 0, memory_order_release);
-        (void)AudioQueueStop(stack->input_queue, true);
+        (void)AudioOutputUnitStop(stack->input_unit);
         (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
                        "std::audio CoreAudio output start failed: %d", (int)rc);
         return -1;
@@ -3103,8 +3253,8 @@ int32_t __mlang_std_audio_insert_stack_stop(int64_t handle)
         return 0;
     atomic_store_explicit(&stack->running, 0, memory_order_release);
 #if defined(__APPLE__)
-    if(stack->input_queue)
-        (void)AudioQueueStop(stack->input_queue, true);
+    if(stack->input_unit)
+        (void)AudioOutputUnitStop(stack->input_unit);
     if(stack->output_queue)
         (void)AudioQueueStop(stack->output_queue, true);
 #elif defined(__linux__)
@@ -3121,10 +3271,14 @@ int32_t __mlang_std_audio_insert_stack_close(int64_t handle)
         return 0;
     (void)__mlang_std_audio_insert_stack_stop(handle);
 #if defined(__APPLE__)
-    if(stack->input_queue)
-        AudioQueueDispose(stack->input_queue, true);
+    if(stack->input_unit)
+    {
+        (void)AudioUnitUninitialize(stack->input_unit);
+        (void)AudioComponentInstanceDispose(stack->input_unit);
+    }
     if(stack->output_queue)
         AudioQueueDispose(stack->output_queue, true);
+    free(stack->input_render_buffer);
     free(stack->input_ring);
 #elif defined(__linux__)
     if(stack->jack_client && p_jack_client_close)
@@ -3752,6 +3906,24 @@ double __mlang_std_audio_mixer_input_peak(int64_t handle)
     mlang_audio_mixer_t* mixer = audio_mixer_from_handle(handle);
     return mixer && mixer->io
                ? __mlang_std_audio_insert_stack_input_peak(
+                     (int64_t)(intptr_t)mixer->io)
+               : 0.0;
+}
+
+int64_t __mlang_std_audio_mixer_output_frames_rendered(int64_t handle)
+{
+    mlang_audio_mixer_t* mixer = audio_mixer_from_handle(handle);
+    return mixer && mixer->io
+               ? __mlang_std_audio_insert_stack_output_frames_rendered(
+                     (int64_t)(intptr_t)mixer->io)
+               : 0;
+}
+
+double __mlang_std_audio_mixer_output_peak(int64_t handle)
+{
+    mlang_audio_mixer_t* mixer = audio_mixer_from_handle(handle);
+    return mixer && mixer->io
+               ? __mlang_std_audio_insert_stack_output_peak(
                      (int64_t)(intptr_t)mixer->io)
                : 0.0;
 }

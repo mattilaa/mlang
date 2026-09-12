@@ -463,6 +463,16 @@ impl AudioMixer {
         return __mlang_std_audio_mixer_input_peak(self.handle);
     }
 
+    /// @brief Number of frames rendered to the hardware output since start.
+    pub fn output_frames_rendered(self: AudioMixer) -> i64 {
+        return __mlang_std_audio_mixer_output_frames_rendered(self.handle);
+    }
+
+    /// @brief Peak absolute sample in the most recent hardware output callback.
+    pub fn output_peak(self: AudioMixer) -> f64 {
+        return __mlang_std_audio_mixer_output_peak(self.handle);
+    }
+
     pub fn start(self: AudioMixer) -> result<i32, str8> {
         let rc: i32 = __mlang_std_audio_mixer_start(self.handle);
         if rc != 0 { return Err<i32, str8>(last_error()); }

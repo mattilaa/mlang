@@ -155,6 +155,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     println!("input active: {} frames received, latest peak {}", received,
              mixer.input_peak());
+    println!("output active: {} frames rendered, latest peak {}",
+             mixer.output_frames_rendered(), mixer.output_peak());
     if mixer.input_peak() == 0.0 {
         eprintln!("warning: the input stream is active but all captured samples are silent");
         eprintln!("on macOS, if no microphone indicator appears, enable access for the terminal running this program in System Settings > Privacy & Security > Microphone");
