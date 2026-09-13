@@ -305,6 +305,16 @@ def main():
                 assert b"L  WAVE  R" in imported
                 assert b"38;2;90;220;140" in imported  # left, green
                 assert b"38;2;239;101;117" in imported  # right, red
+                os.write(master, b"z")
+                assert b"L  WAVE x2  R" in read_frame(1)
+                os.write(master, b"\t")
+                read_frame(None)
+                os.write(master, b"z")
+                read_frame(None)
+                os.write(master, b"\x1b")
+                assert b"L  WAVE x2  R" in read_frame(1)  # menu captured z
+                os.write(master, b"z")
+                assert b"L  WAVE  R" in read_frame(1)
             os.write(master, b"G")
             assert b"072" in read_frame(1)
             os.write(master, b"gg")

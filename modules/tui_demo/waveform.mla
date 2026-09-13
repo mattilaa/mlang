@@ -1,0 +1,28 @@
+mod tui::surface;
+use tui::geometry::*;
+use tui::surface::*;
+
+/// Eight amplitude steps per cell, with a solid average-amplitude body and
+/// shaded peak envelope. Left-channel edge cells are right-aligned.
+pub fn paint_wave_channel(surface: Surface, area: Rect, clip: Rect, peak: i32, body: i32,
+    reversed: bool, color: i32, background: i32) -> void {
+    if area.width <= 0 || area.height <= 0 { return; }
+    let level: i32 = peak < 0 ? 0 : (peak > 1000 ? 1000 : peak);
+    let average: i32 = body < 0 ? 0 : (body > level ? level : body);
+    let units: i32 = (level * area.width * 8 + 999) / 1000;
+    let solid: i32 = average * area.width * 8 / 1000;
+    for slot in 0..area.width {
+        let remaining: i32 = units - i32(slot) * 8;
+        if remaining <= 0 { break; }
+        let amount: i32 = remaining > 8 ? 8 : remaining;
+        let x: i32 = reversed ? area.x + area.width - 1 - i32(slot) : area.x + i32(slot);
+        if !clip.contains(x, area.y) { continue; }
+        var glyph: i32 = solid >= (i32(slot) + 1) * 8 ? 0x2588 : 0x2592;
+        var fg: i32 = color; var bg: i32 = background;
+        if amount < 8 {
+            glyph = 0x2588 + 8 - amount;
+            if reversed { glyph = 0x2588 + amount; fg = background; bg = color; }
+        }
+        surface.put(x, area.y, Cell { glyph: glyph, foreground: fg, background: bg });
+    }
+}

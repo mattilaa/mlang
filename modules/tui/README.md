@@ -153,6 +153,13 @@ beside CC1/CC2 draws time downward, with green left-channel bars extending left
 from the center line and red right-channel bars extending right. Mono is shown
 on both sides. Waveforms scroll with the table, while ROW stays frozen.
 
+Waveforms use eighth-cell edges, a solid mean-absolute-amplitude body, and a
+shaded peak envelope. With the Pattern pane focused, press `z` on an audio track
+to toggle its waveform between 13 and 25 cells wide (6 or 12 cells per channel).
+Zoom is stored per track and preserved by pattern/track cloning. This expands
+amplitude detail horizontally, not time: rows and notes remain aligned. Narrow
+viewports clip the waveform safely; menus and text editors capture `z` normally.
+
 One row currently represents a sixteenth note at the displayed BPM (120 by
 default). Longer clips extend the pattern with empty MIDI/automation cells;
 shorter replacements do not discard existing rows. Imports are limited to 16384

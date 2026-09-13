@@ -25,6 +25,27 @@ use tui::listview::*;
 use tui_demo::patterns::PatternLibrary;
 mod tui_demo::transport;
 use tui_demo::transport::TransportStatus;
+mod tui_demo::waveform;
+use tui_demo::waveform::paint_wave_channel;
+
+#[test]
+fn tui_waveform_fractional_edges() {
+    let surface: Surface = Surface::new(8, 2); let area: Rect = surface.bounds();
+    surface.fill(area, Cell { glyph: 32, foreground: 1, background: 2 });
+    paint_wave_channel(surface, Rect::new(0, 0, 4, 1), area, 300, 250, false, 3, 2);
+    let solid: Cell = surface.cell(0, 0); let edge: Cell = surface.cell(1, 0);
+    verify(solid.glyph == 0x2588 && edge.glyph == 0x258e);
+    paint_wave_channel(surface, Rect::new(0, 1, 4, 1), area, 300, 0, true, 3, 2);
+    let shade: Cell = surface.cell(3, 1); let mirrored: Cell = surface.cell(2, 1);
+    verify(shade.glyph == 0x2592 && mirrored.glyph == 0x258a);
+    verify(mirrored.foreground == 2 && mirrored.background == 3);
+    paint_wave_channel(surface, Rect::new(4, 0, 4, 1), area, 0, 0, false, 3, 2);
+    let silent: Cell = surface.cell(4, 0); verify(silent.glyph == 32);
+    paint_wave_channel(surface, Rect::new(4, 1, 4, 1), Rect::new(5, 1, 1, 1), 2000, 2000, false, 3, 2);
+    let clipped: Cell = surface.cell(4, 1); let full: Cell = surface.cell(5, 1);
+    verify(clipped.glyph == 32 && full.glyph == 0x2588);
+    surface.release();
+}
 
 #[test]
 fn tui_audio_import_and_waveform() {
@@ -44,10 +65,18 @@ fn tui_audio_import_and_waveform() {
     table.paint(surface, area, theme); table.paint_audio(surface, area, theme);
     let center: Cell = surface.cell(table.column_x(15) + 6, 2);
     verify(center.glyph == 0x2502);
+    verify(table.edit_event(decode_input("z"), area));
+    let zoomed: TableColumn = table.columns[15]; verify(zoomed.width == 25);
+    verify(table.selected_column == 13 && table.selected_row == 0);
+    table.paint(surface, area, theme); table.paint_audio(surface, area, theme);
+    let zoom_center: Cell = surface.cell(table.column_x(15) + 12, 2); verify(zoom_center.glyph == 0x2502);
     var copy: SequenceTable = table.copy_pattern();
+    table.edit_event(decode_input("z"), area);
+    let compact: TableColumn = table.columns[15]; verify(compact.width == 13);
     table.clear_track(); verify(table.track_columns(3) == 2);
-    let saved: SequenceTrack = copy.tracks[3]; verify(saved.clip.peaks.len() > 64);
+    let saved: SequenceTrack = copy.tracks[3]; verify(saved.clip.peaks.len() > 64 && saved.wave_zoom);
     copy.create_track(true, area); verify(copy.track_columns(4) == 3);
+    let duplicated: SequenceTrack = copy.tracks[4]; verify(duplicated.wave_zoom);
     copy.remove_track(area); verify(copy.tracks.len() == 4);
     verify(!copy.import_audio("missing-file.wav", 120, area));
     let retained: SequenceTrack = copy.tracks[3]; verify(retained.clip.peaks.len() > 64);

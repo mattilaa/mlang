@@ -6,7 +6,10 @@ use std::strbuf::clone;
 use std::strbuf::free;
 use tui::geometry::wide;
 
-pub struct WavePeak { var left: i32; var right: i32; };
+pub struct WavePeak {
+    var left: i32; var right: i32;
+    var left_body: i32; var right_body: i32;
+};
 /// One clip at row zero. Peaks are immutable after import; source is owned.
 pub struct AudioClip { var peaks: list<WavePeak>; var source: str8; };
 impl AudioClip {
@@ -37,6 +40,7 @@ impl AudioClip {
         var clip: AudioClip = AudioClip { source: clone(path) };
         for row in 0..count {
             var left: f32 = 0.0f; var right: f32 = 0.0f;
+            var left_sum: f32 = 0.0f; var right_sum: f32 = 0.0f;
             let end: i64 = (row + 1) * step < frames ? (row + 1) * step : frames;
             let start: i64 = row * step;
             for frame in start..end {
@@ -44,8 +48,11 @@ impl AudioClip {
                 let r: f32 = samples[frame * channels + channels - 1];
                 let a: f32 = l < 0.0f ? -l : l; let b: f32 = r < 0.0f ? -r : r;
                 if a > left { left = a; } if b > right { right = b; }
+                left_sum = left_sum + a; right_sum = right_sum + b;
             }
-            clip.peaks.push(WavePeak { left: i32(left * 1000.0f), right: i32(right * 1000.0f) });
+            clip.peaks.push(WavePeak { left: i32(left * 1000.0f), right: i32(right * 1000.0f),
+                left_body: i32(left_sum / f32(end - start) * 1000.0f),
+                right_body: i32(right_sum / f32(end - start) * 1000.0f) });
         }
         return Ok<AudioClip, str8>(clip);
     }
