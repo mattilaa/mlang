@@ -1,0 +1,174 @@
+/// Ableton-style audio-track, return-track, and master routing demo.
+///
+/// Default input -> Input track inserts -> Processing Bus inserts -> Master
+///                                      |-> Return A delay --------> Master
+///
+/// Build and run:
+///   ./build/mlang -o build/std_audio_mixer_routing_demo examples/std_audio_mixer_routing_demo.mla
+///   ./build/std_audio_mixer_routing_demo --list
+///   ./build/std_audio_mixer_routing_demo --input=1 --output=2 --buffer=32
+
+mod std::argparser;
+mod std::audio;
+mod std::time;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::audio::AudioMixer;
+use std::audio::AudioReturnTrack;
+use std::audio::AudioTrack;
+use std::audio::backend_name;
+use std::audio::default_input_device_id;
+use std::audio::default_output_device_id;
+use std::audio::input_device_count;
+use std::audio::input_device_name;
+use std::audio::output_device_count;
+use std::audio::output_device_name;
+use std::time::sleep_ms;
+
+fn print_audio_devices() -> void {
+    println!("std::audio backend: {}", backend_name());
+    let inputs: i64 = input_device_count();
+    let outputs: i64 = output_device_count();
+    println!("Audio inputs: {} (default {})", inputs, default_input_device_id());
+    for index in 0..inputs {
+        println!("  input  [{}] {}", index, input_device_name(index));
+    }
+    println!("Audio outputs: {} (default {})", outputs, default_output_device_id());
+    for index in 0..outputs {
+        println!("  output [{}] {}", index, output_device_name(index));
+    }
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var parser: ArgParser = ArgParser::new(
+        "std_audio_mixer_routing_demo",
+        "Route a selected audio input through tracks, a return, and a master output.");
+    parser.flag("list", "l", "List numbered audio input and output devices");
+    parser.option("input", "i", "Input device id; -1 uses the default", "-1");
+    parser.option("output", "o", "Master output device id; -1 uses the default", "-1");
+    parser.option("sample-rate", "r", "Sample rate in Hz; 0 uses the selected device rate", "0");
+    parser.option("buffer", "b", "Latency buffer frames (for example 32, 128, or 256)", "256");
+    parser.option("duration", "t", "Processing duration in milliseconds", "10000");
+
+    let parsed: ParseResult = parser.parse(argc, args);
+    if parsed.help_requested() {
+        parser.print_help();
+        parsed.free();
+        parser.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        eprintln!("Error: {}", parsed.error());
+        parser.print_help();
+        parsed.free();
+        parser.free();
+        return 1;
+    }
+    let should_list: bool = parsed.flag("list");
+    var input_device: i64 = parsed.get_i64("input");
+    var output_device: i64 = parsed.get_i64("output");
+    let sample_rate: i64 = parsed.get_i64("sample-rate");
+    let buffer_frames: i64 = parsed.get_i64("buffer");
+    let duration_ms: i64 = parsed.get_i64("duration");
+    parsed.free();
+    parser.free();
+
+    if should_list {
+        print_audio_devices();
+        return 0;
+    }
+    if input_device < 0 { input_device = default_input_device_id(); }
+    if output_device < 0 { output_device = default_output_device_id(); }
+    if input_device < 0 || input_device >= input_device_count() {
+        eprintln!("invalid or unavailable input device {}; run with --list", input_device);
+        return 1;
+    }
+    if output_device < 0 || output_device >= output_device_count() {
+        eprintln!("invalid or unavailable output device {}; run with --list", output_device);
+        return 1;
+    }
+    if duration_ms <= 0 {
+        eprintln!("duration must be positive");
+        return 1;
+    }
+    println!("selected input [{}] {}", input_device, input_device_name(input_device));
+    println!("selected output [{}] {}", output_device, output_device_name(output_device));
+
+    let mixer_r: result<AudioMixer, str8> =
+        AudioMixer::open(input_device, output_device, "mlang_mixer_demo",
+                         sample_rate, buffer_frames);
+    if mixer_r.is_err() {
+        println!("audio mixer open failed: {}", mixer_r.unwrap_err());
+        return 1;
+    }
+    let mixer: AudioMixer = mixer_r.unwrap();
+    println!("audio configuration: {} Hz, {} output buffer frames",
+             mixer.sample_rate(), mixer.buffer_frames());
+    let input_r: result<AudioTrack, str8> = mixer.add_audio_track("Input 1");
+    let bus_r: result<AudioTrack, str8> = mixer.add_audio_track("Processing Bus");
+    let return_r: result<AudioReturnTrack, str8> = mixer.add_return_track("Return A");
+    if input_r.is_err() || bus_r.is_err() || return_r.is_err() {
+        println!("track creation failed");
+        mixer.close();
+        return 1;
+    }
+
+    let input: AudioTrack = input_r.unwrap();
+    let bus: AudioTrack = bus_r.unwrap();
+    let return_a: AudioReturnTrack = return_r.unwrap();
+
+    // Matching Audio From / Audio To settings describe a single route.
+    bus.set_input_track(input);
+    input.set_output_track(bus);
+    bus.set_output_master();
+    return_a.set_output_master();
+
+    input.add_lowpass(10000.0, 0.25);
+    bus.add_distortion(1.8, 0.12);
+    return_a.add_delay(260.0, 0.40, 1.0);
+    return_a.add_lowpass(5000.0, 1.0);
+    bus.set_send(return_a, 0.30, true);
+    input.set_volume(1.20, 20.0);
+    bus.set_pan(-0.15, 20.0);
+    mixer.set_master_gain(0.80);
+
+    let start_r: result<i32, str8> = mixer.start();
+    if start_r.is_err() {
+        println!("audio mixer start failed: {}", start_r.unwrap_err());
+        mixer.close();
+        return 1;
+    }
+    println!("Processing for {} ms:", duration_ms);
+    println!("  Input 1 -> Processing Bus -> Master");
+    println!("                    +-> Return A -> Master (30 percent post-fader send)");
+    let first_half: i64 = duration_ms / 2;
+    var probe_ms: i64 = 500;
+    if probe_ms > first_half { probe_ms = first_half; }
+    sleep_ms(probe_ms);
+    let received: i64 = mixer.input_frames_received();
+    if received == 0 {
+        eprintln!("no input frames received from [{}] {}", input_device,
+                  input_device_name(input_device));
+        eprintln!("on macOS, allow microphone access for your terminal in System Settings > Privacy & Security > Microphone");
+        mixer.stop();
+        mixer.close();
+        return 1;
+    }
+    println!("input active: {} frames received, latest peak {}", received,
+             mixer.input_peak());
+    println!("output active: {} frames rendered, latest peak {}",
+             mixer.output_frames_rendered(), mixer.output_peak());
+    if mixer.input_peak() == 0.0 {
+        eprintln!("warning: the input stream is active but all captured samples are silent");
+        eprintln!("on macOS, if no microphone indicator appears, enable access for the terminal running this program in System Settings > Privacy & Security > Microphone");
+    }
+    sleep_ms(first_half - probe_ms);
+    println!("Ramping bus volume and pan over 250 ms...");
+    bus.set_volume(0.70, 250.0);
+    bus.set_pan(0.50, 250.0);
+    sleep_ms(duration_ms - first_half);
+    mixer.stop();
+    mixer.close();
+    return 0;
+}

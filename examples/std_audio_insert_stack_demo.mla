@@ -1,0 +1,62 @@
+/// Live stereo input insert-stack and parallel effect-rack demo.
+///
+/// The graph is:
+///   input -> gain -> low-pass -> distortion -> rack mixer -> output
+///                                              |-> delay rack --|
+
+mod std::audio;
+mod std::time;
+
+use std::audio::AudioEffectRack;
+use std::audio::AudioInsertStack;
+use std::time::sleep_ms;
+
+fn main() -> i32 {
+    let stack_r: result<AudioInsertStack, str8> =
+        AudioInsertStack::open_default("mlang_insert_demo", 48000, 256);
+    if stack_r.is_err() {
+        println!("Could not open the default stereo input/output.");
+        println!("{}", stack_r.unwrap_err());
+        return 1;
+    }
+    let stack: AudioInsertStack = stack_r.unwrap();
+
+    let gain_r: result<i64, str8> = stack.add_gain(1.25, 1.0);
+    let lowpass_r: result<i64, str8> = stack.add_lowpass(9000.0, 0.35);
+    let drive_r: result<i64, str8> = stack.add_distortion(2.0, 0.15);
+    if gain_r.is_err() || lowpass_r.is_err() || drive_r.is_err() {
+        println!("Could not configure the serial insert chain.");
+        stack.close();
+        return 1;
+    }
+
+    // This rack contributes the dry signal plus a 30% delayed return.
+    let rack_r: result<AudioEffectRack, str8> = stack.add_rack(1.0, 0.30);
+    if rack_r.is_err() {
+        println!("{}", rack_r.unwrap_err());
+        stack.close();
+        return 1;
+    }
+    let delay_rack: AudioEffectRack = rack_r.unwrap();
+    let delay_r: result<i64, str8> = delay_rack.add_delay(240.0, 0.38);
+    let rack_filter_r: result<i64, str8> = delay_rack.add_lowpass(5500.0);
+    if delay_r.is_err() || rack_filter_r.is_err() {
+        println!("Could not configure the delay rack.");
+        stack.close();
+        return 1;
+    }
+
+    let start_r: result<i32, str8> = stack.start();
+    if start_r.is_err() {
+        println!("{}", start_r.unwrap_err());
+        stack.close();
+        return 1;
+    }
+    println!("Processing default stereo input for 10 seconds...");
+    println!("Serial inserts: gain -> low-pass -> distortion");
+    println!("Parallel rack: 100% dry + 30% filtered delay return");
+    sleep_ms(10000);
+    stack.stop();
+    stack.close();
+    return 0;
+}

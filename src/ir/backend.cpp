@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/Config/llvm-config.h>
@@ -334,6 +335,42 @@ bool Backend::linkExecutable(const std::string& objectFile,
 {
     mlang::ir_detail::ensure_artifact_parent_directory(outputFile);
     std::string command = "c++ -o " + outputFile + " " + objectFile;
+    std::filesystem::path infoPlistPath;
+    bool removeInfoPlist = false;
+    const llvm::Triple triple(targetTriple);
+    if(triple.isOSDarwin())
+    {
+        // A command-line executable has no .app bundle, but macOS still
+        // consults an embedded __info_plist when TCC authorizes microphone
+        // capture. Without this usage description, CoreAudio may start an
+        // input queue successfully while delivering all-zero buffers.
+        infoPlistPath = objectFile + ".mlang-info.plist";
+        std::ofstream infoPlist(infoPlistPath, std::ios::binary | std::ios::trunc);
+        if(!infoPlist)
+        {
+            std::cerr << "Could not create macOS executable Info.plist: "
+                      << infoPlistPath << std::endl;
+            return false;
+        }
+        infoPlist << R"(<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>NSMicrophoneUsageDescription</key>
+<string>This command-line program uses the microphone when its audio features are enabled.</string>
+</dict></plist>
+)";
+        if(!infoPlist)
+        {
+            std::cerr << "Could not write macOS executable Info.plist: "
+                      << infoPlistPath << std::endl;
+            return false;
+        }
+        infoPlist.close();
+        removeInfoPlist = true;
+        command += " " + shell_quote(
+            "-Wl,-sectcreate,__TEXT,__info_plist," + infoPlistPath.string());
+    }
     if(const char* extraLinkFlags = std::getenv("MLANG_LINK_FLAGS"))
     {
         if(extraLinkFlags[0] != '\0')
@@ -350,6 +387,11 @@ bool Backend::linkExecutable(const std::string& objectFile,
     std::cout << "Linking: " << command << std::endl;
 
     int result = system(command.c_str());
+    if(removeInfoPlist)
+    {
+        std::error_code ec;
+        std::filesystem::remove(infoPlistPath, ec);
+    }
     if(result != 0)
     {
         std::cerr << "Linking failed with error code: " << result << std::endl;

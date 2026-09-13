@@ -659,6 +659,8 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
     append_framework_link_args(linkArgs, "ImageIO");
     append_framework_link_args(linkArgs, "CoreAudio");
     append_framework_link_args(linkArgs, "AudioToolbox");
+    append_framework_link_args(linkArgs, "AudioUnit");
+    append_framework_link_args(linkArgs, "AVFoundation");
     append_framework_link_args(linkArgs, "CoreMIDI");
 #endif
 }

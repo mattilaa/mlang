@@ -477,11 +477,17 @@ if(WIN32)
     target_link_libraries(mlang_std PUBLIC ws2_32)
 endif()
 if(APPLE)
+    enable_language(OBJC)
+    set_source_files_properties(stdlib/src/std_audio.c PROPERTIES
+        LANGUAGE OBJC
+        COMPILE_OPTIONS "-fblocks")
     find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
     find_library(COREGRAPHICS_FRAMEWORK CoreGraphics)
     find_library(IMAGEIO_FRAMEWORK ImageIO)
     find_library(COREAUDIO_FRAMEWORK CoreAudio)
     find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox)
+    find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
+    find_library(AVFOUNDATION_FRAMEWORK AVFoundation)
     find_library(COREMIDI_FRAMEWORK CoreMIDI)
     target_link_libraries(mlang_std PUBLIC
         ${COREFOUNDATION_FRAMEWORK}
@@ -489,6 +495,8 @@ if(APPLE)
         ${IMAGEIO_FRAMEWORK}
         ${COREAUDIO_FRAMEWORK}
         ${AUDIOTOOLBOX_FRAMEWORK}
+        ${AUDIOUNIT_FRAMEWORK}
+        ${AVFOUNDATION_FRAMEWORK}
         ${COREMIDI_FRAMEWORK}
     )
 endif()

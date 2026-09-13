@@ -5,7 +5,14 @@ mod std::testing;
 use std::audio::backend_name;
 use std::audio::default_output_device_id;
 use std::audio::device_count;
+use std::audio::default_input_device_id;
+use std::audio::input_device_count;
 use std::audio::last_error;
+use std::audio::AudioEffectRack;
+use std::audio::AudioInsertStack;
+use std::audio::AudioMixer;
+use std::audio::AudioReturnTrack;
+use std::audio::AudioTrack;
 use std::audio::PcmAudio;
 use std::audio::PcmBlock;
 use std::audio::PcmWavWriter;
@@ -18,6 +25,8 @@ fn test_audio_backend_metadata() {
     verify(len(backend) > 0);
     verify(device_count() >= 0);
     verify(default_output_device_id() >= -1);
+    verify(input_device_count() >= 0);
+    verify(default_input_device_id() >= -1);
     let err: str8 = last_error();
     verify(len(err) >= 0);
 }
@@ -87,4 +96,256 @@ fn test_audio_pcm_wav_writer() {
     verify(audio.channels() == 2);
     verify(audio.frame_count() == 3);
     audio.close();
+}
+
+#[test]
+fn test_audio_serial_insert_stack() {
+    let stack_r: result<AudioInsertStack, str8> = AudioInsertStack::new(48000, 64);
+    verify(stack_r.is_ok());
+    if stack_r.is_err() { return; }
+    let stack: AudioInsertStack = stack_r.unwrap();
+    let gain_r: result<i64, str8> = stack.add_gain(2.0, 1.0);
+    let lowpass_r: result<i64, str8> = stack.add_lowpass(12000.0, 0.0);
+    verify(gain_r.is_ok());
+    verify(lowpass_r.is_ok());
+    verify(stack.insert_count() == 2);
+
+    let input_r: result<PcmBlock, str8> = PcmBlock::new(2);
+    let output_r: result<PcmBlock, str8> = PcmBlock::new(2);
+    verify(input_r.is_ok() && output_r.is_ok());
+    if input_r.is_err() || output_r.is_err() {
+        stack.close();
+        return;
+    }
+    let input: PcmBlock = input_r.unwrap();
+    let output: PcmBlock = output_r.unwrap();
+    input.set_stereo(0, 0.25f, -0.25f);
+    input.set_stereo(1, 0.10f, -0.10f);
+    let process_r: result<i32, str8> = stack.process_block(input, output, 2);
+    verify(process_r.is_ok());
+    verify(output.left(0) > 0.499f && output.left(0) < 0.501f);
+    verify(output.right(0) < -0.499f && output.right(0) > -0.501f);
+    input.close();
+    output.close();
+    stack.close();
+}
+
+#[test]
+fn test_audio_parallel_effect_rack_mix() {
+    let stack_r: result<AudioInsertStack, str8> = AudioInsertStack::new(48000, 64);
+    verify(stack_r.is_ok());
+    if stack_r.is_err() { return; }
+    let stack: AudioInsertStack = stack_r.unwrap();
+    let rack_r: result<AudioEffectRack, str8> = stack.add_rack(0.25, 0.5);
+    verify(rack_r.is_ok());
+    if rack_r.is_err() {
+        stack.close();
+        return;
+    }
+    let rack: AudioEffectRack = rack_r.unwrap();
+    let gain_r: result<i64, str8> = rack.add_gain(2.0);
+    verify(gain_r.is_ok());
+    verify(stack.rack_count() == 1);
+
+    let input_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    let output_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    if input_r.is_err() || output_r.is_err() {
+        stack.close();
+        return;
+    }
+    let input: PcmBlock = input_r.unwrap();
+    let output: PcmBlock = output_r.unwrap();
+    input.set_stereo(0, 0.20f, -0.20f);
+    let process_r: result<i32, str8> = stack.process_block(input, output, 1);
+    verify(process_r.is_ok());
+    verify(output.left(0) > 0.249f && output.left(0) < 0.251f);
+    verify(output.right(0) < -0.249f && output.right(0) > -0.251f);
+    input.close();
+    output.close();
+    stack.close();
+}
+
+#[test]
+fn test_audio_mixer_track_send_and_return() {
+    let mixer_r: result<AudioMixer, str8> = AudioMixer::new(48000, 64);
+    verify(mixer_r.is_ok());
+    if mixer_r.is_err() { return; }
+    let mixer: AudioMixer = mixer_r.unwrap();
+    verify(mixer.input_frames_received() == 0);
+    verify(mixer.input_peak() == 0.0);
+    let track_r: result<AudioTrack, str8> = mixer.add_audio_track("Input 1");
+    let return_r: result<AudioReturnTrack, str8> = mixer.add_return_track("Return A");
+    if track_r.is_err() || return_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let track: AudioTrack = track_r.unwrap();
+    let return_track: AudioReturnTrack = return_r.unwrap();
+    let insert_r: result<i64, str8> = track.add_gain(2.0, 1.0);
+    let return_insert_r: result<i64, str8> = return_track.add_gain(0.5, 1.0);
+    let send_r: result<i32, str8> = track.set_send(return_track, 0.5, true);
+    verify(insert_r.is_ok() && return_insert_r.is_ok() && send_r.is_ok());
+    verify(mixer.track_count() == 2);
+
+    let input_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    let output_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    if input_r.is_err() || output_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let input: PcmBlock = input_r.unwrap();
+    let output: PcmBlock = output_r.unwrap();
+    input.set_stereo(0, 0.20f, -0.20f);
+    let process_r: result<i32, str8> = mixer.process_block(input, output, 1);
+    verify(process_r.is_ok());
+    // Direct track = 0.4. Return = 0.4 * send 0.5 * return gain 0.5.
+    verify(output.left(0) > 0.499f && output.left(0) < 0.501f);
+    verify(output.right(0) < -0.499f && output.right(0) > -0.501f);
+    input.close();
+    output.close();
+    mixer.close();
+}
+
+#[test]
+fn test_audio_mixer_rejects_routing_cycles() {
+    let mixer_r: result<AudioMixer, str8> = AudioMixer::new(48000, 64);
+    if mixer_r.is_err() { return; }
+    let mixer: AudioMixer = mixer_r.unwrap();
+    let a_r: result<AudioTrack, str8> = mixer.add_audio_track("A");
+    let b_r: result<AudioTrack, str8> = mixer.add_audio_track("B");
+    if a_r.is_err() || b_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let a: AudioTrack = a_r.unwrap();
+    let b: AudioTrack = b_r.unwrap();
+    let a_to_b: result<i32, str8> = a.set_output_track(b);
+    let b_to_a: result<i32, str8> = b.set_output_track(a);
+    verify(a_to_b.is_ok());
+    verify(b_to_a.is_err());
+    // The failed route was rolled back, so B still reaches master.
+    let b_master: result<i32, str8> = b.set_output_master();
+    verify(b_master.is_ok());
+    mixer.close();
+}
+
+#[test]
+fn test_audio_mixer_track_to_track_route_is_not_duplicated() {
+    let mixer_r: result<AudioMixer, str8> = AudioMixer::new(48000, 64);
+    if mixer_r.is_err() { return; }
+    let mixer: AudioMixer = mixer_r.unwrap();
+    let source_r: result<AudioTrack, str8> = mixer.add_audio_track("Source");
+    let bus_r: result<AudioTrack, str8> = mixer.add_audio_track("Bus");
+    if source_r.is_err() || bus_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let source: AudioTrack = source_r.unwrap();
+    let bus: AudioTrack = bus_r.unwrap();
+    let source_gain: result<i64, str8> = source.add_gain(2.0, 1.0);
+    let bus_gain: result<i64, str8> = bus.add_gain(0.5, 1.0);
+    let audio_from: result<i32, str8> = bus.set_input_track(source);
+    let audio_to: result<i32, str8> = source.set_output_track(bus);
+    verify(source_gain.is_ok() && bus_gain.is_ok());
+    verify(audio_from.is_ok() && audio_to.is_ok());
+
+    let input_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    let output_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    if input_r.is_err() || output_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let input: PcmBlock = input_r.unwrap();
+    let output: PcmBlock = output_r.unwrap();
+    input.set_stereo(0, 0.20f, -0.20f);
+    let process_r: result<i32, str8> = mixer.process_block(input, output, 1);
+    verify(process_r.is_ok());
+    verify(output.left(0) > 0.199f && output.left(0) < 0.201f);
+    verify(output.right(0) < -0.199f && output.right(0) > -0.201f);
+    input.close();
+    output.close();
+    mixer.close();
+}
+
+#[test]
+fn test_audio_mixer_volume_and_pan_ramps() {
+    let mixer_r: result<AudioMixer, str8> = AudioMixer::new(8000, 64);
+    if mixer_r.is_err() { return; }
+    let mixer: AudioMixer = mixer_r.unwrap();
+    let track_r: result<AudioTrack, str8> = mixer.add_audio_track("Ramp");
+    if track_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let track: AudioTrack = track_r.unwrap();
+    let input_r: result<PcmBlock, str8> = PcmBlock::new(32);
+    let output_r: result<PcmBlock, str8> = PcmBlock::new(32);
+    if input_r.is_err() || output_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let input: PcmBlock = input_r.unwrap();
+    let output: PcmBlock = output_r.unwrap();
+    var frame: i64 = 0;
+    while frame < 32 {
+        input.set_stereo(frame, 1.0f, 1.0f);
+        frame = frame + 1;
+    }
+
+    let volume_r: result<i32, str8> = track.set_volume(0.0, 4.0);
+    let process_volume_r: result<i32, str8> = mixer.process_block(input, output, 32);
+    verify(volume_r.is_ok() && process_volume_r.is_ok());
+    verify(output.left(15) > 0.499f && output.left(15) < 0.501f);
+    verify(output.left(31) > -0.001f && output.left(31) < 0.001f);
+
+    let restore_r: result<i32, str8> = track.set_volume(1.0, 0.0);
+    let pan_r: result<i32, str8> = track.set_pan(1.0, 4.0);
+    let process_pan_r: result<i32, str8> = mixer.process_block(input, output, 32);
+    verify(restore_r.is_ok() && pan_r.is_ok() && process_pan_r.is_ok());
+    verify(output.left(15) > 0.499f && output.left(15) < 0.501f);
+    verify(output.right(15) > 0.999f && output.right(15) < 1.001f);
+    verify(output.left(31) > -0.001f && output.left(31) < 0.001f);
+    verify(output.right(31) > 0.999f && output.right(31) < 1.001f);
+    input.close();
+    output.close();
+    mixer.close();
+}
+
+#[test]
+fn test_audio_mixer_independent_effect_sends() {
+    let mixer_r: result<AudioMixer, str8> = AudioMixer::new(48000, 64);
+    if mixer_r.is_err() { return; }
+    let mixer: AudioMixer = mixer_r.unwrap();
+    let source_r: result<AudioTrack, str8> = mixer.add_audio_track("Source");
+    let a_r: result<AudioReturnTrack, str8> = mixer.add_return_track("A");
+    let b_r: result<AudioReturnTrack, str8> = mixer.add_return_track("B");
+    if source_r.is_err() || a_r.is_err() || b_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let source: AudioTrack = source_r.unwrap();
+    let return_a: AudioReturnTrack = a_r.unwrap();
+    let return_b: AudioReturnTrack = b_r.unwrap();
+    let b_gain: result<i64, str8> = return_b.add_gain(2.0, 1.0);
+    let send_a: result<i32, str8> = source.set_send(return_a, 0.25, true);
+    let send_b: result<i32, str8> = source.set_send(return_b, 0.25, true);
+    verify(b_gain.is_ok() && send_a.is_ok() && send_b.is_ok());
+
+    let input_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    let output_r: result<PcmBlock, str8> = PcmBlock::new(1);
+    if input_r.is_err() || output_r.is_err() {
+        mixer.close();
+        return;
+    }
+    let input: PcmBlock = input_r.unwrap();
+    let output: PcmBlock = output_r.unwrap();
+    input.set_stereo(0, 0.20f, -0.20f);
+    let process_r: result<i32, str8> = mixer.process_block(input, output, 1);
+    verify(process_r.is_ok());
+    // Dry 0.20 + return A 0.05 + return B 0.10.
+    verify(output.left(0) > 0.349f && output.left(0) < 0.351f);
+    verify(output.right(0) < -0.349f && output.right(0) > -0.351f);
+    input.close();
+    output.close();
+    mixer.close();
 }
