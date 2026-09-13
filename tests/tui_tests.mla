@@ -5,6 +5,9 @@ mod tui::theme;
 mod tui::menu;
 mod tui::widgets;
 mod std::strbuf;
+mod tui::focus;
+mod tui::input;
+mod std::bytes;
 mod std::testing;
 use tui::geometry::*;
 use tui::layout::*;
@@ -14,7 +17,132 @@ use tui::menu::*;
 use tui::widgets::*;
 use std::strbuf::len;
 use std::strbuf::free;
+use tui::focus::*;
+use tui::input::*;
+use std::bytes::Bytes;
 use std::testing::verify;
+
+fn focus_panes() -> list<Pane> {
+    return [Pane { id: 10, bounds: Rect::new(0, 1, 20, 20) },
+            Pane { id: 20, bounds: Rect::new(21, 1, 40, 12) },
+            Pane { id: 30, bounds: Rect::new(21, 14, 40, 7) }];
+}
+
+#[test]
+fn tui_directional_pane_focus() {
+    let panes: list<Pane> = focus_panes();
+    var focus: PaneFocus = PaneFocus::new(10);
+    focus.navigate(Key::Right, panes);
+    verify(focus.is_active(20));
+    focus.navigate(Key::Down, panes);
+    verify(focus.is_active(30));
+    focus.navigate(Key::Down, panes);
+    verify(focus.is_active(30)); // no wrap at the bottom
+    focus.navigate(Key::Up, panes);
+    verify(focus.is_active(20));
+    focus.navigate(Key::Left, panes);
+    verify(focus.is_active(10));
+    focus.navigate(Key::Left, panes);
+    verify(focus.is_active(10));
+}
+
+#[test]
+fn tui_menu_preserves_pane_focus() {
+    let panes: list<Pane> = focus_panes();
+    var focus: PaneFocus = PaneFocus::new(30);
+    var menus: MenuBar = test_menus();
+    let exits: list<Key> = [Key::Escape, Key::Toggle, Key::Enter];
+    for exit_key in exits {
+        menus.open(0);
+        focus.set_menu_active(menus.active >= 0);
+        verify(!focus.is_active(30) && focus.selected == 30);
+        focus.navigate(Key::Up, panes);
+        verify(focus.selected == 30); // menu owns input while open
+        menus.on_key(exit_key);
+        focus.set_menu_active(menus.active >= 0);
+        verify(focus.is_active(30));
+    }
+}
+
+#[test]
+fn tui_focus_resize_and_highlight() {
+    var focus: PaneFocus = PaneFocus::new(30);
+    let reordered: list<Pane> = [Pane { id: 30, bounds: Rect::new(0, 0, 10, 5) },
+        Pane { id: 10, bounds: Rect::new(11, 0, 10, 5) }];
+    focus.reconcile(reordered);
+    verify(focus.selected == 30);
+    let collapsed: list<Pane> = [Pane { id: 30, bounds: Rect::new(0, 0, 0, 0) },
+        Pane { id: 10, bounds: Rect::new(0, 0, 10, 5) }];
+    focus.reconcile(collapsed);
+    verify(focus.selected == 10);
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(20, 5);
+    let panel: Panel = Panel { title: " Pane " };
+    panel.paint_focused(surface, Rect::new(0, 0, 10, 5), theme, true);
+    panel.paint_focused(surface, Rect::new(10, 0, 10, 5), theme, false);
+    let active: Cell = surface.cell(0, 1);
+    let inactive: Cell = surface.cell(10, 1);
+    verify(active.foreground == theme.accent && inactive.foreground == theme.border);
+    verify(active.glyph == inactive.glyph && active.glyph == 0x2502);
+    surface.release();
+    let empty: list<Pane> = [];
+    focus.reconcile(empty);
+    verify(focus.selected == -1);
+}
+
+fn decode_input(text: str8) -> InputEvent {
+    var decoder: InputDecoder = InputDecoder::new();
+    let result: result<Bytes, str8> = Bytes::from_string(text);
+    let bytes: Bytes = result.unwrap();
+    var event: InputEvent = InputEvent { kind: InputKind::None, key: Key::Escape };
+    for i in 0..bytes.len() { event = decoder.feed(bytes.get(i)); }
+    bytes.close();
+    return event;
+}
+
+#[test]
+fn tui_modified_keyboard_protocols() {
+    let left: InputEvent = decode_input("\x1b[104;6u");
+    let down: InputEvent = decode_input("\x1b[106;6u");
+    let up: InputEvent = decode_input("\x1b[107;6u");
+    let right: InputEvent = decode_input("\x1b[108;6u");
+    verify(left.kind == InputKind::Pane && left.key == Key::Left);
+    verify(down.kind == InputKind::Pane && down.key == Key::Down);
+    verify(up.kind == InputKind::Pane && up.key == Key::Up);
+    verify(right.kind == InputKind::Pane && right.key == Key::Right);
+    let xterm: InputEvent = decode_input("\x1b[27;6;72~");
+    verify(xterm.kind == InputKind::Pane && xterm.key == Key::Left);
+    let repeated: InputEvent = decode_input("\x1b[108:76;6:2u");
+    verify(repeated.kind == InputKind::Pane && repeated.key == Key::Right);
+    let released: InputEvent = decode_input("\x1b[108;6:3u");
+    verify(released.kind == InputKind::None);
+    let plain_ctrl: InputEvent = decode_input("\x1b[108;5u");
+    verify(plain_ctrl.kind == InputKind::None);
+    let backspace: InputEvent = decode_input("\x08");
+    let enter: InputEvent = decode_input("\n");
+    verify(backspace.kind == InputKind::None);
+    verify(enter.kind == InputKind::Menu && enter.key == Key::Enter);
+    let arrow: InputEvent = decode_input("\x1b[A");
+    verify(arrow.kind == InputKind::Menu && arrow.key == Key::Up);
+}
+
+#[test]
+fn tui_partial_and_invalid_keyboard_packets() {
+    var decoder: InputDecoder = InputDecoder::new();
+    decoder.feed(27);
+    verify(decoder.pending());
+    let escape: InputEvent = decoder.expire();
+    verify(escape.kind == InputKind::Menu && escape.key == Key::Escape);
+    decoder.feed(27); decoder.feed(91); decoder.feed(49);
+    let truncated: InputEvent = decoder.expire();
+    verify(truncated.kind == InputKind::None && !decoder.pending());
+    let excessive: InputEvent = decode_input("\x1b[999999999999999999999999999999999999;6u");
+    verify(excessive.kind == InputKind::None);
+    let response: InputEvent = decode_input("\x1b[?1u");
+    verify(response.kind == InputKind::None);
+    let quit: InputEvent = decoder.feed(113);
+    verify(quit.kind == InputKind::Quit);
+}
 
 #[test]
 fn tui_surface_shadow_preserves_glyph() {

@@ -6,3 +6,5 @@ mod tui::layout;
 mod tui::widgets;
 mod tui::menu;
 mod tui::terminal;
+mod tui::focus;
+mod tui::input;

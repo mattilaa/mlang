@@ -11,6 +11,8 @@ This first version provides:
 - A viewport whose optional menu row is reserved above its content. Opening a
   menu never changes the layout's available height.
 - Box-drawn panels and labels, using a customizable dark blue/gray RGB theme.
+- Spatial pane focus with accent-colored borders and Ctrl+Shift+H/J/K/L
+  navigation. Menus temporarily suspend focus and restore the selected pane.
 - A menu bar with keyboard navigation, disabled items, command IDs, scrolling
   selection in short popups, and popup bounds constrained to the viewport.
 - Cell compositing: draw content first, then the menu bar. Popup shadows retain
@@ -57,6 +59,44 @@ zero for navigation and a positive application-defined command ID on Enter.
 Handle the command in the application; the library does not invoke callbacks.
 The demo maps arrows, Tab, Escape, Enter, and `hjkl` to these semantic keys.
 
+### Pane focus and modified keys
+
+`tui::focus::PaneFocus` remembers a stable, nonnegative application pane ID.
+Describe the current layout as `list<Pane>` (`id` and `bounds`) and call
+`reconcile(panes)` after layout changes. A selected visible pane keeps its ID
+across resize/reordering; when it disappears or becomes too small for a border,
+focus falls back to the first visible pane (or -1 when none remain).
+
+Call `set_menu_active(menus.active >= 0)` before routing input and painting.
+While the menu owns input, `is_active(id)` is false for every pane and
+`navigate()` does nothing; the remembered selection is retained. Synchronizing
+again after any menu dismissal restores that pane, including dismissal through
+Escape, Tab, or command activation.
+
+Paint focusable panels with `panel.paint_focused(surface, bounds, theme,
+focus.is_active(id))`. The active border uses `theme.accent`; inactive borders
+use `theme.border` and inactive titles use `theme.muted`. Route pane commands to
+`focus.navigate(Key::Left/Down/Up/Right, panes)`. Navigation does not wrap; it
+prefers neighbors overlapping on the perpendicular axis, then the nearest edge
+and center. Ties use pane declaration order.
+
+`tui::input::InputDecoder` handles input a byte at a time and emits `InputEvent`
+values with kinds `None`, `Menu`, `Pane`, or `Quit`. In the demo, Ctrl+Shift+H/J/K/L
+maps to left/down/up/right pane navigation; plain `hjkl` remains menu navigation.
+Pass bytes to `feed()`. If `pending()` stays true with no new input for about
+50ms, call `expire()` to resolve a bare Escape and discard incomplete packets.
+
+The shortcut needs a terminal that reports the modifiers distinctly.
+`Terminal::begin()` pushes the disambiguation flag from the
+[kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/), and
+`finish()` pops it. The decoder accepts CSI-u/kitty sequences such as
+`ESC [ 104 ; 6 u` and already-configured xterm modifyOtherKeys sequences such as
+`ESC [ 27 ; 6 ; 104 ~`. Releases are ignored, while presses and repeats work.
+Terminal-owned shortcuts may need rebinding to pass these combinations through.
+Legacy terminals can collapse Ctrl+Shift+H/J to Backspace/Enter; those ambiguous
+bytes are deliberately not treated as pane navigation. The menu still works
+with legacy arrow keys and unmodified `hjkl`.
+
 Repaint the underlying content before compositing menus each frame. This removes
 old shadows when a menu closes or moves; repeatedly shading an existing frame
 would otherwise darken it again. `Surface::cell` lets tests and custom widgets
@@ -78,7 +118,7 @@ The initial text repertoire is single-cell printable ASCII, Latin characters,
 and Unicode box drawing. Unsupported wide/combining characters and controls are
 replaced with `?`; this is not a full Unicode grapheme/width engine. Rendering uses
 truecolor escape sequences, so RGB-capable terminals give the intended theme and
-shadows. There is no mouse support, focus system for content widgets, nested
+shadows. There is no mouse support, focus traversal inside a pane, nested
 submenus, or differential repainting yet.
 
 From the repository root:

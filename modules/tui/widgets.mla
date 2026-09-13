@@ -8,6 +8,14 @@ use tui::theme::Theme;
 
 pub struct Panel { var title: str8; };
 impl Panel {
+    /// Focused pane uses the theme accent on its entire border. Existing paint
+    /// remains available for panels that do not participate in focus.
+    pub fn paint_focused(self: Panel, surface: Surface, area: Rect, theme: Theme, active: bool) -> Rect {
+        var style: Theme = theme;
+        if active { style.border = theme.accent; }
+        else { style.accent = theme.muted; }
+        return self.paint(surface, area, style);
+    }
     /// Paint a filled, clipped Unicode box. Returns its usable inner rectangle.
     pub fn paint(self: Panel, surface: Surface, area: Rect, theme: Theme) -> Rect {
         surface.fill(area, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });

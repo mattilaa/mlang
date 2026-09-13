@@ -24,6 +24,8 @@ impl Terminal {
         if stdin_is_tty() == 0 || supports_ansi() == 0 { return Terminal { active: false }; }
         if stdin_enable_raw() != 0 { return Terminal { active: false }; }
         write(stdout(), alt_screen_on());
+        // Push disambiguated keyboard reporting on supporting terminals.
+        write(stdout(), "\x1b[>1u");
         write(stdout(), cursor_code(cmd_hide()));
         return Terminal { active: true };
     }
@@ -36,6 +38,7 @@ impl Terminal {
         if !self.active { return; }
         write(stdout(), reset());
         write(stdout(), cursor_code(cmd_show()));
+        write(stdout(), "\x1b[<u");
         write(stdout(), alt_screen_off());
         stdin_restore();
         self.active = false;
