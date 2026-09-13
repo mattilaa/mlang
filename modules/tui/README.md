@@ -163,6 +163,13 @@ renaming or editing it updates all occurrences. In Song view, `dd` removes only
 the selected occurrence, not the pattern. An empty Song is allowed and keeps
 the current Pattern view available. Song is an order-list preview, not playback.
 
+With Song focused, Ctrl+J/K moves the selected occurrence down/up and selection
+follows it. `o` inserts a duplicate above, `O` below, selecting the inserted row.
+Shift+J/K changes only that occurrence to the previous/next available pattern,
+stopping at either end of the pattern list. Duplicates reference the same pattern;
+these shortcuts do nothing in an empty Song. Ctrl+J/K requires modifier-aware
+terminal reporting (CSI-u or modifyOtherKeys); legacy LF remains Enter.
+
 Both views use `tui::listview::ListView`, with selected-row highlighting and the
 table's darker alternating rows. With the left pane active, j/k or arrows select,
 `G` jumps to the last item, `gg` jumps to the first, and `dd` requests deletion.

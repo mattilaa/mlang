@@ -123,6 +123,22 @@ def main():
         os.write(master, b"jjjj\r")
         song = read_frame(0)
         assert b" Song " in song and b"2  002 Verse" in song and b"3  002 Verse" in song
+        os.write(master, b"\x1b[106;5u")
+        assert b"2  001 Intro" in read_frame(0)
+        os.write(master, b"\x1b[107;5u")
+        assert b"1  001 Intro" in read_frame(0)
+        os.write(master, b"o")
+        assert b"2  001 Intro" in read_frame(0)
+        os.write(master, b"O")
+        assert b"3  001 Intro" in read_frame(0)
+        os.write(master, b"K")
+        changed = read_frame(0)
+        assert b"2  002 Verse" in changed and b"Pattern / 2 Verse" in changed
+        os.write(master, b"J")
+        changed = read_frame(0)
+        assert b"2  001 Intro" in changed and b"Pattern / 1 Intro" in changed
+        os.write(master, b"ddddgg")
+        assert b"2  002 Verse" in read_frame(0)
         os.write(master, b"jj")
         assert b"Pattern / 2 Verse" in read_frame(0)
         os.write(master, b"dd")

@@ -93,6 +93,56 @@ fn tui_song_and_pattern_removal() {
 }
 
 #[test]
+fn tui_song_row_editing() {
+    var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 20, 2);
+    verify(!library.on_event(decode_input("o"), area));
+    verify(!library.on_event(decode_input("K"), area));
+    verify(!library.on_event(decode_input("\x1b[106;5u"), area));
+    verify(library.song.len() == 4 && library.song[0] == 1);
+    library.show_song(true);
+    library.table.edit_event(decode_input("K"), area);
+    library.on_event(decode_input("\x1b[107;5u"), area); verify(library.view.selected == 0);
+    library.on_event(decode_input("\x1b[106;5u"), area);
+    verify(library.song[0] == 2 && library.song[1] == 1 && library.view.selected == 1 && library.active_id == 1);
+    library.on_event(decode_input("\x1b[27;5;106~"), area);
+    verify(library.song[2] == 1 && library.view.selected == 2 && library.view.scroll == 1);
+    library.on_event(decode_input("\x1b[107;5u"), area);
+    verify(library.song[1] == 1 && library.view.selected == 1);
+    library.on_event(decode_input("o"), area);
+    verify(library.song.len() == 5 && library.song[1] == 1 && library.song[2] == 1 && library.view.selected == 1);
+    library.on_event(decode_input("O"), area);
+    verify(library.song.len() == 6 && library.view.selected == 2 && library.view.scroll == 1);
+    library.on_event(decode_input("K"), area);
+    verify(library.song[2] == 2 && library.song[1] == 1 && library.song[3] == 1 && library.active_id == 2);
+    library.on_event(decode_input("\x1b[106;2u"), area);
+    verify(library.song[2] == 1 && library.active_id == 1);
+    let intro: TableRow = library.table.rows[0]; verify(intro.cells[1] == "C#4");
+    library.on_event(decode_input("J"), area); verify(library.song[2] == 1);
+    library.on_event(decode_input("\x1b[107;2u"), area);
+    library.on_event(decode_input("K"), area);
+    library.on_event(decode_input("K"), area); verify(library.song[2] == 3 && library.active_id == 3);
+    library.on_event(decode_input("G"), area);
+    library.on_event(decode_input("\x1b[106;5u"), area); verify(library.view.selected == 5);
+    library.on_event(decode_input("\n"), area); verify(library.view.selected == 5 && library.song.len() == 6);
+    library.on_event(decode_input("d"), area);
+    library.on_event(decode_input("O"), area);
+    library.on_event(decode_input("d"), area); verify(library.song.len() == 7);
+    library.on_event(decode_input("d"), area); verify(library.song.len() == 6);
+    // Pattern IDs may have gaps: assignment follows existing patterns, not IDs.
+    library.select(2); library.remove_active(area);
+    library.view.selected = 0; library.choose_selected();
+    library.on_event(decode_input("K"), area); verify(library.song[0] == 3);
+    library.on_event(decode_input("J"), area); verify(library.song[0] == 1);
+    let count: i32 = i32(library.song.len());
+    for _i in 0..count { library.remove_song_occurrence(area); }
+    library.on_event(decode_input("o"), area); library.on_event(decode_input("O"), area);
+    library.on_event(decode_input("J"), area); library.on_event(decode_input("K"), area);
+    library.on_event(decode_input("\x1b[106;5u"), area);
+    verify(library.song.len() == 0 && library.view.selected == -1);
+    library.release();
+}
+
+#[test]
 fn tui_sequence_jump_navigation() {
     var table: SequenceTable = SequenceTable::new();
     let area: Rect = Rect::new(0, 0, 40, 10);

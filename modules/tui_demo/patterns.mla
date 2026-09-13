@@ -145,7 +145,61 @@ impl PatternLibrary {
         for i in 0..self.song.len() { if i != self.view.selected { order.push(self.song[i]); } }
         self.song = order; self.refresh(); self.view.reconcile(area); self.choose_selected();
     }
+    fn move_song_row(self: &mut Self, direction: i32, area: Rect) -> void {
+        self.view.cancel_pending();
+        let selected: i32 = self.view.selected; let target: i32 = selected + direction;
+        if selected < 0 || selected >= self.song.len() || target < 0 || target >= self.song.len() { return; }
+        var order: list<i32> = [];
+        for i in 0..self.song.len() {
+            if i == selected { order.push(self.song[target]); }
+            else if i == target { order.push(self.song[selected]); }
+            else { order.push(self.song[i]); }
+        }
+        self.song = order; self.view.selected = target;
+        self.refresh(); self.view.reconcile(area); self.choose_selected();
+    }
+    fn insert_song_row(self: &mut Self, after: bool, area: Rect) -> void {
+        self.view.cancel_pending();
+        let selected: i32 = self.view.selected;
+        if selected < 0 || selected >= self.song.len() { return; }
+        var order: list<i32> = [];
+        for i in 0..self.song.len() {
+            if i == selected && !after { order.push(self.song[selected]); }
+            order.push(self.song[i]);
+            if i == selected && after { order.push(self.song[selected]); }
+        }
+        self.song = order; self.view.selected = after ? selected + 1 : selected;
+        self.refresh(); self.view.reconcile(area); self.choose_selected();
+    }
+    fn change_song_pattern(self: &mut Self, direction: i32, area: Rect) -> void {
+        self.view.cancel_pending();
+        let selected: i32 = self.view.selected;
+        if selected < 0 || selected >= self.song.len() { return; }
+        let target: i32 = self.index_of(self.song[selected]) + direction;
+        if target < 0 || target >= self.patterns.len() { return; }
+        let entry: PatternEntry = self.patterns[target];
+        var order: list<i32> = [];
+        for i in 0..self.song.len() { order.push(i == selected ? entry.id : self.song[i]); }
+        self.song = order; self.refresh(); self.view.reconcile(area); self.choose_selected();
+    }
     pub fn on_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
+        if self.song_mode {
+            // Modifier-aware Ctrl+J must remain distinct from legacy LF/Enter.
+            if event.modifiers == 5 && (event.code == 106 || event.code == 107) {
+                self.move_song_row(event.code == 106 ? 1 : -1, area); return true;
+            }
+            if ((event.modifiers == 1 || event.modifiers == 2) && (event.code == 74 || event.code == 75)) ||
+                (event.modifiers == 2 && (event.code == 106 || event.code == 107)) {
+                self.change_song_pattern((event.code == 74 || event.code == 106) ? -1 : 1, area); return true;
+            }
+            if event.modifiers == 1 && event.code == 111 {
+                self.insert_song_row(false, area); return true;
+            }
+            if ((event.modifiers == 1 || event.modifiers == 2) && event.code == 79) ||
+                (event.modifiers == 2 && event.code == 111) {
+                self.insert_song_row(true, area); return true;
+            }
+        }
         let action: i32 = self.view.on_event(event, area);
         if action == 3 {
             if self.song_mode { self.remove_song_occurrence(area); }
