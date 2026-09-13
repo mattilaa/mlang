@@ -14,6 +14,7 @@ results
 *xml
 docs/out
 .rg
+.venv
 PIPE
 .S
 .cache
