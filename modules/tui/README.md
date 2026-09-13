@@ -207,10 +207,23 @@ are not implemented yet; row editing does not trim the source audio.
 ### Patterns and Song lists
 
 The demo's bottom status bar shows BPM (initially 120), sequence elapsed time
-(`MM:SS.mmm`), time signature (4/4), and a MIDI-input light. The demo has no
-playback clock or MIDI input processor yet, so time remains zero and the light
-is idle. `tui_demo::transport::TransportStatus` holds the display state for future
-integration; `midi_received` switches the dim hollow light to solid green.
+(`MM:SS.mmm`), time signature (4/4), PLAY/STOP, and a MIDI-input light.
+**Ctrl+B** opens the tempo dialog (20–400 integer BPM; Enter saves, Escape cancels,
+Tab switches between the field and OK/Cancel). CSI-u Ctrl+B and legacy Ctrl+B
+are supported. The input light stays idle until a MIDI-input processor is added.
+
+**Space** starts/stops the current pattern from the selected row and loops at
+its end. A monotonic clock with fractional-row phase drives sixteenth-note rows,
+the selected-row highlight, automatic scrolling, and sequence time. An open
+Sample view follows within the row too, including at single-sample zoom. BPM
+changes preserve row phase; menus and the BPM dialog do not pause transport.
+Switching patterns or opening a content editor/file/action dialog stops it so
+edits cannot accidentally target a moving row. Modal controls capture Space and
+Ctrl+B before the transport handles them. UI repainting is limited to about 33 Hz.
+
+This is a pattern transport and meter/event preview, not audio-device playback
+or MIDI output. Song-order playback is not connected. Imported audio envelopes
+remain on their import-time row grid; BPM changes do not yet resample/re-grid them.
 
 The left pane defaults to **Patterns**, listing `<pattern_nr> <pattern_name>`.
 The demo starts with `001 Intro`, `002 Verse`, and `003 Chorus`. Selection
@@ -346,13 +359,18 @@ height remains. `tui::meter::VuMeter` is reusable independently: pass a level
 from 0 to 1000 and a target rectangle. Its quarter-cell blocks and
 green/yellow/orange/red thresholds match the oscilloscope demo: green below
 520, yellow from 520, orange from 700, and red from 850 on the 0–1000 scale.
-View → Meter style selects Solid bars (default) or Grainy (osc). Both retain
+View → Meter style selects Solid bars or Grainy (osc, default). Both retain
 the same fill calculation and colors. Grainy uses `std::esc::acs_meter` directly,
 including its braille glyphs. Custom `VuMeter` instances set `grainy: true`.
 
-The pane is labeled **Mixer (demo levels)**: levels are synthetic, animated at
-roughly 10 Hz, scaled by volume/pan, and zero for muted tracks. They are not
-audio measurements. Animation pauses during menus, dialogs, and editing.
+The **Mixer** has no synthetic levels. A MIDI note supplies its velocity / 127
+as a meter impulse whose target falls to zero before the next row; empty notes and zero
+velocity are silent. Audio tracks use the current instance-relative row's
+left/right peak amplitudes. Levels use a fast attack (8 ms time constant) and
+release (25 ms), bounded toward the next target without overshoot. They continue
+updating when the Mixer is hidden, and decay to silence on stop. Track volume,
+pan, and mute still apply; V100 is the editable track gain, not a fabricated VU
+source. These are sequencer-derived levels, not measurements from an audio device.
 
 #### Typed columns and editing
 

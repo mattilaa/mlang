@@ -6,16 +6,38 @@ use tui::theme::*;
 use std::strbuf::free;
 use std::strbuf::len;
 
-/// Display state for the future sequencer and MIDI input processor.
-/// Playback time is independent of the editor cursor and demo mixer animation.
+/// Pattern transport. Integer phase keeps fractional row timing without drift.
 pub struct TransportStatus {
     var bpm: i32{120};
     var elapsed_ms: i32;
     var beats_per_bar: i32{4};
     var beat_unit: i32{4};
     var midi_received: bool;
+    var playing: bool; var row: i32; var phase: i64; var clock_ms: i64;
 };
 impl TransportStatus {
+    pub fn toggle(self: &mut Self, now: i64, selected: i32, count: i32) -> void {
+        if self.playing { self.advance(now, count); self.playing = false; return; }
+        if count <= 0 { return; }
+        self.row = selected < 0 ? 0 : (selected >= count ? count - 1 : selected);
+        self.phase = 0; self.clock_ms = now; self.playing = true;
+        self.elapsed_ms = i32(wide(self.row) * 15000 / wide(self.bpm));
+    }
+    pub fn advance(self: &mut Self, now: i64, count: i32) -> bool {
+        if !self.playing { self.clock_ms = now; return false; }
+        if count <= 0 { self.playing = false; self.row = -1; self.elapsed_ms = 0; return true; }
+        let delta: i64 = now > self.clock_ms ? now - self.clock_ms : 0;
+        self.clock_ms = now;
+        let phase: i64 = self.phase + delta * wide(self.bpm);
+        self.row = i32((wide(self.row) + phase / 15000) % wide(count));
+        self.phase = phase % 15000;
+        self.elapsed_ms = i32((wide(self.row) * 15000 + self.phase) / wide(self.bpm));
+        return delta > 0;
+    }
+    pub fn set_bpm(self: &mut Self, value: i32) -> bool {
+        if value < 20 || value > 400 { return false; }
+        self.bpm = value; return true;
+    }
     pub fn paint(self: TransportStatus, surface: Surface, area: Rect, theme: Theme) -> void {
         if area.width <= 0 || area.height <= 0 { return; }
         let row: Rect = Rect::new(area.x, area.y, area.width, 1);
@@ -35,6 +57,10 @@ impl TransportStatus {
         if offset < area.width {
             surface.text(Rect::new(area.x + offset, area.y, area.width - offset, 1),
                 self.midi_received ? "●" : "○", self.midi_received ? 0x5adc8c : theme.muted, theme.panel);
+        }
+        if offset + 2 < area.width {
+            surface.text(Rect::new(area.x + offset + 2, area.y, area.width - offset - 2, 1),
+                self.playing ? "PLAY" : "STOP", self.playing ? theme.accent : theme.muted, theme.panel);
         }
         free(text);
     }

@@ -166,13 +166,8 @@ def main():
         read_frame(1, table_text=((24, 4), "001"))
         os.write(master, b"m")
         mixer_frame = read_frame(1)
-        assert b"Mixer (demo levels)" in mixer_frame and b"V100" in mixer_frame and b"P0" in mixer_frame
-        animated = mixer_frame
-        for _ in range(20):
-            animated = read_frame(1)
-            if animated != mixer_frame:
-                break
-        assert animated != mixer_frame
+        assert b" Mixer " in mixer_frame and b"V100" in mixer_frame and b"P0" in mixer_frame
+        assert b"STOP" in mixer_frame  # no synthetic animation while stopped
         os.write(master, b"\tll")
         assert b"Meter style" in read_frame(None)
         os.write(master, b"jjl")

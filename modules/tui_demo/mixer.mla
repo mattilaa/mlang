@@ -5,16 +5,59 @@ use tui::surface::*;
 use tui::theme::*;
 use tui::meter::VuMeter;
 use tui_demo::sequence::SequenceTrack;
+use tui_demo::sequence::SequenceTable;
+use tui_demo::sequence::AudioInstance;
+use tui_demo::audio_clip::WavePeak;
+use tui::table::TableRow;
+use tui::table::table_integer;
 use std::strbuf::free;
 
-/// Demo mixer strips. Synthetic animation is deliberately independent of audio.
-pub struct Mixer { var visible: bool; var phase: i32; var grainy: bool{true}; };
+pub struct MeterLevel { var left: i32; var right: i32; };
+/// Meters are derived from sequenced notes and audio peaks, never synthetic.
+pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; };
 impl Mixer {
-    pub fn tick(self: &mut Self) -> void { self.phase = (self.phase + 1) % 1000; }
+    pub fn update(self: &mut Self, source: &SequenceTable, row: i32, phase: i32, playing: bool, delta: i32) -> bool {
+        var table: SequenceTable = SequenceTable {}; table = source;
+        var levels: list<MeterLevel> = []; var changed: bool = self.levels.len() != table.tracks.len();
+        for i in 0..table.tracks.len() {
+            let track: SequenceTrack = table.tracks[i];
+            var left: i32 = 0; var right: i32 = 0;
+            if playing && row >= 0 && row < table.rows.len() && !track.muted {
+                if track.audio {
+                    let hit: i32 = track.instance_at(row);
+                    if hit >= 0 {
+                        let instance: AudioInstance = track.instances[hit];
+                        let peak: WavePeak = instance.clip.peaks[row - instance.start_row];
+                        left = peak.left; right = peak.right;
+                    }
+                } else {
+                    let data: TableRow = table.rows[row]; let column: i32 = table.track_start(i32(i));
+                    if data.cells[column] != "" {
+                        let velocity: result<i64, str8> = table_integer(data.cells[column + 1]);
+                        if velocity.is_ok() {
+                            let value: i64 = velocity.unwrap();
+                            if value >= 0 && value <= 127 {
+                                // Note impulse fades during the first 60% of its row.
+                                let envelope: i32 = phase < 9000 ? 9000 - phase : 0;
+                                left = i32(value) * 1000 / 127 * envelope / 9000; right = left;
+                            }
+                        }
+                    }
+                }
+            }
+            var old: MeterLevel = MeterLevel {};
+            if i < self.levels.len() { old = self.levels[i]; }
+            let next: MeterLevel = MeterLevel { left: meter_ramp(old.left, left, delta), right: meter_ramp(old.right, right, delta) };
+            if next.left != old.left || next.right != old.right { changed = true; }
+            levels.push(next);
+        }
+        self.levels = levels; return changed;
+    }
     pub fn level(self: Mixer, index: i32, volume: i32, pan: i32, right: bool, muted: bool) -> i32 {
         if muted { return 0; }
-        let phase: i32 = (self.phase * 37 + index * 173) % 1800;
-        let wave: i32 = 100 + (phase < 900 ? phase : 1800 - phase);
+        if index < 0 || index >= self.levels.len() { return 0; }
+        let level: MeterLevel = self.levels[index];
+        let wave: i32 = right ? level.right : level.left;
         let gain: i32 = volume < 0 ? 0 : (volume > 100 ? 100 : volume);
         let p: i32 = pan < -100 ? -100 : (pan > 100 ? 100 : pan);
         let balance: i32 = right ? (p < 0 ? 100 + p : 100) : (p > 0 ? 100 - p : 100);
@@ -50,4 +93,15 @@ impl Mixer {
             }
         }
     }
+}
+/// Fast attack and release, bounded by the next target (no overshoot).
+pub fn meter_ramp(current: i32, target: i32, delta: i32) -> i32 {
+    if delta <= 0 { return current; }
+    let next: i32 = target < 0 ? 0 : (target > 1000 ? 1000 : target);
+    let diff: i32 = next - current;
+    let distance: i32 = diff < 0 ? -diff : diff;
+    let time: i32 = delta > 1000 ? 1000 : delta;
+    let rate: i32 = diff > 0 ? 8 : 25;
+    let step: i32 = (distance * time + rate + time - 1) / (rate + time);
+    return diff > 0 ? current + step : current - step;
 }

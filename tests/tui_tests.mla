@@ -31,6 +31,62 @@ use tui_demo::waveform::paint_grainy_row;
 mod tui_demo::sample_view;
 use tui_demo::sample_view::SampleView;
 use tui_demo::audio_clip::*;
+mod tui_demo::bpm_dialog;
+use tui_demo::bpm_dialog::BpmDialog;
+use tui_demo::mixer::meter_ramp;
+
+#[test]
+fn tui_transport_clock_and_bpm_dialog() {
+    var transport: TransportStatus = TransportStatus {};
+    transport.toggle(1000, 2, 4); verify(transport.playing && transport.row == 2 && transport.elapsed_ms == 250);
+    transport.advance(1125, 4); verify(transport.row == 3 && transport.phase == 0);
+    transport.advance(1250, 4); verify(transport.row == 0);
+    transport.advance(1300, 4); verify(transport.phase == 6000);
+    verify(transport.set_bpm(240)); transport.advance(1325, 4); verify(transport.phase == 12000);
+    transport.advance(1338, 4); verify(transport.row == 1 && transport.phase == 120);
+    transport.toggle(1338, 1, 4); verify(!transport.playing);
+    transport.advance(2000, 4); verify(transport.row == 1);
+    verify(!transport.set_bpm(0) && !transport.set_bpm(401) && transport.bpm == 240);
+    transport.toggle(2000, 0, 4); transport.advance(12000, 4); verify(transport.row == 0);
+    transport.advance(12010, 0); verify(!transport.playing && transport.row == -1);
+    var dialog: BpmDialog = BpmDialog::new(); dialog.open(120);
+    dialog.editor.set_text("1.5"); dialog.on_event(decode_input("\r")); verify(dialog.active && dialog.error != "");
+    dialog.editor.set_text("401"); dialog.on_event(decode_input("\r")); verify(dialog.active);
+    dialog.editor.set_text("137"); dialog.on_event(decode_input("\r")); verify(!dialog.active && dialog.value == 137 && dialog.result == 1);
+    dialog.open(137); dialog.editor.set_text("200");
+    dialog.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }); verify(!dialog.active && dialog.value == 137 && dialog.result == 2);
+    dialog.open(137); dialog.editor.set_text("200"); dialog.on_event(decode_input("\t")); dialog.on_event(decode_input("\r"));
+    for _i in 0..10 { dialog.tick(); } verify(!dialog.active && dialog.value == 200 && dialog.result == 1);
+    dialog.release();
+}
+
+#[test]
+fn tui_sequenced_meter_sources_and_ramps() {
+    var table: SequenceTable = SequenceTable::new(); var mixer: Mixer = Mixer {};
+    mixer.update(table, 0, 0, false, 10); verify(mixer.level(0, 100, 0, false, false) == 0);
+    mixer.update(table, 0, 0, true, 10);
+    let attack: i32 = mixer.level(0, 100, 0, false, false); verify(attack > 0 && attack < 788);
+    for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 787);
+    for _i in 0..30 { mixer.update(table, 0, 14000, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 0);
+    table.clear_row(); mixer.update(table, 0, 0, true, 10); verify(mixer.level(0, 100, 0, false, false) == 0);
+    let area: Rect = Rect::new(0, 0, 100, 12); table.create_track_kind(false, true, area);
+    var clip: AudioClip = AudioClip { source: clone("test") };
+    clip.peaks.push(WavePeak { left: 1000, right: 500 }); clip.peaks.push(WavePeak { left: 100, right: 250 });
+    table.insert_audio(clip, area); clip.release();
+    for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
+    verify(mixer.level(3, 100, 0, false, false) == 1000 && mixer.level(3, 100, 0, true, false) == 500);
+    mixer.update(table, 1, 0, true, 10);
+    let falling: i32 = mixer.level(3, 100, 0, false, false); verify(falling > 100 && falling < 1000);
+    for _i in 0..30 { mixer.update(table, 1, 0, true, 10); }
+    verify(mixer.level(3, 100, 0, false, false) == 100 && mixer.level(3, 100, 0, true, false) == 250);
+    verify(mixer.level(3, 50, 0, true, false) == 125 && mixer.level(3, 100, -100, true, false) == 0);
+    for _i in 0..30 { mixer.update(table, 1, 0, false, 10); }
+    verify(mixer.level(3, 100, 0, false, false) == 0);
+    verify(meter_ramp(0, 1000, 0) == 0 && meter_ramp(1000, 0, 10) < 1000);
+    table.release();
+}
 
 #[test]
 fn tui_loaded_audio_and_instances() {
@@ -102,6 +158,9 @@ fn tui_horizontal_sample_zoom_and_render() {
     view.grainy = true;
     view.paint(surface, surface.bounds(), theme, clip, 0);
     let dots: Cell = surface.cell(2, 5); verify(dots.glyph >= 0x2800 && dots.glyph <= 0x28ff);
+    view.paint_at(surface, surface.bounds(), theme, clip, 0, 7500);
+    let moving: Cell = surface.cell(4, 1); let prior: Cell = surface.cell(2, 1);
+    verify(moving.background == theme.selection && prior.background == theme.panel);
     view.paint(surface, Rect::new(0, 0, 1, 1), theme, clip, 0);
     surface.release();
 }
@@ -355,10 +414,10 @@ fn tui_vu_meter_and_mixer() {
     let empty: VuMeter = VuMeter { level: -1 };
     empty.paint(surface, Rect::new(3, 1, 1, 1), theme.panel);
     let silent: Cell = surface.cell(3, 1); verify(silent.foreground == 0x163A2A);
-    var mixer: Mixer = Mixer { visible: true, phase: 80 };
+    var mixer: Mixer = Mixer { visible: true };
     var table: SequenceTable = SequenceTable::new();
     let track: SequenceTrack = table.tracks[0]; verify(track.volume == 100 && track.pan == 0);
-    let before: i32 = mixer.level(0, 100, 0, false, false); mixer.tick();
+    let before: i32 = mixer.level(0, 100, 0, false, false); mixer.update(table, 0, 0, true, 10);
     verify(before != mixer.level(0, 100, 0, false, false));
     verify(mixer.level(0, 100, 0, false, true) == 0 && mixer.level(0, 100, 100, false, false) == 0);
     mixer.paint(surface, Rect::new(0, 0, 27, 16), theme, table.tracks, 1);
@@ -408,7 +467,7 @@ fn tui_meter_styles_and_channel_counts() {
     verify(VuMeter::color(519) == 0x74F078 && VuMeter::color(520) == 0xFFD65C);
     verify(VuMeter::color(700) == 0xFF9046 && VuMeter::color(850) == 0xFF604C);
     var table: SequenceTable = SequenceTable::new(); table.create_track_kind(false, true, Rect::new(0, 0, 40, 12));
-    let mixer: Mixer = Mixer { visible: true, phase: 10 };
+    let mixer: Mixer = Mixer { visible: true };
     mixer.paint(surface, Rect::new(0, 0, 24, 12), theme, table.tracks, 3);
     let mono: Cell = surface.cell(2, 11); let empty: Cell = surface.cell(3, 11);
     let left: Cell = surface.cell(19, 11); let right: Cell = surface.cell(21, 11);
