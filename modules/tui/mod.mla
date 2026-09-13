@@ -1,0 +1,8 @@
+/// Terminal widgets, independent of stdlib, built on std::esc and std::term.
+mod tui::geometry;
+mod tui::theme;
+mod tui::surface;
+mod tui::layout;
+mod tui::widgets;
+mod tui::menu;
+mod tui::terminal;

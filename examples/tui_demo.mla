@@ -1,0 +1,135 @@
+/// Run in a terminal for interaction, or redirect stdout for a plain snapshot.
+mod tui;
+mod std::io;
+mod std::time;
+use tui::geometry::*;
+use tui::theme::*;
+use tui::surface::*;
+use tui::layout::*;
+use tui::widgets::*;
+use tui::menu::*;
+use tui::terminal::*;
+use std::io::stdin;
+use std::io::read_keycode_nonblocking;
+use std::time::sleep_ms;
+
+fn demo_menus() -> MenuBar {
+    return MenuBar::new([
+        Menu { title: "File", items: [
+            MenuItem { label: "New session", action: 1, enabled: true },
+            MenuItem { label: "Open session", action: 2, enabled: true },
+            MenuItem { label: "Save session", action: 3, enabled: false },
+            MenuItem { label: "Quit", action: 99, enabled: true }] },
+        Menu { title: "Edit", items: [
+            MenuItem { label: "Undo", action: 4, enabled: true },
+            MenuItem { label: "Redo", action: 5, enabled: true }] },
+        Menu { title: "View", items: [
+            MenuItem { label: "Reset layout", action: 6, enabled: true },
+            MenuItem { label: "Show details", action: 7, enabled: true }] }
+    ]);
+}
+
+fn paint_demo(surface: Surface, menus: &MenuBar, message: str8) -> void {
+    let theme: Theme = Theme::dark_blue();
+    surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
+    let viewport: Viewport = menus.viewport(surface.bounds());
+    let vertical: Layout = Layout { axis: Axis::Vertical, gap: 0,
+        sizes: [Size::flex(1), Size::fixed(1)] };
+    let rows: list<Rect> = vertical.split(viewport.content());
+    let horizontal: Layout = Layout { axis: Axis::Horizontal, gap: 1,
+        sizes: [Size::fixed(22), Size::flex(1)] };
+    let columns: list<Rect> = horizontal.split(rows[0]);
+    let sidebar: Panel = Panel { title: " Library " };
+    let left: Rect = sidebar.paint(surface, columns[0], theme);
+    surface.text(Rect::new(left.x + 1, left.y + 1, left.width - 2, 1), "PROJECT", theme.muted, theme.panel);
+    surface.text(Rect::new(left.x + 1, left.y + 3, left.width - 2, 1), "Sequences", theme.accent, theme.panel);
+    surface.text(Rect::new(left.x + 1, left.y + 4, left.width - 2, 1), "Instruments", theme.foreground, theme.panel);
+    surface.text(Rect::new(left.x + 1, left.y + 5, left.width - 2, 1), "Automation", theme.foreground, theme.panel);
+    let right_layout: Layout = Layout { axis: Axis::Vertical, gap: 1,
+        sizes: [Size::flex(2), Size::flex(1)] };
+    let right: list<Rect> = right_layout.split(columns[1]);
+    let sequence: Panel = Panel { title: " Sequence / 01 " };
+    let top: Rect = sequence.paint(surface, right[0], theme);
+    surface.text(Rect::new(top.x + 1, top.y, top.width - 2, 1),
+        "LINE    NOTE    VELOCITY    TRACK", theme.muted, theme.panel);
+    let lines: list<str8> = ["001     C-4       100       Keys", "002     E-4        84       Keys",
+        "003     G-4        92       Keys", "004     B-4        76       Keys",
+        "005     C-5        96       Keys", "006     G-4        88       Keys"];
+    var y: i32 = top.y + 2;
+    for line in lines {
+        if y < top.y + top.height {
+            surface.text(Rect::new(top.x + 1, y, top.width - 2, 1), line, theme.foreground, theme.panel);
+        }
+        y = y + 1;
+    }
+    let details: Panel = Panel { title: " Inspector " };
+    let bottom: Rect = details.paint(surface, right[1], theme);
+    let label: Label = Label { text: message };
+    label.paint(surface, bottom, theme);
+    surface.text(rows[1], " Tab: menu  Arrows/hjkl: navigate  Enter: select  Esc: close  q: quit",
+        theme.muted, theme.background);
+    menus.paint(surface, surface.bounds(), theme);
+}
+
+fn main() -> i32 {
+    var terminal: Terminal = Terminal::begin();
+    var menus: MenuBar = demo_menus();
+    menus.open(0);
+    var message: str8 = "Select a command from the menu.";
+    var running: bool = true;
+    var dirty: bool = true;
+    var previous_width: i32 = 0;
+    var previous_height: i32 = 0;
+    var escape_state: i32 = 0;
+    var escape_ticks: i32 = 0;
+    while running {
+        let area: Rect = terminal_bounds();
+        if dirty || area.width != previous_width || area.height != previous_height {
+            let surface: Surface = Surface::new(area.width, area.height);
+            if !surface.is_valid() { terminal.finish(); return 1; }
+            paint_demo(surface, menus, message);
+            terminal.present(surface);
+            surface.release();
+            previous_width = area.width;
+            previous_height = area.height;
+            dirty = false;
+        }
+        if !terminal.active { break; }
+        let byte: i32 = read_keycode_nonblocking(stdin());
+        var command: i32 = 0;
+        if byte == -1 { running = false; }
+        else if byte >= 0 {
+            dirty = true;
+            if escape_state == 1 && byte == 91 { escape_state = 2; }
+            else if escape_state == 2 {
+                if byte == 65 { command = menus.on_key(Key::Up); }
+                if byte == 66 { command = menus.on_key(Key::Down); }
+                if byte == 67 { command = menus.on_key(Key::Right); }
+                if byte == 68 { command = menus.on_key(Key::Left); }
+                escape_state = 0;
+            } else if byte == 27 { escape_state = 1; escape_ticks = 0; }
+            else {
+                escape_state = 0;
+                if byte == 113 || byte == 3 { running = false; }
+                else if byte == 9 { command = menus.on_key(Key::Toggle); }
+                else if byte == 104 { command = menus.on_key(Key::Left); }
+                else if byte == 108 { command = menus.on_key(Key::Right); }
+                else if byte == 106 { command = menus.on_key(Key::Down); }
+                else if byte == 107 { command = menus.on_key(Key::Up); }
+                else if byte == 13 || byte == 10 { command = menus.on_key(Key::Enter); }
+            }
+        } else if escape_state > 0 {
+            escape_ticks = escape_ticks + 1;
+            if escape_ticks >= 5 {
+                menus.on_key(Key::Escape);
+                escape_state = 0;
+                dirty = true;
+            }
+        }
+        if command == 99 { running = false; }
+        else if command > 0 { message = "Command selected. Ready for the application handler."; }
+        sleep_ms(10);
+    }
+    terminal.finish();
+    return 0;
+}

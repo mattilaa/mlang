@@ -1,0 +1,191 @@
+mod tui::geometry;
+mod tui::layout;
+mod tui::surface;
+mod tui::theme;
+mod tui::menu;
+mod tui::widgets;
+mod std::strbuf;
+mod std::testing;
+use tui::geometry::*;
+use tui::layout::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::menu::*;
+use tui::widgets::*;
+use std::strbuf::len;
+use std::strbuf::free;
+use std::testing::verify;
+
+#[test]
+fn tui_surface_shadow_preserves_glyph() {
+    let surface: Surface = Surface::new(4, 3);
+    verify(surface.is_valid());
+    surface.put(2, 1, Cell { glyph: 0x2500, foreground: 0xC0A080, background: 0x204060 });
+    surface.shadow(Rect::new(2, 1, 4, 5), 50);
+    let cell: Cell = surface.cell(2, 1);
+    verify(cell.glyph == 0x2500);
+    verify(cell.foreground == 0x605040);
+    verify(cell.background == 0x102030);
+    surface.release();
+}
+
+#[test]
+fn tui_nested_layout() {
+    let viewport: Viewport = Viewport { bounds: Rect::new(0, 0, 40, 12), has_menu: true };
+    let layout: Layout = Layout { axis: Axis::Horizontal, gap: 1,
+        sizes: [Size::fixed(10), Size::flex(1), Size::flex(2)] };
+    let parts: list<Rect> = layout.split(viewport.content());
+    verify(parts.len() == 3);
+    let first: Rect = parts[0];
+    let middle: Rect = parts[1];
+    let last: Rect = parts[2];
+    verify(first.width == 10 && first.y == 1 && first.height == 11);
+    verify(last.x + last.width == 40);
+    verify(middle.width == 9 && last.width == 19);
+    let nested: Layout = Layout { axis: Axis::Vertical, gap: 1,
+        sizes: [Size::flex(1), Size::flex(1)] };
+    let children: list<Rect> = nested.split(last);
+    let upper: Rect = children[0];
+    let lower: Rect = children[1];
+    verify(upper.x == last.x && upper.width == last.width && upper.height == 5);
+    verify(lower.y == upper.y + upper.height + 1 && lower.y + lower.height == 12);
+}
+
+#[test]
+fn tui_menu_scroll_and_disabled_only() {
+    var menus: MenuBar = test_menus();
+    menus.open(0);
+    menus.on_key(Key::Up);
+    let surface: Surface = Surface::new(20, 4);
+    menus.paint(surface, surface.bounds(), Theme::dark_blue());
+    let visible: Cell = surface.cell(2, 2);
+    verify(visible.glyph == 81); // Quit is scrolled into the only visible row.
+    surface.release();
+    var disabled: MenuBar = MenuBar::new([
+        Menu { title: "Empty", items: [] },
+        Menu { title: "Disabled", items: [MenuItem { label: "No", action: 1, enabled: false }] }
+    ]);
+    disabled.open(0);
+    verify(disabled.selected == -1 && disabled.on_key(Key::Enter) == 0);
+    disabled.on_key(Key::Right);
+    verify(disabled.active == 1 && disabled.selected == -1);
+    verify(disabled.on_key(Key::Enter) == 0);
+}
+
+fn test_menus() -> MenuBar {
+    return MenuBar::new([
+        Menu { title: "File", items: [
+            MenuItem { label: "Open", action: 1, enabled: true },
+            MenuItem { label: "Save", action: 2, enabled: false },
+            MenuItem { label: "Quit", action: 3, enabled: true }] },
+        Menu { title: "Edit", items: [MenuItem { label: "Undo", action: 4, enabled: true }] }
+    ]);
+}
+
+#[test]
+fn tui_menu_navigation_and_actions() {
+    var menus: MenuBar = test_menus();
+    verify(menus.active == -1);
+    menus.on_key(Key::Toggle);
+    verify(menus.active == 0 && menus.selected == 0);
+    menus.on_key(Key::Down);
+    verify(menus.selected == 2);
+    menus.on_key(Key::Down);
+    verify(menus.selected == 0);
+    menus.on_key(Key::Up);
+    verify(menus.selected == 2);
+    verify(menus.on_key(Key::Enter) == 3);
+    verify(menus.active == -1);
+    menus.open(0);
+    menus.on_key(Key::Right);
+    verify(menus.active == 1 && menus.selected == 0);
+    menus.on_key(Key::Left);
+    verify(menus.active == 0);
+    menus.on_key(Key::Escape);
+    verify(menus.active == -1);
+}
+
+#[test]
+fn tui_menu_layers_and_shadow() {
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(30, 10);
+    var menus: MenuBar = test_menus();
+    let bounds: Rect = surface.bounds();
+    let viewport: Viewport = menus.viewport(bounds);
+    let content_before: Rect = viewport.content();
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    menus.open(0);
+    let popup: Rect = menus.popup_rect(bounds);
+    menus.paint(surface, bounds, theme);
+    let corner: Cell = surface.cell(popup.x, popup.y);
+    verify(corner.glyph == 0x250C);
+    let shadow: Cell = surface.cell(popup.x + popup.width, popup.y + 1);
+    verify(shadow.glyph == 88);
+    verify(shadow.foreground == darken(theme.foreground, theme.shadow_percent));
+    verify(shadow.background == darken(theme.panel, theme.shadow_percent));
+    let outside: Cell = surface.cell(29, 9);
+    verify(outside.glyph == 88 && outside.foreground == theme.foreground);
+    let bar: Cell = surface.cell(29, 0);
+    verify(bar.background == theme.menu_background);
+    // Repaint from application state to remove overlay and shadow on dismissal.
+    menus.dismiss();
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    menus.paint(surface, bounds, theme);
+    let restored: Cell = surface.cell(popup.x + popup.width, popup.y + 1);
+    verify(restored.glyph == 88 && restored.foreground == theme.foreground);
+    let after: Viewport = menus.viewport(bounds);
+    let content_after: Rect = after.content();
+    verify(content_before.y == content_after.y && content_before.height == content_after.height);
+    surface.release();
+}
+
+#[test]
+fn tui_small_and_empty_viewports() {
+    var empty: MenuBar = MenuBar::new([]);
+    let viewport: Viewport = empty.viewport(Rect::new(4, 5, 7, 8));
+    let content: Rect = viewport.content();
+    verify(content.y == 5 && content.height == 8);
+    verify(empty.on_key(Key::Toggle) == 0 && empty.active == -1);
+    let layout: Layout = Layout { axis: Axis::Vertical, gap: 2,
+        sizes: [Size::fixed(8), Size::flex(1), Size::fixed(5)] };
+    for height in 0..8 {
+        let area: Rect = Rect::new(0, 0, 3, i32(height));
+        let parts: list<Rect> = layout.split(area);
+        for part in parts { verify(part.y >= 0 && part.y + part.height <= height); }
+    }
+    var menus: MenuBar = test_menus();
+    menus.open(1);
+    let theme: Theme = Theme::dark_blue();
+    for width in 0..8 {
+        let surface: Surface = Surface::new(i32(width), 2);
+        let area: Rect = surface.bounds();
+        menus.paint(surface, area, theme);
+        let popup: Rect = menus.popup_rect(area);
+        verify(popup.x >= 0 && popup.x + popup.width <= width);
+        surface.release();
+    }
+}
+
+#[test]
+fn tui_unicode_clipping_and_boxes() {
+    let surface: Surface = Surface::new(8, 4);
+    let theme: Theme = Theme::dark_blue();
+    let panel: Panel = Panel { title: "" };
+    panel.paint(surface, surface.bounds(), theme);
+    let corner: Cell = surface.cell(0, 0);
+    verify(corner.glyph == 0x250C);
+    surface.text(Rect::new(1, 1, 3, 1), "é─AB", theme.foreground, theme.panel);
+    let latin: Cell = surface.cell(1, 1);
+    let box: Cell = surface.cell(2, 1);
+    let end: Cell = surface.cell(3, 1);
+    let untouched: Cell = surface.cell(4, 1);
+    verify(latin.glyph == 233 && box.glyph == 0x2500 && end.glyph == 65);
+    verify(untouched.glyph == 32);
+    surface.text(Rect::new(1, 2, 3, 1), "\x1b界Z", theme.foreground, theme.panel);
+    let control: Cell = surface.cell(1, 2);
+    verify(control.glyph == 63);
+    let snapshot: str8 = surface.encode(false);
+    verify(len(snapshot) > 32);
+    free(snapshot);
+    surface.release();
+}

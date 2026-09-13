@@ -1,0 +1,44 @@
+mod tui::geometry;
+mod tui::surface;
+mod tui::theme;
+use tui::geometry::Rect;
+use tui::surface::Surface;
+use tui::surface::Cell;
+use tui::theme::Theme;
+
+pub struct Panel { var title: str8; };
+impl Panel {
+    /// Paint a filled, clipped Unicode box. Returns its usable inner rectangle.
+    pub fn paint(self: Panel, surface: Surface, area: Rect, theme: Theme) -> Rect {
+        surface.fill(area, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
+        if area.width < 2 || area.height < 2 { return Rect::new(area.x, area.y, 0, 0); }
+        let horizontal: Cell = Cell { glyph: 0x2500, foreground: theme.border, background: theme.panel };
+        let vertical: Cell = Cell { glyph: 0x2502, foreground: theme.border, background: theme.panel };
+        let start_x: i32 = area.x + 1;
+        let end_x: i32 = area.x + area.width - 1;
+        let start_y: i32 = area.y + 1;
+        let end_y: i32 = area.y + area.height - 1;
+        for x in start_x..end_x {
+            surface.put(i32(x), area.y, horizontal);
+            surface.put(i32(x), area.y + area.height - 1, horizontal);
+        }
+        for y in start_y..end_y {
+            surface.put(area.x, i32(y), vertical);
+            surface.put(area.x + area.width - 1, i32(y), vertical);
+        }
+        surface.put(area.x, area.y, Cell { glyph: 0x250C, foreground: theme.border, background: theme.panel });
+        surface.put(area.x + area.width - 1, area.y, Cell { glyph: 0x2510, foreground: theme.border, background: theme.panel });
+        surface.put(area.x, area.y + area.height - 1, Cell { glyph: 0x2514, foreground: theme.border, background: theme.panel });
+        surface.put(area.x + area.width - 1, area.y + area.height - 1,
+                    Cell { glyph: 0x2518, foreground: theme.border, background: theme.panel });
+        surface.text(Rect::new(area.x + 2, area.y, area.width - 4, 1), self.title, theme.accent, theme.panel);
+        return area.inset(1);
+    }
+}
+
+pub struct Label { var text: str8; };
+impl Label {
+    pub fn paint(self: Label, surface: Surface, area: Rect, theme: Theme) -> void {
+        surface.text(area, self.text, theme.foreground, theme.panel);
+    }
+}
