@@ -20,7 +20,7 @@ pub struct Cell { var glyph: i32; var foreground: i32; var background: i32; };
 pub fn cell_glyph(code: i32) -> i32 {
     if code == 173 { return 63; } // soft hyphen is not reliably one cell
     if (code >= 32 && code <= 126) || (code >= 160 && code <= 591) ||
-       (code >= 0x2500 && code <= 0x2588) { return code; }
+       (code >= 0x2500 && code <= 0x2588) || (code >= 0x2800 && code <= 0x28FF) { return code; }
     return 63;
 }
 

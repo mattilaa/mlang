@@ -19,6 +19,7 @@ pub struct AutomationSlot { var parameter: str8; var minimum: i64; var maximum: 
 pub struct SequenceTrack {
     var name: str8; var muted: bool; var cc1: AutomationSlot; var cc2: AutomationSlot;
     var volume: i32{100}; var pan: i32;
+    var audio: bool;
 };
 pub struct SequenceTable : Table {
     var notes: array<str8, 128>;
@@ -54,10 +55,30 @@ pub fn new() -> SequenceTable {
 }
 pub fn active_track(self: SequenceTable) -> i32 {
     if self.selected_column < 1 || self.tracks.len() == 0 { return -1; }
-    let index: i32 = (self.selected_column - 1) / 4;
-    return index < self.tracks.len() ? index : i32(self.tracks.len()) - 1;
+    var first: i32 = 1;
+    for i in 0..self.tracks.len() {
+        first = first + self.track_columns(i32(i));
+        if self.selected_column < first { return i32(i); }
+    }
+    return i32(self.tracks.len()) - 1;
 }
-pub fn is_note(self: SequenceTable) -> bool { return self.selected_column >= 1 && (self.selected_column - 1) % 4 == 0; }
+pub fn track_columns(self: SequenceTable, index: i32) -> i32 {
+    let track: SequenceTrack = self.tracks[index]; return track.audio ? 2 : 4;
+}
+pub fn track_start(self: SequenceTable, index: i32) -> i32 {
+    var first: i32 = 1;
+    for i in 0..index { first = first + self.track_columns(i32(i)); }
+    return first;
+}
+pub fn automation_column(self: SequenceTable, index: i32, slot: i32) -> i32 {
+    let track: SequenceTrack = self.tracks[index];
+    return self.track_start(index) + (track.audio ? 0 : 2) + slot - 1;
+}
+pub fn is_note(self: SequenceTable) -> bool {
+    let index: i32 = self.active_track(); if index < 0 { return false; }
+    let track: SequenceTrack = self.tracks[index];
+    return !track.audio && self.selected_column == self.track_start(index);
+}
 fn replace_track(self: &mut Self, index: i32, value: SequenceTrack) -> void {
     var tracks: list<SequenceTrack> = [];
     for i in 0..self.tracks.len() { tracks.push(i == index ? value : self.tracks[i]); }
@@ -70,9 +91,11 @@ pub fn rebuild_columns(self: &mut Self) -> void {
     var groups: list<TableGroup> = [];
     for i in 0..self.tracks.len() {
         let track: SequenceTrack = self.tracks[i];
-        groups.push(TableGroup { title: format!("{}{}", track.name, track.muted ? " [M]" : ""), first: 1 + i32(i) * 4, count: 4 });
-        columns.push(TableColumn { title: "NOTE", width: 6, value_type: "str8", pattern: "[A-G][#-]-?[0-9]", nullable: true });
-        columns.push(TableColumn { title: "VEL", width: 4, value_type: "i32", bounded: true, minimum: 0, maximum: 127, nullable: true });
+        groups.push(TableGroup { title: format!("{}{}", track.name, track.muted ? " [M]" : ""), first: i32(columns.len()), count: self.track_columns(i32(i)) });
+        if !track.audio {
+            columns.push(TableColumn { title: "NOTE", width: 6, value_type: "str8", pattern: "[A-G][#-]-?[0-9]", nullable: true });
+            columns.push(TableColumn { title: "VEL", width: 4, value_type: "i32", bounded: true, minimum: 0, maximum: 127, nullable: true });
+        }
         columns.push(TableColumn { title: "CC1", width: 6, value_type: "i32", bounded: true,
             minimum: track.cc1.minimum, maximum: track.cc1.maximum, nullable: true });
         columns.push(TableColumn { title: "CC2", width: 6, value_type: "i32", bounded: true,
@@ -81,16 +104,19 @@ pub fn rebuild_columns(self: &mut Self) -> void {
     self.columns = columns; self.groups = groups;
 }
 pub fn create_track(self: &mut Self, duplicate: bool, area: Rect) -> void {
+    self.create_track_kind(duplicate, false, area);
+}
+pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Rect) -> void {
     if self.tracks.len() >= 64 { self.error = "Maximum 64 tracks"; return; }
     let source: i32 = self.active_track();
     if duplicate && source < 0 { return; }
-    var track: SequenceTrack = SequenceTrack { name: format!("Track {}", self.next_track_id),
+    var track: SequenceTrack = SequenceTrack { name: format!("{} {}", audio ? "Audio" : "Track", self.next_track_id), audio: audio,
         cc1: AutomationSlot { parameter: clone("cc:1"), minimum: 0, maximum: 127 },
         cc2: AutomationSlot { parameter: clone("cc:74"), minimum: 0, maximum: 127 } };
     if duplicate {
         let original: SequenceTrack = self.tracks[source];
         free(track.name); free(track.cc1.parameter); free(track.cc2.parameter);
-        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan,
+        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, audio: original.audio,
             cc1: AutomationSlot { parameter: clone(original.cc1.parameter), minimum: original.cc1.minimum, maximum: original.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(original.cc2.parameter), minimum: original.cc2.minimum, maximum: original.cc2.maximum } };
     }
@@ -101,19 +127,20 @@ pub fn create_track(self: &mut Self, duplicate: bool, area: Rect) -> void {
     for row in old {
         var cells: list<str8> = []; let previous: list<str8> = row.cells;
         for value in previous { cells.push(value); }
-        for c in 0..4 {
-            if duplicate { cells.push(clone(row.cells[1 + source * 4 + c])); }
+        for c in 0..self.track_columns(i32(self.tracks.len()) - 1) {
+            if duplicate { cells.push(clone(row.cells[self.track_start(source) + c])); }
             else { cells.push(clone("")); }
         }
         rows.push(TableRow { cells: cells });
     }
-    self.rows = rows; self.selected_column = 1 + (i32(self.tracks.len()) - 1) * 4;
+    self.rows = rows; self.selected_column = self.track_start(i32(self.tracks.len()) - 1);
     self.rebuild_columns(); self.reconcile(area); self.error = "";
 }
 pub fn remove_track(self: &mut Self, area: Rect) -> void {
     let index: i32 = self.active_track();
     if index < 0 { return; }
     if self.tracks.len() <= 1 { self.error = "Keep at least one track"; return; }
+    let first: i32 = self.track_start(index); let end: i32 = first + self.track_columns(index);
     var tracks: list<SequenceTrack> = [];
     for i in 0..self.tracks.len() {
         let track: SequenceTrack = self.tracks[i];
@@ -124,22 +151,24 @@ pub fn remove_track(self: &mut Self, area: Rect) -> void {
     for row in previous {
         var cells: list<str8> = [];
         for c in 0..row.cells.len() {
-            if c >= 1 + index * 4 && c < 5 + index * 4 { free(row.cells[c]); }
+            if c >= first && c < end { free(row.cells[c]); }
             else { cells.push(row.cells[c]); }
         }
         rows.push(TableRow { cells: cells });
     }
-    self.selected_column = 1 + (index >= tracks.len() ? i32(tracks.len()) - 1 : index) * 4;
+    let next: i32 = index >= tracks.len() ? i32(tracks.len()) - 1 : index;
     self.tracks = tracks; self.rows = rows;
+    self.selected_column = self.track_start(next);
     self.rebuild_columns(); self.reconcile(area); self.error = "";
 }
 pub fn clear_track(self: &mut Self) -> void {
     let index: i32 = self.active_track(); if index < 0 { return; }
+    let first: i32 = self.track_start(index); let end: i32 = first + self.track_columns(index);
     var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
     for row in previous {
         var cells: list<str8> = [];
         for c in 0..row.cells.len() {
-            if c >= 1 + index * 4 && c < 5 + index * 4 { free(row.cells[c]); cells.push(clone("")); }
+            if c >= first && c < end { free(row.cells[c]); cells.push(clone("")); }
             else { cells.push(row.cells[c]); }
         }
         rows.push(TableRow { cells: cells });
@@ -176,7 +205,7 @@ pub fn configure_slot(self: &mut Self, slot: i32, spec: str8) -> bool {
     let column: TableColumn = TableColumn { title: "", width: 6, value_type: "i32", bounded: true, minimum: low, maximum: high, nullable: true };
     let rows: list<TableRow> = self.rows;
     for row in rows {
-        if !column.validate(row.cells[1 + index * 4 + 1 + slot]) { self.error = "Existing values exceed limits; clear track first"; return false; }
+        if !column.validate(row.cells[self.automation_column(index, slot)]) { self.error = "Existing values exceed limits; clear track first"; return false; }
     }
     var track: SequenceTrack = self.tracks[index];
     let copy: str8 = clone(spec);
@@ -188,6 +217,7 @@ pub fn configure_slot(self: &mut Self, slot: i32, spec: str8) -> bool {
 pub fn track_action(self: &mut Self, command: i32, area: Rect) -> void {
     self.delete_pending = false;
     if command == 21 { self.create_track(false, area); return; }
+    if command == 28 { self.create_track_kind(false, true, area); return; }
     if command == 23 { self.create_track(true, area); return; }
     if command == 22 { self.remove_track(area); return; }
     if command == 24 { self.clear_track(); return; }
@@ -360,7 +390,7 @@ pub fn paint_track_dialog(self: SequenceTable, surface: Surface, viewport: Rect,
 pub fn paint_track_details(self: SequenceTable, surface: Surface, area: Rect, theme: Theme) -> void {
     let index: i32 = self.active_track(); if index < 0 || area.height < 3 { return; }
     let track: SequenceTrack = self.tracks[index];
-    let title: str8 = format!("{}{}", track.name, track.muted ? " [muted]" : "");
+    let title: str8 = format!("{} [{}]{}", track.name, track.audio ? "AUDIO" : "MIDI", track.muted ? " [muted]" : "");
     let parameters: str8 = format!("CC1={}  CC2={}", track.cc1.parameter, track.cc2.parameter);
     surface.text(Rect::new(area.x, area.y + 1, area.width, 1), title, theme.accent, theme.panel);
     surface.text(Rect::new(area.x, area.y + 2, area.width, 1), parameters, theme.muted, theme.panel);

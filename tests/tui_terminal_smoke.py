@@ -100,13 +100,27 @@ def main():
         read_frame(1, table_text=((24, 4), "001"))
         os.write(master, b"m")
         mixer_frame = read_frame(1)
-        assert b"Mixer (demo levels)" in mixer_frame and b"Vol 100" in mixer_frame and b"Pan 0" in mixer_frame
+        assert b"Mixer (demo levels)" in mixer_frame and b"V100" in mixer_frame and b"P0" in mixer_frame
         animated = mixer_frame
         for _ in range(20):
             animated = read_frame(1)
             if animated != mixer_frame:
                 break
         assert animated != mixer_frame
+        os.write(master, b"\tll")
+        assert b"Meter style" in read_frame(None)
+        os.write(master, b"jjl")
+        assert b"Grainy (osc)" in read_frame(None)
+        os.write(master, b"j\r")
+        grainy = read_frame(1).decode()
+        assert any("\u2800" <= glyph <= "\u28ff" for glyph in grainy)
+        os.write(master, b"\tll")
+        read_frame(None)
+        os.write(master, b"jjl")
+        read_frame(None)
+        os.write(master, b"\r")
+        solid = read_frame(1).decode()
+        assert not any("\u2800" <= glyph <= "\u28ff" for glyph in solid)
         os.write(master, b"m")
         while b" Inspector " not in read_frame(1):
             pass
@@ -162,7 +176,7 @@ def main():
         read_frame(1)
         def track_menu(item):
             os.write(master, b"\tlll")
-            assert b"Create new" in read_frame(None)
+            assert b"Create track" in read_frame(None)
             os.write(master, b"j" * item + b"\r")
 
         # Track menu acts on the group containing the selected child column.
@@ -171,6 +185,8 @@ def main():
         os.write(master, b"\x15Lead qhjk\r")
         assert b"Lead qhjk" in read_frame(1)
         track_menu(1)
+        assert b"MIDI track" in read_frame(None)
+        os.write(master, b"\r")
         created = read_frame(1, table_text=((24, 4), "001"))
         assert b"Track 4" in created
         track_menu(3)
@@ -200,6 +216,15 @@ def main():
         assert b"Configure CC2" in read_frame(None)
         os.write(master, b"\x15cutoff:0:1000\r")
         assert b"CC2=cutoff:0:1000" in read_frame(1)
+        track_menu(1)
+        assert b"AUDIO track" in read_frame(None)
+        os.write(master, b"j\r")
+        assert b"[AUDIO]" in read_frame(1)
+        os.write(master, b"m")
+        assert b"A5" in read_frame(1)
+        os.write(master, b"m")
+        while b" Inspector " not in read_frame(1):
+            pass
         os.write(master, b"b" * 30)
         read_frame(1, table_cell=((28, 4), (60, 91, 128)), table_text=((24, 4), "001"))
         # Menu navigation must not mutate the underlying table, even after

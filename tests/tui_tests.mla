@@ -65,13 +65,58 @@ fn tui_vu_meter_and_mixer() {
     verify(before != mixer.level(0, 100, 0, false, false));
     verify(mixer.level(0, 100, 0, false, true) == 0 && mixer.level(0, 100, 100, false, false) == 0);
     mixer.paint(surface, Rect::new(0, 0, 27, 16), theme, table.tracks, 1);
-    let selected: Cell = surface.cell(9, 0); let other: Cell = surface.cell(0, 0);
+    let selected: Cell = surface.cell(6, 0); let other: Cell = surface.cell(0, 0);
     verify(selected.background == lighten(theme.panel, 8) && other.background == theme.panel);
-    let volume: Cell = surface.cell(9, 1); let pan: Cell = surface.cell(9, 2);
+    let volume: Cell = surface.cell(6, 1); let pan: Cell = surface.cell(6, 2);
     verify(volume.glyph == 86 && pan.glyph == 80);
     mixer.paint(surface, Rect::new(0, 0, 9, 8), theme, table.tracks, 2);
-    let last: Cell = surface.cell(6, 0); verify(last.glyph == 51);
+    let last: Cell = surface.cell(1, 0); verify(last.glyph == 51);
     for size in 0..5 { mixer.paint(surface, Rect::new(0, 0, i32(size), i32(size)), theme, table.tracks, 2); }
+    table.release(); surface.release();
+}
+
+#[test]
+fn tui_mixed_track_types() {
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(0, 0, 40, 12);
+    table.track_action(28, area);
+    verify(table.tracks.len() == 4 && table.selected_column == 13 && table.track_columns(3) == 2 && !table.is_note());
+    let audio: SequenceTrack = table.tracks[3]; verify(audio.audio);
+    let group: TableGroup = table.groups[3]; verify(group.first == 13 && group.count == 2);
+    let column: TableColumn = table.columns[13]; verify(column.title == "CC1" && !column.validate("C-4"));
+    verify(table.configure_slot(1, "pitchbend"));
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("-123"); table.edit_event(decode_input("\r"), area);
+    table.track_action(21, area); verify(table.selected_column == 15 && table.is_note());
+    table.edit_event(decode_input("K"), area); table.edit_event(decode_input("K"), area);
+    let mixed: TableRow = table.rows[0]; verify(mixed.cells[13] == "-123" && mixed.cells[15] == "C#4");
+    table.selected_column = 13; table.create_track(true, area);
+    let duplicate: SequenceTrack = table.tracks[5]; verify(duplicate.audio && table.selected_column == 19);
+    let copied: TableRow = table.rows[0]; verify(copied.cells[19] == "-123");
+    table.clear_track(); let cleared: TableRow = table.rows[0]; verify(cleared.cells[19] == "" && cleared.cells[13] == "-123");
+    table.remove_track(area); table.selected_column = 13; table.remove_track(area);
+    verify(table.tracks.len() == 4 && table.is_note() && table.selected_column == 13);
+    let shifted: TableRow = table.rows[0]; verify(shifted.cells[13] == "C#4");
+    table.release();
+}
+
+#[test]
+fn tui_meter_styles_and_channel_counts() {
+    let surface: Surface = Surface::new(30, 16); let theme: Theme = Theme::dark_blue();
+    let solid: VuMeter = VuMeter { level: 250 };
+    let grainy: VuMeter = VuMeter { level: 250, grainy: true };
+    solid.paint(surface, Rect::new(0, 0, 1, 1), theme.panel);
+    grainy.paint(surface, Rect::new(1, 0, 1, 1), theme.panel);
+    let bar: Cell = surface.cell(0, 0); let dots: Cell = surface.cell(1, 0);
+    verify(bar.glyph == 0x2582 && dots.glyph == 0x28C0 && dots.foreground == bar.foreground);
+    verify(VuMeter::color(519) == 0x74F078 && VuMeter::color(520) == 0xFFD65C);
+    verify(VuMeter::color(700) == 0xFF9046 && VuMeter::color(850) == 0xFF604C);
+    var table: SequenceTable = SequenceTable::new(); table.create_track_kind(false, true, Rect::new(0, 0, 40, 12));
+    let mixer: Mixer = Mixer { visible: true, phase: 10 };
+    mixer.paint(surface, Rect::new(0, 0, 24, 12), theme, table.tracks, 3);
+    let mono: Cell = surface.cell(2, 11); let empty: Cell = surface.cell(3, 11);
+    let left: Cell = surface.cell(19, 11); let right: Cell = surface.cell(21, 11);
+    verify(mono.glyph != 32 && empty.glyph == 32 && left.glyph != 32 && right.glyph != 32);
+    let identity: Cell = surface.cell(18, 0); verify(identity.glyph == 65);
     table.release(); surface.release();
 }
 

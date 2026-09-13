@@ -189,7 +189,10 @@ column. Column widths are NOTE=6, VEL=4, CC1=6, CC2=6, including spacing.
 The demo's **Track** menu always targets the selected column's track:
 
 - Rename opens a text dialog (Enter saves, Escape cancels).
-- Create new appends an empty track and selects it.
+- Create track → MIDI track / AUDIO track appends an empty track of the chosen
+  type and selects it. MIDI has NOTE, VEL, CC1, CC2; AUDIO has only CC1 and CC2.
+  Mixed groups have different widths; navigation, frozen ROW, deletion, and
+  duplication follow their actual column ranges. Duplicate preserves track type.
 - Duplicate appends an independent copy of the pattern, mute flag, and automation
   settings, then selects the copy.
 - Delete removes the track after confirmation; at least one track is retained.
@@ -211,8 +214,11 @@ for a future playback engine, and custom parameters need an application mapping.
 #### Mixer preview
 
 Press `m` outside menus, dialogs, or cell editing to toggle Inspector/Mixer.
-`modules/tui_demo/mixer.mla` provides the demo widget: narrow track strips with
-track names, volume (0–100), pan (-100 left to +100 right), and stereo VU meters.
+`modules/tui_demo/mixer.mla` provides six-cell-wide track strips (five content
+cells plus a separator). Headers use `M1`, `A2`, etc. for MIDI/audio and their
+current track order; full names remain in the sequence and Inspector. Compact
+readouts show `V100` for volume (0–100) and `P0` for pan (-100 left to +100 right).
+MIDI uses one pre-pan meter; AUDIO uses two meters, left then right.
 The selected track shares the sequence selection and has a lighter background.
 When tracks exceed the pane width, the visible strip range follows selection.
 New tracks, duplicates, names, and mute state are read from the sequence model.
@@ -222,7 +228,11 @@ The meter takes all remaining height below its three readout rows, shrinking or
 growing on terminal resize. Tiny panes clip readouts and omit meters when no
 height remains. `tui::meter::VuMeter` is reusable independently: pass a level
 from 0 to 1000 and a target rectangle. Its quarter-cell blocks and
-green/yellow/orange/red thresholds match the oscilloscope demo.
+green/yellow/orange/red thresholds match the oscilloscope demo: green below
+520, yellow from 520, orange from 700, and red from 850 on the 0–1000 scale.
+View → Meter style selects Solid bars (default) or Grainy (osc). Both retain
+the same fill calculation and colors. Grainy uses `std::esc::acs_meter` directly,
+including its braille glyphs. Custom `VuMeter` instances set `grainy: true`.
 
 The pane is labeled **Mixer (demo levels)**: levels are synthetic, animated at
 roughly 10 Hz, scaled by volume/pan, and zero for muted tracks. They are not

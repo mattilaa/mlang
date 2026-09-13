@@ -42,10 +42,15 @@ fn demo_menus() -> MenuBar {
             MenuItem { label: "Redo", action: 5, enabled: true }] },
         Menu { title: "View", items: [
             MenuItem { label: "Reset layout", action: 6, enabled: true },
-            MenuItem { label: "Show details", action: 7, enabled: true }] },
+            MenuItem { label: "Show details", action: 7, enabled: true },
+            MenuItem::submenu("Meter style", [
+                MenuItem { label: "Solid bars", action: 40, enabled: true },
+                MenuItem { label: "Grainy (osc)", action: 41, enabled: true }])] },
         Menu { title: "Track", items: [
             MenuItem { label: "Rename", action: 20, enabled: true },
-            MenuItem { label: "Create new", action: 21, enabled: true },
+            MenuItem::submenu("Create track", [
+                MenuItem { label: "MIDI track", action: 21, enabled: true },
+                MenuItem { label: "AUDIO track", action: 28, enabled: true }]),
             MenuItem { label: "Delete", action: 22, enabled: true },
             MenuItem { label: "Duplicate", action: 23, enabled: true },
             MenuItem { label: "Clear pattern", action: 24, enabled: true },
@@ -239,7 +244,11 @@ fn main() -> i32 {
                 question.question = command == 22 ? "Delete the selected track and its pattern?" : "Clear all rows of the selected track?";
                 question.open(); focus.set_menu_active(true);
             }
-            else if command >= 20 && command <= 27 {
+            else if command == 40 || command == 41 {
+                mixer.grainy = command == 41;
+                free(message); message = clone(mixer.grainy ? "Meter style: grainy (osc)" : "Meter style: solid bars");
+            }
+            else if command >= 20 && command <= 28 {
                 table.track_action(command, panes[1].bounds.inset(1));
                 free(message); message = clone("Track updated. Mute affects demo state only.");
             }

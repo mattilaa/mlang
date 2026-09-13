@@ -1,13 +1,16 @@
 mod tui::geometry;
 mod tui::surface;
 mod tui::theme;
+mod std::esc;
+use std::esc::acs_meter;
+use std::strbuf::free;
 use tui::geometry::*;
 use tui::surface::*;
 use tui::theme::*;
 
 /// Vertical VU display; caller supplies a normalized level (0..1000).
 /// Quarter-cell fill and colors follow the std::esc oscilloscope demo.
-pub struct VuMeter { var level: i32; };
+pub struct VuMeter { var level: i32; var grainy: bool; };
 impl VuMeter {
     pub fn color(level: i32) -> i32 {
         if level >= 850 { return 0xFF604C; }
@@ -25,9 +28,15 @@ impl VuMeter {
             let amount: i32 = filled <= base ? 0 : (filled - base >= 4 ? 4 : i32(filled - base));
             let threshold: i32 = i32((base + 2) * 1000 / total);
             let glyph: i32 = amount == 0 ? 0x2502 : (amount == 1 ? 0x2582 : (amount == 2 ? 0x2584 : (amount == 3 ? 0x2586 : 0x2588)));
-            for x in 0..area.width {
-                surface.put(area.x + i32(x), area.y + i32(row), Cell { glyph: glyph,
-                    foreground: amount == 0 ? 0x163A2A : VuMeter::color(threshold), background: background });
+            let color: i32 = amount == 0 ? 0x163A2A : VuMeter::color(threshold);
+            if self.grainy {
+                let dots: str8 = acs_meter(amount);
+                for x in 0..area.width { surface.text(Rect::new(area.x + i32(x), area.y + i32(row), 1, 1), dots, color, background); }
+                free(dots);
+            } else {
+                for x in 0..area.width {
+                    surface.put(area.x + i32(x), area.y + i32(row), Cell { glyph: glyph, foreground: color, background: background });
+                }
             }
         }
     }
