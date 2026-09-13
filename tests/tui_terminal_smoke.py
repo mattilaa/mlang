@@ -38,13 +38,14 @@ def main():
         pending_output = data[end:]
         return data[:end]
 
-    def read_frame(expected_pane, dialog_pane=None, table_cell=None):
+    def read_frame(expected_pane, dialog_pane=None, table_cell=None, table_text=None):
         frame = read_until(b"\x1b[0m")
         # Inspect rendered border colors, not application debug/status text.
         x = y = 0
         foreground = None
         background = None
         backgrounds = {}
+        glyphs = {}
         cells = {}
         for token in re.split(r"(\x1b\[[0-?]*[ -/]*[@-~])", frame.decode()):
             if token.startswith("\x1b["):
@@ -60,6 +61,7 @@ def main():
                 for _glyph in token:
                     cells[x, y] = foreground
                     backgrounds[x, y] = background
+                    glyphs[x, y] = _glyph
                     x += 1
         borders = [(0, 8), (23, 8), (23, 18)]
         selected = [i for i, point in enumerate(borders) if cells.get(point) == (145, 184, 235)]
@@ -67,6 +69,10 @@ def main():
         if table_cell is not None:
             point, expected = table_cell
             assert backgrounds.get(point) == expected, (point, backgrounds.get(point), expected)
+        if table_text is not None:
+            (x, y), expected = table_text
+            actual = "".join(glyphs.get((x + i, y), "") for i in range(len(expected)))
+            assert actual == expected, (actual, expected)
         if dialog_pane is not None:
             dialog_borders = [(3, 3), (3, 8), (28, 8)]
             dialog_selected = [i for i, point in enumerate(dialog_borders)
@@ -89,13 +95,32 @@ def main():
         os.write(master, b"\x1b[108;6u")
         read_frame(1)
         os.write(master, b"w")
-        read_frame(1, table_cell=((31, 3), (60, 91, 128)))
+        read_frame(1, table_cell=((40, 3), (60, 91, 128)))
         os.write(master, b"j")
-        read_frame(1, table_cell=((31, 4), (60, 91, 128)))
+        read_frame(1, table_cell=((40, 4), (60, 91, 128)))
         os.write(master, b"j" * 70)
         assert b"064" in read_frame(1)
         os.write(master, b"b" + b"k" * 70)
-        assert b"001" in read_frame(1, table_cell=((24, 3), (60, 91, 128)))
+        assert b"001" in read_frame(1, table_cell=((31, 3), (60, 91, 128)))
+        os.write(master, b"K")
+        read_frame(1, table_text=((31, 3), "C#4"))
+        os.write(master, b"\x1b[106;2u")
+        read_frame(1, table_text=((31, 3), "C-4"))
+        os.write(master, b"w\r")
+        assert b"Editing:" in read_frame(1)
+        os.write(master, b"\x15128\r")
+        assert b"Invalid type" in read_frame(1)
+        os.write(master, b"\x1542\r")
+        read_frame(1, table_text=((40, 3), "42"))
+        os.write(master, b"\r\x1599")
+        read_frame(1)
+        os.write(master, b"\x1b")
+        read_frame(1, table_text=((40, 3), "42"))
+        # q, spaces, and navigation letters are literal text during string edits.
+        os.write(master, b"w\r\x15qhjk track\r")
+        read_frame(1, table_text=((47, 3), "qhjk track"))
+        os.write(master, b"bb")
+        read_frame(1, table_cell=((31, 3), (60, 91, 128)))
         # Menu navigation must not mutate the underlying table, even after
         # scrolling beyond its viewport; column and pane keys are captured too.
         os.write(master, b"\t")
@@ -103,13 +128,13 @@ def main():
         os.write(master, b"j" * 70 + b"ww\x1b[106;6u")
         read_frame(None)
         os.write(master, b"\x1b")
-        assert b"001" in read_frame(1, table_cell=((24, 3), (60, 91, 128)))
+        assert b"001" in read_frame(1, table_cell=((31, 3), (60, 91, 128)))
         os.write(master, b"\x1b[104;6u")
         read_frame(0)
         # Unfocused tables must not receive ordinary navigation either.
         os.write(master, b"jw")
         os.write(master, b"\x1b[108;6u")
-        read_frame(1, table_cell=((24, 3), (60, 91, 128)))
+        read_frame(1, table_cell=((31, 3), (60, 91, 128)))
         os.write(master, b"\x1b[104;6u")
         read_frame(0)
         # Ctrl+Shift+L/J/K/H traverses the nested pane geometry.

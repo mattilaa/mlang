@@ -13,6 +13,74 @@ mod tui::dialog;
 mod tui::textfield;
 mod tui::table;
 use tui::table::*;
+mod tui_demo::sequence;
+use tui_demo::sequence::SequenceTable;
+
+#[test]
+fn tui_column_validation() {
+    var column: TableColumn = TableColumn { title: "VEL", width: 6, value_type: "i32", bounded: true, minimum: 0, maximum: 127 };
+    verify(column.validate("0") && column.validate("127"));
+    verify(!column.validate("128") && !column.validate("-1") && !column.validate("1.5") && !column.validate("12x"));
+    column.bounded = false;
+    verify(column.validate("-2147483648") && !column.validate("2147483648"));
+    column.value_type = "u32";
+    verify(column.validate("4294967295") && !column.validate("4294967296") && !column.validate("-0"));
+    column.value_type = "i64";
+    verify(column.validate("-9223372036854775808") && column.validate("9223372036854775807"));
+    verify(!column.validate("9223372036854775808") && !column.validate("-9223372036854775809"));
+    column.value_type = "unknown"; verify(!column.validate("5"));
+    column.value_type = "str8"; column.pattern = "[A-Z]+";
+    verify(column.validate("ABC") && !column.validate("ABC5"));
+    column.pattern = "["; verify(!column.validate("ABC"));
+}
+
+#[test]
+fn tui_sequence_editing() {
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(0, 0, 40, 10);
+    verify(table.notes.len() == 128);
+    table.reconcile(area); verify(table.selected_column == 1);
+    table.edit_event(decode_input("b"), area); verify(table.selected_column == 1);
+    table.edit_event(decode_input("K"), area);
+    let sharp: TableRow = table.rows[0]; verify(sharp.cells[1] == "C#4");
+    table.edit_event(decode_input("\x1b[106;2u"), area);
+    let natural: TableRow = table.rows[0]; verify(natural.cells[1] == "C-4");
+    for _i in 0..150 { table.edit_event(decode_input("J"), area); }
+    let lowest: TableRow = table.rows[0]; verify(lowest.cells[1] == "C--1");
+    for _i in 0..150 { table.edit_event(decode_input("K"), area); }
+    let highest: TableRow = table.rows[0]; verify(highest.cells[1] == "G-9");
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("G#9");
+    table.edit_event(decode_input("\r"), area); verify(table.editing);
+    table.editor.set_text("C#4"); table.edit_event(decode_input("\r"), area);
+    let manual_note: TableRow = table.rows[0]; verify(!table.editing && manual_note.cells[1] == "C#4");
+    table.edit_event(decode_input("w"), area);
+    for _i in 0..140 { table.edit_event(decode_input("K"), area); }
+    let maximum: TableRow = table.rows[0]; verify(maximum.cells[2] == "127");
+    for _i in 0..140 { table.edit_event(decode_input("J"), area); }
+    let minimum: TableRow = table.rows[0]; verify(minimum.cells[2] == "0");
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("128");
+    table.edit_event(decode_input("\r"), area); verify(table.editing && table.error != "");
+    table.editor.set_text("42"); table.edit_event(decode_input("\r"), area);
+    let manual: TableRow = table.rows[0]; verify(!table.editing && manual.cells[2] == "42");
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("55");
+    table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area);
+    let cancelled: TableRow = table.rows[0]; verify(cancelled.cells[2] == "42");
+    verify(!table.set_cell(0, 0, "2") && !table.set_cell(0, 2, "bad"));
+    table.release();
+}
+
+#[test]
+fn tui_read_only_columns() {
+    var table: Table = Table::new([TableColumn { title: "ROW", width: 5, read_only: true },
+        TableColumn { title: "A", width: 5 }, TableColumn { title: "RO", width: 5, read_only: true },
+        TableColumn { title: "B", width: 5 }], []);
+    let area: Rect = Rect::new(0, 0, 30, 10);
+    table.reconcile(area); verify(table.selected_column == 1);
+    table.on_event(decode_input("w"), area); verify(table.selected_column == 3);
+    table.on_event(decode_input("b"), area); verify(table.selected_column == 1);
+    table.columns = [TableColumn { title: "ROW", width: 5, read_only: true }];
+    table.reconcile(area); verify(table.selected_column == -1);
+}
 
 fn sample_table() -> Table {
     return Table::new([TableColumn { title: "NOTE", width: 6 }, TableColumn { title: "VEL", width: 5 },

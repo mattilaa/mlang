@@ -141,7 +141,7 @@ with legacy arrow keys and unmodified `hjkl`.
 
 ### Table widget
 
-`tui::table::Table` renders the demo's 64-row sequence as separate LINE, NOTE,
+`tui::table::Table` renders the demo's 64-row sequence as separate ROW, NOTE,
 VEL, and TRACK columns. Focus the sequence pane with Ctrl+Shift+L; `w`/`b`
 select the next/previous column and `j`/`k` (or Down/Up) select rows. Navigation
 stops at the edges and scrolls the selection into view, with a fixed header.
@@ -171,6 +171,50 @@ the visible range and position; navigation is keyboard-driven, without mouse
 dragging. The selected row uses the theme selection color, the selected column
 is slightly lighter (including their intersection), and alternating data rows
 are darker. Striping follows absolute row numbers while scrolling.
+
+#### Typed columns and editing
+
+`TableColumn` owns the reusable validation rules:
+
+```mlang
+TableColumn { title: "ROW", width: 7, value_type: "u32", read_only: true }
+TableColumn { title: "VEL", width: 7, value_type: "i32",
+              bounded: true, minimum: 0, maximum: 127 }
+TableColumn { title: "NAME", width: 16, value_type: "str8", pattern: "[A-Za-z ]+" }
+```
+
+`value_type` defaults to `str8`. Supported types are `i8`, `u8`, `i16`, `u16`,
+`i32`, `u32`, `i64`, `bool`, and `str8`; unknown/unsupported types fail validation.
+Integer syntax is checked with `std::regex`, then converted with overflow checks
+and checked against both the type's range and optional inclusive column limits.
+Unsigned types reject negative signs; booleans require `true` or `false`.
+An optional POSIX `pattern` must match the entire value in addition to its type
+rules; invalid regexes reject input. `bounded` applies only to integer columns.
+Cells remain textual display values, not a dynamically typed language object.
+
+`read_only` columns are skipped by `w/b` and selection reconciliation; an
+all-read-only table has `selected_column == -1`. `can_set(row, column, value)`
+and `set_cell(row, column, value)` reject invalid values, missing cells, and
+read-only writes. The base still borrows strings: callers keep accepted values
+alive and manage replaced strings. Directly replacing the public `rows` data
+bypasses write validation; use `set_cell` for interactive edits.
+
+The demo uses `SequenceTable : Table` in `modules/tui_demo/sequence.mla`, outside
+the reusable widget library. It owns its cell strings and a compiler-provided
+`std::array` (`array<str8, 128>`) containing every MIDI note. Notes use tracker
+spelling: MIDI 0 is `C--1`, MIDI 60 is `C-4`, and MIDI 127 is `G-9`; sharps use
+`#`, e.g. `C#4`. Manual notes must occur in this array as well as match the
+column regex. ROW is read-only, NOTE starts selected, VEL is bounded to 0–127,
+and TRACK accepts text.
+
+- Shift+J decreases and Shift+K increases the selected value. Notes step by a
+  semitone; integer columns step by one. Endpoints stop without wrapping.
+- Enter starts an inline `TextField`; Enter validates and commits, while Escape
+  discards the draft. Invalid input stays editable with an Inspector error.
+- While editing, text including q/w/b/j/k and spaces is literal input. Ctrl+U
+  clears the draft. Pane/menu navigation is suspended until commit or cancel.
+
+The demo edits display data only; it does not send changes to an audio engine.
 
 ### Open session dialog
 
