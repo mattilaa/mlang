@@ -1,0 +1,99 @@
+mod std::sync;
+mod std::thread;
+mod std::testing;
+use std::sync::SpscQueue;
+use std::thread::join;
+use std::testing::verify;
+
+enum Kind { Note, Parameter };
+struct Stamp { var sample: i64; var line: i32; };
+struct Event { var stamp: Stamp; var kind: Kind; var value: f32; };
+
+fn make_event(i: i64) -> Event {
+    return Event { stamp: Stamp { sample: i, line: i32(i % 64) },
+                   kind: Kind::Note, value: 0.75 };
+}
+
+#[test]
+fn spsc_capacity_wrap_and_output() {
+    let q: SpscQueue<Event> = SpscQueue<Event>::new(3);
+    verify(q.is_valid());
+    var out: Event = make_event(-1);
+    verify(!q.try_pop_into(&out));
+    verify(out.stamp.sample == -1);
+    for round in 0..100 {
+        verify(q.try_push(make_event(round * 3)));
+        verify(q.try_push(make_event(round * 3 + 1)));
+        verify(q.try_push(make_event(round * 3 + 2)));
+        verify(!q.try_push(make_event(9999)));
+        for j in 0..3 {
+            verify(q.try_pop_into(&out));
+            verify(out.stamp.sample == round * 3 + j);
+            verify(out.stamp.line == i32((round * 3 + j) % 64));
+            verify(out.value == f32(0.75));
+            let dispatched: i32 = match out.kind {
+                Kind::Note => 1, Kind::Parameter => 2, _ => 0
+            };
+            verify(dispatched == 1);
+        }
+        verify(!q.try_pop_into(&out));
+    }
+    q.release();
+}
+
+#[test]
+fn spsc_scalar_and_invalid_capacity() {
+    let invalid: SpscQueue<i64> = SpscQueue<i64>::new(0);
+    verify(!invalid.is_valid());
+    invalid.release();
+    let huge: SpscQueue<i64> = SpscQueue<i64>::new(9223372036854775807);
+    verify(!huge.is_valid());
+    huge.release();
+    let q: SpscQueue<i64> = SpscQueue<i64>::new(1);
+    verify(q.is_valid());
+    var out: i64 = -1;
+    verify(q.try_push(42));
+    verify(!q.try_push(43));
+    verify(q.try_pop_into(&out));
+    verify(out == 42);
+    verify(!q.try_pop_into(&out));
+    verify(out == 42);
+    q.release();
+}
+
+fn produce(handle: i64) -> i32 {
+    let q: SpscQueue<Event> = SpscQueue<Event> { handle: handle };
+    for i in 0..100000 {
+        var posted: bool = false;
+        // Finite retry budget for the stress test, not an audio callback.
+        for _retry in 0..10000000 {
+            if q.try_push(make_event(i)) { posted = true; break; }
+        }
+        if !posted { return 1; }
+    }
+    return 0;
+}
+
+#[test]
+fn spsc_concurrent_fifo() {
+    let q: SpscQueue<Event> = SpscQueue<Event>::new(17);
+    verify(q.is_valid());
+    let worker: std::thread::thread = thread::spawn(produce, q.handle);
+    var out: Event = make_event(-1);
+    var valid: bool = true;
+    for i in 0..100000 {
+        var received: bool = false;
+        for _retry in 0..10000000 {
+            if q.try_pop_into(&out) { received = true; break; }
+        }
+        if !received { valid = false; break; }
+        if out.stamp.sample != i || out.stamp.line != i32(i % 64) || out.value != f32(0.75) {
+            valid = false;
+        }
+    }
+    let status: i32 = join(worker);
+    verify(valid);
+    verify(status == 0);
+    verify(!q.try_pop_into(&out));
+    q.release();
+}

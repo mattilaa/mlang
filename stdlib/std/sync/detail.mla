@@ -23,3 +23,7 @@ extern pub fn __mlang_std_sync_lfqueue_send(queue_handle: i64, s: str8) -> i32;
 extern pub fn __mlang_std_sync_lfqueue_try_recv(queue_handle: i64, buf: str8, capacity: i64) -> i64;
 extern pub fn __mlang_std_sync_lfqueue_close(queue_handle: i64) -> i32;
 extern pub fn __mlang_std_sync_lfqueue_free(queue_handle: i64) -> i32;
+extern pub fn __mlang_std_sync_spsc_new(capacity: i64, item_size: i64) -> i64;
+extern pub fn __mlang_std_sync_spsc_push(handle: i64, value: ptr<void>) -> i32;
+extern pub fn __mlang_std_sync_spsc_pop(handle: i64, value: ptr<void>) -> i32;
+extern pub fn __mlang_std_sync_spsc_free(handle: i64) -> void;
