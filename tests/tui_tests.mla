@@ -24,6 +24,104 @@ use tui::input::*;
 use std::bytes::Bytes;
 use std::testing::verify;
 use tui::dialog::*;
+use tui::button::*;
+
+#[test]
+fn tui_layout_alignment() {
+    var layout: Layout = Layout { axis: Axis::Horizontal, gap: 2,
+        alignment: Alignment::Center, sizes: [Size::fixed(4), Size::fixed(4)] };
+    var parts: list<Rect> = layout.split(Rect::new(3, 5, 20, 20));
+    let first: Rect = parts[0]; let second: Rect = parts[1];
+    verify(first.x == 8 && second.x == 14);
+    layout.axis = Axis::Vertical; layout.alignment = Alignment::End;
+    parts = layout.split(Rect::new(3, 5, 20, 20));
+    let bottom: Rect = parts[1]; verify(bottom.y == 21 && bottom.height == 4);
+    layout.alignment = Alignment::Center;
+    parts = layout.split(Rect::new(3, 5, 20, 20));
+    let middle: Rect = parts[0]; verify(middle.y == 10);
+    layout.sizes = [Size::flex(1), Size::fixed(4)];
+    parts = layout.split(Rect::new(3, 5, 20, 20));
+    let flexible: Rect = parts[0]; verify(flexible.y == 5 && flexible.height == 14);
+}
+
+#[test]
+fn tui_base_dialog_and_push_button() {
+    var dialog: Dialog = Dialog::new("Question", 40, 15);
+    let viewport: Rect = Rect::new(0, 0, 80, 24);
+    let content: Rect = dialog.content_rect(viewport);
+    let row: Rect = dialog.button_row(viewport);
+    let buttons: list<Rect> = dialog.button_rects(viewport);
+    let left: Rect = buttons[0]; let right: Rect = buttons[1];
+    verify(content.y + content.height == row.y && row.height == 4);
+    verify(left.x - row.x == (row.width - left.width - right.width - 2) / 2);
+    let surface: Surface = Surface::new(80, 24);
+    let theme: Theme = Theme::dark_blue();
+    let button: PushButton = PushButton { label: "OK", action: 7 };
+    surface.fill(viewport, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    button.paint(surface, left, theme, true, false);
+    let raised: Cell = surface.cell(left.x, left.y);
+    let shadow: Cell = surface.cell(left.x + left.width - 1, left.y + 1);
+    verify(raised.glyph == 0x250C && raised.foreground == theme.accent);
+    verify(shadow.glyph == 88 && shadow.background == darken(theme.panel, theme.shadow_percent));
+    surface.fill(viewport, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
+    button.paint(surface, left, theme, true, true);
+    let depressed: Cell = surface.cell(left.x + 1, left.y + 1);
+    let old_corner: Cell = surface.cell(left.x, left.y);
+    verify(depressed.glyph == 0x250C && old_corner.glyph == 32);
+    surface.release();
+}
+
+#[test]
+fn tui_question_custom_buttons() {
+    var question: QuestionDialog = QuestionDialog::new("Confirm", "Continue?");
+    question.buttons = [PushButton { label: "Unavailable", action: 8, enabled: false },
+        PushButton { label: "Proceed", action: 42 }, PushButton { label: "Later", action: 43 },
+        PushButton { label: "Cancel", action: 2 }];
+    question.open(); verify(question.button_selected == 1);
+    question.on_event(decode_input("l")); verify(question.button_selected == 2);
+    question.on_event(decode_input("h")); verify(question.button_selected == 1);
+    question.button_selected = 3;
+    let small: Rect = Rect::new(0, 0, 24, 14);
+    let row: Rect = question.button_row(small);
+    let rectangles: list<Rect> = question.button_rects(small);
+    let visible: Rect = rectangles[3];
+    verify(visible.width == 11 && visible.x + visible.width == row.x + row.width);
+    for rectangle in rectangles {
+        verify(rectangle.width == 0 || (rectangle.x >= row.x && rectangle.x + rectangle.width <= row.x + row.width));
+    }
+    question.button_selected = 1;
+    question.on_event(decode_input("\r"));
+    verify(question.active && question.pressed_button == 1 && question.result == 0);
+    for _i in 0..9 { question.tick(); verify(question.active); }
+    question.tick(); verify(!question.active && question.result == 42);
+    question.open(); question.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape });
+    verify(!question.active && question.result == 2);
+    question.buttons = []; question.open(); question.on_event(decode_input("\r"));
+    verify(question.button_selected == -1 && question.pressed_button == -1);
+}
+
+#[test]
+fn tui_file_dialog_shared_buttons() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    let viewport: Rect = Rect::new(0, 0, 80, 24);
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.on_event(decode_input("\x1b[106;6u"), viewport);
+    verify(dialog.focus.selected == 2);
+    dialog.on_event(decode_input("\x1b[106;6u"), viewport);
+    verify(dialog.focus.selected == 3);
+    dialog.on_event(decode_input("\r"), viewport);
+    // Navigation cannot change an activation already in progress.
+    dialog.on_event(decode_input("l"), viewport);
+    for _i in 0..10 { dialog.tick(); }
+    verify(dialog.accepted && !dialog.active);
+    dialog.open("tests/fixtures/tui_dialog"); dialog.focus.selected = 3;
+    dialog.on_event(decode_input("l"), viewport);
+    dialog.on_event(decode_input("\r"), viewport);
+    verify(dialog.active && dialog.pressed_button == 1);
+    for _i in 0..10 { dialog.tick(); }
+    verify(!dialog.active && !dialog.accepted && dialog.result == 2);
+    dialog.release();
+}
 use tui::textfield::TextField;
 
 #[test]

@@ -7,7 +7,9 @@ It lives outside `std` and uses the existing module search/install mechanism.
 This first version provides:
 
 - Horizontal and vertical layouts with fixed sizes, weighted flexible sizes,
-  and gaps. Nest layouts by splitting a child rectangle again.
+  gaps, and `Alignment::Start`, `Center`, or `End` on either axis. Nest layouts
+  by splitting a child rectangle again. Alignment positions fixed-size groups
+  in unused space; flexible children consume that space instead.
 - A viewport whose optional menu row is reserved above its content. Opening a
   menu never changes the layout's available height.
 - Box-drawn panels and labels, using a customizable dark blue/gray RGB theme.
@@ -19,7 +21,8 @@ This first version provides:
 - Cell compositing: draw content first, then the menu bar. Popup shadows retain
   existing glyphs and darken both foreground and background colors.
 - A modal Open session browser with an editable path, lazy directory tree,
-  file list, and its own pane focus.
+  file list, and its own pane focus; a reusable base dialog, push buttons,
+  and a non-file question dialog.
 - Explicit alternate-screen/raw-input setup and restoration, terminal size
   queries, and plain-text snapshots when output is redirected.
 
@@ -143,8 +146,8 @@ title is drawn into the upper box border. The first inside row is the editable
 path; beneath it a horizontal layout holds the directory tree and the selected
 directory's files. The dialog paints last, with a shadow above the main view.
 
-- Ctrl+Shift+H/J/K/L moves between the path, directory tree, and file list using
-  the same spatial rules as the main view. Tab cycles these three controls.
+- Ctrl+Shift+H/J/K/L moves between the path, directory tree, file list, and button
+  row using the same spatial rules as the main view. Tab cycles these controls.
   Each control has its own highlight; the main view is inactive while modal.
 - In the tree, arrows or j/k select directories and immediately refresh the
   files on the right. Right/l or Enter expands a directory lazily; Left/h
@@ -171,8 +174,47 @@ avoid copying this owning widget. No process-directory changes or filesystem
 writes occur. The chooser does not deserialize sessions; the demo reports the
 selected path for an application handler to load.
 
-The reusable `Dialog` frame and `tui::textfield::TextField` can also be used
-separately. `InputEvent` now preserves `code`, `modifiers`, and `raw_byte`, and
+### Base dialogs and push buttons
+
+`OpenSessionDialog` and `QuestionDialog` both derive from `Dialog`. Construct a
+base with `Dialog::new(title, width, height)`: its default buttons are OK and
+Cancel, centered in the bottom four-cell-high row (including button shadow).
+`content_rect(viewport)` excludes this row, so nested content cannot overlap it.
+`paint_frame` paints the border, shadow, and buttons and returns that content area.
+
+Buttons are independent `tui::button::PushButton` widgets. Replace the inherited
+`buttons` list to choose any number of labels, action IDs, and enabled states:
+
+```mlang
+var question: QuestionDialog = QuestionDialog::new("Confirm", "Start a new session?");
+question.buttons = [PushButton { label: "Proceed", action: 1 },
+                    PushButton { label: "Not now", action: 2 }];
+question.button_alignment = Alignment::Center;
+question.open();
+```
+
+Import `tui::dialog::*`, `tui::button::*`, and `tui::layout::*` for this example.
+Labels and question text are borrowed and must remain valid while displayed.
+There is no fixed button-count limit; an overflowing row scrolls to keep the
+selected button visible. Disabled buttons are skipped. Left/h and Right/l
+choose buttons, Enter or Space presses one; Tab also cycles question buttons.
+The face shifts down and right, changing its color, before the action completes.
+
+Route events only to the active modal (`QuestionDialog::on_event(event)` or
+`OpenSessionDialog::on_event(event, viewport)`). Call its `tick()` every 10 ms
+and repaint after input and while a press is pending; activation completes after
+10 ticks. `result` is the selected action: 0 means no result, 1 is OK, and 2 is
+Cancel/Escape. File-dialog OK validates the path/selected file and keeps the
+dialog open on failure. Custom nonzero actions close it without accepting a file.
+Change button lists between activations, not during a pending press.
+
+File → New session demonstrates the non-file question, reporting OK or Cancel
+without changing session data. Both modals restore the main pane on dismissal.
+Custom derived dialogs can reuse `reset_buttons`, `on_button_event`, and
+`tick_buttons`; pane ID 3 identifies the shared button row for highlighting.
+
+The reusable `tui::textfield::TextField` can also be used separately.
+`InputEvent` preserves `code`, `modifiers`, and `raw_byte`, and
 adds `Text` and `Edit` kinds. Route text-field input before global shortcuts and
 retain control-code events even when their kind is `None`. Text input storage
 is bounded to roughly 4096 bytes. Pane minimum dimensions default to 2×2;

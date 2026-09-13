@@ -10,3 +10,4 @@ mod tui::focus;
 mod tui::input;
 mod tui::textfield;
 mod tui::dialog;
+mod tui::button;

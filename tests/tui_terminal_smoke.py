@@ -89,11 +89,27 @@ def main():
         read_frame(None)  # menu retains keyboard ownership
         os.write(master, b"\x1b")
         read_frame(2)  # previous pane restored, not the first pane
-        for dismissal in (b"\t", b"\r"):
+        for dismissal in (b"\t",):
             os.write(master, b"\t")
             read_frame(None)
             os.write(master, dismissal)
             read_frame(2)
+        # Non-file modal: configurable base buttons keep focus out of the view.
+        for answer, status in [(b"\r", b"confirmed"), (b"l\r", b"cancelled")]:
+            os.write(master, b"\t")
+            read_frame(None)
+            os.write(master, b"\r")
+            question = read_frame(None)
+            assert b"Start a new session?" in question and b"Cancel" in question
+            os.write(master, answer)
+            pressed = read_frame(None)
+            assert b"Start a new session?" in pressed
+            # The modal remains visible during the press animation.
+            while True:
+                frame = read_until(b"\x1b[0m")
+                if b"Start a new session?" not in frame:
+                    assert status in frame
+                    break
         # Cascades remain beside their ancestors. h closes only one level;
         # Escape from the grandchild closes every menu and restores pane 2.
         os.write(master, b"\t")

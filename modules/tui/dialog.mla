@@ -6,6 +6,7 @@ mod tui::layout;
 mod tui::focus;
 mod tui::input;
 mod tui::textfield;
+mod tui::button;
 mod std::fs;
 mod std::strbuf;
 use tui::geometry::*;
@@ -16,6 +17,7 @@ use tui::layout::*;
 use tui::focus::*;
 use tui::input::*;
 use tui::textfield::TextField;
+use tui::button::PushButton;
 use tui::menu::Key;
 use std::fs::list_dir;
 use std::fs::is_dir;
@@ -25,9 +27,99 @@ use std::fs::cwd;
 use std::fs::free_lines;
 use std::strbuf::*;
 
-/// Centered modal frame. Paint after the main view and menus.
-pub struct Dialog { var title: str8; var width: i32; var height: i32; };
-impl Dialog {
+/// Base modal dialog: shared frame, content layout, configurable bottom buttons,
+/// focus, and a short pressed animation before dispatching a button action.
+pub struct Dialog {
+    var title: str8; var width: i32; var height: i32;
+    var active: bool{false};
+    var focus: PaneFocus;
+    var buttons: list<PushButton>{[]};
+    var button_alignment: Alignment;
+    var button_selected: i32{0}; var pressed_button: i32{-1};
+    var press_ticks: i32{0}; var result: i32{0};
+    pub fn new(title: str8, width: i32, height: i32) -> Dialog {
+        return Dialog { title: title, width: width, height: height,
+            button_alignment: Alignment::Center, focus: PaneFocus::new(3),
+            buttons: [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 }] };
+    }
+    pub fn reset_buttons(self: &mut Self) -> void {
+        self.result = 0; self.pressed_button = -1; self.press_ticks = 0;
+        self.button_selected = -1;
+        self.move_button(1);
+    }
+    pub fn button_row(self: Dialog, viewport: Rect) -> Rect {
+        let area: Rect = self.bounds(viewport);
+        let inner: Rect = area.inset(1);
+        let height: i32 = self.buttons.len() == 0 ? 0 : (inner.height < 4 ? inner.height : 4);
+        return Rect::new(inner.x, inner.y + inner.height - height, inner.width, height);
+    }
+    pub fn content_rect(self: Dialog, viewport: Rect) -> Rect {
+        let area: Rect = self.bounds(viewport);
+        let inner: Rect = area.inset(1);
+        let row: Rect = self.button_row(viewport);
+        return Rect::new(inner.x, inner.y, inner.width, inner.height - row.height);
+    }
+    pub fn button_rects(self: Dialog, viewport: Rect) -> list<Rect> {
+        let row: Rect = self.button_row(viewport);
+        var sizes: list<Size> = [];
+        var total: i32 = 0; var selected_end: i32 = 0;
+        for i in 0..self.buttons.len() {
+            let button: PushButton = self.buttons[i];
+            sizes.push(Size::fixed(button.width()));
+            total = total + button.width() + (i > 0 ? 2 : 0);
+            if i == self.button_selected { selected_end = total; }
+        }
+        let offset: i32 = selected_end > row.width ? selected_end - row.width : 0;
+        let virtual_row: Rect = Rect::new(row.x - offset, row.y, total > row.width ? total : row.width, row.height);
+        let layout: Layout = Layout { axis: Axis::Horizontal, gap: 2, sizes: sizes, alignment: self.button_alignment };
+        let rectangles: list<Rect> = layout.split(virtual_row);
+        var clipped: list<Rect> = [];
+        for rectangle in rectangles { clipped.push(rectangle.intersect(row)); }
+        return clipped;
+    }
+    pub fn paint_buttons(self: Dialog, surface: Surface, viewport: Rect, theme: Theme) -> void {
+        let rectangles: list<Rect> = self.button_rects(viewport);
+        for i in 0..self.buttons.len() {
+            let button: PushButton = self.buttons[i];
+            button.paint(surface, rectangles[i], theme,
+                self.focus.selected == 3 && i == self.button_selected, i == self.pressed_button);
+        }
+    }
+    pub fn move_button(self: &mut Self, direction: i32) -> void {
+        let count: i32 = i32(self.buttons.len());
+        if count == 0 { self.button_selected = -1; return; }
+        var next: i32 = self.button_selected;
+        for _i in 0..count {
+            next = (next + direction + count) % count;
+            let button: PushButton = self.buttons[next];
+            if button.enabled { self.button_selected = next; return; }
+        }
+        self.button_selected = -1;
+    }
+    pub fn on_button_event(self: &mut Self, event: InputEvent) -> void {
+        if self.pressed_button >= 0 { return; }
+        if event.kind == InputKind::Menu && event.key == Key::Left { self.move_button(-1); }
+        if event.kind == InputKind::Menu && (event.key == Key::Right || event.key == Key::Toggle) { self.move_button(1); }
+        if (event.kind == InputKind::Menu && event.key == Key::Enter) || event.code == 32 {
+            if self.button_selected >= 0 && self.button_selected < self.buttons.len() {
+                let button: PushButton = self.buttons[self.button_selected];
+                if button.enabled { self.pressed_button = self.button_selected; self.press_ticks = 10; }
+            }
+        }
+    }
+    /// Call once per 10ms UI tick. Returns the action after the pressed frame
+    /// has remained visible for about 100ms; zero means no completed activation.
+    pub fn tick_buttons(self: &mut Self) -> i32 {
+        if self.pressed_button < 0 { return 0; }
+        self.press_ticks = self.press_ticks - 1;
+        if self.press_ticks > 0 { return 0; }
+        let index: i32 = self.pressed_button;
+        self.pressed_button = -1;
+        if index >= self.buttons.len() { return 0; }
+        let button: PushButton = self.buttons[index];
+        self.result = button.enabled ? button.action : 0;
+        return self.result;
+    }
     pub fn bounds(self: Dialog, viewport: Rect) -> Rect {
         let available_width: i32 = viewport.width > 4 ? viewport.width - 4 : viewport.width;
         let available_height: i32 = viewport.height > 4 ? viewport.height - 4 : viewport.height;
@@ -36,12 +128,48 @@ impl Dialog {
         return Rect::new(viewport.x + (viewport.width - width) / 2,
                 viewport.y + (viewport.height - height) / 2, width, height);
     }
-    pub fn paint(self: Dialog, surface: Surface, viewport: Rect, theme: Theme) -> Rect {
+    pub fn paint_frame(self: Dialog, surface: Surface, viewport: Rect, theme: Theme) -> Rect {
         let area: Rect = self.bounds(viewport);
         let shadow: Rect = Rect::new(area.x + 1, area.y + 1, area.width, area.height);
         surface.shadow(shadow.intersect(viewport), theme.shadow_percent);
         let panel: Panel = Panel { title: self.title };
-        return panel.paint_focused(surface, area, theme, true);
+        panel.paint_focused(surface, area, theme, true);
+        self.paint_buttons(surface, viewport, theme);
+        return self.content_rect(viewport);
+    }
+    pub fn paint(self: Dialog, surface: Surface, viewport: Rect, theme: Theme) -> Rect {
+        return self.paint_frame(surface, viewport, theme);
+    }
+};
+
+/// A simple non-file modal. Action 0 is reserved for no answer; 2 is Cancel.
+pub struct QuestionDialog : Dialog {
+    var question: str8;
+};
+impl QuestionDialog {
+    pub fn new(title: str8, question: str8) -> QuestionDialog {
+        return QuestionDialog { title: title, question: question, width: 56, height: 11,
+            button_alignment: Alignment::Center, focus: PaneFocus::new(3),
+            buttons: [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 }] };
+    }
+    pub fn open(self: &mut Self) -> void {
+        self.reset_buttons(); self.focus.selected = 3; self.active = true;
+    }
+    pub fn on_event(self: &mut Self, event: InputEvent) -> void {
+        if !self.active { return; }
+        if (event.kind == InputKind::Menu && event.key == Key::Escape) ||
+                event.code == 3 || (event.code == 99 && event.modifiers == 5) {
+            self.active = false; self.result = 2; self.pressed_button = -1; return;
+        }
+        self.on_button_event(event);
+    }
+    pub fn tick(self: &mut Self) -> void {
+        if self.active && self.tick_buttons() != 0 { self.active = false; }
+    }
+    pub fn paint(self: QuestionDialog, surface: Surface, viewport: Rect, theme: Theme) -> void {
+        if !self.active { return; }
+        let inner: Rect = self.paint_frame(surface, viewport, theme);
+        surface.text(inner.inset(1), self.question, theme.foreground, theme.panel);
     }
 }
 
@@ -54,16 +182,18 @@ fn join_owned(base: str8, name: str8) -> str8 {
 
 /// Filesystem chooser. Owns strings/tree storage; call release once. A successful
 /// selection returns a path in accepted_path; the application loads its format.
-pub struct OpenSessionDialog {
-    var active: bool; var accepted: bool; var accepted_path: str8;
-    var directory: str8; var path_field: TextField; var focus: PaneFocus;
+pub struct OpenSessionDialog : Dialog {
+    var accepted: bool; var accepted_path: str8;
+    var directory: str8; var path_field: TextField;
     var nodes: list<DirectoryNode>; var tree_selected: i32;
     var files: list<str8>; var file_selected: i32;
     var status: str8;
 };
 impl OpenSessionDialog {
     pub fn new() -> OpenSessionDialog {
-        return OpenSessionDialog {active: false, accepted: false, accepted_path: clone(""),
+        return OpenSessionDialog {title: "Open session", width: 90, height: 26, button_alignment: Alignment::Center,
+            buttons: [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 }],
+            active: false, accepted: false, accepted_path: clone(""),
             directory: clone(""), path_field: TextField::new(""), focus: PaneFocus::new(0),
             nodes: [], tree_selected: -1, files: [], file_selected: -1, status: ""};
     }
@@ -83,6 +213,7 @@ impl OpenSessionDialog {
     }
     /// Does not change the process working directory or write filesystem data.
     pub fn open(self: &mut Self, initial_directory: str8) -> void {
+        self.reset_buttons();
         self.active = true; self.accepted = false;
         free(self.accepted_path); self.accepted_path = clone("");
         self.focus.selected = 0; self.focus.menu_active = false;
@@ -92,7 +223,22 @@ impl OpenSessionDialog {
         self.set_root(path);
         free(path); free(working);
     }
-    pub fn cancel(self: &mut Self) -> void { self.active = false; self.accepted = false; }
+    pub fn cancel(self: &mut Self) -> void {
+        self.active = false; self.accepted = false; self.pressed_button = -1; self.result = 2;
+    }
+    pub fn tick(self: &mut Self) -> void {
+        if !self.active { return; }
+        let action: i32 = self.tick_buttons();
+        if action == 2 { self.cancel(); }
+        else if action == 1 {
+            if self.path_field.text != self.directory { self.submit_path(); }
+            else if self.file_selected >= 0 && self.file_selected < self.files.len() {
+                let target: str8 = join_owned(self.directory, self.files[self.file_selected]);
+                self.accept_file(target); free(target);
+            } else { self.status = "Select a file to open."; }
+            if self.active { self.result = 0; }
+        } else if action != 0 { self.active = false; }
+    }
     fn load_files(self: &mut Self, path: str8) -> bool {
         if is_dir(path) == 0 { self.status = "Directory does not exist or is inaccessible."; return false; }
         let directory: str8 = clone(path);
@@ -181,7 +327,7 @@ impl OpenSessionDialog {
         }
         let copy: str8 = clone(path);
         free(self.accepted_path); self.accepted_path = copy;
-        self.accepted = true; self.active = false;
+        self.accepted = true; self.active = false; self.result = 1;
     }
     pub fn submit_path(self: &mut Self) -> void {
         if len(self.path_field.text) == 0 { self.status = "Enter a directory or file path."; return; }
@@ -191,19 +337,16 @@ impl OpenSessionDialog {
         else { self.accept_file(target); }
         free(working); free(target);
     }
-    pub fn bounds(self: OpenSessionDialog, viewport: Rect) -> Rect {
-        let frame: Dialog = Dialog { title: "Open session", width: 90, height: 26 };
-        return frame.bounds(viewport);
-    }
     pub fn panes(self: OpenSessionDialog, viewport: Rect) -> list<Pane> {
         let area: Rect = self.bounds(viewport);
-        if area.width < 16 || area.height < 7 { return []; }
-        let inner: Rect = area.inset(1);
+        if area.width < 16 || area.height < 11 { return []; }
+        let inner: Rect = self.content_rect(viewport);
         let body: Rect = Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 2);
         let layout: Layout = Layout { axis: Axis::Horizontal, gap: 1, sizes: [Size::flex(1), Size::flex(2)] };
         let columns: list<Rect> = layout.split(body);
         return [Pane { id: 0, bounds: Rect::new(inner.x, inner.y, inner.width, 1), min_height: 1 },
-                Pane { id: 1, bounds: columns[0] }, Pane { id: 2, bounds: columns[1] }];
+                Pane { id: 1, bounds: columns[0] }, Pane { id: 2, bounds: columns[1] },
+                Pane { id: 3, bounds: self.button_row(viewport) }];
     }
     pub fn on_event(self: &mut Self, event: InputEvent, viewport: Rect) -> void {
         if !self.active { return; }
@@ -212,9 +355,11 @@ impl OpenSessionDialog {
         if event.kind == InputKind::Pane { self.focus.navigate(event.key, panes); return; }
         if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { self.cancel(); return; }
         if event.code == 3 ||(event.code == 99 && event.modifiers == 5) { self.cancel(); return; }
+        if self.pressed_button >= 0 { return; }
         if event.kind == InputKind::Menu && event.key == Key::Toggle {
-            self.focus.selected = (self.focus.selected + 1) % 3; return;
+            self.focus.selected = (self.focus.selected + 1) % 4; return;
         }
+        if self.focus.selected == 3 { self.on_button_event(event); return; }
         if self.focus.selected == 0 {
             if event.kind == InputKind::Menu && event.key == Key::Enter { self.submit_path(); }
             else { self.path_field.on_event(event); }
@@ -237,10 +382,9 @@ impl OpenSessionDialog {
     }
     pub fn paint(self: &mut Self, surface: Surface, viewport: Rect, theme: Theme) -> void {
         if !self.active { return; }
-        let frame: Dialog = Dialog { title: "Open session", width: 90, height: 26 };
-        let inner: Rect = frame.paint(surface, viewport, theme);
         let panes: list<Pane> = self.panes(viewport);
         self.focus.reconcile(panes);
+        let inner: Rect = self.paint_frame(surface, viewport, theme);
         if panes.len() == 0 { surface.text(inner, "Resize terminal | Esc: cancel", theme.muted, theme.panel); return; }
         let path: Pane = panes[0]; let tree: Pane = panes[1]; let files: Pane = panes[2];
         let path_active: bool = self.focus.is_active(0);

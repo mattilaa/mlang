@@ -98,6 +98,7 @@ fn main() -> i32 {
     var focus: PaneFocus = PaneFocus::new(0);
     var input: InputDecoder = InputDecoder::new();
     var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    var question: QuestionDialog = QuestionDialog::new("New session", "Start a new session?");
     var message: str8 = clone("Select a command from the menu.");
     var running: bool = true;
     var dirty: bool = true;
@@ -105,16 +106,27 @@ fn main() -> i32 {
     var previous_height: i32 = 0;
     var escape_ticks: i32 = 0;
     while running {
+        if dialog.active && dialog.pressed_button >= 0 {
+            dialog.tick(); dirty = true;
+            if dialog.accepted { free(message); message = format!("Selected: {}", dialog.accepted_path); }
+        }
+        if question.active && question.pressed_button >= 0 {
+            question.tick(); dirty = true;
+            if !question.active {
+                free(message); message = clone(question.result == 1 ? "New session confirmed." : "New session cancelled.");
+            }
+        }
         let area: Rect = terminal_bounds();
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active(menus.active >= 0 || dialog.active);
+        focus.set_menu_active(menus.active >= 0 || dialog.active || question.active);
         if dirty || area.width != previous_width || area.height != previous_height {
             let surface: Surface = Surface::new(area.width, area.height);
             if !surface.is_valid() { dialog.release(); free(message); terminal.finish(); return 1; }
             paint_demo(surface, menus, focus, panes, message);
             dialog.paint(surface, area, Theme::dark_blue());
+            question.paint(surface, area, Theme::dark_blue());
             terminal.present(surface);
             surface.release();
             previous_width = area.width;
@@ -135,7 +147,12 @@ fn main() -> i32 {
             let event: InputEvent = input.feed(byte);
             escape_ticks = 0;
             var command: i32 = 0;
-            if dialog.active {
+            if question.active {
+                question.on_event(event);
+                if !question.active { free(message); message = clone("New session cancelled."); }
+                dirty = true;
+            }
+            else if dialog.active {
                 if event.kind != InputKind::None || event.code != 0 {
                     dialog.on_event(event, area);
                     focus.set_menu_active(dialog.active);
@@ -156,6 +173,7 @@ fn main() -> i32 {
                 dirty = true;
             }
             if command == 99 { running = false; }
+            else if command == 1 { question.open(); focus.set_menu_active(true); }
             else if command == 2 {
                 dialog.open("");
                 focus.set_menu_active(true);
@@ -169,7 +187,12 @@ fn main() -> i32 {
             escape_ticks = escape_ticks + 1;
             if escape_ticks >= 5 {
                 let event: InputEvent = input.expire();
-                if dialog.active {
+                if question.active {
+                    question.on_event(event);
+                    if !question.active { free(message); message = clone("New session cancelled."); }
+                    dirty = true;
+                }
+                else if dialog.active {
                     dialog.on_event(event, area);
                     focus.set_menu_active(dialog.active);
                     dirty = true;

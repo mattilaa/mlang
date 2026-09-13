@@ -3,6 +3,7 @@ use tui::geometry::Rect;
 use tui::geometry::wide;
 
 pub enum Axis { Horizontal, Vertical };
+pub enum Alignment { Start, Center, End };
 /// Positive fixed cells take priority; remaining cells are divided by weight.
 pub struct Size { var cells: i32; var weight: i32; };
 impl Size {
@@ -13,7 +14,10 @@ impl Size {
         return Size { cells: 0, weight: weight < 1 ? 1 : weight };
     }
 }
-pub struct Layout { var axis: Axis; var gap: i32; var sizes: list<Size>; };
+pub struct Layout {
+    var axis: Axis; var gap: i32; var sizes: list<Size>;
+    var alignment: Alignment;
+};
 impl Layout {
     /// Split a rectangle; feed any returned rectangle to another layout to nest.
     /// Under pressure fixed sizes shrink in declaration order; no child escapes.
@@ -34,6 +38,12 @@ impl Layout {
         }
         var flexible: i32 = fixed_total >= wide(remaining) ? 0 : remaining - i32(fixed_total);
         var offset: i32 = 0;
+        // Alignment distributes unused space on the layout's main axis.
+        if weights == 0 && fixed_total + gap_total < wide(extent) {
+            let spare: i32 = extent - i32(fixed_total + gap_total);
+            if self.alignment == Alignment::Center { offset = spare / 2; }
+            if self.alignment == Alignment::End { offset = spare; }
+        }
         for size in sizes {
             var length: i32 = size.cells < 0 ? 0 : size.cells;
             if size.weight > 0 && weights > 0 {
