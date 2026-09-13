@@ -45,10 +45,17 @@ pub struct TableColumn {
     var title: str8; var width: i32;
     var read_only: bool{false}; var value_type: str8{"str8"};
     var pattern: str8{""};
+    var nullable: bool{false};
     var bounded: bool{false}; var minimum: i64; var maximum: i64;
 };
 impl TableColumn {
     pub fn validate(self: TableColumn, text: str8) -> bool {
+        if self.nullable && text == "" {
+            return self.value_type == "str8" || self.value_type == "bool" ||
+                self.value_type == "i8" || self.value_type == "u8" ||
+                self.value_type == "i16" || self.value_type == "u16" ||
+                self.value_type == "i32" || self.value_type == "u32" || self.value_type == "i64";
+        }
         if self.value_type == "str8" {
             if self.bounded { return false; }
         } else if self.value_type == "bool" {

@@ -140,6 +140,12 @@ fn main() -> i32 {
             }
             received_input = true;
             let event: InputEvent = input.feed(byte);
+            // dd is consecutive input in the active sequence, never across a
+            // menu, dialog, pane switch, or unrelated key.
+            if event.kind != InputKind::None || event.code != 0 {
+                if menus.active >= 0 || dialog.active || question.active || focus.selected != 1 ||
+                        event.code != 100 || event.modifiers != 1 { table.delete_pending = false; }
+            }
             escape_ticks = 0;
             var command: i32 = 0;
             if question.active {
@@ -199,6 +205,7 @@ fn main() -> i32 {
             escape_ticks = escape_ticks + 1;
             if escape_ticks >= 5 {
                 let event: InputEvent = input.expire();
+                table.delete_pending = false;
                 if question.active {
                     question.on_event(event);
                     if !question.active { free(message); message = clone("New session cancelled."); }

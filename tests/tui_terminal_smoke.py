@@ -121,6 +121,25 @@ def main():
         read_frame(1, table_text=((47, 3), "qhjk track"))
         os.write(master, b"bb")
         read_frame(1, table_cell=((31, 3), (60, 91, 128)))
+        # Empty note commits as a rest; clearing preserves ROW, dd removes it.
+        os.write(master, b"\r\x15\r")
+        read_frame(1, table_text=((31, 3), "   "))
+        os.write(master, b"\x1b[127;2u")
+        read_frame(1, table_text=((40, 3), "   "))
+        os.write(master, b"d")
+        read_frame(1, table_text=((31, 3), "   "))
+        os.write(master, b"d")
+        read_frame(1, table_text=((31, 3), "C-4"))
+        os.write(master, b"j" * 70)
+        frame = read_frame(1)
+        assert b"063" in frame and b"064" not in frame
+        os.write(master, b"k" * 70)
+        read_frame(1)
+        # dd in an inline editor is text, not a row command.
+        os.write(master, b"ww\r\x15dd\r")
+        read_frame(1, table_text=((47, 3), "dd"))
+        os.write(master, b"bb")
+        read_frame(1)
         # Menu navigation must not mutate the underlying table, even after
         # scrolling beyond its viewport; column and pane keys are captured too.
         os.write(master, b"\t")

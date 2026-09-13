@@ -1,0 +1,165 @@
+/// Editable sequence used by tui_demo; not part of the reusable TUI library.
+mod tui::table;
+mod tui::textfield;
+use tui::table::*;
+use tui::textfield::TextField;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::input::*;
+use tui::menu::Key;
+use std::strbuf::clone;
+use std::strbuf::free;
+pub struct SequenceTable : Table {
+    var notes: array<str8, 128>;
+    var editor: TextField; var editing: bool; var error: str8;
+    var delete_pending: bool;
+};
+impl SequenceTable {
+pub fn new() -> SequenceTable {
+    // std::array is compiler-provided; array<T, N> needs no module import.
+    var midi: array<str8, 128> = {};
+    let names: array<str8, 12> = {"C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"};
+    for i in 0..128 { midi.push(format!("{}{}", names[i % 12], i / 12 - 1)); }
+    var rows: list<TableRow> = [];
+    for i in 0..64 {
+        let number: str8 = format!("{}{}", i < 9 ? "00" : "0", i + 1);
+        rows.push(TableRow { cells: [number, clone("C-4"), clone("100"), clone("Keys")] });
+    }
+    return SequenceTable { columns: [TableColumn { title: "ROW", width: 7, read_only: true, value_type: "u32" },
+        TableColumn { title: "NOTE", width: 9, value_type: "str8", pattern: "[A-G][#-]-?[0-9]", nullable: true },
+        TableColumn { title: "VEL", width: 7, value_type: "i32", bounded: true, minimum: 0, maximum: 127, nullable: true },
+        TableColumn { title: "TRACK", width: 16, value_type: "str8", nullable: true }], rows: rows,
+        selected_column: 1, notes: midi, editor: TextField::new(""), error: "" };
+}
+pub fn release(self: &mut Self) -> void {
+    let rows: list<TableRow> = self.rows;
+    for row in rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
+    let notes: array<str8, 128> = self.notes;
+    for note in notes { free(note); }
+    self.editor.release();
+}
+fn note_index(self: SequenceTable, value: str8) -> i32 {
+    for i in 0..128 { if self.notes[i] == value { return i32(i); } }
+    return -1;
+}
+fn commit(self: &mut Self, value: str8) -> bool {
+    if !self.can_set(self.selected_row, self.selected_column, value) { self.error = "Invalid type or outside column limits"; return false; }
+    if self.selected_column == 1 && value != "" {
+        if self.note_index(value) < 0 { self.error = "Expected MIDI note C--1 through G-9"; return false; }
+    }
+    let row: TableRow = self.rows[self.selected_row];
+    let old: str8 = row.cells[self.selected_column];
+    let copy: str8 = clone(value);
+    if !self.set_cell(self.selected_row, self.selected_column, copy) { free(copy); return false; }
+    free(old); self.error = ""; return true;
+}
+pub fn clear_row(self: &mut Self) -> void {
+    if self.selected_row < 0 || self.selected_row >= self.rows.len() { return; }
+    let row: TableRow = self.rows[self.selected_row];
+    // Validate the complete operation before changing any cell.
+    for c in 0..self.columns.len() {
+        let column: TableColumn = self.columns[c];
+        if !column.read_only {
+            if !self.can_set(self.selected_row, i32(c), "") { self.error = "Column does not allow an empty value"; return; }
+        }
+    }
+    for c in 0..self.columns.len() {
+        let column: TableColumn = self.columns[c];
+        if !column.read_only {
+            let empty: str8 = clone("");
+            self.set_cell(self.selected_row, i32(c), empty); free(row.cells[c]);
+        }
+    }
+    self.error = "";
+}
+pub fn delete_row(self: &mut Self, area: Rect) -> void {
+    if self.selected_row < 0 || self.selected_row >= self.rows.len() { return; }
+    let previous: list<TableRow> = self.rows;
+    var kept: list<TableRow> = [];
+    for i in 0..previous.len() {
+        let row: TableRow = previous[i];
+        let cells: list<str8> = row.cells;
+        if i == self.selected_row {
+            for cell in cells { free(cell); }
+        } else {
+            var replacement: list<str8> = [];
+            let index: i32 = i32(kept.len());
+            replacement.push(format!("{}{}", index < 9 ? "00" : "0", index + 1));
+            for c in 1..cells.len() { replacement.push(cells[c]); }
+            free(cells[0]); kept.push(TableRow { cells: replacement });
+        }
+    }
+    self.rows = kept; self.error = ""; self.delete_pending = false;
+    self.reconcile(area);
+}
+pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
+    if event.kind == InputKind::None && event.code == 0 { return false; }
+    if self.editing {
+        self.delete_pending = false;
+        if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 {
+            self.editing = false; self.error = ""; return true;
+        }
+        if event.kind == InputKind::Menu && event.key == Key::Enter {
+            if self.commit(self.editor.text) { self.editing = false; }
+        } else { self.editor.on_event(event); }
+        return true;
+    }
+    let delete_key: bool = event.modifiers == 1 && event.code == 100;
+    if !delete_key { self.delete_pending = false; }
+    self.reconcile(area);
+    if self.selected_row < 0 || self.selected_column < 0 { return self.on_event(event, area); }
+    if delete_key {
+        if self.delete_pending { self.delete_row(area); }
+        else { self.delete_pending = true; }
+        return true;
+    }
+    if event.modifiers == 2 && (event.code == 8 || event.code == 127) {
+        self.clear_row(); return true;
+    }
+    let row: TableRow = self.rows[self.selected_row];
+    if event.kind == InputKind::Menu && event.key == Key::Enter {
+        self.editor.set_text(row.cells[self.selected_column]); self.editing = true; self.error = ""; return true;
+    }
+    var delta: i32 = 0;
+    if event.modifiers == 1 || event.modifiers == 2 {
+        if event.code == 74 || (event.modifiers == 2 && event.code == 106) { delta = -1; }
+        if event.code == 75 || (event.modifiers == 2 && event.code == 107) { delta = 1; }
+    }
+    if delta != 0 {
+        if row.cells[self.selected_column] == "" {
+            if self.selected_column == 1 { self.commit("C-4"); }
+            else {
+                let column: TableColumn = self.columns[self.selected_column];
+                if column.value_type != "str8" && column.value_type != "bool" {
+                    let initial: str8 = format!("{}", column.bounded ? column.minimum : 0);
+                    self.commit(initial); free(initial);
+                }
+            }
+            return true;
+        }
+        if self.selected_column == 1 {
+            let next: i32 = self.note_index(row.cells[1]) + delta;
+            if next >= 0 && next < 128 { self.commit(self.notes[next]); }
+        } else {
+            let column: TableColumn = self.columns[self.selected_column];
+            if column.value_type != "str8" && column.value_type != "bool" {
+                let parsed: result<i64, str8> = table_integer(row.cells[self.selected_column]);
+                if parsed.is_ok() {
+                    let value: i64 = parsed.unwrap();
+                    if delta > 0 && value == 9223372036854775807 { return true; }
+                    if delta < 0 && value == -9223372036854775807 - 1 { return true; }
+                    let text: str8 = format!("{}", value + delta);
+                    if column.validate(text) { self.commit(text); }
+                    free(text);
+                }
+            }
+        }
+        return true;
+    }
+    return self.on_event(event, area);
+}
+pub fn paint_editor(self: SequenceTable, surface: Surface, area: Rect, theme: Theme) -> void {
+    if self.editing { self.editor.paint(surface, self.selected_rect(area), theme.foreground, theme.selection, true); }
+}
+}

@@ -213,6 +213,21 @@ and TRACK accepts text.
   discards the draft. Invalid input stays editable with an Inspector error.
 - While editing, text including q/w/b/j/k and spaces is literal input. Ctrl+U
   clears the draft. Pane/menu navigation is suspended until commit or cancel.
+- Columns can opt into `nullable: true`: an empty string represents no value
+  and bypasses the value regex/range checks, but unsupported types still fail.
+  NOTE, VEL, and TRACK enable this in the demo. An empty NOTE means a rest.
+  Enter, Ctrl+U, Enter clears a single cell.
+- Shift+Backspace clears all editable cells in the selected row, preserving its
+  read-only ROW number. `dd` deletes the row, shifts following rows upward, and
+  renumbers ROW. Selection and scrolling are clamped, including an empty table.
+  The two d keys must be consecutive; another key, menu, or pane switch cancels
+  the pending command. Inside the cell editor, `dd` is ordinary text.
+- Adjusting an empty note with Shift+J/K initializes it to C-4; an empty integer
+  starts at its column minimum (or zero without limits).
+
+Shift+Backspace requires a terminal that reports the modifier (CSI-u or
+modifyOtherKeys). If it sends the same byte as plain Backspace, the shortcut
+cannot be distinguished; plain Backspace never clears a whole row.
 
 The demo edits display data only; it does not send changes to an audio engine.
 

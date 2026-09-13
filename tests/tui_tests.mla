@@ -35,6 +35,48 @@ fn tui_column_validation() {
 }
 
 #[test]
+fn tui_sequence_empty_clear_delete() {
+    var column: TableColumn = TableColumn { title: "VEL", width: 7, value_type: "i32", nullable: true,
+        bounded: true, minimum: 0, maximum: 127 };
+    verify(column.validate("") && !column.validate(" ") && !column.validate("128"));
+    column.nullable = false; verify(!column.validate(""));
+    column.nullable = true; column.value_type = "unknown"; verify(!column.validate(""));
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(0, 0, 40, 10);
+    table.edit_event(decode_input("\x7f"), area);
+    let unchanged: TableRow = table.rows[0]; verify(unchanged.cells[1] == "C-4" && unchanged.cells[2] == "100");
+    table.edit_event(decode_input("\r"), area);
+    table.edit_event(decode_input("\x1b[127;2u"), area);
+    let editing_row: TableRow = table.rows[0]; verify(editing_row.cells[1] == "C-4" && editing_row.cells[2] == "100");
+    table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area);
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("");
+    table.edit_event(decode_input("\r"), area);
+    let empty: TableRow = table.rows[0]; verify(!table.editing && empty.cells[1] == "" && empty.cells[2] == "100");
+    table.edit_event(decode_input("K"), area);
+    let initialized: TableRow = table.rows[0]; verify(initialized.cells[1] == "C-4");
+    table.edit_event(decode_input("\x1b[127;2u"), area);
+    let cleared: TableRow = table.rows[0];
+    verify(cleared.cells[0] == "001" && cleared.cells[1] == "" && cleared.cells[2] == "" && cleared.cells[3] == "");
+    verify(table.rows.len() == 64);
+    table.edit_event(decode_input("K"), area);
+    table.edit_event(decode_input("w"), area); table.edit_event(decode_input("J"), area);
+    let numeric: TableRow = table.rows[0]; verify(numeric.cells[2] == "0");
+    table.edit_event(decode_input("d"), area); verify(table.rows.len() == 64);
+    table.edit_event(decode_input("j"), area); table.edit_event(decode_input("d"), area);
+    verify(table.rows.len() == 64);
+    table.edit_event(decode_input("d"), area); verify(table.rows.len() == 63 && table.selected_row == 1);
+    let renumbered: TableRow = table.rows[1]; verify(renumbered.cells[0] == "002");
+    table.selected_row = 62;
+    table.edit_event(decode_input("d"), area); table.edit_event(decode_input("d"), area);
+    verify(table.rows.len() == 62 && table.selected_row == 61);
+    for _i in 0..62 { table.delete_row(area); }
+    verify(table.rows.len() == 0 && table.selected_row == -1 && table.scroll_y == 0);
+    table.clear_row(); table.delete_row(area);
+    table.edit_event(decode_input("d"), area); table.edit_event(decode_input("d"), area);
+    table.release();
+}
+
+#[test]
 fn tui_sequence_editing() {
     var table: SequenceTable = SequenceTable::new();
     let area: Rect = Rect::new(0, 0, 40, 10);
