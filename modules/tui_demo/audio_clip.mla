@@ -10,15 +10,25 @@ pub struct WavePeak {
     var left: i32; var right: i32;
     var left_body: i32; var right_body: i32;
 };
-/// One clip at row zero. Peaks are immutable after import; source is owned.
-pub struct AudioClip { var peaks: list<WavePeak>; var source: str8; };
+/// Decoded sample data, independent of pattern placements. Source is owned.
+pub struct AudioClip {
+    var peaks: list<WavePeak>; var source: str8;
+    // Immutable decoded data can be shared by pattern snapshots.
+    var samples: list<f32>; var channels: i64; var sample_rate: i64;
+    var frames: i64; var frames_per_row: i64;
+    var detail_peaks: list<WavePeak>;
+};
 impl AudioClip {
     pub fn copy(self: AudioClip) -> AudioClip {
         var copy: AudioClip = AudioClip {};
+        copy.samples = self.samples; copy.channels = self.channels; copy.sample_rate = self.sample_rate;
+        copy.frames = self.frames; copy.frames_per_row = self.frames_per_row;
         if self.peaks.len() > 0 {
             copy.source = clone(self.source);
             let peaks: list<WavePeak> = self.peaks;
             for peak in peaks { copy.peaks.push(peak); }
+            let details: list<WavePeak> = self.detail_peaks;
+            for peak in details { copy.detail_peaks.push(peak); }
         }
         return copy;
     }
@@ -38,6 +48,8 @@ impl AudioClip {
         if count > 16384 { audio.close(); return Err<AudioClip, str8>("Audio exceeds 16384 pattern rows"); }
         let samples: list<f32> = audio.samples(); audio.close();
         var clip: AudioClip = AudioClip { source: clone(path) };
+        clip.channels = channels; clip.sample_rate = rate;
+        clip.frames = frames; clip.frames_per_row = step;
         for row in 0..count {
             var left: f32 = 0.0f; var right: f32 = 0.0f;
             var left_sum: f32 = 0.0f; var right_sum: f32 = 0.0f;
@@ -53,7 +65,21 @@ impl AudioClip {
             clip.peaks.push(WavePeak { left: i32(left * 1000.0f), right: i32(right * 1000.0f),
                 left_body: i32(left_sum / f32(end - start) * 1000.0f),
                 right_body: i32(right_sum / f32(end - start) * 1000.0f) });
+            // Four chronological slices occupy the four dot rows of a cell.
+            for part in 0..4 {
+                let a: i64 = start + part * step / 4;
+                let stop: i64 = start + (part + 1) * step / 4;
+                let b: i64 = stop < end ? stop : end;
+                var l: f32 = 0.0f; var r: f32 = 0.0f;
+                for frame in a..b {
+                    let lv: f32 = samples[frame * channels]; let rv: f32 = samples[frame * channels + channels - 1];
+                    let la: f32 = lv < 0.0f ? -lv : lv; let ra: f32 = rv < 0.0f ? -rv : rv;
+                    if la > l { l = la; } if ra > r { r = ra; }
+                }
+                clip.detail_peaks.push(WavePeak { left: i32(l * 1000.0f), right: i32(r * 1000.0f) });
+            }
         }
+        clip.samples = samples;
         return Ok<AudioClip, str8>(clip);
     }
 }

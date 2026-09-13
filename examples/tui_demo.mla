@@ -21,6 +21,8 @@ mod tui_demo::patterns;
 use tui_demo::patterns::PatternLibrary;
 mod tui_demo::transport;
 use tui_demo::transport::TransportStatus;
+mod tui_demo::sample_view;
+use tui_demo::sample_view::SampleView;
 use std::strbuf::clone;
 use std::strbuf::free;
 use std::io::stdin;
@@ -51,7 +53,14 @@ fn demo_menus() -> MenuBar {
                 MenuItem { label: "Solid bars", action: 40, enabled: true },
                 MenuItem { label: "Grainy (osc)", action: 41, enabled: true }]),
             MenuItem { label: "Show patterns", action: 42, enabled: true },
-            MenuItem { label: "Show song", action: 43, enabled: true }] },
+            MenuItem { label: "Show song", action: 43, enabled: true },
+            MenuItem::submenu("Sample view", [
+                MenuItem { label: "Normal", action: 70, enabled: true },
+                MenuItem { label: "Grainy", action: 71, enabled: true },
+                MenuItem::submenu("Type", [
+                    MenuItem { label: "Filled blocks", action: 72, enabled: true },
+                    MenuItem { label: "Wave (osc)", action: 73, enabled: true }]) ]),
+            MenuItem { label: "Audio", action: 44, enabled: true }] },
         Menu { title: "Track", items: [
             MenuItem { label: "Rename", action: 20, enabled: true },
             MenuItem::submenu("Create track", [
@@ -86,26 +95,36 @@ fn demo_panes(content: Rect) -> list<Pane> {
             Pane { id: 2, bounds: right[1] }];
 }
 
-fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: Mixer, patterns: &PatternLibrary, transport: TransportStatus) -> void {
+fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView) -> void {
     let theme: Theme = Theme::dark_blue();
     surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
     let library: Pane = panes[0];
     let editor: Pane = panes[1];
     let inspector: Pane = panes[2];
-    let sidebar: Panel = Panel { title: patterns.song_mode ? " Song " : " Patterns " };
+    let sidebar: Panel = Panel { title: patterns.audio_mode ? " Audio " : (patterns.song_mode ? " Song " : " Patterns ") };
     let left: Rect = sidebar.paint_focused(surface, library.bounds, theme, focus.is_active(0));
-    patterns.view.paint(surface, left, theme);
+    if patterns.audio_mode { patterns.audio.view.paint(surface, left, theme); }
+    else { patterns.view.paint(surface, left, theme); }
     let title: str8 = format!(" Pattern / {} {} ", patterns.active_id, patterns.active_name());
     let sequence: Panel = Panel { title: title };
     let top: Rect = sequence.paint_focused(surface, editor.bounds, theme, focus.is_active(1));
     free(title);
     table.paint(surface, top, theme);
-    table.paint_audio(surface, top, theme);
+    table.paint_audio_style(surface, top, theme, sample.grainy, sample.wave);
     table.paint_editor(surface, top, theme);
-    let details: Panel = Panel { title: mixer.visible ? " Mixer (demo levels) " : " Inspector " };
+    let show_sample: bool = sample.visible && table.audio_under_cursor();
+    let details: Panel = Panel { title: show_sample ? " Sample " : (mixer.visible ? " Mixer (demo levels) " : " Inspector ") };
     let bottom: Rect = details.paint_focused(surface, inspector.bounds, theme, focus.is_active(2));
     let label: Label = Label { text: patterns.error != "" ? patterns.error : (table.error != "" ? table.error : (table.editing ? "Editing: Enter saves | Esc cancels" : message)) };
-    if mixer.visible {
+    if show_sample {
+        let track: SequenceTrack = table.tracks[table.active_track()];
+        let instance: AudioInstance = track.instances[track.instance_at(table.selected_row)];
+        sample.paint(surface, bottom, theme, instance.clip, table.selected_row - instance.start_row);
+        if (patterns.error != "" || table.error != "") && bottom.height > 0 {
+            surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
+        }
+    }
+    else if mixer.visible {
         mixer.paint(surface, bottom, theme, table.tracks, table.active_track());
         if (patterns.error != "" || table.error != "") && bottom.height > 0 {
             surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
@@ -127,6 +146,7 @@ fn main() -> i32 {
     var library: PatternLibrary = PatternLibrary::new();
     let transport: TransportStatus = TransportStatus {};
     var mixer: Mixer = Mixer { visible: false, phase: 0 };
+    var sample: SampleView = SampleView {};
     var mixer_ticks: i32 = 0;
     var question: QuestionDialog = QuestionDialog::new("New session", "Start a new session?");
     var message: str8 = clone("Select a command from the menu.");
@@ -137,14 +157,15 @@ fn main() -> i32 {
     var escape_ticks: i32 = 0;
     var confirm_track_action: i32 = 0;
     while running {
-        if mixer.visible && menus.active < 0 && !dialog.active && !question.active && !library.table.editing && !library.renaming {
+        if sample.visible && !library.table.audio_under_cursor() { sample.visible = false; dirty = true; }
+        if mixer.visible && !sample.visible && menus.active < 0 && !dialog.active && !question.active && !library.table.editing && !library.renaming {
             mixer_ticks = mixer_ticks + 1;
             if mixer_ticks >= 10 { mixer.tick(); mixer_ticks = 0; dirty = true; }
         }
         if dialog.active && dialog.pressed_button >= 0 {
             dialog.tick(); dirty = true;
             if dialog.accepted {
-                if adding_audio { library.table.import_audio(dialog.accepted_path, transport.bpm, terminal_bounds()); }
+                if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, terminal_bounds()); }
                 free(message); message = format!("Selected: {}", dialog.accepted_path);
             }
         }
@@ -168,7 +189,8 @@ fn main() -> i32 {
             if !surface.is_valid() { library.release(); dialog.release(); free(message); terminal.finish(); return 1; }
             library.table.reconcile(panes[1].bounds.inset(1));
             library.view.reconcile(panes[0].bounds.inset(1));
-            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport);
+            library.audio.view.reconcile(panes[0].bounds.inset(1));
+            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample);
             dialog.paint(surface, area, Theme::dark_blue());
             question.paint(surface, area, Theme::dark_blue());
             library.table.paint_track_dialog(surface, area, Theme::dark_blue());
@@ -195,7 +217,7 @@ fn main() -> i32 {
             // menu, dialog, pane switch, or unrelated key.
             if event.kind != InputKind::None || event.code != 0 {
                 if menus.active >= 0 || dialog.active || question.active || library.table.editing || library.renaming || focus.selected != 0 ||
-                        event.kind == InputKind::Pane || (event.kind == InputKind::Menu && event.key == Key::Toggle) { library.view.cancel_pending(); }
+                        event.kind == InputKind::Pane || (event.kind == InputKind::Menu && event.key == Key::Toggle) { library.view.cancel_pending(); library.audio.view.cancel_pending(); }
                 if menus.active >= 0 || dialog.active || question.active || focus.selected != 1 ||
                         event.code != 100 || event.modifiers != 1 { library.table.delete_pending = false; }
                 if menus.active >= 0 || dialog.active || question.active || focus.selected != 1 ||
@@ -216,7 +238,7 @@ fn main() -> i32 {
                     dialog.on_event(event, area);
                     focus.set_menu_active(dialog.active);
                     if dialog.accepted {
-                        if adding_audio { library.table.import_audio(dialog.accepted_path, transport.bpm, panes[1].bounds.inset(1)); }
+                        if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, panes[1].bounds.inset(1)); }
                         free(message);
                         message = format!("Selected: {}", dialog.accepted_path);
                     }
@@ -249,6 +271,13 @@ fn main() -> i32 {
             } else if event.kind == InputKind::Pane {
                 focus.navigate(event.key, panes);
                 dirty = true;
+            } else if event.code == 115 && event.modifiers == 1 && (focus.selected == 1 || focus.selected == 2) {
+                if library.table.audio_under_cursor() { sample.visible = !sample.visible; dirty = true; }
+            } else if event.modifiers == 5 && (event.code == 104 || event.code == 108) &&
+                (focus.selected == 1 || focus.selected == 2) && sample.visible && library.table.audio_under_cursor() {
+                let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
+                if sample.on_event(event, instance.clip, panes[2].bounds.width - 2) { dirty = true; }
             } else if focus.selected == 1 {
                 if library.table.edit_event(event, panes[1].bounds.inset(1)) { dirty = true; }
             } else if focus.selected == 0 {
@@ -265,15 +294,9 @@ fn main() -> i32 {
                 focus.set_menu_active(true);
             }
             else if command == 60 {
-                let selected: i32 = library.table.active_track();
-                if selected >= 0 {
-                    let track: SequenceTrack = library.table.tracks[selected];
-                    if track.audio {
-                        adding_audio = true; dialog.title = "Add audio";
-                        dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
-                        dialog.open("");
-                    } else { library.table.error = "Select an AUDIO track first"; }
-                }
+                adding_audio = true; dialog.title = "Add audio";
+                dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
+                dialog.open(""); focus.set_menu_active(true);
             }
             else if command == 22 || command == 24 {
                 confirm_track_action = command;
@@ -284,11 +307,14 @@ fn main() -> i32 {
             else if command == 42 || command == 43 {
                 library.show_song(command == 43);
             }
+            else if command == 44 { library.show_audio(); }
             else if command == 50 || command == 53 { library.add(command == 53); }
             else if command == 51 {
                 library.editor.set_text(library.active_name()); library.renaming = true; library.error = "";
             }
             else if command == 52 { library.remove_active(panes[0].bounds.inset(1)); }
+            else if command == 70 || command == 71 { sample.grainy = command == 71; }
+            else if command == 72 || command == 73 { sample.wave = command == 73; }
             else if command == 40 || command == 41 {
                 mixer.grainy = command == 41;
                 free(message); message = clone(mixer.grainy ? "Meter style: grainy (osc)" : "Meter style: solid bars");
@@ -309,6 +335,7 @@ fn main() -> i32 {
                 library.table.delete_pending = false;
                 library.table.top_pending = false;
                 library.view.cancel_pending();
+                library.audio.view.cancel_pending();
                 if library.renaming { library.rename_event(event); dirty = true; }
                 else if question.active {
                     question.on_event(event);

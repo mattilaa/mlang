@@ -27,6 +27,84 @@ mod tui_demo::transport;
 use tui_demo::transport::TransportStatus;
 mod tui_demo::waveform;
 use tui_demo::waveform::paint_wave_channel;
+use tui_demo::waveform::paint_grainy_row;
+mod tui_demo::sample_view;
+use tui_demo::sample_view::SampleView;
+use tui_demo::audio_clip::*;
+
+#[test]
+fn tui_loaded_audio_and_instances() {
+    let mixer: Mixer = Mixer {}; let sample: SampleView = SampleView {};
+    verify(mixer.grainy && sample.grainy);
+    var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 100, 12);
+    verify(library.load_audio("examples/fft_example/illusion.wav", 120, area));
+    verify(library.audio_mode && library.audio.samples.len() == 1 && library.table.tracks.len() == 3);
+    let label: ListItem = library.audio.view.items[0]; verify(label.label == "1 illusion.wav");
+    library.on_event(decode_input("\r"), area); verify(library.table.error == "Select an AUDIO track first");
+    library.table.create_track_kind(false, true, area); library.table.selected_row = 10;
+    verify(library.insert_selected_audio(area));
+    let loaded: AudioClip = library.audio.samples[0]; let duration: i32 = i32(loaded.peaks.len());
+    verify(library.table.rows.len() == duration + 10);
+    let first_track: SequenceTrack = library.table.tracks[3]; let first: AudioInstance = first_track.instances[0];
+    verify(first.start_row == 10 && first_track.instance_at(9) == -1 && first_track.instance_at(10) == 0);
+    library.table.selected_row = 9; verify(!library.table.audio_under_cursor());
+    library.table.selected_row = 11;
+    verify(!library.insert_selected_audio(area)); // overlap must not replace anything
+    verify(library.table.edit_event(decode_input("\x7f"), area));
+    verify(!library.table.audio_under_cursor() && library.audio.samples.len() == 1 && library.table.track_columns(3) == 2);
+    library.table.selected_row = 20; library.on_event(decode_input("\r"), area);
+    library.table.selected_row = 20 + duration; library.on_event(decode_input("\r"), area);
+    let repeated: SequenceTrack = library.table.tracks[3]; verify(repeated.instances.len() == 2);
+    verify(repeated.instance_at(20) == 0 && repeated.instance_at(20 + duration) == 1);
+    library.select(2); verify(!library.table.audio_under_cursor());
+    library.select(1); verify(library.table.audio_under_cursor());
+    library.table.edit_event(decode_input("\x08"), area);
+    let remaining: SequenceTrack = library.table.tracks[3]; verify(remaining.instances.len() == 1 && remaining.instance_at(20) == 0);
+    verify(library.audio.samples.len() == 1 && library.table.track_columns(3) == 3);
+    library.table.selected_row = 20;
+    let surface: Surface = Surface::new(100, 12);
+    library.table.reconcile(area); library.table.paint(surface, area, Theme::dark_blue());
+    library.table.paint_audio_style(surface, area, Theme::dark_blue(), true, false);
+    surface.release(); library.release();
+}
+
+#[test]
+fn tui_grainy_waveform_time_slices() {
+    let surface: Surface = Surface::new(4, 1); let area: Rect = surface.bounds();
+    let details: list<WavePeak> = [WavePeak { right: 1000 }, WavePeak { right: 0 },
+        WavePeak { right: 1000 }, WavePeak { right: 0 }];
+    paint_grainy_row(surface, Rect::new(0, 0, 2, 1), area, details, 0, false, 3, 2, false);
+    let first: Cell = surface.cell(0, 0); let second: Cell = surface.cell(1, 0);
+    verify(first.glyph == 0x282d && second.glyph == 0x282d);
+    paint_grainy_row(surface, Rect::new(2, 0, 2, 1), area, details, 0, false, 3, 2, true);
+    let edge: Cell = surface.cell(3, 0); verify(edge.glyph == 0x2828);
+    surface.release();
+}
+
+#[test]
+fn tui_horizontal_sample_zoom_and_render() {
+    var clip: AudioClip = AudioClip { channels: 1, sample_rate: 8, frames: 32, frames_per_row: 8 };
+    for i in 0..32 { clip.samples.push(i % 2 == 0 ? -1.0f : 1.0f); }
+    var view: SampleView = SampleView { grainy: false };
+    verify(view.span(clip, 8) == 32 && view.start(clip, 0, 8) == 0);
+    view.on_event(decode_input("\x1b[108;5u"), clip, 10);
+    verify(view.span(clip, 8) == 16 && view.start(clip, 2, 8) == 8);
+    view.on_event(decode_input("\x1b[108;5u"), clip, 10);
+    verify(view.span(clip, 8) == 8 && view.start(clip, 3, 8) == 20);
+    view.on_event(decode_input("\x1b[108;5u"), clip, 10); verify(view.zoom == 2);
+    verify(!view.on_event(decode_input("\x1b[108;6u"), clip, 10));
+    verify(!view.on_event(decode_input("\x08"), clip, 10));
+    view.on_event(decode_input("\x1b[104;5u"), clip, 10); verify(view.zoom == 1);
+    let surface: Surface = Surface::new(18, 6); let theme: Theme = Theme::dark_blue();
+    view.wave = true; view.zoom = 20;
+    view.paint(surface, surface.bounds(), theme, clip, 1);
+    let signed_low: Cell = surface.cell(2, 5); verify(signed_low.glyph == 0x25cf);
+    view.grainy = true;
+    view.paint(surface, surface.bounds(), theme, clip, 0);
+    let dots: Cell = surface.cell(2, 5); verify(dots.glyph >= 0x2800 && dots.glyph <= 0x28ff);
+    view.paint(surface, Rect::new(0, 0, 1, 1), theme, clip, 0);
+    surface.release();
+}
 
 #[test]
 fn tui_waveform_fractional_edges() {
@@ -55,7 +133,11 @@ fn tui_audio_import_and_waveform() {
     verify(!table.import_audio("modules/tui/README.md", 120, area));
     verify(table.import_audio("examples/fft_example/illusion.wav", 120, area));
     let track: SequenceTrack = table.tracks[3];
-    verify(track.clip.peaks.len() > 64 && table.rows.len() == track.clip.peaks.len());
+    let audio: AudioInstance = track.instances[0];
+    verify(audio.clip.detail_peaks.len() == audio.clip.peaks.len() * 4);
+    verify(audio.clip.samples.len() == audio.clip.frames * audio.clip.channels);
+    verify(table.audio_under_cursor());
+    verify(audio.clip.peaks.len() > 64 && table.rows.len() == audio.clip.peaks.len());
     verify(table.track_columns(3) == 3 && table.columns.len() == 16);
     let tail: TableRow = table.rows[64];
     verify(tail.cells.len() == 16 && tail.cells[1] == "" && tail.cells[2] == "");
@@ -74,12 +156,14 @@ fn tui_audio_import_and_waveform() {
     table.edit_event(decode_input("z"), area);
     let compact: TableColumn = table.columns[15]; verify(compact.width == 13);
     table.clear_track(); verify(table.track_columns(3) == 2);
-    let saved: SequenceTrack = copy.tracks[3]; verify(saved.clip.peaks.len() > 64 && saved.wave_zoom);
+    let saved: SequenceTrack = copy.tracks[3]; let saved_audio: AudioInstance = saved.instances[0];
+    verify(saved_audio.clip.peaks.len() > 64 && saved.wave_zoom);
+    verify(saved_audio.clip.samples.len() > 0 && saved_audio.clip.samples[0] == audio.clip.samples[0]);
     copy.create_track(true, area); verify(copy.track_columns(4) == 3);
     let duplicated: SequenceTrack = copy.tracks[4]; verify(duplicated.wave_zoom);
     copy.remove_track(area); verify(copy.tracks.len() == 4);
     verify(!copy.import_audio("missing-file.wav", 120, area));
-    let retained: SequenceTrack = copy.tracks[3]; verify(retained.clip.peaks.len() > 64);
+    let retained: SequenceTrack = copy.tracks[3]; verify(retained.instances.len() == 1);
     copy.release(); table.release(); surface.release();
 }
 

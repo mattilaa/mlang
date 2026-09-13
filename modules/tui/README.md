@@ -141,14 +141,29 @@ with legacy arrow keys and unmodified `hjkl`.
 
 ### Audio import (demo)
 
-Create/select an AUDIO track, then choose **Add → Audio**. The file chooser
+Choose **Add → Audio** to load a sample. The file chooser
 lists `.wav`, `.aif`, and `.aiff` files case-insensitively and enforces the same
 filter on manually entered paths. Directories remain browsable. The current
 stdlib decoder supports mono/stereo **16-bit PCM** WAV/AIFF (not every encoding
 these containers can hold); decode errors preserve the existing clip.
 
-Each audio track holds one source-file reference and its peak envelope, starting
-at row 1. Import replaces that track's previous clip. A read-only waveform column
+Loaded samples belong to a session-wide **View → Audio** list in the left pane.
+The list shows sample numbers and filenames; j/k, gg, and G navigate without
+changing the active pattern or its cursor. Enter inserts the selected sample
+into the selected AUDIO track at the Pattern cursor row. Without an audio track
+selected, importing only adds the sample to the Audio list and opens that view;
+it does not create a track or put audio on a MIDI track.
+
+Importing with an AUDIO track selected also inserts an instance at the selected
+row. A track can contain multiple independent, non-overlapping instances.
+Overlapping insertions are rejected, while the loaded sample remains available.
+With the Pattern pane focused, Backspace over audio removes just that instance,
+not its loaded sample, other instances, automation, or pattern rows. Samples can
+be inserted again even if the original file is no longer available. Clear track
+removes all its instances; deleting a pattern/track does not unload samples.
+
+Each instance references decoded samples and carries its own start row.
+A read-only waveform column
 beside CC1/CC2 draws time downward, with green left-channel bars extending left
 from the center line and red right-channel bars extending right. Mono is shown
 on both sides. Waveforms scroll with the table, while ROW stays frozen.
@@ -160,11 +175,33 @@ Zoom is stored per track and preserved by pattern/track cloning. This expands
 amplitude detail horizontally, not time: rows and notes remain aligned. Narrow
 viewports clip the waveform safely; menus and text editors capture `z` normally.
 
+**View → Sample view** selects **Normal** or **Grainy**, and its **Type** submenu
+selects **Filled blocks** or **Wave (osc)**. These settings affect both the Pattern
+waveform and the horizontal sample viewer. Grainy Pattern waveforms pack four
+successive audio slices into each terminal row using Braille's 2×4 dot grid,
+rather than rendering a single row peak with a dotted texture.
+Grainy is the default for both sample waveforms and Mixer meters.
+
+Press `s` while an audio clip is under the Pattern cursor to toggle the horizontal
+**Sample** view in the lower pane. It replaces (and remembers) the Mixer/Inspector;
+moving off the clip closes it. With either the Pattern or Sample pane focused,
+**Ctrl+H/L** zooms time out/in by factors of two, anchored around the cursor row.
+Zoom ranges from the full clip to one original sample per horizontal pixel (two
+pixels per cell in Grainy mode). The display shows its time range and frames per
+pixel, with a highlighted cursor column. Stereo uses green L and red R lanes;
+mono uses one lane. Filled mode extends to the zero line; Wave draws the signed
+sample trace/envelope, revealing individual oscillations at sufficient zoom.
+These controls require modifier-aware terminal input; raw Backspace is not zoom.
+Menus and editors retain exclusive keyboard ownership, including `s` and Ctrl+H/L.
+
+Decoded samples are shared read-only by pattern/track copies, so zooming neither
+reopens the source file nor changes clip timing, notes, or automation.
+
 One row currently represents a sixteenth note at the displayed BPM (120 by
 default). Longer clips extend the pattern with empty MIDI/automation cells;
-shorter replacements do not discard existing rows. Imports are limited to 16384
-rows. Pattern/track cloning copies clip metadata and peaks, and Clear track
-removes its clip. Audio playback, clip trimming, and tempo-change resampling
+Deleting instances does not discard existing rows. Instance ends are limited to
+16384 rows. Pattern/track cloning preserves all instance offsets and sample data.
+Audio playback, clip trimming, and tempo-change resampling
 are not implemented yet; row editing does not trim the source audio.
 
 ### Patterns and Song lists

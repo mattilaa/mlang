@@ -8,7 +8,7 @@ use tui_demo::sequence::SequenceTrack;
 use std::strbuf::free;
 
 /// Demo mixer strips. Synthetic animation is deliberately independent of audio.
-pub struct Mixer { var visible: bool; var phase: i32; var grainy: bool; };
+pub struct Mixer { var visible: bool; var phase: i32; var grainy: bool{true}; };
 impl Mixer {
     pub fn tick(self: &mut Self) -> void { self.phase = (self.phase + 1) % 1000; }
     pub fn level(self: Mixer, index: i32, volume: i32, pan: i32, right: bool, muted: bool) -> i32 {

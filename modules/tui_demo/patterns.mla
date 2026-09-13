@@ -1,6 +1,9 @@
 mod tui::listview;
 mod tui_demo::sequence;
 mod tui::dialog;
+mod tui_demo::audio_library;
+use tui_demo::audio_library::AudioLibrary;
+use tui_demo::audio_clip::AudioClip;
 use tui::listview::*;
 use tui_demo::sequence::SequenceTable;
 use tui::textfield::TextField;
@@ -21,6 +24,7 @@ pub struct PatternLibrary {
     var patterns: list<PatternEntry>; var song: list<i32>; var active_id: i32; var next_id: i32;
     var table: SequenceTable; var view: ListView; var song_mode: bool;
     var renaming: bool; var editor: TextField; var error: str8;
+    var audio: AudioLibrary; var audio_mode: bool;
 };
 impl PatternLibrary {
     pub fn new() -> PatternLibrary {
@@ -83,6 +87,7 @@ impl PatternLibrary {
         self.view.items = items; self.view.cancel_pending();
     }
     pub fn show_song(self: &mut Self, song: bool) -> void {
+        self.audio_mode = false; self.audio.view.cancel_pending();
         self.song_mode = song; self.view.selected = 0; self.view.scroll = 0; self.refresh();
         for i in 0..self.view.items.len() {
             let item: ListItem = self.view.items[i];
@@ -183,6 +188,11 @@ impl PatternLibrary {
         self.song = order; self.refresh(); self.view.reconcile(area); self.choose_selected();
     }
     pub fn on_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
+        if self.audio_mode {
+            let action: i32 = self.audio.view.on_event(event, area);
+            if action == 2 { self.insert_selected_audio(area); }
+            return action != 0;
+        }
         if self.song_mode {
             // Modifier-aware Ctrl+J must remain distinct from legacy LF/Enter.
             if event.modifiers == 5 && (event.code == 106 || event.code == 107) {
@@ -213,6 +223,25 @@ impl PatternLibrary {
             if self.rename(self.editor.text) { self.renaming = false; }
         } else { self.editor.on_event(event); }
     }
+    pub fn show_audio(self: &mut Self) -> void {
+        self.audio_mode = true; self.view.cancel_pending(); self.audio.view.cancel_pending();
+    }
+    pub fn insert_selected_audio(self: &mut Self, area: Rect) -> bool {
+        let index: i32 = self.audio.view.selected;
+        if index < 0 || index >= self.audio.samples.len() { self.error = "Select a loaded sample"; return false; }
+        let clip: AudioClip = self.audio.samples[index];
+        self.error = ""; return self.table.insert_audio(clip, area);
+    }
+    pub fn load_audio(self: &mut Self, path: str8, bpm: i32, area: Rect) -> bool {
+        if !self.audio.load(path, bpm) { self.error = self.audio.error; return false; }
+        self.error = ""; self.table.error = "";
+        let index: i32 = self.table.active_track();
+        if index >= 0 {
+            let track: SequenceTrack = self.table.tracks[index];
+            if track.audio { self.insert_selected_audio(area); return true; }
+        }
+        self.show_audio(); return true;
+    }
     pub fn paint_rename(self: PatternLibrary, surface: Surface, area: Rect, theme: Theme) -> void {
         if !self.renaming { return; }
         let dialog: Dialog = Dialog { title: "Rename pattern", width: 64, height: 9 };
@@ -222,6 +251,7 @@ impl PatternLibrary {
         if content.height > 4 { surface.text(Rect::new(content.x, content.y + 4, content.width, 1), self.error == "" ? "Enter: save | Esc: cancel" : self.error, theme.accent, theme.panel); }
     }
     pub fn release(self: &mut Self) -> void {
+        self.audio.release();
         self.table.release(); self.editor.release();
         let entries: list<PatternEntry> = self.patterns;
         for entry in entries { var owned: PatternEntry = PatternEntry {}; owned = entry; owned.data.release(); free(owned.name); }

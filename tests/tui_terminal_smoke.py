@@ -40,7 +40,7 @@ def main():
         pending_output = data[end:]
         return data[:end]
 
-    def read_frame(expected_pane, dialog_pane=None, table_cell=None, table_text=None):
+    def read_frame(expected_pane, dialog_pane=None, table_cell=None, table_text=None, pattern_grainy=False):
         frame = read_until(b"\x1b[0m")
         # Inspect rendered border colors, not application debug/status text.
         x = y = 0
@@ -75,6 +75,9 @@ def main():
             (x, y), expected = table_text
             actual = "".join(glyphs.get((x + i, y), "") for i in range(len(expected)))
             assert actual == expected, (actual, expected)
+        if pattern_grainy:
+            assert any(0x2800 < ord(glyph) <= 0x28ff for (x, y), glyph in glyphs.items()
+                       if x >= 28 and 4 <= y <= 13), "Missing sub-row Braille waveform"
         if dialog_pane is not None:
             dialog_borders = [(3, 3), (3, 8), (28, 8)]
             dialog_selected = [i for i, point in enumerate(dialog_borders)
@@ -298,6 +301,11 @@ def main():
             with open(aif_path, "wb") as fixture:
                 fixture.write(b"FORM" + struct.pack(">I", len(chunks) + 4) + b"AIFF" + chunks)
             for path in (wav_path, aif_path):
+                if path == aif_path:
+                    os.write(master, b"\x7f")  # remove the WAV instance, not the loaded sample
+                    assert b"L  WAVE" not in read_frame(1)
+                    os.write(master, b"jjjjj")  # next import starts on row 6
+                    read_frame(1)
                 os.write(master, b"\tlllll\r")
                 assert b"Add audio" in read_frame(None, 0)
                 os.write(master, b"\x15" + path.encode() + b"\r")
@@ -305,6 +313,8 @@ def main():
                 assert b"L  WAVE  R" in imported
                 assert b"38;2;90;220;140" in imported  # left, green
                 assert b"38;2;239;101;117" in imported  # right, red
+                if path == wav_path:
+                    assert any(0x2800 < ord(c) <= 0x28ff for c in imported.decode())
                 os.write(master, b"z")
                 assert b"L  WAVE x2  R" in read_frame(1)
                 os.write(master, b"\t")
@@ -315,10 +325,70 @@ def main():
                 assert b"L  WAVE x2  R" in read_frame(1)  # menu captured z
                 os.write(master, b"z")
                 assert b"L  WAVE  R" in read_frame(1)
+                os.write(master, b"s")
+                assert b" Sample " in read_frame(1)
+                os.write(master, b"\x1b[108;5u" * 15)
+                assert b"1 frames/px" in read_frame(1)
+                os.write(master, b"\x1b[104;5u")
+                assert b" Sample " in read_frame(1)
+                # Both views share the texture and type controls.
+                os.write(master, b"\tll")
+                read_frame(None)
+                os.write(master, b"jjjjjlj\r")
+                assert b"Grainy Filled" in read_frame(1, pattern_grainy=True)
+                os.write(master, b"\tll")
+                read_frame(None)
+                os.write(master, b"jjjjjljjlj\r")
+                assert b"Grainy Wave" in read_frame(1, pattern_grainy=True)
+                # The lower pane can own zoom input too; pane navigation stays distinct.
+                os.write(master, b"\x1b[106;6u")
+                read_frame(2)
+                os.write(master, b"\x1b[104;5u")
+                assert b" Sample " in read_frame(2)
+                os.write(master, b"s")
+                assert b" Inspector " in read_frame(2)
+                os.write(master, b"\x1b[107;6u")
+                read_frame(1)
+                os.write(master, b"\tll")
+                read_frame(None)
+                os.write(master, b"jjjjjl\r")
+                read_frame(1)
+                os.write(master, b"\tll")
+                read_frame(None)
+                os.write(master, b"jjjjjljjl\r")
+                read_frame(1)
+                if path == aif_path:
+                    os.write(master, b"s")
+                    assert b" Sample " in read_frame(1)
+                    os.write(master, b"G")
+                    assert b" Inspector " in read_frame(1)  # cursor past short clip
+                    os.write(master, b"gg")
+                    assert b" Sample " not in read_frame(1)  # requires s to reopen
             os.write(master, b"G")
             assert b"072" in read_frame(1)
             os.write(master, b"gg")
             read_frame(1)
+        # Loaded samples survive removal of their source files and placements.
+        os.write(master, b"jjjjj\x7f")
+        assert b"L  WAVE" not in read_frame(1)
+        os.write(master, b"\tll")
+        read_frame(None)
+        os.write(master, b"jjjjjj\r")
+        assert b" Audio " in read_frame(1)
+        os.write(master, b"\x1b[104;6u")
+        assert b"2 mono.AIF" in read_frame(0)
+        os.write(master, b"\r")  # reuse selected sample at the Pattern cursor (row 6)
+        assert b"L  WAVE" in read_frame(0)
+        os.write(master, b"\x1b[108;6u" + b"j" * 15)
+        read_frame(1)
+        os.write(master, b"\x1b[104;6u\r")  # a second independent instance at row 21
+        assert b"L  WAVE" in read_frame(0)
+        os.write(master, b"\x1b[108;6u\x7f")
+        assert b"L  WAVE" in read_frame(1)  # the first instance remains
+        os.write(master, b"gg\tll")
+        read_frame(None)
+        os.write(master, b"jjj\r")
+        assert b" Patterns " in read_frame(1)
         os.write(master, b"m")
         assert b"A5" in read_frame(1)
         os.write(master, b"m")

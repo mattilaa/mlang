@@ -1,0 +1,112 @@
+mod tui_demo::audio_clip;
+mod tui::surface;
+mod tui::theme;
+mod tui::input;
+use tui_demo::audio_clip::AudioClip;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::input::InputEvent;
+use std::strbuf::free;
+
+pub struct SampleView { var grainy: bool{true}; var wave: bool; var zoom: i32; var visible: bool; };
+impl SampleView {
+    pub fn span(self: SampleView, source: &AudioClip, pixels: i32) -> i64 {
+        var clip: AudioClip = AudioClip {}; clip = source;
+        var frames: i64 = clip.frames;
+        for _i in 0..self.zoom { frames = frames / 2; }
+        if frames < wide(pixels) { frames = wide(pixels); }
+        return frames > clip.frames ? clip.frames : frames;
+    }
+    pub fn start(self: SampleView, source: &AudioClip, row: i32, pixels: i32) -> i64 {
+        var clip: AudioClip = AudioClip {}; clip = source;
+        let span: i64 = self.span(clip, pixels);
+        var start: i64 = wide(row) * clip.frames_per_row - span / 2;
+        if start < 0 { start = 0; }
+        if start + span > clip.frames { start = clip.frames - span; }
+        return start;
+    }
+    pub fn on_event(self: &mut Self, event: InputEvent, source: &AudioClip, width: i32) -> bool {
+        var clip: AudioClip = AudioClip {}; clip = source;
+        if event.modifiers != 5 { return false; }
+        if event.code == 104 { if self.zoom > 0 { self.zoom = self.zoom - 1; } return true; }
+        if event.code == 108 {
+            let pixels: i32 = (width > 2 ? width - 2 : 1) * (self.grainy ? 2 : 1);
+            if self.zoom < 30 && self.span(clip, pixels) > wide(pixels) { self.zoom = self.zoom + 1; }
+            return true;
+        }
+        return false;
+    }
+    pub fn paint(self: SampleView, surface: Surface, area: Rect, theme: Theme, source: &AudioClip, row: i32) -> void {
+        var clip: AudioClip = AudioClip {}; clip = source;
+        surface.fill(area, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
+        if area.width <= 2 || area.height < 2 || clip.frames <= 0 || clip.channels < 1 || clip.channels > 2 ||
+            clip.sample_rate <= 0 || clip.samples.len() < clip.frames * clip.channels { return; }
+        let pixels: i32 = (area.width - 2) * (self.grainy ? 2 : 1);
+        let span: i64 = self.span(clip, pixels); let start: i64 = self.start(clip, row, pixels);
+        let info: str8 = format!("{} {} | {}..{} ms | {} frames/px", self.grainy ? "Grainy" : "Normal",
+            self.wave ? "Wave" : "Filled", start * 1000 / clip.sample_rate,
+            (start + span) * 1000 / clip.sample_rate, span / wide(pixels) > 0 ? span / wide(pixels) : 1);
+        surface.text(Rect::new(area.x, area.y, area.width, 1), info, theme.muted, theme.panel); free(info);
+        let height: i32 = area.height - 1;
+        let top_height: i32 = clip.channels == 2 ? height / 2 : height;
+        self.paint_channel(surface, Rect::new(area.x + 2, area.y + 1, area.width - 2, top_height), theme, clip, 0, start, span, row, 0x5adc8c);
+        surface.text(Rect::new(area.x, area.y + 1, 1, 1), clip.channels == 1 ? "M" : "L", 0x5adc8c, theme.panel);
+        if clip.channels == 2 {
+            self.paint_channel(surface, Rect::new(area.x + 2, area.y + 1 + top_height, area.width - 2, height - top_height), theme, clip, 1, start, span, row, 0xef6575);
+            surface.text(Rect::new(area.x, area.y + 1 + top_height, 1, 1), "R", 0xef6575, theme.panel);
+        }
+    }
+    fn paint_channel(self: SampleView, surface: Surface, area: Rect, theme: Theme, source: &AudioClip,
+        channel: i64, start: i64, span: i64, row: i32, color: i32) -> void {
+        var clip: AudioClip = AudioClip {}; clip = source;
+        if area.width <= 0 || area.height <= 0 || span <= 0 { return; }
+        let scale_x: i32 = self.grainy ? 2 : 1; let scale_y: i32 = self.grainy ? 4 : 1;
+        let width: i32 = area.width * scale_x; let height: i32 = area.height * scale_y;
+        let cursor: i64 = wide(row) * clip.frames_per_row;
+        if cursor >= start && cursor < start + span {
+            let x: i32 = i32((cursor - start) * wide(area.width) / span);
+            surface.fill(Rect::new(area.x + x, area.y, 1, area.height), Cell { glyph: 32, foreground: color, background: theme.selection });
+        }
+        var previous: i32 = -1;
+        for x in 0..width {
+            let first: i64 = start + x * span / wide(width);
+            let next: i64 = start + (x + 1) * span / wide(width);
+            let end: i64 = next > first ? next : first + 1;
+            let initial: f32 = clip.samples[first * clip.channels + channel];
+            var low: f32 = initial; var high: f32 = initial; var last: f32 = initial;
+            for frame in first..end {
+                let sample: f32 = clip.samples[frame * clip.channels + channel];
+                if sample < low { low = sample; } if sample > high { high = sample; } last = sample;
+            }
+            var top: i32 = sample_y(high, height); var bottom: i32 = sample_y(low, height);
+            if self.wave {
+                if previous >= 0 { if previous < top { top = previous; } if previous > bottom { bottom = previous; } }
+            } else {
+                let zero: i32 = sample_y(0.0f, height);
+                if zero < top { top = zero; } if zero > bottom { bottom = zero; }
+            }
+            previous = sample_y(last, height);
+            let stop: i32 = bottom + 1;
+            for y in top..stop { sample_pixel(surface, area, i32(x), i32(y), self.grainy, self.wave, color); }
+        }
+    }
+}
+fn sample_y(value: f32, height: i32) -> i32 {
+    let sample: f32 = value < -1.0f ? -1.0f : (value > 1.0f ? 1.0f : value);
+    return i32((1.0f - sample) * 0.5f * f32(height - 1));
+}
+fn sample_pixel(surface: Surface, area: Rect, x: i32, y: i32, grainy: bool, wave: bool, color: i32) -> void {
+    let col: i32 = area.x + (grainy ? x / 2 : x); let row: i32 = area.y + (grainy ? y / 4 : y);
+    if !area.contains(col, row) { return; }
+    let old: Cell = surface.cell(col, row);
+    var glyph: i32 = wave ? 0x25cf : 0x2588;
+    if grainy {
+        let bits: array<i32, 8> = {1, 8, 2, 16, 4, 32, 64, 128};
+        let dot_mask: i32 = bits[(y % 4) * 2 + x % 2];
+        var mask: i32 = old.glyph >= 0x2800 && old.glyph <= 0x28ff ? old.glyph - 0x2800 : 0;
+        if mask / dot_mask % 2 == 0 { mask = mask + dot_mask; }
+        glyph = 0x2800 + mask;
+    }
+    surface.put(col, row, Cell { glyph: glyph, foreground: color, background: old.background });
+}
