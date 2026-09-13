@@ -141,8 +141,9 @@ with legacy arrow keys and unmodified `hjkl`.
 
 ### Table widget
 
-`tui::table::Table` renders the demo's 64-row sequence as separate ROW, NOTE,
-VEL, and TRACK columns. Focus the sequence pane with Ctrl+Shift+L; `w`/`b`
+`tui::table::Table` renders the demo's 64-row sequence with a frozen ROW column
+and three independent tracks, each containing compact NOTE, VEL, CC1, and CC2
+columns. Focus the sequence pane with Ctrl+Shift+L; `w`/`b`
 select the next/previous column and `j`/`k` (or Down/Up) select rows. Navigation
 stops at the edges and scrolls the selection into view, with a fixed header.
 Menus and dialogs retain exclusive keyboard ownership while open.
@@ -171,6 +172,38 @@ the visible range and position; navigation is keyboard-driven, without mouse
 dragging. The selected row uses the theme selection color, the selected column
 is slightly lighter (including their intersection), and alternating data rows
 are darker. Striping follows absolute row numbers while scrolling.
+
+#### Track groups and actions
+
+The base table accepts `groups: list<TableGroup>`, where each group specifies
+`title`, `first` column index, and `count`. This adds an upper header row; only
+the group containing the selected child column gets the selection highlight.
+Set `frozen_columns: 1` to pin ROW during horizontal navigation. The scrollbar
+represents only the unfrozen columns. Selecting another track scrolls it into
+view; if the whole group fits, it is kept together. Wider groups scroll by child
+column. Column widths are NOTE=6, VEL=4, CC1=6, CC2=6, including spacing.
+
+The demo's **Track** menu always targets the selected column's track:
+
+- Rename opens a text dialog (Enter saves, Escape cancels).
+- Create new appends an empty track and selects it.
+- Duplicate appends an independent copy of the pattern, mute flag, and automation
+  settings, then selects the copy.
+- Delete removes the track after confirmation; at least one track is retained.
+- Clear pattern clears only that track's cells after confirmation.
+- Mute / unmute toggles the track flag and its `[M]` header indicator.
+- Configure CC1 / CC2 assigns the corresponding per-track automation slot.
+
+Each automation slot accepts `cc:N` for MIDI CC 0–127 (values 0–127),
+`pitchbend` (signed values -8192–8191), or `name:min:max` for a custom integer
+parameter, e.g. `cutoff:0:1000`. Custom names use letters, digits, and underscores
+and start with a letter. Limits must fit i32. Existing slot values must fit new
+limits or configuration is rejected without changing data. The Inspector shows
+the selected track's mute state and both parameter assignments.
+
+New tracks start with CC1=`cc:1` and CC2=`cc:74`. There is a 64-track demo limit.
+These actions change in-memory demo data, not audio/MIDI output; mute is state
+for a future playback engine, and custom parameters need an application mapping.
 
 #### Typed columns and editing
 
@@ -205,7 +238,7 @@ the reusable widget library. It owns its cell strings and a compiler-provided
 spelling: MIDI 0 is `C--1`, MIDI 60 is `C-4`, and MIDI 127 is `G-9`; sharps use
 `#`, e.g. `C#4`. Manual notes must occur in this array as well as match the
 column regex. ROW is read-only, NOTE starts selected, VEL is bounded to 0–127,
-and TRACK accepts text.
+and each track has two nullable i32 automation columns with independent limits.
 
 - Shift+J decreases and Shift+K increases the selected value. Notes step by a
   semitone; integer columns step by one. Endpoints stop without wrapping.
@@ -215,7 +248,7 @@ and TRACK accepts text.
   clears the draft. Pane/menu navigation is suspended until commit or cancel.
 - Columns can opt into `nullable: true`: an empty string represents no value
   and bypasses the value regex/range checks, but unsupported types still fail.
-  NOTE, VEL, and TRACK enable this in the demo. An empty NOTE means a rest.
+  NOTE, VEL, CC1, and CC2 enable this in the demo. An empty NOTE means a rest.
   Enter, Ctrl+U, Enter clears a single cell.
 - Shift+Backspace clears all editable cells in the selected row, preserving its
   read-only ROW number. `dd` deletes the row, shifts following rows upward, and

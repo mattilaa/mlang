@@ -40,7 +40,16 @@ fn demo_menus() -> MenuBar {
             MenuItem { label: "Redo", action: 5, enabled: true }] },
         Menu { title: "View", items: [
             MenuItem { label: "Reset layout", action: 6, enabled: true },
-            MenuItem { label: "Show details", action: 7, enabled: true }] }
+            MenuItem { label: "Show details", action: 7, enabled: true }] },
+        Menu { title: "Track", items: [
+            MenuItem { label: "Rename", action: 20, enabled: true },
+            MenuItem { label: "Create new", action: 21, enabled: true },
+            MenuItem { label: "Delete", action: 22, enabled: true },
+            MenuItem { label: "Duplicate", action: 23, enabled: true },
+            MenuItem { label: "Clear pattern", action: 24, enabled: true },
+            MenuItem { label: "Mute / unmute", action: 25, enabled: true },
+            MenuItem { label: "Configure CC1", action: 26, enabled: true },
+            MenuItem { label: "Configure CC2", action: 27, enabled: true }] }
     ]);
 }
 
@@ -78,6 +87,7 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
     let bottom: Rect = details.paint_focused(surface, inspector.bounds, theme, focus.is_active(2));
     let label: Label = Label { text: table.error != "" ? table.error : (table.editing ? "Editing: Enter saves | Esc cancels" : message) };
     label.paint(surface, bottom, theme);
+    table.paint_track_details(surface, bottom, theme);
     surface.text(Rect::new(0, surface.height - 1, surface.width, 1),
         " w/b: col j/k: row J/K: value Enter: edit | C-S-H/J/K/L: panes | Tab: menu",
         theme.muted, theme.background);
@@ -99,6 +109,7 @@ fn main() -> i32 {
     var previous_width: i32 = 0;
     var previous_height: i32 = 0;
     var escape_ticks: i32 = 0;
+    var confirm_track_action: i32 = 0;
     while running {
         if dialog.active && dialog.pressed_button >= 0 {
             dialog.tick(); dirty = true;
@@ -107,14 +118,18 @@ fn main() -> i32 {
         if question.active && question.pressed_button >= 0 {
             question.tick(); dirty = true;
             if !question.active {
-                free(message); message = clone(question.result == 1 ? "New session confirmed." : "New session cancelled.");
+                if confirm_track_action != 0 {
+                    if question.result == 1 { table.track_action(confirm_track_action, terminal_bounds()); }
+                    confirm_track_action = 0;
+                    free(message); message = clone("Track action finished.");
+                } else { free(message); message = clone(question.result == 1 ? "New session confirmed." : "New session cancelled."); }
             }
         }
         let area: Rect = terminal_bounds();
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active(menus.active >= 0 || dialog.active || question.active);
+        focus.set_menu_active(menus.active >= 0 || dialog.active || question.active || table.edit_mode > 0);
         if dirty || area.width != previous_width || area.height != previous_height {
             let surface: Surface = Surface::new(area.width, area.height);
             if !surface.is_valid() { table.release(); dialog.release(); free(message); terminal.finish(); return 1; }
@@ -122,6 +137,7 @@ fn main() -> i32 {
             paint_demo(surface, menus, focus, panes, message, table);
             dialog.paint(surface, area, Theme::dark_blue());
             question.paint(surface, area, Theme::dark_blue());
+            table.paint_track_dialog(surface, area, Theme::dark_blue());
             terminal.present(surface);
             surface.release();
             previous_width = area.width;
@@ -150,7 +166,7 @@ fn main() -> i32 {
             var command: i32 = 0;
             if question.active {
                 question.on_event(event);
-                if !question.active { free(message); message = clone("New session cancelled."); }
+                if !question.active { confirm_track_action = 0; free(message); message = clone("Cancelled."); }
                 dirty = true;
             }
             else if dialog.active {
@@ -191,10 +207,23 @@ fn main() -> i32 {
                 if table.edit_event(event, panes[1].bounds.inset(1)) { dirty = true; }
             }
             if command == 99 { running = false; }
-            else if command == 1 { question.open(); focus.set_menu_active(true); }
+            else if command == 1 {
+                question.title = "New session"; question.question = "Start a new session?";
+                confirm_track_action = 0; question.open(); focus.set_menu_active(true);
+            }
             else if command == 2 {
                 dialog.open("");
                 focus.set_menu_active(true);
+            }
+            else if command == 22 || command == 24 {
+                confirm_track_action = command;
+                question.title = command == 22 ? "Delete track" : "Clear track";
+                question.question = command == 22 ? "Delete the selected track and its pattern?" : "Clear all rows of the selected track?";
+                question.open(); focus.set_menu_active(true);
+            }
+            else if command >= 20 && command <= 27 {
+                table.track_action(command, panes[1].bounds.inset(1));
+                free(message); message = clone("Track updated. Mute affects demo state only.");
             }
             else if command > 0 {
                 free(message); message = clone("Command selected. Ready for the application handler.");
@@ -208,7 +237,7 @@ fn main() -> i32 {
                 table.delete_pending = false;
                 if question.active {
                     question.on_event(event);
-                    if !question.active { free(message); message = clone("New session cancelled."); }
+                    if !question.active { confirm_track_action = 0; free(message); message = clone("Cancelled."); }
                     dirty = true;
                 }
                 else if dialog.active {

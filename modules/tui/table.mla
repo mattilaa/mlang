@@ -87,6 +87,7 @@ impl TableColumn {
     }
 }
 pub struct TableRow { var cells: list<str8>; };
+pub struct TableGroup { var title: str8; var first: i32; var count: i32; };
 
 /// Strings are borrowed. Scrollbar visibility does not disable scrolling.
 pub struct Table {
@@ -94,6 +95,7 @@ pub struct Table {
     var selected_row: i32; var selected_column: i32;
     var scroll_x: i32; var scroll_y: i32;
     var horizontal_scrollbar: bool{true}; var vertical_scrollbar: bool{true};
+    var groups: list<TableGroup>{[]}; var frozen_columns: i32;
     // Methods live on the struct so derived widgets inherit the implementation.
     pub fn new(columns: list<TableColumn>, rows: list<TableRow>) -> Table {
         return Table { columns: columns, rows: rows };
@@ -107,11 +109,26 @@ pub struct Table {
         for i in 0..self.columns.len() { width = width + self.column_width(i32(i)); }
         return width;
     }
+    pub fn frozen_count(self: Table) -> i32 {
+        return self.frozen_columns < 0 ? 0 : (self.frozen_columns > self.columns.len() ? i32(self.columns.len()) : self.frozen_columns);
+    }
+    pub fn frozen_width(self: Table) -> i32 {
+        var width: i32 = 0;
+        for i in 0..self.frozen_count() { width = width + self.column_width(i32(i)); }
+        return width;
+    }
+    pub fn header_height(self: Table) -> i32 { return self.groups.len() > 0 ? 2 : 1; }
+    pub fn column_x(self: Table, column: i32) -> i32 {
+        var x: i32 = column < self.frozen_count() ? 0 : -self.scroll_x;
+        for c in 0..column { x = x + self.column_width(i32(c)); }
+        return x;
+    }
     /// Header is fixed; scrollbars each reserve one cell when enabled.
     pub fn body(self: Table, area: Rect) -> Rect {
-        return Rect::new(area.x, area.y + (area.height > 0 ? 1 : 0),
+        let header: i32 = area.height < self.header_height() ? area.height : self.header_height();
+        return Rect::new(area.x, area.y + header,
             area.width - (self.vertical_scrollbar && area.width > 0 ? 1 : 0),
-            area.height - 1 - (self.horizontal_scrollbar && area.height > 1 ? 1 : 0));
+            area.height - header - (self.horizontal_scrollbar && area.height > header ? 1 : 0));
     }
     pub fn reconcile(self: &mut Self, area: Rect) -> void {
         let body: Rect = self.body(area);
@@ -134,17 +151,34 @@ pub struct Table {
             if self.selected_row >= self.scroll_y + body.height { self.scroll_y = self.selected_row - body.height + 1; }
         }
         var start: i32 = 0;
+        let frozen: i32 = self.frozen_width();
+        let visible: i32 = body.width > frozen ? body.width - frozen : 0;
         for i in 0..columns {
             let width: i32 = self.column_width(i32(i));
-            if i == self.selected_column && body.width > 0 {
-                if start < self.scroll_x { self.scroll_x = start; }
+            if i == self.selected_column && i >= self.frozen_count() && visible > 0 {
+                if start - frozen < self.scroll_x { self.scroll_x = start - frozen; }
                 else if start + width > self.scroll_x + body.width {
-                    self.scroll_x = width > body.width ? start : start + width - body.width;
+                    self.scroll_x = width > visible ? start - frozen : start + width - body.width;
                 }
             }
             start = start + width;
         }
-        let max_x: i32 = start > body.width ? start - body.width : 0;
+        // Keep a selected group together when it fits the scrollable viewport.
+        let groups: list<TableGroup> = self.groups;
+        for group in groups {
+            if self.selected_column < group.first || self.selected_column >= group.first + group.count ||
+                    group.first < self.frozen_count() || group.count <= 0 { continue; }
+            var first: i32 = 0; var width: i32 = 0;
+            for c in 0..self.columns.len() {
+                if c < group.first { first = first + self.column_width(i32(c)); }
+                else if c < group.first + group.count { width = width + self.column_width(i32(c)); }
+            }
+            if width <= visible && width > 0 {
+                if first - frozen < self.scroll_x { self.scroll_x = first - frozen; }
+                else if first + width > self.scroll_x + body.width { self.scroll_x = first + width - body.width; }
+            }
+        }
+        let max_x: i32 = start - frozen > visible ? start - frozen - visible : 0;
         let max_y: i32 = count > body.height ? count - body.height : 0;
         self.scroll_x = self.scroll_x < 0 ? 0 : (self.scroll_x > max_x ? max_x : self.scroll_x);
         self.scroll_y = self.scroll_y < 0 ? 0 : (self.scroll_y > max_y ? max_y : self.scroll_y);
@@ -178,10 +212,12 @@ pub struct Table {
     }
     pub fn selected_rect(self: Table, area: Rect) -> Rect {
         if self.selected_column < 0 || self.selected_row < 0 { return Rect::new(area.x, area.y, 0, 0); }
-        var x: i32 = area.x - self.scroll_x;
-        for i in 0..self.selected_column { x = x + self.column_width(i32(i)); }
-        let cell: Rect = Rect::new(x, area.y + 1 + self.selected_row - self.scroll_y, self.column_width(self.selected_column), 1);
-        return cell.intersect(self.body(area));
+        let x: i32 = area.x + self.column_x(self.selected_column);
+        let body: Rect = self.body(area);
+        let frozen: i32 = self.selected_column < self.frozen_count() ? 0 : self.frozen_width();
+        let clip: Rect = Rect::new(body.x + frozen, body.y, body.width - frozen, body.height);
+        let cell: Rect = Rect::new(x, body.y + self.selected_row - self.scroll_y, self.column_width(self.selected_column), 1);
+        return cell.intersect(clip);
     }
     /// Returns true only for table navigation. Caller owns pane/modal routing.
     pub fn on_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
@@ -210,31 +246,47 @@ pub struct Table {
             let row: TableRow = self.rows[row_index];
             let bg: i32 = row_index == self.selected_row ? theme.selection :
                 (row_index % 2 == 1 ? darken(theme.panel, 82) : theme.panel);
-            canvas.fill(Rect::new(0, i32(y) + 1, body.width, 1), Cell { glyph: 32, foreground: theme.foreground, background: bg });
-            var x: i32 = -self.scroll_x;
-            for c in 0..self.columns.len() {
+            canvas.fill(Rect::new(0, i32(y) + body.y, body.width, 1), Cell { glyph: 32, foreground: theme.foreground, background: bg });
+            for order in 0..self.columns.len() {
+                let c: i32 = (i32(order) + self.frozen_count()) % i32(self.columns.len());
+                let x: i32 = self.column_x(c);
                 let width: i32 = self.column_width(i32(c));
                 let cell_bg: i32 = c == self.selected_column ? lighten(bg, 8) : bg;
-                let cell: Rect = Rect::new(x, i32(y) + 1, width, 1);
+                let cell: Rect = Rect::new(x, i32(y) + body.y, width, 1);
                 canvas.fill(cell.intersect(body), Cell { glyph: 32, foreground: theme.foreground, background: cell_bg });
                 let text_width: i32 = x + width > body.width ? body.width - x : width;
-                if c < row.cells.len() { canvas.text(Rect::new(x, i32(y) + 1, text_width, 1), row.cells[c], theme.foreground, cell_bg); }
-                x = x + width;
+                if c < row.cells.len() { canvas.text(Rect::new(x, i32(y) + body.y, text_width, 1), row.cells[c], theme.foreground, cell_bg); }
             }
         }
-        var x: i32 = -self.scroll_x;
-        for c in 0..self.columns.len() {
+        for order in 0..self.columns.len() {
+            let c: i32 = (i32(order) + self.frozen_count()) % i32(self.columns.len());
+            let x: i32 = self.column_x(c);
             let column: TableColumn = self.columns[c];
             let width: i32 = self.column_width(i32(c));
-            let header: Rect = Rect::new(x, 0, width, 1);
-            let clip: Rect = Rect::new(0, 0, body.width, 1);
+            let header: Rect = Rect::new(x, self.header_height() - 1, width, 1);
+            let clip: Rect = Rect::new(0, self.header_height() - 1, body.width, 1);
             let bg: i32 = c == self.selected_column ? lighten(theme.menu_background, 8) : theme.menu_background;
             canvas.fill(header.intersect(clip), Cell { glyph: 32, foreground: theme.accent, background: bg });
-            canvas.text(Rect::new(x, 0, x + width > body.width ? body.width - x : width, 1), column.title, theme.accent, bg);
-            x = x + width;
+            canvas.text(Rect::new(x, header.y, x + width > body.width ? body.width - x : width, 1), column.title, theme.accent, bg);
         }
-        if self.vertical_scrollbar { self.paint_bar(canvas, Rect::new(body.width, 1, 1, body.height), i32(self.rows.len()), body.height, self.scroll_y, true, theme); }
-        if self.horizontal_scrollbar && area.height > 1 { self.paint_bar(canvas, Rect::new(0, area.height - 1, body.width, 1), self.total_width(), body.width, self.scroll_x, false, theme); }
+        let frozen: i32 = self.frozen_width() > body.width ? body.width : self.frozen_width();
+        let groups: list<TableGroup> = self.groups;
+        for group in groups {
+            if group.first < self.frozen_count() || group.first < 0 || group.first >= self.columns.len() || group.count <= 0 { continue; }
+            var width: i32 = 0;
+            for c in group.first..group.first + group.count {
+                if c < self.columns.len() { width = width + self.column_width(i32(c)); }
+            }
+            let start: i32 = self.column_x(group.first);
+            let rect: Rect = Rect::new(start, 0, width, 1);
+            let visible: Rect = rect.intersect(Rect::new(frozen, 0, body.width - frozen, 1));
+            let active: bool = self.selected_column >= group.first && self.selected_column < group.first + group.count;
+            let bg: i32 = active ? theme.selection : theme.menu_background;
+            canvas.fill(visible, Cell { glyph: 32, foreground: theme.muted, background: bg });
+            canvas.text(visible, group.title, active ? theme.accent : theme.muted, bg);
+        }
+        if self.vertical_scrollbar { self.paint_bar(canvas, Rect::new(body.width, body.y, 1, body.height), i32(self.rows.len()), body.height, self.scroll_y, true, theme); }
+        if self.horizontal_scrollbar && area.height > self.header_height() { self.paint_bar(canvas, Rect::new(frozen, area.height - 1, body.width - frozen, 1), self.total_width() - self.frozen_width(), body.width - frozen, self.scroll_x, false, theme); }
         for y in 0..area.height {
             for x in 0..area.width { surface.put(area.x + i32(x), area.y + i32(y), canvas.cell(i32(x), i32(y))); }
         }

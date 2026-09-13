@@ -35,6 +35,52 @@ fn tui_column_validation() {
 }
 
 #[test]
+fn tui_track_groups_and_frozen_row() {
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(2, 1, 34, 10);
+    let surface: Surface = Surface::new(40, 14); let theme: Theme = Theme::dark_blue();
+    verify(table.tracks.len() == 3 && table.columns.len() == 13 && table.groups.len() == 3);
+    table.paint(surface, area, theme);
+    let active: Cell = surface.cell(6, 1); let inactive: Cell = surface.cell(28, 1);
+    verify(active.background == theme.selection && inactive.background == theme.menu_background);
+    let row: Cell = surface.cell(2, 3); verify(row.glyph == 48);
+    table.selected_column = 12; table.paint(surface, area, theme);
+    verify(table.scroll_x > 0 && table.active_track() == 2);
+    let pinned: Cell = surface.cell(2, 3); verify(pinned.glyph == 48);
+    let header: Cell = surface.cell(2, 2); verify(header.glyph == 82);
+    let selected: Rect = table.selected_rect(area);
+    verify(selected.x >= area.x + 4 && selected.x + selected.width <= area.x + area.width - 1);
+    let right_group: Cell = surface.cell(selected.x, 1); verify(right_group.background == theme.selection);
+    for width in 0..8 { table.paint(surface, Rect::new(0, 0, i32(width), 2), theme); }
+    table.release(); surface.release();
+}
+
+#[test]
+fn tui_track_actions_and_automation() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 45, 12);
+    verify(table.rename_track("Lead"));
+    verify(table.configure_slot(1, "pitchbend"));
+    table.selected_column = 3;
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("-8192"); table.edit_event(decode_input("\r"), area);
+    let bend: TableRow = table.rows[0]; verify(bend.cells[3] == "-8192" && bend.cells[7] == "");
+    verify(!table.configure_slot(1, "cc:7"));
+    verify(table.configure_slot(2, "cutoff:-100:1000"));
+    verify(!table.configure_slot(2, "bad:9:1") && !table.configure_slot(2, "cc:128"));
+    table.track_action(25, area);
+    let muted: SequenceTrack = table.tracks[0]; verify(muted.muted);
+    table.create_track(true, area); verify(table.tracks.len() == 4 && table.active_track() == 3);
+    let duplicate: TableRow = table.rows[0]; verify(duplicate.cells[15] == "-8192");
+    table.clear_track();
+    let cleared: TableRow = table.rows[0]; verify(cleared.cells[15] == "" && cleared.cells[3] == "-8192");
+    table.remove_track(area); verify(table.tracks.len() == 3 && table.active_track() == 2);
+    table.create_track(false, area); let added: TableRow = table.rows[0];
+    verify(table.tracks.len() == 4 && added.cells[13] == "" && added.cells[14] == "");
+    for _i in 0..5 { table.remove_track(area); }
+    verify(table.tracks.len() == 1 && table.columns.len() == 5);
+    table.release();
+}
+
+#[test]
 fn tui_sequence_empty_clear_delete() {
     var column: TableColumn = TableColumn { title: "VEL", width: 7, value_type: "i32", nullable: true,
         bounded: true, minimum: 0, maximum: 127 };
