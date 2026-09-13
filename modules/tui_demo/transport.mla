@@ -1,0 +1,41 @@
+mod tui::surface;
+mod tui::theme;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use std::strbuf::free;
+use std::strbuf::len;
+
+/// Display state for the future sequencer and MIDI input processor.
+/// Playback time is independent of the editor cursor and demo mixer animation.
+pub struct TransportStatus {
+    var bpm: i32{120};
+    var elapsed_ms: i32;
+    var beats_per_bar: i32{4};
+    var beat_unit: i32{4};
+    var midi_received: bool;
+};
+impl TransportStatus {
+    pub fn paint(self: TransportStatus, surface: Surface, area: Rect, theme: Theme) -> void {
+        if area.width <= 0 || area.height <= 0 { return; }
+        let row: Rect = Rect::new(area.x, area.y, area.width, 1);
+        surface.fill(row, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
+        let elapsed: i32 = self.elapsed_ms < 0 ? 0 : self.elapsed_ms;
+        let minutes: i32 = elapsed / 60000;
+        let seconds: i32 = (elapsed / 1000) % 60;
+        let millis: i32 = elapsed % 1000;
+        let text: str8 = format!(" BPM {} | Time {}{}:{}{}.{}{} | {}/{} | MIDI IN ",
+            self.bpm, minutes < 10 ? "0" : "", minutes,
+            seconds < 10 ? "0" : "", seconds,
+            millis < 10 ? "00" : (millis < 100 ? "0" : ""), millis,
+            self.beats_per_bar, self.beat_unit);
+        surface.text(row, text, theme.foreground, theme.panel);
+        // ASCII status text gives a predictable cell offset; the LED is separate.
+        let offset: i32 = i32(len(text));
+        if offset < area.width {
+            surface.text(Rect::new(area.x + offset, area.y, area.width - offset, 1),
+                self.midi_received ? "●" : "○", self.midi_received ? 0x5adc8c : theme.muted, theme.panel);
+        }
+        free(text);
+    }
+}

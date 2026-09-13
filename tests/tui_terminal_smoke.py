@@ -86,6 +86,9 @@ def main():
         assert b"38;2;" in frame and b"48;2;" in frame
         assert "┌".encode() in frame and b"New session" in frame
         assert b"\x1b[>1u" in frame
+        assert b" BPM 120 | Time 00:00.000 | 4/4 | MIDI IN " in frame
+        assert "○" in frame.decode()
+        assert b"w/b: col" not in frame
         # Switch to Edit, activate Undo, then reopen and dismiss with Escape.
         os.write(master, b"\x1b[C")
         assert b"Undo" in read_frame(None)

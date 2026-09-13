@@ -19,6 +19,8 @@ mod tui_demo::mixer;
 use tui_demo::mixer::Mixer;
 mod tui_demo::patterns;
 use tui_demo::patterns::PatternLibrary;
+mod tui_demo::transport;
+use tui_demo::transport::TransportStatus;
 use std::strbuf::clone;
 use std::strbuf::free;
 use std::io::stdin;
@@ -83,7 +85,7 @@ fn demo_panes(content: Rect) -> list<Pane> {
             Pane { id: 2, bounds: right[1] }];
 }
 
-fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: Mixer, patterns: &PatternLibrary) -> void {
+fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: Mixer, patterns: &PatternLibrary, transport: TransportStatus) -> void {
     let theme: Theme = Theme::dark_blue();
     surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
     let library: Pane = panes[0];
@@ -108,9 +110,7 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
         }
     }
     else { label.paint(surface, bottom, theme); table.paint_track_details(surface, bottom, theme); }
-    surface.text(Rect::new(0, surface.height - 1, surface.width, 1),
-        " w/b: col j/k: row G/gg: last/first m: mixer | Enter: edit Tab: menu",
-        theme.muted, theme.background);
+    transport.paint(surface, Rect::new(0, surface.height - 1, surface.width, 1), theme);
     menus.paint(surface, surface.bounds(), theme);
 }
 
@@ -122,6 +122,7 @@ fn main() -> i32 {
     var input: InputDecoder = InputDecoder::new();
     var dialog: OpenSessionDialog = OpenSessionDialog::new();
     var library: PatternLibrary = PatternLibrary::new();
+    let transport: TransportStatus = TransportStatus {};
     var mixer: Mixer = Mixer { visible: false, phase: 0 };
     var mixer_ticks: i32 = 0;
     var question: QuestionDialog = QuestionDialog::new("New session", "Start a new session?");
@@ -161,7 +162,7 @@ fn main() -> i32 {
             if !surface.is_valid() { library.release(); dialog.release(); free(message); terminal.finish(); return 1; }
             library.table.reconcile(panes[1].bounds.inset(1));
             library.view.reconcile(panes[0].bounds.inset(1));
-            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library);
+            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport);
             dialog.paint(surface, area, Theme::dark_blue());
             question.paint(surface, area, Theme::dark_blue());
             library.table.paint_track_dialog(surface, area, Theme::dark_blue());

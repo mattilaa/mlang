@@ -23,6 +23,28 @@ mod tui::listview;
 mod tui_demo::patterns;
 use tui::listview::*;
 use tui_demo::patterns::PatternLibrary;
+mod tui_demo::transport;
+use tui_demo::transport::TransportStatus;
+
+#[test]
+fn tui_transport_status() {
+    let surface: Surface = Surface::new(80, 3); let theme: Theme = Theme::dark_blue();
+    var status: TransportStatus = TransportStatus {};
+    verify(status.bpm == 120 && status.beats_per_bar == 4 && status.beat_unit == 4);
+    status.paint(surface, Rect::new(0, 2, 80, 1), theme);
+    let idle: Cell = surface.cell(42, 2);
+    verify(idle.glyph == 9675 && idle.foreground == theme.muted);
+    status.elapsed_ms = 62003; status.bpm = 140; status.beats_per_bar = 7; status.beat_unit = 8;
+    status.midi_received = true;
+    status.paint(surface, Rect::new(0, 2, 80, 1), theme);
+    let active: Cell = surface.cell(42, 2);
+    verify(active.glyph == 9679 && active.foreground == 0x5adc8c);
+    let minute: Cell = surface.cell(17, 2); let second: Cell = surface.cell(20, 2);
+    verify(minute.glyph == 49 && second.glyph == 50);
+    status.paint(surface, Rect::new(0, 2, 5, 1), theme);
+    status.paint(surface, Rect::new(0, 2, 0, 0), theme);
+    surface.release();
+}
 
 #[test]
 fn tui_list_view_navigation_and_paint() {

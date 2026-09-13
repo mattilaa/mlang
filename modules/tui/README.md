@@ -141,6 +141,12 @@ with legacy arrow keys and unmodified `hjkl`.
 
 ### Patterns and Song lists
 
+The demo's bottom status bar shows BPM (initially 120), sequence elapsed time
+(`MM:SS.mmm`), time signature (4/4), and a MIDI-input light. The demo has no
+playback clock or MIDI input processor yet, so time remains zero and the light
+is idle. `tui_demo::transport::TransportStatus` holds the display state for future
+integration; `midi_received` switches the dim hollow light to solid green.
+
 The left pane defaults to **Patterns**, listing `<pattern_nr> <pattern_name>`.
 The demo starts with `001 Intro`, `002 Verse`, and `003 Chorus`. Selection
 immediately loads that pattern into the **Pattern** view and Mixer. Each pattern
