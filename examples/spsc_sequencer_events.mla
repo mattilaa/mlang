@@ -1,0 +1,67 @@
+/// Typed sequencer events delivered to a renderer without string encoding.
+mod std::sync;
+mod std::thread;
+use std::sync::SpscQueue;
+use std::thread::join;
+
+enum EventKind { NoteOn, NoteOff, Parameter };
+
+struct SequencerEvent {
+    var sample_time: i64;
+    var track: i32;
+    var line: i32;
+    var kind: EventKind;
+    var note: i32;
+    var velocity: f32;
+};
+
+struct Renderer { var active_note: i32; };
+
+// Methods avoid the compiler's allocating free-function exception frames.
+impl Renderer {
+pub fn note_on(self: Renderer, event: SequencerEvent) -> i32 { return event.note; }
+pub fn note_off(self: Renderer, event: SequencerEvent) -> i32 { return 0; }
+pub fn parameter(self: Renderer, event: SequencerEvent) -> i32 { return event.track; }
+
+// Called by the audio process loop. Bound work per callback; retain future
+// events in renderer-owned storage and apply them at their sample_time.
+pub fn render_events(self: Renderer, q: SpscQueue<SequencerEvent>) -> i32 {
+    var event: SequencerEvent = SequencerEvent {
+        sample_time: 0, track: 0, line: 0, kind: EventKind::NoteOff,
+        note: 0, velocity: 0.0
+    };
+    var sum: i32 = 0;
+    for _i in 0..32 {
+        if !q.try_pop_into(&event) { break; }
+        sum = sum + match event.kind {
+            EventKind::NoteOn => self.note_on(event),
+            EventKind::NoteOff => self.note_off(event),
+            EventKind::Parameter => self.parameter(event),
+            _ => 0
+        };
+    }
+    return sum;
+}
+}
+
+fn sequence(handle: i64) -> i32 {
+    let q: SpscQueue<SequencerEvent> = SpscQueue<SequencerEvent> { handle: handle };
+    let event: SequencerEvent = SequencerEvent {
+        sample_time: 128, track: 1, line: 16, kind: EventKind::NoteOn,
+        note: 60, velocity: 0.8
+    };
+    // A real sequencer must choose an explicit overflow policy.
+    return q.try_push(event) ? 0 : 1;
+}
+
+fn main() -> i32 {
+    let q: SpscQueue<SequencerEvent> = SpscQueue<SequencerEvent>::new(256);
+    if !q.is_valid() { return 1; }
+    let producer: std::thread::thread = thread::spawn(sequence, q.handle);
+    // Join is for this finite demo only, never inside an audio callback.
+    let status: i32 = join(producer);
+    let renderer: Renderer = Renderer { active_note: 0 };
+    let rendered: i32 = renderer.render_events(q);
+    q.release();
+    return status == 0 && rendered == 60 ? 0 : 1;
+}

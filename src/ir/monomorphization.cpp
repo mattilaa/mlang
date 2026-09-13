@@ -455,6 +455,12 @@ CodeGenerator::substituteTypeParams(TypeNode* type,
     if(!type)
         return nullptr;
 
+    if(auto* ptr = dynamic_cast<PointerTypeNode*>(type))
+    {
+        return new PointerTypeNode(
+            substituteTypeParams(ptr->elementType, typeParams, typeArgs));
+    }
+
     // Check if this is a struct type reference that matches a type parameter
     if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
     {

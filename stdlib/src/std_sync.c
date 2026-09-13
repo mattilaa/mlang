@@ -41,6 +41,15 @@ typedef struct
 
 static __thread char g_last_error[512];
 
+typedef struct
+{
+    _Atomic size_t head;
+    _Atomic size_t tail;
+    size_t slots;
+    size_t item_size;
+    unsigned char* items;
+} mlang_sync_spsc_t;
+
 static void set_error(const char* msg)
 {
     if(!msg)
@@ -58,6 +67,76 @@ static void set_errno_error(const char* prefix)
 static void clear_error(void)
 {
     g_last_error[0] = '\0';
+}
+
+int64_t __mlang_std_sync_spsc_new(int64_t capacity, int64_t item_size)
+{
+    // One sentinel slot distinguishes full from empty. Indices wrap at slots,
+    // not SIZE_MAX, so arbitrary capacities remain correct indefinitely.
+    if(capacity <= 0 || item_size <= 0 ||
+       (uint64_t)capacity >= SIZE_MAX || (uint64_t)item_size > SIZE_MAX ||
+       (size_t)capacity + 1 > SIZE_MAX / (size_t)item_size)
+    {
+        set_error("std::sync SpscQueue: invalid capacity or item size");
+        return 0;
+    }
+    mlang_sync_spsc_t* q = malloc(sizeof(*q));
+    if(!q)
+    {
+        set_error("std::sync SpscQueue: out of memory");
+        return 0;
+    }
+    atomic_init(&q->head, 0);
+    atomic_init(&q->tail, 0);
+    if(!atomic_is_lock_free(&q->head) || !atomic_is_lock_free(&q->tail))
+    {
+        free(q);
+        set_error("std::sync SpscQueue: index atomics are not lock-free");
+        return 0;
+    }
+    q->slots = (size_t)capacity + 1;
+    q->item_size = (size_t)item_size;
+    q->items = calloc(q->slots, q->item_size);
+    if(!q->items)
+    {
+        free(q);
+        set_error("std::sync SpscQueue: out of memory");
+        return 0;
+    }
+    clear_error();
+    return (int64_t)(intptr_t)q;
+}
+
+int __mlang_std_sync_spsc_push(int64_t handle, const void* value)
+{
+    mlang_sync_spsc_t* q = (mlang_sync_spsc_t*)(intptr_t)handle;
+    if(!q || !value) return 0;
+    size_t tail = atomic_load_explicit(&q->tail, memory_order_relaxed);
+    size_t next = tail + 1 == q->slots ? 0 : tail + 1;
+    if(next == atomic_load_explicit(&q->head, memory_order_acquire)) return 0;
+    memcpy(q->items + tail * q->item_size, value, q->item_size);
+    atomic_store_explicit(&q->tail, next, memory_order_release);
+    return 1;
+}
+
+int __mlang_std_sync_spsc_pop(int64_t handle, void* value)
+{
+    mlang_sync_spsc_t* q = (mlang_sync_spsc_t*)(intptr_t)handle;
+    if(!q || !value) return 0;
+    size_t head = atomic_load_explicit(&q->head, memory_order_relaxed);
+    if(head == atomic_load_explicit(&q->tail, memory_order_acquire)) return 0;
+    memcpy(value, q->items + head * q->item_size, q->item_size);
+    size_t next = head + 1 == q->slots ? 0 : head + 1;
+    atomic_store_explicit(&q->head, next, memory_order_release);
+    return 1;
+}
+
+void __mlang_std_sync_spsc_free(int64_t handle)
+{
+    mlang_sync_spsc_t* q = (mlang_sync_spsc_t*)(intptr_t)handle;
+    if(!q) return;
+    free(q->items);
+    free(q);
 }
 
 static char* dup_cstr(const char* s)

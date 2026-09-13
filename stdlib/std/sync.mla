@@ -6,6 +6,7 @@
 /// - Condvar
 /// - Channel (string message queue)
 /// - LockFreeQueue (string SPSC lock-free queue)
+/// - SpscQueue<T> (preallocated, fixed-size event queue)
 
 
 /// \cond INTERNAL_IMPORTS
@@ -41,6 +42,49 @@ alias channel = Channel;
 
 /// @brief Lowercase stdlib type alias for `LockFreeQueue`.
 alias lock_free_queue = LockFreeQueue;
+
+/// @brief Preallocated single-producer/single-consumer queue of byte-copied T values.
+/// T must contain only self-contained, fixed-size values (numbers, enums,
+/// and structs of those). No strings, lists, arrays, pointers, references,
+/// managed resources, or types with copy/drop hooks.
+/// This requirement is a caller contract, not a compiler-enforced constraint.
+/// Exactly one thread may push and exactly one thread may pop. Copies of this
+/// handle share storage. Call release exactly once after both threads stop.
+pub struct SpscQueue<T> {
+    var handle: i64;
+};
+
+impl<T> SpscQueue {
+    /// @brief Allocate capacity slots before starting audio processing.
+    /// Returns an invalid queue (is_valid() == false) for nonpositive sizes,
+    /// overflow, allocation failure, or targets without lock-free indices.
+    /// last_error() describes construction failures.
+    pub fn new(capacity: i64) -> SpscQueue<T> {
+        let h: i64 = __mlang_std_sync_spsc_new(capacity, size_of(T));
+        return SpscQueue<T> { handle: h };
+    }
+
+    pub fn is_valid(self: SpscQueue<T>) -> bool {
+        return self.handle != 0;
+    }
+
+    /// @brief Copy an event into the queue. False means full; never waits.
+    /// No allocation, deallocation, or mutex operations on this path.
+    pub fn try_push(self: SpscQueue<T>, value: T) -> bool {
+        return __mlang_std_sync_spsc_push(self.handle, &value) == 1;
+    }
+
+    /// @brief Copy the next event into existing storage. False means empty.
+    /// Leaves output unchanged when empty. Never allocates, frees, or waits.
+    pub fn try_pop_into(self: SpscQueue<T>, value: ptr<T>) -> bool {
+        return __mlang_std_sync_spsc_pop(self.handle, value) == 1;
+    }
+
+    /// @brief Release storage after producer and consumer have stopped.
+    pub fn release(self: SpscQueue<T>) -> void {
+        __mlang_std_sync_spsc_free(self.handle);
+    }
+}
 
 
 /// @brief Return last std::sync backend error string.
