@@ -11,6 +11,61 @@ mod std::bytes;
 mod std::testing;
 mod tui::dialog;
 mod tui::textfield;
+mod tui::table;
+use tui::table::*;
+
+fn sample_table() -> Table {
+    return Table::new([TableColumn { title: "NOTE", width: 6 }, TableColumn { title: "VEL", width: 5 },
+        TableColumn { title: "TRACK", width: 8 }],
+        [TableRow { cells: ["C-4", "100", "Keys"] }, TableRow { cells: ["D-4", "90", "Bass"] },
+         TableRow { cells: ["E-4", "80"] }, TableRow { cells: ["F-4"] }, TableRow { cells: ["G-4"] }]);
+}
+
+#[test]
+fn tui_table_navigation_and_scrollbars() {
+    var table: Table = sample_table();
+    let area: Rect = Rect::new(3, 2, 12, 5);
+    let body: Rect = table.body(area);
+    verify(body.width == 11 && body.height == 3);
+    for _i in 0..10 { table.on_event(decode_input("j"), area); table.on_event(decode_input("w"), area); }
+    verify(table.selected_row == 4 && table.selected_column == 2);
+    verify(table.scroll_y == 2 && table.scroll_x == 8);
+    table.vertical_scrollbar = false; table.horizontal_scrollbar = false;
+    table.reconcile(area);
+    let expanded: Rect = table.body(area);
+    verify(expanded.width == 12 && expanded.height == 4 && table.scroll_y == 1);
+    verify(!table.on_event(decode_input("\x1b[106;6u"), area));
+    for _i in 0..10 { table.on_event(decode_input("k"), area); table.on_event(decode_input("b"), area); }
+    verify(table.selected_row == 0 && table.selected_column == 0 && table.scroll_x == 0 && table.scroll_y == 0);
+}
+
+#[test]
+fn tui_table_rendering_and_clipping() {
+    var table: Table = sample_table();
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(25, 9);
+    let bounds: Rect = surface.bounds();
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.background });
+    let area: Rect = Rect::new(2, 1, 21, 7);
+    table.paint(surface, area, theme);
+    let selected: Cell = surface.cell(9, 2);
+    let intersection: Cell = surface.cell(3, 2);
+    let stripe: Cell = surface.cell(9, 3);
+    let normal: Cell = surface.cell(9, 4);
+    let column: Cell = surface.cell(3, 4);
+    verify(selected.background == theme.selection && intersection.background == lighten(theme.selection, 8));
+    verify(stripe.background == darken(theme.panel, 82) && normal.background == theme.panel);
+    verify(column.background == lighten(theme.panel, 8));
+    let vertical: Cell = surface.cell(22, 2); let horizontal: Cell = surface.cell(2, 7);
+    verify(vertical.foreground == theme.accent && horizontal.foreground == theme.accent);
+    table.selected_column = 2; table.selected_row = 4;
+    table.paint(surface, Rect::new(2, 1, 8, 5), theme);
+    let outside: Cell = surface.cell(1, 2); verify(outside.glyph == 88);
+    table.rows = []; table.columns = [];
+    for size in 0..4 { table.paint(surface, Rect::new(0, 0, i32(size), i32(size)), theme); }
+    verify(table.selected_row == -1 && table.selected_column == -1 && table.scroll_x == 0 && table.scroll_y == 0);
+    surface.release();
+}
 use tui::geometry::*;
 use tui::layout::*;
 use tui::surface::*;

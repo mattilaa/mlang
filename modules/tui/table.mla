@@ -1,0 +1,136 @@
+mod tui::geometry;
+mod tui::surface;
+mod tui::theme;
+mod tui::input;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::input::*;
+use tui::menu::Key;
+
+pub struct TableColumn { var title: str8; var width: i32; };
+pub struct TableRow { var cells: list<str8>; };
+
+/// Strings are borrowed. Scrollbar visibility does not disable scrolling.
+pub struct Table {
+    var columns: list<TableColumn>; var rows: list<TableRow>;
+    var selected_row: i32; var selected_column: i32;
+    var scroll_x: i32; var scroll_y: i32;
+    var horizontal_scrollbar: bool{true}; var vertical_scrollbar: bool{true};
+};
+impl Table {
+    pub fn new(columns: list<TableColumn>, rows: list<TableRow>) -> Table {
+        return Table { columns: columns, rows: rows };
+    }
+    fn column_width(self: Table, index: i32) -> i32 {
+        let column: TableColumn = self.columns[index];
+        return column.width < 1 ? 1 : (column.width > 4096 ? 4096 : column.width);
+    }
+    pub fn total_width(self: Table) -> i32 {
+        var width: i32 = 0;
+        for i in 0..self.columns.len() { width = width + self.column_width(i32(i)); }
+        return width;
+    }
+    /// Header is fixed; scrollbars each reserve one cell when enabled.
+    pub fn body(self: Table, area: Rect) -> Rect {
+        return Rect::new(area.x, area.y + (area.height > 0 ? 1 : 0),
+            area.width - (self.vertical_scrollbar && area.width > 0 ? 1 : 0),
+            area.height - 1 - (self.horizontal_scrollbar && area.height > 1 ? 1 : 0));
+    }
+    pub fn reconcile(self: &mut Self, area: Rect) -> void {
+        let body: Rect = self.body(area);
+        let count: i32 = i32(self.rows.len());
+        let columns: i32 = i32(self.columns.len());
+        self.selected_row = count == 0 ? -1 : (self.selected_row < 0 ? 0 : (self.selected_row >= count ? count - 1 : self.selected_row));
+        self.selected_column = columns == 0 ? -1 : (self.selected_column < 0 ? 0 : (self.selected_column >= columns ? columns - 1 : self.selected_column));
+        if self.selected_row >= 0 && body.height > 0 {
+            if self.selected_row < self.scroll_y { self.scroll_y = self.selected_row; }
+            if self.selected_row >= self.scroll_y + body.height { self.scroll_y = self.selected_row - body.height + 1; }
+        }
+        var start: i32 = 0;
+        for i in 0..columns {
+            let width: i32 = self.column_width(i32(i));
+            if i == self.selected_column && body.width > 0 {
+                if start < self.scroll_x { self.scroll_x = start; }
+                else if start + width > self.scroll_x + body.width {
+                    self.scroll_x = width > body.width ? start : start + width - body.width;
+                }
+            }
+            start = start + width;
+        }
+        let max_x: i32 = start > body.width ? start - body.width : 0;
+        let max_y: i32 = count > body.height ? count - body.height : 0;
+        self.scroll_x = self.scroll_x < 0 ? 0 : (self.scroll_x > max_x ? max_x : self.scroll_x);
+        self.scroll_y = self.scroll_y < 0 ? 0 : (self.scroll_y > max_y ? max_y : self.scroll_y);
+    }
+    /// Returns true only for table navigation. Caller owns pane/modal routing.
+    pub fn on_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
+        if event.kind == InputKind::Pane || event.modifiers != 1 { return false; }
+        var handled: bool = true;
+        if event.code == 119 { self.selected_column = self.selected_column + 1; }
+        else if event.code == 98 { self.selected_column = self.selected_column - 1; }
+        else if event.kind == InputKind::Menu && event.key == Key::Down { self.selected_row = self.selected_row + 1; }
+        else if event.kind == InputKind::Menu && event.key == Key::Up { self.selected_row = self.selected_row - 1; }
+        else { handled = false; }
+        if handled { self.reconcile(area); }
+        return handled;
+    }
+    pub fn paint(self: &mut Self, surface: Surface, area: Rect, theme: Theme) -> void {
+        self.reconcile(area);
+        if area.width <= 0 || area.height <= 0 { return; }
+        // Local surface clips horizontally scrolled text without touching panes.
+        let canvas: Surface = Surface::new(area.width, area.height);
+        if !canvas.is_valid() { canvas.release(); return; }
+        let bounds: Rect = canvas.bounds();
+        let body: Rect = self.body(bounds);
+        canvas.fill(bounds, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
+        for y in 0..body.height {
+            let row_index: i32 = self.scroll_y + i32(y);
+            if row_index >= self.rows.len() { break; }
+            let row: TableRow = self.rows[row_index];
+            let bg: i32 = row_index == self.selected_row ? theme.selection :
+                (row_index % 2 == 1 ? darken(theme.panel, 82) : theme.panel);
+            canvas.fill(Rect::new(0, i32(y) + 1, body.width, 1), Cell { glyph: 32, foreground: theme.foreground, background: bg });
+            var x: i32 = -self.scroll_x;
+            for c in 0..self.columns.len() {
+                let width: i32 = self.column_width(i32(c));
+                let cell_bg: i32 = c == self.selected_column ? lighten(bg, 8) : bg;
+                let cell: Rect = Rect::new(x, i32(y) + 1, width, 1);
+                canvas.fill(cell.intersect(body), Cell { glyph: 32, foreground: theme.foreground, background: cell_bg });
+                let text_width: i32 = x + width > body.width ? body.width - x : width;
+                if c < row.cells.len() { canvas.text(Rect::new(x, i32(y) + 1, text_width, 1), row.cells[c], theme.foreground, cell_bg); }
+                x = x + width;
+            }
+        }
+        var x: i32 = -self.scroll_x;
+        for c in 0..self.columns.len() {
+            let column: TableColumn = self.columns[c];
+            let width: i32 = self.column_width(i32(c));
+            let header: Rect = Rect::new(x, 0, width, 1);
+            let clip: Rect = Rect::new(0, 0, body.width, 1);
+            let bg: i32 = c == self.selected_column ? lighten(theme.menu_background, 8) : theme.menu_background;
+            canvas.fill(header.intersect(clip), Cell { glyph: 32, foreground: theme.accent, background: bg });
+            canvas.text(Rect::new(x, 0, x + width > body.width ? body.width - x : width, 1), column.title, theme.accent, bg);
+            x = x + width;
+        }
+        if self.vertical_scrollbar { self.paint_bar(canvas, Rect::new(body.width, 1, 1, body.height), i32(self.rows.len()), body.height, self.scroll_y, true, theme); }
+        if self.horizontal_scrollbar && area.height > 1 { self.paint_bar(canvas, Rect::new(0, area.height - 1, body.width, 1), self.total_width(), body.width, self.scroll_x, false, theme); }
+        for y in 0..area.height {
+            for x in 0..area.width { surface.put(area.x + i32(x), area.y + i32(y), canvas.cell(i32(x), i32(y))); }
+        }
+        canvas.release();
+    }
+    fn paint_bar(self: Table, surface: Surface, area: Rect, total: i32, visible: i32, offset: i32, vertical: bool, theme: Theme) -> void {
+        let length: i32 = vertical ? area.height : area.width;
+        if length <= 0 { return; }
+        var thumb: i32 = total <= visible ? length : i32(wide(length) * wide(visible) / wide(total));
+        if thumb < 1 { thumb = 1; }
+        let position: i32 = total <= visible ? 0 : i32(wide(length - thumb) * wide(offset) / wide(total - visible));
+        for i in 0..length {
+            let selected: bool = i >= position && i < position + thumb;
+            surface.put(area.x + (vertical ? 0 : i32(i)), area.y + (vertical ? i32(i) : 0),
+                Cell { glyph: selected ? (vertical ? 0x2503 : 0x2501) : (vertical ? 0x2502 : 0x2500),
+                    foreground: selected ? theme.accent : theme.border, background: theme.background });
+        }
+    }
+}

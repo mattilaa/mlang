@@ -1,0 +1,47 @@
+mod tui::geometry;
+mod tui::surface;
+mod tui::theme;
+mod tui::widgets;
+mod std::bytes;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::widgets::Panel;
+use std::bytes::Bytes;
+
+/// Independent button widget. Labels are borrowed; action is application-defined.
+/// The allocated rectangle includes one cell of right/bottom shadow (height 4).
+pub struct PushButton { var label: str8; var action: i32; var enabled: bool{true}; };
+impl PushButton {
+    pub fn width(self: PushButton) -> i32 {
+        let raw: result<Bytes, str8> = Bytes::from_string(self.label);
+        if raw.is_err() { return 7; }
+        let bytes: Bytes = raw.unwrap();
+        var cells: i32 = 0;
+        for i in 0..bytes.len() {
+            let byte: i32 = bytes.get(i);
+            if byte < 128 || byte >= 192 { cells = cells + 1; }
+        }
+        bytes.close();
+        return cells + 5;
+    }
+    pub fn paint(self: PushButton, surface: Surface, area: Rect, theme: Theme,
+                 focused: bool, pressed: bool) -> void {
+        if area.width < 2 || area.height < 2 { return; }
+        let down: i32 = pressed && self.enabled ? 1 : 0;
+        var style: Theme = theme;
+        style.panel = down == 1 ? theme.selection : theme.menu_background;
+        style.border = focused && self.enabled ? theme.accent : theme.border;
+        let face: Rect = Rect::new(area.x + down, area.y + down, area.width - 1,
+            area.height > 4 ? 3 : area.height - 1);
+        if down == 0 {
+            let shadow: Rect = Rect::new(face.x + 1, face.y + 1, face.width, face.height);
+            surface.shadow(shadow, theme.shadow_percent);
+        }
+        let panel: Panel = Panel { title: "" };
+        let inside: Rect = panel.paint(surface, face, style);
+        let padding: i32 = inside.width > self.width() - 5 ? (inside.width - (self.width() - 5)) / 2 : 0;
+        surface.text(Rect::new(inside.x + padding, inside.y, inside.width - padding, inside.height),
+            self.label, self.enabled ? theme.foreground : theme.muted, style.panel);
+    }
+}

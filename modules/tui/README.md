@@ -139,6 +139,39 @@ Legacy terminals can collapse Ctrl+Shift+H/J to Backspace/Enter; those ambiguous
 bytes are deliberately not treated as pane navigation. The menu still works
 with legacy arrow keys and unmodified `hjkl`.
 
+### Table widget
+
+`tui::table::Table` renders the demo's 64-row sequence as separate LINE, NOTE,
+VEL, and TRACK columns. Focus the sequence pane with Ctrl+Shift+L; `w`/`b`
+select the next/previous column and `j`/`k` (or Down/Up) select rows. Navigation
+stops at the edges and scrolls the selection into view, with a fixed header.
+Menus and dialogs retain exclusive keyboard ownership while open.
+
+Construct with `Table::new(columns, rows)`, using `TableColumn { title, width }`
+and `TableRow { cells }`. Widths are terminal cells (clamped to 1–4096), and
+strings are borrowed. Missing cells are blank; extra cells are ignored.
+Paint inside a panel's returned content rectangle. Route input to
+`on_event(event, content_rect)` only when its pane is active; it returns whether
+it handled navigation. `selected_row` and `selected_column` are zero-based
+(`-1` for empty data). Call `reconcile` after changing data or viewport size;
+painting also reconciles the selection and scroll offsets.
+
+Both scrollbars are enabled by default and reserve one cell each, even when
+all data fits. Set `horizontal_scrollbar` or `vertical_scrollbar` to `false`
+independently to hide them and reclaim that space. Scrolling still works:
+
+```mlang
+table.vertical_scrollbar = false; // e.g. while the application is playing
+table.selected_row = playing_row;
+table.reconcile(content_rect); // keep the playback row visible
+```
+
+Playback itself remains the application's responsibility. Scrollbars display
+the visible range and position; navigation is keyboard-driven, without mouse
+dragging. The selected row uses the theme selection color, the selected column
+is slightly lighter (including their intersection), and alternating data rows
+are darker. Striping follows absolute row numbers while scrolling.
+
 ### Open session dialog
 
 File → Open session in the demo opens `tui::dialog::OpenSessionDialog`. Its

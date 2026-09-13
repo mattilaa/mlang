@@ -12,6 +12,7 @@ use tui::terminal::*;
 use tui::focus::*;
 use tui::input::*;
 use tui::dialog::*;
+use tui::table::*;
 use std::strbuf::clone;
 use std::strbuf::free;
 use std::io::stdin;
@@ -55,7 +56,23 @@ fn demo_panes(content: Rect) -> list<Pane> {
             Pane { id: 2, bounds: right[1] }];
 }
 
-fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8) -> void {
+fn demo_table() -> Table {
+    var rows: list<TableRow> = [];
+    let notes: list<str8> = ["C-4", "E-4", "G-4", "B-4", "C-5", "G-4"];
+    for i in 0..64 {
+        let number: str8 = format!("{}{}", i < 9 ? "00" : "0", i + 1);
+        rows.push(TableRow { cells: [number, notes[i % 6], "100", "Keys"] });
+    }
+    return Table::new([TableColumn { title: "LINE", width: 7 }, TableColumn { title: "NOTE", width: 9 },
+        TableColumn { title: "VEL", width: 7 }, TableColumn { title: "TRACK", width: 16 }], rows);
+}
+
+fn release_demo_table(table: Table) -> void {
+    let rows: list<TableRow> = table.rows;
+    for row in rows { free(row.cells[0]); }
+}
+
+fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &Table) -> void {
     let theme: Theme = Theme::dark_blue();
     surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
     let library: Pane = panes[0];
@@ -69,24 +86,13 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
     surface.text(Rect::new(left.x + 1, left.y + 5, left.width - 2, 1), "Automation", theme.foreground, theme.panel);
     let sequence: Panel = Panel { title: " Sequence / 01 " };
     let top: Rect = sequence.paint_focused(surface, editor.bounds, theme, focus.is_active(1));
-    surface.text(Rect::new(top.x + 1, top.y, top.width - 2, 1),
-        "LINE    NOTE    VELOCITY    TRACK", theme.muted, theme.panel);
-    let lines: list<str8> = ["001     C-4       100       Keys", "002     E-4        84       Keys",
-        "003     G-4        92       Keys", "004     B-4        76       Keys",
-        "005     C-5        96       Keys", "006     G-4        88       Keys"];
-    var y: i32 = top.y + 2;
-    for line in lines {
-        if y < top.y + top.height {
-            surface.text(Rect::new(top.x + 1, y, top.width - 2, 1), line, theme.foreground, theme.panel);
-        }
-        y = y + 1;
-    }
+    table.paint(surface, top, theme);
     let details: Panel = Panel { title: " Inspector " };
     let bottom: Rect = details.paint_focused(surface, inspector.bounds, theme, focus.is_active(2));
     let label: Label = Label { text: message };
     label.paint(surface, bottom, theme);
     surface.text(Rect::new(0, surface.height - 1, surface.width, 1),
-        " Ctrl+Shift+H/J/K/L: panes | Tab: menu | Enter: select | Esc: close | q: quit",
+        " C-S-H/J/K/L: panes | w/b: column j/k: row | Tab: menu | Esc: close | q: quit",
         theme.muted, theme.background);
     menus.paint(surface, surface.bounds(), theme);
 }
@@ -98,6 +104,7 @@ fn main() -> i32 {
     var focus: PaneFocus = PaneFocus::new(0);
     var input: InputDecoder = InputDecoder::new();
     var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    var table: Table = demo_table();
     var question: QuestionDialog = QuestionDialog::new("New session", "Start a new session?");
     var message: str8 = clone("Select a command from the menu.");
     var running: bool = true;
@@ -123,8 +130,9 @@ fn main() -> i32 {
         focus.set_menu_active(menus.active >= 0 || dialog.active || question.active);
         if dirty || area.width != previous_width || area.height != previous_height {
             let surface: Surface = Surface::new(area.width, area.height);
-            if !surface.is_valid() { dialog.release(); free(message); terminal.finish(); return 1; }
-            paint_demo(surface, menus, focus, panes, message);
+            if !surface.is_valid() { release_demo_table(table); dialog.release(); free(message); terminal.finish(); return 1; }
+            table.reconcile(panes[1].bounds.inset(1));
+            paint_demo(surface, menus, focus, panes, message, table);
             dialog.paint(surface, area, Theme::dark_blue());
             question.paint(surface, area, Theme::dark_blue());
             terminal.present(surface);
@@ -164,13 +172,25 @@ fn main() -> i32 {
                 }
             }
             else if event.kind == InputKind::Quit { running = false; }
-            else if event.kind == InputKind::Menu {
+            // Exclusive input ownership: never call a widget handler from a
+            // boolean guard. The compiler may evaluate every operand.
+            else if menus.active >= 0 {
+                if event.kind != InputKind::None { dirty = true; }
+                if event.kind == InputKind::Menu {
+                    command = menus.on_key(event.key);
+                    focus.set_menu_active(menus.active >= 0);
+                    dirty = true;
+                }
+            }
+            else if event.kind == InputKind::Menu && event.key == Key::Toggle {
                 command = menus.on_key(event.key);
                 focus.set_menu_active(menus.active >= 0);
                 dirty = true;
             } else if event.kind == InputKind::Pane {
                 focus.navigate(event.key, panes);
                 dirty = true;
+            } else if focus.selected == 1 {
+                if table.on_event(event, panes[1].bounds.inset(1)) { dirty = true; }
             }
             if command == 99 { running = false; }
             else if command == 1 { question.open(); focus.set_menu_active(true); }
@@ -206,7 +226,7 @@ fn main() -> i32 {
         }
         sleep_ms(10);
     }
-    dialog.release(); free(message);
+    release_demo_table(table); dialog.release(); free(message);
     terminal.finish();
     return 0;
 }

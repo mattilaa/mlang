@@ -11,3 +11,4 @@ mod tui::input;
 mod tui::textfield;
 mod tui::dialog;
 mod tui::button;
+mod tui::table;

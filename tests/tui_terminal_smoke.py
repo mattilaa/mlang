@@ -38,11 +38,13 @@ def main():
         pending_output = data[end:]
         return data[:end]
 
-    def read_frame(expected_pane, dialog_pane=None):
+    def read_frame(expected_pane, dialog_pane=None, table_cell=None):
         frame = read_until(b"\x1b[0m")
         # Inspect rendered border colors, not application debug/status text.
         x = y = 0
         foreground = None
+        background = None
+        backgrounds = {}
         cells = {}
         for token in re.split(r"(\x1b\[[0-?]*[ -/]*[@-~])", frame.decode()):
             if token.startswith("\x1b["):
@@ -52,13 +54,19 @@ def main():
                     x, y = col - 1, row - 1
                 elif token.endswith("m") and params.startswith("38;2;"):
                     foreground = tuple(map(int, params.split(";")[2:]))
+                elif token.endswith("m") and params.startswith("48;2;"):
+                    background = tuple(map(int, params.split(";")[2:]))
             else:
                 for _glyph in token:
                     cells[x, y] = foreground
+                    backgrounds[x, y] = background
                     x += 1
         borders = [(0, 8), (23, 8), (23, 18)]
         selected = [i for i, point in enumerate(borders) if cells.get(point) == (145, 184, 235)]
         assert selected == ([] if expected_pane is None else [expected_pane]), selected
+        if table_cell is not None:
+            point, expected = table_cell
+            assert backgrounds.get(point) == expected, (point, backgrounds.get(point), expected)
         if dialog_pane is not None:
             dialog_borders = [(3, 3), (3, 8), (28, 8)]
             dialog_selected = [i for i, point in enumerate(dialog_borders)
@@ -77,6 +85,33 @@ def main():
         assert b"Undo" in read_frame(None)
         os.write(master, b"\r")
         assert b"Command selected" in read_frame(0)
+        # The sequence is a real 64-row table; column/row input stays in its pane.
+        os.write(master, b"\x1b[108;6u")
+        read_frame(1)
+        os.write(master, b"w")
+        read_frame(1, table_cell=((31, 3), (60, 91, 128)))
+        os.write(master, b"j")
+        read_frame(1, table_cell=((31, 4), (60, 91, 128)))
+        os.write(master, b"j" * 70)
+        assert b"064" in read_frame(1)
+        os.write(master, b"b" + b"k" * 70)
+        assert b"001" in read_frame(1, table_cell=((24, 3), (60, 91, 128)))
+        # Menu navigation must not mutate the underlying table, even after
+        # scrolling beyond its viewport; column and pane keys are captured too.
+        os.write(master, b"\t")
+        read_frame(None)
+        os.write(master, b"j" * 70 + b"ww\x1b[106;6u")
+        read_frame(None)
+        os.write(master, b"\x1b")
+        assert b"001" in read_frame(1, table_cell=((24, 3), (60, 91, 128)))
+        os.write(master, b"\x1b[104;6u")
+        read_frame(0)
+        # Unfocused tables must not receive ordinary navigation either.
+        os.write(master, b"jw")
+        os.write(master, b"\x1b[108;6u")
+        read_frame(1, table_cell=((24, 3), (60, 91, 128)))
+        os.write(master, b"\x1b[104;6u")
+        read_frame(0)
         # Ctrl+Shift+L/J/K/H traverses the nested pane geometry.
         for packet, pane in [(b"\x1b[108;6u", 1), (b"\x1b[106;6u", 2),
                              (b"\x1b[107;6u", 1), (b"\x1b[104;6u", 0),
