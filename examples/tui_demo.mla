@@ -11,6 +11,9 @@ use tui::menu::*;
 use tui::terminal::*;
 use tui::focus::*;
 use tui::input::*;
+use tui::dialog::*;
+use std::strbuf::clone;
+use std::strbuf::free;
 use std::io::stdin;
 use std::io::read_keycode_nonblocking;
 use std::time::sleep_ms;
@@ -94,7 +97,8 @@ fn main() -> i32 {
     menus.open(0);
     var focus: PaneFocus = PaneFocus::new(0);
     var input: InputDecoder = InputDecoder::new();
-    var message: str8 = "Select a command from the menu.";
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    var message: str8 = clone("Select a command from the menu.");
     var running: bool = true;
     var dirty: bool = true;
     var previous_width: i32 = 0;
@@ -105,11 +109,12 @@ fn main() -> i32 {
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active(menus.active >= 0);
+        focus.set_menu_active(menus.active >= 0 || dialog.active);
         if dirty || area.width != previous_width || area.height != previous_height {
             let surface: Surface = Surface::new(area.width, area.height);
-            if !surface.is_valid() { terminal.finish(); return 1; }
+            if !surface.is_valid() { dialog.release(); free(message); terminal.finish(); return 1; }
             paint_demo(surface, menus, focus, panes, message);
+            dialog.paint(surface, area, Theme::dark_blue());
             terminal.present(surface);
             surface.release();
             previous_width = area.width;
@@ -130,7 +135,18 @@ fn main() -> i32 {
             let event: InputEvent = input.feed(byte);
             escape_ticks = 0;
             var command: i32 = 0;
-            if event.kind == InputKind::Quit { running = false; }
+            if dialog.active {
+                if event.kind != InputKind::None || event.code != 0 {
+                    dialog.on_event(event, area);
+                    focus.set_menu_active(dialog.active);
+                    if dialog.accepted {
+                        free(message);
+                        message = format!("Selected: {}", dialog.accepted_path);
+                    }
+                    dirty = true;
+                }
+            }
+            else if event.kind == InputKind::Quit { running = false; }
             else if event.kind == InputKind::Menu {
                 command = menus.on_key(event.key);
                 focus.set_menu_active(menus.active >= 0);
@@ -140,14 +156,25 @@ fn main() -> i32 {
                 dirty = true;
             }
             if command == 99 { running = false; }
-            else if command > 0 { message = "Command selected. Ready for the application handler."; }
+            else if command == 2 {
+                dialog.open("");
+                focus.set_menu_active(true);
+            }
+            else if command > 0 {
+                free(message); message = clone("Command selected. Ready for the application handler.");
+            }
             if !running { break; }
         }
         if !received_input && input.pending() {
             escape_ticks = escape_ticks + 1;
             if escape_ticks >= 5 {
                 let event: InputEvent = input.expire();
-                if event.kind == InputKind::Menu {
+                if dialog.active {
+                    dialog.on_event(event, area);
+                    focus.set_menu_active(dialog.active);
+                    dirty = true;
+                }
+                else if event.kind == InputKind::Menu {
                     menus.on_key(event.key);
                     focus.set_menu_active(menus.active >= 0);
                     dirty = true;
@@ -156,6 +183,7 @@ fn main() -> i32 {
         }
         sleep_ms(10);
     }
+    dialog.release(); free(message);
     terminal.finish();
     return 0;
 }

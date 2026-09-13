@@ -38,7 +38,7 @@ def main():
         pending_output = data[end:]
         return data[:end]
 
-    def read_frame(expected_pane):
+    def read_frame(expected_pane, dialog_pane=None):
         frame = read_until(b"\x1b[0m")
         # Inspect rendered border colors, not application debug/status text.
         x = y = 0
@@ -59,6 +59,11 @@ def main():
         borders = [(0, 8), (23, 8), (23, 18)]
         selected = [i for i, point in enumerate(borders) if cells.get(point) == (145, 184, 235)]
         assert selected == ([] if expected_pane is None else [expected_pane]), selected
+        if dialog_pane is not None:
+            dialog_borders = [(3, 3), (3, 8), (28, 8)]
+            dialog_selected = [i for i, point in enumerate(dialog_borders)
+                               if cells.get(point) == (145, 184, 235)]
+            assert dialog_selected == [dialog_pane], dialog_selected
         return frame
 
     try:
@@ -106,6 +111,45 @@ def main():
         os.write(master, b"\x1b")
         closed = read_frame(2)
         assert b"Blue hour" not in closed and b"Ambient" not in closed
+        # File -> Open session creates a modal browser, not a status-only action.
+        os.write(master, b"\t")
+        read_frame(None)
+        os.write(master, b"j\r")
+        browser = read_frame(None, 0)
+        assert b"Open session" in browser and b"Path: " in browser
+        assert b"Directories" in browser and b"Files" in browser
+        os.write(master, b"\x15tests/fixtures/tui_dialog\r")
+        browser = read_frame(None, 0)
+        assert b"alpha.session" in browser and b"qhjk session.session" in browser
+        os.write(master, b"\x1b[106;6u")  # path -> files
+        read_frame(None, 2)
+        os.write(master, b"\x1b[104;6u")  # files -> directories
+        read_frame(None, 1)
+        os.write(master, b"jl")  # select branch, expand it
+        browser = read_frame(None, 1)
+        assert b"child.session" in browser and b"nested" in browser
+        os.write(master, b"\x1b[108;6u")
+        read_frame(None, 2)
+        os.write(master, b"\x1b[107;6u")
+        read_frame(None, 0)
+        os.write(master, b"\x1b[106;6u\r")
+        assert b"Selected:" in read_frame(2)
+        # An invalid typed path keeps the dialog open, even when it contains q.
+        os.write(master, b"\tj\r")
+        read_frame(None, 0)
+        os.write(master, b"\x15qhjk-does-not-exist.session\r")
+        assert b"inaccessible" in read_frame(None, 0)
+        os.write(master, b"\x15tests/fixtures/tui_dialog/qhjk session.session\r")
+        assert b"Selected:" in read_frame(2)
+        # Cancellation restores pane focus and small viewports remain usable.
+        os.write(master, b"\tj\r")
+        read_frame(None, 0)
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 6, 12, 0, 0))
+        read_until(b"\x1b[0m")
+        os.write(master, b"\x1b")
+        read_until(b"\x1b[0m")
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+        read_frame(0)  # prior pane collapsed on resize; visible fallback is Library
         # A resize causes re-layout and a full frame with the new bottom row.
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 12, 45, 0, 0))
         read_until(b"\x1b[12;1H")
@@ -120,7 +164,7 @@ def main():
         before[3] &= ~pending
         after[3] &= ~pending
         assert after == before, f"Terminal settings were not restored: before={before!r}, after={after!r}"
-        print("PASS: cascading submenus, pane highlights, Ctrl+Shift navigation, focus restoration, resize, terminal restoration")
+        print("PASS: Open session dialog, path editing, directory browsing, modal focus, submenus, resize, terminal restoration")
     finally:
         if process.poll() is None:
             process.terminate()

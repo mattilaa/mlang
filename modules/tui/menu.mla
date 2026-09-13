@@ -9,7 +9,7 @@ use tui::theme::Theme;
 use tui::widgets::Panel;
 use std::bytes::Bytes;
 
-pub enum Key { Left, Right, Up, Down, Enter, Escape, Toggle };
+pub enum Key { Left, Right, Up, Down, Enter, Escape, Toggle, Backspace, Delete, Home, End };
 /// action > 0 identifies an application command; 0 is reserved for no action.
 pub struct MenuItem {
     var label: str8;

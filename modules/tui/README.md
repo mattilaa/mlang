@@ -18,6 +18,8 @@ This first version provides:
   to the viewport.
 - Cell compositing: draw content first, then the menu bar. Popup shadows retain
   existing glyphs and darken both foreground and background colors.
+- A modal Open session browser with an editable path, lazy directory tree,
+  file list, and its own pane focus.
 - Explicit alternate-screen/raw-input setup and restoration, terminal size
   queries, and plain-text snapshots when output is redirected.
 
@@ -118,7 +120,7 @@ prefers neighbors overlapping on the perpendicular axis, then the nearest edge
 and center. Ties use pane declaration order.
 
 `tui::input::InputDecoder` handles input a byte at a time and emits `InputEvent`
-values with kinds `None`, `Menu`, `Pane`, or `Quit`. In the demo, Ctrl+Shift+H/J/K/L
+values with kinds `None`, `Menu`, `Pane`, `Quit`, `Text`, or `Edit`. In the demo, Ctrl+Shift+H/J/K/L
 maps to left/down/up/right pane navigation; plain `hjkl` remains menu navigation.
 Pass bytes to `feed()`. If `pending()` stays true with no new input for about
 50ms, call `expire()` to resolve a bare Escape and discard incomplete packets.
@@ -133,6 +135,54 @@ Terminal-owned shortcuts may need rebinding to pass these combinations through.
 Legacy terminals can collapse Ctrl+Shift+H/J to Backspace/Enter; those ambiguous
 bytes are deliberately not treated as pane navigation. The menu still works
 with legacy arrow keys and unmodified `hjkl`.
+
+### Open session dialog
+
+File → Open session in the demo opens `tui::dialog::OpenSessionDialog`. Its
+title is drawn into the upper box border. The first inside row is the editable
+path; beneath it a horizontal layout holds the directory tree and the selected
+directory's files. The dialog paints last, with a shadow above the main view.
+
+- Ctrl+Shift+H/J/K/L moves between the path, directory tree, and file list using
+  the same spatial rules as the main view. Tab cycles these three controls.
+  Each control has its own highlight; the main view is inactive while modal.
+- In the tree, arrows or j/k select directories and immediately refresh the
+  files on the right. Right/l or Enter expands a directory lazily; Left/h
+  collapses it or selects its parent. The `..` entry navigates above the current
+  tree root. Expansion is limited to 32 levels.
+- In the file list, arrows or j/k select a file. Enter accepts its path and
+  closes the dialog.
+- In the path field, type an absolute path or a path relative to the currently
+  selected directory. Enter visits a directory or accepts an existing file.
+  Backspace, Delete, Left/Right, Home/End, Ctrl+A/E, and Ctrl+U (clear) edit the
+  text. Spaces and UTF-8 input are preserved. Letters such as q/h/j/k/l are text
+  here, even though they have shortcut meanings elsewhere.
+- Escape cancels the dialog and restores the main view's selected pane. Ctrl+C
+  also cancels while the dialog is open. Invalid paths leave the dialog open
+  with an error, and resizing keeps it inside the viewport.
+
+Construct with `OpenSessionDialog::new()`, call `open(initial_directory)` (empty
+means process CWD), route events to `on_event(event, viewport)` while `active`,
+and call `paint(surface, viewport, theme)` after all other UI. Suspend main focus
+while either a menu or the dialog is active. `accepted` and `accepted_path`
+provide the result after completion; the path belongs to the dialog until its
+next `open()` or `release()`. Call `release()` exactly once when finished and
+avoid copying this owning widget. No process-directory changes or filesystem
+writes occur. The chooser does not deserialize sessions; the demo reports the
+selected path for an application handler to load.
+
+The reusable `Dialog` frame and `tui::textfield::TextField` can also be used
+separately. `InputEvent` now preserves `code`, `modifiers`, and `raw_byte`, and
+adds `Text` and `Edit` kinds. Route text-field input before global shortcuts and
+retain control-code events even when their kind is `None`. Text input storage
+is bounded to roughly 4096 bytes. Pane minimum dimensions default to 2×2;
+single-line fields opt in with `min_height: 1`.
+
+Directory names/files are sorted by `std::fs::list_dir`, including hidden
+entries. That API reports an empty list for both an empty and an unreadable
+directory; the dialog explicitly labels this ambiguous state. There is no
+extension filtering, shell expansion (`~`/environment variables), or filesystem
+watcher in this version.
 
 Repaint the underlying content before compositing menus each frame. This removes
 old shadows when a menu closes or moves; repeatedly shading an existing frame
@@ -167,5 +217,5 @@ build/mlang --tests tests/tui_tests.mla -L build -lmlang_std
 python3 tests/tui_terminal_smoke.py /tmp/mlang_tui_demo
 ```
 
-The demo is an interaction/layout showcase; its menu commands report selection
-rather than implementing session editing.
+The demo is an interaction/layout showcase. Open session browses real files and
+returns a path; other commands report selection rather than editing sessions.

@@ -1,0 +1,83 @@
+mod tui::geometry;
+mod tui::menu;
+use tui::geometry::*;
+use tui::menu::Key;
+
+/// Stable application IDs keep focus independent of layout order and resizing.
+pub struct Pane {
+    var id: i32; var bounds: Rect;
+    var min_width: i32{2}; var min_height: i32{2};
+};
+impl Pane {
+    pub fn visible(self: Pane) -> bool {
+        return self.bounds.width >= self.min_width && self.bounds.height >= self.min_height;
+    }
+}
+pub struct PaneFocus { var selected: i32; var menu_active: bool; };
+impl PaneFocus {
+    pub fn new(selected: i32) -> PaneFocus {
+        return PaneFocus { selected: selected, menu_active: false };
+    }
+    /// Menus suspend pane focus without changing the remembered selection.
+    pub fn set_menu_active(self: &mut Self, active: bool) -> void { self.menu_active = active; }
+    pub fn is_active(self: PaneFocus, id: i32) -> bool {
+        return !self.menu_active && self.selected == id;
+    }
+    /// Keep the selection on a visible pane after a resize/removal.
+    pub fn reconcile(self: &mut Self, panes: &list<Pane>) -> void {
+        var first: i32 = -1;
+        for pane in panes {
+            if pane.visible() {
+                if pane.id == self.selected { return; }
+                if first < 0 { first = pane.id; }
+            }
+        }
+        self.selected = first;
+    }
+    /// Navigate spatially without wrapping. Prefer overlapping neighbors, then
+    /// the closest edge, then closest center on the perpendicular axis.
+    pub fn navigate(self: &mut Self, direction: Key, panes: &list<Pane>) -> void {
+        if self.menu_active { return; }
+        self.reconcile(panes);
+        var current: Rect = Rect::new(0, 0, 0, 0);
+        for pane in panes { if pane.id == self.selected { current = pane.bounds; } }
+        if current.width == 0 || current.height == 0 { return; }
+        var best: i32 = self.selected;
+        var best_overlap: bool = false;
+        var best_gap: i64 = 9223372036854775807;
+        var best_cross: i64 = 9223372036854775807;
+        for pane in panes {
+            let area: Rect = pane.bounds;
+            if pane.id != self.selected && pane.visible() {
+                var eligible: bool = false;
+                var overlap: bool = false;
+                var gap: i64 = 0;
+                var cross: i64 = 0;
+                if direction == Key::Left || direction == Key::Right {
+                    eligible = direction == Key::Left ? area.x + area.width <= current.x
+                        : area.x >= current.x + current.width;
+                    gap = direction == Key::Left ? wide(current.x) - wide(area.x) - wide(area.width)
+                        : wide(area.x) - wide(current.x) - wide(current.width);
+                    overlap = area.y < current.y + current.height && current.y < area.y + area.height;
+                    cross = 2 * wide(area.y) + wide(area.height) - 2 * wide(current.y) - wide(current.height);
+                } else if direction == Key::Up || direction == Key::Down {
+                    eligible = direction == Key::Up ? area.y + area.height <= current.y
+                        : area.y >= current.y + current.height;
+                    gap = direction == Key::Up ? wide(current.y) - wide(area.y) - wide(area.height)
+                        : wide(area.y) - wide(current.y) - wide(current.height);
+                    overlap = area.x < current.x + current.width && current.x < area.x + area.width;
+                    cross = 2 * wide(area.x) + wide(area.width) - 2 * wide(current.x) - wide(current.width);
+                }
+                if cross < 0 { cross = -cross; }
+                if eligible && (best == self.selected || (overlap && !best_overlap) ||
+                   (overlap == best_overlap && (gap < best_gap || (gap == best_gap && cross < best_cross)))) {
+                    best = pane.id;
+                    best_overlap = overlap;
+                    best_gap = gap;
+                    best_cross = cross;
+                }
+            }
+        }
+        self.selected = best;
+    }
+}

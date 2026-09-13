@@ -1,0 +1,280 @@
+mod tui::geometry;
+mod tui::surface;
+mod tui::theme;
+mod tui::widgets;
+mod tui::layout;
+mod tui::focus;
+mod tui::input;
+mod tui::textfield;
+mod std::fs;
+mod std::strbuf;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::widgets::*;
+use tui::layout::*;
+use tui::focus::*;
+use tui::input::*;
+use tui::textfield::TextField;
+use tui::menu::Key;
+use std::fs::list_dir;
+use std::fs::is_dir;
+use std::fs::file_exists;
+use std::fs::parent_dir;
+use std::fs::cwd;
+use std::fs::free_lines;
+use std::strbuf::*;
+
+/// Centered modal frame. Paint after the main view and menus.
+pub struct Dialog { var title: str8; var width: i32; var height: i32; };
+impl Dialog {
+    pub fn bounds(self: Dialog, viewport: Rect) -> Rect {
+        let available_width: i32 = viewport.width > 4 ? viewport.width - 4 : viewport.width;
+        let available_height: i32 = viewport.height > 4 ? viewport.height - 4 : viewport.height;
+        let width: i32 = self.width < available_width ? self.width : available_width;
+        let height: i32 = self.height < available_height ? self.height : available_height;
+        return Rect::new(viewport.x + (viewport.width - width) / 2,
+                viewport.y + (viewport.height - height) / 2, width, height);
+    }
+    pub fn paint(self: Dialog, surface: Surface, viewport: Rect, theme: Theme) -> Rect {
+        let area: Rect = self.bounds(viewport);
+        let shadow: Rect = Rect::new(area.x + 1, area.y + 1, area.width, area.height);
+        surface.shadow(shadow.intersect(viewport), theme.shadow_percent);
+        let panel: Panel = Panel { title: self.title };
+        return panel.paint_focused(surface, area, theme, true);
+    }
+}
+
+pub struct DirectoryNode { var path: str8; var label: str8; var depth: i32; var expanded: bool; };
+
+fn join_owned(base: str8, name: str8) -> str8 {
+    if starts_with(name, "/") == 1 { return clone(name); }
+    return ends_with(base, "/") == 1 ? format!("{}{}", base, name): format!("{}/{}", base, name);
+}
+
+/// Filesystem chooser. Owns strings/tree storage; call release once. A successful
+/// selection returns a path in accepted_path; the application loads its format.
+pub struct OpenSessionDialog {
+    var active: bool; var accepted: bool; var accepted_path: str8;
+    var directory: str8; var path_field: TextField; var focus: PaneFocus;
+    var nodes: list<DirectoryNode>; var tree_selected: i32;
+    var files: list<str8>; var file_selected: i32;
+    var status: str8;
+};
+impl OpenSessionDialog {
+    pub fn new() -> OpenSessionDialog {
+        return OpenSessionDialog {active: false, accepted: false, accepted_path: clone(""),
+            directory: clone(""), path_field: TextField::new(""), focus: PaneFocus::new(0),
+            nodes: [], tree_selected: -1, files: [], file_selected: -1, status: ""};
+    }
+    fn clear_nodes(self: &mut Self) -> void {
+        let nodes: list<DirectoryNode> = self.nodes;
+        for node in nodes { free(node.path); free(node.label); }
+        self.nodes.clear();
+    }
+    fn clear_files(self: &mut Self) -> void {
+        let files: list<str8> = self.files;
+        for name in files { free(name); }
+        self.files.clear();
+    }
+    pub fn release(self: &mut Self) -> void {
+        self.clear_nodes(); self.clear_files();
+        free(self.directory); free(self.accepted_path); self.path_field.release();
+    }
+    /// Does not change the process working directory or write filesystem data.
+    pub fn open(self: &mut Self, initial_directory: str8) -> void {
+        self.active = true; self.accepted = false;
+        free(self.accepted_path); self.accepted_path = clone("");
+        self.focus.selected = 0; self.focus.menu_active = false;
+        let working: str8 = cwd();
+        let path: str8 = len(initial_directory) == 0 ? clone(working) : join_owned(working, initial_directory);
+        self.path_field.set_text(path);
+        self.set_root(path);
+        free(path); free(working);
+    }
+    pub fn cancel(self: &mut Self) -> void { self.active = false; self.accepted = false; }
+    fn load_files(self: &mut Self, path: str8) -> bool {
+        if is_dir(path) == 0 { self.status = "Directory does not exist or is inaccessible."; return false; }
+        let directory: str8 = clone(path);
+        self.clear_files();
+        let entries: list<str8> = list_dir(directory);
+        for name in entries {
+            let full: str8 = join_owned(directory, name);
+            if is_dir(full) == 0 { self.files.push(clone(name)); }
+            free(full);
+        }
+        free_lines(entries);
+        free(self.directory); self.directory = directory;
+        self.path_field.set_text(directory);
+        self.file_selected = self.files.len() > 0 ? 0 : -1;
+        self.status = self.files.len() > 0 ? "Enter: open file | Esc: cancel": "No files (directory empty or unreadable).";
+        return true;
+    }
+    pub fn set_root(self: &mut Self, path: str8) -> bool {
+        // Clone before load_files, since callers may pass the current directory.
+        let target: str8 = clone(path);
+        if !self.load_files(target) { free(target); return false; }
+        self.clear_nodes();
+        let parent: str8 = parent_dir(target);
+        if parent != target {
+            self.nodes.push(DirectoryNode { path: clone(parent), label: clone(".."), depth: -1, expanded: false });
+        }
+        free(parent);
+        self.nodes.push(DirectoryNode { path: clone(target), label: clone(target), depth: 0, expanded: false });
+        self.tree_selected = i32(self.nodes.len()) - 1;
+        self.expand_selected(); free(target); return true;
+    }
+    pub fn expand_selected(self: &mut Self) -> void {
+        if self.tree_selected < 0 || self.tree_selected >= self.nodes.len() { return; }
+        let node: DirectoryNode = self.nodes[self.tree_selected];
+        if node.depth < 0 { self.set_root(node.path); return; }
+        if node.expanded || node.depth >= 32 { return; }
+        let entries: list<str8> = list_dir(node.path);
+        var rebuilt: list<DirectoryNode> = [];
+        for i in 0..self.nodes.len() {
+            let current: DirectoryNode = self.nodes[i];
+            if i == self.tree_selected {
+                rebuilt.push(DirectoryNode { path: current.path, label: current.label, depth: current.depth, expanded: true });
+                for name in entries {
+                    let full: str8 = join_owned(current.path, name);
+                    if is_dir(full) == 1 {
+                        rebuilt.push(DirectoryNode { path: full, label: clone(name), depth: current.depth + 1, expanded: false });
+                    } else {free(full);}
+                }
+            } else {rebuilt.push(current);}
+        }
+        free_lines(entries); self.nodes = rebuilt;
+    }
+    pub fn collapse_selected(self: &mut Self) -> void {
+        if self.tree_selected < 0 || self.tree_selected >= self.nodes.len() { return; }
+        let node: DirectoryNode = self.nodes[self.tree_selected];
+        if !node.expanded {
+            var i: i32 = self.tree_selected - 1;
+            while i >= 0 {
+                let parent: DirectoryNode = self.nodes[i];
+                if parent.depth < node.depth { self.select_directory(i); return; }
+                i = i - 1;
+            }
+            return;
+        }
+        var rebuilt: list<DirectoryNode> = [];
+        var removing: bool = false;
+        for i in 0..self.nodes.len() {
+            let current: DirectoryNode = self.nodes[i];
+            if i == self.tree_selected {
+                rebuilt.push(DirectoryNode { path: current.path, label: current.label, depth: current.depth, expanded: false });
+                removing = true;
+            } else if removing && current.depth > node.depth {
+                free(current.path); free(current.label);
+            } else {removing = false; rebuilt.push(current);}
+        }
+        self.nodes = rebuilt;
+    }
+    pub fn select_directory(self: &mut Self, index: i32) -> void {
+        if index < 0 || index >= self.nodes.len() { return; }
+        let node: DirectoryNode = self.nodes[index];
+        if self.load_files(node.path) { self.tree_selected = index; }
+    }
+    fn accept_file(self: &mut Self, path: str8) -> void {
+        if file_exists(path) == 0 || is_dir(path) == 1 {
+            self.status = "File no longer exists or is inaccessible."; return;
+        }
+        let copy: str8 = clone(path);
+        free(self.accepted_path); self.accepted_path = copy;
+        self.accepted = true; self.active = false;
+    }
+    pub fn submit_path(self: &mut Self) -> void {
+        if len(self.path_field.text) == 0 { self.status = "Enter a directory or file path."; return; }
+        let working: str8 = len(self.directory) > 0 ? clone(self.directory) : cwd();
+        let target: str8 = join_owned(working, self.path_field.text);
+        if is_dir(target) == 1 { self.set_root(target); }
+        else { self.accept_file(target); }
+        free(working); free(target);
+    }
+    pub fn bounds(self: OpenSessionDialog, viewport: Rect) -> Rect {
+        let frame: Dialog = Dialog { title: "Open session", width: 90, height: 26 };
+        return frame.bounds(viewport);
+    }
+    pub fn panes(self: OpenSessionDialog, viewport: Rect) -> list<Pane> {
+        let area: Rect = self.bounds(viewport);
+        if area.width < 16 || area.height < 7 { return []; }
+        let inner: Rect = area.inset(1);
+        let body: Rect = Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 2);
+        let layout: Layout = Layout { axis: Axis::Horizontal, gap: 1, sizes: [Size::flex(1), Size::flex(2)] };
+        let columns: list<Rect> = layout.split(body);
+        return [Pane { id: 0, bounds: Rect::new(inner.x, inner.y, inner.width, 1), min_height: 1 },
+                Pane { id: 1, bounds: columns[0] }, Pane { id: 2, bounds: columns[1] }];
+    }
+    pub fn on_event(self: &mut Self, event: InputEvent, viewport: Rect) -> void {
+        if !self.active { return; }
+        let panes: list<Pane> = self.panes(viewport);
+        self.focus.reconcile(panes);
+        if event.kind == InputKind::Pane { self.focus.navigate(event.key, panes); return; }
+        if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { self.cancel(); return; }
+        if event.code == 3 ||(event.code == 99 && event.modifiers == 5) { self.cancel(); return; }
+        if event.kind == InputKind::Menu && event.key == Key::Toggle {
+            self.focus.selected = (self.focus.selected + 1) % 3; return;
+        }
+        if self.focus.selected == 0 {
+            if event.kind == InputKind::Menu && event.key == Key::Enter { self.submit_path(); }
+            else { self.path_field.on_event(event); }
+            return;
+        }
+        if event.kind != InputKind::Menu { return; }
+        if self.focus.selected == 1 {
+            if event.key == Key::Up { self.select_directory(self.tree_selected - 1); }
+            if event.key == Key::Down { self.select_directory(self.tree_selected + 1); }
+            if event.key == Key::Right || event.key == Key::Enter { self.expand_selected(); }
+            if event.key == Key::Left { self.collapse_selected(); }
+        } else if self.focus.selected == 2 {
+            if event.key == Key::Up && self.file_selected > 0 { self.file_selected = self.file_selected - 1; }
+            if event.key == Key::Down && self.file_selected + 1 < self.files.len() { self.file_selected = self.file_selected + 1; }
+            if event.key == Key::Enter && self.file_selected >= 0 && self.file_selected < self.files.len() {
+                let target: str8 = join_owned(self.directory, self.files[self.file_selected]);
+                self.accept_file(target); free(target);
+            }
+        }
+    }
+    pub fn paint(self: &mut Self, surface: Surface, viewport: Rect, theme: Theme) -> void {
+        if !self.active { return; }
+        let frame: Dialog = Dialog { title: "Open session", width: 90, height: 26 };
+        let inner: Rect = frame.paint(surface, viewport, theme);
+        let panes: list<Pane> = self.panes(viewport);
+        self.focus.reconcile(panes);
+        if panes.len() == 0 { surface.text(inner, "Resize terminal | Esc: cancel", theme.muted, theme.panel); return; }
+        let path: Pane = panes[0]; let tree: Pane = panes[1]; let files: Pane = panes[2];
+        let path_active: bool = self.focus.is_active(0);
+        let bg: i32 = path_active ? theme.selection : theme.background;
+        surface.fill(path.bounds, Cell { glyph: 32, foreground: theme.foreground, background: bg });
+        surface.text(path.bounds, "Path: ", path_active ? theme.accent : theme.muted, bg);
+        self.path_field.paint(surface, Rect::new(path.bounds.x + 6, path.bounds.y, path.bounds.width - 6, 1),
+                theme.foreground, bg, path_active);
+        let tree_panel: Panel = Panel { title: " Directories " };
+        let tree_body: Rect = tree_panel.paint_focused(surface, tree.bounds, theme, self.focus.is_active(1));
+        let file_panel: Panel = Panel { title: " Files " };
+        let file_body: Rect = file_panel.paint_focused(surface, files.bounds, theme, self.focus.is_active(2));
+        var start: i32 = self.tree_selected >= tree_body.height ? self.tree_selected - tree_body.height + 1 : 0;
+        for row in 0..tree_body.height {
+            let index: i32 = start + i32(row);
+            if index < 0 || index >= self.nodes.len() { break; }
+            let node: DirectoryNode = self.nodes[index];
+            let indent: str8 = repeat("  ", node.depth > 0 ? node.depth : 0);
+            let text: str8 = format!("{}{} {}", indent, node.depth < 0 ? "<" : (node.expanded ? "v" : ">"), node.label);
+            let line: Rect = Rect::new(tree_body.x, tree_body.y + i32(row), tree_body.width, 1);
+            let selected_bg: i32 = index == self.tree_selected ? theme.selection : theme.panel;
+            surface.fill(line, Cell { glyph: 32, foreground: theme.foreground, background: selected_bg });
+            surface.text(line, text, theme.foreground, selected_bg);
+            free(indent); free(text);
+        }
+        start = self.file_selected >= file_body.height ? self.file_selected - file_body.height + 1 : 0;
+        for row in 0..file_body.height {
+            let index: i32 = start + i32(row);
+            if index < 0 || index >= self.files.len() { break; }
+            let line: Rect = Rect::new(file_body.x, file_body.y + i32(row), file_body.width, 1);
+            let selected_bg: i32 = index == self.file_selected ? theme.selection : theme.panel;
+            surface.fill(line, Cell { glyph: 32, foreground: theme.foreground, background: selected_bg });
+            surface.text(line, self.files[index], theme.foreground, selected_bg);
+        }
+        surface.text(Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1), self.status, theme.muted, theme.panel);
+    }
+}

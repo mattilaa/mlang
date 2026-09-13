@@ -9,6 +9,8 @@ mod tui::focus;
 mod tui::input;
 mod std::bytes;
 mod std::testing;
+mod tui::dialog;
+mod tui::textfield;
 use tui::geometry::*;
 use tui::layout::*;
 use tui::surface::*;
@@ -21,6 +23,106 @@ use tui::focus::*;
 use tui::input::*;
 use std::bytes::Bytes;
 use std::testing::verify;
+use tui::dialog::*;
+use tui::textfield::TextField;
+
+#[test]
+fn tui_path_text_editing() {
+    var field_editor: TextField = TextField::new("");
+    let letters: list<i32> = [113, 104, 106, 107, 108, 32, 120];
+    var decoder: InputDecoder = InputDecoder::new();
+    for code in letters { field_editor.on_event(decoder.feed(code)); }
+    verify(field_editor.text == "qhjkl x"); // q/hjkl are text, not commands
+    field_editor.on_event(decoder.feed(127));
+    verify(field_editor.text == "qhjkl ");
+    field_editor.on_event(decode_input("\x1b[H"));
+    field_editor.on_event(decoder.feed(65));
+    verify(field_editor.text == "Aqhjkl ");
+    field_editor.on_event(decode_input("\x1b[3~"));
+    verify(field_editor.text == "Ahjkl ");
+    field_editor.on_event(decoder.feed(21));
+    verify(field_editor.text == "");
+    field_editor.on_event(decode_input("\x1b[233u"));
+    verify(field_editor.text == "é");
+    field_editor.on_event(decoder.feed(127));
+    verify(field_editor.text == "");
+    field_editor.release();
+}
+
+#[test]
+fn tui_open_session_directory_tree() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    dialog.open("tests/fixtures/tui_dialog");
+    verify(dialog.active && !dialog.accepted && dialog.focus.selected == 0);
+    verify(dialog.files.len() == 2);
+    verify(dialog.files[0] == "alpha.session");
+    verify(dialog.nodes.len() == 3);
+    dialog.select_directory(2); // branch
+    verify(dialog.files.len() == 1 && dialog.files[0] == "child.session");
+    dialog.expand_selected();
+    verify(dialog.nodes.len() == 4);
+    dialog.select_directory(3); // nested
+    verify(dialog.files.len() == 1 && dialog.files[0] == "leaf.session");
+    dialog.collapse_selected(); // unopened node -> its parent
+    verify(dialog.tree_selected == 2 && dialog.files[0] == "child.session");
+    dialog.collapse_selected();
+    verify(dialog.nodes.len() == 3);
+    dialog.release();
+}
+
+#[test]
+fn tui_open_session_path_validation_and_acceptance() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.path_field.set_text("does-not-exist.session");
+    dialog.submit_path();
+    verify(dialog.active && !dialog.accepted);
+    verify(dialog.files.len() == 2);
+    dialog.path_field.set_text("branch");
+    dialog.submit_path();
+    verify(dialog.active && dialog.files.len() == 1 && dialog.files[0] == "child.session");
+    dialog.path_field.set_text("child.session");
+    dialog.submit_path();
+    verify(dialog.accepted && !dialog.active);
+    dialog.open("tests/fixtures/tui_dialog");
+    verify(!dialog.accepted && dialog.accepted_path == "");
+    dialog.cancel();
+    verify(!dialog.active && !dialog.accepted);
+    dialog.release();
+}
+
+#[test]
+fn tui_dialog_focus_and_rendering() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    dialog.open("tests/fixtures/tui_dialog");
+    let bounds: Rect = Rect::new(0, 0, 80, 24);
+    let panes: list<Pane> = dialog.panes(bounds);
+    let path: Pane = panes[0]; let tree: Pane = panes[1]; let files: Pane = panes[2];
+    verify(path.bounds.height == 1 && tree.bounds.y == path.bounds.y + 1);
+    verify(files.bounds.x > tree.bounds.x && tree.bounds.y == files.bounds.y);
+    dialog.on_event(decode_input("\x1b[106;6u"), bounds); // path -> files (nearest center)
+    verify(dialog.focus.selected == 2);
+    dialog.on_event(decode_input("\x1b[104;6u"), bounds);
+    verify(dialog.focus.selected == 1);
+    dialog.on_event(decode_input("\x1b[108;6u"), bounds);
+    verify(dialog.focus.selected == 2);
+    dialog.on_event(decode_input("\x1b[107;6u"), bounds);
+    verify(dialog.focus.selected == 0);
+    let surface: Surface = Surface::new(80, 24);
+    let theme: Theme = Theme::dark_blue();
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    dialog.paint(surface, bounds, theme);
+    let area: Rect = dialog.bounds(bounds);
+    let title: Cell = surface.cell(area.x + 2, area.y);
+    verify(title.glyph == 79); // Open session, on the upper border
+    let first_line: Cell = surface.cell(path.bounds.x, path.bounds.y);
+    verify(first_line.glyph == 80); // Path: is uppermost inside line
+    let shadow: Cell = surface.cell(area.x + area.width, area.y + 1);
+    verify(shadow.glyph == 88 && shadow.foreground == darken(theme.foreground, theme.shadow_percent));
+    dialog.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, bounds);
+    verify(!dialog.active);
+    surface.release(); dialog.release();
+}
 
 fn focus_panes() -> list<Pane> {
     return [Pane { id: 10, bounds: Rect::new(0, 1, 20, 20) },
@@ -120,7 +222,7 @@ fn tui_modified_keyboard_protocols() {
     verify(plain_ctrl.kind == InputKind::None);
     let backspace: InputEvent = decode_input("\x08");
     let enter: InputEvent = decode_input("\n");
-    verify(backspace.kind == InputKind::None);
+    verify(backspace.kind == InputKind::Edit && backspace.key == Key::Backspace);
     verify(enter.kind == InputKind::Menu && enter.key == Key::Enter);
     let arrow: InputEvent = decode_input("\x1b[A");
     verify(arrow.kind == InputKind::Menu && arrow.key == Key::Up);

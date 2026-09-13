@@ -1,0 +1,127 @@
+mod tui::menu;
+use tui::menu::Key;
+
+pub enum InputKind { None, Menu, Pane, Quit, Text, Edit };
+pub struct InputEvent {
+    var kind: InputKind; var key: Key;
+    var code: i32{0}; var modifiers: i32{1}; var raw_byte: bool{false};
+};
+
+fn no_input() -> InputEvent { return InputEvent { kind: InputKind::None, key: Key::Escape }; }
+fn key_event(kind: InputKind, key: Key) -> InputEvent { return InputEvent { kind: kind, key: key }; }
+
+fn classify_key(code: i32, modifiers: i32) -> InputEvent {
+    // Ignore Caps/Num Lock bits. Ctrl+Shift is modifier mask 5, encoded as 6.
+    let mods: i32 = (modifiers - 1) % 64;
+    if mods == 5 {
+        if code == 104 || code == 72 { return key_event(InputKind::Pane, Key::Left); }
+        if code == 106 || code == 74 { return key_event(InputKind::Pane, Key::Down); }
+        if code == 107 || code == 75 { return key_event(InputKind::Pane, Key::Up); }
+        if code == 108 || code == 76 { return key_event(InputKind::Pane, Key::Right); }
+    }
+    if mods == 4 && code == 99 { return key_event(InputKind::Quit, Key::Escape); }
+    if mods != 0 { return no_input(); }
+    if code == 113 || code == 3 { return key_event(InputKind::Quit, Key::Escape); }
+    if code == 9 { return key_event(InputKind::Menu, Key::Toggle); }
+    if code == 27 { return key_event(InputKind::Menu, Key::Escape); }
+    if code == 104 { return key_event(InputKind::Menu, Key::Left); }
+    if code == 106 { return key_event(InputKind::Menu, Key::Down); }
+    if code == 107 { return key_event(InputKind::Menu, Key::Up); }
+    if code == 108 { return key_event(InputKind::Menu, Key::Right); }
+    if code == 13 || code == 10 { return key_event(InputKind::Menu, Key::Enter); }
+    if code == 8 || code == 127 { return key_event(InputKind::Edit, Key::Backspace); }
+    if code >= 32 { return key_event(InputKind::Text, Key::Escape); }
+    return no_input();
+}
+
+fn decode_key(code: i32, modifiers: i32) -> InputEvent {
+    var event: InputEvent = classify_key(code, modifiers);
+    // Preserve printable keys even when the application normally uses them as
+    // commands (q/h/j/k/l). Text fields consume them before shortcut routing.
+    event.code = code;
+    event.modifiers = modifiers;
+    if modifiers == 2 && code >= 32 { event.kind = InputKind::Text; }
+    return event;
+}
+
+/// Incremental legacy/CSI-u/kitty/modifyOtherKeys decoder. Never interpret raw
+/// Ctrl-H (Backspace) or Ctrl-J (Enter) as Ctrl-Shift pane movement.
+pub struct InputDecoder {
+    var state: i32; var parameter: i32; var subfield: i32;
+    var number: i32; var digits: bool; var code: i32; var modifiers: i32;
+    var third: i32; var event_type: i32; var invalid: bool; var length: i32;
+};
+impl InputDecoder {
+    pub fn new() -> InputDecoder {
+        return InputDecoder { state: 0, parameter: 0, subfield: 0, number: 0, digits: false,
+            code: 0, modifiers: 1, third: 0, event_type: 1, invalid: false, length: 0 };
+    }
+    fn reset(self: &mut Self) -> void {
+        self.state = 0; self.parameter = 0; self.subfield = 0; self.number = 0;
+        self.digits = false; self.code = 0; self.modifiers = 1; self.third = 0;
+        self.event_type = 1; self.invalid = false; self.length = 0;
+    }
+    fn commit(self: &mut Self) -> void {
+        if self.digits {
+            if self.parameter == 0 && self.subfield == 0 { self.code = self.number; }
+            if self.parameter == 1 && self.subfield == 0 { self.modifiers = self.number; }
+            if self.parameter == 1 && self.subfield == 1 { self.event_type = self.number; }
+            if self.parameter == 2 && self.subfield == 0 { self.third = self.number; }
+        }
+        self.number = 0; self.digits = false;
+    }
+    pub fn pending(self: InputDecoder) -> bool { return self.state != 0; }
+    /// Call after an input timeout (e.g. 50ms). Only bare Escape emits an event;
+    /// incomplete CSI packets are discarded instead of closing menus.
+    pub fn expire(self: &mut Self) -> InputEvent {
+        let escape: bool = self.state == 1;
+        self.reset();
+        return escape ? key_event(InputKind::Menu, Key::Escape) : no_input();
+    }
+    pub fn feed(self: &mut Self, byte: i32) -> InputEvent {
+        if byte == 27 { self.reset(); self.state = 1; return no_input(); }
+        if self.state == 0 {
+            var event: InputEvent = decode_key(byte, 1);
+            event.raw_byte = true;
+            return event;
+        }
+        if self.state == 1 {
+            if byte == 91 { self.state = 2; return no_input(); }
+            if byte == 79 { self.state = 3; return no_input(); }
+            self.reset(); return no_input();
+        }
+        if self.length <= 64 { self.length = self.length + 1; }
+        if self.length > 64 { self.invalid = true; }
+        if byte >= 48 && byte <= 57 && self.state == 2 {
+            if self.number > 100000 { self.invalid = true; }
+            else { self.number = self.number * 10 + byte - 48; }
+            self.digits = true; return no_input();
+        }
+        if (byte == 59 || byte == 58) && self.state == 2 {
+            self.commit();
+            if byte == 59 { self.parameter = self.parameter + 1; self.subfield = 0; }
+            else { self.subfield = self.subfield + 1; }
+            return no_input();
+        }
+        if byte < 64 || byte > 126 { self.invalid = true; return no_input(); }
+        self.commit();
+        var output: InputEvent = no_input();
+        if !self.invalid && (self.event_type == 1 || self.event_type == 2) && self.modifiers > 0 {
+            if byte == 117 { output = decode_key(self.code, self.modifiers); }
+            else if byte == 126 && self.code == 27 { output = decode_key(self.third, self.modifiers); }
+            else if self.modifiers == 1 {
+                if byte == 65 { output = key_event(InputKind::Menu, Key::Up); }
+                if byte == 66 { output = key_event(InputKind::Menu, Key::Down); }
+                if byte == 67 { output = key_event(InputKind::Menu, Key::Right); }
+                if byte == 68 { output = key_event(InputKind::Menu, Key::Left); }
+                if byte == 72 { output = key_event(InputKind::Edit, Key::Home); }
+                if byte == 70 { output = key_event(InputKind::Edit, Key::End); }
+                if byte == 126 && self.code == 3 { output = key_event(InputKind::Edit, Key::Delete); }
+                if byte == 126 && self.code == 1 { output = key_event(InputKind::Edit, Key::Home); }
+                if byte == 126 && self.code == 4 { output = key_event(InputKind::Edit, Key::End); }
+            }
+        }
+        self.reset();
+        return output;
+    }
+}

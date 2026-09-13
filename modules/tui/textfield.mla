@@ -1,0 +1,99 @@
+mod tui::geometry;
+mod tui::surface;
+mod tui::input;
+mod std::strbuf;
+mod std::bytes;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::input::*;
+use tui::menu::Key;
+use std::strbuf::*;
+use std::bytes::Bytes;
+
+/// Single-line UTF-8 editor. Owns text; release once. Cursor is a byte boundary.
+pub struct TextField { var text: str8; var cursor: i64; };
+impl TextField {
+    pub fn new(text: str8) -> TextField {
+        return TextField { text: clone(text), cursor: len(text) };
+    }
+    pub fn release(self: TextField) -> void { free(self.text); }
+    pub fn set_text(self: &mut Self, text: str8) -> void {
+        let copy: str8 = clone(text);
+        free(self.text); self.text = copy; self.cursor = len(copy);
+    }
+    fn previous(self: TextField, position: i64) -> i64 {
+        if position <= 0 { return 0; }
+        let raw: result<Bytes, str8> = Bytes::from_string(self.text);
+        if raw.is_err() { return position - 1; }
+        let bytes: Bytes = raw.unwrap();
+        var at: i64 = position - 1;
+        while at > 0 && bytes.get(at) >= 128 && bytes.get(at) < 192 { at = at - 1; }
+        bytes.close(); return at;
+    }
+    fn next(self: TextField, position: i64) -> i64 {
+        let size: i64 = len(self.text);
+        if position >= size { return size; }
+        let raw: result<Bytes, str8> = Bytes::from_string(self.text);
+        if raw.is_err() { return position + 1; }
+        let bytes: Bytes = raw.unwrap();
+        var at: i64 = position + 1;
+        while at < size && bytes.get(at) >= 128 && bytes.get(at) < 192 { at = at + 1; }
+        bytes.close(); return at;
+    }
+    fn erase(self: &mut Self, start: i64, end: i64) -> void {
+        let prefix: str8 = sub(self.text, 0, start);
+        let suffix: str8 = sub(self.text, end, len(self.text) - end);
+        let joined: str8 = concat(prefix, suffix);
+        free(prefix); free(suffix); free(self.text);
+        self.text = joined; self.cursor = start;
+    }
+    /// Printable input wins over application bindings such as q and hjkl.
+    pub fn on_event(self: &mut Self, event: InputEvent) -> void {
+        if event.modifiers == 1 && event.code == 1 { self.cursor = 0; return; }
+        if event.modifiers == 1 && event.code == 5 { self.cursor = len(self.text); return; }
+        if event.modifiers == 1 && event.code == 21 { self.set_text(""); return; }
+        if event.modifiers == 5 && event.code == 97 { self.cursor = 0; return; }
+        if event.modifiers == 5 && event.code == 101 { self.cursor = len(self.text); return; }
+        if event.modifiers == 5 && event.code == 117 { self.set_text(""); return; }
+        if (event.modifiers == 1 || event.modifiers == 2) && event.code >= 32 && event.code != 127 {
+            if len(self.text) >= 4096 { return; }
+            let builder: i64 = builder_new(len(self.text) + 8);
+            builder_append_len(builder, self.text, self.cursor);
+            let before: i64 = builder_len(builder);
+            if event.raw_byte { builder_append_char(builder, event.code); }
+            else if event.code < 65536 { append_glyph(builder, event.code); }
+            else if event.code <= 0x10FFFF {
+                builder_append_char(builder, 240 + event.code / 262144);
+                builder_append_char(builder, 128 + event.code / 4096 % 64);
+                builder_append_char(builder, 128 + event.code / 64 % 64);
+                builder_append_char(builder, 128 + event.code % 64);
+            }
+            let added: i64 = builder_len(builder) - before;
+            let suffix: str8 = sub(self.text, self.cursor, len(self.text) - self.cursor);
+            builder_append(builder, suffix); free(suffix);
+            free(self.text); self.text = builder_take_string(builder); builder_free(builder);
+            self.cursor = self.cursor + added;
+            return;
+        }
+        if event.kind != InputKind::Menu && event.kind != InputKind::Edit { return; }
+        if event.key == Key::Left { self.cursor = self.previous(self.cursor); }
+        if event.key == Key::Right { self.cursor = self.next(self.cursor); }
+        if event.key == Key::Home { self.cursor = 0; }
+        if event.key == Key::End { self.cursor = len(self.text); }
+        if event.key == Key::Backspace && self.cursor > 0 { self.erase(self.previous(self.cursor), self.cursor); }
+        if event.key == Key::Delete { self.erase(self.cursor, self.next(self.cursor)); }
+    }
+    pub fn paint(self: TextField, surface: Surface, area: Rect, fg: i32, bg: i32, active: bool) -> void {
+        if area.width <= 0 || area.height <= 0 { return; }
+        surface.fill(area, Cell { glyph: 32, foreground: fg, background: bg });
+        var start: i64 = self.cursor;
+        var column: i32 = 0;
+        while start > 0 && column < area.width - 1 { start = self.previous(start); column = column + 1; }
+        let visible: str8 = sub(self.text, start, len(self.text) - start);
+        surface.text(area, visible, fg, bg); free(visible);
+        if active {
+            let old: Cell = surface.cell(area.x + column, area.y);
+            surface.put(area.x + column, area.y, Cell { glyph: old.glyph, foreground: bg, background: fg });
+        }
+    }
+}
