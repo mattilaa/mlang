@@ -89,6 +89,23 @@ def main():
             read_frame(None)
             os.write(master, dismissal)
             read_frame(2)
+        # Cascades remain beside their ancestors. h closes only one level;
+        # Escape from the grandchild closes every menu and restores pane 2.
+        os.write(master, b"\t")
+        read_frame(None)
+        os.write(master, b"jjl")
+        cascade = read_frame(None)
+        assert b"Recent sessions" in cascade and b"Blue hour" in cascade and b">" in cascade
+        os.write(master, b"jl")
+        assert b"Ambient" in read_frame(None)
+        os.write(master, b"h")
+        parent = read_frame(None)
+        assert b"Blue hour" in parent and b"Ambient" not in parent
+        os.write(master, b"l")
+        assert b"Ambient" in read_frame(None)
+        os.write(master, b"\x1b")
+        closed = read_frame(2)
+        assert b"Blue hour" not in closed and b"Ambient" not in closed
         # A resize causes re-layout and a full frame with the new bottom row.
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 12, 45, 0, 0))
         read_until(b"\x1b[12;1H")
@@ -103,7 +120,7 @@ def main():
         before[3] &= ~pending
         after[3] &= ~pending
         assert after == before, f"Terminal settings were not restored: before={before!r}, after={after!r}"
-        print("PASS: pane highlights, Ctrl+Shift navigation, menu focus restoration, resize, terminal restoration")
+        print("PASS: cascading submenus, pane highlights, Ctrl+Shift navigation, focus restoration, resize, terminal restoration")
     finally:
         if process.poll() is None:
             process.terminate()

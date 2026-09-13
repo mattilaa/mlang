@@ -14,7 +14,8 @@ This first version provides:
 - Spatial pane focus with accent-colored borders and Ctrl+Shift+H/J/K/L
   navigation. Menus temporarily suspend focus and restore the selected pane.
 - A menu bar with keyboard navigation, disabled items, command IDs, scrolling
-  selection in short popups, and popup bounds constrained to the viewport.
+  selection in short popups, cascading submenus, and popup bounds constrained
+  to the viewport.
 - Cell compositing: draw content first, then the menu bar. Popup shadows retain
   existing glyphs and darken both foreground and background colors.
 - Explicit alternate-screen/raw-input setup and restoration, terminal size
@@ -58,6 +59,42 @@ fn main() -> i32 {
 zero for navigation and a positive application-defined command ID on Enter.
 Handle the command in the application; the library does not invoke callbacks.
 The demo maps arrows, Tab, Escape, Enter, and `hjkl` to these semantic keys.
+
+### Cascading submenus
+
+Add a submenu as a menu item with `MenuItem::submenu(label, children)`:
+
+```mlang
+MenuItem::submenu("Recent sessions", [
+    MenuItem { label: "Blue hour", action: 8, enabled: true },
+    MenuItem::submenu("Templates", [
+        MenuItem { label: "Ambient", action: 9, enabled: true },
+        MenuItem { label: "Dance", action: 10, enabled: true }
+    ])
+])
+```
+
+Rows with children display `>` at the right. `l`/Right or Enter opens the
+selected item's submenu. `h`/Left closes one submenu and restores its parent's
+selected row. `j`/Down and `k`/Up navigate only the deepest open menu, skipping
+disabled items. On a leaf inside a submenu, `l` does nothing. At the root,
+Left selects the previous menu-bar entry and Right selects the next entry when
+the selected row has no submenu.
+
+Children open beside their parent with their first row aligned to the invoking
+row where space permits. They flip left at the right edge, then clamp to the
+viewport when neither side fits. Parent menus stay visible underneath; each
+popup has its own glyph-preserving shadow. Short popups scroll the selected row
+into view at every depth.
+
+Escape closes **all** menus at once, as do Tab and activating a leaf command.
+The last selected pane becomes active again. `MenuBar::depth()` reports the
+number of open child levels; `popup_rect_at(bounds, depth)` exposes each level's
+geometry. `active` continues to identify the root menu-bar entry, while
+`selected` identifies the deepest menu's row. Existing leaf item literals work
+unchanged because `children` defaults to an empty list. An empty children list
+is a leaf, not an openable submenu. To disable a branch, set `enabled: false`
+on a `MenuItem` with nonempty `children`; a branch does not invoke its `action`.
 
 ### Pane focus and modified keys
 
@@ -118,8 +155,8 @@ The initial text repertoire is single-cell printable ASCII, Latin characters,
 and Unicode box drawing. Unsupported wide/combining characters and controls are
 replaced with `?`; this is not a full Unicode grapheme/width engine. Rendering uses
 truecolor escape sequences, so RGB-capable terminals give the intended theme and
-shadows. There is no mouse support, focus traversal inside a pane, nested
-submenus, or differential repainting yet.
+shadows. There is no mouse support, focus traversal inside a pane, or
+differential repainting yet.
 
 From the repository root:
 

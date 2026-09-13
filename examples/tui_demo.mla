@@ -21,6 +21,13 @@ fn demo_menus() -> MenuBar {
             MenuItem { label: "New session", action: 1, enabled: true },
             MenuItem { label: "Open session", action: 2, enabled: true },
             MenuItem { label: "Save session", action: 3, enabled: false },
+            MenuItem::submenu("Recent sessions", [
+                MenuItem { label: "Blue hour", action: 8, enabled: true },
+                MenuItem::submenu("Templates", [
+                    MenuItem { label: "Ambient", action: 9, enabled: true },
+                    MenuItem { label: "Dance", action: 10, enabled: true }
+                ])
+            ]),
             MenuItem { label: "Quit", action: 99, enabled: true }] },
         Menu { title: "Edit", items: [
             MenuItem { label: "Undo", action: 4, enabled: true },

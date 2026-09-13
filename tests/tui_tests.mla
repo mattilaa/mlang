@@ -210,6 +210,122 @@ fn test_menus() -> MenuBar {
     ]);
 }
 
+fn cascade_menus() -> MenuBar {
+    return MenuBar::new([Menu { title: "File", items: [
+        MenuItem { label: "Open", action: 1, enabled: true },
+        MenuItem::submenu("Recent", [
+            MenuItem { label: "Disabled", action: 2, enabled: false },
+            MenuItem::submenu("Templates", [
+                MenuItem { label: "Ambient", action: 42, enabled: true },
+                MenuItem { label: "Dance", action: 43, enabled: true }
+            ]),
+            MenuItem { label: "Session", action: 44, enabled: true }
+        ])
+    ] }]);
+}
+
+#[test]
+fn tui_cascading_menu_stack() {
+    var menus: MenuBar = cascade_menus();
+    menus.open(0);
+    menus.on_key(Key::Down);
+    verify(menus.selected == 1);
+    menus.on_key(Key::Right);
+    verify(menus.depth() == 1 && menus.selected == 1 && menus.active == 0);
+    menus.on_key(Key::Right);
+    verify(menus.depth() == 2 && menus.selected == 0);
+    menus.on_key(Key::Down);
+    verify(menus.selected == 1);
+    menus.on_key(Key::Left);
+    verify(menus.depth() == 1 && menus.selected == 1);
+    menus.on_key(Key::Left);
+    verify(menus.depth() == 0 && menus.selected == 1);
+    menus.on_key(Key::Enter);
+    menus.on_key(Key::Enter);
+    verify(menus.depth() == 2);
+    verify(menus.on_key(Key::Enter) == 42);
+    verify(menus.active == -1 && menus.depth() == 0);
+    menus.open(0);
+    menus.on_key(Key::Down);
+    menus.on_key(Key::Right);
+    menus.on_key(Key::Right);
+    var focus: PaneFocus = PaneFocus::new(30);
+    focus.set_menu_active(menus.active >= 0);
+    menus.on_key(Key::Escape);
+    focus.set_menu_active(menus.active >= 0);
+    verify(menus.active == -1 && menus.selected == -1 && menus.depth() == 0);
+    verify(focus.is_active(30));
+    menus.open(0);
+    verify(menus.depth() == 0 && menus.selected == 0);
+}
+
+#[test]
+fn tui_cascading_menu_geometry_and_layers() {
+    var menus: MenuBar = cascade_menus();
+    menus.open(0);
+    menus.on_key(Key::Down);
+    let bounds: Rect = Rect::new(0, 0, 80, 24);
+    let root: Rect = menus.popup_rect(bounds);
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(80, 24);
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    menus.paint(surface, bounds, theme);
+    let indicator: Cell = surface.cell(root.x + root.width - 3, root.y + 2);
+    verify(indicator.glyph == 62);
+    menus.on_key(Key::Right);
+    let child: Rect = menus.popup_rect_at(bounds, 1);
+    verify(child.x == root.x + root.width && child.y == root.y + 1);
+    menus.on_key(Key::Right);
+    let grandchild: Rect = menus.popup_rect_at(bounds, 2);
+    verify(grandchild.x == child.x + child.width);
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    menus.paint(surface, bounds, theme);
+    let parent_corner: Cell = surface.cell(root.x, root.y);
+    let child_corner: Cell = surface.cell(child.x, child.y);
+    let top_corner: Cell = surface.cell(grandchild.x, grandchild.y);
+    verify(parent_corner.glyph == 0x250C && child_corner.glyph == 0x250C && top_corner.glyph == 0x250C);
+    let shadow: Cell = surface.cell(grandchild.x + grandchild.width, grandchild.y + 1);
+    verify(shadow.glyph == 88 && shadow.foreground == darken(theme.foreground, theme.shadow_percent));
+    menus.on_key(Key::Left);
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    menus.paint(surface, bounds, theme);
+    let restored: Cell = surface.cell(grandchild.x + grandchild.width, grandchild.y + 1);
+    verify(restored.glyph == 88 && restored.foreground == theme.foreground);
+    surface.release();
+}
+
+#[test]
+fn tui_cascading_menu_edges_and_disabled_branches() {
+    var menus: MenuBar = MenuBar::new([
+        Menu { title: "Long heading", items: [] },
+        Menu { title: "File", items: [MenuItem::submenu("Recent", [
+            MenuItem { label: "Open", action: 1, enabled: true }
+        ])] }
+    ]);
+    menus.open(1); menus.on_key(Key::Right);
+    let bounds: Rect = Rect::new(0, 0, 32, 6);
+    let parent: Rect = menus.popup_rect(bounds);
+    let child: Rect = menus.popup_rect_at(bounds, 1);
+    verify(child.x + child.width == parent.x); // flips to the left
+    for width in 0..20 {
+        for height in 0..8 {
+            let small: Rect = Rect::new(3, 4, i32(width), i32(height));
+            let popup: Rect = menus.popup_rect_at(small, 1);
+            verify(popup.x >= small.x && popup.x + popup.width <= small.x + small.width);
+            verify(popup.y >= small.y && popup.y + popup.height <= small.y + small.height);
+        }
+    }
+    var disabled: MenuBar = MenuBar::new([Menu { title: "File", items: [
+        MenuItem { label: "Unavailable", action: 0, enabled: false,
+            children: [MenuItem { label: "Child", action: 1, enabled: true }] },
+        MenuItem { label: "Enabled", action: 2, enabled: true }
+    ] }]);
+    disabled.open(0);
+    verify(disabled.selected == 1);
+    disabled.on_key(Key::Right);
+    verify(disabled.depth() == 0);
+}
+
 #[test]
 fn tui_menu_navigation_and_actions() {
     var menus: MenuBar = test_menus();
