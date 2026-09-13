@@ -19,6 +19,78 @@ mod tui::meter;
 mod tui_demo::mixer;
 use tui::meter::VuMeter;
 use tui_demo::mixer::Mixer;
+mod tui::listview;
+mod tui_demo::patterns;
+use tui::listview::*;
+use tui_demo::patterns::PatternLibrary;
+
+#[test]
+fn tui_list_view_navigation_and_paint() {
+    var view: ListView = ListView { items: [ListItem { id: 1, label: "001 Intro" },
+        ListItem { id: 2, label: "002 Verse" }, ListItem { id: 3, label: "003 Chorus" }] };
+    let area: Rect = Rect::new(1, 1, 12, 2);
+    verify(view.on_event(decode_input("G"), area) == 1 && view.selected == 2 && view.scroll == 1);
+    view.on_event(decode_input("g"), area); view.on_event(decode_input("g"), area);
+    verify(view.selected == 0 && view.scroll == 0);
+    view.on_event(decode_input("d"), area); view.on_event(decode_input("j"), area);
+    verify(view.on_event(decode_input("d"), area) == 1);
+    verify(view.on_event(decode_input("d"), area) == 3 && view.items.len() == 3);
+    view.on_event(decode_input("d"), area); view.cancel_pending();
+    verify(view.on_event(decode_input("d"), area) == 1);
+    let surface: Surface = Surface::new(15, 5); let theme: Theme = Theme::dark_blue();
+    view.paint(surface, area, theme);
+    let selected: Cell = surface.cell(1, 2); verify(selected.background == theme.selection);
+    view.selected = 2; view.paint(surface, Rect::new(1, 1, 12, 3), theme);
+    let stripe: Cell = surface.cell(1, 2); verify(stripe.background == darken(theme.panel, 82));
+    view.items = []; view.on_event(decode_input("G"), area);
+    verify(view.selected == -1 && view.scroll == 0);
+    view.on_event(decode_input("d"), area); verify(view.on_event(decode_input("d"), area) != 3);
+    surface.release();
+}
+
+#[test]
+fn tui_pattern_library_independence() {
+    var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 20, 10);
+    verify(library.patterns.len() == 3 && library.song.len() == 4 && library.active_id == 1);
+    library.table.edit_event(decode_input("K"), area);
+    library.table.track_action(25, area);
+    library.on_event(decode_input("j"), area);
+    verify(library.active_id == 2);
+    let verse: TableRow = library.table.rows[0]; let verse_track: SequenceTrack = library.table.tracks[0];
+    verify(verse.cells[1] == "E-4" && !verse_track.muted);
+    library.on_event(decode_input("k"), area);
+    let intro: TableRow = library.table.rows[0]; let intro_track: SequenceTrack = library.table.tracks[0];
+    verify(intro.cells[1] == "C#4" && intro_track.muted);
+    library.add(true); verify(library.active_id == 4 && library.patterns.len() == 4);
+    library.table.edit_event(decode_input("K"), area);
+    library.select(1); let original: TableRow = library.table.rows[0]; verify(original.cells[1] == "C#4");
+    library.select(4); let duplicate: TableRow = library.table.rows[0]; verify(duplicate.cells[1] == "D-4");
+    verify(library.rename("Intro copy edited"));
+    library.show_song(true);
+    let last: ListItem = library.view.items[4]; verify(last.label == "5  004 Intro copy edited");
+    library.add(false); verify(library.active_id == 5);
+    let blank: TableRow = library.table.rows[0]; verify(blank.cells[1] == "" && blank.cells[2] == "");
+    library.release();
+}
+
+#[test]
+fn tui_song_and_pattern_removal() {
+    var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 20, 10);
+    library.show_song(true);
+    library.on_event(decode_input("j"), area); verify(library.active_id == 2);
+    library.on_event(decode_input("d"), area); library.on_event(decode_input("d"), area);
+    verify(library.song.len() == 3 && library.patterns.len() == 3 && library.active_id == 2);
+    library.remove_active(area); verify(library.patterns.len() == 2 && library.song.len() == 2);
+    let order: list<i32> = library.song;
+    for id in order { verify(id != 2); }
+    library.on_event(decode_input("G"), area); verify(library.active_id == 3);
+    library.on_event(decode_input("g"), area); library.on_event(decode_input("g"), area); verify(library.active_id == 1);
+    library.remove_song_occurrence(area); library.remove_song_occurrence(area);
+    verify(library.song.len() == 0 && library.patterns.len() == 2 && library.view.selected == -1);
+    library.show_song(false); library.remove_active(area); library.remove_active(area);
+    verify(library.patterns.len() == 1 && library.error != "");
+    library.release();
+}
 
 #[test]
 fn tui_sequence_jump_navigation() {

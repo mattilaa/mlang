@@ -1,0 +1,69 @@
+mod tui::geometry;
+mod tui::surface;
+mod tui::theme;
+mod tui::input;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::input::*;
+use tui::menu::Key;
+
+pub struct ListItem { var id: i32; var label: str8; };
+/// Borrows item labels. Returns actions; deletion/activation belongs to caller.
+pub struct ListView {
+    var items: list<ListItem>; var selected: i32; var scroll: i32;
+    var top_pending: bool; var delete_pending: bool;
+};
+impl ListView {
+    pub fn cancel_pending(self: &mut Self) -> void { self.top_pending = false; self.delete_pending = false; }
+    pub fn reconcile(self: &mut Self, area: Rect) -> void {
+        let count: i32 = i32(self.items.len());
+        self.selected = count == 0 ? -1 : (self.selected < 0 ? 0 : (self.selected >= count ? count - 1 : self.selected));
+        if self.selected >= 0 && area.height > 0 {
+            if self.selected < self.scroll { self.scroll = self.selected; }
+            if self.selected >= self.scroll + area.height { self.scroll = self.selected - area.height + 1; }
+        }
+        let maximum: i32 = count > area.height ? count - area.height : 0;
+        self.scroll = self.scroll < 0 ? 0 : (self.scroll > maximum ? maximum : self.scroll);
+    }
+    /// 0=unhandled, 1=navigation, 2=activate, 3=delete request (dd).
+    pub fn on_event(self: &mut Self, event: InputEvent, area: Rect) -> i32 {
+        if event.kind == InputKind::None && event.code == 0 { return 0; }
+        let g: bool = event.code == 103 && event.modifiers == 1;
+        let d: bool = event.code == 100 && event.modifiers == 1;
+        if !g { self.top_pending = false; }
+        if !d { self.delete_pending = false; }
+        self.reconcile(area);
+        if g {
+            if self.top_pending { self.selected = 0; self.top_pending = false; }
+            else { self.top_pending = true; }
+        } else if (event.code == 71 && (event.modifiers == 1 || event.modifiers == 2)) || (event.code == 103 && event.modifiers == 2) {
+            self.selected = i32(self.items.len()) - 1;
+        } else if d {
+            if self.delete_pending {
+                self.delete_pending = false;
+                return self.selected >= 0 ? 3 : 1;
+            }
+            self.delete_pending = true;
+        } else if event.modifiers == 1 && event.kind == InputKind::Menu {
+            if event.key == Key::Down { self.selected = self.selected + 1; }
+            else if event.key == Key::Up { self.selected = self.selected - 1; }
+            else if event.key == Key::Enter { return self.selected >= 0 ? 2 : 1; }
+            else { return 0; }
+        } else { return 0; }
+        self.reconcile(area); return 1;
+    }
+    pub fn paint(self: &mut Self, surface: Surface, area: Rect, theme: Theme) -> void {
+        self.reconcile(area);
+        surface.fill(area, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
+        for y in 0..area.height {
+            let index: i32 = self.scroll + i32(y);
+            if index >= self.items.len() { break; }
+            let item: ListItem = self.items[index];
+            let bg: i32 = index == self.selected ? theme.selection : (index % 2 == 1 ? darken(theme.panel, 82) : theme.panel);
+            let line: Rect = Rect::new(area.x, area.y + i32(y), area.width, 1);
+            surface.fill(line, Cell { glyph: 32, foreground: theme.foreground, background: bg });
+            surface.text(line, item.label, theme.foreground, bg);
+        }
+    }
+}

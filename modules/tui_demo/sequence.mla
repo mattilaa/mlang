@@ -62,6 +62,31 @@ pub fn active_track(self: SequenceTable) -> i32 {
     }
     return i32(self.tracks.len()) - 1;
 }
+/// Independent pattern snapshot, including tracks, automation, mixer settings,
+/// cursor and viewport. No owned strings or mutable lists alias the source.
+pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
+    var copy: SequenceTable = SequenceTable { frozen_columns: self.frozen_columns,
+        horizontal_scrollbar: self.horizontal_scrollbar, vertical_scrollbar: self.vertical_scrollbar,
+        selected_row: self.selected_row, selected_column: self.selected_column,
+        scroll_x: self.scroll_x, scroll_y: self.scroll_y, next_track_id: self.next_track_id,
+        editor: TextField::new(""), error: "" };
+    var rows: list<TableRow> = []; let source_rows: list<TableRow> = self.rows;
+    for row in source_rows {
+        var cells: list<str8> = []; let source_cells: list<str8> = row.cells;
+        for value in source_cells { cells.push(clone(value)); }
+        rows.push(TableRow { cells: cells });
+    }
+    var tracks: list<SequenceTrack> = []; let source_tracks: list<SequenceTrack> = self.tracks;
+    for track in source_tracks {
+        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, audio: track.audio,
+            cc1: AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum },
+            cc2: AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum } });
+    }
+    var notes: array<str8, 128> = {};
+    for i in 0..128 { notes.push(clone(self.notes[i])); }
+    copy.rows = rows; copy.tracks = tracks; copy.notes = notes;
+    copy.rebuild_columns(); return copy;
+}
 pub fn track_columns(self: SequenceTable, index: i32) -> i32 {
     let track: SequenceTrack = self.tracks[index]; return track.audio ? 2 : 4;
 }

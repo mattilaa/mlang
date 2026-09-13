@@ -139,6 +139,44 @@ Legacy terminals can collapse Ctrl+Shift+H/J to Backspace/Enter; those ambiguous
 bytes are deliberately not treated as pane navigation. The menu still works
 with legacy arrow keys and unmodified `hjkl`.
 
+### Patterns and Song lists
+
+The left pane defaults to **Patterns**, listing `<pattern_nr> <pattern_name>`.
+The demo starts with `001 Intro`, `002 Verse`, and `003 Chorus`. Selection
+immediately loads that pattern into the **Pattern** view and Mixer. Each pattern
+has independent rows, tracks, automation settings, mixer state, and cursor/scroll
+position; edits are retained when switching away and back.
+
+The **Pattern** menu implements Add pattern, Rename pattern, Remove pattern,
+and Clone pattern. Add creates a blank 64-row pattern with three MIDI tracks;
+Clone makes an independent copy of the current pattern. Both select the new
+pattern and append it to Song order. Rename uses a text dialog (Enter saves,
+Escape cancels). Pattern IDs remain stable after deletion. Remove deletes the
+pattern and all its Song occurrences. The demo retains at least one pattern and
+limits the library to 128 patterns. Changes are in memory; there is no undo or
+session persistence yet.
+
+View → Show patterns / Show song switches the left pane. Song lists
+`<order_position> <pattern_nr> <pattern_name>` in playback order, initially
+Intro → Verse → Verse → Chorus. Repeated occurrences reference the same pattern;
+renaming or editing it updates all occurrences. In Song view, `dd` removes only
+the selected occurrence, not the pattern. An empty Song is allowed and keeps
+the current Pattern view available. Song is an order-list preview, not playback.
+
+Both views use `tui::listview::ListView`, with selected-row highlighting and the
+table's darker alternating rows. With the left pane active, j/k or arrows select,
+`G` jumps to the last item, `gg` jumps to the first, and `dd` requests deletion.
+Enter activates the selection. Menus, dialogs, editors, and other panes capture
+their own input; leaving the list cancels pending multi-key commands.
+
+The reusable list borrows `ListItem { id, label }` values. `on_event(event, area)`
+returns 0 for unhandled input, 1 for navigation, 2 for activation, or 3 for a
+delete request; it does not delete application data itself. `reconcile(area)`
+clamps selection and scrolling after data changes, and `paint` also reconciles.
+Call `cancel_pending()` when suspending list input. Empty lists select `-1`.
+The demo model is `modules/tui_demo/patterns.mla` and owns its labels/snapshots;
+call its `release()` once and do not shallow-copy the owning library.
+
 ### Table widget
 
 `tui::table::Table` renders the demo's 64-row sequence with a frozen ROW column
