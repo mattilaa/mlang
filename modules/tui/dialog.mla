@@ -7,6 +7,7 @@ mod tui::focus;
 mod tui::input;
 mod tui::textfield;
 mod tui::button;
+mod tui::table;
 mod std::fs;
 mod std::strbuf;
 use tui::geometry::*;
@@ -188,6 +189,8 @@ pub struct OpenSessionDialog : Dialog {
     var nodes: list<DirectoryNode>; var tree_selected: i32;
     var files: list<str8>; var file_selected: i32;
     var status: str8;
+    /// Optional full-path regex, also enforced for manually entered paths.
+    var file_pattern: str8{""};
 };
 impl OpenSessionDialog {
     pub fn new() -> OpenSessionDialog {
@@ -246,7 +249,7 @@ impl OpenSessionDialog {
         let entries: list<str8> = list_dir(directory);
         for name in entries {
             let full: str8 = join_owned(directory, name);
-            if is_dir(full) == 0 { self.files.push(clone(name)); }
+            if is_dir(full) == 0 && self.matches_file(full) { self.files.push(clone(name)); }
             free(full);
         }
         free_lines(entries);
@@ -321,7 +324,11 @@ impl OpenSessionDialog {
         let node: DirectoryNode = self.nodes[index];
         if self.load_files(node.path) { self.tree_selected = index; }
     }
+    pub fn matches_file(self: OpenSessionDialog, path: str8) -> bool {
+        return self.file_pattern == "" || tui::table::table_matches(self.file_pattern, path);
+    }
     fn accept_file(self: &mut Self, path: str8) -> void {
+        if !self.matches_file(path) { self.status = "File type does not match the filter."; return; }
         if file_exists(path) == 0 || is_dir(path) == 1 {
             self.status = "File no longer exists or is inaccessible."; return;
         }

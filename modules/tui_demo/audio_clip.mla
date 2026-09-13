@@ -1,0 +1,52 @@
+mod std::audio;
+mod std::strbuf;
+mod tui::geometry;
+use std::audio::PcmAudio;
+use std::strbuf::clone;
+use std::strbuf::free;
+use tui::geometry::wide;
+
+pub struct WavePeak { var left: i32; var right: i32; };
+/// One clip at row zero. Peaks are immutable after import; source is owned.
+pub struct AudioClip { var peaks: list<WavePeak>; var source: str8; };
+impl AudioClip {
+    pub fn copy(self: AudioClip) -> AudioClip {
+        var copy: AudioClip = AudioClip {};
+        if self.peaks.len() > 0 {
+            copy.source = clone(self.source);
+            let peaks: list<WavePeak> = self.peaks;
+            for peak in peaks { copy.peaks.push(peak); }
+        }
+        return copy;
+    }
+    pub fn release(self: AudioClip) -> void { if self.peaks.len() > 0 { free(self.source); } }
+    pub fn load(path: str8, bpm: i32) -> result<AudioClip, str8> {
+        if bpm <= 0 { return Err<AudioClip, str8>("Invalid BPM"); }
+        let loaded: result<PcmAudio, str8> = PcmAudio::load(path);
+        if loaded.is_err() { return Err<AudioClip, str8>("Cannot decode audio: use mono/stereo 16-bit PCM WAV or AIFF"); }
+        let audio: PcmAudio = loaded.unwrap();
+        let frames: i64 = audio.frame_count(); let rate: i64 = audio.sample_rate();
+        let channels: i64 = audio.channels();
+        let step: i64 = rate * 60 / (wide(bpm) * 4);
+        if frames <= 0 || step <= 0 || channels < 1 || channels > 2 {
+            audio.close(); return Err<AudioClip, str8>("Empty or unsupported audio");
+        }
+        let count: i64 = (frames + step - 1) / step;
+        if count > 16384 { audio.close(); return Err<AudioClip, str8>("Audio exceeds 16384 pattern rows"); }
+        let samples: list<f32> = audio.samples(); audio.close();
+        var clip: AudioClip = AudioClip { source: clone(path) };
+        for row in 0..count {
+            var left: f32 = 0.0f; var right: f32 = 0.0f;
+            let end: i64 = (row + 1) * step < frames ? (row + 1) * step : frames;
+            let start: i64 = row * step;
+            for frame in start..end {
+                let l: f32 = samples[frame * channels];
+                let r: f32 = samples[frame * channels + channels - 1];
+                let a: f32 = l < 0.0f ? -l : l; let b: f32 = r < 0.0f ? -r : r;
+                if a > left { left = a; } if b > right { right = b; }
+            }
+            clip.peaks.push(WavePeak { left: i32(left * 1000.0f), right: i32(right * 1000.0f) });
+        }
+        return Ok<AudioClip, str8>(clip);
+    }
+}

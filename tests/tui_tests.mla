@@ -27,6 +27,46 @@ mod tui_demo::transport;
 use tui_demo::transport::TransportStatus;
 
 #[test]
+fn tui_audio_import_and_waveform() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 120, 12);
+    verify(!table.import_audio("examples/fft_example/illusion.wav", 120, area));
+    table.create_track_kind(false, true, area);
+    verify(!table.import_audio("modules/tui/README.md", 120, area));
+    verify(table.import_audio("examples/fft_example/illusion.wav", 120, area));
+    let track: SequenceTrack = table.tracks[3];
+    verify(track.clip.peaks.len() > 64 && table.rows.len() == track.clip.peaks.len());
+    verify(table.track_columns(3) == 3 && table.columns.len() == 16);
+    let tail: TableRow = table.rows[64];
+    verify(tail.cells.len() == 16 && tail.cells[1] == "" && tail.cells[2] == "");
+    let original: TableRow = table.rows[0]; verify(original.cells[1] == "C-4");
+    let wave_column: TableColumn = table.columns[15]; verify(wave_column.read_only);
+    let surface: Surface = Surface::new(120, 12); let theme: Theme = Theme::dark_blue();
+    table.paint(surface, area, theme); table.paint_audio(surface, area, theme);
+    let center: Cell = surface.cell(table.column_x(15) + 6, 2);
+    verify(center.glyph == 0x2502);
+    var copy: SequenceTable = table.copy_pattern();
+    table.clear_track(); verify(table.track_columns(3) == 2);
+    let saved: SequenceTrack = copy.tracks[3]; verify(saved.clip.peaks.len() > 64);
+    copy.create_track(true, area); verify(copy.track_columns(4) == 3);
+    copy.remove_track(area); verify(copy.tracks.len() == 4);
+    verify(!copy.import_audio("missing-file.wav", 120, area));
+    let retained: SequenceTrack = copy.tracks[3]; verify(retained.clip.peaks.len() > 64);
+    copy.release(); table.release(); surface.release();
+}
+
+#[test]
+fn tui_audio_file_filter() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
+    verify(dialog.matches_file("/tmp/kick.WAV") && dialog.matches_file("snare.AiFf"));
+    verify(dialog.matches_file("bass.aif") && !dialog.matches_file("bass.wav.txt"));
+    dialog.open("modules/tui"); verify(dialog.files.len() == 0 && dialog.nodes.len() > 0);
+    dialog.path_field.set_text("README.md"); dialog.submit_path();
+    verify(!dialog.accepted && dialog.active);
+    dialog.release();
+}
+
+#[test]
 fn tui_transport_status() {
     let surface: Surface = Surface::new(80, 3); let theme: Theme = Theme::dark_blue();
     var status: TransportStatus = TransportStatus {};

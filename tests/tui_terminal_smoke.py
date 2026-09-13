@@ -11,6 +11,8 @@ import subprocess
 import sys
 import termios
 import time
+import tempfile
+import wave
 
 
 def main():
@@ -281,6 +283,32 @@ def main():
         assert b"AUDIO track" in read_frame(None)
         os.write(master, b"j\r")
         assert b"[AUDIO]" in read_frame(1)
+        # Import stereo WAV and mono AIFF through Add -> Audio. No devices or
+        # third-party codecs are needed; known amplitudes verify channel colors.
+        with tempfile.TemporaryDirectory(prefix="mlang-tui-audio-") as fixture_dir:
+            wav_path = os.path.join(fixture_dir, "stereo.WAV")
+            with wave.open(wav_path, "wb") as wav:
+                wav.setparams((2, 2, 8000, 0, "NONE", "not compressed"))
+                wav.writeframes(struct.pack("<hh", 16384, -8192) * 72000)
+            aif_path = os.path.join(fixture_dir, "mono.AIF")
+            comm = struct.pack(">hIh", 1, 8000, 16) + bytes.fromhex("400bfa00000000000000")
+            samples = struct.pack(">h", 16384) * 8000
+            chunks = b"COMM" + struct.pack(">I", len(comm)) + comm
+            chunks += b"SSND" + struct.pack(">I", len(samples) + 8) + bytes(8) + samples
+            with open(aif_path, "wb") as fixture:
+                fixture.write(b"FORM" + struct.pack(">I", len(chunks) + 4) + b"AIFF" + chunks)
+            for path in (wav_path, aif_path):
+                os.write(master, b"\tlllll\r")
+                assert b"Add audio" in read_frame(None, 0)
+                os.write(master, b"\x15" + path.encode() + b"\r")
+                imported = read_frame(1)
+                assert b"L  WAVE  R" in imported
+                assert b"38;2;90;220;140" in imported  # left, green
+                assert b"38;2;239;101;117" in imported  # right, red
+            os.write(master, b"G")
+            assert b"072" in read_frame(1)
+            os.write(master, b"gg")
+            read_frame(1)
         os.write(master, b"m")
         assert b"A5" in read_frame(1)
         os.write(master, b"m")

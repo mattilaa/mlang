@@ -67,7 +67,8 @@ fn demo_menus() -> MenuBar {
             MenuItem { label: "Add pattern", action: 50, enabled: true },
             MenuItem { label: "Rename pattern", action: 51, enabled: true },
             MenuItem { label: "Remove pattern", action: 52, enabled: true },
-            MenuItem { label: "Clone pattern", action: 53, enabled: true }] }
+            MenuItem { label: "Clone pattern", action: 53, enabled: true }] },
+        Menu { title: "Add", items: [MenuItem { label: "Audio", action: 60, enabled: true }] }
     ]);
 }
 
@@ -99,6 +100,7 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
     let top: Rect = sequence.paint_focused(surface, editor.bounds, theme, focus.is_active(1));
     free(title);
     table.paint(surface, top, theme);
+    table.paint_audio(surface, top, theme);
     table.paint_editor(surface, top, theme);
     let details: Panel = Panel { title: mixer.visible ? " Mixer (demo levels) " : " Inspector " };
     let bottom: Rect = details.paint_focused(surface, inspector.bounds, theme, focus.is_active(2));
@@ -121,6 +123,7 @@ fn main() -> i32 {
     var focus: PaneFocus = PaneFocus::new(0);
     var input: InputDecoder = InputDecoder::new();
     var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    var adding_audio: bool = false;
     var library: PatternLibrary = PatternLibrary::new();
     let transport: TransportStatus = TransportStatus {};
     var mixer: Mixer = Mixer { visible: false, phase: 0 };
@@ -140,7 +143,10 @@ fn main() -> i32 {
         }
         if dialog.active && dialog.pressed_button >= 0 {
             dialog.tick(); dirty = true;
-            if dialog.accepted { free(message); message = format!("Selected: {}", dialog.accepted_path); }
+            if dialog.accepted {
+                if adding_audio { library.table.import_audio(dialog.accepted_path, transport.bpm, terminal_bounds()); }
+                free(message); message = format!("Selected: {}", dialog.accepted_path);
+            }
         }
         if question.active && question.pressed_button >= 0 {
             question.tick(); dirty = true;
@@ -210,6 +216,7 @@ fn main() -> i32 {
                     dialog.on_event(event, area);
                     focus.set_menu_active(dialog.active);
                     if dialog.accepted {
+                        if adding_audio { library.table.import_audio(dialog.accepted_path, transport.bpm, panes[1].bounds.inset(1)); }
                         free(message);
                         message = format!("Selected: {}", dialog.accepted_path);
                     }
@@ -253,8 +260,20 @@ fn main() -> i32 {
                 confirm_track_action = 0; question.open(); focus.set_menu_active(true);
             }
             else if command == 2 {
+                adding_audio = false; dialog.title = "Open session"; dialog.file_pattern = "";
                 dialog.open("");
                 focus.set_menu_active(true);
+            }
+            else if command == 60 {
+                let selected: i32 = library.table.active_track();
+                if selected >= 0 {
+                    let track: SequenceTrack = library.table.tracks[selected];
+                    if track.audio {
+                        adding_audio = true; dialog.title = "Add audio";
+                        dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
+                        dialog.open("");
+                    } else { library.table.error = "Select an AUDIO track first"; }
+                }
             }
             else if command == 22 || command == 24 {
                 confirm_track_action = command;

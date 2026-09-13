@@ -2,6 +2,8 @@
 mod tui::table;
 mod tui::textfield;
 mod tui::dialog;
+mod tui_demo::audio_clip;
+use tui_demo::audio_clip::*;
 use tui::dialog::Dialog;
 use tui::table::*;
 use tui::textfield::TextField;
@@ -20,6 +22,7 @@ pub struct SequenceTrack {
     var name: str8; var muted: bool; var cc1: AutomationSlot; var cc2: AutomationSlot;
     var volume: i32{100}; var pan: i32;
     var audio: bool;
+    var clip: AudioClip;
 };
 pub struct SequenceTable : Table {
     var notes: array<str8, 128>;
@@ -62,6 +65,67 @@ pub fn active_track(self: SequenceTable) -> i32 {
     }
     return i32(self.tracks.len()) - 1;
 }
+pub fn import_audio(self: &mut Self, path: str8, bpm: i32, area: Rect) -> bool {
+    let index: i32 = self.active_track(); if index < 0 { self.error = "Select an AUDIO track first"; return false; }
+    var track: SequenceTrack = self.tracks[index];
+    if !track.audio { self.error = "Select an AUDIO track first"; return false; }
+    let loaded: result<AudioClip, str8> = AudioClip::load(path, bpm);
+    if loaded.is_err() { self.error = loaded.unwrap_err(); return false; }
+    let clip: AudioClip = loaded.unwrap();
+    let insert: bool = track.clip.peaks.len() == 0;
+    let column: i32 = self.track_start(index) + 2;
+    track.clip.release(); track.clip = clip;
+    let count: i32 = i32(track.clip.peaks.len());
+    self.replace_track(index, track);
+    if insert {
+        var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
+        for row in previous {
+            var cells: list<str8> = [];
+            for c in 0..row.cells.len() {
+                if c == column { cells.push(clone("")); }
+                cells.push(row.cells[c]);
+            }
+            if column == row.cells.len() { cells.push(clone("")); }
+            rows.push(TableRow { cells: cells });
+        }
+        self.rows = rows;
+    }
+    self.rebuild_columns();
+    let start: i32 = i32(self.rows.len());
+    for r in start..count {
+        var cells: list<str8> = [format!("{}{}", r < 9 ? "00" : (r < 99 ? "0" : ""), r + 1)];
+        for _c in 1..self.columns.len() { cells.push(clone("")); }
+        self.rows.push(TableRow { cells: cells });
+    }
+    self.reconcile(area); self.error = ""; return true;
+}
+pub fn paint_audio(self: SequenceTable, surface: Surface, area: Rect, theme: Theme) -> void {
+    let body: Rect = self.body(area);
+    let clip: Rect = Rect::new(body.x + self.frozen_width(), body.y, body.width - self.frozen_width(), body.height);
+    for t in 0..self.tracks.len() {
+        let track: SequenceTrack = self.tracks[t];
+        if track.clip.peaks.len() > 0 {
+            let x: i32 = area.x + self.column_x(self.track_start(i32(t)) + 2);
+            for y in 0..body.height {
+                let row: i32 = self.scroll_y + i32(y);
+                if row < track.clip.peaks.len() && row < self.rows.len() {
+                    let peak: WavePeak = track.clip.peaks[row];
+                    let bg: i32 = row == self.selected_row ? theme.selection : (row % 2 == 1 ? darken(theme.panel, 82) : theme.panel);
+                    let line: Rect = Rect::new(x, body.y + i32(y), 13, 1);
+                    surface.fill(line.intersect(clip), Cell { glyph: 32, foreground: theme.muted, background: bg });
+                    let l: i32 = peak.left > 1000 ? 6 : (peak.left * 6 + 999) / 1000;
+                    let r: i32 = peak.right > 1000 ? 6 : (peak.right * 6 + 999) / 1000;
+                    let left: Rect = Rect::new(x + 6 - l, body.y + i32(y), l, 1);
+                    let right: Rect = Rect::new(x + 7, body.y + i32(y), r, 1);
+                    let center: Rect = Rect::new(x + 6, body.y + i32(y), 1, 1);
+                    surface.fill(left.intersect(clip), Cell { glyph: 0x2588, foreground: 0x5adc8c, background: bg });
+                    surface.fill(right.intersect(clip), Cell { glyph: 0x2588, foreground: 0xef6575, background: bg });
+                    surface.fill(center.intersect(clip), Cell { glyph: 0x2502, foreground: theme.muted, background: bg });
+                }
+            }
+        }
+    }
+}
 /// Independent pattern snapshot, including tracks, automation, mixer settings,
 /// cursor and viewport. No owned strings or mutable lists alias the source.
 pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
@@ -78,7 +142,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     }
     var tracks: list<SequenceTrack> = []; let source_tracks: list<SequenceTrack> = self.tracks;
     for track in source_tracks {
-        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, audio: track.audio,
+        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, audio: track.audio, clip: track.clip.copy(),
             cc1: AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum } });
     }
@@ -88,7 +152,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     copy.rebuild_columns(); return copy;
 }
 pub fn track_columns(self: SequenceTable, index: i32) -> i32 {
-    let track: SequenceTrack = self.tracks[index]; return track.audio ? 2 : 4;
+    let track: SequenceTrack = self.tracks[index]; return track.audio ? (track.clip.peaks.len() > 0 ? 3 : 2) : 4;
 }
 pub fn track_start(self: SequenceTable, index: i32) -> i32 {
     var first: i32 = 1;
@@ -125,6 +189,9 @@ pub fn rebuild_columns(self: &mut Self) -> void {
             minimum: track.cc1.minimum, maximum: track.cc1.maximum, nullable: true });
         columns.push(TableColumn { title: "CC2", width: 6, value_type: "i32", bounded: true,
             minimum: track.cc2.minimum, maximum: track.cc2.maximum, nullable: true });
+        if track.audio && track.clip.peaks.len() > 0 {
+            columns.push(TableColumn { title: "L  WAVE  R", width: 13, value_type: "str8", read_only: true, nullable: true });
+        }
     }
     self.columns = columns; self.groups = groups;
 }
@@ -141,7 +208,7 @@ pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Re
     if duplicate {
         let original: SequenceTrack = self.tracks[source];
         free(track.name); free(track.cc1.parameter); free(track.cc2.parameter);
-        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, audio: original.audio,
+        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, audio: original.audio, clip: original.clip.copy(),
             cc1: AutomationSlot { parameter: clone(original.cc1.parameter), minimum: original.cc1.minimum, maximum: original.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(original.cc2.parameter), minimum: original.cc2.minimum, maximum: original.cc2.maximum } };
     }
@@ -169,7 +236,7 @@ pub fn remove_track(self: &mut Self, area: Rect) -> void {
     var tracks: list<SequenceTrack> = [];
     for i in 0..self.tracks.len() {
         let track: SequenceTrack = self.tracks[i];
-        if i == index { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); }
+        if i == index { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.clip.release(); }
         else { tracks.push(track); }
     }
     var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
@@ -189,16 +256,25 @@ pub fn remove_track(self: &mut Self, area: Rect) -> void {
 pub fn clear_track(self: &mut Self) -> void {
     let index: i32 = self.active_track(); if index < 0 { return; }
     let first: i32 = self.track_start(index); let end: i32 = first + self.track_columns(index);
+    var track: SequenceTrack = self.tracks[index];
+    let has_clip: bool = track.clip.peaks.len() > 0;
     var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
     for row in previous {
         var cells: list<str8> = [];
         for c in 0..row.cells.len() {
-            if c >= first && c < end { free(row.cells[c]); cells.push(clone("")); }
+            if c >= first && c < end {
+                free(row.cells[c]);
+                if !has_clip || c != first + 2 { cells.push(clone("")); }
+            }
             else { cells.push(row.cells[c]); }
         }
         rows.push(TableRow { cells: cells });
     }
     self.rows = rows; self.error = "";
+    if has_clip {
+        track.clip.release(); track.clip = AudioClip {};
+        self.replace_track(index, track); self.rebuild_columns();
+    }
 }
 pub fn rename_track(self: &mut Self, name: str8) -> bool {
     let index: i32 = self.active_track(); if index < 0 { return false; }
@@ -257,7 +333,7 @@ pub fn track_action(self: &mut Self, command: i32, area: Rect) -> void {
 }
 pub fn release(self: &mut Self) -> void {
     let tracks: list<SequenceTrack> = self.tracks;
-    for track in tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); }
+    for track in tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.clip.release(); }
     let groups: list<TableGroup> = self.groups;
     for group in groups { free(group.title); }
     let rows: list<TableRow> = self.rows;

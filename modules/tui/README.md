@@ -139,6 +139,27 @@ Legacy terminals can collapse Ctrl+Shift+H/J to Backspace/Enter; those ambiguous
 bytes are deliberately not treated as pane navigation. The menu still works
 with legacy arrow keys and unmodified `hjkl`.
 
+### Audio import (demo)
+
+Create/select an AUDIO track, then choose **Add → Audio**. The file chooser
+lists `.wav`, `.aif`, and `.aiff` files case-insensitively and enforces the same
+filter on manually entered paths. Directories remain browsable. The current
+stdlib decoder supports mono/stereo **16-bit PCM** WAV/AIFF (not every encoding
+these containers can hold); decode errors preserve the existing clip.
+
+Each audio track holds one source-file reference and its peak envelope, starting
+at row 1. Import replaces that track's previous clip. A read-only waveform column
+beside CC1/CC2 draws time downward, with green left-channel bars extending left
+from the center line and red right-channel bars extending right. Mono is shown
+on both sides. Waveforms scroll with the table, while ROW stays frozen.
+
+One row currently represents a sixteenth note at the displayed BPM (120 by
+default). Longer clips extend the pattern with empty MIDI/automation cells;
+shorter replacements do not discard existing rows. Imports are limited to 16384
+rows. Pattern/track cloning copies clip metadata and peaks, and Clear track
+removes its clip. Audio playback, clip trimming, and tempo-change resampling
+are not implemented yet; row editing does not trim the source audio.
+
 ### Patterns and Song lists
 
 The demo's bottom status bar shows BPM (initially 120), sequence elapsed time
