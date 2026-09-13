@@ -15,6 +15,65 @@ mod tui::table;
 use tui::table::*;
 mod tui_demo::sequence;
 use tui_demo::sequence::SequenceTable;
+mod tui::meter;
+mod tui_demo::mixer;
+use tui::meter::VuMeter;
+use tui_demo::mixer::Mixer;
+
+#[test]
+fn tui_sequence_jump_navigation() {
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(0, 0, 40, 10);
+    table.edit_event(decode_input("G"), area);
+    verify(table.selected_row == 63 && table.scroll_y > 0);
+    table.edit_event(decode_input("g"), area); verify(table.selected_row == 63);
+    table.edit_event(decode_input("g"), area); verify(table.selected_row == 0 && table.scroll_y == 0);
+    table.edit_event(decode_input("\x1b[103;2u"), area); verify(table.selected_row == 63);
+    table.edit_event(decode_input("g"), area); table.edit_event(decode_input("k"), area);
+    table.edit_event(decode_input("g"), area); verify(table.selected_row == 62);
+    table.edit_event(decode_input("g"), area); verify(table.selected_row == 0);
+    table.edit_event(decode_input("\r"), area);
+    table.editor.set_text(""); table.edit_event(decode_input("G"), area);
+    table.edit_event(decode_input("g"), area); table.edit_event(decode_input("g"), area);
+    verify(table.editor.text == "Ggg" && table.selected_row == 0);
+    table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area);
+    for _i in 0..64 { table.delete_row(area); }
+    table.edit_event(decode_input("G"), area);
+    table.edit_event(decode_input("g"), area); table.edit_event(decode_input("g"), area);
+    verify(table.selected_row == -1 && table.scroll_y == 0);
+    table.release();
+}
+
+#[test]
+fn tui_vu_meter_and_mixer() {
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(40, 18);
+    let full: VuMeter = VuMeter { level: 2000 };
+    full.paint(surface, Rect::new(1, 1, 1, 10), theme.panel);
+    let red: Cell = surface.cell(1, 1); let green: Cell = surface.cell(1, 10);
+    verify(red.glyph == 0x2588 && red.foreground == 0xFF604C && green.foreground == 0x74F078);
+    let partial: VuMeter = VuMeter { level: 250 };
+    partial.paint(surface, Rect::new(2, 1, 1, 1), theme.panel);
+    let quarter: Cell = surface.cell(2, 1); verify(quarter.glyph == 0x2582);
+    let empty: VuMeter = VuMeter { level: -1 };
+    empty.paint(surface, Rect::new(3, 1, 1, 1), theme.panel);
+    let silent: Cell = surface.cell(3, 1); verify(silent.foreground == 0x163A2A);
+    var mixer: Mixer = Mixer { visible: true, phase: 80 };
+    var table: SequenceTable = SequenceTable::new();
+    let track: SequenceTrack = table.tracks[0]; verify(track.volume == 100 && track.pan == 0);
+    let before: i32 = mixer.level(0, 100, 0, false, false); mixer.tick();
+    verify(before != mixer.level(0, 100, 0, false, false));
+    verify(mixer.level(0, 100, 0, false, true) == 0 && mixer.level(0, 100, 100, false, false) == 0);
+    mixer.paint(surface, Rect::new(0, 0, 27, 16), theme, table.tracks, 1);
+    let selected: Cell = surface.cell(9, 0); let other: Cell = surface.cell(0, 0);
+    verify(selected.background == lighten(theme.panel, 8) && other.background == theme.panel);
+    let volume: Cell = surface.cell(9, 1); let pan: Cell = surface.cell(9, 2);
+    verify(volume.glyph == 86 && pan.glyph == 80);
+    mixer.paint(surface, Rect::new(0, 0, 9, 8), theme, table.tracks, 2);
+    let last: Cell = surface.cell(6, 0); verify(last.glyph == 51);
+    for size in 0..5 { mixer.paint(surface, Rect::new(0, 0, i32(size), i32(size)), theme, table.tracks, 2); }
+    table.release(); surface.release();
+}
 
 #[test]
 fn tui_column_validation() {

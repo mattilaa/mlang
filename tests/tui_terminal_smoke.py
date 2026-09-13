@@ -94,6 +94,22 @@ def main():
         # The sequence is a real 64-row table; column/row input stays in its pane.
         os.write(master, b"\x1b[108;6u")
         read_frame(1)
+        os.write(master, b"G")
+        assert b"064" in read_frame(1)
+        os.write(master, b"gg")
+        read_frame(1, table_text=((24, 4), "001"))
+        os.write(master, b"m")
+        mixer_frame = read_frame(1)
+        assert b"Mixer (demo levels)" in mixer_frame and b"Vol 100" in mixer_frame and b"Pan 0" in mixer_frame
+        animated = mixer_frame
+        for _ in range(20):
+            animated = read_frame(1)
+            if animated != mixer_frame:
+                break
+        assert animated != mixer_frame
+        os.write(master, b"m")
+        while b" Inspector " not in read_frame(1):
+            pass
         os.write(master, b"w")
         read_frame(1, table_cell=((34, 4), (60, 91, 128)))
         os.write(master, b"j")
@@ -190,7 +206,7 @@ def main():
         # scrolling beyond its viewport; column and pane keys are captured too.
         os.write(master, b"\t")
         read_frame(None)
-        os.write(master, b"j" * 70 + b"ww\x1b[106;6u")
+        os.write(master, b"j" * 70 + b"wwGm\x1b[106;6u")
         read_frame(None)
         os.write(master, b"\x1b")
         assert b"001" in read_frame(1, table_cell=((28, 4), (60, 91, 128)))

@@ -15,6 +15,8 @@ use tui::dialog::*;
 use tui::table::*;
 mod tui_demo::sequence;
 use tui_demo::sequence::SequenceTable;
+mod tui_demo::mixer;
+use tui_demo::mixer::Mixer;
 use std::strbuf::clone;
 use std::strbuf::free;
 use std::io::stdin;
@@ -67,7 +69,7 @@ fn demo_panes(content: Rect) -> list<Pane> {
             Pane { id: 2, bounds: right[1] }];
 }
 
-fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable) -> void {
+fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: Mixer) -> void {
     let theme: Theme = Theme::dark_blue();
     surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
     let library: Pane = panes[0];
@@ -83,13 +85,18 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
     let top: Rect = sequence.paint_focused(surface, editor.bounds, theme, focus.is_active(1));
     table.paint(surface, top, theme);
     table.paint_editor(surface, top, theme);
-    let details: Panel = Panel { title: " Inspector " };
+    let details: Panel = Panel { title: mixer.visible ? " Mixer (demo levels) " : " Inspector " };
     let bottom: Rect = details.paint_focused(surface, inspector.bounds, theme, focus.is_active(2));
     let label: Label = Label { text: table.error != "" ? table.error : (table.editing ? "Editing: Enter saves | Esc cancels" : message) };
-    label.paint(surface, bottom, theme);
-    table.paint_track_details(surface, bottom, theme);
+    if mixer.visible {
+        mixer.paint(surface, bottom, theme, table.tracks, table.active_track());
+        if table.error != "" && bottom.height > 0 {
+            surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), table.error, theme.accent, theme.panel);
+        }
+    }
+    else { label.paint(surface, bottom, theme); table.paint_track_details(surface, bottom, theme); }
     surface.text(Rect::new(0, surface.height - 1, surface.width, 1),
-        " w/b: col j/k: row J/K: value Enter: edit | C-S-H/J/K/L: panes | Tab: menu",
+        " w/b: col j/k: row G/gg: last/first m: mixer | Enter: edit Tab: menu",
         theme.muted, theme.background);
     menus.paint(surface, surface.bounds(), theme);
 }
@@ -102,6 +109,8 @@ fn main() -> i32 {
     var input: InputDecoder = InputDecoder::new();
     var dialog: OpenSessionDialog = OpenSessionDialog::new();
     var table: SequenceTable = SequenceTable::new();
+    var mixer: Mixer = Mixer { visible: false, phase: 0 };
+    var mixer_ticks: i32 = 0;
     var question: QuestionDialog = QuestionDialog::new("New session", "Start a new session?");
     var message: str8 = clone("Select a command from the menu.");
     var running: bool = true;
@@ -111,6 +120,10 @@ fn main() -> i32 {
     var escape_ticks: i32 = 0;
     var confirm_track_action: i32 = 0;
     while running {
+        if mixer.visible && menus.active < 0 && !dialog.active && !question.active && !table.editing {
+            mixer_ticks = mixer_ticks + 1;
+            if mixer_ticks >= 10 { mixer.tick(); mixer_ticks = 0; dirty = true; }
+        }
         if dialog.active && dialog.pressed_button >= 0 {
             dialog.tick(); dirty = true;
             if dialog.accepted { free(message); message = format!("Selected: {}", dialog.accepted_path); }
@@ -134,7 +147,7 @@ fn main() -> i32 {
             let surface: Surface = Surface::new(area.width, area.height);
             if !surface.is_valid() { table.release(); dialog.release(); free(message); terminal.finish(); return 1; }
             table.reconcile(panes[1].bounds.inset(1));
-            paint_demo(surface, menus, focus, panes, message, table);
+            paint_demo(surface, menus, focus, panes, message, table, mixer);
             dialog.paint(surface, area, Theme::dark_blue());
             question.paint(surface, area, Theme::dark_blue());
             table.paint_track_dialog(surface, area, Theme::dark_blue());
@@ -161,6 +174,8 @@ fn main() -> i32 {
             if event.kind != InputKind::None || event.code != 0 {
                 if menus.active >= 0 || dialog.active || question.active || focus.selected != 1 ||
                         event.code != 100 || event.modifiers != 1 { table.delete_pending = false; }
+                if menus.active >= 0 || dialog.active || question.active || focus.selected != 1 ||
+                        event.code != 103 || event.modifiers != 1 { table.top_pending = false; }
             }
             escape_ticks = 0;
             var command: i32 = 0;
@@ -195,6 +210,9 @@ fn main() -> i32 {
                     focus.set_menu_active(menus.active >= 0);
                     dirty = true;
                 }
+            }
+            else if event.code == 109 && event.modifiers == 1 {
+                mixer.visible = !mixer.visible; dirty = true;
             }
             else if event.kind == InputKind::Menu && event.key == Key::Toggle {
                 command = menus.on_key(event.key);
@@ -235,6 +253,7 @@ fn main() -> i32 {
             if escape_ticks >= 5 {
                 let event: InputEvent = input.expire();
                 table.delete_pending = false;
+                table.top_pending = false;
                 if question.active {
                     question.on_event(event);
                     if !question.active { confirm_track_action = 0; free(message); message = clone("Cancelled."); }

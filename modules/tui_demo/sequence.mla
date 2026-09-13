@@ -16,11 +16,15 @@ use std::strbuf::len;
 use std::strbuf::find;
 use std::strbuf::sub;
 pub struct AutomationSlot { var parameter: str8; var minimum: i64; var maximum: i64; };
-pub struct SequenceTrack { var name: str8; var muted: bool; var cc1: AutomationSlot; var cc2: AutomationSlot; };
+pub struct SequenceTrack {
+    var name: str8; var muted: bool; var cc1: AutomationSlot; var cc2: AutomationSlot;
+    var volume: i32{100}; var pan: i32;
+};
 pub struct SequenceTable : Table {
     var notes: array<str8, 128>;
     var editor: TextField; var editing: bool; var error: str8;
     var delete_pending: bool;
+    var top_pending: bool;
     var tracks: list<SequenceTrack>; var edit_mode: i32;
     var next_track_id: i32;
 };
@@ -86,7 +90,7 @@ pub fn create_track(self: &mut Self, duplicate: bool, area: Rect) -> void {
     if duplicate {
         let original: SequenceTrack = self.tracks[source];
         free(track.name); free(track.cc1.parameter); free(track.cc2.parameter);
-        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted,
+        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan,
             cc1: AutomationSlot { parameter: clone(original.cc1.parameter), minimum: original.cc1.minimum, maximum: original.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(original.cc2.parameter), minimum: original.cc2.minimum, maximum: original.cc2.maximum } };
     }
@@ -264,7 +268,7 @@ pub fn delete_row(self: &mut Self, area: Rect) -> void {
 pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
     if event.kind == InputKind::None && event.code == 0 { return false; }
     if self.editing {
-        self.delete_pending = false;
+        self.delete_pending = false; self.top_pending = false;
         if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 {
             self.editing = false; self.edit_mode = 0; self.error = ""; return true;
         }
@@ -279,7 +283,18 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
     }
     let delete_key: bool = event.modifiers == 1 && event.code == 100;
     if !delete_key { self.delete_pending = false; }
+    let top_key: bool = event.modifiers == 1 && event.code == 103;
+    if !top_key { self.top_pending = false; }
     self.reconcile(area);
+    if (event.code == 71 && (event.modifiers == 1 || event.modifiers == 2)) ||
+            (event.code == 103 && event.modifiers == 2) {
+        self.selected_row = i32(self.rows.len()) - 1; self.reconcile(area); return true;
+    }
+    if top_key {
+        if self.top_pending { self.selected_row = 0; self.top_pending = false; self.reconcile(area); }
+        else { self.top_pending = true; }
+        return true;
+    }
     if self.selected_row < 0 || self.selected_column < 0 { return self.on_event(event, area); }
     if delete_key {
         if self.delete_pending { self.delete_row(area); }

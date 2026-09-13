@@ -146,6 +146,9 @@ and three independent tracks, each containing compact NOTE, VEL, CC1, and CC2
 columns. Focus the sequence pane with Ctrl+Shift+L; `w`/`b`
 select the next/previous column and `j`/`k` (or Down/Up) select rows. Navigation
 stops at the edges and scrolls the selection into view, with a fixed header.
+`G` jumps to the bottom row; consecutive `gg` jumps to the first row. These
+bindings operate only in the active sequence pane, not in menus or cell editors.
+Any unrelated key or focus change cancels a pending first `g`.
 Menus and dialogs retain exclusive keyboard ownership while open.
 
 Construct with `Table::new(columns, rows)`, using `TableColumn { title, width }`
@@ -204,6 +207,26 @@ the selected track's mute state and both parameter assignments.
 New tracks start with CC1=`cc:1` and CC2=`cc:74`. There is a 64-track demo limit.
 These actions change in-memory demo data, not audio/MIDI output; mute is state
 for a future playback engine, and custom parameters need an application mapping.
+
+#### Mixer preview
+
+Press `m` outside menus, dialogs, or cell editing to toggle Inspector/Mixer.
+`modules/tui_demo/mixer.mla` provides the demo widget: narrow track strips with
+track names, volume (0–100), pan (-100 left to +100 right), and stereo VU meters.
+The selected track shares the sequence selection and has a lighter background.
+When tracks exceed the pane width, the visible strip range follows selection.
+New tracks, duplicates, names, and mute state are read from the sequence model.
+Volume and pan are model readouts in this first preview, not editable controls.
+
+The meter takes all remaining height below its three readout rows, shrinking or
+growing on terminal resize. Tiny panes clip readouts and omit meters when no
+height remains. `tui::meter::VuMeter` is reusable independently: pass a level
+from 0 to 1000 and a target rectangle. Its quarter-cell blocks and
+green/yellow/orange/red thresholds match the oscilloscope demo.
+
+The pane is labeled **Mixer (demo levels)**: levels are synthetic, animated at
+roughly 10 Hz, scaled by volume/pan, and zero for muted tracks. They are not
+audio measurements. Animation pauses during menus, dialogs, and editing.
 
 #### Typed columns and editing
 
