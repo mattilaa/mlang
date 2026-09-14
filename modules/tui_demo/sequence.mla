@@ -94,7 +94,7 @@ pub fn new() -> SequenceTable {
             cc1: AutomationSlot { parameter: clone("cc:1"), minimum: 0, maximum: 127 },
             cc2: AutomationSlot { parameter: clone("cc:74"), minimum: 0, maximum: 127 } });
     }
-    var table: SequenceTable = SequenceTable { frozen_columns: 1, horizontal_scrollbar: true, vertical_scrollbar: true,
+    var table: SequenceTable = SequenceTable { frozen_columns: 1, horizontal_scrollbar: true, vertical_scrollbar: true, alternate_group_text: true,
         selected_column: 1, editor: TextField::new(""), error: "", next_track_id: 4 };
     table.rows = rows; table.tracks = tracks; table.notes = midi;
     table.rebuild_columns(); return table;
@@ -280,6 +280,7 @@ pub fn paint_audio_style(self: SequenceTable, surface: Surface, area: Rect, them
 /// cursor and viewport. No owned strings or mutable lists alias the source.
 pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     var copy: SequenceTable = SequenceTable { frozen_columns: self.frozen_columns,
+        alternate_group_text: self.alternate_group_text,
         horizontal_scrollbar: self.horizontal_scrollbar, vertical_scrollbar: self.vertical_scrollbar,
         selected_row: self.selected_row, selected_column: self.selected_column,
         scroll_x: self.scroll_x, scroll_y: self.scroll_y, next_track_id: self.next_track_id,

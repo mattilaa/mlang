@@ -97,6 +97,7 @@ pub struct Table {
     var scroll_x: i32; var scroll_y: i32;
     var horizontal_scrollbar: bool{true}; var vertical_scrollbar: bool{true};
     var groups: list<TableGroup>{[]}; var frozen_columns: i32;
+    var alternate_group_text: bool{false};
     // Methods live on the struct so derived widgets inherit the implementation.
     pub fn new(columns: list<TableColumn>, rows: list<TableRow>) -> Table {
         return Table { columns: columns, rows: rows };
@@ -110,6 +111,14 @@ pub struct Table {
         var width: i32 = 0;
         for i in 0..self.columns.len() { width = width + self.column_width(i32(i)); }
         return width;
+    }
+    fn dim_column(self: Table, column: i32) -> bool {
+        if !self.alternate_group_text || column == self.selected_column { return false; }
+        for i in 0..self.groups.len() {
+            let group: TableGroup = self.groups[i];
+            if column >= group.first && column < group.first + group.count { return i % 2 == 1; }
+        }
+        return false;
     }
     pub fn frozen_count(self: Table) -> i32 {
         return self.frozen_columns < 0 ? 0 : (self.frozen_columns > self.columns.len() ? i32(self.columns.len()) : self.frozen_columns);
@@ -255,10 +264,11 @@ pub struct Table {
                 let width: i32 = self.column_width(i32(c));
                 if width == 0 { continue; }
                 let cell_bg: i32 = c == self.selected_column ? lighten(bg, 8) : bg;
+                let fg: i32 = self.dim_column(c) ? darken(theme.foreground, 88) : theme.foreground;
                 let cell: Rect = Rect::new(x, i32(y) + body.y, width, 1);
-                canvas.fill(cell.intersect(body), Cell { glyph: 32, foreground: theme.foreground, background: cell_bg });
+                canvas.fill(cell.intersect(body), Cell { glyph: 32, foreground: fg, background: cell_bg });
                 let text_width: i32 = x + width > body.width ? body.width - x : width;
-                if c < row.cells.len() { canvas.text(Rect::new(x, i32(y) + body.y, text_width, 1), row.cells[c], theme.foreground, cell_bg); }
+                if c < row.cells.len() { canvas.text(Rect::new(x, i32(y) + body.y, text_width, 1), row.cells[c], fg, cell_bg); }
             }
         }
         for order in 0..self.columns.len() {
@@ -270,8 +280,9 @@ pub struct Table {
             let header: Rect = Rect::new(x, self.header_height() - 1, width, 1);
             let clip: Rect = Rect::new(0, self.header_height() - 1, body.width, 1);
             let bg: i32 = c == self.selected_column ? lighten(theme.menu_background, 8) : theme.menu_background;
-            canvas.fill(header.intersect(clip), Cell { glyph: 32, foreground: theme.accent, background: bg });
-            canvas.text(Rect::new(x, header.y, x + width > body.width ? body.width - x : width, 1), column.title, theme.accent, bg);
+            let fg: i32 = self.dim_column(c) ? darken(theme.accent, 88) : theme.accent;
+            canvas.fill(header.intersect(clip), Cell { glyph: 32, foreground: fg, background: bg });
+            canvas.text(Rect::new(x, header.y, x + width > body.width ? body.width - x : width, 1), column.title, fg, bg);
         }
         let frozen: i32 = self.frozen_width() > body.width ? body.width : self.frozen_width();
         let groups: list<TableGroup> = self.groups;

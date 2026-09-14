@@ -43,6 +43,33 @@ use tui_demo::note_playback::*;
 
 
 #[test]
+fn tui_alternating_track_text() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 120, 10);
+    let surface: Surface = Surface::new(120, 10); let theme: Theme = Theme::dark_blue();
+    for stage in 0..3 {
+        table.zoom_tracks(i32(stage), true, area);
+        for selected in 0..3 {
+            table.selected_column = table.track_start(i32(selected)); table.paint(surface, area, theme);
+            let body: Rect = table.body(area);
+            for t in 0..3 {
+                let column: i32 = table.track_start(i32(t)); let x: i32 = table.column_x(column);
+                let expected: i32 = t == 1 && t != selected ? darken(theme.foreground, 88) : theme.foreground;
+                let cell: Cell = surface.cell(x, body.y); let stripe: Cell = surface.cell(x, body.y + 1);
+                verify(cell.foreground == expected && stripe.foreground == expected);
+                let vel: Cell = surface.cell(table.column_x(column + 1), body.y);
+                verify(vel.foreground == (t == 1 ? darken(theme.foreground, 88) : theme.foreground));
+            }
+        }
+        table.selected_column = table.track_start(1) + 1; table.paint(surface, area, theme);
+        let body: Rect = table.body(area); let x: i32 = table.column_x(table.selected_column);
+        let selected_vel: Cell = surface.cell(x, body.y); let selected_header: Cell = surface.cell(x, body.y - 1);
+        verify(selected_vel.foreground == theme.foreground && selected_header.foreground == theme.accent);
+    }
+    var copy: SequenceTable = table.copy_pattern(); verify(copy.alternate_group_text); copy.release();
+    surface.release(); table.release();
+}
+
+#[test]
 fn tui_velocity_left_alignment() {
     var table: SequenceTable = SequenceTable::new();
     let area: Rect = Rect::new(0, 0, 120, 10);

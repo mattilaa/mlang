@@ -288,6 +288,9 @@ waveform-width toggle; MIDI column stages do not change audio tracks.
 
 The reusable `TableColumn.hidden` property controls visibility independently
 of `read_only`: hidden cells can still be validated and updated by the model.
+Pattern tables also enable `Table.alternate_group_text`: tracks 2, 4, etc. use
+slightly dimmer cell text and column headers. The selected column always uses
+the normal text/header color, independently of track parity and row shading.
 
 LEN uses decimal sixteenth-note units: `1.00` = one row, `0.50` = half a row,
 `3.75` = three and three-quarter rows. Enter edits LEN; Shift+J/K adjusts it by
