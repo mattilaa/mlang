@@ -1,0 +1,67 @@
+mod tui::geometry;
+use tui::geometry::Rect;
+use tui::geometry::wide;
+
+pub enum Axis { Horizontal, Vertical };
+pub enum Alignment { Start, Center, End };
+/// Positive fixed cells take priority; remaining cells are divided by weight.
+pub struct Size { var cells: i32; var weight: i32; };
+impl Size {
+    pub fn fixed(cells: i32) -> Size {
+        return Size { cells: cells < 0 ? 0 : cells, weight: 0 };
+    }
+    pub fn flex(weight: i32) -> Size {
+        return Size { cells: 0, weight: weight < 1 ? 1 : weight };
+    }
+}
+pub struct Layout {
+    var axis: Axis; var gap: i32; var sizes: list<Size>;
+    var alignment: Alignment;
+};
+impl Layout {
+    /// Split a rectangle; feed any returned rectangle to another layout to nest.
+    /// Under pressure fixed sizes shrink in declaration order; no child escapes.
+    pub fn split(self: Layout, area: Rect) -> list<Rect> {
+        var result: list<Rect> = [];
+        let count: i32 = i32(self.sizes.len());
+        if count == 0 { return result; }
+        let extent: i32 = self.axis == Axis::Horizontal ? area.width : area.height;
+        let gap: i32 = self.gap < 0 ? 0 : self.gap;
+        let gap_total: i64 = wide(gap) * wide(count - 1);
+        var remaining: i32 = gap_total >= wide(extent) ? 0 : extent - i32(gap_total);
+        var fixed_total: i64 = 0;
+        var weights: i64 = 0;
+        let sizes: list<Size> = self.sizes;
+        for size in sizes {
+            if size.cells > 0 { fixed_total = fixed_total + wide(size.cells); }
+            if size.weight > 0 { weights = weights + wide(size.weight); }
+        }
+        var flexible: i32 = fixed_total >= wide(remaining) ? 0 : remaining - i32(fixed_total);
+        var offset: i32 = 0;
+        // Alignment distributes unused space on the layout's main axis.
+        if weights == 0 && fixed_total + gap_total < wide(extent) {
+            let spare: i32 = extent - i32(fixed_total + gap_total);
+            if self.alignment == Alignment::Center { offset = spare / 2; }
+            if self.alignment == Alignment::End { offset = spare; }
+        }
+        for size in sizes {
+            var length: i32 = size.cells < 0 ? 0 : size.cells;
+            if size.weight > 0 && weights > 0 {
+                length = length + i32(wide(flexible) * wide(size.weight) / weights);
+                flexible = flexible - (length - (size.cells < 0 ? 0 : size.cells));
+                weights = weights - wide(size.weight);
+            }
+            if length > remaining { length = remaining; }
+            if length > extent - offset { length = extent - offset; }
+            if self.axis == Axis::Horizontal {
+                result.push(Rect::new(area.x + offset, area.y, length, area.height));
+            } else {
+                result.push(Rect::new(area.x, area.y + offset, area.width, length));
+            }
+            remaining = remaining - length;
+            let advance: i64 = wide(offset) + wide(length) + wide(gap);
+            offset = advance > wide(extent) ? extent : i32(advance);
+        }
+        return result;
+    }
+}

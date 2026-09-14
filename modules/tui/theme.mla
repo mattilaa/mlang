@@ -1,0 +1,27 @@
+/// RGB colors packed as 0xRRGGBB. Theme is a value; customize any field.
+pub struct Theme {
+    var foreground: i32; var background: i32; var panel: i32;
+    var border: i32; var muted: i32; var accent: i32;
+    var menu_background: i32; var selection: i32;
+    var shadow_percent: i32;
+};
+impl Theme {
+    pub fn dark_blue() -> Theme {
+        return Theme { foreground: 0xC1CAD8, background: 0x0B1220,
+            panel: 0x111D30, border: 0x3C5678, muted: 0x748399,
+            accent: 0x91B8EB, menu_background: 0x1A2B45,
+            selection: 0x2C4D76, shadow_percent: 48 };
+    }
+}
+
+pub fn lighten(rgb: i32, percent: i32) -> i32 {
+    let p: i32 = percent < 0 ? 0 : (percent > 100 ? 100 : percent);
+    let r: i32 = rgb / 65536 % 256; let g: i32 = rgb / 256 % 256; let b: i32 = rgb % 256;
+    return (r + (255 - r) * p / 100) * 65536 + (g + (255 - g) * p / 100) * 256 + b + (255 - b) * p / 100;
+}
+
+pub fn darken(rgb: i32, percent: i32) -> i32 {
+    let p: i32 = percent < 0 ? 0 : (percent > 100 ? 100 : percent);
+    return ((rgb / 65536 % 256) * p / 100) * 65536 +
+           ((rgb / 256 % 256) * p / 100) * 256 + (rgb % 256) * p / 100;
+}

@@ -1,0 +1,46 @@
+mod std::term;
+mod std::esc;
+mod std::io;
+mod std::strbuf;
+mod tui::geometry;
+mod tui::surface;
+use std::term::*;
+use std::esc::*;
+use std::io::stdout;
+use std::io::write;
+use std::strbuf::free;
+use tui::geometry::Rect;
+use tui::surface::Surface;
+
+pub fn terminal_bounds() -> Rect {
+    let size: TermSize = stdout_size();
+    return Rect::new(0, 0, size.cols > 0 ? size.cols : 80, size.rows > 0 ? size.rows : 24);
+}
+
+/// Explicit terminal lifecycle. Always call finish before normal application exit.
+pub struct Terminal { var active: bool; };
+impl Terminal {
+    pub fn begin() -> Terminal {
+        if stdin_is_tty() == 0 || supports_ansi() == 0 { return Terminal { active: false }; }
+        if stdin_enable_raw() != 0 { return Terminal { active: false }; }
+        write(stdout(), alt_screen_on());
+        // Push disambiguated keyboard reporting on supporting terminals.
+        write(stdout(), "\x1b[>1u");
+        write(stdout(), cursor_code(cmd_hide()));
+        return Terminal { active: true };
+    }
+    pub fn present(self: Terminal, surface: Surface) -> void {
+        let output: str8 = surface.encode(self.active);
+        write(stdout(), output);
+        free(output);
+    }
+    pub fn finish(self: &mut Self) -> void {
+        if !self.active { return; }
+        write(stdout(), reset());
+        write(stdout(), cursor_code(cmd_show()));
+        write(stdout(), "\x1b[<u");
+        write(stdout(), alt_screen_off());
+        stdin_restore();
+        self.active = false;
+    }
+}

@@ -1,0 +1,232 @@
+mod tui::geometry;
+mod tui::surface;
+mod tui::theme;
+mod tui::widgets;
+mod std::bytes;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::Theme;
+use tui::widgets::Panel;
+use std::bytes::Bytes;
+
+pub enum Key { Left, Right, Up, Down, Enter, Escape, Toggle, Backspace, Delete, Home, End };
+/// action > 0 identifies an application command; 0 is reserved for no action.
+pub struct MenuItem {
+    var label: str8;
+    var action: i32;
+    var enabled: bool;
+    var children: list<MenuItem>{[]};
+};
+impl MenuItem {
+    pub fn submenu(label: str8, children: list<MenuItem>) -> MenuItem {
+        return MenuItem { label: label, action: 0, enabled: true, children: children };
+    }
+}
+pub struct Menu { var title: str8; var items: list<MenuItem>; };
+
+fn label_width(text: str8) -> i32 {
+    let raw: result<Bytes, str8> = Bytes::from_string(text);
+    if raw.is_err() { return 0; }
+    let bytes: Bytes = raw.unwrap();
+    var count: i32 = 0;
+    for i in 0..bytes.len() {
+        let byte: i32 = bytes.get(i);
+        if byte < 128 || byte >= 192 { count = count + 1; }
+    }
+    bytes.close();
+    return count;
+}
+
+/// path contains the selected row in each ancestor; selected is the deepest row.
+pub struct MenuBar {
+    var menus: list<Menu>; var active: i32; var selected: i32;
+    var path: list<i32>{[]};
+};
+impl MenuBar {
+    pub fn new(menus: list<Menu>) -> MenuBar {
+        return MenuBar { menus: menus, active: -1, selected: -1, path: [] };
+    }
+    pub fn viewport(self: MenuBar, bounds: Rect) -> Viewport {
+        return Viewport { bounds: bounds, has_menu: self.menus.len() > 0 };
+    }
+    pub fn dismiss(self: &mut Self) -> void {
+        self.active = -1; self.selected = -1; self.path.clear();
+    }
+    pub fn depth(self: MenuBar) -> i32 { return i32(self.path.len()); }
+    fn items_at(self: MenuBar, depth: i32) -> list<MenuItem> {
+        if self.active < 0 || self.active >= self.menus.len() { return []; }
+        let menu: Menu = self.menus[self.active];
+        var items: list<MenuItem> = menu.items;
+        for level in 0..depth {
+            if level >= self.path.len() { return []; }
+            let index: i32 = self.path[level];
+            if index < 0 || index >= items.len() { return []; }
+            let item: MenuItem = items[index];
+            items = item.children;
+        }
+        return items;
+    }
+    fn selected_at(self: MenuBar, depth: i32) -> i32 {
+        if depth < self.path.len() { return self.path[depth]; }
+        return self.selected;
+    }
+    fn enter_submenu(self: &mut Self) -> bool {
+        let items: list<MenuItem> = self.items_at(self.depth());
+        if self.selected < 0 || self.selected >= items.len() { return false; }
+        let item: MenuItem = items[self.selected];
+        if !item.enabled || item.children.len() == 0 { return false; }
+        self.path.push(self.selected);
+        self.selected = -1;
+        self.move_selection(1);
+        return true;
+    }
+    pub fn open(self: &mut Self, index: i32) -> void {
+        self.dismiss();
+        if index < 0 || index >= self.menus.len() { return; }
+        self.active = index;
+        self.move_selection(1);
+    }
+    fn move_selection(self: &mut Self, direction: i32) -> void {
+        if self.active < 0 || self.active >= self.menus.len() { return; }
+        let items: list<MenuItem> = self.items_at(self.depth());
+        let count: i32 = i32(items.len());
+        if count == 0 { self.selected = -1; return; }
+        var next: i32 = self.selected;
+        for _i in 0..count {
+            next = (next + direction + count) % count;
+            let item: MenuItem = items[next];
+            if item.enabled && (item.action > 0 || item.children.len() > 0) {
+                self.selected = next; return;
+            }
+        }
+        self.selected = -1;
+    }
+    /// Returns a positive command ID on activation, otherwise zero.
+    pub fn on_key(self: &mut Self, key: Key) -> i32 {
+        if key == Key::Escape { self.dismiss(); return 0; }
+        if key == Key::Toggle {
+            if self.active >= 0 { self.dismiss(); } else { self.open(0); }
+            return 0;
+        }
+        let count: i32 = i32(self.menus.len());
+        if self.active < 0 || count == 0 { return 0; }
+        if key == Key::Left {
+            if self.path.len() > 0 { self.selected = self.path.pop(); }
+            else { self.open((self.active + count - 1) % count); }
+        }
+        else if key == Key::Right {
+            if self.enter_submenu() { return 0; }
+            if self.path.len() == 0 { self.open((self.active + 1) % count); }
+        }
+        else if key == Key::Up { self.move_selection(-1); }
+        else if key == Key::Down { self.move_selection(1); }
+        else if key == Key::Enter {
+            if self.enter_submenu() { return 0; }
+            let items: list<MenuItem> = self.items_at(self.depth());
+            if self.selected >= 0 && self.selected < items.len() {
+                let item: MenuItem = items[self.selected];
+                if item.enabled && item.action > 0 { self.dismiss(); return item.action; }
+            }
+        }
+        return 0;
+    }
+    pub fn popup_rect(self: MenuBar, bounds: Rect) -> Rect {
+        return self.popup_rect_at(bounds, 0);
+    }
+    /// Popup at a stack depth. Children open to the right, flip left if needed,
+    /// then clamp when the viewport cannot fit both menus side by side.
+    pub fn popup_rect_at(self: MenuBar, bounds: Rect, depth: i32) -> Rect {
+        if depth < 0 || depth > self.path.len() { return Rect::new(bounds.x, bounds.y, 0, 0); }
+        if self.active < 0 || self.active >= self.menus.len() || bounds.height < 2 {
+            return Rect::new(bounds.x, bounds.y, 0, 0);
+        }
+        var x: i32 = bounds.x;
+        for i in 0..self.active {
+            let previous: Menu = self.menus[i];
+            x = x + label_width(previous.title) + 2;
+        }
+        var popup: Rect = Rect::new(x, bounds.y + 1, 0, 0);
+        let levels: i32 = depth + 1;
+        for level in 0..levels {
+            let items: list<MenuItem> = self.items_at(i32(level));
+            var width: i32 = 8;
+            for item in items {
+                let needed: i32 = label_width(item.label) + (item.children.len() > 0 ? 6 : 4);
+                if needed > width { width = needed; }
+            }
+            if width > bounds.width { width = bounds.width; }
+            let wanted: i32 = i32(items.len()) + 2;
+            let height: i32 = wanted > bounds.height - 1 ? bounds.height - 1 : wanted;
+            var y: i32 = bounds.y + 1;
+            if level > 0 {
+                let parent_selected: i32 = self.selected_at(i32(level) - 1);
+                let visible: i32 = popup.height - 2;
+                let start: i32 = parent_selected >= visible && visible > 0 ? parent_selected - visible + 1 : 0;
+                y = popup.y + parent_selected - start;
+                x = popup.x + popup.width;
+                if x + width > bounds.x + bounds.width { x = popup.x - width; }
+            }
+            if x < bounds.x { x = bounds.x; }
+            if x + width > bounds.x + bounds.width { x = bounds.x + bounds.width - width; }
+            if y + height > bounds.y + bounds.height { y = bounds.y + bounds.height - height; }
+            if y < bounds.y + 1 { y = bounds.y + 1; }
+            popup = Rect::new(x, y, width, height);
+        }
+        return popup;
+    }
+    /// Call AFTER all content widgets: menu and shadow form the top layer.
+    pub fn paint(self: MenuBar, surface: Surface, bounds: Rect, theme: Theme) -> void {
+        if self.menus.len() == 0 || bounds.width == 0 || bounds.height == 0 { return; }
+        surface.fill(Rect::new(bounds.x, bounds.y, bounds.width, 1),
+            Cell { glyph: 32, foreground: theme.foreground, background: theme.menu_background });
+        var x: i32 = bounds.x;
+        for i in 0..self.menus.len() {
+            let menu: Menu = self.menus[i];
+            let width: i32 = label_width(menu.title) + 2;
+            let bg: i32 = i == self.active ? theme.selection : theme.menu_background;
+            let tab_area: Rect = Rect::new(x, bounds.y, width, 1);
+            let tab: Rect = tab_area.intersect(bounds);
+            surface.fill(tab, Cell { glyph: 32, foreground: theme.foreground, background: bg });
+            let text_area: Rect = Rect::new(x + 1, bounds.y, width - 2, 1);
+            surface.text(text_area.intersect(bounds),
+                menu.title, theme.foreground, bg);
+            x = x + width;
+        }
+        if self.active < 0 || self.active >= self.menus.len() { return; }
+        let levels: i32 = self.depth() + 1;
+        for level in 0..levels {
+            let popup: Rect = self.popup_rect_at(bounds, i32(level));
+            let items: list<MenuItem> = self.items_at(i32(level));
+            self.paint_popup(surface, bounds, popup, theme, items, self.selected_at(i32(level)));
+        }
+    }
+    fn paint_popup(self: MenuBar, surface: Surface, bounds: Rect, popup: Rect,
+                   theme: Theme, items: &list<MenuItem>, selected: i32) -> void {
+        if popup.width < 2 || popup.height < 2 { return; }
+        // Offset the full shadow then cover its overlap with the opaque menu.
+        let shadow: Rect = Rect::new(popup.x + 1, popup.y + 1, popup.width, popup.height);
+        surface.shadow(shadow.intersect(bounds),
+            theme.shadow_percent);
+        var menu_theme: Theme = theme;
+        menu_theme.panel = theme.menu_background;
+        let border: Panel = Panel { title: "" };
+        let inside: Rect = border.paint(surface, popup, menu_theme);
+        var start: i32 = 0;
+        if selected >= inside.height && inside.height > 0 { start = selected - inside.height + 1; }
+        for row in 0..inside.height {
+            let index: i32 = start + i32(row);
+            if index >= items.len() { break; }
+            let item: MenuItem = items[index];
+            let bg: i32 = index == selected ? theme.selection : theme.menu_background;
+            let fg: i32 = item.enabled ? theme.foreground : theme.muted;
+            let line: Rect = Rect::new(inside.x, inside.y + i32(row), inside.width, 1);
+            surface.fill(line, Cell { glyph: 32, foreground: fg, background: bg });
+            let has_children: bool = item.children.len() > 0;
+            surface.text(Rect::new(line.x + 1, line.y, line.width - (has_children ? 4 : 2), 1), item.label, fg, bg);
+            if has_children && line.width >= 2 {
+                surface.put(line.x + line.width - 2, line.y,
+                    Cell { glyph: 62, foreground: fg, background: bg });
+            }
+        }
+    }
+}

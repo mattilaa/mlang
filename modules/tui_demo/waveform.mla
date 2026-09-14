@@ -1,0 +1,69 @@
+mod tui::surface;
+mod tui_demo::audio_clip;
+use tui_demo::audio_clip::WavePeak;
+use tui::geometry::*;
+use tui::surface::*;
+
+pub fn paint_grainy_row(surface: Surface, area: Rect, clip: Rect, details: &list<WavePeak>, row: i32,
+    reversed: bool, color: i32, background: i32, wave: bool) -> void {
+    paint_grainy_row_duration(surface, area, clip, details, row, reversed, color, background, wave, 15000);
+}
+pub fn paint_grainy_row_duration(surface: Surface, area: Rect, clip: Rect, details: &list<WavePeak>, row: i32,
+    reversed: bool, color: i32, background: i32, wave: bool, remaining: i64) -> void {
+    let bits: array<i32, 8> = {1, 8, 2, 16, 4, 32, 64, 128};
+    for x in 0..area.width {
+        if !clip.contains(area.x + i32(x), area.y) { continue; }
+        var mask: i32 = 0;
+        for part in 0..4 {
+            if part * 3750 >= remaining { continue; }
+            let index: i32 = row * 4 + i32(part);
+            if index >= details.len() { continue; }
+            let peak: WavePeak = details[index];
+            let value: i32 = reversed ? peak.left : peak.right;
+            let level: i32 = value > 1000 ? 1000 : (value < 0 ? 0 : value);
+            let units: i32 = (level * area.width * 2 + 999) / 1000;
+            for dot in 0..2 {
+                let position: i32 = i32(x) * 2 + i32(dot);
+                let distance: i32 = reversed ? area.width * 2 - 1 - position : position;
+                if distance < units && (!wave || distance == units - 1) { mask = mask + bits[part * 2 + dot]; }
+            }
+        }
+        if mask != 0 { surface.put(area.x + i32(x), area.y, Cell { glyph: 0x2800 + mask, foreground: color, background: background }); }
+    }
+}
+
+/// Eight amplitude steps per cell, with a solid average-amplitude body and
+/// shaded peak envelope. Left-channel edge cells are right-aligned.
+pub fn paint_wave_channel(surface: Surface, area: Rect, clip: Rect, peak: i32, body: i32,
+    reversed: bool, color: i32, background: i32) -> void {
+    paint_wave_channel_style(surface, area, clip, peak, body, reversed, color, background, false, false);
+}
+pub fn paint_wave_channel_style(surface: Surface, area: Rect, clip: Rect, peak: i32, body: i32,
+    reversed: bool, color: i32, background: i32, grainy: bool, wave: bool) -> void {
+    if area.width <= 0 || area.height <= 0 { return; }
+    let level: i32 = peak < 0 ? 0 : (peak > 1000 ? 1000 : peak);
+    let average: i32 = body < 0 ? 0 : (body > level ? level : body);
+    let units: i32 = (level * area.width * 8 + 999) / 1000;
+    let solid: i32 = average * area.width * 8 / 1000;
+    for slot in 0..area.width {
+        let remaining: i32 = units - i32(slot) * 8;
+        if remaining <= 0 { break; }
+        let amount: i32 = remaining > 8 ? 8 : remaining;
+        if wave && remaining > 8 { continue; }
+        let x: i32 = reversed ? area.x + area.width - 1 - i32(slot) : area.x + i32(slot);
+        if !clip.contains(x, area.y) { continue; }
+        var glyph: i32 = solid >= (i32(slot) + 1) * 8 ? 0x2588 : 0x2592;
+        var fg: i32 = color; var bg: i32 = background;
+        if amount < 8 {
+            glyph = 0x2588 + 8 - amount;
+            if reversed { glyph = 0x2588 + amount; fg = background; bg = color; }
+        }
+        if grainy {
+            glyph = solid >= (i32(slot) + 1) * 8 ? 0x28ff : 0x2892;
+            if amount <= 4 { glyph = reversed ? 0x28b8 : 0x2847; }
+            fg = color; bg = background;
+        }
+        if wave { glyph = grainy ? (reversed ? 0x2810 : 0x2802) : 0x25cf; fg = color; bg = background; }
+        surface.put(x, area.y, Cell { glyph: glyph, foreground: fg, background: bg });
+    }
+}

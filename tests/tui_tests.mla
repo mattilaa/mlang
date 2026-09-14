@@ -1,0 +1,1675 @@
+mod tui::geometry;
+mod tui::layout;
+mod tui::surface;
+mod tui::theme;
+mod tui::menu;
+mod tui::widgets;
+mod std::strbuf;
+mod tui::focus;
+mod tui::input;
+mod std::bytes;
+mod std::testing;
+mod tui::dialog;
+mod tui::textfield;
+mod tui::table;
+use tui::table::*;
+mod tui_demo::sequence;
+use tui_demo::sequence::SequenceTable;
+mod tui::meter;
+mod tui_demo::mixer;
+use tui::meter::VuMeter;
+use tui_demo::mixer::Mixer;
+mod tui::listview;
+mod tui_demo::patterns;
+use tui::listview::*;
+use tui_demo::patterns::PatternLibrary;
+mod tui_demo::transport;
+use tui_demo::transport::TransportStatus;
+mod tui_demo::waveform;
+use tui_demo::waveform::paint_wave_channel;
+use tui_demo::waveform::paint_grainy_row;
+mod tui_demo::sample_view;
+use tui_demo::sample_view::SampleView;
+use tui_demo::audio_clip::*;
+mod tui_demo::bpm_dialog;
+use tui_demo::bpm_dialog::BpmDialog;
+use tui_demo::mixer::meter_ramp;
+mod tui_demo::frame_rate;
+use tui_demo::frame_rate::FrameRate;
+mod tui_demo::duration;
+use tui_demo::duration::*;
+mod tui_demo::note_playback;
+use tui_demo::note_playback::*;
+
+
+#[test]
+fn tui_velocity_left_alignment() {
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(0, 0, 120, 10);
+    let surface: Surface = Surface::new(120, 10);
+    let values: array<str8, 4> = {"0", "7", "42", "127"};
+    let first_glyphs: array<i32, 4> = {48, 55, 52, 49};
+    for t in 0..3 {
+        table.selected_column = table.track_start(i32(t)) + 1;
+        for r in 0..4 {
+            table.selected_row = i32(r); table.edit_event(decode_input("\r"), area);
+            table.editor.set_text(values[r]); table.edit_event(decode_input("\r"), area);
+        }
+    }
+    for stage in 0..3 {
+        table.zoom_tracks(i32(stage), true, area);
+        table.paint(surface, area, Theme::dark_blue());
+        table.paint_note_lengths(surface, area, Theme::dark_blue());
+        let body: Rect = table.body(area);
+        for t in 0..3 {
+            let x: i32 = table.column_x(table.track_start(i32(t)) + 1);
+            let header: Cell = surface.cell(x, body.y - 1); verify(header.glyph == 86);
+            for r in 0..4 {
+                let value: Cell = surface.cell(x, body.y + i32(r)); verify(value.glyph == first_glyphs[r]);
+                let trailing: Cell = surface.cell(x + 3, body.y + i32(r)); verify(trailing.glyph == 32);
+                let extra: Cell = surface.cell(x + 4, body.y + i32(r)); verify(extra.glyph == 32);
+                let note: Cell = surface.cell(x - 6, body.y + i32(r));
+                let rail: Cell = surface.cell(x - 1, body.y + i32(r));
+                verify(rail.glyph == 0x2847 && rail.background == note.background);
+            }
+        }
+        table.selected_column = 1;
+        table.paint(surface, area, Theme::dark_blue()); table.paint_note_lengths(surface, area, Theme::dark_blue());
+        let selected_note: Cell = surface.cell(table.column_x(1), body.y);
+        let selected_rail: Cell = surface.cell(table.column_x(1) + 5, body.y);
+        verify(selected_note.background == selected_rail.background);
+    }
+    surface.release(); table.release();
+}
+
+#[test]
+fn tui_hidden_table_columns() {
+    var table: Table = Table::new([TableColumn { title: "A", width: 4 },
+        TableColumn { title: "HIDDEN", width: 80, hidden: true }, TableColumn { title: "B", width: 4 }],
+        [TableRow { cells: ["a", "secret", "b"] }]);
+    let area: Rect = Rect::new(0, 0, 20, 4); let surface: Surface = Surface::new(20, 4);
+    verify(table.total_width() == 8 && table.column_x(2) == 4);
+    table.selected_column = 1; table.reconcile(area); verify(table.selected_column == 2);
+    table.on_event(decode_input("h"), area); verify(table.selected_column == 0);
+    verify(table.set_cell(0, 1, "updated")); let row: TableRow = table.rows[0]; verify(row.cells[1] == "updated");
+    table.paint(surface, area, Theme::dark_blue()); let visible: Cell = surface.cell(4, 1); verify(visible.glyph == 98);
+    table.columns = [TableColumn { title: "HIDDEN", hidden: true }]; table.reconcile(area);
+    verify(table.selected_column == -1 && table.total_width() == 0);
+    table.paint(surface, area, Theme::dark_blue()); surface.release();
+}
+
+#[test]
+fn tui_track_zoom_stages() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 12);
+    verify(table.total_width() == 37);
+    let length: TableColumn = table.columns[3]; let cc: TableColumn = table.columns[5]; verify(length.hidden && cc.hidden);
+    table.edit_event(decode_input("l"), area); verify(table.selected_column == 2);
+    table.edit_event(decode_input("l"), area); verify(table.selected_column == 7);
+    table.edit_event(decode_input("h"), area); verify(table.selected_column == 2);
+    table.selected_column = 1; table.edit_event(decode_input("z"), area);
+    verify(table.total_width() == 49);
+    let shown_length: TableColumn = table.columns[3]; let hidden_cc: TableColumn = table.columns[5]; verify(!shown_length.hidden && hidden_cc.hidden);
+    table.selected_column = 4; table.edit_event(decode_input("z"), area); verify(table.total_width() == 61 && table.selected_column == 4);
+    table.edit_event(decode_input("z"), area); verify(table.total_width() == 37 && table.selected_column == 1);
+    table.edit_event(decode_input("Z"), area); verify(table.total_width() == 73);
+    table.edit_event(decode_input("z"), area);
+    table.edit_event(decode_input("\x1b[122;2u"), area);
+    let first: SequenceTrack = table.tracks[0]; let second: SequenceTrack = table.tracks[1];
+    verify(first.zoom_stage == 0 && second.zoom_stage == 2);
+    table.track_action(83, area); verify(table.total_width() == 37);
+    table.track_action(84, area); verify(table.total_width() == 109);
+    let data: TableRow = table.rows[0]; verify(data.cells[3] == "1.00" && data.cells[4] == "0.00");
+    table.selected_column = 5; table.track_action(83, area); verify(table.selected_column == 1);
+    table.note_line_action(80, area); verify(table.total_width() == 48);
+    table.edit_event(decode_input("l"), area); verify(table.selected_column == 6);
+    table.edit_event(decode_input("l"), area); verify(table.selected_column == 11);
+    // Collapsing a selected LEN returns to NOTE in the same note line/track.
+    table.selected_column = 5; table.edit_event(decode_input("z"), area);
+    table.selected_column = 7; table.track_action(83, area); verify(table.selected_column == 5);
+    table.edit_event(decode_input("z"), area);
+    var copy: SequenceTable = table.copy_pattern(); let saved: SequenceTrack = copy.tracks[0]; verify(saved.zoom_stage == 1);
+    table.track_action(83, area); let still_saved: SequenceTrack = copy.tracks[0]; verify(still_saved.zoom_stage == 1);
+    copy.create_track(true, area); let cloned: SequenceTrack = copy.tracks[3]; verify(cloned.zoom_stage == 1);
+    table.create_track_kind(false, true, area); table.edit_event(decode_input("z"), area);
+    table.edit_event(decode_input("Z"), area); let audio: SequenceTrack = table.tracks[3]; verify(audio.audio && audio.wave_zoom);
+    table.release(); copy.release();
+}
+
+#[test]
+fn tui_note_duration_and_events() {
+
+    verify(duration_ticks("1.00") == 15000 && duration_ticks("0.5") == 7500 && duration_ticks("3.75") == 56250);
+    verify(duration_ticks("0") == -1 && duration_ticks("-1") == -1 && duration_ticks("1x25") == -1 && duration_ticks("1.001") == -1);
+    let area: Rect = Rect::new(0, 0, 100, 12);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    for r in 0..64 { table.selected_row = i32(r); table.clear_row(); }
+    table.selected_row = 0; table.selected_column = 1; table.edit_event(decode_input("\r"), area); table.editor.set_text("C-4"); table.edit_event(decode_input("\r"), area); verify(!table.editing);
+    let initial: TableRow = table.rows[0]; verify(initial.cells[3] == "1.00");
+    table.selected_row = 0; table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("100"); table.edit_event(decode_input("\r"), area); verify(!table.editing); table.selected_row = 0; table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("3.75"); table.edit_event(decode_input("\r"), area); verify(!table.editing);
+    table.selected_row = 1; table.selected_column = 1; table.edit_event(decode_input("\r"), area); table.editor.set_text("D-4"); table.edit_event(decode_input("\r"), area); verify(!table.editing); table.selected_row = 1; table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("80"); table.edit_event(decode_input("\r"), area); verify(!table.editing); table.selected_row = 1; table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("0.50"); table.edit_event(decode_input("\r"), area); verify(!table.editing);
+    var playback: NotePlayback = NotePlayback {};
+
+    playback.update(table, 0, true); verify(playback.events.len() == 1 && playback.active.len() == 1);
+    let on: NoteEvent = playback.events[0]; verify(on.on == 1 && on.note == 60 && on.tick == 0);
+    playback.update(table, 15000, true); verify(playback.events.len() == 1 && playback.active.len() == 2);
+    playback.update(table, 22499, true); verify(playback.events.len() == 0);
+    playback.update(table, 22500, true); verify(playback.events.len() == 1 && playback.active.len() == 1);
+    let short_off: NoteEvent = playback.events[0]; verify(short_off.on == 0 && short_off.note == 62 && short_off.tick == 22500);
+    playback.update(table, 56249, true); verify(playback.active.len() == 1 && playback.events.len() == 0);
+    playback.update(table, 56250, true); verify(playback.active.len() == 0);
+
+    let off: NoteEvent = playback.events[0]; verify(off.on == 0 && off.note == 60 && off.tick == 56250);
+    // A late UI update still emits exact, ordered musical timestamps.
+    playback.update(table, 0, false); playback.update(table, 0, true); playback.update(table, 60000, true);
+    verify(playback.events.len() == 3);
+    let late: NoteEvent = playback.events[2]; verify(late.tick == 56250 && late.on == 0);
+    playback.update(table, 0, false); playback.update(table, 0, true); playback.update(table, 100, false);
+    verify(playback.active.len() == 0 && playback.events.len() == 1);
+
+    // Same-pitch overlap cannot send an early note-off for the longer voice.
+    table.selected_row = 1; table.selected_column = 1; table.edit_event(decode_input("\r"), area); table.editor.set_text("C-4"); table.edit_event(decode_input("\r"), area); verify(!table.editing); playback.update(table, 0, true); playback.update(table, 22500, true);
+    verify(playback.events.len() == 1 && playback.active.len() == 1);
+    playback.update(table, 56250, true); verify(playback.events.len() == 1);
+
+    let surface: Surface = Surface::new(100, 12); table.selected_row = 0; table.selected_column = 1; table.scroll_y = 0;
+    table.paint(surface, area, Theme::dark_blue()); table.paint_note_lengths(surface, area, Theme::dark_blue());
+    let x: i32 = table.column_x(1) + 5; let body: Rect = table.body(area);
+    let full: Cell = surface.cell(x, body.y + 2); let partial: Cell = surface.cell(x, body.y + 3); let rest: Cell = surface.cell(x, body.y + 4);
+    verify(full.glyph == 0x2847 && partial.glyph == 0x2807 && rest.glyph == 32);
+    // A note begun at the last row is not cut at the pattern loop boundary.
+    table.selected_row = 0; table.clear_row(); table.selected_row = 1; table.clear_row(); table.set_length(4, area);
+    table.selected_row = 3; table.selected_column = 1;
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("E-4"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("100"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("1.50"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 45000, false); playback.update(table, 45000, true);
+    playback.update(table, 60000, true); verify(playback.active.len() == 1 && playback.events.len() == 0);
+    playback.update(table, 67500, true); verify(playback.active.len() == 0 && playback.events.len() == 1);
+    let loop_off: NoteEvent = playback.events[0]; verify(loop_off.note == 64 && loop_off.tick == 67500 && loop_off.on == 0);
+    surface.release(); table.release();
+}
+
+#[test]
+fn tui_note_offsets() {
+    verify(offset_ticks("-0.50") == -7500 && offset_ticks("+0.50") == 7500);
+    verify(offset_ticks("") == 0 && offset_ticks("-0.00") == 0 && offset_ticks("0") == 0);
+    verify(offset_ticks("-16384.00") == -245760000 && offset_ticks("16384.01") < -245760000);
+    verify(offset_ticks("0.001") < -245760000 && offset_ticks("1x25") < -245760000);
+    let area: Rect = Rect::new(0, 0, 120, 12);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    for r in 0..64 { table.selected_row = i32(r); table.clear_row(); }
+    table.set_length(4, area); table.selected_row = 0; table.selected_column = 1;
+    table.edit_event(decode_input("K"), area);
+    let initial: TableRow = table.rows[0]; verify(initial.cells[3] == "1.00" && initial.cells[4] == "0.00");
+    table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("100"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("0.50"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 4; table.edit_event(decode_input("J"), area);
+    let negative: TableRow = table.rows[0]; verify(negative.cells[4] == "-0.01");
+    table.edit_event(decode_input("K"), area); let zero: TableRow = table.rows[0]; verify(zero.cells[4] == "0.00");
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("+0.50"); table.edit_event(decode_input("\r"), area); verify(!table.editing);
+    table.selected_row = 2; table.selected_column = 1; table.edit_event(decode_input("\r"), area); table.editor.set_text("D-4"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("80"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 4; table.edit_event(decode_input("\r"), area); table.editor.set_text("-0.50"); table.edit_event(decode_input("\r"), area);
+    var playback: NotePlayback = NotePlayback {};
+    playback.update(table, 0, true); verify(playback.events.len() == 0);
+    playback.update(table, 7499, true); verify(playback.events.len() == 0);
+    playback.update(table, 7500, true); verify(playback.events.len() == 1);
+    let delayed: NoteEvent = playback.events[0]; verify(delayed.note == 60 && delayed.on == 1 && delayed.tick == 7500);
+    playback.update(table, 14999, true); verify(playback.active.len() == 1);
+    playback.update(table, 15000, true); let delayed_off: NoteEvent = playback.events[0]; verify(delayed_off.on == 0 && delayed_off.tick == 15000);
+    playback.update(table, 22500, true); let early: NoteEvent = playback.events[0]; verify(early.note == 62 && early.on == 1 && early.tick == 22500);
+    playback.update(table, 37499, true); verify(playback.active.len() == 1);
+    playback.update(table, 37500, true); let early_off: NoteEvent = playback.events[0]; verify(early_off.on == 0 && early_off.tick == 37500);
+    let surface: Surface = Surface::new(120, 12); let theme: Theme = Theme::dark_blue();
+    table.selected_row = 0; table.selected_column = 1; table.paint(surface, area, theme); table.paint_note_lengths(surface, area, theme);
+    let body: Rect = table.body(area); let x: i32 = table.column_x(1) + 5;
+    let late_start: Cell = surface.cell(x, body.y); let early_start: Cell = surface.cell(x, body.y + 1); let early_end: Cell = surface.cell(x, body.y + 2);
+    verify(late_start.glyph == 0x2844 && early_start.glyph == 0x2844 && early_end.glyph == 0x2803);
+    var mixer: Mixer = Mixer {};
+    for _i in 0..30 { mixer.update(table, 1, 7500, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 629); // row 2's early note, before its row
+    // Selecting OFF identifies the whole note line for duplication.
+    table.selected_column = 4; table.track_action(82, area);
+    let duplicated: TableRow = table.rows[2]; verify(duplicated.cells[4] == "-0.50" && duplicated.cells[8] == "-0.50");
+    table.track_action(81, area);
+    table.selected_row = 2; table.clear_row(); table.selected_row = 0; table.selected_column = 4;
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("-0.25"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 0, false); playback.update(table, 0, true); verify(playback.events.len() == 0);
+    playback.update(table, 56249, true); verify(playback.events.len() == 0);
+    playback.update(table, 56250, true); let next_loop: NoteEvent = playback.events[0]; verify(next_loop.on == 1 && next_loop.tick == 56250);
+    playback.update(table, 63750, true); let loop_off: NoteEvent = playback.events[0]; verify(loop_off.on == 0 && loop_off.tick == 63750);
+    // A positive offset beyond one pattern must not fire in the first loop.
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("4.50"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 0, false); playback.update(table, 0, true); playback.update(table, 67499, true); verify(playback.events.len() == 0);
+    playback.update(table, 67500, true); let later_loop: NoteEvent = playback.events[0]; verify(later_loop.on == 1 && later_loop.tick == 67500);
+    // Editing OFF while running invalidates future onsets, not active LEN gates.
+    playback.update(table, 0, false);
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("1.00"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 0, true); playback.update(table, 5000, true);
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("1.50"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 15000, true); verify(playback.events.len() == 0);
+    playback.update(table, 22500, true); let revised: NoteEvent = playback.events[0]; verify(revised.on == 1 && revised.tick == 22500);
+    // Later rows may start first; a late update must retain event order.
+    table.selected_row = 3; table.selected_column = 1; table.edit_event(decode_input("\r"), area); table.editor.set_text("D-4"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("90"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 4; table.edit_event(decode_input("\r"), area); table.editor.set_text("-2.00"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 0, false); playback.update(table, 0, true); playback.update(table, 30000, true);
+    verify(playback.events.len() == 4);
+    let first_event: NoteEvent = playback.events[0]; let second_event: NoteEvent = playback.events[1];
+    verify(first_event.note == 62 && first_event.tick == 15000 && second_event.note == 60 && second_event.tick == 22500);
+    var copy: SequenceTable = table.copy_pattern();
+    table.edit_event(decode_input("K"), area); let saved_offset: TableRow = copy.rows[3]; verify(saved_offset.cells[4] == "-2.00"); copy.release();
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("0.001"); table.edit_event(decode_input("\r"), area); verify(table.editing);
+    table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area);
+    surface.release(); table.release();
+}
+
+#[test]
+fn tui_pattern_length() {
+    let area: Rect = Rect::new(0, 0, 80, 12);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    verify(table.length_truncates_data(32));
+    verify(!table.set_length(0, area) && !table.set_length(16385, area));
+    verify(table.rows.len() == 64);
+    table.selected_row = 63;
+    verify(table.set_length(32, area)); verify(table.rows.len() == 32 && table.selected_row == 31);
+    verify(table.set_length(80, area));
+    let empty: TableRow = table.rows[79]; verify(empty.cells[0] == "080" && empty.cells[1] == "" && empty.cells[2] == "");
+    verify(!table.length_truncates_data(32));
+    table.selected_row = 79; table.selected_column = 5;
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("0"); table.edit_event(decode_input("\r"), area);
+    verify(table.length_truncates_data(32));
+    table.release();
+    var audio_table: SequenceTable = SequenceTable::new(); audio_table.track_action(28, area);
+    var clip: AudioClip = AudioClip { source: clone("length-test"), frames: 40, frames_per_row: 10 };
+    for _r in 0..4 { clip.peaks.push(WavePeak { left: 500 }); }
+    for _r in 0..16 { clip.detail_peaks.push(WavePeak { left: 500 }); }
+    audio_table.selected_row = 2; audio_table.insert_audio(clip, area);
+    audio_table.selected_row = 8; audio_table.insert_audio(clip, area);
+    // Clear MIDI cells to isolate detection of audio crossing the new end.
+    for r in 0..64 { audio_table.selected_row = i32(r); audio_table.clear_row(); }
+    verify(audio_table.length_truncates_data(4));
+    audio_table.set_length(4, area);
+    let trimmed: SequenceTrack = audio_table.tracks[3];
+    verify(trimmed.instances.len() == 1);
+    let placed: AudioInstance = trimmed.instances[0];
+    verify(placed.clip.peaks.len() == 2 && placed.clip.detail_peaks.len() == 8 && placed.clip.frames == 20);
+    verify(clip.peaks.len() == 4 && clip.frames == 40);
+    audio_table.set_length(64, area); verify(!audio_table.length_truncates_data(4));
+    audio_table.set_length(1, area); let removed: SequenceTrack = audio_table.tracks[3];
+    verify(removed.instances.len() == 0 && audio_table.track_columns(3) == 3);
+    audio_table.release(); clip.release();
+    var dialog: BpmDialog = BpmDialog::new(); dialog.open_pattern_length(64);
+    verify(dialog.editor.text == "64");
+    dialog.editor.set_text("0"); dialog.on_event(decode_input("\r")); verify(dialog.active);
+    dialog.editor.set_text("12.5"); dialog.on_event(decode_input("\r")); verify(dialog.active);
+    dialog.editor.set_text("128"); dialog.on_event(decode_input("\r"));
+    verify(!dialog.active && dialog.value == 128 && dialog.result == 1);
+    dialog.open(120); verify(!dialog.pattern_length); dialog.release();
+}
+
+#[test]
+fn tui_audio_duration_gate() {
+    let area: Rect = Rect::new(0, 0, 120, 12);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); table.create_track_kind(false, true, area);
+    var clip: AudioClip = AudioClip { source: clone("gate-test"), frames: 40, frames_per_row: 10 };
+    for _r in 0..4 { clip.peaks.push(WavePeak { left: 500, right: 250 }); }
+    for _r in 0..16 { clip.detail_peaks.push(WavePeak { left: 500, right: 250 }); }
+    verify(table.insert_audio(clip, area));
+    let first: TableRow = table.rows[0]; verify(first.cells[21] == "4.00");
+    table.selected_column = 21; table.edit_event(decode_input("\r"), area); table.editor.set_text("3.75"); table.edit_event(decode_input("\r"), area);
+    verify(!table.editing);
+    let track: SequenceTrack = table.tracks[3]; let instance: AudioInstance = track.instances[0];
+    verify(instance.duration() == 56250 && clip.frames == 40 && track.instance_at(4) == -1);
+    let rendered: AudioClip = instance.render_clip(); verify(rendered.frames == 38);
+    var mixer: Mixer = Mixer {};
+    for _i in 0..30 { mixer.update(table, 3, 11249, true, 10); }
+    verify(mixer.level(3, 100, 0, false, false) == 500);
+    for _i in 0..30 { mixer.update(table, 3, 11250, true, 10); }
+    verify(mixer.level(3, 100, 0, false, false) == 0);
+    let surface: Surface = Surface::new(120, 12); let theme: Theme = Theme::dark_blue();
+    table.paint(surface, area, theme); table.paint_audio_style(surface, area, theme, true, false);
+    let body: Rect = table.body(area); let center: Cell = surface.cell(table.column_x(22) + 6, body.y + 3);
+    verify(center.glyph == 0x2807);
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("4.01"); table.edit_event(decode_input("\r"), area);
+    verify(table.editing && table.error == "LEN exceeds the sample duration"); table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area);
+    table.edit_event(decode_input("K"), area); let stepped: TableRow = table.rows[0]; verify(stepped.cells[21] == "3.76");
+    var copy: SequenceTable = table.copy_pattern(); table.remove_audio_under_cursor();
+    let saved: SequenceTrack = copy.tracks[3]; let saved_instance: AudioInstance = saved.instances[0]; verify(saved_instance.duration() == 56400);
+    table.release(); copy.release(); clip.release(); surface.release();
+}
+
+#[test]
+fn tui_multiple_note_lines() {
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); let area: Rect = Rect::new(0, 0, 80, 12);
+    table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("3.75"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 5; table.edit_event(decode_input("\r"), area); table.editor.set_text("25"); table.edit_event(decode_input("\r"), area);
+    table.track_action(80, area); // Add from CC appends before automation.
+    let added: TableRow = table.rows[0]; let track: SequenceTrack = table.tracks[0];
+    verify(track.note_lines == 2 && table.selected_column == 5 && table.track_start(1) == 11);
+    verify(added.cells[1] == "C-4" && added.cells[5] == "" && added.cells[6] == "" && added.cells[9] == "25");
+    table.selected_column = 2; table.track_action(82, area); // VEL selects its NOTE/VEL pair.
+    let duplicated: TableRow = table.rows[0];
+    verify(duplicated.cells[3] == "3.75" && duplicated.cells[7] == "3.75");
+    verify(duplicated.cells[5] == "C-4" && duplicated.cells[6] == "100" && duplicated.cells[13] == "25");
+    verify(table.automation_column(0, 1) == 13 && table.track_start(1) == 15 && table.is_note());
+    table.edit_event(decode_input("K"), area);
+    let edited: TableRow = table.rows[0]; verify(edited.cells[1] == "C-4" && edited.cells[5] == "C#4");
+    var mixer: Mixer = Mixer {};
+    for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 787); // two V100 notes are not summed
+    table.selected_column = 6; table.edit_event(decode_input("\r"), area); table.editor.set_text("127"); table.edit_event(decode_input("\r"), area);
+    for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 1000 && mixer.levels.len() == 3);
+    table.selected_column = 5; table.edit_event(decode_input("\r"), area); table.editor.set_text(""); table.edit_event(decode_input("\r"), area); // empty NOTE ignores its high VEL
+    for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 787);
+    var copy: SequenceTable = table.copy_pattern();
+    table.track_action(81, area); let removed: TableRow = table.rows[0];
+    verify(table.track_columns(0) == 10 && removed.cells[5] == "" && removed.cells[9] == "25");
+    table.track_action(81, area); verify(table.track_columns(0) == 6);
+    table.track_action(81, area); verify(table.error != "" && table.track_columns(0) == 6);
+    let saved: SequenceTrack = copy.tracks[0]; verify(saved.note_lines == 3);
+    copy.create_track(true, area); let cloned: SequenceTrack = copy.tracks[3]; verify(cloned.note_lines == 3);
+    copy.create_track_kind(false, true, area); copy.track_action(80, area);
+    verify(copy.error == "Note lines require a MIDI track" && copy.track_columns(4) == 3);
+    copy.release(); table.release();
+}
+
+#[test]
+fn tui_meter_refresh_rate() {
+    var rate: FrameRate = FrameRate {}; verify(rate.fps == 60);
+    rate.set(60, 1000); rate.presented(1000);
+    verify(!rate.ready(1016) && rate.ready(1017) && rate.sleep_ms(1010) == 7);
+    rate.presented(1017); verify(!rate.ready(1033) && rate.ready(1034));
+    rate.presented(1034); verify(rate.ready(1050));
+    // Sixty scheduled frames in one second; no 20ms/50FPS polling ceiling.
+    rate.set(60, 0); var frames: i32 = 0;
+    for now in 0..1000 { if rate.ready(now) { frames = frames + 1; rate.presented(now); } }
+    verify(frames == 60);
+    verify(!rate.set(0, 1000) && !rate.set(241, 1000) && rate.fps == 60);
+    rate.presented(5000); verify(!rate.ready(5000)); // skip missed frames, no catch-up burst
+    var dialog: BpmDialog = BpmDialog::new(); dialog.open_meter_rate(60);
+    dialog.editor.set_text("0"); dialog.on_event(decode_input("\r")); verify(dialog.active && dialog.error != "");
+    dialog.editor.set_text("60.5"); dialog.on_event(decode_input("\r")); verify(dialog.active);
+    dialog.editor.set_text("60"); dialog.on_event(decode_input("\r")); verify(!dialog.active && dialog.value == 60 && dialog.meter_rate);
+    dialog.open_meter_rate(60); dialog.editor.set_text("120");
+    dialog.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }); verify(dialog.value == 60 && dialog.result == 2);
+    dialog.open(137); verify(!dialog.meter_rate && dialog.title == "Set BPM");
+    dialog.release();
+}
+
+#[test]
+fn tui_transport_clock_and_bpm_dialog() {
+    var transport: TransportStatus = TransportStatus {};
+    transport.toggle(1000, 2, 4); verify(transport.playing && transport.row == 2 && transport.elapsed_ms == 250);
+    transport.advance(1125, 4); verify(transport.row == 3 && transport.phase == 0);
+    transport.advance(1250, 4); verify(transport.row == 0);
+    transport.advance(1300, 4); verify(transport.phase == 6000);
+    verify(transport.set_bpm(240)); transport.advance(1325, 4); verify(transport.phase == 12000);
+    transport.advance(1338, 4); verify(transport.row == 1 && transport.phase == 120);
+    transport.toggle(1338, 1, 4); verify(!transport.playing);
+    transport.advance(2000, 4); verify(transport.row == 1);
+    verify(!transport.set_bpm(0) && !transport.set_bpm(401) && transport.bpm == 240);
+    transport.toggle(2000, 0, 4); transport.advance(12000, 4); verify(transport.row == 0);
+    transport.advance(12010, 0); verify(!transport.playing && transport.row == -1);
+    var dialog: BpmDialog = BpmDialog::new(); dialog.open(120);
+    dialog.editor.set_text("1.5"); dialog.on_event(decode_input("\r")); verify(dialog.active && dialog.error != "");
+    dialog.editor.set_text("401"); dialog.on_event(decode_input("\r")); verify(dialog.active);
+    dialog.editor.set_text("137"); dialog.on_event(decode_input("\r")); verify(!dialog.active && dialog.value == 137 && dialog.result == 1);
+    dialog.open(137); dialog.editor.set_text("200");
+    dialog.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }); verify(!dialog.active && dialog.value == 137 && dialog.result == 2);
+    dialog.open(137); dialog.editor.set_text("200"); dialog.on_event(decode_input("\t")); dialog.on_event(decode_input("\r"));
+    for _i in 0..10 { dialog.tick(); } verify(!dialog.active && dialog.value == 200 && dialog.result == 1);
+    dialog.release();
+}
+
+#[test]
+fn tui_sequenced_meter_sources_and_ramps() {
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); var mixer: Mixer = Mixer {};
+    mixer.update(table, 0, 0, false, 10); verify(mixer.level(0, 100, 0, false, false) == 0);
+    mixer.update(table, 0, 0, true, 10);
+    let attack: i32 = mixer.level(0, 100, 0, false, false); verify(attack > 0 && attack < 788);
+    for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 787);
+    for _i in 0..30 { mixer.update(table, 0, 14000, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 0);
+    table.clear_row(); mixer.update(table, 0, 0, true, 10); verify(mixer.level(0, 100, 0, false, false) == 0);
+    let area: Rect = Rect::new(0, 0, 100, 12); table.create_track_kind(false, true, area);
+    var clip: AudioClip = AudioClip { source: clone("test") };
+    clip.peaks.push(WavePeak { left: 1000, right: 500 }); clip.peaks.push(WavePeak { left: 100, right: 250 });
+    table.insert_audio(clip, area); clip.release();
+    for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
+    verify(mixer.level(3, 100, 0, false, false) == 1000 && mixer.level(3, 100, 0, true, false) == 500);
+    mixer.update(table, 1, 0, true, 10);
+    let falling: i32 = mixer.level(3, 100, 0, false, false); verify(falling > 100 && falling < 1000);
+    for _i in 0..30 { mixer.update(table, 1, 0, true, 10); }
+    verify(mixer.level(3, 100, 0, false, false) == 100 && mixer.level(3, 100, 0, true, false) == 250);
+    verify(mixer.level(3, 50, 0, true, false) == 125 && mixer.level(3, 100, -100, true, false) == 0);
+    for _i in 0..30 { mixer.update(table, 1, 0, false, 10); }
+    verify(mixer.level(3, 100, 0, false, false) == 0);
+    verify(meter_ramp(0, 1000, 0) == 0 && meter_ramp(1000, 0, 10) < 1000);
+    table.release();
+}
+
+#[test]
+fn tui_loaded_audio_and_instances() {
+    let mixer: Mixer = Mixer {}; let sample: SampleView = SampleView {};
+    verify(mixer.grainy && sample.grainy);
+    var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 100, 12);
+    verify(library.load_audio("examples/fft_example/illusion.wav", 120, area));
+    verify(library.audio_mode && library.audio.samples.len() == 1 && library.table.tracks.len() == 3);
+    let label: ListItem = library.audio.view.items[0]; verify(label.label == "1 illusion.wav");
+    library.on_event(decode_input("\r"), area); verify(library.table.error == "Select an AUDIO track first");
+    library.table.create_track_kind(false, true, area); library.table.selected_row = 10;
+    verify(library.insert_selected_audio(area));
+    let loaded: AudioClip = library.audio.samples[0]; let duration: i32 = i32(loaded.peaks.len());
+    verify(library.table.rows.len() == duration + 10);
+    let first_track: SequenceTrack = library.table.tracks[3]; let first: AudioInstance = first_track.instances[0];
+    verify(first.start_row == 10 && first_track.instance_at(9) == -1 && first_track.instance_at(10) == 0);
+    library.table.selected_row = 9; verify(!library.table.audio_under_cursor());
+    library.table.selected_row = 11;
+    verify(!library.insert_selected_audio(area)); // overlap must not replace anything
+    verify(library.table.edit_event(decode_input("\x7f"), area));
+    verify(!library.table.audio_under_cursor() && library.audio.samples.len() == 1 && library.table.track_columns(3) == 3);
+    library.table.selected_row = 20; library.on_event(decode_input("\r"), area);
+    library.table.selected_row = 20 + duration; library.on_event(decode_input("\r"), area);
+    let repeated: SequenceTrack = library.table.tracks[3]; verify(repeated.instances.len() == 2);
+    verify(repeated.instance_at(20) == 0 && repeated.instance_at(20 + duration) == 1);
+    library.select(2); verify(!library.table.audio_under_cursor());
+    library.select(1); verify(library.table.audio_under_cursor());
+    library.table.edit_event(decode_input("\x08"), area);
+    let remaining: SequenceTrack = library.table.tracks[3]; verify(remaining.instances.len() == 1 && remaining.instance_at(20) == 0);
+    verify(library.audio.samples.len() == 1 && library.table.track_columns(3) == 4);
+    library.table.selected_row = 20;
+    let surface: Surface = Surface::new(100, 12);
+    library.table.reconcile(area); library.table.paint(surface, area, Theme::dark_blue());
+    library.table.paint_audio_style(surface, area, Theme::dark_blue(), true, false);
+    surface.release(); library.release();
+}
+
+#[test]
+fn tui_grainy_waveform_time_slices() {
+    let surface: Surface = Surface::new(4, 1); let area: Rect = surface.bounds();
+    let details: list<WavePeak> = [WavePeak { right: 1000 }, WavePeak { right: 0 },
+        WavePeak { right: 1000 }, WavePeak { right: 0 }];
+    paint_grainy_row(surface, Rect::new(0, 0, 2, 1), area, details, 0, false, 3, 2, false);
+    let first: Cell = surface.cell(0, 0); let second: Cell = surface.cell(1, 0);
+    verify(first.glyph == 0x282d && second.glyph == 0x282d);
+    paint_grainy_row(surface, Rect::new(2, 0, 2, 1), area, details, 0, false, 3, 2, true);
+    let edge: Cell = surface.cell(3, 0); verify(edge.glyph == 0x2828);
+    surface.release();
+}
+
+#[test]
+fn tui_horizontal_sample_zoom_and_render() {
+    var clip: AudioClip = AudioClip { channels: 1, sample_rate: 8, frames: 32, frames_per_row: 8 };
+    for i in 0..32 { clip.samples.push(i % 2 == 0 ? -1.0f : 1.0f); }
+    var view: SampleView = SampleView { grainy: false };
+    verify(view.span(clip, 8) == 32 && view.start(clip, 0, 8) == 0);
+    view.on_event(decode_input("\x1b[108;5u"), clip, 10);
+    verify(view.span(clip, 8) == 16 && view.start(clip, 2, 8) == 8);
+    view.on_event(decode_input("\x1b[108;5u"), clip, 10);
+    verify(view.span(clip, 8) == 8 && view.start(clip, 3, 8) == 20);
+    view.on_event(decode_input("\x1b[108;5u"), clip, 10); verify(view.zoom == 2);
+    verify(!view.on_event(decode_input("\x1b[108;6u"), clip, 10));
+    verify(!view.on_event(decode_input("\x08"), clip, 10));
+    view.on_event(decode_input("\x1b[104;5u"), clip, 10); verify(view.zoom == 1);
+    let surface: Surface = Surface::new(18, 6); let theme: Theme = Theme::dark_blue();
+    view.wave = true; view.zoom = 20;
+    view.paint(surface, surface.bounds(), theme, clip, 1);
+    let signed_low: Cell = surface.cell(2, 5); verify(signed_low.glyph == 0x25cf);
+    view.grainy = true;
+    view.paint(surface, surface.bounds(), theme, clip, 0);
+    let dots: Cell = surface.cell(2, 5); verify(dots.glyph >= 0x2800 && dots.glyph <= 0x28ff);
+    view.paint_at(surface, surface.bounds(), theme, clip, 0, 7500);
+    let moving: Cell = surface.cell(4, 1); let prior: Cell = surface.cell(2, 1);
+    verify(moving.background == theme.selection && prior.background == theme.panel);
+    view.paint(surface, Rect::new(0, 0, 1, 1), theme, clip, 0);
+    surface.release();
+}
+
+#[test]
+fn tui_waveform_fractional_edges() {
+    let surface: Surface = Surface::new(8, 2); let area: Rect = surface.bounds();
+    surface.fill(area, Cell { glyph: 32, foreground: 1, background: 2 });
+    paint_wave_channel(surface, Rect::new(0, 0, 4, 1), area, 300, 250, false, 3, 2);
+    let solid: Cell = surface.cell(0, 0); let edge: Cell = surface.cell(1, 0);
+    verify(solid.glyph == 0x2588 && edge.glyph == 0x258e);
+    paint_wave_channel(surface, Rect::new(0, 1, 4, 1), area, 300, 0, true, 3, 2);
+    let shade: Cell = surface.cell(3, 1); let mirrored: Cell = surface.cell(2, 1);
+    verify(shade.glyph == 0x2592 && mirrored.glyph == 0x258a);
+    verify(mirrored.foreground == 2 && mirrored.background == 3);
+    paint_wave_channel(surface, Rect::new(4, 0, 4, 1), area, 0, 0, false, 3, 2);
+    let silent: Cell = surface.cell(4, 0); verify(silent.glyph == 32);
+    paint_wave_channel(surface, Rect::new(4, 1, 4, 1), Rect::new(5, 1, 1, 1), 2000, 2000, false, 3, 2);
+    let clipped: Cell = surface.cell(4, 1); let full: Cell = surface.cell(5, 1);
+    verify(clipped.glyph == 32 && full.glyph == 0x2588);
+    surface.release();
+}
+
+#[test]
+fn tui_audio_import_and_waveform() {
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); let area: Rect = Rect::new(0, 0, 120, 12);
+    verify(!table.import_audio("examples/fft_example/illusion.wav", 120, area));
+    table.create_track_kind(false, true, area);
+    verify(!table.import_audio("modules/tui/README.md", 120, area));
+    verify(table.import_audio("examples/fft_example/illusion.wav", 120, area));
+    let track: SequenceTrack = table.tracks[3];
+    let audio: AudioInstance = track.instances[0];
+    verify(audio.clip.detail_peaks.len() == audio.clip.peaks.len() * 4);
+    verify(audio.clip.samples.len() == audio.clip.frames * audio.clip.channels);
+    verify(table.audio_under_cursor());
+    verify(audio.clip.peaks.len() > 64 && table.rows.len() == audio.clip.peaks.len());
+    verify(table.track_columns(3) == 4 && table.columns.len() == 23);
+    let tail: TableRow = table.rows[64];
+    verify(tail.cells.len() == 23 && tail.cells[1] == "" && tail.cells[2] == "");
+    let original: TableRow = table.rows[0]; verify(original.cells[1] == "C-4");
+    let wave_column: TableColumn = table.columns[22]; verify(wave_column.read_only);
+    let surface: Surface = Surface::new(120, 12); let theme: Theme = Theme::dark_blue();
+    table.paint(surface, area, theme); table.paint_audio(surface, area, theme);
+    let center: Cell = surface.cell(table.column_x(22) + 6, 2);
+    verify(center.glyph == 0x2502);
+    verify(table.edit_event(decode_input("z"), area));
+    let zoomed: TableColumn = table.columns[22]; verify(zoomed.width == 25);
+    verify(table.selected_column == 19 && table.selected_row == 0);
+    table.paint(surface, area, theme); table.paint_audio(surface, area, theme);
+    let zoom_center: Cell = surface.cell(table.column_x(22) + 12, 2); verify(zoom_center.glyph == 0x2502);
+    var copy: SequenceTable = table.copy_pattern();
+    table.edit_event(decode_input("z"), area);
+    let compact: TableColumn = table.columns[22]; verify(compact.width == 13);
+    table.clear_track(); verify(table.track_columns(3) == 3);
+    let saved: SequenceTrack = copy.tracks[3]; let saved_audio: AudioInstance = saved.instances[0];
+    verify(saved_audio.clip.peaks.len() > 64 && saved.wave_zoom);
+    verify(saved_audio.clip.samples.len() > 0 && saved_audio.clip.samples[0] == audio.clip.samples[0]);
+    copy.create_track(true, area); verify(copy.track_columns(4) == 4);
+    let duplicated: SequenceTrack = copy.tracks[4]; verify(duplicated.wave_zoom);
+    copy.remove_track(area); verify(copy.tracks.len() == 4);
+    verify(!copy.import_audio("missing-file.wav", 120, area));
+    let retained: SequenceTrack = copy.tracks[3]; verify(retained.instances.len() == 1);
+    copy.release(); table.release(); surface.release();
+}
+
+#[test]
+fn tui_audio_file_filter() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
+    verify(dialog.matches_file("/tmp/kick.WAV") && dialog.matches_file("snare.AiFf"));
+    verify(dialog.matches_file("bass.aif") && !dialog.matches_file("bass.wav.txt"));
+    dialog.open("modules/tui"); verify(dialog.files.len() == 0 && dialog.nodes.len() > 0);
+    dialog.path_field.set_text("README.md"); dialog.submit_path();
+    verify(!dialog.accepted && dialog.active);
+    dialog.release();
+}
+
+#[test]
+fn tui_transport_status() {
+    let surface: Surface = Surface::new(80, 3); let theme: Theme = Theme::dark_blue();
+    var status: TransportStatus = TransportStatus {};
+    verify(status.bpm == 120 && status.beats_per_bar == 4 && status.beat_unit == 4);
+    status.paint(surface, Rect::new(0, 2, 80, 1), theme);
+    let idle: Cell = surface.cell(42, 2);
+    verify(idle.glyph == 9675 && idle.foreground == theme.muted);
+    status.elapsed_ms = 62003; status.bpm = 140; status.beats_per_bar = 7; status.beat_unit = 8;
+    status.midi_received = true;
+    status.paint(surface, Rect::new(0, 2, 80, 1), theme);
+    let active: Cell = surface.cell(42, 2);
+    verify(active.glyph == 9679 && active.foreground == 0x5adc8c);
+    let minute: Cell = surface.cell(17, 2); let second: Cell = surface.cell(20, 2);
+    verify(minute.glyph == 49 && second.glyph == 50);
+    status.paint(surface, Rect::new(0, 2, 5, 1), theme);
+    status.paint(surface, Rect::new(0, 2, 0, 0), theme);
+    surface.release();
+}
+
+#[test]
+fn tui_list_view_navigation_and_paint() {
+    var view: ListView = ListView { items: [ListItem { id: 1, label: "001 Intro" },
+        ListItem { id: 2, label: "002 Verse" }, ListItem { id: 3, label: "003 Chorus" }] };
+    let area: Rect = Rect::new(1, 1, 12, 2);
+    verify(view.on_event(decode_input("G"), area) == 1 && view.selected == 2 && view.scroll == 1);
+    view.on_event(decode_input("g"), area); view.on_event(decode_input("g"), area);
+    verify(view.selected == 0 && view.scroll == 0);
+    view.on_event(decode_input("d"), area); view.on_event(decode_input("j"), area);
+    verify(view.on_event(decode_input("d"), area) == 1);
+    verify(view.on_event(decode_input("d"), area) == 3 && view.items.len() == 3);
+    view.on_event(decode_input("d"), area); view.cancel_pending();
+    verify(view.on_event(decode_input("d"), area) == 1);
+    let surface: Surface = Surface::new(15, 5); let theme: Theme = Theme::dark_blue();
+    view.paint(surface, area, theme);
+    let selected: Cell = surface.cell(1, 2); verify(selected.background == theme.selection);
+    view.selected = 2; view.paint(surface, Rect::new(1, 1, 12, 3), theme);
+    let stripe: Cell = surface.cell(1, 2); verify(stripe.background == darken(theme.panel, 82));
+    view.items = []; view.on_event(decode_input("G"), area);
+    verify(view.selected == -1 && view.scroll == 0);
+    view.on_event(decode_input("d"), area); verify(view.on_event(decode_input("d"), area) != 3);
+    surface.release();
+}
+
+#[test]
+fn tui_pattern_library_independence() {
+    var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 20, 10);
+    verify(library.patterns.len() == 3 && library.song.len() == 4 && library.active_id == 1);
+    library.table.edit_event(decode_input("K"), area);
+    library.table.track_action(25, area);
+    library.on_event(decode_input("j"), area);
+    verify(library.active_id == 2);
+    let verse: TableRow = library.table.rows[0]; let verse_track: SequenceTrack = library.table.tracks[0];
+    verify(verse.cells[1] == "E-4" && !verse_track.muted);
+    library.on_event(decode_input("k"), area);
+    let intro: TableRow = library.table.rows[0]; let intro_track: SequenceTrack = library.table.tracks[0];
+    verify(intro.cells[1] == "C#4" && intro_track.muted);
+    library.add(true); verify(library.active_id == 4 && library.patterns.len() == 4);
+    library.table.edit_event(decode_input("K"), area);
+    library.select(1); let original: TableRow = library.table.rows[0]; verify(original.cells[1] == "C#4");
+    library.select(4); let duplicate: TableRow = library.table.rows[0]; verify(duplicate.cells[1] == "D-4");
+    verify(library.rename("Intro copy edited"));
+    library.show_song(true);
+    let last: ListItem = library.view.items[4]; verify(last.label == "5  004 Intro copy edited");
+    library.add(false); verify(library.active_id == 5);
+    let blank: TableRow = library.table.rows[0]; verify(blank.cells[1] == "" && blank.cells[2] == "");
+    library.release();
+}
+
+#[test]
+fn tui_song_and_pattern_removal() {
+    var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 20, 10);
+    library.show_song(true);
+    library.on_event(decode_input("j"), area); verify(library.active_id == 2);
+    library.on_event(decode_input("d"), area); library.on_event(decode_input("d"), area);
+    verify(library.song.len() == 3 && library.patterns.len() == 3 && library.active_id == 2);
+    library.remove_active(area); verify(library.patterns.len() == 2 && library.song.len() == 2);
+    let order: list<i32> = library.song;
+    for id in order { verify(id != 2); }
+    library.on_event(decode_input("G"), area); verify(library.active_id == 3);
+    library.on_event(decode_input("g"), area); library.on_event(decode_input("g"), area); verify(library.active_id == 1);
+    library.remove_song_occurrence(area); library.remove_song_occurrence(area);
+    verify(library.song.len() == 0 && library.patterns.len() == 2 && library.view.selected == -1);
+    library.show_song(false); library.remove_active(area); library.remove_active(area);
+    verify(library.patterns.len() == 1 && library.error != "");
+    library.release();
+}
+
+#[test]
+fn tui_song_row_editing() {
+    var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 20, 2);
+    verify(!library.on_event(decode_input("o"), area));
+    verify(!library.on_event(decode_input("K"), area));
+    verify(!library.on_event(decode_input("\x1b[106;5u"), area));
+    verify(library.song.len() == 4 && library.song[0] == 1);
+    library.show_song(true);
+    library.table.edit_event(decode_input("K"), area);
+    library.on_event(decode_input("\x1b[107;5u"), area); verify(library.view.selected == 0);
+    library.on_event(decode_input("\x1b[106;5u"), area);
+    verify(library.song[0] == 2 && library.song[1] == 1 && library.view.selected == 1 && library.active_id == 1);
+    library.on_event(decode_input("\x1b[27;5;106~"), area);
+    verify(library.song[2] == 1 && library.view.selected == 2 && library.view.scroll == 1);
+    library.on_event(decode_input("\x1b[107;5u"), area);
+    verify(library.song[1] == 1 && library.view.selected == 1);
+    library.on_event(decode_input("o"), area);
+    verify(library.song.len() == 5 && library.song[1] == 1 && library.song[2] == 1 && library.view.selected == 1);
+    library.on_event(decode_input("O"), area);
+    verify(library.song.len() == 6 && library.view.selected == 2 && library.view.scroll == 1);
+    library.on_event(decode_input("K"), area);
+    verify(library.song[2] == 2 && library.song[1] == 1 && library.song[3] == 1 && library.active_id == 2);
+    library.on_event(decode_input("\x1b[106;2u"), area);
+    verify(library.song[2] == 1 && library.active_id == 1);
+    let intro: TableRow = library.table.rows[0]; verify(intro.cells[1] == "C#4");
+    library.on_event(decode_input("J"), area); verify(library.song[2] == 1);
+    library.on_event(decode_input("\x1b[107;2u"), area);
+    library.on_event(decode_input("K"), area);
+    library.on_event(decode_input("K"), area); verify(library.song[2] == 3 && library.active_id == 3);
+    library.on_event(decode_input("G"), area);
+    library.on_event(decode_input("\x1b[106;5u"), area); verify(library.view.selected == 5);
+    library.on_event(decode_input("\n"), area); verify(library.view.selected == 5 && library.song.len() == 6);
+    library.on_event(decode_input("d"), area);
+    library.on_event(decode_input("O"), area);
+    library.on_event(decode_input("d"), area); verify(library.song.len() == 7);
+    library.on_event(decode_input("d"), area); verify(library.song.len() == 6);
+    // Pattern IDs may have gaps: assignment follows existing patterns, not IDs.
+    library.select(2); library.remove_active(area);
+    library.view.selected = 0; library.choose_selected();
+    library.on_event(decode_input("K"), area); verify(library.song[0] == 3);
+    library.on_event(decode_input("J"), area); verify(library.song[0] == 1);
+    let count: i32 = i32(library.song.len());
+    for _i in 0..count { library.remove_song_occurrence(area); }
+    library.on_event(decode_input("o"), area); library.on_event(decode_input("O"), area);
+    library.on_event(decode_input("J"), area); library.on_event(decode_input("K"), area);
+    library.on_event(decode_input("\x1b[106;5u"), area);
+    verify(library.song.len() == 0 && library.view.selected == -1);
+    library.release();
+}
+
+#[test]
+fn tui_sequence_jump_navigation() {
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    let area: Rect = Rect::new(0, 0, 40, 10);
+    table.edit_event(decode_input("G"), area);
+    verify(table.selected_row == 63 && table.scroll_y > 0);
+    table.edit_event(decode_input("g"), area); verify(table.selected_row == 63);
+    table.edit_event(decode_input("g"), area); verify(table.selected_row == 0 && table.scroll_y == 0);
+    table.edit_event(decode_input("\x1b[103;2u"), area); verify(table.selected_row == 63);
+    table.edit_event(decode_input("g"), area); table.edit_event(decode_input("k"), area);
+    table.edit_event(decode_input("g"), area); verify(table.selected_row == 62);
+    table.edit_event(decode_input("g"), area); verify(table.selected_row == 0);
+    table.edit_event(decode_input("\r"), area);
+    table.editor.set_text(""); table.edit_event(decode_input("G"), area);
+    table.edit_event(decode_input("g"), area); table.edit_event(decode_input("g"), area);
+    verify(table.editor.text == "Ggg" && table.selected_row == 0);
+    table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area);
+    for _i in 0..64 { table.delete_row(area); }
+    table.edit_event(decode_input("G"), area);
+    table.edit_event(decode_input("g"), area); table.edit_event(decode_input("g"), area);
+    verify(table.selected_row == -1 && table.scroll_y == 0);
+    table.release();
+}
+
+#[test]
+fn tui_vu_meter_and_mixer() {
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(40, 18);
+    let full: VuMeter = VuMeter { level: 2000 };
+    full.paint(surface, Rect::new(1, 1, 1, 10), theme.panel);
+    let red: Cell = surface.cell(1, 1); let green: Cell = surface.cell(1, 10);
+    verify(red.glyph == 0x2588 && red.foreground == 0xFF604C && green.foreground == 0x74F078);
+    let partial: VuMeter = VuMeter { level: 250 };
+    partial.paint(surface, Rect::new(2, 1, 1, 1), theme.panel);
+    let quarter: Cell = surface.cell(2, 1); verify(quarter.glyph == 0x2582);
+    let empty: VuMeter = VuMeter { level: -1 };
+    empty.paint(surface, Rect::new(3, 1, 1, 1), theme.panel);
+    let silent: Cell = surface.cell(3, 1); verify(silent.foreground == 0x163A2A);
+    var mixer: Mixer = Mixer { visible: true };
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    let track: SequenceTrack = table.tracks[0]; verify(track.volume == 100 && track.pan == 0);
+    let before: i32 = mixer.level(0, 100, 0, false, false); mixer.update(table, 0, 0, true, 10);
+    verify(before != mixer.level(0, 100, 0, false, false));
+    verify(mixer.level(0, 100, 0, false, true) == 0 && mixer.level(0, 100, 100, false, false) == 0);
+    mixer.paint(surface, Rect::new(0, 0, 27, 16), theme, table.tracks, 1);
+    let selected: Cell = surface.cell(6, 0); let other: Cell = surface.cell(0, 0);
+    verify(selected.background == lighten(theme.panel, 8) && other.background == theme.panel);
+    let volume: Cell = surface.cell(6, 1); let pan: Cell = surface.cell(6, 2);
+    verify(volume.glyph == 86 && pan.glyph == 80);
+    mixer.paint(surface, Rect::new(0, 0, 9, 8), theme, table.tracks, 2);
+    let last: Cell = surface.cell(1, 0); verify(last.glyph == 51);
+    for size in 0..5 { mixer.paint(surface, Rect::new(0, 0, i32(size), i32(size)), theme, table.tracks, 2); }
+    table.release(); surface.release();
+}
+
+#[test]
+fn tui_mixed_track_types() {
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    let area: Rect = Rect::new(0, 0, 40, 12);
+    table.track_action(28, area);
+    verify(table.tracks.len() == 4 && table.selected_column == 19 && table.track_columns(3) == 3 && !table.is_note());
+    let audio: SequenceTrack = table.tracks[3]; verify(audio.audio);
+    let group: TableGroup = table.groups[3]; verify(group.first == 19 && group.count == 3);
+    let column: TableColumn = table.columns[19]; verify(column.title == "CC1" && !column.validate("C-4"));
+    verify(table.configure_slot(1, "pitchbend"));
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("-123"); table.edit_event(decode_input("\r"), area);
+    table.track_action(21, area); verify(table.selected_column == 22 && table.is_note());
+    table.edit_event(decode_input("K"), area); table.edit_event(decode_input("K"), area);
+    let mixed: TableRow = table.rows[0]; verify(mixed.cells[19] == "-123" && mixed.cells[22] == "C#4");
+    table.selected_column = 19; table.create_track(true, area);
+    let duplicate: SequenceTrack = table.tracks[5]; verify(duplicate.audio && table.selected_column == 28);
+    let copied: TableRow = table.rows[0]; verify(copied.cells[28] == "-123");
+    table.clear_track(); let cleared: TableRow = table.rows[0]; verify(cleared.cells[28] == "" && cleared.cells[19] == "-123");
+    table.remove_track(area); table.selected_column = 19; table.remove_track(area);
+    verify(table.tracks.len() == 4 && table.is_note() && table.selected_column == 19);
+    let shifted: TableRow = table.rows[0]; verify(shifted.cells[19] == "C#4");
+    table.release();
+}
+
+#[test]
+fn tui_meter_styles_and_channel_counts() {
+    let surface: Surface = Surface::new(30, 16); let theme: Theme = Theme::dark_blue();
+    let solid: VuMeter = VuMeter { level: 250 };
+    let grainy: VuMeter = VuMeter { level: 250, grainy: true };
+    solid.paint(surface, Rect::new(0, 0, 1, 1), theme.panel);
+    grainy.paint(surface, Rect::new(1, 0, 1, 1), theme.panel);
+    let bar: Cell = surface.cell(0, 0); let dots: Cell = surface.cell(1, 0);
+    verify(bar.glyph == 0x2582 && dots.glyph == 0x28C0 && dots.foreground == bar.foreground);
+    verify(VuMeter::color(519) == 0x74F078 && VuMeter::color(520) == 0xFFD65C);
+    verify(VuMeter::color(700) == 0xFF9046 && VuMeter::color(850) == 0xFF604C);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); table.create_track_kind(false, true, Rect::new(0, 0, 40, 12));
+    let mixer: Mixer = Mixer { visible: true };
+    mixer.paint(surface, Rect::new(0, 0, 24, 12), theme, table.tracks, 3);
+    let mono: Cell = surface.cell(2, 11); let empty: Cell = surface.cell(3, 11);
+    let left: Cell = surface.cell(19, 11); let right: Cell = surface.cell(21, 11);
+    verify(mono.glyph != 32 && empty.glyph == 32 && left.glyph != 32 && right.glyph != 32);
+    let identity: Cell = surface.cell(18, 0); verify(identity.glyph == 65);
+    table.release(); surface.release();
+}
+
+#[test]
+fn tui_column_validation() {
+    var column: TableColumn = TableColumn { title: "VEL", width: 6, value_type: "i32", bounded: true, minimum: 0, maximum: 127 };
+    verify(column.validate("0") && column.validate("127"));
+    verify(!column.validate("128") && !column.validate("-1") && !column.validate("1.5") && !column.validate("12x"));
+    column.bounded = false;
+    verify(column.validate("-2147483648") && !column.validate("2147483648"));
+    column.value_type = "u32";
+    verify(column.validate("4294967295") && !column.validate("4294967296") && !column.validate("-0"));
+    column.value_type = "i64";
+    verify(column.validate("-9223372036854775808") && column.validate("9223372036854775807"));
+    verify(!column.validate("9223372036854775808") && !column.validate("-9223372036854775809"));
+    column.value_type = "unknown"; verify(!column.validate("5"));
+    column.value_type = "str8"; column.pattern = "[A-Z]+";
+    verify(column.validate("ABC") && !column.validate("ABC5"));
+    column.pattern = "["; verify(!column.validate("ABC"));
+}
+
+#[test]
+fn tui_track_groups_and_frozen_row() {
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    let area: Rect = Rect::new(2, 1, 42, 10);
+    let surface: Surface = Surface::new(48, 14); let theme: Theme = Theme::dark_blue();
+    verify(table.tracks.len() == 3 && table.columns.len() == 19 && table.groups.len() == 3);
+    table.paint(surface, area, theme);
+    let active: Cell = surface.cell(6, 1); let inactive: Cell = surface.cell(41, 1);
+    verify(active.background == theme.selection && inactive.background == theme.menu_background);
+    let row: Cell = surface.cell(2, 3); verify(row.glyph == 48);
+    table.selected_column = 18; table.paint(surface, area, theme);
+    verify(table.scroll_x > 0 && table.active_track() == 2);
+    let pinned: Cell = surface.cell(2, 3); verify(pinned.glyph == 48);
+    let header: Cell = surface.cell(2, 2); verify(header.glyph == 82);
+    let selected: Rect = table.selected_rect(area);
+    verify(selected.x >= area.x + 4 && selected.x + selected.width <= area.x + area.width - 1);
+    let right_group: Cell = surface.cell(selected.x, 1); verify(right_group.background == theme.selection);
+    for width in 0..8 { table.paint(surface, Rect::new(0, 0, i32(width), 2), theme); }
+    table.release(); surface.release();
+}
+
+#[test]
+fn tui_track_actions_and_automation() {
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); let area: Rect = Rect::new(0, 0, 45, 12);
+    verify(table.rename_track("Lead"));
+    verify(table.configure_slot(1, "pitchbend"));
+    table.selected_column = 5;
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("-8192"); table.edit_event(decode_input("\r"), area);
+    let bend: TableRow = table.rows[0]; verify(bend.cells[5] == "-8192" && bend.cells[11] == "");
+    verify(!table.configure_slot(1, "cc:7"));
+    verify(table.configure_slot(2, "cutoff:-100:1000"));
+    verify(!table.configure_slot(2, "bad:9:1") && !table.configure_slot(2, "cc:128"));
+    table.track_action(25, area);
+    let muted: SequenceTrack = table.tracks[0]; verify(muted.muted);
+    table.create_track(true, area); verify(table.tracks.len() == 4 && table.active_track() == 3);
+    let duplicate: TableRow = table.rows[0]; verify(duplicate.cells[23] == "-8192");
+    table.clear_track();
+    let cleared: TableRow = table.rows[0]; verify(cleared.cells[23] == "" && cleared.cells[5] == "-8192");
+    table.remove_track(area); verify(table.tracks.len() == 3 && table.active_track() == 2);
+    table.create_track(false, area); let added: TableRow = table.rows[0];
+    verify(table.tracks.len() == 4 && added.cells[19] == "" && added.cells[20] == "");
+    for _i in 0..5 { table.remove_track(area); }
+    verify(table.tracks.len() == 1 && table.columns.len() == 7);
+    table.release();
+}
+
+#[test]
+fn tui_sequence_empty_clear_delete() {
+    var column: TableColumn = TableColumn { title: "VEL", width: 7, value_type: "i32", nullable: true,
+        bounded: true, minimum: 0, maximum: 127 };
+    verify(column.validate("") && !column.validate(" ") && !column.validate("128"));
+    column.nullable = false; verify(!column.validate(""));
+    column.nullable = true; column.value_type = "unknown"; verify(!column.validate(""));
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    let area: Rect = Rect::new(0, 0, 40, 10);
+    table.edit_event(decode_input("\x7f"), area);
+    let unchanged: TableRow = table.rows[0]; verify(unchanged.cells[1] == "C-4" && unchanged.cells[2] == "100");
+    table.edit_event(decode_input("\r"), area);
+    table.edit_event(decode_input("\x1b[127;2u"), area);
+    let editing_row: TableRow = table.rows[0]; verify(editing_row.cells[1] == "C-4" && editing_row.cells[2] == "100");
+    table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area);
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("");
+    table.edit_event(decode_input("\r"), area);
+    let empty: TableRow = table.rows[0]; verify(!table.editing && empty.cells[1] == "" && empty.cells[2] == "100");
+    table.edit_event(decode_input("K"), area);
+    let initialized: TableRow = table.rows[0]; verify(initialized.cells[1] == "C-4");
+    table.edit_event(decode_input("\x1b[127;2u"), area);
+    let cleared: TableRow = table.rows[0];
+    verify(cleared.cells[0] == "001" && cleared.cells[1] == "" && cleared.cells[2] == "" && cleared.cells[3] == "");
+    verify(table.rows.len() == 64);
+    table.edit_event(decode_input("K"), area);
+    table.edit_event(decode_input("l"), area); table.edit_event(decode_input("J"), area);
+    let numeric: TableRow = table.rows[0]; verify(numeric.cells[2] == "0");
+    table.edit_event(decode_input("d"), area); verify(table.rows.len() == 64);
+    table.edit_event(decode_input("j"), area); table.edit_event(decode_input("d"), area);
+    verify(table.rows.len() == 64);
+    table.edit_event(decode_input("d"), area); verify(table.rows.len() == 63 && table.selected_row == 1);
+    let renumbered: TableRow = table.rows[1]; verify(renumbered.cells[0] == "002");
+    table.selected_row = 62;
+    table.edit_event(decode_input("d"), area); table.edit_event(decode_input("d"), area);
+    verify(table.rows.len() == 62 && table.selected_row == 61);
+    for _i in 0..62 { table.delete_row(area); }
+    verify(table.rows.len() == 0 && table.selected_row == -1 && table.scroll_y == 0);
+    table.clear_row(); table.delete_row(area);
+    table.edit_event(decode_input("d"), area); table.edit_event(decode_input("d"), area);
+    table.release();
+}
+
+#[test]
+fn tui_sequence_editing() {
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    let area: Rect = Rect::new(0, 0, 40, 10);
+    verify(table.notes.len() == 128);
+    table.reconcile(area); verify(table.selected_column == 1);
+    table.edit_event(decode_input("h"), area); verify(table.selected_column == 1);
+    table.edit_event(decode_input("K"), area);
+    let sharp: TableRow = table.rows[0]; verify(sharp.cells[1] == "C#4");
+    table.edit_event(decode_input("\x1b[106;2u"), area);
+    let natural: TableRow = table.rows[0]; verify(natural.cells[1] == "C-4");
+    for _i in 0..150 { table.edit_event(decode_input("J"), area); }
+    let lowest: TableRow = table.rows[0]; verify(lowest.cells[1] == "C--1");
+    for _i in 0..150 { table.edit_event(decode_input("K"), area); }
+    let highest: TableRow = table.rows[0]; verify(highest.cells[1] == "G-9");
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("G#9");
+    table.edit_event(decode_input("\r"), area); verify(table.editing);
+    table.editor.set_text("C#4"); table.edit_event(decode_input("\r"), area);
+    let manual_note: TableRow = table.rows[0]; verify(!table.editing && manual_note.cells[1] == "C#4");
+    table.edit_event(decode_input("l"), area);
+    for _i in 0..140 { table.edit_event(decode_input("K"), area); }
+    let maximum: TableRow = table.rows[0]; verify(maximum.cells[2] == "127");
+    for _i in 0..140 { table.edit_event(decode_input("J"), area); }
+    let minimum: TableRow = table.rows[0]; verify(minimum.cells[2] == "0");
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("128");
+    table.edit_event(decode_input("\r"), area); verify(table.editing && table.error != "");
+    table.editor.set_text("42"); table.edit_event(decode_input("\r"), area);
+    let manual: TableRow = table.rows[0]; verify(!table.editing && manual.cells[2] == "42");
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("55");
+    table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area);
+    let cancelled: TableRow = table.rows[0]; verify(cancelled.cells[2] == "42");
+    verify(!table.set_cell(0, 0, "2") && !table.set_cell(0, 2, "bad"));
+    table.release();
+}
+
+#[test]
+fn tui_read_only_columns() {
+    var table: Table = Table::new([TableColumn { title: "ROW", width: 5, read_only: true },
+        TableColumn { title: "A", width: 5 }, TableColumn { title: "RO", width: 5, read_only: true },
+        TableColumn { title: "B", width: 5 }], []);
+    let area: Rect = Rect::new(0, 0, 30, 10);
+    table.reconcile(area); verify(table.selected_column == 1);
+    table.on_event(decode_input("l"), area); verify(table.selected_column == 3);
+    table.on_event(decode_input("h"), area); verify(table.selected_column == 1);
+    verify(!table.on_event(decode_input("w"), area));
+    verify(!table.on_event(decode_input("b"), area));
+    verify(!table.on_event(decode_input("\x1b[108;5u"), area));
+    verify(!table.on_event(decode_input("\x1b[104;6u"), area));
+    verify(table.selected_column == 1);
+    table.columns = [TableColumn { title: "ROW", width: 5, read_only: true }];
+    table.reconcile(area); verify(table.selected_column == -1);
+}
+
+fn sample_table() -> Table {
+    return Table::new([TableColumn { title: "NOTE", width: 6 }, TableColumn { title: "VEL", width: 5 },
+        TableColumn { title: "TRACK", width: 8 }],
+        [TableRow { cells: ["C-4", "100", "Keys"] }, TableRow { cells: ["D-4", "90", "Bass"] },
+         TableRow { cells: ["E-4", "80"] }, TableRow { cells: ["F-4"] }, TableRow { cells: ["G-4"] }]);
+}
+
+#[test]
+fn tui_table_navigation_and_scrollbars() {
+    var table: Table = sample_table();
+    let area: Rect = Rect::new(3, 2, 12, 5);
+    let body: Rect = table.body(area);
+    verify(body.width == 11 && body.height == 3);
+    for _i in 0..10 { table.on_event(decode_input("j"), area); table.on_event(decode_input("l"), area); }
+    verify(table.selected_row == 4 && table.selected_column == 2);
+    verify(table.scroll_y == 2 && table.scroll_x == 8);
+    table.vertical_scrollbar = false; table.horizontal_scrollbar = false;
+    table.reconcile(area);
+    let expanded: Rect = table.body(area);
+    verify(expanded.width == 12 && expanded.height == 4 && table.scroll_y == 1);
+    verify(!table.on_event(decode_input("\x1b[106;6u"), area));
+    for _i in 0..10 { table.on_event(decode_input("k"), area); table.on_event(decode_input("h"), area); }
+    verify(table.selected_row == 0 && table.selected_column == 0 && table.scroll_x == 0 && table.scroll_y == 0);
+}
+
+#[test]
+fn tui_table_rendering_and_clipping() {
+    var table: Table = sample_table();
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(25, 9);
+    let bounds: Rect = surface.bounds();
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.background });
+    let area: Rect = Rect::new(2, 1, 21, 7);
+    table.paint(surface, area, theme);
+    let selected: Cell = surface.cell(9, 2);
+    let intersection: Cell = surface.cell(3, 2);
+    let stripe: Cell = surface.cell(9, 3);
+    let normal: Cell = surface.cell(9, 4);
+    let column: Cell = surface.cell(3, 4);
+    verify(selected.background == theme.selection && intersection.background == lighten(theme.selection, 8));
+    verify(stripe.background == darken(theme.panel, 82) && normal.background == theme.panel);
+    verify(column.background == lighten(theme.panel, 8));
+    let vertical: Cell = surface.cell(22, 2); let horizontal: Cell = surface.cell(2, 7);
+    verify(vertical.foreground == theme.accent && horizontal.foreground == theme.accent);
+    table.selected_column = 2; table.selected_row = 4;
+    table.paint(surface, Rect::new(2, 1, 8, 5), theme);
+    let outside: Cell = surface.cell(1, 2); verify(outside.glyph == 88);
+    table.rows = []; table.columns = [];
+    for size in 0..4 { table.paint(surface, Rect::new(0, 0, i32(size), i32(size)), theme); }
+    verify(table.selected_row == -1 && table.selected_column == -1 && table.scroll_x == 0 && table.scroll_y == 0);
+    surface.release();
+}
+use tui::geometry::*;
+use tui::layout::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::menu::*;
+use tui::widgets::*;
+use std::strbuf::len;
+use std::strbuf::free;
+use tui::focus::*;
+use tui::input::*;
+use std::bytes::Bytes;
+use std::testing::verify;
+use tui::dialog::*;
+use tui::button::*;
+
+#[test]
+fn tui_layout_alignment() {
+    var layout: Layout = Layout { axis: Axis::Horizontal, gap: 2,
+        alignment: Alignment::Center, sizes: [Size::fixed(4), Size::fixed(4)] };
+    var parts: list<Rect> = layout.split(Rect::new(3, 5, 20, 20));
+    let first: Rect = parts[0]; let second: Rect = parts[1];
+    verify(first.x == 8 && second.x == 14);
+    layout.axis = Axis::Vertical; layout.alignment = Alignment::End;
+    parts = layout.split(Rect::new(3, 5, 20, 20));
+    let bottom: Rect = parts[1]; verify(bottom.y == 21 && bottom.height == 4);
+    layout.alignment = Alignment::Center;
+    parts = layout.split(Rect::new(3, 5, 20, 20));
+    let middle: Rect = parts[0]; verify(middle.y == 10);
+    layout.sizes = [Size::flex(1), Size::fixed(4)];
+    parts = layout.split(Rect::new(3, 5, 20, 20));
+    let flexible: Rect = parts[0]; verify(flexible.y == 5 && flexible.height == 14);
+}
+
+#[test]
+fn tui_base_dialog_and_push_button() {
+    var dialog: Dialog = Dialog::new("Question", 40, 15);
+    let viewport: Rect = Rect::new(0, 0, 80, 24);
+    let content: Rect = dialog.content_rect(viewport);
+    let row: Rect = dialog.button_row(viewport);
+    let buttons: list<Rect> = dialog.button_rects(viewport);
+    let left: Rect = buttons[0]; let right: Rect = buttons[1];
+    verify(content.y + content.height == row.y && row.height == 4);
+    verify(left.x - row.x == (row.width - left.width - right.width - 2) / 2);
+    let surface: Surface = Surface::new(80, 24);
+    let theme: Theme = Theme::dark_blue();
+    let button: PushButton = PushButton { label: "OK", action: 7 };
+    surface.fill(viewport, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    button.paint(surface, left, theme, true, false);
+    let raised: Cell = surface.cell(left.x, left.y);
+    let shadow: Cell = surface.cell(left.x + left.width - 1, left.y + 1);
+    verify(raised.glyph == 0x250C && raised.foreground == theme.accent);
+    verify(shadow.glyph == 88 && shadow.background == darken(theme.panel, theme.shadow_percent));
+    surface.fill(viewport, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
+    button.paint(surface, left, theme, true, true);
+    let depressed: Cell = surface.cell(left.x + 1, left.y + 1);
+    let old_corner: Cell = surface.cell(left.x, left.y);
+    verify(depressed.glyph == 0x250C && old_corner.glyph == 32);
+    surface.release();
+}
+
+#[test]
+fn tui_question_custom_buttons() {
+    var question: QuestionDialog = QuestionDialog::new("Confirm", "Continue?");
+    question.buttons = [PushButton { label: "Unavailable", action: 8, enabled: false },
+        PushButton { label: "Proceed", action: 42 }, PushButton { label: "Later", action: 43 },
+        PushButton { label: "Cancel", action: 2 }];
+    question.open(); verify(question.button_selected == 1);
+    question.on_event(decode_input("l")); verify(question.button_selected == 2);
+    question.on_event(decode_input("h")); verify(question.button_selected == 1);
+    question.button_selected = 3;
+    let small: Rect = Rect::new(0, 0, 24, 14);
+    let row: Rect = question.button_row(small);
+    let rectangles: list<Rect> = question.button_rects(small);
+    let visible: Rect = rectangles[3];
+    verify(visible.width == 11 && visible.x + visible.width == row.x + row.width);
+    for rectangle in rectangles {
+        verify(rectangle.width == 0 || (rectangle.x >= row.x && rectangle.x + rectangle.width <= row.x + row.width));
+    }
+    question.button_selected = 1;
+    question.on_event(decode_input("\r"));
+    verify(question.active && question.pressed_button == 1 && question.result == 0);
+    for _i in 0..9 { question.tick(); verify(question.active); }
+    question.tick(); verify(!question.active && question.result == 42);
+    question.open(); question.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape });
+    verify(!question.active && question.result == 2);
+    question.buttons = []; question.open(); question.on_event(decode_input("\r"));
+    verify(question.button_selected == -1 && question.pressed_button == -1);
+}
+
+#[test]
+fn tui_file_dialog_shared_buttons() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    let viewport: Rect = Rect::new(0, 0, 80, 24);
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.on_event(decode_input("\x1b[106;6u"), viewport);
+    verify(dialog.focus.selected == 2);
+    dialog.on_event(decode_input("\x1b[106;6u"), viewport);
+    verify(dialog.focus.selected == 3);
+    dialog.on_event(decode_input("\r"), viewport);
+    // Navigation cannot change an activation already in progress.
+    dialog.on_event(decode_input("l"), viewport);
+    for _i in 0..10 { dialog.tick(); }
+    verify(dialog.accepted && !dialog.active);
+    dialog.open("tests/fixtures/tui_dialog"); dialog.focus.selected = 3;
+    dialog.on_event(decode_input("l"), viewport);
+    dialog.on_event(decode_input("\r"), viewport);
+    verify(dialog.active && dialog.pressed_button == 1);
+    for _i in 0..10 { dialog.tick(); }
+    verify(!dialog.active && !dialog.accepted && dialog.result == 2);
+    dialog.release();
+}
+use tui::textfield::TextField;
+
+#[test]
+fn tui_path_text_editing() {
+    var field_editor: TextField = TextField::new("");
+    let letters: list<i32> = [113, 104, 106, 107, 108, 32, 120];
+    var decoder: InputDecoder = InputDecoder::new();
+    for code in letters { field_editor.on_event(decoder.feed(code)); }
+    verify(field_editor.text == "qhjkl x"); // q/hjkl are text, not commands
+    field_editor.on_event(decoder.feed(127));
+    verify(field_editor.text == "qhjkl ");
+    field_editor.on_event(decode_input("\x1b[H"));
+    field_editor.on_event(decoder.feed(65));
+    verify(field_editor.text == "Aqhjkl ");
+    field_editor.on_event(decode_input("\x1b[3~"));
+    verify(field_editor.text == "Ahjkl ");
+    field_editor.on_event(decoder.feed(21));
+    verify(field_editor.text == "");
+    field_editor.on_event(decode_input("\x1b[233u"));
+    verify(field_editor.text == "é");
+    field_editor.on_event(decoder.feed(127));
+    verify(field_editor.text == "");
+    field_editor.release();
+}
+
+#[test]
+fn tui_open_session_directory_tree() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    dialog.open("tests/fixtures/tui_dialog");
+    verify(dialog.active && !dialog.accepted && dialog.focus.selected == 0);
+    verify(dialog.files.len() == 2);
+    verify(dialog.files[0] == "alpha.session");
+    verify(dialog.nodes.len() == 3);
+    dialog.select_directory(2); // branch
+    verify(dialog.files.len() == 1 && dialog.files[0] == "child.session");
+    dialog.expand_selected();
+    verify(dialog.nodes.len() == 4);
+    dialog.select_directory(3); // nested
+    verify(dialog.files.len() == 1 && dialog.files[0] == "leaf.session");
+    dialog.collapse_selected(); // unopened node -> its parent
+    verify(dialog.tree_selected == 2 && dialog.files[0] == "child.session");
+    dialog.collapse_selected();
+    verify(dialog.nodes.len() == 3);
+    dialog.release();
+}
+
+#[test]
+fn tui_open_session_path_validation_and_acceptance() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.path_field.set_text("does-not-exist.session");
+    dialog.submit_path();
+    verify(dialog.active && !dialog.accepted);
+    verify(dialog.files.len() == 2);
+    dialog.path_field.set_text("branch");
+    dialog.submit_path();
+    verify(dialog.active && dialog.files.len() == 1 && dialog.files[0] == "child.session");
+    dialog.path_field.set_text("child.session");
+    dialog.submit_path();
+    verify(dialog.accepted && !dialog.active);
+    dialog.open("tests/fixtures/tui_dialog");
+    verify(!dialog.accepted && dialog.accepted_path == "");
+    dialog.cancel();
+    verify(!dialog.active && !dialog.accepted);
+    dialog.release();
+}
+
+#[test]
+fn tui_dialog_focus_and_rendering() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    dialog.open("tests/fixtures/tui_dialog");
+    let bounds: Rect = Rect::new(0, 0, 80, 24);
+    let panes: list<Pane> = dialog.panes(bounds);
+    let path: Pane = panes[0]; let tree: Pane = panes[1]; let files: Pane = panes[2];
+    verify(path.bounds.height == 1 && tree.bounds.y == path.bounds.y + 1);
+    verify(files.bounds.x > tree.bounds.x && tree.bounds.y == files.bounds.y);
+    dialog.on_event(decode_input("\x1b[106;6u"), bounds); // path -> files (nearest center)
+    verify(dialog.focus.selected == 2);
+    dialog.on_event(decode_input("\x1b[104;6u"), bounds);
+    verify(dialog.focus.selected == 1);
+    dialog.on_event(decode_input("\x1b[108;6u"), bounds);
+    verify(dialog.focus.selected == 2);
+    dialog.on_event(decode_input("\x1b[107;6u"), bounds);
+    verify(dialog.focus.selected == 0);
+    let surface: Surface = Surface::new(80, 24);
+    let theme: Theme = Theme::dark_blue();
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    dialog.paint(surface, bounds, theme);
+    let area: Rect = dialog.bounds(bounds);
+    let title: Cell = surface.cell(area.x + 2, area.y);
+    verify(title.glyph == 79); // Open session, on the upper border
+    let first_line: Cell = surface.cell(path.bounds.x, path.bounds.y);
+    verify(first_line.glyph == 80); // Path: is uppermost inside line
+    let shadow: Cell = surface.cell(area.x + area.width, area.y + 1);
+    verify(shadow.glyph == 88 && shadow.foreground == darken(theme.foreground, theme.shadow_percent));
+    dialog.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, bounds);
+    verify(!dialog.active);
+    surface.release(); dialog.release();
+}
+
+fn focus_panes() -> list<Pane> {
+    return [Pane { id: 10, bounds: Rect::new(0, 1, 20, 20) },
+            Pane { id: 20, bounds: Rect::new(21, 1, 40, 12) },
+            Pane { id: 30, bounds: Rect::new(21, 14, 40, 7) }];
+}
+
+#[test]
+fn tui_directional_pane_focus() {
+    let panes: list<Pane> = focus_panes();
+    var focus: PaneFocus = PaneFocus::new(10);
+    focus.navigate(Key::Right, panes);
+    verify(focus.is_active(20));
+    focus.navigate(Key::Down, panes);
+    verify(focus.is_active(30));
+    focus.navigate(Key::Down, panes);
+    verify(focus.is_active(30)); // no wrap at the bottom
+    focus.navigate(Key::Up, panes);
+    verify(focus.is_active(20));
+    focus.navigate(Key::Left, panes);
+    verify(focus.is_active(10));
+    focus.navigate(Key::Left, panes);
+    verify(focus.is_active(10));
+}
+
+#[test]
+fn tui_menu_preserves_pane_focus() {
+    let panes: list<Pane> = focus_panes();
+    var focus: PaneFocus = PaneFocus::new(30);
+    var menus: MenuBar = test_menus();
+    let exits: list<Key> = [Key::Escape, Key::Toggle, Key::Enter];
+    for exit_key in exits {
+        menus.open(0);
+        focus.set_menu_active(menus.active >= 0);
+        verify(!focus.is_active(30) && focus.selected == 30);
+        focus.navigate(Key::Up, panes);
+        verify(focus.selected == 30); // menu owns input while open
+        menus.on_key(exit_key);
+        focus.set_menu_active(menus.active >= 0);
+        verify(focus.is_active(30));
+    }
+}
+
+#[test]
+fn tui_focus_resize_and_highlight() {
+    var focus: PaneFocus = PaneFocus::new(30);
+    let reordered: list<Pane> = [Pane { id: 30, bounds: Rect::new(0, 0, 10, 5) },
+        Pane { id: 10, bounds: Rect::new(11, 0, 10, 5) }];
+    focus.reconcile(reordered);
+    verify(focus.selected == 30);
+    let collapsed: list<Pane> = [Pane { id: 30, bounds: Rect::new(0, 0, 0, 0) },
+        Pane { id: 10, bounds: Rect::new(0, 0, 10, 5) }];
+    focus.reconcile(collapsed);
+    verify(focus.selected == 10);
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(20, 5);
+    let panel: Panel = Panel { title: " Pane " };
+    panel.paint_focused(surface, Rect::new(0, 0, 10, 5), theme, true);
+    panel.paint_focused(surface, Rect::new(10, 0, 10, 5), theme, false);
+    let active: Cell = surface.cell(0, 1);
+    let inactive: Cell = surface.cell(10, 1);
+    verify(active.foreground == theme.accent && inactive.foreground == theme.border);
+    verify(active.glyph == inactive.glyph && active.glyph == 0x2502);
+    surface.release();
+    let empty: list<Pane> = [];
+    focus.reconcile(empty);
+    verify(focus.selected == -1);
+}
+
+fn decode_input(text: str8) -> InputEvent {
+    var decoder: InputDecoder = InputDecoder::new();
+    let result: result<Bytes, str8> = Bytes::from_string(text);
+    let bytes: Bytes = result.unwrap();
+    var event: InputEvent = InputEvent { kind: InputKind::None, key: Key::Escape };
+    for i in 0..bytes.len() { event = decoder.feed(bytes.get(i)); }
+    bytes.close();
+    return event;
+}
+
+#[test]
+fn tui_modified_keyboard_protocols() {
+    let left: InputEvent = decode_input("\x1b[104;6u");
+    let down: InputEvent = decode_input("\x1b[106;6u");
+    let up: InputEvent = decode_input("\x1b[107;6u");
+    let right: InputEvent = decode_input("\x1b[108;6u");
+    verify(left.kind == InputKind::Pane && left.key == Key::Left);
+    verify(down.kind == InputKind::Pane && down.key == Key::Down);
+    verify(up.kind == InputKind::Pane && up.key == Key::Up);
+    verify(right.kind == InputKind::Pane && right.key == Key::Right);
+    let xterm: InputEvent = decode_input("\x1b[27;6;72~");
+    verify(xterm.kind == InputKind::Pane && xterm.key == Key::Left);
+    let repeated: InputEvent = decode_input("\x1b[108:76;6:2u");
+    verify(repeated.kind == InputKind::Pane && repeated.key == Key::Right);
+    let released: InputEvent = decode_input("\x1b[108;6:3u");
+    verify(released.kind == InputKind::None);
+    let plain_ctrl: InputEvent = decode_input("\x1b[108;5u");
+    verify(plain_ctrl.kind == InputKind::None);
+    let backspace: InputEvent = decode_input("\x08");
+    let enter: InputEvent = decode_input("\n");
+    verify(backspace.kind == InputKind::Edit && backspace.key == Key::Backspace);
+    verify(enter.kind == InputKind::Menu && enter.key == Key::Enter);
+    let arrow: InputEvent = decode_input("\x1b[A");
+    verify(arrow.kind == InputKind::Menu && arrow.key == Key::Up);
+}
+
+#[test]
+fn tui_partial_and_invalid_keyboard_packets() {
+    var decoder: InputDecoder = InputDecoder::new();
+    decoder.feed(27);
+    verify(decoder.pending());
+    let escape: InputEvent = decoder.expire();
+    verify(escape.kind == InputKind::Menu && escape.key == Key::Escape);
+    decoder.feed(27); decoder.feed(91); decoder.feed(49);
+    let truncated: InputEvent = decoder.expire();
+    verify(truncated.kind == InputKind::None && !decoder.pending());
+    let excessive: InputEvent = decode_input("\x1b[999999999999999999999999999999999999;6u");
+    verify(excessive.kind == InputKind::None);
+    let response: InputEvent = decode_input("\x1b[?1u");
+    verify(response.kind == InputKind::None);
+    let quit: InputEvent = decoder.feed(113);
+    verify(quit.kind == InputKind::Quit);
+}
+
+#[test]
+fn tui_surface_shadow_preserves_glyph() {
+    let surface: Surface = Surface::new(4, 3);
+    verify(surface.is_valid());
+    surface.put(2, 1, Cell { glyph: 0x2500, foreground: 0xC0A080, background: 0x204060 });
+    surface.shadow(Rect::new(2, 1, 4, 5), 50);
+    let cell: Cell = surface.cell(2, 1);
+    verify(cell.glyph == 0x2500);
+    verify(cell.foreground == 0x605040);
+    verify(cell.background == 0x102030);
+    surface.release();
+}
+
+#[test]
+fn tui_nested_layout() {
+    let viewport: Viewport = Viewport { bounds: Rect::new(0, 0, 40, 12), has_menu: true };
+    let layout: Layout = Layout { axis: Axis::Horizontal, gap: 1,
+        sizes: [Size::fixed(10), Size::flex(1), Size::flex(2)] };
+    let parts: list<Rect> = layout.split(viewport.content());
+    verify(parts.len() == 3);
+    let first: Rect = parts[0];
+    let middle: Rect = parts[1];
+    let last: Rect = parts[2];
+    verify(first.width == 10 && first.y == 1 && first.height == 11);
+    verify(last.x + last.width == 40);
+    verify(middle.width == 9 && last.width == 19);
+    let nested: Layout = Layout { axis: Axis::Vertical, gap: 1,
+        sizes: [Size::flex(1), Size::flex(1)] };
+    let children: list<Rect> = nested.split(last);
+    let upper: Rect = children[0];
+    let lower: Rect = children[1];
+    verify(upper.x == last.x && upper.width == last.width && upper.height == 5);
+    verify(lower.y == upper.y + upper.height + 1 && lower.y + lower.height == 12);
+}
+
+#[test]
+fn tui_menu_scroll_and_disabled_only() {
+    var menus: MenuBar = test_menus();
+    menus.open(0);
+    menus.on_key(Key::Up);
+    let surface: Surface = Surface::new(20, 4);
+    menus.paint(surface, surface.bounds(), Theme::dark_blue());
+    let visible: Cell = surface.cell(2, 2);
+    verify(visible.glyph == 81); // Quit is scrolled into the only visible row.
+    surface.release();
+    var disabled: MenuBar = MenuBar::new([
+        Menu { title: "Empty", items: [] },
+        Menu { title: "Disabled", items: [MenuItem { label: "No", action: 1, enabled: false }] }
+    ]);
+    disabled.open(0);
+    verify(disabled.selected == -1 && disabled.on_key(Key::Enter) == 0);
+    disabled.on_key(Key::Right);
+    verify(disabled.active == 1 && disabled.selected == -1);
+    verify(disabled.on_key(Key::Enter) == 0);
+}
+
+fn test_menus() -> MenuBar {
+    return MenuBar::new([
+        Menu { title: "File", items: [
+            MenuItem { label: "Open", action: 1, enabled: true },
+            MenuItem { label: "Save", action: 2, enabled: false },
+            MenuItem { label: "Quit", action: 3, enabled: true }] },
+        Menu { title: "Edit", items: [MenuItem { label: "Undo", action: 4, enabled: true }] }
+    ]);
+}
+
+fn cascade_menus() -> MenuBar {
+    return MenuBar::new([Menu { title: "File", items: [
+        MenuItem { label: "Open", action: 1, enabled: true },
+        MenuItem::submenu("Recent", [
+            MenuItem { label: "Disabled", action: 2, enabled: false },
+            MenuItem::submenu("Templates", [
+                MenuItem { label: "Ambient", action: 42, enabled: true },
+                MenuItem { label: "Dance", action: 43, enabled: true }
+            ]),
+            MenuItem { label: "Session", action: 44, enabled: true }
+        ])
+    ] }]);
+}
+
+#[test]
+fn tui_cascading_menu_stack() {
+    var menus: MenuBar = cascade_menus();
+    menus.open(0);
+    menus.on_key(Key::Down);
+    verify(menus.selected == 1);
+    menus.on_key(Key::Right);
+    verify(menus.depth() == 1 && menus.selected == 1 && menus.active == 0);
+    menus.on_key(Key::Right);
+    verify(menus.depth() == 2 && menus.selected == 0);
+    menus.on_key(Key::Down);
+    verify(menus.selected == 1);
+    menus.on_key(Key::Left);
+    verify(menus.depth() == 1 && menus.selected == 1);
+    menus.on_key(Key::Left);
+    verify(menus.depth() == 0 && menus.selected == 1);
+    menus.on_key(Key::Enter);
+    menus.on_key(Key::Enter);
+    verify(menus.depth() == 2);
+    verify(menus.on_key(Key::Enter) == 42);
+    verify(menus.active == -1 && menus.depth() == 0);
+    menus.open(0);
+    menus.on_key(Key::Down);
+    menus.on_key(Key::Right);
+    menus.on_key(Key::Right);
+    var focus: PaneFocus = PaneFocus::new(30);
+    focus.set_menu_active(menus.active >= 0);
+    menus.on_key(Key::Escape);
+    focus.set_menu_active(menus.active >= 0);
+    verify(menus.active == -1 && menus.selected == -1 && menus.depth() == 0);
+    verify(focus.is_active(30));
+    menus.open(0);
+    verify(menus.depth() == 0 && menus.selected == 0);
+}
+
+#[test]
+fn tui_cascading_menu_geometry_and_layers() {
+    var menus: MenuBar = cascade_menus();
+    menus.open(0);
+    menus.on_key(Key::Down);
+    let bounds: Rect = Rect::new(0, 0, 80, 24);
+    let root: Rect = menus.popup_rect(bounds);
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(80, 24);
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    menus.paint(surface, bounds, theme);
+    let indicator: Cell = surface.cell(root.x + root.width - 3, root.y + 2);
+    verify(indicator.glyph == 62);
+    menus.on_key(Key::Right);
+    let child: Rect = menus.popup_rect_at(bounds, 1);
+    verify(child.x == root.x + root.width && child.y == root.y + 1);
+    menus.on_key(Key::Right);
+    let grandchild: Rect = menus.popup_rect_at(bounds, 2);
+    verify(grandchild.x == child.x + child.width);
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    menus.paint(surface, bounds, theme);
+    let parent_corner: Cell = surface.cell(root.x, root.y);
+    let child_corner: Cell = surface.cell(child.x, child.y);
+    let top_corner: Cell = surface.cell(grandchild.x, grandchild.y);
+    verify(parent_corner.glyph == 0x250C && child_corner.glyph == 0x250C && top_corner.glyph == 0x250C);
+    let shadow: Cell = surface.cell(grandchild.x + grandchild.width, grandchild.y + 1);
+    verify(shadow.glyph == 88 && shadow.foreground == darken(theme.foreground, theme.shadow_percent));
+    menus.on_key(Key::Left);
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    menus.paint(surface, bounds, theme);
+    let restored: Cell = surface.cell(grandchild.x + grandchild.width, grandchild.y + 1);
+    verify(restored.glyph == 88 && restored.foreground == theme.foreground);
+    surface.release();
+}
+
+#[test]
+fn tui_cascading_menu_edges_and_disabled_branches() {
+    var menus: MenuBar = MenuBar::new([
+        Menu { title: "Long heading", items: [] },
+        Menu { title: "File", items: [MenuItem::submenu("Recent", [
+            MenuItem { label: "Open", action: 1, enabled: true }
+        ])] }
+    ]);
+    menus.open(1); menus.on_key(Key::Right);
+    let bounds: Rect = Rect::new(0, 0, 32, 6);
+    let parent: Rect = menus.popup_rect(bounds);
+    let child: Rect = menus.popup_rect_at(bounds, 1);
+    verify(child.x + child.width == parent.x); // flips to the left
+    for width in 0..20 {
+        for height in 0..8 {
+            let small: Rect = Rect::new(3, 4, i32(width), i32(height));
+            let popup: Rect = menus.popup_rect_at(small, 1);
+            verify(popup.x >= small.x && popup.x + popup.width <= small.x + small.width);
+            verify(popup.y >= small.y && popup.y + popup.height <= small.y + small.height);
+        }
+    }
+    var disabled: MenuBar = MenuBar::new([Menu { title: "File", items: [
+        MenuItem { label: "Unavailable", action: 0, enabled: false,
+            children: [MenuItem { label: "Child", action: 1, enabled: true }] },
+        MenuItem { label: "Enabled", action: 2, enabled: true }
+    ] }]);
+    disabled.open(0);
+    verify(disabled.selected == 1);
+    disabled.on_key(Key::Right);
+    verify(disabled.depth() == 0);
+}
+
+#[test]
+fn tui_menu_navigation_and_actions() {
+    var menus: MenuBar = test_menus();
+    verify(menus.active == -1);
+    menus.on_key(Key::Toggle);
+    verify(menus.active == 0 && menus.selected == 0);
+    menus.on_key(Key::Down);
+    verify(menus.selected == 2);
+    menus.on_key(Key::Down);
+    verify(menus.selected == 0);
+    menus.on_key(Key::Up);
+    verify(menus.selected == 2);
+    verify(menus.on_key(Key::Enter) == 3);
+    verify(menus.active == -1);
+    menus.open(0);
+    menus.on_key(Key::Right);
+    verify(menus.active == 1 && menus.selected == 0);
+    menus.on_key(Key::Left);
+    verify(menus.active == 0);
+    menus.on_key(Key::Escape);
+    verify(menus.active == -1);
+}
+
+#[test]
+fn tui_menu_layers_and_shadow() {
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(30, 10);
+    var menus: MenuBar = test_menus();
+    let bounds: Rect = surface.bounds();
+    let viewport: Viewport = menus.viewport(bounds);
+    let content_before: Rect = viewport.content();
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    menus.open(0);
+    let popup: Rect = menus.popup_rect(bounds);
+    menus.paint(surface, bounds, theme);
+    let corner: Cell = surface.cell(popup.x, popup.y);
+    verify(corner.glyph == 0x250C);
+    let shadow: Cell = surface.cell(popup.x + popup.width, popup.y + 1);
+    verify(shadow.glyph == 88);
+    verify(shadow.foreground == darken(theme.foreground, theme.shadow_percent));
+    verify(shadow.background == darken(theme.panel, theme.shadow_percent));
+    let outside: Cell = surface.cell(29, 9);
+    verify(outside.glyph == 88 && outside.foreground == theme.foreground);
+    let bar: Cell = surface.cell(29, 0);
+    verify(bar.background == theme.menu_background);
+    // Repaint from application state to remove overlay and shadow on dismissal.
+    menus.dismiss();
+    surface.fill(bounds, Cell { glyph: 88, foreground: theme.foreground, background: theme.panel });
+    menus.paint(surface, bounds, theme);
+    let restored: Cell = surface.cell(popup.x + popup.width, popup.y + 1);
+    verify(restored.glyph == 88 && restored.foreground == theme.foreground);
+    let after: Viewport = menus.viewport(bounds);
+    let content_after: Rect = after.content();
+    verify(content_before.y == content_after.y && content_before.height == content_after.height);
+    surface.release();
+}
+
+#[test]
+fn tui_small_and_empty_viewports() {
+    var empty: MenuBar = MenuBar::new([]);
+    let viewport: Viewport = empty.viewport(Rect::new(4, 5, 7, 8));
+    let content: Rect = viewport.content();
+    verify(content.y == 5 && content.height == 8);
+    verify(empty.on_key(Key::Toggle) == 0 && empty.active == -1);
+    let layout: Layout = Layout { axis: Axis::Vertical, gap: 2,
+        sizes: [Size::fixed(8), Size::flex(1), Size::fixed(5)] };
+    for height in 0..8 {
+        let area: Rect = Rect::new(0, 0, 3, i32(height));
+        let parts: list<Rect> = layout.split(area);
+        for part in parts { verify(part.y >= 0 && part.y + part.height <= height); }
+    }
+    var menus: MenuBar = test_menus();
+    menus.open(1);
+    let theme: Theme = Theme::dark_blue();
+    for width in 0..8 {
+        let surface: Surface = Surface::new(i32(width), 2);
+        let area: Rect = surface.bounds();
+        menus.paint(surface, area, theme);
+        let popup: Rect = menus.popup_rect(area);
+        verify(popup.x >= 0 && popup.x + popup.width <= width);
+        surface.release();
+    }
+}
+
+#[test]
+fn tui_unicode_clipping_and_boxes() {
+    let surface: Surface = Surface::new(8, 4);
+    let theme: Theme = Theme::dark_blue();
+    let panel: Panel = Panel { title: "" };
+    panel.paint(surface, surface.bounds(), theme);
+    let corner: Cell = surface.cell(0, 0);
+    verify(corner.glyph == 0x250C);
+    surface.text(Rect::new(1, 1, 3, 1), "é─AB", theme.foreground, theme.panel);
+    let latin: Cell = surface.cell(1, 1);
+    let box: Cell = surface.cell(2, 1);
+    let end: Cell = surface.cell(3, 1);
+    let untouched: Cell = surface.cell(4, 1);
+    verify(latin.glyph == 233 && box.glyph == 0x2500 && end.glyph == 65);
+    verify(untouched.glyph == 32);
+    surface.text(Rect::new(1, 2, 3, 1), "\x1b界Z", theme.foreground, theme.panel);
+    let control: Cell = surface.cell(1, 2);
+    verify(control.glyph == 63);
+    let snapshot: str8 = surface.encode(false);
+    verify(len(snapshot) > 32);
+    free(snapshot);
+    surface.release();
+}

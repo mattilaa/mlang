@@ -1,0 +1,103 @@
+mod tui_demo::sequence;
+use tui_demo::sequence::SequenceTable;
+use tui_demo::sequence::SequenceTrack;
+use tui::table::*;
+use tui::geometry::wide;
+
+/// Timestamped demo events for a future MIDI output/audio-thread consumer.
+/// Ticks are musical time (15000 per sixteenth), not UI frame timestamps.
+// Uniform-width fields keep list payloads free of mixed-width struct padding.
+// on is 1 for note-on, 0 for note-off.
+pub struct NoteEvent { var on: i64; var track: i64; var line: i64; var note: i64; var velocity: i64; var tick: i64; };
+pub struct PlayingNote { var track: i64; var line: i64; var note: i64; var end: i64; };
+pub struct ScheduledNote { var track: i64; var line: i64; var note: i64; var velocity: i64; var start: i64; var length: i64; };
+pub struct NotePlayback {
+    var active: list<PlayingNote>; var events: list<NoteEvent>;
+    var running: bool; var last: i64;
+    var score: list<ScheduledNote>; var revision: i64;
+};
+impl NotePlayback {
+    fn finish_at(self: &mut Self, tick: i64, all: bool) -> void {
+        let previous: list<PlayingNote> = self.active; var kept: list<PlayingNote> = [];
+        for voice in previous {
+            if !all && voice.end > tick { kept.push(PlayingNote { track: voice.track, line: voice.line, note: voice.note, end: voice.end }); }
+        }
+        for i in 0..previous.len() {
+            let voice: PlayingNote = previous[i];
+            if all || voice.end <= tick {
+                // MIDI has no voice ID: overlapping equal pitches stay on until
+                // the last voice ends. Never cut a longer note at a retrigger.
+                var held: bool = false;
+                for other in kept { if other.track == voice.track && other.note == voice.note { held = true; } }
+                for j in 0..i {
+                    let other: PlayingNote = previous[j];
+                    if (all || other.end <= tick) && other.track == voice.track && other.note == voice.note { held = true; }
+                }
+                if !held { self.events.push(NoteEvent { track: voice.track, line: voice.line, note: voice.note, tick: tick }); }
+            }
+        }
+        self.active = kept;
+    }
+    fn rebuild_score(self: &mut Self, source: &SequenceTable, from: i64) -> void {
+        var table: SequenceTable = SequenceTable {}; table = source;
+        self.score = []; self.revision = table.revision;
+        let period: i64 = wide(i32(table.rows.len())) * 15000;
+        if period <= 0 { return; }
+        for r in 0..table.rows.len() {
+            let data: TableRow = table.rows[r];
+            for t in 0..table.tracks.len() {
+                let track: SequenceTrack = table.tracks[t];
+                if track.audio || track.muted { continue; }
+                for line in 0..track.note_lines {
+                    let column: i32 = table.track_start(i32(t)) + i32(line) * 4;
+                    if data.cells[column] == "" { continue; }
+                    let note: i32 = table.note_index(data.cells[column]);
+                    let velocity: result<i64, str8> = table_integer(data.cells[column + 1]);
+                    if note < 0 || velocity.is_err() { continue; }
+                    let value: i64 = velocity.unwrap(); if value <= 0 || value > 127 { continue; }
+                    var start: i64 = r * 15000 + table.note_offset(i32(r), column);
+                    // No retroactive note-ons on start/seek. A first-row early
+                    // note is scheduled before the NEXT loop's first row.
+                    if start < from { start = start + (from - start + period - 1) / period * period; }
+                    let length: i64 = table.note_length(i32(r), column);
+                    self.score.push(ScheduledNote { track: t, line: line, note: wide(note), velocity: value, start: start, length: length });
+                }
+            }
+        }
+    }
+    pub fn update(self: &mut Self, source: &SequenceTable, tick: i64, playing: bool) -> void {
+        self.events = [];
+        var table: SequenceTable = SequenceTable {}; table = source;
+        if !playing || table.rows.len() == 0 {
+            self.finish_at(tick, true); self.running = false; self.last = tick; self.score = []; return;
+        }
+        if self.running && tick < self.last { self.finish_at(tick, true); self.running = false; }
+        if !self.running || self.revision != table.revision {
+            self.rebuild_score(table, self.running ? self.last + 1 : tick);
+        }
+        self.running = true;
+        let period: i64 = wide(i32(table.rows.len())) * 15000;
+        while true {
+            var event_tick: i64 = tick + 1;
+            let voices: list<PlayingNote> = self.active;
+            for voice in voices { if voice.end < event_tick { event_tick = voice.end; } }
+            let score: list<ScheduledNote> = self.score;
+            for note in score { if note.start < event_tick { event_tick = note.start; } }
+            if event_tick > tick { break; }
+            self.finish_at(event_tick, false);
+            var updated: list<ScheduledNote> = [];
+            for note in score {
+                var next: i64 = note.start;
+                if next == event_tick {
+                    self.events.push(NoteEvent { on: 1, track: note.track, line: note.line, note: note.note, velocity: note.velocity, tick: next });
+                    let end: i64 = next + note.length;
+                    self.active.push(PlayingNote { track: note.track, line: note.line, note: note.note, end: end });
+                    next = next + period;
+                }
+                updated.push(ScheduledNote { track: note.track, line: note.line, note: note.note, velocity: note.velocity, start: next, length: note.length });
+            }
+            self.score = updated;
+        }
+        self.last = tick;
+    }
+}

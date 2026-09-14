@@ -1,0 +1,123 @@
+mod tui::meter;
+mod tui_demo::sequence;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::meter::VuMeter;
+use tui_demo::sequence::SequenceTrack;
+use tui_demo::sequence::SequenceTable;
+use tui_demo::sequence::AudioInstance;
+use tui_demo::audio_clip::WavePeak;
+use tui::table::TableRow;
+use tui::table::table_integer;
+use std::strbuf::free;
+
+pub struct MeterLevel { var left: i32; var right: i32; };
+/// Meters are derived from sequenced notes and audio peaks, never synthetic.
+pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; };
+impl Mixer {
+    pub fn update(self: &mut Self, source: &SequenceTable, row: i32, phase: i32, playing: bool, delta: i32) -> bool {
+        var table: SequenceTable = SequenceTable {}; table = source;
+        // Track edits already repaint layout; resizing silent meter state is
+        // not an additional animation frame.
+        var levels: list<MeterLevel> = []; var changed: bool = false;
+        for i in 0..table.tracks.len() {
+            let track: SequenceTrack = table.tracks[i];
+            var left: i32 = 0; var right: i32 = 0;
+            if playing && row >= 0 && row < table.rows.len() && !track.muted {
+                if track.audio {
+                    let hit: i32 = track.instance_at(row);
+                    if hit >= 0 {
+                        let instance: AudioInstance = track.instances[hit];
+                        let peak: WavePeak = instance.clip.peaks[row - instance.start_row];
+                        if wide(row - instance.start_row) * 15000 + wide(phase) < instance.duration() {
+                            left = peak.left; right = peak.right;
+                        }
+                    }
+                } else {
+                    let first: i32 = table.track_start(i32(i));
+                    for r in 0..table.rows.len() {
+                        let data: TableRow = table.rows[r];
+                        for line in 0..track.note_lines {
+                            let column: i32 = first + i32(line) * 4;
+                            if data.cells[column] == "" { continue; }
+                            let age: i64 = wide(row - i32(r)) * 15000 + wide(phase) - table.note_offset(i32(r), column);
+                            if age < 0 { continue; }
+                            if age >= 15000 && (data.cells[column + 2] == "" || data.cells[column + 2] == "1.00") { continue; }
+                            if data.cells[column] != "" {
+                                let velocity: result<i64, str8> = table_integer(data.cells[column + 1]);
+                                let decay: i64 = table.note_length(i32(r), column) * 3 / 5;
+                                if velocity.is_ok() && age < decay {
+                                    let value: i64 = velocity.unwrap();
+                                    if value >= 0 && value <= 127 {
+                                        let level: i32 = i32(value * 1000 / 127 * (decay - age) / decay);
+                                        if level > left { left = level; }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Visual decay is separate from the exact LEN note-off gate.
+                    right = left;
+                }
+            }
+            var old: MeterLevel = MeterLevel {};
+            if i < self.levels.len() { old = self.levels[i]; }
+            let next: MeterLevel = MeterLevel { left: meter_ramp(old.left, left, delta), right: meter_ramp(old.right, right, delta) };
+            if next.left != old.left || next.right != old.right { changed = true; }
+            levels.push(next);
+        }
+        self.levels = levels; return changed;
+    }
+    pub fn level(self: Mixer, index: i32, volume: i32, pan: i32, right: bool, muted: bool) -> i32 {
+        if muted { return 0; }
+        if index < 0 || index >= self.levels.len() { return 0; }
+        let level: MeterLevel = self.levels[index];
+        let wave: i32 = right ? level.right : level.left;
+        let gain: i32 = volume < 0 ? 0 : (volume > 100 ? 100 : volume);
+        let p: i32 = pan < -100 ? -100 : (pan > 100 ? 100 : pan);
+        let balance: i32 = right ? (p < 0 ? 100 + p : 100) : (p > 0 ? 100 - p : 100);
+        return wave * gain / 100 * balance / 100;
+    }
+    pub fn paint(self: Mixer, surface: Surface, area: Rect, theme: Theme, tracks: &list<SequenceTrack>, selected: i32) -> void {
+        surface.fill(area, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
+        if area.width <= 0 || area.height <= 0 { return; }
+        let width: i32 = area.width < 6 ? area.width : 6;
+        let capacity: i32 = area.width / width;
+        let start: i32 = selected >= capacity ? selected - capacity + 1 : 0;
+        for slot in 0..capacity {
+            let index: i32 = start + i32(slot);
+            if index >= tracks.len() { break; }
+            let track: SequenceTrack = tracks[index];
+            let x: i32 = area.x + i32(slot) * width;
+            let strip: Rect = Rect::new(x, area.y, width - (width > 1 ? 1 : 0), area.height);
+            let bg: i32 = index == selected ? lighten(theme.panel, 8) : theme.panel;
+            surface.fill(strip, Cell { glyph: 32, foreground: theme.foreground, background: bg });
+            let title: str8 = format!("{}{}", track.audio ? "A" : "M", index + 1);
+            surface.text(Rect::new(x, area.y, strip.width, 1), title, index == selected ? theme.accent : theme.foreground, bg);
+            let volume: str8 = format!("V{}", track.volume);
+            let pan: str8 = format!("P{}", track.pan);
+            if area.height > 1 { surface.text(Rect::new(x, area.y + 1, strip.width, 1), track.muted ? "MUTED" : volume, theme.foreground, bg); }
+            if area.height > 2 { surface.text(Rect::new(x, area.y + 2, strip.width, 1), pan, theme.muted, bg); }
+            free(title); free(volume); free(pan);
+            if area.height > 3 {
+                let left: VuMeter = VuMeter { level: self.level(index, track.volume, track.audio ? track.pan : 0, false, track.muted), grainy: self.grainy };
+                let right: VuMeter = VuMeter { level: self.level(index, track.volume, track.pan, true, track.muted), grainy: self.grainy };
+                let meter_x: i32 = track.audio ? (strip.width >= 4 ? x + (strip.width - 3) / 2 : x) : x + strip.width / 2;
+                left.paint(surface, Rect::new(meter_x, area.y + 3, 1, area.height - 3), bg);
+                if track.audio && strip.width >= 3 { right.paint(surface, Rect::new(meter_x + 2, area.y + 3, 1, area.height - 3), bg); }
+            }
+        }
+    }
+}
+/// Fast attack and release, bounded by the next target (no overshoot).
+pub fn meter_ramp(current: i32, target: i32, delta: i32) -> i32 {
+    if delta <= 0 { return current; }
+    let next: i32 = target < 0 ? 0 : (target > 1000 ? 1000 : target);
+    let diff: i32 = next - current;
+    let distance: i32 = diff < 0 ? -diff : diff;
+    let time: i32 = delta > 1000 ? 1000 : delta;
+    let rate: i32 = diff > 0 ? 8 : 25;
+    let step: i32 = (distance * time + rate + time - 1) / (rate + time);
+    return diff > 0 ? current + step : current - step;
+}

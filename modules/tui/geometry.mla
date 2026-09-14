@@ -1,0 +1,41 @@
+/// Cell coordinates are zero-based. Rectangles use exclusive right/bottom edges.
+pub struct Rect { var x: i32; var y: i32; var width: i32; var height: i32; };
+
+pub fn wide(value: i32) -> i64 { return value; }
+
+impl Rect {
+    pub fn new(x: i32, y: i32, width: i32, height: i32) -> Rect {
+        return Rect { x: x, y: y, width: width < 0 ? 0 : width,
+                      height: height < 0 ? 0 : height };
+    }
+    pub fn contains(self: Rect, x: i32, y: i32) -> bool {
+        return x >= self.x && y >= self.y &&
+               x < self.x + self.width && y < self.y + self.height;
+    }
+    pub fn inset(self: Rect, padding: i32) -> Rect {
+        let p: i32 = padding < 0 ? 0 : padding;
+        let dx: i32 = p > self.width / 2 ? self.width / 2 : p;
+        let dy: i32 = p > self.height / 2 ? self.height / 2 : p;
+        return Rect::new(self.x + dx, self.y + dy,
+                         self.width - 2 * dx, self.height - 2 * dy);
+    }
+    pub fn intersect(self: Rect, other: Rect) -> Rect {
+        let left: i32 = self.x > other.x ? self.x : other.x;
+        let top: i32 = self.y > other.y ? self.y : other.y;
+        let right: i32 = self.x + self.width < other.x + other.width
+            ? self.x + self.width : other.x + other.width;
+        let bottom: i32 = self.y + self.height < other.y + other.height
+            ? self.y + self.height : other.y + other.height;
+        return Rect::new(left, top, right - left, bottom - top);
+    }
+}
+
+/// The menu row is outside the layout's content rectangle.
+pub struct Viewport { var bounds: Rect; var has_menu: bool; };
+impl Viewport {
+    pub fn content(self: Viewport) -> Rect {
+        let rows: i32 = self.has_menu && self.bounds.height > 0 ? 1 : 0;
+        return Rect::new(self.bounds.x, self.bounds.y + rows,
+                         self.bounds.width, self.bounds.height - rows);
+    }
+}

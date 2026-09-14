@@ -1,0 +1,260 @@
+mod tui::listview;
+mod tui_demo::sequence;
+mod tui::dialog;
+mod tui_demo::audio_library;
+use tui_demo::audio_library::AudioLibrary;
+use tui_demo::audio_clip::AudioClip;
+use tui::listview::*;
+use tui_demo::sequence::SequenceTable;
+use tui::textfield::TextField;
+use tui::dialog::Dialog;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::input::*;
+use tui::menu::Key;
+use tui::table::table_matches;
+use std::strbuf::clone;
+use std::strbuf::free;
+
+pub struct PatternEntry { var id: i32; var name: str8; var data: SequenceTable; };
+/// Owns independent saved patterns plus the current editable pattern.
+/// Song order uses stable pattern IDs; repeated occurrences share a pattern.
+pub struct PatternLibrary {
+    var patterns: list<PatternEntry>; var song: list<i32>; var active_id: i32; var next_id: i32;
+    var table: SequenceTable; var view: ListView; var song_mode: bool;
+    var renaming: bool; var editor: TextField; var error: str8;
+    var audio: AudioLibrary; var audio_mode: bool;
+};
+impl PatternLibrary {
+    pub fn new() -> PatternLibrary {
+        var library: PatternLibrary = PatternLibrary { active_id: 1, next_id: 4,
+            table: SequenceTable::new(), editor: TextField::new(""), error: "" };
+        let names: list<str8> = ["Intro", "Verse", "Chorus"];
+        for i in 0..3 {
+            var data: SequenceTable = SequenceTable::new();
+            let steps: i32 = i32(i) * 4;
+            for _j in 0..steps { data.edit_event(InputEvent { kind: InputKind::Text, key: Key::Escape, code: 75 }, Rect::new(0, 0, 80, 24)); }
+            library.patterns.push(PatternEntry { id: i32(i) + 1, name: clone(names[i]), data: data });
+        }
+        let order: list<i32> = [1, 2, 2, 3];
+        library.song = order; library.refresh(); return library;
+    }
+    pub fn index_of(self: PatternLibrary, id: i32) -> i32 {
+        for i in 0..self.patterns.len() { let entry: PatternEntry = self.patterns[i]; if entry.id == id { return i32(i); } }
+        return -1;
+    }
+    pub fn active_name(self: PatternLibrary) -> str8 {
+        let index: i32 = self.index_of(self.active_id); if index < 0 { return ""; }
+        let entry: PatternEntry = self.patterns[index]; return entry.name;
+    }
+    fn save_active(self: &mut Self) -> void {
+        var entries: list<PatternEntry> = [];
+        let previous: list<PatternEntry> = self.patterns;
+        for entry in previous {
+            var next: PatternEntry = PatternEntry {};
+            next = entry;
+            if next.id == self.active_id { next.data.release(); next.data = self.table.copy_pattern(); }
+            entries.push(next);
+        }
+        self.patterns = entries;
+    }
+    pub fn select(self: &mut Self, id: i32) -> void {
+        if id == self.active_id || self.index_of(id) < 0 { return; }
+        self.save_active();
+        let entry: PatternEntry = self.patterns[self.index_of(id)];
+        self.table.release(); self.table = entry.data.copy_pattern(); self.active_id = id;
+        self.error = "";
+    }
+    pub fn refresh(self: &mut Self) -> void {
+        let old: list<ListItem> = self.view.items;
+        for item in old { free(item.label); }
+        var items: list<ListItem> = [];
+        if self.song_mode {
+            for i in 0..self.song.len() {
+                let id: i32 = self.song[i]; let index: i32 = self.index_of(id);
+                if index >= 0 {
+                    let entry: PatternEntry = self.patterns[index];
+                    items.push(ListItem { id: id, label: format!("{}  {}{} {}", i + 1, id < 10 ? "00" : (id < 100 ? "0" : ""), id, entry.name) });
+                }
+            }
+        } else {
+            let entries: list<PatternEntry> = self.patterns;
+            for entry in entries {
+                items.push(ListItem { id: entry.id, label: format!("{}{} {}", entry.id < 10 ? "00" : (entry.id < 100 ? "0" : ""), entry.id, entry.name) });
+            }
+        }
+        self.view.items = items; self.view.cancel_pending();
+    }
+    pub fn show_song(self: &mut Self, song: bool) -> void {
+        self.audio_mode = false; self.audio.view.cancel_pending();
+        self.song_mode = song; self.view.selected = 0; self.view.scroll = 0; self.refresh();
+        for i in 0..self.view.items.len() {
+            let item: ListItem = self.view.items[i];
+            if item.id == self.active_id { self.view.selected = i32(i); return; }
+        }
+        self.choose_selected();
+    }
+    pub fn choose_selected(self: &mut Self) -> void {
+        if self.view.selected < 0 || self.view.selected >= self.view.items.len() { return; }
+        let item: ListItem = self.view.items[self.view.selected]; self.select(item.id);
+    }
+    pub fn add(self: &mut Self, duplicate: bool) -> void {
+        if self.patterns.len() >= 128 { self.error = "Maximum 128 patterns"; return; }
+        var data: SequenceTable = self.table.copy_pattern();
+        if !duplicate {
+            data.release(); data = SequenceTable::new();
+            for i in 0..data.tracks.len() { data.selected_column = data.track_start(i32(i)); data.clear_track(); }
+            data.selected_column = 1;
+        }
+        let id: i32 = self.next_id; self.next_id = self.next_id + 1;
+        let name: str8 = duplicate ? format!("{} copy", self.active_name()) : format!("Pattern {}", id);
+        self.patterns.push(PatternEntry { id: id, name: name, data: data });
+        self.song.push(id); self.select(id); self.refresh();
+        self.view.selected = self.song_mode ? i32(self.song.len()) - 1 : i32(self.patterns.len()) - 1;
+    }
+    pub fn rename(self: &mut Self, name: str8) -> bool {
+        if !table_matches("[A-Za-z0-9][A-Za-z0-9 _-]{0,47}", name) { self.error = "Name: 1-48 letters, digits, spaces, _ or -"; return false; }
+        var entries: list<PatternEntry> = []; let previous: list<PatternEntry> = self.patterns;
+        for entry in previous {
+            var next: PatternEntry = PatternEntry {};
+            next = entry;
+            if next.id == self.active_id { let copy: str8 = clone(name); free(next.name); next.name = copy; }
+            entries.push(next);
+        }
+        self.patterns = entries; self.refresh(); self.error = ""; return true;
+    }
+    pub fn remove_active(self: &mut Self, area: Rect) -> void {
+        if self.patterns.len() <= 1 { self.error = "Keep at least one pattern"; return; }
+        let removed: i32 = self.active_id;
+        let index: i32 = self.index_of(removed);
+        var entries: list<PatternEntry> = []; let previous: list<PatternEntry> = self.patterns;
+        for entry in previous {
+            var next: PatternEntry = PatternEntry {};
+            next = entry;
+            if next.id == removed { free(next.name); next.data.release(); }
+            else { entries.push(next); }
+        }
+        var song: list<i32> = []; let order: list<i32> = self.song;
+        for id in order { if id != removed { song.push(id); } }
+        self.patterns = entries; self.song = song;
+        let next_index: i32 = index >= self.patterns.len() ? i32(self.patterns.len()) - 1 : index;
+        let next: PatternEntry = self.patterns[next_index];
+        self.table.release(); self.table = next.data.copy_pattern(); self.active_id = next.id;
+        if !self.song_mode { self.view.selected = next_index; }
+        self.refresh(); self.view.reconcile(area); self.choose_selected(); self.error = "";
+    }
+    pub fn remove_song_occurrence(self: &mut Self, area: Rect) -> void {
+        if self.view.selected < 0 || self.view.selected >= self.song.len() { return; }
+        var order: list<i32> = [];
+        for i in 0..self.song.len() { if i != self.view.selected { order.push(self.song[i]); } }
+        self.song = order; self.refresh(); self.view.reconcile(area); self.choose_selected();
+    }
+    fn move_song_row(self: &mut Self, direction: i32, area: Rect) -> void {
+        self.view.cancel_pending();
+        let selected: i32 = self.view.selected; let target: i32 = selected + direction;
+        if selected < 0 || selected >= self.song.len() || target < 0 || target >= self.song.len() { return; }
+        var order: list<i32> = [];
+        for i in 0..self.song.len() {
+            if i == selected { order.push(self.song[target]); }
+            else if i == target { order.push(self.song[selected]); }
+            else { order.push(self.song[i]); }
+        }
+        self.song = order; self.view.selected = target;
+        self.refresh(); self.view.reconcile(area); self.choose_selected();
+    }
+    fn insert_song_row(self: &mut Self, after: bool, area: Rect) -> void {
+        self.view.cancel_pending();
+        let selected: i32 = self.view.selected;
+        if selected < 0 || selected >= self.song.len() { return; }
+        var order: list<i32> = [];
+        for i in 0..self.song.len() {
+            if i == selected && !after { order.push(self.song[selected]); }
+            order.push(self.song[i]);
+            if i == selected && after { order.push(self.song[selected]); }
+        }
+        self.song = order; self.view.selected = after ? selected + 1 : selected;
+        self.refresh(); self.view.reconcile(area); self.choose_selected();
+    }
+    fn change_song_pattern(self: &mut Self, direction: i32, area: Rect) -> void {
+        self.view.cancel_pending();
+        let selected: i32 = self.view.selected;
+        if selected < 0 || selected >= self.song.len() { return; }
+        let target: i32 = self.index_of(self.song[selected]) + direction;
+        if target < 0 || target >= self.patterns.len() { return; }
+        let entry: PatternEntry = self.patterns[target];
+        var order: list<i32> = [];
+        for i in 0..self.song.len() { order.push(i == selected ? entry.id : self.song[i]); }
+        self.song = order; self.refresh(); self.view.reconcile(area); self.choose_selected();
+    }
+    pub fn on_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
+        if self.audio_mode {
+            let action: i32 = self.audio.view.on_event(event, area);
+            if action == 2 { self.insert_selected_audio(area); }
+            return action != 0;
+        }
+        if self.song_mode {
+            // Modifier-aware Ctrl+J must remain distinct from legacy LF/Enter.
+            if event.modifiers == 5 && (event.code == 106 || event.code == 107) {
+                self.move_song_row(event.code == 106 ? 1 : -1, area); return true;
+            }
+            if ((event.modifiers == 1 || event.modifiers == 2) && (event.code == 74 || event.code == 75)) ||
+                (event.modifiers == 2 && (event.code == 106 || event.code == 107)) {
+                self.change_song_pattern((event.code == 74 || event.code == 106) ? -1 : 1, area); return true;
+            }
+            if event.modifiers == 1 && event.code == 111 {
+                self.insert_song_row(false, area); return true;
+            }
+            if ((event.modifiers == 1 || event.modifiers == 2) && event.code == 79) ||
+                (event.modifiers == 2 && event.code == 111) {
+                self.insert_song_row(true, area); return true;
+            }
+        }
+        let action: i32 = self.view.on_event(event, area);
+        if action == 3 {
+            if self.song_mode { self.remove_song_occurrence(area); }
+            else { self.choose_selected(); self.remove_active(area); }
+        } else if action != 0 { self.choose_selected(); }
+        return action != 0;
+    }
+    pub fn rename_event(self: &mut Self, event: InputEvent) -> void {
+        if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { self.renaming = false; self.error = ""; return; }
+        if event.kind == InputKind::Menu && event.key == Key::Enter {
+            if self.rename(self.editor.text) { self.renaming = false; }
+        } else { self.editor.on_event(event); }
+    }
+    pub fn show_audio(self: &mut Self) -> void {
+        self.audio_mode = true; self.view.cancel_pending(); self.audio.view.cancel_pending();
+    }
+    pub fn insert_selected_audio(self: &mut Self, area: Rect) -> bool {
+        let index: i32 = self.audio.view.selected;
+        if index < 0 || index >= self.audio.samples.len() { self.error = "Select a loaded sample"; return false; }
+        let clip: AudioClip = self.audio.samples[index];
+        self.error = ""; return self.table.insert_audio(clip, area);
+    }
+    pub fn load_audio(self: &mut Self, path: str8, bpm: i32, area: Rect) -> bool {
+        if !self.audio.load(path, bpm) { self.error = self.audio.error; return false; }
+        self.error = ""; self.table.error = "";
+        let index: i32 = self.table.active_track();
+        if index >= 0 {
+            let track: SequenceTrack = self.table.tracks[index];
+            if track.audio { self.insert_selected_audio(area); return true; }
+        }
+        self.show_audio(); return true;
+    }
+    pub fn paint_rename(self: PatternLibrary, surface: Surface, area: Rect, theme: Theme) -> void {
+        if !self.renaming { return; }
+        let dialog: Dialog = Dialog { title: "Rename pattern", width: 64, height: 9 };
+        let content: Rect = dialog.paint_frame(surface, area, theme);
+        surface.text(content, "Pattern name:", theme.foreground, theme.panel);
+        if content.height > 2 { self.editor.paint(surface, Rect::new(content.x, content.y + 2, content.width, 1), theme.foreground, theme.selection, true); }
+        if content.height > 4 { surface.text(Rect::new(content.x, content.y + 4, content.width, 1), self.error == "" ? "Enter: save | Esc: cancel" : self.error, theme.accent, theme.panel); }
+    }
+    pub fn release(self: &mut Self) -> void {
+        self.audio.release();
+        self.table.release(); self.editor.release();
+        let entries: list<PatternEntry> = self.patterns;
+        for entry in entries { var owned: PatternEntry = PatternEntry {}; owned = entry; owned.data.release(); free(owned.name); }
+        let items: list<ListItem> = self.view.items; for item in items { free(item.label); }
+    }
+}
