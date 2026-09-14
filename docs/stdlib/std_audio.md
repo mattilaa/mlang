@@ -3,7 +3,7 @@
 Module file: `stdlib/std/audio.mla`
 
 Common audio output and duplex processing helpers:
-- macOS uses CoreAudio Audio Queue input/output.
+- macOS uses CoreAudio AUHAL input/output.
 - Linux uses JACK2 when `libjack` and a running JACK server are available.
 
 Examples:
@@ -282,3 +282,23 @@ and run the demo again.
 
 When using different physical CoreAudio devices for input and output over long
 sessions, an Aggregate Device with clock-drift correction is recommended.
+
+### Low-latency sample output on macOS
+
+`audio_device` uses an output-only AUHAL render callback for queued PCM and
+sine playback. The callback reads the preallocated stereo PCM ring directly,
+without allocation, locks, or additional AudioQueue buffers.
+
+Use `audio_device::open_default_with_config("player", 0, 64)` to request a
+64-frame hardware buffer at the device's native sample rate. A zero buffer
+request also defaults to 64 frames on macOS. Requests are clamped to the
+hardware range; `buffer_frames()` reports the accepted hardware size at open.
+Changing this device property can affect other clients of the same device.
+A nonzero sample rate must match the device rate; configure the device first
+if another rate is needed. AUHAL does not perform sample-rate conversion here.
+
+Queue PCM before `start()` and keep only a small number of buffers queued;
+queue capacity does not itself add latency, but queued frames do. Increase
+the buffer size if `pcm_underrun_count()` grows. At 48 kHz, 64 frames represent
+1.33 ms of audio, excluding queued PCM, device safety offset, and hardware
+latency. Stop and reopen after device or sample-rate changes.

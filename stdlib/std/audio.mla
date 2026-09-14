@@ -2,7 +2,7 @@
 /// \brief Common audio hardware output helpers (std::audio).
 ///
 /// Backends:
-/// - macOS: CoreAudio Audio Queue output.
+/// - macOS: CoreAudio AUHAL output.
 /// - Linux: JACK2 output when `libjack` and a running JACK server are present.
 
 /// \cond INTERNAL_IMPORTS

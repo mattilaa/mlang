@@ -72,14 +72,14 @@ int32_t __mlang_std_audio_mixer_close(int64_t handle);
 struct mlang_audio_device
 {
     int backend;
-    int running;
+    _Atomic int running;
     int64_t device_id;
     double sample_rate;
     int64_t buffer_frames;
     double phase;
-    double frequency_hz;
-    double gain;
-    int64_t frames_left;
+    _Atomic double frequency_hz;
+    _Atomic double gain;
+    _Atomic int64_t frames_left;
     float* pcm_ring;
     uint64_t pcm_capacity_frames;
     _Atomic uint64_t pcm_read_frame;
@@ -87,8 +87,7 @@ struct mlang_audio_device
     _Atomic uint64_t pcm_underruns;
     _Atomic int source_mode;
 #if defined(__APPLE__)
-    AudioQueueRef queue;
-    AudioQueueBufferRef buffers[3];
+    AudioComponentInstance output_unit;
 #elif defined(__linux__)
     void* jack_lib;
     void* jack_client;
@@ -1490,112 +1489,119 @@ static double coreaudio_nominal_sample_rate(AudioDeviceID id)
     return 0.0;
 }
 
-static int coreaudio_set_queue_device(AudioQueueRef queue, AudioDeviceID id)
+/* AUHAL pulls directly from the preallocated SPSC PCM ring. */
+static OSStatus audio_output_unit_callback(void* context,
+    AudioUnitRenderActionFlags* flags, const AudioTimeStamp* timestamp,
+    UInt32 bus, UInt32 frames, AudioBufferList* data)
 {
-    if(id == kAudioObjectUnknown)
-        return 0;
-    CFStringRef uid = NULL;
-    UInt32 size = sizeof(uid);
-    AudioObjectPropertyAddress addr;
-    addr.mSelector = kAudioDevicePropertyDeviceUID;
-    addr.mScope = kAudioObjectPropertyScopeGlobal;
-    addr.mElement = kAudioObjectPropertyElementMain;
-    if(AudioObjectGetPropertyData(id, &addr, 0, NULL, &size, &uid) != noErr || !uid)
-        return -1;
-    OSStatus rc = AudioQueueSetProperty(queue, kAudioQueueProperty_CurrentDevice,
-                                        &uid, sizeof(uid));
-    CFStringRef selected_uid = NULL;
-    UInt32 selected_size = sizeof(selected_uid);
-    if(rc == noErr)
-        rc = AudioQueueGetProperty(queue, kAudioQueueProperty_CurrentDevice,
-                                   &selected_uid, &selected_size);
-    if(rc == noErr && (!selected_uid || !CFEqual(uid, selected_uid)))
-        rc = kAudio_ParamError;
-    CFRelease(uid);
-    return rc == noErr ? 0 : -1;
+    (void)flags;
+    (void)timestamp;
+    (void)bus;
+    if(!data || data->mNumberBuffers != 2)
+        return kAudio_ParamError;
+    for(UInt32 i = 0; i < 2; ++i)
+        if(!data->mBuffers[i].mData ||
+           data->mBuffers[i].mDataByteSize / sizeof(float) < frames)
+            return kAudio_ParamError;
+    audio_render_frames(context, NULL, data->mBuffers[0].mData,
+                        data->mBuffers[1].mData, frames);
+    return noErr;
 }
 
-static void audioqueue_fill(mlang_audio_device_t* d, AudioQueueBufferRef buffer)
-{
-    if(!d || !buffer)
-        return;
-    const int64_t frames = d->buffer_frames > 0 ? d->buffer_frames : 512;
-    float* samples = (float*)buffer->mAudioData;
-    audio_render_frames(d, samples, NULL, NULL, (uint64_t)frames);
-    buffer->mAudioDataByteSize = (UInt32)(frames * 2 * (int64_t)sizeof(float));
-}
-
-static void audioqueue_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer)
-{
-    mlang_audio_device_t* d = (mlang_audio_device_t*)user_data;
-    audioqueue_fill(d, buffer);
-    (void)AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
-}
-
-static int audio_coreaudio_open(mlang_audio_device_t* d, int64_t device_id, int requested_sample_rate)
+static int audio_coreaudio_open(mlang_audio_device_t* d, int64_t device_id,
+                                int requested_sample_rate)
 {
     d->backend = 1;
-    d->device_id = device_id;
-
-    AudioDeviceID selected = kAudioObjectUnknown;
-    if(device_id >= 0)
+    const AudioDeviceID selected = coreaudio_device_for_index(device_id);
+    if(selected == kAudioObjectUnknown)
     {
-        selected = coreaudio_device_for_index(device_id);
-        if(selected == kAudioObjectUnknown)
-        {
-            audio_set_error("std::audio CoreAudio output device id is invalid");
-            return -1;
-        }
-        if(!requested_sample_rate)
-            coreaudio_apply_nominal_sample_rate(d, selected);
+        audio_set_error("std::audio CoreAudio output device is unavailable");
+        return -1;
+    }
+    if(!requested_sample_rate)
+        coreaudio_apply_nominal_sample_rate(d, selected);
+    if(fabs(d->sample_rate - coreaudio_nominal_sample_rate(selected)) > 0.5)
+    {
+        audio_set_error("std::audio AUHAL requires the device sample rate; use sample_rate=0 or configure the device first");
+        return -1;
     }
 
-    AudioStreamBasicDescription fmt;
-    memset(&fmt, 0, sizeof(fmt));
-    fmt.mSampleRate = d->sample_rate;
-    fmt.mFormatID = kAudioFormatLinearPCM;
-    fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat | kAudioFormatFlagIsPacked;
-    fmt.mBytesPerPacket = 2u * (UInt32)sizeof(float);
-    fmt.mFramesPerPacket = 1;
-    fmt.mBytesPerFrame = 2u * (UInt32)sizeof(float);
-    fmt.mChannelsPerFrame = 2;
-    fmt.mBitsPerChannel = 32;
-
-    OSStatus rc = AudioQueueNewOutput(&fmt, audioqueue_callback, d, NULL, NULL, 0, &d->queue);
+    AudioObjectPropertyAddress address = {
+        kAudioDevicePropertyBufferFrameSizeRange,
+        kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+    AudioValueRange range;
+    UInt32 size = sizeof(range);
+    OSStatus rc = AudioObjectGetPropertyData(selected, &address, 0, NULL,
+                                             &size, &range);
     if(rc != noErr)
+        goto failed;
+    UInt32 frames = (UInt32)fmax(range.mMinimum,
+                                fmin(range.mMaximum, d->buffer_frames));
+    address.mSelector = kAudioDevicePropertyBufferFrameSize;
+    /* Some devices have a fixed buffer; always read back the actual size. */
+    (void)AudioObjectSetPropertyData(selected, &address, 0, NULL,
+                                     sizeof(frames), &frames);
+    size = sizeof(frames);
+    rc = AudioObjectGetPropertyData(selected, &address, 0, NULL, &size, &frames);
+    if(rc != noErr || frames == 0)
     {
-        (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
-                       "std::audio CoreAudio AudioQueueNewOutput failed: %d", (int)rc);
+        if(rc == noErr) rc = kAudio_ParamError;
+        goto failed;
+    }
+    d->buffer_frames = frames;
+
+    AudioComponentDescription description = {0};
+    description.componentType = kAudioUnitType_Output;
+    description.componentSubType = kAudioUnitSubType_HALOutput;
+    description.componentManufacturer = kAudioUnitManufacturer_Apple;
+    AudioComponent component = AudioComponentFindNext(NULL, &description);
+    if(!component)
+    {
+        audio_set_error("std::audio AUHAL component unavailable");
         return -1;
     }
+    rc = AudioComponentInstanceNew(component, &d->output_unit);
+    if(rc != noErr) goto failed;
+    UInt32 enabled = 1;
+    rc = AudioUnitSetProperty(d->output_unit, kAudioOutputUnitProperty_EnableIO,
+        kAudioUnitScope_Output, 0, &enabled, sizeof(enabled));
+    if(rc != noErr) goto failed;
+    enabled = 0;
+    rc = AudioUnitSetProperty(d->output_unit, kAudioOutputUnitProperty_EnableIO,
+        kAudioUnitScope_Input, 1, &enabled, sizeof(enabled));
+    if(rc != noErr) goto failed;
+    rc = AudioUnitSetProperty(d->output_unit, kAudioOutputUnitProperty_CurrentDevice,
+        kAudioUnitScope_Global, 0, &selected, sizeof(selected));
+    if(rc != noErr) goto failed;
 
-    if(selected != kAudioObjectUnknown && coreaudio_set_queue_device(d->queue, selected) != 0)
-    {
-        audio_set_error("std::audio CoreAudio failed to select output device");
-        return -1;
-    }
-
-    UInt32 buffer_bytes = (UInt32)(d->buffer_frames * 2 * (int64_t)sizeof(float));
-    for(int i = 0; i < 3; ++i)
-    {
-        rc = AudioQueueAllocateBuffer(d->queue, buffer_bytes, &d->buffers[i]);
-        if(rc != noErr)
-        {
-            (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
-                           "std::audio CoreAudio AudioQueueAllocateBuffer failed: %d", (int)rc);
-            return -1;
-        }
-        audioqueue_fill(d, d->buffers[i]);
-        rc = AudioQueueEnqueueBuffer(d->queue, d->buffers[i], 0, NULL);
-        if(rc != noErr)
-        {
-            (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
-                           "std::audio CoreAudio AudioQueueEnqueueBuffer failed: %d", (int)rc);
-            return -1;
-        }
-    }
-    return 0;
+    AudioStreamBasicDescription format = {0};
+    format.mSampleRate = d->sample_rate;
+    format.mFormatID = kAudioFormatLinearPCM;
+    format.mFormatFlags = kAudioFormatFlagsNativeFloatPacked |
+                          kAudioFormatFlagIsNonInterleaved;
+    format.mBytesPerPacket = sizeof(float);
+    format.mFramesPerPacket = 1;
+    format.mBytesPerFrame = sizeof(float);
+    format.mChannelsPerFrame = 2;
+    format.mBitsPerChannel = 32;
+    rc = AudioUnitSetProperty(d->output_unit, kAudioUnitProperty_StreamFormat,
+        kAudioUnitScope_Input, 0, &format, sizeof(format));
+    if(rc != noErr) goto failed;
+    rc = AudioUnitSetProperty(d->output_unit, kAudioUnitProperty_MaximumFramesPerSlice,
+        kAudioUnitScope_Global, 0, &frames, sizeof(frames));
+    if(rc != noErr) goto failed;
+    AURenderCallbackStruct callback = {audio_output_unit_callback, d};
+    rc = AudioUnitSetProperty(d->output_unit, kAudioUnitProperty_SetRenderCallback,
+        kAudioUnitScope_Input, 0, &callback, sizeof(callback));
+    if(rc != noErr) goto failed;
+    rc = AudioUnitInitialize(d->output_unit);
+    if(rc == noErr) return 0;
+failed:
+    (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
+                   "std::audio AUHAL output setup failed: %d", (int)rc);
+    return -1;
 }
+
 #endif
 
 #if defined(__linux__)
@@ -2004,6 +2010,9 @@ int64_t __mlang_std_audio_open_output_device_config(int64_t device_id, const cha
 #endif
     d->sample_rate = (double)audio_normalize_sample_rate(sample_rate);
     d->buffer_frames = audio_normalize_buffer_frames(buffer_frames);
+#if defined(__APPLE__)
+    if(buffer_frames <= 0) d->buffer_frames = 64;
+#endif
     d->frequency_hz = 440.0;
     d->gain = 0.15;
     d->frames_left = 0;
@@ -2032,7 +2041,10 @@ int64_t __mlang_std_audio_open_output_device_config(int64_t device_id, const cha
         d->device_id = coreaudio_default_output_index();
     if(audio_coreaudio_open(d, d->device_id, requested_sample_rate) != 0)
     {
+        char error[sizeof(g_audio_last_error)];
+        memcpy(error, g_audio_last_error, sizeof(error));
         __mlang_std_audio_close((int64_t)(intptr_t)d);
+        audio_set_error(error);
         return 0;
     }
 #elif defined(__linux__)
@@ -2084,11 +2096,11 @@ int32_t __mlang_std_audio_start(int64_t handle)
         return -1;
     }
 #if defined(__APPLE__)
-    OSStatus rc = AudioQueueStart(d->queue, NULL);
+    OSStatus rc = AudioOutputUnitStart(d->output_unit);
     if(rc != noErr)
     {
         (void)snprintf(g_audio_last_error, sizeof(g_audio_last_error),
-                       "std::audio CoreAudio AudioQueueStart failed: %d", (int)rc);
+                       "std::audio CoreAudio AudioOutputUnitStart failed: %d", (int)rc);
         return -1;
     }
 #elif defined(__linux__)
@@ -2112,8 +2124,8 @@ int32_t __mlang_std_audio_stop(int64_t handle)
     d->running = 0;
     d->frames_left = 0;
 #if defined(__APPLE__)
-    if(d->queue)
-        (void)AudioQueueStop(d->queue, true);
+    if(d->output_unit)
+        (void)AudioOutputUnitStop(d->output_unit);
 #elif defined(__linux__)
     if(p_jack_deactivate && d->jack_client)
         (void)p_jack_deactivate(d->jack_client);
@@ -2129,8 +2141,11 @@ int32_t __mlang_std_audio_close(int64_t handle)
         return 0;
     (void)__mlang_std_audio_stop(handle);
 #if defined(__APPLE__)
-    if(d->queue)
-        AudioQueueDispose(d->queue, true);
+    if(d->output_unit)
+    {
+        (void)AudioUnitUninitialize(d->output_unit);
+        (void)AudioComponentInstanceDispose(d->output_unit);
+    }
 #elif defined(__linux__)
     if(p_jack_client_close && d->jack_client)
         (void)p_jack_client_close(d->jack_client);
