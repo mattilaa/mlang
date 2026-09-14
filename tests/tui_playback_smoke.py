@@ -137,16 +137,28 @@ def main():
         until(lambda s: "Add pattern" in s)
         send(b"\r")
         until(lambda s: "Add pattern" not in s)
-        send(b"\x1b[108;6uK")
+        send(b"\x1b[108;6uzK")
         until(lambda s: "C-4" in s and "1.00" in s)
         send(b"l\r\x15100\r")
         until(lambda s: "100" in s and "Editing:" not in s)
         send(b"l\r\x153.75\r")
-        until(lambda s: "3.75" in s and "\u2582" in s and "Editing:" not in s)
+        until(lambda s: "3.75" in s and "\u2807" in s and "Editing:" not in s)
         send(b"K")
         until(lambda s: "3.76" in s)
         send(b"J")
         until(lambda s: "3.75" in s)
+        send(b"l\r\x15+0.50\r")
+        until(lambda s: "+0.50" in s and "\u2844" in s and "Editing:" not in s)
+        send(b"\r\x15-0.50\r")
+        until(lambda s: "-0.50" in s and "Editing:" not in s)
+        send(b"K")
+        until(lambda s: "-0.49" in s)
+        send(b"J")
+        until(lambda s: "-0.50" in s)
+        send(b"\r\x15-16384.01\r")
+        until(lambda s: "OFF: -16384.00 to 16384.00" in s)
+        send(b"\x1b")
+        until(lambda s: "Editing:" not in s and "-0.50" in s)
         send(b"q")
         # Keep draining the PTY while exiting: at high FPS a final frame can
         # otherwise fill its output buffer before the process handles Quit.
@@ -155,7 +167,7 @@ def main():
             if select.select([master], [], [], 0.05)[0]:
                 os.read(master, 65536)
         assert process.wait(timeout=5) == 0
-        print("PASS: BPM validation/cancel, clock scrolling, MIDI meters, modal capture, sample following, fractional LEN editing")
+        print("PASS: BPM validation/cancel, clock scrolling, MIDI meters, modal capture, sample following, fractional LEN/OFF editing")
     finally:
         if process.poll() is None:
             process.terminate()

@@ -82,7 +82,9 @@ fn demo_menus() -> MenuBar {
             MenuItem { label: "Configure CC2", action: 27, enabled: true },
             MenuItem { label: "Add note line", action: 80, enabled: true },
             MenuItem { label: "Remove note line", action: 81, enabled: true },
-            MenuItem { label: "Duplicate note line", action: 82, enabled: true }] },
+            MenuItem { label: "Duplicate note line", action: 82, enabled: true },
+            MenuItem { label: "Collapse all", action: 83, enabled: true },
+            MenuItem { label: "Expand all", action: 84, enabled: true }] },
         Menu { title: "Pattern", items: [
             MenuItem { label: "Add pattern", action: 50, enabled: true },
             MenuItem { label: "Rename pattern", action: 51, enabled: true },
@@ -399,7 +401,7 @@ fn main() -> i32 {
                 mixer.grainy = command == 41;
                 free(message); message = clone(mixer.grainy ? "Meter style: grainy (osc)" : "Meter style: solid bars");
             }
-            else if (command >= 20 && command <= 28) || (command >= 80 && command <= 82) {
+            else if (command >= 20 && command <= 28) || (command >= 80 && command <= 84) {
                 library.table.track_action(command, panes[1].bounds.inset(1));
                 free(message); message = clone("Track updated. Mute affects demo state only.");
             }

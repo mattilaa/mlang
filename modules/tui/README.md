@@ -271,11 +271,46 @@ call its `release()` once and do not shallow-copy the owning library.
 
 ### Table widget
 
+MIDI tracks start collapsed to NOTE/VEL for every note line. In the Pattern view,
+`z` cycles the selected MIDI track through three column stages:
+
+1. NOTE / VEL (default)
+2. NOTE / VEL / LEN / OFF
+3. All columns, including CC1 / CC2
+
+The next press returns to stage 1. Shift+Z advances every MIDI track's stage
+independently. Track → Collapse all selects stage 1; Expand all selects stage 3.
+Hidden columns consume no width and are skipped by h/l navigation, but their
+values and playback remain unchanged. Collapsing keeps selection in the same
+track, returning a hidden LEN/OFF selection to its note line's NOTE column.
+Track/pattern copies preserve their stages. Audio retains its existing `z`
+waveform-width toggle; MIDI column stages do not change audio tracks.
+
+The reusable `TableColumn.hidden` property controls visibility independently
+of `read_only`: hidden cells can still be validated and updated by the model.
+
 LEN uses decimal sixteenth-note units: `1.00` = one row, `0.50` = half a row,
 `3.75` = three and three-quarter rows. Enter edits LEN; Shift+J/K adjusts it by
 0.01. MIDI accepts 0.01–16384.00, with new notes defaulting to 1.00. A muted-color
-duration rail beside NOTE follows sustained notes and uses eight vertical steps
-per terminal cell for partial endings. Empty NOTE cells do not cut off a sustain.
+duration rail beside NOTE follows sustained notes using four vertical Braille dots
+per terminal cell for partial endings. Its background matches NOTE, including
+selection and alternating-row shading. Empty NOTE cells do not cut off a sustain.
+
+Each MIDI note line is NOTE / VEL / LEN / OFF. OFF uses the same scale as LEN,
+but is signed: `-0.50` starts half a sixteenth before its row, `+0.50` starts
+half a sixteenth after it. New notes default to OFF `0.00`; empty OFF also means
+zero. Enter edits it, Shift+J/K adjusts by 0.01, and the accepted range is
+−16384.00 through +16384.00. Note-off is always **row time + OFF + LEN**.
+Duration rails and MIDI meters follow the shifted start, including notes from
+later rows starting early. Partial starts, ends and disjoint fragments use thin
+Braille glyphs without a separate background strip. Note-line and pattern duplication preserve OFF.
+
+The scheduler looks ahead across all rows and maintains chronological event
+order even when offsets reorder notes. Pattern loops repeat shifted onsets;
+starting/seeking skips onsets already in the past (no automatic preroll or
+retroactive note-ons). Thus a negative OFF on row 1 first plays just before the
+next loop. A live edit refreshes future onsets without altering already-issued
+voices' end times. OFF is MIDI-only; audio retains its LEN column.
 
 Audio LEN defaults to the sample duration. Edit it at the instance's starting
 row to shorten its gate; it cannot exceed the sample, pattern end or next
@@ -299,7 +334,7 @@ samples. Extending again does not restore discarded data. Playback stops when
 opening the length dialog.
 
 `tui::table::Table` renders the demo's 64-row sequence with a frozen ROW column
-and three independent tracks, each containing compact NOTE, VEL, LEN, CC1, and CC2
+and three independent tracks, each containing compact NOTE, VEL, LEN, OFF, CC1, and CC2
 columns. Focus the sequence pane with Ctrl+Shift+L; `l`/`h`
 select the next/previous column and `j`/`k` (or Down/Up) select rows. Navigation
 stops at the edges and scrolls the selection into view, with a fixed header.
@@ -341,13 +376,14 @@ the group containing the selected child column gets the selection highlight.
 Set `frozen_columns: 1` to pin ROW during horizontal navigation. The scrollbar
 represents only the unfrozen columns. Selecting another track scrolls it into
 view; if the whole group fits, it is kept together. Wider groups scroll by child
-column. Column widths are NOTE=6, VEL=4, LEN=6, CC1=6, CC2=6, including spacing.
+column. Column widths are NOTE=6, VEL=5, LEN=6, OFF=6, CC1=6, CC2=6, including spacing.
+VEL is left-aligned with two trailing spaces after a three-digit value.
 
 The demo's **Track** menu always targets the selected column's track:
 
 - Rename opens a text dialog (Enter saves, Escape cancels).
 - Create track → MIDI track / AUDIO track appends an empty track of the chosen
-  type and selects it. MIDI has NOTE, VEL, LEN, CC1, CC2; AUDIO has CC1, CC2, LEN.
+  type and selects it. MIDI has NOTE, VEL, LEN, OFF, CC1, CC2; AUDIO has CC1, CC2, LEN.
   Mixed groups have different widths; navigation, frozen ROW, deletion, and
   duplication follow their actual column ranges. Duplicate preserves track type.
 - Duplicate appends an independent copy of the pattern, mute flag, and automation
@@ -410,12 +446,12 @@ source. These are sequencer-derived levels, not measurements from an audio devic
 
 #### Typed columns and editing
 
-MIDI tracks support 1–16 NOTE/VEL/LEN groups followed by their shared CC1/CC2 columns.
+MIDI tracks support 1–16 NOTE/VEL/LEN/OFF groups followed by their shared CC1/CC2 columns.
 **Track → Add note line** inserts a blank group after the selected group (or appends
 it before CC1 when an automation column is selected). **Duplicate note line**
-copies the selected NOTE/VEL/LEN group for every row and selects the copy. **Remove
-note line** removes that group, keeping at least one. Selecting NOTE, VEL or
-LEN identifies the group; Remove/Duplicate require such a selection. These actions
+copies the selected NOTE/VEL/LEN/OFF group for every row and selects the copy. **Remove
+note line** removes that group, keeping at least one. Selecting NOTE, VEL, LEN or
+OFF identifies the group; Remove/Duplicate require such a selection. These actions
 do not apply to audio tracks, and no new shortcuts are assigned yet.
 
 All note lines retain the usual note editing, typed velocity limits, empty values,

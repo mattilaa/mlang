@@ -44,6 +44,7 @@ pub fn table_integer(text: str8) -> result<i64, str8> {
 pub struct TableColumn {
     var title: str8; var width: i32;
     var read_only: bool{false}; var value_type: str8{"str8"};
+    var hidden: bool{false};
     var pattern: str8{""};
     var nullable: bool{false};
     var bounded: bool{false}; var minimum: i64; var maximum: i64;
@@ -102,6 +103,7 @@ pub struct Table {
     }
     fn column_width(self: Table, index: i32) -> i32 {
         let column: TableColumn = self.columns[index];
+        if column.hidden { return 0; }
         return column.width < 1 ? 1 : (column.width > 4096 ? 4096 : column.width);
     }
     pub fn total_width(self: Table) -> i32 {
@@ -138,12 +140,12 @@ pub struct Table {
         self.selected_column = columns == 0 ? -1 : (self.selected_column < 0 ? 0 : (self.selected_column >= columns ? columns - 1 : self.selected_column));
         if self.selected_column >= 0 {
             let selected: TableColumn = self.columns[self.selected_column];
-            if selected.read_only {
+            if selected.read_only || selected.hidden {
                 let previous: i32 = self.selected_column;
                 self.move_column(1);
                 if self.selected_column == previous { self.move_column(-1); }
                 let candidate: TableColumn = self.columns[self.selected_column];
-                if candidate.read_only { self.selected_column = -1; }
+                if candidate.read_only || candidate.hidden { self.selected_column = -1; }
             }
         }
         if self.selected_row >= 0 && body.height > 0 {
@@ -187,7 +189,7 @@ pub struct Table {
         var next: i32 = self.selected_column + direction;
         while next >= 0 && next < self.columns.len() {
             let column: TableColumn = self.columns[next];
-            if !column.read_only { self.selected_column = next; return; }
+            if !column.read_only && !column.hidden { self.selected_column = next; return; }
             next = next + direction;
         }
     }
@@ -251,6 +253,7 @@ pub struct Table {
                 let c: i32 = (i32(order) + self.frozen_count()) % i32(self.columns.len());
                 let x: i32 = self.column_x(c);
                 let width: i32 = self.column_width(i32(c));
+                if width == 0 { continue; }
                 let cell_bg: i32 = c == self.selected_column ? lighten(bg, 8) : bg;
                 let cell: Rect = Rect::new(x, i32(y) + body.y, width, 1);
                 canvas.fill(cell.intersect(body), Cell { glyph: 32, foreground: theme.foreground, background: cell_bg });
@@ -263,6 +266,7 @@ pub struct Table {
             let x: i32 = self.column_x(c);
             let column: TableColumn = self.columns[c];
             let width: i32 = self.column_width(i32(c));
+            if width == 0 { continue; }
             let header: Rect = Rect::new(x, self.header_height() - 1, width, 1);
             let clip: Rect = Rect::new(0, self.header_height() - 1, body.width, 1);
             let bg: i32 = c == self.selected_column ? lighten(theme.menu_background, 8) : theme.menu_background;

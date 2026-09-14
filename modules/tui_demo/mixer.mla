@@ -36,11 +36,13 @@ impl Mixer {
                     }
                 } else {
                     let first: i32 = table.track_start(i32(i));
-                    for r in 0..row + 1 {
+                    for r in 0..table.rows.len() {
                         let data: TableRow = table.rows[r];
                         for line in 0..track.note_lines {
-                            let column: i32 = first + i32(line) * 3;
-                            let age: i64 = wide(row - i32(r)) * 15000 + wide(phase);
+                            let column: i32 = first + i32(line) * 4;
+                            if data.cells[column] == "" { continue; }
+                            let age: i64 = wide(row - i32(r)) * 15000 + wide(phase) - table.note_offset(i32(r), column);
+                            if age < 0 { continue; }
                             if age >= 15000 && (data.cells[column + 2] == "" || data.cells[column + 2] == "1.00") { continue; }
                             if data.cells[column] != "" {
                                 let velocity: result<i64, str8> = table_integer(data.cells[column + 1]);

@@ -181,10 +181,22 @@ def main():
         read_frame(None)
         os.write(master, b"\r")
         solid = read_frame(1).decode()
-        assert not any("\u2800" <= glyph <= "\u28ff" for glyph in solid)
+        # Note-duration rails use Braille independently of the meter style.
+        assert not any("\u2800" <= glyph <= "\u28ff" for glyph in solid.split(" Mixer ", 1)[1])
         os.write(master, b"m")
         while b" Inspector " not in read_frame(1):
             pass
+        # MIDI starts compact; z cycles only this track, Z cycles all tracks.
+        os.write(master, b"z")
+        read_frame(1, table_text=((39, 3), "LEN"))
+        os.write(master, b"z")
+        read_frame(1, table_text=((51, 3), "CC1"))
+        os.write(master, b"z")
+        read_frame(1, table_text=((39, 3), "NOTE"))
+        os.write(master, b"Z")
+        read_frame(1, table_text=((39, 3), "LEN"))
+        os.write(master, b"Z")
+        read_frame(1, table_text=((51, 3), "CC1"))
         os.write(master, b"l")
         read_frame(1, table_cell=((34, 4), (60, 91, 128)))
         os.write(master, b"j")
@@ -208,11 +220,11 @@ def main():
         os.write(master, b"\x1b")
         read_frame(1, table_text=((34, 4), "42"))
         # CC cells reject text and remain editable until corrected.
-        os.write(master, b"ll\r\x15qhjk\r")
+        os.write(master, b"lll\r\x15qhjk\r")
         assert b"Invalid type" in read_frame(1)
         os.write(master, b"\x1564\r")
-        read_frame(1, table_text=((44, 4), "64"))
-        os.write(master, b"hhh")
+        read_frame(1, table_text=((51, 4), "64"))
+        os.write(master, b"hhhh")
         read_frame(1, table_cell=((28, 4), (60, 91, 128)))
         # Empty note commits as a rest; clearing preserves ROW, dd removes it.
         os.write(master, b"\r\x15\r")
@@ -229,11 +241,11 @@ def main():
         os.write(master, b"k" * 70)
         read_frame(1)
         # dd in an inline editor is text, not a row command.
-        os.write(master, b"lll\r\x15dd\r")
+        os.write(master, b"llll\r\x15dd\r")
         assert b"Invalid type" in read_frame(1)
         os.write(master, b"\x1b")
         read_frame(1)
-        os.write(master, b"hhh")
+        os.write(master, b"hhhh")
         read_frame(1)
         def track_menu(item):
             os.write(master, b"\tlll")
@@ -241,14 +253,18 @@ def main():
             os.write(master, b"j" * item + b"\r")
 
         # Track menu acts on the group containing the selected child column.
+        track_menu(11)
+        read_frame(1, table_text=((39, 3), "NOTE"))
+        track_menu(12)
+        read_frame(1, table_text=((51, 3), "CC1"))
         track_menu(8)
-        read_frame(1, table_text=((44, 4), "   "))
-        os.write(master, b"hh")  # select VEL in the original note line
+        read_frame(1, table_text=((51, 4), "   "))
+        os.write(master, b"hhh")  # select VEL in the original note line
         read_frame(1)
         track_menu(10)
-        read_frame(1, table_text=((44, 4), "C-4"))
+        read_frame(1, table_text=((51, 4), "C-4"))
         track_menu(9)
-        read_frame(1, table_text=((44, 4), "   "))
+        read_frame(1, table_text=((51, 4), "   "))
         track_menu(9)
         read_frame(1, table_text=((28, 4), "C-4"))
         track_menu(0)
@@ -260,6 +276,8 @@ def main():
         os.write(master, b"\r")
         created = read_frame(1, table_text=((24, 4), "001"))
         assert b"Track 4" in created
+        os.write(master, b"zz")  # expand the newly created compact track
+        read_frame(1)
         track_menu(3)
         assert b"Track 4 copy" in read_frame(1, table_text=((24, 4), "001"))
         track_menu(2)

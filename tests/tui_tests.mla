@@ -43,12 +43,105 @@ use tui_demo::note_playback::*;
 
 
 #[test]
+fn tui_velocity_left_alignment() {
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(0, 0, 120, 10);
+    let surface: Surface = Surface::new(120, 10);
+    let values: array<str8, 4> = {"0", "7", "42", "127"};
+    let first_glyphs: array<i32, 4> = {48, 55, 52, 49};
+    for t in 0..3 {
+        table.selected_column = table.track_start(i32(t)) + 1;
+        for r in 0..4 {
+            table.selected_row = i32(r); table.edit_event(decode_input("\r"), area);
+            table.editor.set_text(values[r]); table.edit_event(decode_input("\r"), area);
+        }
+    }
+    for stage in 0..3 {
+        table.zoom_tracks(i32(stage), true, area);
+        table.paint(surface, area, Theme::dark_blue());
+        table.paint_note_lengths(surface, area, Theme::dark_blue());
+        let body: Rect = table.body(area);
+        for t in 0..3 {
+            let x: i32 = table.column_x(table.track_start(i32(t)) + 1);
+            let header: Cell = surface.cell(x, body.y - 1); verify(header.glyph == 86);
+            for r in 0..4 {
+                let value: Cell = surface.cell(x, body.y + i32(r)); verify(value.glyph == first_glyphs[r]);
+                let trailing: Cell = surface.cell(x + 3, body.y + i32(r)); verify(trailing.glyph == 32);
+                let extra: Cell = surface.cell(x + 4, body.y + i32(r)); verify(extra.glyph == 32);
+                let note: Cell = surface.cell(x - 6, body.y + i32(r));
+                let rail: Cell = surface.cell(x - 1, body.y + i32(r));
+                verify(rail.glyph == 0x2847 && rail.background == note.background);
+            }
+        }
+        table.selected_column = 1;
+        table.paint(surface, area, Theme::dark_blue()); table.paint_note_lengths(surface, area, Theme::dark_blue());
+        let selected_note: Cell = surface.cell(table.column_x(1), body.y);
+        let selected_rail: Cell = surface.cell(table.column_x(1) + 5, body.y);
+        verify(selected_note.background == selected_rail.background);
+    }
+    surface.release(); table.release();
+}
+
+#[test]
+fn tui_hidden_table_columns() {
+    var table: Table = Table::new([TableColumn { title: "A", width: 4 },
+        TableColumn { title: "HIDDEN", width: 80, hidden: true }, TableColumn { title: "B", width: 4 }],
+        [TableRow { cells: ["a", "secret", "b"] }]);
+    let area: Rect = Rect::new(0, 0, 20, 4); let surface: Surface = Surface::new(20, 4);
+    verify(table.total_width() == 8 && table.column_x(2) == 4);
+    table.selected_column = 1; table.reconcile(area); verify(table.selected_column == 2);
+    table.on_event(decode_input("h"), area); verify(table.selected_column == 0);
+    verify(table.set_cell(0, 1, "updated")); let row: TableRow = table.rows[0]; verify(row.cells[1] == "updated");
+    table.paint(surface, area, Theme::dark_blue()); let visible: Cell = surface.cell(4, 1); verify(visible.glyph == 98);
+    table.columns = [TableColumn { title: "HIDDEN", hidden: true }]; table.reconcile(area);
+    verify(table.selected_column == -1 && table.total_width() == 0);
+    table.paint(surface, area, Theme::dark_blue()); surface.release();
+}
+
+#[test]
+fn tui_track_zoom_stages() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 12);
+    verify(table.total_width() == 37);
+    let length: TableColumn = table.columns[3]; let cc: TableColumn = table.columns[5]; verify(length.hidden && cc.hidden);
+    table.edit_event(decode_input("l"), area); verify(table.selected_column == 2);
+    table.edit_event(decode_input("l"), area); verify(table.selected_column == 7);
+    table.edit_event(decode_input("h"), area); verify(table.selected_column == 2);
+    table.selected_column = 1; table.edit_event(decode_input("z"), area);
+    verify(table.total_width() == 49);
+    let shown_length: TableColumn = table.columns[3]; let hidden_cc: TableColumn = table.columns[5]; verify(!shown_length.hidden && hidden_cc.hidden);
+    table.selected_column = 4; table.edit_event(decode_input("z"), area); verify(table.total_width() == 61 && table.selected_column == 4);
+    table.edit_event(decode_input("z"), area); verify(table.total_width() == 37 && table.selected_column == 1);
+    table.edit_event(decode_input("Z"), area); verify(table.total_width() == 73);
+    table.edit_event(decode_input("z"), area);
+    table.edit_event(decode_input("\x1b[122;2u"), area);
+    let first: SequenceTrack = table.tracks[0]; let second: SequenceTrack = table.tracks[1];
+    verify(first.zoom_stage == 0 && second.zoom_stage == 2);
+    table.track_action(83, area); verify(table.total_width() == 37);
+    table.track_action(84, area); verify(table.total_width() == 109);
+    let data: TableRow = table.rows[0]; verify(data.cells[3] == "1.00" && data.cells[4] == "0.00");
+    table.selected_column = 5; table.track_action(83, area); verify(table.selected_column == 1);
+    table.note_line_action(80, area); verify(table.total_width() == 48);
+    table.edit_event(decode_input("l"), area); verify(table.selected_column == 6);
+    table.edit_event(decode_input("l"), area); verify(table.selected_column == 11);
+    // Collapsing a selected LEN returns to NOTE in the same note line/track.
+    table.selected_column = 5; table.edit_event(decode_input("z"), area);
+    table.selected_column = 7; table.track_action(83, area); verify(table.selected_column == 5);
+    table.edit_event(decode_input("z"), area);
+    var copy: SequenceTable = table.copy_pattern(); let saved: SequenceTrack = copy.tracks[0]; verify(saved.zoom_stage == 1);
+    table.track_action(83, area); let still_saved: SequenceTrack = copy.tracks[0]; verify(still_saved.zoom_stage == 1);
+    copy.create_track(true, area); let cloned: SequenceTrack = copy.tracks[3]; verify(cloned.zoom_stage == 1);
+    table.create_track_kind(false, true, area); table.edit_event(decode_input("z"), area);
+    table.edit_event(decode_input("Z"), area); let audio: SequenceTrack = table.tracks[3]; verify(audio.audio && audio.wave_zoom);
+    table.release(); copy.release();
+}
+
+#[test]
 fn tui_note_duration_and_events() {
 
     verify(duration_ticks("1.00") == 15000 && duration_ticks("0.5") == 7500 && duration_ticks("3.75") == 56250);
     verify(duration_ticks("0") == -1 && duration_ticks("-1") == -1 && duration_ticks("1x25") == -1 && duration_ticks("1.001") == -1);
     let area: Rect = Rect::new(0, 0, 100, 12);
-    var table: SequenceTable = SequenceTable::new();
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
     for r in 0..64 { table.selected_row = i32(r); table.clear_row(); }
     table.selected_row = 0; table.selected_column = 1; table.edit_event(decode_input("\r"), area); table.editor.set_text("C-4"); table.edit_event(decode_input("\r"), area); verify(!table.editing);
     let initial: TableRow = table.rows[0]; verify(initial.cells[3] == "1.00");
@@ -82,7 +175,7 @@ fn tui_note_duration_and_events() {
     table.paint(surface, area, Theme::dark_blue()); table.paint_note_lengths(surface, area, Theme::dark_blue());
     let x: i32 = table.column_x(1) + 5; let body: Rect = table.body(area);
     let full: Cell = surface.cell(x, body.y + 2); let partial: Cell = surface.cell(x, body.y + 3); let rest: Cell = surface.cell(x, body.y + 4);
-    verify(full.glyph == 0x2588 && partial.glyph == 0x2582 && rest.glyph == 32);
+    verify(full.glyph == 0x2847 && partial.glyph == 0x2807 && rest.glyph == 32);
     // A note begun at the last row is not cut at the pattern loop boundary.
     table.selected_row = 0; table.clear_row(); table.selected_row = 1; table.clear_row(); table.set_length(4, area);
     table.selected_row = 3; table.selected_column = 1;
@@ -97,9 +190,84 @@ fn tui_note_duration_and_events() {
 }
 
 #[test]
+fn tui_note_offsets() {
+    verify(offset_ticks("-0.50") == -7500 && offset_ticks("+0.50") == 7500);
+    verify(offset_ticks("") == 0 && offset_ticks("-0.00") == 0 && offset_ticks("0") == 0);
+    verify(offset_ticks("-16384.00") == -245760000 && offset_ticks("16384.01") < -245760000);
+    verify(offset_ticks("0.001") < -245760000 && offset_ticks("1x25") < -245760000);
+    let area: Rect = Rect::new(0, 0, 120, 12);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    for r in 0..64 { table.selected_row = i32(r); table.clear_row(); }
+    table.set_length(4, area); table.selected_row = 0; table.selected_column = 1;
+    table.edit_event(decode_input("K"), area);
+    let initial: TableRow = table.rows[0]; verify(initial.cells[3] == "1.00" && initial.cells[4] == "0.00");
+    table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("100"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("0.50"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 4; table.edit_event(decode_input("J"), area);
+    let negative: TableRow = table.rows[0]; verify(negative.cells[4] == "-0.01");
+    table.edit_event(decode_input("K"), area); let zero: TableRow = table.rows[0]; verify(zero.cells[4] == "0.00");
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("+0.50"); table.edit_event(decode_input("\r"), area); verify(!table.editing);
+    table.selected_row = 2; table.selected_column = 1; table.edit_event(decode_input("\r"), area); table.editor.set_text("D-4"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("80"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 4; table.edit_event(decode_input("\r"), area); table.editor.set_text("-0.50"); table.edit_event(decode_input("\r"), area);
+    var playback: NotePlayback = NotePlayback {};
+    playback.update(table, 0, true); verify(playback.events.len() == 0);
+    playback.update(table, 7499, true); verify(playback.events.len() == 0);
+    playback.update(table, 7500, true); verify(playback.events.len() == 1);
+    let delayed: NoteEvent = playback.events[0]; verify(delayed.note == 60 && delayed.on == 1 && delayed.tick == 7500);
+    playback.update(table, 14999, true); verify(playback.active.len() == 1);
+    playback.update(table, 15000, true); let delayed_off: NoteEvent = playback.events[0]; verify(delayed_off.on == 0 && delayed_off.tick == 15000);
+    playback.update(table, 22500, true); let early: NoteEvent = playback.events[0]; verify(early.note == 62 && early.on == 1 && early.tick == 22500);
+    playback.update(table, 37499, true); verify(playback.active.len() == 1);
+    playback.update(table, 37500, true); let early_off: NoteEvent = playback.events[0]; verify(early_off.on == 0 && early_off.tick == 37500);
+    let surface: Surface = Surface::new(120, 12); let theme: Theme = Theme::dark_blue();
+    table.selected_row = 0; table.selected_column = 1; table.paint(surface, area, theme); table.paint_note_lengths(surface, area, theme);
+    let body: Rect = table.body(area); let x: i32 = table.column_x(1) + 5;
+    let late_start: Cell = surface.cell(x, body.y); let early_start: Cell = surface.cell(x, body.y + 1); let early_end: Cell = surface.cell(x, body.y + 2);
+    verify(late_start.glyph == 0x2844 && early_start.glyph == 0x2844 && early_end.glyph == 0x2803);
+    var mixer: Mixer = Mixer {};
+    for _i in 0..30 { mixer.update(table, 1, 7500, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 629); // row 2's early note, before its row
+    // Selecting OFF identifies the whole note line for duplication.
+    table.selected_column = 4; table.track_action(82, area);
+    let duplicated: TableRow = table.rows[2]; verify(duplicated.cells[4] == "-0.50" && duplicated.cells[8] == "-0.50");
+    table.track_action(81, area);
+    table.selected_row = 2; table.clear_row(); table.selected_row = 0; table.selected_column = 4;
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("-0.25"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 0, false); playback.update(table, 0, true); verify(playback.events.len() == 0);
+    playback.update(table, 56249, true); verify(playback.events.len() == 0);
+    playback.update(table, 56250, true); let next_loop: NoteEvent = playback.events[0]; verify(next_loop.on == 1 && next_loop.tick == 56250);
+    playback.update(table, 63750, true); let loop_off: NoteEvent = playback.events[0]; verify(loop_off.on == 0 && loop_off.tick == 63750);
+    // A positive offset beyond one pattern must not fire in the first loop.
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("4.50"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 0, false); playback.update(table, 0, true); playback.update(table, 67499, true); verify(playback.events.len() == 0);
+    playback.update(table, 67500, true); let later_loop: NoteEvent = playback.events[0]; verify(later_loop.on == 1 && later_loop.tick == 67500);
+    // Editing OFF while running invalidates future onsets, not active LEN gates.
+    playback.update(table, 0, false);
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("1.00"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 0, true); playback.update(table, 5000, true);
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("1.50"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 15000, true); verify(playback.events.len() == 0);
+    playback.update(table, 22500, true); let revised: NoteEvent = playback.events[0]; verify(revised.on == 1 && revised.tick == 22500);
+    // Later rows may start first; a late update must retain event order.
+    table.selected_row = 3; table.selected_column = 1; table.edit_event(decode_input("\r"), area); table.editor.set_text("D-4"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("90"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 4; table.edit_event(decode_input("\r"), area); table.editor.set_text("-2.00"); table.edit_event(decode_input("\r"), area);
+    playback.update(table, 0, false); playback.update(table, 0, true); playback.update(table, 30000, true);
+    verify(playback.events.len() == 4);
+    let first_event: NoteEvent = playback.events[0]; let second_event: NoteEvent = playback.events[1];
+    verify(first_event.note == 62 && first_event.tick == 15000 && second_event.note == 60 && second_event.tick == 22500);
+    var copy: SequenceTable = table.copy_pattern();
+    table.edit_event(decode_input("K"), area); let saved_offset: TableRow = copy.rows[3]; verify(saved_offset.cells[4] == "-2.00"); copy.release();
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("0.001"); table.edit_event(decode_input("\r"), area); verify(table.editing);
+    table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area);
+    surface.release(); table.release();
+}
+
+#[test]
 fn tui_pattern_length() {
     let area: Rect = Rect::new(0, 0, 80, 12);
-    var table: SequenceTable = SequenceTable::new();
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
     verify(table.length_truncates_data(32));
     verify(!table.set_length(0, area) && !table.set_length(16385, area));
     verify(table.rows.len() == 64);
@@ -108,7 +276,7 @@ fn tui_pattern_length() {
     verify(table.set_length(80, area));
     let empty: TableRow = table.rows[79]; verify(empty.cells[0] == "080" && empty.cells[1] == "" && empty.cells[2] == "");
     verify(!table.length_truncates_data(32));
-    table.selected_row = 79; table.selected_column = 4;
+    table.selected_row = 79; table.selected_column = 5;
     table.edit_event(decode_input("\r"), area); table.editor.set_text("0"); table.edit_event(decode_input("\r"), area);
     verify(table.length_truncates_data(32));
     table.release();
@@ -143,13 +311,13 @@ fn tui_pattern_length() {
 #[test]
 fn tui_audio_duration_gate() {
     let area: Rect = Rect::new(0, 0, 120, 12);
-    var table: SequenceTable = SequenceTable::new(); table.create_track_kind(false, true, area);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); table.create_track_kind(false, true, area);
     var clip: AudioClip = AudioClip { source: clone("gate-test"), frames: 40, frames_per_row: 10 };
     for _r in 0..4 { clip.peaks.push(WavePeak { left: 500, right: 250 }); }
     for _r in 0..16 { clip.detail_peaks.push(WavePeak { left: 500, right: 250 }); }
     verify(table.insert_audio(clip, area));
-    let first: TableRow = table.rows[0]; verify(first.cells[18] == "4.00");
-    table.selected_column = 18; table.edit_event(decode_input("\r"), area); table.editor.set_text("3.75"); table.edit_event(decode_input("\r"), area);
+    let first: TableRow = table.rows[0]; verify(first.cells[21] == "4.00");
+    table.selected_column = 21; table.edit_event(decode_input("\r"), area); table.editor.set_text("3.75"); table.edit_event(decode_input("\r"), area);
     verify(!table.editing);
     let track: SequenceTrack = table.tracks[3]; let instance: AudioInstance = track.instances[0];
     verify(instance.duration() == 56250 && clip.frames == 40 && track.instance_at(4) == -1);
@@ -161,11 +329,11 @@ fn tui_audio_duration_gate() {
     verify(mixer.level(3, 100, 0, false, false) == 0);
     let surface: Surface = Surface::new(120, 12); let theme: Theme = Theme::dark_blue();
     table.paint(surface, area, theme); table.paint_audio_style(surface, area, theme, true, false);
-    let body: Rect = table.body(area); let center: Cell = surface.cell(table.column_x(19) + 6, body.y + 3);
+    let body: Rect = table.body(area); let center: Cell = surface.cell(table.column_x(22) + 6, body.y + 3);
     verify(center.glyph == 0x2807);
     table.edit_event(decode_input("\r"), area); table.editor.set_text("4.01"); table.edit_event(decode_input("\r"), area);
     verify(table.editing && table.error == "LEN exceeds the sample duration"); table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area);
-    table.edit_event(decode_input("K"), area); let stepped: TableRow = table.rows[0]; verify(stepped.cells[18] == "3.76");
+    table.edit_event(decode_input("K"), area); let stepped: TableRow = table.rows[0]; verify(stepped.cells[21] == "3.76");
     var copy: SequenceTable = table.copy_pattern(); table.remove_audio_under_cursor();
     let saved: SequenceTrack = copy.tracks[3]; let saved_instance: AudioInstance = saved.instances[0]; verify(saved_instance.duration() == 56400);
     table.release(); copy.release(); clip.release(); surface.release();
@@ -173,34 +341,34 @@ fn tui_audio_duration_gate() {
 
 #[test]
 fn tui_multiple_note_lines() {
-    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 12);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); let area: Rect = Rect::new(0, 0, 80, 12);
     table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("3.75"); table.edit_event(decode_input("\r"), area);
-    table.selected_column = 4; table.edit_event(decode_input("\r"), area); table.editor.set_text("25"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 5; table.edit_event(decode_input("\r"), area); table.editor.set_text("25"); table.edit_event(decode_input("\r"), area);
     table.track_action(80, area); // Add from CC appends before automation.
     let added: TableRow = table.rows[0]; let track: SequenceTrack = table.tracks[0];
-    verify(track.note_lines == 2 && table.selected_column == 4 && table.track_start(1) == 9);
-    verify(added.cells[1] == "C-4" && added.cells[4] == "" && added.cells[5] == "" && added.cells[7] == "25");
+    verify(track.note_lines == 2 && table.selected_column == 5 && table.track_start(1) == 11);
+    verify(added.cells[1] == "C-4" && added.cells[5] == "" && added.cells[6] == "" && added.cells[9] == "25");
     table.selected_column = 2; table.track_action(82, area); // VEL selects its NOTE/VEL pair.
     let duplicated: TableRow = table.rows[0];
-    verify(duplicated.cells[3] == "3.75" && duplicated.cells[6] == "3.75");
-    verify(duplicated.cells[4] == "C-4" && duplicated.cells[5] == "100" && duplicated.cells[10] == "25");
-    verify(table.automation_column(0, 1) == 10 && table.track_start(1) == 12 && table.is_note());
+    verify(duplicated.cells[3] == "3.75" && duplicated.cells[7] == "3.75");
+    verify(duplicated.cells[5] == "C-4" && duplicated.cells[6] == "100" && duplicated.cells[13] == "25");
+    verify(table.automation_column(0, 1) == 13 && table.track_start(1) == 15 && table.is_note());
     table.edit_event(decode_input("K"), area);
-    let edited: TableRow = table.rows[0]; verify(edited.cells[1] == "C-4" && edited.cells[4] == "C#4");
+    let edited: TableRow = table.rows[0]; verify(edited.cells[1] == "C-4" && edited.cells[5] == "C#4");
     var mixer: Mixer = Mixer {};
     for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
     verify(mixer.level(0, 100, 0, false, false) == 787); // two V100 notes are not summed
-    table.selected_column = 5; table.edit_event(decode_input("\r"), area); table.editor.set_text("127"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 6; table.edit_event(decode_input("\r"), area); table.editor.set_text("127"); table.edit_event(decode_input("\r"), area);
     for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
     verify(mixer.level(0, 100, 0, false, false) == 1000 && mixer.levels.len() == 3);
-    table.selected_column = 4; table.edit_event(decode_input("\r"), area); table.editor.set_text(""); table.edit_event(decode_input("\r"), area); // empty NOTE ignores its high VEL
+    table.selected_column = 5; table.edit_event(decode_input("\r"), area); table.editor.set_text(""); table.edit_event(decode_input("\r"), area); // empty NOTE ignores its high VEL
     for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
     verify(mixer.level(0, 100, 0, false, false) == 787);
     var copy: SequenceTable = table.copy_pattern();
     table.track_action(81, area); let removed: TableRow = table.rows[0];
-    verify(table.track_columns(0) == 8 && removed.cells[4] == "" && removed.cells[7] == "25");
-    table.track_action(81, area); verify(table.track_columns(0) == 5);
-    table.track_action(81, area); verify(table.error != "" && table.track_columns(0) == 5);
+    verify(table.track_columns(0) == 10 && removed.cells[5] == "" && removed.cells[9] == "25");
+    table.track_action(81, area); verify(table.track_columns(0) == 6);
+    table.track_action(81, area); verify(table.error != "" && table.track_columns(0) == 6);
     let saved: SequenceTrack = copy.tracks[0]; verify(saved.note_lines == 3);
     copy.create_track(true, area); let cloned: SequenceTrack = copy.tracks[3]; verify(cloned.note_lines == 3);
     copy.create_track_kind(false, true, area); copy.track_action(80, area);
@@ -258,7 +426,7 @@ fn tui_transport_clock_and_bpm_dialog() {
 
 #[test]
 fn tui_sequenced_meter_sources_and_ramps() {
-    var table: SequenceTable = SequenceTable::new(); var mixer: Mixer = Mixer {};
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); var mixer: Mixer = Mixer {};
     mixer.update(table, 0, 0, false, 10); verify(mixer.level(0, 100, 0, false, false) == 0);
     mixer.update(table, 0, 0, true, 10);
     let attack: i32 = mixer.level(0, 100, 0, false, false); verify(attack > 0 && attack < 788);
@@ -382,7 +550,7 @@ fn tui_waveform_fractional_edges() {
 
 #[test]
 fn tui_audio_import_and_waveform() {
-    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 120, 12);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); let area: Rect = Rect::new(0, 0, 120, 12);
     verify(!table.import_audio("examples/fft_example/illusion.wav", 120, area));
     table.create_track_kind(false, true, area);
     verify(!table.import_audio("modules/tui/README.md", 120, area));
@@ -393,23 +561,23 @@ fn tui_audio_import_and_waveform() {
     verify(audio.clip.samples.len() == audio.clip.frames * audio.clip.channels);
     verify(table.audio_under_cursor());
     verify(audio.clip.peaks.len() > 64 && table.rows.len() == audio.clip.peaks.len());
-    verify(table.track_columns(3) == 4 && table.columns.len() == 20);
+    verify(table.track_columns(3) == 4 && table.columns.len() == 23);
     let tail: TableRow = table.rows[64];
-    verify(tail.cells.len() == 20 && tail.cells[1] == "" && tail.cells[2] == "");
+    verify(tail.cells.len() == 23 && tail.cells[1] == "" && tail.cells[2] == "");
     let original: TableRow = table.rows[0]; verify(original.cells[1] == "C-4");
-    let wave_column: TableColumn = table.columns[19]; verify(wave_column.read_only);
+    let wave_column: TableColumn = table.columns[22]; verify(wave_column.read_only);
     let surface: Surface = Surface::new(120, 12); let theme: Theme = Theme::dark_blue();
     table.paint(surface, area, theme); table.paint_audio(surface, area, theme);
-    let center: Cell = surface.cell(table.column_x(19) + 6, 2);
+    let center: Cell = surface.cell(table.column_x(22) + 6, 2);
     verify(center.glyph == 0x2502);
     verify(table.edit_event(decode_input("z"), area));
-    let zoomed: TableColumn = table.columns[19]; verify(zoomed.width == 25);
-    verify(table.selected_column == 16 && table.selected_row == 0);
+    let zoomed: TableColumn = table.columns[22]; verify(zoomed.width == 25);
+    verify(table.selected_column == 19 && table.selected_row == 0);
     table.paint(surface, area, theme); table.paint_audio(surface, area, theme);
-    let zoom_center: Cell = surface.cell(table.column_x(19) + 12, 2); verify(zoom_center.glyph == 0x2502);
+    let zoom_center: Cell = surface.cell(table.column_x(22) + 12, 2); verify(zoom_center.glyph == 0x2502);
     var copy: SequenceTable = table.copy_pattern();
     table.edit_event(decode_input("z"), area);
-    let compact: TableColumn = table.columns[19]; verify(compact.width == 13);
+    let compact: TableColumn = table.columns[22]; verify(compact.width == 13);
     table.clear_track(); verify(table.track_columns(3) == 3);
     let saved: SequenceTrack = copy.tracks[3]; let saved_audio: AudioInstance = saved.instances[0];
     verify(saved_audio.clip.peaks.len() > 64 && saved.wave_zoom);
@@ -574,7 +742,7 @@ fn tui_song_row_editing() {
 
 #[test]
 fn tui_sequence_jump_navigation() {
-    var table: SequenceTable = SequenceTable::new();
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
     let area: Rect = Rect::new(0, 0, 40, 10);
     table.edit_event(decode_input("G"), area);
     verify(table.selected_row == 63 && table.scroll_y > 0);
@@ -611,7 +779,7 @@ fn tui_vu_meter_and_mixer() {
     empty.paint(surface, Rect::new(3, 1, 1, 1), theme.panel);
     let silent: Cell = surface.cell(3, 1); verify(silent.foreground == 0x163A2A);
     var mixer: Mixer = Mixer { visible: true };
-    var table: SequenceTable = SequenceTable::new();
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
     let track: SequenceTrack = table.tracks[0]; verify(track.volume == 100 && track.pan == 0);
     let before: i32 = mixer.level(0, 100, 0, false, false); mixer.update(table, 0, 0, true, 10);
     verify(before != mixer.level(0, 100, 0, false, false));
@@ -629,25 +797,25 @@ fn tui_vu_meter_and_mixer() {
 
 #[test]
 fn tui_mixed_track_types() {
-    var table: SequenceTable = SequenceTable::new();
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
     let area: Rect = Rect::new(0, 0, 40, 12);
     table.track_action(28, area);
-    verify(table.tracks.len() == 4 && table.selected_column == 16 && table.track_columns(3) == 3 && !table.is_note());
+    verify(table.tracks.len() == 4 && table.selected_column == 19 && table.track_columns(3) == 3 && !table.is_note());
     let audio: SequenceTrack = table.tracks[3]; verify(audio.audio);
-    let group: TableGroup = table.groups[3]; verify(group.first == 16 && group.count == 3);
-    let column: TableColumn = table.columns[16]; verify(column.title == "CC1" && !column.validate("C-4"));
+    let group: TableGroup = table.groups[3]; verify(group.first == 19 && group.count == 3);
+    let column: TableColumn = table.columns[19]; verify(column.title == "CC1" && !column.validate("C-4"));
     verify(table.configure_slot(1, "pitchbend"));
     table.edit_event(decode_input("\r"), area); table.editor.set_text("-123"); table.edit_event(decode_input("\r"), area);
-    table.track_action(21, area); verify(table.selected_column == 19 && table.is_note());
+    table.track_action(21, area); verify(table.selected_column == 22 && table.is_note());
     table.edit_event(decode_input("K"), area); table.edit_event(decode_input("K"), area);
-    let mixed: TableRow = table.rows[0]; verify(mixed.cells[16] == "-123" && mixed.cells[19] == "C#4");
-    table.selected_column = 16; table.create_track(true, area);
-    let duplicate: SequenceTrack = table.tracks[5]; verify(duplicate.audio && table.selected_column == 24);
-    let copied: TableRow = table.rows[0]; verify(copied.cells[24] == "-123");
-    table.clear_track(); let cleared: TableRow = table.rows[0]; verify(cleared.cells[24] == "" && cleared.cells[16] == "-123");
-    table.remove_track(area); table.selected_column = 16; table.remove_track(area);
-    verify(table.tracks.len() == 4 && table.is_note() && table.selected_column == 16);
-    let shifted: TableRow = table.rows[0]; verify(shifted.cells[16] == "C#4");
+    let mixed: TableRow = table.rows[0]; verify(mixed.cells[19] == "-123" && mixed.cells[22] == "C#4");
+    table.selected_column = 19; table.create_track(true, area);
+    let duplicate: SequenceTrack = table.tracks[5]; verify(duplicate.audio && table.selected_column == 28);
+    let copied: TableRow = table.rows[0]; verify(copied.cells[28] == "-123");
+    table.clear_track(); let cleared: TableRow = table.rows[0]; verify(cleared.cells[28] == "" && cleared.cells[19] == "-123");
+    table.remove_track(area); table.selected_column = 19; table.remove_track(area);
+    verify(table.tracks.len() == 4 && table.is_note() && table.selected_column == 19);
+    let shifted: TableRow = table.rows[0]; verify(shifted.cells[19] == "C#4");
     table.release();
 }
 
@@ -662,7 +830,7 @@ fn tui_meter_styles_and_channel_counts() {
     verify(bar.glyph == 0x2582 && dots.glyph == 0x28C0 && dots.foreground == bar.foreground);
     verify(VuMeter::color(519) == 0x74F078 && VuMeter::color(520) == 0xFFD65C);
     verify(VuMeter::color(700) == 0xFF9046 && VuMeter::color(850) == 0xFF604C);
-    var table: SequenceTable = SequenceTable::new(); table.create_track_kind(false, true, Rect::new(0, 0, 40, 12));
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); table.create_track_kind(false, true, Rect::new(0, 0, 40, 12));
     let mixer: Mixer = Mixer { visible: true };
     mixer.paint(surface, Rect::new(0, 0, 24, 12), theme, table.tracks, 3);
     let mono: Cell = surface.cell(2, 11); let empty: Cell = surface.cell(3, 11);
@@ -692,15 +860,15 @@ fn tui_column_validation() {
 
 #[test]
 fn tui_track_groups_and_frozen_row() {
-    var table: SequenceTable = SequenceTable::new();
-    let area: Rect = Rect::new(2, 1, 34, 10);
-    let surface: Surface = Surface::new(40, 14); let theme: Theme = Theme::dark_blue();
-    verify(table.tracks.len() == 3 && table.columns.len() == 16 && table.groups.len() == 3);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
+    let area: Rect = Rect::new(2, 1, 42, 10);
+    let surface: Surface = Surface::new(48, 14); let theme: Theme = Theme::dark_blue();
+    verify(table.tracks.len() == 3 && table.columns.len() == 19 && table.groups.len() == 3);
     table.paint(surface, area, theme);
-    let active: Cell = surface.cell(6, 1); let inactive: Cell = surface.cell(34, 1);
+    let active: Cell = surface.cell(6, 1); let inactive: Cell = surface.cell(41, 1);
     verify(active.background == theme.selection && inactive.background == theme.menu_background);
     let row: Cell = surface.cell(2, 3); verify(row.glyph == 48);
-    table.selected_column = 15; table.paint(surface, area, theme);
+    table.selected_column = 18; table.paint(surface, area, theme);
     verify(table.scroll_x > 0 && table.active_track() == 2);
     let pinned: Cell = surface.cell(2, 3); verify(pinned.glyph == 48);
     let header: Cell = surface.cell(2, 2); verify(header.glyph == 82);
@@ -713,26 +881,26 @@ fn tui_track_groups_and_frozen_row() {
 
 #[test]
 fn tui_track_actions_and_automation() {
-    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 45, 12);
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); let area: Rect = Rect::new(0, 0, 45, 12);
     verify(table.rename_track("Lead"));
     verify(table.configure_slot(1, "pitchbend"));
-    table.selected_column = 4;
+    table.selected_column = 5;
     table.edit_event(decode_input("\r"), area); table.editor.set_text("-8192"); table.edit_event(decode_input("\r"), area);
-    let bend: TableRow = table.rows[0]; verify(bend.cells[4] == "-8192" && bend.cells[9] == "");
+    let bend: TableRow = table.rows[0]; verify(bend.cells[5] == "-8192" && bend.cells[11] == "");
     verify(!table.configure_slot(1, "cc:7"));
     verify(table.configure_slot(2, "cutoff:-100:1000"));
     verify(!table.configure_slot(2, "bad:9:1") && !table.configure_slot(2, "cc:128"));
     table.track_action(25, area);
     let muted: SequenceTrack = table.tracks[0]; verify(muted.muted);
     table.create_track(true, area); verify(table.tracks.len() == 4 && table.active_track() == 3);
-    let duplicate: TableRow = table.rows[0]; verify(duplicate.cells[19] == "-8192");
+    let duplicate: TableRow = table.rows[0]; verify(duplicate.cells[23] == "-8192");
     table.clear_track();
-    let cleared: TableRow = table.rows[0]; verify(cleared.cells[19] == "" && cleared.cells[4] == "-8192");
+    let cleared: TableRow = table.rows[0]; verify(cleared.cells[23] == "" && cleared.cells[5] == "-8192");
     table.remove_track(area); verify(table.tracks.len() == 3 && table.active_track() == 2);
     table.create_track(false, area); let added: TableRow = table.rows[0];
-    verify(table.tracks.len() == 4 && added.cells[16] == "" && added.cells[17] == "");
+    verify(table.tracks.len() == 4 && added.cells[19] == "" && added.cells[20] == "");
     for _i in 0..5 { table.remove_track(area); }
-    verify(table.tracks.len() == 1 && table.columns.len() == 6);
+    verify(table.tracks.len() == 1 && table.columns.len() == 7);
     table.release();
 }
 
@@ -743,7 +911,7 @@ fn tui_sequence_empty_clear_delete() {
     verify(column.validate("") && !column.validate(" ") && !column.validate("128"));
     column.nullable = false; verify(!column.validate(""));
     column.nullable = true; column.value_type = "unknown"; verify(!column.validate(""));
-    var table: SequenceTable = SequenceTable::new();
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
     let area: Rect = Rect::new(0, 0, 40, 10);
     table.edit_event(decode_input("\x7f"), area);
     let unchanged: TableRow = table.rows[0]; verify(unchanged.cells[1] == "C-4" && unchanged.cells[2] == "100");
@@ -780,7 +948,7 @@ fn tui_sequence_empty_clear_delete() {
 
 #[test]
 fn tui_sequence_editing() {
-    var table: SequenceTable = SequenceTable::new();
+    var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12));
     let area: Rect = Rect::new(0, 0, 40, 10);
     verify(table.notes.len() == 128);
     table.reconcile(area); verify(table.selected_column == 1);
