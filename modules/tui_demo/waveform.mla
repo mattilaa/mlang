@@ -6,11 +6,16 @@ use tui::surface::*;
 
 pub fn paint_grainy_row(surface: Surface, area: Rect, clip: Rect, details: &list<WavePeak>, row: i32,
     reversed: bool, color: i32, background: i32, wave: bool) -> void {
+    paint_grainy_row_duration(surface, area, clip, details, row, reversed, color, background, wave, 15000);
+}
+pub fn paint_grainy_row_duration(surface: Surface, area: Rect, clip: Rect, details: &list<WavePeak>, row: i32,
+    reversed: bool, color: i32, background: i32, wave: bool, remaining: i64) -> void {
     let bits: array<i32, 8> = {1, 8, 2, 16, 4, 32, 64, 128};
     for x in 0..area.width {
         if !clip.contains(area.x + i32(x), area.y) { continue; }
         var mask: i32 = 0;
         for part in 0..4 {
+            if part * 3750 >= remaining { continue; }
             let index: i32 = row * 4 + i32(part);
             if index >= details.len() { continue; }
             let peak: WavePeak = details[index];

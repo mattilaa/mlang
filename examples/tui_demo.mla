@@ -24,6 +24,8 @@ use tui_demo::transport::TransportStatus;
 mod tui_demo::sample_view;
 use tui_demo::sample_view::SampleView;
 mod tui_demo::bpm_dialog;
+mod tui_demo::note_playback;
+use tui_demo::note_playback::NotePlayback;
 use tui_demo::bpm_dialog::BpmDialog;
 mod tui_demo::frame_rate;
 use tui_demo::frame_rate::FrameRate;
@@ -121,6 +123,7 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
     free(title);
     table.paint(surface, top, theme);
     table.paint_audio_style(surface, top, theme, sample.grainy, sample.wave);
+    table.paint_note_lengths(surface, top, theme);
     table.paint_editor(surface, top, theme);
     let show_sample: bool = sample.visible && table.audio_under_cursor();
     let details: Panel = Panel { title: show_sample ? " Sample " : (mixer.visible ? " Mixer " : " Inspector ") };
@@ -129,7 +132,8 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
     if show_sample {
         let track: SequenceTrack = table.tracks[table.active_track()];
         let instance: AudioInstance = track.instances[track.instance_at(table.selected_row)];
-        sample.paint_at(surface, bottom, theme, instance.clip, table.selected_row - instance.start_row, transport.playing ? transport.phase : 0);
+        let render_clip: AudioClip = instance.render_clip();
+        sample.paint_at(surface, bottom, theme, render_clip, table.selected_row - instance.start_row, transport.playing ? transport.phase : 0);
         if (patterns.error != "" || table.error != "") && bottom.height > 0 {
             surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
         }
@@ -156,6 +160,7 @@ fn main() -> i32 {
     var library: PatternLibrary = PatternLibrary::new();
     var transport: TransportStatus = TransportStatus {};
     var bpm_dialog: BpmDialog = BpmDialog::new();
+    var note_playback: NotePlayback = NotePlayback {};
     var pending_length: i32 = 0;
     var length_target: i32 = 0;
     var mixer: Mixer = Mixer { visible: false };
@@ -185,6 +190,7 @@ fn main() -> i32 {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
         }
+        note_playback.update(library.table, transport.ticks, transport.playing);
         if mixer.update(library.table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
         if playback_dirty && frame_rate.ready(now) { dirty = true; }
         if sample.visible && !library.table.audio_under_cursor() { sample.visible = false; dirty = true; }
@@ -326,6 +332,7 @@ fn main() -> i32 {
             }
             else if event.code == 32 && event.modifiers == 1 {
                 transport.toggle(now_ms(), library.table.selected_row, i32(library.table.rows.len()));
+                note_playback.update(library.table, transport.ticks, transport.playing);
                 if transport.row >= 0 { library.table.selected_row = transport.row; }
                 dirty = true;
             }
@@ -442,6 +449,7 @@ fn main() -> i32 {
         }
         sleep_ms(frame_rate.sleep_ms(now_ms()));
     }
+    note_playback.update(library.table, transport.ticks, false);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();
     return 0;

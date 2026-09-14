@@ -1,0 +1,24 @@
+mod tui::table;
+mod std::strbuf;
+use tui::table::*;
+use std::strbuf::*;
+/// Fixed-point row duration: one sixteenth = 15000 ticks, precision 0.01 row.
+pub fn duration_ticks(text: str8) -> i64 {
+    if !table_matches("[0-9]{1,5}(\\.[0-9]{1,2})?", text) { return -1; }
+    let dot: i64 = find(text, ".");
+    let whole: str8 = dot < 0 ? clone(text) : sub(text, 0, dot);
+    let integer: result<i64, str8> = table_integer(whole); free(whole);
+    if integer.is_err() { return -1; }
+    var hundredths: i64 = integer.unwrap() * 100;
+    if dot >= 0 {
+        let fraction: str8 = sub(text, dot + 1, len(text) - dot - 1);
+        let parsed: result<i64, str8> = table_integer(fraction); free(fraction);
+        if parsed.is_err() { return -1; }
+        hundredths = hundredths + parsed.unwrap() * (len(text) - dot == 2 ? 10 : 1);
+    }
+    return hundredths >= 1 && hundredths <= 1638400 ? hundredths * 150 : -1;
+}
+pub fn duration_text(ticks: i64) -> str8 {
+    let hundredths: i64 = (ticks + 149) / 150;
+    return format!("{}.{}{}", hundredths / 100, hundredths % 100 < 10 ? "0" : "", hundredths % 100);
+}

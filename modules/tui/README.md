@@ -271,6 +271,26 @@ call its `release()` once and do not shallow-copy the owning library.
 
 ### Table widget
 
+LEN uses decimal sixteenth-note units: `1.00` = one row, `0.50` = half a row,
+`3.75` = three and three-quarter rows. Enter edits LEN; Shift+J/K adjusts it by
+0.01. MIDI accepts 0.01–16384.00, with new notes defaulting to 1.00. A muted-color
+duration rail beside NOTE follows sustained notes and uses eight vertical steps
+per terminal cell for partial endings. Empty NOTE cells do not cut off a sustain.
+
+Audio LEN defaults to the sample duration. Edit it at the instance's starting
+row to shorten its gate; it cannot exceed the sample, pattern end or next
+instance. Its fractional tail is visible in the waveform and its mixer gate
+ends at LEN, leaving the loaded sample unchanged. Clear audio LEN to restore
+the available sample duration.
+
+`tui_demo::note_playback::NotePlayback` produces timestamped note-on/off events
+using the transport's continuous musical ticks (15000 per sixteenth). Note-offs
+are scheduled at LEN, independent of row/frame boundaries and visual meter
+decay. Equal-pitch overlaps on a track hold until the last voice ends; stopping
+flushes active notes. This is demo-side scheduling, not a real-time/lock-free
+MIDI backend: the demo still has no connected MIDI-device output. Consumers must
+drain `events` after each update; timestamps preserve timing across late frames.
+
 Pattern → Set length opens a row-count dialog prefilled with the current length
 (1–16,384 rows). Growth adds empty rows. Shrinking past populated cells or audio
 asks “Are you sure, data will be truncated”; Cancel/Escape leaves data intact.
@@ -279,7 +299,7 @@ samples. Extending again does not restore discarded data. Playback stops when
 opening the length dialog.
 
 `tui::table::Table` renders the demo's 64-row sequence with a frozen ROW column
-and three independent tracks, each containing compact NOTE, VEL, CC1, and CC2
+and three independent tracks, each containing compact NOTE, VEL, LEN, CC1, and CC2
 columns. Focus the sequence pane with Ctrl+Shift+L; `l`/`h`
 select the next/previous column and `j`/`k` (or Down/Up) select rows. Navigation
 stops at the edges and scrolls the selection into view, with a fixed header.
@@ -321,13 +341,13 @@ the group containing the selected child column gets the selection highlight.
 Set `frozen_columns: 1` to pin ROW during horizontal navigation. The scrollbar
 represents only the unfrozen columns. Selecting another track scrolls it into
 view; if the whole group fits, it is kept together. Wider groups scroll by child
-column. Column widths are NOTE=6, VEL=4, CC1=6, CC2=6, including spacing.
+column. Column widths are NOTE=6, VEL=4, LEN=6, CC1=6, CC2=6, including spacing.
 
 The demo's **Track** menu always targets the selected column's track:
 
 - Rename opens a text dialog (Enter saves, Escape cancels).
 - Create track → MIDI track / AUDIO track appends an empty track of the chosen
-  type and selects it. MIDI has NOTE, VEL, CC1, CC2; AUDIO has only CC1 and CC2.
+  type and selects it. MIDI has NOTE, VEL, LEN, CC1, CC2; AUDIO has CC1, CC2, LEN.
   Mixed groups have different widths; navigation, frozen ROW, deletion, and
   duplication follow their actual column ranges. Duplicate preserves track type.
 - Duplicate appends an independent copy of the pattern, mute flag, and automation
@@ -390,17 +410,17 @@ source. These are sequencer-derived levels, not measurements from an audio devic
 
 #### Typed columns and editing
 
-MIDI tracks support 1–16 NOTE/VEL pairs followed by their shared CC1/CC2 columns.
-**Track → Add note line** inserts a blank pair after the selected pair (or appends
+MIDI tracks support 1–16 NOTE/VEL/LEN groups followed by their shared CC1/CC2 columns.
+**Track → Add note line** inserts a blank group after the selected group (or appends
 it before CC1 when an automation column is selected). **Duplicate note line**
-copies the selected NOTE/VEL pair for every row and selects the copy. **Remove
-note line** removes that pair, keeping at least one. Selecting either NOTE or
-VEL identifies the pair; Remove/Duplicate require such a selection. These actions
+copies the selected NOTE/VEL/LEN group for every row and selects the copy. **Remove
+note line** removes that group, keeping at least one. Selecting NOTE, VEL or
+LEN identifies the group; Remove/Duplicate require such a selection. These actions
 do not apply to audio tracks, and no new shortcuts are assigned yet.
 
-All pairs retain the usual note editing, typed velocity limits, empty values,
+All note lines retain the usual note editing, typed velocity limits, empty values,
 column navigation, and horizontal scrolling. Pattern/track clones preserve the
-pair count and contents. Each MIDI track still has one Mixer strip: the highest
+note-line count and contents. Each MIDI track still has one Mixer strip: the highest
 velocity among its non-empty notes feeds that strip's smoothed meter; velocities
 are not summed, and a velocity without a note produces no meter activity.
 

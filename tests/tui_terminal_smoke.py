@@ -208,11 +208,11 @@ def main():
         os.write(master, b"\x1b")
         read_frame(1, table_text=((34, 4), "42"))
         # CC cells reject text and remain editable until corrected.
-        os.write(master, b"l\r\x15qhjk\r")
+        os.write(master, b"ll\r\x15qhjk\r")
         assert b"Invalid type" in read_frame(1)
         os.write(master, b"\x1564\r")
-        read_frame(1, table_text=((38, 4), "64"))
-        os.write(master, b"hh")
+        read_frame(1, table_text=((44, 4), "64"))
+        os.write(master, b"hhh")
         read_frame(1, table_cell=((28, 4), (60, 91, 128)))
         # Empty note commits as a rest; clearing preserves ROW, dd removes it.
         os.write(master, b"\r\x15\r")
@@ -229,11 +229,11 @@ def main():
         os.write(master, b"k" * 70)
         read_frame(1)
         # dd in an inline editor is text, not a row command.
-        os.write(master, b"ll\r\x15dd\r")
+        os.write(master, b"lll\r\x15dd\r")
         assert b"Invalid type" in read_frame(1)
         os.write(master, b"\x1b")
         read_frame(1)
-        os.write(master, b"hh")
+        os.write(master, b"hhh")
         read_frame(1)
         def track_menu(item):
             os.write(master, b"\tlll")
@@ -242,13 +242,13 @@ def main():
 
         # Track menu acts on the group containing the selected child column.
         track_menu(8)
-        read_frame(1, table_text=((38, 4), "   "))
-        os.write(master, b"h")  # select VEL in the original note line
+        read_frame(1, table_text=((44, 4), "   "))
+        os.write(master, b"hh")  # select VEL in the original note line
         read_frame(1)
         track_menu(10)
-        read_frame(1, table_text=((38, 4), "C-4"))
+        read_frame(1, table_text=((44, 4), "C-4"))
         track_menu(9)
-        read_frame(1, table_text=((38, 4), "   "))
+        read_frame(1, table_text=((44, 4), "   "))
         track_menu(9)
         read_frame(1, table_text=((28, 4), "C-4"))
         track_menu(0)

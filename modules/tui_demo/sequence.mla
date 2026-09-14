@@ -3,10 +3,13 @@ mod tui::table;
 mod tui::textfield;
 mod tui::dialog;
 mod tui_demo::audio_clip;
+mod tui_demo::duration;
+use tui_demo::duration::*;
 use tui_demo::audio_clip::*;
 mod tui_demo::waveform;
 use tui_demo::waveform::paint_wave_channel_style;
 use tui_demo::waveform::paint_grainy_row;
+use tui_demo::waveform::paint_grainy_row_duration;
 use tui::dialog::Dialog;
 use tui::table::*;
 use tui::textfield::TextField;
@@ -21,7 +24,21 @@ use std::strbuf::len;
 use std::strbuf::find;
 use std::strbuf::sub;
 pub struct AutomationSlot { var parameter: str8; var minimum: i64; var maximum: i64; };
-pub struct AudioInstance { var clip: AudioClip; var start_row: i32; };
+pub struct AudioInstance { var clip: AudioClip; var start_row: i32; var length_ticks: i32; };
+impl AudioInstance {
+    /// Borrowed render view: metadata is gated by LEN; never release this view.
+    pub fn render_clip(self: AudioInstance) -> AudioClip {
+        let frames: i64 = (self.duration() * self.clip.frames_per_row + 14999) / 15000;
+        var clip: AudioClip = AudioClip {}; clip = self.clip;
+        if frames > 0 && frames < clip.frames { clip.frames = frames; }
+        return clip;
+    }
+    pub fn duration(self: AudioInstance) -> i64 {
+        if self.length_ticks > 0 { return wide(self.length_ticks); }
+        if self.clip.frames_per_row > 0 { return self.clip.frames * 15000 / self.clip.frames_per_row; }
+        return wide(i32(self.clip.peaks.len())) * 15000;
+    }
+}
 pub struct SequenceTrack {
     var name: str8; var muted: bool; var cc1: AutomationSlot; var cc2: AutomationSlot;
     var volume: i32{100}; var pan: i32;
@@ -34,13 +51,13 @@ impl SequenceTrack {
     pub fn instance_at(self: SequenceTrack, row: i32) -> i32 {
         for i in 0..self.instances.len() {
             let instance: AudioInstance = self.instances[i];
-            if row >= instance.start_row && row - instance.start_row < instance.clip.peaks.len() { return i32(i); }
+            if row >= instance.start_row && wide(row - instance.start_row) * 15000 < instance.duration() { return i32(i); }
         }
         return -1;
     }
     pub fn copy_audio(self: SequenceTrack) -> list<AudioInstance> {
         var copies: list<AudioInstance> = []; let instances: list<AudioInstance> = self.instances;
-        for instance in instances { copies.push(AudioInstance { clip: instance.clip.copy(), start_row: instance.start_row }); }
+        for instance in instances { copies.push(AudioInstance { clip: instance.clip.copy(), start_row: instance.start_row, length_ticks: instance.length_ticks }); }
         return copies;
     }
     pub fn release_audio(self: SequenceTrack) -> void {
@@ -66,7 +83,7 @@ pub fn new() -> SequenceTable {
     for i in 0..64 {
         let number: str8 = format!("{}{}", i < 9 ? "00" : "0", i + 1);
         var cells: list<str8> = [number];
-        for _t in 0..3 { cells.push(clone("C-4")); cells.push(clone("100")); cells.push(clone("")); cells.push(clone("")); }
+        for _t in 0..3 { cells.push(clone("C-4")); cells.push(clone("100")); cells.push(clone("1.00")); cells.push(clone("")); cells.push(clone("")); }
         rows.push(TableRow { cells: cells });
     }
     var tracks: list<SequenceTrack> = [];
@@ -109,12 +126,12 @@ pub fn insert_audio(self: &mut Self, source: &AudioClip, area: Rect) -> bool {
     if count > 16384 { self.error = "Audio exceeds 16384 pattern rows"; return false; }
     let instances: list<AudioInstance> = track.instances;
     for instance in instances {
-        if row < instance.start_row + instance.clip.peaks.len() && count > instance.start_row {
+        if wide(row) * 15000 < wide(instance.start_row) * 15000 + instance.duration() && count > instance.start_row {
             self.error = "Audio overlaps another instance"; return false;
         }
     }
     let insert: bool = track.instances.len() == 0;
-    let column: i32 = self.track_start(index) + 2;
+    let column: i32 = self.track_start(index) + 3;
     track.instances.push(AudioInstance { clip: clip.copy(), start_row: row });
     self.replace_track(index, track);
     if insert {
@@ -137,6 +154,9 @@ pub fn insert_audio(self: &mut Self, source: &AudioClip, area: Rect) -> bool {
         for _c in 1..self.columns.len() { cells.push(clone("")); }
         self.rows.push(TableRow { cells: cells });
     }
+    let saved: SequenceTrack = self.tracks[index];
+    let placed: AudioInstance = saved.instances[saved.instances.len() - 1];
+    self.write_owned_cell(row, column - 1, duration_text(placed.duration()));
     self.reconcile(area); self.error = ""; return true;
 }
 pub fn remove_audio_under_cursor(self: &mut Self) -> bool {
@@ -146,12 +166,15 @@ pub fn remove_audio_under_cursor(self: &mut Self) -> bool {
     var kept: list<AudioInstance> = [];
     for i in 0..track.instances.len() {
         let instance: AudioInstance = track.instances[i];
-        if i == hit { instance.clip.release(); } else { kept.push(instance); }
+        if i == hit {
+            self.write_owned_cell(instance.start_row, self.track_start(index) + 2, clone(""));
+            instance.clip.release();
+        } else { kept.push(instance); }
     }
     let empty: bool = kept.len() == 0;
     track.instances = kept; self.replace_track(index, track);
     if empty {
-        let column: i32 = self.track_start(index) + 2;
+        let column: i32 = self.track_start(index) + 3;
         var rows: list<TableRow> = []; let old: list<TableRow> = self.rows;
         for row in old {
             var cells: list<str8> = [];
@@ -165,6 +188,35 @@ pub fn remove_audio_under_cursor(self: &mut Self) -> bool {
 pub fn paint_audio(self: SequenceTable, surface: Surface, area: Rect, theme: Theme) -> void {
     self.paint_audio_style(surface, area, theme, true, false);
 }
+/// Eight vertical steps per cell show duration without rounding to whole rows.
+pub fn paint_note_lengths(self: SequenceTable, surface: Surface, area: Rect, theme: Theme) -> void {
+    let body: Rect = self.body(area);
+    for t in 0..self.tracks.len() {
+        let track: SequenceTrack = self.tracks[t]; if track.audio { continue; }
+        for line in 0..track.note_lines {
+            let column: i32 = self.track_start(i32(t)) + i32(line) * 3;
+            let x: i32 = area.x + self.column_x(column) + 5;
+            if x < body.x + self.frozen_width() || x >= body.x + body.width { continue; }
+            var until: i64 = 0;
+            for r in 0..self.scroll_y + body.height {
+                if r >= self.rows.len() { break; }
+                let row: TableRow = self.rows[r];
+                if row.cells[column] != "" {
+                    let end: i64 = wide(i32(r)) * 15000 + self.note_length(i32(r), column);
+                    if end > until { until = end; }
+                }
+                let remaining: i64 = until - wide(i32(r)) * 15000;
+                if r >= self.scroll_y && remaining > 0 {
+                    let units: i32 = remaining >= 15000 ? 8 : (remaining < 1875 ? 1 : i32(remaining * 8 / 15000));
+                    let bg: i32 = r == self.selected_row ? theme.selection : (r % 2 == 1 ? darken(theme.panel, 82) : theme.panel);
+                    let color: i32 = lighten(bg, 12);
+                    surface.put(x, body.y + i32(r) - self.scroll_y, Cell { glyph: units == 8 ? 0x2588 : 0x2580 + 8 - units,
+                        foreground: units == 8 ? color : bg, background: units == 8 ? bg : color });
+                }
+            }
+        }
+    }
+}
 pub fn audio_under_cursor(self: SequenceTable) -> bool {
     let index: i32 = self.active_track(); if index < 0 { return false; }
     let track: SequenceTrack = self.tracks[index];
@@ -177,7 +229,7 @@ pub fn paint_audio_style(self: SequenceTable, surface: Surface, area: Rect, them
     for t in 0..self.tracks.len() {
         let track: SequenceTrack = self.tracks[t];
         if track.instances.len() > 0 {
-            let x: i32 = area.x + self.column_x(self.track_start(i32(t)) + 2);
+            let x: i32 = area.x + self.column_x(self.track_start(i32(t)) + 3);
             let half: i32 = track.wave_zoom ? 12 : 6;
             for y in 0..body.height {
                 let row: i32 = self.scroll_y + i32(y);
@@ -192,14 +244,16 @@ pub fn paint_audio_style(self: SequenceTable, surface: Surface, area: Rect, them
                     let left: Rect = Rect::new(x, body.y + i32(y), half, 1);
                     let right: Rect = Rect::new(x + half + 1, body.y + i32(y), half, 1);
                     let center: Rect = Rect::new(x + half, body.y + i32(y), 1, 1);
-                    if grainy {
-                        paint_grainy_row(surface, left, clip, instance.clip.detail_peaks, offset, true, 0x5adc8c, bg, wave);
-                        paint_grainy_row(surface, right, clip, instance.clip.detail_peaks, offset, false, 0xef6575, bg, wave);
+                    let remaining: i64 = instance.duration() - wide(offset) * 15000;
+                    if grainy || remaining < 15000 {
+                        paint_grainy_row_duration(surface, left, clip, instance.clip.detail_peaks, offset, true, 0x5adc8c, bg, wave, remaining);
+                        paint_grainy_row_duration(surface, right, clip, instance.clip.detail_peaks, offset, false, 0xef6575, bg, wave, remaining);
                     } else {
                         paint_wave_channel_style(surface, left, clip, peak.left, peak.left_body, true, 0x5adc8c, bg, false, wave);
                         paint_wave_channel_style(surface, right, clip, peak.right, peak.right_body, false, 0xef6575, bg, false, wave);
                     }
-                    surface.fill(center.intersect(clip), Cell { glyph: 0x2502, foreground: theme.muted, background: bg });
+                    let end_glyph: i32 = remaining >= 15000 ? 0x2502 : (remaining > 11250 ? 0x2847 : (remaining > 7500 ? 0x2807 : (remaining > 3750 ? 0x2803 : 0x2801)));
+                    surface.fill(center.intersect(clip), Cell { glyph: end_glyph, foreground: theme.muted, background: bg });
                 }
             }
         }
@@ -231,7 +285,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     copy.rebuild_columns(); return copy;
 }
 pub fn track_columns(self: SequenceTable, index: i32) -> i32 {
-    let track: SequenceTrack = self.tracks[index]; return track.audio ? (track.instances.len() > 0 ? 3 : 2) : track.note_lines * 2 + 2;
+    let track: SequenceTrack = self.tracks[index]; return track.audio ? (track.instances.len() > 0 ? 4 : 3) : track.note_lines * 3 + 2;
 }
 pub fn track_start(self: SequenceTable, index: i32) -> i32 {
     var first: i32 = 1;
@@ -240,13 +294,13 @@ pub fn track_start(self: SequenceTable, index: i32) -> i32 {
 }
 pub fn automation_column(self: SequenceTable, index: i32, slot: i32) -> i32 {
     let track: SequenceTrack = self.tracks[index];
-    return self.track_start(index) + (track.audio ? 0 : track.note_lines * 2) + slot - 1;
+    return self.track_start(index) + (track.audio ? 0 : track.note_lines * 3) + slot - 1;
 }
 pub fn is_note(self: SequenceTable) -> bool {
     let index: i32 = self.active_track(); if index < 0 { return false; }
     let track: SequenceTrack = self.tracks[index];
     let offset: i32 = self.selected_column - self.track_start(index);
-    return !track.audio && offset >= 0 && offset < track.note_lines * 2 && offset % 2 == 0;
+    return !track.audio && offset >= 0 && offset < track.note_lines * 3 && offset % 3 == 0;
 }
 fn replace_track(self: &mut Self, index: i32, value: SequenceTrack) -> void {
     var tracks: list<SequenceTrack> = [];
@@ -265,12 +319,14 @@ pub fn rebuild_columns(self: &mut Self) -> void {
             for _line in 0..track.note_lines {
                 columns.push(TableColumn { title: "NOTE", width: 6, value_type: "str8", pattern: "[A-G][#-]-?[0-9]", nullable: true });
                 columns.push(TableColumn { title: "VEL", width: 4, value_type: "i32", bounded: true, minimum: 0, maximum: 127, nullable: true });
+                columns.push(TableColumn { title: "LEN", width: 6, value_type: "str8", pattern: "[0-9]{1,5}(\\.[0-9]{1,2})?", nullable: true });
             }
         }
         columns.push(TableColumn { title: "CC1", width: 6, value_type: "i32", bounded: true,
             minimum: track.cc1.minimum, maximum: track.cc1.maximum, nullable: true });
         columns.push(TableColumn { title: "CC2", width: 6, value_type: "i32", bounded: true,
             minimum: track.cc2.minimum, maximum: track.cc2.maximum, nullable: true });
+        if track.audio { columns.push(TableColumn { title: "LEN", width: 6, value_type: "str8", pattern: "[0-9]{1,5}(\\.[0-9]{1,2})?", nullable: true }); }
         if track.audio && track.instances.len() > 0 {
             columns.push(TableColumn { title: track.wave_zoom ? "L  WAVE x2  R" : "L  WAVE  R", width: track.wave_zoom ? 25 : 13, value_type: "str8", read_only: true, nullable: true });
         }
@@ -346,7 +402,7 @@ pub fn clear_track(self: &mut Self) -> void {
         for c in 0..row.cells.len() {
             if c >= first && c < end {
                 free(row.cells[c]);
-                if !has_clip || c != first + 2 { cells.push(clone("")); }
+                if !has_clip || c != first + 3 { cells.push(clone("")); }
             }
             else { cells.push(row.cells[c]); }
         }
@@ -397,29 +453,29 @@ pub fn configure_slot(self: &mut Self, slot: i32, spec: str8) -> bool {
     else { free(track.cc2.parameter); track.cc2 = definition; }
     self.replace_track(index, track); self.rebuild_columns(); self.error = ""; return true;
 }
-/// 80 adds a blank pair, 81 removes it, 82 duplicates the selected pair.
+/// 80 adds a blank note line, 81 removes it, 82 duplicates NOTE/VEL/LEN.
 pub fn note_line_action(self: &mut Self, command: i32, area: Rect) -> void {
     let index: i32 = self.active_track(); if index < 0 { return; }
     var track: SequenceTrack = self.tracks[index];
     if track.audio { self.error = "Note lines require a MIDI track"; return; }
     let first: i32 = self.track_start(index);
     let offset: i32 = self.selected_column - first;
-    let selected: i32 = offset < track.note_lines * 2 ? offset / 2 : -1;
-    if selected < 0 && command != 80 { self.error = "Select a NOTE or VEL column"; return; }
+    let selected: i32 = offset < track.note_lines * 3 ? offset / 3 : -1;
+    if selected < 0 && command != 80 { self.error = "Select a NOTE, VEL or LEN column"; return; }
     if command == 81 && track.note_lines == 1 { self.error = "Keep at least one note line"; return; }
     if command != 81 && track.note_lines >= 16 { self.error = "Maximum 16 note lines per track"; return; }
     let line: i32 = command == 81 ? selected : (selected < 0 ? track.note_lines : selected + 1);
-    let column: i32 = first + line * 2;
-    let source: i32 = first + selected * 2;
+    let column: i32 = first + line * 3;
+    let source: i32 = first + selected * 3;
     var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
     for row in previous {
         var cells: list<str8> = [];
         for c in 0..row.cells.len() {
             if c == column && command != 81 {
-                if command == 82 { cells.push(clone(row.cells[source])); cells.push(clone(row.cells[source + 1])); }
-                else { cells.push(clone("")); cells.push(clone("")); }
+                if command == 82 { cells.push(clone(row.cells[source])); cells.push(clone(row.cells[source + 1])); cells.push(clone(row.cells[source + 2])); }
+                else { cells.push(clone("")); cells.push(clone("")); cells.push(clone("")); }
             }
-            if command == 81 && (c == column || c == column + 1) { free(row.cells[c]); }
+            if command == 81 && (c >= column && c < column + 3) { free(row.cells[c]); }
             else { cells.push(row.cells[c]); }
         }
         rows.push(TableRow { cells: cells });
@@ -427,7 +483,7 @@ pub fn note_line_action(self: &mut Self, command: i32, area: Rect) -> void {
     track.note_lines = track.note_lines + (command == 81 ? -1 : 1);
     let next: i32 = line >= track.note_lines ? track.note_lines - 1 : line;
     self.replace_track(index, track); self.rows = rows;
-    self.selected_column = first + next * 2;
+    self.selected_column = first + next * 3;
     self.rebuild_columns(); self.reconcile(area); self.error = "";
     self.delete_pending = false; self.top_pending = false;
 }
@@ -459,20 +515,68 @@ pub fn release(self: &mut Self) -> void {
     for note in notes { free(note); }
     self.editor.release();
 }
-fn note_index(self: SequenceTable, value: str8) -> i32 {
+pub fn note_index(self: SequenceTable, value: str8) -> i32 {
     for i in 0..128 { if self.notes[i] == value { return i32(i); } }
     return -1;
+}
+pub fn note_length(self: SequenceTable, row: i32, column: i32) -> i64 {
+    let data: TableRow = self.rows[row];
+    if data.cells[column + 2] == "" || data.cells[column + 2] == "1.00" { return 15000; }
+    let ticks: i64 = duration_ticks(data.cells[column + 2]);
+    return ticks > 0 ? ticks : 15000;
+}
+pub fn is_length(self: SequenceTable) -> bool {
+    let index: i32 = self.active_track(); if index < 0 { return false; }
+    let track: SequenceTrack = self.tracks[index];
+    let offset: i32 = self.selected_column - self.track_start(index);
+    return track.audio ? offset == 2 : (offset < track.note_lines * 3 && offset % 3 == 2);
+}
+fn write_owned_cell(self: &mut Self, row: i32, column: i32, value: str8) -> void {
+    let data: TableRow = self.rows[row]; let old: str8 = data.cells[column];
+    if self.set_cell(row, column, value) { free(old); } else { free(value); }
 }
 fn commit(self: &mut Self, value: str8) -> bool {
     if !self.can_set(self.selected_row, self.selected_column, value) { self.error = "Invalid type or outside column limits"; return false; }
     if self.is_note() && value != "" {
         if self.note_index(value) < 0 { self.error = "Expected MIDI note C--1 through G-9"; return false; }
     }
+    if self.is_length() {
+        let ticks: i64 = value == "" ? 15000 : duration_ticks(value);
+        if ticks < 0 { self.error = "LEN: 0.01-16384.00 sixteenth notes"; return false; }
+        let index: i32 = self.active_track(); var track: SequenceTrack = self.tracks[index];
+        if track.audio {
+            let hit: i32 = track.instance_at(self.selected_row);
+            if hit < 0 { self.error = "Set LEN at the start of an audio instance"; return false; }
+            let instance: AudioInstance = track.instances[hit];
+            if instance.start_row != self.selected_row { self.error = "Set LEN at the start of an audio instance"; return false; }
+            let natural: i64 = instance.clip.frames_per_row > 0 ? instance.clip.frames * 15000 / instance.clip.frames_per_row : wide(i32(instance.clip.peaks.len())) * 15000;
+            let duration: i64 = value == "" ? natural : ticks;
+            if duration > natural + 149 { self.error = "LEN exceeds the sample duration"; return false; }
+            let end: i64 = wide(instance.start_row) * 15000 + duration;
+            if end > wide(i32(self.rows.len())) * 15000 { self.error = "Extend the pattern first"; return false; }
+            let instances: list<AudioInstance> = track.instances; var updated: list<AudioInstance> = [];
+            for other in instances {
+                if other.start_row > instance.start_row && wide(other.start_row) * 15000 < end {
+                    self.error = "Audio overlaps another instance"; return false;
+                }
+            }
+            for i in 0..track.instances.len() {
+                var next: AudioInstance = track.instances[i];
+                if i == hit { next.length_ticks = i32(duration > natural ? natural : duration); }
+                updated.push(next);
+            }
+            track.instances = updated; self.replace_track(index, track);
+            self.write_owned_cell(self.selected_row, self.selected_column, duration_text(duration)); self.error = ""; return true;
+        }
+    }
     let row: TableRow = self.rows[self.selected_row];
     let old: str8 = row.cells[self.selected_column];
     let copy: str8 = clone(value);
     if !self.set_cell(self.selected_row, self.selected_column, copy) { free(copy); return false; }
-    free(old); self.error = ""; return true;
+    let new_note: bool = self.is_note() && old == "" && value != "";
+    free(old);
+    if new_note { self.write_owned_cell(self.selected_row, self.selected_column + 2, clone("1.00")); }
+    self.error = ""; return true;
 }
 pub fn clear_row(self: &mut Self) -> void {
     if self.selected_row < 0 || self.selected_row >= self.rows.len() { return; }
@@ -503,7 +607,7 @@ pub fn length_truncates_data(self: SequenceTable, count: i32) -> bool {
     for track in tracks {
         let instances: list<AudioInstance> = track.instances;
         for instance in instances {
-            if instance.start_row + instance.clip.peaks.len() > count { return true; }
+            if wide(instance.start_row) * 15000 + instance.duration() > wide(count) * 15000 { return true; }
         }
     }
     return false;
@@ -526,6 +630,7 @@ pub fn set_length(self: &mut Self, count: i32, area: Rect) -> bool {
         for instance in remaining {
             var clipped: AudioInstance = AudioInstance {}; clipped = instance;
             let length: i32 = count - clipped.start_row;
+            if clipped.duration() > wide(length) * 15000 { clipped.length_ticks = length * 15000; }
             if length < clipped.clip.peaks.len() {
                 var peaks: list<WavePeak> = []; var details: list<WavePeak> = [];
                 for r in 0..length { peaks.push(clipped.clip.peaks[r]); }
@@ -539,6 +644,8 @@ pub fn set_length(self: &mut Self, count: i32, area: Rect) -> bool {
             kept.push(clipped);
         }
         updated.instances = kept; self.replace_track(i32(t), updated);
+        let saved: SequenceTrack = self.tracks[t]; let placements: list<AudioInstance> = saved.instances;
+        for instance in placements { self.write_owned_cell(instance.start_row, self.track_start(i32(t)) + 2, duration_text(instance.duration())); }
     }
     var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
     for r in 0..previous.len() {
@@ -635,6 +742,14 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         if event.code == 75 || (event.modifiers == 2 && event.code == 107) { delta = 1; }
     }
     if delta != 0 {
+        if self.is_length() {
+            let current: i64 = row.cells[self.selected_column] == "" ? 15000 : duration_ticks(row.cells[self.selected_column]);
+            let next: i64 = current + wide(delta) * 150;
+            if next >= 150 && next <= 245760000 {
+                let text: str8 = duration_text(next); self.commit(text); free(text);
+            }
+            return true;
+        }
         if row.cells[self.selected_column] == "" {
             if self.is_note() { self.commit("C-4"); }
             else {

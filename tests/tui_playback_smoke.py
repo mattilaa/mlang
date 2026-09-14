@@ -132,6 +132,21 @@ def main():
         assert "64" in length_dialog()
         send(b"\x1532\r")  # newly appended empty rows need no confirmation
         until(lambda s: "Set length" not in s)
+        # New MIDI notes default to one sixteenth; LEN supports fractional rows.
+        send(b"\tllll")
+        until(lambda s: "Add pattern" in s)
+        send(b"\r")
+        until(lambda s: "Add pattern" not in s)
+        send(b"\x1b[108;6uK")
+        until(lambda s: "C-4" in s and "1.00" in s)
+        send(b"l\r\x15100\r")
+        until(lambda s: "100" in s and "Editing:" not in s)
+        send(b"l\r\x153.75\r")
+        until(lambda s: "3.75" in s and "\u2582" in s and "Editing:" not in s)
+        send(b"K")
+        until(lambda s: "3.76" in s)
+        send(b"J")
+        until(lambda s: "3.75" in s)
         send(b"q")
         # Keep draining the PTY while exiting: at high FPS a final frame can
         # otherwise fill its output buffer before the process handles Quit.
@@ -140,7 +155,7 @@ def main():
             if select.select([master], [], [], 0.05)[0]:
                 os.read(master, 65536)
         assert process.wait(timeout=5) == 0
-        print("PASS: BPM validation/cancel, clock scrolling, MIDI meters, modal capture, sample following")
+        print("PASS: BPM validation/cancel, clock scrolling, MIDI meters, modal capture, sample following, fractional LEN editing")
     finally:
         if process.poll() is None:
             process.terminate()
