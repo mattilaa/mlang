@@ -185,19 +185,19 @@ def main():
         os.write(master, b"m")
         while b" Inspector " not in read_frame(1):
             pass
-        os.write(master, b"w")
+        os.write(master, b"l")
         read_frame(1, table_cell=((34, 4), (60, 91, 128)))
         os.write(master, b"j")
         read_frame(1, table_cell=((34, 5), (60, 91, 128)))
         os.write(master, b"j" * 70)
         assert b"064" in read_frame(1)
-        os.write(master, b"b" + b"k" * 70)
+        os.write(master, b"h" + b"k" * 70)
         assert b"001" in read_frame(1, table_cell=((28, 4), (60, 91, 128)))
         os.write(master, b"K")
         read_frame(1, table_text=((28, 4), "C#4"))
         os.write(master, b"\x1b[106;2u")
         read_frame(1, table_text=((28, 4), "C-4"))
-        os.write(master, b"w\r")
+        os.write(master, b"l\r")
         assert b"Editing:" in read_frame(1)
         os.write(master, b"\x15128\r")
         assert b"Invalid type" in read_frame(1)
@@ -208,11 +208,11 @@ def main():
         os.write(master, b"\x1b")
         read_frame(1, table_text=((34, 4), "42"))
         # CC cells reject text and remain editable until corrected.
-        os.write(master, b"w\r\x15qhjk\r")
+        os.write(master, b"l\r\x15qhjk\r")
         assert b"Invalid type" in read_frame(1)
         os.write(master, b"\x1564\r")
         read_frame(1, table_text=((38, 4), "64"))
-        os.write(master, b"bb")
+        os.write(master, b"hh")
         read_frame(1, table_cell=((28, 4), (60, 91, 128)))
         # Empty note commits as a rest; clearing preserves ROW, dd removes it.
         os.write(master, b"\r\x15\r")
@@ -229,11 +229,11 @@ def main():
         os.write(master, b"k" * 70)
         read_frame(1)
         # dd in an inline editor is text, not a row command.
-        os.write(master, b"ww\r\x15dd\r")
+        os.write(master, b"ll\r\x15dd\r")
         assert b"Invalid type" in read_frame(1)
         os.write(master, b"\x1b")
         read_frame(1)
-        os.write(master, b"bb")
+        os.write(master, b"hh")
         read_frame(1)
         def track_menu(item):
             os.write(master, b"\tlll")
@@ -243,7 +243,7 @@ def main():
         # Track menu acts on the group containing the selected child column.
         track_menu(8)
         read_frame(1, table_text=((38, 4), "   "))
-        os.write(master, b"b")  # select VEL in the original note line
+        os.write(master, b"h")  # select VEL in the original note line
         read_frame(1)
         track_menu(10)
         read_frame(1, table_text=((38, 4), "C-4"))
@@ -399,20 +399,20 @@ def main():
         os.write(master, b"m")
         while b" Inspector " not in read_frame(1):
             pass
-        os.write(master, b"b" * 30)
+        os.write(master, b"h" * 30)
         read_frame(1, table_cell=((28, 4), (60, 91, 128)), table_text=((24, 4), "001"))
         # Menu navigation must not mutate the underlying table, even after
         # scrolling beyond its viewport; column and pane keys are captured too.
         os.write(master, b"\t")
         read_frame(None)
-        os.write(master, b"j" * 70 + b"wwGm\x1b[106;6u")
+        os.write(master, b"j" * 70 + b"llGm\x1b[106;6u")
         read_frame(None)
         os.write(master, b"\x1b")
         assert b"001" in read_frame(1, table_cell=((28, 4), (60, 91, 128)))
         os.write(master, b"\x1b[104;6u")
         read_frame(0)
         # List navigation selects another pattern; its mixer is independent.
-        os.write(master, b"jw")
+        os.write(master, b"jl")
         assert b"Pattern / 2 Verse" in read_frame(0)
         os.write(master, b"m")
         assert b"A5" not in read_frame(0)

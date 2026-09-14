@@ -108,6 +108,30 @@ def main():
             assert followed != before
             send(b" ")
             until(lambda s: "STOP" in s)
+        def length_dialog():
+            send(b"\tllll")
+            until(lambda s: "Clone pattern" in s)
+            send(b"jjjj\r")
+            return until(lambda s: "Pattern length (1-16384 rows)" in s)
+
+        length_dialog()
+        send(b"\x150\r")
+        until(lambda s: "whole number from 1 to 16384" in s)
+        send(b"\x1532\r")
+        until(lambda s: "Are you sure, data will be truncated" in s)
+        send(b"\x1b")
+        until(lambda s: "Set length" not in s)
+        assert "120" in length_dialog()  # cancel preserved the imported pattern length
+        send(b"\x1532\r")
+        until(lambda s: "Are you sure, data will be truncated" in s)
+        send(b"\r")
+        until(lambda s: "Set length" not in s)
+        assert "32" in length_dialog()
+        send(b"\x1564\r")
+        until(lambda s: "Set length" not in s)
+        assert "64" in length_dialog()
+        send(b"\x1532\r")  # newly appended empty rows need no confirmation
+        until(lambda s: "Set length" not in s)
         send(b"q")
         # Keep draining the PTY while exiting: at high FPS a final frame can
         # otherwise fill its output buffer before the process handles Quit.

@@ -493,6 +493,68 @@ pub fn clear_row(self: &mut Self) -> void {
     }
     self.error = "";
 }
+pub fn length_truncates_data(self: SequenceTable, count: i32) -> bool {
+    if count >= self.rows.len() { return false; }
+    for r in count..self.rows.len() {
+        let row: TableRow = self.rows[r];
+        for c in 1..row.cells.len() { if row.cells[c] != "" { return true; } }
+    }
+    let tracks: list<SequenceTrack> = self.tracks;
+    for track in tracks {
+        let instances: list<AudioInstance> = track.instances;
+        for instance in instances {
+            if instance.start_row + instance.clip.peaks.len() > count { return true; }
+        }
+    }
+    return false;
+}
+pub fn set_length(self: &mut Self, count: i32, area: Rect) -> bool {
+    if count < 1 || count > 16384 { return false; }
+    let selected_row: i32 = self.selected_row; let selected_column: i32 = self.selected_column;
+    // Remove placements beyond the new end using the existing column cleanup.
+    for t in 0..self.tracks.len() {
+        let track: SequenceTrack = self.tracks[t];
+        let instances: list<AudioInstance> = track.instances;
+        for instance in instances {
+            if instance.start_row >= count {
+                self.selected_column = self.track_start(i32(t)); self.selected_row = instance.start_row;
+                self.remove_audio_under_cursor();
+            }
+        }
+        var updated: SequenceTrack = self.tracks[t];
+        var kept: list<AudioInstance> = []; let remaining: list<AudioInstance> = updated.instances;
+        for instance in remaining {
+            var clipped: AudioInstance = AudioInstance {}; clipped = instance;
+            let length: i32 = count - clipped.start_row;
+            if length < clipped.clip.peaks.len() {
+                var peaks: list<WavePeak> = []; var details: list<WavePeak> = [];
+                for r in 0..length { peaks.push(clipped.clip.peaks[r]); }
+                for r in 0..clipped.clip.detail_peaks.len() {
+                    if r < length * 4 { details.push(clipped.clip.detail_peaks[r]); }
+                }
+                clipped.clip.peaks = peaks; clipped.clip.detail_peaks = details;
+                let frames: i64 = wide(length) * clipped.clip.frames_per_row;
+                if frames < clipped.clip.frames { clipped.clip.frames = frames; }
+            }
+            kept.push(clipped);
+        }
+        updated.instances = kept; self.replace_track(i32(t), updated);
+    }
+    var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
+    for r in 0..previous.len() {
+        let row: TableRow = previous[r];
+        if r < count { rows.push(row); }
+        else { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
+    }
+    for r in rows.len()..count {
+        var cells: list<str8> = [format!("{}{}", r < 9 ? "00" : (r < 99 ? "0" : ""), r + 1)];
+        for _c in 1..self.columns.len() { cells.push(clone("")); }
+        rows.push(TableRow { cells: cells });
+    }
+    self.rows = rows; self.delete_pending = false; self.top_pending = false; self.error = "";
+    self.selected_row = selected_row; self.selected_column = selected_column;
+    self.reconcile(area); return true;
+}
 pub fn delete_row(self: &mut Self, area: Rect) -> void {
     if self.selected_row < 0 || self.selected_row >= self.rows.len() { return; }
     let previous: list<TableRow> = self.rows;

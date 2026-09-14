@@ -85,7 +85,8 @@ fn demo_menus() -> MenuBar {
             MenuItem { label: "Add pattern", action: 50, enabled: true },
             MenuItem { label: "Rename pattern", action: 51, enabled: true },
             MenuItem { label: "Remove pattern", action: 52, enabled: true },
-            MenuItem { label: "Clone pattern", action: 53, enabled: true }] },
+            MenuItem { label: "Clone pattern", action: 53, enabled: true },
+            MenuItem { label: "Set length", action: 54, enabled: true }] },
         Menu { title: "Add", items: [MenuItem { label: "Audio", action: 60, enabled: true }] }
     ]);
 }
@@ -155,6 +156,8 @@ fn main() -> i32 {
     var library: PatternLibrary = PatternLibrary::new();
     var transport: TransportStatus = TransportStatus {};
     var bpm_dialog: BpmDialog = BpmDialog::new();
+    var pending_length: i32 = 0;
+    var length_target: i32 = 0;
     var mixer: Mixer = Mixer { visible: false };
     var sample: SampleView = SampleView {};
     var last_tick: i64 = now_ms(); var ui_clock: i64 = last_tick;
@@ -189,7 +192,8 @@ fn main() -> i32 {
             if bpm_dialog.active && bpm_dialog.pressed_button >= 0 {
                 bpm_dialog.tick(); dirty = true;
                 if !bpm_dialog.active && bpm_dialog.result == 1 {
-                    if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
+                    if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
+                    else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
                     else { transport.set_bpm(bpm_dialog.value); }
                 }
             }
@@ -204,12 +208,24 @@ fn main() -> i32 {
                 question.tick(); dirty = true;
                 if !question.active {
                     if confirm_track_action != 0 {
-                        if question.result == 1 { library.table.track_action(confirm_track_action, terminal_bounds()); }
+                        if question.result == 1 {
+                            if confirm_track_action == 54 { library.table.set_length(length_target, terminal_bounds()); }
+                            else { library.table.track_action(confirm_track_action, terminal_bounds()); }
+                        }
                         confirm_track_action = 0;
                         free(message); message = clone("Track action finished.");
                     } else { free(message); message = clone(question.result == 1 ? "New session confirmed." : "New session cancelled."); }
                 }
             }
+        }
+        if pending_length > 0 {
+            length_target = pending_length; pending_length = 0;
+            if library.table.length_truncates_data(length_target) {
+                question.title = "Set length";
+                question.question = "Are you sure, data will be truncated";
+                confirm_track_action = 54; question.open();
+            } else { library.table.set_length(length_target, terminal_bounds()); }
+            dirty = true;
         }
         let area: Rect = terminal_bounds();
         let viewport: Viewport = menus.viewport(area);
@@ -263,7 +279,8 @@ fn main() -> i32 {
                 if event.kind != InputKind::None || event.code != 0 {
                     bpm_dialog.on_event(event); dirty = true;
                     if !bpm_dialog.active && bpm_dialog.result == 1 {
-                        if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
+                        if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
+                        else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
                         else { transport.set_bpm(bpm_dialog.value); }
                     }
                 }
@@ -364,6 +381,10 @@ fn main() -> i32 {
                 library.editor.set_text(library.active_name()); library.renaming = true; library.error = "";
             }
             else if command == 52 { library.remove_active(panes[0].bounds.inset(1)); }
+            else if command == 54 {
+                transport.playing = false;
+                bpm_dialog.open_pattern_length(i32(library.table.rows.len()));
+            }
             else if command == 70 || command == 71 { sample.grainy = command == 71; }
             else if command == 72 || command == 73 { sample.wave = command == 73; }
             else if command == 74 { bpm_dialog.open_meter_rate(frame_rate.fps); }
@@ -377,6 +398,15 @@ fn main() -> i32 {
             }
             else if command > 0 {
                 free(message); message = clone("Command selected. Ready for the application handler.");
+            }
+            if pending_length > 0 {
+                length_target = pending_length; pending_length = 0;
+                if library.table.length_truncates_data(length_target) {
+                    question.title = "Set length";
+                    question.question = "Are you sure, data will be truncated";
+                    confirm_track_action = 54; question.open();
+                } else { library.table.set_length(length_target, panes[1].bounds.inset(1)); }
+                dirty = true;
             }
             if !running { break; }
         }

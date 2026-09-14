@@ -271,9 +271,16 @@ call its `release()` once and do not shallow-copy the owning library.
 
 ### Table widget
 
+Pattern → Set length opens a row-count dialog prefilled with the current length
+(1–16,384 rows). Growth adds empty rows. Shrinking past populated cells or audio
+asks “Are you sure, data will be truncated”; Cancel/Escape leaves data intact.
+Confirmed truncation trims or removes audio instances without changing loaded
+samples. Extending again does not restore discarded data. Playback stops when
+opening the length dialog.
+
 `tui::table::Table` renders the demo's 64-row sequence with a frozen ROW column
 and three independent tracks, each containing compact NOTE, VEL, CC1, and CC2
-columns. Focus the sequence pane with Ctrl+Shift+L; `w`/`b`
+columns. Focus the sequence pane with Ctrl+Shift+L; `l`/`h`
 select the next/previous column and `j`/`k` (or Down/Up) select rows. Navigation
 stops at the edges and scrolls the selection into view, with a fixed header.
 `G` jumps to the bottom row; consecutive `gg` jumps to the first row. These
@@ -415,7 +422,7 @@ An optional POSIX `pattern` must match the entire value in addition to its type
 rules; invalid regexes reject input. `bounded` applies only to integer columns.
 Cells remain textual display values, not a dynamically typed language object.
 
-`read_only` columns are skipped by `w/b` and selection reconciliation; an
+`read_only` columns are skipped by `l/h` and selection reconciliation; an
 all-read-only table has `selected_column == -1`. `can_set(row, column, value)`
 and `set_cell(row, column, value)` reject invalid values, missing cells, and
 read-only writes. The base still borrows strings: callers keep accepted values
@@ -434,7 +441,7 @@ and each track has two nullable i32 automation columns with independent limits.
   semitone; integer columns step by one. Endpoints stop without wrapping.
 - Enter starts an inline `TextField`; Enter validates and commits, while Escape
   discards the draft. Invalid input stays editable with an Inspector error.
-- While editing, text including q/w/b/j/k and spaces is literal input. Ctrl+U
+- While editing, text including q/h/j/k/l and spaces is literal input. Ctrl+U
   clears the draft. Pane/menu navigation is suspended until commit or cancel.
 - Columns can opt into `nullable: true`: an empty string represents no value
   and bypasses the value regex/range checks, but unsupported types still fail.

@@ -223,8 +223,8 @@ pub struct Table {
     pub fn on_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         if event.kind == InputKind::Pane || event.modifiers != 1 { return false; }
         var handled: bool = true;
-        if event.code == 119 { self.move_column(1); }
-        else if event.code == 98 { self.move_column(-1); }
+        if event.code == 108 { self.move_column(1); }
+        else if event.code == 104 { self.move_column(-1); }
         else if event.kind == InputKind::Menu && event.key == Key::Down { self.selected_row = self.selected_row + 1; }
         else if event.kind == InputKind::Menu && event.key == Key::Up { self.selected_row = self.selected_row - 1; }
         else { handled = false; }

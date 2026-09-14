@@ -38,6 +38,50 @@ mod tui_demo::frame_rate;
 use tui_demo::frame_rate::FrameRate;
 
 #[test]
+fn tui_pattern_length() {
+    let area: Rect = Rect::new(0, 0, 80, 12);
+    var table: SequenceTable = SequenceTable::new();
+    verify(table.length_truncates_data(32));
+    verify(!table.set_length(0, area) && !table.set_length(16385, area));
+    verify(table.rows.len() == 64);
+    table.selected_row = 63;
+    verify(table.set_length(32, area)); verify(table.rows.len() == 32 && table.selected_row == 31);
+    verify(table.set_length(80, area));
+    let empty: TableRow = table.rows[79]; verify(empty.cells[0] == "080" && empty.cells[1] == "" && empty.cells[2] == "");
+    verify(!table.length_truncates_data(32));
+    table.selected_row = 79; table.selected_column = 3;
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("0"); table.edit_event(decode_input("\r"), area);
+    verify(table.length_truncates_data(32));
+    table.release();
+    var audio_table: SequenceTable = SequenceTable::new(); audio_table.track_action(28, area);
+    var clip: AudioClip = AudioClip { source: clone("length-test"), frames: 40, frames_per_row: 10 };
+    for _r in 0..4 { clip.peaks.push(WavePeak { left: 500 }); }
+    for _r in 0..16 { clip.detail_peaks.push(WavePeak { left: 500 }); }
+    audio_table.selected_row = 2; audio_table.insert_audio(clip, area);
+    audio_table.selected_row = 8; audio_table.insert_audio(clip, area);
+    // Clear MIDI cells to isolate detection of audio crossing the new end.
+    for r in 0..64 { audio_table.selected_row = i32(r); audio_table.clear_row(); }
+    verify(audio_table.length_truncates_data(4));
+    audio_table.set_length(4, area);
+    let trimmed: SequenceTrack = audio_table.tracks[3];
+    verify(trimmed.instances.len() == 1);
+    let placed: AudioInstance = trimmed.instances[0];
+    verify(placed.clip.peaks.len() == 2 && placed.clip.detail_peaks.len() == 8 && placed.clip.frames == 20);
+    verify(clip.peaks.len() == 4 && clip.frames == 40);
+    audio_table.set_length(64, area); verify(!audio_table.length_truncates_data(4));
+    audio_table.set_length(1, area); let removed: SequenceTrack = audio_table.tracks[3];
+    verify(removed.instances.len() == 0 && audio_table.track_columns(3) == 2);
+    audio_table.release(); clip.release();
+    var dialog: BpmDialog = BpmDialog::new(); dialog.open_pattern_length(64);
+    verify(dialog.editor.text == "64");
+    dialog.editor.set_text("0"); dialog.on_event(decode_input("\r")); verify(dialog.active);
+    dialog.editor.set_text("12.5"); dialog.on_event(decode_input("\r")); verify(dialog.active);
+    dialog.editor.set_text("128"); dialog.on_event(decode_input("\r"));
+    verify(!dialog.active && dialog.value == 128 && dialog.result == 1);
+    dialog.open(120); verify(!dialog.pattern_length); dialog.release();
+}
+
+#[test]
 fn tui_multiple_note_lines() {
     var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 12);
     table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("25"); table.edit_event(decode_input("\r"), area);
@@ -625,7 +669,7 @@ fn tui_sequence_empty_clear_delete() {
     verify(cleared.cells[0] == "001" && cleared.cells[1] == "" && cleared.cells[2] == "" && cleared.cells[3] == "");
     verify(table.rows.len() == 64);
     table.edit_event(decode_input("K"), area);
-    table.edit_event(decode_input("w"), area); table.edit_event(decode_input("J"), area);
+    table.edit_event(decode_input("l"), area); table.edit_event(decode_input("J"), area);
     let numeric: TableRow = table.rows[0]; verify(numeric.cells[2] == "0");
     table.edit_event(decode_input("d"), area); verify(table.rows.len() == 64);
     table.edit_event(decode_input("j"), area); table.edit_event(decode_input("d"), area);
@@ -648,7 +692,7 @@ fn tui_sequence_editing() {
     let area: Rect = Rect::new(0, 0, 40, 10);
     verify(table.notes.len() == 128);
     table.reconcile(area); verify(table.selected_column == 1);
-    table.edit_event(decode_input("b"), area); verify(table.selected_column == 1);
+    table.edit_event(decode_input("h"), area); verify(table.selected_column == 1);
     table.edit_event(decode_input("K"), area);
     let sharp: TableRow = table.rows[0]; verify(sharp.cells[1] == "C#4");
     table.edit_event(decode_input("\x1b[106;2u"), area);
@@ -661,7 +705,7 @@ fn tui_sequence_editing() {
     table.edit_event(decode_input("\r"), area); verify(table.editing);
     table.editor.set_text("C#4"); table.edit_event(decode_input("\r"), area);
     let manual_note: TableRow = table.rows[0]; verify(!table.editing && manual_note.cells[1] == "C#4");
-    table.edit_event(decode_input("w"), area);
+    table.edit_event(decode_input("l"), area);
     for _i in 0..140 { table.edit_event(decode_input("K"), area); }
     let maximum: TableRow = table.rows[0]; verify(maximum.cells[2] == "127");
     for _i in 0..140 { table.edit_event(decode_input("J"), area); }
@@ -684,8 +728,13 @@ fn tui_read_only_columns() {
         TableColumn { title: "B", width: 5 }], []);
     let area: Rect = Rect::new(0, 0, 30, 10);
     table.reconcile(area); verify(table.selected_column == 1);
-    table.on_event(decode_input("w"), area); verify(table.selected_column == 3);
-    table.on_event(decode_input("b"), area); verify(table.selected_column == 1);
+    table.on_event(decode_input("l"), area); verify(table.selected_column == 3);
+    table.on_event(decode_input("h"), area); verify(table.selected_column == 1);
+    verify(!table.on_event(decode_input("w"), area));
+    verify(!table.on_event(decode_input("b"), area));
+    verify(!table.on_event(decode_input("\x1b[108;5u"), area));
+    verify(!table.on_event(decode_input("\x1b[104;6u"), area));
+    verify(table.selected_column == 1);
     table.columns = [TableColumn { title: "ROW", width: 5, read_only: true }];
     table.reconcile(area); verify(table.selected_column == -1);
 }
@@ -703,7 +752,7 @@ fn tui_table_navigation_and_scrollbars() {
     let area: Rect = Rect::new(3, 2, 12, 5);
     let body: Rect = table.body(area);
     verify(body.width == 11 && body.height == 3);
-    for _i in 0..10 { table.on_event(decode_input("j"), area); table.on_event(decode_input("w"), area); }
+    for _i in 0..10 { table.on_event(decode_input("j"), area); table.on_event(decode_input("l"), area); }
     verify(table.selected_row == 4 && table.selected_column == 2);
     verify(table.scroll_y == 2 && table.scroll_x == 8);
     table.vertical_scrollbar = false; table.horizontal_scrollbar = false;
@@ -711,7 +760,7 @@ fn tui_table_navigation_and_scrollbars() {
     let expanded: Rect = table.body(area);
     verify(expanded.width == 12 && expanded.height == 4 && table.scroll_y == 1);
     verify(!table.on_event(decode_input("\x1b[106;6u"), area));
-    for _i in 0..10 { table.on_event(decode_input("k"), area); table.on_event(decode_input("b"), area); }
+    for _i in 0..10 { table.on_event(decode_input("k"), area); table.on_event(decode_input("h"), area); }
     verify(table.selected_row == 0 && table.selected_column == 0 && table.scroll_x == 0 && table.scroll_y == 0);
 }
 
