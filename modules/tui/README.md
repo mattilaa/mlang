@@ -272,6 +272,23 @@ call its `release()` once and do not shallow-copy the owning library.
 ### Table widget
 
 MIDI tracks start collapsed to NOTE/VEL for every note line. In the Pattern view,
+The demo opens the default MIDI input on a dedicated worker thread at startup.
+`tui_demo::midi_controller` decodes note-on/off (including velocity-zero note-on)
+and running status, then posts fixed-size `MidiInputEvent` values through a
+1024-entry `std::sync::SpscQueue`. The main loop drains at most 256 events per
+iteration, independently of modal keyboard focus. `MidiController.dispatch`
+uses `match` to call main-thread note handlers; the current handlers retain the
+last note/channel/velocity and flash MIDI IN for 150 ms. This does not record
+notes into the pattern or send MIDI output. No input device is a nonfatal state;
+connect the device before starting the demo (no hot-plug reopening yet).
+
+The worker-to-window queue never waits when full: dropped events are counted
+atomically, and the consumer clears its last-note display state on loss. Native
+input queue drops are counted too. MIDI polling/packet allocation happens on
+the worker, not on a real-time audio callback. Shutdown signals and joins the
+worker before releasing shared storage. Hardware-independent decoder, threaded
+handoff, overflow, and indicator tests live in `tests/tui_midi_tests.mla`.
+
 `z` cycles the selected MIDI track through three column stages:
 
 1. NOTE / VEL (default)

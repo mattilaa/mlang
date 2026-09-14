@@ -1,0 +1,61 @@
+mod std::testing;
+mod tui_demo::midi_controller;
+use std::testing::verify;
+use tui_demo::midi_controller::*;
+use std::sync::SpscQueue;
+use std::thread::*;
+
+#[test]
+fn midi_stream_decoder() {
+    var decoder: MidiDecoder = MidiDecoder {};
+    decoder.feed(146, 10); decoder.feed(60, 10);
+    let realtime: MidiInputEvent = decoder.feed(248, 10); verify(realtime.kind == 3);
+    let on: MidiInputEvent = decoder.feed(100, 10);
+    verify(on.kind == 1 && on.channel == 2 && on.note == 60 && on.velocity == 100);
+    decoder.feed(61, 11);
+    let off: MidiInputEvent = decoder.feed(0, 11); verify(off.kind == 2 && off.note == 61);
+    decoder.feed(130, 12); decoder.feed(60, 12);
+    let explicit_off: MidiInputEvent = decoder.feed(64, 12); verify(explicit_off.kind == 2);
+    decoder.feed(240, 13); decoder.feed(60, 13);
+    let sysex: MidiInputEvent = decoder.feed(100, 13); verify(sysex.kind == 0);
+    decoder.feed(247, 13);
+    let orphan: MidiInputEvent = decoder.feed(60, 13); verify(orphan.kind == 0);
+    decoder.feed(192, 14);
+    let program: MidiInputEvent = decoder.feed(5, 14); verify(program.kind == 3);
+}
+
+fn midi_test_producer(handle: i64) -> i32 {
+    let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent> { handle: handle };
+    if !queue.try_push(MidiInputEvent { kind: 4 }) { return 1; }
+    if !queue.try_push(MidiInputEvent { kind: 1, channel: 3, note: 67, velocity: 110, received_ms: 100 }) { return 2; }
+    return 0;
+}
+
+#[test]
+fn midi_worker_dispatch() {
+    let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent>::new(4);
+    verify(queue.is_valid());
+    var controller: MidiController = MidiController { queue_handle: queue.handle };
+    let producer: thread = thread::spawn(midi_test_producer, queue.handle);
+    verify(join(producer) == 0);
+    verify(controller.poll(100));
+    verify(controller.connected && controller.last_note == 67 && controller.last_velocity == 110 && controller.last_channel == 3);
+    verify(!controller.poll(250));
+    controller.dispatch(MidiInputEvent { kind: 2, channel: 2, note: 67 });
+    verify(controller.last_velocity == 110);
+    controller.dispatch(MidiInputEvent { kind: 2, channel: 3, note: 67 });
+    verify(controller.last_velocity == 0);
+    controller.release(); controller.release();
+}
+
+#[test]
+fn midi_bounded_queue_and_loss() {
+    let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent>::new(1);
+    verify(queue.try_push(MidiInputEvent { kind: 1, note: 60, velocity: 100 }));
+    verify(!queue.try_push(MidiInputEvent { kind: 2, note: 60 }));
+    var controller: MidiController = MidiController { queue_handle: queue.handle };
+    controller.dropped = atomic_new(1);
+    controller.poll(100);
+    verify(controller.lost_events == 1 && controller.last_note == -1 && controller.last_velocity == 0);
+    controller.release();
+}

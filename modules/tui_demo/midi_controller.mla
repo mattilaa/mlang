@@ -1,0 +1,143 @@
+mod std::midi;
+mod std::sync;
+mod std::thread;
+mod std::time;
+mod tui::geometry;
+use tui::geometry::wide;
+use std::midi::MidiInput;
+use std::midi::MidiMessage;
+use std::sync::SpscQueue;
+use std::thread::*;
+use std::time::now_ms;
+use std::time::sleep_ms;
+
+// Fixed-size values only: safe to byte-copy across the SPSC boundary.
+// kind: 1 note-on, 2 note-off, 3 other MIDI, 4 connected, 5 unavailable.
+pub struct MidiInputEvent {
+    var kind: i64; var channel: i64; var note: i64; var velocity: i64;
+    var received_ms: i64;
+};
+
+/// Streaming decoder: packets may contain multiple messages or running status.
+pub struct MidiDecoder {
+    var status: i32; var first: i32; var count: i32; var sysex: bool;
+};
+impl MidiDecoder {
+    pub fn feed(self: &mut Self, byte: i32, now: i64) -> MidiInputEvent {
+        var event: MidiInputEvent = MidiInputEvent { received_ms: now };
+        if byte < 0 || byte > 255 { return event; }
+        if byte >= 248 { event.kind = 3; return event; }
+        if byte >= 128 {
+            self.count = 0; self.status = byte;
+            self.sysex = byte == 240;
+            if byte >= 244 { self.status = 0; event.kind = 3; }
+            return event;
+        }
+        if self.sysex || self.status == 0 { return event; }
+        let family: i32 = self.status / 16;
+        let needed: i32 = family == 12 || family == 13 || self.status == 241 || self.status == 243 ? 1 : 2;
+        if self.count == 0 { self.first = byte; }
+        self.count = self.count + 1;
+        if self.count < needed { return event; }
+        self.count = 0; event.kind = 3;
+        event.channel = wide(self.status % 16); event.note = wide(self.first);
+        event.velocity = needed == 2 ? wide(byte) : 0;
+        if family == 9 { event.kind = byte == 0 ? 2 : 1; }
+        if family == 8 { event.kind = 2; }
+        if self.status >= 240 { self.status = 0; }
+        return event;
+    }
+}
+
+fn midi_input_worker(queue_handle: i64, stop_handle: i64, dropped_handle: i64) -> i32 {
+    let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent> { handle: queue_handle };
+    let stop: atomic64 = atomic64 { raw: stop_handle };
+    let dropped: atomic64 = atomic64 { raw: dropped_handle };
+    let opened: result<MidiInput, str8> = MidiInput::open_default("mlang_tui_input");
+    if opened.is_err() {
+        queue.try_push(MidiInputEvent { kind: 5 }); return 0;
+    }
+    let input: MidiInput = opened.unwrap();
+    queue.try_push(MidiInputEvent { kind: 4 });
+    var decoder: MidiDecoder = MidiDecoder {};
+    var native_dropped: i64 = 0;
+    while atomic_load_value(stop) == 0 {
+        let lost: i64 = input.dropped_messages();
+        if lost > native_dropped {
+            atomic_add_value(dropped, lost - native_dropped); native_dropped = lost;
+            decoder = MidiDecoder {};
+        }
+        let packet: option<MidiMessage> = input.poll();
+        if packet.is_some() {
+            let message: MidiMessage = packet.unwrap(); let now: i64 = now_ms();
+            for index in 0..message.len() {
+                let event: MidiInputEvent = decoder.feed(message.byte(index), now);
+                if event.kind != 0 {
+                    if !queue.try_push(event) { atomic_add_value(dropped, 1); }
+                }
+            }
+            message.close();
+        } else { sleep_ms(1); }
+    }
+    input.close(); return 0;
+}
+
+/// Owns the worker. Only the main thread consumes events and changes UI state.
+pub struct MidiController {
+    var queue_handle: i64;
+    var stop: atomic64; var dropped: atomic64; var worker: thread;
+    var connected: bool; var last_note: i64{-1}; var last_velocity: i64;
+    var last_channel: i64; var activity_until: i64; var lost_events: i64;
+};
+impl MidiController {
+    pub fn start() -> MidiController {
+        var controller: MidiController = MidiController {};
+        let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent>::new(1024);
+        controller.queue_handle = queue.handle;
+        controller.stop = atomic_new(0); controller.dropped = atomic_new(0);
+        if controller.queue_handle != 0 && controller.stop.raw != 0 && controller.dropped.raw != 0 {
+            controller.worker = thread::spawn(midi_input_worker, controller.queue_handle, controller.stop.raw, controller.dropped.raw);
+        }
+        return controller;
+    }
+    // Main-window event handler. Extend these cases for recording/routing later.
+    pub fn note_on(self: &mut Self, event: MidiInputEvent) -> i32 {
+        self.last_note = event.note; self.last_velocity = event.velocity; self.last_channel = event.channel; return 0;
+    }
+    pub fn note_off(self: &mut Self, event: MidiInputEvent) -> i32 {
+        if self.last_note == event.note && self.last_channel == event.channel { self.last_velocity = 0; }
+        return 0;
+    }
+    pub fn dispatch(self: &mut Self, event: MidiInputEvent) -> void {
+        let handled: i32 = match event.kind {
+            1 => self.note_on(event),
+            2 => self.note_off(event),
+            _ => 0
+        };
+        if event.kind == 4 { self.connected = true; }
+        if event.kind == 5 { self.connected = false; }
+        if event.kind >= 1 && event.kind <= 3 { self.activity_until = event.received_ms + 150; }
+    }
+    pub fn poll(self: &mut Self, now: i64) -> bool {
+        var event: MidiInputEvent = MidiInputEvent {};
+        let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent> { handle: self.queue_handle };
+        if queue.is_valid() {
+            for _index in 0..256 {
+                if !queue.try_pop_into(&event) { break; }
+                self.dispatch(event);
+            }
+        }
+        if self.dropped.raw != 0 {
+            let lost: i64 = atomic_load_value(self.dropped);
+            if lost != self.lost_events { self.lost_events = lost; self.last_note = -1; self.last_velocity = 0; }
+        }
+        return now < self.activity_until;
+    }
+    pub fn release(self: &mut Self) -> void {
+        if self.worker.raw != 0 { atomic_store_value(self.stop, 1); join(self.worker); self.worker.raw = 0; }
+        let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent> { handle: self.queue_handle };
+        if queue.is_valid() { queue.release(); self.queue_handle = 0; }
+        if self.stop.raw != 0 { atomic_free_handle(self.stop); self.stop.raw = 0; }
+        if self.dropped.raw != 0 { atomic_free_handle(self.dropped); self.dropped.raw = 0; }
+    }
+}

@@ -26,6 +26,8 @@ use tui_demo::sample_view::SampleView;
 mod tui_demo::bpm_dialog;
 mod tui_demo::note_playback;
 use tui_demo::note_playback::NotePlayback;
+mod tui_demo::midi_controller;
+use tui_demo::midi_controller::MidiController;
 use tui_demo::bpm_dialog::BpmDialog;
 mod tui_demo::frame_rate;
 use tui_demo::frame_rate::FrameRate;
@@ -178,8 +180,12 @@ fn main() -> i32 {
     var previous_height: i32 = 0;
     var escape_ticks: i32 = 0;
     var confirm_track_action: i32 = 0;
+    var midi: MidiController = MidiController::start();
     while running {
         let now: i64 = now_ms(); let delta: i32 = i32(now - last_tick > 1000 ? 1000 : now - last_tick); last_tick = now;
+        // MIDI dispatch is independent of modal keyboard focus.
+        let midi_active: bool = midi.poll(now);
+        if transport.midi_received != midi_active { transport.midi_received = midi_active; dirty = true; }
         let ui_steps: i64 = (now - ui_clock) / 10; ui_clock = ui_clock + ui_steps * 10;
         if play_pattern != library.active_id {
             transport.playing = false; mixer.levels = []; play_pattern = library.active_id;
@@ -242,7 +248,7 @@ fn main() -> i32 {
         focus.set_menu_active(menus.active >= 0 || dialog.active || question.active || bpm_dialog.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             let surface: Surface = Surface::new(area.width, area.height);
-            if !surface.is_valid() { library.release(); dialog.release(); bpm_dialog.release(); free(message); terminal.finish(); return 1; }
+            if !surface.is_valid() { midi.release(); library.release(); dialog.release(); bpm_dialog.release(); free(message); terminal.finish(); return 1; }
             library.table.reconcile(panes[1].bounds.inset(1));
             library.view.reconcile(panes[0].bounds.inset(1));
             library.audio.view.reconcile(panes[0].bounds.inset(1));
@@ -452,6 +458,7 @@ fn main() -> i32 {
         sleep_ms(frame_rate.sleep_ms(now_ms()));
     }
     note_playback.update(library.table, transport.ticks, false);
+    midi.release();
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();
     return 0;
