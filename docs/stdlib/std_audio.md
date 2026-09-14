@@ -2,6 +2,49 @@
 
 Module file: `stdlib/std/audio.mla`
 
+## Low-latency event controller
+
+Import `std::audio::controller` for the separate output-only AUHAL API on macOS.
+Existing `AudioDevice` APIs keep their original backends. `AudioController.open`
+takes an output device index (`-1` for system default) and a requested hardware
+buffer size, for example 128 frames. It uses the device's native sample rate;
+query `sample_rate()` and `buffer_frames()` for actual values. The buffer size
+request may affect other clients of that device; it is not an end-to-end latency
+guarantee. `start()` activates the native render callback; `stop()` stops it.
+Other platforms return an unsupported error for hardware open, but the offline
+`new(sample_rate, buffer_frames)` renderer works without hardware.
+
+`AudioEvent` has `kind`, nested `AudioMidiEvent { channel, note, velocity }`,
+`source`, `frame`, `sample`, and `gain` fields. Supported kinds are `NoteOn`,
+`NoteOff`, `MasterGain`, `PlaySample`, and `StopSource`. MIDI channel/note/velocity
+ranges are 0–15/0–127/0–127; source IDs distinguish tracks or producers.
+`post(event, lane)` returns 0 on success, 1 when full, or -1 for invalid arguments.
+It does not allocate or wait. There are two preallocated 1024-event SPSC lanes:
+lane 0 for a main/sequencer producer and lane 1 for a MIDI-input producer.
+**Exactly one producer may post to each lane.** The callback is their sole
+consumer. It handles at most 256 events per lane per callback, without locks,
+allocation, logging, or MLang calls. A future event on one lane does not block
+the other. Frame -1 means immediately; other frames are absolute positions in
+`frame_clock()`. Keep timestamps nondecreasing within each lane; late events
+run at the next available frame. Dense bursts can exhaust the callback budget.
+
+The reference renderer has 128 shared MIDI/sample voices and a sine preview
+instrument, with a short click-reduction ramp and conservative master gain.
+It is not an Audio Unit plugin host. `add_sample(pcm)` copies a decoded PcmAudio
+while stopped, returning a sample ID or -1; up to 64 copies are retained until
+close. The source PcmAudio can then be freed. PCM voices use linear interpolation
+when source and output rates differ. `PlaySample` starts a registered sample;
+`StopSource` releases every voice belonging to a source. `MasterGain` accepts
+0–1. `process(block, frames)` runs the same renderer into a preallocated PcmBlock
+while stopped, for offline processing and tests.
+
+Overflow increments `dropped_events()` and requests a panic rather than risking
+stuck notes. `panic()` atomically requests clearing voices and both event queues
+at the next callback. Stop/join producers before `close()`; handle copies are
+non-owning aliases. Opening devices, registering PCM, and lifecycle calls belong
+on a control thread, never inside an audio callback. No hardware input or audio
+recording permission is needed for this output-only controller.
+
 Common audio output and duplex processing helpers:
 - macOS uses CoreAudio Audio Queue input/output.
 - Linux uses JACK2 when `libjack` and a running JACK server are available.

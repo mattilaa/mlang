@@ -2,6 +2,8 @@
 mod tui;
 mod std::io;
 mod std::time;
+mod std::env::detail;
+use std::env::detail::__env_get_var;
 use tui::geometry::*;
 use tui::theme::*;
 use tui::surface::*;
@@ -26,8 +28,10 @@ use tui_demo::sample_view::SampleView;
 mod tui_demo::bpm_dialog;
 mod tui_demo::note_playback;
 use tui_demo::note_playback::NotePlayback;
-mod tui_demo::midi_controller;
-use tui_demo::midi_controller::MidiController;
+mod tui_demo::audio_controller;
+use tui_demo::audio_controller::AudioSystem;
+mod tui_demo::settings_dialog;
+use tui_demo::settings_dialog::SettingsDialog;
 use tui_demo::bpm_dialog::BpmDialog;
 mod tui_demo::frame_rate;
 use tui_demo::frame_rate::FrameRate;
@@ -51,6 +55,7 @@ fn demo_menus() -> MenuBar {
                     MenuItem { label: "Dance", action: 10, enabled: true }
                 ])
             ]),
+            MenuItem { label: "Settings", action: 90, enabled: true },
             MenuItem { label: "Quit", action: 99, enabled: true }] },
         Menu { title: "Edit", items: [
             MenuItem { label: "Undo", action: 4, enabled: true },
@@ -164,6 +169,7 @@ fn main() -> i32 {
     var library: PatternLibrary = PatternLibrary::new();
     var transport: TransportStatus = TransportStatus {};
     var bpm_dialog: BpmDialog = BpmDialog::new();
+    var settings: SettingsDialog = SettingsDialog::new();
     var note_playback: NotePlayback = NotePlayback {};
     var pending_length: i32 = 0;
     var length_target: i32 = 0;
@@ -180,7 +186,9 @@ fn main() -> i32 {
     var previous_height: i32 = 0;
     var escape_ticks: i32 = 0;
     var confirm_track_action: i32 = 0;
-    var midi: MidiController = MidiController::start();
+    let no_hardware: str8 = __env_get_var("MLANG_TUI_NO_HARDWARE");
+    var midi: AudioSystem = AudioSystem::start(terminal.active && no_hardware != "1");
+    free(no_hardware);
     while running {
         let now: i64 = now_ms(); let delta: i32 = i32(now - last_tick > 1000 ? 1000 : now - last_tick); last_tick = now;
         // MIDI dispatch is independent of modal keyboard focus.
@@ -193,16 +201,29 @@ fn main() -> i32 {
             transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
         }
         // Editing a moving row would otherwise commit to a different row.
-        if library.table.editing || library.renaming || dialog.active || question.active { transport.playing = false; }
+        if library.table.editing || library.renaming || dialog.active || question.active || settings.active { transport.playing = false; }
         if transport.advance(now, i32(library.table.rows.len())) {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
         }
         note_playback.update(library.table, transport.ticks, transport.playing);
+        midi.sequencer_events(note_playback.events);
         if mixer.update(library.table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
         if playback_dirty && frame_rate.ready(now) { dirty = true; }
         if sample.visible && !library.table.audio_under_cursor() { sample.visible = false; dirty = true; }
         for _ui_step in 0..ui_steps {
+            if settings.active && settings.pressed_button >= 0 {
+                settings.tick(); dirty = true;
+                if !settings.active && settings.result == 1 {
+                    let applied: result<i32, str8> = midi.configure(settings.midi.selected_id(), settings.output.selected_id());
+                    if applied.is_err() { settings.fail(applied.unwrap_err()); }
+                    else {
+                        free(message);
+                        if midi.output.handle == 0 { message = clone("Settings applied. Audio disabled."); }
+                        else { message = format!("AUHAL: {} Hz / {} frames. Settings applied.", midi.output.sample_rate(), midi.output.buffer_frames()); }
+                    }
+                }
+            }
             if bpm_dialog.active && bpm_dialog.pressed_button >= 0 {
                 bpm_dialog.tick(); dirty = true;
                 if !bpm_dialog.active && bpm_dialog.result == 1 {
@@ -245,10 +266,10 @@ fn main() -> i32 {
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active(menus.active >= 0 || dialog.active || question.active || bpm_dialog.active || library.table.edit_mode > 0 || library.renaming);
+        focus.set_menu_active(menus.active >= 0 || dialog.active || question.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             let surface: Surface = Surface::new(area.width, area.height);
-            if !surface.is_valid() { midi.release(); library.release(); dialog.release(); bpm_dialog.release(); free(message); terminal.finish(); return 1; }
+            if !surface.is_valid() { midi.release(); settings.release(); library.release(); dialog.release(); bpm_dialog.release(); free(message); terminal.finish(); return 1; }
             library.table.reconcile(panes[1].bounds.inset(1));
             library.view.reconcile(panes[0].bounds.inset(1));
             library.audio.view.reconcile(panes[0].bounds.inset(1));
@@ -258,6 +279,7 @@ fn main() -> i32 {
             library.table.paint_track_dialog(surface, area, Theme::dark_blue());
             library.paint_rename(surface, area, Theme::dark_blue());
             bpm_dialog.paint(surface, area, Theme::dark_blue());
+            settings.paint(surface, area, Theme::dark_blue());
             terminal.present(surface);
             surface.release();
             previous_width = area.width;
@@ -280,16 +302,19 @@ fn main() -> i32 {
             // dd is consecutive input in the active sequence, never across a
             // menu, dialog, pane switch, or unrelated key.
             if event.kind != InputKind::None || event.code != 0 {
-                if menus.active >= 0 || dialog.active || question.active || bpm_dialog.active || library.table.editing || library.renaming || focus.selected != 0 ||
+                if menus.active >= 0 || settings.active || dialog.active || question.active || bpm_dialog.active || library.table.editing || library.renaming || focus.selected != 0 ||
                         event.kind == InputKind::Pane || (event.kind == InputKind::Menu && event.key == Key::Toggle) { library.view.cancel_pending(); library.audio.view.cancel_pending(); }
-                if menus.active >= 0 || dialog.active || question.active || bpm_dialog.active || focus.selected != 1 ||
+                if menus.active >= 0 || settings.active || dialog.active || question.active || bpm_dialog.active || focus.selected != 1 ||
                         event.code != 100 || event.modifiers != 1 { library.table.delete_pending = false; }
-                if menus.active >= 0 || dialog.active || question.active || bpm_dialog.active || focus.selected != 1 ||
+                if menus.active >= 0 || settings.active || dialog.active || question.active || bpm_dialog.active || focus.selected != 1 ||
                         event.code != 103 || event.modifiers != 1 { library.table.top_pending = false; }
             }
             escape_ticks = 0;
             var command: i32 = 0;
-            if bpm_dialog.active {
+            if settings.active {
+                if event.kind != InputKind::None || event.code != 0 { settings.on_event(event); dirty = true; }
+            }
+            else if bpm_dialog.active {
                 if event.kind != InputKind::None || event.code != 0 {
                     bpm_dialog.on_event(event); dirty = true;
                     if !bpm_dialog.active && bpm_dialog.result == 1 {
@@ -341,6 +366,7 @@ fn main() -> i32 {
             else if event.code == 32 && event.modifiers == 1 {
                 transport.toggle(now_ms(), library.table.selected_row, i32(library.table.rows.len()));
                 note_playback.update(library.table, transport.ticks, transport.playing);
+                midi.sequencer_events(note_playback.events);
                 if transport.row >= 0 { library.table.selected_row = transport.row; }
                 dirty = true;
             }
@@ -367,6 +393,9 @@ fn main() -> i32 {
                 if library.on_event(event, panes[0].bounds.inset(1)) { dirty = true; }
             }
             if command == 99 { running = false; }
+            else if command == 90 {
+                transport.playing = false; settings.open(midi.midi_id, midi.output_id); focus.set_menu_active(true);
+            }
             else if command == 1 {
                 question.title = "New session"; question.question = "Start a new session?";
                 confirm_track_action = 0; question.open(); focus.set_menu_active(true);
@@ -433,7 +462,8 @@ fn main() -> i32 {
                 library.table.top_pending = false;
                 library.view.cancel_pending();
                 library.audio.view.cancel_pending();
-                if bpm_dialog.active { bpm_dialog.on_event(event); dirty = true; }
+                if settings.active { settings.on_event(event); dirty = true; }
+                else if bpm_dialog.active { bpm_dialog.on_event(event); dirty = true; }
                 else if library.renaming { library.rename_event(event); dirty = true; }
                 else if question.active {
                     question.on_event(event);
@@ -459,6 +489,7 @@ fn main() -> i32 {
     }
     note_playback.update(library.table, transport.ticks, false);
     midi.release();
+    settings.release();
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();
     return 0;

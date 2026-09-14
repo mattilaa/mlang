@@ -20,6 +20,7 @@ def main():
     before = termios.tcgetattr(slave)
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
     env = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor")
+    env["MLANG_TUI_NO_HARDWARE"] = "1"
     env.pop("NO_COLOR", None)
     process = subprocess.Popen([sys.argv[1]], stdin=slave, stdout=slave, stderr=slave, env=env)
     pending_output = bytearray()

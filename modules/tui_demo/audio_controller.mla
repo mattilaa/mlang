@@ -1,0 +1,64 @@
+mod std::audio::controller;
+mod tui_demo::midi_controller;
+mod tui_demo::note_playback;
+use std::audio::controller::*;
+use std::audio::detail::__mlang_std_audio_last_error;
+use std::midi::input_count;
+use tui_demo::midi_controller::MidiController;
+use tui_demo::note_playback::NoteEvent;
+
+/// Control-thread owner. AUHAL owns rendering; MIDI uses its separate lane.
+pub struct AudioSystem {
+    var output: AudioController; var midi: MidiController;
+    var midi_id: i64{-1}; var output_id: i64{-1};
+};
+impl AudioSystem {
+    pub fn start(hardware: bool) -> AudioSystem {
+        var system: AudioSystem = AudioSystem {};
+        if hardware {
+            let opened: result<AudioController, str8> = AudioController::open(-1, 128);
+            if opened.is_ok() {
+                system.output = opened.unwrap();
+                if system.output.start() != 0 { system.output.close(); system.output.handle = 0; }
+            }
+            system.midi = MidiController::start_selected(-1, system.output.handle);
+        }
+        return system;
+    }
+    /// Prepare new output before retiring old resources. Failure leaves old output.
+    pub fn configure(self: &mut Self, midi_id: i64, output_id: i64) -> result<i32, str8> {
+        if midi_id < -2 || output_id < -2 { return Err<i32, str8>("Invalid device selection"); }
+        if midi_id >= std::midi::input_count() { return Err<i32, str8>("MIDI adapter unavailable; reopen Settings"); }
+        var next: AudioController = AudioController {};
+        if output_id != -2 {
+            let opened: result<AudioController, str8> = AudioController::open(output_id, 128);
+            if opened.is_err() { return Err<i32, str8>(__mlang_std_audio_last_error()); }
+            next = opened.unwrap();
+            if next.start() != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); }
+        }
+        // Never free an audio handle while the MIDI producer still borrows it.
+        self.midi.release();
+        if self.output.handle != 0 {
+            if self.output.close() != 0 {
+                if next.handle != 0 { next.close(); }
+                self.midi = MidiController::start_selected(self.midi_id, self.output.handle);
+                return Err<i32, str8>("Could not stop previous output; settings unchanged");
+            }
+        }
+        self.output = next; self.midi_id = midi_id; self.output_id = output_id;
+        self.midi = MidiController::start_selected(midi_id, self.output.handle);
+        return Ok<i32, str8>(0);
+    }
+    pub fn poll(self: &mut Self, now: i64) -> bool { return self.midi.poll(now); }
+    pub fn sequencer_events(self: AudioSystem, events: list<NoteEvent>) -> void {
+        if self.output.handle == 0 { return; }
+        for event in events {
+            self.output.post(AudioEvent { kind: event.on == 1 ? AudioEventKind::NoteOn : AudioEventKind::NoteOff,
+                midi: AudioMidiEvent { channel: event.track % 16, note: event.note, velocity: event.velocity }, source: event.track }, 0);
+        }
+    }
+    pub fn release(self: &mut Self) -> void {
+        self.midi.release();
+        if self.output.handle != 0 { if self.output.close() == 0 { self.output.handle = 0; } }
+    }
+}

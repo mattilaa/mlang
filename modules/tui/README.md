@@ -269,9 +269,8 @@ Call `cancel_pending()` when suspending list input. Empty lists select `-1`.
 The demo model is `modules/tui_demo/patterns.mla` and owns its labels/snapshots;
 call its `release()` once and do not shallow-copy the owning library.
 
-### Table widget
+### MIDI, AUHAL output, and Settings
 
-MIDI tracks start collapsed to NOTE/VEL for every note line. In the Pattern view,
 The demo opens the default MIDI input on a dedicated worker thread at startup.
 `tui_demo::midi_controller` decodes note-on/off (including velocity-zero note-on)
 and running status, then posts fixed-size `MidiInputEvent` values through a
@@ -280,7 +279,7 @@ iteration, independently of modal keyboard focus. `MidiController.dispatch`
 uses `match` to call main-thread note handlers; the current handlers retain the
 last note/channel/velocity and flash MIDI IN for 150 ms. This does not record
 notes into the pattern or send MIDI output. No input device is a nonfatal state;
-connect the device before starting the demo (no hot-plug reopening yet).
+connect the device before startup, or reopen File → Settings to refresh devices.
 
 The worker-to-window queue never waits when full: dropped events are counted
 atomically, and the consumer clears its last-note display state on loss. Native
@@ -289,6 +288,38 @@ the worker, not on a real-time audio callback. Shutdown signals and joins the
 worker before releasing shared storage. Hardware-independent decoder, threaded
 handoff, overflow, and indicator tests live in `tests/tui_midi_tests.mla`.
 
+File → Settings selects the MIDI input adapter and AUHAL master output device.
+Both offer System default and Disabled. Enter opens a dropdown, j/k or arrows
+browse, Enter commits its choice, and Escape cancels the popup. A second Escape
+cancels Settings. Tab or Ctrl+Shift+H/J/K/L moves between fields and the centered
+OK/Cancel buttons. Only OK applies choices. Device choices last for this run;
+no settings file or automatic hot-plug reconnect is implemented yet. Output
+open/start errors keep Settings open and retain the previous output.
+
+The public `tui::dropdown::DropDown` widget takes `DropDownItem { id, label }`
+values through `set_items(items, selected_id)`, cloning their labels. Query
+`selected_id()` after handling input. `on_event` returns whether it consumed
+the event. Call `paint` with its one-line anchor, then `paint_popup` **after all
+sibling widgets** to render the clipped, shadowed overlay. `max_rows` controls
+the visible list height (default six); longer lists scroll with the cursor.
+Call `cancel()` when transferring focus and `release()` when disposing it.
+
+The demo's `AudioSystem` owns `std::audio::controller::AudioController`, an
+output-only macOS AUHAL stream requesting 128 frames at the native device rate.
+The hardware can reject that buffer request; Settings reports the actual rate
+and buffer size after applying. Live MIDI goes directly from the MIDI worker
+to a dedicated audio queue, independently of UI dispatch. Sequenced MIDI uses
+a separate main-thread queue. The native callback uses a small sine-voice
+preview synth (not an AU instrument host); no microphone input is opened.
+The controller also supports copied PCM sample-play/stop events, but pattern
+audio-instance scheduling is not yet connected to this output. Existing
+sequencer events are forwarded as they become due in the UI loop; a future
+look-ahead sequencer can use absolute frame timestamps supported by the API.
+Set `MLANG_TUI_NO_HARDWARE=1` to skip startup device opening, as the PTY tests do.
+
+### Table widget
+
+MIDI tracks start collapsed to NOTE/VEL for every note line. In the Pattern view,
 `z` cycles the selected MIDI track through three column stages:
 
 1. NOTE / VEL (default)

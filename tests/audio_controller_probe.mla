@@ -1,0 +1,19 @@
+/// Optional silent hardware check (not part of automated offline tests).
+mod std::audio::controller;
+mod std::time;
+use std::audio::controller::AudioController;
+use std::audio::detail::__mlang_std_audio_last_error;
+use std::time::sleep_ms;
+
+fn main() -> i32 {
+    let opened: result<AudioController, str8> = AudioController::open(-1, 128);
+    if opened.is_err() { println!("Unavailable: {}", __mlang_std_audio_last_error()); return 77; }
+    let controller: AudioController = opened.unwrap();
+    if controller.start() != 0 { println!("Start failed: {}", __mlang_std_audio_last_error()); controller.close(); return 1; }
+    // No events: callback renders silence only.
+    sleep_ms(100);
+    let frames: i64 = controller.frame_clock();
+    println!("AUHAL: {} Hz, {} buffer frames, {} frames rendered", controller.sample_rate(), controller.buffer_frames(), frames);
+    let closed: i32 = controller.close();
+    return frames > 0 && closed == 0 ? 0 : 1;
+}

@@ -1,0 +1,87 @@
+mod std::testing;
+mod std::audio::controller;
+mod std::thread;
+use std::testing::verify;
+use std::audio::controller::*;
+use std::audio::PcmAudio;
+use std::audio::PcmBlock;
+use std::thread::*;
+
+#[test]
+fn audio_controller_scheduled_midi() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    let block_result: result<PcmBlock, str8> = PcmBlock::new(512);
+    verify(block_result.is_ok()); if block_result.is_err() { controller.close(); return; }
+    let block: PcmBlock = block_result.unwrap();
+    verify(controller.sample_rate() == 48000 && controller.buffer_frames() == 128);
+    verify(controller.post(AudioEvent { kind: AudioEventKind::NoteOn,
+        midi: AudioMidiEvent { channel: 2, note: 69, velocity: 127 }, frame: 64, source: 7 }, 0) == 0);
+    verify(controller.post(AudioEvent { kind: AudioEventKind::NoteOff,
+        midi: AudioMidiEvent { channel: 2, note: 69 }, frame: 256, source: 7 }, 0) == 0);
+    verify(controller.process(block, 512) == 0 && controller.frame_clock() == 512);
+    for f in 0..64 { verify(block.left(f) == 0.0f && block.right(f) == 0.0f); }
+    verify(block.left(90) > 0.0f);
+    verify(block.left(90) == block.right(90));
+    verify(block.left(511) == 0.0f);
+    verify(controller.post(AudioEvent { kind: AudioEventKind::NoteOn, midi: AudioMidiEvent { note: 128 } }, 0) == -1);
+    verify(controller.post(AudioEvent {}, 2) == -1);
+    verify(controller.process(block, 513) == -1);
+    block.close(); controller.close();
+}
+
+fn audio_live_producer(handle: i64) -> i32 {
+    let controller: AudioController = AudioController { handle: handle };
+    return controller.post(AudioEvent { kind: AudioEventKind::NoteOn,
+        midi: AudioMidiEvent { channel: 1, note: 69, velocity: 100 }, source: 1000 }, 1);
+}
+
+#[test]
+fn audio_controller_separate_lanes_and_panic() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    let block_result: result<PcmBlock, str8> = PcmBlock::new(128);
+    verify(block_result.is_ok()); if block_result.is_err() { controller.close(); return; }
+    let block: PcmBlock = block_result.unwrap();
+    // A future command on the main lane must not block live MIDI on lane 1.
+    verify(controller.post(AudioEvent { kind: AudioEventKind::MasterGain, frame: 10000, gain: 0.5 }, 0) == 0);
+    let worker: thread = thread::spawn(audio_live_producer, controller.handle);
+    verify(join(worker) == 0);
+    controller.process(block, 128); verify(block.left(20) > 0.0f);
+    controller.panic(); controller.process(block, 128);
+    for f in 0..128 { verify(block.left(f) == 0.0f); }
+    for i in 0..1024 { verify(controller.post(AudioEvent { kind: AudioEventKind::MasterGain }, 0) == 0); }
+    verify(controller.post(AudioEvent { kind: AudioEventKind::NoteOff }, 0) == 1);
+    verify(controller.dropped_events() == 1);
+    controller.process(block, 128); verify(block.left(20) == 0.0f);
+    // Overflow recovery leaves the queue usable.
+    verify(controller.post(AudioEvent { kind: AudioEventKind::NoteOn, midi: AudioMidiEvent { note: 69, velocity: 100 } }, 0) == 0);
+    controller.process(block, 128); verify(block.left(20) > 0.0f);
+    block.close(); controller.close();
+}
+
+#[test]
+fn audio_controller_sample_ownership() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    let decoded: result<PcmAudio, str8> = PcmAudio::load("examples/fft_example/illusion.wav");
+    verify(decoded.is_ok()); if decoded.is_err() { controller.close(); return; }
+    let pcm: PcmAudio = decoded.unwrap();
+    let id: i64 = controller.add_sample(pcm); verify(id == 0); pcm.close();
+    let block_result: result<PcmBlock, str8> = PcmBlock::new(4096);
+    verify(block_result.is_ok()); if block_result.is_err() { controller.close(); return; }
+    let block: PcmBlock = block_result.unwrap();
+    verify(controller.post(AudioEvent { kind: AudioEventKind::PlaySample, sample: id, source: 3 }, 0) == 0);
+    var audible: bool = false;
+    for _i in 0..20 {
+        verify(controller.process(block, 4096) == 0);
+        for f in 0..4096 { if block.left(f) != 0.0f { audible = true; } }
+    }
+    verify(audible);
+    verify(controller.post(AudioEvent { kind: AudioEventKind::StopSource, source: 3 }, 0) == 0);
+    controller.process(block, 4096); verify(block.left(4095) == 0.0f);
+    block.close(); controller.close();
+}
