@@ -409,6 +409,13 @@ A successful run executes the installed binary and prints `signed registry
 package installed successfully`. Generated secrets and registry/install state
 stay below the example's ignored `build/` directory.
 
+## macOS installer
+
+The [macOS PKG example](../examples/package_manager_macos_pkg/README.md)
+shows a simple `mlang.toml` task chain that compiles an executable and creates
+an installer with a standalone uninstaller. Build it with `mlang pkg run package`
+from its directory; installation and removal are explicit separate commands.
+
 ## Focused regression examples
 
 Some new features are best represented by compact compiler regression tests

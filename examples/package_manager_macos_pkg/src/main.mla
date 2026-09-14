@@ -1,0 +1,4 @@
+fn main() -> i32 {
+    println!("Hello from a PKG-installed MLang program!");
+    return 0;
+}

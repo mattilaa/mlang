@@ -1,0 +1,32 @@
+[package]
+name = "hello_pkg"
+version = "0.1.0"
+
+[tool.mlang]
+build_dir = "build"
+
+[[task]]
+name = "compile"
+workdir = "{{root}}"
+supported_hosts = ["darwin"]
+unsupported_message = "This installer example requires macOS"
+commands = [
+  'mkdir -p "{{build_dir}}"',
+  '../../build/mlang src/main.mla -L ../../build -lmlang_std -o "{{build_dir}}/hello_pkg"',
+]
+
+[[task]]
+name = "package"
+workdir = "{{root}}"
+depends_on = ["compile"]
+commands = [
+  'bash ../../scripts/package_macos_project.sh "{{build_dir}}/hello_pkg" README.md hello_pkg org.mlang.examples.hello-pkg 0.1.0 "{{build_dir}}/hello_pkg-0.1.0.pkg"',
+]
+
+# Preview only. Actual removal is an explicit sudo command in README.md.
+[[task]]
+name = "uninstall-preview"
+workdir = "{{root}}"
+commands = [
+  '/bin/bash /usr/local/lib/org.mlang.examples.hello-pkg/uninstall.sh --dry-run',
+]
