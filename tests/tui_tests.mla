@@ -34,6 +34,66 @@ use tui_demo::audio_clip::*;
 mod tui_demo::bpm_dialog;
 use tui_demo::bpm_dialog::BpmDialog;
 use tui_demo::mixer::meter_ramp;
+mod tui_demo::frame_rate;
+use tui_demo::frame_rate::FrameRate;
+
+#[test]
+fn tui_multiple_note_lines() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 12);
+    table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("25"); table.edit_event(decode_input("\r"), area);
+    table.track_action(80, area); // Add from CC appends before automation.
+    let added: TableRow = table.rows[0]; let track: SequenceTrack = table.tracks[0];
+    verify(track.note_lines == 2 && table.selected_column == 3 && table.track_start(1) == 7);
+    verify(added.cells[1] == "C-4" && added.cells[3] == "" && added.cells[4] == "" && added.cells[5] == "25");
+    table.selected_column = 2; table.track_action(82, area); // VEL selects its NOTE/VEL pair.
+    let duplicated: TableRow = table.rows[0];
+    verify(duplicated.cells[3] == "C-4" && duplicated.cells[4] == "100" && duplicated.cells[7] == "25");
+    verify(table.automation_column(0, 1) == 7 && table.track_start(1) == 9 && table.is_note());
+    table.edit_event(decode_input("K"), area);
+    let edited: TableRow = table.rows[0]; verify(edited.cells[1] == "C-4" && edited.cells[3] == "C#4");
+    var mixer: Mixer = Mixer {};
+    for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 787); // two V100 notes are not summed
+    table.selected_column = 4; table.edit_event(decode_input("\r"), area); table.editor.set_text("127"); table.edit_event(decode_input("\r"), area);
+    for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 1000 && mixer.levels.len() == 3);
+    table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text(""); table.edit_event(decode_input("\r"), area); // empty NOTE ignores its high VEL
+    for _i in 0..30 { mixer.update(table, 0, 0, true, 10); }
+    verify(mixer.level(0, 100, 0, false, false) == 787);
+    var copy: SequenceTable = table.copy_pattern();
+    table.track_action(81, area); let removed: TableRow = table.rows[0];
+    verify(table.track_columns(0) == 6 && removed.cells[3] == "" && removed.cells[5] == "25");
+    table.track_action(81, area); verify(table.track_columns(0) == 4);
+    table.track_action(81, area); verify(table.error != "" && table.track_columns(0) == 4);
+    let saved: SequenceTrack = copy.tracks[0]; verify(saved.note_lines == 3);
+    copy.create_track(true, area); let cloned: SequenceTrack = copy.tracks[3]; verify(cloned.note_lines == 3);
+    copy.create_track_kind(false, true, area); copy.track_action(80, area);
+    verify(copy.error == "Note lines require a MIDI track" && copy.track_columns(4) == 2);
+    copy.release(); table.release();
+}
+
+#[test]
+fn tui_meter_refresh_rate() {
+    var rate: FrameRate = FrameRate {}; verify(rate.fps == 60);
+    rate.set(60, 1000); rate.presented(1000);
+    verify(!rate.ready(1016) && rate.ready(1017) && rate.sleep_ms(1010) == 7);
+    rate.presented(1017); verify(!rate.ready(1033) && rate.ready(1034));
+    rate.presented(1034); verify(rate.ready(1050));
+    // Sixty scheduled frames in one second; no 20ms/50FPS polling ceiling.
+    rate.set(60, 0); var frames: i32 = 0;
+    for now in 0..1000 { if rate.ready(now) { frames = frames + 1; rate.presented(now); } }
+    verify(frames == 60);
+    verify(!rate.set(0, 1000) && !rate.set(241, 1000) && rate.fps == 60);
+    rate.presented(5000); verify(!rate.ready(5000)); // skip missed frames, no catch-up burst
+    var dialog: BpmDialog = BpmDialog::new(); dialog.open_meter_rate(60);
+    dialog.editor.set_text("0"); dialog.on_event(decode_input("\r")); verify(dialog.active && dialog.error != "");
+    dialog.editor.set_text("60.5"); dialog.on_event(decode_input("\r")); verify(dialog.active);
+    dialog.editor.set_text("60"); dialog.on_event(decode_input("\r")); verify(!dialog.active && dialog.value == 60 && dialog.meter_rate);
+    dialog.open_meter_rate(60); dialog.editor.set_text("120");
+    dialog.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }); verify(dialog.value == 60 && dialog.result == 2);
+    dialog.open(137); verify(!dialog.meter_rate && dialog.title == "Set BPM");
+    dialog.release();
+}
 
 #[test]
 fn tui_transport_clock_and_bpm_dialog() {

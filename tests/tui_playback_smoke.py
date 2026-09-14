@@ -50,6 +50,14 @@ def main():
         until(lambda s: "New session" in s)
         send(b"\x1b")
         until(lambda s: "New session" not in s)
+        send(b"\tll")
+        until(lambda s: "Meter" in s)
+        send(b"jjljj\r")
+        until(lambda s: "Set update rate" in s and "FPS" in s)
+        send(b"\x150\r")
+        until(lambda s: "whole number from 1 to 240" in s)
+        send(b"\x1560\r")
+        until(lambda s: "Set update rate" not in s and "BPM 120" in s)
         send(b"\x1b[108;6um\x1b[98;5u")
         until(lambda s: "Set BPM" in s)
         send(b"\x150\r")
@@ -101,6 +109,12 @@ def main():
             send(b" ")
             until(lambda s: "STOP" in s)
         send(b"q")
+        # Keep draining the PTY while exiting: at high FPS a final frame can
+        # otherwise fill its output buffer before the process handles Quit.
+        deadline = time.monotonic() + 5
+        while process.poll() is None and time.monotonic() < deadline:
+            if select.select([master], [], [], 0.05)[0]:
+                os.read(master, 65536)
         assert process.wait(timeout=5) == 0
         print("PASS: BPM validation/cancel, clock scrolling, MIDI meters, modal capture, sample following")
     finally:

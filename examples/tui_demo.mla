@@ -25,6 +25,8 @@ mod tui_demo::sample_view;
 use tui_demo::sample_view::SampleView;
 mod tui_demo::bpm_dialog;
 use tui_demo::bpm_dialog::BpmDialog;
+mod tui_demo::frame_rate;
+use tui_demo::frame_rate::FrameRate;
 use std::strbuf::clone;
 use std::strbuf::free;
 use std::io::stdin;
@@ -52,9 +54,10 @@ fn demo_menus() -> MenuBar {
         Menu { title: "View", items: [
             MenuItem { label: "Reset layout", action: 6, enabled: true },
             MenuItem { label: "Show details", action: 7, enabled: true },
-            MenuItem::submenu("Meter style", [
+            MenuItem::submenu("Meter", [
                 MenuItem { label: "Solid bars", action: 40, enabled: true },
-                MenuItem { label: "Grainy (osc)", action: 41, enabled: true }]),
+                MenuItem { label: "Grainy (osc)", action: 41, enabled: true },
+                MenuItem { label: "Set update rate", action: 74, enabled: true }]),
             MenuItem { label: "Show patterns", action: 42, enabled: true },
             MenuItem { label: "Show song", action: 43, enabled: true },
             MenuItem::submenu("Sample view", [
@@ -74,7 +77,10 @@ fn demo_menus() -> MenuBar {
             MenuItem { label: "Clear pattern", action: 24, enabled: true },
             MenuItem { label: "Mute / unmute", action: 25, enabled: true },
             MenuItem { label: "Configure CC1", action: 26, enabled: true },
-            MenuItem { label: "Configure CC2", action: 27, enabled: true }] },
+            MenuItem { label: "Configure CC2", action: 27, enabled: true },
+            MenuItem { label: "Add note line", action: 80, enabled: true },
+            MenuItem { label: "Remove note line", action: 81, enabled: true },
+            MenuItem { label: "Duplicate note line", action: 82, enabled: true }] },
         Menu { title: "Pattern", items: [
             MenuItem { label: "Add pattern", action: 50, enabled: true },
             MenuItem { label: "Rename pattern", action: 51, enabled: true },
@@ -151,7 +157,8 @@ fn main() -> i32 {
     var bpm_dialog: BpmDialog = BpmDialog::new();
     var mixer: Mixer = Mixer { visible: false };
     var sample: SampleView = SampleView {};
-    var last_tick: i64 = now_ms(); var last_paint: i64 = last_tick;
+    var last_tick: i64 = now_ms(); var ui_clock: i64 = last_tick;
+    var frame_rate: FrameRate = FrameRate {};
     var playback_dirty: bool = false; var play_pattern: i32 = library.active_id;
     var question: QuestionDialog = QuestionDialog::new("New session", "Start a new session?");
     var message: str8 = clone("Select a command from the menu.");
@@ -163,6 +170,7 @@ fn main() -> i32 {
     var confirm_track_action: i32 = 0;
     while running {
         let now: i64 = now_ms(); let delta: i32 = i32(now - last_tick > 1000 ? 1000 : now - last_tick); last_tick = now;
+        let ui_steps: i64 = (now - ui_clock) / 10; ui_clock = ui_clock + ui_steps * 10;
         if play_pattern != library.active_id {
             transport.playing = false; mixer.levels = []; play_pattern = library.active_id;
             transport.row = library.table.selected_row < 0 ? 0 : library.table.selected_row; transport.phase = 0;
@@ -175,27 +183,32 @@ fn main() -> i32 {
             playback_dirty = true;
         }
         if mixer.update(library.table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
-        if playback_dirty && now - last_paint >= 30 { dirty = true; }
+        if playback_dirty && frame_rate.ready(now) { dirty = true; }
         if sample.visible && !library.table.audio_under_cursor() { sample.visible = false; dirty = true; }
-        if bpm_dialog.active && bpm_dialog.pressed_button >= 0 {
-            bpm_dialog.tick(); dirty = true;
-            if !bpm_dialog.active && bpm_dialog.result == 1 { transport.set_bpm(bpm_dialog.value); }
-        }
-        if dialog.active && dialog.pressed_button >= 0 {
-            dialog.tick(); dirty = true;
-            if dialog.accepted {
-                if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, terminal_bounds()); }
-                free(message); message = format!("Selected: {}", dialog.accepted_path);
+        for _ui_step in 0..ui_steps {
+            if bpm_dialog.active && bpm_dialog.pressed_button >= 0 {
+                bpm_dialog.tick(); dirty = true;
+                if !bpm_dialog.active && bpm_dialog.result == 1 {
+                    if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
+                    else { transport.set_bpm(bpm_dialog.value); }
+                }
             }
-        }
-        if question.active && question.pressed_button >= 0 {
-            question.tick(); dirty = true;
-            if !question.active {
-                if confirm_track_action != 0 {
-                    if question.result == 1 { library.table.track_action(confirm_track_action, terminal_bounds()); }
-                    confirm_track_action = 0;
-                    free(message); message = clone("Track action finished.");
-                } else { free(message); message = clone(question.result == 1 ? "New session confirmed." : "New session cancelled."); }
+            if dialog.active && dialog.pressed_button >= 0 {
+                dialog.tick(); dirty = true;
+                if dialog.accepted {
+                    if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, terminal_bounds()); }
+                    free(message); message = format!("Selected: {}", dialog.accepted_path);
+                }
+            }
+            if question.active && question.pressed_button >= 0 {
+                question.tick(); dirty = true;
+                if !question.active {
+                    if confirm_track_action != 0 {
+                        if question.result == 1 { library.table.track_action(confirm_track_action, terminal_bounds()); }
+                        confirm_track_action = 0;
+                        free(message); message = clone("Track action finished.");
+                    } else { free(message); message = clone(question.result == 1 ? "New session confirmed." : "New session cancelled."); }
+                }
             }
         }
         let area: Rect = terminal_bounds();
@@ -220,7 +233,7 @@ fn main() -> i32 {
             previous_width = area.width;
             previous_height = area.height;
             dirty = false;
-            last_paint = now; playback_dirty = false;
+            frame_rate.presented(now_ms()); playback_dirty = false;
         }
         if !terminal.active { break; }
         // Drain a bounded batch so multi-byte shortcuts/repeats do not acquire
@@ -249,7 +262,10 @@ fn main() -> i32 {
             if bpm_dialog.active {
                 if event.kind != InputKind::None || event.code != 0 {
                     bpm_dialog.on_event(event); dirty = true;
-                    if !bpm_dialog.active && bpm_dialog.result == 1 { transport.set_bpm(bpm_dialog.value); }
+                    if !bpm_dialog.active && bpm_dialog.result == 1 {
+                        if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
+                        else { transport.set_bpm(bpm_dialog.value); }
+                    }
                 }
             }
             else if library.renaming {
@@ -350,11 +366,12 @@ fn main() -> i32 {
             else if command == 52 { library.remove_active(panes[0].bounds.inset(1)); }
             else if command == 70 || command == 71 { sample.grainy = command == 71; }
             else if command == 72 || command == 73 { sample.wave = command == 73; }
+            else if command == 74 { bpm_dialog.open_meter_rate(frame_rate.fps); }
             else if command == 40 || command == 41 {
                 mixer.grainy = command == 41;
                 free(message); message = clone(mixer.grainy ? "Meter style: grainy (osc)" : "Meter style: solid bars");
             }
-            else if command >= 20 && command <= 28 {
+            else if (command >= 20 && command <= 28) || (command >= 80 && command <= 82) {
                 library.table.track_action(command, panes[1].bounds.inset(1));
                 free(message); message = clone("Track updated. Mute affects demo state only.");
             }
@@ -364,7 +381,7 @@ fn main() -> i32 {
             if !running { break; }
         }
         if !received_input && input.pending() {
-            escape_ticks = escape_ticks + 1;
+            escape_ticks = escape_ticks + i32(ui_steps);
             if escape_ticks >= 5 {
                 let event: InputEvent = input.expire();
                 library.table.delete_pending = false;
@@ -393,7 +410,7 @@ fn main() -> i32 {
                 }
             }
         }
-        sleep_ms(10);
+        sleep_ms(frame_rate.sleep_ms(now_ms()));
     }
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();

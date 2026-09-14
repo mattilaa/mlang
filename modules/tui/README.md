@@ -219,7 +219,8 @@ Sample view follows within the row too, including at single-sample zoom. BPM
 changes preserve row phase; menus and the BPM dialog do not pause transport.
 Switching patterns or opening a content editor/file/action dialog stops it so
 edits cannot accidentally target a moving row. Modal controls capture Space and
-Ctrl+B before the transport handles them. UI repainting is limited to about 33 Hz.
+Ctrl+B before the transport handles them. Animated repainting uses the configured
+meter update rate (60 FPS by default), independently of the sequencer clock.
 
 This is a pattern transport and meter/event preview, not audio-device playback
 or MIDI output. Song-order playback is not connected. Imported audio envelopes
@@ -359,9 +360,17 @@ height remains. `tui::meter::VuMeter` is reusable independently: pass a level
 from 0 to 1000 and a target rectangle. Its quarter-cell blocks and
 green/yellow/orange/red thresholds match the oscilloscope demo: green below
 520, yellow from 520, orange from 700, and red from 850 on the 0–1000 scale.
-View → Meter style selects Solid bars or Grainy (osc, default). Both retain
+View → Meter selects Solid bars or Grainy (osc, default). Both retain
 the same fill calculation and colors. Grainy uses `std::esc::acs_meter` directly,
 including its braille glyphs. Custom `VuMeter` instances set `grainy: true`.
+
+**View → Meter → Set update rate** opens an FPS dialog. Enter a whole number
+from 1 to 240; `60` requests 60 FPS. Enter/OK applies it immediately, and
+Escape/Cancel leaves it unchanged. Fractional deadlines avoid rounding 60 FPS
+to a 20 ms / 50 FPS polling cadence. Missed frames are skipped rather than
+replayed; actual throughput depends on terminal/rendering speed. Input remains
+responsive at low rates, and transport timing, smoothing time constants, and
+button animations do not change with FPS. The setting is session-local.
 
 The **Mixer** has no synthetic levels. A MIDI note supplies its velocity / 127
 as a meter impulse whose target falls to zero before the next row; empty notes and zero
@@ -373,6 +382,20 @@ pan, and mute still apply; V100 is the editable track gain, not a fabricated VU
 source. These are sequencer-derived levels, not measurements from an audio device.
 
 #### Typed columns and editing
+
+MIDI tracks support 1–16 NOTE/VEL pairs followed by their shared CC1/CC2 columns.
+**Track → Add note line** inserts a blank pair after the selected pair (or appends
+it before CC1 when an automation column is selected). **Duplicate note line**
+copies the selected NOTE/VEL pair for every row and selects the copy. **Remove
+note line** removes that pair, keeping at least one. Selecting either NOTE or
+VEL identifies the pair; Remove/Duplicate require such a selection. These actions
+do not apply to audio tracks, and no new shortcuts are assigned yet.
+
+All pairs retain the usual note editing, typed velocity limits, empty values,
+column navigation, and horizontal scrolling. Pattern/track clones preserve the
+pair count and contents. Each MIDI track still has one Mixer strip: the highest
+velocity among its non-empty notes feeds that strip's smoothed meter; velocities
+are not summed, and a velocity without a note produces no meter activity.
 
 `TableColumn` owns the reusable validation rules:
 

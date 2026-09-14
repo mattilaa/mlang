@@ -26,6 +26,7 @@ pub struct SequenceTrack {
     var name: str8; var muted: bool; var cc1: AutomationSlot; var cc2: AutomationSlot;
     var volume: i32{100}; var pan: i32;
     var audio: bool;
+    var note_lines: i32{1};
     var instances: list<AudioInstance>;
     var wave_zoom: bool;
 };
@@ -220,7 +221,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     }
     var tracks: list<SequenceTrack> = []; let source_tracks: list<SequenceTrack> = self.tracks;
     for track in source_tracks {
-        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, audio: track.audio, instances: track.copy_audio(), wave_zoom: track.wave_zoom,
+        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, audio: track.audio, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom,
             cc1: AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum } });
     }
@@ -230,7 +231,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     copy.rebuild_columns(); return copy;
 }
 pub fn track_columns(self: SequenceTable, index: i32) -> i32 {
-    let track: SequenceTrack = self.tracks[index]; return track.audio ? (track.instances.len() > 0 ? 3 : 2) : 4;
+    let track: SequenceTrack = self.tracks[index]; return track.audio ? (track.instances.len() > 0 ? 3 : 2) : track.note_lines * 2 + 2;
 }
 pub fn track_start(self: SequenceTable, index: i32) -> i32 {
     var first: i32 = 1;
@@ -239,12 +240,13 @@ pub fn track_start(self: SequenceTable, index: i32) -> i32 {
 }
 pub fn automation_column(self: SequenceTable, index: i32, slot: i32) -> i32 {
     let track: SequenceTrack = self.tracks[index];
-    return self.track_start(index) + (track.audio ? 0 : 2) + slot - 1;
+    return self.track_start(index) + (track.audio ? 0 : track.note_lines * 2) + slot - 1;
 }
 pub fn is_note(self: SequenceTable) -> bool {
     let index: i32 = self.active_track(); if index < 0 { return false; }
     let track: SequenceTrack = self.tracks[index];
-    return !track.audio && self.selected_column == self.track_start(index);
+    let offset: i32 = self.selected_column - self.track_start(index);
+    return !track.audio && offset >= 0 && offset < track.note_lines * 2 && offset % 2 == 0;
 }
 fn replace_track(self: &mut Self, index: i32, value: SequenceTrack) -> void {
     var tracks: list<SequenceTrack> = [];
@@ -260,8 +262,10 @@ pub fn rebuild_columns(self: &mut Self) -> void {
         let track: SequenceTrack = self.tracks[i];
         groups.push(TableGroup { title: format!("{}{}", track.name, track.muted ? " [M]" : ""), first: i32(columns.len()), count: self.track_columns(i32(i)) });
         if !track.audio {
-            columns.push(TableColumn { title: "NOTE", width: 6, value_type: "str8", pattern: "[A-G][#-]-?[0-9]", nullable: true });
-            columns.push(TableColumn { title: "VEL", width: 4, value_type: "i32", bounded: true, minimum: 0, maximum: 127, nullable: true });
+            for _line in 0..track.note_lines {
+                columns.push(TableColumn { title: "NOTE", width: 6, value_type: "str8", pattern: "[A-G][#-]-?[0-9]", nullable: true });
+                columns.push(TableColumn { title: "VEL", width: 4, value_type: "i32", bounded: true, minimum: 0, maximum: 127, nullable: true });
+            }
         }
         columns.push(TableColumn { title: "CC1", width: 6, value_type: "i32", bounded: true,
             minimum: track.cc1.minimum, maximum: track.cc1.maximum, nullable: true });
@@ -286,7 +290,7 @@ pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Re
     if duplicate {
         let original: SequenceTrack = self.tracks[source];
         free(track.name); free(track.cc1.parameter); free(track.cc2.parameter);
-        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, audio: original.audio, instances: original.copy_audio(), wave_zoom: original.wave_zoom,
+        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, audio: original.audio, note_lines: original.note_lines, instances: original.copy_audio(), wave_zoom: original.wave_zoom,
             cc1: AutomationSlot { parameter: clone(original.cc1.parameter), minimum: original.cc1.minimum, maximum: original.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(original.cc2.parameter), minimum: original.cc2.minimum, maximum: original.cc2.maximum } };
     }
@@ -393,7 +397,42 @@ pub fn configure_slot(self: &mut Self, slot: i32, spec: str8) -> bool {
     else { free(track.cc2.parameter); track.cc2 = definition; }
     self.replace_track(index, track); self.rebuild_columns(); self.error = ""; return true;
 }
+/// 80 adds a blank pair, 81 removes it, 82 duplicates the selected pair.
+pub fn note_line_action(self: &mut Self, command: i32, area: Rect) -> void {
+    let index: i32 = self.active_track(); if index < 0 { return; }
+    var track: SequenceTrack = self.tracks[index];
+    if track.audio { self.error = "Note lines require a MIDI track"; return; }
+    let first: i32 = self.track_start(index);
+    let offset: i32 = self.selected_column - first;
+    let selected: i32 = offset < track.note_lines * 2 ? offset / 2 : -1;
+    if selected < 0 && command != 80 { self.error = "Select a NOTE or VEL column"; return; }
+    if command == 81 && track.note_lines == 1 { self.error = "Keep at least one note line"; return; }
+    if command != 81 && track.note_lines >= 16 { self.error = "Maximum 16 note lines per track"; return; }
+    let line: i32 = command == 81 ? selected : (selected < 0 ? track.note_lines : selected + 1);
+    let column: i32 = first + line * 2;
+    let source: i32 = first + selected * 2;
+    var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
+    for row in previous {
+        var cells: list<str8> = [];
+        for c in 0..row.cells.len() {
+            if c == column && command != 81 {
+                if command == 82 { cells.push(clone(row.cells[source])); cells.push(clone(row.cells[source + 1])); }
+                else { cells.push(clone("")); cells.push(clone("")); }
+            }
+            if command == 81 && (c == column || c == column + 1) { free(row.cells[c]); }
+            else { cells.push(row.cells[c]); }
+        }
+        rows.push(TableRow { cells: cells });
+    }
+    track.note_lines = track.note_lines + (command == 81 ? -1 : 1);
+    let next: i32 = line >= track.note_lines ? track.note_lines - 1 : line;
+    self.replace_track(index, track); self.rows = rows;
+    self.selected_column = first + next * 2;
+    self.rebuild_columns(); self.reconcile(area); self.error = "";
+    self.delete_pending = false; self.top_pending = false;
+}
 pub fn track_action(self: &mut Self, command: i32, area: Rect) -> void {
+    if command >= 80 && command <= 82 { self.note_line_action(command, area); return; }
     self.delete_pending = false;
     if command == 21 { self.create_track(false, area); return; }
     if command == 28 { self.create_track_kind(false, true, area); return; }

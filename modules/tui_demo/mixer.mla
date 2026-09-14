@@ -18,7 +18,9 @@ pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<M
 impl Mixer {
     pub fn update(self: &mut Self, source: &SequenceTable, row: i32, phase: i32, playing: bool, delta: i32) -> bool {
         var table: SequenceTable = SequenceTable {}; table = source;
-        var levels: list<MeterLevel> = []; var changed: bool = self.levels.len() != table.tracks.len();
+        // Track edits already repaint layout; resizing silent meter state is
+        // not an additional animation frame.
+        var levels: list<MeterLevel> = []; var changed: bool = false;
         for i in 0..table.tracks.len() {
             let track: SequenceTrack = table.tracks[i];
             var left: i32 = 0; var right: i32 = 0;
@@ -31,18 +33,23 @@ impl Mixer {
                         left = peak.left; right = peak.right;
                     }
                 } else {
-                    let data: TableRow = table.rows[row]; let column: i32 = table.track_start(i32(i));
-                    if data.cells[column] != "" {
-                        let velocity: result<i64, str8> = table_integer(data.cells[column + 1]);
-                        if velocity.is_ok() {
-                            let value: i64 = velocity.unwrap();
-                            if value >= 0 && value <= 127 {
-                                // Note impulse fades during the first 60% of its row.
-                                let envelope: i32 = phase < 9000 ? 9000 - phase : 0;
-                                left = i32(value) * 1000 / 127 * envelope / 9000; right = left;
+                    let data: TableRow = table.rows[row]; let first: i32 = table.track_start(i32(i));
+                    var maximum_velocity: i32 = 0;
+                    for line in 0..track.note_lines {
+                        let column: i32 = first + i32(line) * 2;
+                        if data.cells[column] != "" {
+                            let velocity: result<i64, str8> = table_integer(data.cells[column + 1]);
+                            if velocity.is_ok() {
+                                let value: i64 = velocity.unwrap();
+                                if value >= 0 && value <= 127 {
+                                    if value > maximum_velocity { maximum_velocity = i32(value); }
+                                }
                             }
                         }
                     }
+                    // All note lines feed the same strip; never sum velocities.
+                    let envelope: i32 = phase < 9000 ? 9000 - phase : 0;
+                    left = maximum_velocity * 1000 / 127 * envelope / 9000; right = left;
                 }
             }
             var old: MeterLevel = MeterLevel {};

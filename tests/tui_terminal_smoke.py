@@ -169,7 +169,7 @@ def main():
         assert b" Mixer " in mixer_frame and b"V100" in mixer_frame and b"P0" in mixer_frame
         assert b"STOP" in mixer_frame  # no synthetic animation while stopped
         os.write(master, b"\tll")
-        assert b"Meter style" in read_frame(None)
+        assert b"Meter" in read_frame(None)
         os.write(master, b"jjl")
         assert b"Grainy (osc)" in read_frame(None)
         os.write(master, b"j\r")
@@ -241,6 +241,16 @@ def main():
             os.write(master, b"j" * item + b"\r")
 
         # Track menu acts on the group containing the selected child column.
+        track_menu(8)
+        read_frame(1, table_text=((38, 4), "   "))
+        os.write(master, b"b")  # select VEL in the original note line
+        read_frame(1)
+        track_menu(10)
+        read_frame(1, table_text=((38, 4), "C-4"))
+        track_menu(9)
+        read_frame(1, table_text=((38, 4), "   "))
+        track_menu(9)
+        read_frame(1, table_text=((28, 4), "C-4"))
         track_menu(0)
         assert b"Rename track" in read_frame(None)
         os.write(master, b"\x15Lead qhjk\r")
