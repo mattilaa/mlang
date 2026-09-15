@@ -29,6 +29,11 @@ def main():
         assert b"C-4" not in frame and b"003" in frame, frame[-5000:]
         frame = tui.send(b"p")
         assert frame.count(b"C-4") >= 2, frame[-5000:]
+        frame = tui.send(b"vljK")
+        assert frame.count(b"C#4") >= 2 and b"101" in frame, frame[-5000:]
+        frame = tui.send(b"\x1b[106;2u")
+        assert frame.count(b"C-4") >= 2 and b"100" in frame, frame[-5000:]
+        tui.send(b"\x1b")
         tui.send(b"v")
         frame = tui.send(b"\x1b")
         assert b"New session" not in frame, "Visual Escape opened a menu"
@@ -38,7 +43,7 @@ def main():
         tui.send(b"\x1b")
     finally:
         tui.close()
-    print("PASS: visual copy/cut/paste, matching-column OK modal, new-note velocity, Escape")
+    print("PASS: visual copy/cut/paste/transpose, matching-column OK modal, new-note velocity, Escape")
 
 
 if __name__ == "__main__":

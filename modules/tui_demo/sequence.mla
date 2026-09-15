@@ -876,6 +876,36 @@ fn apply_clipboard(self: &mut Self, erase: bool, area: Rect) -> void {
     candidate.rows = []; candidate.tracks = []; candidate.release();
     self.rebuild_columns(); self.reconcile(area);
 }
+pub fn transpose_visual(self: &mut Self, event: InputEvent, area: Rect) -> void {
+    if !self.visual { return; }
+    // Work on an independent pattern so a limit in any cell cancels the whole
+    // step. Reuse normal editing for MIDI ranges, numeric limits and audio LEN.
+    var candidate: SequenceTable = self.copy_pattern();
+    var changed: bool = false;
+    for r in 0..self.rows.len() {
+        let row: TableRow = self.rows[r];
+        for c in 0..self.columns.len() {
+            let column: TableColumn = self.columns[c];
+            if column.hidden || column.read_only || !self.visual_cell(i32(r), i32(c)) { continue; }
+            if row.cells[c] == "" { continue; }
+            candidate.selected_row = i32(r); candidate.selected_column = i32(c);
+            if !candidate.is_note() && !candidate.is_length() && !candidate.is_offset() &&
+                    (column.value_type == "str8" || column.value_type == "bool") { continue; }
+            candidate.edit_event(event, area);
+            let updated: TableRow = candidate.rows[r];
+            if updated.cells[c] == row.cells[c] { candidate.release(); return; }
+            changed = true;
+        }
+    }
+    if !changed { candidate.release(); return; }
+    let old_rows: list<TableRow> = self.rows;
+    for row in old_rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
+    let old_tracks: list<SequenceTrack> = self.tracks;
+    for track in old_tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.release_audio(); }
+    self.rows = candidate.rows; self.tracks = candidate.tracks;
+    candidate.rows = []; candidate.tracks = []; candidate.release();
+    self.rebuild_columns(); self.visual = true; self.error = ""; self.reconcile(area);
+}
 pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
     if event.kind == InputKind::None && event.code == 0 { return false; }
     if self.editing {
@@ -896,6 +926,10 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
     if self.visual {
         self.delete_pending = false; self.top_pending = false;
         if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { self.visual = false; return true; }
+        if (event.modifiers == 1 || event.modifiers == 2) &&
+                (event.code == 74 || event.code == 75 || (event.modifiers == 2 && (event.code == 106 || event.code == 107))) {
+            self.transpose_visual(event, area); return true;
+        }
         if event.modifiers == 1 {
             if event.code == 118 { self.visual = false; return true; }
             if event.code == 121 || event.code == 100 { self.copy_visual(event.code == 100, area); return true; }

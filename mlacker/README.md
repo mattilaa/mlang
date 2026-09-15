@@ -79,6 +79,11 @@ pastes show an OK-only dialog and leave the pattern unchanged. Pasting does not
 insert rows. New notes default to VEL 100, LEN 1.00 and OFF 0.00; explicitly copied
 values override these defaults when those columns are included.
 
+While selecting, `Shift+J/K` decreases/increases every nonempty selected value:
+notes move by one semitone, VEL/automation by one, and LEN/OFF by 0.01 sixteenth
+notes. If any value would exceed its limits, the entire step does nothing. Empty,
+hidden and read-only cells stay unchanged; selection remains active for repeats.
+
 ## Instrument tracks
 
 - **Add → Instrument** browses `.vst3` bundles on disk. On selection, the host

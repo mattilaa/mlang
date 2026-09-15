@@ -356,6 +356,65 @@ fn tui_track_zoom_stages() {
     table.release(); copy.release();
 }
 
+fn visual_pair(column: i32, first: str8, second: str8) -> SequenceTable {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 120, 20);
+    table.zoom_tracks(2, true, area); table.selected_column = column;
+    for r in 0..3 {
+        table.selected_row = i32(r); table.edit_event(decode_input("\r"), area);
+        table.editor.set_text(r == 0 ? first : (r == 1 ? second : ""));
+        table.edit_event(decode_input("\r"), area); verify(!table.editing);
+    }
+    table.selected_row = 0; table.edit_event(decode_input("v"), area);
+    table.edit_event(decode_input("j"), area); table.edit_event(decode_input("j"), area);
+    return table;
+}
+
+#[test]
+fn tui_visual_transpose_note_and_velocity_bounds() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var notes: SequenceTable = visual_pair(1, "F#9", "G-9");
+    let revision: i64 = notes.revision;
+    notes.edit_event(decode_input("K"), area);
+    let high: TableRow = notes.rows[0]; verify(high.cells[1] == "F#9" && notes.revision == revision);
+    notes.edit_event(decode_input("J"), area);
+    let first: TableRow = notes.rows[0]; let second: TableRow = notes.rows[1]; let empty: TableRow = notes.rows[2];
+    verify(first.cells[1] == "F-9" && second.cells[1] == "F#9" && empty.cells[1] == "");
+    verify(first.cells[2] == "100" && notes.visual && notes.anchor_row == 0 && notes.selected_row == 2);
+    notes.edit_event(decode_input("\x1b[107;2u"), area); let restored: TableRow = notes.rows[1]; verify(restored.cells[1] == "G-9");
+    notes.release();
+    var low: SequenceTable = visual_pair(1, "C--1", "C#-1"); low.edit_event(decode_input("J"), area);
+    let unchanged: TableRow = low.rows[1]; verify(unchanged.cells[1] == "C#-1");
+    low.edit_event(decode_input("K"), area); let moved: TableRow = low.rows[0]; verify(moved.cells[1] == "C#-1"); low.release();
+    var velocity: SequenceTable = visual_pair(2, "126", "127"); velocity.edit_event(decode_input("K"), area);
+    let vmax: TableRow = velocity.rows[0]; verify(vmax.cells[2] == "126");
+    velocity.edit_event(decode_input("\x1b[106;2u"), area); let vdown: TableRow = velocity.rows[0]; verify(vdown.cells[2] == "125"); velocity.release();
+    var vlow: SequenceTable = visual_pair(2, "0", "1"); vlow.edit_event(decode_input("J"), area);
+    let vmin: TableRow = vlow.rows[1]; verify(vmin.cells[2] == "1"); vlow.release();
+}
+
+#[test]
+fn tui_visual_transpose_length_offset_and_atomicity() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var length: SequenceTable = visual_pair(3, "16383.99", "16384.00"); length.edit_event(decode_input("K"), area);
+    let top: TableRow = length.rows[0]; verify(top.cells[3] == "16383.99");
+    length.edit_event(decode_input("J"), area); let down: TableRow = length.rows[0]; verify(down.cells[3] == "16383.98"); length.release();
+    var minimum: SequenceTable = visual_pair(3, "0.01", "0.02"); minimum.edit_event(decode_input("J"), area);
+    let bottom: TableRow = minimum.rows[1]; verify(bottom.cells[3] == "0.02"); minimum.release();
+    var offset: SequenceTable = visual_pair(4, "16383.99", "16384.00"); offset.edit_event(decode_input("K"), area);
+    let omax: TableRow = offset.rows[0]; verify(omax.cells[4] == "16383.99"); offset.release();
+    var negative: SequenceTable = visual_pair(4, "-16384.00", "-16383.99"); negative.edit_event(decode_input("J"), area);
+    let omin: TableRow = negative.rows[1]; verify(omin.cells[4] == "-16383.99");
+    negative.edit_event(decode_input("K"), area); let oup: TableRow = negative.rows[0]; verify(oup.cells[4] == "-16383.99"); negative.release();
+    var mixed: SequenceTable = visual_pair(1, "C-4", "D-4");
+    mixed.visual = false; mixed.selected_column = 2; mixed.selected_row = 1;
+    mixed.edit_event(decode_input("\r"), area); mixed.editor.set_text("127"); mixed.edit_event(decode_input("\r"), area);
+    mixed.selected_column = 1; mixed.selected_row = 0; mixed.edit_event(decode_input("v"), area);
+    mixed.edit_event(decode_input("l"), area); mixed.edit_event(decode_input("j"), area); mixed.edit_event(decode_input("K"), area);
+    let blocked: TableRow = mixed.rows[0]; verify(blocked.cells[1] == "C-4" && blocked.cells[2] == "100");
+    mixed.edit_event(decode_input("J"), area); let changed: TableRow = mixed.rows[0];
+    verify(changed.cells[1] == "B-3" && changed.cells[2] == "99" && changed.cells[3] == "1.00"); mixed.release();
+}
+
 #[test]
 fn tui_instrument_tracks_and_routing() {
     let area: Rect = Rect::new(0, 0, 100, 12);
