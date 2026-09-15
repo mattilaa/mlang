@@ -2372,6 +2372,58 @@ TEST_F(MLATest, BranchPredictionHintsPreserveRuntimeBehavior)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, LoopLocalsHaveBoundedStackAtO0)
+{
+    writeSource(R"(
+        mod std::thread;
+        use std::thread::*;
+        fn poll_worker(count: i64) -> i32 {
+            var index: i64 = 0;
+            var sum: i64 = 0;
+            while index < count {
+                let lost: i64 = index + 1;
+                var current: i64 = lost;
+                if index % 2 == 0 {
+                    let nested: i64 = current;
+                    current = nested;
+                }
+                sum = sum + current;
+                index = index + 1;
+            }
+            return sum == count * (count + 1) / 2 ? 0 : 1;
+        }
+        fn main() -> i32 {
+            let worker: thread = thread::spawn(poll_worker, 1000000);
+            return join(worker);
+        }
+    )");
+    ASSERT_TRUE(compile(true, "-O0"));
+    // The old lowering exhausts even a large pthread stack. Avoid core files.
+    int status = system(("ulimit -c 0; " + outputExe).c_str());
+    ASSERT_TRUE(WIFEXITED(status));
+    EXPECT_EQ(WEXITSTATUS(status), 0);
+
+    const fs::path irFile = fs::path(testDir) / "stack_locals.ll";
+    ASSERT_EQ(system((compilerPath + " -O0 -emit-llvm -o " +
+                      irFile.string() + " " + sourceFile).c_str()), 0);
+    std::ifstream input(irFile);
+    std::string line, block;
+    int allocations = 0;
+    while(std::getline(input, line))
+    {
+        if(line.find("define ") == 0)
+            block.clear();
+        if(!line.empty() && line[0] != ' ' && line.find(':') != std::string::npos)
+            block = line.substr(0, line.find(':'));
+        if(line.find(" = alloca ") != std::string::npos)
+        {
+            ++allocations;
+            EXPECT_EQ(block, "entry") << line;
+        }
+    }
+    EXPECT_GT(allocations, 0);
+}
+
 TEST_F(MLATest, BranchPredictionHintsEmitLLVMWeights)
 {
     writeSource(R"(
