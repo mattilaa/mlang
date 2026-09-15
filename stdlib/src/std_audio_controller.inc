@@ -145,6 +145,19 @@ int32_t __mlang_std_audio_controller_live_note(int64_t handle, int64_t on, int64
     if(result == 0) *held = target;
     return result;
 }
+/* Same single MIDI producer/lane as live_note. Controllers address the
+ * currently selected destination, while note-offs retain their held target. */
+int32_t __mlang_std_audio_controller_live_control(int64_t handle, int64_t channel, int64_t controller, int64_t value) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || channel < 0 || channel > 15 || !((controller >= 0 && controller <= 127) || controller == 129) ||
+       value < 0 || value > (controller == 129 ? 16383 : 127)) return -1;
+    uint64_t target = atomic_load_explicit(&c->live_target, memory_order_acquire);
+    if(!target) return 0;
+    int64_t source = (int64_t)(target & 127u) - 1;
+    int64_t instrument = (int64_t)(target >> 7) - 1;
+    return __mlang_std_audio_controller_post(handle, 1, instrument ? 9 : 8,
+        channel, controller, value, source + 65536, -1, instrument, 1.0);
+}
 int32_t __mlang_std_audio_controller_master_peak(int64_t handle, int64_t channel) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || channel < 0 || channel > 1) return 0;

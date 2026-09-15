@@ -4,6 +4,8 @@ use std::testing::verify;
 use tui_demo::midi_controller::*;
 use std::sync::SpscQueue;
 use std::thread::*;
+use std::audio::controller::AudioController;
+use std::audio::PcmBlock;
 
 #[test]
 fn midi_stream_decoder() {
@@ -46,6 +48,48 @@ fn midi_worker_dispatch() {
     controller.dispatch(MidiInputEvent { kind: 2, channel: 3, note: 67 });
     verify(controller.last_velocity == 0);
     controller.release(); controller.release();
+}
+
+#[test]
+fn midi_live_controls_and_velocity() {
+    var decoder: MidiDecoder = MidiDecoder {};
+    decoder.feed(179, 10); decoder.feed(1, 10); decoder.feed(248, 10);
+    let modulation: MidiInputEvent = decoder.feed(32, 10);
+    verify(modulation.kind == 6 && modulation.channel == 3 && modulation.note == 1 && modulation.velocity == 32);
+    decoder.feed(1, 11); let running: MidiInputEvent = decoder.feed(96, 11);
+    verify(running.kind == 6 && running.velocity == 96);
+    decoder.feed(227, 12); decoder.feed(0, 12); let bend: MidiInputEvent = decoder.feed(64, 12);
+    verify(bend.kind == 7 && bend.channel == 3 && bend.note == 129 && bend.velocity == 8192);
+    decoder.feed(147, 13); decoder.feed(60, 13); let soft: MidiInputEvent = decoder.feed(32, 13);
+    decoder.feed(61, 14); let hard: MidiInputEvent = decoder.feed(96, 14);
+    verify(soft.kind == 1 && soft.velocity == 32 && hard.kind == 1 && hard.velocity == 96);
+    decoder.feed(61, 15); let off: MidiInputEvent = decoder.feed(0, 15); verify(off.kind == 2);
+    var dispatch: MidiController = MidiController {};
+    dispatch.dispatch(soft); verify(dispatch.last_velocity == 32);
+    dispatch.dispatch(modulation); verify(dispatch.last_velocity == 32 && dispatch.activity_until == 160);
+    dispatch.dispatch(hard); verify(dispatch.last_velocity == 96);
+    dispatch.dispatch(off); verify(dispatch.last_velocity == 0);
+    dispatch.release();
+}
+
+#[test]
+fn midi_decoded_velocity_reaches_audio() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    let audio: AudioController = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(1024); let block: PcmBlock = allocated.unwrap();
+    verify(audio.midi_target(0, 0) == 0);
+    var decoder: MidiDecoder = MidiDecoder {};
+    decoder.feed(144, 1); decoder.feed(60, 1); let soft: MidiInputEvent = decoder.feed(32, 1);
+    verify(soft.send_audio(audio) == 0); verify(audio.process(block, 1024) == 0);
+    let first: f32 = block.left(900);
+    decoder.feed(60, 2); let hard: MidiInputEvent = decoder.feed(96, 2);
+    verify(hard.send_audio(audio) == 0); verify(audio.process(block, 1024) == 0);
+    let difference: f32 = block.left(900) - first * 3.0f;
+    verify(first != 0.0f && difference > -0.000001f && difference < 0.000001f);
+    decoder.feed(60, 3); let off: MidiInputEvent = decoder.feed(0, 3);
+    verify(off.send_audio(audio) == 0); verify(audio.process(block, 1024) == 0);
+    verify(block.left(900) == 0.0f);
+    block.close(); audio.close();
 }
 
 #[test]

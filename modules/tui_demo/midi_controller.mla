@@ -14,11 +14,21 @@ use std::time::now_ms;
 use std::time::sleep_ms;
 
 // Fixed-size values only: safe to byte-copy across the SPSC boundary.
-// kind: 1 note-on, 2 note-off, 3 other MIDI, 4 connected, 5 unavailable.
+// kind: 1 note-on, 2 note-off, 3 other MIDI, 4 connected, 5 unavailable,
+// 6 CC (note=controller, velocity=value), 7 pitch bend (note=129).
 pub struct MidiInputEvent {
     var kind: i64; var channel: i64; var note: i64; var velocity: i64;
     var received_ms: i64;
 };
+impl MidiInputEvent {
+    /// Called only by the MIDI worker: UI never writes to this producer lane.
+    pub fn send_audio(self: MidiInputEvent, audio: AudioController) -> i32 {
+        if audio.handle == 0 { return 0; }
+        if self.kind == 1 || self.kind == 2 { return audio.live_note(self.kind == 1, self.channel, self.note, self.velocity); }
+        if self.kind == 6 || self.kind == 7 { return audio.live_control(self.channel, self.note, self.velocity); }
+        return 0;
+    }
+}
 
 /// Streaming decoder: packets may contain multiple messages or running status.
 pub struct MidiDecoder {
@@ -46,6 +56,8 @@ impl MidiDecoder {
         event.velocity = needed == 2 ? wide(byte) : 0;
         if family == 9 { event.kind = byte == 0 ? 2 : 1; }
         if family == 8 { event.kind = 2; }
+        if family == 11 { event.kind = 6; }
+        if family == 14 { event.kind = 7; event.note = 129; event.velocity = wide(self.first) + wide(byte) * 128; }
         if self.status >= 240 { self.status = 0; }
         return event;
     }
@@ -82,9 +94,7 @@ fn midi_input_worker(queue_handle: i64, stop_handle: i64, dropped_handle: i64, a
                 let event: MidiInputEvent = decoder.feed(message.byte(index), now);
                 if event.kind != 0 {
                     if !queue.try_push(event) { atomic_add_value(dropped, 1); }
-                    if audio_handle != 0 && (event.kind == 1 || event.kind == 2) {
-                        audio.live_note(event.kind == 1, event.channel, event.note, event.velocity);
-                    }
+                    event.send_audio(audio);
                 }
             }
             message.close();
@@ -132,7 +142,7 @@ impl MidiController {
         };
         if event.kind == 4 { self.connected = true; }
         if event.kind == 5 { self.connected = false; }
-        if event.kind >= 1 && event.kind <= 3 { self.activity_until = event.received_ms + 150; }
+        if (event.kind >= 1 && event.kind <= 3) || event.kind == 6 || event.kind == 7 { self.activity_until = event.received_ms + 150; }
     }
     pub fn poll(self: &mut Self, now: i64) -> bool {
         var event: MidiInputEvent = MidiInputEvent {};

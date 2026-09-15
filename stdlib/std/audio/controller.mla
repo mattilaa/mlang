@@ -25,6 +25,7 @@ extern fn __mlang_std_audio_controller_unload_instrument(handle: i64, slot: i64)
 extern fn __mlang_std_audio_controller_restore_parameter(handle: i64, slot: i64, index: i64, value: f64) -> i32;
 extern fn __mlang_std_audio_controller_midi_target(handle: i64, source: i64, instrument: i64) -> i32;
 extern fn __mlang_std_audio_controller_live_note(handle: i64, on: i64, channel: i64, pitch: i64, velocity: i64) -> i32;
+extern fn __mlang_std_audio_controller_live_control(handle: i64, channel: i64, controller: i64, value: i64) -> i32;
 extern fn __mlang_std_audio_controller_master_peak(handle: i64, channel: i64) -> i32;
 
 pub enum AudioEventKind { NoteOn, NoteOff, MasterGain, PlaySample, StopSource, InstrumentNoteOn, InstrumentNoteOff, ControlChange, InstrumentControlChange };
@@ -74,6 +75,9 @@ impl AudioController {
     pub fn midi_target(self: AudioController, track: i64, instrument: i64) -> i32 { return __mlang_std_audio_controller_midi_target(self.handle, track, instrument); }
     /// MIDI worker only (lane 1). Note-offs retain the original note-on route.
     pub fn live_note(self: AudioController, on: bool, channel: i64, pitch: i64, velocity: i64) -> i32 { return __mlang_std_audio_controller_live_note(self.handle, on ? 1 : 0, channel, pitch, velocity); }
+    /// MIDI-producer only, sharing live_note's lock-free lane. CC 0-127;
+    /// controller 129 denotes 14-bit pitch bend. Routes to the selected track.
+    pub fn live_control(self: AudioController, channel: i64, controller: i64, value: i64) -> i32 { return __mlang_std_audio_controller_live_control(self.handle, channel, controller, value); }
     /// Single UI consumer: peak since previous read, post-master gain/clipping, 0-1000.
     pub fn master_peak(self: AudioController, channel: i64) -> i32 { return __mlang_std_audio_controller_master_peak(self.handle, channel); }
     /// Stopped control thread only. Instrument slots are 1-32; name is borrowed.

@@ -119,7 +119,11 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
 - Live MIDI follows the selected Pattern-view track, even while another pane or
   menu has keyboard focus. Instrument tracks address their VST3 instance; MIDI
   tracks use the preview/master path. Audio, muted, and unassigned instrument
-  tracks reject new notes. Input MIDI channels are preserved. Held keys retain
+  tracks reject new notes. Live CC 0–127 and 14-bit pitch bend use the same
+  selected destination and VST3 MIDI mapping as pattern controls. Input MIDI
+  channels and note velocities (0–127) are preserved; velocity zero is note-off.
+  A patch must have velocity sensitivity/modulation enabled to respond audibly.
+  Held keys retain
   their original destination for note-off when selection or assignment changes.
 - Every instrument's stereo PCM is summed before the master processor, gain,
   and output clipping. The rightmost **Master** mixer strip stays pinned while
@@ -217,7 +221,7 @@ Current scope:
 - macOS, native-architecture VST3 bundles; float32 mono/stereo, at most one audio
   input bus and one output bus, and the first MIDI input bus.
 - One master slot plus 32 instrument slots; no per-track effect chains, native plugin editor windows, opaque preset
-  persistence, arbitrary named-parameter automation, live MIDI CC forwarding, sidechains,
+  persistence, arbitrary named-parameter automation, sidechains,
   latency compensation, or transport/tempo synchronization yet.
 - Existing UI-loop sequencer timing is retained. The audio API supports absolute
   frame scheduling, but a look-ahead sequencer is still future work.
