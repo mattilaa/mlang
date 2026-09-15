@@ -78,7 +78,13 @@ the selection, `d` cuts/clears its cells without removing rows, and `p` pastes a
 the current cell. `Esc` or `v` cancels selection. The internal clipboard survives
 pattern switches; it is not the operating-system clipboard or session data.
 
-Only visible, writable columns participate. Paste must fit the pattern and match
+`Shift+V` selects whole rows across every track; `j/k` extends the row range.
+`y` copies and `d` clears/cuts all writable cells, including hidden LEN/OFF and
+automation fields. Row numbers and pattern length stay unchanged. To paste with
+`p`, place the cursor at the first writable column of the destination row.
+`Shift+V` again or `Esc` leaves whole-row selection.
+
+Column-mode selection includes only visible, writable columns. Paste must fit the pattern and match
 the destination column roles throughout (NOTE to NOTE, VEL to VEL, etc.). Invalid
 pastes show an OK-only dialog and leave the pattern unchanged. Pasting does not
 insert rows. New notes default to VEL 100, LEN 1.00 and OFF 0.00; explicitly copied

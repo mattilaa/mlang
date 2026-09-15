@@ -81,6 +81,7 @@ impl PatternLibrary {
         let entry: PatternEntry = self.patterns[self.index_of(id)];
         var replacement: SequenceTable = entry.data.copy_pattern();
         replacement.clipboard = self.table.clipboard; replacement.clipboard_kinds = self.table.clipboard_kinds;
+        replacement.clipboard_rows = self.table.clipboard_rows;
         self.table.clipboard = []; self.table.clipboard_kinds = [];
         self.table.release(); self.table = replacement; self.active_id = id;
         self.error = "";
@@ -162,6 +163,7 @@ impl PatternLibrary {
         let next: PatternEntry = self.patterns[next_index];
         var replacement: SequenceTable = next.data.copy_pattern();
         replacement.clipboard = self.table.clipboard; replacement.clipboard_kinds = self.table.clipboard_kinds;
+        replacement.clipboard_rows = self.table.clipboard_rows;
         self.table.clipboard = []; self.table.clipboard_kinds = [];
         self.table.release(); self.table = replacement; self.active_id = next.id;
         if !self.song_mode { self.view.selected = next_index; }

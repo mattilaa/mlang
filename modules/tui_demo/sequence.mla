@@ -76,6 +76,7 @@ pub struct SequenceTable : Table {
     var tracks: list<SequenceTrack>; var edit_mode: i32;
     var next_track_id: i32; var revision: i64;
     var clipboard: list<TableRow>; var clipboard_kinds: list<str8>; var paste_error: bool;
+    var clipboard_rows: bool;
 };
 impl SequenceTable {
 pub fn empty() -> SequenceTable {
@@ -341,7 +342,7 @@ fn replace_track(self: &mut Self, index: i32, value: SequenceTrack) -> void {
     self.tracks = tracks;
 }
 pub fn rebuild_columns(self: &mut Self) -> void {
-    self.visual = false;
+    self.visual = false; self.visual_rows = false;
     self.revision = self.revision + 1;
     let old_groups: list<TableGroup> = self.groups;
     for group in old_groups { free(group.title); }
@@ -826,7 +827,7 @@ pub fn clear_clipboard(self: &mut Self) -> void {
     let rows: list<TableRow> = self.clipboard;
     for row in rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
     let kinds: list<str8> = self.clipboard_kinds; for kind in kinds { free(kind); }
-    self.clipboard = []; self.clipboard_kinds = [];
+    self.clipboard = []; self.clipboard_kinds = []; self.clipboard_rows = false;
 }
 fn cell_kind(self: SequenceTable, column: i32) -> str8 {
     let definition: TableColumn = self.columns[column];
@@ -840,18 +841,19 @@ pub fn copy_visual(self: &mut Self, cut: bool, area: Rect) -> void {
     self.error = ""; self.paste_error = false;
     let first_row: i32 = self.anchor_row < self.selected_row ? self.anchor_row : self.selected_row;
     let last_row: i32 = self.anchor_row > self.selected_row ? self.anchor_row : self.selected_row;
-    let first_col: i32 = self.anchor_column < self.selected_column ? self.anchor_column : self.selected_column;
-    let last_col: i32 = self.anchor_column > self.selected_column ? self.anchor_column : self.selected_column;
+    let first_col: i32 = self.visual_rows ? 1 : (self.anchor_column < self.selected_column ? self.anchor_column : self.selected_column);
+    let last_col: i32 = self.visual_rows ? i32(self.columns.len()) - 1 : (self.anchor_column > self.selected_column ? self.anchor_column : self.selected_column);
     self.clear_clipboard();
+    self.clipboard_rows = self.visual_rows;
     for c in first_col..last_col + 1 {
         let column: TableColumn = self.columns[c];
-        if !column.hidden && !column.read_only { self.clipboard_kinds.push(self.cell_kind(i32(c))); }
+        if (self.clipboard_rows || !column.hidden) && !column.read_only { self.clipboard_kinds.push(self.cell_kind(i32(c))); }
     }
     for r in first_row..last_row + 1 {
         let row: TableRow = self.rows[r]; var cells: list<str8> = [];
         for c in first_col..last_col + 1 {
             let column: TableColumn = self.columns[c];
-            if !column.hidden && !column.read_only { cells.push(clone(row.cells[c])); }
+            if (self.clipboard_rows || !column.hidden) && !column.read_only { cells.push(clone(row.cells[c])); }
         }
         self.clipboard.push(TableRow { cells: cells });
     }
@@ -876,7 +878,7 @@ fn apply_clipboard(self: &mut Self, erase: bool, area: Rect) -> void {
     for c in self.selected_column..self.columns.len() {
         if targets.len() == self.clipboard_kinds.len() { break; }
         let column: TableColumn = self.columns[c];
-        if !column.hidden && !column.read_only { targets.push(i32(c)); }
+        if (self.clipboard_rows || !column.hidden) && !column.read_only { targets.push(i32(c)); }
     }
     if targets.len() != self.clipboard_kinds.len() {
         self.error = "Selection does not fit in the pattern"; self.paste_error = true; return;
@@ -937,7 +939,8 @@ pub fn transpose_visual(self: &mut Self, event: InputEvent, area: Rect) -> void 
     for track in old_tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.release_audio(); }
     self.rows = candidate.rows; self.tracks = candidate.tracks;
     candidate.rows = []; candidate.tracks = []; candidate.release();
-    self.rebuild_columns(); self.visual = true; self.error = ""; self.reconcile(area);
+    let whole_rows: bool = self.visual_rows;
+    self.rebuild_columns(); self.visual = true; self.visual_rows = whole_rows; self.error = ""; self.reconcile(area);
 }
 pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
     if event.kind == InputKind::None && event.code == 0 { return false; }
@@ -956,6 +959,17 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         return true;
     }
     self.reconcile(area);
+    if (event.code == 86 && (event.modifiers == 1 || event.modifiers == 2)) || (event.code == 118 && event.modifiers == 2) {
+        if self.selected_row >= 0 && self.selected_column >= 0 {
+            if self.visual && self.visual_rows { self.visual = false; self.visual_rows = false; }
+            else {
+                if !self.visual { self.anchor_row = self.selected_row; self.anchor_column = self.selected_column; }
+                self.visual = true; self.visual_rows = true;
+            }
+            self.delete_pending = false; self.top_pending = false;
+        }
+        return true;
+    }
     if self.visual {
         self.delete_pending = false; self.top_pending = false;
         if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { self.visual = false; return true; }
@@ -972,7 +986,7 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
     }
     if event.modifiers == 1 && event.code == 118 {
         if self.selected_row >= 0 && self.selected_column >= 0 {
-            self.visual = true; self.anchor_row = self.selected_row; self.anchor_column = self.selected_column;
+            self.visual = true; self.visual_rows = false; self.anchor_row = self.selected_row; self.anchor_column = self.selected_column;
             self.delete_pending = false; self.top_pending = false;
         }
         return true;

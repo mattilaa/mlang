@@ -98,12 +98,12 @@ pub struct Table {
     var horizontal_scrollbar: bool{true}; var vertical_scrollbar: bool{true};
     var groups: list<TableGroup>{[]}; var frozen_columns: i32;
     var alternate_group_text: bool{false};
-    var visual: bool; var anchor_row: i32; var anchor_column: i32;
+    var visual: bool; var visual_rows: bool; var anchor_row: i32; var anchor_column: i32;
     pub fn visual_cell(self: Table, row: i32, column: i32) -> bool {
         return self.visual && row >= (self.anchor_row < self.selected_row ? self.anchor_row : self.selected_row) &&
             row <= (self.anchor_row > self.selected_row ? self.anchor_row : self.selected_row) &&
-            column >= (self.anchor_column < self.selected_column ? self.anchor_column : self.selected_column) &&
-            column <= (self.anchor_column > self.selected_column ? self.anchor_column : self.selected_column);
+            (self.visual_rows || (column >= (self.anchor_column < self.selected_column ? self.anchor_column : self.selected_column) &&
+            column <= (self.anchor_column > self.selected_column ? self.anchor_column : self.selected_column)));
     }
     // Methods live on the struct so derived widgets inherit the implementation.
     pub fn new(columns: list<TableColumn>, rows: list<TableRow>) -> Table {
@@ -262,8 +262,9 @@ pub struct Table {
             let row_index: i32 = self.scroll_y + i32(y);
             if row_index >= self.rows.len() { break; }
             let row: TableRow = self.rows[row_index];
-            let bg: i32 = row_index == self.selected_row ? theme.selection :
+            let base_bg: i32 = row_index == self.selected_row ? theme.selection :
                 (row_index % 2 == 1 ? darken(theme.panel, 82) : theme.panel);
+            let bg: i32 = self.visual_rows && self.visual_cell(row_index, 0) ? lighten(base_bg, 20) : base_bg;
             canvas.fill(Rect::new(0, i32(y) + body.y, body.width, 1), Cell { glyph: 32, foreground: theme.foreground, background: bg });
             for order in 0..self.columns.len() {
                 let c: i32 = (i32(order) + self.frozen_count()) % i32(self.columns.len());
@@ -271,7 +272,7 @@ pub struct Table {
                 let width: i32 = self.column_width(i32(c));
                 if width == 0 { continue; }
                 let definition: TableColumn = self.columns[c];
-                let cell_bg: i32 = !definition.read_only && self.visual_cell(row_index, c) ? lighten(bg, 20) : (c == self.selected_column ? lighten(bg, 8) : bg);
+                let cell_bg: i32 = !self.visual_rows && !definition.read_only && self.visual_cell(row_index, c) ? lighten(bg, 20) : (c == self.selected_column ? lighten(bg, 8) : bg);
                 let fg: i32 = self.dim_column(c) ? darken(theme.foreground, 88) : theme.foreground;
                 let cell: Rect = Rect::new(x, i32(y) + body.y, width, 1);
                 canvas.fill(cell.intersect(body), Cell { glyph: 32, foreground: fg, background: cell_bg });

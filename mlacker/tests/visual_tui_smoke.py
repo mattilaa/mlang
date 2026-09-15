@@ -45,6 +45,10 @@ def main():
         assert frame.count(b"C-4") == 3 and b"C#4" not in frame, frame[-5000:]
         frame = tui.send(b"OK")
         assert frame.count(b"C-4") == 4 and b"C#4" not in frame, frame[-5000:]
+        frame = tui.send(b"ggVjjjd")
+        assert b"C-4" not in frame and b"004" in frame, frame[-5000:]
+        frame = tui.send(b"p")
+        assert frame.count(b"C-4") == 4, frame[-5000:]
     finally:
         tui.close()
     print("PASS: visual copy/cut/paste/transpose, matching-column OK modal, new-note velocity, Escape")
