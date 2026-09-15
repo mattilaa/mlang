@@ -61,6 +61,33 @@ SDK license and usage notices remain in `build/deps/vst3sdk/LICENSE.txt` and
 
 ## Use a master plugin
 
+### Instrument parameter editor
+
+Select an entry in **View → Instruments**, then choose **Instrument → Open VST3
+editor**. This opens a terminal parameter editor over the Pattern pane (not the
+plugin's native graphical window). Parameter names, step counts, read-only flags,
+and initial values are copied into memory when the plugin loads.
+
+- `h/j/k/l` browse sliders. Moving between columns scrolls horizontally to keep
+  the selected control visible; the bottom bar shows the horizontal position.
+- `Shift+J` decreases and `Shift+K` increases the selected value.
+- Enter opens manual entry; Ctrl+U clears the field and Enter validates/commits.
+  Invalid input stays in the field. Esc cancels entry; Esc outside entry closes
+  the editor and restores the previous pane focus.
+- Continuous parameters use VST3's normalized `f64` range 0–1, with 0.01 steps;
+  discrete controls use `i32` indices 0–stepCount. These are not physical Hz/dB
+  units. Read-only parameters cannot be edited. The public `tui::slider::Slider`
+  widget checks numeric type and min/max bounds and supports i32/u32/f32/f64.
+- Accepted edits use the existing preallocated audio-event/parameter queues.
+  The editor captures navigation, so the pattern and library do not move.
+
+**Instrument → Remove instrument** stops playback, joins the MIDI worker, stops
+audio, unloads the selected instance, and clears its assignments in every
+pattern. Other instrument IDs remain unchanged; vacant slots can be reused.
+Plugin state and parameter edits are not persisted across device reloads or
+application restarts. Dynamic parameter-list changes and plugin-originated
+parameter notifications are not handled yet; reopen to refresh cached values.
+
 ### Pattern CC1 / CC2
 
 Both automation columns send their non-empty values at the pattern row boundary,
@@ -121,7 +148,7 @@ Current scope:
 
 - macOS, native-architecture VST3 bundles; float32 mono/stereo, at most one audio
   input bus and one output bus, and the first MIDI input bus.
-- One master slot plus 32 instrument slots; no per-track effect chains, plugin editor windows, preset or
+- One master slot plus 32 instrument slots; no per-track effect chains, native plugin editor windows, preset or
   state persistence, arbitrary named-parameter automation, live MIDI CC forwarding, sidechains,
   latency compensation, or transport/tempo synchronization yet.
 - Existing UI-loop sequencer timing is retained. The audio API supports absolute

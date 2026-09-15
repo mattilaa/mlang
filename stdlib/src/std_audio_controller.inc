@@ -86,11 +86,12 @@ int32_t __mlang_std_audio_controller_post(int64_t handle, int64_t lane,
     int64_t kind, int64_t channel, int64_t note, int64_t velocity,
     int64_t source, int64_t frame, int64_t sample, double gain) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || lane < 0 || lane > 1 || kind < 1 || kind > 9 || frame < -1 ||
+    if(!c || lane < 0 || lane > 1 || kind < 1 || kind > 10 || frame < -1 ||
        source < 0 || source > INT32_MAX || !isfinite(gain) || gain < 0 || gain > 1) return -1;
     if((kind == 1 || kind == 2 || kind == 6 || kind == 7) && (channel < 0 || channel > 15 ||
         note < 0 || note > 127 || velocity < 0 || velocity > 127)) return -1;
     if(kind == 4 && (sample < 0 || sample >= AC_SAMPLES)) return -1;
+    if(kind == 10 && (sample < 1 || sample > 32 || note < 0 || note > 16383)) return -1;
     if((kind == 6 || kind == 7) && (sample < 0 || sample > 32)) return -1;
     if((kind == 8 || kind == 9) && (channel < 0 || channel > 15 ||
         !((note >= 0 && note <= 127) || note == 129) || velocity < 0 ||
@@ -151,6 +152,11 @@ int32_t __mlang_std_audio_controller_master_peak(int64_t handle, int64_t channel
 }
 
 static void ac_dispatch(ac_controller *c, const ac_event *e) {
+    if(e->kind == 10) {
+        mlang_audio_processor *p = &c->instruments[e->sample - 1];
+        if(p->context && p->parameter) p->parameter(p->context, (int32_t)e->note, e->gain, c->render_offset);
+        return;
+    }
     if(e->kind == 8 || e->kind == 9) {
         mlang_audio_processor *p = e->kind == 8 ? &c->processor :
             (e->sample > 0 ? &c->instruments[e->sample - 1] : NULL);
@@ -421,6 +427,39 @@ int64_t __mlang_std_audio_controller_info(int64_t handle, int64_t key) {
 }
 
 int32_t __mlang_std_audio_controller_processor_support(void) { return ac_processor_factory != NULL; }
+double __mlang_std_audio_controller_parameter_info(int64_t handle, int64_t slot, int64_t index, int64_t key) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || index < 0 || index > 16383 || key < 0 || key > 3) return -1;
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    return p->context && p->parameter_info ? p->parameter_info(p->context, (int32_t)index, (int32_t)key) : -1;
+}
+const char *__mlang_std_audio_controller_parameter_name(int64_t handle, int64_t slot, int64_t index) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || index < 0 || index > 16383) return "";
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    return p->context && p->parameter_name ? p->parameter_name(p->context, (int32_t)index) : "";
+}
+int32_t __mlang_std_audio_controller_set_parameter(int64_t handle, int64_t slot, int64_t index, double value) {
+    double steps = __mlang_std_audio_controller_parameter_info(handle, slot, index, 1);
+    if(steps < 0 || !isfinite(value) || value < 0 || value > (steps > 0 ? steps : 1) ||
+       (steps > 0 && floor(value) != value) ||
+       __mlang_std_audio_controller_parameter_info(handle, slot, index, 3) != 0) return -1;
+    double normalized = steps > 0 ? value / steps : value;
+    int32_t result = __mlang_std_audio_controller_post(handle, 0, 10, 0, index, 0, 0, -1, slot, normalized);
+    if(result == 0) {
+        ac_controller *c = (ac_controller*)(intptr_t)handle;
+        mlang_audio_processor *p = &c->instruments[slot - 1];
+        if(p->parameter_edited) p->parameter_edited(p->context, (int32_t)index, normalized);
+    }
+    return result;
+}
+int32_t __mlang_std_audio_controller_unload_instrument(int64_t handle, int64_t slot) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || c->running || slot < 1 || slot > 32) return -1;
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    if(p->context) p->destroy(p->context);
+    *p = (mlang_audio_processor){0}; c->processor_reset = 1; return 0;
+}
 const char *__mlang_std_audio_controller_instrument_name(int64_t handle, int64_t slot) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || slot < 1 || slot > 32) return "";

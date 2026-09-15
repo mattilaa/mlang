@@ -9,6 +9,10 @@ int64_t __mlang_std_audio_controller_new(int64_t, int64_t);
 int32_t __mlang_std_audio_controller_load_processor(int64_t, const char*);
 int32_t __mlang_std_audio_controller_load_instrument(int64_t, int64_t, const char*);
 const char *__mlang_std_audio_controller_instrument_name(int64_t, int64_t);
+double __mlang_std_audio_controller_parameter_info(int64_t, int64_t, int64_t, int64_t);
+const char *__mlang_std_audio_controller_parameter_name(int64_t, int64_t, int64_t);
+int32_t __mlang_std_audio_controller_set_parameter(int64_t, int64_t, int64_t, double);
+int32_t __mlang_std_audio_controller_unload_instrument(int64_t, int64_t);
 int32_t __mlang_std_audio_controller_midi_target(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_live_note(int64_t, int64_t, int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_master_peak(int64_t, int64_t);
@@ -153,9 +157,36 @@ int main(int argc, char **argv) {
         float expected = (f >= 32 && f < 64) || (f >= 128 && f < 160) ? 0.f : (f >= 96 ? .5f * 64.f / 127.f : .5f);
         CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, f, 0) - expected) < 1.e-7f);
     }
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 1, 0, 0) == 40);
+    CHECK(std::strcmp(__mlang_std_audio_controller_parameter_name(c, 1, 0), "Modulation") == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 1, 1, 2) == 64.0 / 127.0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 1, 3, 1) == 3);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 1, 4, 3) == 1);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 1, 3, 1.5) == -1);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 1, 3, 4) == -1);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 1, 4, 0.2) == -1);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 1, 40, 0.2) == -1);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 0, 0, 0.2) == -1);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 1, 0, NAN) == -1);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 1, 0, INFINITY) == -1);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 1, 0, 1.01) == -1);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 1, 0, 0.5) == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 1, 0, 2) == 0.5); // also cached without hardware rendering
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 1, 3, 2) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 1, 0, 2) == 0.5);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 1, 3, 2) == 2.0 / 3.0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .25f * 64.f / 127.f) < 1.e-7f);
+    CHECK(__mlang_std_audio_controller_stop(c) == 0);
+    CHECK(__mlang_std_audio_controller_unload_instrument(c, 1) == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 1, 0, 0) == -1);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 1, 0, 0.5) == -1);
+    CHECK(*__mlang_std_audio_controller_instrument_name(c, 1) == 0);
+    CHECK(*__mlang_std_audio_controller_instrument_name(c, 2) != 0);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 1, argv[1]) == 0);
     // Empty parameter blocks preserve the plugin's last value; exercise idle processing.
     for(int i = 0; i < 20000; ++i) CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
-    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .5f * 64.f / 127.f) < 1.e-7f);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == 0.f);
     CHECK(__mlang_std_audio_controller_load_processor(c, argv[2]) == 0);
     CHECK(__mlang_std_audio_controller_post(c, 0, 8, 0, 74, 0, 0, -1, 0, 1) == 0);
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);

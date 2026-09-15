@@ -22,6 +22,13 @@ typedef struct mlang_audio_processor {
     /* Optional MIDI CC (0-127) / pitch bend (129, value 0-16383). */
     void (*control)(void *context, int32_t channel, int32_t controller,
                     int32_t value, int32_t offset);
+    /* Cached metadata, control-thread queries. key: 0=count, 1=steps,
+     * 2=normalized value, 3=read-only. Names borrowed until destruction. */
+    double (*parameter_info)(void *context, int32_t index, int32_t key);
+    const char *(*parameter_name)(void *context, int32_t index);
+    void (*parameter)(void *context, int32_t index, double value, int32_t offset);
+    /* Control thread: mirror accepted edits into cached/controller state. */
+    void (*parameter_edited)(void *context, int32_t index, double normalized);
 } mlang_audio_processor;
 typedef int32_t (*mlang_audio_processor_factory)(const char *path, double rate,
     int32_t max_frames, mlang_audio_processor *out, char *error, int32_t error_size);

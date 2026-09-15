@@ -36,6 +36,13 @@ public:
     tresult PLUGIN_API initialize(FUnknown *host) override {
         auto result = SingleComponentEffect::initialize(host);
         if(result != kResultOk) return result;
+        parameters.addParameter(STR16("Modulation"), nullptr, 0, 1, ParameterInfo::kCanAutomate, 100);
+        parameters.addParameter(STR16("Brightness"), nullptr, 0, 1, ParameterInfo::kCanAutomate, 101);
+        parameters.addParameter(STR16("Pitch bend"), nullptr, 0, 1, ParameterInfo::kCanAutomate, 102);
+        parameters.addParameter(STR16("Mode"), nullptr, 3, 0, ParameterInfo::kCanAutomate, 103);
+        parameters.addParameter(STR16("Read only"), nullptr, 0, 0.5, ParameterInfo::kIsReadOnly, 104);
+        // Enough controls to exercise multiple horizontal pages in the TUI.
+        for(int i = 0; i < 35; ++i) parameters.addParameter(STR16("Extra control"), nullptr, 0, 0.5, ParameterInfo::kCanAutomate, 200 + i);
         addAudioOutput(STR16("Stereo"), SpeakerArr::kStereo);
 #ifdef MLACKER_TEST_EFFECT
         addAudioInput(STR16("Stereo"), SpeakerArr::kStereo);

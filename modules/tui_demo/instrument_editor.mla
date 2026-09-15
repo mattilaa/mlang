@@ -1,0 +1,106 @@
+mod tui::slider;
+mod tui::widgets;
+mod std::audio::controller;
+use tui::slider::Slider;
+use tui::widgets::Panel;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::input::*;
+use tui::menu::Key;
+use std::audio::controller::AudioController;
+use std::strbuf::clone;
+use std::strbuf::free;
+
+/// Modal parameter overlay. Columns scroll horizontally; navigation is column-major.
+pub struct InstrumentEditor {
+    var active: bool; var slot: i64; var selected: i32;
+    var scroll: i32; var sliders: list<Slider>; var title: str8{""};
+};
+impl InstrumentEditor {
+    pub fn release(self: &mut Self) -> void {
+        let sliders: list<Slider> = self.sliders;
+        for slider in sliders { slider.release(); }
+        self.sliders = []; if self.title != "" { free(self.title); }
+        self.title = ""; self.active = false;
+    }
+    pub fn open(self: &mut Self, output: AudioController, slot: i64) -> bool {
+        self.release();
+        let count: i32 = i32(output.parameter_info(slot, 0, 0));
+        if count < 0 { return false; }
+        self.slot = slot; self.selected = 0; self.scroll = 0;
+        self.title = format!(" VST3 editor: {} ", output.instrument_name(slot));
+        for i in 0..count {
+            let steps: f64 = output.parameter_info(slot, i, 1);
+            let normalized: f64 = output.parameter_info(slot, i, 2);
+            var slider: Slider = Slider::new(output.parameter_name(slot, i), 0.0, steps > 0.0 ? steps : 1.0,
+                steps > 0.0 ? std::math::floor(normalized * steps + 0.5) : normalized, steps > 0.0 ? "i32" : "f64");
+            slider.step = steps > 0.0 ? 1.0 : 0.01;
+            slider.read_only = output.parameter_info(slot, i, 3) != 0.0;
+            self.sliders.push(slider);
+        }
+        self.active = true; return true;
+    }
+    pub fn rows(self: InstrumentEditor, area: Rect) -> i32 {
+        let rows: i32 = (area.height - 4) / 4; return rows > 0 ? rows : 1;
+    }
+    pub fn on_event(self: &mut Self, event: InputEvent, output: AudioController, area: Rect) -> void {
+        if !self.active || (event.kind == InputKind::None && event.code == 0) { return; }
+        var editing: bool = false;
+        if self.sliders.len() > 0 { let selected: Slider = self.sliders[self.selected]; editing = selected.editing; }
+        if !editing && event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { self.active = false; return; }
+        if self.sliders.len() == 0 { return; }
+        let old: list<Slider> = self.sliders; var next: list<Slider> = [];
+        for i in 0..old.len() {
+            var slider: Slider = old[i];
+            if i == self.selected {
+                let previous: f64 = slider.value;
+                if slider.on_event(event) {
+                    if output.set_parameter(self.slot, i, slider.value) != 0 {
+                        slider.value = previous; slider.error = "Parameter queue full or unavailable";
+                    }
+                }
+            }
+            next.push(slider);
+        }
+        self.sliders = next;
+        if editing || event.kind != InputKind::Menu { return; }
+        let rows: i32 = self.rows(area);
+        var selected: i32 = self.selected;
+        if event.key == Key::Left { selected = selected - rows; }
+        if event.key == Key::Right { selected = selected + rows; }
+        if event.key == Key::Down { selected = selected + 1; }
+        if event.key == Key::Up { selected = selected - 1; }
+        if selected >= 0 && selected < self.sliders.len() { self.selected = selected; }
+    }
+    pub fn paint(self: &mut Self, surface: Surface, area: Rect, theme: Theme) -> void {
+        if !self.active { return; }
+        let panel: Panel = Panel { title: self.title };
+        let body: Rect = panel.paint(surface, area, theme);
+        if body.width < 1 || body.height < 1 { return; }
+        if self.sliders.len() == 0 { surface.text(body, "No exposed parameters. Esc closes", theme.muted, theme.panel); return; }
+        let rows: i32 = self.rows(area);
+        let width: i32 = body.width < 26 ? body.width : 26;
+        let visible: i32 = body.width / width;
+        let column: i32 = self.selected / rows;
+        if column < self.scroll { self.scroll = column; }
+        if column >= self.scroll + visible { self.scroll = column - visible + 1; }
+        for i in 0..self.sliders.len() {
+            let col: i32 = i32(i) / rows - self.scroll;
+            if col >= 0 && col < visible {
+                let slider: Slider = self.sliders[i];
+                let cell: Rect = Rect::new(body.x + col * width, body.y + i32(i) % rows * 4, width - 1, 3);
+                slider.paint(surface, cell.intersect(body), theme, i == self.selected);
+            }
+        }
+        let selected: Slider = self.sliders[self.selected];
+        let info: str8 = selected.error != "" ? clone(selected.error) : format!("{}..{} {}{} | hjkl browse J/K adjust Enter edit Esc close", selected.minimum, selected.maximum, selected.value_type, selected.read_only ? " read-only" : "");
+        if body.height > 1 { surface.text(Rect::new(body.x, body.y + body.height - 2, body.width, 1), info, theme.accent, theme.panel); }
+        free(info);
+        let columns: i32 = (i32(self.sliders.len()) + rows - 1) / rows;
+        for x in 0..body.width {
+            let c: i32 = i32(x) * columns / body.width;
+            surface.put(body.x + i32(x), body.y + body.height - 1, Cell { glyph: c >= self.scroll && c < self.scroll + visible ? 0x2501 : 0x2500, foreground: theme.accent, background: theme.panel });
+        }
+    }
+}

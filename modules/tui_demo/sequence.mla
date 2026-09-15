@@ -365,6 +365,15 @@ pub fn assign_instrument(self: &mut Self, id: i32) -> bool {
     track.instrument_id = id; self.replace_track(index, track);
     self.revision = self.revision + 1; self.error = ""; return true;
 }
+pub fn detach_instrument(self: &mut Self, id: i32) -> void {
+    let old: list<SequenceTrack> = self.tracks; var next: list<SequenceTrack> = [];
+    for item in old {
+        var track: SequenceTrack = SequenceTrack {}; track = item;
+        if track.instrument_id == id { track.instrument_id = 0; }
+        next.push(track);
+    }
+    self.tracks = next; self.revision = self.revision + 1;
+}
 pub fn create_instrument_track(self: &mut Self, id: i32, area: Rect) -> void {
     if self.tracks.len() >= 64 { self.error = "Maximum 64 tracks"; return; }
     self.create_track(false, area);

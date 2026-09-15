@@ -18,6 +18,10 @@ extern fn __mlang_std_audio_controller_processor_name(handle: i64) -> str8;
 extern fn __mlang_std_audio_controller_load_processor(handle: i64, path: str8) -> i32;
 extern fn __mlang_std_audio_controller_load_instrument(handle: i64, slot: i64, path: str8) -> i32;
 extern fn __mlang_std_audio_controller_instrument_name(handle: i64, slot: i64) -> str8;
+extern fn __mlang_std_audio_controller_parameter_info(handle: i64, slot: i64, index: i64, key: i64) -> f64;
+extern fn __mlang_std_audio_controller_parameter_name(handle: i64, slot: i64, index: i64) -> str8;
+extern fn __mlang_std_audio_controller_set_parameter(handle: i64, slot: i64, index: i64, value: f64) -> i32;
+extern fn __mlang_std_audio_controller_unload_instrument(handle: i64, slot: i64) -> i32;
 extern fn __mlang_std_audio_controller_midi_target(handle: i64, source: i64, instrument: i64) -> i32;
 extern fn __mlang_std_audio_controller_live_note(handle: i64, on: i64, channel: i64, pitch: i64, velocity: i64) -> i32;
 extern fn __mlang_std_audio_controller_master_peak(handle: i64, channel: i64) -> i32;
@@ -38,6 +42,13 @@ pub struct AudioEvent {
 };
 pub struct AudioController { var handle: i64; };
 impl AudioController {
+    /// Cached metadata: key 0=count, 1=steps (0 continuous), 2=normalized value, 3=read-only.
+    pub fn parameter_info(self: AudioController, slot: i64, index: i64, key: i64) -> f64 { return __mlang_std_audio_controller_parameter_info(self.handle, slot, index, key); }
+    pub fn parameter_name(self: AudioController, slot: i64, index: i64) -> str8 { return __mlang_std_audio_controller_parameter_name(self.handle, slot, index); }
+    /// UI producer only. Continuous values 0..1; stepped values integer 0..steps.
+    pub fn set_parameter(self: AudioController, slot: i64, index: i64, value: f64) -> i32 { return __mlang_std_audio_controller_set_parameter(self.handle, slot, index, value); }
+    /// Stop audio and join the MIDI producer before unloading/reusing a slot.
+    pub fn unload_instrument(self: AudioController, slot: i64) -> i32 { return __mlang_std_audio_controller_unload_instrument(self.handle, slot); }
     /// Publish selected track 0-63. -1 disables, 0 preview, 1-32 instrument slot.
     pub fn midi_target(self: AudioController, track: i64, instrument: i64) -> i32 { return __mlang_std_audio_controller_midi_target(self.handle, track, instrument); }
     /// MIDI worker only (lane 1). Note-offs retain the original note-on route.

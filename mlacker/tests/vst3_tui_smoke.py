@@ -61,6 +61,25 @@ def main():
         assert b"Instrument: 1" in frame
         frame = send(b"m")
         assert b"Mixer" in frame and b"Master" in frame and b"L R" in frame
+        frame = send(b"\tllllll\r")
+        assert b"VST3 editor:" in frame and b"Modulation" in frame, frame[-6000:]
+        frame = send(b"J\r\x151.5\r")
+        assert b"Invalid value" in frame, frame[-6000:]
+        frame = send(b"\x150.25\r")
+        assert b"0.25" in frame, frame[-6000:]
+        send(b"\x1b", 0.4)
+        frame = send(b"\tllllll\r")
+        assert b"VST3 editor:" in frame and b"0.25" in frame, frame[-6000:]
+        frame = send(b"lll")
+        assert b"Extra control" in frame and b"VST3 editor:" in frame
+        send(b"\x1b", 0.4)
+        send(b"m")  # Inspector displays command status.
+        frame = send(b"\tllllllj\r")
+        assert b"Instrument removed; track assignments cleared" in frame, frame[-6000:]
+        # Slot reuse must not shift IDs or retain the old assignment.
+        assert b"Add VST3 instrument" in send(b"\tllllljjj\r")
+        frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
+        assert b"001 Mlacker Test" in frame and b"Instrument: 1" in frame, frame[-6000:]
         send(b"q")
         deadline = time.monotonic() + 3
         while process.poll() is None and time.monotonic() < deadline:

@@ -8,6 +8,9 @@
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/base/ustring.h"
 #include <algorithm>
+#include <atomic>
+#include <cmath>
+#include "public.sdk/source/common/commonstringconvert.h"
 #include <cstdio>
 #include <cstring>
 #include <exception>
@@ -36,6 +39,14 @@ public:
     ProcessContext context{};
     mlacker::ParameterChanges parameters;
     ParamID midiParameters[16][130];
+    struct CachedParameter {
+        ParameterInfo info{};
+        std::string title;
+        std::atomic<double> value{0};
+    };
+    static_assert(std::atomic<double>::is_always_lock_free);
+    std::unique_ptr<CachedParameter[]> cached;
+    int32 parameterCount = 0;
     std::string name;
     bool active = false, processing = false, instrument = false, overflow = false;
     int32 maxFrames = 0;
@@ -112,6 +123,20 @@ public:
         data.processContext = &context; data.processMode = kRealtime;
         data.inputEvents = eventInputs ? &incoming : nullptr; data.outputEvents = &outgoing;
         data.inputParameterChanges = &parameters; data.outputParameterChanges = nullptr;
+        auto controller = provider->getControllerPtr();
+        parameterCount = controller ? controller->getParameterCount() : 0;
+        if(parameterCount < 0 || parameterCount > 16384) { error = "Unsupported parameter count"; return false; }
+        cached = std::make_unique<CachedParameter[]>(parameterCount);
+        for(int32 i = 0; i < parameterCount; ++i) {
+            auto &p = cached[i];
+            if(controller->getParameterInfo(i, p.info) != kResultOk || p.info.stepCount < 0) {
+                error = "Invalid plugin parameter metadata"; return false;
+            }
+            p.info.title[127] = 0;
+            p.title = StringConvert::convert(std::u16string(p.info.title));
+            double value = controller->getParamNormalized(p.info.id);
+            p.value.store(std::isfinite(value) ? std::clamp(value, 0.0, 1.0) : 0.0);
+        }
         auto mapping = U::cast<IMidiMapping>(provider->getControllerPtr());
         for(int ch = 0; ch < 16; ++ch) for(int cc = 0; cc < 130; ++cc) {
             ParamID id = kNoParamId;
@@ -160,6 +185,27 @@ public:
         auto *queue = parameters.addParameterData(id, index);
         double normalized = value / (controller == 129 ? 16383.0 : 127.0);
         if(!queue || queue->addPoint(offset, normalized, index) != kResultOk) overflow = true;
+        else for(int32 i = 0; i < parameterCount; ++i)
+            if(cached[i].info.id == id) cached[i].value.store(normalized, std::memory_order_relaxed);
+    }
+
+    double parameterInfo(int32 index, int32 key) const noexcept {
+        if(key == 0) return parameterCount;
+        if(index < 0 || index >= parameterCount) return -1;
+        const auto &p = cached[index];
+        if(key == 1) return p.info.stepCount;
+        if(key == 2) return p.value.load(std::memory_order_relaxed);
+        if(key == 3) return (p.info.flags & ParameterInfo::kIsReadOnly) != 0;
+        return -1;
+    }
+    void parameter(int32 index, double value, int32 offset) noexcept {
+        if(index < 0 || index >= parameterCount || !std::isfinite(value) || value < 0 || value > 1) return;
+        auto &p = cached[index];
+        if(p.info.flags & ParameterInfo::kIsReadOnly) return;
+        int32 point = 0;
+        auto *queue = parameters.addParameterData(p.info.id, point);
+        if(!queue || queue->addPoint(offset, value, point) != kResultOk) { overflow = true; return; }
+        p.value.store(value, std::memory_order_relaxed);
     }
 
     int32 render(float *stereo, int32 frames, uint64_t clock) noexcept {
@@ -206,6 +252,19 @@ int32_t load(const char *path, double rate, int32_t frames,
         out->destroy = [](void *p) { delete static_cast<Processor*>(p); };
         out->name = [](void *p) { return static_cast<Processor*>(p)->name.c_str(); };
         out->control = [](void *p, int32_t ch, int32_t cc, int32_t value, int32_t offset) { static_cast<Processor*>(p)->control(ch, cc, value, offset); };
+        out->parameter_info = [](void *p, int32_t i, int32_t k) { return static_cast<Processor*>(p)->parameterInfo(i, k); };
+        out->parameter_name = [](void *p, int32_t i) -> const char * {
+            auto *host = static_cast<Processor*>(p);
+            return i >= 0 && i < host->parameterCount ? host->cached[i].title.c_str() : "";
+        };
+        out->parameter = [](void *p, int32_t i, double v, int32_t offset) { static_cast<Processor*>(p)->parameter(i, v, offset); };
+        out->parameter_edited = [](void *p, int32_t i, double value) {
+            auto *host = static_cast<Processor*>(p);
+            if(i < 0 || i >= host->parameterCount) return;
+            auto &parameter = host->cached[i];
+            parameter.value.store(value, std::memory_order_relaxed);
+            if(auto controller = host->provider->getControllerPtr()) controller->setParamNormalized(parameter.info.id, value);
+        };
         plugin.release(); return 0;
     } catch(const std::exception &e) { std::snprintf(error, errorSize, "VST3 load failed: %s", e.what()); }
     catch(...) { std::snprintf(error, errorSize, "VST3 load failed with an unknown exception"); }

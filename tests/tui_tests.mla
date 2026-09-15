@@ -12,7 +12,94 @@ mod std::testing;
 mod tui::dialog;
 mod tui::textfield;
 mod tui::table;
+mod tui::slider;
+mod tui_demo::instrument_editor;
+use tui::slider::Slider;
+use tui_demo::instrument_editor::InstrumentEditor;
+use std::audio::controller::AudioController;
+use tui_demo::sequence::SequenceTrack;
+use tui_demo::patterns::PatternEntry;
 use tui::table::*;
+fn slider_valid(slider: Slider, text: str8) -> bool { let value: result<f64, str8> = slider.parse(text); return value.is_ok(); }
+fn slider_value(slider: Slider, text: str8) -> f64 { let value: result<f64, str8> = slider.parse(text); return value.unwrap(); }
+
+#[test]
+fn tui_slider_validation() {
+    var slider: Slider = Slider::new("Velocity", 0.0, 127.0, 100.0, "i32");
+    verify(slider_valid(slider, "0")); verify(slider_valid(slider, "127"));
+    verify(!slider_valid(slider, "128")); verify(!slider_valid(slider, "-1"));
+    verify(!slider_valid(slider, "1.5")); verify(!slider_valid(slider, "12x"));
+    slider.value_type = "f64"; slider.maximum = 1.0;
+    let quarter: f64 = slider_value(slider, "0.25"); verify(quarter > 0.249999 && quarter < 0.250001);
+    let half: f64 = slider_value(slider, ".5"); verify(half > 0.499999 && half < 0.500001);
+    verify(!slider_valid(slider, "NaN")); verify(!slider_valid(slider, "inf"));
+    verify(!slider_valid(slider, "1e9")); verify(!slider_valid(slider, ""));
+    slider.value_type = "str8"; verify(!slider_valid(slider, "0"));
+    slider.value_type = "u32"; slider.maximum = 4294967296.0;
+    verify(slider_valid(slider, "4294967295")); verify(!slider_valid(slider, "4294967296"));
+    slider.minimum = 10.0; slider.maximum = 1.0; verify(!slider_valid(slider, "5"));
+    slider.minimum = f64(-2147483649); slider.maximum = f64(2147483648); slider.value_type = "i32";
+    verify(slider_valid(slider, "2147483647")); verify(!slider_valid(slider, "2147483648"));
+    verify(slider_valid(slider, "-2147483648")); verify(!slider_valid(slider, "-2147483649"));
+    slider.release();
+}
+
+#[test]
+fn tui_slider_keyboard() {
+    var slider: Slider = Slider::new("Mode", 0.0, 3.0, 2.0, "i32"); slider.step = 1.0;
+    verify(slider.on_event(decode_input("J"))); verify(slider.value == 1.0);
+    verify(slider.on_event(decode_input("K"))); verify(slider.value == 2.0);
+    verify(slider.on_event(decode_input("\x1b[107;2u"))); verify(slider.value == 3.0);
+    verify(!slider.on_event(decode_input("K"))); verify(slider.value == 3.0);
+    slider.on_event(decode_input("\r")); verify(slider.editing);
+    slider.editor.set_text("9"); verify(!slider.on_event(decode_input("\r")));
+    verify(slider.editing && slider.value == 3.0 && slider.error != "");
+    slider.editor.set_text("1"); verify(slider.on_event(decode_input("\r")));
+    verify(!slider.editing && slider.value == 1.0);
+    slider.read_only = true; verify(!slider.on_event(decode_input("K"))); verify(slider.value == 1.0);
+    slider.on_event(decode_input("\r")); verify(!slider.editing);
+    slider.release();
+}
+
+#[test]
+fn tui_instrument_editor_navigation() {
+    var editor: InstrumentEditor = InstrumentEditor { active: true };
+    for i in 0..40 { editor.sliders.push(Slider::new("Parameter", 0.0, 1.0, 0.5, "f64")); }
+    let area: Rect = Rect::new(0, 0, 54, 20);
+    let output: AudioController = AudioController {};
+    editor.on_event(decode_input("l"), output, area); verify(editor.selected == 4);
+    editor.on_event(decode_input("j"), output, area); verify(editor.selected == 5);
+    editor.on_event(decode_input("k"), output, area); verify(editor.selected == 4);
+    editor.on_event(decode_input("h"), output, area); verify(editor.selected == 0);
+    editor.selected = 39;
+    let surface: Surface = Surface::new(54, 20);
+    editor.paint(surface, area, Theme::dark_blue()); verify(editor.scroll > 0);
+    editor.on_event(decode_input("\r"), output, area);
+    editor.on_event(decode_input("h"), output, area); verify(editor.selected == 39);
+    // Entered text stays in the slider, never reaching the pattern navigator.
+    let selected: Slider = editor.sliders[39]; verify(selected.editing);
+    surface.release(); editor.release();
+}
+
+#[test]
+fn tui_remove_instrument_detaches_patterns() {
+    var library: PatternLibrary = PatternLibrary::new();
+    let area: Rect = Rect::new(0, 0, 100, 20);
+    library.table.create_instrument_track(7, area);
+    library.add_instrument(7, "Test"); library.add_instrument(8, "Other");
+    library.table.assign_instrument(7); library.add(true);
+    library.remove_instrument(7, area);
+    let tracks: list<SequenceTrack> = library.table.tracks;
+    for track in tracks { verify(track.instrument_id != 7); }
+    let patterns: list<PatternEntry> = library.patterns;
+    for pattern in patterns {
+        let saved: list<SequenceTrack> = pattern.data.tracks;
+        for track in saved { verify(track.instrument_id != 7); }
+    }
+    verify(library.instruments.items.len() == 1);
+    let kept: ListItem = library.instruments.items[0]; verify(kept.id == 8);
+    library.release();
+}
 mod tui_demo::sequence;
 use tui_demo::sequence::SequenceTable;
 mod tui::meter;

@@ -238,6 +238,15 @@ impl PatternLibrary {
         if self.instruments.selected < 0 || self.instruments.selected >= self.instruments.items.len() { return 0; }
         let item: ListItem = self.instruments.items[self.instruments.selected]; return item.id;
     }
+    pub fn remove_instrument(self: &mut Self, id: i32, area: Rect) -> void {
+        self.table.detach_instrument(id);
+        let old: list<PatternEntry> = self.patterns; var next: list<PatternEntry> = [];
+        for item in old { var entry: PatternEntry = PatternEntry {}; entry = item; entry.data.detach_instrument(id); next.push(entry); }
+        self.patterns = next;
+        let items: list<ListItem> = self.instruments.items; var kept: list<ListItem> = [];
+        for item in items { if item.id == id { free(item.label); } else { kept.push(item); } }
+        self.instruments.items = kept; self.instruments.cancel_pending(); self.instruments.reconcile(area);
+    }
     pub fn show_instruments(self: &mut Self) -> void {
         self.instruments_mode = true; self.audio_mode = false;
         self.view.cancel_pending(); self.audio.view.cancel_pending(); self.instruments.cancel_pending();
