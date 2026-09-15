@@ -42,7 +42,7 @@ public:
         parameters.addParameter(STR16("Mode"), nullptr, 3, 0, ParameterInfo::kCanAutomate, 103);
         parameters.addParameter(STR16("Read only"), nullptr, 0, 0.5, ParameterInfo::kIsReadOnly, 104);
         // Enough controls to exercise multiple horizontal pages in the TUI.
-        for(int i = 0; i < 35; ++i) parameters.addParameter(STR16("Extra control"), nullptr, 0, 0.5, ParameterInfo::kCanAutomate, 200 + i);
+        for(int i = 0; i < 35; ++i) parameters.addParameter(STR16("Extra control"), nullptr, 0, i == 34 ? 0.0 : 0.5, ParameterInfo::kCanAutomate, 200 + i);
         addAudioOutput(STR16("Stereo"), SpeakerArr::kStereo);
 #ifdef MLACKER_TEST_EFFECT
         addAudioInput(STR16("Stereo"), SpeakerArr::kStereo);
@@ -61,6 +61,15 @@ public:
         for(int32 f = 0; f < data.numSamples; ++f) {
             if(data.inputParameterChanges) for(int32 q = 0; q < data.inputParameterChanges->getParameterCount(); ++q) {
                 auto *queue = data.inputParameterChanges->getParameterData(q);
+                // Virtual command parameter: default 0 means no command has
+                // been sent, not that the DSP's current volume is zero.
+                // Replaying it unnecessarily during restore mutes the synth.
+                if(queue->getParameterId() == 234) {
+                    for(int32 p = 0; p < queue->getPointCount(); ++p) {
+                        int32 offset = 0; ParamValue value = 0;
+                        if(queue->getPoint(p, offset, value) == kResultOk && offset == f) controls[1] = value;
+                    }
+                }
                 if(queue->getParameterId() < 100 || queue->getParameterId() > 102) continue;
                 for(int32 p = 0; p < queue->getPointCount(); ++p) {
                     int32 offset = 0; ParamValue value = 0;

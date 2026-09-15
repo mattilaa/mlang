@@ -77,6 +77,19 @@ pub struct SequenceTable : Table {
     var next_track_id: i32; var revision: i64;
 };
 impl SequenceTable {
+pub fn empty() -> SequenceTable {
+    var table: SequenceTable = SequenceTable::new();
+    let tracks: list<SequenceTrack> = table.tracks;
+    for track in tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); }
+    table.tracks = []; table.next_track_id = 1;
+    let old: list<TableRow> = table.rows; var rows: list<TableRow> = [];
+    for row in old {
+        let cells: list<str8> = row.cells;
+        for i in 1..cells.len() { free(cells[i]); }
+        rows.push(TableRow { cells: [cells[0]] });
+    }
+    table.rows = rows; table.selected_column = 0; table.rebuild_columns(); return table;
+}
 pub fn new() -> SequenceTable {
     // std::array is compiler-provided; array<T, N> needs no module import.
     var midi: array<str8, 128> = {};

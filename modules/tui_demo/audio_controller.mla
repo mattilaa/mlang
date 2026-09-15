@@ -16,14 +16,23 @@ use std::strbuf::free;
 pub struct AudioSystem {
     var output: AudioController; var midi: MidiController;
     var midi_id: i64{-1}; var output_id: i64{-1};
+    var hardware_requested: bool;
     var processor_path: str8{""};
     var instrument_paths: list<str8>;
     var last_instrument_id: i32;
     var instrument_output_failed: bool;
 };
 impl AudioSystem {
+    pub fn adopt(self: &mut Self, source: &AudioSystem) -> void {
+        var next: AudioSystem = AudioSystem {}; next = source;
+        self.release();
+        self.output = next.output; self.midi = next.midi; self.midi_id = next.midi_id; self.output_id = next.output_id;
+        self.hardware_requested = next.hardware_requested;
+        self.processor_path = next.processor_path; self.instrument_paths = next.instrument_paths;
+        self.last_instrument_id = next.last_instrument_id; self.instrument_output_failed = next.instrument_output_failed;
+    }
     pub fn start(hardware: bool) -> AudioSystem {
-        var system: AudioSystem = AudioSystem {};
+        var system: AudioSystem = AudioSystem { hardware_requested: hardware };
         if hardware {
             let opened: result<AudioController, str8> = AudioController::open(-1, 128);
             if opened.is_ok() {
@@ -52,10 +61,12 @@ impl AudioSystem {
         if next.handle != 0 {
             if self.processor_path != "" {
                 if next.load_processor(self.processor_path) != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); }
+                if next.copy_parameters_from(self.output, 0) != 0 { next.close(); return Err<i32, str8>("Cannot preserve master plugin parameters; settings unchanged"); }
             }
             for i in 0..self.instrument_paths.len() {
                 if self.instrument_paths[i] != "" {
                     if next.load_instrument(i + 1, self.instrument_paths[i]) != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); }
+                    if next.copy_parameters_from(self.output, i + 1) != 0 { next.close(); return Err<i32, str8>("Cannot preserve instrument parameters; settings unchanged"); }
                 }
             }
             if output_id != -2 { if next.start() != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); } }
@@ -70,6 +81,7 @@ impl AudioSystem {
             }
         }
         self.output = next; self.midi_id = midi_id; self.output_id = output_id;
+        self.hardware_requested = output_id != -2;
         self.midi = MidiController::start_selected(midi_id, self.output.handle);
         return Ok<i32, str8>(0);
     }

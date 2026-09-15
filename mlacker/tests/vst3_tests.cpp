@@ -3,15 +3,23 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
+#include <thread>
+#include <chrono>
+#include <fstream>
+#include <string>
 extern "C" {
 void mlacker_install_vst3_host();
 int64_t __mlang_std_audio_controller_new(int64_t, int64_t);
+int64_t __mlang_std_audio_controller_open(int64_t, int64_t);
+int32_t __mlang_std_audio_controller_start(int64_t);
 int32_t __mlang_std_audio_controller_load_processor(int64_t, const char*);
 int32_t __mlang_std_audio_controller_load_instrument(int64_t, int64_t, const char*);
 const char *__mlang_std_audio_controller_instrument_name(int64_t, int64_t);
 double __mlang_std_audio_controller_parameter_info(int64_t, int64_t, int64_t, int64_t);
 const char *__mlang_std_audio_controller_parameter_name(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_set_parameter(int64_t, int64_t, int64_t, double);
+int32_t __mlang_std_audio_controller_restore_parameter(int64_t, int64_t, int64_t, double);
 int32_t __mlang_std_audio_controller_unload_instrument(int64_t, int64_t);
 int32_t __mlang_std_audio_controller_midi_target(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_live_note(int64_t, int64_t, int64_t, int64_t, int64_t);
@@ -31,6 +39,91 @@ const char *__mlang_std_audio_last_error();
 }
 #define CHECK(condition) do { if(!(condition)) { std::fprintf(stderr, "FAIL line %d: %s; %s\n", __LINE__, #condition, __mlang_std_audio_last_error()); std::exit(1); } } while(0)
 int main(int argc, char **argv) {
+    if(argc == 2 && std::strcmp(argv[1], "--handover-probe") == 0) {
+        // Silent hardware diagnostic: no plugins, samples, or note events.
+        const int64_t old = __mlang_std_audio_controller_open(-1, 128);
+        CHECK(old && __mlang_std_audio_controller_start(old) == 0);
+        const int64_t next = __mlang_std_audio_controller_open(-1, 128);
+        CHECK(next && __mlang_std_audio_controller_stop(old) == 0);
+        CHECK(__mlang_std_audio_controller_start(next) == 0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        const auto before = __mlang_std_audio_controller_info(next, 2);
+        CHECK(__mlang_std_audio_controller_close(old) == 0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        const auto after = __mlang_std_audio_controller_info(next, 2);
+        std::printf("Output handover frame clock: before=%lld after=%lld\n", (long long)before, (long long)after);
+        CHECK(__mlang_std_audio_controller_close(next) == 0);
+        CHECK(before > 0 && after > before);
+        return 0;
+    }
+    if(argc == 3 && (std::strcmp(argv[1], "--restore-probe") == 0 || std::strcmp(argv[1], "--session-probe") == 0)) {
+        const bool session = std::strcmp(argv[1], "--session-probe") == 0;
+        std::string path = argv[2];
+        std::vector<double> saved;
+        std::vector<int64_t> ids;
+        if(session) {
+            // Read-only diagnostic for a single-plugin, sample-free 1.0 session.
+            std::ifstream input(path, std::ios::binary);
+            auto integer = [&]() { int64_t v = 0; CHECK(input.read(reinterpret_cast<char*>(&v), 8)); return v; };
+            auto string = [&]() { const auto size = integer(); CHECK(size >= 0 && size <= 4096); std::string v(size, '\0'); CHECK(input.read(v.data(), size)); return v; };
+            CHECK(string() == "MLACK" && integer() == 1 && integer() == 0);
+            for(int i = 0; i < 24; ++i) integer();
+            CHECK(integer() == 0); CHECK(integer() == 1); CHECK(integer() == 1);
+            path = string();
+            const auto count = integer(); CHECK(count > 0 && count <= 16384);
+            for(int i = 0; i < count; ++i) {
+                ids.push_back(integer()); double v = 0;
+                CHECK(input.read(reinterpret_cast<char*>(&v), 8)); CHECK(std::isfinite(v) && v >= 0 && v <= 1); saved.push_back(v);
+            }
+        }
+        mlacker_install_vst3_host();
+        const int64_t block = __mlang_std_audio_pcm_block_new(128);
+        std::vector<double> values;
+        std::vector<double> defaults;
+        for(int pass = 0; pass < (session ? 3 : 2); ++pass) {
+            const int64_t controller = __mlang_std_audio_controller_new(48000, 128);
+            CHECK(__mlang_std_audio_controller_load_instrument(controller, 1, path.c_str()) == 0);
+            for(int n = 0; pass == 0 && n < 375; ++n) {
+                CHECK(__mlang_std_audio_controller_process(controller, block, 128) == 0);
+                std::this_thread::sleep_for(std::chrono::milliseconds(3));
+            }
+            const int count = (int)__mlang_std_audio_controller_parameter_info(controller, 1, 0, 0);
+            if(session) CHECK(count == (int)saved.size());
+            for(int i = 0; i < count; ++i) {
+                if(pass == 0) {
+                    const double initial = __mlang_std_audio_controller_parameter_info(controller, 1, i, 2);
+                    defaults.push_back(initial);
+                    values.push_back(session ? saved[i] : initial);
+                    if(session) {
+                        CHECK(ids[i] == __mlang_std_audio_controller_parameter_info(controller, 1, i, 4));
+                        if(std::fabs(initial - saved[i]) > 0.000001)
+                            std::printf("%d %s: fresh=%.6f saved=%.6f\n", i, __mlang_std_audio_controller_parameter_name(controller, 1, i), initial, saved[i]);
+                    }
+                }
+                else if(pass == 1 || std::fabs(defaults[i] - values[i]) > 0.000001)
+                    CHECK(__mlang_std_audio_controller_restore_parameter(controller, 1, i, values.at(i)) == 0);
+            }
+            for(int n = 0; pass > 0 && n < 375; ++n) {
+                CHECK(__mlang_std_audio_controller_process(controller, block, 128) == 0);
+                std::this_thread::sleep_for(std::chrono::milliseconds(3));
+            }
+            CHECK(__mlang_std_audio_controller_midi_target(controller, 0, 1) == 0);
+            CHECK(__mlang_std_audio_controller_live_note(controller, 1, 0, 60, 100) == 0);
+            double peak = 0;
+            for(int n = 0; n < 1500; ++n) {
+                CHECK(__mlang_std_audio_controller_process(controller, block, 128) == 0);
+                for(int f = 0; f < 128; ++f)
+                    peak = std::fmax(peak, std::fabs(__mlang_std_audio_pcm_block_sample(block, f, 0)));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            std::printf("%s: parameters=%d peak=%f errors=%lld\n", pass == 2 ? "edits only" : (pass ? "restored" : "fresh"), count, peak,
+                (long long)__mlang_std_audio_controller_info(controller, 4));
+            std::fflush(stdout);
+            CHECK(__mlang_std_audio_controller_close(controller) == 0);
+        }
+        CHECK(__mlang_std_audio_pcm_block_close(block) == 0);
+        return 0;
+    }
     CHECK(argc == 3);
     mlacker_install_vst3_host(); CHECK(__mlang_std_audio_controller_processor_support() == 1);
     int64_t c = __mlang_std_audio_controller_new(48000, 128), b = __mlang_std_audio_pcm_block_new(256);
@@ -191,6 +284,23 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_post(c, 0, 8, 0, 74, 0, 0, -1, 0, 1) == 0);
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
     CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == 0.f);
+    CHECK(__mlang_std_audio_controller_close(c) == 0);
+    // Session restore must produce PCM, not merely expose cached parameters.
+    c = __mlang_std_audio_controller_new(48000, 128);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 1, argv[1]) == 0);
+    const int count = (int)__mlang_std_audio_controller_parameter_info(c, 1, 0, 0);
+    for(int i = 0; i < count; ++i) {
+        double value = __mlang_std_audio_controller_parameter_info(c, 1, i, 2);
+        CHECK(__mlang_std_audio_controller_restore_parameter(c, 1, i, value) == 0);
+    }
+    CHECK(__mlang_std_audio_controller_restore_parameter(c, 1, 0, 0.25) == 0);
+    CHECK(__mlang_std_audio_controller_restore_parameter(c, 1, 0, 0.25) == 0);
+    CHECK(__mlang_std_audio_controller_midi_target(c, 0, 1) == 0);
+    CHECK(__mlang_std_audio_controller_live_note(c, 1, 0, 60, 127) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == 0.03125f);
+    CHECK(__mlang_std_audio_controller_master_peak(c, 0) > 0);
+    CHECK(__mlang_std_audio_controller_master_peak(c, 1) > 0);
     CHECK(__mlang_std_audio_controller_close(c) == 0);
     CHECK(__mlang_std_audio_pcm_block_close(b) == 0);
     std::puts("PASS: real VST3 bundle load, frame-timed MIDI, output, panic, failed replacement, reload");

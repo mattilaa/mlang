@@ -38,6 +38,12 @@ use tui_demo::settings_dialog::SettingsDialog;
 use tui_demo::bpm_dialog::BpmDialog;
 mod tui_demo::frame_rate;
 use tui_demo::frame_rate::FrameRate;
+mod tui_demo::session;
+use tui_demo::session::SessionCodec;
+use tui_demo::session::SessionData;
+use tui_demo::session::SessionView;
+use tui_demo::midi_controller::MidiController;
+use std::env::detail::__env_args;
 use std::strbuf::clone;
 use std::strbuf::free;
 use std::io::stdin;
@@ -45,12 +51,12 @@ use std::io::read_keycode_nonblocking;
 use std::time::sleep_ms;
 use std::time::now_ms;
 
-fn demo_menus() -> MenuBar {
+fn demo_menus(fixture: bool) -> MenuBar {
     return MenuBar::new([
                     Menu {title: "File", items: [
                                 MenuItem { label: "New session", action: 1, enabled: true },
                                 MenuItem { label: "Open session", action: 2, enabled: true },
-                                MenuItem { label: "Save session", action: 3, enabled: false },
+                                MenuItem { label: "Save session", action: 3, enabled: !fixture },
                                 MenuItem::submenu("Recent sessions", [
                                                 MenuItem { label: "Blue hour", action: 8, enabled: true },
                                                 MenuItem::submenu("Templates", [
@@ -59,7 +65,8 @@ fn demo_menus() -> MenuBar {
                                                         ])
                                         ]),
                                 MenuItem { label: "Settings", action: 90, enabled: true },
-                                MenuItem { label: "Quit", action: 99, enabled: true }] },
+                                MenuItem { label: "Quit", action: 99, enabled: true },
+                                MenuItem { label: "Save session as", action: 96, enabled: !fixture }] },
                     Menu {title: "Edit", items: [
                                 MenuItem { label: "Undo", action: 4, enabled: true },
                                 MenuItem { label: "Redo", action: 5, enabled: true }] },
@@ -171,16 +178,24 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
 }
 
 pub fn run() -> i32 {
+    let fixture_env: str8 = __env_get_var("MLANG_TUI_DEMO");
+    let fixture: bool = fixture_env == "1" || !AudioController::processor_support(); free(fixture_env);
     var terminal: Terminal = Terminal::begin();
-    var menus: MenuBar = demo_menus();
-    menus.open(0);
+    var menus: MenuBar = demo_menus(fixture);
+    if fixture { menus.open(0); }
     var focus: PaneFocus = PaneFocus::new(0);
     var input: InputDecoder = InputDecoder::new();
     var dialog: OpenSessionDialog = OpenSessionDialog::new();
     var adding_audio: bool = false;
     var adding_plugin: bool = false;
     var adding_instrument: bool = false;
-    var library: PatternLibrary = PatternLibrary::new();
+    var library: PatternLibrary = fixture ? PatternLibrary::new() : PatternLibrary::empty();
+    var session_path: str8 = clone(""); var request_path: str8 = clone("");
+    var session_request: i32 = 0; var saving_session: bool = false;
+    if !fixture {
+        let arguments: list<str8> = __env_args();
+        if arguments.len() == 2 { free(request_path); request_path = clone(arguments[1]); session_request = 1; }
+    }
     var transport: TransportStatus = TransportStatus {};
     var bpm_dialog: BpmDialog = BpmDialog::new();
     var settings: SettingsDialog = SettingsDialog::new();
@@ -208,6 +223,75 @@ pub fn run() -> i32 {
     free(no_hardware);
     var master_meter_clock: i64 = now_ms();
     while running {
+        if session_request != 0 {
+            var session_status: str8 = "";
+            transport.playing = false;
+            note_playback.update(library.table, transport.ticks, false); midi.sequencer_events(note_playback.events);
+            if session_request == 2 {
+                let view: SessionView = SessionView { bpm: transport.bpm, beats: transport.beats_per_bar, unit: transport.beat_unit,
+                    row: transport.row < 0 ? 0 : transport.row, phase: transport.phase, pane: focus.selected,
+                    sidebar: library.instruments_mode ? 3 : (library.audio_mode ? 2 : (library.song_mode ? 1 : 0)),
+                    list_selected: library.view.selected, list_scroll: library.view.scroll,
+                    audio_selected: library.audio.view.selected, audio_scroll: library.audio.view.scroll,
+                    instrument_selected: library.instruments.selected, instrument_scroll: library.instruments.scroll,
+                    mixer: mixer.visible, meter_grainy: mixer.grainy, meter_fps: frame_rate.fps,
+                    sample: sample.visible, sample_grainy: sample.grainy, sample_wave: sample.wave, sample_zoom: sample.zoom,
+                    editor: instrument_editor.active, editor_slot: i32(instrument_editor.slot), editor_selected: instrument_editor.selected, editor_scroll: instrument_editor.scroll };
+                var serializer: SessionCodec = SessionCodec {};
+                let saved: bool = serializer.save(request_path, library, view, midi);
+                if saved { free(session_path); session_path = clone(request_path); session_status = format!("Saved: {}", session_path); }
+                else { session_status = clone("Save failed: invalid state, size limit or unwritable path. Original file retained."); }
+            } else {
+                var result: result<SessionData, str8> = session_request == 3 ? Ok<SessionData, str8>(SessionData { library: PatternLibrary::empty(), view: SessionView {} }) : SessionCodec::load(request_path);
+                if result.is_err() { session_status = clone(result.unwrap_err()); }
+                else {
+                    var data: SessionData = result.unwrap();
+                    let prepared: result<AudioSystem, str8> = data.prepare_audio(midi);
+                    if prepared.is_err() { session_status = clone(prepared.unwrap_err()); data.release(); }
+                    else {
+                        var next: AudioSystem = prepared.unwrap();
+                        let worker: bool = midi.midi.worker.raw != 0;
+                        let hardware: bool = midi.output.hardware_output();
+                        var accepted: bool = midi.output.handle == 0 || midi.output.stop() == 0;
+                        if accepted && next.output.hardware_output() { accepted = next.output.start() == 0; }
+                        if !accepted {
+                            if hardware { midi.output.start(); }
+                            next.release(); data.release(); session_status = clone("Cannot switch audio output; previous session retained");
+                        } else {
+                            midi.adopt(next);
+                            if worker { midi.midi = MidiController::start_selected(midi.midi_id, midi.output.handle); }
+                            library.adopt(data.library); data.release_plugins();
+                            for i in 0..midi.instrument_paths.len() {
+                                if midi.instrument_paths[i] != "" {
+                                    library.name_instrument(i32(i) + 1, midi.output.instrument_name(i + 1));
+                                }
+                            }
+                            let v: SessionView = data.view;
+                            transport = TransportStatus { bpm: v.bpm, beats_per_bar: v.beats, beat_unit: v.unit, row: v.row, phase: v.phase,
+                                ticks: wide(v.row) * 15000 + v.phase, elapsed_ms: i32((wide(v.row) * 15000 + v.phase) / wide(v.bpm)) };
+                            focus.selected = v.pane;
+                            mixer = Mixer { visible: v.mixer, grainy: v.meter_grainy };
+                            sample = SampleView { visible: v.sample, grainy: v.sample_grainy, wave: v.sample_wave, zoom: v.sample_zoom };
+                            frame_rate.set(v.meter_fps, now_ms()); note_playback = NotePlayback {}; play_pattern = library.active_id;
+                            instrument_editor.release();
+                            instrument_editor.slot = v.editor_slot;
+                            instrument_editor.selected = v.editor_selected;
+                            instrument_editor.scroll = v.editor_scroll;
+                            if v.editor {
+                                if instrument_editor.open(midi.output, v.editor_slot) {
+                                    if v.editor_selected < instrument_editor.sliders.len() { instrument_editor.selected = v.editor_selected; }
+                                    instrument_editor.scroll = v.editor_scroll;
+                                }
+                            }
+                            free(session_path); session_path = session_request == 3 ? clone("") : clone(request_path);
+                            session_status = session_request == 3 ? clone("New empty session") : format!("Opened: {}", session_path);
+                        }
+                    }
+                }
+            }
+            free(message); message = clone(session_status); free(session_status);
+            session_request = 0; menus.dismiss(); dirty = true;
+        }
         let now: i64 = now_ms(); let delta: i32 = i32(now - last_tick > 1000 ? 1000 : now - last_tick); last_tick = now;
         // MIDI dispatch is independent of modal keyboard focus.
         midi.route_selected(library.table);
@@ -248,7 +332,7 @@ pub fn run() -> i32 {
                     if applied.is_err() { settings.fail(applied.unwrap_err()); }
                     else {
                         free(message);
-                        if midi.output.handle == 0 { message = clone("Settings applied. Audio disabled."); }
+                        if !midi.output.hardware_output() { message = clone("Settings applied. Audio disabled."); }
                         else { message = format!("AUHAL: {} Hz / {} frames. Settings applied.", midi.output.sample_rate(), midi.output.buffer_frames()); }
                     }
                 }
@@ -277,7 +361,10 @@ pub fn run() -> i32 {
                         }
                     }
                     else if adding_plugin { message = midi.set_processor(dialog.accepted_path); }
-                    else { message = format!("Selected: {}", dialog.accepted_path); }
+                    else {
+                        message = format!("Selected: {}", dialog.accepted_path);
+                        if !adding_audio && !fixture { free(request_path); request_path = clone(dialog.accepted_path); session_request = saving_session ? 2 : 1; }
+                    }
                 }
             }
             if question.active && question.pressed_button >= 0 {
@@ -290,7 +377,7 @@ pub fn run() -> i32 {
                         }
                         confirm_track_action = 0;
                         free(message); message = clone("Track action finished.");
-                    } else {free(message); message = clone(question.result == 1 ? "New session confirmed." : "New session cancelled.");}
+                    } else {free(message); message = clone(question.result == 1 ? "New session confirmed." : "New session cancelled."); if question.result == 1 && !fixture { session_request = 3; } }
                 }
             }
         }
@@ -353,7 +440,8 @@ pub fn run() -> i32 {
             }
             escape_ticks = 0;
             var command: i32 = 0;
-            if instrument_editor.active {
+            if (event.code == 19 && event.modifiers == 1) || (event.code == 115 && event.modifiers == 5) { command = 3; dirty = true; }
+            else if instrument_editor.active && !dialog.active {
                 instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true;
             }
             else if settings.active {
@@ -395,7 +483,10 @@ pub fn run() -> i32 {
                             }
                         }
                         else if adding_plugin { message = midi.set_processor(dialog.accepted_path); }
-                        else { message = format!("Selected: {}", dialog.accepted_path); }
+                        else {
+                            message = format!("Selected: {}", dialog.accepted_path);
+                            if !adding_audio && !fixture { free(request_path); request_path = clone(dialog.accepted_path); session_request = saving_session ? 2 : 1; }
+                        }
                     }
                     dirty = true;
                 }
@@ -456,18 +547,24 @@ pub fn run() -> i32 {
                 question.title = "New session"; question.question = "Start a new session?";
                 confirm_track_action = 0; question.open(); focus.set_menu_active(true);
             }
-            else if command == 2 {
+            else if command == 3 && session_path != "" {
+                free(request_path); request_path = clone(session_path); session_request = 2;
+            }
+            else if command == 2 || command == 3 || command == 96 {
                 adding_audio = false; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = "";
-                dialog.title = "Open session"; dialog.file_pattern = "";
+                saving_session = command != 2; dialog.save_mode = saving_session;
+                dialog.title = saving_session ? "Save session (.mlack)" : "Open session"; dialog.file_pattern = fixture ? "" : ".*\\.[mM][lL][aA][cC][kK]";
                 dialog.open("");
                 focus.set_menu_active(true);
             }
             else if command == 60 {
+                dialog.save_mode = false; saving_session = false;
                 adding_audio = true; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = ""; dialog.title = "Add audio";
                 dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
                 dialog.open(""); focus.set_menu_active(true);
             }
             else if command == 91 || command == 93 {
+                dialog.save_mode = false; saving_session = false;
                 transport.playing = false; adding_audio = false; adding_plugin = command == 91; adding_instrument = command == 93;
                 dialog.title = adding_instrument ? "Add VST3 instrument" : "Load master VST3"; dialog.file_pattern = ".*\\.[vV][sS][tT]3";
                 dialog.bundle_pattern = dialog.file_pattern;
@@ -553,7 +650,7 @@ pub fn run() -> i32 {
                 library.view.cancel_pending();
                 library.audio.view.cancel_pending();
                 library.instruments.cancel_pending();
-                if instrument_editor.active { instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true; }
+                if instrument_editor.active && !dialog.active { instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true; }
                 else if settings.active { settings.on_event(event); dirty = true; }
                 else if bpm_dialog.active { bpm_dialog.on_event(event); dirty = true; }
                 else if library.renaming { library.rename_event(event); dirty = true; }
@@ -583,6 +680,7 @@ pub fn run() -> i32 {
     note_playback.update(library.table, transport.ticks, false);
     midi.release();
     settings.release();
+    free(session_path); free(request_path);
     instrument_editor.release();
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();

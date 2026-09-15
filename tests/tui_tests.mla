@@ -110,6 +110,61 @@ mod tui::listview;
 mod tui_demo::patterns;
 use tui::listview::*;
 use tui_demo::patterns::PatternLibrary;
+mod tui_demo::session;
+use tui_demo::session::SessionCodec;
+use tui_demo::session::SessionData;
+use tui_demo::session::SessionView;
+use tui_demo::audio_controller::AudioSystem;
+extern fn mkdtemp(path: str8) -> str8;
+
+#[test]
+fn tui_session_roundtrip() {
+    let directory: str8 = clone("/private/tmp/mlacker-session-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/roundtrip.mlack", directory);
+    var library: PatternLibrary = PatternLibrary::new();
+    var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.track_action(80, area);
+    library.table.create_track_kind(false, true, area);
+    var clip: AudioClip = AudioClip { source: clone("embedded-test.wav"), channels: 1, sample_rate: 8000, frames: 80, frames_per_row: 10 };
+    for _i in 0..80 { clip.samples.push(0.5f); }
+    for _i in 0..8 { clip.peaks.push(WavePeak { left: 500, right: 500, left_body: 500, right_body: 500 }); }
+    for _i in 0..32 { clip.detail_peaks.push(WavePeak { left: 500, right: 500 }); }
+    library.audio.samples.push(clip); library.table.selected_row = 7;
+    verify(library.table.insert_audio(clip, area));
+    let view: SessionView = SessionView { bpm: 147, beats: 7, unit: 8, pane: 1, sidebar: 1, mixer: true, meter_fps: 120, sample_zoom: 4, row: 7 };
+    verify(codec.save(path, library, view, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap();
+    verify(restored.view.bpm == 147 && restored.view.beats == 7 && restored.view.sample_zoom == 4 && restored.view.meter_fps == 120);
+    verify(restored.library.patterns.len() == 3 && restored.library.song.len() == 4);
+    verify(restored.library.table.tracks.len() == 4 && restored.library.table.selected_row == 7);
+    let track: SequenceTrack = restored.library.table.tracks[3];
+    let placement: AudioInstance = track.instances[0]; verify(placement.start_row == 7 && placement.clip.frames == 80);
+    verify(placement.clip.samples[20] == 0.5f && restored.library.audio.samples.len() == 1);
+    let midi: SequenceTrack = restored.library.table.tracks[0]; verify(midi.note_lines == 2);
+    restored.release();
+    // A rejected save must not truncate the previous valid session.
+    verify(!codec.save(path, library, SessionView { bpm: 0 }, audio));
+    let retained: result<SessionData, str8> = SessionCodec::load(path); verify(retained.is_ok());
+    var valid: SessionData = retained.unwrap(); valid.release();
+    library.release();
+    let removed: result<i32, str8> = std::fs::remove_tree(directory); verify(removed.is_ok()); free(path); free(directory);
+}
+
+#[test]
+fn tui_session_empty_and_bad_file() {
+    var library: PatternLibrary = PatternLibrary::empty(); var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    verify(library.table.tracks.len() == 0 && library.song.len() == 0 && library.audio.samples.len() == 0);
+    let directory: str8 = clone("/private/tmp/mlacker-empty-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/empty.mlack", directory);
+    verify(codec.save(path, library, SessionView {}, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap(); verify(restored.library.table.tracks.len() == 0); restored.release();
+    std::fs::write_all_text(path, "not a session file and deliberately too short or malformed");
+    let invalid: result<SessionData, str8> = SessionCodec::load(path); verify(invalid.is_err());
+    library.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}
 mod tui_demo::transport;
 use tui_demo::transport::TransportStatus;
 mod tui_demo::waveform;

@@ -28,6 +28,21 @@ pub struct PatternLibrary {
     var instruments: ListView; var instruments_mode: bool;
 };
 impl PatternLibrary {
+    pub fn adopt(self: &mut Self, source: &PatternLibrary) -> void {
+        var next: PatternLibrary = PatternLibrary {}; next = source;
+        self.release();
+        self.patterns = next.patterns; self.song = next.song; self.active_id = next.active_id; self.next_id = next.next_id;
+        self.table = next.table; self.view = next.view; self.song_mode = next.song_mode;
+        self.renaming = false; self.editor = next.editor; self.error = next.error;
+        self.audio = next.audio; self.audio_mode = next.audio_mode;
+        self.instruments = next.instruments; self.instruments_mode = next.instruments_mode;
+    }
+    pub fn empty() -> PatternLibrary {
+        var library: PatternLibrary = PatternLibrary { active_id: 1, next_id: 2,
+            table: SequenceTable::empty(), editor: TextField::new(""), error: "" };
+        library.patterns.push(PatternEntry { id: 1, name: clone("Untitled"), data: SequenceTable::empty() });
+        library.refresh(); return library;
+    }
     pub fn new() -> PatternLibrary {
         var library: PatternLibrary = PatternLibrary { active_id: 1, next_id: 4,
             table: SequenceTable::new(), editor: TextField::new(""), error: "" };
@@ -260,6 +275,16 @@ impl PatternLibrary {
             let track: SequenceTrack = self.table.tracks[index];
             if track.instrument { self.table.assign_instrument(id); }
         }
+    }
+    pub fn name_instrument(self: &mut Self, id: i32, name: str8) -> void {
+        let items: list<ListItem> = self.instruments.items; var next: list<ListItem> = [];
+        for item in items {
+            if item.id == id {
+                free(item.label);
+                next.push(ListItem { id: id, label: format!("{}{} {}", id < 10 ? "00" : "0", id, name) });
+            } else { next.push(item); }
+        }
+        self.instruments.items = next;
     }
     pub fn insert_selected_audio(self: &mut Self, area: Rect) -> bool {
         let index: i32 = self.audio.view.selected;

@@ -23,7 +23,8 @@ typedef struct mlang_audio_processor {
     void (*control)(void *context, int32_t channel, int32_t controller,
                     int32_t value, int32_t offset);
     /* Cached metadata, control-thread queries. key: 0=count, 1=steps,
-     * 2=normalized value, 3=read-only. Names borrowed until destruction. */
+     * 2=normalized value, 3=read-only, 4=stable parameter ID.
+     * Names borrowed until destruction. */
     double (*parameter_info)(void *context, int32_t index, int32_t key);
     const char *(*parameter_name)(void *context, int32_t index);
     void (*parameter)(void *context, int32_t index, double value, int32_t offset);

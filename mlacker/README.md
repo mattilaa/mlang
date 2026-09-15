@@ -28,6 +28,43 @@ revision. Generated SDK sources and binaries stay under ignored `build/`.
 SDK license and usage notices remain in `build/deps/vst3sdk/LICENSE.txt` and
 `VST3_Usage_Guidelines.pdf`; preserve applicable notices when distributing.
 
+## Sessions (.mlack 1.0)
+
+Launching mlacker without a filename starts one empty, 64-row **Untitled**
+pattern, with no tracks, song entries, instruments, or samples. Menus stay closed.
+Tab opens the menu bar. To open an existing session at startup:
+
+```sh
+mlacker/build/cmake/bin/mlacker "my song.mlack"
+```
+
+**File → Save session** (or Ctrl+S) saves to the current filename; the first save
+asks for a `.mlack` path. **Save session as** chooses another path. **Open session**
+loads a `.mlack` file. **New session** confirms before resetting to an empty editor.
+Saving stops the sequencer; loading always restores a stopped transport.
+
+Version 1.0 stores all patterns and song order, track types and assignments,
+NOTE/VEL/LEN/OFF/automation data, audio placements, loaded samples, loaded
+instrument/master-plugin paths and normalized parameter states, BPM/time signature,
+playhead/cursors, pane focus, track zoom, scroll positions, sidebar mode, mixer and
+sample styles, meter update rate, and the parameter editor's selection/visibility.
+Ctrl+S works with the parameter editor open. Uncommitted text-entry drafts are not
+saved.
+
+Decoded audio and waveform data are embedded: the original WAV/AIFF files are not
+needed to reopen the session. VST3 binaries are **not** embedded and must remain
+installed at the saved paths. Only open trusted sessions: opening one can load
+native plugin code. The current audio/MIDI device selection is retained, rather
+than reopening machine-specific device IDs from another computer.
+
+Saves use a flushed, same-directory temporary file and atomic replacement. Parse,
+version, missing-plugin, and parameter-restore failures retain the current session.
+There is no autosave or unsaved-change prompt on Open/Quit yet. Native plugin
+opaque presets, internal sample banks, and non-parameter controller state are not
+stored in 1.0; exposed parameter values are restored by ID. Device changes still
+reload plugins with defaults. See [the binary format](FORMAT.md) for the schema
+and limits.
+
 ## Instrument tracks
 
 - **Add → Instrument** browses `.vst3` bundles on disk. On selection, the host
@@ -84,8 +121,8 @@ and initial values are copied into memory when the plugin loads.
 **Instrument → Remove instrument** stops playback, joins the MIDI worker, stops
 audio, unloads the selected instance, and clears its assignments in every
 pattern. Other instrument IDs remain unchanged; vacant slots can be reused.
-Plugin state and parameter edits are not persisted across device reloads or
-application restarts. Dynamic parameter-list changes and plugin-originated
+Saved `.mlack` sessions restore exposed parameter edits across application
+restarts and audio-device changes. Dynamic parameter-list changes and plugin-originated
 parameter notifications are not handled yet; reopen to refresh cached values.
 
 ### Pattern CC1 / CC2
@@ -122,7 +159,8 @@ channel, pitch, velocity, and sample offset. Sequencer tracks use channels modul
 16; live MIDI retains its input channel. Audio can be disabled while loading a
 plugin for inspection; its name appears in the Inspector, with no hardware open.
 Failed replacement keeps the previous plugin. Audio-device changes reload the
-selected plugin for the new sample rate, resetting its internal state.
+selected plugin for the new sample rate and restores its exposed parameter values.
+Opaque, non-parameter plugin state is not preserved by device changes yet.
 
 Only load plugins you trust. Plugins execute in-process; they are not sandboxed.
 A plugin can display its own authorization UI, block, or crash the tracker.
@@ -148,8 +186,8 @@ Current scope:
 
 - macOS, native-architecture VST3 bundles; float32 mono/stereo, at most one audio
   input bus and one output bus, and the first MIDI input bus.
-- One master slot plus 32 instrument slots; no per-track effect chains, native plugin editor windows, preset or
-  state persistence, arbitrary named-parameter automation, live MIDI CC forwarding, sidechains,
+- One master slot plus 32 instrument slots; no per-track effect chains, native plugin editor windows, opaque preset
+  persistence, arbitrary named-parameter automation, live MIDI CC forwarding, sidechains,
   latency compensation, or transport/tempo synchronization yet.
 - Existing UI-loop sequencer timing is retained. The audio API supports absolute
   frame scheduling, but a look-ahead sequencer is still future work.
@@ -170,6 +208,9 @@ replacement, repeated unload/reload, instrument-only validation and independent
 instrument-slot mixing. Four PTY tests cover Settings, plugin selection/load/unload,
 Instrument track creation/assignment, Instruments view, existing widgets and
 playback. They open no audio devices.
+The session PTY test separately checks real empty startup, command-line opening,
+parameter/editor-state round trips and rejected files. Legacy widget tests opt in
+to seeded demo data with `MLANG_TUI_DEMO=1`; normal mlacker startup does not.
 
 For a hardware-free manual run:
 

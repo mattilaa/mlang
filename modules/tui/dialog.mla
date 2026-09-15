@@ -191,6 +191,8 @@ pub struct OpenSessionDialog : Dialog {
     var status: str8;
     /// Optional full-path regex, also enforced for manually entered paths.
     var file_pattern: str8{""};
+    /// Save choosers may accept a new filename; the caller handles overwrites.
+    var save_mode: bool;
     /// Matching directories can be selected as opaque bundles (e.g. .vst3).
     var bundle_pattern: str8{""};
 };
@@ -334,7 +336,7 @@ impl OpenSessionDialog {
     }
     fn accept_file(self: &mut Self, path: str8) -> void {
         if !self.matches_file(path) { self.status = "File type does not match the filter."; return; }
-        if file_exists(path) == 0 || (is_dir(path) == 1 && !self.matches_bundle(path)) {
+        if (!self.save_mode && file_exists(path) == 0) || (is_dir(path) == 1 && !self.matches_bundle(path)) {
             self.status = "File no longer exists or is inaccessible."; return;
         }
         let copy: str8 = clone(path);

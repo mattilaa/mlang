@@ -5,6 +5,7 @@
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/eventlist.h"
 #include "public.sdk/source/vst/hosting/processdata.h"
+#include "public.sdk/source/common/memorystream.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/base/ustring.h"
 #include <algorithm>
@@ -124,6 +125,15 @@ public:
         data.inputEvents = eventInputs ? &incoming : nullptr; data.outputEvents = &outgoing;
         data.inputParameterChanges = &parameters; data.outputParameterChanges = nullptr;
         auto controller = provider->getControllerPtr();
+        // Separate controllers may initially expose defaults unrelated to the
+        // processor's loaded patch. Synchronize before caching/saving values.
+        if(controller) {
+            MemoryStream state;
+            if(component->getState(&state) == kResultOk && state.getSize() > 0) {
+                state.seek(0, IBStream::kIBSeekSet, nullptr);
+                controller->setComponentState(&state);
+            }
+        }
         parameterCount = controller ? controller->getParameterCount() : 0;
         if(parameterCount < 0 || parameterCount > 16384) { error = "Unsupported parameter count"; return false; }
         cached = std::make_unique<CachedParameter[]>(parameterCount);
@@ -196,6 +206,7 @@ public:
         if(key == 1) return p.info.stepCount;
         if(key == 2) return p.value.load(std::memory_order_relaxed);
         if(key == 3) return (p.info.flags & ParameterInfo::kIsReadOnly) != 0;
+        if(key == 4) return p.info.id;
         return -1;
     }
     void parameter(int32 index, double value, int32 offset) noexcept {

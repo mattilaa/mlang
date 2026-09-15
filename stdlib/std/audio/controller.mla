@@ -22,6 +22,7 @@ extern fn __mlang_std_audio_controller_parameter_info(handle: i64, slot: i64, in
 extern fn __mlang_std_audio_controller_parameter_name(handle: i64, slot: i64, index: i64) -> str8;
 extern fn __mlang_std_audio_controller_set_parameter(handle: i64, slot: i64, index: i64, value: f64) -> i32;
 extern fn __mlang_std_audio_controller_unload_instrument(handle: i64, slot: i64) -> i32;
+extern fn __mlang_std_audio_controller_restore_parameter(handle: i64, slot: i64, index: i64, value: f64) -> i32;
 extern fn __mlang_std_audio_controller_midi_target(handle: i64, source: i64, instrument: i64) -> i32;
 extern fn __mlang_std_audio_controller_live_note(handle: i64, on: i64, channel: i64, pitch: i64, velocity: i64) -> i32;
 extern fn __mlang_std_audio_controller_master_peak(handle: i64, channel: i64) -> i32;
@@ -42,7 +43,27 @@ pub struct AudioEvent {
 };
 pub struct AudioController { var handle: i64; };
 impl AudioController {
-    /// Cached metadata: key 0=count, 1=steps (0 continuous), 2=normalized value, 3=read-only.
+    /// Session restoration: stopped owner only, no MIDI worker. slot 0=master.
+    pub fn restore_parameter(self: AudioController, slot: i64, index: i64, normalized: f64) -> i32 { return __mlang_std_audio_controller_restore_parameter(self.handle, slot, index, normalized); }
+    /// Copy exposed parameter state into a stopped replacement of the same plugin.
+    /// Match stable IDs, since enumeration order may change between instances.
+    pub fn copy_parameters_from(self: AudioController, source: AudioController, slot: i64) -> i32 {
+        let count: i64 = source.parameter_info(slot, 0, 0);
+        if count < 0 || self.parameter_info(slot, 0, 0) != f64(count) { return -1; }
+        for i in 0..count {
+            let id: f64 = source.parameter_info(slot, i, 4);
+            var target: i64 = i;
+            if self.parameter_info(slot, target, 4) != id {
+                target = -1;
+                for j in 0..count { if self.parameter_info(slot, j, 4) == id { target = j; } }
+            }
+            if target < 0 { return -1; }
+            if self.restore_parameter(slot, target, source.parameter_info(slot, i, 2)) != 0 { return -1; }
+        }
+        return 0;
+    }
+    /// Cached metadata: key 0=count, 1=steps (0 continuous), 2=normalized value,
+    /// 3=read-only, 4=stable parameter ID. Slot 0 queries the master processor.
     pub fn parameter_info(self: AudioController, slot: i64, index: i64, key: i64) -> f64 { return __mlang_std_audio_controller_parameter_info(self.handle, slot, index, key); }
     pub fn parameter_name(self: AudioController, slot: i64, index: i64) -> str8 { return __mlang_std_audio_controller_parameter_name(self.handle, slot, index); }
     /// UI producer only. Continuous values 0..1; stepped values integer 0..steps.

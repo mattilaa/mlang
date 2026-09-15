@@ -25,6 +25,7 @@ add_subdirectory("${VST3_SDK_ROOT}" "${CMAKE_BINARY_DIR}/sdk")
 smtg_enable_vst3_sdk()
 find_package(OpenSSL REQUIRED)
 add_library(mlacker_host STATIC src/vst3_host.cpp
+    "${VST3_SDK_ROOT}/public.sdk/source/common/memorystream.cpp"
     "${VST3_SDK_ROOT}/public.sdk/source/vst/hosting/plugprovider.cpp"
     "${VST3_SDK_ROOT}/public.sdk/source/vst/hosting/module_mac.mm")
 target_include_directories(mlacker_host PUBLIC "${MLANG_ROOT}/stdlib/include")
@@ -57,7 +58,10 @@ add_test(NAME vst3_host COMMAND mlacker_vst3_tests "$<TARGET_BUNDLE_DIR:MlackerT
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME settings_tui COMMAND "${Python3_EXECUTABLE}" "${MLANG_ROOT}/tests/tui_settings_smoke.py" "$<TARGET_FILE:mlacker>")
 add_test(NAME vst3_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/vst3_tui_smoke.py" "$<TARGET_FILE:mlacker>" "$<TARGET_BUNDLE_DIR:MlackerTestInstrument>")
+add_test(NAME session_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/session_tui_smoke.py" "$<TARGET_FILE:mlacker>" "$<TARGET_BUNDLE_DIR:MlackerTestInstrument>")
+set_tests_properties(session_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 120)
 add_test(NAME terminal_tui COMMAND "${Python3_EXECUTABLE}" "${MLANG_ROOT}/tests/tui_terminal_smoke.py" "$<TARGET_FILE:mlacker>")
 add_test(NAME playback_tui COMMAND "${Python3_EXECUTABLE}" "${MLANG_ROOT}/tests/tui_playback_smoke.py" "$<TARGET_FILE:mlacker>")
 set_tests_properties(settings_tui vst3_tui terminal_tui playback_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 120)
+set_tests_properties(settings_tui vst3_tui terminal_tui playback_tui PROPERTIES ENVIRONMENT "MLANG_TUI_DEMO=1")
 set_tests_properties(vst3_host PROPERTIES TIMEOUT 30)

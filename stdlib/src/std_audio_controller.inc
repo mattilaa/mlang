@@ -429,8 +429,8 @@ int64_t __mlang_std_audio_controller_info(int64_t handle, int64_t key) {
 int32_t __mlang_std_audio_controller_processor_support(void) { return ac_processor_factory != NULL; }
 double __mlang_std_audio_controller_parameter_info(int64_t handle, int64_t slot, int64_t index, int64_t key) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || slot < 1 || slot > 32 || index < 0 || index > 16383 || key < 0 || key > 3) return -1;
-    mlang_audio_processor *p = &c->instruments[slot - 1];
+    if(!c || slot < 0 || slot > 32 || index < 0 || index > 16383 || key < 0 || key > 4) return -1;
+    mlang_audio_processor *p = slot ? &c->instruments[slot - 1] : &c->processor;
     return p->context && p->parameter_info ? p->parameter_info(p->context, (int32_t)index, (int32_t)key) : -1;
 }
 const char *__mlang_std_audio_controller_parameter_name(int64_t handle, int64_t slot, int64_t index) {
@@ -438,6 +438,26 @@ const char *__mlang_std_audio_controller_parameter_name(int64_t handle, int64_t 
     if(!c || slot < 1 || slot > 32 || index < 0 || index > 16383) return "";
     mlang_audio_processor *p = &c->instruments[slot - 1];
     return p->context && p->parameter_name ? p->parameter_name(p->context, (int32_t)index) : "";
+}
+/* Session restoration only: stopped owner, no MIDI producer. Flush one silent
+ * frame so parameters take effect before hardware starts, without queue limits. */
+int32_t __mlang_std_audio_controller_restore_parameter(int64_t handle, int64_t slot, int64_t index, double value) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || c->running || slot < 0 || slot > 32 || !isfinite(value) || value < 0 || value > 1 ||
+       __mlang_std_audio_controller_parameter_info(handle, slot, index, 1) < 0) return -1;
+    mlang_audio_processor *p = slot ? &c->instruments[slot - 1] : &c->processor;
+    if(__mlang_std_audio_controller_parameter_info(handle, slot, index, 3) != 0) return 0;
+    /* Some plugins expose MIDI/command parameters as well as persistent
+     * controls. Replaying their unchanged defaults can trigger commands (and
+     * alter the patch). A fresh instance already owns this value: do not send
+     * a redundant event or render an extra restoration block for it. */
+    if(__mlang_std_audio_controller_parameter_info(handle, slot, index, 2) == value) return 0;
+    if(!p->parameter) return -1;
+    float silent[2] = {0, 0};
+    p->begin(p->context, 0); p->parameter(p->context, (int32_t)index, value, 0);
+    if(p->process(p->context, silent, 1, 0) != 0) return -1;
+    if(p->parameter_edited) p->parameter_edited(p->context, (int32_t)index, value);
+    return 0;
 }
 int32_t __mlang_std_audio_controller_set_parameter(int64_t handle, int64_t slot, int64_t index, double value) {
     double steps = __mlang_std_audio_controller_parameter_info(handle, slot, index, 1);
