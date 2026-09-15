@@ -61,6 +61,24 @@ SDK license and usage notices remain in `build/deps/vst3sdk/LICENSE.txt` and
 
 ## Use a master plugin
 
+### Pattern CC1 / CC2
+
+Both automation columns send their non-empty values at the pattern row boundary,
+even without a note or when the columns are collapsed. **Track → Configure CC1 /
+Configure CC2** selects `cc:N` (0–127; values 0–127) or `pitchbend` (values
+-8192–8191). Defaults are CC1 = `cc:1`, CC2 = `cc:74`; the column labels are slot
+names, not fixed MIDI controller numbers. Instrument tracks target their assigned
+instance; MIDI tracks target the master plugin. Muted/audio tracks do not send
+these events. Empty cells leave the current parameter value unchanged.
+
+The host translates controllers using the plugin's `IMidiMapping` assignments
+for event bus 0 and the track's MIDI channel. Assignments are cached at load time;
+unmapped controllers and custom `name:min:max` slots are not sent. Plugins without
+MIDI mappings cannot receive these controls yet. Parameter queues are bounded and
+preallocated, with sample offsets preserved by the native audio event queue.
+
+### Master slot
+
 1. Select MIDI input and master output in **File → Settings**.
 2. Choose **Add → VST3 master plugin**.
 3. Select a `.vst3` bundle, or type its full path into the dialog and press Enter.
@@ -104,7 +122,7 @@ Current scope:
 - macOS, native-architecture VST3 bundles; float32 mono/stereo, at most one audio
   input bus and one output bus, and the first MIDI input bus.
 - One master slot plus 32 instrument slots; no per-track effect chains, plugin editor windows, preset or
-  state persistence, parameter automation, MIDI CC/pitch-bend mapping, sidechains,
+  state persistence, arbitrary named-parameter automation, live MIDI CC forwarding, sidechains,
   latency compensation, or transport/tempo synchronization yet.
 - Existing UI-loop sequencer timing is retained. The audio API supports absolute
   frame scheduling, but a look-ahead sequencer is still future work.

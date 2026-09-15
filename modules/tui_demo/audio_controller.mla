@@ -137,6 +137,7 @@ impl AudioSystem {
         for event in events {
             var kind: AudioEventKind = event.on == 1 ? AudioEventKind::NoteOn : AudioEventKind::NoteOff;
             if event.instrument != 0 { kind = event.on == 1 ? AudioEventKind::InstrumentNoteOn : AudioEventKind::InstrumentNoteOff; }
+            if event.on == 2 { kind = event.instrument == 0 ? AudioEventKind::ControlChange : AudioEventKind::InstrumentControlChange; }
             self.output.post(AudioEvent { kind: kind, sample: event.instrument > 0 ? event.instrument : 0,
                 midi: AudioMidiEvent { channel: event.track % 16, note: event.note, velocity: event.velocity }, source: event.track }, 0);
         }

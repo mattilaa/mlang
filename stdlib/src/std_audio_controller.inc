@@ -86,12 +86,15 @@ int32_t __mlang_std_audio_controller_post(int64_t handle, int64_t lane,
     int64_t kind, int64_t channel, int64_t note, int64_t velocity,
     int64_t source, int64_t frame, int64_t sample, double gain) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || lane < 0 || lane > 1 || kind < 1 || kind > 7 || frame < -1 ||
+    if(!c || lane < 0 || lane > 1 || kind < 1 || kind > 9 || frame < -1 ||
        source < 0 || source > INT32_MAX || !isfinite(gain) || gain < 0 || gain > 1) return -1;
     if((kind == 1 || kind == 2 || kind == 6 || kind == 7) && (channel < 0 || channel > 15 ||
         note < 0 || note > 127 || velocity < 0 || velocity > 127)) return -1;
     if(kind == 4 && (sample < 0 || sample >= AC_SAMPLES)) return -1;
     if((kind == 6 || kind == 7) && (sample < 0 || sample > 32)) return -1;
+    if((kind == 8 || kind == 9) && (channel < 0 || channel > 15 ||
+        !((note >= 0 && note <= 127) || note == 129) || velocity < 0 ||
+        velocity > (note == 129 ? 16383 : 127) || sample < 0 || sample > 32)) return -1;
     ac_queue *q = &c->queues[lane];
     uint64_t w = atomic_load_explicit(&q->write, memory_order_relaxed);
     uint64_t r = atomic_load_explicit(&q->read, memory_order_acquire);
@@ -148,6 +151,13 @@ int32_t __mlang_std_audio_controller_master_peak(int64_t handle, int64_t channel
 }
 
 static void ac_dispatch(ac_controller *c, const ac_event *e) {
+    if(e->kind == 8 || e->kind == 9) {
+        mlang_audio_processor *p = e->kind == 8 ? &c->processor :
+            (e->sample > 0 ? &c->instruments[e->sample - 1] : NULL);
+        if(p && p->context && p->control)
+            p->control(p->context, (int32_t)e->channel, (int32_t)e->note, (int32_t)e->velocity, c->render_offset);
+        return;
+    }
     if(e->kind == 6 || e->kind == 7) {
         if(e->sample > 0) {
             mlang_audio_processor *p = &c->instruments[e->sample - 1];

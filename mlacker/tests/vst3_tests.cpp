@@ -137,6 +137,29 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_master_peak(c, 0) == 250); // post-effect and gain
     CHECK(__mlang_std_audio_controller_stop(c) == 0);
     CHECK(__mlang_std_audio_controller_master_peak(c, 1) == 0);
+    CHECK(__mlang_std_audio_controller_load_processor(c, "") == 0);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 1, argv[1]) == 0);
+    clock = __mlang_std_audio_controller_info(c, 2);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 6, 0, 60, 127, 0, clock, 1, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 9, 0, 1, 0, 0, clock + 32, 1, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 9, 0, 1, 127, 0, clock + 64, 1, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 9, 0, 74, 64, 0, clock + 96, 1, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 9, 0, 129, 0, 0, clock + 128, 1, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 9, 0, 129, 16383, 0, clock + 160, 1, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 9, 0, 23, 0, 0, clock + 192, 1, 1) == 0); // unmapped: ignored
+    CHECK(__mlang_std_audio_controller_post(c, 0, 9, 0, 1, 128, 0, -1, 1, 1) == -1);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    for(int f = 0; f < 256; ++f) {
+        float expected = (f >= 32 && f < 64) || (f >= 128 && f < 160) ? 0.f : (f >= 96 ? .5f * 64.f / 127.f : .5f);
+        CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, f, 0) - expected) < 1.e-7f);
+    }
+    // Empty parameter blocks preserve the plugin's last value; exercise idle processing.
+    for(int i = 0; i < 20000; ++i) CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .5f * 64.f / 127.f) < 1.e-7f);
+    CHECK(__mlang_std_audio_controller_load_processor(c, argv[2]) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 8, 0, 74, 0, 0, -1, 0, 1) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == 0.f);
     CHECK(__mlang_std_audio_controller_close(c) == 0);
     CHECK(__mlang_std_audio_pcm_block_close(b) == 0);
     std::puts("PASS: real VST3 bundle load, frame-timed MIDI, output, panic, failed replacement, reload");

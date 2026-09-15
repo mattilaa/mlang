@@ -2,6 +2,7 @@
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "public.sdk/source/main/pluginfactory.h"
 #include "pluginterfaces/vst/ivstevents.h"
+#include "pluginterfaces/vst/ivstparameterchanges.h"
 #include <array>
 #include <algorithm>
 using namespace Steinberg;
@@ -17,10 +18,20 @@ const FUID testUID(0x1C8EAF00, 0x39AA4DEC, 0x8CE2E11B, 0x30E82967);
 #define TEST_NAME "Mlacker Test Instrument"
 #define TEST_TYPE PlugType::kInstrumentSynth
 #endif
-class TestInstrument final : public SingleComponentEffect {
+class TestInstrument final : public SingleComponentEffect, public IMidiMapping {
     std::array<float, 2048> notes{};
     float level = 0;
+    double controls[3] = {1, 1, 1};
 public:
+    DEFINE_INTERFACES
+        DEF_INTERFACE(IMidiMapping)
+    END_DEFINE_INTERFACES(SingleComponentEffect)
+    REFCOUNT_METHODS(SingleComponentEffect)
+    tresult PLUGIN_API getMidiControllerAssignment(int32 bus, int16 channel, CtrlNumber cc, ParamID &id) override {
+        if(bus != 0 || channel < 0 || channel > 15) return kResultFalse;
+        if(cc == 1) id = 100; else if(cc == 74) id = 101; else if(cc == 129) id = 102; else return kResultFalse;
+        return kResultOk;
+    }
     static FUnknown *create(void*) { return static_cast<IComponent*>(new TestInstrument); }
     tresult PLUGIN_API initialize(FUnknown *host) override {
         auto result = SingleComponentEffect::initialize(host);
@@ -41,6 +52,14 @@ public:
         if(data.numOutputs != 1 || data.symbolicSampleSize != kSample32) return kResultFalse;
         int32 next = 0, count = data.inputEvents ? data.inputEvents->getEventCount() : 0;
         for(int32 f = 0; f < data.numSamples; ++f) {
+            if(data.inputParameterChanges) for(int32 q = 0; q < data.inputParameterChanges->getParameterCount(); ++q) {
+                auto *queue = data.inputParameterChanges->getParameterData(q);
+                if(queue->getParameterId() < 100 || queue->getParameterId() > 102) continue;
+                for(int32 p = 0; p < queue->getPointCount(); ++p) {
+                    int32 offset = 0; ParamValue value = 0;
+                    if(queue->getPoint(p, offset, value) == kResultOk && offset == f) controls[queue->getParameterId() - 100] = value;
+                }
+            }
             while(next < count) {
                 Event event{}; data.inputEvents->getEvent(next, event);
                 if(event.sampleOffset > f) break;
@@ -54,9 +73,9 @@ public:
             }
             for(int32 ch = 0; ch < data.outputs[0].numChannels; ++ch) {
 #ifdef MLACKER_TEST_EFFECT
-                data.outputs[0].channelBuffers32[ch][f] = data.inputs[0].channelBuffers32[ch][f] * 0.5f;
+                data.outputs[0].channelBuffers32[ch][f] = data.inputs[0].channelBuffers32[ch][f] * 0.5f * controls[0] * controls[1] * controls[2];
 #else
-                data.outputs[0].channelBuffers32[ch][f] = level;
+                data.outputs[0].channelBuffers32[ch][f] = level * controls[0] * controls[1] * controls[2];
 #endif
             }
         }

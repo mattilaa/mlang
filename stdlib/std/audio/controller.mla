@@ -22,8 +22,10 @@ extern fn __mlang_std_audio_controller_midi_target(handle: i64, source: i64, ins
 extern fn __mlang_std_audio_controller_live_note(handle: i64, on: i64, channel: i64, pitch: i64, velocity: i64) -> i32;
 extern fn __mlang_std_audio_controller_master_peak(handle: i64, channel: i64) -> i32;
 
-pub enum AudioEventKind { NoteOn, NoteOff, MasterGain, PlaySample, StopSource, InstrumentNoteOn, InstrumentNoteOff };
+pub enum AudioEventKind { NoteOn, NoteOff, MasterGain, PlaySample, StopSource, InstrumentNoteOn, InstrumentNoteOff, ControlChange, InstrumentControlChange };
 pub struct AudioMidiEvent { var channel: i64; var note: i64; var velocity: i64; };
+// ControlChange/InstrumentControlChange: note=CC 0-127 (or pitch bend 129),
+// velocity=0-127 (pitch bend 0-16383), sample=instrument slot for instrument CC.
 /// frame=-1 means next render opportunity. Otherwise absolute output frame.
 /// Submit nondecreasing frame timestamps within each lane; late events run now.
 pub struct AudioEvent {
@@ -74,7 +76,8 @@ impl AudioController {
             AudioEventKind::NoteOn => 1, AudioEventKind::NoteOff => 2,
             AudioEventKind::MasterGain => 3, AudioEventKind::PlaySample => 4,
             AudioEventKind::StopSource => 5, AudioEventKind::InstrumentNoteOn => 6,
-            AudioEventKind::InstrumentNoteOff => 7, _ => 0
+            AudioEventKind::InstrumentNoteOff => 7, AudioEventKind::ControlChange => 8,
+            AudioEventKind::InstrumentControlChange => 9, _ => 0
         };
         return __mlang_std_audio_controller_post(self.handle, lane, kind,
             event.midi.channel, event.midi.note, event.midi.velocity,

@@ -75,6 +75,13 @@ retain their preview/master routing. Panic resets every slot; close destroys
 all instances on the control thread. A failed instrument block silences only
 that slot's contribution and increments `processor_errors()`.
 
+`ControlChange` (master) and `InstrumentControlChange` (slot in `sample`) use
+`midi.note` for the controller number and `midi.velocity` for its integer value.
+CC numbers 0–127 accept 0–127; controller 129 is pitch bend and accepts 0–16383.
+The optional native `control` callback receives the block-relative sample offset.
+mlacker converts these through cached VST3 `IMidiMapping` assignments to normalized
+`IParameterChanges` points. Unsupported mappings are ignored, never treated as notes.
+
 For selected-track live input, the control thread publishes
 `midi_target(track, instrument)` (`track` 0–63; instrument -1 disables new notes,
 0 routes to preview/master, 1–32 routes to a slot). The MIDI worker calls

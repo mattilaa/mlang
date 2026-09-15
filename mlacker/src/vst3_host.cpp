@@ -1,4 +1,5 @@
 #include "mlang_audio_processor.h"
+#include "parameter_changes.h"
 #include "public.sdk/source/vst/hosting/module.h"
 #include "public.sdk/source/vst/hosting/plugprovider.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
@@ -33,6 +34,8 @@ public:
     HostProcessData data;
     EventList incoming{4096}, outgoing{512};
     ProcessContext context{};
+    mlacker::ParameterChanges parameters;
+    ParamID midiParameters[16][130];
     std::string name;
     bool active = false, processing = false, instrument = false, overflow = false;
     int32 maxFrames = 0;
@@ -108,7 +111,13 @@ public:
         context.sampleRate = rate; context.tempo = 120;
         data.processContext = &context; data.processMode = kRealtime;
         data.inputEvents = eventInputs ? &incoming : nullptr; data.outputEvents = &outgoing;
-        data.inputParameterChanges = nullptr; data.outputParameterChanges = nullptr;
+        data.inputParameterChanges = &parameters; data.outputParameterChanges = nullptr;
+        auto mapping = U::cast<IMidiMapping>(provider->getControllerPtr());
+        for(int ch = 0; ch < 16; ++ch) for(int cc = 0; cc < 130; ++cc) {
+            ParamID id = kNoParamId;
+            if(mapping && mapping->getMidiControllerAssignment(0, ch, cc, id) != kResultOk) id = kNoParamId;
+            midiParameters[ch][cc] = id;
+        }
         maxFrames = frames; instrument = instrumentOnly || ins == 0;
         if(component->setActive(true) != kResultOk) { error = "VST3 activation failed"; return false; }
         active = true;
@@ -135,12 +144,22 @@ public:
     }
 
     void begin(bool reset) noexcept {
-        incoming.clear(); outgoing.clear();
+        incoming.clear(); outgoing.clear(); parameters.clear();
         reset = reset || overflow; overflow = false;
         // Bounded all-notes-off fallback also covers dropped note-offs.
         if(reset)
             for(int32 channel = 0; channel < 16; ++channel)
                 for(int32 pitch = 0; pitch < 128; ++pitch) note(0, channel, pitch, 0, 0);
+    }
+
+    void control(int32 channel, int32 controller, int32 value, int32 offset) noexcept {
+        if(channel < 0 || channel >= 16 || controller < 0 || controller >= 130) return;
+        ParamID id = midiParameters[channel][controller];
+        if(id == kNoParamId) return;
+        int32 index = 0;
+        auto *queue = parameters.addParameterData(id, index);
+        double normalized = value / (controller == 129 ? 16383.0 : 127.0);
+        if(!queue || queue->addPoint(offset, normalized, index) != kResultOk) overflow = true;
     }
 
     int32 render(float *stereo, int32 frames, uint64_t clock) noexcept {
@@ -186,6 +205,7 @@ int32_t load(const char *path, double rate, int32_t frames,
         out->process = [](void *p, float *buffer, int32_t frames, uint64_t clock) { return static_cast<Processor*>(p)->render(buffer, frames, clock); };
         out->destroy = [](void *p) { delete static_cast<Processor*>(p); };
         out->name = [](void *p) { return static_cast<Processor*>(p)->name.c_str(); };
+        out->control = [](void *p, int32_t ch, int32_t cc, int32_t value, int32_t offset) { static_cast<Processor*>(p)->control(ch, cc, value, offset); };
         plugin.release(); return 0;
     } catch(const std::exception &e) { std::snprintf(error, errorSize, "VST3 load failed: %s", e.what()); }
     catch(...) { std::snprintf(error, errorSize, "VST3 load failed with an unknown exception"); }

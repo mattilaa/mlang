@@ -19,6 +19,9 @@ typedef struct mlang_audio_processor {
     int32_t (*process)(void *context, float *stereo, int32_t frames, uint64_t clock);
     void (*destroy)(void *context);
     const char *(*name)(void *context);
+    /* Optional MIDI CC (0-127) / pitch bend (129, value 0-16383). */
+    void (*control)(void *context, int32_t channel, int32_t controller,
+                    int32_t value, int32_t offset);
 } mlang_audio_processor;
 typedef int32_t (*mlang_audio_processor_factory)(const char *path, double rate,
     int32_t max_frames, mlang_audio_processor *out, char *error, int32_t error_size);
