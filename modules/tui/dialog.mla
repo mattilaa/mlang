@@ -191,6 +191,8 @@ pub struct OpenSessionDialog : Dialog {
     var status: str8;
     /// Optional full-path regex, also enforced for manually entered paths.
     var file_pattern: str8{""};
+    /// Matching directories can be selected as opaque bundles (e.g. .vst3).
+    var bundle_pattern: str8{""};
 };
 impl OpenSessionDialog {
     pub fn new() -> OpenSessionDialog {
@@ -249,7 +251,7 @@ impl OpenSessionDialog {
         let entries: list<str8> = list_dir(directory);
         for name in entries {
             let full: str8 = join_owned(directory, name);
-            if is_dir(full) == 0 && self.matches_file(full) { self.files.push(clone(name)); }
+            if (is_dir(full) == 0 || self.matches_bundle(full)) && self.matches_file(full) { self.files.push(clone(name)); }
             free(full);
         }
         free_lines(entries);
@@ -286,7 +288,7 @@ impl OpenSessionDialog {
                 rebuilt.push(DirectoryNode { path: current.path, label: current.label, depth: current.depth, expanded: true });
                 for name in entries {
                     let full: str8 = join_owned(current.path, name);
-                    if is_dir(full) == 1 {
+                    if is_dir(full) == 1 && !self.matches_bundle(full) {
                         rebuilt.push(DirectoryNode { path: full, label: clone(name), depth: current.depth + 1, expanded: false });
                     } else {free(full);}
                 }
@@ -327,9 +329,12 @@ impl OpenSessionDialog {
     pub fn matches_file(self: OpenSessionDialog, path: str8) -> bool {
         return self.file_pattern == "" || tui::table::table_matches(self.file_pattern, path);
     }
+    pub fn matches_bundle(self: OpenSessionDialog, path: str8) -> bool {
+        return self.bundle_pattern != "" && tui::table::table_matches(self.bundle_pattern, path);
+    }
     fn accept_file(self: &mut Self, path: str8) -> void {
         if !self.matches_file(path) { self.status = "File type does not match the filter."; return; }
-        if file_exists(path) == 0 || is_dir(path) == 1 {
+        if file_exists(path) == 0 || (is_dir(path) == 1 && !self.matches_bundle(path)) {
             self.status = "File no longer exists or is inaccessible."; return;
         }
         let copy: str8 = clone(path);
@@ -340,7 +345,7 @@ impl OpenSessionDialog {
         if len(self.path_field.text) == 0 { self.status = "Enter a directory or file path."; return; }
         let working: str8 = len(self.directory) > 0 ? clone(self.directory) : cwd();
         let target: str8 = join_owned(working, self.path_field.text);
-        if is_dir(target) == 1 { self.set_root(target); }
+        if is_dir(target) == 1 && !self.matches_bundle(target) { self.set_root(target); }
         else { self.accept_file(target); }
         free(working); free(target);
     }

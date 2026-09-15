@@ -5,6 +5,11 @@
 #define AC_QUEUE 1024u
 #define AC_VOICES 128u
 #define AC_SAMPLES 64u
+#include "../include/mlang_audio_processor.h"
+static mlang_audio_processor_factory ac_processor_factory;
+void mlang_audio_register_processor_factory(mlang_audio_processor_factory factory) {
+    ac_processor_factory = factory;
+}
 typedef struct {
     int64_t kind, channel, note, velocity, source, frame, sample;
     double gain;
@@ -31,6 +36,10 @@ typedef struct {
     int sample_count, running;
     double rate, gain, frequencies[128];
     int64_t buffer_frames;
+    mlang_audio_processor processor;
+    int32_t render_offset, processor_reset;
+    _Atomic uint64_t processor_errors;
+    double render_gains[4096];
 #if defined(__APPLE__)
     AudioComponentInstance unit;
 #endif
@@ -51,6 +60,7 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     }
     atomic_init(&c->dropped, 0); atomic_init(&c->clock, 0);
     atomic_init(&c->panic, 0); atomic_init(&c->peak, 0);
+    atomic_init(&c->processor_errors, 0);
     if(!atomic_is_lock_free(&c->queues[0].read) || !atomic_is_lock_free(&c->peak)) {
         free(c); audio_set_error("audio controller: lock-free atomics unavailable"); return 0;
     }
@@ -87,6 +97,11 @@ void __mlang_std_audio_controller_panic(int64_t handle) {
 
 static void ac_dispatch(ac_controller *c, const ac_event *e) {
     if(e->kind == 3) { c->gain = e->gain; return; }
+    if(c->processor.context && (e->kind == 1 || e->kind == 2)) {
+        c->processor.note(c->processor.context, e->kind == 1 && e->velocity > 0,
+            (int32_t)e->channel, (int32_t)e->note, (int32_t)e->velocity, c->render_offset);
+        if(c->processor.instrument) return;
+    }
     int off = e->kind == 2 || (e->kind == 1 && e->velocity == 0);
     ac_voice *slot = NULL;
     for(unsigned i = 0; i < AC_VOICES; ++i) {
@@ -110,7 +125,11 @@ static void ac_dispatch(ac_controller *c, const ac_event *e) {
 }
 
 static void ac_render(ac_controller *c, float *out, uint32_t frames) {
+    if(frames == 0) return; /* Do not consume events/reset on an empty block. */
     uint64_t panic = atomic_load_explicit(&c->panic, memory_order_acquire);
+    int reset = c->processor_reset || panic != c->seen_panic;
+    c->processor_reset = 0;
+    if(c->processor.context) c->processor.begin(c->processor.context, reset);
     if(panic != c->seen_panic) {
         ac_silence(c); c->seen_panic = panic;
         for(int lane = 0; lane < 2; ++lane) {
@@ -122,6 +141,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     unsigned budget[2] = {256, 256};
     float peak = 0;
     for(uint32_t f = 0; f < frames; ++f) {
+        c->render_offset = (int32_t)f;
         for(int lane = 0; lane < 2; ++lane) {
             ac_queue *q = &c->queues[lane];
             while(budget[lane]) {
@@ -159,8 +179,19 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
                 v->phase += v->step;
             }
         }
-        out[f * 2] = (float)fmax(-1, fmin(1, l * c->gain));
-        out[f * 2 + 1] = (float)fmax(-1, fmin(1, r * c->gain));
+        c->render_gains[f] = c->gain;
+        out[f * 2] = (float)l;
+        out[f * 2 + 1] = (float)r;
+    }
+    if(c->processor.context && c->processor.process(c->processor.context, out, (int32_t)frames, clock) != 0) {
+        memset(out, 0, frames * 2u * sizeof(float));
+        atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed);
+    }
+    for(uint32_t f = 0; f < frames; ++f) {
+        double l = isfinite(out[f * 2]) ? out[f * 2] * c->render_gains[f] : 0;
+        double r = isfinite(out[f * 2 + 1]) ? out[f * 2 + 1] * c->render_gains[f] : 0;
+        out[f * 2] = (float)fmax(-1, fmin(1, l));
+        out[f * 2 + 1] = (float)fmax(-1, fmin(1, r));
         peak = fmaxf(peak, fmaxf(fabsf(out[f * 2]), fabsf(out[f * 2 + 1])));
     }
     uint32_t bits; memcpy(&bits, &peak, sizeof(bits));
@@ -209,7 +240,7 @@ int32_t __mlang_std_audio_controller_stop(int64_t handle) {
         if(rc != noErr) { audio_set_error("AUHAL stop failed"); return -1; }
     }
 #endif
-    c->running = 0; ac_silence(c);
+    c->running = 0; ac_silence(c); c->processor_reset = 1;
     for(int lane = 0; lane < 2; ++lane) {
         ac_queue *q = &c->queues[lane];
         atomic_store_explicit(&q->read, atomic_load_explicit(&q->write, memory_order_acquire), memory_order_release);
@@ -223,6 +254,7 @@ int32_t __mlang_std_audio_controller_close(int64_t handle) {
     if(c->unit) { AudioUnitUninitialize(c->unit); AudioComponentInstanceDispose(c->unit); }
 #endif
     for(int i = 0; i < c->sample_count; ++i) free(c->samples[i].data);
+    if(c->processor.context) c->processor.destroy(c->processor.context);
     free(c); return 0;
 }
 int32_t __mlang_std_audio_controller_start(int64_t handle) {
@@ -285,5 +317,31 @@ int64_t __mlang_std_audio_controller_info(int64_t handle, int64_t key) {
     if(key == 1) return c->buffer_frames;
     if(key == 2) return atomic_load_explicit(&c->clock, memory_order_acquire);
     if(key == 3) return atomic_load_explicit(&c->dropped, memory_order_relaxed);
+    if(key == 4) return atomic_load_explicit(&c->processor_errors, memory_order_relaxed);
+#if defined(__APPLE__)
+    if(key == 5) return c->unit != NULL;
+#endif
     return 0;
+}
+
+int32_t __mlang_std_audio_controller_processor_support(void) { return ac_processor_factory != NULL; }
+const char *__mlang_std_audio_controller_processor_name(int64_t handle) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    return c && c->processor.context ? c->processor.name(c->processor.context) : "";
+}
+int32_t __mlang_std_audio_controller_load_processor(int64_t handle, const char *path) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || c->running) { audio_set_error("Stop audio before changing the master processor"); return -1; }
+    mlang_audio_processor next = {0};
+    if(path && *path) {
+        if(!ac_processor_factory) { audio_set_error("No processor host installed; run mlacker for VST3 support"); return -1; }
+        if(ac_processor_factory(path, c->rate, 4096, &next, g_audio_last_error, sizeof(g_audio_last_error)) != 0) return -1;
+        if(!next.context || !next.begin || !next.note || !next.process || !next.destroy || !next.name) {
+            if(next.context && next.destroy) next.destroy(next.context);
+            audio_set_error("Incomplete audio processor callbacks"); return -1;
+        }
+    }
+    if(c->processor.context) c->processor.destroy(c->processor.context);
+    c->processor = next; c->processor_reset = 1; ac_silence(c);
+    audio_clear_error(); return 0;
 }

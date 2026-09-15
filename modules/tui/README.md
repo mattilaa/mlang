@@ -310,12 +310,21 @@ The hardware can reject that buffer request; Settings reports the actual rate
 and buffer size after applying. Live MIDI goes directly from the MIDI worker
 to a dedicated audio queue, independently of UI dispatch. Sequenced MIDI uses
 a separate main-thread queue. The native callback uses a small sine-voice
-preview synth (not an AU instrument host); no microphone input is opened.
+preview synth by default; no microphone input is opened.
 The controller also supports copied PCM sample-play/stop events, but pattern
 audio-instance scheduling is not yet connected to this output. Existing
 sequencer events are forwarded as they become due in the UI loop; a future
 look-ahead sequencer can use absolute frame timestamps supported by the API.
 Set `MLANG_TUI_NO_HARDWARE=1` to skip startup device opening, as the PTY tests do.
+
+The full tracker is now the [mlacker project](../../mlacker/README.md). Its
+`mlang.toml` fetches a pinned VST3 SDK and links a native master-plugin host.
+Add → VST3 master plugin opens the bundle chooser; Add → Unload master VST3
+restores the preview synth. The SDK-free demo disables these commands.
+`OpenSessionDialog.bundle_pattern` is a public, optional regex for directories
+that should be treated as opaque selectable bundles. These appear in the files
+list, are not expanded in the directory tree, and can also be entered manually.
+Ordinary file dialogs retain the original behavior when this pattern is empty.
 
 ### Table widget
 

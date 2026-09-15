@@ -1,0 +1,8 @@
+/// mlacker: terminal tracker with optional native VST3 hosting.
+mod tui_demo::app;
+use tui_demo::app::run;
+extern fn mlacker_install_vst3_host() -> void;
+fn main() -> i32 {
+    mlacker_install_vst3_host();
+    return run();
+}

@@ -45,6 +45,24 @@ non-owning aliases. Opening devices, registering PCM, and lifecycle calls belong
 on a control thread, never inside an audio callback. No hardware input or audio
 recording permission is needed for this output-only controller.
 
+### Optional native master processor
+
+`AudioController.processor_support()` reports whether the application installed
+a processor host. `load_processor(path)` replaces the master processor while
+stopped; an empty path unloads it, and a failed load retains the old processor.
+`processor_name()` returns a borrowed name, `processor_errors()` counts failed
+render blocks, and `hardware_output()` distinguishes AUHAL and offline handles.
+
+The application-owned host registers an `mlang_audio_processor_factory` through
+`stdlib/include/mlang_audio_processor.h` before creating controllers. It supplies
+preallocated native begin/note/process callbacks, plus control-thread name and
+destruction callbacks. The runtime keeps SDK dependencies out of stdlib. mlacker
+installs a VST3 implementation; the original widget demo installs none. Master
+gain/clipping is applied after the processor, and instruments suppress the
+reference sine voices while preserving the PCM mix. Failure silences the block
+and increments an atomic counter. Hosting plugins does not guarantee that
+third-party code itself is lock-free or allocation-free.
+
 Common audio output and duplex processing helpers:
 - macOS uses CoreAudio Audio Queue input/output.
 - Linux uses JACK2 when `libjack` and a running JACK server are available.

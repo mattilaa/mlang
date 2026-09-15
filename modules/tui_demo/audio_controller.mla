@@ -6,11 +6,14 @@ use std::audio::detail::__mlang_std_audio_last_error;
 use std::midi::input_count;
 use tui_demo::midi_controller::MidiController;
 use tui_demo::note_playback::NoteEvent;
+use std::strbuf::clone;
+use std::strbuf::free;
 
 /// Control-thread owner. AUHAL owns rendering; MIDI uses its separate lane.
 pub struct AudioSystem {
     var output: AudioController; var midi: MidiController;
     var midi_id: i64{-1}; var output_id: i64{-1};
+    var processor_path: str8{""};
 };
 impl AudioSystem {
     pub fn start(hardware: bool) -> AudioSystem {
@@ -34,6 +37,9 @@ impl AudioSystem {
             let opened: result<AudioController, str8> = AudioController::open(output_id, 128);
             if opened.is_err() { return Err<i32, str8>(__mlang_std_audio_last_error()); }
             next = opened.unwrap();
+            if self.processor_path != "" {
+                if next.load_processor(self.processor_path) != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); }
+            }
             if next.start() != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); }
         }
         // Never free an audio handle while the MIDI producer still borrows it.
@@ -50,6 +56,28 @@ impl AudioSystem {
         return Ok<i32, str8>(0);
     }
     pub fn poll(self: &mut Self, now: i64) -> bool { return self.midi.poll(now); }
+    /// Returns an owned status string. Load outside the audio callback; retain
+    /// the old processor if the new bundle cannot initialize.
+    pub fn set_processor(self: &mut Self, path: str8) -> str8 {
+        if self.output.handle == 0 {
+            let created: result<AudioController, str8> = AudioController::new(48000, 128);
+            if created.is_err() { return clone(__mlang_std_audio_last_error()); }
+            self.output = created.unwrap();
+        }
+        let restart: bool = self.output.hardware_output();
+        if self.output.stop() != 0 { return clone(__mlang_std_audio_last_error()); }
+        let loaded: i32 = self.output.load_processor(path);
+        if loaded != 0 {
+            let error: str8 = format!("VST3 load failed: {}", __mlang_std_audio_last_error());
+            if restart { self.output.start(); }
+            return error;
+        }
+        if self.processor_path != "" { free(self.processor_path); }
+        self.processor_path = path == "" ? "" : clone(path);
+        if restart { if self.output.start() != 0 { return clone(__mlang_std_audio_last_error()); } }
+        if path == "" { return clone("Master VST3 unloaded; preview synth restored."); }
+        return format!("Master VST3: {}{}", self.output.processor_name(), restart ? "" : " (audio output disabled)");
+    }
     pub fn sequencer_events(self: AudioSystem, events: list<NoteEvent>) -> void {
         if self.output.handle == 0 { return; }
         for event in events {
@@ -60,5 +88,7 @@ impl AudioSystem {
     pub fn release(self: &mut Self) -> void {
         self.midi.release();
         if self.output.handle != 0 { if self.output.close() == 0 { self.output.handle = 0; } }
+        if self.processor_path != "" { free(self.processor_path); }
+        self.processor_path = "";
     }
 }

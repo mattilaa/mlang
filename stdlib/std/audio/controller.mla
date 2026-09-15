@@ -13,6 +13,9 @@ extern fn __mlang_std_audio_controller_start(handle: i64) -> i32;
 extern fn __mlang_std_audio_controller_stop(handle: i64) -> i32;
 extern fn __mlang_std_audio_controller_close(handle: i64) -> i32;
 extern fn __mlang_std_audio_controller_info(handle: i64, key: i64) -> i64;
+extern fn __mlang_std_audio_controller_processor_support() -> i32;
+extern fn __mlang_std_audio_controller_processor_name(handle: i64) -> str8;
+extern fn __mlang_std_audio_controller_load_processor(handle: i64, path: str8) -> i32;
 
 pub enum AudioEventKind { NoteOn, NoteOff, MasterGain, PlaySample, StopSource };
 pub struct AudioMidiEvent { var channel: i64; var note: i64; var velocity: i64; };
@@ -26,6 +29,14 @@ pub struct AudioEvent {
 };
 pub struct AudioController { var handle: i64; };
 impl AudioController {
+    /// Optional host is installed by the application (mlacker installs VST3).
+    pub fn processor_support() -> bool { return __mlang_std_audio_controller_processor_support() != 0; }
+    /// Control thread, while stopped. Empty path unloads; failure retains old processor.
+    pub fn load_processor(self: AudioController, path: str8) -> i32 { return __mlang_std_audio_controller_load_processor(self.handle, path); }
+    /// Borrowed name, valid until replacement/close. Clone if retaining it.
+    pub fn processor_name(self: AudioController) -> str8 { return __mlang_std_audio_controller_processor_name(self.handle); }
+    pub fn processor_errors(self: AudioController) -> i64 { return __mlang_std_audio_controller_info(self.handle, 4); }
+    pub fn hardware_output(self: AudioController) -> bool { return __mlang_std_audio_controller_info(self.handle, 5) != 0; }
     /// Open AUHAL stereo output, using its native sample rate. -1 = default.
     /// Buffer size is a hardware hint, not a guaranteed latency. Query actual.
     pub fn open(device: i64, frames: i64) -> result<AudioController, str8> {

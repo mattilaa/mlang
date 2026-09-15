@@ -1,0 +1,57 @@
+[package]
+name = "mlacker"
+version = "0.1.0"
+module_paths = ["../modules"]
+
+[dependencies]
+vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", rev = "3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96", submodules = true, build = "none", spinner = false }
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+deps_dir = "build/deps"
+
+[[task]]
+name = "prepare"
+workdir = "{{root}}"
+supported_hosts = ["darwin"]
+unsupported_message = "mlacker currently uses macOS AUHAL audio output"
+commands = ["mkdir -p {{build_dir}}/obj", "cmake --build ../build --target mlang_std -j4"]
+
+[[task]]
+name = "compile-main"
+phase = "compile"
+workdir = "{{root}}"
+depends_on = ["prepare"]
+language = "mlang"
+source = "src/main.mla"
+output = "{{build_dir}}/obj/main.o"
+compile_only = true
+opt_level = "O2"
+compiler_flags = ["-Wno-unwrap", "-Wno-colon-if"]
+
+[[task]]
+name = "configure"
+workdir = "{{root}}"
+depends_on = ["compile-main"]
+commands = ["cmake -S {{root}} -B {{build_dir}}/cmake -DCMAKE_BUILD_TYPE=Release -DVST3_SDK_ROOT={{deps_dir}}/vst3sdk -DMLACKER_MAIN_OBJECT={{build_dir}}/obj/main.o"]
+
+[[task]]
+name = "build"
+phase = "build"
+workdir = "{{root}}"
+depends_on = ["configure"]
+commands = ["cmake --build {{build_dir}}/cmake -j4"]
+
+[[task]]
+name = "run"
+workdir = "{{root}}"
+depends_on = ["build"]
+log_output = false
+shell = ["exec {{build_dir}}/cmake/bin/mlacker"]
+
+[[task]]
+name = "test"
+workdir = "{{root}}"
+depends_on = ["build"]
+commands = ["ctest --test-dir {{build_dir}}/cmake --output-on-failure"]
