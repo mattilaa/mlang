@@ -43,12 +43,28 @@ def main():
             frame = send(b"\x15" + os.fsencode(bad_bundle) + b"\r", 1)
             assert b"VST3 load failed" in frame
         assert b"Master VST3 unloaded" in send(b"\tllllljj\r", 0.5)
+        frame = send(b"\tllljljj\r", 0.5)
+        assert b"Instrument track created" in frame, frame[-2000:]
+        assert b"Instruments" in frame
+        assert b"Add VST3 instrument" in send(b"\tllllljjj\r")
+        frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
+        assert b"Instrument loaded: Mlacker Test Instrument" in frame, frame[-2000:]
+        assert b"001 Mlacker Test" in frame, frame[-6000:]
+        assert b"Instrument: 1" in frame, frame[-6000:]
+        # Switch away and return via View > Instruments (last View entry).
+        send(b"\tlljjj\r")  # Show patterns
+        frame = send(b"\tlljjjjjjj\r")
+        assert b"Instruments" in frame and b"001 Mlacker Test" in frame, frame[-6000:]
+        # The list owns normal navigation and Enter, without changing pattern.
+        send(b"\x1b[104;6u")  # Ctrl+Shift+H: focus left
+        frame = send(b"ggG\r")
+        assert b"Instrument: 1" in frame
         send(b"q")
         deadline = time.monotonic() + 3
         while process.poll() is None and time.monotonic() < deadline:
             read_for(0.1)
         assert process.poll() == 0
-        print("PASS: mlacker VST3 bundle chooser, load, failed replacement, unload, shutdown")
+        print("PASS: master and instrument bundle loading, instrument track assignment, Instruments view, shutdown")
     finally:
         if process.poll() is None:
             process.kill()

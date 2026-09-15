@@ -25,6 +25,7 @@ pub struct PatternLibrary {
     var table: SequenceTable; var view: ListView; var song_mode: bool;
     var renaming: bool; var editor: TextField; var error: str8;
     var audio: AudioLibrary; var audio_mode: bool;
+    var instruments: ListView; var instruments_mode: bool;
 };
 impl PatternLibrary {
     pub fn new() -> PatternLibrary {
@@ -87,6 +88,7 @@ impl PatternLibrary {
         self.view.items = items; self.view.cancel_pending();
     }
     pub fn show_song(self: &mut Self, song: bool) -> void {
+        self.instruments_mode = false; self.instruments.cancel_pending();
         self.audio_mode = false; self.audio.view.cancel_pending();
         self.song_mode = song; self.view.selected = 0; self.view.scroll = 0; self.refresh();
         for i in 0..self.view.items.len() {
@@ -188,6 +190,11 @@ impl PatternLibrary {
         self.song = order; self.refresh(); self.view.reconcile(area); self.choose_selected();
     }
     pub fn on_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
+        if self.instruments_mode {
+            let action: i32 = self.instruments.on_event(event, area);
+            if action == 2 { self.table.assign_instrument(self.selected_instrument()); }
+            return action != 0;
+        }
         if self.audio_mode {
             let action: i32 = self.audio.view.on_event(event, area);
             if action == 2 { self.insert_selected_audio(area); }
@@ -224,7 +231,26 @@ impl PatternLibrary {
         } else { self.editor.on_event(event); }
     }
     pub fn show_audio(self: &mut Self) -> void {
+        self.instruments_mode = false; self.instruments.cancel_pending();
         self.audio_mode = true; self.view.cancel_pending(); self.audio.view.cancel_pending();
+    }
+    pub fn selected_instrument(self: PatternLibrary) -> i32 {
+        if self.instruments.selected < 0 || self.instruments.selected >= self.instruments.items.len() { return 0; }
+        let item: ListItem = self.instruments.items[self.instruments.selected]; return item.id;
+    }
+    pub fn show_instruments(self: &mut Self) -> void {
+        self.instruments_mode = true; self.audio_mode = false;
+        self.view.cancel_pending(); self.audio.view.cancel_pending(); self.instruments.cancel_pending();
+    }
+    pub fn add_instrument(self: &mut Self, id: i32, name: str8) -> void {
+        self.instruments.items.push(ListItem { id: id, label: format!("{}{} {}", id < 10 ? "00" : "0", id, name) });
+        self.instruments.selected = i32(self.instruments.items.len()) - 1;
+        self.show_instruments();
+        let index: i32 = self.table.active_track();
+        if index >= 0 {
+            let track: SequenceTrack = self.table.tracks[index];
+            if track.instrument { self.table.assign_instrument(id); }
+        }
     }
     pub fn insert_selected_audio(self: &mut Self, area: Rect) -> bool {
         let index: i32 = self.audio.view.selected;
@@ -251,6 +277,7 @@ impl PatternLibrary {
         if content.height > 4 { surface.text(Rect::new(content.x, content.y + 4, content.width, 1), self.error == "" ? "Enter: save | Esc: cancel" : self.error, theme.accent, theme.panel); }
     }
     pub fn release(self: &mut Self) -> void {
+        let instruments: list<ListItem> = self.instruments.items; for item in instruments { free(item.label); }
         self.audio.release();
         self.table.release(); self.editor.release();
         let entries: list<PatternEntry> = self.patterns;

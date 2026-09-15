@@ -44,6 +44,7 @@ pub struct SequenceTrack {
     var name: str8; var muted: bool; var cc1: AutomationSlot; var cc2: AutomationSlot;
     var volume: i32{100}; var pan: i32;
     var audio: bool;
+    var instrument: bool; var instrument_id: i32;
     var note_lines: i32{1};
     var instances: list<AudioInstance>;
     var wave_zoom: bool;
@@ -293,7 +294,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     }
     var tracks: list<SequenceTrack> = []; let source_tracks: list<SequenceTrack> = self.tracks;
     for track in source_tracks {
-        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, audio: track.audio, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom, zoom_stage: track.zoom_stage,
+        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, audio: track.audio, instrument: track.instrument, instrument_id: track.instrument_id, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom, zoom_stage: track.zoom_stage,
             cc1: AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum } });
     }
@@ -356,6 +357,23 @@ pub fn rebuild_columns(self: &mut Self) -> void {
 pub fn create_track(self: &mut Self, duplicate: bool, area: Rect) -> void {
     self.create_track_kind(duplicate, false, area);
 }
+pub fn assign_instrument(self: &mut Self, id: i32) -> bool {
+    let index: i32 = self.active_track();
+    if index < 0 { return false; }
+    var track: SequenceTrack = self.tracks[index];
+    if !track.instrument { self.error = "Select an Instrument track first"; return false; }
+    track.instrument_id = id; self.replace_track(index, track);
+    self.revision = self.revision + 1; self.error = ""; return true;
+}
+pub fn create_instrument_track(self: &mut Self, id: i32, area: Rect) -> void {
+    if self.tracks.len() >= 64 { self.error = "Maximum 64 tracks"; return; }
+    self.create_track(false, area);
+    let index: i32 = self.active_track();
+    var track: SequenceTrack = self.tracks[index];
+    free(track.name); track.name = format!("Instrument {}", self.next_track_id - 1);
+    track.instrument = true; track.instrument_id = id;
+    self.replace_track(index, track); self.rebuild_columns();
+}
 pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Rect) -> void {
     if self.tracks.len() >= 64 { self.error = "Maximum 64 tracks"; return; }
     let source: i32 = self.active_track();
@@ -366,7 +384,7 @@ pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Re
     if duplicate {
         let original: SequenceTrack = self.tracks[source];
         free(track.name); free(track.cc1.parameter); free(track.cc2.parameter);
-        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, audio: original.audio, note_lines: original.note_lines, instances: original.copy_audio(), wave_zoom: original.wave_zoom, zoom_stage: original.zoom_stage,
+        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, audio: original.audio, instrument: original.instrument, instrument_id: original.instrument_id, note_lines: original.note_lines, instances: original.copy_audio(), wave_zoom: original.wave_zoom, zoom_stage: original.zoom_stage,
             cc1: AutomationSlot { parameter: clone(original.cc1.parameter), minimum: original.cc1.minimum, maximum: original.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(original.cc2.parameter), minimum: original.cc2.minimum, maximum: original.cc2.maximum } };
     }
@@ -870,8 +888,8 @@ pub fn paint_track_dialog(self: SequenceTable, surface: Surface, viewport: Rect,
 pub fn paint_track_details(self: SequenceTable, surface: Surface, area: Rect, theme: Theme) -> void {
     let index: i32 = self.active_track(); if index < 0 || area.height < 3 { return; }
     let track: SequenceTrack = self.tracks[index];
-    let title: str8 = format!("{} [{}]{}", track.name, track.audio ? "AUDIO" : "MIDI", track.muted ? " [muted]" : "");
-    let parameters: str8 = format!("CC1={}  CC2={}", track.cc1.parameter, track.cc2.parameter);
+    let title: str8 = format!("{} [{}]{}", track.name, track.audio ? "AUDIO" : (track.instrument ? "INSTRUMENT" : "MIDI"), track.muted ? " [muted]" : "");
+    let parameters: str8 = track.instrument ? format!("Instrument: {} | CC1={} CC2={}", track.instrument_id, track.cc1.parameter, track.cc2.parameter) : format!("CC1={}  CC2={}", track.cc1.parameter, track.cc2.parameter);
     surface.text(Rect::new(area.x, area.y + 1, area.width, 1), title, theme.accent, theme.panel);
     surface.text(Rect::new(area.x, area.y + 2, area.width, 1), parameters, theme.muted, theme.panel);
     free(title); free(parameters);

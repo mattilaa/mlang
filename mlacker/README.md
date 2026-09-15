@@ -28,7 +28,30 @@ revision. Generated SDK sources and binaries stay under ignored `build/`.
 SDK license and usage notices remain in `build/deps/vst3sdk/LICENSE.txt` and
 `VST3_Usage_Guidelines.pdf`; preserve applicable notices when distributing.
 
-## Use a plugin
+## Instrument tracks
+
+- **Add → Instrument** browses `.vst3` bundles on disk. On selection, the host
+  validates the first class marked `Instrument`, its MIDI input and supported
+  audio buses. Effects and incompatible/broken bundles report an error without
+  adding an entry. Only open trusted plugins.
+- **View → Instruments** shows session-wide loaded instances, numbered by ID.
+  `j/k`, `gg`, and `G` navigate; Enter assigns the selected instance to the
+  current Instrument track. Loading while an Instrument track is selected also
+  assigns the new instance automatically.
+- **Track → Create track → Instrument track** creates a note/velocity/LEN/OFF
+  track using the selected library instance. If none is loaded it remains silent
+  until assigned through **Add → Instrument** or the Instruments list.
+- Up to 32 instances may be loaded, independently routed and summed before the
+  master processor. Loading the same bundle again creates another instance.
+  Assigning the same entry to multiple tracks shares plugin state and its 16 MIDI
+  channels (track index modulo 16); use separate instances for isolated voices.
+  Track/pattern duplication preserves the instrument ID rather than loading a
+  new instance. Removing a track does not unload the library entry.
+- Audio-device changes reload all instances at the new sample rate. Disabling
+  output keeps them loaded in an offline controller. Live MIDI still targets the
+  existing master/preview path, not the selected instrument track.
+
+## Use a master plugin
 
 1. Select MIDI input and master output in **File → Settings**.
 2. Choose **Add → VST3 master plugin**.
@@ -72,7 +95,7 @@ Current scope:
 
 - macOS, native-architecture VST3 bundles; float32 mono/stereo, at most one audio
   input bus and one output bus, and the first MIDI input bus.
-- One master slot; no per-track plugin chains, plugin editor windows, preset or
+- One master slot plus 32 instrument slots; no per-track effect chains, plugin editor windows, preset or
   state persistence, parameter automation, MIDI CC/pitch-bend mapping, sidechains,
   latency compensation, or transport/tempo synchronization yet.
 - Existing UI-loop sequencer timing is retained. The audio API supports absolute
@@ -90,8 +113,10 @@ build/mlang pkg --config mlacker/mlang.toml run test
 This builds two local test bundles (never installed in system plugin folders),
 loads them through the real module loader, and checks instrument/effect output,
 frame-accurate event offsets, live MIDI lane independence, panic, failed
-replacement, and repeated unload/reload. Four PTY tests cover Settings, plugin
-selection/load/unload, existing widgets and playback. They open no audio devices.
+replacement, repeated unload/reload, instrument-only validation and independent
+instrument-slot mixing. Four PTY tests cover Settings, plugin selection/load/unload,
+Instrument track creation/assignment, Instruments view, existing widgets and
+playback. They open no audio devices.
 
 For a hardware-free manual run:
 

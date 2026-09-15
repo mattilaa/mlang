@@ -14,6 +14,8 @@ pub struct AudioSystem {
     var output: AudioController; var midi: MidiController;
     var midi_id: i64{-1}; var output_id: i64{-1};
     var processor_path: str8{""};
+    var instrument_paths: list<str8>;
+    var instrument_output_failed: bool;
 };
 impl AudioSystem {
     pub fn start(hardware: bool) -> AudioSystem {
@@ -37,10 +39,20 @@ impl AudioSystem {
             let opened: result<AudioController, str8> = AudioController::open(output_id, 128);
             if opened.is_err() { return Err<i32, str8>(__mlang_std_audio_last_error()); }
             next = opened.unwrap();
+        }
+        if output_id == -2 && (self.instrument_paths.len() > 0 || self.processor_path != "") {
+            let created: result<AudioController, str8> = AudioController::new(48000, 128);
+            if created.is_err() { return Err<i32, str8>(__mlang_std_audio_last_error()); }
+            next = created.unwrap();
+        }
+        if next.handle != 0 {
             if self.processor_path != "" {
                 if next.load_processor(self.processor_path) != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); }
             }
-            if next.start() != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); }
+            for i in 0..self.instrument_paths.len() {
+                if next.load_instrument(i + 1, self.instrument_paths[i]) != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); }
+            }
+            if output_id != -2 { if next.start() != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); } }
         }
         // Never free an audio handle while the MIDI producer still borrows it.
         self.midi.release();
@@ -56,6 +68,26 @@ impl AudioSystem {
         return Ok<i32, str8>(0);
     }
     pub fn poll(self: &mut Self, now: i64) -> bool { return self.midi.poll(now); }
+    /// Returns owned error text, or empty literal on success. IDs remain stable.
+    pub fn add_instrument(self: &mut Self, path: str8) -> str8 {
+        self.instrument_output_failed = false;
+        if self.instrument_paths.len() >= 32 { return clone("Maximum 32 loaded instruments"); }
+        if self.output.handle == 0 {
+            let created: result<AudioController, str8> = AudioController::new(48000, 128);
+            if created.is_err() { return clone(__mlang_std_audio_last_error()); }
+            self.output = created.unwrap();
+        }
+        let restart: bool = self.output.hardware_output();
+        if self.output.stop() != 0 { return clone(__mlang_std_audio_last_error()); }
+        if self.output.load_instrument(self.instrument_paths.len() + 1, path) != 0 {
+            let error: str8 = format!("Instrument load failed: {}", __mlang_std_audio_last_error());
+            if restart { self.output.start(); } return error;
+        }
+        self.instrument_paths.push(clone(path));
+        // The loaded slot remains valid even if hardware cannot restart.
+        if restart { self.instrument_output_failed = self.output.start() != 0; }
+        return "";
+    }
     /// Returns an owned status string. Load outside the audio callback; retain
     /// the old processor if the new bundle cannot initialize.
     pub fn set_processor(self: &mut Self, path: str8) -> str8 {
@@ -81,7 +113,9 @@ impl AudioSystem {
     pub fn sequencer_events(self: AudioSystem, events: list<NoteEvent>) -> void {
         if self.output.handle == 0 { return; }
         for event in events {
-            self.output.post(AudioEvent { kind: event.on == 1 ? AudioEventKind::NoteOn : AudioEventKind::NoteOff,
+            var kind: AudioEventKind = event.on == 1 ? AudioEventKind::NoteOn : AudioEventKind::NoteOff;
+            if event.instrument != 0 { kind = event.on == 1 ? AudioEventKind::InstrumentNoteOn : AudioEventKind::InstrumentNoteOff; }
+            self.output.post(AudioEvent { kind: kind, sample: event.instrument > 0 ? event.instrument : 0,
                 midi: AudioMidiEvent { channel: event.track % 16, note: event.note, velocity: event.velocity }, source: event.track }, 0);
         }
     }
@@ -90,5 +124,7 @@ impl AudioSystem {
         if self.output.handle != 0 { if self.output.close() == 0 { self.output.handle = 0; } }
         if self.processor_path != "" { free(self.processor_path); }
         self.processor_path = "";
+        let paths: list<str8> = self.instrument_paths; for path in paths { free(path); }
+        self.instrument_paths = [];
     }
 }

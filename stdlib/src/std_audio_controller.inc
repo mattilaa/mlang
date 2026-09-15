@@ -7,6 +7,10 @@
 #define AC_SAMPLES 64u
 #include "../include/mlang_audio_processor.h"
 static mlang_audio_processor_factory ac_processor_factory;
+static mlang_audio_processor_factory ac_instrument_factory;
+void mlang_audio_register_instrument_factory(mlang_audio_processor_factory factory) {
+    ac_instrument_factory = factory;
+}
 void mlang_audio_register_processor_factory(mlang_audio_processor_factory factory) {
     ac_processor_factory = factory;
 }
@@ -37,6 +41,8 @@ typedef struct {
     double rate, gain, frequencies[128];
     int64_t buffer_frames;
     mlang_audio_processor processor;
+    mlang_audio_processor instruments[32];
+    float instrument_buffer[8192];
     int32_t render_offset, processor_reset;
     _Atomic uint64_t processor_errors;
     double render_gains[4096];
@@ -74,11 +80,12 @@ int32_t __mlang_std_audio_controller_post(int64_t handle, int64_t lane,
     int64_t kind, int64_t channel, int64_t note, int64_t velocity,
     int64_t source, int64_t frame, int64_t sample, double gain) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || lane < 0 || lane > 1 || kind < 1 || kind > 5 || frame < -1 ||
+    if(!c || lane < 0 || lane > 1 || kind < 1 || kind > 7 || frame < -1 ||
        source < 0 || source > INT32_MAX || !isfinite(gain) || gain < 0 || gain > 1) return -1;
-    if((kind == 1 || kind == 2) && (channel < 0 || channel > 15 ||
+    if((kind == 1 || kind == 2 || kind == 6 || kind == 7) && (channel < 0 || channel > 15 ||
         note < 0 || note > 127 || velocity < 0 || velocity > 127)) return -1;
     if(kind == 4 && (sample < 0 || sample >= AC_SAMPLES)) return -1;
+    if((kind == 6 || kind == 7) && (sample < 0 || sample > 32)) return -1;
     ac_queue *q = &c->queues[lane];
     uint64_t w = atomic_load_explicit(&q->write, memory_order_relaxed);
     uint64_t r = atomic_load_explicit(&q->read, memory_order_acquire);
@@ -96,6 +103,14 @@ void __mlang_std_audio_controller_panic(int64_t handle) {
 }
 
 static void ac_dispatch(ac_controller *c, const ac_event *e) {
+    if(e->kind == 6 || e->kind == 7) {
+        if(e->sample > 0) {
+            mlang_audio_processor *p = &c->instruments[e->sample - 1];
+            if(p->context) p->note(p->context, e->kind == 6 && e->velocity > 0,
+                (int32_t)e->channel, (int32_t)e->note, (int32_t)e->velocity, c->render_offset);
+        }
+        return; /* Unassigned instrument tracks are silent, never preview sine. */
+    }
     if(e->kind == 3) { c->gain = e->gain; return; }
     if(c->processor.context && (e->kind == 1 || e->kind == 2)) {
         c->processor.note(c->processor.context, e->kind == 1 && e->velocity > 0,
@@ -130,6 +145,8 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     int reset = c->processor_reset || panic != c->seen_panic;
     c->processor_reset = 0;
     if(c->processor.context) c->processor.begin(c->processor.context, reset);
+    for(int i = 0; i < 32; ++i)
+        if(c->instruments[i].context) c->instruments[i].begin(c->instruments[i].context, reset);
     if(panic != c->seen_panic) {
         ac_silence(c); c->seen_panic = panic;
         for(int lane = 0; lane < 2; ++lane) {
@@ -182,6 +199,17 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         c->render_gains[f] = c->gain;
         out[f * 2] = (float)l;
         out[f * 2 + 1] = (float)r;
+    }
+    for(int i = 0; i < 32; ++i) {
+        mlang_audio_processor *p = &c->instruments[i];
+        if(!p->context) continue;
+        memset(c->instrument_buffer, 0, frames * 2u * sizeof(float));
+        if(p->process(p->context, c->instrument_buffer, (int32_t)frames, clock) != 0) {
+            atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed);
+            continue;
+        }
+        for(uint32_t f = 0; f < frames * 2u; ++f)
+            if(isfinite(c->instrument_buffer[f])) out[f] += c->instrument_buffer[f];
     }
     if(c->processor.context && c->processor.process(c->processor.context, out, (int32_t)frames, clock) != 0) {
         memset(out, 0, frames * 2u * sizeof(float));
@@ -255,6 +283,8 @@ int32_t __mlang_std_audio_controller_close(int64_t handle) {
 #endif
     for(int i = 0; i < c->sample_count; ++i) free(c->samples[i].data);
     if(c->processor.context) c->processor.destroy(c->processor.context);
+    for(int i = 0; i < 32; ++i)
+        if(c->instruments[i].context) c->instruments[i].destroy(c->instruments[i].context);
     free(c); return 0;
 }
 int32_t __mlang_std_audio_controller_start(int64_t handle) {
@@ -325,6 +355,27 @@ int64_t __mlang_std_audio_controller_info(int64_t handle, int64_t key) {
 }
 
 int32_t __mlang_std_audio_controller_processor_support(void) { return ac_processor_factory != NULL; }
+const char *__mlang_std_audio_controller_instrument_name(int64_t handle, int64_t slot) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32) return "";
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    return p->context ? p->name(p->context) : "";
+}
+int32_t __mlang_std_audio_controller_load_instrument(int64_t handle, int64_t slot, const char *path) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || c->running || slot < 1 || slot > 32 || !ac_instrument_factory || !path || !*path) {
+        audio_set_error("Instrument load requires a stopped controller, host and slot 1-32"); return -1;
+    }
+    mlang_audio_processor next = {0};
+    if(ac_instrument_factory(path, c->rate, 4096, &next, g_audio_last_error, sizeof(g_audio_last_error)) != 0) return -1;
+    if(!next.context || !next.instrument || !next.begin || !next.note || !next.process || !next.destroy || !next.name) {
+        if(next.context && next.destroy) next.destroy(next.context);
+        audio_set_error("Not a supported instrument processor"); return -1;
+    }
+    mlang_audio_processor *old = &c->instruments[slot - 1];
+    if(old->context) old->destroy(old->context);
+    *old = next; c->processor_reset = 1; audio_clear_error(); return 0;
+}
 const char *__mlang_std_audio_controller_processor_name(int64_t handle) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     return c && c->processor.context ? c->processor.name(c->processor.context) : "";

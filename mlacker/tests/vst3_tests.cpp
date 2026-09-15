@@ -7,6 +7,8 @@ extern "C" {
 void mlacker_install_vst3_host();
 int64_t __mlang_std_audio_controller_new(int64_t, int64_t);
 int32_t __mlang_std_audio_controller_load_processor(int64_t, const char*);
+int32_t __mlang_std_audio_controller_load_instrument(int64_t, int64_t, const char*);
+const char *__mlang_std_audio_controller_instrument_name(int64_t, int64_t);
 const char *__mlang_std_audio_controller_processor_name(int64_t);
 int32_t __mlang_std_audio_controller_processor_support();
 int32_t __mlang_std_audio_controller_post(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, double);
@@ -67,6 +69,36 @@ int main(int argc, char **argv) {
         CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, f, 0) - __mlang_std_audio_pcm_block_sample(dryBlock, f, 0) * 0.5f) < 1.e-7f);
     CHECK(__mlang_std_audio_controller_close(dry) == 0);
     CHECK(__mlang_std_audio_pcm_block_close(dryBlock) == 0);
+    CHECK(__mlang_std_audio_controller_load_processor(c, "") == 0);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 0, argv[1]) != 0);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 33, argv[1]) != 0);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 1, argv[2]) != 0);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 1, argv[1]) == 0);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 2, argv[1]) == 0);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 1, argv[2]) != 0);
+    CHECK(std::strcmp(__mlang_std_audio_controller_instrument_name(c, 1), "Mlacker Test Instrument") == 0);
+    __mlang_std_audio_controller_panic(c);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    int64_t clock = __mlang_std_audio_controller_info(c, 2);
+    // Same pitch/channel in separate instances: independent, additive, exact offsets.
+    CHECK(__mlang_std_audio_controller_post(c, 0, 6, 0, 60, 127, 0, clock + 32, 1, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 6, 0, 60, 127, 1, clock + 64, 2, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 7, 0, 60, 0, 0, clock + 96, 1, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 7, 0, 60, 0, 1, clock + 128, 2, 1) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    for(int f = 0; f < 256; ++f) {
+        float expected = (f >= 32 && f < 96 ? .125f : 0.f) + (f >= 64 && f < 128 ? .125f : 0.f);
+        CHECK(__mlang_std_audio_pcm_block_sample(b, f, 0) == expected);
+    }
+    // Unassigned instrument notes never fall back to a sine voice.
+    CHECK(__mlang_std_audio_controller_post(c, 0, 6, 0, 60, 127, 0, -1, 0, 1) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == 0.f);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 6, 0, 60, 127, 0, -1, 1, 1) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    __mlang_std_audio_controller_panic(c);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == 0.f);
     CHECK(__mlang_std_audio_controller_close(c) == 0);
     CHECK(__mlang_std_audio_pcm_block_close(b) == 0);
     std::puts("PASS: real VST3 bundle load, frame-timed MIDI, output, panic, failed replacement, reload");

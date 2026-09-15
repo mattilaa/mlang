@@ -163,6 +163,43 @@ fn tui_track_zoom_stages() {
 }
 
 #[test]
+fn tui_instrument_tracks_and_routing() {
+    let area: Rect = Rect::new(0, 0, 100, 12);
+    var library: PatternLibrary = PatternLibrary::new();
+    library.add_instrument(1, "Synth one");
+    verify(library.instruments_mode && library.selected_instrument() == 1);
+    library.table.create_instrument_track(library.selected_instrument(), area);
+    let track: SequenceTrack = library.table.tracks[3];
+    verify(track.instrument && !track.audio && track.instrument_id == 1);
+    // Isolate one note on the instrument track.
+    for r in 0..64 { library.table.selected_row = i32(r); library.table.clear_row(); }
+    library.table.selected_row = 0;
+    library.table.edit_event(decode_input("\r"), area); library.table.editor.set_text("C-4"); library.table.edit_event(decode_input("\r"), area);
+    library.table.selected_column = library.table.selected_column + 1;
+    library.table.edit_event(decode_input("\r"), area); library.table.editor.set_text("100"); library.table.edit_event(decode_input("\r"), area);
+    var playback: NotePlayback = NotePlayback {};
+    playback.update(library.table, 0, true);
+    verify(playback.events.len() == 1);
+    let on: NoteEvent = playback.events[0]; verify(on.instrument == 1 && on.on == 1);
+    library.add_instrument(2, "Synth two");
+    let assigned: SequenceTrack = library.table.tracks[3]; verify(assigned.instrument_id == 2);
+    playback.update(library.table, 15000, false);
+    let off: NoteEvent = playback.events[0]; verify(off.instrument == 1 && off.on == 0);
+    library.table.create_track(true, area);
+    let duplicate: SequenceTrack = library.table.tracks[4]; verify(duplicate.instrument && duplicate.instrument_id == 2);
+    var copied: SequenceTable = library.table.copy_pattern();
+    let copied_track: SequenceTrack = copied.tracks[4]; verify(copied_track.instrument && copied_track.instrument_id == 2);
+    library.select(2); library.select(1);
+    let saved: SequenceTrack = library.table.tracks[4]; verify(saved.instrument && saved.instrument_id == 2);
+    library.show_song(false); verify(!library.instruments_mode);
+    library.show_instruments(); library.on_event(decode_input("gg"), area);
+    library.instruments.selected = 0; library.on_event(decode_input("\r"), area);
+    let selected: SequenceTrack = library.table.tracks[4]; verify(selected.instrument_id == 1);
+    library.show_audio(); verify(!library.instruments_mode && library.audio_mode);
+    copied.release(); library.release();
+}
+
+#[test]
 fn tui_note_duration_and_events() {
 
     verify(duration_ticks("1.00") == 15000 && duration_ticks("0.5") == 7500 && duration_ticks("3.75") == 56250);

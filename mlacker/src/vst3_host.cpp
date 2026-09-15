@@ -45,13 +45,14 @@ public:
         module.reset();
     }
 
-    bool open(const char *path, double rate, int32 frames, std::string &error) {
+    bool open(const char *path, double rate, int32 frames, std::string &error, bool instrumentOnly) {
         module = VST3::Hosting::Module::create(path, error);
         if(!module) return false;
         const auto &factory = module->getFactory();
         factory.setHostContext(&application);
         for(const auto &info : factory.classInfos()) {
             if(info.category() != kVstAudioEffectClass) continue;
+            if(instrumentOnly && std::find(info.subCategories().begin(), info.subCategories().end(), "Instrument") == info.subCategories().end()) continue;
             name = info.name();
             provider = owned(new PlugProvider(factory, info, true));
             if(!provider->initialize()) { error = "VST3 component/controller initialization failed"; return false; }
@@ -59,7 +60,7 @@ public:
             processor = U::cast<IAudioProcessor>(component);
             break;
         }
-        if(!component || !processor) { error = "Bundle contains no VST3 audio processor"; return false; }
+        if(!component || !processor) { error = instrumentOnly ? "Bundle contains no VST3 instrument" : "Bundle contains no VST3 audio processor"; return false; }
         if(processor->canProcessSampleSize(kSample32) != kResultOk) {
             error = "VST3 processor does not support 32-bit float audio"; return false;
         }
@@ -87,6 +88,7 @@ public:
             error = "Could not activate VST3 audio buses"; return false;
         }
         const int32 eventInputs = component->getBusCount(kEvent, kInput);
+        if(instrumentOnly && eventInputs < 1) { error = "Instrument requires a MIDI event input"; return false; }
         const int32 eventOutputs = component->getBusCount(kEvent, kOutput);
         if(eventInputs < 0 || eventInputs > 16 || eventOutputs < 0 || eventOutputs > 16) {
             error = "Unsupported VST3 event bus count"; return false;
@@ -107,7 +109,7 @@ public:
         data.processContext = &context; data.processMode = kRealtime;
         data.inputEvents = eventInputs ? &incoming : nullptr; data.outputEvents = &outgoing;
         data.inputParameterChanges = nullptr; data.outputParameterChanges = nullptr;
-        maxFrames = frames; instrument = ins == 0;
+        maxFrames = frames; instrument = instrumentOnly || ins == 0;
         if(component->setActive(true) != kResultOk) { error = "VST3 activation failed"; return false; }
         active = true;
         const auto started = processor->setProcessing(true);
@@ -168,12 +170,13 @@ public:
     }
 };
 
+template<bool InstrumentOnly = false>
 int32_t load(const char *path, double rate, int32_t frames,
     mlang_audio_processor *out, char *error, int32_t errorSize) {
     try {
         auto plugin = std::make_unique<Processor>();
         std::string why;
-        if(!plugin->open(path, rate, frames, why)) {
+        if(!plugin->open(path, rate, frames, why, InstrumentOnly)) {
             std::snprintf(error, errorSize, "%s", why.c_str()); return -1;
         }
         *out = {};
@@ -194,5 +197,6 @@ extern "C" void mlacker_install_vst3_host() {
     PluginContextFactory::instance().setPluginContext(&application);
     // SDK diagnostics must not corrupt the terminal screen.
     PlugProvider::setErrorStream(nullptr);
-    mlang_audio_register_processor_factory(load);
+    mlang_audio_register_processor_factory(load<false>);
+    mlang_audio_register_instrument_factory(load<true>);
 }

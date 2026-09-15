@@ -63,6 +63,18 @@ reference sine voices while preserving the PCM mix. Failure silences the block
 and increments an atomic counter. Hosting plugins does not guarantee that
 third-party code itself is lock-free or allocation-free.
 
+An optional instrument-only factory can also be registered with
+`mlang_audio_register_instrument_factory`. While stopped,
+`load_instrument(slot, path)` loads/replaces slot 1–32; failure retains the old
+instance. `instrument_name(slot)` returns a borrowed name. Post
+`InstrumentNoteOn` / `InstrumentNoteOff` with `AudioEvent.sample` set to the slot
+ID (0 is unassigned/silent). Other MIDI fields and frame scheduling are unchanged.
+Each slot renders into a preallocated scratch buffer, then contributes to the
+mix before the master processor and gain. Ordinary `NoteOn` / `NoteOff` events
+retain their preview/master routing. Panic resets every slot; close destroys
+all instances on the control thread. A failed instrument block silences only
+that slot's contribution and increments `processor_errors()`.
+
 Common audio output and duplex processing helpers:
 - macOS uses CoreAudio Audio Queue input/output.
 - Linux uses JACK2 when `libjack` and a running JACK server are available.

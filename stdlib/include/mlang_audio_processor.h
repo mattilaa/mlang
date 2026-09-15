@@ -23,6 +23,9 @@ typedef struct mlang_audio_processor {
 typedef int32_t (*mlang_audio_processor_factory)(const char *path, double rate,
     int32_t max_frames, mlang_audio_processor *out, char *error, int32_t error_size);
 void mlang_audio_register_processor_factory(mlang_audio_processor_factory factory);
+/* Separate instrument-only factory; loaded slots mix before the master.
+ * Must return an instrument processor, rejecting effects/unsupported bundles. */
+void mlang_audio_register_instrument_factory(mlang_audio_processor_factory factory);
 #ifdef __cplusplus
 }
 #endif

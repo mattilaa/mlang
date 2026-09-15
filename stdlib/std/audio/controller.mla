@@ -16,8 +16,10 @@ extern fn __mlang_std_audio_controller_info(handle: i64, key: i64) -> i64;
 extern fn __mlang_std_audio_controller_processor_support() -> i32;
 extern fn __mlang_std_audio_controller_processor_name(handle: i64) -> str8;
 extern fn __mlang_std_audio_controller_load_processor(handle: i64, path: str8) -> i32;
+extern fn __mlang_std_audio_controller_load_instrument(handle: i64, slot: i64, path: str8) -> i32;
+extern fn __mlang_std_audio_controller_instrument_name(handle: i64, slot: i64) -> str8;
 
-pub enum AudioEventKind { NoteOn, NoteOff, MasterGain, PlaySample, StopSource };
+pub enum AudioEventKind { NoteOn, NoteOff, MasterGain, PlaySample, StopSource, InstrumentNoteOn, InstrumentNoteOff };
 pub struct AudioMidiEvent { var channel: i64; var note: i64; var velocity: i64; };
 /// frame=-1 means next render opportunity. Otherwise absolute output frame.
 /// Submit nondecreasing frame timestamps within each lane; late events run now.
@@ -25,10 +27,15 @@ pub struct AudioEvent {
     var kind: AudioEventKind;
     var midi: AudioMidiEvent;
     var source: i64;
+    // sample: registered PCM sample ID for PlaySample, slot 1-32 for InstrumentNote*.
+    // Instrument slot 0 is unassigned/silent.
     var frame: i64{-1}; var sample: i64; var gain: f64{1.0};
 };
 pub struct AudioController { var handle: i64; };
 impl AudioController {
+    /// Stopped control thread only. Instrument slots are 1-32; name is borrowed.
+    pub fn load_instrument(self: AudioController, slot: i64, path: str8) -> i32 { return __mlang_std_audio_controller_load_instrument(self.handle, slot, path); }
+    pub fn instrument_name(self: AudioController, slot: i64) -> str8 { return __mlang_std_audio_controller_instrument_name(self.handle, slot); }
     /// Optional host is installed by the application (mlacker installs VST3).
     pub fn processor_support() -> bool { return __mlang_std_audio_controller_processor_support() != 0; }
     /// Control thread, while stopped. Empty path unloads; failure retains old processor.
@@ -57,7 +64,8 @@ impl AudioController {
         let kind: i64 = match event.kind {
             AudioEventKind::NoteOn => 1, AudioEventKind::NoteOff => 2,
             AudioEventKind::MasterGain => 3, AudioEventKind::PlaySample => 4,
-            AudioEventKind::StopSource => 5, _ => 0
+            AudioEventKind::StopSource => 5, AudioEventKind::InstrumentNoteOn => 6,
+            AudioEventKind::InstrumentNoteOff => 7, _ => 0
         };
         return __mlang_std_audio_controller_post(self.handle, lane, kind,
             event.midi.channel, event.midi.note, event.midi.velocity,
