@@ -65,6 +65,20 @@ stored in 1.0; exposed parameter values are restored by ID. Device changes still
 reload plugins with defaults. See [the binary format](FORMAT.md) for the schema
 and limits.
 
+## Pattern visual selection
+
+In the Pattern pane, `v` starts a rectangular selection at the current cell.
+Use `h/j/k/l` to extend it; selected cells have a brighter background. `y` copies
+the selection, `d` cuts/clears its cells without removing rows, and `p` pastes at
+the current cell. `Esc` or `v` cancels selection. The internal clipboard survives
+pattern switches; it is not the operating-system clipboard or session data.
+
+Only visible, writable columns participate. Paste must fit the pattern and match
+the destination column roles throughout (NOTE to NOTE, VEL to VEL, etc.). Invalid
+pastes show an OK-only dialog and leave the pattern unchanged. Pasting does not
+insert rows. New notes default to VEL 100, LEN 1.00 and OFF 0.00; explicitly copied
+values override these defaults when those columns are included.
+
 ## Instrument tracks
 
 - **Add → Instrument** browses `.vst3` bundles on disk. On selection, the host

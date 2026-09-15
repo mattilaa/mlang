@@ -75,6 +75,7 @@ pub struct SequenceTable : Table {
     var top_pending: bool;
     var tracks: list<SequenceTrack>; var edit_mode: i32;
     var next_track_id: i32; var revision: i64;
+    var clipboard: list<TableRow>; var clipboard_kinds: list<str8>; var paste_error: bool;
 };
 impl SequenceTable {
 pub fn empty() -> SequenceTable {
@@ -340,6 +341,7 @@ fn replace_track(self: &mut Self, index: i32, value: SequenceTrack) -> void {
     self.tracks = tracks;
 }
 pub fn rebuild_columns(self: &mut Self) -> void {
+    self.visual = false;
     self.revision = self.revision + 1;
     let old_groups: list<TableGroup> = self.groups;
     for group in old_groups { free(group.title); }
@@ -567,6 +569,7 @@ pub fn track_action(self: &mut Self, command: i32, area: Rect) -> void {
     }
 }
 pub fn release(self: &mut Self) -> void {
+    self.clear_clipboard();
     let tracks: list<SequenceTrack> = self.tracks;
     for track in tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.release_audio(); }
     let groups: list<TableGroup> = self.groups;
@@ -673,6 +676,7 @@ fn commit(self: &mut Self, value: str8) -> bool {
     if !self.set_cell(self.selected_row, self.selected_column, copy) { free(copy); return false; }
     let new_note: bool = self.is_note() && old == "" && value != "";
     free(old);
+    if new_note { self.write_owned_cell(self.selected_row, self.selected_column + 1, clone("100")); }
     if new_note { self.write_owned_cell(self.selected_row, self.selected_column + 2, clone("1.00")); }
     if new_note { self.write_owned_cell(self.selected_row, self.selected_column + 3, clone("0.00")); }
     self.revision = self.revision + 1;
@@ -785,6 +789,93 @@ pub fn delete_row(self: &mut Self, area: Rect) -> void {
     self.rows = kept; self.error = ""; self.delete_pending = false;
     self.reconcile(area);
 }
+pub fn clear_clipboard(self: &mut Self) -> void {
+    let rows: list<TableRow> = self.clipboard;
+    for row in rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
+    let kinds: list<str8> = self.clipboard_kinds; for kind in kinds { free(kind); }
+    self.clipboard = []; self.clipboard_kinds = [];
+}
+fn cell_kind(self: SequenceTable, column: i32) -> str8 {
+    let definition: TableColumn = self.columns[column];
+    return format!("{}:{}", definition.title, definition.value_type);
+}
+pub fn copy_visual(self: &mut Self, cut: bool, area: Rect) -> void {
+    if !self.visual { return; }
+    if self.anchor_row < 0 || self.anchor_row >= self.rows.len() || self.anchor_column < 0 || self.anchor_column >= self.columns.len() {
+        self.visual = false; return;
+    }
+    self.error = ""; self.paste_error = false;
+    let first_row: i32 = self.anchor_row < self.selected_row ? self.anchor_row : self.selected_row;
+    let last_row: i32 = self.anchor_row > self.selected_row ? self.anchor_row : self.selected_row;
+    let first_col: i32 = self.anchor_column < self.selected_column ? self.anchor_column : self.selected_column;
+    let last_col: i32 = self.anchor_column > self.selected_column ? self.anchor_column : self.selected_column;
+    self.clear_clipboard();
+    for c in first_col..last_col + 1 {
+        let column: TableColumn = self.columns[c];
+        if !column.hidden && !column.read_only { self.clipboard_kinds.push(self.cell_kind(i32(c))); }
+    }
+    for r in first_row..last_row + 1 {
+        let row: TableRow = self.rows[r]; var cells: list<str8> = [];
+        for c in first_col..last_col + 1 {
+            let column: TableColumn = self.columns[c];
+            if !column.hidden && !column.read_only { cells.push(clone(row.cells[c])); }
+        }
+        self.clipboard.push(TableRow { cells: cells });
+    }
+    self.visual = false; self.selected_row = first_row; self.selected_column = first_col;
+    if cut { self.apply_clipboard(true, area); }
+    self.reconcile(area);
+}
+pub fn paste_visual(self: &mut Self, area: Rect) -> void { self.apply_clipboard(false, area); }
+fn apply_clipboard(self: &mut Self, erase: bool, area: Rect) -> void {
+    self.error = ""; self.paste_error = false;
+    if self.clipboard.len() == 0 || self.clipboard_kinds.len() == 0 { return; }
+    if self.selected_row < 0 || self.selected_column < 0 { return; }
+    let start_kind: str8 = self.cell_kind(self.selected_column);
+    let matching_start: bool = start_kind == self.clipboard_kinds[0]; free(start_kind);
+    if !matching_start {
+        self.error = "Paste needs matching columns: NOTE to NOTE, etc."; self.paste_error = true; return;
+    }
+    if self.selected_row + self.clipboard.len() > self.rows.len() {
+        self.error = "Selection does not fit in the pattern"; self.paste_error = true; return;
+    }
+    var targets: list<i32> = [];
+    for c in self.selected_column..self.columns.len() {
+        if targets.len() == self.clipboard_kinds.len() { break; }
+        let column: TableColumn = self.columns[c];
+        if !column.hidden && !column.read_only { targets.push(i32(c)); }
+    }
+    if targets.len() != self.clipboard_kinds.len() {
+        self.error = "Selection does not fit in the pattern"; self.paste_error = true; return;
+    }
+    for i in 0..targets.len() {
+        let kind: str8 = self.cell_kind(targets[i]); let matches: bool = kind == self.clipboard_kinds[i]; free(kind);
+        if !matches { self.error = "Paste needs matching columns: NOTE to NOTE, etc."; self.paste_error = true; return; }
+    }
+    // Stage the entire edit. Invalid values/limits/audio lengths never leave a
+    // partially pasted rectangle behind. New notes still receive their defaults.
+    var candidate: SequenceTable = self.copy_pattern();
+    for r in 0..self.clipboard.len() {
+        let row: TableRow = self.clipboard[r];
+        for c in 0..targets.len() {
+            candidate.selected_row = self.selected_row + i32(r); candidate.selected_column = targets[c];
+            let target: TableRow = candidate.rows[candidate.selected_row];
+            let value: str8 = erase ? "" : row.cells[c];
+            if target.cells[targets[c]] != value {
+                if !candidate.commit(value) {
+                    self.error = candidate.error; self.paste_error = true; candidate.release(); return;
+                }
+            }
+        }
+    }
+    let old_rows: list<TableRow> = self.rows;
+    for row in old_rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
+    let old_tracks: list<SequenceTrack> = self.tracks;
+    for track in old_tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.release_audio(); }
+    self.rows = candidate.rows; self.tracks = candidate.tracks;
+    candidate.rows = []; candidate.tracks = []; candidate.release();
+    self.rebuild_columns(); self.reconcile(area);
+}
 pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
     if event.kind == InputKind::None && event.code == 0 { return false; }
     if self.editing {
@@ -801,6 +892,25 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         } else { self.editor.on_event(event); }
         return true;
     }
+    self.reconcile(area);
+    if self.visual {
+        self.delete_pending = false; self.top_pending = false;
+        if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { self.visual = false; return true; }
+        if event.modifiers == 1 {
+            if event.code == 118 { self.visual = false; return true; }
+            if event.code == 121 || event.code == 100 { self.copy_visual(event.code == 100, area); return true; }
+            if event.code == 104 || event.code == 106 || event.code == 107 || event.code == 108 { return self.on_event(event, area); }
+        }
+        return true;
+    }
+    if event.modifiers == 1 && event.code == 118 {
+        if self.selected_row >= 0 && self.selected_column >= 0 {
+            self.visual = true; self.anchor_row = self.selected_row; self.anchor_column = self.selected_column;
+            self.delete_pending = false; self.top_pending = false;
+        }
+        return true;
+    }
+    if event.modifiers == 1 && event.code == 112 { self.paste_visual(area); return true; }
     let delete_key: bool = event.modifiers == 1 && event.code == 100;
     if !delete_key { self.delete_pending = false; }
     let top_key: bool = event.modifiers == 1 && event.code == 103;

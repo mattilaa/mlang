@@ -98,6 +98,13 @@ pub struct Table {
     var horizontal_scrollbar: bool{true}; var vertical_scrollbar: bool{true};
     var groups: list<TableGroup>{[]}; var frozen_columns: i32;
     var alternate_group_text: bool{false};
+    var visual: bool; var anchor_row: i32; var anchor_column: i32;
+    pub fn visual_cell(self: Table, row: i32, column: i32) -> bool {
+        return self.visual && row >= (self.anchor_row < self.selected_row ? self.anchor_row : self.selected_row) &&
+            row <= (self.anchor_row > self.selected_row ? self.anchor_row : self.selected_row) &&
+            column >= (self.anchor_column < self.selected_column ? self.anchor_column : self.selected_column) &&
+            column <= (self.anchor_column > self.selected_column ? self.anchor_column : self.selected_column);
+    }
     // Methods live on the struct so derived widgets inherit the implementation.
     pub fn new(columns: list<TableColumn>, rows: list<TableRow>) -> Table {
         return Table { columns: columns, rows: rows };
@@ -263,7 +270,8 @@ pub struct Table {
                 let x: i32 = self.column_x(c);
                 let width: i32 = self.column_width(i32(c));
                 if width == 0 { continue; }
-                let cell_bg: i32 = c == self.selected_column ? lighten(bg, 8) : bg;
+                let definition: TableColumn = self.columns[c];
+                let cell_bg: i32 = !definition.read_only && self.visual_cell(row_index, c) ? lighten(bg, 20) : (c == self.selected_column ? lighten(bg, 8) : bg);
                 let fg: i32 = self.dim_column(c) ? darken(theme.foreground, 88) : theme.foreground;
                 let cell: Rect = Rect::new(x, i32(y) + body.y, width, 1);
                 canvas.fill(cell.intersect(body), Cell { glyph: 32, foreground: fg, background: cell_bg });

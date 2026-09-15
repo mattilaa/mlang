@@ -268,6 +268,58 @@ fn tui_hidden_table_columns() {
 }
 
 #[test]
+fn tui_pattern_visual_clipboard() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 20);
+    table.selected_row = 0; table.selected_column = 1;
+    table.edit_event(decode_input("v"), area); table.edit_event(decode_input("l"), area); table.edit_event(decode_input("j"), area);
+    verify(table.visual && table.visual_cell(0, 1) && table.visual_cell(1, 2) && !table.visual_cell(2, 2));
+    let surface: Surface = Surface::new(80, 20); table.paint(surface, area, Theme::dark_blue());
+    let body: Rect = table.body(area);
+    let selected: Cell = surface.cell(table.column_x(1), body.y);
+    let other: Cell = surface.cell(table.column_x(7), body.y);
+    verify(selected.background != other.background); surface.release();
+    table.edit_event(decode_input("y"), area);
+    verify(!table.visual && table.clipboard.len() == 2 && table.clipboard_kinds.len() == 2);
+    let source: TableRow = table.rows[0]; let expected_note: str8 = clone(source.cells[1]); let expected_vel: str8 = clone(source.cells[2]);
+    table.selected_row = 4; table.clear_row(); table.selected_row = 5; table.clear_row();
+    table.selected_row = 4; table.selected_column = 7; table.edit_event(decode_input("p"), area);
+    verify(!table.paste_error); let pasted: TableRow = table.rows[4];
+    verify(pasted.cells[7] == expected_note && pasted.cells[8] == expected_vel && pasted.cells[9] == "1.00");
+    table.selected_column = 8; table.edit_event(decode_input("p"), area);
+    verify(table.paste_error); let unchanged: TableRow = table.rows[4]; verify(unchanged.cells[8] == expected_vel);
+    table.selected_column = 8; table.selected_row = 5;
+    table.edit_event(decode_input("v"), area); table.edit_event(decode_input("h"), area); table.edit_event(decode_input("k"), area);
+    table.edit_event(decode_input("d"), area);
+    verify(table.rows.len() == 64 && !table.visual); let cleared: TableRow = table.rows[4];
+    verify(cleared.cells[7] == "" && cleared.cells[8] == "");
+    table.edit_event(decode_input("p"), area); let restored: TableRow = table.rows[4]; verify(restored.cells[7] == expected_note && restored.cells[8] == expected_vel);
+    table.selected_row = i32(table.rows.len()) - 1; table.edit_event(decode_input("p"), area); verify(table.paste_error);
+    table.edit_event(decode_input("v"), area); table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area); verify(!table.visual);
+    free(expected_note); free(expected_vel); table.release();
+}
+
+#[test]
+fn tui_pattern_visual_atomic_and_new_velocity() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 20);
+    table.selected_row = 0; table.selected_column = 1;
+    table.edit_event(decode_input("v"), area); table.edit_event(decode_input("l"), area); table.edit_event(decode_input("y"), area);
+    let copied: TableRow = table.clipboard[0]; free(copied.cells[1]);
+    table.clipboard = [TableRow { cells: [copied.cells[0], clone("999")] }];
+    table.selected_row = 4; table.selected_column = 1; table.clear_row();
+    table.edit_event(decode_input("p"), area); verify(table.paste_error);
+    let unchanged: TableRow = table.rows[4]; verify(unchanged.cells[1] == "" && unchanged.cells[2] == "");
+    table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("12"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 1; table.edit_event(decode_input("K"), area);
+    let inserted: TableRow = table.rows[4]; verify(inserted.cells[1] == "C-4" && inserted.cells[2] == "100");
+    table.release();
+    var library: PatternLibrary = PatternLibrary::new(); library.table.selected_row = 0; library.table.selected_column = 1;
+    library.table.edit_event(decode_input("v"), area); library.table.edit_event(decode_input("y"), area);
+    library.select(2); verify(library.table.clipboard.len() == 1);
+    library.table.selected_row = 4; library.table.selected_column = 1; library.table.edit_event(decode_input("p"), area);
+    verify(!library.table.paste_error); library.release();
+}
+
+#[test]
 fn tui_track_zoom_stages() {
     var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 12);
     verify(table.total_width() == 37);
@@ -1175,7 +1227,7 @@ fn tui_sequence_empty_clear_delete() {
     verify(table.rows.len() == 64);
     table.edit_event(decode_input("K"), area);
     table.edit_event(decode_input("l"), area); table.edit_event(decode_input("J"), area);
-    let numeric: TableRow = table.rows[0]; verify(numeric.cells[2] == "0");
+    let numeric: TableRow = table.rows[0]; verify(numeric.cells[2] == "99");
     table.edit_event(decode_input("d"), area); verify(table.rows.len() == 64);
     table.edit_event(decode_input("j"), area); table.edit_event(decode_input("d"), area);
     verify(table.rows.len() == 64);

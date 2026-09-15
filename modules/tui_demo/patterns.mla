@@ -79,7 +79,10 @@ impl PatternLibrary {
         if id == self.active_id || self.index_of(id) < 0 { return; }
         self.save_active();
         let entry: PatternEntry = self.patterns[self.index_of(id)];
-        self.table.release(); self.table = entry.data.copy_pattern(); self.active_id = id;
+        var replacement: SequenceTable = entry.data.copy_pattern();
+        replacement.clipboard = self.table.clipboard; replacement.clipboard_kinds = self.table.clipboard_kinds;
+        self.table.clipboard = []; self.table.clipboard_kinds = [];
+        self.table.release(); self.table = replacement; self.active_id = id;
         self.error = "";
     }
     pub fn refresh(self: &mut Self) -> void {
@@ -157,7 +160,10 @@ impl PatternLibrary {
         self.patterns = entries; self.song = song;
         let next_index: i32 = index >= self.patterns.len() ? i32(self.patterns.len()) - 1 : index;
         let next: PatternEntry = self.patterns[next_index];
-        self.table.release(); self.table = next.data.copy_pattern(); self.active_id = next.id;
+        var replacement: SequenceTable = next.data.copy_pattern();
+        replacement.clipboard = self.table.clipboard; replacement.clipboard_kinds = self.table.clipboard_kinds;
+        self.table.clipboard = []; self.table.clipboard_kinds = [];
+        self.table.release(); self.table = replacement; self.active_id = next.id;
         if !self.song_mode { self.view.selected = next_index; }
         self.refresh(); self.view.reconcile(area); self.choose_selected(); self.error = "";
     }

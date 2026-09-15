@@ -209,6 +209,8 @@ pub fn run() -> i32 {
     var frame_rate: FrameRate = FrameRate {};
     var playback_dirty: bool = false; var play_pattern: i32 = library.active_id;
     var question: QuestionDialog = QuestionDialog::new("New session", "Start a new session?");
+    var paste_error: QuestionDialog = QuestionDialog::new("Cannot paste selection", "");
+    paste_error.buttons = [PushButton { label: "OK", action: 1 }];
     var message: str8 = clone("Select a command from the menu.");
     if AudioController::processor_support() { free(message); message = clone("mlacker | Add > VST3 master plugin to load an instrument or effect."); }
     var running: bool = true;
@@ -309,7 +311,7 @@ pub fn run() -> i32 {
             transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
         }
         // Editing a moving row would otherwise commit to a different row.
-        if library.table.editing || library.renaming || dialog.active || question.active || settings.active { transport.playing = false; }
+        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active { transport.playing = false; }
         if transport.advance(now, i32(library.table.rows.len())) {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
@@ -390,11 +392,15 @@ pub fn run() -> i32 {
             } else {library.table.set_length(length_target, terminal_bounds());}
             dirty = true;
         }
+        if library.table.paste_error {
+            paste_error.question = library.table.error; paste_error.open(); library.table.paste_error = false; dirty = true;
+        }
+        if paste_error.active && paste_error.pressed_button >= 0 { paste_error.tick(); dirty = true; }
         let area: Rect = terminal_bounds();
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active(instrument_editor.active || menus.active >= 0 || dialog.active || question.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        focus.set_menu_active(instrument_editor.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             let surface: Surface = Surface::new(area.width, area.height);
             if !surface.is_valid() { instrument_editor.release(); midi.release(); settings.release(); library.release(); dialog.release(); bpm_dialog.release(); free(message); terminal.finish(); return 1; }
@@ -409,6 +415,7 @@ pub fn run() -> i32 {
             library.paint_rename(surface, area, Theme::dark_blue());
             bpm_dialog.paint(surface, area, Theme::dark_blue());
             settings.paint(surface, area, Theme::dark_blue());
+            paste_error.paint(surface, area, Theme::dark_blue());
             terminal.present(surface);
             surface.release();
             previous_width = area.width;
@@ -440,7 +447,11 @@ pub fn run() -> i32 {
             }
             escape_ticks = 0;
             var command: i32 = 0;
-            if (event.code == 19 && event.modifiers == 1) || (event.code == 115 && event.modifiers == 5) { command = 3; dirty = true; }
+            if library.table.paste_error {
+                paste_error.question = library.table.error; paste_error.open(); library.table.paste_error = false; dirty = true;
+            }
+            if paste_error.active { paste_error.on_event(event); dirty = true; }
+            else if (event.code == 19 && event.modifiers == 1) || (event.code == 115 && event.modifiers == 5) { command = 3; dirty = true; }
             else if instrument_editor.active && !dialog.active {
                 instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true;
             }
@@ -650,7 +661,8 @@ pub fn run() -> i32 {
                 library.view.cancel_pending();
                 library.audio.view.cancel_pending();
                 library.instruments.cancel_pending();
-                if instrument_editor.active && !dialog.active { instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true; }
+                if paste_error.active { paste_error.on_event(event); dirty = true; }
+                else if instrument_editor.active && !dialog.active { instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true; }
                 else if settings.active { settings.on_event(event); dirty = true; }
                 else if bpm_dialog.active { bpm_dialog.on_event(event); dirty = true; }
                 else if library.renaming { library.rename_event(event); dirty = true; }
@@ -664,7 +676,7 @@ pub fn run() -> i32 {
                     focus.set_menu_active(dialog.active);
                     dirty = true;
                 }
-                else if library.table.editing {
+                else if library.table.editing || (library.table.visual && menus.active < 0 && focus.selected == 1) {
                     library.table.edit_event(event, panes[1].bounds.inset(1)); dirty = true;
                 }
                 else if event.kind == InputKind::Menu {
