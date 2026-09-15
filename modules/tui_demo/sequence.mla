@@ -768,6 +768,39 @@ pub fn set_length(self: &mut Self, count: i32, area: Rect) -> bool {
     self.selected_row = selected_row; self.selected_column = selected_column;
     self.reconcile(area); return true;
 }
+pub fn insert_row(self: &mut Self, above: bool, area: Rect) -> void {
+    self.delete_pending = false; self.top_pending = false;
+    if self.rows.len() >= 16384 { self.error = "Maximum pattern length is 16384 rows"; return; }
+    self.reconcile(area);
+    let index: i32 = self.rows.len() == 0 ? 0 : self.selected_row + (above ? 0 : 1);
+    let previous: list<TableRow> = self.rows; var rows: list<TableRow> = [];
+    for r in 0..previous.len() + 1 {
+        var cells: list<str8> = [format!("{}{}", r < 9 ? "00" : (r < 99 ? "0" : ""), r + 1)];
+        if r == index {
+            for _c in 1..self.columns.len() { cells.push(clone("")); }
+        } else {
+            let old: TableRow = previous[r < index ? r : r - 1];
+            free(old.cells[0]);
+            for c in 1..old.cells.len() { cells.push(old.cells[c]); }
+        }
+        rows.push(TableRow { cells: cells });
+    }
+    self.rows = rows;
+    // Keep clip starts attached to their shifted rows. Clips already sounding
+    // across the insertion point retain their duration and are not stretched.
+    for t in 0..self.tracks.len() {
+        var track: SequenceTrack = self.tracks[t];
+        let old: list<AudioInstance> = track.instances; var shifted: list<AudioInstance> = [];
+        for instance in old {
+            var next: AudioInstance = AudioInstance {}; next = instance;
+            if next.start_row >= index { next.start_row = next.start_row + 1; }
+            shifted.push(next);
+        }
+        track.instances = shifted; self.replace_track(i32(t), track);
+    }
+    self.selected_row = index; self.visual = false; self.error = "";
+    self.revision = self.revision + 1; self.reconcile(area);
+}
 pub fn delete_row(self: &mut Self, area: Rect) -> void {
     self.revision = self.revision + 1;
     if self.selected_row < 0 || self.selected_row >= self.rows.len() { return; }
@@ -945,6 +978,9 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         return true;
     }
     if event.modifiers == 1 && event.code == 112 { self.paste_visual(area); return true; }
+    if event.modifiers == 1 && event.code == 111 { self.insert_row(false, area); return true; }
+    if (event.code == 79 && (event.modifiers == 1 || event.modifiers == 2)) ||
+            (event.code == 111 && event.modifiers == 2) { self.insert_row(true, area); return true; }
     let delete_key: bool = event.modifiers == 1 && event.code == 100;
     if !delete_key { self.delete_pending = false; }
     let top_key: bool = event.modifiers == 1 && event.code == 103;

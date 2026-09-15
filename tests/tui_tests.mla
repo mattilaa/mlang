@@ -1114,6 +1114,46 @@ fn tui_sequence_jump_navigation() {
 }
 
 #[test]
+fn tui_pattern_insert_rows() {
+    let area: Rect = Rect::new(0, 0, 40, 8); var table: SequenceTable = SequenceTable::new();
+    table.selected_row = 3; table.selected_column = 2;
+    table.edit_event(decode_input("o"), area);
+    verify(table.rows.len() == 65 && table.selected_row == 4 && table.selected_column == 2);
+    let blank: TableRow = table.rows[4]; verify(blank.cells[0] == "005");
+    for c in 1..blank.cells.len() { verify(blank.cells[c] == ""); }
+    let shifted: TableRow = table.rows[5]; verify(shifted.cells[0] == "006" && shifted.cells[1] == "C-4" && shifted.cells[3] == "1.00");
+    table.edit_event(decode_input("O"), area); verify(table.rows.len() == 66 && table.selected_row == 4);
+    table.selected_row = 0; table.edit_event(decode_input("\x1b[111;2u"), area);
+    verify(table.selected_row == 0 && table.rows.len() == 67);
+    table.selected_row = 66; table.edit_event(decode_input("o"), area);
+    verify(table.selected_row == 67 && table.rows.len() == 68 && table.scroll_y > 0);
+    table.release();
+    var empty: SequenceTable = SequenceTable::empty();
+    for _r in 0..64 { empty.selected_row = 0; empty.delete_row(area); }
+    empty.edit_event(decode_input("o"), area); verify(empty.rows.len() == 1 && empty.selected_row == 0);
+    verify(empty.set_length(16384, area)); let revision: i64 = empty.revision;
+    empty.edit_event(decode_input("O"), area); verify(empty.rows.len() == 16384 && empty.revision == revision && empty.error != ""); empty.release();
+}
+
+#[test]
+fn tui_pattern_insert_shifts_audio() {
+    let area: Rect = Rect::new(0, 0, 120, 12);
+    var table: SequenceTable = SequenceTable::new(); table.create_track_kind(false, true, area);
+    var clip: AudioClip = AudioClip { source: clone("insert-test"), frames: 40, frames_per_row: 10 };
+    for _r in 0..4 { clip.peaks.push(WavePeak { left: 500, right: 250 }); }
+    for _r in 0..16 { clip.detail_peaks.push(WavePeak { left: 500, right: 250 }); }
+    table.selected_row = 5; verify(table.insert_audio(clip, area));
+    table.edit_event(decode_input("O"), area);
+    let shifted: SequenceTrack = table.tracks[3]; let instance: AudioInstance = shifted.instances[0];
+    verify(table.selected_row == 5 && instance.start_row == 6 && instance.duration() == 60000);
+    let start: TableRow = table.rows[6]; verify(start.cells[21] == "4.00");
+    table.selected_row = 7; table.edit_event(decode_input("o"), area);
+    let retained: SequenceTrack = table.tracks[3]; let span: AudioInstance = retained.instances[0];
+    verify(span.start_row == 6 && span.duration() == 60000 && table.selected_row == 8);
+    table.release(); clip.release();
+}
+
+#[test]
 fn tui_vu_meter_and_mixer() {
     let theme: Theme = Theme::dark_blue();
     let surface: Surface = Surface::new(40, 18);

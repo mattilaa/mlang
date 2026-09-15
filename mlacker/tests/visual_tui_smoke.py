@@ -41,6 +41,10 @@ def main():
         assert b"New session" in tui.send(b"\t")
         assert b"New session" not in tui.send(b"\x1b"), "Visual selection stole Escape from the menu"
         tui.send(b"\x1b")
+        frame = tui.send(b"gghoK")
+        assert frame.count(b"C-4") == 3 and b"C#4" not in frame, frame[-5000:]
+        frame = tui.send(b"OK")
+        assert frame.count(b"C-4") == 4 and b"C#4" not in frame, frame[-5000:]
     finally:
         tui.close()
     print("PASS: visual copy/cut/paste/transpose, matching-column OK modal, new-note velocity, Escape")

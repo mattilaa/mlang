@@ -67,6 +67,11 @@ and limits.
 
 ## Pattern visual selection
 
+In normal Pattern mode, `o` inserts a blank row below the cursor and `O` inserts
+one above it, selecting the new row while keeping the current column. Later rows
+and audio clip starts shift down; clips already spanning that point keep their
+duration. The maximum pattern length remains 16384 rows.
+
 In the Pattern pane, `v` starts a rectangular selection at the current cell.
 Use `h/j/k/l` to extend it; selected cells have a brighter background. `y` copies
 the selection, `d` cuts/clears its cells without removing rows, and `p` pastes at
