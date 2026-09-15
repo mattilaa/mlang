@@ -48,8 +48,16 @@ SDK license and usage notices remain in `build/deps/vst3sdk/LICENSE.txt` and
   Track/pattern duplication preserves the instrument ID rather than loading a
   new instance. Removing a track does not unload the library entry.
 - Audio-device changes reload all instances at the new sample rate. Disabling
-  output keeps them loaded in an offline controller. Live MIDI still targets the
-  existing master/preview path, not the selected instrument track.
+  output keeps them loaded in an offline controller.
+- Live MIDI follows the selected Pattern-view track, even while another pane or
+  menu has keyboard focus. Instrument tracks address their VST3 instance; MIDI
+  tracks use the preview/master path. Audio, muted, and unassigned instrument
+  tracks reject new notes. Input MIDI channels are preserved. Held keys retain
+  their original destination for note-off when selection or assignment changes.
+- Every instrument's stereo PCM is summed before the master processor, gain,
+  and output clipping. The rightmost **Master** mixer strip stays pinned while
+  track strips scroll. Its L/R meters show measured output peaks with smooth
+  decay, using the selected meter style and update rate—not MIDI velocity.
 
 ## Use a master plugin
 

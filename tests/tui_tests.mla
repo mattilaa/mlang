@@ -853,6 +853,12 @@ fn tui_vu_meter_and_mixer() {
     verify(selected.background == lighten(theme.panel, 8) && other.background == theme.panel);
     let volume: Cell = surface.cell(6, 1); let pan: Cell = surface.cell(6, 2);
     verify(volume.glyph == 86 && pan.glyph == 80);
+    verify(mixer.update_master(900, 400, 20));
+    verify(mixer.master.left > mixer.master.right && mixer.master.right > 0);
+    let previous_master: i32 = mixer.master.left;
+    mixer.update_master(0, 0, 20); verify(mixer.master.left < previous_master);
+    mixer.paint(surface, Rect::new(0, 0, 27, 16), theme, table.tracks, 2);
+    let master_title: Cell = surface.cell(21, 0); verify(master_title.glyph == 77);
     mixer.paint(surface, Rect::new(0, 0, 9, 8), theme, table.tracks, 2);
     let last: Cell = surface.cell(1, 0); verify(last.glyph == 51);
     for size in 0..5 { mixer.paint(surface, Rect::new(0, 0, i32(size), i32(size)), theme, table.tracks, 2); }
@@ -898,9 +904,10 @@ fn tui_meter_styles_and_channel_counts() {
     let mixer: Mixer = Mixer { visible: true };
     mixer.paint(surface, Rect::new(0, 0, 24, 12), theme, table.tracks, 3);
     let mono: Cell = surface.cell(2, 11); let empty: Cell = surface.cell(3, 11);
-    let left: Cell = surface.cell(19, 11); let right: Cell = surface.cell(21, 11);
+    let left: Cell = surface.cell(13, 11); let right: Cell = surface.cell(15, 11);
     verify(mono.glyph != 32 && empty.glyph == 32 && left.glyph != 32 && right.glyph != 32);
-    let identity: Cell = surface.cell(18, 0); verify(identity.glyph == 65);
+    let identity: Cell = surface.cell(12, 0); verify(identity.glyph == 65);
+    let master: Cell = surface.cell(18, 0); verify(master.glyph == 77);
     table.release(); surface.release();
 }
 

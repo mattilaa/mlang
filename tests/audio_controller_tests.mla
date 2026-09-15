@@ -8,6 +8,38 @@ use std::audio::PcmBlock;
 use std::thread::*;
 
 #[test]
+fn audio_controller_live_route_and_master_meter() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(1024);
+    verify(allocated.is_ok()); if allocated.is_err() { controller.close(); return; }
+    let block: PcmBlock = allocated.unwrap();
+    verify(controller.midi_target(0, 0) == 0);
+    verify(controller.live_note(true, 2, 69, 127) == 0);
+    verify(controller.process(block, 1024) == 0);
+    verify(controller.master_peak(0) > 0 && controller.master_peak(1) > 0);
+    verify(controller.master_peak(0) == 0);
+    // Focus changes affect new keys, not the destination of a held key's off.
+    verify(controller.midi_target(1, -1) == 0);
+    verify(controller.live_note(false, 2, 69, 0) == 0);
+    verify(controller.live_note(true, 2, 72, 100) == 0);
+    verify(controller.process(block, 1024) == 0);
+    verify(block.left(1023) == 0.0f);
+    controller.master_peak(0); controller.master_peak(1);
+    verify(controller.process(block, 1024) == 0);
+    verify(controller.master_peak(0) == 0 && controller.master_peak(1) == 0);
+    verify(controller.midi_target(64, 0) == -1);
+    verify(controller.midi_target(0, 33) == -1);
+    verify(controller.live_note(true, 16, 60, 127) == -1);
+    verify(controller.midi_target(2, 0) == 0);
+    verify(controller.live_note(true, 0, 60, 127) == 0);
+    verify(controller.process(block, 1024) == 0);
+    controller.stop(); verify(controller.master_peak(0) == 0 && controller.master_peak(1) == 0);
+    block.close(); controller.close();
+}
+
+#[test]
 fn audio_controller_scheduled_midi() {
     let opened: result<AudioController, str8> = AudioController::new(48000, 128);
     verify(opened.is_ok()); if opened.is_err() { return; }

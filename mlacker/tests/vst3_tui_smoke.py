@@ -59,6 +59,8 @@ def main():
         send(b"\x1b[104;6u")  # Ctrl+Shift+H: focus left
         frame = send(b"ggG\r")
         assert b"Instrument: 1" in frame
+        frame = send(b"m")
+        assert b"Mixer" in frame and b"Master" in frame and b"L R" in frame
         send(b"q")
         deadline = time.monotonic() + 3
         while process.poll() is None and time.monotonic() < deadline:

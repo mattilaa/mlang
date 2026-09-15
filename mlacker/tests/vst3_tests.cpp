@@ -9,6 +9,9 @@ int64_t __mlang_std_audio_controller_new(int64_t, int64_t);
 int32_t __mlang_std_audio_controller_load_processor(int64_t, const char*);
 int32_t __mlang_std_audio_controller_load_instrument(int64_t, int64_t, const char*);
 const char *__mlang_std_audio_controller_instrument_name(int64_t, int64_t);
+int32_t __mlang_std_audio_controller_midi_target(int64_t, int64_t, int64_t);
+int32_t __mlang_std_audio_controller_live_note(int64_t, int64_t, int64_t, int64_t, int64_t);
+int32_t __mlang_std_audio_controller_master_peak(int64_t, int64_t);
 const char *__mlang_std_audio_controller_processor_name(int64_t);
 int32_t __mlang_std_audio_controller_processor_support();
 int32_t __mlang_std_audio_controller_post(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, double);
@@ -99,6 +102,41 @@ int main(int argc, char **argv) {
     __mlang_std_audio_controller_panic(c);
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
     CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == 0.f);
+    __mlang_std_audio_controller_master_peak(c, 0);
+    __mlang_std_audio_controller_master_peak(c, 1);
+    CHECK(__mlang_std_audio_controller_midi_target(c, 0, 1) == 0);
+    CHECK(__mlang_std_audio_controller_live_note(c, 1, 3, 60, 127) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .125f);
+    CHECK(__mlang_std_audio_controller_master_peak(c, 0) == 125);
+    CHECK(__mlang_std_audio_controller_master_peak(c, 1) == 125);
+    CHECK(__mlang_std_audio_controller_master_peak(c, 0) == 0);
+    // Changing selection while held: the next key addresses slot 2; first off
+    // must still reach slot 1. Both instrument PCMs contribute to master.
+    CHECK(__mlang_std_audio_controller_midi_target(c, 1, 2) == 0);
+    CHECK(__mlang_std_audio_controller_live_note(c, 1, 3, 62, 127) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .25f);
+    CHECK(__mlang_std_audio_controller_live_note(c, 0, 3, 60, 0) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .125f);
+    CHECK(__mlang_std_audio_controller_master_peak(c, 0) == 250); // peak hold across blocks
+    CHECK(__mlang_std_audio_controller_master_peak(c, 1) == 250);
+    CHECK(__mlang_std_audio_controller_midi_target(c, 2, -1) == 0);
+    CHECK(__mlang_std_audio_controller_live_note(c, 0, 3, 62, 0) == 0);
+    CHECK(__mlang_std_audio_controller_live_note(c, 1, 3, 64, 127) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == 0.f);
+    CHECK(__mlang_std_audio_controller_master_peak(c, 0) == 0);
+    CHECK(__mlang_std_audio_controller_midi_target(c, 0, 1) == 0);
+    CHECK(__mlang_std_audio_controller_load_processor(c, argv[2]) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 3, 0, 0, 0, 0, -1, 0, 1.0) == 0);
+    CHECK(__mlang_std_audio_controller_live_note(c, 1, 0, 60, 127) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .25f);
+    CHECK(__mlang_std_audio_controller_master_peak(c, 0) == 250); // post-effect and gain
+    CHECK(__mlang_std_audio_controller_stop(c) == 0);
+    CHECK(__mlang_std_audio_controller_master_peak(c, 1) == 0);
     CHECK(__mlang_std_audio_controller_close(c) == 0);
     CHECK(__mlang_std_audio_pcm_block_close(b) == 0);
     std::puts("PASS: real VST3 bundle load, frame-timed MIDI, output, panic, failed replacement, reload");

@@ -83,8 +83,7 @@ fn midi_input_worker(queue_handle: i64, stop_handle: i64, dropped_handle: i64, a
                 if event.kind != 0 {
                     if !queue.try_push(event) { atomic_add_value(dropped, 1); }
                     if audio_handle != 0 && (event.kind == 1 || event.kind == 2) {
-                        audio.post(AudioEvent { kind: event.kind == 1 ? AudioEventKind::NoteOn : AudioEventKind::NoteOff,
-                            midi: AudioMidiEvent { channel: event.channel, note: event.note, velocity: event.velocity }, source: 2147483647 }, 1);
+                        audio.live_note(event.kind == 1, event.channel, event.note, event.velocity);
                     }
                 }
             }

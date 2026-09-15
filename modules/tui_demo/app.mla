@@ -200,9 +200,11 @@ pub fn run() -> i32 {
     let no_hardware: str8 = __env_get_var("MLANG_TUI_NO_HARDWARE");
     var midi: AudioSystem = AudioSystem::start(terminal.active && no_hardware != "1");
     free(no_hardware);
+    var master_meter_clock: i64 = now_ms();
     while running {
         let now: i64 = now_ms(); let delta: i32 = i32(now - last_tick > 1000 ? 1000 : now - last_tick); last_tick = now;
         // MIDI dispatch is independent of modal keyboard focus.
+        midi.route_selected(library.table);
         let midi_active: bool = midi.poll(now);
         let processor_errors: i64 = midi.output.processor_errors();
         if processor_errors > last_processor_errors {
@@ -225,6 +227,11 @@ pub fn run() -> i32 {
         note_playback.update(library.table, transport.ticks, transport.playing);
         midi.sequencer_events(note_playback.events);
         if mixer.update(library.table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
+        let meter_delta: i32 = i32(now - master_meter_clock);
+        if meter_delta >= 1000 / frame_rate.fps {
+            if mixer.update_master(midi.output.master_peak(0), midi.output.master_peak(1), meter_delta) { playback_dirty = true; }
+            master_meter_clock = now;
+        }
         if playback_dirty && frame_rate.ready(now) { dirty = true; }
         if sample.visible && !library.table.audio_under_cursor() { sample.visible = false; dirty = true; }
         for _ui_step in 0..ui_steps {
@@ -541,6 +548,7 @@ pub fn run() -> i32 {
                 }
             }
         }
+        midi.route_selected(library.table);
         sleep_ms(frame_rate.sleep_ms(now_ms()));
     }
     note_playback.update(library.table, transport.ticks, false);

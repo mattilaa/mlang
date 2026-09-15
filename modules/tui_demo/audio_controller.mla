@@ -1,6 +1,9 @@
 mod std::audio::controller;
 mod tui_demo::midi_controller;
 mod tui_demo::note_playback;
+mod tui_demo::sequence;
+use tui_demo::sequence::SequenceTable;
+use tui_demo::sequence::SequenceTrack;
 use std::audio::controller::*;
 use std::audio::detail::__mlang_std_audio_last_error;
 use std::midi::input_count;
@@ -68,6 +71,23 @@ impl AudioSystem {
         return Ok<i32, str8>(0);
     }
     pub fn poll(self: &mut Self, now: i64) -> bool { return self.midi.poll(now); }
+    pub fn route_selected(self: AudioSystem, source: &SequenceTable) -> void {
+        var table: SequenceTable = SequenceTable {}; table = source;
+        if self.output.handle == 0 { return; }
+        let index: i32 = table.active_track();
+        if index < 0 { self.output.midi_target(0, -1); return; }
+        let track: SequenceTrack = table.tracks[index];
+        var slot: i32 = 0;
+        if track.audio || track.muted { slot = -1; }
+        else if track.instrument { slot = track.instrument_id > 0 ? track.instrument_id : -1; }
+        self.output.midi_target(index, slot);
+    }
+    // A device worker may already exist when loading creates an offline output.
+    fn reconnect_midi(self: &mut Self) -> void {
+        if self.midi.worker.raw != 0 {
+            self.midi.release(); self.midi = MidiController::start_selected(self.midi_id, self.output.handle);
+        }
+    }
     /// Returns owned error text, or empty literal on success. IDs remain stable.
     pub fn add_instrument(self: &mut Self, path: str8) -> str8 {
         self.instrument_output_failed = false;
@@ -76,6 +96,7 @@ impl AudioSystem {
             let created: result<AudioController, str8> = AudioController::new(48000, 128);
             if created.is_err() { return clone(__mlang_std_audio_last_error()); }
             self.output = created.unwrap();
+            self.reconnect_midi();
         }
         let restart: bool = self.output.hardware_output();
         if self.output.stop() != 0 { return clone(__mlang_std_audio_last_error()); }
@@ -95,6 +116,7 @@ impl AudioSystem {
             let created: result<AudioController, str8> = AudioController::new(48000, 128);
             if created.is_err() { return clone(__mlang_std_audio_last_error()); }
             self.output = created.unwrap();
+            self.reconnect_midi();
         }
         let restart: bool = self.output.hardware_output();
         if self.output.stop() != 0 { return clone(__mlang_std_audio_last_error()); }

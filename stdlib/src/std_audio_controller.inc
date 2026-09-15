@@ -35,6 +35,10 @@ typedef struct {
     _Atomic uint64_t dropped, clock, panic;
     uint64_t seen_panic;
     _Atomic uint32_t peak;
+    _Atomic uint32_t master_peak[2];
+    _Atomic uint64_t live_target;
+    uint64_t live_notes[2048]; /* MIDI producer owned: original destination per key. */
+    uint64_t live_panic;
     ac_voice voices[AC_VOICES];
     ac_sample samples[AC_SAMPLES];
     int sample_count, running;
@@ -66,6 +70,8 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     }
     atomic_init(&c->dropped, 0); atomic_init(&c->clock, 0);
     atomic_init(&c->panic, 0); atomic_init(&c->peak, 0);
+    atomic_init(&c->master_peak[0], 0); atomic_init(&c->master_peak[1], 0);
+    atomic_init(&c->live_target, 0);
     atomic_init(&c->processor_errors, 0);
     if(!atomic_is_lock_free(&c->queues[0].read) || !atomic_is_lock_free(&c->peak)) {
         free(c); audio_set_error("audio controller: lock-free atomics unavailable"); return 0;
@@ -100,6 +106,45 @@ int32_t __mlang_std_audio_controller_post(int64_t handle, int64_t lane,
 void __mlang_std_audio_controller_panic(int64_t handle) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(c) atomic_fetch_add_explicit(&c->panic, 1, memory_order_release);
+}
+
+/* Main/control thread publishes one coherent destination. -1 silences new notes,
+ * 0 uses preview/master MIDI, 1-32 addresses a loaded instrument. */
+int32_t __mlang_std_audio_controller_midi_target(int64_t handle, int64_t source, int64_t instrument) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || source < 0 || source >= 64 || instrument < -1 || instrument > 32) return -1;
+    uint64_t target = instrument < 0 ? 0 : ((uint64_t)(instrument + 1) << 7) | (uint64_t)(source + 1);
+    atomic_store_explicit(&c->live_target, target, memory_order_release); return 0;
+}
+static int32_t ac_post_live(ac_controller *c, uint64_t target, int on, int64_t channel, int64_t pitch, int64_t velocity) {
+    if(!target) return 0;
+    int64_t source = (int64_t)(target & 127u) - 1;
+    int64_t instrument = (int64_t)(target >> 7) - 1;
+    return __mlang_std_audio_controller_post((int64_t)(intptr_t)c, 1,
+        instrument ? (on ? 6 : 7) : (on ? 1 : 2), channel, pitch, velocity,
+        source + 65536, -1, instrument, 1.0);
+}
+/* Exactly one MIDI producer, sharing lane 1 with no other producer. UI focus
+ * changes affect new note-ons; held-note offs keep their original destination. */
+int32_t __mlang_std_audio_controller_live_note(int64_t handle, int64_t on, int64_t channel, int64_t pitch, int64_t velocity) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || channel < 0 || channel > 15 || pitch < 0 || pitch > 127 || velocity < 0 || velocity > 127) return -1;
+    uint64_t panic = atomic_load_explicit(&c->panic, memory_order_acquire);
+    if(panic != c->live_panic) { memset(c->live_notes, 0, sizeof(c->live_notes)); c->live_panic = panic; }
+    uint64_t *held = &c->live_notes[channel * 128 + pitch];
+    uint64_t previous = *held;
+    *held = 0;
+    if(previous && ac_post_live(c, previous, 0, channel, pitch, on ? 0 : velocity) != 0) return 1;
+    if(!on || !velocity) return 0;
+    uint64_t target = atomic_load_explicit(&c->live_target, memory_order_acquire);
+    int32_t result = ac_post_live(c, target, 1, channel, pitch, velocity);
+    if(result == 0) *held = target;
+    return result;
+}
+int32_t __mlang_std_audio_controller_master_peak(int64_t handle, int64_t channel) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || channel < 0 || channel > 1) return 0;
+    return (int32_t)atomic_exchange_explicit(&c->master_peak[channel], 0, memory_order_relaxed);
 }
 
 static void ac_dispatch(ac_controller *c, const ac_event *e) {
@@ -215,15 +260,24 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         memset(out, 0, frames * 2u * sizeof(float));
         atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed);
     }
+    float master[2] = {0, 0};
     for(uint32_t f = 0; f < frames; ++f) {
         double l = isfinite(out[f * 2]) ? out[f * 2] * c->render_gains[f] : 0;
         double r = isfinite(out[f * 2 + 1]) ? out[f * 2 + 1] * c->render_gains[f] : 0;
         out[f * 2] = (float)fmax(-1, fmin(1, l));
         out[f * 2 + 1] = (float)fmax(-1, fmin(1, r));
+        master[0] = fmaxf(master[0], fabsf(out[f * 2]));
+        master[1] = fmaxf(master[1], fabsf(out[f * 2 + 1]));
         peak = fmaxf(peak, fmaxf(fabsf(out[f * 2]), fabsf(out[f * 2 + 1])));
     }
     uint32_t bits; memcpy(&bits, &peak, sizeof(bits));
     atomic_store_explicit(&c->peak, bits, memory_order_relaxed);
+    for(int ch = 0; ch < 2; ++ch) {
+        uint32_t value = (uint32_t)lroundf(master[ch] * 1000.f);
+        uint32_t old = atomic_load_explicit(&c->master_peak[ch], memory_order_relaxed);
+        while(old < value && !atomic_compare_exchange_weak_explicit(&c->master_peak[ch], &old, value,
+            memory_order_relaxed, memory_order_relaxed)) {}
+    }
     atomic_store_explicit(&c->clock, clock + frames, memory_order_release);
 }
 
@@ -269,6 +323,8 @@ int32_t __mlang_std_audio_controller_stop(int64_t handle) {
     }
 #endif
     c->running = 0; ac_silence(c); c->processor_reset = 1;
+    atomic_store_explicit(&c->master_peak[0], 0, memory_order_relaxed);
+    atomic_store_explicit(&c->master_peak[1], 0, memory_order_relaxed);
     for(int lane = 0; lane < 2; ++lane) {
         ac_queue *q = &c->queues[lane];
         atomic_store_explicit(&q->read, atomic_load_explicit(&q->write, memory_order_acquire), memory_order_release);

@@ -14,8 +14,13 @@ use std::strbuf::free;
 
 pub struct MeterLevel { var left: i32; var right: i32; };
 /// Meters are derived from sequenced notes and audio peaks, never synthetic.
-pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; };
+pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; var master: MeterLevel; };
 impl Mixer {
+    pub fn update_master(self: &mut Self, left: i32, right: i32, delta: i32) -> bool {
+        let next: MeterLevel = MeterLevel { left: meter_ramp(self.master.left, left, delta), right: meter_ramp(self.master.right, right, delta) };
+        let changed: bool = next.left != self.master.left || next.right != self.master.right;
+        self.master = next; return changed;
+    }
     pub fn update(self: &mut Self, source: &SequenceTable, row: i32, phase: i32, playing: bool, delta: i32) -> bool {
         var table: SequenceTable = SequenceTable {}; table = source;
         // Track edits already repaint layout; resizing silent meter state is
@@ -82,8 +87,10 @@ impl Mixer {
     pub fn paint(self: Mixer, surface: Surface, area: Rect, theme: Theme, tracks: &list<SequenceTrack>, selected: i32) -> void {
         surface.fill(area, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
         if area.width <= 0 || area.height <= 0 { return; }
-        let width: i32 = area.width < 6 ? area.width : 6;
-        let capacity: i32 = area.width / width;
+        let master_width: i32 = area.width < 6 ? area.width : 6;
+        let available: i32 = area.width - master_width;
+        let width: i32 = available < 6 ? (available > 0 ? available : 1) : 6;
+        let capacity: i32 = available / width;
         let start: i32 = selected >= capacity ? selected - capacity + 1 : 0;
         for slot in 0..capacity {
             let index: i32 = start + i32(slot);
@@ -93,7 +100,7 @@ impl Mixer {
             let strip: Rect = Rect::new(x, area.y, width - (width > 1 ? 1 : 0), area.height);
             let bg: i32 = index == selected ? lighten(theme.panel, 8) : theme.panel;
             surface.fill(strip, Cell { glyph: 32, foreground: theme.foreground, background: bg });
-            let title: str8 = format!("{}{}", track.audio ? "A" : "M", index + 1);
+            let title: str8 = format!("{}{}", track.audio ? "A" : (track.instrument ? "I" : "M"), index + 1);
             surface.text(Rect::new(x, area.y, strip.width, 1), title, index == selected ? theme.accent : theme.foreground, bg);
             let volume: str8 = format!("V{}", track.volume);
             let pan: str8 = format!("P{}", track.pan);
@@ -107,6 +114,19 @@ impl Mixer {
                 left.paint(surface, Rect::new(meter_x, area.y + 3, 1, area.height - 3), bg);
                 if track.audio && strip.width >= 3 { right.paint(surface, Rect::new(meter_x + 2, area.y + 3, 1, area.height - 3), bg); }
             }
+        }
+        // Fixed to the right, independent of the horizontally scrolling tracks.
+        let x: i32 = area.x + area.width - master_width;
+        let bg: i32 = lighten(theme.panel, 4);
+        surface.fill(Rect::new(x, area.y, master_width, area.height), Cell { glyph: 32, foreground: theme.foreground, background: bg });
+        surface.text(Rect::new(x, area.y, master_width, 1), "Master", theme.accent, bg);
+        if area.height > 1 { surface.text(Rect::new(x, area.y + 1, master_width, 1), "OUT", theme.foreground, bg); }
+        if area.height > 2 { surface.text(Rect::new(x, area.y + 2, master_width, 1), "L R", theme.muted, bg); }
+        if area.height > 3 {
+            let left: VuMeter = VuMeter { level: self.master.left, grainy: self.grainy };
+            let right: VuMeter = VuMeter { level: self.master.right, grainy: self.grainy };
+            left.paint(surface, Rect::new(x, area.y + 3, 1, area.height - 3), bg);
+            if master_width >= 3 { right.paint(surface, Rect::new(x + 2, area.y + 3, 1, area.height - 3), bg); }
         }
     }
 }

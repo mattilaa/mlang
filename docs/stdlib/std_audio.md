@@ -75,6 +75,19 @@ retain their preview/master routing. Panic resets every slot; close destroys
 all instances on the control thread. A failed instrument block silences only
 that slot's contribution and increments `processor_errors()`.
 
+For selected-track live input, the control thread publishes
+`midi_target(track, instrument)` (`track` 0–63; instrument -1 disables new notes,
+0 routes to preview/master, 1–32 routes to a slot). The MIDI worker calls
+`live_note(on, channel, pitch, velocity)` as the sole producer of lane 1.
+An atomic destination snapshot and producer-owned held-key table preserve the
+original route for note-offs; input channels are preserved. Preview live voices
+use separate source IDs from sequencer voices. No UI round trip is required.
+
+`master_peak(channel)` (0 = left, 1 = right) atomically consumes the maximum
+post-master, post-gain/clipping peak since the previous read, scaled 0–1000.
+One UI consumer should read at meter refresh cadence, then apply display decay.
+Stopping output clears pending peaks. These APIs also work with offline output.
+
 Common audio output and duplex processing helpers:
 - macOS uses CoreAudio Audio Queue input/output.
 - Linux uses JACK2 when `libjack` and a running JACK server are available.
