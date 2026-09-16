@@ -27,6 +27,8 @@ extern fn __mlang_std_audio_controller_midi_target(handle: i64, source: i64, ins
 extern fn __mlang_std_audio_controller_live_note(handle: i64, on: i64, channel: i64, pitch: i64, velocity: i64) -> i32;
 extern fn __mlang_std_audio_controller_live_control(handle: i64, channel: i64, controller: i64, value: i64) -> i32;
 extern fn __mlang_std_audio_controller_master_peak(handle: i64, channel: i64) -> i32;
+extern fn __mlang_std_audio_controller_midi_learn(handle: i64, key: i64, slot: i64, index: i64) -> i32;
+extern fn __mlang_std_audio_controller_midi_learn_info(handle: i64, key: i64, property: i64) -> i64;
 
 pub enum AudioEventKind { NoteOn, NoteOff, MasterGain, PlaySample, StopSource, InstrumentNoteOn, InstrumentNoteOff, ControlChange, InstrumentControlChange };
 pub struct AudioMidiEvent { var channel: i64; var note: i64; var velocity: i64; };
@@ -44,6 +46,27 @@ pub struct AudioEvent {
 };
 pub struct AudioController { var handle: i64; };
 impl AudioController {
+    /// Control thread: key -1 arms the next CC; slot 0 cancels/clears.
+    /// Keys 0..2047 bind channel*128+CC globally to an instrument parameter.
+    pub fn midi_learn(self: AudioController, key: i64, slot: i64, index: i64) -> i32 { return __mlang_std_audio_controller_midi_learn(self.handle, key, slot, index); }
+    /// property 0=slot, 1=index, 2=coherent slot+64*index (0 unbound).
+    /// key -1 queries armed target.
+    pub fn midi_learn_info(self: AudioController, key: i64, property: i64) -> i64 { return __mlang_std_audio_controller_midi_learn_info(self.handle, key, property); }
+    pub fn copy_midi_learn_from(self: AudioController, source: AudioController) -> i32 {
+        for key in 0..2048 {
+            let destination: i64 = source.midi_learn_info(key, 2);
+            let slot: i64 = destination % 64;
+            if slot > 0 {
+                let id: f64 = source.parameter_info(slot, destination / 64, 4);
+                let count: i64 = self.parameter_info(slot, 0, 0);
+                var found: i64 = -1;
+                for index in 0..count { if self.parameter_info(slot, index, 4) == id { found = index; } }
+                if found < 0 { return -1; }
+                if self.midi_learn(key, slot, found) != 0 { return -1; }
+            }
+        }
+        return 0;
+    }
     /// Session restoration: stopped owner only, no MIDI worker. slot 0=master.
     pub fn restore_parameter(self: AudioController, slot: i64, index: i64, normalized: f64) -> i32 { return __mlang_std_audio_controller_restore_parameter(self.handle, slot, index, normalized); }
     /// Copy exposed parameter state into a stopped replacement of the same plugin.

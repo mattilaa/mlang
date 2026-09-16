@@ -69,6 +69,7 @@ impl AudioSystem {
                     if next.copy_parameters_from(self.output, i + 1) != 0 { next.close(); return Err<i32, str8>("Cannot preserve instrument parameters; settings unchanged"); }
                 }
             }
+            if next.copy_midi_learn_from(self.output) != 0 { next.close(); return Err<i32, str8>("Cannot preserve MIDI learn; settings unchanged"); }
             if output_id != -2 { if next.start() != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); } }
         }
         // Never free an audio handle while the MIDI producer still borrows it.

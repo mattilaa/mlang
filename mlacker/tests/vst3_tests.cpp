@@ -24,6 +24,8 @@ int32_t __mlang_std_audio_controller_unload_instrument(int64_t, int64_t);
 int32_t __mlang_std_audio_controller_midi_target(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_live_note(int64_t, int64_t, int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_live_control(int64_t, int64_t, int64_t, int64_t);
+int32_t __mlang_std_audio_controller_midi_learn(int64_t, int64_t, int64_t, int64_t);
+int64_t __mlang_std_audio_controller_midi_learn_info(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_master_peak(int64_t, int64_t);
 const char *__mlang_std_audio_controller_processor_name(int64_t);
 int32_t __mlang_std_audio_controller_processor_support();
@@ -338,6 +340,35 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_live_control(c, 0, 128, 0) == -1);
     CHECK(__mlang_std_audio_controller_live_control(c, 0, 1, 128) == -1);
     CHECK(__mlang_std_audio_controller_live_control(c, 0, 129, 16384) == -1);
+    // Learn is global to this controller/session, not the selected track.
+    CHECK(__mlang_std_audio_controller_midi_learn(c, -1, 2, 0) == 0);
+    CHECK(__mlang_std_audio_controller_midi_learn_info(c, -1, 0) == 2);
+    CHECK(__mlang_std_audio_controller_live_control(c, 3, 7, 32) == 0);
+    CHECK(__mlang_std_audio_controller_midi_learn_info(c, -1, 0) == 0);
+    CHECK(__mlang_std_audio_controller_midi_learn_info(c, 3 * 128 + 7, 0) == 2);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 2, 0, 2) == 32.0 / 127.0);
+    CHECK(__mlang_std_audio_controller_midi_target(c, 0, 1) == 0);
+    CHECK(__mlang_std_audio_controller_live_control(c, 3, 7, 127) == 0);
+    CHECK(__mlang_std_audio_controller_live_control(c, 2, 7, 0) == 0); // different channel, not bound
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 2, 0, 2) == 1);
+    CHECK(__mlang_std_audio_controller_midi_learn(c, -1, 2, 4) == -1); // read-only
+    CHECK(__mlang_std_audio_controller_midi_learn(c, -1, 2, 40) == -1);
+    CHECK(__mlang_std_audio_controller_midi_learn(c, 2048, 2, 0) == -1);
+    CHECK(__mlang_std_audio_controller_midi_learn(c, -1, 2, 3) == 0);
+    CHECK(__mlang_std_audio_controller_live_control(c, 3, 7, 64) == 0); // replaces binding, quantized
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 2, 3, 2) == 2.0 / 3.0);
+    CHECK(__mlang_std_audio_controller_midi_learn_info(c, 3 * 128 + 7, 1) == 3);
+    CHECK(__mlang_std_audio_controller_midi_learn(c, -1, 2, 1) == 0);
+    CHECK(__mlang_std_audio_controller_midi_learn(c, -1, 0, 0) == 0); // cancel
+    CHECK(__mlang_std_audio_controller_live_control(c, 3, 8, 64) == 0);
+    CHECK(__mlang_std_audio_controller_midi_learn_info(c, 3 * 128 + 8, 0) == 0);
+    CHECK(__mlang_std_audio_controller_midi_learn(c, -1, 2, 1) == 0);
+    CHECK(__mlang_std_audio_controller_unload_instrument(c, 2) == 0);
+    CHECK(__mlang_std_audio_controller_midi_learn_info(c, -1, 0) == 0);
+    CHECK(__mlang_std_audio_controller_midi_learn_info(c, 3 * 128 + 7, 0) == 0);
     CHECK(__mlang_std_audio_controller_close(c) == 0);
     CHECK(__mlang_std_audio_pcm_block_close(b) == 0);
     std::puts("PASS: real VST3 bundle load, frame-timed MIDI, output, panic, failed replacement, reload");

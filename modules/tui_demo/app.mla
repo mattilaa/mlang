@@ -321,6 +321,7 @@ pub fn run() -> i32 {
         if mixer.update(library.table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
         let meter_delta: i32 = i32(now - master_meter_clock);
         if meter_delta >= 1000 / frame_rate.fps {
+            if instrument_editor.sync(midi.output) { dirty = true; }
             if mixer.update_master(midi.output.master_peak(0), midi.output.master_peak(1), meter_delta) { playback_dirty = true; }
             master_meter_clock = now;
         }

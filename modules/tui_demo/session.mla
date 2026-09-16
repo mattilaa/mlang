@@ -77,7 +77,8 @@ pub struct SessionView {
     var sample: bool; var sample_grainy: bool{true}; var sample_wave: bool; var sample_zoom: i32;
     var editor: bool; var editor_slot: i32; var editor_selected: i32; var editor_scroll: i32;
 };
-pub struct SessionData { var library: PatternLibrary; var plugins: list<PluginSnapshot>; var view: SessionView; };
+pub struct MidiLearnSnapshot { var key: i32; var slot: i32; var parameter_id: i64; };
+pub struct SessionData { var library: PatternLibrary; var plugins: list<PluginSnapshot>; var view: SessionView; var midi_learn: list<MidiLearnSnapshot>; };
 impl SessionData {
     pub fn release_plugins(self: &mut Self) -> void {
         let plugins: list<PluginSnapshot> = self.plugins; for plugin in plugins { free(plugin.path); }
@@ -116,6 +117,14 @@ impl SessionData {
                     next.release(); return Err<AudioSystem, str8>("Cannot restore VST3 parameters; session retained");
                 }
             }
+        }
+        let mappings: list<MidiLearnSnapshot> = self.midi_learn;
+        for mapping in mappings {
+            let count: i64 = next.output.parameter_info(mapping.slot, 0, 0);
+            var found: i64 = -1;
+            for index in 0..count { if next.output.parameter_info(mapping.slot, index, 4) == f64(mapping.parameter_id) { found = index; } }
+            if found < 0 { next.release(); return Err<AudioSystem, str8>("MIDI learn parameter no longer exists"); }
+            if next.output.midi_learn(mapping.key, mapping.slot, found) != 0 { next.release(); return Err<AudioSystem, str8>("Cannot restore MIDI learn mapping"); }
         }
         return Ok<AudioSystem, str8>(next);
     }
@@ -350,7 +359,43 @@ impl SessionCodec {
             library.audio.view.selected = state.audio_selected; library.audio.view.scroll = state.audio_scroll;
             library.instruments.selected = state.instrument_selected; library.instruments.scroll = state.instrument_scroll;
         }
-        return SessionData { library: library, plugins: plugins, view: state };
+        // Optional tagged extension. Legacy 1.0 files end immediately after song.
+        var mappings: list<MidiLearnSnapshot> = [];
+        if !self.reading {
+            for key in 0..2048 {
+                let destination: i64 = audio.output.midi_learn_info(key, 2);
+                let slot: i32 = i32(destination % 64);
+                if slot > 0 {
+                    let index: i64 = destination / 64;
+                    let id: i64 = audio.output.parameter_info(slot, index, 4);
+                    mappings.push(MidiLearnSnapshot { key: i32(key), slot: slot, parameter_id: id });
+                }
+            }
+        }
+        let extension: bool = self.reading ? self.reader.remaining() > 0 : mappings.len() > 0;
+        if extension {
+            let tag: str8 = self.text("MIDI_LEARN"); if tag != "MIDI_LEARN" { self.failed = true; } if self.reading { free(tag); }
+            let mapping_count: i32 = self.number(i32(mappings.len()), 0, 2048);
+            var previous_key: i32 = -1;
+            for i in 0..mapping_count {
+                if self.failed { break; }
+                var mapping: MidiLearnSnapshot = MidiLearnSnapshot {};
+                if !self.reading { mapping = mappings[i]; }
+                mapping.key = self.number(mapping.key, previous_key + 1, 2047); previous_key = mapping.key;
+                mapping.slot = self.number(mapping.slot, 1, 32);
+                mapping.parameter_id = self.integer(mapping.parameter_id, 0, 4294967295);
+                var found: bool = false;
+                for plugin in plugins {
+                    if plugin.slot == mapping.slot {
+                        let ids: list<i64> = plugin.ids;
+                        for id in ids { if id == mapping.parameter_id { found = true; } }
+                    }
+                }
+                if !found { self.failed = true; }
+                if self.reading { mappings.push(mapping); }
+            }
+        }
+        return SessionData { library: library, plugins: plugins, view: state, midi_learn: mappings };
     }
     pub fn save(self: &mut Self, path: str8, library: &PatternLibrary, view: SessionView, audio: &AudioSystem) -> bool {
         let created: result<SessionBuffer, str8> = SessionBuffer::new(4096); if created.is_err() { return false; }

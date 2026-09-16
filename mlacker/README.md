@@ -139,8 +139,16 @@ editor**. This opens a terminal parameter editor over the Pattern pane (not the
 plugin's native graphical window). Parameter names, step counts, read-only flags,
 and initial values are copied into memory when the plugin loads.
 
-- `h/j/k/l` browse sliders. Moving between columns scrolls horizontally to keep
+- Arrow keys or `h/j/k/l` browse sliders. Moving between columns scrolls horizontally to keep
   the selected control visible; the bottom bar shows the horizontal position.
+- `Shift+L` arms MIDI learn, displaying a white **L** on red. Move a synth CC control
+  to bind its channel/CC to this parameter; capture ends listening. Press `Shift+L`
+  again, move to another parameter, or close the editor to cancel listening.
+  Read-only parameters cannot learn. Learned CCs control the assigned instrument
+  independently of track focus and replace ordinary selected-track CC routing
+  for that channel/CC. Values span the parameter range, rounded for discrete controls.
+  Bindings belong to the session, survive output changes, and save in `.mlack`.
+  New sessions start unmapped; removing an instrument removes its bindings.
 - `Shift+J` decreases and `Shift+K` increases the selected value.
 - Enter opens manual entry; Ctrl+U clears the field and Enter validates/commits.
   Invalid input stays in the field. Esc cancels entry; Esc outside entry closes

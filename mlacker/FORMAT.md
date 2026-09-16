@@ -48,6 +48,14 @@ are accepted. Unsupported major or minor versions fail closed.
      columns and ROW. Column definitions are rebuilt from track metadata; cells
      must match the resulting column count and writable-column validation rules.
 7. Song order: list of stable pattern IDs, allowing repeated occurrences.
+8. Optional MIDI-learn extension: string `MIDI_LEARN`, followed by a list of
+   `(channel * 128 + CC, instrument slot, stable parameter ID)` integer triples.
+   At most 2048 entries, strictly increasing keys 0–2047, slots 1–32. Every slot
+   and parameter ID must exist in the saved plugin list. On restoration the ID
+   is resolved to the current parameter index; read-only targets are rejected.
+   Files without mappings omit this extension, preserving the original 1.0
+   layout. This reader accepts both layouts; older readers reject extended files.
+   Armed listening is transient and is never saved. Unknown/trailing data is rejected.
 
 The active pattern is serialized from the live editor, not its older library
 snapshot. Audio placements reference the embedded sample list; plugin assignments

@@ -67,6 +67,8 @@ fn tui_instrument_editor_navigation() {
     for i in 0..40 { editor.sliders.push(Slider::new("Parameter", 0.0, 1.0, 0.5, "f64")); }
     let area: Rect = Rect::new(0, 0, 54, 20);
     let output: AudioController = AudioController {};
+    editor.on_event(decode_input("L"), output, area); verify(editor.selected == 0); verify(!editor.learning);
+    editor.on_event(decode_input("\x1b[108;2u"), output, area); verify(editor.selected == 0); verify(!editor.learning);
     editor.on_event(decode_input("l"), output, area); verify(editor.selected == 4);
     editor.on_event(decode_input("j"), output, area); verify(editor.selected == 5);
     editor.on_event(decode_input("k"), output, area); verify(editor.selected == 4);

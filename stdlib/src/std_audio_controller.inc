@@ -37,6 +37,9 @@ typedef struct {
     _Atomic uint32_t peak;
     _Atomic uint32_t master_peak[2];
     _Atomic uint64_t live_target;
+    /* Packed slot (6 bits), parameter index (14), step count (32).
+     * Main thread arms; the single MIDI producer captures the next CC. */
+    _Atomic uint64_t learn_target, learn_map[2048];
     uint64_t live_notes[2048]; /* MIDI producer owned: original destination per key. */
     uint64_t live_panic;
     ac_voice voices[AC_VOICES];
@@ -72,6 +75,8 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     atomic_init(&c->panic, 0); atomic_init(&c->peak, 0);
     atomic_init(&c->master_peak[0], 0); atomic_init(&c->master_peak[1], 0);
     atomic_init(&c->live_target, 0);
+    atomic_init(&c->learn_target, 0);
+    for(int i = 0; i < 2048; ++i) atomic_init(&c->learn_map[i], 0);
     atomic_init(&c->processor_errors, 0);
     if(!atomic_is_lock_free(&c->queues[0].read) || !atomic_is_lock_free(&c->peak)) {
         free(c); audio_set_error("audio controller: lock-free atomics unavailable"); return 0;
@@ -151,6 +156,19 @@ int32_t __mlang_std_audio_controller_live_control(int64_t handle, int64_t channe
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || channel < 0 || channel > 15 || !((controller >= 0 && controller <= 127) || controller == 129) ||
        value < 0 || value > (controller == 129 ? 16383 : 127)) return -1;
+    if(controller <= 127) {
+        int key = (int)(channel * 128 + controller);
+        uint64_t learned = atomic_exchange_explicit(&c->learn_target, 0, memory_order_acq_rel);
+        if(learned) atomic_store_explicit(&c->learn_map[key], learned, memory_order_release);
+        uint64_t mapping = atomic_load_explicit(&c->learn_map[key], memory_order_acquire);
+        if(mapping) {
+            double steps = (double)(mapping >> 20);
+            double normalized = (double)value / 127.0;
+            if(steps > 0) normalized = floor(normalized * steps + 0.5) / steps;
+            return __mlang_std_audio_controller_post(handle, 1, 10, channel,
+                (mapping >> 6) & 16383, 0, 0, -1, mapping & 63, normalized);
+        }
+    }
     uint64_t target = atomic_load_explicit(&c->live_target, memory_order_acquire);
     if(!target) return 0;
     int64_t source = (int64_t)(target & 127u) - 1;
@@ -452,6 +470,36 @@ const char *__mlang_std_audio_controller_parameter_name(int64_t handle, int64_t 
     mlang_audio_processor *p = &c->instruments[slot - 1];
     return p->context && p->parameter_name ? p->parameter_name(p->context, (int32_t)index) : "";
 }
+/* key -1 arms (slot 0 cancels); keys 0..2047 bind channel*128+CC.
+ * Only control thread calls this; no plugin metadata is accessed by MIDI. */
+int32_t __mlang_std_audio_controller_midi_learn(int64_t handle, int64_t key, int64_t slot, int64_t index) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || key < -1 || key >= 2048 || slot < 0 || slot > 32) return -1;
+    uint64_t target = 0;
+    if(slot) {
+        double steps = __mlang_std_audio_controller_parameter_info(handle, slot, index, 1);
+        if(index < 0 || index > 16383 || steps < 0 || steps > INT32_MAX ||
+           __mlang_std_audio_controller_parameter_info(handle, slot, index, 3) != 0) return -1;
+        target = (uint64_t)slot | ((uint64_t)index << 6) | ((uint64_t)steps << 20);
+    }
+    atomic_store_explicit(key == -1 ? &c->learn_target : &c->learn_map[key], target, memory_order_release);
+    return 0;
+}
+/* Returns slot (0), index (1), or coherent packed slot/index (2).
+ * Unbound index is -1; packed destination is slot | (index << 6). */
+int64_t __mlang_std_audio_controller_midi_learn_info(int64_t handle, int64_t key, int64_t field) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || key < -1 || key >= 2048 || field < 0 || field > 2) return field == 1 ? -1 : 0;
+    uint64_t target = atomic_load_explicit(key == -1 ? &c->learn_target : &c->learn_map[key], memory_order_acquire);
+    if(field == 2) return (int64_t)(target & 1048575);
+    return field == 0 ? (int64_t)(target & 63) : (target ? (int64_t)((target >> 6) & 16383) : -1);
+}
+static void ac_clear_learn_slot(ac_controller *c, int64_t slot) {
+    /* Called only with audio stopped and MIDI producer joined. */
+    if((atomic_load(&c->learn_target) & 63) == (uint64_t)slot) atomic_store(&c->learn_target, 0);
+    for(int i = 0; i < 2048; ++i)
+        if((atomic_load(&c->learn_map[i]) & 63) == (uint64_t)slot) atomic_store(&c->learn_map[i], 0);
+}
 /* Session restoration only: stopped owner, no MIDI producer. Flush one silent
  * frame so parameters take effect before hardware starts, without queue limits. */
 int32_t __mlang_std_audio_controller_restore_parameter(int64_t handle, int64_t slot, int64_t index, double value) {
@@ -489,6 +537,7 @@ int32_t __mlang_std_audio_controller_set_parameter(int64_t handle, int64_t slot,
 int32_t __mlang_std_audio_controller_unload_instrument(int64_t handle, int64_t slot) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || c->running || slot < 1 || slot > 32) return -1;
+    ac_clear_learn_slot(c, slot);
     mlang_audio_processor *p = &c->instruments[slot - 1];
     if(p->context) p->destroy(p->context);
     *p = (mlang_audio_processor){0}; c->processor_reset = 1; return 0;
@@ -511,6 +560,7 @@ int32_t __mlang_std_audio_controller_load_instrument(int64_t handle, int64_t slo
         audio_set_error("Not a supported instrument processor"); return -1;
     }
     mlang_audio_processor *old = &c->instruments[slot - 1];
+    ac_clear_learn_slot(c, slot);
     if(old->context) old->destroy(old->context);
     *old = next; c->processor_reset = 1; audio_clear_error(); return 0;
 }

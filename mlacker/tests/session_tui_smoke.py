@@ -70,6 +70,11 @@ def main():
         finally:
             tui.close()
         saved = path.read_bytes()
+        # A legacy 1.0 file gains an optional tagged MIDI-learn extension.
+        # Channel 4, CC7 -> instrument slot1, stable parameter ID100.
+        learned = struct.pack("<q", 10) + b"MIDI_LEARN" + struct.pack("<qqqq", 1, 3 * 128 + 7, 1, 100)
+        saved += learned
+        path.write_bytes(saved)
         tui = Terminal(str(path))
         try:
             frame = tui.read(1.0)
@@ -103,8 +108,23 @@ def main():
             assert b"Settings applied. Audio disabled." in frame, frame[-5000:]
             frame = tui.send(b"\tllllll\r")
             assert b"VST3 editor: Mlacker Test Instrument" in frame and b"0.25" in frame, frame[-5000:]
+            tui.send(b"\x13", 0.6)
+            assert path.read_bytes().endswith(learned), "MIDI learn lost after output replacement"
         finally:
             tui.close()
+        for name, extension in (
+            ("truncated-learn", learned[:-1]),
+            ("missing-learn-slot", learned[:-16] + struct.pack("<qq", 32, 100)),
+            ("missing-learn-param", learned[:-8] + struct.pack("<q", 999999)),
+        ):
+            invalid = Path(directory) / (name + ".mlack")
+            invalid.write_bytes(saved[:-len(learned)] + extension)
+            tui = Terminal(str(invalid))
+            try:
+                frame = tui.read(0.8)
+                assert b"Invalid" in frame and b"Untitled" in frame, frame[-5000:]
+            finally:
+                tui.close()
         master_path = Path(directory) / "master.mlack"
         tui = Terminal()
         try:
@@ -150,7 +170,7 @@ def main():
             assert b"missing or could not load" in frame and b"Untitled" in frame, frame[-5000:]
         finally:
             tui.close()
-    print("PASS: empty startup, atomic save, CLI load, VST3 parameter/editor/master state, corrupt/version/missing-plugin rejection")
+    print("PASS: empty startup, atomic save, MIDI learn roundtrip/device retention/validation, VST3 state, corrupt/version/missing-plugin rejection")
 
 
 if __name__ == "__main__":

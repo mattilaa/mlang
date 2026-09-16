@@ -70,7 +70,14 @@ def main():
         send(b"\x1b", 0.4)
         frame = send(b"\tllllll\r")
         assert b"VST3 editor:" in frame and b"0.25" in frame, frame[-6000:]
-        frame = send(b"lll")
+        frame = send(b"L")
+        assert b"255;255;255" in frame and b"192;32;48" in frame, frame[-6000:]
+        frame = send(b"\x1b[108;2u")  # Shift+L via CSI-u also cancels.
+        assert b"192;32;48" not in frame
+        send(b"L")
+        frame = send(b"l")  # Lowercase l navigates and cancels learning.
+        assert b"192;32;48" not in frame
+        frame = send(b"\x1b[C\x1b[C\x1b[C")
         assert b"Extra control" in frame and b"VST3 editor:" in frame
         send(b"\x1b", 0.4)
         send(b"m")  # Inspector displays command status.
