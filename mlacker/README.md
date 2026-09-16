@@ -157,6 +157,13 @@ and initial values are copied into memory when the plugin loads.
   Different plugin names, missing/read-only parameters, malformed files, and CCs
   owned by another instrument are rejected without changing existing mappings.
   Plugin parameter values are not included; `.mlack` still saves session mappings.
+- **Instrument → Save plugin preset / Load plugin preset** saves/restores exposed
+  parameter values in `.mlapre` files for the selected instrument. The suggested
+  `<plugin name> - ` prefix is editable (Ctrl+U replaces it); omitted extensions
+  are appended. Loading validates the complete file, matches stable parameter
+  IDs, and pauses audio/MIDI input while applying values. MIDI-learn mappings
+  remain unchanged. These are parameter presets, not opaque VST3 state: internal
+  sample libraries and other non-parameter plugin state are not included.
 - `Shift+J` decreases and `Shift+K` increases the selected value.
 - Enter opens manual entry; Ctrl+U clears the field and Enter validates/commits.
   Invalid input stays in the field. Esc cancels entry; Esc outside entry closes

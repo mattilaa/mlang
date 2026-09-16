@@ -118,7 +118,9 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Open VST3 editor", action: 94, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Remove instrument", action: 95, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Save MIDI learn", action: 97, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Load MIDI learn", action: 98, enabled: AudioController::processor_support() }] }
+                                MenuItem { label: "Load MIDI learn", action: 98, enabled: AudioController::processor_support() },
+                                MenuItem { label: "Save plugin preset", action: 100, enabled: AudioController::processor_support() },
+                                MenuItem { label: "Load plugin preset", action: 101, enabled: AudioController::processor_support() }] }
             ]);
 }
 
@@ -357,7 +359,12 @@ pub fn run() -> i32 {
                     if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, terminal_bounds()); }
                     free(message);
                     if learn_action != 0 {
-                        message = SessionCodec::learn_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 97);
+                        if learn_action >= 100 {
+                            let worker_running: bool = midi.midi.worker.raw != 0;
+                            if learn_action == 101 { midi.midi.release(); }
+                            message = SessionCodec::preset_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 100);
+                            if learn_action == 101 { midi.resume_midi(worker_running); }
+                        } else { message = SessionCodec::learn_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 97); }
                         learn_action = 0;
                     }
                     else if adding_instrument {
@@ -492,7 +499,12 @@ pub fn run() -> i32 {
                         if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, panes[1].bounds.inset(1)); }
                         free(message);
                         if learn_action != 0 {
-                            message = SessionCodec::learn_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 97);
+                            if learn_action >= 100 {
+                                let worker_running: bool = midi.midi.worker.raw != 0;
+                                if learn_action == 101 { midi.midi.release(); }
+                                message = SessionCodec::preset_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 100);
+                                if learn_action == 101 { midi.resume_midi(worker_running); }
+                            } else { message = SessionCodec::learn_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 97); }
                             learn_action = 0;
                         }
                         else if adding_instrument {
@@ -596,18 +608,23 @@ pub fn run() -> i32 {
                 dialog.bundle_pattern = dialog.file_pattern;
                 dialog.open("/Library/Audio/Plug-Ins/VST3"); focus.set_menu_active(true);
             }
-            else if command == 97 || command == 98 {
+            else if command == 97 || command == 98 || command == 100 || command == 101 {
                 learn_slot = library.selected_instrument();
                 if learn_slot < 1 || midi.output.parameter_info(learn_slot, 0, 0) < 0.0 {
                     free(message); message = clone("Select a loaded instrument in Instruments first");
                 } else {
                     learn_action = command; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
                     midi.output.midi_learn(-1, 0, 0);
-                    dialog.save_mode = command == 97; dialog.bundle_pattern = "";
+                    if command == 101 { transport.playing = false; }
+                    dialog.save_mode = command == 97 || command == 100; dialog.bundle_pattern = "";
                     dialog.title = command == 97 ? "Save MIDI learn (.mlalearn)" : "Load MIDI learn (.mlalearn)";
                     dialog.file_pattern = command == 97 ? "" : ".*\\.[mM][lL][aA][lL][eE][aA][rR][nN]";
+                    if command >= 100 {
+                        dialog.title = command == 100 ? "Save plugin preset (.mlapre)" : "Load plugin preset (.mlapre)";
+                        dialog.file_pattern = command == 100 ? "" : ".*\\.[mM][lL][aA][pP][rR][eE]";
+                    }
                     dialog.open("");
-                    if command == 97 {
+                    if command == 97 || command == 100 {
                         let suggested: str8 = SessionCodec::learn_suggestion(midi.output.instrument_name(learn_slot));
                         dialog.path_field.set_text(suggested); free(suggested);
                     }

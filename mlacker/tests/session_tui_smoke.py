@@ -117,6 +117,31 @@ def main():
             tui.send(b"\x15" + os.fsencode(preset) + b"\r", 0.6)
             tui.send(b"\x13", 0.6)
             assert path.read_bytes() == closed_editor
+            frame = tui.send(b"\tlllllljjjj\r")
+            assert b"Save plugin preset (.mlapre)" in frame and b"Mlacker Test Instrument - " in frame, frame[-5000:]
+            frame = tui.send(b"Warm patch\r", 0.6)
+            assert b"Saved plugin preset:" in frame, frame[-5000:]
+            patch = Path(directory) / "Mlacker Test Instrument - Warm patch.mlapre"
+            patch_data = patch.read_bytes()
+            assert patch_data.startswith(struct.pack("<q", 6) + b"MLAPRE" + struct.pack("<qq", 1, 0))
+            custom_patch = Path(directory) / "custom.mlapre"
+            tui.send(b"\tlllllljjjj\r")
+            tui.send(b"\x15" + os.fsencode(custom_patch) + b"\r", 0.6)
+            assert custom_patch.read_bytes() == patch_data
+            tui.send(b"\tllllll\r")
+            assert b"0.75" in tui.send(b"\r\x150.75\r")
+            tui.send(b"\x1b")
+            assert b"Load plugin preset (.mlapre)" in tui.send(b"\tlllllljjjjj\r")
+            frame = tui.send(b"\x15" + os.fsencode(patch) + b"\r", 0.6)
+            assert b"Loaded plugin preset:" in frame, frame[-5000:]
+            assert b"0.25" in tui.send(b"\tllllll\r")
+            tui.send(b"\x1b")
+            custom_patch.write_bytes(patch_data[:-1])
+            tui.send(b"\tlllllljjjjj\r")
+            frame = tui.send(b"\x15" + os.fsencode(custom_patch) + b"\r", 0.6)
+            assert b"parameters unchanged" in frame, frame[-5000:]
+            tui.send(b"\x13", 0.6)
+            assert path.read_bytes() == closed_editor, "Preset load changed MIDI learn or failed to restore parameters"
             bad = Path(directory) / "bad.mlack"
             bad.write_bytes(saved[:20])
             assert b"Open session" in tui.send(b"\tj\r")

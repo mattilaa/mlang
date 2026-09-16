@@ -97,3 +97,14 @@ replaces mappings belonging to the selected loaded instrument. Keys currently
 owned by another instrument reject the import. The entire file is validated
 before changing mappings. Empty mapping lists clear that instrument's bindings.
 Exports use atomic file replacement. Ordinary `.mlack` persistence is unchanged.
+
+## Parameter preset files (`.mlapre`, version 1.0)
+
+String `MLAPRE`, i64 major 1 and minor 0, plugin display-name string, i64 parameter
+count, then `(i64 stable parameter ID, f64 normalized value)` pairs. Uses the same
+little-endian primitives. Maximum 512 KiB, 16384 parameters, and 4096-byte strings.
+The plugin name and complete parameter-ID set must match; duplicate/missing IDs,
+non-finite values, values outside 0–1, and trailing/truncated data are rejected
+before applying. Read-only parameters are recorded but not written on restore.
+Unchanged values are not resent, preserving the session restoration safeguards.
+MIDI bindings and opaque VST3 component/controller state are not part of a preset.

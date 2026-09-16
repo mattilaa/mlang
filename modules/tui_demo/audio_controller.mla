@@ -99,6 +99,9 @@ impl AudioSystem {
         self.output.midi_target(index, slot);
     }
     // A device worker may already exist when loading creates an offline output.
+    pub fn resume_midi(self: &mut Self, was_running: bool) -> void {
+        if was_running && self.midi.worker.raw == 0 { self.midi = MidiController::start_selected(self.midi_id, self.output.handle); }
+    }
     fn reconnect_midi(self: &mut Self) -> void {
         if self.midi.worker.raw != 0 {
             self.midi.release(); self.midi = MidiController::start_selected(self.midi_id, self.output.handle);

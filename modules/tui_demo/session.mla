@@ -134,6 +134,67 @@ impl SessionData {
 /// Sticky errors prevent a later successful operation from masking truncation.
 pub struct SessionCodec { var reading: bool; var failed: bool; var binary: SessionBuffer; var reader: SessionReader; var cells: i64; };
 impl SessionCodec {
+    /// Exposed-parameter preset. Caller joins MIDI before loading; IDs are stable.
+    pub fn preset_file(path: str8, output: AudioController, slot: i64, saving: bool) -> str8 {
+        let parameters: i64 = output.parameter_info(slot, 0, 0);
+        if slot < 1 || parameters < 0 { return clone("Select a loaded instrument first"); }
+        let actual: str8 = saving && !tui::table::table_matches(".*\\.[mM][lL][aA][pP][rR][eE]", path) ? format!("{}.mlapre", path) : clone(path);
+        var codec: SessionCodec = SessionCodec { reading: !saving };
+        if saving {
+            let created: result<SessionBuffer, str8> = SessionBuffer::new(4096);
+            if created.is_err() { free(actual); return clone("Cannot allocate plugin preset"); }
+            codec.binary = created.unwrap();
+        } else {
+            let opened: result<File, str8> = File::open(actual);
+            if opened.is_err() { free(actual); return clone("Cannot open plugin preset"); }
+            let file: File = opened.unwrap(); let size: result<i64, str8> = file.size(); file.close();
+            if size.is_err() { free(actual); return clone("Cannot read plugin preset"); }
+            if size.unwrap() > 524288 { free(actual); return clone("Plugin preset exceeds 512 KiB"); }
+            let read: result<SessionReader, str8> = SessionReader::from_file(actual);
+            if read.is_err() { free(actual); return clone("Cannot read plugin preset"); }
+            codec.reader = read.unwrap();
+        }
+        let magic: str8 = codec.text("MLAPRE");
+        if magic != "MLAPRE" { codec.failed = true; } if !saving { free(magic); }
+        codec.number(1, 1, 1); codec.number(0, 0, 0);
+        let plugin_name: str8 = output.instrument_name(slot);
+        let name: str8 = codec.text(plugin_name);
+        if name != plugin_name { codec.failed = true; } if !saving { free(name); }
+        let count: i32 = codec.number(i32(parameters), 0, 16384);
+        if count != parameters { codec.failed = true; }
+        var ids: list<i64> = []; var indices: list<i64> = []; var values: list<f64> = []; var previous: list<f64> = [];
+        for i in 0..count {
+            if codec.failed { break; }
+            let source_id: i64 = saving ? output.parameter_info(slot, i, 4) : 0.0;
+            let id: i64 = codec.integer(source_id, 0, 4294967295);
+            let value: f64 = codec.real(saving ? output.parameter_info(slot, i, 2) : 0.0, 0.0, 1.0);
+            if !saving {
+                var found: i64 = -1;
+                for index in 0..parameters { if output.parameter_info(slot, index, 4) == f64(id) { found = index; } }
+                for seen in ids { if seen == id { codec.failed = true; } }
+                if found < 0 { codec.failed = true; }
+                ids.push(id); indices.push(found); values.push(value); previous.push(output.parameter_info(slot, found, 2));
+            }
+        }
+        if saving {
+            if !codec.failed { let written: result<i32, str8> = codec.binary.write_atomic(actual); if written.is_err() { codec.failed = true; } }
+            codec.binary.close();
+            let status: str8 = codec.failed ? clone("Cannot save plugin preset") : format!("Saved plugin preset: {}", actual);
+            free(actual); return status;
+        }
+        if codec.reader.remaining() != 0 { codec.failed = true; } codec.reader.close();
+        if codec.failed { free(actual); return clone("Invalid/incompatible plugin preset; parameters unchanged"); }
+        let restart: bool = output.hardware_output();
+        if output.stop() != 0 { free(actual); return clone("Cannot stop audio; preset not loaded"); }
+        output.panic(); output.midi_learn(-1, 0, 0);
+        for i in 0..indices.len() {
+            if output.restore_parameter(slot, indices[i], values[i]) != 0 { codec.failed = true; break; }
+        }
+        if codec.failed { for i in 0..indices.len() { output.restore_parameter(slot, indices[i], previous[i]); } }
+        var status: str8 = codec.failed ? clone("Plugin rejected preset; previous parameters restored where possible") : format!("Loaded plugin preset: {}", actual);
+        if restart { if output.start() != 0 { free(status); status = clone("Preset processed but audio restart failed; reopen Settings"); } }
+        free(actual); return status;
+    }
     pub fn learn_suggestion(name: str8) -> str8 {
         let raw: result<std::bytes::Bytes, str8> = std::bytes::Bytes::from_string(name);
         if raw.is_err() { return clone("Instrument - "); }
