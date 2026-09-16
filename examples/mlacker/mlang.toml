@@ -1,0 +1,75 @@
+[package]
+name = "mlacker_drum_machine"
+version = "0.1.0"
+
+[dependencies]
+vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = true, build = "none", spinner = false }
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+deps_dir = "build/deps"
+
+[[task]]
+name = "toolchain-check"
+print = "[mlacker] Checking MLang, CMake, C++, Git, and archiver toolchains"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi'",
+  "sh -c 'for tool in cmake c++ git; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done'"
+]
+
+[[task]]
+name = "prepare-build-tree"
+print = "[mlacker] Preparing build output directories"
+workdir = "{{root}}"
+commands = [
+  "mkdir -p {{build_dir}}/obj {{build_dir}}/cmake"
+]
+
+[[task]]
+name = "compile-mlang-dsp"
+phase = "compile"
+print = "[mlacker] Compiling the MLang master-bus DSP object"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+language = "mlang"
+source = "src/drum_dsp.mla"
+output = "{{build_dir}}/obj/drum_dsp.o"
+compile_only = true
+opt_level = "O2"
+
+[[task]]
+name = "configure-cmake"
+print = "[mlacker] Configuring the local CMake project for the VST3 and offline-host targets"
+workdir = "{{root}}"
+depends_on = ["compile-mlang-dsp"]
+commands = [
+  "cmake -S {{root}} -B {{build_dir}}/cmake -DCMAKE_BUILD_TYPE=Release -DVST3_SDK_ROOT={{deps_dir}}/vst3sdk -DMLANG_DSP_OBJECT={{build_dir}}/obj/drum_dsp.o"
+]
+
+[[task]]
+name = "build-artifacts"
+phase = "build"
+print = "[mlacker] Building the headless VST3 bundle and the offline host binary"
+workdir = "{{root}}"
+depends_on = ["configure-cmake"]
+commands = [
+  "cmake --build {{build_dir}}/cmake --target MlackerDrum mlacker_offline_host -j4"
+]
+
+[[task]]
+name = "render"
+print = "[mlacker] Running the offline host: upload a sample and render a drum pattern to WAV"
+workdir = "{{root}}"
+# One-command workflow: `mlang pkg run render` fetches the SDK if needed, runs
+# the build chain via depends_on, then launches the offline host. Pass a WAV
+# path after `--` to also load pad 1 from a file, e.g.
+#   mlang pkg run render -- samples/snare.wav
+depends_on = ["build-artifacts"]
+log_output = false
+shell = [
+  "exec {{build_dir}}/cmake/bin/mlacker_offline_host"
+]

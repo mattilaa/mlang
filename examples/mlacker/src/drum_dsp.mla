@@ -1,0 +1,41 @@
+/// \file drum_dsp.mla
+/// \ingroup examples
+/// \brief Master-bus DSP for the mlacker headless drum-machine VST3.
+///
+/// The C++ sample engine mixes the active drum voices, then runs every mix-bus
+/// sample through this MLang code. Keeping the bus DSP in MLang mirrors the
+/// other VST3 examples in this repository: the audio boundary lives in C++,
+/// while the signal shaping stays in MLang.
+///
+/// Exported symbols (MLang appends the argument signature to the name):
+///   mlang_drum_reset__void
+///   mlang_drum_set_master_gain__f32
+///   mlang_drum_process_sample__f32
+
+var g_master_gain: f32 = 0.8f;
+
+fn mlang_drum_reset() {
+    g_master_gain = 0.8f;
+}
+
+fn mlang_drum_set_master_gain(gain: f32) {
+    if gain < 0.0f {
+        g_master_gain = 0.0f;
+    } else {
+        g_master_gain = gain;
+    }
+}
+
+/// Apply master gain and a cubic soft-clip to tame drum transients.
+fn mlang_drum_process_sample(x: f32) -> f32 {
+    var s: f32 = x * g_master_gain;
+
+    if s > 1.0f {
+        return 0.66666667f;
+    }
+    if s < -1.0f {
+        return -0.66666667f;
+    }
+
+    return s - (s * s * s) * 0.33333333f;
+}
