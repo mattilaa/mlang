@@ -26,6 +26,19 @@ fn midi_stream_decoder() {
     let program: MidiInputEvent = decoder.feed(5, 14); verify(program.kind == 3);
 }
 
+#[test]
+fn midi_recording_keeps_quick_note_on() {
+    let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent>::new(8);
+    var controller: MidiController = MidiController { queue_handle: queue.handle };
+    verify(queue.try_push(MidiInputEvent { kind: 1, note: 60, velocity: 87 }));
+    verify(queue.try_push(MidiInputEvent { kind: 2, note: 60 }));
+    controller.poll(1);
+    verify(controller.last_velocity == 0 && controller.note_events.len() == 1);
+    let note: MidiInputEvent = controller.note_events[0]; verify(note.note == 60 && note.velocity == 87);
+    controller.poll(2); verify(controller.note_events.len() == 0);
+    controller.release();
+}
+
 fn midi_test_producer(handle: i64) -> i32 {
     let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent> { handle: handle };
     if !queue.try_push(MidiInputEvent { kind: 4 }) { return 1; }

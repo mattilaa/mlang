@@ -130,6 +130,24 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
   track strips scroll. Its L/R meters show measured output peaks with smooth
   decay, using the selected meter style and update rate—not MIDI velocity.
 
+### Mixer faders and MIDI recording
+
+Press `m` to show Mixer, then focus it with `Ctrl+Shift+J` from Pattern view.
+`h/l` or Left/Right selects tracks. Each strip has a vertical volume fader beside
+its VU meter, with the 0–100 value underneath. `Shift+J/K` lowers/raises volume;
+these keys still edit cells when Pattern view has focus. Gain affects preview,
+PCM voices and VST instrument output. Tracks sharing a loaded VST instance share
+its output gain; changing one linked fader updates the others in the pattern.
+
+`Shift+R` in Mixer toggles the selected MIDI/instrument track's record arm. Its
+upper `R` becomes white on red while armed. Incoming MIDI note-ons overwrite NOTE
+and VEL at the selected pattern row/note line without advancing the cursor. A new
+note defaults to LEN 1.00 and OFF 0.00; existing timing is retained. The last note
+in a chord wins on that note line. Other armed tracks are not written unless
+selected. Audio tracks do not record MIDI. Menus, dialogs, plugin editors, text
+editing, and visual selection suspend recording. Volume is saved in `.mlack`;
+record-arm is transient and starts off when a session is loaded.
+
 ## Use a master plugin
 
 ### Instrument parameter editor

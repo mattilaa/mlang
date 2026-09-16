@@ -37,6 +37,7 @@ typedef struct {
     _Atomic uint32_t peak;
     _Atomic uint32_t master_peak[2];
     _Atomic uint64_t live_target;
+    _Atomic uint32_t track_volume[64], instrument_volume[32];
     /* Packed slot (6 bits), parameter index (14), step count (32).
      * Main thread arms; the single MIDI producer captures the next CC. */
     _Atomic uint64_t learn_target, learn_map[2048];
@@ -75,6 +76,8 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     atomic_init(&c->panic, 0); atomic_init(&c->peak, 0);
     atomic_init(&c->master_peak[0], 0); atomic_init(&c->master_peak[1], 0);
     atomic_init(&c->live_target, 0);
+    for(int i = 0; i < 64; ++i) atomic_init(&c->track_volume[i], 100);
+    for(int i = 0; i < 32; ++i) atomic_init(&c->instrument_volume[i], 100);
     atomic_init(&c->learn_target, 0);
     for(int i = 0; i < 2048; ++i) atomic_init(&c->learn_map[i], 0);
     atomic_init(&c->processor_errors, 0);
@@ -124,6 +127,14 @@ int32_t __mlang_std_audio_controller_midi_target(int64_t handle, int64_t source,
     if(!c || source < 0 || source >= 64 || instrument < -1 || instrument > 32) return -1;
     uint64_t target = instrument < 0 ? 0 : ((uint64_t)(instrument + 1) << 7) | (uint64_t)(source + 1);
     atomic_store_explicit(&c->live_target, target, memory_order_release); return 0;
+}
+/* Control thread, atomic gain publication without using either event producer. */
+int32_t __mlang_std_audio_controller_track_volume(int64_t handle, int64_t track, int64_t slot, int64_t percent) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || track < 0 || track >= 64 || slot < 0 || slot > 32 || percent < 0 || percent > 100) return -1;
+    atomic_store_explicit(&c->track_volume[track], (uint32_t)percent, memory_order_relaxed);
+    if(slot) atomic_store_explicit(&c->instrument_volume[slot - 1], (uint32_t)percent, memory_order_relaxed);
+    return 0;
 }
 static int32_t ac_post_live(ac_controller *c, uint64_t target, int on, int64_t channel, int64_t pitch, int64_t velocity) {
     if(!target) return 0;
@@ -270,7 +281,9 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             else v->gain = fmax(v->target, v->gain - slew);
             if(v->gain == 0 && v->target == 0) { v->active = 0; continue; }
             if(v->sample < 0) {
-                double value = sin(v->phase * 6.283185307179586) * v->gain;
+                int track = v->source >= 65536 ? v->source - 65536 : v->source;
+                double volume = track >= 0 && track < 64 ? atomic_load_explicit(&c->track_volume[track], memory_order_relaxed) / 100.0 : 1.0;
+                double value = sin(v->phase * 6.283185307179586) * v->gain * volume;
                 l += value; r += value; v->phase += v->step;
                 v->phase -= floor(v->phase);
             } else {
@@ -282,7 +295,9 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
                 for(int ch = 0; ch < 2; ++ch) {
                     int channel = s->channels == 1 ? 0 : ch;
                     float a = s->data[pos * s->channels + channel], b = s->data[next * s->channels + channel];
-                    double value = (a + (b - a) * mix) * v->gain;
+                    int track = v->source >= 65536 ? v->source - 65536 : v->source;
+                    double volume = track >= 0 && track < 64 ? atomic_load_explicit(&c->track_volume[track], memory_order_relaxed) / 100.0 : 1.0;
+                    double value = (a + (b - a) * mix) * v->gain * volume;
                     if(ch == 0) l += value; else r += value;
                 }
                 v->phase += v->step;
@@ -300,8 +315,9 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed);
             continue;
         }
+        float volume = atomic_load_explicit(&c->instrument_volume[i], memory_order_relaxed) / 100.f;
         for(uint32_t f = 0; f < frames * 2u; ++f)
-            if(isfinite(c->instrument_buffer[f])) out[f] += c->instrument_buffer[f];
+            if(isfinite(c->instrument_buffer[f])) out[f] += c->instrument_buffer[f] * volume;
     }
     if(c->processor.context && c->processor.process(c->processor.context, out, (int32_t)frames, clock) != 0) {
         memset(out, 0, frames * 2u * sizeof(float));

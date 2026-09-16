@@ -1,6 +1,4 @@
 mod tui::meter;
-mod tui::slider;
-use tui::slider::Slider;
 mod tui_demo::sequence;
 use tui::geometry::*;
 use tui::surface::*;
@@ -104,22 +102,17 @@ impl Mixer {
             surface.fill(strip, Cell { glyph: 32, foreground: theme.foreground, background: bg });
             let title: str8 = format!("{}{}", track.audio ? "A" : (track.instrument ? "I" : "M"), index + 1);
             surface.text(Rect::new(x, area.y, strip.width, 1), title, index == selected ? theme.accent : theme.foreground, bg);
+            let volume: str8 = format!("V{}", track.volume);
             let pan: str8 = format!("P{}", track.pan);
-            if strip.width > 3 && !track.audio {
-                surface.text(Rect::new(x + strip.width - 1, area.y, 1, 1), "R", track.record_armed ? 0xFFFFFF : theme.muted, track.record_armed ? 0xC02030 : bg);
-            }
-            if area.height > 1 { surface.text(Rect::new(x, area.y + 1, strip.width, 1), track.muted ? "MUTED" : "VOL", theme.foreground, bg); }
+            if area.height > 1 { surface.text(Rect::new(x, area.y + 1, strip.width, 1), track.muted ? "MUTED" : volume, theme.foreground, bg); }
             if area.height > 2 { surface.text(Rect::new(x, area.y + 2, strip.width, 1), pan, theme.muted, bg); }
-            free(title); free(pan);
-            if area.height > 3 && strip.width >= 4 {
-                let fader: Slider = Slider { minimum: 0.0, maximum: 100.0, value: f64(track.volume), value_type: "i32" };
-                var fader_theme: Theme = theme; fader_theme.panel = bg; fader_theme.selection = bg;
-                fader.paint_vertical(surface, Rect::new(x, area.y + 3, 3, area.height - 3), fader_theme, index == selected);
+            free(title); free(volume); free(pan);
+            if area.height > 3 {
                 let left: VuMeter = VuMeter { level: self.level(index, track.volume, track.audio ? track.pan : 0, false, track.muted), grainy: self.grainy };
                 let right: VuMeter = VuMeter { level: self.level(index, track.volume, track.pan, true, track.muted), grainy: self.grainy };
-                let meter_x: i32 = x + 3;
-                left.paint(surface, Rect::new(meter_x, area.y + 3, 1, area.height - 4), bg);
-                if track.audio && strip.width >= 5 { right.paint(surface, Rect::new(meter_x + 1, area.y + 3, 1, area.height - 4), bg); }
+                let meter_x: i32 = track.audio ? (strip.width >= 4 ? x + (strip.width - 3) / 2 : x) : x + strip.width / 2;
+                left.paint(surface, Rect::new(meter_x, area.y + 3, 1, area.height - 3), bg);
+                if track.audio && strip.width >= 3 { right.paint(surface, Rect::new(meter_x + 2, area.y + 3, 1, area.height - 3), bg); }
             }
         }
         // Fixed to the right, independent of the horizontally scrolling tracks.

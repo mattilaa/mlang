@@ -29,8 +29,6 @@ mod tui_demo::bpm_dialog;
 mod tui_demo::note_playback;
 use tui_demo::note_playback::NotePlayback;
 mod tui_demo::audio_controller;
-mod tui_demo::midi_controller;
-use tui_demo::midi_controller::MidiInputEvent;
 use tui_demo::audio_controller::AudioSystem;
 use std::audio::controller::AudioController;
 mod tui_demo::settings_dialog;
@@ -304,7 +302,6 @@ pub fn run() -> i32 {
         let now: i64 = now_ms(); let delta: i32 = i32(now - last_tick > 1000 ? 1000 : now - last_tick); last_tick = now;
         // MIDI dispatch is independent of modal keyboard focus.
         midi.route_selected(library.table);
-        midi.sync_volumes(library.table);
         let midi_active: bool = midi.poll(now);
         let processor_errors: i64 = midi.output.processor_errors();
         if processor_errors > last_processor_errors {
@@ -323,12 +320,6 @@ pub fn run() -> i32 {
         if transport.advance(now, i32(library.table.rows.len())) {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
-        }
-        // Consume every note-on, including a note released within this poll.
-        // Modal editors never receive destructive background recording edits.
-        if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !library.renaming {
-            let notes: list<MidiInputEvent> = midi.midi.note_events;
-            for note in notes { if library.table.record_note(note.note, note.velocity) { dirty = true; } }
         }
         note_playback.update(library.table, transport.ticks, transport.playing);
         midi.sequencer_events(note_playback.events);
@@ -578,8 +569,6 @@ pub fn run() -> i32 {
                 let track: SequenceTrack = library.table.tracks[library.table.active_track()];
                 let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
                 if sample.on_event(event, instance.clip, panes[2].bounds.width - 2) { dirty = true; }
-            } else if focus.selected == 2 && mixer.visible && !(sample.visible && library.table.audio_under_cursor()) {
-                if library.table.mixer_event(event, panes[1].bounds.inset(1)) { dirty = true; }
             } else if focus.selected == 1 {
                 if library.table.edit_event(event, panes[1].bounds.inset(1)) { dirty = true; }
             } else if focus.selected == 0 {

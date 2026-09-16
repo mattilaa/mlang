@@ -1,0 +1,24 @@
+mod tui::geometry;
+use tui::geometry::wide;
+
+/// Fractional millisecond deadlines avoid rounding 60 FPS down to 50 FPS.
+pub struct FrameRate { var fps: i32{60}; var deadline: i64; };
+impl FrameRate {
+    pub fn set(self: &mut Self, fps: i32, now: i64) -> bool {
+        if fps < 1 || fps > 240 { return false; }
+        self.fps = fps; self.deadline = now * wide(fps); return true;
+    }
+    pub fn ready(self: FrameRate, now: i64) -> bool { return now * wide(self.fps) >= self.deadline; }
+    pub fn presented(self: &mut Self, now: i64) -> void {
+        let units: i64 = now * wide(self.fps);
+        if self.deadline == 0 { self.deadline = units + 1000; }
+        else if units >= self.deadline { self.deadline = self.deadline + ((units - self.deadline) / 1000 + 1) * 1000; }
+    }
+    /// Keep input responsive at low FPS, and wake sooner for high FPS.
+    pub fn sleep_ms(self: FrameRate, now: i64) -> i64 {
+        let remaining: i64 = self.deadline - now * wide(self.fps);
+        if remaining <= 0 { return 10; }
+        let delay: i64 = (remaining + wide(self.fps) - 1) / wide(self.fps);
+        return delay > 10 ? 10 : delay;
+    }
+}

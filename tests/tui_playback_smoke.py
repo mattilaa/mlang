@@ -65,6 +65,11 @@ def main():
         until(lambda s: "whole number" in s)
         send(b"\x15400\r")
         until(lambda s: "BPM 400" in s and "Set BPM" not in s)
+        # Mixer owns shifted volume/arm keys; Pattern keeps its cell shortcuts.
+        send(b"\x1b[106;6uJR")
+        until(lambda s: " Mixer " in s and "99" in s)
+        send(b"\x1b[107;2u\x1b[114;2u\x1b[107;6u")
+        until(lambda s: " Mixer " in s and "99" not in s)
         send(b" ")
         until(lambda s: "PLAY" in s)
         moved = until(lambda s: (m := re.search(r"(\d{3}) C-4", s)) is not None and int(m[1]) > 2)

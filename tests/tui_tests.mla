@@ -90,6 +90,41 @@ fn tui_midi_learn_filename() {
 }
 
 #[test]
+fn tui_mixer_faders_and_recording() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var table: SequenceTable = SequenceTable::new();
+    table.clear_row();
+    verify(!table.record_note(60, 87));
+    verify(table.mixer_event(decode_input("J"), area));
+    let quieter: SequenceTrack = table.tracks[0]; verify(quieter.volume == 99);
+    verify(table.mixer_event(decode_input("\x1b[107;2u"), area));
+    verify(!table.mixer_event(decode_input("K"), area));
+    verify(table.mixer_event(decode_input("R"), area));
+    verify(table.record_note(60, 87));
+    let first: TableRow = table.rows[0];
+    verify(first.cells[1] == "C-4" && first.cells[2] == "87" && first.cells[3] == "1.00" && first.cells[4] == "0.00");
+    verify(!table.record_note(61, 0));
+    table.note_line_action(80, area); // A new selected note line, still same track.
+    verify(table.record_note(67, 113));
+    let chord: TableRow = table.rows[0]; verify(chord.cells[1] == "C-4" && chord.cells[5] == "G-4" && chord.cells[6] == "113");
+    verify(table.mixer_event(decode_input("\x1b[114;2u"), area));
+    verify(!table.record_note(69, 100));
+    verify(table.mixer_event(decode_input("l"), area)); verify(table.active_track() == 1);
+    let surface: Surface = Surface::new(12, 12);
+    var slider: Slider = Slider { minimum: 0.0, maximum: 100.0, value: 100.0, value_type: "i32" };
+    slider.paint_vertical(surface, Rect::new(0, 0, 3, 10), Theme::dark_blue(), false);
+    let top: Cell = surface.cell(1, 0); let value: Cell = surface.cell(0, 9);
+    verify(top.glyph == 0x2501 && value.glyph == 49);
+    slider.value = 0.0; slider.paint_vertical(surface, Rect::new(0, 0, 3, 10), Theme::dark_blue(), false);
+    let bottom: Cell = surface.cell(1, 8); verify(bottom.glyph == 0x2501);
+    table.selected_column = 1; table.mixer_event(decode_input("R"), area);
+    let mixer: Mixer = Mixer {};
+    mixer.paint(surface, Rect::new(0, 0, 12, 12), Theme::dark_blue(), table.tracks, 0);
+    let armed: Cell = surface.cell(4, 0); verify(armed.glyph == 82 && armed.foreground == 0xFFFFFF && armed.background == 0xC02030);
+    table.release(); surface.release();
+}
+
+#[test]
 fn tui_remove_instrument_detaches_patterns() {
     var library: PatternLibrary = PatternLibrary::new();
     let area: Rect = Rect::new(0, 0, 100, 20);
@@ -1263,8 +1298,8 @@ fn tui_meter_styles_and_channel_counts() {
     var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); table.create_track_kind(false, true, Rect::new(0, 0, 40, 12));
     let mixer: Mixer = Mixer { visible: true };
     mixer.paint(surface, Rect::new(0, 0, 24, 12), theme, table.tracks, 3);
-    let mono: Cell = surface.cell(2, 11); let empty: Cell = surface.cell(3, 11);
-    let left: Cell = surface.cell(13, 11); let right: Cell = surface.cell(15, 11);
+    let mono: Cell = surface.cell(3, 10); let empty: Cell = surface.cell(4, 10);
+    let left: Cell = surface.cell(15, 10); let right: Cell = surface.cell(16, 10);
     verify(mono.glyph != 32 && empty.glyph == 32 && left.glyph != 32 && right.glyph != 32);
     let identity: Cell = surface.cell(12, 0); verify(identity.glyph == 65);
     let master: Cell = surface.cell(18, 0); verify(master.glyph == 77);

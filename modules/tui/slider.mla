@@ -24,6 +24,25 @@ pub struct Slider {
     var editor: TextField; var editing: bool; var error: str8{""};
 };
 impl Slider {
+    /// Vertical fader; its last row shows the value, remaining rows form the rail.
+    pub fn paint_vertical(self: Slider, surface: Surface, area: Rect, theme: Theme, selected: bool) -> void {
+        if area.width < 1 || area.height < 1 { return; }
+        let bg: i32 = selected ? theme.selection : theme.panel;
+        surface.fill(area, Cell { glyph: 32, foreground: theme.foreground, background: bg });
+        let text: str8 = self.value_text();
+        surface.text(Rect::new(area.x, area.y + area.height - 1, area.width, 1), text, theme.foreground, bg); free(text);
+        if area.height < 2 || !self.accepts(self.value) { return; }
+        let height: i32 = area.height - 1;
+        var position: i32 = 0;
+        if self.maximum > self.minimum {
+            let span: f64 = self.maximum * 0.5 - self.minimum * 0.5;
+            if span > 0.0 { position = i32((self.value * 0.5 - self.minimum * 0.5) / span * f64(height - 1)); }
+        }
+        for y in 0..height {
+            let knob: bool = i32(y) == height - 1 - position;
+            surface.put(area.x + area.width / 2, area.y + i32(y), Cell { glyph: knob ? 0x2501 : 0x2502, foreground: knob ? theme.accent : theme.muted, background: bg });
+        }
+    }
     pub fn new(label: str8, minimum: f64, maximum: f64, value: f64, value_type: str8) -> Slider {
         return Slider { label: clone(label), minimum: minimum, maximum: maximum,
             value: value, value_type: value_type, step: value_type == "i32" || value_type == "u32" ? 1.0 : 0.01, editor: TextField::new("") };

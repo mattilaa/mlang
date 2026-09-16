@@ -87,18 +87,6 @@ impl AudioSystem {
         return Ok<i32, str8>(0);
     }
     pub fn poll(self: &mut Self, now: i64) -> bool { return self.midi.poll(now); }
-    pub fn sync_volumes(self: AudioSystem, source: &SequenceTable) -> void {
-        var table: SequenceTable = SequenceTable {}; table = source;
-        for i in 0..table.tracks.len() {
-            let track: SequenceTrack = table.tracks[i];
-            self.output.track_volume(i, track.instrument ? track.instrument_id : 0, track.muted ? 0 : track.volume);
-        }
-        // A muted assignment must not silence other tracks using the same instance.
-        for i in 0..table.tracks.len() {
-            let track: SequenceTrack = table.tracks[i];
-            if track.instrument && !track.muted { self.output.track_volume(i, track.instrument_id, track.volume); }
-        }
-    }
     pub fn route_selected(self: AudioSystem, source: &SequenceTable) -> void {
         var table: SequenceTable = SequenceTable {}; table = source;
         if self.output.handle == 0 { return; }

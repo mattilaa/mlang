@@ -27,6 +27,7 @@ extern fn __mlang_std_audio_controller_midi_target(handle: i64, source: i64, ins
 extern fn __mlang_std_audio_controller_live_note(handle: i64, on: i64, channel: i64, pitch: i64, velocity: i64) -> i32;
 extern fn __mlang_std_audio_controller_live_control(handle: i64, channel: i64, controller: i64, value: i64) -> i32;
 extern fn __mlang_std_audio_controller_master_peak(handle: i64, channel: i64) -> i32;
+extern fn __mlang_std_audio_controller_track_volume(handle: i64, track: i64, slot: i64, percent: i64) -> i32;
 extern fn __mlang_std_audio_controller_midi_learn(handle: i64, key: i64, slot: i64, index: i64) -> i32;
 extern fn __mlang_std_audio_controller_midi_learn_info(handle: i64, key: i64, property: i64) -> i64;
 
@@ -46,6 +47,8 @@ pub struct AudioEvent {
 };
 pub struct AudioController { var handle: i64; };
 impl AudioController {
+    /// Atomic output gain. Shared VST instrument slots share the same PCM gain.
+    pub fn track_volume(self: AudioController, track: i64, slot: i64, percent: i64) -> i32 { return __mlang_std_audio_controller_track_volume(self.handle, track, slot, percent); }
     /// Control thread: key -1 arms the next CC; slot 0 cancels/clears.
     /// Keys 0..2047 bind channel*128+CC globally to an instrument parameter.
     pub fn midi_learn(self: AudioController, key: i64, slot: i64, index: i64) -> i32 { return __mlang_std_audio_controller_midi_learn(self.handle, key, slot, index); }

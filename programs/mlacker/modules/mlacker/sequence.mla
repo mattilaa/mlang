@@ -43,7 +43,6 @@ impl AudioInstance {
 pub struct SequenceTrack {
     var name: str8; var muted: bool; var cc1: AutomationSlot; var cc2: AutomationSlot;
     var volume: i32{100}; var pan: i32;
-    var record_armed: bool;
     var audio: bool;
     var instrument: bool; var instrument_id: i32;
     var note_lines: i32{1};
@@ -124,56 +123,6 @@ pub fn active_track(self: SequenceTable) -> i32 {
         if self.selected_column < first { return i32(i); }
     }
     return i32(self.tracks.len()) - 1;
-}
-/// Mixer controls are separate from the pattern's cell-editing shortcuts.
-pub fn mixer_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
-    let index: i32 = self.active_track(); if index < 0 { return false; }
-    if event.kind == InputKind::Menu && (event.key == Key::Left || event.key == Key::Right) {
-        let next: i32 = index + (event.key == Key::Right ? 1 : -1);
-        if next >= 0 && next < self.tracks.len() { self.selected_column = self.track_start(next); self.reconcile(area); return true; }
-        return false;
-    }
-    var track: SequenceTrack = self.tracks[index];
-    let arm: bool = (event.code == 82 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 114 || event.code == 82));
-    if arm {
-        if track.audio { return false; }
-        track.record_armed = !track.record_armed; self.replace_track(index, track); return true;
-    }
-    let down: bool = (event.code == 74 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 106 || event.code == 74));
-    let up: bool = (event.code == 75 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 107 || event.code == 75));
-    if !down && !up { return false; }
-    let value: i32 = track.volume + (up ? 1 : -1);
-    if value < 0 || value > 100 { return false; }
-    let linked_slot: i32 = track.instrument ? track.instrument_id : 0;
-    track.volume = value; self.replace_track(index, track);
-    // One loaded VST instance has one PCM output: linked assignments share gain.
-    if linked_slot > 0 {
-        let old: list<SequenceTrack> = self.tracks;
-        for i in 0..old.len() {
-            var other: SequenceTrack = old[i];
-            if other.instrument && other.instrument_id == linked_slot { other.volume = value; self.replace_track(i32(i), other); }
-        }
-    }
-    return true;
-}
-pub fn record_note(self: &mut Self, note: i64, velocity: i64) -> bool {
-    if note < 0 || note > 127 || velocity <= 0 || velocity > 127 || self.editing || self.visual { return false; }
-    let index: i32 = self.active_track(); if index < 0 { return false; }
-    let track: SequenceTrack = self.tracks[index];
-    if track.audio || !track.record_armed || self.selected_row < 0 || self.selected_row >= self.rows.len() { return false; }
-    let first: i32 = self.track_start(index);
-    let offset: i32 = self.selected_column - first;
-    let line: i32 = offset >= 0 && offset < track.note_lines * 4 ? offset / 4 : 0;
-    let column: i32 = first + line * 4;
-    let row: TableRow = self.rows[self.selected_row];
-    let fresh: bool = row.cells[column] == "";
-    self.write_owned_cell(self.selected_row, column, clone(self.notes[note]));
-    self.write_owned_cell(self.selected_row, column + 1, format!("{}", velocity));
-    if fresh {
-        self.write_owned_cell(self.selected_row, column + 2, clone("1.00"));
-        self.write_owned_cell(self.selected_row, column + 3, clone("0.00"));
-    }
-    self.revision = self.revision + 1; return true;
 }
 pub fn import_audio(self: &mut Self, path: str8, bpm: i32, area: Rect) -> bool {
     let index: i32 = self.active_track(); if index < 0 { self.error = "Select an AUDIO track first"; return false; }
@@ -360,7 +309,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     }
     var tracks: list<SequenceTrack> = []; let source_tracks: list<SequenceTrack> = self.tracks;
     for track in source_tracks {
-        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, record_armed: track.record_armed, audio: track.audio, instrument: track.instrument, instrument_id: track.instrument_id, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom, zoom_stage: track.zoom_stage,
+        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, audio: track.audio, instrument: track.instrument, instrument_id: track.instrument_id, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom, zoom_stage: track.zoom_stage,
             cc1: AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum } });
     }

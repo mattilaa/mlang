@@ -63,6 +63,26 @@ fn audio_controller_scheduled_midi() {
     block.close(); controller.close();
 }
 
+#[test]
+fn audio_controller_track_fader() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(1024);
+    verify(allocated.is_ok()); if allocated.is_err() { controller.close(); return; }
+    let block: PcmBlock = allocated.unwrap();
+    controller.midi_target(3, 0); controller.live_note(true, 0, 69, 127);
+    controller.process(block, 1024); verify(controller.master_peak(0) > 0);
+    verify(controller.track_volume(3, 0, 0) == 0);
+    controller.process(block, 1024); verify(controller.master_peak(0) == 0);
+    verify(controller.track_volume(3, 0, 100) == 0);
+    controller.process(block, 1024); verify(controller.master_peak(0) > 0);
+    verify(controller.track_volume(64, 0, 100) == -1);
+    verify(controller.track_volume(3, 33, 100) == -1);
+    verify(controller.track_volume(3, 0, -1) == -1);
+    block.close(); controller.close();
+}
+
 fn audio_live_producer(handle: i64) -> i32 {
     let controller: AudioController = AudioController { handle: handle };
     return controller.post(AudioEvent { kind: AudioEventKind::NoteOn,

@@ -167,7 +167,7 @@ def main():
         read_frame(1, table_text=((24, 4), "001"))
         os.write(master, b"m")
         mixer_frame = read_frame(1)
-        assert b" Mixer " in mixer_frame and b"V100" in mixer_frame and b"P0" in mixer_frame
+        assert b" Mixer " in mixer_frame and b"VOL" in mixer_frame and b"100" in mixer_frame and b"P0" in mixer_frame
         assert b"STOP" in mixer_frame  # no synthetic animation while stopped
         os.write(master, b"\tll")
         assert b"Meter" in read_frame(None)

@@ -109,7 +109,6 @@ pub struct MidiController {
     var stop: atomic64; var dropped: atomic64; var worker: thread;
     var connected: bool; var last_note: i64{-1}; var last_velocity: i64;
     var last_channel: i64; var activity_until: i64; var lost_events: i64;
-    var note_events: list<MidiInputEvent>;
 };
 impl MidiController {
     pub fn start() -> MidiController {
@@ -129,7 +128,6 @@ impl MidiController {
     }
     // Main-window event handler. Extend these cases for recording/routing later.
     pub fn note_on(self: &mut Self, event: MidiInputEvent) -> i32 {
-        if event.velocity > 0 && self.note_events.len() < 256 { self.note_events.push(event); }
         self.last_note = event.note; self.last_velocity = event.velocity; self.last_channel = event.channel; return 0;
     }
     pub fn note_off(self: &mut Self, event: MidiInputEvent) -> i32 {
@@ -147,7 +145,6 @@ impl MidiController {
         if (event.kind >= 1 && event.kind <= 3) || event.kind == 6 || event.kind == 7 { self.activity_until = event.received_ms + 150; }
     }
     pub fn poll(self: &mut Self, now: i64) -> bool {
-        self.note_events = [];
         var event: MidiInputEvent = MidiInputEvent {};
         let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent> { handle: self.queue_handle };
         if queue.is_valid() {

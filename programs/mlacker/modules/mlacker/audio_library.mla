@@ -1,0 +1,32 @@
+mod tui_demo::audio_clip;
+mod tui::listview;
+use tui_demo::audio_clip::AudioClip;
+use tui::listview::*;
+use std::strbuf::free;
+use std::strbuf::len;
+use std::strbuf::sub;
+
+/// Session-wide loaded samples; independent from removable pattern instances.
+pub struct AudioLibrary { var samples: list<AudioClip>; var view: ListView; var error: str8{""}; };
+impl AudioLibrary {
+    pub fn load(self: &mut Self, path: str8, bpm: i32) -> bool {
+        let loaded: result<AudioClip, str8> = AudioClip::load(path, bpm);
+        if loaded.is_err() { self.error = loaded.unwrap_err(); return false; }
+        self.samples.push(loaded.unwrap());
+        // Basename without changing the source path used by the sample.
+        var start: i64 = len(path);
+        while start > 0 {
+            let character: str8 = sub(path, start - 1, 1);
+            let slash: bool = character == "/"; free(character);
+            if slash { break; } start = start - 1;
+        }
+        let name: str8 = sub(path, start, len(path) - start);
+        self.view.items.push(ListItem { id: i32(self.samples.len()), label: format!("{} {}", self.samples.len(), name) });
+        free(name); self.view.selected = i32(self.samples.len()) - 1;
+        self.view.cancel_pending(); self.error = ""; return true;
+    }
+    pub fn release(self: AudioLibrary) -> void {
+        let samples: list<AudioClip> = self.samples; for sample in samples { sample.release(); }
+        let items: list<ListItem> = self.view.items; for item in items { free(item.label); }
+    }
+}
