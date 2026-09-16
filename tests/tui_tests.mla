@@ -90,6 +90,28 @@ fn tui_midi_learn_filename() {
 }
 
 #[test]
+fn tui_aux_send_pattern_independence() {
+    var library: PatternLibrary = PatternLibrary::new();
+    let initial: SequenceTrack = library.table.tracks[0]; verify(initial.send_level(0) == 0);
+    verify(!library.table.set_send(-1, 0, 50));
+    verify(!library.table.set_send(0, 8, 50));
+    verify(!library.table.set_send(0, 0, 101));
+    verify(!library.table.set_send(0, 0, -1));
+    verify(library.table.set_send(0, 0, 50));
+    verify(library.table.set_send(0, 7, 100));
+    library.add(true);
+    let copied: SequenceTrack = library.table.tracks[0];
+    verify(copied.send_level(0) == 50 && copied.send_level(7) == 100);
+    verify(library.table.set_send(0, 0, 25));
+    library.select(1);
+    let original: SequenceTrack = library.table.tracks[0];
+    verify(original.send_level(0) == 50 && original.send_level(7) == 100);
+    library.select(2);
+    let other: SequenceTrack = library.table.tracks[0]; verify(other.send_level(0) == 0);
+    library.release();
+}
+
+#[test]
 fn tui_mixer_faders_and_recording() {
     let area: Rect = Rect::new(0, 0, 120, 20);
     var table: SequenceTable = SequenceTable::new();

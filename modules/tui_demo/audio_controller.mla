@@ -13,6 +13,7 @@ use std::strbuf::clone;
 use std::strbuf::free;
 
 /// Control-thread owner. AUHAL owns rendering; MIDI uses its separate lane.
+pub struct EffectChannel { var path: str8{""}; var volume: i32{100}; };
 pub struct AudioSystem {
     var output: AudioController; var midi: MidiController;
     var midi_id: i64{-1}; var output_id: i64{-1};
@@ -21,6 +22,7 @@ pub struct AudioSystem {
     var instrument_paths: list<str8>;
     var last_instrument_id: i32;
     var instrument_output_failed: bool;
+    var effects: list<EffectChannel>;
 };
 impl AudioSystem {
     pub fn adopt(self: &mut Self, source: &AudioSystem) -> void {
@@ -30,6 +32,7 @@ impl AudioSystem {
         self.hardware_requested = next.hardware_requested;
         self.processor_path = next.processor_path; self.instrument_paths = next.instrument_paths;
         self.last_instrument_id = next.last_instrument_id; self.instrument_output_failed = next.instrument_output_failed;
+        self.effects = next.effects;
     }
     pub fn start(hardware: bool) -> AudioSystem {
         var system: AudioSystem = AudioSystem { hardware_requested: hardware };
@@ -53,7 +56,7 @@ impl AudioSystem {
             if opened.is_err() { return Err<i32, str8>(__mlang_std_audio_last_error()); }
             next = opened.unwrap();
         }
-        if output_id == -2 && (self.instrument_paths.len() > 0 || self.processor_path != "") {
+        if output_id == -2 && (self.instrument_paths.len() > 0 || self.processor_path != "" || self.effects.len() > 0) {
             let created: result<AudioController, str8> = AudioController::new(48000, 128);
             if created.is_err() { return Err<i32, str8>(__mlang_std_audio_last_error()); }
             next = created.unwrap();
@@ -70,6 +73,14 @@ impl AudioSystem {
                 }
             }
             if next.copy_midi_learn_from(self.output) != 0 { next.close(); return Err<i32, str8>("Cannot preserve MIDI learn; settings unchanged"); }
+            for i in 0..self.effects.len() {
+                let effect: EffectChannel = self.effects[i];
+                if effect.path != "" {
+                    if next.load_effect(i, effect.path) != 0 { next.close(); return Err<i32, str8>("Cannot reload effect; settings unchanged"); }
+                    if next.copy_parameters_from(self.output, i + 33) != 0 { next.close(); return Err<i32, str8>("Cannot preserve effect parameters; settings unchanged"); }
+                }
+                next.effect_volume(i, effect.volume);
+            }
             if output_id != -2 { if next.start() != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); } }
         }
         // Never free an audio handle while the MIDI producer still borrows it.
@@ -92,12 +103,46 @@ impl AudioSystem {
         for i in 0..table.tracks.len() {
             let track: SequenceTrack = table.tracks[i];
             self.output.track_volume(i, track.instrument ? track.instrument_id : 0, track.muted ? 0 : track.volume);
+            for fx in 0..8 { self.output.effect_send(i, track.instrument ? track.instrument_id : 0, fx, track.muted ? 0 : track.send_level(i32(fx))); }
         }
         // A muted assignment must not silence other tracks using the same instance.
         for i in 0..table.tracks.len() {
             let track: SequenceTrack = table.tracks[i];
-            if track.instrument && !track.muted { self.output.track_volume(i, track.instrument_id, track.volume); }
+            if track.instrument && !track.muted {
+                self.output.track_volume(i, track.instrument_id, track.volume);
+                for fx in 0..8 { self.output.effect_send(i, track.instrument_id, fx, track.send_level(i32(fx))); }
+            }
         }
+        for fx in 0..self.effects.len() { let effect: EffectChannel = self.effects[fx]; self.output.effect_volume(fx, effect.volume); }
+    }
+    pub fn add_effect(self: &mut Self) -> bool {
+        if self.effects.len() >= 8 { return false; }
+        self.effects.push(EffectChannel {}); return true;
+    }
+    pub fn effect_level(self: &mut Self, index: i32, value: i32) -> void {
+        if index < 0 || index >= self.effects.len() || value < 0 || value > 100 { return; }
+        let old: list<EffectChannel> = self.effects; var next: list<EffectChannel> = [];
+        for i in 0..old.len() { var effect: EffectChannel = old[i]; if i == index { effect.volume = value; } next.push(effect); }
+        self.effects = next;
+    }
+    pub fn load_effect(self: &mut Self, index: i32, path: str8) -> str8 {
+        if index < 0 || index >= self.effects.len() { return clone("Select an effect channel in Mixer first"); }
+        if self.output.handle == 0 {
+            let created: result<AudioController, str8> = AudioController::new(48000, 128);
+            if created.is_err() { return clone("Cannot create effect output"); } self.output = created.unwrap(); self.reconnect_midi();
+        }
+        let worker: bool = self.midi.worker.raw != 0; self.midi.release();
+        let restart: bool = self.output.hardware_output();
+        if self.output.stop() != 0 { self.resume_midi(worker); return clone("Cannot stop output; effect unchanged"); }
+        let loaded: i32 = self.output.load_effect(index, path);
+        var message: str8 = loaded == 0 ? clone(path == "" ? "Effect plugin removed" : "Effect loaded; set the plugin wet mix to 100% for aux use") : clone(__mlang_std_audio_last_error());
+        if loaded == 0 {
+            let old: list<EffectChannel> = self.effects; var next: list<EffectChannel> = [];
+            for i in 0..old.len() { var effect: EffectChannel = old[i]; if i == index { if effect.path != "" { free(effect.path); } effect.path = path == "" ? "" : clone(path); } next.push(effect); }
+            self.effects = next;
+        }
+        if restart { if self.output.start() != 0 { free(message); message = clone("Effect processed but audio restart failed; reopen Settings"); } }
+        self.resume_midi(worker); return message;
     }
     pub fn route_selected(self: AudioSystem, source: &SequenceTable) -> void {
         var table: SequenceTable = SequenceTable {}; table = source;
@@ -212,5 +257,6 @@ impl AudioSystem {
         self.processor_path = "";
         let paths: list<str8> = self.instrument_paths; for path in paths { if path != "" { free(path); } }
         self.instrument_paths = [];
+        let effects: list<EffectChannel> = self.effects; for effect in effects { if effect.path != "" { free(effect.path); } } self.effects = [];
     }
 }

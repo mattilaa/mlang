@@ -10,6 +10,7 @@ use tui_demo::patterns::*;
 use tui_demo::sequence::*;
 use tui_demo::audio_clip::*;
 use tui_demo::audio_controller::AudioSystem;
+use tui_demo::audio_controller::EffectChannel;
 use std::audio::controller::AudioController;
 use tui::table::*;
 use tui::listview::*;
@@ -77,9 +78,10 @@ pub struct SessionView {
     var mixer: bool; var meter_grainy: bool{true}; var meter_fps: i32{60};
     var sample: bool; var sample_grainy: bool{true}; var sample_wave: bool; var sample_zoom: i32;
     var editor: bool; var editor_slot: i32; var editor_selected: i32; var editor_scroll: i32;
+    var effect_focus: bool; var effect_selected: i32;
 };
 pub struct MidiLearnSnapshot { var key: i32; var slot: i32; var parameter_id: i64; };
-pub struct SessionData { var library: PatternLibrary; var plugins: list<PluginSnapshot>; var view: SessionView; var midi_learn: list<MidiLearnSnapshot>; };
+pub struct SessionData { var library: PatternLibrary; var plugins: list<PluginSnapshot>; var view: SessionView; var midi_learn: list<MidiLearnSnapshot>; var effect_volumes: list<i32>; };
 impl SessionData {
     pub fn release_plugins(self: &mut Self) -> void {
         let plugins: list<PluginSnapshot> = self.plugins; for plugin in plugins { free(plugin.path); }
@@ -97,10 +99,15 @@ impl SessionData {
         next.output = opened.unwrap();
         let plugins: list<PluginSnapshot> = self.plugins;
         for plugin in plugins {
-            let loaded: i32 = plugin.slot == 0 ? next.output.load_processor(plugin.path) : next.output.load_instrument(plugin.slot, plugin.path);
+            if plugin.slot > 32 {
+                next.effects.push(EffectChannel { path: plugin.path == "" ? "" : clone(plugin.path), volume: self.effect_volumes[plugin.slot - 33] });
+                next.output.effect_volume(plugin.slot - 33, self.effect_volumes[plugin.slot - 33]);
+                if plugin.path == "" { continue; }
+            }
+            let loaded: i32 = plugin.slot > 32 ? next.output.load_effect(plugin.slot - 33, plugin.path) : (plugin.slot == 0 ? next.output.load_processor(plugin.path) : next.output.load_instrument(plugin.slot, plugin.path));
             if loaded != 0 { next.release(); return Err<AudioSystem, str8>("A session VST3 plugin is missing or could not load"); }
             if plugin.slot == 0 { next.processor_path = clone(plugin.path); }
-            else {
+            else if plugin.slot <= 32 {
                 while next.instrument_paths.len() < plugin.slot { next.instrument_paths.push(""); }
                 let old: list<str8> = next.instrument_paths; var paths: list<str8> = [];
                 for i in 0..old.len() { paths.push(i + 1 == plugin.slot ? clone(plugin.path) : old[i]); }
@@ -420,7 +427,7 @@ impl SessionCodec {
         v.instrument_selected = self.number(v.instrument_selected, -1, 31); v.instrument_scroll = self.number(v.instrument_scroll, 0, 31);
         v.mixer = self.flag(v.mixer); v.meter_grainy = self.flag(v.meter_grainy); v.meter_fps = self.number(v.meter_fps, 1, 240);
         v.sample = self.flag(v.sample); v.sample_grainy = self.flag(v.sample_grainy); v.sample_wave = self.flag(v.sample_wave); v.sample_zoom = self.number(v.sample_zoom, 0, 30);
-        v.editor = self.flag(v.editor); v.editor_slot = self.number(v.editor_slot, 0, 32); v.editor_selected = self.number(v.editor_selected, 0, 16383); v.editor_scroll = self.number(v.editor_scroll, 0, 16383);
+        v.editor = self.flag(v.editor); v.editor_slot = self.number(v.editor_slot, 0, 40); v.editor_selected = self.number(v.editor_selected, 0, 16383); v.editor_scroll = self.number(v.editor_scroll, 0, 16383);
         return v;
     }
     fn contents(self: &mut Self, source: &PatternLibrary, view: SessionView, system: &AudioSystem) -> SessionData {
@@ -433,7 +440,7 @@ impl SessionCodec {
         }
         let magic: str8 = self.text("MLACK"); if magic != "MLACK" { self.failed = true; } if self.reading { free(magic); }
         self.number(1, 1, 1); self.number(0, 0, 0);
-        let state: SessionView = self.view(view);
+        var state: SessionView = self.view(view);
         let sample_count: i32 = self.number(i32(library.audio.samples.len()), 0, 256);
         for i in 0..sample_count {
             if self.failed { break; }
@@ -516,7 +523,7 @@ impl SessionCodec {
                 }
             }
         }
-        let extension: bool = self.reading ? self.reader.remaining() > 0 : mappings.len() > 0;
+        let extension: bool = self.reading ? self.reader.remaining() > 0 : mappings.len() > 0 || audio.effects.len() > 0;
         if extension {
             let tag: str8 = self.text("MIDI_LEARN"); if tag != "MIDI_LEARN" { self.failed = true; } if self.reading { free(tag); }
             let mapping_count: i32 = self.number(i32(mappings.len()), 0, 2048);
@@ -539,7 +546,52 @@ impl SessionCodec {
                 if self.reading { mappings.push(mapping); }
             }
         }
-        return SessionData { library: library, plugins: plugins, view: state, midi_learn: mappings };
+        var effect_volumes: list<i32> = [];
+        let effects_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.effects.len() > 0;
+        if effects_extension && !self.failed {
+            let tag: str8 = self.text("AUX_EFFECTS"); if tag != "AUX_EFFECTS" { self.failed = true; } if self.reading { free(tag); }
+            let count: i32 = self.number(i32(audio.effects.len()), 1, 8);
+            for fx in 0..count {
+                if self.failed { break; }
+                var effect: EffectChannel = EffectChannel {}; if !self.reading { effect = audio.effects[fx]; }
+                effect.path = self.text(effect.path); effect.volume = self.number(effect.volume, 0, 100); effect_volumes.push(effect.volume);
+                let slot: i32 = i32(fx) + 33;
+                let params: i32 = self.number(!self.reading && effect.path != "" ? i32(audio.output.parameter_info(slot, 0, 0)) : 0, 0, 16384);
+                if effect.path == "" && params != 0 { self.failed = true; }
+                var plugin: PluginSnapshot = PluginSnapshot { slot: slot, path: effect.path };
+                for p in 0..params {
+                    let id: i64 = self.integer(self.reading ? 0 : audio.output.parameter_info(slot, p, 4), 0, 4294967295);
+                    let value: f64 = self.real(self.reading ? 0.0 : audio.output.parameter_info(slot, p, 2), 0.0, 1.0);
+                    let ids: list<i64> = plugin.ids; for old in ids { if old == id { self.failed = true; } }
+                    plugin.ids.push(id); plugin.values.push(value);
+                }
+                plugins.push(plugin);
+            }
+            // Sends follow pattern track order, not global plugin/library slots.
+            let patterns: list<PatternEntry> = library.patterns; var updated: list<PatternEntry> = [];
+            for p in 0..patterns.len() {
+                if self.failed { break; }
+                var entry: PatternEntry = patterns[p];
+                if !self.reading && entry.id == library.active_id { entry.data = library.table; }
+                let track_count: i32 = self.number(i32(entry.data.tracks.len()), 0, 64);
+                if track_count != entry.data.tracks.len() { self.failed = true; break; }
+                var tracks: list<SequenceTrack> = [];
+                for t in 0..track_count {
+                    var track: SequenceTrack = entry.data.tracks[t]; var sends: list<i32> = [];
+                    for fx in 0..count { sends.push(self.number(track.send_level(i32(fx)), 0, 100)); }
+                    if self.reading { track.sends = sends; } tracks.push(track);
+                }
+                if self.reading { entry.data.tracks = tracks; updated.push(entry); }
+            }
+            state.effect_focus = self.flag(state.effect_focus); state.effect_selected = self.number(state.effect_selected, 0, count - 1);
+            if self.reading && !self.failed {
+                library.patterns = updated;
+                let entry: PatternEntry = library.patterns[library.index_of(library.active_id)];
+                library.table.release(); library.table = entry.data.copy_pattern();
+            }
+        }
+        if state.editor_slot > 32 + effect_volumes.len() { self.failed = true; }
+        return SessionData { library: library, plugins: plugins, view: state, midi_learn: mappings, effect_volumes: effect_volumes };
     }
     pub fn save(self: &mut Self, path: str8, library: &PatternLibrary, view: SessionView, audio: &AudioSystem) -> bool {
         let created: result<SessionBuffer, str8> = SessionBuffer::new(4096); if created.is_err() { return false; }

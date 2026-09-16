@@ -53,9 +53,20 @@ are accepted. Unsupported major or minor versions fail closed.
    At most 2048 entries, strictly increasing keys 0–2047, slots 1–32. Every slot
    and parameter ID must exist in the saved plugin list. On restoration the ID
    is resolved to the current parameter index; read-only targets are rejected.
-   Files without mappings omit this extension, preserving the original 1.0
+   Files without mappings or aux effects omit this extension, preserving the original 1.0
    layout. This reader accepts both layouts; older readers reject extended files.
    Armed listening is transient and is never saved. Unknown/trailing data is rejected.
+9. Optional aux extension, following `MIDI_LEARN` (which may have zero mappings):
+   string `AUX_EFFECTS`, then effect count (1–8). Each effect stores its plugin
+   path (empty for an unloaded channel), return volume (0–100), and parameter
+   list of `(stable parameter ID i64, normalized f64)` pairs. Empty paths require
+   zero parameters; IDs must be unique within each effect.
+   For each pattern in document order, a track count matching that pattern is
+   followed by exactly `effect_count` send levels (0–100) for each track.
+   Finally, effect-bank focus (boolean) and selected effect index (0-based) are
+   stored. Effects use runtime parameter slots 33–40, separate from the plugin
+   list in step 4; the editor view may reference these slots. Older readers
+   reject this extension. Files without effects retain the preceding layouts.
 
 The active pattern is serialized from the live editor, not its older library
 snapshot. Audio placements reference the embedded sample list; plugin assignments
@@ -64,7 +75,7 @@ reference stable slots, including holes left by removed instruments.
 ## Validation and restoration
 
 Maximum file size is 256 MiB; strings are limited to 4096 bytes; at most 256
-samples, 33 plugins (including master), 16384 parameters per plugin, 1024 patterns,
+samples, 33 plugins (including master) plus 8 aux effects, 16384 parameters per plugin, 1024 patterns,
 64 tracks per pattern, 16384 rows per pattern, 8 million cells per document, and
 65536 song entries are accepted. Each sample has at most 16777216 frames and one
 or two channels. Invalid counts, non-finite/out-of-range numeric data, malformed

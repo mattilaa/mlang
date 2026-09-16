@@ -26,6 +26,10 @@ int32_t __mlang_std_audio_controller_live_note(int64_t, int64_t, int64_t, int64_
 int32_t __mlang_std_audio_controller_live_control(int64_t, int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_track_volume(int64_t, int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_instrument_peak(int64_t, int64_t, int64_t);
+int32_t __mlang_std_audio_controller_load_effect(int64_t, int64_t, const char*);
+int32_t __mlang_std_audio_controller_effect_send(int64_t, int64_t, int64_t, int64_t, int64_t);
+int32_t __mlang_std_audio_controller_effect_volume(int64_t, int64_t, int64_t);
+int32_t __mlang_std_audio_controller_effect_peak(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_midi_learn(int64_t, int64_t, int64_t, int64_t);
 int64_t __mlang_std_audio_controller_midi_learn_info(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_master_peak(int64_t, int64_t);
@@ -388,6 +392,36 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_unload_instrument(c, 2) == 0);
     CHECK(__mlang_std_audio_controller_midi_learn_info(c, -1, 0) == 0);
     CHECK(__mlang_std_audio_controller_midi_learn_info(c, 3 * 128 + 7, 0) == 0);
+    CHECK(__mlang_std_audio_controller_close(c) == 0);
+    // Parallel aux: dry .125 + send(.5) * effect(.5) * return(1) => .15625.
+    c = __mlang_std_audio_controller_new(48000, 128);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 1, argv[1]) == 0);
+    CHECK(__mlang_std_audio_controller_load_effect(c, 0, argv[2]) == 0);
+    CHECK(__mlang_std_audio_controller_load_effect(c, 0, argv[1]) == -1); // preserve prior effect
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 33, 0, 0) == 40);
+    CHECK(__mlang_std_audio_controller_effect_send(c, 0, 1, 0, 50) == 0);
+    CHECK(__mlang_std_audio_controller_midi_target(c, 0, 1) == 0);
+    CHECK(__mlang_std_audio_controller_live_note(c, 1, 0, 60, 127) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .15625f) < 1.e-7f);
+    CHECK(__mlang_std_audio_controller_effect_peak(c, 0, 0) == 125);
+    CHECK(__mlang_std_audio_controller_effect_peak(c, 0, 1) == 125);
+    CHECK(__mlang_std_audio_controller_effect_peak(c, 0, 0) == 0);
+    CHECK(__mlang_std_audio_controller_effect_volume(c, 0, 50) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .140625f) < 1.e-7f);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 33, 0, .5) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .1328125f) < 1.e-7f);
+    CHECK(__mlang_std_audio_controller_effect_send(c, 0, 1, 0, 0) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .125f); // dry unchanged
+    CHECK(__mlang_std_audio_controller_effect_send(c, 64, 1, 0, 50) == -1);
+    CHECK(__mlang_std_audio_controller_effect_send(c, 0, 1, 8, 50) == -1);
+    CHECK(__mlang_std_audio_controller_effect_send(c, 0, 1, 0, 101) == -1);
+    CHECK(__mlang_std_audio_controller_load_effect(c, 8, argv[2]) == -1);
+    CHECK(__mlang_std_audio_controller_load_effect(c, 0, "") == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 33, 0, 0) == -1);
     CHECK(__mlang_std_audio_controller_close(c) == 0);
     CHECK(__mlang_std_audio_pcm_block_close(b) == 0);
     std::puts("PASS: real VST3 bundle load, frame-timed MIDI, output, panic, failed replacement, reload");

@@ -153,6 +153,29 @@ selected. Audio tracks do not record MIDI. Menus, dialogs, plugin editors, text
 editing, and visual selection suspend recording. Volume is saved in `.mlack`;
 record-arm is transient and starts off when a session is loaded.
 
+### Aux effect channels
+
+Choose **Effect → Add effect channel** to create an aux return (up to eight).
+Effect strips occupy a separate bank before the pinned Master strip; ordinary
+tracks and effects scroll independently when they do not fit. In Mixer, `l`
+from the last ordinary track enters the effect bank; `h` from the first effect
+returns to the tracks. `Shift+J/K` adjusts the selected return's volume.
+
+Press Enter on an empty effect strip to browse for a VST3 effect, or on a loaded
+strip to edit its parameters. The same actions are available in the Effect menu.
+**Remove effect plugin** empties the selected channel without removing its strip.
+
+Select a source track in Pattern view, then select the desired effect strip and
+choose **Effect → Set track send** (0–100%). Sends are post-fader and parallel:
+the dry signal remains audible, while each effect return is summed into Master.
+For reverb/delay aux use, set the plugin's wet mix to 100%; mlacker does not force
+plugin-specific wet/dry parameters. Effects continue processing silence for tails.
+Effect-to-effect sends are not supported.
+
+Send levels belong to each pattern. Tracks sharing a VST instrument instance
+share its PCM send levels, just as they share output gain. `.mlack` saves effect
+paths, exposed parameters, return levels, sends, and effect-bank selection.
+
 ## Use a master plugin
 
 ### Instrument parameter editor

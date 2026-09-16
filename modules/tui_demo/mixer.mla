@@ -2,6 +2,8 @@ mod tui::meter;
 mod tui::slider;
 mod std::audio::controller;
 use std::audio::controller::AudioController;
+mod tui_demo::audio_controller;
+use tui_demo::audio_controller::EffectChannel;
 use tui::slider::Slider;
 mod tui_demo::sequence;
 use tui::geometry::*;
@@ -18,8 +20,20 @@ use std::strbuf::free;
 
 pub struct MeterLevel { var left: i32; var right: i32; };
 /// Meters are derived from sequenced notes and audio peaks, never synthetic.
-pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; var master: MeterLevel; var instrument_levels: list<MeterLevel>; };
+pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; var master: MeterLevel; var instrument_levels: list<MeterLevel>; var effect_volumes: list<i32>; var effect_levels: list<MeterLevel>; var bus_focus: bool; var selected_effect: i32; };
 impl Mixer {
+    pub fn update_effects(self: &mut Self, output: AudioController, effects: &list<EffectChannel>, delta: i32) -> bool {
+        var levels: list<MeterLevel> = []; var volumes: list<i32> = []; var changed: bool = self.effect_volumes.len() != effects.len();
+        for i in 0..effects.len() {
+            let effect: EffectChannel = effects[i]; var old: MeterLevel = MeterLevel {};
+            if i < self.effect_levels.len() { old = self.effect_levels[i]; }
+            let level: MeterLevel = MeterLevel { left: meter_ramp(old.left, output.effect_peak(i, 0), delta), right: meter_ramp(old.right, output.effect_peak(i, 1), delta) };
+            if level.left != old.left || level.right != old.right { changed = true; }
+            if i < self.effect_volumes.len() { if self.effect_volumes[i] != effect.volume { changed = true; } }
+            levels.push(level); volumes.push(effect.volume);
+        }
+        self.effect_levels = levels; self.effect_volumes = volumes; return changed;
+    }
     /// Consume each plugin's peaks once; shared track assignments reuse the cache.
     pub fn update_instruments(self: &mut Self, output: AudioController, delta: i32) -> bool {
         var next: list<MeterLevel> = []; var changed: bool = false;
@@ -109,7 +123,9 @@ impl Mixer {
         surface.fill(area, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
         if area.width <= 0 || area.height <= 0 { return; }
         let master_width: i32 = area.width < 6 ? area.width : 6;
-        let available: i32 = area.width - master_width;
+        let remaining: i32 = area.width - master_width;
+        let effect_width: i32 = i32(self.effect_volumes.len()) * 6 < remaining / 2 ? i32(self.effect_volumes.len()) * 6 : remaining / 2;
+        let available: i32 = remaining - effect_width;
         var start: i32 = 0; var span: i32 = 0;
         for i in 0..tracks.len() {
             if i > selected { break; }
@@ -126,7 +142,7 @@ impl Mixer {
             let width: i32 = available - cursor < preferred ? available - cursor : preferred;
             let x: i32 = area.x + cursor; cursor = cursor + width;
             let strip: Rect = Rect::new(x, area.y, width - (width > 1 ? 1 : 0), area.height);
-            let bg: i32 = index == selected ? lighten(theme.panel, 8) : theme.panel;
+            let bg: i32 = index == selected && !self.bus_focus ? lighten(theme.panel, 8) : theme.panel;
             surface.fill(strip, Cell { glyph: 32, foreground: theme.foreground, background: bg });
             let title: str8 = format!("{}{}", track.audio ? "A" : (track.instrument ? "I" : "M"), index + 1);
             surface.text(Rect::new(x, area.y, strip.width, 1), title, index == selected ? theme.accent : theme.foreground, bg);
@@ -154,6 +170,31 @@ impl Mixer {
                     surface.text(Rect::new(x + 3, area.y + 2, 4, 1), "M LR", theme.muted, bg);
                     pcm_left.paint(surface, Rect::new(x + 5, area.y + 3, 1, area.height - 4), bg);
                     pcm_right.paint(surface, Rect::new(x + 6, area.y + 3, 1, area.height - 4), bg);
+                }
+            }
+        }
+        // Aux bank has its own scrolling window; normal tracks never move it.
+        if effect_width > 0 {
+            let width: i32 = effect_width < 6 ? effect_width : 6;
+            let capacity: i32 = effect_width / width;
+            let start: i32 = self.selected_effect >= capacity ? self.selected_effect - capacity + 1 : 0;
+            for cell in 0..capacity {
+                let index: i32 = start + i32(cell); if index >= self.effect_volumes.len() { break; }
+                let x: i32 = area.x + available + i32(cell) * width;
+                let bg: i32 = lighten(theme.panel, self.bus_focus && index == self.selected_effect ? 12 : 4);
+                surface.fill(Rect::new(x, area.y, width, area.height), Cell { glyph: 32, foreground: theme.foreground, background: bg });
+                let title: str8 = format!("FX{}", index + 1);
+                surface.text(Rect::new(x, area.y, width, 1), title, theme.accent, bg); free(title);
+                if area.height > 1 { surface.text(Rect::new(x, area.y + 1, width, 1), "AUX", theme.muted, bg); }
+                if area.height > 3 && width >= 5 {
+                    var fader_theme: Theme = theme; fader_theme.panel = bg; fader_theme.selection = bg;
+                    let fader: Slider = Slider { minimum: 0.0, maximum: 100.0, value: f64(self.effect_volumes[index]), value_type: "i32" };
+                    fader.paint_vertical(surface, Rect::new(x, area.y + 3, 3, area.height - 3), fader_theme, self.bus_focus && index == self.selected_effect);
+                    var level: MeterLevel = MeterLevel {}; if index < self.effect_levels.len() { level = self.effect_levels[index]; }
+                    let left: VuMeter = VuMeter { level: level.left, grainy: self.grainy }; let right: VuMeter = VuMeter { level: level.right, grainy: self.grainy };
+                    surface.text(Rect::new(x + 3, area.y + 2, 2, 1), "LR", theme.muted, bg);
+                    left.paint(surface, Rect::new(x + 3, area.y + 3, 1, area.height - 4), bg);
+                    right.paint(surface, Rect::new(x + 4, area.y + 3, 1, area.height - 4), bg);
                 }
             }
         }

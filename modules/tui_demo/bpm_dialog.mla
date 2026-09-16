@@ -13,7 +13,7 @@ use tui::menu::Key;
 use tui::table::table_integer;
 use std::strbuf::free;
 
-pub struct BpmDialog : Dialog { var editor: TextField; var value: i32; var error: str8; var meter_rate: bool; var pattern_length: bool; };
+pub struct BpmDialog : Dialog { var editor: TextField; var value: i32; var error: str8; var meter_rate: bool; var pattern_length: bool; var send_level: bool; };
 impl BpmDialog {
     pub fn new() -> BpmDialog {
         return BpmDialog { title: "Set BPM", width: 48, height: 12, editor: TextField::new(""), error: "",
@@ -21,7 +21,7 @@ impl BpmDialog {
             buttons: [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 }] };
     }
     pub fn open(self: &mut Self, value: i32) -> void {
-        self.meter_rate = false; self.pattern_length = false; self.title = "Set BPM";
+        self.meter_rate = false; self.pattern_length = false; self.send_level = false; self.title = "Set BPM";
         let text: str8 = format!("{}", value); self.editor.set_text(text); free(text);
         self.value = value; self.error = ""; self.reset_buttons(); self.focus.selected = 0; self.active = true;
     }
@@ -31,15 +31,16 @@ impl BpmDialog {
     pub fn open_pattern_length(self: &mut Self, value: i32) -> void {
         self.open(value); self.pattern_length = true; self.title = "Set length";
     }
+    pub fn open_send(self: &mut Self, value: i32) -> void { self.open(value); self.send_level = true; self.title = "Set track send (0-100%)"; }
     fn accept(self: &mut Self) -> void {
         let parsed: result<i64, str8> = table_integer(self.editor.text);
         if parsed.is_ok() {
             let value: i64 = parsed.unwrap();
-            let minimum: i64 = self.pattern_length || self.meter_rate ? 1 : 20;
-            let maximum: i64 = self.pattern_length ? 16384 : (self.meter_rate ? 240 : 400);
+            let minimum: i64 = self.send_level ? 0 : (self.pattern_length || self.meter_rate ? 1 : 20);
+            let maximum: i64 = self.send_level ? 100 : (self.pattern_length ? 16384 : (self.meter_rate ? 240 : 400));
             if value >= minimum && value <= maximum { self.value = i32(value); self.result = 1; self.active = false; return; }
         }
-        self.error = self.pattern_length ? "Enter a whole number from 1 to 16384" : (self.meter_rate ? "Enter a whole number from 1 to 240" : "Enter a whole number from 20 to 400"); self.result = 0;
+        self.error = self.send_level ? "Enter a whole number from 0 to 100" : (self.pattern_length ? "Enter a whole number from 1 to 16384" : (self.meter_rate ? "Enter a whole number from 1 to 240" : "Enter a whole number from 20 to 400")); self.result = 0;
     }
     pub fn on_event(self: &mut Self, event: InputEvent) -> void {
         if event.kind == InputKind::Pane {
@@ -64,7 +65,7 @@ impl BpmDialog {
     pub fn paint(self: BpmDialog, surface: Surface, area: Rect, theme: Theme) -> void {
         if !self.active { return; }
         let body: Rect = self.paint_frame(surface, area, theme);
-        surface.text(body, self.pattern_length ? "Pattern length (1-16384 rows)" : (self.meter_rate ? "Meter update rate (1-240 FPS)" : "Tempo (20-400 BPM)"), theme.foreground, theme.panel);
+        surface.text(body, self.send_level ? "Post-fader aux send (0-100%)" : (self.pattern_length ? "Pattern length (1-16384 rows)" : (self.meter_rate ? "Meter update rate (1-240 FPS)" : "Tempo (20-400 BPM)")), theme.foreground, theme.panel);
         if body.height > 1 { self.editor.paint(surface, Rect::new(body.x, body.y + 1, body.width, 1), theme.foreground, theme.selection, self.focus.selected == 0); }
         if body.height > 2 { surface.text(Rect::new(body.x, body.y + 2, body.width, 1), self.error, theme.accent, theme.panel); }
     }

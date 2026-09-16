@@ -47,7 +47,17 @@ pub struct AudioEvent {
     var frame: i64{-1}; var sample: i64; var gain: f64{1.0};
 };
 pub struct AudioController { var handle: i64; };
+extern fn __mlang_std_audio_controller_load_effect(handle: i64, fx: i64, path: str8) -> i32;
+extern fn __mlang_std_audio_controller_effect_send(handle: i64, track: i64, slot: i64, fx: i64, percent: i64) -> i32;
+extern fn __mlang_std_audio_controller_effect_volume(handle: i64, fx: i64, percent: i64) -> i32;
+extern fn __mlang_std_audio_controller_effect_peak(handle: i64, fx: i64, channel: i64) -> i32;
 impl AudioController {
+    /// Aux channels 0-7; parameter APIs address them as slots 33-40.
+    /// Load/replace while stopped, with MIDI producer joined. Empty path unloads.
+    pub fn load_effect(self: AudioController, fx: i64, path: str8) -> i32 { return __mlang_std_audio_controller_load_effect(self.handle, fx, path); }
+    pub fn effect_send(self: AudioController, track: i64, slot: i64, fx: i64, percent: i64) -> i32 { return __mlang_std_audio_controller_effect_send(self.handle, track, slot, fx, percent); }
+    pub fn effect_volume(self: AudioController, fx: i64, percent: i64) -> i32 { return __mlang_std_audio_controller_effect_volume(self.handle, fx, percent); }
+    pub fn effect_peak(self: AudioController, fx: i64, channel: i64) -> i32 { return __mlang_std_audio_controller_effect_peak(self.handle, fx, channel); }
     /// Single UI consumer: slot 1-32, channel 0/1, post-fader/pre-master peak 0-1000.
     pub fn instrument_peak(self: AudioController, slot: i64, channel: i64) -> i32 { return __mlang_std_audio_controller_instrument_peak(self.handle, slot, channel); }
     /// Atomic output gain. Shared VST instrument slots share the same PCM gain.

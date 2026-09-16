@@ -44,6 +44,7 @@ pub struct SequenceTrack {
     var name: str8; var muted: bool; var cc1: AutomationSlot; var cc2: AutomationSlot;
     var volume: i32{100}; var pan: i32;
     var record_armed: bool;
+    var sends: list<i32>;
     var audio: bool;
     var instrument: bool; var instrument_id: i32;
     var note_lines: i32{1};
@@ -52,6 +53,12 @@ pub struct SequenceTrack {
     var zoom_stage: i32;
 };
 impl SequenceTrack {
+    pub fn send_level(self: SequenceTrack, fx: i32) -> i32 {
+        if fx < 0 || fx >= self.sends.len() { return 0; } return self.sends[fx];
+    }
+    pub fn copy_sends(self: SequenceTrack) -> list<i32> {
+        var copy: list<i32> = []; for i in 0..self.sends.len() { copy.push(self.sends[i]); } return copy;
+    }
     pub fn instance_at(self: SequenceTrack, row: i32) -> i32 {
         for i in 0..self.instances.len() {
             let instance: AudioInstance = self.instances[i];
@@ -174,6 +181,20 @@ pub fn record_note(self: &mut Self, note: i64, velocity: i64) -> bool {
         self.write_owned_cell(self.selected_row, column + 3, clone("0.00"));
     }
     self.revision = self.revision + 1; return true;
+}
+pub fn set_send(self: &mut Self, index: i32, fx: i32, value: i32) -> bool {
+    if index < 0 || index >= self.tracks.len() || fx < 0 || fx >= 8 || value < 0 || value > 100 { return false; }
+    let target: SequenceTrack = self.tracks[index];
+    let linked: i32 = target.instrument ? target.instrument_id : 0;
+    let old: list<SequenceTrack> = self.tracks;
+    for i in 0..old.len() {
+        var track: SequenceTrack = old[i];
+        if i == index || (linked > 0 && track.instrument && track.instrument_id == linked) {
+            var sends: list<i32> = []; for bus in 0..8 { sends.push(bus == fx ? value : track.send_level(i32(bus))); }
+            track.sends = sends; self.replace_track(i32(i), track);
+        }
+    }
+    return true;
 }
 pub fn import_audio(self: &mut Self, path: str8, bpm: i32, area: Rect) -> bool {
     let index: i32 = self.active_track(); if index < 0 { self.error = "Select an AUDIO track first"; return false; }
@@ -360,7 +381,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     }
     var tracks: list<SequenceTrack> = []; let source_tracks: list<SequenceTrack> = self.tracks;
     for track in source_tracks {
-        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, record_armed: track.record_armed, audio: track.audio, instrument: track.instrument, instrument_id: track.instrument_id, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom, zoom_stage: track.zoom_stage,
+        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, record_armed: track.record_armed, sends: track.copy_sends(), audio: track.audio, instrument: track.instrument, instrument_id: track.instrument_id, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom, zoom_stage: track.zoom_stage,
             cc1: AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum } });
     }
@@ -460,7 +481,7 @@ pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Re
     if duplicate {
         let original: SequenceTrack = self.tracks[source];
         free(track.name); free(track.cc1.parameter); free(track.cc2.parameter);
-        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, audio: original.audio, instrument: original.instrument, instrument_id: original.instrument_id, note_lines: original.note_lines, instances: original.copy_audio(), wave_zoom: original.wave_zoom, zoom_stage: original.zoom_stage,
+        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, sends: original.copy_sends(), audio: original.audio, instrument: original.instrument, instrument_id: original.instrument_id, note_lines: original.note_lines, instances: original.copy_audio(), wave_zoom: original.wave_zoom, zoom_stage: original.zoom_stage,
             cc1: AutomationSlot { parameter: clone(original.cc1.parameter), minimum: original.cc1.minimum, maximum: original.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(original.cc2.parameter), minimum: original.cc2.minimum, maximum: original.cc2.maximum } };
     }

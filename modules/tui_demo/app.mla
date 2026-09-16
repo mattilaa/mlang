@@ -32,6 +32,7 @@ mod tui_demo::audio_controller;
 mod tui_demo::midi_controller;
 use tui_demo::midi_controller::MidiInputEvent;
 use tui_demo::audio_controller::AudioSystem;
+use tui_demo::audio_controller::EffectChannel;
 use std::audio::controller::AudioController;
 mod tui_demo::settings_dialog;
 mod tui_demo::instrument_editor;
@@ -122,7 +123,13 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Save MIDI learn", action: 97, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Load MIDI learn", action: 98, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Save plugin preset", action: 100, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Load plugin preset", action: 101, enabled: AudioController::processor_support() }] }
+                                MenuItem { label: "Load plugin preset", action: 101, enabled: AudioController::processor_support() }] },
+                    Menu {title: "Effect", items: [
+                                MenuItem { label: "Add effect channel", action: 110, enabled: AudioController::processor_support() },
+                                MenuItem { label: "Load effect plugin", action: 111, enabled: AudioController::processor_support() },
+                                MenuItem { label: "Edit effect plugin", action: 112, enabled: AudioController::processor_support() },
+                                MenuItem { label: "Set track send", action: 113, enabled: AudioController::processor_support() },
+                                MenuItem { label: "Remove effect plugin", action: 114, enabled: AudioController::processor_support() }] }
             ]);
 }
 
@@ -173,7 +180,9 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
         }
     }
     else if mixer.visible {
-        mixer.paint(surface, bottom, theme, table.tracks, table.active_track());
+        let mix_area: Rect = Rect::new(bottom.x, bottom.y, bottom.width, bottom.height - (mixer.effect_volumes.len() > 0 && bottom.height > 1 ? 1 : 0));
+        mixer.paint(surface, mix_area, theme, table.tracks, table.active_track());
+        if mixer.effect_volumes.len() > 0 && bottom.height > 1 { surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), message, theme.muted, theme.panel); }
         if(patterns.error != "" || table.error != "") && bottom.height > 0 {
             surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
         }
@@ -195,6 +204,7 @@ pub fn run() -> i32 {
     var adding_audio: bool = false;
     var adding_plugin: bool = false;
     var adding_instrument: bool = false;
+    var adding_effect: i32 = -1; var send_track: i32 = -1; var send_fx: i32 = -1;
     var library: PatternLibrary = fixture ? PatternLibrary::new() : PatternLibrary::empty();
     var session_path: str8 = clone(""); var request_path: str8 = clone("");
     var session_request: i32 = 0; var saving_session: bool = false;
@@ -243,7 +253,7 @@ pub fn run() -> i32 {
                     list_selected: library.view.selected, list_scroll: library.view.scroll,
                     audio_selected: library.audio.view.selected, audio_scroll: library.audio.view.scroll,
                     instrument_selected: library.instruments.selected, instrument_scroll: library.instruments.scroll,
-                    mixer: mixer.visible, meter_grainy: mixer.grainy, meter_fps: frame_rate.fps,
+                    mixer: mixer.visible, meter_grainy: mixer.grainy, meter_fps: frame_rate.fps, effect_focus: mixer.bus_focus, effect_selected: mixer.selected_effect,
                     sample: sample.visible, sample_grainy: sample.grainy, sample_wave: sample.wave, sample_zoom: sample.zoom,
                     editor: instrument_editor.active, editor_slot: i32(instrument_editor.slot), editor_selected: instrument_editor.selected, editor_scroll: instrument_editor.scroll };
                 var serializer: SessionCodec = SessionCodec {};
@@ -279,7 +289,8 @@ pub fn run() -> i32 {
                             transport = TransportStatus { bpm: v.bpm, beats_per_bar: v.beats, beat_unit: v.unit, row: v.row, phase: v.phase,
                                 ticks: wide(v.row) * 15000 + v.phase, elapsed_ms: i32((wide(v.row) * 15000 + v.phase) / wide(v.bpm)) };
                             focus.selected = v.pane;
-                            mixer = Mixer { visible: v.mixer, grainy: v.meter_grainy };
+                            mixer = Mixer { visible: v.mixer, grainy: v.meter_grainy, bus_focus: v.effect_focus, selected_effect: v.effect_selected };
+                            mixer.update_effects(midi.output, midi.effects, 0);
                             sample = SampleView { visible: v.sample, grainy: v.sample_grainy, wave: v.sample_wave, zoom: v.sample_zoom };
                             frame_rate.set(v.meter_fps, now_ms()); note_playback = NotePlayback {}; play_pattern = library.active_id;
                             instrument_editor.release();
@@ -326,7 +337,7 @@ pub fn run() -> i32 {
         }
         // Consume every note-on, including a note released within this poll.
         // Modal editors never receive destructive background recording edits.
-        if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !library.renaming {
+        if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !library.renaming && !mixer.bus_focus {
             let notes: list<MidiInputEvent> = midi.midi.note_events;
             for note in notes { if library.table.record_note(note.note, note.velocity) { dirty = true; } }
         }
@@ -338,6 +349,7 @@ pub fn run() -> i32 {
             if instrument_editor.sync(midi.output) { dirty = true; }
             if mixer.update_master(midi.output.master_peak(0), midi.output.master_peak(1), meter_delta) { playback_dirty = true; }
             if mixer.update_instruments(midi.output, meter_delta) { playback_dirty = true; }
+            if mixer.update_effects(midi.output, midi.effects, meter_delta) { playback_dirty = true; }
             master_meter_clock = now;
         }
         if playback_dirty && frame_rate.ready(now) { dirty = true; }
@@ -358,7 +370,8 @@ pub fn run() -> i32 {
             if bpm_dialog.active && bpm_dialog.pressed_button >= 0 {
                 bpm_dialog.tick(); dirty = true;
                 if !bpm_dialog.active && bpm_dialog.result == 1 {
-                    if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
+                    if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
+                    else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
                     else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
                     else { transport.set_bpm(bpm_dialog.value); }
                 }
@@ -368,7 +381,8 @@ pub fn run() -> i32 {
                 if dialog.accepted {
                     if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, terminal_bounds()); }
                     free(message);
-                    if learn_action != 0 {
+                    if adding_effect >= 0 { message = midi.load_effect(adding_effect, dialog.accepted_path); adding_effect = -1; }
+                    else if learn_action != 0 {
                         if learn_action >= 100 {
                             let worker_running: bool = midi.midi.worker.raw != 0;
                             if learn_action == 101 { midi.midi.release(); }
@@ -487,7 +501,8 @@ pub fn run() -> i32 {
                 if event.kind != InputKind::None || event.code != 0 {
                     bpm_dialog.on_event(event); dirty = true;
                     if !bpm_dialog.active && bpm_dialog.result == 1 {
-                        if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
+                        if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
+                        else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
                         else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
                         else { transport.set_bpm(bpm_dialog.value); }
                     }
@@ -508,7 +523,8 @@ pub fn run() -> i32 {
                     if dialog.accepted {
                         if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, panes[1].bounds.inset(1)); }
                         free(message);
-                        if learn_action != 0 {
+                        if adding_effect >= 0 { message = midi.load_effect(adding_effect, dialog.accepted_path); adding_effect = -1; }
+                        else if learn_action != 0 {
                             if learn_action >= 100 {
                                 let worker_running: bool = midi.midi.worker.raw != 0;
                                 if learn_action == 101 { midi.midi.release(); }
@@ -580,12 +596,27 @@ pub fn run() -> i32 {
                 let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
                 if sample.on_event(event, instance.clip, panes[2].bounds.width - 2) { dirty = true; }
             } else if focus.selected == 2 && mixer.visible && !(sample.visible && library.table.audio_under_cursor()) {
-                if library.table.mixer_event(event, panes[1].bounds.inset(1)) { dirty = true; }
+                if mixer.bus_focus && midi.effects.len() > 0 {
+                    if event.kind == InputKind::Menu && event.key == Key::Left {
+                        if mixer.selected_effect > 0 { mixer.selected_effect = mixer.selected_effect - 1; } else { mixer.bus_focus = false; } dirty = true;
+                    } else if event.kind == InputKind::Menu && event.key == Key::Right {
+                        if mixer.selected_effect + 1 < midi.effects.len() { mixer.selected_effect = mixer.selected_effect + 1; } dirty = true;
+                    } else if event.kind == InputKind::Menu && event.key == Key::Enter {
+                        let effect: EffectChannel = midi.effects[mixer.selected_effect]; command = effect.path == "" ? 111 : 112;
+                    } else {
+                        let down: bool = (event.code == 74 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 106 || event.code == 74));
+                        let up: bool = (event.code == 75 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 107 || event.code == 75));
+                        if down || up { let effect: EffectChannel = midi.effects[mixer.selected_effect]; midi.effect_level(mixer.selected_effect, effect.volume + (up ? 1 : -1)); dirty = true; }
+                    }
+                } else if event.kind == InputKind::Menu && event.key == Key::Right && library.table.active_track() == library.table.tracks.len() - 1 && midi.effects.len() > 0 {
+                    mixer.bus_focus = true; mixer.selected_effect = 0; dirty = true;
+                } else { if library.table.mixer_event(event, panes[1].bounds.inset(1)) { dirty = true; } }
             } else if focus.selected == 1 {
                 if library.table.edit_event(event, panes[1].bounds.inset(1)) { dirty = true; }
             } else if focus.selected == 0 {
                 if library.on_event(event, panes[0].bounds.inset(1)) { dirty = true; }
             }
+            if command > 0 { dirty = true; }
             if command == 99 { running = false; }
             else if command == 90 {
                 transport.playing = false; settings.open(midi.midi_id, midi.output_id); focus.set_menu_active(true);
@@ -598,6 +629,7 @@ pub fn run() -> i32 {
                 free(request_path); request_path = clone(session_path); session_request = 2;
             }
             else if command == 2 || command == 3 || command == 96 {
+                adding_effect = -1;
                 learn_action = 0;
                 adding_audio = false; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = "";
                 saving_session = command != 2; dialog.save_mode = saving_session;
@@ -606,6 +638,7 @@ pub fn run() -> i32 {
                 focus.set_menu_active(true);
             }
             else if command == 60 {
+                adding_effect = -1;
                 learn_action = 0;
                 dialog.save_mode = false; saving_session = false;
                 adding_audio = true; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = ""; dialog.title = "Add audio";
@@ -613,6 +646,7 @@ pub fn run() -> i32 {
                 dialog.open(""); focus.set_menu_active(true);
             }
             else if command == 91 || command == 93 {
+                adding_effect = -1;
                 learn_action = 0;
                 dialog.save_mode = false; saving_session = false;
                 transport.playing = false; adding_audio = false; adding_plugin = command == 91; adding_instrument = command == 93;
@@ -621,6 +655,7 @@ pub fn run() -> i32 {
                 dialog.open("/Library/Audio/Plug-Ins/VST3"); focus.set_menu_active(true);
             }
             else if command == 97 || command == 98 || command == 100 || command == 101 {
+                adding_effect = -1;
                 learn_slot = library.selected_instrument();
                 if learn_slot < 1 || midi.output.parameter_info(learn_slot, 0, 0) < 0.0 {
                     free(message); message = clone("Select a loaded instrument in Instruments first");
@@ -641,6 +676,29 @@ pub fn run() -> i32 {
                         dialog.path_field.set_text(suggested); free(suggested);
                     }
                     focus.set_menu_active(true);
+                }
+            }
+            else if command == 110 {
+                if midi.add_effect() {
+                    mixer.visible = true; sample.visible = false; focus.selected = 2; mixer.bus_focus = true; mixer.selected_effect = i32(midi.effects.len()) - 1;
+                    mixer.update_effects(midi.output, midi.effects, 0);
+                    free(message); message = clone("Effect channel added. Enter loads plugin; Effect > Set track send routes the selected track.");
+                } else { free(message); message = clone("Maximum 8 effect channels"); }
+            }
+            else if command >= 111 && command <= 114 {
+                if mixer.selected_effect < 0 || mixer.selected_effect >= midi.effects.len() { free(message); message = clone("Add/select an effect channel in Mixer first"); }
+                else if command == 111 {
+                    adding_effect = mixer.selected_effect; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                    transport.playing = false; dialog.save_mode = false; dialog.title = "Load VST3 effect";
+                    dialog.file_pattern = ".*\\.[vV][sS][tT]3"; dialog.bundle_pattern = dialog.file_pattern;
+                    dialog.open("/Library/Audio/Plug-Ins/VST3"); focus.set_menu_active(true);
+                } else if command == 112 {
+                    if !instrument_editor.open(midi.output, mixer.selected_effect + 33) { free(message); message = clone("Load an effect plugin first"); }
+                } else if command == 114 { free(message); message = midi.load_effect(mixer.selected_effect, ""); }
+                else {
+                    send_track = library.table.active_track(); send_fx = mixer.selected_effect;
+                    if send_track >= 0 { let track: SequenceTrack = library.table.tracks[send_track]; bpm_dialog.open_send(track.send_level(send_fx)); }
+                    else { free(message); message = clone("Select a source track in Pattern view first"); }
                 }
             }
             else if command == 94 {
