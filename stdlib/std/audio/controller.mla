@@ -1,0 +1,160 @@
+/// Output-only AUHAL controller. Hardware callback contains no MLang calls.
+mod std::audio;
+use std::audio::PcmAudio;
+use std::audio::PcmBlock;
+use std::audio::detail::__mlang_std_audio_last_error;
+extern fn __mlang_std_audio_controller_new(rate: i64, frames: i64) -> i64;
+extern fn __mlang_std_audio_controller_open(device: i64, frames: i64) -> i64;
+extern fn __mlang_std_audio_controller_post(handle: i64, lane: i64, kind: i64, channel: i64, note: i64, velocity: i64, source: i64, frame: i64, sample: i64, gain: f64) -> i32;
+extern fn __mlang_std_audio_controller_panic(handle: i64) -> void;
+extern fn __mlang_std_audio_controller_sample(handle: i64, pcm: i64) -> i64;
+extern fn __mlang_std_audio_controller_process(handle: i64, block: i64, frames: i64) -> i32;
+extern fn __mlang_std_audio_controller_start(handle: i64) -> i32;
+extern fn __mlang_std_audio_controller_stop(handle: i64) -> i32;
+extern fn __mlang_std_audio_controller_close(handle: i64) -> i32;
+extern fn __mlang_std_audio_controller_info(handle: i64, key: i64) -> i64;
+extern fn __mlang_std_audio_controller_processor_support() -> i32;
+extern fn __mlang_std_audio_controller_processor_name(handle: i64) -> str8;
+extern fn __mlang_std_audio_controller_load_processor(handle: i64, path: str8) -> i32;
+extern fn __mlang_std_audio_controller_load_instrument(handle: i64, slot: i64, path: str8) -> i32;
+extern fn __mlang_std_audio_controller_instrument_name(handle: i64, slot: i64) -> str8;
+extern fn __mlang_std_audio_controller_parameter_info(handle: i64, slot: i64, index: i64, key: i64) -> f64;
+extern fn __mlang_std_audio_controller_parameter_name(handle: i64, slot: i64, index: i64) -> str8;
+extern fn __mlang_std_audio_controller_set_parameter(handle: i64, slot: i64, index: i64, value: f64) -> i32;
+extern fn __mlang_std_audio_controller_unload_instrument(handle: i64, slot: i64) -> i32;
+extern fn __mlang_std_audio_controller_restore_parameter(handle: i64, slot: i64, index: i64, value: f64) -> i32;
+extern fn __mlang_std_audio_controller_midi_target(handle: i64, source: i64, instrument: i64) -> i32;
+extern fn __mlang_std_audio_controller_live_note(handle: i64, on: i64, channel: i64, pitch: i64, velocity: i64) -> i32;
+extern fn __mlang_std_audio_controller_live_control(handle: i64, channel: i64, controller: i64, value: i64) -> i32;
+extern fn __mlang_std_audio_controller_master_peak(handle: i64, channel: i64) -> i32;
+extern fn __mlang_std_audio_controller_midi_learn(handle: i64, key: i64, slot: i64, index: i64) -> i32;
+extern fn __mlang_std_audio_controller_midi_learn_info(handle: i64, key: i64, property: i64) -> i64;
+
+pub enum AudioEventKind { NoteOn, NoteOff, MasterGain, PlaySample, StopSource, InstrumentNoteOn, InstrumentNoteOff, ControlChange, InstrumentControlChange };
+pub struct AudioMidiEvent { var channel: i64; var note: i64; var velocity: i64; };
+// ControlChange/InstrumentControlChange: note=CC 0-127 (or pitch bend 129),
+// velocity=0-127 (pitch bend 0-16383), sample=instrument slot for instrument CC.
+/// frame=-1 means next render opportunity. Otherwise absolute output frame.
+/// Submit nondecreasing frame timestamps within each lane; late events run now.
+pub struct AudioEvent {
+    var kind: AudioEventKind;
+    var midi: AudioMidiEvent;
+    var source: i64;
+    // sample: registered PCM sample ID for PlaySample, slot 1-32 for InstrumentNote*.
+    // Instrument slot 0 is unassigned/silent.
+    var frame: i64{-1}; var sample: i64; var gain: f64{1.0};
+};
+pub struct AudioController { var handle: i64; };
+impl AudioController {
+    /// Control thread: key -1 arms the next CC; slot 0 cancels/clears.
+    /// Keys 0..2047 bind channel*128+CC globally to an instrument parameter.
+    pub fn midi_learn(self: AudioController, key: i64, slot: i64, index: i64) -> i32 { return __mlang_std_audio_controller_midi_learn(self.handle, key, slot, index); }
+    /// property 0=slot, 1=index, 2=coherent slot+64*index (0 unbound).
+    /// key -1 queries armed target.
+    pub fn midi_learn_info(self: AudioController, key: i64, property: i64) -> i64 { return __mlang_std_audio_controller_midi_learn_info(self.handle, key, property); }
+    pub fn copy_midi_learn_from(self: AudioController, source: AudioController) -> i32 {
+        for key in 0..2048 {
+            let destination: i64 = source.midi_learn_info(key, 2);
+            let slot: i64 = destination % 64;
+            if slot > 0 {
+                let id: f64 = source.parameter_info(slot, destination / 64, 4);
+                let count: i64 = self.parameter_info(slot, 0, 0);
+                var found: i64 = -1;
+                for index in 0..count { if self.parameter_info(slot, index, 4) == id { found = index; } }
+                if found < 0 { return -1; }
+                if self.midi_learn(key, slot, found) != 0 { return -1; }
+            }
+        }
+        return 0;
+    }
+    /// Session restoration: stopped owner only, no MIDI worker. slot 0=master.
+    pub fn restore_parameter(self: AudioController, slot: i64, index: i64, normalized: f64) -> i32 { return __mlang_std_audio_controller_restore_parameter(self.handle, slot, index, normalized); }
+    /// Copy exposed parameter state into a stopped replacement of the same plugin.
+    /// Match stable IDs, since enumeration order may change between instances.
+    pub fn copy_parameters_from(self: AudioController, source: AudioController, slot: i64) -> i32 {
+        let count: i64 = source.parameter_info(slot, 0, 0);
+        if count < 0 || self.parameter_info(slot, 0, 0) != f64(count) { return -1; }
+        for i in 0..count {
+            let id: f64 = source.parameter_info(slot, i, 4);
+            var target: i64 = i;
+            if self.parameter_info(slot, target, 4) != id {
+                target = -1;
+                for j in 0..count { if self.parameter_info(slot, j, 4) == id { target = j; } }
+            }
+            if target < 0 { return -1; }
+            if self.restore_parameter(slot, target, source.parameter_info(slot, i, 2)) != 0 { return -1; }
+        }
+        return 0;
+    }
+    /// Cached metadata: key 0=count, 1=steps (0 continuous), 2=normalized value,
+    /// 3=read-only, 4=stable parameter ID. Slot 0 queries the master processor.
+    pub fn parameter_info(self: AudioController, slot: i64, index: i64, key: i64) -> f64 { return __mlang_std_audio_controller_parameter_info(self.handle, slot, index, key); }
+    pub fn parameter_name(self: AudioController, slot: i64, index: i64) -> str8 { return __mlang_std_audio_controller_parameter_name(self.handle, slot, index); }
+    /// UI producer only. Continuous values 0..1; stepped values integer 0..steps.
+    pub fn set_parameter(self: AudioController, slot: i64, index: i64, value: f64) -> i32 { return __mlang_std_audio_controller_set_parameter(self.handle, slot, index, value); }
+    /// Stop audio and join the MIDI producer before unloading/reusing a slot.
+    pub fn unload_instrument(self: AudioController, slot: i64) -> i32 { return __mlang_std_audio_controller_unload_instrument(self.handle, slot); }
+    /// Publish selected track 0-63. -1 disables, 0 preview, 1-32 instrument slot.
+    pub fn midi_target(self: AudioController, track: i64, instrument: i64) -> i32 { return __mlang_std_audio_controller_midi_target(self.handle, track, instrument); }
+    /// MIDI worker only (lane 1). Note-offs retain the original note-on route.
+    pub fn live_note(self: AudioController, on: bool, channel: i64, pitch: i64, velocity: i64) -> i32 { return __mlang_std_audio_controller_live_note(self.handle, on ? 1 : 0, channel, pitch, velocity); }
+    /// MIDI-producer only, sharing live_note's lock-free lane. CC 0-127;
+    /// controller 129 denotes 14-bit pitch bend. Routes to the selected track.
+    pub fn live_control(self: AudioController, channel: i64, controller: i64, value: i64) -> i32 { return __mlang_std_audio_controller_live_control(self.handle, channel, controller, value); }
+    /// Single UI consumer: peak since previous read, post-master gain/clipping, 0-1000.
+    pub fn master_peak(self: AudioController, channel: i64) -> i32 { return __mlang_std_audio_controller_master_peak(self.handle, channel); }
+    /// Stopped control thread only. Instrument slots are 1-32; name is borrowed.
+    pub fn load_instrument(self: AudioController, slot: i64, path: str8) -> i32 { return __mlang_std_audio_controller_load_instrument(self.handle, slot, path); }
+    pub fn instrument_name(self: AudioController, slot: i64) -> str8 { return __mlang_std_audio_controller_instrument_name(self.handle, slot); }
+    /// Optional host is installed by the application (mlacker installs VST3).
+    pub fn processor_support() -> bool { return __mlang_std_audio_controller_processor_support() != 0; }
+    /// Control thread, while stopped. Empty path unloads; failure retains old processor.
+    pub fn load_processor(self: AudioController, path: str8) -> i32 { return __mlang_std_audio_controller_load_processor(self.handle, path); }
+    /// Borrowed name, valid until replacement/close. Clone if retaining it.
+    pub fn processor_name(self: AudioController) -> str8 { return __mlang_std_audio_controller_processor_name(self.handle); }
+    pub fn processor_errors(self: AudioController) -> i64 { return __mlang_std_audio_controller_info(self.handle, 4); }
+    pub fn hardware_output(self: AudioController) -> bool { return __mlang_std_audio_controller_info(self.handle, 5) != 0; }
+    /// Open AUHAL stereo output, using its native sample rate. -1 = default.
+    /// Buffer size is a hardware hint, not a guaranteed latency. Query actual.
+    pub fn open(device: i64, frames: i64) -> result<AudioController, str8> {
+        let handle: i64 = __mlang_std_audio_controller_open(device, frames);
+        if handle == 0 { return Err<AudioController, str8>(__mlang_std_audio_last_error()); }
+        return Ok<AudioController, str8>(AudioController { handle: handle });
+    }
+    /// Offline renderer, with identical event processing; no hardware needed.
+    pub fn new(rate: i64, frames: i64) -> result<AudioController, str8> {
+        let handle: i64 = __mlang_std_audio_controller_new(rate, frames);
+        if handle == 0 { return Err<AudioController, str8>(__mlang_std_audio_last_error()); }
+        return Ok<AudioController, str8>(AudioController { handle: handle });
+    }
+    /// Nonblocking: 0=posted, 1=full, -1=invalid. Exactly ONE producer per lane.
+    /// Lane 0: main/sequencer; lane 1: dedicated MIDI input producer.
+    /// Overflow requests panic to avoid stuck notes. 256 events/lane/callback.
+    pub fn post(self: AudioController, event: AudioEvent, lane: i64) -> i32 {
+        let kind: i64 = match event.kind {
+            AudioEventKind::NoteOn => 1, AudioEventKind::NoteOff => 2,
+            AudioEventKind::MasterGain => 3, AudioEventKind::PlaySample => 4,
+            AudioEventKind::StopSource => 5, AudioEventKind::InstrumentNoteOn => 6,
+            AudioEventKind::InstrumentNoteOff => 7, AudioEventKind::ControlChange => 8,
+            AudioEventKind::InstrumentControlChange => 9, _ => 0
+        };
+        return __mlang_std_audio_controller_post(self.handle, lane, kind,
+            event.midi.channel, event.midi.note, event.midi.velocity,
+            event.source, event.frame, event.sample, event.gain);
+    }
+    /// Atomically silence all voices and discard queued commands next callback.
+    pub fn panic(self: AudioController) -> void { __mlang_std_audio_controller_panic(self.handle); }
+    /// Copy immutable PCM while stopped. Up to 64 samples; owned until close.
+    /// Source PcmAudio may be closed immediately after this call.
+    pub fn add_sample(self: AudioController, pcm: PcmAudio) -> i64 { return __mlang_std_audio_controller_sample(self.handle, pcm.handle); }
+    /// Render offline/while stopped into preallocated stereo PCM.
+    pub fn process(self: AudioController, block: PcmBlock, frames: i64) -> i32 { return __mlang_std_audio_controller_process(self.handle, block.handle, frames); }
+    pub fn start(self: AudioController) -> i32 { return __mlang_std_audio_controller_start(self.handle); }
+    pub fn stop(self: AudioController) -> i32 { return __mlang_std_audio_controller_stop(self.handle); }
+    /// Join all producers before close. Handle aliases are non-owning.
+    pub fn close(self: AudioController) -> i32 { return __mlang_std_audio_controller_close(self.handle); }
+    pub fn sample_rate(self: AudioController) -> i64 { return __mlang_std_audio_controller_info(self.handle, 0); }
+    pub fn buffer_frames(self: AudioController) -> i64 { return __mlang_std_audio_controller_info(self.handle, 1); }
+    pub fn frame_clock(self: AudioController) -> i64 { return __mlang_std_audio_controller_info(self.handle, 2); }
+    pub fn dropped_events(self: AudioController) -> i64 { return __mlang_std_audio_controller_info(self.handle, 3); }
+}

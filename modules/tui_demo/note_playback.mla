@@ -3,14 +3,27 @@ use tui_demo::sequence::SequenceTable;
 use tui_demo::sequence::SequenceTrack;
 use tui::table::*;
 use tui::geometry::wide;
+use std::strbuf::sub;
+use std::strbuf::len;
+use std::strbuf::free;
+
+fn pattern_controller_number(parameter: str8) -> i64 {
+    if parameter == "pitchbend" { return 129; }
+    if !table_matches("cc:[0-9]{1,3}", parameter) { return -1; }
+    let suffix: str8 = sub(parameter, 3, len(parameter) - 3);
+    let parsed: result<i64, str8> = table_integer(suffix); free(suffix);
+    if parsed.is_err() { return -1; }
+    let number: i64 = parsed.unwrap(); return number <= 127 ? number : -1;
+}
 
 /// Timestamped demo events for a future MIDI output/audio-thread consumer.
 /// Ticks are musical time (15000 per sixteenth), not UI frame timestamps.
 // Uniform-width fields keep list payloads free of mixed-width struct padding.
-// on is 1 for note-on, 0 for note-off.
-pub struct NoteEvent { var on: i64; var track: i64; var line: i64; var note: i64; var velocity: i64; var tick: i64; };
-pub struct PlayingNote { var track: i64; var line: i64; var note: i64; var end: i64; };
-pub struct ScheduledNote { var track: i64; var line: i64; var note: i64; var velocity: i64; var start: i64; var length: i64; };
+// on is 1 for note-on, 0 for note-off, 2 for CC (note=controller, velocity=value).
+// instrument: 0 = MIDI preview, -1 = unassigned, 1-32 = loaded slot.
+pub struct NoteEvent { var on: i64; var track: i64; var line: i64; var note: i64; var velocity: i64; var tick: i64; var instrument: i64; };
+pub struct PlayingNote { var track: i64; var line: i64; var note: i64; var end: i64; var instrument: i64; };
+pub struct ScheduledNote { var track: i64; var line: i64; var note: i64; var velocity: i64; var start: i64; var length: i64; var instrument: i64; var control: i64; };
 pub struct NotePlayback {
     var active: list<PlayingNote>; var events: list<NoteEvent>;
     var running: bool; var last: i64;
@@ -20,7 +33,7 @@ impl NotePlayback {
     fn finish_at(self: &mut Self, tick: i64, all: bool) -> void {
         let previous: list<PlayingNote> = self.active; var kept: list<PlayingNote> = [];
         for voice in previous {
-            if !all && voice.end > tick { kept.push(PlayingNote { track: voice.track, line: voice.line, note: voice.note, end: voice.end }); }
+            if !all && voice.end > tick { kept.push(PlayingNote { track: voice.track, line: voice.line, note: voice.note, end: voice.end, instrument: voice.instrument }); }
         }
         for i in 0..previous.len() {
             let voice: PlayingNote = previous[i];
@@ -28,12 +41,12 @@ impl NotePlayback {
                 // MIDI has no voice ID: overlapping equal pitches stay on until
                 // the last voice ends. Never cut a longer note at a retrigger.
                 var held: bool = false;
-                for other in kept { if other.track == voice.track && other.note == voice.note { held = true; } }
+                for other in kept { if other.track == voice.track && other.note == voice.note && other.instrument == voice.instrument { held = true; } }
                 for j in 0..i {
                     let other: PlayingNote = previous[j];
-                    if (all || other.end <= tick) && other.track == voice.track && other.note == voice.note { held = true; }
+                    if (all || other.end <= tick) && other.track == voice.track && other.note == voice.note && other.instrument == voice.instrument { held = true; }
                 }
-                if !held { self.events.push(NoteEvent { track: voice.track, line: voice.line, note: voice.note, tick: tick }); }
+                if !held { self.events.push(NoteEvent { track: voice.track, line: voice.line, note: voice.note, tick: tick, instrument: voice.instrument }); }
             }
         }
         self.active = kept;
@@ -48,6 +61,23 @@ impl NotePlayback {
             for t in 0..table.tracks.len() {
                 let track: SequenceTrack = table.tracks[t];
                 if track.audio || track.muted { continue; }
+                // Automation is row-timed, independent of NOTE/LEN/OFF and visibility.
+                for slot in 1..3 {
+                    let controller: i64 = pattern_controller_number(slot == 1 ? track.cc1.parameter : track.cc2.parameter);
+                    let column: i32 = table.automation_column(i32(t), i32(slot));
+                    if controller < 0 || data.cells[column] == "" { continue; }
+                    let parsed: result<i64, str8> = table_integer(data.cells[column]);
+                    if parsed.is_err() { continue; }
+                    let value: i64 = parsed.unwrap();
+                    if controller == 129 {
+                        if value < -8192 || value > 8191 { continue; }
+                    } else if value < 0 || value > 127 { continue; }
+                    var start: i64 = r * 15000;
+                    if start < from { start = start + (from - start + period - 1) / period * period; }
+                    self.score.push(ScheduledNote { track: t, line: slot, note: controller,
+                        velocity: controller == 129 ? value + 8192 : value, start: start, control: 1,
+                        instrument: track.instrument ? (track.instrument_id > 0 ? wide(track.instrument_id) : -1) : 0 });
+                }
                 for line in 0..track.note_lines {
                     let column: i32 = table.track_start(i32(t)) + i32(line) * 4;
                     if data.cells[column] == "" { continue; }
@@ -60,7 +90,8 @@ impl NotePlayback {
                     // note is scheduled before the NEXT loop's first row.
                     if start < from { start = start + (from - start + period - 1) / period * period; }
                     let length: i64 = table.note_length(i32(r), column);
-                    self.score.push(ScheduledNote { track: t, line: line, note: wide(note), velocity: value, start: start, length: length });
+                    self.score.push(ScheduledNote { track: t, line: line, note: wide(note), velocity: value, start: start, length: length,
+                        instrument: track.instrument ? (track.instrument_id > 0 ? wide(track.instrument_id) : -1) : 0 });
                 }
             }
         }
@@ -89,12 +120,14 @@ impl NotePlayback {
             for note in score {
                 var next: i64 = note.start;
                 if next == event_tick {
-                    self.events.push(NoteEvent { on: 1, track: note.track, line: note.line, note: note.note, velocity: note.velocity, tick: next });
-                    let end: i64 = next + note.length;
-                    self.active.push(PlayingNote { track: note.track, line: note.line, note: note.note, end: end });
+                    self.events.push(NoteEvent { on: note.control == 1 ? 2 : 1, track: note.track, line: note.line, note: note.note, velocity: note.velocity, tick: next, instrument: note.instrument });
+                    if note.control == 0 {
+                        let end: i64 = next + note.length;
+                        self.active.push(PlayingNote { track: note.track, line: note.line, note: note.note, end: end, instrument: note.instrument });
+                    }
                     next = next + period;
                 }
-                updated.push(ScheduledNote { track: note.track, line: note.line, note: note.note, velocity: note.velocity, start: next, length: note.length });
+                updated.push(ScheduledNote { track: note.track, line: note.line, note: note.note, velocity: note.velocity, start: next, length: note.length, instrument: note.instrument, control: note.control });
             }
             self.score = updated;
         }

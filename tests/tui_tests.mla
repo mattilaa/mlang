@@ -12,7 +12,102 @@ mod std::testing;
 mod tui::dialog;
 mod tui::textfield;
 mod tui::table;
+mod tui::slider;
+mod tui_demo::instrument_editor;
+use tui::slider::Slider;
+use tui_demo::instrument_editor::InstrumentEditor;
+use std::audio::controller::AudioController;
+use tui_demo::sequence::SequenceTrack;
+use tui_demo::patterns::PatternEntry;
 use tui::table::*;
+fn slider_valid(slider: Slider, text: str8) -> bool { let value: result<f64, str8> = slider.parse(text); return value.is_ok(); }
+fn slider_value(slider: Slider, text: str8) -> f64 { let value: result<f64, str8> = slider.parse(text); return value.unwrap(); }
+
+#[test]
+fn tui_slider_validation() {
+    var slider: Slider = Slider::new("Velocity", 0.0, 127.0, 100.0, "i32");
+    verify(slider_valid(slider, "0")); verify(slider_valid(slider, "127"));
+    verify(!slider_valid(slider, "128")); verify(!slider_valid(slider, "-1"));
+    verify(!slider_valid(slider, "1.5")); verify(!slider_valid(slider, "12x"));
+    slider.value_type = "f64"; slider.maximum = 1.0;
+    let quarter: f64 = slider_value(slider, "0.25"); verify(quarter > 0.249999 && quarter < 0.250001);
+    let half: f64 = slider_value(slider, ".5"); verify(half > 0.499999 && half < 0.500001);
+    verify(!slider_valid(slider, "NaN")); verify(!slider_valid(slider, "inf"));
+    verify(!slider_valid(slider, "1e9")); verify(!slider_valid(slider, ""));
+    slider.value_type = "str8"; verify(!slider_valid(slider, "0"));
+    slider.value_type = "u32"; slider.maximum = 4294967296.0;
+    verify(slider_valid(slider, "4294967295")); verify(!slider_valid(slider, "4294967296"));
+    slider.minimum = 10.0; slider.maximum = 1.0; verify(!slider_valid(slider, "5"));
+    slider.minimum = f64(-2147483649); slider.maximum = f64(2147483648); slider.value_type = "i32";
+    verify(slider_valid(slider, "2147483647")); verify(!slider_valid(slider, "2147483648"));
+    verify(slider_valid(slider, "-2147483648")); verify(!slider_valid(slider, "-2147483649"));
+    slider.release();
+}
+
+#[test]
+fn tui_slider_keyboard() {
+    var slider: Slider = Slider::new("Mode", 0.0, 3.0, 2.0, "i32"); slider.step = 1.0;
+    verify(slider.on_event(decode_input("J"))); verify(slider.value == 1.0);
+    verify(slider.on_event(decode_input("K"))); verify(slider.value == 2.0);
+    verify(slider.on_event(decode_input("\x1b[107;2u"))); verify(slider.value == 3.0);
+    verify(!slider.on_event(decode_input("K"))); verify(slider.value == 3.0);
+    slider.on_event(decode_input("\r")); verify(slider.editing);
+    slider.editor.set_text("9"); verify(!slider.on_event(decode_input("\r")));
+    verify(slider.editing && slider.value == 3.0 && slider.error != "");
+    slider.editor.set_text("1"); verify(slider.on_event(decode_input("\r")));
+    verify(!slider.editing && slider.value == 1.0);
+    slider.read_only = true; verify(!slider.on_event(decode_input("K"))); verify(slider.value == 1.0);
+    slider.on_event(decode_input("\r")); verify(!slider.editing);
+    slider.release();
+}
+
+#[test]
+fn tui_instrument_editor_navigation() {
+    var editor: InstrumentEditor = InstrumentEditor { active: true };
+    for i in 0..40 { editor.sliders.push(Slider::new("Parameter", 0.0, 1.0, 0.5, "f64")); }
+    let area: Rect = Rect::new(0, 0, 54, 20);
+    let output: AudioController = AudioController {};
+    editor.on_event(decode_input("L"), output, area); verify(editor.selected == 0); verify(!editor.learning);
+    editor.on_event(decode_input("\x1b[108;2u"), output, area); verify(editor.selected == 0); verify(!editor.learning);
+    editor.on_event(decode_input("l"), output, area); verify(editor.selected == 4);
+    editor.on_event(decode_input("j"), output, area); verify(editor.selected == 5);
+    editor.on_event(decode_input("k"), output, area); verify(editor.selected == 4);
+    editor.on_event(decode_input("h"), output, area); verify(editor.selected == 0);
+    editor.selected = 39;
+    let surface: Surface = Surface::new(54, 20);
+    editor.paint(surface, area, Theme::dark_blue()); verify(editor.scroll > 0);
+    editor.on_event(decode_input("\r"), output, area);
+    editor.on_event(decode_input("h"), output, area); verify(editor.selected == 39);
+    // Entered text stays in the slider, never reaching the pattern navigator.
+    let selected: Slider = editor.sliders[39]; verify(selected.editing);
+    surface.release(); editor.release();
+}
+
+#[test]
+fn tui_midi_learn_filename() {
+    let suggested: str8 = SessionCodec::learn_suggestion("Synth/A:B\\C\n");
+    verify(suggested == "Synth_A_B_C_ - "); free(suggested);
+}
+
+#[test]
+fn tui_remove_instrument_detaches_patterns() {
+    var library: PatternLibrary = PatternLibrary::new();
+    let area: Rect = Rect::new(0, 0, 100, 20);
+    library.table.create_instrument_track(7, area);
+    library.add_instrument(7, "Test"); library.add_instrument(8, "Other");
+    library.table.assign_instrument(7); library.add(true);
+    library.remove_instrument(7, area);
+    let tracks: list<SequenceTrack> = library.table.tracks;
+    for track in tracks { verify(track.instrument_id != 7); }
+    let patterns: list<PatternEntry> = library.patterns;
+    for pattern in patterns {
+        let saved: list<SequenceTrack> = pattern.data.tracks;
+        for track in saved { verify(track.instrument_id != 7); }
+    }
+    verify(library.instruments.items.len() == 1);
+    let kept: ListItem = library.instruments.items[0]; verify(kept.id == 8);
+    library.release();
+}
 mod tui_demo::sequence;
 use tui_demo::sequence::SequenceTable;
 mod tui::meter;
@@ -23,6 +118,61 @@ mod tui::listview;
 mod tui_demo::patterns;
 use tui::listview::*;
 use tui_demo::patterns::PatternLibrary;
+mod tui_demo::session;
+use tui_demo::session::SessionCodec;
+use tui_demo::session::SessionData;
+use tui_demo::session::SessionView;
+use tui_demo::audio_controller::AudioSystem;
+extern fn mkdtemp(path: str8) -> str8;
+
+#[test]
+fn tui_session_roundtrip() {
+    let directory: str8 = clone("/private/tmp/mlacker-session-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/roundtrip.mlack", directory);
+    var library: PatternLibrary = PatternLibrary::new();
+    var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.track_action(80, area);
+    library.table.create_track_kind(false, true, area);
+    var clip: AudioClip = AudioClip { source: clone("embedded-test.wav"), channels: 1, sample_rate: 8000, frames: 80, frames_per_row: 10 };
+    for _i in 0..80 { clip.samples.push(0.5f); }
+    for _i in 0..8 { clip.peaks.push(WavePeak { left: 500, right: 500, left_body: 500, right_body: 500 }); }
+    for _i in 0..32 { clip.detail_peaks.push(WavePeak { left: 500, right: 500 }); }
+    library.audio.samples.push(clip); library.table.selected_row = 7;
+    verify(library.table.insert_audio(clip, area));
+    let view: SessionView = SessionView { bpm: 147, beats: 7, unit: 8, pane: 1, sidebar: 1, mixer: true, meter_fps: 120, sample_zoom: 4, row: 7 };
+    verify(codec.save(path, library, view, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap();
+    verify(restored.view.bpm == 147 && restored.view.beats == 7 && restored.view.sample_zoom == 4 && restored.view.meter_fps == 120);
+    verify(restored.library.patterns.len() == 3 && restored.library.song.len() == 4);
+    verify(restored.library.table.tracks.len() == 4 && restored.library.table.selected_row == 7);
+    let track: SequenceTrack = restored.library.table.tracks[3];
+    let placement: AudioInstance = track.instances[0]; verify(placement.start_row == 7 && placement.clip.frames == 80);
+    verify(placement.clip.samples[20] == 0.5f && restored.library.audio.samples.len() == 1);
+    let midi: SequenceTrack = restored.library.table.tracks[0]; verify(midi.note_lines == 2);
+    restored.release();
+    // A rejected save must not truncate the previous valid session.
+    verify(!codec.save(path, library, SessionView { bpm: 0 }, audio));
+    let retained: result<SessionData, str8> = SessionCodec::load(path); verify(retained.is_ok());
+    var valid: SessionData = retained.unwrap(); valid.release();
+    library.release();
+    let removed: result<i32, str8> = std::fs::remove_tree(directory); verify(removed.is_ok()); free(path); free(directory);
+}
+
+#[test]
+fn tui_session_empty_and_bad_file() {
+    var library: PatternLibrary = PatternLibrary::empty(); var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    verify(library.table.tracks.len() == 0 && library.song.len() == 0 && library.audio.samples.len() == 0);
+    let directory: str8 = clone("/private/tmp/mlacker-empty-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/empty.mlack", directory);
+    verify(codec.save(path, library, SessionView {}, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap(); verify(restored.library.table.tracks.len() == 0); restored.release();
+    std::fs::write_all_text(path, "not a session file and deliberately too short or malformed");
+    let invalid: result<SessionData, str8> = SessionCodec::load(path); verify(invalid.is_err());
+    library.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}
 mod tui_demo::transport;
 use tui_demo::transport::TransportStatus;
 mod tui_demo::waveform;
@@ -41,6 +191,33 @@ use tui_demo::duration::*;
 mod tui_demo::note_playback;
 use tui_demo::note_playback::*;
 
+
+#[test]
+fn tui_alternating_track_text() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 120, 10);
+    let surface: Surface = Surface::new(120, 10); let theme: Theme = Theme::dark_blue();
+    for stage in 0..3 {
+        table.zoom_tracks(i32(stage), true, area);
+        for selected in 0..3 {
+            table.selected_column = table.track_start(i32(selected)); table.paint(surface, area, theme);
+            let body: Rect = table.body(area);
+            for t in 0..3 {
+                let column: i32 = table.track_start(i32(t)); let x: i32 = table.column_x(column);
+                let expected: i32 = t == 1 && t != selected ? darken(theme.foreground, 88) : theme.foreground;
+                let cell: Cell = surface.cell(x, body.y); let stripe: Cell = surface.cell(x, body.y + 1);
+                verify(cell.foreground == expected && stripe.foreground == expected);
+                let vel: Cell = surface.cell(table.column_x(column + 1), body.y);
+                verify(vel.foreground == (t == 1 ? darken(theme.foreground, 88) : theme.foreground));
+            }
+        }
+        table.selected_column = table.track_start(1) + 1; table.paint(surface, area, theme);
+        let body: Rect = table.body(area); let x: i32 = table.column_x(table.selected_column);
+        let selected_vel: Cell = surface.cell(x, body.y); let selected_header: Cell = surface.cell(x, body.y - 1);
+        verify(selected_vel.foreground == theme.foreground && selected_header.foreground == theme.accent);
+    }
+    var copy: SequenceTable = table.copy_pattern(); verify(copy.alternate_group_text); copy.release();
+    surface.release(); table.release();
+}
 
 #[test]
 fn tui_velocity_left_alignment() {
@@ -99,6 +276,58 @@ fn tui_hidden_table_columns() {
 }
 
 #[test]
+fn tui_pattern_visual_clipboard() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 20);
+    table.selected_row = 0; table.selected_column = 1;
+    table.edit_event(decode_input("v"), area); table.edit_event(decode_input("l"), area); table.edit_event(decode_input("j"), area);
+    verify(table.visual && table.visual_cell(0, 1) && table.visual_cell(1, 2) && !table.visual_cell(2, 2));
+    let surface: Surface = Surface::new(80, 20); table.paint(surface, area, Theme::dark_blue());
+    let body: Rect = table.body(area);
+    let selected: Cell = surface.cell(table.column_x(1), body.y);
+    let other: Cell = surface.cell(table.column_x(7), body.y);
+    verify(selected.background != other.background); surface.release();
+    table.edit_event(decode_input("y"), area);
+    verify(!table.visual && table.clipboard.len() == 2 && table.clipboard_kinds.len() == 2);
+    let source: TableRow = table.rows[0]; let expected_note: str8 = clone(source.cells[1]); let expected_vel: str8 = clone(source.cells[2]);
+    table.selected_row = 4; table.clear_row(); table.selected_row = 5; table.clear_row();
+    table.selected_row = 4; table.selected_column = 7; table.edit_event(decode_input("p"), area);
+    verify(!table.paste_error); let pasted: TableRow = table.rows[4];
+    verify(pasted.cells[7] == expected_note && pasted.cells[8] == expected_vel && pasted.cells[9] == "1.00");
+    table.selected_column = 8; table.edit_event(decode_input("p"), area);
+    verify(table.paste_error); let unchanged: TableRow = table.rows[4]; verify(unchanged.cells[8] == expected_vel);
+    table.selected_column = 8; table.selected_row = 5;
+    table.edit_event(decode_input("v"), area); table.edit_event(decode_input("h"), area); table.edit_event(decode_input("k"), area);
+    table.edit_event(decode_input("d"), area);
+    verify(table.rows.len() == 64 && !table.visual); let cleared: TableRow = table.rows[4];
+    verify(cleared.cells[7] == "" && cleared.cells[8] == "");
+    table.edit_event(decode_input("p"), area); let restored: TableRow = table.rows[4]; verify(restored.cells[7] == expected_note && restored.cells[8] == expected_vel);
+    table.selected_row = i32(table.rows.len()) - 1; table.edit_event(decode_input("p"), area); verify(table.paste_error);
+    table.edit_event(decode_input("v"), area); table.edit_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }, area); verify(!table.visual);
+    free(expected_note); free(expected_vel); table.release();
+}
+
+#[test]
+fn tui_pattern_visual_atomic_and_new_velocity() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 20);
+    table.selected_row = 0; table.selected_column = 1;
+    table.edit_event(decode_input("v"), area); table.edit_event(decode_input("l"), area); table.edit_event(decode_input("y"), area);
+    let copied: TableRow = table.clipboard[0]; free(copied.cells[1]);
+    table.clipboard = [TableRow { cells: [copied.cells[0], clone("999")] }];
+    table.selected_row = 4; table.selected_column = 1; table.clear_row();
+    table.edit_event(decode_input("p"), area); verify(table.paste_error);
+    let unchanged: TableRow = table.rows[4]; verify(unchanged.cells[1] == "" && unchanged.cells[2] == "");
+    table.selected_column = 2; table.edit_event(decode_input("\r"), area); table.editor.set_text("12"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 1; table.edit_event(decode_input("K"), area);
+    let inserted: TableRow = table.rows[4]; verify(inserted.cells[1] == "C-4" && inserted.cells[2] == "100");
+    table.release();
+    var library: PatternLibrary = PatternLibrary::new(); library.table.selected_row = 0; library.table.selected_column = 1;
+    library.table.edit_event(decode_input("v"), area); library.table.edit_event(decode_input("y"), area);
+    library.select(2); verify(library.table.clipboard.len() == 1);
+    library.table.selected_row = 4; library.table.selected_column = 1; library.table.edit_event(decode_input("p"), area);
+    verify(!library.table.paste_error); library.release();
+}
+
+#[test]
 fn tui_track_zoom_stages() {
     var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 12);
     verify(table.total_width() == 37);
@@ -133,6 +362,161 @@ fn tui_track_zoom_stages() {
     table.create_track_kind(false, true, area); table.edit_event(decode_input("z"), area);
     table.edit_event(decode_input("Z"), area); let audio: SequenceTrack = table.tracks[3]; verify(audio.audio && audio.wave_zoom);
     table.release(); copy.release();
+}
+
+fn visual_pair(column: i32, first: str8, second: str8) -> SequenceTable {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 120, 20);
+    table.zoom_tracks(2, true, area); table.selected_column = column;
+    for r in 0..3 {
+        table.selected_row = i32(r); table.edit_event(decode_input("\r"), area);
+        table.editor.set_text(r == 0 ? first : (r == 1 ? second : ""));
+        table.edit_event(decode_input("\r"), area); verify(!table.editing);
+    }
+    table.selected_row = 0; table.edit_event(decode_input("v"), area);
+    table.edit_event(decode_input("j"), area); table.edit_event(decode_input("j"), area);
+    return table;
+}
+
+#[test]
+fn tui_visual_whole_rows() {
+    let area: Rect = Rect::new(0, 0, 80, 12); var table: SequenceTable = SequenceTable::new();
+    table.selected_column = 8; table.selected_row = 2;
+    table.edit_event(decode_input("V"), area); table.edit_event(decode_input("k"), area);
+    table.edit_event(decode_input("h"), area);
+    verify(table.visual_rows && table.visual_cell(1, 1) && table.visual_cell(2, 18) && !table.visual_cell(0, 1));
+    let surface: Surface = Surface::new(80, 12); table.paint(surface, area, Theme::dark_blue());
+    let body: Rect = table.body(area); let mark: Cell = surface.cell(0, body.y + 2); let outside: Cell = surface.cell(0, body.y);
+    verify(mark.background != outside.background); surface.release();
+    table.edit_event(decode_input("y"), area);
+    verify(!table.visual && table.clipboard_rows && table.clipboard.len() == 2 && table.clipboard_kinds.len() == 18);
+    table.edit_event(decode_input("\x1b[118;2u"), area); table.edit_event(decode_input("j"), area); table.edit_event(decode_input("d"), area);
+    verify(table.rows.len() == 64 && !table.visual);
+    for r in 1..3 { let row: TableRow = table.rows[r]; for c in 1..row.cells.len() { verify(row.cells[c] == ""); } }
+    table.edit_event(decode_input("p"), area); verify(!table.paste_error);
+    let restored: TableRow = table.rows[1]; verify(restored.cells[1] == "C-4" && restored.cells[3] == "1.00" && restored.cells[16] == "0.00");
+    table.edit_event(decode_input("V"), area); table.edit_event(decode_input("K"), area);
+    verify(table.visual && table.visual_rows); let shifted: TableRow = table.rows[1]; verify(shifted.cells[1] == "C#4" && shifted.cells[3] == "1.00");
+    table.edit_event(decode_input("V"), area); verify(!table.visual); table.release();
+    var library: PatternLibrary = PatternLibrary::new(); library.table.selected_column = 2;
+    library.table.edit_event(decode_input("V"), area); library.table.edit_event(decode_input("y"), area);
+    library.select(2); verify(library.table.clipboard_rows);
+    library.table.selected_row = 4; library.table.selected_column = 1; library.table.edit_event(decode_input("p"), area);
+    verify(!library.table.paste_error); library.release();
+}
+
+#[test]
+fn tui_visual_transpose_note_and_velocity_bounds() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var notes: SequenceTable = visual_pair(1, "F#9", "G-9");
+    let revision: i64 = notes.revision;
+    notes.edit_event(decode_input("K"), area);
+    let high: TableRow = notes.rows[0]; verify(high.cells[1] == "F#9" && notes.revision == revision);
+    notes.edit_event(decode_input("J"), area);
+    let first: TableRow = notes.rows[0]; let second: TableRow = notes.rows[1]; let empty: TableRow = notes.rows[2];
+    verify(first.cells[1] == "F-9" && second.cells[1] == "F#9" && empty.cells[1] == "");
+    verify(first.cells[2] == "100" && notes.visual && notes.anchor_row == 0 && notes.selected_row == 2);
+    notes.edit_event(decode_input("\x1b[107;2u"), area); let restored: TableRow = notes.rows[1]; verify(restored.cells[1] == "G-9");
+    notes.release();
+    var low: SequenceTable = visual_pair(1, "C--1", "C#-1"); low.edit_event(decode_input("J"), area);
+    let unchanged: TableRow = low.rows[1]; verify(unchanged.cells[1] == "C#-1");
+    low.edit_event(decode_input("K"), area); let moved: TableRow = low.rows[0]; verify(moved.cells[1] == "C#-1"); low.release();
+    var velocity: SequenceTable = visual_pair(2, "126", "127"); velocity.edit_event(decode_input("K"), area);
+    let vmax: TableRow = velocity.rows[0]; verify(vmax.cells[2] == "126");
+    velocity.edit_event(decode_input("\x1b[106;2u"), area); let vdown: TableRow = velocity.rows[0]; verify(vdown.cells[2] == "125"); velocity.release();
+    var vlow: SequenceTable = visual_pair(2, "0", "1"); vlow.edit_event(decode_input("J"), area);
+    let vmin: TableRow = vlow.rows[1]; verify(vmin.cells[2] == "1"); vlow.release();
+}
+
+#[test]
+fn tui_visual_transpose_length_offset_and_atomicity() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var length: SequenceTable = visual_pair(3, "16383.99", "16384.00"); length.edit_event(decode_input("K"), area);
+    let top: TableRow = length.rows[0]; verify(top.cells[3] == "16383.99");
+    length.edit_event(decode_input("J"), area); let down: TableRow = length.rows[0]; verify(down.cells[3] == "16383.98"); length.release();
+    var minimum: SequenceTable = visual_pair(3, "0.01", "0.02"); minimum.edit_event(decode_input("J"), area);
+    let bottom: TableRow = minimum.rows[1]; verify(bottom.cells[3] == "0.02"); minimum.release();
+    var offset: SequenceTable = visual_pair(4, "16383.99", "16384.00"); offset.edit_event(decode_input("K"), area);
+    let omax: TableRow = offset.rows[0]; verify(omax.cells[4] == "16383.99"); offset.release();
+    var negative: SequenceTable = visual_pair(4, "-16384.00", "-16383.99"); negative.edit_event(decode_input("J"), area);
+    let omin: TableRow = negative.rows[1]; verify(omin.cells[4] == "-16383.99");
+    negative.edit_event(decode_input("K"), area); let oup: TableRow = negative.rows[0]; verify(oup.cells[4] == "-16383.99"); negative.release();
+    var mixed: SequenceTable = visual_pair(1, "C-4", "D-4");
+    mixed.visual = false; mixed.selected_column = 2; mixed.selected_row = 1;
+    mixed.edit_event(decode_input("\r"), area); mixed.editor.set_text("127"); mixed.edit_event(decode_input("\r"), area);
+    mixed.selected_column = 1; mixed.selected_row = 0; mixed.edit_event(decode_input("v"), area);
+    mixed.edit_event(decode_input("l"), area); mixed.edit_event(decode_input("j"), area); mixed.edit_event(decode_input("K"), area);
+    let blocked: TableRow = mixed.rows[0]; verify(blocked.cells[1] == "C-4" && blocked.cells[2] == "100");
+    mixed.edit_event(decode_input("J"), area); let changed: TableRow = mixed.rows[0];
+    verify(changed.cells[1] == "B-3" && changed.cells[2] == "99" && changed.cells[3] == "1.00"); mixed.release();
+}
+
+#[test]
+fn tui_instrument_tracks_and_routing() {
+    let area: Rect = Rect::new(0, 0, 100, 12);
+    var library: PatternLibrary = PatternLibrary::new();
+    library.add_instrument(1, "Synth one");
+    verify(library.instruments_mode && library.selected_instrument() == 1);
+    library.table.create_instrument_track(library.selected_instrument(), area);
+    let track: SequenceTrack = library.table.tracks[3];
+    verify(track.instrument && !track.audio && track.instrument_id == 1);
+    // Isolate one note on the instrument track.
+    for r in 0..64 { library.table.selected_row = i32(r); library.table.clear_row(); }
+    library.table.selected_row = 0;
+    library.table.edit_event(decode_input("\r"), area); library.table.editor.set_text("C-4"); library.table.edit_event(decode_input("\r"), area);
+    library.table.selected_column = library.table.selected_column + 1;
+    library.table.edit_event(decode_input("\r"), area); library.table.editor.set_text("100"); library.table.edit_event(decode_input("\r"), area);
+    var playback: NotePlayback = NotePlayback {};
+    playback.update(library.table, 0, true);
+    verify(playback.events.len() == 1);
+    let on: NoteEvent = playback.events[0]; verify(on.instrument == 1 && on.on == 1);
+    library.add_instrument(2, "Synth two");
+    let assigned: SequenceTrack = library.table.tracks[3]; verify(assigned.instrument_id == 2);
+    playback.update(library.table, 15000, false);
+    let off: NoteEvent = playback.events[0]; verify(off.instrument == 1 && off.on == 0);
+    library.table.create_track(true, area);
+    let duplicate: SequenceTrack = library.table.tracks[4]; verify(duplicate.instrument && duplicate.instrument_id == 2);
+    var copied: SequenceTable = library.table.copy_pattern();
+    let copied_track: SequenceTrack = copied.tracks[4]; verify(copied_track.instrument && copied_track.instrument_id == 2);
+    library.select(2); library.select(1);
+    let saved: SequenceTrack = library.table.tracks[4]; verify(saved.instrument && saved.instrument_id == 2);
+    library.show_song(false); verify(!library.instruments_mode);
+    library.show_instruments(); library.on_event(decode_input("gg"), area);
+    library.instruments.selected = 0; library.on_event(decode_input("\r"), area);
+    let selected: SequenceTrack = library.table.tracks[4]; verify(selected.instrument_id == 1);
+    library.show_audio(); verify(!library.instruments_mode && library.audio_mode);
+    copied.release(); library.release();
+}
+
+#[test]
+fn tui_pattern_controller_events() {
+    let area: Rect = Rect::new(0, 0, 120, 12);
+    var table: SequenceTable = SequenceTable::new();
+    for r in 0..64 { table.selected_row = i32(r); table.clear_row(); }
+    table.create_instrument_track(2, area); table.zoom_tracks(2, true, area);
+    table.selected_row = 0; table.selected_column = table.automation_column(3, 1);
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("127"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = table.automation_column(3, 2);
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("64"); table.edit_event(decode_input("\r"), area);
+    table.selected_row = 1; table.selected_column = table.automation_column(3, 1);
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("0"); table.edit_event(decode_input("\r"), area);
+    table.zoom_tracks(0, true, area); // hidden automation still plays without notes
+    var playback: NotePlayback = NotePlayback {};
+    playback.update(table, 0, true); verify(playback.events.len() == 2 && playback.active.len() == 0);
+    let first: NoteEvent = playback.events[0]; let second: NoteEvent = playback.events[1];
+    verify(first.on == 2 && first.note == 1 && first.velocity == 127 && first.instrument == 2);
+    verify(second.on == 2 && second.note == 74 && second.velocity == 64 && second.tick == 0);
+    playback.update(table, 0, true); verify(playback.events.len() == 0);
+    playback.update(table, 30000, true); verify(playback.events.len() == 1);
+    let zero: NoteEvent = playback.events[0]; verify(zero.velocity == 0 && zero.tick == 15000);
+    playback.update(table, 960000, true); verify(playback.events.len() == 2);
+    playback.update(table, 960000, false); verify(playback.events.len() == 0);
+    verify(table.configure_slot(1, "pitchbend"));
+    playback.update(table, 15000, true); verify(playback.events.len() == 1);
+    let bend: NoteEvent = playback.events[0]; verify(bend.note == 129 && bend.velocity == 8192);
+    playback.update(table, 15000, false);
+    verify(table.configure_slot(1, "custom:0:127"));
+    playback.update(table, 15000, true); verify(playback.events.len() == 0);
+    table.release();
 }
 
 #[test]
@@ -765,6 +1149,46 @@ fn tui_sequence_jump_navigation() {
 }
 
 #[test]
+fn tui_pattern_insert_rows() {
+    let area: Rect = Rect::new(0, 0, 40, 8); var table: SequenceTable = SequenceTable::new();
+    table.selected_row = 3; table.selected_column = 2;
+    table.edit_event(decode_input("o"), area);
+    verify(table.rows.len() == 65 && table.selected_row == 4 && table.selected_column == 2);
+    let blank: TableRow = table.rows[4]; verify(blank.cells[0] == "005");
+    for c in 1..blank.cells.len() { verify(blank.cells[c] == ""); }
+    let shifted: TableRow = table.rows[5]; verify(shifted.cells[0] == "006" && shifted.cells[1] == "C-4" && shifted.cells[3] == "1.00");
+    table.edit_event(decode_input("O"), area); verify(table.rows.len() == 66 && table.selected_row == 4);
+    table.selected_row = 0; table.edit_event(decode_input("\x1b[111;2u"), area);
+    verify(table.selected_row == 0 && table.rows.len() == 67);
+    table.selected_row = 66; table.edit_event(decode_input("o"), area);
+    verify(table.selected_row == 67 && table.rows.len() == 68 && table.scroll_y > 0);
+    table.release();
+    var empty: SequenceTable = SequenceTable::empty();
+    for _r in 0..64 { empty.selected_row = 0; empty.delete_row(area); }
+    empty.edit_event(decode_input("o"), area); verify(empty.rows.len() == 1 && empty.selected_row == 0);
+    verify(empty.set_length(16384, area)); let revision: i64 = empty.revision;
+    empty.edit_event(decode_input("O"), area); verify(empty.rows.len() == 16384 && empty.revision == revision && empty.error != ""); empty.release();
+}
+
+#[test]
+fn tui_pattern_insert_shifts_audio() {
+    let area: Rect = Rect::new(0, 0, 120, 12);
+    var table: SequenceTable = SequenceTable::new(); table.create_track_kind(false, true, area);
+    var clip: AudioClip = AudioClip { source: clone("insert-test"), frames: 40, frames_per_row: 10 };
+    for _r in 0..4 { clip.peaks.push(WavePeak { left: 500, right: 250 }); }
+    for _r in 0..16 { clip.detail_peaks.push(WavePeak { left: 500, right: 250 }); }
+    table.selected_row = 5; verify(table.insert_audio(clip, area));
+    table.edit_event(decode_input("O"), area);
+    let shifted: SequenceTrack = table.tracks[3]; let instance: AudioInstance = shifted.instances[0];
+    verify(table.selected_row == 5 && instance.start_row == 6 && instance.duration() == 60000);
+    let start: TableRow = table.rows[6]; verify(start.cells[21] == "4.00");
+    table.selected_row = 7; table.edit_event(decode_input("o"), area);
+    let retained: SequenceTrack = table.tracks[3]; let span: AudioInstance = retained.instances[0];
+    verify(span.start_row == 6 && span.duration() == 60000 && table.selected_row == 8);
+    table.release(); clip.release();
+}
+
+#[test]
 fn tui_vu_meter_and_mixer() {
     let theme: Theme = Theme::dark_blue();
     let surface: Surface = Surface::new(40, 18);
@@ -789,6 +1213,12 @@ fn tui_vu_meter_and_mixer() {
     verify(selected.background == lighten(theme.panel, 8) && other.background == theme.panel);
     let volume: Cell = surface.cell(6, 1); let pan: Cell = surface.cell(6, 2);
     verify(volume.glyph == 86 && pan.glyph == 80);
+    verify(mixer.update_master(900, 400, 20));
+    verify(mixer.master.left > mixer.master.right && mixer.master.right > 0);
+    let previous_master: i32 = mixer.master.left;
+    mixer.update_master(0, 0, 20); verify(mixer.master.left < previous_master);
+    mixer.paint(surface, Rect::new(0, 0, 27, 16), theme, table.tracks, 2);
+    let master_title: Cell = surface.cell(21, 0); verify(master_title.glyph == 77);
     mixer.paint(surface, Rect::new(0, 0, 9, 8), theme, table.tracks, 2);
     let last: Cell = surface.cell(1, 0); verify(last.glyph == 51);
     for size in 0..5 { mixer.paint(surface, Rect::new(0, 0, i32(size), i32(size)), theme, table.tracks, 2); }
@@ -834,9 +1264,10 @@ fn tui_meter_styles_and_channel_counts() {
     let mixer: Mixer = Mixer { visible: true };
     mixer.paint(surface, Rect::new(0, 0, 24, 12), theme, table.tracks, 3);
     let mono: Cell = surface.cell(2, 11); let empty: Cell = surface.cell(3, 11);
-    let left: Cell = surface.cell(19, 11); let right: Cell = surface.cell(21, 11);
+    let left: Cell = surface.cell(13, 11); let right: Cell = surface.cell(15, 11);
     verify(mono.glyph != 32 && empty.glyph == 32 && left.glyph != 32 && right.glyph != 32);
-    let identity: Cell = surface.cell(18, 0); verify(identity.glyph == 65);
+    let identity: Cell = surface.cell(12, 0); verify(identity.glyph == 65);
+    let master: Cell = surface.cell(18, 0); verify(master.glyph == 77);
     table.release(); surface.release();
 }
 
@@ -930,7 +1361,7 @@ fn tui_sequence_empty_clear_delete() {
     verify(table.rows.len() == 64);
     table.edit_event(decode_input("K"), area);
     table.edit_event(decode_input("l"), area); table.edit_event(decode_input("J"), area);
-    let numeric: TableRow = table.rows[0]; verify(numeric.cells[2] == "0");
+    let numeric: TableRow = table.rows[0]; verify(numeric.cells[2] == "99");
     table.edit_event(decode_input("d"), area); verify(table.rows.len() == 64);
     table.edit_event(decode_input("j"), area); table.edit_event(decode_input("d"), area);
     verify(table.rows.len() == 64);

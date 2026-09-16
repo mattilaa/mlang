@@ -1,0 +1,567 @@
+/// MLACK binary session 1.0. All lengths and integers are little endian.
+mod std::serde::detail;
+mod std::fs;
+mod std::bytes;
+mod tui_demo::patterns;
+mod tui_demo::audio_controller;
+use std::serde::detail::*;
+use std::fs::File;
+use tui_demo::patterns::*;
+use tui_demo::sequence::*;
+use tui_demo::audio_clip::*;
+use tui_demo::audio_controller::AudioSystem;
+use std::audio::controller::AudioController;
+use tui::table::*;
+use tui::listview::*;
+use tui::geometry::*;
+use std::strbuf::clone;
+use std::strbuf::free;
+use std::strbuf::len;
+extern fn __mlang_std_serde_binary_write_atomic(handle: i64, path: str8) -> i32;
+// Small session-specific adapters avoid pulling unrelated generic serde traits
+// into the widget demo. Encoding is the std::serde primitive wire format.
+pub struct SessionBuffer { var handle: i64; };
+impl SessionBuffer {
+    pub fn new(capacity: i64) -> result<SessionBuffer, str8> {
+        let h: i64 = __mlang_std_serde_binary_new(capacity);
+        if h == 0 { return Err<SessionBuffer, str8>("Allocation failed"); }
+        return Ok<SessionBuffer, str8>(SessionBuffer { handle: h });
+    }
+    pub fn len(self: SessionBuffer) -> i64 { return __mlang_std_serde_binary_len(self.handle); }
+    pub fn close(self: SessionBuffer) -> void { __mlang_std_serde_binary_free(self.handle); }
+    pub fn write_i64(self: SessionBuffer, value: i64) -> result<i32, str8> {
+        if __mlang_std_serde_binary_append_i64(self.handle, value) != 0 { return Err<i32, str8>("Write failed"); } return Ok<i32, str8>(0);
+    }
+    pub fn write_f64(self: SessionBuffer, value: f64) -> result<i32, str8> {
+        if __mlang_std_serde_binary_append_f64(self.handle, value) != 0 { return Err<i32, str8>("Write failed"); } return Ok<i32, str8>(0);
+    }
+    pub fn write_string(self: SessionBuffer, value: str8) -> result<i32, str8> {
+        if __mlang_std_serde_binary_append_string(self.handle, value) != 0 { return Err<i32, str8>("Write failed"); } return Ok<i32, str8>(0);
+    }
+    pub fn write_atomic(self: SessionBuffer, path: str8) -> result<i32, str8> {
+        if __mlang_std_serde_binary_write_atomic(self.handle, path) != 0 { return Err<i32, str8>("Save failed"); } return Ok<i32, str8>(0);
+    }
+}
+pub struct SessionReader { var handle: i64; };
+impl SessionReader {
+    pub fn from_file(path: str8) -> result<SessionReader, str8> {
+        let binary: i64 = __mlang_std_serde_binary_read_file(path);
+        if binary == 0 { return Err<SessionReader, str8>("Read failed"); }
+        let h: i64 = __mlang_std_serde_reader_new(binary); __mlang_std_serde_binary_free(binary);
+        if h == 0 { return Err<SessionReader, str8>("Read failed"); } return Ok<SessionReader, str8>(SessionReader { handle: h });
+    }
+    pub fn remaining(self: SessionReader) -> i64 { return __mlang_std_serde_reader_remaining(self.handle); }
+    pub fn close(self: SessionReader) -> void { __mlang_std_serde_reader_free(self.handle); }
+    pub fn read_i64(self: SessionReader) -> result<i64, str8> {
+        let value: i64 = __mlang_std_serde_reader_read_i64(self.handle);
+        if __mlang_std_serde_last_ok() == 0 { return Err<i64, str8>("Truncated"); } return Ok<i64, str8>(value);
+    }
+    pub fn read_f64(self: SessionReader) -> result<f64, str8> {
+        let value: f64 = __mlang_std_serde_reader_read_f64(self.handle);
+        if __mlang_std_serde_last_ok() == 0 { return Err<f64, str8>("Truncated"); } return Ok<f64, str8>(value);
+    }
+    pub fn read_string(self: SessionReader) -> result<str8, str8> {
+        let before: i64 = self.remaining();
+        let value: str8 = __mlang_std_serde_reader_read_string(self.handle);
+        if __mlang_std_serde_last_ok() == 0 { free(value); return Err<str8, str8>("Truncated"); }
+        if before - self.remaining() != 8 + len(value) || len(value) > 4096 { free(value); return Err<str8, str8>("Invalid string"); }
+        return Ok<str8, str8>(value);
+    }
+}
+
+pub struct PluginSnapshot { var slot: i32; var path: str8; var ids: list<i64>; var values: list<f64>; };
+pub struct SessionView {
+    var bpm: i32{120}; var beats: i32{4}; var unit: i32{4}; var row: i32; var phase: i64;
+    var pane: i32; var sidebar: i32; var list_selected: i32; var list_scroll: i32;
+    var audio_selected: i32; var audio_scroll: i32; var instrument_selected: i32; var instrument_scroll: i32;
+    var mixer: bool; var meter_grainy: bool{true}; var meter_fps: i32{60};
+    var sample: bool; var sample_grainy: bool{true}; var sample_wave: bool; var sample_zoom: i32;
+    var editor: bool; var editor_slot: i32; var editor_selected: i32; var editor_scroll: i32;
+};
+pub struct MidiLearnSnapshot { var key: i32; var slot: i32; var parameter_id: i64; };
+pub struct SessionData { var library: PatternLibrary; var plugins: list<PluginSnapshot>; var view: SessionView; var midi_learn: list<MidiLearnSnapshot>; };
+impl SessionData {
+    pub fn release_plugins(self: &mut Self) -> void {
+        let plugins: list<PluginSnapshot> = self.plugins; for plugin in plugins { free(plugin.path); }
+        self.plugins = [];
+    }
+    pub fn release(self: &mut Self) -> void { self.library.release(); self.release_plugins(); }
+    /// Construct a replacement without touching the running session.
+    pub fn prepare_audio(self: SessionData, source: &AudioSystem) -> result<AudioSystem, str8> {
+        var current: AudioSystem = AudioSystem {}; current = source;
+        var next: AudioSystem = AudioSystem { midi_id: current.midi_id, output_id: current.output_id, hardware_requested: current.hardware_requested };
+        // A failed initial device open is not a request for silent/offline audio.
+        let hardware: bool = current.hardware_requested;
+        let opened: result<AudioController, str8> = hardware ? AudioController::open(current.output_id, 128) : AudioController::new(48000, 128);
+        if opened.is_err() { return Err<AudioSystem, str8>("Cannot prepare session audio output"); }
+        next.output = opened.unwrap();
+        let plugins: list<PluginSnapshot> = self.plugins;
+        for plugin in plugins {
+            let loaded: i32 = plugin.slot == 0 ? next.output.load_processor(plugin.path) : next.output.load_instrument(plugin.slot, plugin.path);
+            if loaded != 0 { next.release(); return Err<AudioSystem, str8>("A session VST3 plugin is missing or could not load"); }
+            if plugin.slot == 0 { next.processor_path = clone(plugin.path); }
+            else {
+                while next.instrument_paths.len() < plugin.slot { next.instrument_paths.push(""); }
+                let old: list<str8> = next.instrument_paths; var paths: list<str8> = [];
+                for i in 0..old.len() { paths.push(i + 1 == plugin.slot ? clone(plugin.path) : old[i]); }
+                next.instrument_paths = paths;
+            }
+            let count: i32 = i32(next.output.parameter_info(plugin.slot, 0, 0));
+            if count != plugin.ids.len() { next.release(); return Err<AudioSystem, str8>("VST3 parameter layout changed; session retained"); }
+            for i in 0..plugin.ids.len() {
+                var found: i32 = i32(i);
+                if next.output.parameter_info(plugin.slot, i, 4) != f64(plugin.ids[i]) {
+                    found = -1;
+                    for j in 0..count { if next.output.parameter_info(plugin.slot, j, 4) == f64(plugin.ids[i]) { found = i32(j); } }
+                }
+                if found < 0 || next.output.restore_parameter(plugin.slot, found, plugin.values[i]) != 0 {
+                    next.release(); return Err<AudioSystem, str8>("Cannot restore VST3 parameters; session retained");
+                }
+            }
+        }
+        let mappings: list<MidiLearnSnapshot> = self.midi_learn;
+        for mapping in mappings {
+            let count: i64 = next.output.parameter_info(mapping.slot, 0, 0);
+            var found: i64 = -1;
+            for index in 0..count { if next.output.parameter_info(mapping.slot, index, 4) == f64(mapping.parameter_id) { found = index; } }
+            if found < 0 { next.release(); return Err<AudioSystem, str8>("MIDI learn parameter no longer exists"); }
+            if next.output.midi_learn(mapping.key, mapping.slot, found) != 0 { next.release(); return Err<AudioSystem, str8>("Cannot restore MIDI learn mapping"); }
+        }
+        return Ok<AudioSystem, str8>(next);
+    }
+}
+
+/// Sticky errors prevent a later successful operation from masking truncation.
+pub struct SessionCodec { var reading: bool; var failed: bool; var binary: SessionBuffer; var reader: SessionReader; var cells: i64; };
+impl SessionCodec {
+    /// Exposed-parameter preset. Caller joins MIDI before loading; IDs are stable.
+    pub fn preset_file(path: str8, output: AudioController, slot: i64, saving: bool) -> str8 {
+        let parameters: i64 = output.parameter_info(slot, 0, 0);
+        if slot < 1 || parameters < 0 { return clone("Select a loaded instrument first"); }
+        let actual: str8 = saving && !tui::table::table_matches(".*\\.[mM][lL][aA][pP][rR][eE]", path) ? format!("{}.mlapre", path) : clone(path);
+        var codec: SessionCodec = SessionCodec { reading: !saving };
+        if saving {
+            let created: result<SessionBuffer, str8> = SessionBuffer::new(4096);
+            if created.is_err() { free(actual); return clone("Cannot allocate plugin preset"); }
+            codec.binary = created.unwrap();
+        } else {
+            let opened: result<File, str8> = File::open(actual);
+            if opened.is_err() { free(actual); return clone("Cannot open plugin preset"); }
+            let file: File = opened.unwrap(); let size: result<i64, str8> = file.size(); file.close();
+            if size.is_err() { free(actual); return clone("Cannot read plugin preset"); }
+            if size.unwrap() > 524288 { free(actual); return clone("Plugin preset exceeds 512 KiB"); }
+            let read: result<SessionReader, str8> = SessionReader::from_file(actual);
+            if read.is_err() { free(actual); return clone("Cannot read plugin preset"); }
+            codec.reader = read.unwrap();
+        }
+        let magic: str8 = codec.text("MLAPRE");
+        if magic != "MLAPRE" { codec.failed = true; } if !saving { free(magic); }
+        codec.number(1, 1, 1); codec.number(0, 0, 0);
+        let plugin_name: str8 = output.instrument_name(slot);
+        let name: str8 = codec.text(plugin_name);
+        if name != plugin_name { codec.failed = true; } if !saving { free(name); }
+        let count: i32 = codec.number(i32(parameters), 0, 16384);
+        if count != parameters { codec.failed = true; }
+        var ids: list<i64> = []; var indices: list<i64> = []; var values: list<f64> = []; var previous: list<f64> = [];
+        for i in 0..count {
+            if codec.failed { break; }
+            let source_id: i64 = saving ? output.parameter_info(slot, i, 4) : 0.0;
+            let id: i64 = codec.integer(source_id, 0, 4294967295);
+            let value: f64 = codec.real(saving ? output.parameter_info(slot, i, 2) : 0.0, 0.0, 1.0);
+            if !saving {
+                var found: i64 = -1;
+                for index in 0..parameters { if output.parameter_info(slot, index, 4) == f64(id) { found = index; } }
+                for seen in ids { if seen == id { codec.failed = true; } }
+                if found < 0 { codec.failed = true; }
+                ids.push(id); indices.push(found); values.push(value); previous.push(output.parameter_info(slot, found, 2));
+            }
+        }
+        if saving {
+            if !codec.failed { let written: result<i32, str8> = codec.binary.write_atomic(actual); if written.is_err() { codec.failed = true; } }
+            codec.binary.close();
+            let status: str8 = codec.failed ? clone("Cannot save plugin preset") : format!("Saved plugin preset: {}", actual);
+            free(actual); return status;
+        }
+        if codec.reader.remaining() != 0 { codec.failed = true; } codec.reader.close();
+        if codec.failed { free(actual); return clone("Invalid/incompatible plugin preset; parameters unchanged"); }
+        let restart: bool = output.hardware_output();
+        if output.stop() != 0 { free(actual); return clone("Cannot stop audio; preset not loaded"); }
+        output.panic(); output.midi_learn(-1, 0, 0);
+        for i in 0..indices.len() {
+            if output.restore_parameter(slot, indices[i], values[i]) != 0 { codec.failed = true; break; }
+        }
+        if codec.failed { for i in 0..indices.len() { output.restore_parameter(slot, indices[i], previous[i]); } }
+        var status: str8 = codec.failed ? clone("Plugin rejected preset; previous parameters restored where possible") : format!("Loaded plugin preset: {}", actual);
+        if restart { if output.start() != 0 { free(status); status = clone("Preset processed but audio restart failed; reopen Settings"); } }
+        free(actual); return status;
+    }
+    pub fn learn_suggestion(name: str8) -> str8 {
+        let raw: result<std::bytes::Bytes, str8> = std::bytes::Bytes::from_string(name);
+        if raw.is_err() { return clone("Instrument - "); }
+        let bytes: std::bytes::Bytes = raw.unwrap();
+        let builder: i64 = std::strbuf::builder_new(len(name) + 4);
+        for i in 0..bytes.len() {
+            let ch: i32 = bytes.get(i);
+            std::strbuf::builder_append_char(builder, ch < 32 || ch == 127 || ch == 47 || ch == 92 || ch == 58 ? 95 : ch);
+        }
+        std::strbuf::builder_append(builder, " - ");
+        let suggested: str8 = std::strbuf::builder_to_string(builder);
+        std::strbuf::builder_free(builder); bytes.close(); return suggested;
+    }
+    /// Portable, per-plugin MIDI mappings. Validate completely before replacing.
+    pub fn learn_file(path: str8, output: AudioController, slot: i64, saving: bool) -> str8 {
+        if slot < 1 || output.parameter_info(slot, 0, 0) < 0.0 { return clone("Select a loaded instrument first"); }
+        let actual: str8 = saving && !tui::table::table_matches(".*\\.[mM][lL][aA][lL][eE][aA][rR][nN]", path) ? format!("{}.mlalearn", path) : clone(path);
+        var codec: SessionCodec = SessionCodec { reading: !saving };
+        if saving {
+            let created: result<SessionBuffer, str8> = SessionBuffer::new(4096);
+            if created.is_err() { free(actual); return clone("Cannot allocate MIDI learn file"); }
+            codec.binary = created.unwrap();
+        } else {
+            let opened: result<File, str8> = File::open(actual);
+            if opened.is_err() { free(actual); return clone("Cannot open MIDI learn file"); }
+            let file: File = opened.unwrap(); let size: result<i64, str8> = file.size(); file.close();
+            if size.is_err() { free(actual); return clone("Cannot read MIDI learn file"); }
+            if size.unwrap() > 65536 { free(actual); return clone("MIDI learn file exceeds 64 KiB"); }
+            let read: result<SessionReader, str8> = SessionReader::from_file(actual);
+            if read.is_err() { free(actual); return clone("Cannot read MIDI learn file"); }
+            codec.reader = read.unwrap();
+        }
+        let magic: str8 = codec.text("MLALEARN");
+        if magic != "MLALEARN" { codec.failed = true; } if !saving { free(magic); }
+        codec.number(1, 1, 1); codec.number(0, 0, 0);
+        let plugin_name: str8 = output.instrument_name(slot);
+        let name: str8 = codec.text(plugin_name);
+        if name != plugin_name { codec.failed = true; } if !saving { free(name); }
+        var keys: list<i64> = []; var ids: list<i64> = []; var indices: list<i64> = [];
+        if saving {
+            for key in 0..2048 {
+                let destination: i64 = output.midi_learn_info(key, 2);
+                if destination % 64 == slot {
+                    let id: i64 = output.parameter_info(slot, destination / 64, 4);
+                    keys.push(key); ids.push(id);
+                }
+            }
+        }
+        let count: i32 = codec.number(i32(keys.len()), 0, 2048);
+        var previous: i64 = -1;
+        let parameters: i64 = output.parameter_info(slot, 0, 0);
+        for i in 0..count {
+            if codec.failed { break; }
+            let key: i64 = codec.integer(saving ? keys[i] : 0, previous + 1, 2047); previous = key;
+            let id: i64 = codec.integer(saving ? ids[i] : 0, 0, 4294967295);
+            if !saving {
+                var found: i64 = -1;
+                for index in 0..parameters { if output.parameter_info(slot, index, 4) == f64(id) { found = index; } }
+                if found < 0 { codec.failed = true; }
+                else { if output.parameter_info(slot, found, 3) != 0.0 { codec.failed = true; } }
+                let owner: i64 = output.midi_learn_info(key, 0);
+                if owner != 0 && owner != slot { codec.failed = true; }
+                keys.push(key); indices.push(found);
+            }
+        }
+        if !saving { if codec.reader.remaining() != 0 { codec.failed = true; } codec.reader.close(); }
+        var status: str8 = "";
+        if saving {
+            if !codec.failed { let written: result<i32, str8> = codec.binary.write_atomic(actual); if written.is_err() { codec.failed = true; } }
+            codec.binary.close();
+            status = codec.failed ? clone("Cannot save MIDI learn file") : format!("Saved MIDI learn: {}", actual);
+        } else {
+            if codec.failed { status = clone("Invalid/incompatible MIDI learn file or CC assigned to another instrument; mappings unchanged"); }
+            else {
+                output.midi_learn(-1, 0, 0);
+                for key in 0..2048 { if output.midi_learn_info(key, 0) == slot { output.midi_learn(key, 0, 0); } }
+                for i in 0..keys.len() { output.midi_learn(keys[i], slot, indices[i]); }
+                status = format!("Loaded MIDI learn: {}", actual);
+            }
+        }
+        free(actual); return status;
+    }
+    fn integer(self: &mut Self, value: i64, minimum: i64, maximum: i64) -> i64 {
+        if !self.reading && self.binary.len() > 268431352 { self.failed = true; }
+        if self.failed { return 0; }
+        var number: i64 = value;
+        if self.reading { let result: result<i64, str8> = self.reader.read_i64(); if result.is_err() { self.failed = true; return 0; } number = result.unwrap(); }
+        if number < minimum || number > maximum { self.failed = true; return 0; }
+        if !self.reading { let result: result<i32, str8> = self.binary.write_i64(number); if result.is_err() { self.failed = true; } }
+        return number;
+    }
+    fn number(self: &mut Self, value: i32, minimum: i32, maximum: i32) -> i32 { return i32(self.integer(wide(value), wide(minimum), wide(maximum))); }
+    fn flag(self: &mut Self, value: bool) -> bool { return self.number(value ? 1 : 0, 0, 1) == 1; }
+    fn real(self: &mut Self, value: f64, low: f64, high: f64) -> f64 {
+        if !self.reading && self.binary.len() > 268431352 { self.failed = true; }
+        if self.failed { return 0.0; }
+        var number: f64 = value;
+        if self.reading { let result: result<f64, str8> = self.reader.read_f64(); if result.is_err() { self.failed = true; return 0.0; } number = result.unwrap(); }
+        if !(number >= low && number <= high) { self.failed = true; return 0.0; }
+        if !self.reading { let result: result<i32, str8> = self.binary.write_f64(number); if result.is_err() { self.failed = true; } }
+        return number;
+    }
+    fn text(self: &mut Self, value: str8) -> str8 {
+        if !self.reading && self.binary.len() > 268431352 { self.failed = true; }
+        if self.reading {
+            if self.failed { return clone(""); }
+            let result: result<str8, str8> = self.reader.read_string();
+            if result.is_err() { self.failed = true; return clone(""); }
+            let text: str8 = result.unwrap();
+            if len(text) > 4096 { self.failed = true; }
+            return text;
+        }
+        if len(value) > 4096 { self.failed = true; return value; }
+        if !self.failed { let result: result<i32, str8> = self.binary.write_string(value); if result.is_err() { self.failed = true; } }
+        return value;
+    }
+    fn clip(self: &mut Self, source: AudioClip) -> AudioClip {
+        var clip: AudioClip = AudioClip {}; clip = source;
+        clip.source = self.text(self.reading ? "" : clip.source);
+        clip.channels = self.integer(clip.channels, 1, 2); clip.sample_rate = self.integer(clip.sample_rate, 1000, 768000);
+        clip.frames = self.integer(clip.frames, 1, 16777216); clip.frames_per_row = self.integer(clip.frames_per_row, 1, 16777216);
+        let count: i64 = clip.frames * clip.channels;
+        if self.reading && count > self.reader.remaining() / 8 { self.failed = true; }
+        if !self.reading && clip.samples.len() != count { self.failed = true; }
+        var samples: list<f32> = [];
+        for i in 0..count {
+            if self.failed { break; }
+            let value: f64 = self.real(self.reading ? 0.0 : f64(clip.samples[i]), -1.0, 1.0);
+            if self.reading { samples.push(f32(value)); }
+        }
+        if self.reading { clip.samples = samples; }
+        let peaks: i32 = self.number(i32(clip.peaks.len()), 1, 16384);
+        var output: list<WavePeak> = [];
+        for i in 0..peaks {
+            var peak: WavePeak = WavePeak {}; if !self.reading { peak = clip.peaks[i]; }
+            peak.left = self.number(peak.left, 0, 1000); peak.right = self.number(peak.right, 0, 1000);
+            peak.left_body = self.number(peak.left_body, 0, 1000); peak.right_body = self.number(peak.right_body, 0, 1000);
+            output.push(peak);
+        }
+        if self.reading { clip.peaks = output; }
+        let details: i32 = self.number(i32(clip.detail_peaks.len()), 0, 65536);
+        var detail: list<WavePeak> = [];
+        for i in 0..details {
+            var peak: WavePeak = WavePeak {}; if !self.reading { peak = clip.detail_peaks[i]; }
+            peak.left = self.number(peak.left, 0, 1000); peak.right = self.number(peak.right, 0, 1000); detail.push(peak);
+        }
+        if self.reading { clip.detail_peaks = detail; }
+        if !self.failed {
+            if peaks != (clip.frames + clip.frames_per_row - 1) / clip.frames_per_row || details != peaks * 4 { self.failed = true; }
+        }
+        // Even a partially decoded clip owns its source string.
+        if self.reading && clip.peaks.len() == 0 { clip.peaks.push(WavePeak {}); }
+        return clip;
+    }
+    fn sequence_data(self: &mut Self, source: &SequenceTable, samples: list<AudioClip>) -> SequenceTable {
+        var table: SequenceTable = SequenceTable {}; table = source;
+        if self.reading {
+            table = SequenceTable::empty();
+            let old: list<TableRow> = table.rows; for row in old { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
+            table.rows = [];
+        }
+        table.next_track_id = self.number(table.next_track_id, 1, 1000000);
+        table.selected_row = self.number(table.selected_row, -1, 16383); table.selected_column = self.number(table.selected_column, -1, 20000);
+        table.scroll_x = self.number(table.scroll_x, 0, 1000000); table.scroll_y = self.number(table.scroll_y, 0, 16383);
+        table.horizontal_scrollbar = self.flag(table.horizontal_scrollbar); table.vertical_scrollbar = self.flag(table.vertical_scrollbar);
+        table.alternate_group_text = self.flag(table.alternate_group_text);
+        let tracks: i32 = self.number(i32(table.tracks.len()), 0, 64); var track_list: list<SequenceTrack> = [];
+        for i in 0..tracks {
+            var track: SequenceTrack = SequenceTrack {}; if !self.reading { track = table.tracks[i]; }
+            track.name = self.text(self.reading ? "" : track.name); track.muted = self.flag(track.muted);
+            track.volume = self.number(track.volume, 0, 127); track.pan = self.number(track.pan, -100, 100);
+            track.audio = self.flag(track.audio); track.instrument = self.flag(track.instrument);
+            track.instrument_id = self.number(track.instrument_id, 0, 32);
+            track.note_lines = self.number(track.note_lines, 1, 64); track.wave_zoom = self.flag(track.wave_zoom); track.zoom_stage = self.number(track.zoom_stage, 0, 2);
+            track.cc1.parameter = self.text(self.reading ? "" : track.cc1.parameter);
+            track.cc1.minimum = self.integer(track.cc1.minimum, -2147483648, 2147483647); track.cc1.maximum = self.integer(track.cc1.maximum, track.cc1.minimum, 2147483647);
+            track.cc2.parameter = self.text(self.reading ? "" : track.cc2.parameter);
+            track.cc2.minimum = self.integer(track.cc2.minimum, -2147483648, 2147483647); track.cc2.maximum = self.integer(track.cc2.maximum, track.cc2.minimum, 2147483647);
+            let instances: i32 = self.number(i32(track.instances.len()), 0, 16384); var placements: list<AudioInstance> = [];
+            if (track.audio && track.instrument) || (!track.audio && instances > 0) { self.failed = true; }
+            for j in 0..instances {
+                var instance: AudioInstance = AudioInstance {}; var sample_id: i32 = -1;
+                if !self.reading {
+                    instance = track.instances[j];
+                    for k in 0..samples.len() {
+                        let sample: AudioClip = samples[k];
+                        if sample.source == instance.clip.source && sample.frames == instance.clip.frames && sample.frames_per_row == instance.clip.frames_per_row { sample_id = i32(k); }
+                    }
+                }
+                sample_id = self.number(sample_id, 0, i32(samples.len()) - 1);
+                instance.start_row = self.number(instance.start_row, 0, 16383); instance.length_ticks = self.number(instance.length_ticks, 0, 245760000);
+                if self.reading && !self.failed { let sample: AudioClip = samples[sample_id]; instance.clip = sample.copy(); placements.push(instance); }
+            }
+            if self.reading { track.instances = placements; }
+            track_list.push(track);
+        }
+        if self.reading { table.tracks = track_list; table.rebuild_columns(); }
+        let rows: i32 = self.number(i32(table.rows.len()), 1, 16384); var row_list: list<TableRow> = [];
+        for r in 0..rows {
+            if self.failed { break; }
+            var row: TableRow = TableRow {}; if !self.reading { row = table.rows[r]; }
+            let count: i32 = self.number(i32(row.cells.len()), 1, 20000);
+            self.cells = self.cells + count;
+            if self.cells > 8000000 || count != table.columns.len() { self.failed = true; break; }
+            var cells: list<str8> = [];
+            for c in 0..count {
+                let value: str8 = self.text(self.reading ? "" : row.cells[c]); cells.push(value);
+                let column: TableColumn = table.columns[c];
+                if !column.read_only && !column.validate(value) { self.failed = true; }
+            }
+            if self.reading { row.cells = cells; row_list.push(row); }
+        }
+        if self.reading { table.rows = row_list; }
+        return table;
+    }
+    fn view(self: &mut Self, value: SessionView) -> SessionView {
+        var v: SessionView = SessionView {}; v = value;
+        v.bpm = self.number(v.bpm, 20, 400); v.beats = self.number(v.beats, 1, 32); v.unit = self.number(v.unit, 1, 32);
+        v.row = self.number(v.row, 0, 16383); v.phase = self.integer(v.phase, 0, 14999);
+        v.pane = self.number(v.pane, 0, 2); v.sidebar = self.number(v.sidebar, 0, 3);
+        v.list_selected = self.number(v.list_selected, -1, 65535); v.list_scroll = self.number(v.list_scroll, 0, 65535);
+        v.audio_selected = self.number(v.audio_selected, -1, 255); v.audio_scroll = self.number(v.audio_scroll, 0, 255);
+        v.instrument_selected = self.number(v.instrument_selected, -1, 31); v.instrument_scroll = self.number(v.instrument_scroll, 0, 31);
+        v.mixer = self.flag(v.mixer); v.meter_grainy = self.flag(v.meter_grainy); v.meter_fps = self.number(v.meter_fps, 1, 240);
+        v.sample = self.flag(v.sample); v.sample_grainy = self.flag(v.sample_grainy); v.sample_wave = self.flag(v.sample_wave); v.sample_zoom = self.number(v.sample_zoom, 0, 30);
+        v.editor = self.flag(v.editor); v.editor_slot = self.number(v.editor_slot, 0, 32); v.editor_selected = self.number(v.editor_selected, 0, 16383); v.editor_scroll = self.number(v.editor_scroll, 0, 16383);
+        return v;
+    }
+    fn contents(self: &mut Self, source: &PatternLibrary, view: SessionView, system: &AudioSystem) -> SessionData {
+        var audio: AudioSystem = AudioSystem {}; audio = system;
+        var library: PatternLibrary = PatternLibrary {}; library = source;
+        if self.reading {
+            library = PatternLibrary::empty();
+            let initial: list<PatternEntry> = library.patterns; for entry in initial { free(entry.name); entry.data.release(); }
+            library.patterns = [];
+        }
+        let magic: str8 = self.text("MLACK"); if magic != "MLACK" { self.failed = true; } if self.reading { free(magic); }
+        self.number(1, 1, 1); self.number(0, 0, 0);
+        let state: SessionView = self.view(view);
+        let sample_count: i32 = self.number(i32(library.audio.samples.len()), 0, 256);
+        for i in 0..sample_count {
+            if self.failed { break; }
+            var clip: AudioClip = AudioClip {}; if !self.reading { clip = library.audio.samples[i]; }
+            let decoded: AudioClip = self.clip(clip);
+            if self.reading { library.audio.samples.push(decoded); library.audio.view.items.push(ListItem { id: i32(i) + 1, label: format!("{} {}", i + 1, decoded.source) }); }
+        }
+        var count: i32 = audio.processor_path != "" ? 1 : 0;
+        let paths: list<str8> = audio.instrument_paths; for path in paths { if path != "" { count = count + 1; } }
+        count = self.number(count, 0, 33); var plugins: list<PluginSnapshot> = [];
+        var previous: i32 = -1;
+        for i in 0..count {
+            if self.failed { break; }
+            var slot: i32 = previous + 1;
+            if !self.reading {
+                if slot == 0 && audio.processor_path == "" { slot = 1; }
+                while slot > 0 && slot <= paths.len() {
+                    if paths[slot - 1] != "" { break; }
+                    slot = slot + 1;
+                }
+            }
+            slot = self.number(slot, previous + 1, 32); previous = slot;
+            let path: str8 = self.text(self.reading ? "" : (slot == 0 ? audio.processor_path : paths[slot - 1]));
+            var plugin: PluginSnapshot = PluginSnapshot { slot: slot, path: path };
+            if path == "" { self.failed = true; }
+            let params: i32 = self.number(self.reading ? 0 : i32(audio.output.parameter_info(slot, 0, 0)), 0, 16384);
+            for j in 0..params {
+                let id: i64 = self.integer(self.reading ? 0 : audio.output.parameter_info(slot, j, 4), 0, 4294967295);
+                let value: f64 = self.real(self.reading ? 0.0 : audio.output.parameter_info(slot, j, 2), 0.0, 1.0);
+                plugin.ids.push(id); plugin.values.push(value);
+            }
+            plugins.push(plugin);
+            if self.reading && slot > 0 { library.instruments.items.push(ListItem { id: slot, label: format!("{} {}", slot, path) }); }
+        }
+        library.active_id = self.number(library.active_id, 1, 1000000); library.next_id = self.number(library.next_id, 2, 1000001);
+        let patterns: i32 = self.number(i32(library.patterns.len()), 1, 1024);
+        for i in 0..patterns {
+            if self.failed { break; }
+            var entry: PatternEntry = PatternEntry {}; if !self.reading { entry = library.patterns[i]; }
+            entry.id = self.number(entry.id, 1, library.next_id - 1); entry.name = self.text(self.reading ? "" : entry.name);
+            if !self.reading && entry.id == library.active_id { entry.data = library.table; }
+            entry.data = self.sequence_data(entry.data, library.audio.samples);
+            if self.reading {
+                if library.index_of(entry.id) >= 0 { self.failed = true; }
+                library.patterns.push(entry);
+                let tracks: list<SequenceTrack> = entry.data.tracks;
+                for track in tracks {
+                    if track.instrument_id > 0 {
+                        var found: bool = false; for plugin in plugins { if plugin.slot == track.instrument_id { found = true; } }
+                        if !found { self.failed = true; }
+                    }
+                }
+            }
+        }
+        let song_count: i32 = self.number(i32(library.song.len()), 0, 65536); var song: list<i32> = [];
+        for i in 0..song_count {
+            let id: i32 = self.number(self.reading ? 0 : library.song[i], 1, 1000000);
+            if library.index_of(id) < 0 { self.failed = true; } song.push(id);
+        }
+        if self.reading {
+            library.song = song;
+            let index: i32 = library.index_of(library.active_id);
+            if index < 0 { self.failed = true; }
+            if !self.failed { let entry: PatternEntry = library.patterns[index]; library.table.release(); library.table = entry.data.copy_pattern(); }
+            library.song_mode = state.sidebar == 1; library.audio_mode = state.sidebar == 2; library.instruments_mode = state.sidebar == 3;
+            library.refresh(); library.view.selected = state.list_selected; library.view.scroll = state.list_scroll;
+            library.audio.view.selected = state.audio_selected; library.audio.view.scroll = state.audio_scroll;
+            library.instruments.selected = state.instrument_selected; library.instruments.scroll = state.instrument_scroll;
+        }
+        // Optional tagged extension. Legacy 1.0 files end immediately after song.
+        var mappings: list<MidiLearnSnapshot> = [];
+        if !self.reading {
+            for key in 0..2048 {
+                let destination: i64 = audio.output.midi_learn_info(key, 2);
+                let slot: i32 = i32(destination % 64);
+                if slot > 0 {
+                    let index: i64 = destination / 64;
+                    let id: i64 = audio.output.parameter_info(slot, index, 4);
+                    mappings.push(MidiLearnSnapshot { key: i32(key), slot: slot, parameter_id: id });
+                }
+            }
+        }
+        let extension: bool = self.reading ? self.reader.remaining() > 0 : mappings.len() > 0;
+        if extension {
+            let tag: str8 = self.text("MIDI_LEARN"); if tag != "MIDI_LEARN" { self.failed = true; } if self.reading { free(tag); }
+            let mapping_count: i32 = self.number(i32(mappings.len()), 0, 2048);
+            var previous_key: i32 = -1;
+            for i in 0..mapping_count {
+                if self.failed { break; }
+                var mapping: MidiLearnSnapshot = MidiLearnSnapshot {};
+                if !self.reading { mapping = mappings[i]; }
+                mapping.key = self.number(mapping.key, previous_key + 1, 2047); previous_key = mapping.key;
+                mapping.slot = self.number(mapping.slot, 1, 32);
+                mapping.parameter_id = self.integer(mapping.parameter_id, 0, 4294967295);
+                var found: bool = false;
+                for plugin in plugins {
+                    if plugin.slot == mapping.slot {
+                        let ids: list<i64> = plugin.ids;
+                        for id in ids { if id == mapping.parameter_id { found = true; } }
+                    }
+                }
+                if !found { self.failed = true; }
+                if self.reading { mappings.push(mapping); }
+            }
+        }
+        return SessionData { library: library, plugins: plugins, view: state, midi_learn: mappings };
+    }
+    pub fn save(self: &mut Self, path: str8, library: &PatternLibrary, view: SessionView, audio: &AudioSystem) -> bool {
+        let created: result<SessionBuffer, str8> = SessionBuffer::new(4096); if created.is_err() { return false; }
+        var codec: SessionCodec = SessionCodec { binary: created.unwrap() };
+        codec.contents(library, view, audio);
+        var ok: bool = !codec.failed && codec.binary.len() <= 268435456;
+        if ok { let written: result<i32, str8> = codec.binary.write_atomic(path); ok = written.is_ok(); }
+        codec.binary.close(); return ok;
+    }
+    pub fn load(path: str8) -> result<SessionData, str8> {
+        let opened: result<File, str8> = File::open(path); if opened.is_err() { return Err<SessionData, str8>("Cannot open session file"); }
+        let file: File = opened.unwrap(); let length: result<i64, str8> = file.size(); file.close();
+        if length.is_err() { return Err<SessionData, str8>("Cannot read session size"); }
+        if length.unwrap() < 21 || length.unwrap() > 268435456 { return Err<SessionData, str8>("Session exceeds 256 MiB limit or is truncated"); }
+        let read: result<SessionReader, str8> = SessionReader::from_file(path); if read.is_err() { return Err<SessionData, str8>("Cannot read session file"); }
+        var codec: SessionCodec = SessionCodec { reading: true, reader: read.unwrap() };
+        var dummy: PatternLibrary = PatternLibrary {};
+        var audio: AudioSystem = AudioSystem {};
+        var data: SessionData = codec.contents(dummy, SessionView {}, audio);
+        if codec.reader.remaining() != 0 { codec.failed = true; }
+        codec.reader.close();
+        if codec.failed { data.release(); return Err<SessionData, str8>("Invalid, truncated or unsupported .mlack session (expected version 1.0)"); }
+        return Ok<SessionData, str8>(data);
+    }
+}

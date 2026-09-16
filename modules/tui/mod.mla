@@ -14,3 +14,5 @@ mod tui::button;
 mod tui::table;
 mod tui::meter;
 mod tui::listview;
+mod tui::dropdown;
+mod tui::slider;

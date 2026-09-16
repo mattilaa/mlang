@@ -1129,4 +1129,30 @@ void CodeGenerator::generateCode(ProgramNode* program)
             }
         }
     }
+
+    // Fixed-size locals/temporaries have invocation lifetime. Emitting their
+    // allocas in a loop makes -O0 consume fresh stack on every iteration (LLVM
+    // only releases alloca storage on function return). Normalize all lowering
+    // paths, including instantiated methods and compiler-generated temporaries,
+    // before any optimization or output mode. Keep initialization at its source
+    // location, and leave runtime-sized / ABI inalloca allocations untouched.
+    for(auto& function : *module)
+    {
+        if(function.isDeclaration())
+            continue;
+        auto& entry = function.getEntryBlock();
+        for(auto& block : function)
+        {
+            if(&block == &entry)
+                continue;
+            for(auto it = block.begin(); it != block.end();)
+            {
+                auto* allocation = llvm::dyn_cast<llvm::AllocaInst>(&*it++);
+                if(allocation &&
+                   llvm::isa<llvm::ConstantInt>(allocation->getArraySize()) &&
+                   !allocation->isUsedWithInAlloca())
+                    allocation->moveBefore(entry, entry.begin());
+            }
+        }
+    }
 }

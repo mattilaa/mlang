@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 typedef struct serde_buf_t
 {
@@ -323,6 +324,29 @@ int32_t __mlang_std_serde_binary_get_u8(int64_t handle, int64_t index)
     }
     serde_set_ok();
     return (int32_t)b->data[i];
+}
+
+/* Same-directory temporary file + rename: failed saves retain the old file. */
+int32_t __mlang_std_serde_binary_write_atomic(int64_t handle, const char* path)
+{
+    serde_buf_t* b = (serde_buf_t*)(intptr_t)handle;
+    if(!b || !path || !*path) { serde_set_error("invalid save path/buffer"); return -1; }
+    size_t size = strlen(path) + 16;
+    char* temporary = (char*)malloc(size);
+    if(!temporary) { serde_set_error("allocation failed"); return -1; }
+    snprintf(temporary, size, "%s.XXXXXX", path);
+    int fd = mkstemp(temporary), ok = fd >= 0;
+    size_t at = 0;
+    while(ok && at < b->len) {
+        ssize_t n = write(fd, b->data + at, b->len - at);
+        if(n <= 0) ok = 0; else at += (size_t)n;
+    }
+    if(fd >= 0) { if(ok && fsync(fd) != 0) ok = 0; if(close(fd) != 0) ok = 0; }
+    if(ok && rename(temporary, path) != 0) ok = 0;
+    if(!ok) unlink(temporary);
+    free(temporary);
+    if(!ok) { serde_set_error("atomic save failed; original retained"); return -1; }
+    serde_set_ok(); return 0;
 }
 
 int32_t __mlang_std_serde_binary_write_file(int64_t handle, const char* path)

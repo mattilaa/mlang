@@ -43,6 +43,7 @@ pub fn last_ok() -> i32 {
 pub struct Binary {
     var handle: i64;
 };
+extern fn __mlang_std_serde_binary_write_atomic(handle: i64, path: str8) -> i32;
 
 /// @brief Sequential binary input reader.
 /// @ingroup std_serde
@@ -65,6 +66,11 @@ alias reader = Reader;
 
 
 impl Binary {
+    /// Replace a file atomically using a temporary file in its directory.
+    pub fn write_atomic(self: Binary, path: str8) -> result<i32, str8> {
+        if __mlang_std_serde_binary_write_atomic(self.handle, path) != 0 { return Err<i32, str8>(last_error()); }
+        return Ok<i32, str8>(0);
+    }
     /// @brief Create a new empty binary buffer.
     pub fn new(initial_capacity: i64) -> result<Binary, str8> {
         let h: i64 = __mlang_std_serde_binary_new(initial_capacity);

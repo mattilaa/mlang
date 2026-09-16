@@ -124,8 +124,9 @@ typedef struct
     void* data;
 } mlang_list_t;
 
-static char g_midi_last_error[512];
-static char g_midi_device_name[512];
+/* Device discovery on the UI thread may overlap input opening/polling. */
+static _Thread_local char g_midi_last_error[512];
+static _Thread_local char g_midi_device_name[512];
 
 static void midi_set_error(const char* message)
 {

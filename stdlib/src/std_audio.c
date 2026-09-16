@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Output-only AUHAL event controller is implemented below the shared helpers. */
+
 #if defined(__APPLE__)
 #import <AVFoundation/AVFoundation.h>
 #include <CoreAudio/CoreAudio.h>
@@ -4030,3 +4032,5 @@ int32_t __mlang_std_audio_mixer_close(int64_t handle)
     audio_clear_error();
     return 0;
 }
+
+#include "std_audio_controller.inc"

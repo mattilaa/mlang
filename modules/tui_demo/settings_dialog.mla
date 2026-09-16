@@ -1,0 +1,88 @@
+mod tui::dialog;
+mod tui::dropdown;
+mod std::audio;
+mod std::midi;
+use std::midi::input_count;
+use std::midi::input_name;
+use std::audio::output_device_count;
+use std::audio::output_device_name;
+use tui::dialog::Dialog;
+use tui::dropdown::*;
+use tui::button::PushButton;
+use tui::focus::PaneFocus;
+use tui::layout::Alignment;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::input::*;
+use tui::menu::Key;
+use std::strbuf::clone;
+use std::strbuf::free;
+
+pub struct SettingsDialog : Dialog {
+    var midi: DropDown; var output: DropDown; var error: str8;
+};
+impl SettingsDialog {
+    pub fn new() -> SettingsDialog {
+        return SettingsDialog { title: "Settings", width: 64, height: 16,
+            error: clone(""), focus: PaneFocus::new(0), button_alignment: Alignment::Center,
+            buttons: [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 }] };
+    }
+    pub fn open(self: &mut Self, midi_id: i64, output_id: i64) -> void {
+        var midi_items: list<DropDownItem> = [DropDownItem { id: -2, label: clone("Disabled") }, DropDownItem { id: -1, label: clone("System default") }];
+        let midi_count: i64 = std::midi::input_count();
+        for id in 0..midi_count {
+            midi_items.push(DropDownItem { id: id, label: clone(std::midi::input_name(id)) });
+        }
+        self.midi.set_items(midi_items, midi_id);
+        for item in midi_items { free(item.label); }
+        var audio_items: list<DropDownItem> = [DropDownItem { id: -2, label: clone("Disabled") }, DropDownItem { id: -1, label: clone("AUHAL - System default") }];
+        let audio_count: i64 = std::audio::output_device_count();
+        for id in 0..audio_count {
+            audio_items.push(DropDownItem { id: id, label: format!("AUHAL - {}", std::audio::output_device_name(id)) });
+        }
+        self.output.set_items(audio_items, output_id);
+        for item in audio_items { free(item.label); }
+        free(self.error); self.error = clone("");
+        self.reset_buttons(); self.focus.selected = 0; self.active = true;
+    }
+    pub fn fail(self: &mut Self, error: str8) -> void {
+        free(self.error); self.error = clone(error); self.active = true; self.reset_buttons();
+    }
+    pub fn on_event(self: &mut Self, event: InputEvent) -> void {
+        if self.pressed_button >= 0 { return; }
+        if event.kind == InputKind::Pane || (event.kind == InputKind::Menu && event.key == Key::Toggle) {
+            self.midi.cancel(); self.output.cancel();
+            let back: bool = event.kind == InputKind::Pane && (event.key == Key::Up || event.key == Key::Left);
+            if back { self.focus.selected = self.focus.selected == 3 ? 1 : (self.focus.selected == 1 ? 0 : 3); }
+            else { self.focus.selected = self.focus.selected == 0 ? 1 : (self.focus.selected == 1 ? 3 : 0); }
+            return;
+        }
+        if self.focus.selected == 0 { if self.midi.on_event(event) { return; } }
+        if self.focus.selected == 1 { if self.output.on_event(event) { return; } }
+        if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 {
+            self.active = false; self.result = 2; return;
+        }
+        if self.focus.selected == 3 { self.on_button_event(event); }
+    }
+    pub fn tick(self: &mut Self) -> void {
+        let action: i32 = self.tick_buttons();
+        if action == 1 || action == 2 { self.active = false; self.result = action; }
+    }
+    pub fn paint(self: SettingsDialog, surface: Surface, viewport: Rect, theme: Theme) -> void {
+        if !self.active { return; }
+        let body: Rect = self.paint_frame(surface, viewport, theme);
+        let midi_row: Rect = Rect::new(body.x + 1, body.y + 1, body.width - 2, body.height > 1 ? 1 : 0);
+        let output_row: Rect = Rect::new(body.x + 1, body.y + 4, body.width - 2, body.height > 4 ? 1 : 0);
+        surface.text(body, "MIDI input adapter", theme.foreground, theme.panel);
+        if body.height > 3 { surface.text(Rect::new(body.x, body.y + 3, body.width, 1), "Master output (AUHAL)", theme.foreground, theme.panel); }
+        self.midi.paint(surface, midi_row, theme, self.focus.selected == 0);
+        self.output.paint(surface, output_row, theme, self.focus.selected == 1);
+        if body.height > 6 { surface.text(Rect::new(body.x, body.y + 6, body.width, 1), "128-frame request / native device sample rate", theme.muted, theme.panel); }
+        if body.height > 7 { surface.text(Rect::new(body.x, body.y + 7, body.width, 1), self.error, theme.accent, theme.panel); }
+        // Overlays are last, so they cover labels, fields and buttons.
+        self.midi.paint_popup(surface, midi_row, viewport, theme);
+        self.output.paint_popup(surface, output_row, viewport, theme);
+    }
+    pub fn release(self: &mut Self) -> void { self.midi.release(); self.output.release(); free(self.error); }
+}

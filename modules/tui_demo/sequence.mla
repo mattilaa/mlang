@@ -44,6 +44,7 @@ pub struct SequenceTrack {
     var name: str8; var muted: bool; var cc1: AutomationSlot; var cc2: AutomationSlot;
     var volume: i32{100}; var pan: i32;
     var audio: bool;
+    var instrument: bool; var instrument_id: i32;
     var note_lines: i32{1};
     var instances: list<AudioInstance>;
     var wave_zoom: bool;
@@ -74,8 +75,23 @@ pub struct SequenceTable : Table {
     var top_pending: bool;
     var tracks: list<SequenceTrack>; var edit_mode: i32;
     var next_track_id: i32; var revision: i64;
+    var clipboard: list<TableRow>; var clipboard_kinds: list<str8>; var paste_error: bool;
+    var clipboard_rows: bool;
 };
 impl SequenceTable {
+pub fn empty() -> SequenceTable {
+    var table: SequenceTable = SequenceTable::new();
+    let tracks: list<SequenceTrack> = table.tracks;
+    for track in tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); }
+    table.tracks = []; table.next_track_id = 1;
+    let old: list<TableRow> = table.rows; var rows: list<TableRow> = [];
+    for row in old {
+        let cells: list<str8> = row.cells;
+        for i in 1..cells.len() { free(cells[i]); }
+        rows.push(TableRow { cells: [cells[0]] });
+    }
+    table.rows = rows; table.selected_column = 0; table.rebuild_columns(); return table;
+}
 pub fn new() -> SequenceTable {
     // std::array is compiler-provided; array<T, N> needs no module import.
     var midi: array<str8, 128> = {};
@@ -94,7 +110,7 @@ pub fn new() -> SequenceTable {
             cc1: AutomationSlot { parameter: clone("cc:1"), minimum: 0, maximum: 127 },
             cc2: AutomationSlot { parameter: clone("cc:74"), minimum: 0, maximum: 127 } });
     }
-    var table: SequenceTable = SequenceTable { frozen_columns: 1, horizontal_scrollbar: true, vertical_scrollbar: true,
+    var table: SequenceTable = SequenceTable { frozen_columns: 1, horizontal_scrollbar: true, vertical_scrollbar: true, alternate_group_text: true,
         selected_column: 1, editor: TextField::new(""), error: "", next_track_id: 4 };
     table.rows = rows; table.tracks = tracks; table.notes = midi;
     table.rebuild_columns(); return table;
@@ -280,6 +296,7 @@ pub fn paint_audio_style(self: SequenceTable, surface: Surface, area: Rect, them
 /// cursor and viewport. No owned strings or mutable lists alias the source.
 pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     var copy: SequenceTable = SequenceTable { frozen_columns: self.frozen_columns,
+        alternate_group_text: self.alternate_group_text,
         horizontal_scrollbar: self.horizontal_scrollbar, vertical_scrollbar: self.vertical_scrollbar,
         selected_row: self.selected_row, selected_column: self.selected_column,
         scroll_x: self.scroll_x, scroll_y: self.scroll_y, next_track_id: self.next_track_id,
@@ -292,7 +309,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     }
     var tracks: list<SequenceTrack> = []; let source_tracks: list<SequenceTrack> = self.tracks;
     for track in source_tracks {
-        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, audio: track.audio, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom, zoom_stage: track.zoom_stage,
+        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, audio: track.audio, instrument: track.instrument, instrument_id: track.instrument_id, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom, zoom_stage: track.zoom_stage,
             cc1: AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum } });
     }
@@ -325,6 +342,7 @@ fn replace_track(self: &mut Self, index: i32, value: SequenceTrack) -> void {
     self.tracks = tracks;
 }
 pub fn rebuild_columns(self: &mut Self) -> void {
+    self.visual = false; self.visual_rows = false;
     self.revision = self.revision + 1;
     let old_groups: list<TableGroup> = self.groups;
     for group in old_groups { free(group.title); }
@@ -355,6 +373,32 @@ pub fn rebuild_columns(self: &mut Self) -> void {
 pub fn create_track(self: &mut Self, duplicate: bool, area: Rect) -> void {
     self.create_track_kind(duplicate, false, area);
 }
+pub fn assign_instrument(self: &mut Self, id: i32) -> bool {
+    let index: i32 = self.active_track();
+    if index < 0 { return false; }
+    var track: SequenceTrack = self.tracks[index];
+    if !track.instrument { self.error = "Select an Instrument track first"; return false; }
+    track.instrument_id = id; self.replace_track(index, track);
+    self.revision = self.revision + 1; self.error = ""; return true;
+}
+pub fn detach_instrument(self: &mut Self, id: i32) -> void {
+    let old: list<SequenceTrack> = self.tracks; var next: list<SequenceTrack> = [];
+    for item in old {
+        var track: SequenceTrack = SequenceTrack {}; track = item;
+        if track.instrument_id == id { track.instrument_id = 0; }
+        next.push(track);
+    }
+    self.tracks = next; self.revision = self.revision + 1;
+}
+pub fn create_instrument_track(self: &mut Self, id: i32, area: Rect) -> void {
+    if self.tracks.len() >= 64 { self.error = "Maximum 64 tracks"; return; }
+    self.create_track(false, area);
+    let index: i32 = self.active_track();
+    var track: SequenceTrack = self.tracks[index];
+    free(track.name); track.name = format!("Instrument {}", self.next_track_id - 1);
+    track.instrument = true; track.instrument_id = id;
+    self.replace_track(index, track); self.rebuild_columns();
+}
 pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Rect) -> void {
     if self.tracks.len() >= 64 { self.error = "Maximum 64 tracks"; return; }
     let source: i32 = self.active_track();
@@ -365,7 +409,7 @@ pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Re
     if duplicate {
         let original: SequenceTrack = self.tracks[source];
         free(track.name); free(track.cc1.parameter); free(track.cc2.parameter);
-        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, audio: original.audio, note_lines: original.note_lines, instances: original.copy_audio(), wave_zoom: original.wave_zoom, zoom_stage: original.zoom_stage,
+        track = SequenceTrack { name: format!("{} copy", original.name), muted: original.muted, volume: original.volume, pan: original.pan, audio: original.audio, instrument: original.instrument, instrument_id: original.instrument_id, note_lines: original.note_lines, instances: original.copy_audio(), wave_zoom: original.wave_zoom, zoom_stage: original.zoom_stage,
             cc1: AutomationSlot { parameter: clone(original.cc1.parameter), minimum: original.cc1.minimum, maximum: original.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(original.cc2.parameter), minimum: original.cc2.minimum, maximum: original.cc2.maximum } };
     }
@@ -526,6 +570,7 @@ pub fn track_action(self: &mut Self, command: i32, area: Rect) -> void {
     }
 }
 pub fn release(self: &mut Self) -> void {
+    self.clear_clipboard();
     let tracks: list<SequenceTrack> = self.tracks;
     for track in tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.release_audio(); }
     let groups: list<TableGroup> = self.groups;
@@ -632,6 +677,7 @@ fn commit(self: &mut Self, value: str8) -> bool {
     if !self.set_cell(self.selected_row, self.selected_column, copy) { free(copy); return false; }
     let new_note: bool = self.is_note() && old == "" && value != "";
     free(old);
+    if new_note { self.write_owned_cell(self.selected_row, self.selected_column + 1, clone("100")); }
     if new_note { self.write_owned_cell(self.selected_row, self.selected_column + 2, clone("1.00")); }
     if new_note { self.write_owned_cell(self.selected_row, self.selected_column + 3, clone("0.00")); }
     self.revision = self.revision + 1;
@@ -723,6 +769,39 @@ pub fn set_length(self: &mut Self, count: i32, area: Rect) -> bool {
     self.selected_row = selected_row; self.selected_column = selected_column;
     self.reconcile(area); return true;
 }
+pub fn insert_row(self: &mut Self, above: bool, area: Rect) -> void {
+    self.delete_pending = false; self.top_pending = false;
+    if self.rows.len() >= 16384 { self.error = "Maximum pattern length is 16384 rows"; return; }
+    self.reconcile(area);
+    let index: i32 = self.rows.len() == 0 ? 0 : self.selected_row + (above ? 0 : 1);
+    let previous: list<TableRow> = self.rows; var rows: list<TableRow> = [];
+    for r in 0..previous.len() + 1 {
+        var cells: list<str8> = [format!("{}{}", r < 9 ? "00" : (r < 99 ? "0" : ""), r + 1)];
+        if r == index {
+            for _c in 1..self.columns.len() { cells.push(clone("")); }
+        } else {
+            let old: TableRow = previous[r < index ? r : r - 1];
+            free(old.cells[0]);
+            for c in 1..old.cells.len() { cells.push(old.cells[c]); }
+        }
+        rows.push(TableRow { cells: cells });
+    }
+    self.rows = rows;
+    // Keep clip starts attached to their shifted rows. Clips already sounding
+    // across the insertion point retain their duration and are not stretched.
+    for t in 0..self.tracks.len() {
+        var track: SequenceTrack = self.tracks[t];
+        let old: list<AudioInstance> = track.instances; var shifted: list<AudioInstance> = [];
+        for instance in old {
+            var next: AudioInstance = AudioInstance {}; next = instance;
+            if next.start_row >= index { next.start_row = next.start_row + 1; }
+            shifted.push(next);
+        }
+        track.instances = shifted; self.replace_track(i32(t), track);
+    }
+    self.selected_row = index; self.visual = false; self.error = "";
+    self.revision = self.revision + 1; self.reconcile(area);
+}
 pub fn delete_row(self: &mut Self, area: Rect) -> void {
     self.revision = self.revision + 1;
     if self.selected_row < 0 || self.selected_row >= self.rows.len() { return; }
@@ -744,6 +823,125 @@ pub fn delete_row(self: &mut Self, area: Rect) -> void {
     self.rows = kept; self.error = ""; self.delete_pending = false;
     self.reconcile(area);
 }
+pub fn clear_clipboard(self: &mut Self) -> void {
+    let rows: list<TableRow> = self.clipboard;
+    for row in rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
+    let kinds: list<str8> = self.clipboard_kinds; for kind in kinds { free(kind); }
+    self.clipboard = []; self.clipboard_kinds = []; self.clipboard_rows = false;
+}
+fn cell_kind(self: SequenceTable, column: i32) -> str8 {
+    let definition: TableColumn = self.columns[column];
+    return format!("{}:{}", definition.title, definition.value_type);
+}
+pub fn copy_visual(self: &mut Self, cut: bool, area: Rect) -> void {
+    if !self.visual { return; }
+    if self.anchor_row < 0 || self.anchor_row >= self.rows.len() || self.anchor_column < 0 || self.anchor_column >= self.columns.len() {
+        self.visual = false; return;
+    }
+    self.error = ""; self.paste_error = false;
+    let first_row: i32 = self.anchor_row < self.selected_row ? self.anchor_row : self.selected_row;
+    let last_row: i32 = self.anchor_row > self.selected_row ? self.anchor_row : self.selected_row;
+    let first_col: i32 = self.visual_rows ? 1 : (self.anchor_column < self.selected_column ? self.anchor_column : self.selected_column);
+    let last_col: i32 = self.visual_rows ? i32(self.columns.len()) - 1 : (self.anchor_column > self.selected_column ? self.anchor_column : self.selected_column);
+    self.clear_clipboard();
+    self.clipboard_rows = self.visual_rows;
+    for c in first_col..last_col + 1 {
+        let column: TableColumn = self.columns[c];
+        if (self.clipboard_rows || !column.hidden) && !column.read_only { self.clipboard_kinds.push(self.cell_kind(i32(c))); }
+    }
+    for r in first_row..last_row + 1 {
+        let row: TableRow = self.rows[r]; var cells: list<str8> = [];
+        for c in first_col..last_col + 1 {
+            let column: TableColumn = self.columns[c];
+            if (self.clipboard_rows || !column.hidden) && !column.read_only { cells.push(clone(row.cells[c])); }
+        }
+        self.clipboard.push(TableRow { cells: cells });
+    }
+    self.visual = false; self.selected_row = first_row; self.selected_column = first_col;
+    if cut { self.apply_clipboard(true, area); }
+    self.reconcile(area);
+}
+pub fn paste_visual(self: &mut Self, area: Rect) -> void { self.apply_clipboard(false, area); }
+fn apply_clipboard(self: &mut Self, erase: bool, area: Rect) -> void {
+    self.error = ""; self.paste_error = false;
+    if self.clipboard.len() == 0 || self.clipboard_kinds.len() == 0 { return; }
+    if self.selected_row < 0 || self.selected_column < 0 { return; }
+    let start_kind: str8 = self.cell_kind(self.selected_column);
+    let matching_start: bool = start_kind == self.clipboard_kinds[0]; free(start_kind);
+    if !matching_start {
+        self.error = "Paste needs matching columns: NOTE to NOTE, etc."; self.paste_error = true; return;
+    }
+    if self.selected_row + self.clipboard.len() > self.rows.len() {
+        self.error = "Selection does not fit in the pattern"; self.paste_error = true; return;
+    }
+    var targets: list<i32> = [];
+    for c in self.selected_column..self.columns.len() {
+        if targets.len() == self.clipboard_kinds.len() { break; }
+        let column: TableColumn = self.columns[c];
+        if (self.clipboard_rows || !column.hidden) && !column.read_only { targets.push(i32(c)); }
+    }
+    if targets.len() != self.clipboard_kinds.len() {
+        self.error = "Selection does not fit in the pattern"; self.paste_error = true; return;
+    }
+    for i in 0..targets.len() {
+        let kind: str8 = self.cell_kind(targets[i]); let matches: bool = kind == self.clipboard_kinds[i]; free(kind);
+        if !matches { self.error = "Paste needs matching columns: NOTE to NOTE, etc."; self.paste_error = true; return; }
+    }
+    // Stage the entire edit. Invalid values/limits/audio lengths never leave a
+    // partially pasted rectangle behind. New notes still receive their defaults.
+    var candidate: SequenceTable = self.copy_pattern();
+    for r in 0..self.clipboard.len() {
+        let row: TableRow = self.clipboard[r];
+        for c in 0..targets.len() {
+            candidate.selected_row = self.selected_row + i32(r); candidate.selected_column = targets[c];
+            let target: TableRow = candidate.rows[candidate.selected_row];
+            let value: str8 = erase ? "" : row.cells[c];
+            if target.cells[targets[c]] != value {
+                if !candidate.commit(value) {
+                    self.error = candidate.error; self.paste_error = true; candidate.release(); return;
+                }
+            }
+        }
+    }
+    let old_rows: list<TableRow> = self.rows;
+    for row in old_rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
+    let old_tracks: list<SequenceTrack> = self.tracks;
+    for track in old_tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.release_audio(); }
+    self.rows = candidate.rows; self.tracks = candidate.tracks;
+    candidate.rows = []; candidate.tracks = []; candidate.release();
+    self.rebuild_columns(); self.reconcile(area);
+}
+pub fn transpose_visual(self: &mut Self, event: InputEvent, area: Rect) -> void {
+    if !self.visual { return; }
+    // Work on an independent pattern so a limit in any cell cancels the whole
+    // step. Reuse normal editing for MIDI ranges, numeric limits and audio LEN.
+    var candidate: SequenceTable = self.copy_pattern();
+    var changed: bool = false;
+    for r in 0..self.rows.len() {
+        let row: TableRow = self.rows[r];
+        for c in 0..self.columns.len() {
+            let column: TableColumn = self.columns[c];
+            if column.hidden || column.read_only || !self.visual_cell(i32(r), i32(c)) { continue; }
+            if row.cells[c] == "" { continue; }
+            candidate.selected_row = i32(r); candidate.selected_column = i32(c);
+            if !candidate.is_note() && !candidate.is_length() && !candidate.is_offset() &&
+                    (column.value_type == "str8" || column.value_type == "bool") { continue; }
+            candidate.edit_event(event, area);
+            let updated: TableRow = candidate.rows[r];
+            if updated.cells[c] == row.cells[c] { candidate.release(); return; }
+            changed = true;
+        }
+    }
+    if !changed { candidate.release(); return; }
+    let old_rows: list<TableRow> = self.rows;
+    for row in old_rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
+    let old_tracks: list<SequenceTrack> = self.tracks;
+    for track in old_tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.release_audio(); }
+    self.rows = candidate.rows; self.tracks = candidate.tracks;
+    candidate.rows = []; candidate.tracks = []; candidate.release();
+    let whole_rows: bool = self.visual_rows;
+    self.rebuild_columns(); self.visual = true; self.visual_rows = whole_rows; self.error = ""; self.reconcile(area);
+}
 pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
     if event.kind == InputKind::None && event.code == 0 { return false; }
     if self.editing {
@@ -760,6 +958,43 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         } else { self.editor.on_event(event); }
         return true;
     }
+    self.reconcile(area);
+    if (event.code == 86 && (event.modifiers == 1 || event.modifiers == 2)) || (event.code == 118 && event.modifiers == 2) {
+        if self.selected_row >= 0 && self.selected_column >= 0 {
+            if self.visual && self.visual_rows { self.visual = false; self.visual_rows = false; }
+            else {
+                if !self.visual { self.anchor_row = self.selected_row; self.anchor_column = self.selected_column; }
+                self.visual = true; self.visual_rows = true;
+            }
+            self.delete_pending = false; self.top_pending = false;
+        }
+        return true;
+    }
+    if self.visual {
+        self.delete_pending = false; self.top_pending = false;
+        if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { self.visual = false; return true; }
+        if (event.modifiers == 1 || event.modifiers == 2) &&
+                (event.code == 74 || event.code == 75 || (event.modifiers == 2 && (event.code == 106 || event.code == 107))) {
+            self.transpose_visual(event, area); return true;
+        }
+        if event.modifiers == 1 {
+            if event.code == 118 { self.visual = false; return true; }
+            if event.code == 121 || event.code == 100 { self.copy_visual(event.code == 100, area); return true; }
+            if event.code == 104 || event.code == 106 || event.code == 107 || event.code == 108 { return self.on_event(event, area); }
+        }
+        return true;
+    }
+    if event.modifiers == 1 && event.code == 118 {
+        if self.selected_row >= 0 && self.selected_column >= 0 {
+            self.visual = true; self.visual_rows = false; self.anchor_row = self.selected_row; self.anchor_column = self.selected_column;
+            self.delete_pending = false; self.top_pending = false;
+        }
+        return true;
+    }
+    if event.modifiers == 1 && event.code == 112 { self.paste_visual(area); return true; }
+    if event.modifiers == 1 && event.code == 111 { self.insert_row(false, area); return true; }
+    if (event.code == 79 && (event.modifiers == 1 || event.modifiers == 2)) ||
+            (event.code == 111 && event.modifiers == 2) { self.insert_row(true, area); return true; }
     let delete_key: bool = event.modifiers == 1 && event.code == 100;
     if !delete_key { self.delete_pending = false; }
     let top_key: bool = event.modifiers == 1 && event.code == 103;
@@ -869,8 +1104,8 @@ pub fn paint_track_dialog(self: SequenceTable, surface: Surface, viewport: Rect,
 pub fn paint_track_details(self: SequenceTable, surface: Surface, area: Rect, theme: Theme) -> void {
     let index: i32 = self.active_track(); if index < 0 || area.height < 3 { return; }
     let track: SequenceTrack = self.tracks[index];
-    let title: str8 = format!("{} [{}]{}", track.name, track.audio ? "AUDIO" : "MIDI", track.muted ? " [muted]" : "");
-    let parameters: str8 = format!("CC1={}  CC2={}", track.cc1.parameter, track.cc2.parameter);
+    let title: str8 = format!("{} [{}]{}", track.name, track.audio ? "AUDIO" : (track.instrument ? "INSTRUMENT" : "MIDI"), track.muted ? " [muted]" : "");
+    let parameters: str8 = track.instrument ? format!("Instrument: {} | CC1={} CC2={}", track.instrument_id, track.cc1.parameter, track.cc2.parameter) : format!("CC1={}  CC2={}", track.cc1.parameter, track.cc2.parameter);
     surface.text(Rect::new(area.x, area.y + 1, area.width, 1), title, theme.accent, theme.panel);
     surface.text(Rect::new(area.x, area.y + 2, area.width, 1), parameters, theme.muted, theme.panel);
     free(title); free(parameters);

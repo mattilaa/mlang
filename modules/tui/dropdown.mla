@@ -1,0 +1,94 @@
+mod tui::input;
+mod tui::widgets;
+mod std::strbuf;
+use tui::input::*;
+use tui::menu::Key;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::widgets::*;
+use std::strbuf::clone;
+use std::strbuf::free;
+
+pub struct DropDownItem { var id: i64; var label: str8; };
+/// Owned labels; set_items clones input. Paint popups after all sibling widgets.
+pub struct DropDown {
+    var items: list<DropDownItem>; var selected: i32{-1};
+    var cursor: i32{-1}; var scroll: i32; var expanded: bool;
+    var max_rows: i32{6};
+};
+impl DropDown {
+    pub fn set_items(self: &mut Self, items: list<DropDownItem>, selected_id: i64) -> void {
+        var copied: list<DropDownItem> = []; var selected: i32 = -1;
+        for item in items {
+            if item.id == selected_id { selected = i32(copied.len()); }
+            copied.push(DropDownItem { id: item.id, label: clone(item.label) });
+        }
+        self.release(); self.items = copied; self.selected = selected;
+        if self.max_rows < 1 { self.max_rows = 6; }
+        if self.selected < 0 && self.items.len() > 0 { self.selected = 0; }
+        self.cursor = self.selected;
+    }
+    pub fn selected_id(self: DropDown) -> i64 {
+        if self.selected < 0 || self.selected >= self.items.len() { return -2; }
+        let item: DropDownItem = self.items[self.selected]; return item.id;
+    }
+    pub fn cancel(self: &mut Self) -> void { self.expanded = false; self.cursor = self.selected; }
+    pub fn on_event(self: &mut Self, event: InputEvent) -> bool {
+        if event.kind != InputKind::Menu { return false; }
+        if !self.expanded {
+            if event.key == Key::Enter || event.key == Key::Down {
+                if self.items.len() > 0 { self.expanded = true; self.cursor = self.selected; }
+                return true;
+            }
+            return false;
+        }
+        if event.key == Key::Escape && event.code < 32 { self.cancel(); return true; }
+        if event.key == Key::Enter { self.selected = self.cursor; self.expanded = false; return true; }
+        if event.key == Key::Down && self.cursor + 1 < self.items.len() { self.cursor = self.cursor + 1; }
+        if event.key == Key::Up && self.cursor > 0 { self.cursor = self.cursor - 1; }
+        return event.key != Key::Toggle;
+    }
+    pub fn paint(self: DropDown, surface: Surface, anchor: Rect, theme: Theme, focused: bool) -> void {
+        let row: Rect = Rect::new(anchor.x, anchor.y, anchor.width, anchor.height > 0 ? 1 : 0);
+        let bg: i32 = focused ? theme.selection : theme.background;
+        surface.fill(row, Cell { glyph: 32, foreground: theme.foreground, background: bg });
+        if self.selected >= 0 && self.selected < self.items.len() {
+            let item: DropDownItem = self.items[self.selected];
+            surface.text(Rect::new(row.x, row.y, row.width - 2, row.height), item.label, theme.foreground, bg);
+        }
+        if row.width > 1 { surface.text(Rect::new(row.x + row.width - 2, row.y, 2, row.height), " v", theme.accent, bg); }
+    }
+    pub fn paint_popup(self: DropDown, surface: Surface, anchor: Rect, viewport: Rect, theme: Theme) -> void {
+        if !self.expanded || self.items.len() == 0 || viewport.height < 3 || viewport.width < 3 { return; }
+        var rows: i32 = i32(self.items.len());
+        let limit: i32 = self.max_rows < 1 ? 1 : self.max_rows;
+        if rows > limit { rows = limit; }
+        if rows > viewport.height - 2 { rows = viewport.height - 2; }
+        var y: i32 = anchor.y + 1;
+        if y + rows + 2 > viewport.y + viewport.height { y = anchor.y - rows - 2; }
+        if y < viewport.y { y = viewport.y; }
+        let width: i32 = anchor.width > viewport.width ? viewport.width : anchor.width;
+        var x: i32 = anchor.x;
+        if x + width > viewport.x + viewport.width { x = viewport.x + viewport.width - width; }
+        if x < viewport.x { x = viewport.x; }
+        let popup: Rect = Rect::new(x, y, width, rows + 2);
+        let shadow: Rect = Rect::new(x + 1, y + 1, width, rows + 2);
+        surface.shadow(shadow.intersect(viewport), 55);
+        let border: Panel = Panel { title: "" };
+        let body: Rect = border.paint(surface, popup, theme);
+        let start: i32 = self.cursor >= rows ? self.cursor - rows + 1 : 0;
+        for r in 0..rows {
+            let item: DropDownItem = self.items[start + i32(r)];
+            let bg: i32 = start + i32(r) == self.cursor ? theme.selection : theme.panel;
+            let line: Rect = Rect::new(body.x, body.y + i32(r), body.width, 1);
+            surface.fill(line, Cell { glyph: 32, foreground: theme.foreground, background: bg });
+            surface.text(line, item.label, theme.foreground, bg);
+        }
+    }
+    pub fn release(self: &mut Self) -> void {
+        let items: list<DropDownItem> = self.items;
+        for item in items { free(item.label); }
+        self.items = []; self.selected = -1; self.cursor = -1; self.expanded = false; self.scroll = 0;
+    }
+}

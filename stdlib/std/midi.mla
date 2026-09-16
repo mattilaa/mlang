@@ -45,7 +45,7 @@ pub fn backend_name() -> str8 {
     return __mlang_std_midi_backend_name();
 }
 
-/// @brief Return the latest native backend error.
+/// @brief Return the latest native backend error on the calling thread.
 pub fn last_error() -> str8 {
     return __mlang_std_midi_last_error();
 }

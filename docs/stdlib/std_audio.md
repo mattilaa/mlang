@@ -2,6 +2,99 @@
 
 Module file: `stdlib/std/audio.mla`
 
+## Low-latency event controller
+
+Import `std::audio::controller` for the separate output-only AUHAL API on macOS.
+Existing `AudioDevice` APIs keep their original backends. `AudioController.open`
+takes an output device index (`-1` for system default) and a requested hardware
+buffer size, for example 128 frames. It uses the device's native sample rate;
+query `sample_rate()` and `buffer_frames()` for actual values. The buffer size
+request may affect other clients of that device; it is not an end-to-end latency
+guarantee. `start()` activates the native render callback; `stop()` stops it.
+Other platforms return an unsupported error for hardware open, but the offline
+`new(sample_rate, buffer_frames)` renderer works without hardware.
+
+`AudioEvent` has `kind`, nested `AudioMidiEvent { channel, note, velocity }`,
+`source`, `frame`, `sample`, and `gain` fields. Supported kinds are `NoteOn`,
+`NoteOff`, `MasterGain`, `PlaySample`, and `StopSource`. MIDI channel/note/velocity
+ranges are 0–15/0–127/0–127; source IDs distinguish tracks or producers.
+`post(event, lane)` returns 0 on success, 1 when full, or -1 for invalid arguments.
+It does not allocate or wait. There are two preallocated 1024-event SPSC lanes:
+lane 0 for a main/sequencer producer and lane 1 for a MIDI-input producer.
+**Exactly one producer may post to each lane.** The callback is their sole
+consumer. It handles at most 256 events per lane per callback, without locks,
+allocation, logging, or MLang calls. A future event on one lane does not block
+the other. Frame -1 means immediately; other frames are absolute positions in
+`frame_clock()`. Keep timestamps nondecreasing within each lane; late events
+run at the next available frame. Dense bursts can exhaust the callback budget.
+
+The reference renderer has 128 shared MIDI/sample voices and a sine preview
+instrument, with a short click-reduction ramp and conservative master gain.
+It is not an Audio Unit plugin host. `add_sample(pcm)` copies a decoded PcmAudio
+while stopped, returning a sample ID or -1; up to 64 copies are retained until
+close. The source PcmAudio can then be freed. PCM voices use linear interpolation
+when source and output rates differ. `PlaySample` starts a registered sample;
+`StopSource` releases every voice belonging to a source. `MasterGain` accepts
+0–1. `process(block, frames)` runs the same renderer into a preallocated PcmBlock
+while stopped, for offline processing and tests.
+
+Overflow increments `dropped_events()` and requests a panic rather than risking
+stuck notes. `panic()` atomically requests clearing voices and both event queues
+at the next callback. Stop/join producers before `close()`; handle copies are
+non-owning aliases. Opening devices, registering PCM, and lifecycle calls belong
+on a control thread, never inside an audio callback. No hardware input or audio
+recording permission is needed for this output-only controller.
+
+### Optional native master processor
+
+`AudioController.processor_support()` reports whether the application installed
+a processor host. `load_processor(path)` replaces the master processor while
+stopped; an empty path unloads it, and a failed load retains the old processor.
+`processor_name()` returns a borrowed name, `processor_errors()` counts failed
+render blocks, and `hardware_output()` distinguishes AUHAL and offline handles.
+
+The application-owned host registers an `mlang_audio_processor_factory` through
+`stdlib/include/mlang_audio_processor.h` before creating controllers. It supplies
+preallocated native begin/note/process callbacks, plus control-thread name and
+destruction callbacks. The runtime keeps SDK dependencies out of stdlib. mlacker
+installs a VST3 implementation; the original widget demo installs none. Master
+gain/clipping is applied after the processor, and instruments suppress the
+reference sine voices while preserving the PCM mix. Failure silences the block
+and increments an atomic counter. Hosting plugins does not guarantee that
+third-party code itself is lock-free or allocation-free.
+
+An optional instrument-only factory can also be registered with
+`mlang_audio_register_instrument_factory`. While stopped,
+`load_instrument(slot, path)` loads/replaces slot 1–32; failure retains the old
+instance. `instrument_name(slot)` returns a borrowed name. Post
+`InstrumentNoteOn` / `InstrumentNoteOff` with `AudioEvent.sample` set to the slot
+ID (0 is unassigned/silent). Other MIDI fields and frame scheduling are unchanged.
+Each slot renders into a preallocated scratch buffer, then contributes to the
+mix before the master processor and gain. Ordinary `NoteOn` / `NoteOff` events
+retain their preview/master routing. Panic resets every slot; close destroys
+all instances on the control thread. A failed instrument block silences only
+that slot's contribution and increments `processor_errors()`.
+
+`ControlChange` (master) and `InstrumentControlChange` (slot in `sample`) use
+`midi.note` for the controller number and `midi.velocity` for its integer value.
+CC numbers 0–127 accept 0–127; controller 129 is pitch bend and accepts 0–16383.
+The optional native `control` callback receives the block-relative sample offset.
+mlacker converts these through cached VST3 `IMidiMapping` assignments to normalized
+`IParameterChanges` points. Unsupported mappings are ignored, never treated as notes.
+
+For selected-track live input, the control thread publishes
+`midi_target(track, instrument)` (`track` 0–63; instrument -1 disables new notes,
+0 routes to preview/master, 1–32 routes to a slot). The MIDI worker calls
+`live_note(on, channel, pitch, velocity)` as the sole producer of lane 1.
+An atomic destination snapshot and producer-owned held-key table preserve the
+original route for note-offs; input channels are preserved. Preview live voices
+use separate source IDs from sequencer voices. No UI round trip is required.
+
+`master_peak(channel)` (0 = left, 1 = right) atomically consumes the maximum
+post-master, post-gain/clipping peak since the previous read, scaled 0–1000.
+One UI consumer should read at meter refresh cadence, then apply display decay.
+Stopping output clears pending peaks. These APIs also work with offline output.
+
 Common audio output and duplex processing helpers:
 - macOS uses CoreAudio Audio Queue input/output.
 - Linux uses JACK2 when `libjack` and a running JACK server are available.
