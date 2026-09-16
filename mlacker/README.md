@@ -139,6 +139,11 @@ these keys still edit cells when Pattern view has focus. Gain affects preview,
 PCM voices and VST instrument output. Tracks sharing a loaded VST instance share
 its output gain; changing one linked fader updates the others in the pattern.
 
+Instrument strips also show `M LR`: MIDI velocity beside measured left/right
+plugin PCM peaks, after the instrument fader and before the master chain. PCM
+meters share the meter style, update rate, and smooth decay. Tracks using the
+same loaded instance display the same cached stereo output readings.
+
 `Shift+R` in Mixer toggles the selected MIDI/instrument track's record arm. Its
 upper `R` becomes white on red while armed. Incoming MIDI note-ons overwrite NOTE
 and VEL at the selected pattern row/note line without advancing the cursor. A new

@@ -36,6 +36,7 @@ typedef struct {
     uint64_t seen_panic;
     _Atomic uint32_t peak;
     _Atomic uint32_t master_peak[2];
+    _Atomic uint32_t instrument_peak[32][2];
     _Atomic uint64_t live_target;
     _Atomic uint32_t track_volume[64], instrument_volume[32];
     /* Packed slot (6 bits), parameter index (14), step count (32).
@@ -75,6 +76,7 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     atomic_init(&c->dropped, 0); atomic_init(&c->clock, 0);
     atomic_init(&c->panic, 0); atomic_init(&c->peak, 0);
     atomic_init(&c->master_peak[0], 0); atomic_init(&c->master_peak[1], 0);
+    for(int i = 0; i < 32; ++i) for(int ch = 0; ch < 2; ++ch) atomic_init(&c->instrument_peak[i][ch], 0);
     atomic_init(&c->live_target, 0);
     for(int i = 0; i < 64; ++i) atomic_init(&c->track_volume[i], 100);
     for(int i = 0; i < 32; ++i) atomic_init(&c->instrument_volume[i], 100);
@@ -191,6 +193,12 @@ int32_t __mlang_std_audio_controller_master_peak(int64_t handle, int64_t channel
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || channel < 0 || channel > 1) return 0;
     return (int32_t)atomic_exchange_explicit(&c->master_peak[channel], 0, memory_order_relaxed);
+}
+/* Single UI consumer: post-instrument-fader, pre-master stereo peaks, 0-1000. */
+int32_t __mlang_std_audio_controller_instrument_peak(int64_t handle, int64_t slot, int64_t channel) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || channel < 0 || channel > 1) return 0;
+    return (int32_t)atomic_exchange_explicit(&c->instrument_peak[slot - 1][channel], 0, memory_order_relaxed);
 }
 
 static void ac_dispatch(ac_controller *c, const ac_event *e) {
@@ -316,8 +324,20 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             continue;
         }
         float volume = atomic_load_explicit(&c->instrument_volume[i], memory_order_relaxed) / 100.f;
-        for(uint32_t f = 0; f < frames * 2u; ++f)
-            if(isfinite(c->instrument_buffer[f])) out[f] += c->instrument_buffer[f] * volume;
+        float peaks[2] = {0, 0};
+        for(uint32_t f = 0; f < frames * 2u; ++f) {
+            if(isfinite(c->instrument_buffer[f])) {
+                float value = c->instrument_buffer[f] * volume;
+                out[f] += value;
+                peaks[f & 1] = fmaxf(peaks[f & 1], fabsf(value));
+            }
+        }
+        for(int ch = 0; ch < 2; ++ch) {
+            uint32_t value = (uint32_t)(fminf(peaks[ch], 1.f) * 1000.f);
+            uint32_t old = atomic_load_explicit(&c->instrument_peak[i][ch], memory_order_relaxed);
+            while(old < value && !atomic_compare_exchange_weak_explicit(&c->instrument_peak[i][ch], &old, value,
+                memory_order_relaxed, memory_order_relaxed)) {}
+        }
     }
     if(c->processor.context && c->processor.process(c->processor.context, out, (int32_t)frames, clock) != 0) {
         memset(out, 0, frames * 2u * sizeof(float));
@@ -388,6 +408,7 @@ int32_t __mlang_std_audio_controller_stop(int64_t handle) {
     c->running = 0; ac_silence(c); c->processor_reset = 1;
     atomic_store_explicit(&c->master_peak[0], 0, memory_order_relaxed);
     atomic_store_explicit(&c->master_peak[1], 0, memory_order_relaxed);
+    for(int i = 0; i < 32; ++i) for(int ch = 0; ch < 2; ++ch) atomic_store_explicit(&c->instrument_peak[i][ch], 0, memory_order_relaxed);
     for(int lane = 0; lane < 2; ++lane) {
         ac_queue *q = &c->queues[lane];
         atomic_store_explicit(&q->read, atomic_load_explicit(&q->write, memory_order_acquire), memory_order_release);
@@ -512,6 +533,7 @@ int64_t __mlang_std_audio_controller_midi_learn_info(int64_t handle, int64_t key
 }
 static void ac_clear_learn_slot(ac_controller *c, int64_t slot) {
     /* Called only with audio stopped and MIDI producer joined. */
+    for(int ch = 0; ch < 2; ++ch) atomic_store_explicit(&c->instrument_peak[slot - 1][ch], 0, memory_order_relaxed);
     if((atomic_load(&c->learn_target) & 63) == (uint64_t)slot) atomic_store(&c->learn_target, 0);
     for(int i = 0; i < 2048; ++i)
         if((atomic_load(&c->learn_map[i]) & 63) == (uint64_t)slot) atomic_store(&c->learn_map[i], 0);

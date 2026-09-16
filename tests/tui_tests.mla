@@ -149,6 +149,26 @@ mod tui::meter;
 mod tui_demo::mixer;
 use tui::meter::VuMeter;
 use tui_demo::mixer::Mixer;
+use tui_demo::mixer::MeterLevel;
+
+#[test]
+fn tui_instrument_stereo_meters() {
+    var table: SequenceTable = SequenceTable::new();
+    table.create_instrument_track(1, Rect::new(0, 0, 80, 20));
+    var mixer: Mixer = Mixer { grainy: false };
+    for i in 0..4 { mixer.levels.push(MeterLevel { left: 1000, right: 1000 }); }
+    mixer.instrument_levels.push(MeterLevel { left: 1000, right: 250 });
+    let surface: Surface = Surface::new(14, 12);
+    mixer.paint(surface, Rect::new(0, 0, 14, 12), Theme::dark_blue(), table.tracks, 3);
+    let midi: Cell = surface.cell(3, 2); let left: Cell = surface.cell(5, 2); let right: Cell = surface.cell(6, 2);
+    verify(midi.glyph == 77 && left.glyph == 76 && right.glyph == 82);
+    let midi_bar: Cell = surface.cell(3, 3); let left_bar: Cell = surface.cell(5, 3); let right_bar: Cell = surface.cell(6, 3);
+    verify(midi_bar.glyph == left_bar.glyph && left_bar.glyph != right_bar.glyph);
+    let master: Cell = surface.cell(8, 0); verify(master.glyph == 77);
+    verify(mixer.update_instruments(AudioController {}, 16));
+    let cleared: MeterLevel = mixer.instrument_levels[0]; verify(cleared.left == 0 && cleared.right == 0);
+    surface.release(); table.release();
+}
 mod tui::listview;
 mod tui_demo::patterns;
 use tui::listview::*;

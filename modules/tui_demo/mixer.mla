@@ -1,5 +1,7 @@
 mod tui::meter;
 mod tui::slider;
+mod std::audio::controller;
+use std::audio::controller::AudioController;
 use tui::slider::Slider;
 mod tui_demo::sequence;
 use tui::geometry::*;
@@ -16,8 +18,25 @@ use std::strbuf::free;
 
 pub struct MeterLevel { var left: i32; var right: i32; };
 /// Meters are derived from sequenced notes and audio peaks, never synthetic.
-pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; var master: MeterLevel; };
+pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; var master: MeterLevel; var instrument_levels: list<MeterLevel>; };
 impl Mixer {
+    /// Consume each plugin's peaks once; shared track assignments reuse the cache.
+    pub fn update_instruments(self: &mut Self, output: AudioController, delta: i32) -> bool {
+        var next: list<MeterLevel> = []; var changed: bool = false;
+        for i in 0..32 {
+            var old: MeterLevel = MeterLevel {};
+            if i < self.instrument_levels.len() { old = self.instrument_levels[i]; }
+            let left: i32 = output.instrument_peak(i + 1, 0);
+            let right: i32 = output.instrument_peak(i + 1, 1);
+            var level: MeterLevel = MeterLevel {};
+            if output.parameter_info(i + 1, 0, 0) >= 0.0 {
+                level = MeterLevel { left: meter_ramp(old.left, left, delta), right: meter_ramp(old.right, right, delta) };
+            }
+            if level.left != old.left || level.right != old.right { changed = true; }
+            next.push(level);
+        }
+        self.instrument_levels = next; return changed;
+    }
     pub fn update_master(self: &mut Self, left: i32, right: i32, delta: i32) -> bool {
         let next: MeterLevel = MeterLevel { left: meter_ramp(self.master.left, left, delta), right: meter_ramp(self.master.right, right, delta) };
         let changed: bool = next.left != self.master.left || next.right != self.master.right;
@@ -91,14 +110,21 @@ impl Mixer {
         if area.width <= 0 || area.height <= 0 { return; }
         let master_width: i32 = area.width < 6 ? area.width : 6;
         let available: i32 = area.width - master_width;
-        let width: i32 = available < 6 ? (available > 0 ? available : 1) : 6;
-        let capacity: i32 = available / width;
-        let start: i32 = selected >= capacity ? selected - capacity + 1 : 0;
-        for slot in 0..capacity {
-            let index: i32 = start + i32(slot);
-            if index >= tracks.len() { break; }
+        var start: i32 = 0; var span: i32 = 0;
+        for i in 0..tracks.len() {
+            if i > selected { break; }
+            let track: SequenceTrack = tracks[i]; span = span + (track.instrument ? 8 : 6);
+        }
+        while span > available && start < selected && start < tracks.len() {
+            let track: SequenceTrack = tracks[start]; span = span - (track.instrument ? 8 : 6); start = start + 1;
+        }
+        var cursor: i32 = 0;
+        for index in start..tracks.len() {
+            if cursor >= available { break; }
             let track: SequenceTrack = tracks[index];
-            let x: i32 = area.x + i32(slot) * width;
+            let preferred: i32 = track.instrument ? 8 : 6;
+            let width: i32 = available - cursor < preferred ? available - cursor : preferred;
+            let x: i32 = area.x + cursor; cursor = cursor + width;
             let strip: Rect = Rect::new(x, area.y, width - (width > 1 ? 1 : 0), area.height);
             let bg: i32 = index == selected ? lighten(theme.panel, 8) : theme.panel;
             surface.fill(strip, Cell { glyph: 32, foreground: theme.foreground, background: bg });
@@ -120,6 +146,15 @@ impl Mixer {
                 let meter_x: i32 = x + 3;
                 left.paint(surface, Rect::new(meter_x, area.y + 3, 1, area.height - 4), bg);
                 if track.audio && strip.width >= 5 { right.paint(surface, Rect::new(meter_x + 1, area.y + 3, 1, area.height - 4), bg); }
+                if track.instrument && strip.width >= 7 {
+                    var pcm: MeterLevel = MeterLevel {};
+                    if track.instrument_id > 0 && track.instrument_id <= self.instrument_levels.len() { pcm = self.instrument_levels[track.instrument_id - 1]; }
+                    let pcm_left: VuMeter = VuMeter { level: pcm.left, grainy: self.grainy };
+                    let pcm_right: VuMeter = VuMeter { level: pcm.right, grainy: self.grainy };
+                    surface.text(Rect::new(x + 3, area.y + 2, 4, 1), "M LR", theme.muted, bg);
+                    pcm_left.paint(surface, Rect::new(x + 5, area.y + 3, 1, area.height - 4), bg);
+                    pcm_right.paint(surface, Rect::new(x + 6, area.y + 3, 1, area.height - 4), bg);
+                }
             }
         }
         // Fixed to the right, independent of the horizontally scrolling tracks.
