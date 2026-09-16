@@ -116,7 +116,9 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Instrument", action: 93, enabled: AudioController::processor_support() }] },
                     Menu {title: "Instrument", items: [
                                 MenuItem { label: "Open VST3 editor", action: 94, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Remove instrument", action: 95, enabled: AudioController::processor_support() }] }
+                                MenuItem { label: "Remove instrument", action: 95, enabled: AudioController::processor_support() },
+                                MenuItem { label: "Save MIDI learn", action: 97, enabled: AudioController::processor_support() },
+                                MenuItem { label: "Load MIDI learn", action: 98, enabled: AudioController::processor_support() }] }
             ]);
 }
 
@@ -192,6 +194,7 @@ pub fn run() -> i32 {
     var library: PatternLibrary = fixture ? PatternLibrary::new() : PatternLibrary::empty();
     var session_path: str8 = clone(""); var request_path: str8 = clone("");
     var session_request: i32 = 0; var saving_session: bool = false;
+    var learn_action: i32 = 0; var learn_slot: i64 = 0;
     if !fixture {
         let arguments: list<str8> = __env_args();
         if arguments.len() == 2 { free(request_path); request_path = clone(arguments[1]); session_request = 1; }
@@ -353,7 +356,11 @@ pub fn run() -> i32 {
                 if dialog.accepted {
                     if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, terminal_bounds()); }
                     free(message);
-                    if adding_instrument {
+                    if learn_action != 0 {
+                        message = SessionCodec::learn_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 97);
+                        learn_action = 0;
+                    }
+                    else if adding_instrument {
                         let error: str8 = midi.add_instrument(dialog.accepted_path);
                         if error != "" { message = error; }
                         else {
@@ -484,7 +491,11 @@ pub fn run() -> i32 {
                     if dialog.accepted {
                         if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, panes[1].bounds.inset(1)); }
                         free(message);
-                        if adding_instrument {
+                        if learn_action != 0 {
+                            message = SessionCodec::learn_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 97);
+                            learn_action = 0;
+                        }
+                        else if adding_instrument {
                             let error: str8 = midi.add_instrument(dialog.accepted_path);
                             if error != "" { message = error; }
                             else {
@@ -563,6 +574,7 @@ pub fn run() -> i32 {
                 free(request_path); request_path = clone(session_path); session_request = 2;
             }
             else if command == 2 || command == 3 || command == 96 {
+                learn_action = 0;
                 adding_audio = false; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = "";
                 saving_session = command != 2; dialog.save_mode = saving_session;
                 dialog.title = saving_session ? "Save session (.mlack)" : "Open session"; dialog.file_pattern = fixture ? "" : ".*\\.[mM][lL][aA][cC][kK]";
@@ -570,17 +582,37 @@ pub fn run() -> i32 {
                 focus.set_menu_active(true);
             }
             else if command == 60 {
+                learn_action = 0;
                 dialog.save_mode = false; saving_session = false;
                 adding_audio = true; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = ""; dialog.title = "Add audio";
                 dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
                 dialog.open(""); focus.set_menu_active(true);
             }
             else if command == 91 || command == 93 {
+                learn_action = 0;
                 dialog.save_mode = false; saving_session = false;
                 transport.playing = false; adding_audio = false; adding_plugin = command == 91; adding_instrument = command == 93;
                 dialog.title = adding_instrument ? "Add VST3 instrument" : "Load master VST3"; dialog.file_pattern = ".*\\.[vV][sS][tT]3";
                 dialog.bundle_pattern = dialog.file_pattern;
                 dialog.open("/Library/Audio/Plug-Ins/VST3"); focus.set_menu_active(true);
+            }
+            else if command == 97 || command == 98 {
+                learn_slot = library.selected_instrument();
+                if learn_slot < 1 || midi.output.parameter_info(learn_slot, 0, 0) < 0.0 {
+                    free(message); message = clone("Select a loaded instrument in Instruments first");
+                } else {
+                    learn_action = command; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                    midi.output.midi_learn(-1, 0, 0);
+                    dialog.save_mode = command == 97; dialog.bundle_pattern = "";
+                    dialog.title = command == 97 ? "Save MIDI learn (.mlalearn)" : "Load MIDI learn (.mlalearn)";
+                    dialog.file_pattern = command == 97 ? "" : ".*\\.[mM][lL][aA][lL][eE][aA][rR][nN]";
+                    dialog.open("");
+                    if command == 97 {
+                        let suggested: str8 = SessionCodec::learn_suggestion(midi.output.instrument_name(learn_slot));
+                        dialog.path_field.set_text(suggested); free(suggested);
+                    }
+                    focus.set_menu_active(true);
+                }
             }
             else if command == 94 {
                 if !instrument_editor.open(midi.output, library.selected_instrument()) {

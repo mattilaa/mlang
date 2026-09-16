@@ -13,13 +13,13 @@ from pathlib import Path
 
 
 class Terminal:
-    def __init__(self, *args):
+    def __init__(self, *args, cwd=None):
         self.master, self.slave = os.openpty()
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 28, 120, 0, 0))
         env = dict(os.environ, TERM="xterm-256color", MLANG_TUI_NO_HARDWARE="1")
         env.pop("MLANG_TUI_DEMO", None)
         env.pop("NO_COLOR", None)
-        self.process = subprocess.Popen([sys.argv[1], *args], stdin=self.slave, stdout=self.slave, stderr=self.slave, env=env)
+        self.process = subprocess.Popen([os.path.abspath(sys.argv[1]), *args], stdin=self.slave, stdout=self.slave, stderr=self.slave, env=env, cwd=cwd)
 
     def read(self, seconds=0.35):
         data = bytearray()
@@ -75,7 +75,7 @@ def main():
         learned = struct.pack("<q", 10) + b"MIDI_LEARN" + struct.pack("<qqqq", 1, 3 * 128 + 7, 1, 100)
         saved += learned
         path.write_bytes(saved)
-        tui = Terminal(str(path))
+        tui = Terminal(str(path), cwd=directory)
         try:
             frame = tui.read(1.0)
             assert b"VST3 editor:" in frame and b"0.25" in frame and b"New session" not in frame, frame[-5000:]
@@ -84,6 +84,39 @@ def main():
             tui.send(b"\x1b")
             tui.send(b"\x13", 0.6)
             closed_editor = path.read_bytes()
+            # Instrument menu export suggests an editable plugin-name prefix.
+            frame = tui.send(b"\tlllllljj\r")
+            assert b"Save MIDI learn (.mlalearn)" in frame and b"Mlacker Test Instrument - " in frame, frame[-5000:]
+            frame = tui.send(b"My keyboard\r", 0.6)
+            assert b"Saved MIDI learn:" in frame, frame[-5000:]
+            preset = Path(directory) / "Mlacker Test Instrument - My keyboard.mlalearn"
+            preset_data = preset.read_bytes()
+            assert preset_data.endswith(struct.pack("<qqq", 1, 391, 100))
+            assert preset_data.startswith(struct.pack("<q", 8) + b"MLALEARN" + struct.pack("<qq", 1, 0))
+            # Ctrl+U can replace the whole suggestion; extension is not doubled.
+            custom = Path(directory) / "custom.mlalearn"
+            tui.send(b"\tlllllljj\r")
+            tui.send(b"\x15" + os.fsencode(custom) + b"\r", 0.6)
+            assert custom.read_bytes() == preset_data
+            # A different mapping imports into the selected slot, then session save persists it.
+            custom.write_bytes(preset_data[:-16] + struct.pack("<qq", 392, 100))
+            assert b"Load MIDI learn (.mlalearn)" in tui.send(b"\tlllllljjj\r")
+            frame = tui.send(b"\x15" + os.fsencode(custom) + b"\r", 0.6)
+            assert b"Loaded MIDI learn:" in frame, frame[-5000:]
+            tui.send(b"\x13", 0.6)
+            assert path.read_bytes().endswith(learned[:-24] + struct.pack("<qqq", 392, 1, 100))
+            # Rejected imports do not change the mapping.
+            custom.write_bytes(preset_data[:-1])
+            tui.send(b"\tlllllljjj\r")
+            frame = tui.send(b"\x15" + os.fsencode(custom) + b"\r", 0.6)
+            assert b"mappings unchanged" in frame, frame[-5000:]
+            tui.send(b"\x13", 0.6)
+            assert path.read_bytes().endswith(learned[:-24] + struct.pack("<qqq", 392, 1, 100))
+            # Restore the original mapping for the rest of the session regression.
+            tui.send(b"\tlllllljjj\r")
+            tui.send(b"\x15" + os.fsencode(preset) + b"\r", 0.6)
+            tui.send(b"\x13", 0.6)
+            assert path.read_bytes() == closed_editor
             bad = Path(directory) / "bad.mlack"
             bad.write_bytes(saved[:20])
             assert b"Open session" in tui.send(b"\tj\r")

@@ -82,3 +82,18 @@ Meters/MIDI activity are transient and start silent; playback never auto-starts.
 Version 1.0 does not capture opaque VST3 component/controller state blobs or
 plugin-internal sample libraries. It preserves the exposed parameter state edited
 by mlacker. Future incompatible additions require a new version.
+
+## Portable MIDI learn files (`.mlalearn`, version 1.0)
+
+Uses the same little-endian integer and length-prefixed UTF-8 string primitives:
+string `MLALEARN`, major 1, minor 0, plugin display-name string, mapping count,
+then `(channel * 128 + CC, stable parameter ID)` integer pairs. Keys are strictly
+increasing, 0–2047; IDs are unsigned 32-bit values stored as i64. Maximum size is
+64 KiB, maximum count 2048, maximum string length 4096 bytes. Trailing data is
+invalid. No session slot, parameter values, or armed-listening state is stored.
+
+Import requires the same plugin display name and writable parameter IDs, and
+replaces mappings belonging to the selected loaded instrument. Keys currently
+owned by another instrument reject the import. The entire file is validated
+before changing mappings. Empty mapping lists clear that instrument's bindings.
+Exports use atomic file replacement. Ordinary `.mlack` persistence is unchanged.

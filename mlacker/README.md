@@ -149,6 +149,14 @@ and initial values are copied into memory when the plugin loads.
   for that channel/CC. Values span the parameter range, rounded for discrete controls.
   Bindings belong to the session, survive output changes, and save in `.mlack`.
   New sessions start unmapped; removing an instrument removes its bindings.
+- **Instrument → Save MIDI learn / Load MIDI learn** exports/imports mappings
+  for the selected entry in Instruments as a `.mlalearn` file. Saving suggests
+  `<plugin name> - `: type a suffix, or Ctrl+U to replace the whole filename/path.
+  The extension is appended automatically when omitted. Loading replaces that
+  instrument's mappings, matching stable parameter IDs rather than session slots.
+  Different plugin names, missing/read-only parameters, malformed files, and CCs
+  owned by another instrument are rejected without changing existing mappings.
+  Plugin parameter values are not included; `.mlack` still saves session mappings.
 - `Shift+J` decreases and `Shift+K` increases the selected value.
 - Enter opens manual entry; Ctrl+U clears the field and Enter validates/commits.
   Invalid input stays in the field. Esc cancels entry; Esc outside entry closes

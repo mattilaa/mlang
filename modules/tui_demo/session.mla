@@ -1,6 +1,7 @@
 /// MLACK binary session 1.0. All lengths and integers are little endian.
 mod std::serde::detail;
 mod std::fs;
+mod std::bytes;
 mod tui_demo::patterns;
 mod tui_demo::audio_controller;
 use std::serde::detail::*;
@@ -133,6 +134,88 @@ impl SessionData {
 /// Sticky errors prevent a later successful operation from masking truncation.
 pub struct SessionCodec { var reading: bool; var failed: bool; var binary: SessionBuffer; var reader: SessionReader; var cells: i64; };
 impl SessionCodec {
+    pub fn learn_suggestion(name: str8) -> str8 {
+        let raw: result<std::bytes::Bytes, str8> = std::bytes::Bytes::from_string(name);
+        if raw.is_err() { return clone("Instrument - "); }
+        let bytes: std::bytes::Bytes = raw.unwrap();
+        let builder: i64 = std::strbuf::builder_new(len(name) + 4);
+        for i in 0..bytes.len() {
+            let ch: i32 = bytes.get(i);
+            std::strbuf::builder_append_char(builder, ch < 32 || ch == 127 || ch == 47 || ch == 92 || ch == 58 ? 95 : ch);
+        }
+        std::strbuf::builder_append(builder, " - ");
+        let suggested: str8 = std::strbuf::builder_to_string(builder);
+        std::strbuf::builder_free(builder); bytes.close(); return suggested;
+    }
+    /// Portable, per-plugin MIDI mappings. Validate completely before replacing.
+    pub fn learn_file(path: str8, output: AudioController, slot: i64, saving: bool) -> str8 {
+        if slot < 1 || output.parameter_info(slot, 0, 0) < 0.0 { return clone("Select a loaded instrument first"); }
+        let actual: str8 = saving && !tui::table::table_matches(".*\\.[mM][lL][aA][lL][eE][aA][rR][nN]", path) ? format!("{}.mlalearn", path) : clone(path);
+        var codec: SessionCodec = SessionCodec { reading: !saving };
+        if saving {
+            let created: result<SessionBuffer, str8> = SessionBuffer::new(4096);
+            if created.is_err() { free(actual); return clone("Cannot allocate MIDI learn file"); }
+            codec.binary = created.unwrap();
+        } else {
+            let opened: result<File, str8> = File::open(actual);
+            if opened.is_err() { free(actual); return clone("Cannot open MIDI learn file"); }
+            let file: File = opened.unwrap(); let size: result<i64, str8> = file.size(); file.close();
+            if size.is_err() { free(actual); return clone("Cannot read MIDI learn file"); }
+            if size.unwrap() > 65536 { free(actual); return clone("MIDI learn file exceeds 64 KiB"); }
+            let read: result<SessionReader, str8> = SessionReader::from_file(actual);
+            if read.is_err() { free(actual); return clone("Cannot read MIDI learn file"); }
+            codec.reader = read.unwrap();
+        }
+        let magic: str8 = codec.text("MLALEARN");
+        if magic != "MLALEARN" { codec.failed = true; } if !saving { free(magic); }
+        codec.number(1, 1, 1); codec.number(0, 0, 0);
+        let plugin_name: str8 = output.instrument_name(slot);
+        let name: str8 = codec.text(plugin_name);
+        if name != plugin_name { codec.failed = true; } if !saving { free(name); }
+        var keys: list<i64> = []; var ids: list<i64> = []; var indices: list<i64> = [];
+        if saving {
+            for key in 0..2048 {
+                let destination: i64 = output.midi_learn_info(key, 2);
+                if destination % 64 == slot {
+                    let id: i64 = output.parameter_info(slot, destination / 64, 4);
+                    keys.push(key); ids.push(id);
+                }
+            }
+        }
+        let count: i32 = codec.number(i32(keys.len()), 0, 2048);
+        var previous: i64 = -1;
+        let parameters: i64 = output.parameter_info(slot, 0, 0);
+        for i in 0..count {
+            if codec.failed { break; }
+            let key: i64 = codec.integer(saving ? keys[i] : 0, previous + 1, 2047); previous = key;
+            let id: i64 = codec.integer(saving ? ids[i] : 0, 0, 4294967295);
+            if !saving {
+                var found: i64 = -1;
+                for index in 0..parameters { if output.parameter_info(slot, index, 4) == f64(id) { found = index; } }
+                if found < 0 { codec.failed = true; }
+                else { if output.parameter_info(slot, found, 3) != 0.0 { codec.failed = true; } }
+                let owner: i64 = output.midi_learn_info(key, 0);
+                if owner != 0 && owner != slot { codec.failed = true; }
+                keys.push(key); indices.push(found);
+            }
+        }
+        if !saving { if codec.reader.remaining() != 0 { codec.failed = true; } codec.reader.close(); }
+        var status: str8 = "";
+        if saving {
+            if !codec.failed { let written: result<i32, str8> = codec.binary.write_atomic(actual); if written.is_err() { codec.failed = true; } }
+            codec.binary.close();
+            status = codec.failed ? clone("Cannot save MIDI learn file") : format!("Saved MIDI learn: {}", actual);
+        } else {
+            if codec.failed { status = clone("Invalid/incompatible MIDI learn file or CC assigned to another instrument; mappings unchanged"); }
+            else {
+                output.midi_learn(-1, 0, 0);
+                for key in 0..2048 { if output.midi_learn_info(key, 0) == slot { output.midi_learn(key, 0, 0); } }
+                for i in 0..keys.len() { output.midi_learn(keys[i], slot, indices[i]); }
+                status = format!("Loaded MIDI learn: {}", actual);
+            }
+        }
+        free(actual); return status;
+    }
     fn integer(self: &mut Self, value: i64, minimum: i64, maximum: i64) -> i64 {
         if !self.reading && self.binary.len() > 268431352 { self.failed = true; }
         if self.failed { return 0; }
