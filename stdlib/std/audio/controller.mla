@@ -8,6 +8,8 @@ extern fn __mlang_std_audio_controller_open(device: i64, frames: i64) -> i64;
 extern fn __mlang_std_audio_controller_post(handle: i64, lane: i64, kind: i64, channel: i64, note: i64, velocity: i64, source: i64, frame: i64, sample: i64, gain: f64) -> i32;
 extern fn __mlang_std_audio_controller_panic(handle: i64) -> void;
 extern fn __mlang_std_audio_controller_sample(handle: i64, pcm: i64) -> i64;
+extern fn __mlang_std_audio_controller_sample_data(handle: i64, samples: list<f32>, channels: i64, rate: i64) -> i64;
+extern fn __mlang_std_audio_controller_clear_samples(handle: i64) -> i32;
 extern fn __mlang_std_audio_controller_process(handle: i64, block: i64, frames: i64) -> i32;
 extern fn __mlang_std_audio_controller_start(handle: i64) -> i32;
 extern fn __mlang_std_audio_controller_stop(handle: i64) -> i32;
@@ -160,9 +162,17 @@ impl AudioController {
     }
     /// Atomically silence all voices and discard queued commands next callback.
     pub fn panic(self: AudioController) -> void { __mlang_std_audio_controller_panic(self.handle); }
-    /// Copy immutable PCM while stopped. Up to 64 samples; owned until close.
+    /// Copy immutable PCM while stopped. Up to 256 samples; owned until close.
     /// Source PcmAudio may be closed immediately after this call.
     pub fn add_sample(self: AudioController, pcm: PcmAudio) -> i64 { return __mlang_std_audio_controller_sample(self.handle, pcm.handle); }
+    /// Stopped owner only; all producers must be joined before clearing.
+    pub fn clear_samples(self: AudioController) -> i32 { return __mlang_std_audio_controller_clear_samples(self.handle); }
+    pub fn add_sample_data(self: AudioController, samples: list<f32>, channels: i64, rate: i64) -> i64 { return __mlang_std_audio_controller_sample_data(self.handle, samples, channels, rate); }
+    /// Offset and length are source PCM frames; length 0 plays to the natural end.
+    pub fn play_sample(self: AudioController, sample: i64, source: i64, offset: i64, length: i64) -> i32 {
+        return self.post(AudioEvent { kind: AudioEventKind::PlaySample, sample: sample, source: source,
+            midi: AudioMidiEvent { note: offset, velocity: length } }, 0);
+    }
     /// Render offline/while stopped into preallocated stereo PCM.
     pub fn process(self: AudioController, block: PcmBlock, frames: i64) -> i32 { return __mlang_std_audio_controller_process(self.handle, block.handle, frames); }
     pub fn start(self: AudioController) -> i32 { return __mlang_std_audio_controller_start(self.handle); }

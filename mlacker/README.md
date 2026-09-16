@@ -294,8 +294,11 @@ Current scope:
   latency compensation, or transport/tempo synchronization yet.
 - Existing UI-loop sequencer timing is retained. The audio API supports absolute
   frame scheduling, but a look-ahead sequencer is still future work.
-- Pattern audio-instance scheduling is still not connected to master playback;
-  the controller's PCM sample event API remains available.
+- Pattern audio samples feed Master directly, respecting track mute/volume, start
+  row and LEN. Starting inside a sample seeks into its embedded PCM; stopping
+  playback releases its voices. Aux sends add parallel wet paths, not replacements
+  for the dry Master route. PCM is copied while audio is stopped before playback
+  (up to 256 placements per pattern); the callback receives lock-free events only.
 - AUHAL's 128-frame request is not a measured end-to-end latency guarantee.
 
 ## Tests

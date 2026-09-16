@@ -200,6 +200,48 @@ use tui_demo::session::SessionCodec;
 use tui_demo::session::SessionData;
 use tui_demo::session::SessionView;
 use tui_demo::audio_controller::AudioSystem;
+use std::audio::PcmBlock;
+use std::testing::verify_eq;
+use std::testing::verify_eq_i32;
+
+#[test]
+fn tui_samples_reach_master() {
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    table.create_track_kind(false, true, area);
+    var clip: AudioClip = AudioClip { source: clone("embedded.wav"), channels: 2, sample_rate: 8000, frames: 4000, frames_per_row: 1000 };
+    for _i in 0..4000 { clip.samples.push(0.5f); clip.samples.push(0.25f); }
+    for _i in 0..4 { clip.peaks.push(WavePeak { left: 500, right: 250 }); }
+    table.selected_row = 1; verify_eq(true, table.insert_audio(clip, area));
+    let opened: result<AudioController, str8> = AudioController::new(8000, 128);
+    var audio: AudioSystem = AudioSystem {}; audio.output = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(1024); let block: PcmBlock = allocated.unwrap();
+    audio.sync_volumes(table);
+    verify_eq(true, audio.sample_playback(table, 0, true, 120));
+    verify(audio.output.process(block, 1024) == 0); verify(audio.output.master_peak(0) == 0);
+    verify(audio.sample_playback(table, 15000, true, 120));
+    verify(audio.output.process(block, 1024) == 0);
+    verify_eq_i32(125, audio.output.master_peak(0)); verify_eq_i32(63, audio.output.master_peak(1));
+    verify(audio.sample_playback(table, 16000, false, 120));
+    audio.output.process(block, 1024); verify_eq(0.0f, block.left(1023));
+    // Starting inside a placed sample seeks into embedded PCM, without reading its path.
+    verify(audio.sample_playback(table, 45000, true, 120));
+    audio.output.process(block, 1024); verify_eq(0.125f, block.left(100));
+    audio.output.process(block, 1024); verify_eq(0.0f, block.left(1023));
+    verify(audio.sample_playback(table, 45000, false, 120));
+    // Explicit source-frame offset and duration are enforced by the audio renderer.
+    verify(audio.output.play_sample(0, 3, 3990, 5) == 0);
+    audio.output.process(block, 1024); verify_eq(true, block.left(1) > 0.0f); verify_eq(0.0f, block.left(5));
+    // Every audio track contributes, not just the selected one.
+    table.create_track_kind(false, true, area);
+    table.selected_row = 1; verify(table.insert_audio(clip, area));
+    audio.sync_volumes(table);
+    verify(audio.sample_playback(table, 15000, true, 120));
+    audio.output.process(block, 1024);
+    verify_eq_i32(250, audio.output.master_peak(0)); verify_eq_i32(125, audio.output.master_peak(1));
+    verify(audio.sample_playback(table, 16000, false, 120));
+    block.close(); audio.release(); table.release(); clip.release();
+}
 extern fn mkdtemp(path: str8) -> str8;
 
 #[test]

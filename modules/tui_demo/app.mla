@@ -341,6 +341,9 @@ pub fn run() -> i32 {
             let notes: list<MidiInputEvent> = midi.midi.note_events;
             for note in notes { if library.table.record_note(note.note, note.velocity) { dirty = true; } }
         }
+        if !midi.sample_playback(library.table, transport.ticks, transport.playing, transport.bpm) {
+            transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)"); dirty = true;
+        }
         note_playback.update(library.table, transport.ticks, transport.playing);
         midi.sequencer_events(note_playback.events);
         if mixer.update(library.table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
@@ -573,6 +576,9 @@ pub fn run() -> i32 {
             }
             else if event.code == 32 && event.modifiers == 1 {
                 transport.toggle(now_ms(), library.table.selected_row, i32(library.table.rows.len()));
+                if !midi.sample_playback(library.table, transport.ticks, transport.playing, transport.bpm) {
+                    transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)");
+                }
                 note_playback.update(library.table, transport.ticks, transport.playing);
                 midi.sequencer_events(note_playback.events);
                 if transport.row >= 0 { library.table.selected_row = transport.row; }

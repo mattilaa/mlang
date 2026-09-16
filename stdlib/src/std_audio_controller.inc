@@ -4,7 +4,7 @@
  */
 #define AC_QUEUE 1024u
 #define AC_VOICES 128u
-#define AC_SAMPLES 64u
+#define AC_SAMPLES 256u
 #include "../include/mlang_audio_processor.h"
 static mlang_audio_processor_factory ac_processor_factory;
 static mlang_audio_processor_factory ac_instrument_factory;
@@ -25,6 +25,7 @@ typedef struct {
 typedef struct {
     int active, channel, note, source, sample;
     double phase, step, gain, target;
+    double sample_end;
 } ac_voice;
 typedef struct {
     float *data;
@@ -113,7 +114,7 @@ int32_t __mlang_std_audio_controller_post(int64_t handle, int64_t lane,
        source < 0 || source > INT32_MAX || !isfinite(gain) || gain < 0 || gain > 1) return -1;
     if((kind == 1 || kind == 2 || kind == 6 || kind == 7) && (channel < 0 || channel > 15 ||
         note < 0 || note > 127 || velocity < 0 || velocity > 127)) return -1;
-    if(kind == 4 && (sample < 0 || sample >= AC_SAMPLES)) return -1;
+    if(kind == 4 && (sample < 0 || sample >= AC_SAMPLES || note < 0 || velocity < 0)) return -1;
     if(kind == 10 && (sample < 1 || sample > 40 || note < 0 || note > 16383)) return -1;
     if((kind == 6 || kind == 7) && (sample < 0 || sample > 32)) return -1;
     if((kind == 8 || kind == 9) && (channel < 0 || channel > 15 ||
@@ -261,6 +262,10 @@ static void ac_dispatch(ac_controller *c, const ac_event *e) {
     slot->sample = e->kind == 4 ? (int)e->sample : -1;
     slot->step = slot->sample >= 0 ? c->samples[slot->sample].rate / c->rate : c->frequencies[e->note] / c->rate;
     slot->target = e->kind == 4 ? e->gain : e->velocity / 127.0 * 0.15;
+    if(e->kind == 4) {
+        slot->phase = (double)e->note;
+        slot->sample_end = e->velocity > 0 ? slot->phase + (double)e->velocity : (double)c->samples[slot->sample].frames;
+    }
 }
 
 static void ac_render(ac_controller *c, float *out, uint32_t frames) {
@@ -318,7 +323,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             } else {
                 ac_sample *s = &c->samples[v->sample];
                 int64_t pos = (int64_t)v->phase;
-                if(pos >= s->frames) { v->active = 0; continue; }
+                if(pos >= s->frames || v->phase >= v->sample_end) { v->active = 0; continue; }
                 int64_t next = pos + 1 < s->frames ? pos + 1 : pos;
                 double mix = v->phase - pos;
                 for(int ch = 0; ch < 2; ++ch) {
@@ -414,6 +419,27 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
 }
 
 /* Copy a sample on the control thread, only while stopped. Controller owns it. */
+int32_t __mlang_std_audio_controller_clear_samples(int64_t handle) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || c->running) return -1;
+    ac_silence(c);
+    for(int i = 0; i < c->sample_count; ++i) free(c->samples[i].data);
+    c->sample_count = 0;
+    for(int lane = 0; lane < 2; ++lane)
+        atomic_store_explicit(&c->queues[lane].read, atomic_load_explicit(&c->queues[lane].write, memory_order_acquire), memory_order_release);
+    return 0;
+}
+int64_t __mlang_std_audio_controller_sample_data(int64_t handle, mlang_list_t samples, int64_t channels, int64_t rate) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || c->running || channels < 1 || channels > 2 || rate <= 0 ||
+       samples.size <= 0 || samples.size % channels || !samples.data || c->sample_count == AC_SAMPLES ||
+       (uint64_t)samples.size > SIZE_MAX / sizeof(float)) return -1;
+    size_t bytes = (size_t)samples.size * sizeof(float);
+    float *data = malloc(bytes); if(!data) return -1;
+    memcpy(data, samples.data, bytes);
+    int id = c->sample_count++;
+    c->samples[id] = (ac_sample){data, samples.size / channels, (int)channels, (double)rate}; return id;
+}
 int64_t __mlang_std_audio_controller_sample(int64_t handle, int64_t pcm) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     mlang_pcm_audio_t *p = (mlang_pcm_audio_t*)(intptr_t)pcm;

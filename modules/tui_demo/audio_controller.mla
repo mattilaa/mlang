@@ -4,6 +4,7 @@ mod tui_demo::note_playback;
 mod tui_demo::sequence;
 use tui_demo::sequence::SequenceTable;
 use tui_demo::sequence::SequenceTrack;
+use tui_demo::sequence::AudioInstance;
 use std::audio::controller::*;
 use std::audio::detail::__mlang_std_audio_last_error;
 use std::midi::input_count;
@@ -14,6 +15,7 @@ use std::strbuf::free;
 
 /// Control-thread owner. AUHAL owns rendering; MIDI uses its separate lane.
 pub struct EffectChannel { var path: str8{""}; var volume: i32{100}; };
+pub struct SamplePlacement { var sample: i64; var track: i64; var start: i64; var duration: i64; var rate: i64; var next: i64; };
 pub struct AudioSystem {
     var output: AudioController; var midi: MidiController;
     var midi_id: i64{-1}; var output_id: i64{-1};
@@ -23,6 +25,8 @@ pub struct AudioSystem {
     var last_instrument_id: i32;
     var instrument_output_failed: bool;
     var effects: list<EffectChannel>;
+    var sample_placements: list<SamplePlacement>; var samples_running: bool;
+    var sample_output: i64; var sample_last: i64;
 };
 impl AudioSystem {
     pub fn adopt(self: &mut Self, source: &AudioSystem) -> void {
@@ -33,6 +37,7 @@ impl AudioSystem {
         self.processor_path = next.processor_path; self.instrument_paths = next.instrument_paths;
         self.last_instrument_id = next.last_instrument_id; self.instrument_output_failed = next.instrument_output_failed;
         self.effects = next.effects;
+        self.samples_running = false; self.sample_placements = []; self.sample_output = 0;
     }
     pub fn start(hardware: bool) -> AudioSystem {
         var system: AudioSystem = AudioSystem { hardware_requested: hardware };
@@ -98,6 +103,70 @@ impl AudioSystem {
         return Ok<i32, str8>(0);
     }
     pub fn poll(self: &mut Self, now: i64) -> bool { return self.midi.poll(now); }
+    /// Register embedded PCM off the audio thread, then send only bounded events.
+    pub fn sample_playback(self: &mut Self, source: &SequenceTable, tick: i64, playing: bool, bpm: i32) -> bool {
+        var table: SequenceTable = SequenceTable {}; table = source;
+        if !playing || table.rows.len() == 0 {
+            if self.samples_running {
+                let placements: list<SamplePlacement> = self.sample_placements;
+                for placement in placements {
+                    self.output.post(AudioEvent { kind: AudioEventKind::StopSource, source: placement.track }, 0);
+                }
+            }
+            self.samples_running = false; return true;
+        }
+        if self.output.handle == 0 { return true; }
+        if bpm <= 0 { return false; }
+        let period: i64 = table.rows.len() * 15000;
+        if !self.samples_running || self.sample_output != self.output.handle || tick < self.sample_last {
+            let worker: bool = self.midi.worker.raw != 0;
+            let restart: bool = self.output.hardware_output();
+            self.midi.release();
+            if self.output.stop() != 0 {
+                if worker { self.midi = MidiController::start_selected(self.midi_id, self.output.handle); }
+                return false;
+            }
+            self.output.clear_samples(); self.sample_placements = [];
+            var valid: bool = true;
+            for t in 0..table.tracks.len() {
+                let track: SequenceTrack = table.tracks[t];
+                if !track.audio { continue; }
+                let instances: list<AudioInstance> = track.instances;
+                for instance in instances {
+                    let id: i64 = self.output.add_sample_data(instance.clip.samples, instance.clip.channels, instance.clip.sample_rate);
+                    if id < 0 { valid = false; continue; }
+                    let start: i64 = wide(instance.start_row) * 15000;
+                    var duration: i64 = instance.clip.frames * wide(bpm) * 1000 / instance.clip.sample_rate;
+                    if instance.length_ticks > 0 && wide(instance.length_ticks) < duration { duration = wide(instance.length_ticks); }
+                    var next: i64 = tick / period * period + start;
+                    if next + duration <= tick { next = next + period; }
+                    self.sample_placements.push(SamplePlacement { sample: id, track: t, start: start, duration: duration,
+                        rate: instance.clip.sample_rate, next: next });
+                }
+            }
+            if restart { if self.output.start() != 0 { valid = false; } }
+            if worker { self.midi = MidiController::start_selected(self.midi_id, self.output.handle); }
+            self.sample_output = self.output.handle; self.samples_running = true;
+            if !valid { self.samples_running = false; return false; }
+        }
+        let previous: list<SamplePlacement> = self.sample_placements;
+        var updated: list<SamplePlacement> = [];
+        for item in previous {
+            var placement: SamplePlacement = item;
+            if placement.next <= tick {
+                if tick - placement.next >= period { placement.next = placement.next + (tick - placement.next) / period * period; }
+                let elapsed: i64 = tick - placement.next;
+                if elapsed < placement.duration {
+                    let offset: i64 = elapsed * placement.rate / (wide(bpm) * 1000);
+                    let length: i64 = (placement.duration - elapsed) * placement.rate / (wide(bpm) * 1000);
+                    if length > 0 { self.output.play_sample(placement.sample, placement.track, offset, length); }
+                }
+                placement.next = placement.next + period;
+            }
+            updated.push(placement);
+        }
+        self.sample_placements = updated; self.sample_last = tick; return true;
+    }
     pub fn sync_volumes(self: AudioSystem, source: &SequenceTable) -> void {
         var table: SequenceTable = SequenceTable {}; table = source;
         for i in 0..table.tracks.len() {
