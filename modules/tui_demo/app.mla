@@ -325,6 +325,7 @@ pub fn run() -> i32 {
         if transport.midi_received != midi_active { transport.midi_received = midi_active; dirty = true; }
         let ui_steps: i64 = (now - ui_clock) / 10; ui_clock = ui_clock + ui_steps * 10;
         if play_pattern != library.active_id {
+            mixer.expanded = []; mixer.selected_send = -1; mixer.send_track = -1;
             transport.playing = false; mixer.levels = []; play_pattern = library.active_id;
             transport.row = library.table.selected_row < 0 ? 0 : library.table.selected_row; transport.phase = 0;
             transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
@@ -602,7 +603,15 @@ pub fn run() -> i32 {
                 let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
                 if sample.on_event(event, instance.clip, panes[2].bounds.width - 2) { dirty = true; }
             } else if focus.selected == 2 && mixer.visible && !(sample.visible && library.table.audio_under_cursor()) {
-                if mixer.bus_focus && midi.effects.len() > 0 {
+                if mixer.send_navigation(event, library.table.active_track()) { dirty = true; }
+                else if !mixer.bus_focus && mixer.selected_send >= 0 {
+                    let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                    let value: i32 = mixer.send_value(event, track);
+                    if value >= 0 { library.table.set_send(library.table.active_track(), mixer.selected_send, value); dirty = true; }
+                    else if (event.code == 82 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 114 || event.code == 82)) {
+                        if library.table.mixer_event(event, panes[1].bounds.inset(1)) { dirty = true; }
+                    }
+                } else if mixer.bus_focus && midi.effects.len() > 0 {
                     if event.kind == InputKind::Menu && event.key == Key::Left {
                         if mixer.selected_effect > 0 { mixer.selected_effect = mixer.selected_effect - 1; } else { mixer.bus_focus = false; } dirty = true;
                     } else if event.kind == InputKind::Menu && event.key == Key::Right {

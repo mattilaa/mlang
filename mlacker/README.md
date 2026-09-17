@@ -166,8 +166,17 @@ strip to edit its parameters. The same actions are available in the Effect menu.
 **Remove effect plugin** empties the selected channel without removing its strip.
 
 Select a source track in Pattern view, then select the desired effect strip and
-choose **Effect → Set track send** (0–100%). Sends are post-fader and parallel:
-the dry signal remains audible, while each effect return is summed into Master.
+choose **Effect → Set track send** (0–100%). In Mixer, `z` expands/collapses the
+selected track's FX sliders beside its volume and meters. `h/l` moves between
+volume and the `FX1`, `FX2`, … sliders; moving past the last slider selects the
+next channel. `Shift+J/K` adjusts the focused slider. Wide strips scroll their
+FX controls to keep the selected slider visible. Expansion is per track and
+transient; switching patterns resets it, while send values remain saved.
+
+Sends are post-fader: 0% is dry, 100% fully wet through the loaded effect.
+With multiple FX, each receives its own send amount, while the dry gain is
+`1 - max(loaded FX sends)`. All effect returns are summed into Master.
+Empty FX slots do not attenuate the dry path.
 For reverb/delay aux use, set the plugin's wet mix to 100%; mlacker does not force
 plugin-specific wet/dry parameters. Effects continue processing silence for tails.
 Effect-to-effect sends are not supported.
@@ -296,8 +305,8 @@ Current scope:
   frame scheduling, but a look-ahead sequencer is still future work.
 - Pattern audio samples feed Master directly, respecting track mute/volume, start
   row and LEN. Starting inside a sample seeks into its embedded PCM; stopping
-  playback releases its voices. Aux sends add parallel wet paths, not replacements
-  for the dry Master route. PCM is copied while audio is stopped before playback
+  playback releases its voices. FX sliders blend the dry path with parallel
+  effect returns. PCM is copied while audio is stopped before playback
   (up to 256 placements per pattern); the callback receives lock-free events only.
 - AUHAL's 128-frame request is not a measured end-to-end latency guarantee.
 

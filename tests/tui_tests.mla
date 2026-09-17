@@ -112,6 +112,36 @@ fn tui_aux_send_pattern_independence() {
 }
 
 #[test]
+fn tui_mixer_fx_zoom() {
+    var table: SequenceTable = SequenceTable::new();
+    var mixer: Mixer = Mixer { effect_volumes: [100, 100, 100, 100] };
+    verify(mixer.send_navigation(decode_input("z"), 0)); verify(mixer.expanded_track(0));
+    verify_eq_i32(26, mixer.track_width(false, 0)); verify_eq_i32(6, mixer.track_width(false, 1));
+    verify(mixer.send_navigation(decode_input("l"), 0)); verify(mixer.selected_send == 0);
+    let track: SequenceTrack = table.tracks[0];
+    verify_eq_i32(1, mixer.send_value(decode_input("K"), track));
+    verify(table.set_send(0, 0, 100));
+    let full: SequenceTrack = table.tracks[0]; verify_eq_i32(-1, mixer.send_value(decode_input("K"), full));
+    let lower: SequenceTrack = table.tracks[0]; verify_eq_i32(99, mixer.send_value(decode_input("J"), lower));
+    verify(mixer.send_navigation(decode_input("l"), 0));
+    verify(mixer.send_navigation(decode_input("l"), 0));
+    verify(mixer.send_navigation(decode_input("l"), 0)); verify(mixer.selected_send == 3);
+    let surface: Surface = Surface::new(40, 12);
+    mixer.paint(surface, Rect::new(0, 0, 40, 12), Theme::dark_blue(), table.tracks, 0);
+    // Narrow track bank scrolls FX controls without displacing Master.
+    let label: Cell = surface.cell(13, 0); verify_eq_i32(52, label.glyph); // FX4
+    let percent: Cell = surface.cell(12, 11); verify_eq_i32(37, percent.glyph);
+    let master: Cell = surface.cell(34, 0); verify_eq_i32(77, master.glyph);
+    verify(!mixer.send_navigation(decode_input("l"), 0)); verify(mixer.selected_send == -1);
+    verify(mixer.send_navigation(decode_input("z"), 1));
+    verify(mixer.expanded_track(0) && mixer.expanded_track(1));
+    verify(mixer.send_navigation(decode_input("z"), 0)); verify(!mixer.expanded_track(0));
+    verify(mixer.expanded_track(1));
+    mixer.bus_focus = true; verify(!mixer.send_navigation(decode_input("z"), 1));
+    surface.release(); table.release();
+}
+
+#[test]
 fn tui_mixer_faders_and_recording() {
     let area: Rect = Rect::new(0, 0, 120, 20);
     var table: SequenceTable = SequenceTable::new();

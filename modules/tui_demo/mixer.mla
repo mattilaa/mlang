@@ -1,5 +1,8 @@
 mod tui::meter;
 mod tui::slider;
+mod tui::input;
+use tui::input::*;
+use tui::menu::Key;
 mod std::audio::controller;
 use std::audio::controller::AudioController;
 mod tui_demo::audio_controller;
@@ -20,8 +23,49 @@ use std::strbuf::free;
 
 pub struct MeterLevel { var left: i32; var right: i32; };
 /// Meters are derived from sequenced notes and audio peaks, never synthetic.
-pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; var master: MeterLevel; var instrument_levels: list<MeterLevel>; var effect_volumes: list<i32>; var effect_levels: list<MeterLevel>; var bus_focus: bool; var selected_effect: i32; };
+pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; var master: MeterLevel; var instrument_levels: list<MeterLevel>; var effect_volumes: list<i32>; var effect_levels: list<MeterLevel>; var bus_focus: bool; var selected_effect: i32;
+    var expanded: list<i32>; var send_track: i32{-1}; var selected_send: i32{-1};
+};
 impl Mixer {
+    pub fn expanded_track(self: Mixer, index: i32) -> bool {
+        if index < 0 || index >= self.expanded.len() { return false; }
+        return self.expanded[index] != 0;
+    }
+    pub fn track_width(self: Mixer, instrument: bool, index: i32) -> i32 {
+        return (instrument ? 8 : 6) + (self.expanded_track(index) ? i32(self.effect_volumes.len()) * 5 : 0);
+    }
+    /// Consume navigation inside an expanded track; false lets channel navigation proceed.
+    pub fn send_navigation(self: &mut Self, event: InputEvent, index: i32) -> bool {
+        if self.send_track != index { self.send_track = index; self.selected_send = -1; }
+        if self.bus_focus || index < 0 { self.selected_send = -1; return false; }
+        if event.code == 122 && event.modifiers == 1 {
+            var expanded: list<i32> = [];
+            let count: i64 = self.expanded.len() > index ? self.expanded.len() : wide(index) + 1;
+            for i in 0..count {
+                let open: bool = i == index ? !self.expanded_track(i32(i)) : self.expanded_track(i32(i));
+                let value: i32 = open ? 1 : 0; expanded.push(value);
+            }
+            self.expanded = expanded; self.selected_send = -1; return true;
+        }
+        if !self.expanded_track(index) { self.selected_send = -1; return false; }
+        if event.kind == InputKind::Menu && event.key == Key::Right {
+            if self.selected_send + 1 < self.effect_volumes.len() { self.selected_send = self.selected_send + 1; return true; }
+            self.selected_send = -1;
+        } else if event.kind == InputKind::Menu && event.key == Key::Left && self.selected_send >= 0 {
+            self.selected_send = self.selected_send - 1; return true;
+        }
+        return false;
+    }
+    /// -1 means this event did not change a send. Reuse the public slider's bounds/type checks.
+    pub fn send_value(self: Mixer, event: InputEvent, track: SequenceTrack) -> i32 {
+        if self.bus_focus || self.selected_send < 0 || self.selected_send >= self.effect_volumes.len() { return -1; }
+        let down: bool = (event.modifiers == 1 && event.code == 74) || (event.modifiers == 2 && (event.code == 106 || event.code == 74));
+        let up: bool = (event.modifiers == 1 && event.code == 75) || (event.modifiers == 2 && (event.code == 107 || event.code == 75));
+        if !down && !up { return -1; }
+        var slider: Slider = Slider { minimum: 0.0, maximum: 100.0, step: 1.0, value: f64(track.send_level(self.selected_send)), value_type: "i32" };
+        if slider.on_event(event) { return i32(slider.value); }
+        return -1;
+    }
     pub fn update_effects(self: &mut Self, output: AudioController, effects: &list<EffectChannel>, delta: i32) -> bool {
         var levels: list<MeterLevel> = []; var volumes: list<i32> = []; var changed: bool = self.effect_volumes.len() != effects.len();
         for i in 0..effects.len() {
@@ -129,19 +173,21 @@ impl Mixer {
         var start: i32 = 0; var span: i32 = 0;
         for i in 0..tracks.len() {
             if i > selected { break; }
-            let track: SequenceTrack = tracks[i]; span = span + (track.instrument ? 8 : 6);
+            let track: SequenceTrack = tracks[i]; span = span + self.track_width(track.instrument, i32(i));
         }
         while span > available && start < selected && start < tracks.len() {
-            let track: SequenceTrack = tracks[start]; span = span - (track.instrument ? 8 : 6); start = start + 1;
+            let track: SequenceTrack = tracks[start]; span = span - self.track_width(track.instrument, start); start = start + 1;
         }
         var cursor: i32 = 0;
         for index in start..tracks.len() {
             if cursor >= available { break; }
             let track: SequenceTrack = tracks[index];
-            let preferred: i32 = track.instrument ? 8 : 6;
+            let base: i32 = track.instrument ? 8 : 6;
+            let preferred: i32 = self.track_width(track.instrument, i32(index));
             let width: i32 = available - cursor < preferred ? available - cursor : preferred;
             let x: i32 = area.x + cursor; cursor = cursor + width;
-            let strip: Rect = Rect::new(x, area.y, width - (width > 1 ? 1 : 0), area.height);
+            let base_width: i32 = width < base ? width : base;
+            let strip: Rect = Rect::new(x, area.y, base_width - (base_width > 1 ? 1 : 0), area.height);
             let bg: i32 = index == selected && !self.bus_focus ? lighten(theme.panel, 8) : theme.panel;
             surface.fill(strip, Cell { glyph: 32, foreground: theme.foreground, background: bg });
             let title: str8 = format!("{}{}", track.audio ? "A" : (track.instrument ? "I" : "M"), index + 1);
@@ -156,7 +202,7 @@ impl Mixer {
             if area.height > 3 && strip.width >= 4 {
                 let fader: Slider = Slider { minimum: 0.0, maximum: 100.0, value: f64(track.volume), value_type: "i32" };
                 var fader_theme: Theme = theme; fader_theme.panel = bg; fader_theme.selection = bg;
-                fader.paint_vertical(surface, Rect::new(x, area.y + 3, 3, area.height - 3), fader_theme, index == selected);
+                fader.paint_vertical(surface, Rect::new(x, area.y + 3, 3, area.height - 3), fader_theme, index == selected && !self.bus_focus && self.selected_send < 0);
                 let left: VuMeter = VuMeter { level: self.level(index, track.volume, track.audio ? track.pan : 0, false, track.muted), grainy: self.grainy };
                 let right: VuMeter = VuMeter { level: self.level(index, track.volume, track.pan, true, track.muted), grainy: self.grainy };
                 let meter_x: i32 = x + 3;
@@ -170,6 +216,31 @@ impl Mixer {
                     surface.text(Rect::new(x + 3, area.y + 2, 4, 1), "M LR", theme.muted, bg);
                     pcm_left.paint(surface, Rect::new(x + 5, area.y + 3, 1, area.height - 4), bg);
                     pcm_right.paint(surface, Rect::new(x + 6, area.y + 3, 1, area.height - 4), bg);
+                }
+            }
+            // Five cells per FX: label, bounded fader, and a complete 100% value.
+            let capacity: i32 = (width - base_width) / 5;
+            if capacity > 0 && self.expanded_track(i32(index)) {
+                let first: i32 = index == selected && self.selected_send >= capacity ? self.selected_send - capacity + 1 : 0;
+                for cell in 0..capacity {
+                    let fx: i32 = first + i32(cell); if fx >= self.effect_volumes.len() { break; }
+                    let sx: i32 = x + base_width + i32(cell) * 5;
+                    let active: bool = index == selected && !self.bus_focus && self.selected_send == fx;
+                    let send_bg: i32 = active ? lighten(bg, 8) : bg;
+                    surface.fill(Rect::new(sx, area.y, 4, area.height), Cell { glyph: 32, foreground: theme.foreground, background: send_bg });
+                    let label: str8 = format!("FX{}", fx + 1);
+                    surface.text(Rect::new(sx, area.y, 4, 1), label, active ? theme.accent : theme.foreground, send_bg); free(label);
+                    if area.height > 1 { surface.text(Rect::new(sx, area.y + 1, 4, 1), "WET", theme.muted, send_bg); }
+                    let value: i32 = track.send_level(fx);
+                    if area.height > 3 {
+                        var send_theme: Theme = theme; send_theme.panel = send_bg; send_theme.selection = send_bg;
+                        let slider: Slider = Slider { minimum: 0.0, maximum: 100.0, value: f64(value), value_type: "i32" };
+                        slider.paint_vertical(surface, Rect::new(sx, area.y + 3, 4, area.height - 3), send_theme, active);
+                    }
+                    if area.height > 2 {
+                        let text: str8 = format!("{}{}", value, "%");
+                        surface.text(Rect::new(sx, area.y + area.height - 1, 4, 1), text, active ? theme.accent : theme.foreground, send_bg); free(text);
+                    }
                 }
             }
         }

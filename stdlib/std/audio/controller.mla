@@ -57,6 +57,8 @@ impl AudioController {
     /// Aux channels 0-7; parameter APIs address them as slots 33-40.
     /// Load/replace while stopped, with MIDI producer joined. Empty path unloads.
     pub fn load_effect(self: AudioController, fx: i64, path: str8) -> i32 { return __mlang_std_audio_controller_load_effect(self.handle, fx, path); }
+    /// Post-fader wet send. Dry gain is 1 - max(send to loaded effects).
+    /// Empty effect slots preserve dry audio; returns are summed into Master.
     pub fn effect_send(self: AudioController, track: i64, slot: i64, fx: i64, percent: i64) -> i32 { return __mlang_std_audio_controller_effect_send(self.handle, track, slot, fx, percent); }
     pub fn effect_volume(self: AudioController, fx: i64, percent: i64) -> i32 { return __mlang_std_audio_controller_effect_volume(self.handle, fx, percent); }
     pub fn effect_peak(self: AudioController, fx: i64, channel: i64) -> i32 { return __mlang_std_audio_controller_effect_peak(self.handle, fx, channel); }

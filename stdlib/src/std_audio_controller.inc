@@ -284,12 +284,16 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         }
     }
     uint64_t clock = atomic_load_explicit(&c->clock, memory_order_relaxed);
-    float sends[96][8];
+    float sends[96][8], dry[96];
+    for(int source = 0; source < 96; ++source) dry[source] = 1.f;
     for(int fx = 0; fx < 8; ++fx) {
         mlang_audio_processor *p = &c->effects[fx];
         if(p->context) { p->begin(p->context, reset); memset(c->effect_buffer[fx], 0, frames * 2u * sizeof(float)); }
-        for(int source = 0; source < 96; ++source)
+        for(int source = 0; source < 96; ++source) {
             sends[source][fx] = p->context ? atomic_load_explicit(&c->sends[source][fx], memory_order_relaxed) / 100.f : 0;
+            // Multiple parallel effects share one dry path. Empty slots never attenuate it.
+            dry[source] = fminf(dry[source], 1.f - sends[source][fx]);
+        }
     }
     unsigned budget[2] = {256, 256};
     float peak = 0;
@@ -342,6 +346,10 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
                 c->effect_buffer[fx][f * 2] += (float)(l - before_l) * sends[track][fx];
                 c->effect_buffer[fx][f * 2 + 1] += (float)(r - before_r) * sends[track][fx];
             }
+            if(track >= 0 && track < 64) {
+                l = before_l + (l - before_l) * dry[track];
+                r = before_r + (r - before_r) * dry[track];
+            }
         }
         c->render_gains[f] = c->gain;
         out[f * 2] = (float)l;
@@ -360,7 +368,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         for(uint32_t f = 0; f < frames * 2u; ++f) {
             if(isfinite(c->instrument_buffer[f])) {
                 float value = c->instrument_buffer[f] * volume;
-                out[f] += value;
+                out[f] += value * dry[64 + i];
                 for(int fx = 0; fx < 8; ++fx)
                     if(sends[64 + i][fx] > 0) c->effect_buffer[fx][f] += value * sends[64 + i][fx];
                 peaks[f & 1] = fmaxf(peaks[f & 1], fabsf(value));

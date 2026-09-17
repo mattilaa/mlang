@@ -393,7 +393,7 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_midi_learn_info(c, -1, 0) == 0);
     CHECK(__mlang_std_audio_controller_midi_learn_info(c, 3 * 128 + 7, 0) == 0);
     CHECK(__mlang_std_audio_controller_close(c) == 0);
-    // Parallel aux: dry .125 + send(.5) * effect(.5) * return(1) => .15625.
+    // Half wet: dry .125 * .5 + send(.5) * effect(.5) * return(1) => .09375.
     c = __mlang_std_audio_controller_new(48000, 128);
     CHECK(__mlang_std_audio_controller_load_instrument(c, 1, argv[1]) == 0);
     CHECK(__mlang_std_audio_controller_load_effect(c, 0, argv[2]) == 0);
@@ -403,16 +403,19 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_midi_target(c, 0, 1) == 0);
     CHECK(__mlang_std_audio_controller_live_note(c, 1, 0, 60, 127) == 0);
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
-    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .15625f) < 1.e-7f);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .09375f) < 1.e-7f);
     CHECK(__mlang_std_audio_controller_effect_peak(c, 0, 0) == 125);
     CHECK(__mlang_std_audio_controller_effect_peak(c, 0, 1) == 125);
     CHECK(__mlang_std_audio_controller_effect_peak(c, 0, 0) == 0);
     CHECK(__mlang_std_audio_controller_effect_volume(c, 0, 50) == 0);
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
-    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .140625f) < 1.e-7f);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .078125f) < 1.e-7f);
     CHECK(__mlang_std_audio_controller_set_parameter(c, 33, 0, .5) == 0);
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
-    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .1328125f) < 1.e-7f);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .0703125f) < 1.e-7f);
+    CHECK(__mlang_std_audio_controller_effect_send(c, 0, 1, 0, 100) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .015625f) < 1.e-7f); // no dry signal
     CHECK(__mlang_std_audio_controller_effect_send(c, 0, 1, 0, 0) == 0);
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
     CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .125f); // dry unchanged
@@ -421,6 +424,10 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_effect_send(c, 0, 1, 0, 101) == -1);
     CHECK(__mlang_std_audio_controller_load_effect(c, 8, argv[2]) == -1);
     CHECK(__mlang_std_audio_controller_load_effect(c, 0, "") == 0);
+    CHECK(__mlang_std_audio_controller_effect_send(c, 0, 1, 0, 100) == 0);
+    CHECK(__mlang_std_audio_controller_live_note(c, 1, 0, 60, 127) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .125f); // empty FX preserves dry
     CHECK(__mlang_std_audio_controller_parameter_info(c, 33, 0, 0) == -1);
     CHECK(__mlang_std_audio_controller_close(c) == 0);
     CHECK(__mlang_std_audio_pcm_block_close(b) == 0);

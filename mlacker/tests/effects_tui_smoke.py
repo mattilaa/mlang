@@ -30,6 +30,14 @@ def main():
             assert b"whole number from 0 to 100" in tui.send(b"\x15101\r")
             tui.send(b"\x1550\r")
             tui.send(b"J")  # Return fader 100 -> 99.
+            # Expand the source channel and edit its FX send, not its volume.
+            frame = tui.send(b"hz")
+            assert b"50%" in frame and b"WET" in frame, frame[-5000:]
+            frame = tui.send(b"lK")
+            assert b"51%" in frame, frame[-5000:]
+            frame = tui.send(b"J")
+            assert b"50%" in frame, frame[-5000:]
+            tui.send(b"zl")  # Collapse, return to aux strip, preserve round-trip focus.
             tui.send(b"\x13")
             frame = tui.send(b"\x15" + os.fsencode(path) + b"\r", .6)
             assert b"Saved:" in frame, frame[-5000:]
