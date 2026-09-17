@@ -873,6 +873,108 @@ fn tui_audio_duration_gate() {
 }
 
 #[test]
+fn tui_audio_cut_copy_paste() {
+    let area: Rect = Rect::new(0, 0, 120, 12);
+    var table: SequenceTable = SequenceTable::new(); table.track_action(28, area);
+    var clip: AudioClip = AudioClip { source: clone("cut-test"), frames: 80, frames_per_row: 10 };
+    for _r in 0..8 { clip.peaks.push(WavePeak { left: 500 }); }
+    for _r in 0..32 { clip.detail_peaks.push(WavePeak { left: 500 }); }
+    table.selected_row = 2; verify(table.insert_audio(clip, area));
+    let placed: SequenceTrack = table.tracks[3];
+    verify(placed.instances.len() == 1 && placed.instance_at(9) == 0 && placed.instance_at(10) == -1);
+    // Copy the tail from row 4 (offset 2): non-destructive, 6 rows on clipboard.
+    table.selected_row = 4; verify(table.copy_audio());
+    verify(table.audio_clipboard.peaks.len() == 6);
+    let after_copy: SequenceTrack = table.tracks[3];
+    verify(after_copy.instances.len() == 1); let copied: AudioInstance = after_copy.instances[0];
+    verify(copied.clip.peaks.len() == 8);
+    // Cut the tail at row 5 (offset 3): head keeps 3 rows, tail (5) goes to clipboard.
+    table.selected_row = 5; verify(table.cut_audio(area));
+    verify(table.audio_clipboard.peaks.len() == 5);
+    let after_cut: SequenceTrack = table.tracks[3];
+    verify(after_cut.instances.len() == 1); let head: AudioInstance = after_cut.instances[0];
+    verify(head.start_row == 2 && head.clip.peaks.len() == 3 && head.duration() == 45000);
+    verify(after_cut.instance_at(4) == 0 && after_cut.instance_at(5) == -1);
+    let len_row: TableRow = table.rows[2]; verify(len_row.cells[table.track_start(3) + 2] == "3.00");
+    // Paste the clipboard onto a free region starting at row 20.
+    table.selected_row = 20; verify(table.paste_audio(area));
+    let after_paste: SequenceTrack = table.tracks[3];
+    verify(after_paste.instances.len() == 2);
+    let pasted: AudioInstance = after_paste.instances[1];
+    verify(pasted.start_row == 20 && pasted.clip.peaks.len() == 5);
+    // Cutting on the first row of an instance removes it whole.
+    table.selected_row = 20; verify(table.cut_audio(area));
+    let after_whole_cut: SequenceTrack = table.tracks[3];
+    verify(after_whole_cut.instances.len() == 1 && table.audio_clipboard.peaks.len() == 5);
+    // Key routing through edit_event: y copies, p pastes, c cuts (audio context).
+    table.selected_row = 2; verify(table.edit_event(decode_input("y"), area));
+    verify(table.audio_clipboard.peaks.len() == 3);
+    table.selected_row = 40; verify(table.edit_event(decode_input("p"), area));
+    let after_key_paste: SequenceTrack = table.tracks[3];
+    verify(after_key_paste.instances.len() == 2);
+    let key_pasted: AudioInstance = after_key_paste.instances[1];
+    verify(key_pasted.start_row == 40 && key_pasted.clip.peaks.len() == 3);
+    table.selected_row = 41; verify(table.edit_event(decode_input("c"), area));
+    verify(table.audio_clipboard.peaks.len() == 2);
+    let after_key_cut: SequenceTrack = table.tracks[3];
+    let key_head: AudioInstance = after_key_cut.instances[1];
+    verify(key_head.clip.peaks.len() == 1 && after_key_cut.instance_at(41) == -1);
+    // Empty clipboard and non-audio guards.
+    var midi: SequenceTable = SequenceTable::new();
+    verify(!midi.copy_audio() && midi.error == "Select an AUDIO track first");
+    verify(!midi.paste_audio(area) && midi.error == "Clipboard is empty");
+    midi.release(); table.release(); clip.release();
+}
+
+#[test]
+fn tui_audio_visual_move_reverse() {
+    let area: Rect = Rect::new(0, 0, 120, 12);
+    var table: SequenceTable = SequenceTable::new(); table.track_action(28, area);
+    var clip: AudioClip = AudioClip { source: clone("v-test"), frames: 80, frames_per_row: 10 };
+    for r in 0..8 { clip.peaks.push(WavePeak { left: 100 + i32(r) }); }
+    for _r in 0..32 { clip.detail_peaks.push(WavePeak { left: 200 }); }
+    table.selected_row = 2; verify(table.insert_audio(clip, area));
+    let len_col: i32 = table.track_start(3) + 2;
+    // Bug fix: transpose (J/K) on a non-start audio LEN cell is a silent no-op.
+    table.selected_row = 5; table.selected_column = len_col;
+    let cell_before: str8 = clone(table.rows[5].cells[len_col]);
+    verify(table.edit_event(decode_input("J"), area));
+    verify(table.error == "" && table.rows[5].cells[len_col] == cell_before);
+    free(cell_before);
+    // Visual whole-instance copy: v enters visual, extend down, y copies the clip.
+    table.selected_row = 3; table.selected_column = len_col;
+    verify(table.edit_event(decode_input("v"), area)); verify(table.visual);
+    table.selected_row = 6; verify(table.edit_event(decode_input("y"), area));
+    verify(!table.visual && table.audio_clipboard.peaks.len() == 8);
+    let intact: SequenceTrack = table.tracks[3];
+    verify(intact.instances.len() == 1 && intact.instances[0].clip.peaks.len() == 8);
+    // Visual whole-instance cut: d removes the intersecting instance entirely.
+    table.selected_row = 4; verify(table.edit_event(decode_input("v"), area));
+    table.selected_row = 5; verify(table.edit_event(decode_input("d"), area));
+    let emptied: SequenceTrack = table.tracks[3];
+    verify(emptied.instances.len() == 0 && table.audio_clipboard.peaks.len() == 8);
+    // Move: Ctrl+J shifts the instance under the cursor down a row, cursor follows.
+    var clip2: AudioClip = AudioClip { source: clone("m-test"), frames: 40, frames_per_row: 10 };
+    for r in 0..4 { clip2.peaks.push(WavePeak { left: 300 + i32(r) }); }
+    for _r in 0..16 { clip2.detail_peaks.push(WavePeak { left: 400 }); }
+    table.selected_row = 2; verify(table.insert_audio(clip2, area));
+    table.selected_row = 2; table.selected_column = len_col;
+    verify(table.edit_event(decode_input("\x1b[106;5u"), area));
+    let moved: SequenceTrack = table.tracks[3];
+    verify(moved.instances[0].start_row == 3 && table.selected_row == 3);
+    verify(table.rows[2].cells[len_col] == "" && table.rows[3].cells[len_col] == "4.00");
+    verify(table.edit_event(decode_input("\x1b[107;5u"), area));
+    verify(table.tracks[3].instances[0].start_row == 2 && table.selected_row == 2);
+    // Reverse flips peak order: the first peak becomes the old last.
+    let pre: AudioInstance = table.tracks[3].instances[0];
+    let first_before: i32 = pre.clip.peaks[0].left; let last_before: i32 = pre.clip.peaks[3].left;
+    verify(table.reverse_audio(area));
+    let post: AudioInstance = table.tracks[3].instances[0];
+    verify(post.clip.peaks[0].left == last_before && post.clip.peaks[3].left == first_before);
+    table.release(); clip.release(); clip2.release();
+}
+
+#[test]
 fn tui_multiple_note_lines() {
     var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); let area: Rect = Rect::new(0, 0, 80, 12);
     table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("3.75"); table.edit_event(decode_input("\r"), area);
@@ -1060,6 +1162,95 @@ fn tui_horizontal_sample_zoom_and_render() {
     verify(moving.background == theme.selection && prior.background == theme.panel);
     view.paint(surface, Rect::new(0, 0, 1, 1), theme, clip, 0);
     surface.release();
+}
+
+#[test]
+fn tui_sample_view_selection() {
+    // slice_frames lifts a sample-accurate sub-clip with freshly built peaks.
+    var clip: AudioClip = AudioClip { source: clone("s"), channels: 1, sample_rate: 8, frames: 32, frames_per_row: 8 };
+    for i in 0..32 { clip.samples.push(i % 2 == 0 ? 0.5f : -0.5f); }
+    for _r in 0..4 { clip.peaks.push(WavePeak { left: 500 }); }
+    for _r in 0..16 { clip.detail_peaks.push(WavePeak { left: 500 }); }
+    let sub: AudioClip = clip.slice_frames(8, 24);
+    verify(sub.frames == 16 && sub.peaks.len() == 2 && sub.detail_peaks.len() == 8);
+    verify(sub.samples.len() == 16 && sub.channels == 1 && sub.samples[0] == 0.5f);
+    var empty: AudioClip = AudioClip { source: clone("e"), channels: 1, frames_per_row: 8 };
+    let none: AudioClip = empty.slice_frames(0, 10); verify(none.frames == 0 && none.peaks.len() == 0);
+    // Trim points: Ctrl+N/M move start, Shift/capital N/M move end (step = span/px).
+    var big: AudioClip = AudioClip { source: clone("b"), channels: 1, sample_rate: 48000, frames: 1024, frames_per_row: 128 };
+    for _i in 0..1024 { big.samples.push(0.0f); }
+    var view: SampleView = SampleView { visible: true };
+    view.reset_selection(big.frames);
+    verify(view.sel_start == 0 && view.sel_end == 1024 && view.sel_frames == 1024);
+    verify(!view.anchor_active);
+    verify(view.on_event(decode_input("\x1b[109;5u"), big, 34)); verify(view.sel_start == 16);
+    verify(view.anchor_active && view.anchor_frame == view.sel_start);
+    verify(view.on_event(decode_input("\x1b[110;5u"), big, 34)); verify(view.sel_start == 0);
+    verify(view.on_event(decode_input("N"), big, 34)); verify(view.sel_end == 1008);
+    verify(view.anchor_active && view.anchor_frame == view.sel_end);
+    verify(view.on_event(decode_input("M"), big, 34)); verify(view.sel_end == 1024);
+    verify(view.on_event(decode_input("\x1b[110;2u"), big, 34)); verify(view.sel_end == 1008);
+    verify(view.on_event(decode_input("\x1b[109;2u"), big, 34)); verify(view.sel_end == 1024);
+    for _i in 0..80 { view.on_event(decode_input("\x1b[109;5u"), big, 34); }
+    verify(view.sel_start < view.sel_end && view.sel_end == 1024);
+    verify(view.on_event(decode_input("\x1b[108;5u"), big, 34)); verify(view.zoom == 1);
+    // A proper subset shades its columns darker than the panel; outside stays panel.
+    var mono: AudioClip = AudioClip { source: clone("m"), channels: 1, sample_rate: 8, frames: 32, frames_per_row: 8 };
+    for i in 0..32 { mono.samples.push(i % 2 == 0 ? -1.0f : 1.0f); }
+    var paint: SampleView = SampleView { grainy: true };
+    paint.sel_frames = 32; paint.sel_start = 0; paint.sel_end = 16;
+    let surface: Surface = Surface::new(18, 6); let theme: Theme = Theme::dark_blue();
+    paint.paint_at(surface, surface.bounds(), theme, mono, 3, 0);
+    let inside: Cell = surface.cell(4, 1); let outside: Cell = surface.cell(12, 1);
+    verify(inside.background != theme.panel && inside.background != theme.selection);
+    verify(outside.background == theme.panel);
+    surface.release();
+    clip.release(); empty.release(); big.release(); mono.release();
+}
+
+#[test]
+fn tui_audio_trim_and_slice() {
+    let area: Rect = Rect::new(0, 0, 120, 12);
+    // --- Non-destructive trim: only offset/length change; full buffer intact. ---
+    var table: SequenceTable = SequenceTable::new(); table.track_action(28, area);
+    var clip: AudioClip = AudioClip { source: clone("t-test"), channels: 1, sample_rate: 80, frames: 80, frames_per_row: 10 };
+    for _i in 0..80 { clip.samples.push(0.25f); }
+    for r in 0..8 { clip.peaks.push(WavePeak { left: 100 + i32(r) }); }
+    for _r in 0..32 { clip.detail_peaks.push(WavePeak { left: 200 }); }
+    let len_col: i32 = table.track_start(3) + 2;
+    table.selected_row = 0; table.selected_column = len_col; verify(table.insert_audio(clip, area));
+    verify(table.trim_audio(20, 60, area));
+    let inst: AudioInstance = table.tracks[3].instances[0];
+    verify(inst.offset_frames == 20 && inst.length_ticks == 60000);
+    verify(inst.clip.frames == 80 && inst.clip.samples.len() == 80);
+    verify(table.rows[0].cells[len_col] == "4.00");
+    let rc: AudioClip = inst.render_clip();
+    verify(rc.offset == 20 && rc.frames == 40);
+    // Trimming again is relative to the current window (offset accumulates).
+    verify(table.trim_audio(10, 30, area));
+    let inst2: AudioInstance = table.tracks[3].instances[0];
+    verify(inst2.offset_frames == 30 && inst2.length_ticks == 30000);
+    verify(inst2.clip.samples.len() == 80);
+    table.release();
+    // --- Non-destructive slice: one instance becomes head / middle / tail. ---
+    var slab: SequenceTable = SequenceTable::new(); slab.track_action(28, area);
+    var sclip: AudioClip = AudioClip { source: clone("sl-test"), channels: 1, sample_rate: 80, frames: 80, frames_per_row: 10 };
+    for _i in 0..80 { sclip.samples.push(0.5f); }
+    for _r in 0..8 { sclip.peaks.push(WavePeak { left: 100 }); }
+    for _r in 0..32 { sclip.detail_peaks.push(WavePeak { left: 200 }); }
+    let scol: i32 = slab.track_start(3) + 2;
+    slab.selected_row = 0; slab.selected_column = scol; verify(slab.insert_audio(sclip, area));
+    slab.selected_row = 2; verify(slab.edit_event(decode_input("v"), area)); verify(slab.visual);
+    slab.selected_row = 4; verify(slab.slice_audio(area));
+    verify(!slab.visual);
+    let track: SequenceTrack = slab.tracks[3];
+    verify(track.instances.len() == 3);
+    verify(track.instances[0].start_row == 0 && track.instances[0].offset_frames == 0 && track.instances[0].length_ticks == 30000);
+    verify(track.instances[1].start_row == 2 && track.instances[1].offset_frames == 20 && track.instances[1].length_ticks == 45000);
+    verify(track.instances[2].start_row == 5 && track.instances[2].offset_frames == 50 && track.instances[2].length_ticks == 45000);
+    verify(track.instances[1].clip.frames == 80 && track.instances[1].clip.samples.len() == 80);
+    verify(slab.rows[0].cells[scol] == "2.00" && slab.rows[2].cells[scol] == "3.00" && slab.rows[5].cells[scol] == "3.00");
+    slab.release();
 }
 
 #[test]

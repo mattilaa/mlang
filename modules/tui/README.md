@@ -162,6 +162,42 @@ not its loaded sample, other instances, automation, or pattern rows. Samples can
 be inserted again even if the original file is no longer available. Clear track
 removes all its instances; deleting a pattern/track does not unload samples.
 
+On an AUDIO track with an instance under the Pattern cursor, `c`, `y`, and `p`
+cut, copy, and paste audio at row granularity. `c` **cuts**: the tail of the
+instance — from the cursor row to its end — moves to a separate audio clipboard
+and the head is truncated to end on the row above (its LEN cell is rewritten);
+cutting on an instance's first row removes the whole instance. `y` **copies**
+(yanks) that tail into the clipboard without changing the pattern. `p` **pastes**
+the clipboard instance at the cursor row, subject to the usual non-overlap rule.
+These keys defer to the vim-style row yank/paste elsewhere: `c`/`y` act only when
+audio is under the cursor, and `p` pastes audio only on an AUDIO track with a
+non-empty audio clipboard, otherwise pasting rows. The audio clipboard is one
+clip carried per pattern and is duplicated when a pattern/track is cloned.
+
+Visual selection also drives whole-clip edits. Enter visual mode (`v` or `V`) on
+an AUDIO track, extend the row range, then `y`/`d` copy/cut the **first whole
+instance** intersecting the selection into the audio clipboard (unlike the
+row-granular `c`/`y`, these operate on the entire clip). **Ctrl+J/Ctrl+K** move
+the instance under the cursor down/up one row, with pattern-bounds and
+non-overlap checks; the cursor follows it. Transpose (`J`/`K`) on an audio LEN
+cell that is not an instance's start row is a silent no-op instead of erroring.
+The **Audio** menu exposes Copy/Cut/Paste clip, Move clip up/down, Trim to
+selection, Slice selection, and Reverse clip (which flips the instance's samples
+back-to-front in place). Reverse rebuilds fresh sample/peak data, so it never
+mutates other clips sharing the source.
+
+Trim and Slice are **non-destructive**: they never rebuild or copy the sample
+buffer. Instead each instance carries a start `offset` (frames into the shared
+full clip) plus its LEN, so the decoded audio is untouched and stays shared.
+**Trim to selection** (key `t` while the Sample view is open) shrinks the
+instance under the cursor to the marked region: its start offset advances to the
+region start and its LEN becomes the region length. Trimming again is relative to
+the current window, so offsets accumulate. **Slice selection** (key `s` on an
+audio track while a Pattern visual row selection is active, or the menu) splits
+the covered instance into up to three instances — head, the selected middle, and
+tail — that all share one full sample buffer with independent offsets, lengths,
+and start rows.
+
 Each instance references decoded samples and carries its own start row.
 A read-only waveform column
 beside CC1/CC2 draws time downward, with green left-channel bars extending left
@@ -196,6 +232,19 @@ Menus and editors retain exclusive keyboard ownership, including `s` and Ctrl+H/
 
 Decoded samples are shared read-only by pattern/track copies, so zooming neither
 reopens the source file nor changes clip timing, notes, or automation.
+
+While the Sample view is open you can mark a sample-accurate region of the clip.
+**Ctrl+N/Ctrl+M** move the region's **start** point left/right and
+**Shift+N/Shift+M** move its **end** point, each by one visible column (so the
+step tracks the current zoom). The selected region is drawn with a **darker
+background** than the rest of the clip; a full-clip selection shows no shading.
+**Ctrl+Y** lifts the selected region into the audio clipboard as a fresh clip
+(new peaks/samples, source untouched), so it can be pasted (`p`) at any row to
+rearrange grooves. The selection resets to the whole clip whenever the Sample
+view is opened. While a start/end point is being adjusted the view follows that
+edge (scrolling so the moving edge stays centred); moving the Pattern cursor to
+another row releases the follow and restores the row-anchored view. The Sample
+panel title shows the clip's file name (not its full path).
 
 One row currently represents a sixteenth note at the displayed BPM (120 by
 default). Longer clips extend the pattern with empty MIDI/automation cells;

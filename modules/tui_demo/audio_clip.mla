@@ -4,7 +4,20 @@ mod tui::geometry;
 use std::audio::PcmAudio;
 use std::strbuf::clone;
 use std::strbuf::free;
+use std::strbuf::len;
+use std::strbuf::sub;
 use tui::geometry::wide;
+
+/// Owned final path component, splitting on both '/' and '\' separators.
+pub fn base_name(path: str8) -> str8 {
+    var start: i64 = len(path);
+    while start > 0 {
+        let character: str8 = sub(path, start - 1, 1);
+        let separator: bool = character == "/" || character == "\\"; free(character);
+        if separator { break; } start = start - 1;
+    }
+    return sub(path, start, len(path) - start);
+}
 
 pub struct WavePeak {
     var left: i32; var right: i32;
@@ -17,12 +30,14 @@ pub struct AudioClip {
     var samples: list<f32>; var channels: i64; var sample_rate: i64;
     var frames: i64; var frames_per_row: i64;
     var detail_peaks: list<WavePeak>;
+    // Transient render window start (frames into `samples`); never serialized.
+    var offset: i64;
 };
 impl AudioClip {
     pub fn copy(self: AudioClip) -> AudioClip {
         var copy: AudioClip = AudioClip {};
         copy.samples = self.samples; copy.channels = self.channels; copy.sample_rate = self.sample_rate;
-        copy.frames = self.frames; copy.frames_per_row = self.frames_per_row;
+        copy.frames = self.frames; copy.frames_per_row = self.frames_per_row; copy.offset = self.offset;
         if self.peaks.len() > 0 {
             copy.source = clone(self.source);
             let peaks: list<WavePeak> = self.peaks;
@@ -32,7 +47,109 @@ impl AudioClip {
         }
         return copy;
     }
+    /// Owned clip holding the pattern rows from `offset_rows` to the end.
+    /// Sample data is realigned so the first kept row maps to frame 0, keeping
+    /// the samples.len() >= frames*channels invariant used by the sample view.
+    pub fn slice_tail(self: AudioClip, offset_rows: i64) -> AudioClip {
+        var tail: AudioClip = AudioClip {};
+        tail.channels = self.channels; tail.sample_rate = self.sample_rate;
+        tail.frames_per_row = self.frames_per_row;
+        if self.peaks.len() == 0 { return tail; }
+        let rows: i64 = self.peaks.len();
+        var start: i64 = offset_rows < 0 ? 0 : offset_rows;
+        if start > rows { start = rows; }
+        tail.source = clone(self.source);
+        let peaks: list<WavePeak> = self.peaks;
+        for r in start..rows { tail.peaks.push(peaks[r]); }
+        let details: list<WavePeak> = self.detail_peaks;
+        let detail_start: i64 = start * 4;
+        for d in detail_start..details.len() { tail.detail_peaks.push(details[d]); }
+        let frame_start: i64 = start * self.frames_per_row * self.channels;
+        let samples: list<f32> = self.samples;
+        var kept: list<f32> = [];
+        for s in frame_start..samples.len() { kept.push(samples[s]); }
+        tail.samples = kept;
+        let dropped: i64 = start * self.frames_per_row;
+        tail.frames = self.frames > dropped ? self.frames - dropped : 0;
+        return tail;
+    }
+    /// Owned clip playing back-to-front: rows, detail slices and interleaved
+    /// samples are all reversed while channel order within each frame is kept.
+    pub fn reverse(self: AudioClip) -> AudioClip {
+        var out: AudioClip = AudioClip {};
+        out.channels = self.channels; out.sample_rate = self.sample_rate;
+        out.frames = self.frames; out.frames_per_row = self.frames_per_row;
+        if self.peaks.len() == 0 { return out; }
+        out.source = clone(self.source);
+        let peaks: list<WavePeak> = self.peaks; let np: i64 = peaks.len();
+        for k in 0..np { out.peaks.push(peaks[np - 1 - k]); }
+        let details: list<WavePeak> = self.detail_peaks; let nd: i64 = details.len();
+        for k in 0..nd { out.detail_peaks.push(details[nd - 1 - k]); }
+        let samples: list<f32> = self.samples;
+        let ch: i64 = self.channels < 1 ? 1 : self.channels;
+        let frames: i64 = samples.len() / ch;
+        for f in 0..frames {
+            let src: i64 = frames - 1 - f;
+            for c in 0..ch { out.samples.push(samples[src * ch + c]); }
+        }
+        return out;
+    }
     pub fn release(self: AudioClip) -> void { if self.peaks.len() > 0 { free(self.source); } }
+    /// Rebuild row peaks and the four-per-row detail peaks from samples/frames.
+    fn rebuild_peaks(self: &mut Self) -> void {
+        let channels: i64 = self.channels < 1 ? 1 : self.channels;
+        let step: i64 = self.frames_per_row; let frames: i64 = self.frames;
+        if step <= 0 || frames <= 0 { return; }
+        let samples: list<f32> = self.samples;
+        let count: i64 = (frames + step - 1) / step;
+        for row in 0..count {
+            var left: f32 = 0.0f; var right: f32 = 0.0f;
+            var left_sum: f32 = 0.0f; var right_sum: f32 = 0.0f;
+            let start: i64 = row * step;
+            let end: i64 = (row + 1) * step < frames ? (row + 1) * step : frames;
+            for frame in start..end {
+                let l: f32 = samples[frame * channels]; let r: f32 = samples[frame * channels + channels - 1];
+                let a: f32 = l < 0.0f ? -l : l; let b: f32 = r < 0.0f ? -r : r;
+                if a > left { left = a; } if b > right { right = b; }
+                left_sum = left_sum + a; right_sum = right_sum + b;
+            }
+            self.peaks.push(WavePeak { left: i32(left * 1000.0f), right: i32(right * 1000.0f),
+                left_body: i32(left_sum / f32(end - start) * 1000.0f),
+                right_body: i32(right_sum / f32(end - start) * 1000.0f) });
+            for part in 0..4 {
+                let a: i64 = start + part * step / 4; let stop: i64 = start + (part + 1) * step / 4;
+                let b: i64 = stop < end ? stop : end;
+                var l: f32 = 0.0f; var r: f32 = 0.0f;
+                for frame in a..b {
+                    let lv: f32 = samples[frame * channels]; let rv: f32 = samples[frame * channels + channels - 1];
+                    let la: f32 = lv < 0.0f ? -lv : lv; let ra: f32 = rv < 0.0f ? -rv : rv;
+                    if la > l { l = la; } if ra > r { r = ra; }
+                }
+                self.detail_peaks.push(WavePeak { left: i32(l * 1000.0f), right: i32(r * 1000.0f) });
+            }
+        }
+    }
+    /// Owned clip covering the sample frame range [from, to), realigned to frame
+    /// 0 with freshly computed peaks. Used to lift a waveform-selected sub-clip.
+    pub fn slice_frames(self: AudioClip, from: i64, to: i64) -> AudioClip {
+        var out: AudioClip = AudioClip {};
+        out.channels = self.channels; out.sample_rate = self.sample_rate;
+        out.frames_per_row = self.frames_per_row;
+        let ch: i64 = self.channels < 1 ? 1 : self.channels;
+        let total: i64 = self.samples.len() / ch;
+        var start: i64 = from < 0 ? 0 : from;
+        var end: i64 = to > total ? total : to;
+        if end <= start || self.peaks.len() == 0 { return out; }
+        out.source = clone(self.source);
+        out.frames = end - start;
+        let samples: list<f32> = self.samples;
+        var kept: list<f32> = [];
+        let lo: i64 = start * ch; let hi: i64 = end * ch;
+        for s in lo..hi { kept.push(samples[s]); }
+        out.samples = kept;
+        out.rebuild_peaks();
+        return out;
+    }
     pub fn load(path: str8, bpm: i32) -> result<AudioClip, str8> {
         if bpm <= 0 { return Err<AudioClip, str8>("Invalid BPM"); }
         let loaded: result<PcmAudio, str8> = PcmAudio::load(path);

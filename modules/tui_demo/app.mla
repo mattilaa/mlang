@@ -25,6 +25,8 @@ mod tui_demo::transport;
 use tui_demo::transport::TransportStatus;
 mod tui_demo::sample_view;
 use tui_demo::sample_view::SampleView;
+mod tui_demo::audio_clip;
+use tui_demo::audio_clip::base_name;
 mod tui_demo::bpm_dialog;
 mod tui_demo::note_playback;
 use tui_demo::note_playback::NotePlayback;
@@ -113,6 +115,15 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Remove pattern", action: 52, enabled: true },
                                 MenuItem { label: "Clone pattern", action: 53, enabled: true },
                                 MenuItem { label: "Set length", action: 54, enabled: true }] },
+                    Menu {title: "Audio", items: [
+                                MenuItem { label: "Copy clip", action: 61, enabled: true },
+                                MenuItem { label: "Cut clip", action: 62, enabled: true },
+                                MenuItem { label: "Paste clip", action: 63, enabled: true },
+                                MenuItem { label: "Move clip up", action: 103, enabled: true },
+                                MenuItem { label: "Move clip down", action: 104, enabled: true },
+                                MenuItem { label: "Trim to selection", action: 105, enabled: true },
+                                MenuItem { label: "Slice selection", action: 106, enabled: true },
+                                MenuItem { label: "Reverse clip", action: 102, enabled: true }] },
                     Menu { title: "Add", items: [MenuItem { label: "Audio", action: 60, enabled: true },
                                 MenuItem { label: "VST3 master plugin", action: 91, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Unload master VST3", action: 92, enabled: AudioController::processor_support() },
@@ -167,7 +178,13 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
     table.paint_note_lengths(surface, top, theme);
     table.paint_editor(surface, top, theme);
     let show_sample: bool = sample.visible && table.audio_under_cursor();
-    let details: Panel = Panel { title: show_sample ? " Sample " : (mixer.visible ? " Mixer " : " Inspector ") };
+    var sample_title: str8 = "";
+    if show_sample {
+        let track: SequenceTrack = table.tracks[table.active_track()];
+        let instance: AudioInstance = track.instances[track.instance_at(table.selected_row)];
+        let name: str8 = base_name(instance.clip.source); sample_title = format!(" Sample: {} ", name); free(name);
+    }
+    let details: Panel = Panel { title: show_sample ? sample_title : (mixer.visible ? " Mixer " : " Inspector ") };
     let bottom: Rect = details.paint_focused(surface, inspector.bounds, theme, focus.is_active(2));
     let label: Label = Label { text: patterns.error != "" ? patterns.error : (table.error != "" ? table.error : (table.editing ? "Editing: Enter saves | Esc cancels": message)) };
     if show_sample {
@@ -188,6 +205,7 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
         }
     }
     else { label.paint(surface, bottom, theme); table.paint_track_details(surface, bottom, theme); }
+    if show_sample { free(sample_title); }
     transport.paint(surface, Rect::new(0, surface.height - 1, surface.width, 1), theme);
     menus.paint(surface, surface.bounds(), theme);
 }
@@ -237,6 +255,7 @@ pub fn run() -> i32 {
     var escape_ticks: i32 = 0;
     var confirm_track_action: i32 = 0;
     var last_processor_errors: i64 = 0;
+    var prev_sample_row: i32 = -1;
     let no_hardware: str8 = __env_get_var("MLANG_TUI_NO_HARDWARE");
     var midi: AudioSystem = AudioSystem::start(terminal.active && no_hardware != "1");
     free(no_hardware);
@@ -335,6 +354,13 @@ pub fn run() -> i32 {
         if transport.advance(now, i32(library.table.rows.len())) {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
+        } else if !transport.playing {
+            let cursor: i32 = library.table.selected_row < 0 ? 0 : library.table.selected_row;
+            if transport.row != cursor { transport.follow_row(cursor); dirty = true; }
+        }
+        if library.table.selected_row != prev_sample_row {
+            if sample.anchor_active { sample.anchor_active = false; dirty = true; }
+            prev_sample_row = library.table.selected_row;
         }
         // Consume every note-on, including a note released within this poll.
         // Modal editors never receive destructive background recording edits.
@@ -595,13 +621,50 @@ pub fn run() -> i32 {
             } else if event.kind == InputKind::Pane {
                 focus.navigate(event.key, panes);
                 dirty = true;
+            } else if event.code == 115 && event.modifiers == 1 && library.table.visual && focus.selected == 1 && library.table.audio_under_cursor() {
+                free(message);
+                message = library.table.slice_audio(panes[1].bounds.inset(1))
+                    ? clone("Sliced audio clip into three parts.")
+                    : clone(library.table.error);
+                dirty = true;
             } else if event.code == 115 && event.modifiers == 1 &&(focus.selected == 1 || focus.selected == 2) {
-                if library.table.audio_under_cursor() { sample.visible = !sample.visible; dirty = true; }
-            } else if event.modifiers == 5 &&(event.code == 104 || event.code == 108) &&
+                if library.table.audio_under_cursor() {
+                    sample.visible = !sample.visible;
+                    if sample.visible {
+                        let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                        let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
+                        let rc: AudioClip = instance.render_clip(); sample.reset_selection(rc.frames);
+                    }
+                    dirty = true;
+                }
+            } else if event.code == 116 && event.modifiers == 1 &&(focus.selected == 1 || focus.selected == 2) && sample.visible && library.table.audio_under_cursor() {
+                free(message);
+                if library.table.trim_audio(sample.sel_start, sample.sel_end, panes[1].bounds.inset(1)) {
+                    let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                    let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
+                    let rc: AudioClip = instance.render_clip(); sample.reset_selection(rc.frames);
+                    message = clone("Trimmed audio clip to selection.");
+                } else { message = clone(library.table.error); }
+                dirty = true;
+            } else if event.modifiers == 5 && event.code == 121 &&
             (focus.selected == 1 || focus.selected == 2) && sample.visible && library.table.audio_under_cursor() {
                 let track: SequenceTrack = library.table.tracks[library.table.active_track()];
                 let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
-                if sample.on_event(event, instance.clip, panes[2].bounds.width - 2) { dirty = true; }
+                let region: AudioClip = instance.clip.slice_frames(sample.sel_start, sample.sel_end);
+                free(message);
+                if region.peaks.len() > 0 {
+                    library.table.audio_clipboard.release(); library.table.audio_clipboard = region;
+                    message = clone("Copied waveform selection to clipboard.");
+                } else { region.release(); message = clone("Waveform selection is empty."); }
+                dirty = true;
+            } else if ((event.modifiers == 5 &&(event.code == 104 || event.code == 108 || event.code == 110 || event.code == 109)) ||
+            (event.modifiers == 2 &&(event.code == 110 || event.code == 109)) ||
+            (event.modifiers == 1 &&(event.code == 78 || event.code == 77))) &&
+            (focus.selected == 1 || focus.selected == 2) && sample.visible && library.table.audio_under_cursor() {
+                let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
+                let rc: AudioClip = instance.render_clip();
+                if sample.on_event(event, rc, panes[2].bounds.width - 2) { dirty = true; }
             } else if focus.selected == 2 && mixer.visible && !(sample.visible && library.table.audio_under_cursor()) {
                 if mixer.send_navigation(event, library.table.active_track()) { dirty = true; }
                 else if !mixer.bus_focus && mixer.selected_send >= 0 {
@@ -768,6 +831,54 @@ pub fn run() -> i32 {
             else if command == 40 || command == 41 {
                 mixer.grainy = command == 41;
                 free(message); message = clone(mixer.grainy ? "Meter style: grainy (osc)": "Meter style: solid bars");
+            }
+            else if command == 61 {
+                free(message);
+                message = library.table.copy_audio()
+                    ? clone("Copied audio tail to clipboard.")
+                    : clone(library.table.error);
+            }
+            else if command == 62 {
+                free(message);
+                message = library.table.cut_audio(panes[1].bounds.inset(1))
+                    ? clone("Cut audio tail to clipboard.")
+                    : clone(library.table.error);
+            }
+            else if command == 63 {
+                free(message);
+                message = library.table.paste_audio(panes[1].bounds.inset(1))
+                    ? clone("Pasted audio from clipboard.")
+                    : clone(library.table.error);
+            }
+            else if command == 102 {
+                free(message);
+                message = library.table.reverse_audio(panes[1].bounds.inset(1))
+                    ? clone("Reversed audio clip.")
+                    : clone(library.table.error);
+            }
+            else if command == 105 {
+                free(message);
+                message = library.table.trim_audio(sample.sel_start, sample.sel_end, panes[1].bounds.inset(1))
+                    ? clone("Trimmed audio clip to selection.")
+                    : clone(library.table.error);
+            }
+            else if command == 106 {
+                free(message);
+                message = library.table.slice_audio(panes[1].bounds.inset(1))
+                    ? clone("Sliced audio clip into three parts.")
+                    : clone(library.table.error);
+            }
+            else if command == 103 {
+                free(message);
+                message = library.table.move_audio(-1, panes[1].bounds.inset(1))
+                    ? clone("Moved audio clip up.")
+                    : clone(library.table.error);
+            }
+            else if command == 104 {
+                free(message);
+                message = library.table.move_audio(1, panes[1].bounds.inset(1))
+                    ? clone("Moved audio clip down.")
+                    : clone(library.table.error);
             }
             else if(command >= 20 && command <= 28) ||(command >= 80 && command <= 84) {
                 library.table.track_action(command, panes[1].bounds.inset(1));

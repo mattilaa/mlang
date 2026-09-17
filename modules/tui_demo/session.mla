@@ -393,6 +393,7 @@ impl SessionCodec {
                 }
                 sample_id = self.number(sample_id, 0, i32(samples.len()) - 1);
                 instance.start_row = self.number(instance.start_row, 0, 16383); instance.length_ticks = self.number(instance.length_ticks, 0, 245760000);
+                instance.offset_frames = self.integer(instance.offset_frames, 0, 16777216);
                 if self.reading && !self.failed { let sample: AudioClip = samples[sample_id]; instance.clip = sample.copy(); placements.push(instance); }
             }
             if self.reading { track.instances = placements; }
@@ -446,7 +447,7 @@ impl SessionCodec {
             if self.failed { break; }
             var clip: AudioClip = AudioClip {}; if !self.reading { clip = library.audio.samples[i]; }
             let decoded: AudioClip = self.clip(clip);
-            if self.reading { library.audio.samples.push(decoded); library.audio.view.items.push(ListItem { id: i32(i) + 1, label: format!("{} {}", i + 1, decoded.source) }); }
+            if self.reading { library.audio.samples.push(decoded); let name: str8 = base_name(decoded.source); library.audio.view.items.push(ListItem { id: i32(i) + 1, label: format!("{} {}", i + 1, name) }); free(name); }
         }
         var count: i32 = audio.processor_path != "" ? 1 : 0;
         let paths: list<str8> = audio.instrument_paths; for path in paths { if path != "" { count = count + 1; } }
