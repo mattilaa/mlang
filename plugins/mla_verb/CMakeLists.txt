@@ -21,6 +21,10 @@ get_filename_component(MLANG_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOL
 if(NOT DEFINED MLANG_STD_LIBRARY)
     set(MLANG_STD_LIBRARY "${MLANG_REPO_ROOT}/build/libmlang_std.a")
 endif()
+# Resolve to an absolute path (relative overrides are interpreted against the
+# source dir, not the CMake build dir where the linker later runs).
+get_filename_component(MLANG_STD_LIBRARY "${MLANG_STD_LIBRARY}" ABSOLUTE
+    BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 if(NOT EXISTS "${MLANG_STD_LIBRARY}")
     message(FATAL_ERROR "MLang runtime archive not found: ${MLANG_STD_LIBRARY}")
 endif()
