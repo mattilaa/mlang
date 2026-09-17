@@ -1,0 +1,113 @@
+/// \file mla_distortion_dsp.mla
+/// \brief C-ABI bridge that drives the shared dsp::distortion saturation.
+///
+/// State is per plug-in instance: `mladist_create` heap-allocates one
+/// `MlaDistortion` (independent left/right `AnalogDistortion` channels plus the
+/// sample rate needed by the tone filter) and returns an opaque pointer that the
+/// C++ VST3 layer stores and passes back to every call. This keeps multiple
+/// loaded instances independent, unlike module-level globals.
+///
+/// Unlike the reverb bridge, `AnalogDistortion` is a plain value type (only
+/// scalar `f32` state, no heap-backed `list` buffers and therefore no implicit
+/// drop), so a wrapper struct with per-channel fields is safe: the nested-field
+/// method calls that corrupt the heap for `list`-owning structs do not apply
+/// here.
+///
+/// All numeric ranges are physical (decibels, hertz, 0..1 / -0.5..0.5 controls);
+/// the C++ side maps VST3 normalized parameters onto them.
+
+mod dsp::distortion;
+use dsp::distortion::AnalogDistortion;
+
+extern fn calloc(count: i64, size: i64) -> ptr<MlaDistortion>;
+extern fn free(block: ptr<MlaDistortion>) -> void;
+
+/// @brief One stereo distortion instance: independent per-channel saturators
+/// plus the sample rate the tone filter is designed against.
+struct MlaDistortion {
+    var left: AnalogDistortion;
+    var right: AnalogDistortion;
+    var sample_rate: f32;
+};
+
+/// @brief Allocate a distortion instance for a sample rate (8 kHz..384 kHz).
+/// @return Opaque handle owned by the caller; release with `mladist_destroy`.
+fn mladist_create(sample_rate: f32) -> ptr<MlaDistortion> {
+    var rate: f32 = sample_rate;
+    if rate < 8000.0f { rate = 8000.0f; }
+    if rate > 384000.0f { rate = 384000.0f; }
+    // `calloc` zero-fills the block; the value-type channels are then assigned
+    // their constructor rvalues directly. `AnalogDistortion` owns no heap
+    // memory, so no drop runs here either way.
+    let handle: ptr<MlaDistortion> = calloc(1, size_of(MlaDistortion));
+    unsafe {
+        (*handle).left = AnalogDistortion::new(rate);
+        (*handle).right = AnalogDistortion::new(rate);
+        (*handle).sample_rate = rate;
+    }
+    return handle;
+}
+
+/// @brief Release a distortion instance created by `mladist_create`.
+fn mladist_destroy(handle: ptr<MlaDistortion>) {
+    free(handle);
+}
+
+/// @brief Clear tone/DC-blocker history on both channels without changing params.
+fn mladist_reset(handle: ptr<MlaDistortion>) {
+    unsafe {
+        (*handle).left.reset();
+        (*handle).right.reset();
+    }
+}
+
+/// @brief Pre-saturation drive gain, 0..36 dB.
+fn mladist_set_drive(handle: ptr<MlaDistortion>, drive_db: f32) {
+    unsafe {
+        (*handle).left.set_drive_db(drive_db);
+        (*handle).right.set_drive_db(drive_db);
+    }
+}
+
+/// @brief One-pole tone cutoff in Hz (clamped 20..rate*0.495 by the DSP).
+fn mladist_set_tone(handle: ptr<MlaDistortion>, cutoff_hz: f32) {
+    unsafe {
+        let rate: f32 = (*handle).sample_rate;
+        (*handle).left.set_tone_hz(cutoff_hz, rate);
+        (*handle).right.set_tone_hz(cutoff_hz, rate);
+    }
+}
+
+/// @brief Transfer-curve asymmetry, -0.5..0.5.
+fn mladist_set_bias(handle: ptr<MlaDistortion>, bias: f32) {
+    unsafe {
+        (*handle).left.set_bias(bias);
+        (*handle).right.set_bias(bias);
+    }
+}
+
+/// @brief Post-effect output gain, -24..12 dB.
+fn mladist_set_output(handle: ptr<MlaDistortion>, output_db: f32) {
+    unsafe {
+        (*handle).left.set_output_gain_db(output_db);
+        (*handle).right.set_output_gain_db(output_db);
+    }
+}
+
+/// @brief Dry/wet blend, 0..1.
+fn mladist_set_mix(handle: ptr<MlaDistortion>, mix: f32) {
+    unsafe {
+        (*handle).left.set_mix(mix);
+        (*handle).right.set_mix(mix);
+    }
+}
+
+/// @brief Process one stereo frame. Returns the left output and writes the
+/// matching right output through `out_right`.
+fn mladist_process(handle: ptr<MlaDistortion>, input_left: f32, input_right: f32, out_right: ptr<f32>) -> f32 {
+    unsafe {
+        let out_l: f32 = (*handle).left.process(input_left);
+        *out_right = (*handle).right.process(input_right);
+        return out_l;
+    }
+}
