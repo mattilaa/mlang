@@ -85,6 +85,7 @@ pub struct SequenceTable : Table {
     var next_track_id: i32; var revision: i64;
     var clipboard: list<TableRow>; var clipboard_kinds: list<str8>; var paste_error: bool;
     var clipboard_rows: bool;
+    var audio_clipboard: AudioClip;
 };
 impl SequenceTable {
 pub fn empty() -> SequenceTable {
@@ -275,6 +276,61 @@ pub fn remove_audio_under_cursor(self: &mut Self) -> bool {
     }
     self.error = ""; return true;
 }
+/// Yank the audio from the cursor row to the end of the instance under it into
+/// the audio clipboard, leaving the pattern unchanged. Row-granular, cursor-based.
+pub fn copy_audio(self: &mut Self) -> bool {
+    let index: i32 = self.active_track(); if index < 0 { self.error = "Select an AUDIO track first"; return false; }
+    let track: SequenceTrack = self.tracks[index];
+    if !track.audio { self.error = "Select an AUDIO track first"; return false; }
+    let hit: i32 = track.instance_at(self.selected_row);
+    if hit < 0 { self.error = "No audio under the cursor to copy"; return false; }
+    let instance: AudioInstance = track.instances[hit];
+    let offset: i64 = wide(self.selected_row - instance.start_row);
+    let tail: AudioClip = instance.clip.slice_tail(offset);
+    self.audio_clipboard.release(); self.audio_clipboard = tail;
+    self.error = ""; return true;
+}
+/// Cut the audio at the cursor row: the tail (cursor row to the end) is moved to
+/// the audio clipboard and the instance is truncated so its head ends on the row
+/// above. Cutting on the first row of an instance removes the whole instance.
+pub fn cut_audio(self: &mut Self, area: Rect) -> bool {
+    let index: i32 = self.active_track(); if index < 0 { self.error = "Select an AUDIO track first"; return false; }
+    var track: SequenceTrack = self.tracks[index];
+    if !track.audio { self.error = "Select an AUDIO track first"; return false; }
+    let hit: i32 = track.instance_at(self.selected_row);
+    if hit < 0 { self.error = "No audio under the cursor to cut"; return false; }
+    let instance: AudioInstance = track.instances[hit];
+    let offset: i64 = wide(self.selected_row - instance.start_row);
+    let tail: AudioClip = instance.clip.slice_tail(offset);
+    self.audio_clipboard.release(); self.audio_clipboard = tail;
+    if offset <= 0 { self.remove_audio_under_cursor(); self.reconcile(area); self.error = ""; return true; }
+    self.revision = self.revision + 1;
+    var kept: list<AudioInstance> = [];
+    for i in 0..track.instances.len() {
+        var next: AudioInstance = AudioInstance {}; next = track.instances[i];
+        if i == hit {
+            next.length_ticks = i32(offset * 15000);
+            var peaks: list<WavePeak> = []; var details: list<WavePeak> = [];
+            let src_peaks: list<WavePeak> = next.clip.peaks;
+            for r in 0..offset { peaks.push(src_peaks[r]); }
+            let src_details: list<WavePeak> = next.clip.detail_peaks;
+            for r in 0..src_details.len() { if r < offset * 4 { details.push(src_details[r]); } }
+            next.clip.peaks = peaks; next.clip.detail_peaks = details;
+            let frames: i64 = offset * next.clip.frames_per_row;
+            if frames < next.clip.frames { next.clip.frames = frames; }
+        }
+        kept.push(next);
+    }
+    track.instances = kept; self.replace_track(index, track);
+    self.write_owned_cell(instance.start_row, self.track_start(index) + 2, duration_text(offset * 15000));
+    self.reconcile(area); self.error = ""; return true;
+}
+/// Paste the audio clipboard at the cursor row on the active AUDIO track.
+pub fn paste_audio(self: &mut Self, area: Rect) -> bool {
+    if self.audio_clipboard.peaks.len() == 0 { self.error = "Clipboard is empty"; return false; }
+    var clip: AudioClip = AudioClip {}; clip = self.audio_clipboard;
+    return self.insert_audio(clip, area);
+}
 pub fn paint_audio(self: SequenceTable, surface: Surface, area: Rect, theme: Theme) -> void {
     self.paint_audio_style(surface, area, theme, true, false);
 }
@@ -388,6 +444,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     var notes: array<str8, 128> = {};
     for i in 0..128 { notes.push(clone(self.notes[i])); }
     copy.rows = rows; copy.tracks = tracks; copy.notes = notes;
+    copy.audio_clipboard = self.audio_clipboard.copy();
     copy.rebuild_columns(); return copy;
 }
 pub fn track_columns(self: SequenceTable, index: i32) -> i32 {
@@ -651,6 +708,7 @@ pub fn release(self: &mut Self) -> void {
     for row in rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
     let notes: array<str8, 128> = self.notes;
     for note in notes { free(note); }
+    self.audio_clipboard.release();
     self.editor.release();
 }
 /// -1 cycles each targeted MIDI track independently; 0/2 collapse/expand.
@@ -1062,6 +1120,16 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
             self.delete_pending = false; self.top_pending = false;
         }
         return true;
+    }
+    // Audio clip cut/copy/paste on the instance under the cursor. On AUDIO tracks
+    // these take priority over the vim-style row yank/paste; elsewhere they defer.
+    if event.modifiers == 1 && (event.code == 99 || event.code == 121) && self.audio_under_cursor() {
+        if event.code == 99 { self.cut_audio(area); return true; }
+        self.copy_audio(); self.reconcile(area); return true;
+    }
+    if event.modifiers == 1 && event.code == 112 && self.audio_clipboard.peaks.len() > 0 {
+        let ai: i32 = self.active_track();
+        if ai >= 0 && self.tracks[ai].audio { self.paste_audio(area); return true; }
     }
     if event.modifiers == 1 && event.code == 112 { self.paste_visual(area); return true; }
     if event.modifiers == 1 && event.code == 111 { self.insert_row(false, area); return true; }

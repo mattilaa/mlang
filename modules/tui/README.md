@@ -162,6 +162,19 @@ not its loaded sample, other instances, automation, or pattern rows. Samples can
 be inserted again even if the original file is no longer available. Clear track
 removes all its instances; deleting a pattern/track does not unload samples.
 
+On an AUDIO track with an instance under the Pattern cursor, `c`, `y`, and `p`
+cut, copy, and paste audio at row granularity. `c` **cuts**: the tail of the
+instance — from the cursor row to its end — moves to a separate audio clipboard
+and the head is truncated to end on the row above (its LEN cell is rewritten);
+cutting on an instance's first row removes the whole instance. `y` **copies**
+(yanks) that tail into the clipboard without changing the pattern. `p` **pastes**
+the clipboard instance at the cursor row, subject to the usual non-overlap rule.
+These keys defer to the vim-style row yank/paste elsewhere: `c`/`y` act only when
+audio is under the cursor, and `p` pastes audio only on an AUDIO track with a
+non-empty audio clipboard, otherwise pasting rows. The audio clipboard is one
+clip carried per pattern and is duplicated when a pattern/track is cloned. The
+Edit menu exposes the same actions (Cut/Copy/Paste audio) for discoverability.
+
 Each instance references decoded samples and carries its own start row.
 A read-only waveform column
 beside CC1/CC2 draws time downward, with green left-channel bars extending left
