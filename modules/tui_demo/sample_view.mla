@@ -9,8 +9,23 @@ use tui::theme::*;
 use tui::input::InputEvent;
 use std::strbuf::free;
 
-pub struct SampleView { var grainy: bool{true}; var wave: bool; var zoom: i32; var visible: bool; };
+pub struct SampleView { var grainy: bool{true}; var wave: bool; var zoom: i32; var visible: bool;
+    var sel_start: i64; var sel_end: i64; var sel_frames: i64; };
 impl SampleView {
+    /// Reset the trim selection to cover the whole clip of `frames` frames.
+    pub fn reset_selection(self: &mut Self, frames: i64) -> void {
+        self.sel_start = 0; self.sel_end = frames; self.sel_frames = frames;
+    }
+    fn move_start(self: &mut Self, delta: i64) -> void {
+        var v: i64 = self.sel_start + delta;
+        if v < 0 { v = 0; } if v >= self.sel_end { v = self.sel_end - 1; }
+        self.sel_start = v;
+    }
+    fn move_end(self: &mut Self, delta: i64, frames: i64) -> void {
+        var v: i64 = self.sel_end + delta;
+        if v > frames { v = frames; } if v <= self.sel_start { v = self.sel_start + 1; }
+        self.sel_end = v;
+    }
     pub fn span(self: SampleView, source: &AudioClip, pixels: i32) -> i64 {
         var clip: AudioClip = AudioClip {}; clip = source;
         var frames: i64 = clip.frames;
@@ -28,12 +43,23 @@ impl SampleView {
     }
     pub fn on_event(self: &mut Self, event: InputEvent, source: &AudioClip, width: i32) -> bool {
         var clip: AudioClip = AudioClip {}; clip = source;
-        if event.modifiers != 5 { return false; }
-        if event.code == 104 { if self.zoom > 0 { self.zoom = self.zoom - 1; } return true; }
-        if event.code == 108 {
-            let pixels: i32 = (width > 2 ? width - 2 : 1) * (self.grainy ? 2 : 1);
+        let pixels: i32 = (width > 2 ? width - 2 : 1) * (self.grainy ? 2 : 1);
+        if self.sel_frames != clip.frames { self.reset_selection(clip.frames); }
+        if event.modifiers == 5 && event.code == 104 { if self.zoom > 0 { self.zoom = self.zoom - 1; } return true; }
+        if event.modifiers == 5 && event.code == 108 {
             if self.zoom < 30 && self.span(clip, pixels) > wide(pixels) { self.zoom = self.zoom + 1; }
             return true;
+        }
+        let span: i64 = self.span(clip, pixels);
+        var step: i64 = span / wide(pixels); if step < 1 { step = 1; }
+        // Start point: Ctrl+N left, Ctrl+M right. End point: Shift+N left, Shift+M right.
+        if event.modifiers == 5 && event.code == 110 { self.move_start(-step); return true; }
+        if event.modifiers == 5 && event.code == 109 { self.move_start(step); return true; }
+        if (event.modifiers == 2 && event.code == 110) || (event.modifiers == 1 && event.code == 78) {
+            self.move_end(-step, clip.frames); return true;
+        }
+        if (event.modifiers == 2 && event.code == 109) || (event.modifiers == 1 && event.code == 77) {
+            self.move_end(step, clip.frames); return true;
         }
         return false;
     }
@@ -55,21 +81,35 @@ impl SampleView {
             self.wave ? "Wave" : "Filled", start * 1000 / clip.sample_rate,
             (start + span) * 1000 / clip.sample_rate, span / wide(pixels) > 0 ? span / wide(pixels) : 1);
         surface.text(Rect::new(area.x, area.y, area.width, 1), info, theme.muted, theme.panel); free(info);
+        // Trim selection window in absolute frames; only a proper subset shades.
+        var sel0: i64 = self.sel_start; var sel1: i64 = self.sel_end;
+        if self.sel_frames != clip.frames || sel1 <= sel0 { sel0 = 0; sel1 = clip.frames; }
+        if sel0 < 0 { sel0 = 0; } if sel1 > clip.frames { sel1 = clip.frames; }
+        if sel0 <= 0 && sel1 >= clip.frames { sel0 = -1; sel1 = -1; }
         let height: i32 = area.height - 1;
         let top_height: i32 = clip.channels == 2 ? height / 2 : height;
-        self.paint_channel(surface, Rect::new(area.x + 2, area.y + 1, area.width - 2, top_height), theme, clip, 0, start, span, cursor, 0x5adc8c);
+        self.paint_channel(surface, Rect::new(area.x + 2, area.y + 1, area.width - 2, top_height), theme, clip, 0, start, span, cursor, sel0, sel1, 0x5adc8c);
         surface.text(Rect::new(area.x, area.y + 1, 1, 1), clip.channels == 1 ? "M" : "L", 0x5adc8c, theme.panel);
         if clip.channels == 2 {
-            self.paint_channel(surface, Rect::new(area.x + 2, area.y + 1 + top_height, area.width - 2, height - top_height), theme, clip, 1, start, span, cursor, 0xef6575);
+            self.paint_channel(surface, Rect::new(area.x + 2, area.y + 1 + top_height, area.width - 2, height - top_height), theme, clip, 1, start, span, cursor, sel0, sel1, 0xef6575);
             surface.text(Rect::new(area.x, area.y + 1 + top_height, 1, 1), "R", 0xef6575, theme.panel);
         }
     }
     fn paint_channel(self: SampleView, surface: Surface, area: Rect, theme: Theme, source: &AudioClip,
-        channel: i64, start: i64, span: i64, cursor: i64, color: i32) -> void {
+        channel: i64, start: i64, span: i64, cursor: i64, sel0: i64, sel1: i64, color: i32) -> void {
         var clip: AudioClip = AudioClip {}; clip = source;
         if area.width <= 0 || area.height <= 0 || span <= 0 { return; }
         let scale_x: i32 = self.grainy ? 2 : 1; let scale_y: i32 = self.grainy ? 4 : 1;
         let width: i32 = area.width * scale_x; let height: i32 = area.height * scale_y;
+        if sel1 > sel0 {
+            let shade: i32 = darken(theme.panel, 55);
+            for col in 0..area.width {
+                let f: i64 = start + wide(col) * span / wide(area.width);
+                if f >= sel0 && f < sel1 {
+                    surface.fill(Rect::new(area.x + i32(col), area.y, 1, area.height), Cell { glyph: 32, foreground: color, background: shade });
+                }
+            }
+        }
         if cursor >= start && cursor < start + span {
             let x: i32 = i32((cursor - start) * wide(area.width) / span);
             surface.fill(Rect::new(area.x + x, area.y, 1, area.height), Cell { glyph: 32, foreground: color, background: theme.selection });

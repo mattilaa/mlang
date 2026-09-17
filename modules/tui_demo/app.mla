@@ -72,10 +72,7 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Save session as", action: 96, enabled: !fixture }] },
                     Menu {title: "Edit", items: [
                                 MenuItem { label: "Undo", action: 4, enabled: true },
-                                MenuItem { label: "Redo", action: 5, enabled: true },
-                                MenuItem { label: "Cut audio tail", action: 62, enabled: true },
-                                MenuItem { label: "Copy audio tail", action: 61, enabled: true },
-                                MenuItem { label: "Paste audio", action: 63, enabled: true }] },
+                                MenuItem { label: "Redo", action: 5, enabled: true }] },
                     Menu {title: "View", items: [
                                 MenuItem { label: "Reset layout", action: 6, enabled: true },
                                 MenuItem { label: "Show details", action: 7, enabled: true },
@@ -116,6 +113,13 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Remove pattern", action: 52, enabled: true },
                                 MenuItem { label: "Clone pattern", action: 53, enabled: true },
                                 MenuItem { label: "Set length", action: 54, enabled: true }] },
+                    Menu {title: "Audio", items: [
+                                MenuItem { label: "Copy clip", action: 61, enabled: true },
+                                MenuItem { label: "Cut clip", action: 62, enabled: true },
+                                MenuItem { label: "Paste clip", action: 63, enabled: true },
+                                MenuItem { label: "Move clip up", action: 103, enabled: true },
+                                MenuItem { label: "Move clip down", action: 104, enabled: true },
+                                MenuItem { label: "Reverse clip", action: 102, enabled: true }] },
                     Menu { title: "Add", items: [MenuItem { label: "Audio", action: 60, enabled: true },
                                 MenuItem { label: "VST3 master plugin", action: 91, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Unload master VST3", action: 92, enabled: AudioController::processor_support() },
@@ -599,12 +603,34 @@ pub fn run() -> i32 {
                 focus.navigate(event.key, panes);
                 dirty = true;
             } else if event.code == 115 && event.modifiers == 1 &&(focus.selected == 1 || focus.selected == 2) {
-                if library.table.audio_under_cursor() { sample.visible = !sample.visible; dirty = true; }
-            } else if event.modifiers == 5 &&(event.code == 104 || event.code == 108) &&
+                if library.table.audio_under_cursor() {
+                    sample.visible = !sample.visible;
+                    if sample.visible {
+                        let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                        let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
+                        let rc: AudioClip = instance.render_clip(); sample.reset_selection(rc.frames);
+                    }
+                    dirty = true;
+                }
+            } else if event.modifiers == 5 && event.code == 121 &&
             (focus.selected == 1 || focus.selected == 2) && sample.visible && library.table.audio_under_cursor() {
                 let track: SequenceTrack = library.table.tracks[library.table.active_track()];
                 let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
-                if sample.on_event(event, instance.clip, panes[2].bounds.width - 2) { dirty = true; }
+                let region: AudioClip = instance.clip.slice_frames(sample.sel_start, sample.sel_end);
+                free(message);
+                if region.peaks.len() > 0 {
+                    library.table.audio_clipboard.release(); library.table.audio_clipboard = region;
+                    message = clone("Copied waveform selection to clipboard.");
+                } else { region.release(); message = clone("Waveform selection is empty."); }
+                dirty = true;
+            } else if ((event.modifiers == 5 &&(event.code == 104 || event.code == 108 || event.code == 110 || event.code == 109)) ||
+            (event.modifiers == 2 &&(event.code == 110 || event.code == 109)) ||
+            (event.modifiers == 1 &&(event.code == 78 || event.code == 77))) &&
+            (focus.selected == 1 || focus.selected == 2) && sample.visible && library.table.audio_under_cursor() {
+                let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
+                let rc: AudioClip = instance.render_clip();
+                if sample.on_event(event, rc, panes[2].bounds.width - 2) { dirty = true; }
             } else if focus.selected == 2 && mixer.visible && !(sample.visible && library.table.audio_under_cursor()) {
                 if mixer.send_navigation(event, library.table.active_track()) { dirty = true; }
                 else if !mixer.bus_focus && mixer.selected_send >= 0 {
@@ -788,6 +814,24 @@ pub fn run() -> i32 {
                 free(message);
                 message = library.table.paste_audio(panes[1].bounds.inset(1))
                     ? clone("Pasted audio from clipboard.")
+                    : clone(library.table.error);
+            }
+            else if command == 102 {
+                free(message);
+                message = library.table.reverse_audio(panes[1].bounds.inset(1))
+                    ? clone("Reversed audio clip.")
+                    : clone(library.table.error);
+            }
+            else if command == 103 {
+                free(message);
+                message = library.table.move_audio(-1, panes[1].bounds.inset(1))
+                    ? clone("Moved audio clip up.")
+                    : clone(library.table.error);
+            }
+            else if command == 104 {
+                free(message);
+                message = library.table.move_audio(1, panes[1].bounds.inset(1))
+                    ? clone("Moved audio clip down.")
                     : clone(library.table.error);
             }
             else if(command >= 20 && command <= 28) ||(command >= 80 && command <= 84) {

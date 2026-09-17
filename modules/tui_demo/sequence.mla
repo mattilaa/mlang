@@ -331,6 +331,79 @@ pub fn paste_audio(self: &mut Self, area: Rect) -> bool {
     var clip: AudioClip = AudioClip {}; clip = self.audio_clipboard;
     return self.insert_audio(clip, area);
 }
+/// Visual-selection copy/cut of the first whole instance intersecting the
+/// selected row range. Reuses the cursor-based copy_audio/cut_audio by parking
+/// the cursor on the instance start (offset 0 = whole clip).
+pub fn visual_audio_copy(self: &mut Self, cut: bool, area: Rect) -> bool {
+    let index: i32 = self.active_track();
+    if index < 0 || !self.tracks[index].audio { self.visual = false; return false; }
+    let a: i32 = self.anchor_row < self.selected_row ? self.anchor_row : self.selected_row;
+    let b: i32 = self.anchor_row > self.selected_row ? self.anchor_row : self.selected_row;
+    let track: SequenceTrack = self.tracks[index];
+    var hit: i32 = -1;
+    for i in 0..track.instances.len() {
+        let instance: AudioInstance = track.instances[i];
+        let end: i32 = instance.start_row + i32((instance.duration() + 14999) / 15000) - 1;
+        if instance.start_row <= b && end >= a { hit = i32(i); break; }
+    }
+    if hit < 0 { self.visual = false; self.error = "No audio in the selection"; return false; }
+    self.selected_row = track.instances[hit].start_row;
+    self.visual = false; self.visual_rows = false;
+    if cut { return self.cut_audio(area); }
+    let ok: bool = self.copy_audio(); self.reconcile(area); return ok;
+}
+/// Move the instance under the cursor by one row (delta -1 up, +1 down) with
+/// pattern bounds and overlap checks, following it with the cursor.
+pub fn move_audio(self: &mut Self, delta: i32, area: Rect) -> bool {
+    let index: i32 = self.active_track();
+    if index < 0 || !self.tracks[index].audio { return false; }
+    var track: SequenceTrack = self.tracks[index];
+    let hit: i32 = track.instance_at(self.selected_row);
+    if hit < 0 { return false; }
+    let moving: AudioInstance = track.instances[hit];
+    let span: i32 = i32((moving.duration() + 14999) / 15000);
+    let new_start: i32 = moving.start_row + delta;
+    if new_start < 0 || new_start + span > i32(self.rows.len()) { self.error = ""; return false; }
+    for i in 0..track.instances.len() {
+        if i == hit { continue; }
+        let other: AudioInstance = track.instances[i];
+        let other_span: i32 = i32((other.duration() + 14999) / 15000);
+        if new_start < other.start_row + other_span && new_start + span > other.start_row {
+            self.error = "Move overlaps another instance"; return false;
+        }
+    }
+    let old_start: i32 = moving.start_row; let dur: i64 = moving.duration();
+    var updated: list<AudioInstance> = [];
+    for i in 0..track.instances.len() {
+        var next: AudioInstance = AudioInstance {}; next = track.instances[i];
+        if i == hit { next.start_row = new_start; }
+        updated.push(next);
+    }
+    track.instances = updated; self.replace_track(index, track);
+    self.revision = self.revision + 1;
+    let len_col: i32 = self.track_start(index) + 2;
+    self.write_owned_cell(old_start, len_col, clone(""));
+    self.write_owned_cell(new_start, len_col, duration_text(dur));
+    self.selected_row = self.selected_row + delta;
+    self.reconcile(area); self.error = ""; return true;
+}
+/// Reverse the audio of the instance under the cursor in place.
+pub fn reverse_audio(self: &mut Self, area: Rect) -> bool {
+    let index: i32 = self.active_track();
+    if index < 0 || !self.tracks[index].audio { self.error = "Select an AUDIO track first"; return false; }
+    var track: SequenceTrack = self.tracks[index];
+    let hit: i32 = track.instance_at(self.selected_row);
+    if hit < 0 { self.error = "No audio under the cursor to reverse"; return false; }
+    var updated: list<AudioInstance> = [];
+    for i in 0..track.instances.len() {
+        var next: AudioInstance = AudioInstance {}; next = track.instances[i];
+        if i == hit { let flipped: AudioClip = next.clip.reverse(); next.clip.release(); next.clip = flipped; }
+        updated.push(next);
+    }
+    track.instances = updated; self.replace_track(index, track);
+    self.revision = self.revision + 1;
+    self.reconcile(area); self.error = ""; return true;
+}
 pub fn paint_audio(self: SequenceTable, surface: Surface, area: Rect, theme: Theme) -> void {
     self.paint_audio_style(surface, area, theme, true, false);
 }
@@ -1109,7 +1182,11 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         }
         if event.modifiers == 1 {
             if event.code == 118 { self.visual = false; return true; }
-            if event.code == 121 || event.code == 100 { self.copy_visual(event.code == 100, area); return true; }
+            if event.code == 121 || event.code == 100 {
+                let ai: i32 = self.active_track();
+                if ai >= 0 && self.tracks[ai].audio { self.visual_audio_copy(event.code == 100, area); return true; }
+                self.copy_visual(event.code == 100, area); return true;
+            }
             if event.code == 104 || event.code == 106 || event.code == 107 || event.code == 108 { return self.on_event(event, area); }
         }
         return true;
@@ -1123,6 +1200,10 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
     }
     // Audio clip cut/copy/paste on the instance under the cursor. On AUDIO tracks
     // these take priority over the vim-style row yank/paste; elsewhere they defer.
+    if event.modifiers == 5 && (event.code == 106 || event.code == 107) {
+        let ai: i32 = self.active_track();
+        if ai >= 0 && self.tracks[ai].audio { self.move_audio(event.code == 106 ? 1 : -1, area); return true; }
+    }
     if event.modifiers == 1 && (event.code == 99 || event.code == 121) && self.audio_under_cursor() {
         if event.code == 99 { self.cut_audio(area); return true; }
         self.copy_audio(); self.reconcile(area); return true;
@@ -1191,6 +1272,11 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
             return true;
         }
         if self.is_length() {
+            let ti: i32 = self.active_track();
+            if ti >= 0 && self.tracks[ti].audio {
+                let hit: i32 = self.tracks[ti].instance_at(self.selected_row);
+                if hit < 0 || self.tracks[ti].instances[hit].start_row != self.selected_row { return true; }
+            }
             let current: i64 = row.cells[self.selected_column] == "" ? 15000 : duration_ticks(row.cells[self.selected_column]);
             let next: i64 = current + wide(delta) * 150;
             if next >= 150 && next <= 245760000 {

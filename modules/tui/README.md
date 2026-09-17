@@ -172,8 +172,19 @@ the clipboard instance at the cursor row, subject to the usual non-overlap rule.
 These keys defer to the vim-style row yank/paste elsewhere: `c`/`y` act only when
 audio is under the cursor, and `p` pastes audio only on an AUDIO track with a
 non-empty audio clipboard, otherwise pasting rows. The audio clipboard is one
-clip carried per pattern and is duplicated when a pattern/track is cloned. The
-Edit menu exposes the same actions (Cut/Copy/Paste audio) for discoverability.
+clip carried per pattern and is duplicated when a pattern/track is cloned.
+
+Visual selection also drives whole-clip edits. Enter visual mode (`v` or `V`) on
+an AUDIO track, extend the row range, then `y`/`d` copy/cut the **first whole
+instance** intersecting the selection into the audio clipboard (unlike the
+row-granular `c`/`y`, these operate on the entire clip). **Ctrl+J/Ctrl+K** move
+the instance under the cursor down/up one row, with pattern-bounds and
+non-overlap checks; the cursor follows it. Transpose (`J`/`K`) on an audio LEN
+cell that is not an instance's start row is a silent no-op instead of erroring.
+The **Audio** menu exposes Copy/Cut/Paste clip, Move clip up/down, and Reverse
+clip (which flips the instance's samples back-to-front in place). Reverse
+rebuilds fresh sample/peak data, so it never mutates other clips sharing the
+source.
 
 Each instance references decoded samples and carries its own start row.
 A read-only waveform column
@@ -209,6 +220,16 @@ Menus and editors retain exclusive keyboard ownership, including `s` and Ctrl+H/
 
 Decoded samples are shared read-only by pattern/track copies, so zooming neither
 reopens the source file nor changes clip timing, notes, or automation.
+
+While the Sample view is open you can mark a sample-accurate region of the clip.
+**Ctrl+N/Ctrl+M** move the region's **start** point left/right and
+**Shift+N/Shift+M** move its **end** point, each by one visible column (so the
+step tracks the current zoom). The selected region is drawn with a **darker
+background** than the rest of the clip; a full-clip selection shows no shading.
+**Ctrl+Y** lifts the selected region into the audio clipboard as a fresh clip
+(new peaks/samples, source untouched), so it can be pasted (`p`) at any row to
+rearrange grooves. The selection resets to the whole clip whenever the Sample
+view is opened.
 
 One row currently represents a sixteenth note at the displayed BPM (120 by
 default). Longer clips extend the pattern with empty MIDI/automation cells;
