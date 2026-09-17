@@ -32,6 +32,32 @@ impl AudioClip {
         }
         return copy;
     }
+    /// Owned clip holding the pattern rows from `offset_rows` to the end.
+    /// Sample data is realigned so the first kept row maps to frame 0, keeping
+    /// the samples.len() >= frames*channels invariant used by the sample view.
+    pub fn slice_tail(self: AudioClip, offset_rows: i64) -> AudioClip {
+        var tail: AudioClip = AudioClip {};
+        tail.channels = self.channels; tail.sample_rate = self.sample_rate;
+        tail.frames_per_row = self.frames_per_row;
+        if self.peaks.len() == 0 { return tail; }
+        let rows: i64 = self.peaks.len();
+        var start: i64 = offset_rows < 0 ? 0 : offset_rows;
+        if start > rows { start = rows; }
+        tail.source = clone(self.source);
+        let peaks: list<WavePeak> = self.peaks;
+        for r in start..rows { tail.peaks.push(peaks[r]); }
+        let details: list<WavePeak> = self.detail_peaks;
+        let detail_start: i64 = start * 4;
+        for d in detail_start..details.len() { tail.detail_peaks.push(details[d]); }
+        let frame_start: i64 = start * self.frames_per_row * self.channels;
+        let samples: list<f32> = self.samples;
+        var kept: list<f32> = [];
+        for s in frame_start..samples.len() { kept.push(samples[s]); }
+        tail.samples = kept;
+        let dropped: i64 = start * self.frames_per_row;
+        tail.frames = self.frames > dropped ? self.frames - dropped : 0;
+        return tail;
+    }
     pub fn release(self: AudioClip) -> void { if self.peaks.len() > 0 { free(self.source); } }
     pub fn load(path: str8, bpm: i32) -> result<AudioClip, str8> {
         if bpm <= 0 { return Err<AudioClip, str8>("Invalid BPM"); }

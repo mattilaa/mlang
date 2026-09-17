@@ -52,7 +52,10 @@ fn demo_menus() -> MenuBar {
             MenuItem { label: "Quit", action: 99, enabled: true }] },
         Menu { title: "Edit", items: [
             MenuItem { label: "Undo", action: 4, enabled: true },
-            MenuItem { label: "Redo", action: 5, enabled: true }] },
+            MenuItem { label: "Redo", action: 5, enabled: true },
+            MenuItem { label: "Cut audio tail", action: 62, enabled: true },
+            MenuItem { label: "Copy audio tail", action: 61, enabled: true },
+            MenuItem { label: "Paste audio", action: 63, enabled: true }] },
         Menu { title: "View", items: [
             MenuItem { label: "Reset layout", action: 6, enabled: true },
             MenuItem { label: "Show details", action: 7, enabled: true },
@@ -400,6 +403,24 @@ fn main() -> i32 {
             else if command == 40 || command == 41 {
                 mixer.grainy = command == 41;
                 free(message); message = clone(mixer.grainy ? "Meter style: grainy (osc)" : "Meter style: solid bars");
+            }
+            else if command == 61 {
+                free(message);
+                message = library.table.copy_audio()
+                    ? clone("Copied audio tail to clipboard.")
+                    : clone(library.table.error);
+            }
+            else if command == 62 {
+                free(message);
+                message = library.table.cut_audio(panes[1].bounds.inset(1))
+                    ? clone("Cut audio tail to clipboard.")
+                    : clone(library.table.error);
+            }
+            else if command == 63 {
+                free(message);
+                message = library.table.paste_audio(panes[1].bounds.inset(1))
+                    ? clone("Pasted audio from clipboard.")
+                    : clone(library.table.error);
             }
             else if (command >= 20 && command <= 28) || (command >= 80 && command <= 84) {
                 library.table.track_action(command, panes[1].bounds.inset(1));

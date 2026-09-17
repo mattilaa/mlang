@@ -162,6 +162,17 @@ not its loaded sample, other instances, automation, or pattern rows. Samples can
 be inserted again even if the original file is no longer available. Clear track
 removes all its instances; deleting a pattern/track does not unload samples.
 
+With the Pattern pane focused on an AUDIO track, three keys cut, copy, and paste
+audio at row granularity around the Pattern cursor. Press `c` to **cut**: the
+tail of the instance under the cursor — from the cursor row to its end — is moved
+to a clipboard and the head is truncated to end on the row above (its LEN cell is
+rewritten). Cutting on an instance's first row removes the whole instance. Press
+`y` to **copy** (yank) the same tail into the clipboard without changing the
+pattern. Press `p` to **paste** the clipboard instance at the cursor row, subject
+to the usual non-overlap rule. The clipboard is one
+audio clip carried per pattern and is duplicated when a pattern/track is cloned.
+The Edit menu exposes the same actions (Cut/Copy/Paste audio) for discoverability.
+
 Each instance references decoded samples and carries its own start row.
 A read-only waveform column
 beside CC1/CC2 draws time downward, with green left-channel bars extending left

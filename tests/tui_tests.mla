@@ -340,6 +340,60 @@ fn tui_audio_duration_gate() {
 }
 
 #[test]
+fn tui_audio_cut_copy_paste() {
+    let area: Rect = Rect::new(0, 0, 120, 12);
+    var table: SequenceTable = SequenceTable::new(); table.track_action(28, area);
+    var clip: AudioClip = AudioClip { source: clone("cut-test"), frames: 80, frames_per_row: 10 };
+    for _r in 0..8 { clip.peaks.push(WavePeak { left: 500 }); }
+    for _r in 0..32 { clip.detail_peaks.push(WavePeak { left: 500 }); }
+    table.selected_row = 2; verify(table.insert_audio(clip, area));
+    let placed: SequenceTrack = table.tracks[3];
+    verify(placed.instances.len() == 1 && placed.instance_at(9) == 0 && placed.instance_at(10) == -1);
+    // Copy the tail from row 4 (offset 2): non-destructive, 6 rows on clipboard.
+    table.selected_row = 4; verify(table.copy_audio());
+    verify(table.clipboard.peaks.len() == 6);
+    let after_copy: SequenceTrack = table.tracks[3];
+    verify(after_copy.instances.len() == 1); let copied: AudioInstance = after_copy.instances[0];
+    verify(copied.clip.peaks.len() == 8);
+    // Cut the tail at row 5 (offset 3): head keeps 3 rows, tail (5) goes to clipboard.
+    table.selected_row = 5; verify(table.cut_audio(area));
+    verify(table.clipboard.peaks.len() == 5);
+    let after_cut: SequenceTrack = table.tracks[3];
+    verify(after_cut.instances.len() == 1); let head: AudioInstance = after_cut.instances[0];
+    verify(head.start_row == 2 && head.clip.peaks.len() == 3 && head.duration() == 45000);
+    verify(after_cut.instance_at(4) == 0 && after_cut.instance_at(5) == -1);
+    let len_row: TableRow = table.rows[2]; verify(len_row.cells[table.track_start(3) + 2] == "3.00");
+    // Paste the clipboard onto a free region starting at row 20.
+    table.selected_row = 20; verify(table.paste_audio(area));
+    let after_paste: SequenceTrack = table.tracks[3];
+    verify(after_paste.instances.len() == 2);
+    let pasted: AudioInstance = after_paste.instances[1];
+    verify(pasted.start_row == 20 && pasted.clip.peaks.len() == 5);
+    // Cutting on the first row of an instance removes it whole.
+    table.selected_row = 20; verify(table.cut_audio(area));
+    let after_whole_cut: SequenceTrack = table.tracks[3];
+    verify(after_whole_cut.instances.len() == 1 && table.clipboard.peaks.len() == 5);
+    // Key routing through edit_event: y copies, p pastes, c cuts.
+    table.selected_row = 2; verify(table.edit_event(decode_input("y"), area));
+    verify(table.clipboard.peaks.len() == 3);
+    table.selected_row = 40; verify(table.edit_event(decode_input("p"), area));
+    let after_key_paste: SequenceTrack = table.tracks[3];
+    verify(after_key_paste.instances.len() == 2);
+    let key_pasted: AudioInstance = after_key_paste.instances[1];
+    verify(key_pasted.start_row == 40 && key_pasted.clip.peaks.len() == 3);
+    table.selected_row = 41; verify(table.edit_event(decode_input("c"), area));
+    verify(table.clipboard.peaks.len() == 2);
+    let after_key_cut: SequenceTrack = table.tracks[3];
+    let key_head: AudioInstance = after_key_cut.instances[1];
+    verify(key_head.clip.peaks.len() == 1 && after_key_cut.instance_at(41) == -1);
+    // Empty clipboard and non-audio guards.
+    var midi: SequenceTable = SequenceTable::new();
+    verify(!midi.copy_audio() && midi.error == "Select an AUDIO track first");
+    verify(!midi.paste_audio(area) && midi.error == "Clipboard is empty");
+    midi.release(); table.release(); clip.release();
+}
+
+#[test]
 fn tui_multiple_note_lines() {
     var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); let area: Rect = Rect::new(0, 0, 80, 12);
     table.selected_column = 3; table.edit_event(decode_input("\r"), area); table.editor.set_text("3.75"); table.edit_event(decode_input("\r"), area);
