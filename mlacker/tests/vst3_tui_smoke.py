@@ -32,21 +32,21 @@ def main():
 
     try:
         assert b"mlacker" in read_for(1)
-        assert b"Load master VST3" in send(b"lllllj\r")
+        assert b"Load master VST3" in send(b"llllllj\r")
         frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
         assert b"Master VST3: Mlacker Test Instrument" in frame, frame[-2000:]
         assert b"audio output disabled" in frame
         with tempfile.TemporaryDirectory(prefix="mlacker-vst3-") as directory:
             bad_bundle = os.path.join(directory, "Broken.vst3")
             os.mkdir(bad_bundle)
-            assert b"Load master VST3" in send(b"\tlllllj\r")
+            assert b"Load master VST3" in send(b"\tllllllj\r")
             frame = send(b"\x15" + os.fsencode(bad_bundle) + b"\r", 1)
             assert b"VST3 load failed" in frame
-        assert b"Master VST3 unloaded" in send(b"\tllllljj\r", 0.5)
+        assert b"Master VST3 unloaded" in send(b"\tlllllljj\r", 0.5)
         frame = send(b"\tllljljj\r", 0.5)
         assert b"Instrument track created" in frame, frame[-2000:]
         assert b"Instruments" in frame
-        assert b"Add VST3 instrument" in send(b"\tllllljjj\r")
+        assert b"Add VST3 instrument" in send(b"\tlllllljjj\r")
         frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
         assert b"Instrument loaded: Mlacker Test Instrument" in frame, frame[-2000:]
         assert b"001 Mlacker Test" in frame, frame[-6000:]
@@ -61,14 +61,14 @@ def main():
         assert b"Instrument: 1" in frame
         frame = send(b"m")
         assert b"Mixer" in frame and b"Master" in frame and b"L R" in frame
-        frame = send(b"\tllllll\r")
+        frame = send(b"\tlllllll\r")
         assert b"VST3 editor:" in frame and b"Modulation" in frame, frame[-6000:]
         frame = send(b"J\r\x151.5\r")
         assert b"Invalid value" in frame, frame[-6000:]
         frame = send(b"\x150.25\r")
         assert b"0.25" in frame, frame[-6000:]
         send(b"\x1b", 0.4)
-        frame = send(b"\tllllll\r")
+        frame = send(b"\tlllllll\r")
         assert b"VST3 editor:" in frame and b"0.25" in frame, frame[-6000:]
         frame = send(b"L")
         assert b"255;255;255" in frame and b"192;32;48" in frame, frame[-6000:]
@@ -81,10 +81,10 @@ def main():
         assert b"Extra control" in frame and b"VST3 editor:" in frame
         send(b"\x1b", 0.4)
         send(b"m")  # Inspector displays command status.
-        frame = send(b"\tllllllj\r")
+        frame = send(b"\tlllllllj\r")
         assert b"Instrument removed; track assignments cleared" in frame, frame[-6000:]
         # Slot reuse must not shift IDs or retain the old assignment.
-        assert b"Add VST3 instrument" in send(b"\tllllljjj\r")
+        assert b"Add VST3 instrument" in send(b"\tlllllljjj\r")
         frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
         assert b"001 Mlacker Test" in frame and b"Instrument: 1" in frame, frame[-6000:]
         send(b"q")

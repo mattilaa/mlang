@@ -25,6 +25,7 @@ pub struct AudioSystem {
     var last_instrument_id: i32;
     var instrument_output_failed: bool;
     var effects: list<EffectChannel>;
+    var insert_paths: list<str8>;
     var sample_placements: list<SamplePlacement>; var samples_running: bool;
     var sample_output: i64; var sample_last: i64;
 };
@@ -37,6 +38,7 @@ impl AudioSystem {
         self.processor_path = next.processor_path; self.instrument_paths = next.instrument_paths;
         self.last_instrument_id = next.last_instrument_id; self.instrument_output_failed = next.instrument_output_failed;
         self.effects = next.effects;
+        self.insert_paths = next.insert_paths;
         self.samples_running = false; self.sample_placements = []; self.sample_output = 0;
     }
     pub fn start(hardware: bool) -> AudioSystem {
@@ -61,7 +63,7 @@ impl AudioSystem {
             if opened.is_err() { return Err<i32, str8>(__mlang_std_audio_last_error()); }
             next = opened.unwrap();
         }
-        if output_id == -2 && (self.instrument_paths.len() > 0 || self.processor_path != "" || self.effects.len() > 0) {
+        if output_id == -2 && (self.instrument_paths.len() > 0 || self.processor_path != "" || self.effects.len() > 0 || self.insert_paths.len() > 0) {
             let created: result<AudioController, str8> = AudioController::new(48000, 128);
             if created.is_err() { return Err<i32, str8>(__mlang_std_audio_last_error()); }
             next = created.unwrap();
@@ -85,6 +87,11 @@ impl AudioSystem {
                     if next.copy_parameters_from(self.output, i + 33) != 0 { next.close(); return Err<i32, str8>("Cannot preserve effect parameters; settings unchanged"); }
                 }
                 next.effect_volume(i, effect.volume);
+            }
+            for i in 0..self.insert_paths.len() {
+                if next.load_insert(i + 1, self.insert_paths[i]) != 0 || next.copy_parameters_from(self.output, i + 41) != 0 {
+                    next.close(); return Err<i32, str8>("Cannot preserve insert plugin; settings unchanged");
+                }
             }
             if output_id != -2 { if next.start() != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); } }
         }
@@ -169,6 +176,18 @@ impl AudioSystem {
     }
     pub fn sync_volumes(self: AudioSystem, source: &SequenceTable) -> void {
         var table: SequenceTable = SequenceTable {}; table = source;
+        // Publish final routes directly: never transiently bypass active chains.
+        for s in 0..96 {
+            var selected: i32 = -1;
+            for t in 0..table.tracks.len() {
+                let track: SequenceTrack = table.tracks[t];
+                if (!track.instrument && s == t) || (track.instrument && track.instrument_id > 0 && s == 63 + wide(track.instrument_id)) { selected = i32(t); }
+            }
+            for n in 0..4 {
+                var id: i32 = 0; if selected >= 0 { let track: SequenceTrack = table.tracks[selected]; id = track.insert_id(i32(n)); }
+                self.output.insert_route(s, n, id);
+            }
+        }
         for i in 0..table.tracks.len() {
             let track: SequenceTrack = table.tracks[i];
             self.output.track_volume(i, track.instrument ? track.instrument_id : 0, track.muted ? 0 : track.volume);
@@ -319,6 +338,27 @@ impl AudioSystem {
                 midi: AudioMidiEvent { channel: event.track % 16, note: event.note, velocity: event.velocity }, source: event.track }, 0);
         }
     }
+    pub fn add_insert(self: &mut Self, path: str8, id: i32) -> i32 {
+        if id < 1 || id > 256 || id > self.insert_paths.len() + 1 { return -1; }
+        if self.output.handle == 0 {
+            let created: result<AudioController, str8> = AudioController::new(48000, 128);
+            if created.is_err() { return -1; } self.output = created.unwrap(); self.reconnect_midi();
+        }
+        let worker: bool = self.midi.worker.raw != 0; let restart: bool = self.output.hardware_output();
+        self.midi.release();
+        if self.output.stop() != 0 { self.resume_midi(worker); return -1; }
+        let loaded: i32 = self.output.load_insert(id, path);
+        if loaded == 0 {
+            if id > self.insert_paths.len() { self.insert_paths.push(clone(path)); }
+            else {
+                let old: list<str8> = self.insert_paths; var paths: list<str8> = [];
+                for i in 0..old.len() { if i + 1 == id { free(old[i]); paths.push(clone(path)); } else { paths.push(old[i]); } }
+                self.insert_paths = paths;
+            }
+        }
+        if restart { self.output.start(); } self.resume_midi(worker);
+        return loaded == 0 ? id : -1;
+    }
     pub fn release(self: &mut Self) -> void {
         self.midi.release();
         if self.output.handle != 0 { if self.output.close() == 0 { self.output.handle = 0; } }
@@ -326,6 +366,7 @@ impl AudioSystem {
         self.processor_path = "";
         let paths: list<str8> = self.instrument_paths; for path in paths { if path != "" { free(path); } }
         self.instrument_paths = [];
+        let insert_paths: list<str8> = self.insert_paths; for path in insert_paths { free(path); } self.insert_paths = [];
         let effects: list<EffectChannel> = self.effects; for effect in effects { if effect.path != "" { free(effect.path); } } self.effects = [];
     }
 }

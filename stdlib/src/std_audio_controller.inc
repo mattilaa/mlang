@@ -53,6 +53,9 @@ typedef struct {
     mlang_audio_processor processor;
     mlang_audio_processor instruments[32];
     mlang_audio_processor effects[8];
+    mlang_audio_processor inserts[256];
+    _Atomic uint32_t insert_route[96][4];
+    float track_buffer[64][8192];
     _Atomic uint32_t sends[96][8], effect_volume[8], effect_peak[8][2];
     float effect_buffer[8][8192];
     float instrument_buffer[8192];
@@ -66,7 +69,7 @@ typedef struct {
 
 /* Parameter namespace: master 0, instruments 1-32, aux effects 33-40. */
 static mlang_audio_processor *ac_plugin(ac_controller *c, int64_t slot) {
-    return slot == 0 ? &c->processor : (slot <= 32 ? &c->instruments[slot - 1] : &c->effects[slot - 33]);
+    return slot == 0 ? &c->processor : (slot <= 32 ? &c->instruments[slot - 1] : (slot <= 40 ? &c->effects[slot - 33] : &c->inserts[slot - 41]));
 }
 
 static void ac_silence(ac_controller *c) {
@@ -88,6 +91,7 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     for(int i = 0; i < 32; ++i) for(int ch = 0; ch < 2; ++ch) atomic_init(&c->instrument_peak[i][ch], 0);
     atomic_init(&c->live_target, 0);
     for(int i = 0; i < 96; ++i) for(int fx = 0; fx < 8; ++fx) atomic_init(&c->sends[i][fx], 0);
+    for(int i = 0; i < 96; ++i) for(int n = 0; n < 4; ++n) atomic_init(&c->insert_route[i][n], 0);
     for(int fx = 0; fx < 8; ++fx) {
         atomic_init(&c->effect_volume[fx], 100);
         for(int ch = 0; ch < 2; ++ch) atomic_init(&c->effect_peak[fx][ch], 0);
@@ -115,7 +119,7 @@ int32_t __mlang_std_audio_controller_post(int64_t handle, int64_t lane,
     if((kind == 1 || kind == 2 || kind == 6 || kind == 7) && (channel < 0 || channel > 15 ||
         note < 0 || note > 127 || velocity < 0 || velocity > 127)) return -1;
     if(kind == 4 && (sample < 0 || sample >= AC_SAMPLES || note < 0 || velocity < 0)) return -1;
-    if(kind == 10 && (sample < 1 || sample > 40 || note < 0 || note > 16383)) return -1;
+    if(kind == 10 && (sample < 1 || sample > 296 || note < 0 || note > 16383)) return -1;
     if((kind == 6 || kind == 7) && (sample < 0 || sample > 32)) return -1;
     if((kind == 8 || kind == 9) && (channel < 0 || channel > 15 ||
         !((note >= 0 && note <= 127) || note == 129) || velocity < 0 ||
@@ -268,6 +272,16 @@ static void ac_dispatch(ac_controller *c, const ac_event *e) {
     }
 }
 
+static void ac_insert_process(ac_controller *c, const uint32_t route[4], float *buffer, uint32_t frames, uint64_t clock) {
+    for(int n = 0; n < 4; ++n) {
+        uint32_t id = route[n]; if(!id || id > 256) continue;
+        mlang_audio_processor *p = &c->inserts[id - 1]; if(!p->context) continue;
+        if(p->process(p->context, buffer, (int32_t)frames, clock) != 0) {
+            memset(buffer, 0, frames * 2u * sizeof(float));
+            atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed);
+        }
+    }
+}
 static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     if(frames == 0) return; /* Do not consume events/reset on an empty block. */
     uint64_t panic = atomic_load_explicit(&c->panic, memory_order_acquire);
@@ -284,6 +298,15 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         }
     }
     uint64_t clock = atomic_load_explicit(&c->clock, memory_order_relaxed);
+    uint32_t routes[96][4]; int routed[96] = {0};
+    for(int i = 0; i < 256; ++i) if(c->inserts[i].context) c->inserts[i].begin(c->inserts[i].context, reset);
+    for(int source = 0; source < 96; ++source) {
+        for(int n = 0; n < 4; ++n) {
+            routes[source][n] = atomic_load_explicit(&c->insert_route[source][n], memory_order_relaxed);
+            if(routes[source][n]) routed[source] = 1;
+        }
+        if(source < 64 && routed[source]) memset(c->track_buffer[source], 0, frames * 2u * sizeof(float));
+    }
     float sends[96][8], dry[96];
     for(int source = 0; source < 96; ++source) dry[source] = 1.f;
     for(int fx = 0; fx < 8; ++fx) {
@@ -321,6 +344,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             if(v->sample < 0) {
                 int track = v->source >= 65536 ? v->source - 65536 : v->source;
                 double volume = track >= 0 && track < 64 ? atomic_load_explicit(&c->track_volume[track], memory_order_relaxed) / 100.0 : 1.0;
+                if(track >= 0 && track < 64 && routed[track]) volume = 1.0;
                 double value = sin(v->phase * 6.283185307179586) * v->gain * volume;
                 l += value; r += value; v->phase += v->step;
                 v->phase -= floor(v->phase);
@@ -335,12 +359,18 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
                     float a = s->data[pos * s->channels + channel], b = s->data[next * s->channels + channel];
                     int track = v->source >= 65536 ? v->source - 65536 : v->source;
                     double volume = track >= 0 && track < 64 ? atomic_load_explicit(&c->track_volume[track], memory_order_relaxed) / 100.0 : 1.0;
+                    if(track >= 0 && track < 64 && routed[track]) volume = 1.0;
                     double value = (a + (b - a) * mix) * v->gain * volume;
                     if(ch == 0) l += value; else r += value;
                 }
                 v->phase += v->step;
             }
             int track = v->source >= 65536 ? v->source - 65536 : v->source;
+            if(track >= 0 && track < 64 && routed[track]) {
+                c->track_buffer[track][f * 2] += (float)(l - before_l);
+                c->track_buffer[track][f * 2 + 1] += (float)(r - before_r);
+                l = before_l; r = before_r; continue;
+            }
             if(track >= 0 && track < 64) for(int fx = 0; fx < 8; ++fx) {
                 if(sends[track][fx] == 0) continue;
                 c->effect_buffer[fx][f * 2] += (float)(l - before_l) * sends[track][fx];
@@ -355,6 +385,15 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         out[f * 2] = (float)l;
         out[f * 2 + 1] = (float)r;
     }
+    for(int t = 0; t < 64; ++t) if(routed[t]) {
+        ac_insert_process(c, routes[t], c->track_buffer[t], frames, clock);
+        float volume = atomic_load_explicit(&c->track_volume[t], memory_order_relaxed) / 100.f;
+        for(uint32_t f = 0; f < frames * 2u; ++f) {
+            float value = c->track_buffer[t][f] * volume; if(!isfinite(value)) continue;
+            out[f] += value * dry[t];
+            for(int fx = 0; fx < 8; ++fx) if(sends[t][fx] > 0) c->effect_buffer[fx][f] += value * sends[t][fx];
+        }
+    }
     for(int i = 0; i < 32; ++i) {
         mlang_audio_processor *p = &c->instruments[i];
         if(!p->context) continue;
@@ -363,6 +402,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed);
             continue;
         }
+        ac_insert_process(c, routes[64 + i], c->instrument_buffer, frames, clock);
         float volume = atomic_load_explicit(&c->instrument_volume[i], memory_order_relaxed) / 100.f;
         float peaks[2] = {0, 0};
         for(uint32_t f = 0; f < frames * 2u; ++f) {
@@ -510,6 +550,7 @@ int32_t __mlang_std_audio_controller_close(int64_t handle) {
     for(int i = 0; i < 32; ++i)
         if(c->instruments[i].context) c->instruments[i].destroy(c->instruments[i].context);
     for(int i = 0; i < 8; ++i) if(c->effects[i].context) c->effects[i].destroy(c->effects[i].context);
+    for(int i = 0; i < 256; ++i) if(c->inserts[i].context) c->inserts[i].destroy(c->inserts[i].context);
     free(c); return 0;
 }
 int32_t __mlang_std_audio_controller_start(int64_t handle) {
@@ -597,6 +638,26 @@ int32_t __mlang_std_audio_controller_effect_peak(int64_t handle, int64_t fx, int
     if(!c || fx < 0 || fx >= 8 || channel < 0 || channel > 1) return 0;
     return (int32_t)atomic_exchange_explicit(&c->effect_peak[fx][channel], 0, memory_order_relaxed);
 }
+int32_t __mlang_std_audio_controller_insert_route(int64_t handle, int64_t source, int64_t position, int64_t id) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || source < 0 || source >= 96 || position < 0 || position >= 4 || id < 0 || id > 256) return -1;
+    atomic_store_explicit(&c->insert_route[source][position], (uint32_t)id, memory_order_relaxed); return 0;
+}
+int32_t __mlang_std_audio_controller_load_insert(int64_t handle, int64_t id, const char *path) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || c->running || id < 1 || id > 256 || !ac_processor_factory) return -1;
+    mlang_audio_processor next = {0};
+    if(path && *path) {
+        if(ac_processor_factory(path, c->rate, 4096, &next, g_audio_last_error, sizeof(g_audio_last_error)) != 0) return -1;
+        if(!next.context || next.instrument || !next.begin || !next.process || !next.destroy || !next.name) {
+            if(next.context && next.destroy) next.destroy(next.context);
+            audio_set_error("Select a VST3 audio effect, not an instrument"); return -1;
+        }
+    }
+    mlang_audio_processor *p = &c->inserts[id - 1];
+    if(p->context) p->destroy(p->context); *p = next; c->processor_reset = 1;
+    audio_clear_error(); return 0;
+}
 int32_t __mlang_std_audio_controller_load_effect(int64_t handle, int64_t fx, const char *path) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || c->running || fx < 0 || fx >= 8 || !ac_processor_factory) { audio_set_error("Effect load requires stopped audio and a valid channel"); return -1; }
@@ -615,13 +676,13 @@ int32_t __mlang_std_audio_controller_load_effect(int64_t handle, int64_t fx, con
 }
 double __mlang_std_audio_controller_parameter_info(int64_t handle, int64_t slot, int64_t index, int64_t key) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || slot < 0 || slot > 40 || index < 0 || index > 16383 || key < 0 || key > 4) return -1;
+    if(!c || slot < 0 || slot > 296 || index < 0 || index > 16383 || key < 0 || key > 4) return -1;
     mlang_audio_processor *p = ac_plugin(c, slot);
     return p->context && p->parameter_info ? p->parameter_info(p->context, (int32_t)index, (int32_t)key) : -1;
 }
 const char *__mlang_std_audio_controller_parameter_name(int64_t handle, int64_t slot, int64_t index) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || slot < 1 || slot > 40 || index < 0 || index > 16383) return "";
+    if(!c || slot < 1 || slot > 296 || index < 0 || index > 16383) return "";
     mlang_audio_processor *p = ac_plugin(c, slot);
     return p->context && p->parameter_name ? p->parameter_name(p->context, (int32_t)index) : "";
 }
@@ -660,7 +721,7 @@ static void ac_clear_learn_slot(ac_controller *c, int64_t slot) {
  * frame so parameters take effect before hardware starts, without queue limits. */
 int32_t __mlang_std_audio_controller_restore_parameter(int64_t handle, int64_t slot, int64_t index, double value) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || c->running || slot < 0 || slot > 40 || !isfinite(value) || value < 0 || value > 1 ||
+    if(!c || c->running || slot < 0 || slot > 296 || !isfinite(value) || value < 0 || value > 1 ||
        __mlang_std_audio_controller_parameter_info(handle, slot, index, 1) < 0) return -1;
     mlang_audio_processor *p = ac_plugin(c, slot);
     if(__mlang_std_audio_controller_parameter_info(handle, slot, index, 3) != 0) return 0;
@@ -700,7 +761,7 @@ int32_t __mlang_std_audio_controller_unload_instrument(int64_t handle, int64_t s
 }
 const char *__mlang_std_audio_controller_instrument_name(int64_t handle, int64_t slot) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || slot < 1 || slot > 40) return "";
+    if(!c || slot < 1 || slot > 296) return "";
     mlang_audio_processor *p = ac_plugin(c, slot);
     return p->context ? p->name(p->context) : "";
 }
