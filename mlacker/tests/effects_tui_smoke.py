@@ -13,9 +13,9 @@ def main():
         try:
             tui.read(.8)
             assert b"Instrument track created" in tui.send(b"\tllljljj\r")
-            tui.send(b"\tllllljjj\r")
+            tui.send(b"\tlllllljjj\r")
             tui.send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", .9)
-            frame = tui.send(b"\tlllllll\r")
+            frame = tui.send(b"\tllllllll\r")
             assert b"FX1" in frame and b"Master" in frame and b"AUX" in frame, frame[-5000:]
             frame = tui.send(b"\r")
             assert b"Load VST3 effect" in frame, (tui.process.poll(), frame[-8000:])
@@ -25,7 +25,7 @@ def main():
             assert b"VST3 editor:" in frame and b"Modulation" in frame, frame[-5000:]
             assert b"0.25" in tui.send(b"\r\x150.25\r")
             tui.send(b"\x1b")
-            frame = tui.send(b"\tllllllljjj\r")
+            frame = tui.send(b"\tlllllllljjj\r")
             assert b"Set track send" in frame, frame[-5000:]
             assert b"whole number from 0 to 100" in tui.send(b"\x15101\r")
             tui.send(b"\x1550\r")
@@ -53,7 +53,7 @@ def main():
             assert path.read_bytes() == saved, "Aux session changed on round trip"
             assert b"0.25" in tui.send(b"\r")
             tui.send(b"\x1b")
-            frame = tui.send(b"\tllllllljjj\r")
+            frame = tui.send(b"\tlllllllljjj\r")
             assert b"50" in frame and b"Set track send" in frame
             tui.send(b"\x1b")
             assert b"MIDI input adapter" in tui.send(b"\tjjjj\r")
@@ -66,13 +66,13 @@ def main():
             tui.send(b"\x13", .6)
             assert path.read_bytes() == saved, "Device replacement lost effect state"
             # Invalid replacement must retain the working effect.
-            tui.send(b"\tlllllllj\r")
+            tui.send(b"\tllllllllj\r")
             frame = tui.send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", .9)
             assert b"not an instrument" in frame, frame[-5000:]
             assert b"0.25" in tui.send(b"\r")
             tui.send(b"\x1b")
             # Multiple aux channels occupy their own bank, not Pattern tracks.
-            frame = tui.send(b"\tlllllll\r")
+            frame = tui.send(b"\tllllllll\r")
             assert b"FX1" in frame and b"FX2" in frame and b"Master" in frame
             frame = tui.send(b"h\r")
             assert b"0.25" in frame

@@ -330,7 +330,7 @@ def main():
                     assert b"L  WAVE" not in read_frame(1)
                     os.write(master, b"jjjjj")  # next import starts on row 6
                     read_frame(1)
-                os.write(master, b"\tlllll\r")
+                os.write(master, b"\tllllll\r")
                 assert b"Add audio" in read_frame(None, 0)
                 os.write(master, b"\x15" + path.encode() + b"\r")
                 imported = read_frame(1)
@@ -350,11 +350,11 @@ def main():
                 os.write(master, b"z")
                 assert b"L  WAVE  R" in read_frame(1)
                 os.write(master, b"s")
-                assert b" Sample " in read_frame(1)
+                assert b" Sample: " in read_frame(1)
                 os.write(master, b"\x1b[108;5u" * 15)
                 assert b"1 frames/px" in read_frame(1)
                 os.write(master, b"\x1b[104;5u")
-                assert b" Sample " in read_frame(1)
+                assert b" Sample: " in read_frame(1)
                 # Both views share the texture and type controls.
                 os.write(master, b"\tll")
                 read_frame(None)
@@ -368,7 +368,7 @@ def main():
                 os.write(master, b"\x1b[106;6u")
                 read_frame(2)
                 os.write(master, b"\x1b[104;5u")
-                assert b" Sample " in read_frame(2)
+                assert b" Sample: " in read_frame(2)
                 os.write(master, b"s")
                 assert b" Inspector " in read_frame(2)
                 os.write(master, b"\x1b[107;6u")
@@ -383,11 +383,11 @@ def main():
                 read_frame(1)
                 if path == aif_path:
                     os.write(master, b"s")
-                    assert b" Sample " in read_frame(1)
+                    assert b" Sample: " in read_frame(1)
                     os.write(master, b"G")
                     assert b" Inspector " in read_frame(1)  # cursor past short clip
                     os.write(master, b"gg")
-                    assert b" Sample " not in read_frame(1)  # requires s to reopen
+                    assert b" Sample: " not in read_frame(1)  # requires s to reopen
             os.write(master, b"G")
             assert b"072" in read_frame(1)
             os.write(master, b"gg")

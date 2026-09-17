@@ -1,5 +1,7 @@
 /// Editable sequence used by tui_demo; not part of the reusable TUI library.
 mod tui::table;
+mod std::audio::controller;
+use std::audio::controller::AudioController;
 mod tui::textfield;
 mod tui::dialog;
 mod tui_demo::audio_clip;
@@ -52,6 +54,7 @@ pub struct SequenceTrack {
     var volume: i32{100}; var pan: i32;
     var record_armed: bool;
     var sends: list<i32>;
+    var inserts: list<i32>;
     var audio: bool;
     var instrument: bool; var instrument_id: i32;
     var note_lines: i32{1};
@@ -60,6 +63,9 @@ pub struct SequenceTrack {
     var zoom_stage: i32;
 };
 impl SequenceTrack {
+    pub fn insert_id(self: SequenceTrack, position: i32) -> i32 {
+        if position < 0 || position >= self.inserts.len() { return 0; } return self.inserts[position];
+    }
     pub fn send_level(self: SequenceTrack, fx: i32) -> i32 {
         if fx < 0 || fx >= self.sends.len() { return 0; } return self.sends[fx];
     }
@@ -95,6 +101,50 @@ pub struct SequenceTable : Table {
     var audio_clipboard: AudioClip;
 };
 impl SequenceTable {
+pub fn set_insert(self: &mut Self, index: i32, position: i32, id: i32) -> void {
+    if index < 0 || index >= self.tracks.len() || position < 0 || position >= 4 || id < 0 || id > 256 { return; }
+    let selected: SequenceTrack = self.tracks[index]; let linked: i32 = selected.instrument ? selected.instrument_id : 0;
+    let old: list<SequenceTrack> = self.tracks;
+    for i in 0..old.len() {
+        var track: SequenceTrack = old[i];
+        if i == index || (linked > 0 && track.instrument && track.instrument_id == linked) {
+            var ids: list<i32> = [];
+            for n in 0..4 { let value: i32 = n == position ? id : track.insert_id(i32(n)); ids.push(value); }
+            track.inserts = ids; self.replace_track(i32(i), track);
+        }
+    }
+}
+pub fn insert_labels(self: &mut Self, output: AudioController) -> void {
+    if self.group_detail_rows == 0 { return; }
+    let old: list<TableGroup> = self.groups; var groups: list<TableGroup> = [];
+    for i in 0..old.len() {
+        var group: TableGroup = old[i]; group.details = [];
+        let track: SequenceTrack = self.tracks[i];
+        for n in 0..4 {
+            let id: i32 = track.insert_id(i32(n));
+            group.details.push(id > 0 ? output.instrument_name(id + 40) : "- empty -");
+        }
+        groups.push(group);
+    }
+    self.groups = groups;
+}
+/// Returns 115=load/edit, 116=remove. Insert mode never edits pattern cells.
+pub fn insert_event(self: &mut Self, event: InputEvent, area: Rect) -> i32 {
+    if event.code == 102 && event.modifiers == 1 {
+        self.group_detail_rows = self.group_detail_rows == 0 ? 4 : 0;
+        self.selected_group_detail = self.group_detail_rows == 0 ? -1 : 0;
+        self.visual = false; self.delete_pending = false; self.reconcile(area); return 0;
+    }
+    if self.group_detail_rows == 0 { return 0; }
+    if event.kind == InputKind::Menu {
+        if event.key == Key::Left || event.key == Key::Right { self.mixer_event(event, area); }
+        if event.key == Key::Up && self.selected_group_detail > 0 { self.selected_group_detail = self.selected_group_detail - 1; }
+        if event.key == Key::Down && self.selected_group_detail < 3 { self.selected_group_detail = self.selected_group_detail + 1; }
+        if event.key == Key::Enter { return 115; }
+    }
+    if event.code == 127 || event.code == 8 { return 116; }
+    return 0;
+}
 pub fn empty() -> SequenceTable {
     var table: SequenceTable = SequenceTable::new();
     let tracks: list<SequenceTrack> = table.tracks;
@@ -599,7 +649,7 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     }
     var tracks: list<SequenceTrack> = []; let source_tracks: list<SequenceTrack> = self.tracks;
     for track in source_tracks {
-        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, record_armed: track.record_armed, sends: track.copy_sends(), audio: track.audio, instrument: track.instrument, instrument_id: track.instrument_id, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom, zoom_stage: track.zoom_stage,
+        tracks.push(SequenceTrack { name: clone(track.name), muted: track.muted, volume: track.volume, pan: track.pan, record_armed: track.record_armed, sends: track.copy_sends(), inserts: track.inserts, audio: track.audio, instrument: track.instrument, instrument_id: track.instrument_id, note_lines: track.note_lines, instances: track.copy_audio(), wave_zoom: track.wave_zoom, zoom_stage: track.zoom_stage,
             cc1: AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum } });
     }
@@ -669,6 +719,10 @@ pub fn assign_instrument(self: &mut Self, id: i32) -> bool {
     if index < 0 { return false; }
     var track: SequenceTrack = self.tracks[index];
     if !track.instrument { self.error = "Select an Instrument track first"; return false; }
+    for i in 0..self.tracks.len() {
+        let other: SequenceTrack = self.tracks[i];
+        if i != index && id > 0 && other.instrument && other.instrument_id == id { track.inserts = other.inserts; }
+    }
     track.instrument_id = id; self.replace_track(index, track);
     self.revision = self.revision + 1; self.error = ""; return true;
 }
@@ -688,7 +742,7 @@ pub fn create_instrument_track(self: &mut Self, id: i32, area: Rect) -> void {
     var track: SequenceTrack = self.tracks[index];
     free(track.name); track.name = format!("Instrument {}", self.next_track_id - 1);
     track.instrument = true; track.instrument_id = id;
-    self.replace_track(index, track); self.rebuild_columns();
+    self.replace_track(index, track); self.assign_instrument(id); self.rebuild_columns();
 }
 pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Rect) -> void {
     if self.tracks.len() >= 64 { self.error = "Maximum 64 tracks"; return; }
@@ -704,6 +758,7 @@ pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Re
             cc1: AutomationSlot { parameter: clone(original.cc1.parameter), minimum: original.cc1.minimum, maximum: original.cc1.maximum },
             cc2: AutomationSlot { parameter: clone(original.cc2.parameter), minimum: original.cc2.minimum, maximum: original.cc2.maximum } };
     }
+    if duplicate && track.instrument { let original: SequenceTrack = self.tracks[source]; track.inserts = original.inserts; }
     self.tracks.push(track);
     if !duplicate { self.next_track_id = self.next_track_id + 1; }
     var rows: list<TableRow> = [];

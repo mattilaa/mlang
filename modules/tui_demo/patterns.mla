@@ -6,6 +6,7 @@ use tui_demo::audio_library::AudioLibrary;
 use tui_demo::audio_clip::AudioClip;
 use tui::listview::*;
 use tui_demo::sequence::SequenceTable;
+use tui_demo::sequence::SequenceTrack;
 use tui::textfield::TextField;
 use tui::dialog::Dialog;
 use tui::geometry::*;
@@ -28,6 +29,19 @@ pub struct PatternLibrary {
     var instruments: ListView; var instruments_mode: bool;
 };
 impl PatternLibrary {
+    /// Reuse only plugin IDs no longer referenced by any committed/live pattern.
+    pub fn free_insert_id(self: PatternLibrary, count: i32) -> i32 {
+        for id in 1..count + 1 {
+            var used: bool = false; let patterns: list<PatternEntry> = self.patterns;
+            for entry in patterns {
+                var data: SequenceTable = SequenceTable {}; data = entry.id == self.active_id ? self.table : entry.data;
+                let tracks: list<SequenceTrack> = data.tracks;
+                for track in tracks { for n in 0..4 { if track.insert_id(i32(n)) == id { used = true; } } }
+            }
+            if !used { return i32(id); }
+        }
+        return count + 1;
+    }
     pub fn adopt(self: &mut Self, source: &PatternLibrary) -> void {
         var next: PatternLibrary = PatternLibrary {}; next = source;
         self.release();

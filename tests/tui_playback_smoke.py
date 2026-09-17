@@ -102,14 +102,14 @@ def main():
             with wave.open(path, "wb") as wav:
                 wav.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
                 wav.writeframes(struct.pack("<h", 16384) * 72000)
-            send(b"\tlllll\r")
+            send(b"\tllllll\r")
             until(lambda s: "Add audio" in s)
             send(b"\x15" + path.encode() + b"\r")
             until(lambda s: "WAVE" in s and "Add audio" not in s)
             send(b"s" + b"\x1b[108;5u" * 4)
-            before = until(lambda s: " Sample " in s)
+            before = until(lambda s: " Sample: " in s)
             send(b" ")
-            followed = until(lambda s: "PLAY" in s and " Sample " in s and
+            followed = until(lambda s: "PLAY" in s and " Sample: " in s and
                              (m := re.search(r"\| (\d+)\.\.(\d+) ms", s)) is not None and int(m[1]) > 0)
             assert followed != before
             send(b" ")

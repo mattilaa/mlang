@@ -9,6 +9,8 @@
 #include <fstream>
 #include <string>
 extern "C" {
+struct FloatList { int64_t size; const float *data; };
+int64_t __mlang_std_audio_controller_sample_data(int64_t, FloatList, int64_t, int64_t);
 void mlacker_install_vst3_host();
 int64_t __mlang_std_audio_controller_new(int64_t, int64_t);
 int64_t __mlang_std_audio_controller_open(int64_t, int64_t);
@@ -27,6 +29,8 @@ int32_t __mlang_std_audio_controller_live_control(int64_t, int64_t, int64_t, int
 int32_t __mlang_std_audio_controller_track_volume(int64_t, int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_instrument_peak(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_load_effect(int64_t, int64_t, const char*);
+int32_t __mlang_std_audio_controller_load_insert(int64_t, int64_t, const char*);
+int32_t __mlang_std_audio_controller_insert_route(int64_t, int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_effect_send(int64_t, int64_t, int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_effect_volume(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_effect_peak(int64_t, int64_t, int64_t);
@@ -429,6 +433,39 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
     CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .125f); // empty FX preserves dry
     CHECK(__mlang_std_audio_controller_parameter_info(c, 33, 0, 0) == -1);
+    CHECK(__mlang_std_audio_controller_close(c) == 0);
+    c = __mlang_std_audio_controller_new(48000, 128);
+    CHECK(__mlang_std_audio_controller_load_instrument(c, 1, argv[1]) == 0);
+    for(int n = 0; n < 4; ++n) {
+        CHECK(__mlang_std_audio_controller_load_insert(c, n + 1, argv[2]) == 0);
+        CHECK(__mlang_std_audio_controller_insert_route(c, 64, n, n + 1) == 0);
+    }
+    CHECK(__mlang_std_audio_controller_load_insert(c, 1, argv[1]) == -1);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 41, 0, 0) == 40);
+    CHECK(__mlang_std_audio_controller_insert_route(c, 64, 4, 1) == -1);
+    CHECK(__mlang_std_audio_controller_midi_target(c, 0, 1) == 0);
+    CHECK(__mlang_std_audio_controller_live_note(c, 1, 0, 60, 127) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .0078125f) < 1.e-7f);
+    CHECK(__mlang_std_audio_controller_set_parameter(c, 41, 0, .5) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .00390625f) < 1.e-7f);
+    CHECK(__mlang_std_audio_controller_insert_route(c, 64, 0, 0) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .015625f) < 1.e-7f);
+    CHECK(__mlang_std_audio_controller_close(c) == 0);
+    c = __mlang_std_audio_controller_new(48000, 128);
+    CHECK(__mlang_std_audio_controller_load_insert(c, 1, argv[2]) == 0);
+    CHECK(__mlang_std_audio_controller_insert_route(c, 0, 0, 1) == 0);
+    std::vector<float> pcm(2048, .5f);
+    CHECK(__mlang_std_audio_controller_sample_data(c, FloatList{2048, pcm.data()}, 1, 48000) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 4, 0, 0, 0, 0, -1, 0, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 4, 0, 0, 0, 1, -1, 0, 1) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .1875f) < 1.e-7f); // one wet track, one unaffected
+    CHECK(__mlang_std_audio_controller_track_volume(c, 0, 0, 0) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .125f); // mute also mutes insert output
     CHECK(__mlang_std_audio_controller_close(c) == 0);
     CHECK(__mlang_std_audio_pcm_block_close(b) == 0);
     std::puts("PASS: real VST3 bundle load, frame-timed MIDI, output, panic, failed replacement, reload");

@@ -153,6 +153,25 @@ selected. Audio tracks do not record MIDI. Menus, dialogs, plugin editors, text
 editing, and visual selection suspend recording. Volume is saved in `.mlack`;
 record-arm is transient and starts off when a session is loaded.
 
+### Track inserts
+
+With Pattern view focused, `f` toggles four insert slots between each track name
+and its NOTE/VEL column headers. While shown, `h/l` selects a track and `j/k`
+selects one of its four slots. Enter browses for a VST3 audio effect in an empty
+slot, or opens the existing effect's parameter editor. **Effect → Edit effect
+plugin** also edits the selected insert. Backspace removes the slot's assignment;
+`f` returns to normal pattern navigation. Loaded plugin names appear in the slots.
+
+Inserts process serially from top to bottom, before channel volume and aux sends.
+They work on sample tracks, MIDI preview audio, and VST instrument outputs.
+Tracks assigned to the same VST instrument share its output and insert chain.
+Pattern copies retain their insert assignments; a duplicated non-instrument track
+starts with empty inserts so it does not reuse another audio stream's processor.
+`.mlack` preserves assignments, exposed parameters, and the active insert view;
+audio-device changes restore parameters as well. Up to 256 insert instances are
+retained per session. Detached instances are reused on the next load only when no
+pattern references them, so removing an insert does not alter another pattern.
+
 ### Aux effect channels
 
 Choose **Effect → Add effect channel** to create an aux return (up to eight).
@@ -298,7 +317,8 @@ Current scope:
 
 - macOS, native-architecture VST3 bundles; float32 mono/stereo, at most one audio
   input bus and one output bus, and the first MIDI input bus.
-- One master slot plus 32 instrument slots; no per-track effect chains, native plugin editor windows, opaque preset
+- One master slot plus 32 instrument slots, eight aux returns, and four inserts
+  per track; no native plugin editor windows, opaque preset
   persistence, arbitrary named-parameter automation, sidechains,
   latency compensation, or transport/tempo synchronization yet.
 - Existing UI-loop sequencer timing is retained. The audio API supports absolute
