@@ -41,6 +41,14 @@ impl TransportStatus {
         if value < 20 || value > 400 { return false; }
         self.bpm = value; return true;
     }
+    /// While stopped, mirror the pattern cursor row so the status-bar time keeps
+    /// up with navigation instead of freezing at the last played position.
+    pub fn follow_row(self: &mut Self, row: i32) -> void {
+        if self.playing { return; }
+        self.row = row < 0 ? 0 : row; self.phase = 0;
+        self.ticks = wide(self.row) * 15000;
+        self.elapsed_ms = i32(wide(self.row) * 15000 / wide(self.bpm));
+    }
     pub fn paint(self: TransportStatus, surface: Surface, area: Rect, theme: Theme) -> void {
         if area.width <= 0 || area.height <= 0 { return; }
         let row: Rect = Rect::new(area.x, area.y, area.width, 1);

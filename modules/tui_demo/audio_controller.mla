@@ -15,7 +15,7 @@ use std::strbuf::free;
 
 /// Control-thread owner. AUHAL owns rendering; MIDI uses its separate lane.
 pub struct EffectChannel { var path: str8{""}; var volume: i32{100}; };
-pub struct SamplePlacement { var sample: i64; var track: i64; var start: i64; var duration: i64; var rate: i64; var next: i64; };
+pub struct SamplePlacement { var sample: i64; var track: i64; var start: i64; var duration: i64; var rate: i64; var next: i64; var head: i64; };
 pub struct AudioSystem {
     var output: AudioController; var midi: MidiController;
     var midi_id: i64{-1}; var output_id: i64{-1};
@@ -133,15 +133,15 @@ impl AudioSystem {
                 if !track.audio { continue; }
                 let instances: list<AudioInstance> = track.instances;
                 for instance in instances {
+                    let rc: AudioClip = instance.render_clip();
                     let id: i64 = self.output.add_sample_data(instance.clip.samples, instance.clip.channels, instance.clip.sample_rate);
                     if id < 0 { valid = false; continue; }
                     let start: i64 = wide(instance.start_row) * 15000;
-                    var duration: i64 = instance.clip.frames * wide(bpm) * 1000 / instance.clip.sample_rate;
-                    if instance.length_ticks > 0 && wide(instance.length_ticks) < duration { duration = wide(instance.length_ticks); }
+                    let duration: i64 = rc.frames * wide(bpm) * 1000 / instance.clip.sample_rate;
                     var next: i64 = tick / period * period + start;
                     if next + duration <= tick { next = next + period; }
                     self.sample_placements.push(SamplePlacement { sample: id, track: t, start: start, duration: duration,
-                        rate: instance.clip.sample_rate, next: next });
+                        rate: instance.clip.sample_rate, next: next, head: rc.offset });
                 }
             }
             if restart { if self.output.start() != 0 { valid = false; } }
@@ -157,7 +157,7 @@ impl AudioSystem {
                 if tick - placement.next >= period { placement.next = placement.next + (tick - placement.next) / period * period; }
                 let elapsed: i64 = tick - placement.next;
                 if elapsed < placement.duration {
-                    let offset: i64 = elapsed * placement.rate / (wide(bpm) * 1000);
+                    let offset: i64 = placement.head + elapsed * placement.rate / (wide(bpm) * 1000);
                     let length: i64 = (placement.duration - elapsed) * placement.rate / (wide(bpm) * 1000);
                     if length > 0 { self.output.play_sample(placement.sample, placement.track, offset, length); }
                 }

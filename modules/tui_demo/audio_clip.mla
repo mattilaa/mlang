@@ -4,7 +4,20 @@ mod tui::geometry;
 use std::audio::PcmAudio;
 use std::strbuf::clone;
 use std::strbuf::free;
+use std::strbuf::len;
+use std::strbuf::sub;
 use tui::geometry::wide;
+
+/// Owned final path component, splitting on both '/' and '\' separators.
+pub fn base_name(path: str8) -> str8 {
+    var start: i64 = len(path);
+    while start > 0 {
+        let character: str8 = sub(path, start - 1, 1);
+        let separator: bool = character == "/" || character == "\\"; free(character);
+        if separator { break; } start = start - 1;
+    }
+    return sub(path, start, len(path) - start);
+}
 
 pub struct WavePeak {
     var left: i32; var right: i32;
@@ -17,12 +30,14 @@ pub struct AudioClip {
     var samples: list<f32>; var channels: i64; var sample_rate: i64;
     var frames: i64; var frames_per_row: i64;
     var detail_peaks: list<WavePeak>;
+    // Transient render window start (frames into `samples`); never serialized.
+    var offset: i64;
 };
 impl AudioClip {
     pub fn copy(self: AudioClip) -> AudioClip {
         var copy: AudioClip = AudioClip {};
         copy.samples = self.samples; copy.channels = self.channels; copy.sample_rate = self.sample_rate;
-        copy.frames = self.frames; copy.frames_per_row = self.frames_per_row;
+        copy.frames = self.frames; copy.frames_per_row = self.frames_per_row; copy.offset = self.offset;
         if self.peaks.len() > 0 {
             copy.source = clone(self.source);
             let peaks: list<WavePeak> = self.peaks;

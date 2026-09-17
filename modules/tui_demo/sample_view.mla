@@ -10,21 +10,22 @@ use tui::input::InputEvent;
 use std::strbuf::free;
 
 pub struct SampleView { var grainy: bool{true}; var wave: bool; var zoom: i32; var visible: bool;
-    var sel_start: i64; var sel_end: i64; var sel_frames: i64; };
+    var sel_start: i64; var sel_end: i64; var sel_frames: i64;
+    var anchor_frame: i64; var anchor_active: bool; };
 impl SampleView {
     /// Reset the trim selection to cover the whole clip of `frames` frames.
     pub fn reset_selection(self: &mut Self, frames: i64) -> void {
-        self.sel_start = 0; self.sel_end = frames; self.sel_frames = frames;
+        self.sel_start = 0; self.sel_end = frames; self.sel_frames = frames; self.anchor_active = false;
     }
     fn move_start(self: &mut Self, delta: i64) -> void {
         var v: i64 = self.sel_start + delta;
         if v < 0 { v = 0; } if v >= self.sel_end { v = self.sel_end - 1; }
-        self.sel_start = v;
+        self.sel_start = v; self.anchor_frame = v; self.anchor_active = true;
     }
     fn move_end(self: &mut Self, delta: i64, frames: i64) -> void {
         var v: i64 = self.sel_end + delta;
         if v > frames { v = frames; } if v <= self.sel_start { v = self.sel_start + 1; }
-        self.sel_end = v;
+        self.sel_end = v; self.anchor_frame = v; self.anchor_active = true;
     }
     pub fn span(self: SampleView, source: &AudioClip, pixels: i32) -> i64 {
         var clip: AudioClip = AudioClip {}; clip = source;
@@ -70,10 +71,11 @@ impl SampleView {
         var clip: AudioClip = AudioClip {}; clip = source;
         surface.fill(area, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
         if area.width <= 2 || area.height < 2 || clip.frames <= 0 || clip.channels < 1 || clip.channels > 2 ||
-            clip.sample_rate <= 0 || clip.samples.len() < clip.frames * clip.channels { return; }
+            clip.sample_rate <= 0 || clip.samples.len() < (clip.offset + clip.frames) * clip.channels { return; }
         let pixels: i32 = (area.width - 2) * (self.grainy ? 2 : 1);
         let span: i64 = self.span(clip, pixels);
         var cursor: i64 = wide(row) * clip.frames_per_row + phase * clip.frames_per_row / 15000;
+        if self.anchor_active { cursor = self.anchor_frame; }
         if cursor >= clip.frames { cursor = clip.frames - 1; } if cursor < 0 { cursor = 0; }
         var start: i64 = cursor - span / 2;
         if start < 0 { start = 0; } if start + span > clip.frames { start = clip.frames - span; }
@@ -119,10 +121,11 @@ impl SampleView {
             let first: i64 = start + x * span / wide(width);
             let next: i64 = start + (x + 1) * span / wide(width);
             let end: i64 = next > first ? next : first + 1;
-            let initial: f32 = clip.samples[first * clip.channels + channel];
+            let base: i64 = clip.offset * clip.channels + channel;
+            let initial: f32 = clip.samples[base + first * clip.channels];
             var low: f32 = initial; var high: f32 = initial; var last: f32 = initial;
             for frame in first..end {
-                let sample: f32 = clip.samples[frame * clip.channels + channel];
+                let sample: f32 = clip.samples[base + frame * clip.channels];
                 if sample < low { low = sample; } if sample > high { high = sample; } last = sample;
             }
             var top: i32 = sample_y(high, height); var bottom: i32 = sample_y(low, height);
