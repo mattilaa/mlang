@@ -68,7 +68,24 @@ cmake -S . -B build/cmake -DCMAKE_BUILD_TYPE=Release \
 cmake --build build/cmake --target MlaVerb
 ```
 
-## Use in mlacker
+### Linux: position-independent runtime required
+
+A `.vst3` is a shared object, so on Linux every input must be
+position-independent. macOS (and therefore mlacker) builds PIC by default, so
+this only applies to Linux hosts:
+
+- Compile the DSP as PIC. The plain `mlang -c` object is not guaranteed PIC, so
+  emit LLVM IR and let clang produce a PIC object:
+
+  ```sh
+  mlang -emit-llvm src/mla_verb_dsp.mla -O2 -o mla_verb_dsp.ll
+  clang -fPIC -O2 -c mla_verb_dsp.ll -o mla_verb_dsp.o
+  ```
+
+- Point `-DMLANG_STD_LIBRARY` at a **PIC** build of `libmlang_std.a` (build the
+  `mlang_std` target in a tree configured with `-DCMAKE_POSITION_INDEPENDENT_CODE=ON`).
+  A non-PIC archive fails to link into the shared object.
+
 
 Mla Verb is a mono/stereo audio effect (subcategory `Fx|Reverb`), which is
 exactly what mlacker's aux/master effect slots accept:

@@ -18,22 +18,21 @@
 
 // --- MLang DSP bridge (compiled from src/mla_verb_dsp.mla) -------------------
 // Opaque per-instance handle owned here on the C++ side.
-struct MlaVerb;
-extern "C" MlaVerb *mlaverb_create__f32(float sampleRate);
-extern "C" void mlaverb_destroy__ptr_struct_MlaVerb(MlaVerb *handle);
-extern "C" void mlaverb_reset__ptr_struct_MlaVerb(MlaVerb *handle);
-extern "C" void mlaverb_set_type__ptr_struct_MlaVerb_i32(MlaVerb *handle, int index);
-extern "C" void mlaverb_set_size__ptr_struct_MlaVerb_f32(MlaVerb *handle, float value);
-extern "C" void mlaverb_set_decay__ptr_struct_MlaVerb_f32(MlaVerb *handle, float seconds);
-extern "C" void mlaverb_set_damp__ptr_struct_MlaVerb_f32(MlaVerb *handle, float value);
-extern "C" void mlaverb_set_diffusion__ptr_struct_MlaVerb_f32(MlaVerb *handle, float value);
-extern "C" void mlaverb_set_predelay__ptr_struct_MlaVerb_f32(MlaVerb *handle, float milliseconds);
-extern "C" void mlaverb_set_early__ptr_struct_MlaVerb_f32(MlaVerb *handle, float value);
-extern "C" void mlaverb_set_width__ptr_struct_MlaVerb_f32(MlaVerb *handle, float value);
-extern "C" void mlaverb_set_mix__ptr_struct_MlaVerb_f32(MlaVerb *handle, float value);
-extern "C" void mlaverb_set_freeze__ptr_struct_MlaVerb_i32(MlaVerb *handle, int enabled);
-extern "C" float mlaverb_process__ptr_struct_MlaVerb_f32_f32(MlaVerb *handle, float left, float right);
-extern "C" float mlaverb_right__ptr_struct_MlaVerb(MlaVerb *handle);
+struct Reverb2;
+extern "C" Reverb2 *mlaverb_create__f32(float sampleRate);
+extern "C" void mlaverb_destroy__ptr_struct_Reverb2(Reverb2 *handle);
+extern "C" void mlaverb_reset__ptr_struct_Reverb2(Reverb2 *handle);
+extern "C" void mlaverb_set_type__ptr_struct_Reverb2_i32(Reverb2 *handle, int index);
+extern "C" void mlaverb_set_size__ptr_struct_Reverb2_f32(Reverb2 *handle, float value);
+extern "C" void mlaverb_set_decay__ptr_struct_Reverb2_f32(Reverb2 *handle, float seconds);
+extern "C" void mlaverb_set_damp__ptr_struct_Reverb2_f32(Reverb2 *handle, float value);
+extern "C" void mlaverb_set_diffusion__ptr_struct_Reverb2_f32(Reverb2 *handle, float value);
+extern "C" void mlaverb_set_predelay__ptr_struct_Reverb2_f32(Reverb2 *handle, float milliseconds);
+extern "C" void mlaverb_set_early__ptr_struct_Reverb2_f32(Reverb2 *handle, float value);
+extern "C" void mlaverb_set_width__ptr_struct_Reverb2_f32(Reverb2 *handle, float value);
+extern "C" void mlaverb_set_mix__ptr_struct_Reverb2_f32(Reverb2 *handle, float value);
+extern "C" void mlaverb_set_freeze__ptr_struct_Reverb2_i32(Reverb2 *handle, int enabled);
+extern "C" float mlaverb_process__ptr_struct_Reverb2_f32_f32_ptr_f32(Reverb2 *handle, float left, float right, float *outRight);
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -187,7 +186,7 @@ class Processor final : public SingleComponentEffect, public IMidiMapping {
     tresult PLUGIN_API setActive(TBool state) SMTG_OVERRIDE
     {
         if(!state && dsp_)
-            mlaverb_reset__ptr_struct_MlaVerb(dsp_);
+            mlaverb_reset__ptr_struct_Reverb2(dsp_);
         return SingleComponentEffect::setActive(state);
     }
 
@@ -221,8 +220,8 @@ class Processor final : public SingleComponentEffect, public IMidiMapping {
         }
 
         for(int32 i = 0; i < data.numSamples; ++i) {
-            const float left = mlaverb_process__ptr_struct_MlaVerb_f32_f32(dsp_, inL[i], inR[i]);
-            const float right = mlaverb_right__ptr_struct_MlaVerb(dsp_);
+            float right = 0.0f;
+            const float left = mlaverb_process__ptr_struct_Reverb2_f32_f32_ptr_f32(dsp_, inL[i], inR[i], &right);
             outL[i] = left;
             outR[i] = right;
         }
@@ -257,7 +256,7 @@ class Processor final : public SingleComponentEffect, public IMidiMapping {
     }
 
   private:
-    MlaVerb *dsp_ = nullptr;
+    Reverb2 *dsp_ = nullptr;
     double norm_[kNumParams] = {};
 
     static ParamID paramIdAt(int index) { return static_cast<ParamID>(kTypeParam + index); }
@@ -270,7 +269,7 @@ class Processor final : public SingleComponentEffect, public IMidiMapping {
     void destroyHandle()
     {
         if(dsp_) {
-            mlaverb_destroy__ptr_struct_MlaVerb(dsp_);
+            mlaverb_destroy__ptr_struct_Reverb2(dsp_);
             dsp_ = nullptr;
         }
     }
@@ -280,15 +279,15 @@ class Processor final : public SingleComponentEffect, public IMidiMapping {
     {
         if(!dsp_)
             return;
-        mlaverb_set_size__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(norm_[1]));
-        mlaverb_set_decay__ptr_struct_MlaVerb_f32(dsp_, decaySecondsFromNorm(norm_[2]));
-        mlaverb_set_damp__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(norm_[3]));
-        mlaverb_set_mix__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(norm_[4]));
-        mlaverb_set_predelay__ptr_struct_MlaVerb_f32(dsp_, predelayMsFromNorm(norm_[5]));
-        mlaverb_set_width__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(norm_[6]));
-        mlaverb_set_diffusion__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(norm_[7]));
-        mlaverb_set_early__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(norm_[8]));
-        mlaverb_set_freeze__ptr_struct_MlaVerb_i32(dsp_, norm_[9] >= 0.5 ? 1 : 0);
+        mlaverb_set_size__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(norm_[1]));
+        mlaverb_set_decay__ptr_struct_Reverb2_f32(dsp_, decaySecondsFromNorm(norm_[2]));
+        mlaverb_set_damp__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(norm_[3]));
+        mlaverb_set_mix__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(norm_[4]));
+        mlaverb_set_predelay__ptr_struct_Reverb2_f32(dsp_, predelayMsFromNorm(norm_[5]));
+        mlaverb_set_width__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(norm_[6]));
+        mlaverb_set_diffusion__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(norm_[7]));
+        mlaverb_set_early__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(norm_[8]));
+        mlaverb_set_freeze__ptr_struct_Reverb2_i32(dsp_, norm_[9] >= 0.5 ? 1 : 0);
     }
 
     // Selecting a type loads its character preset (and clears the tail); the
@@ -297,7 +296,7 @@ class Processor final : public SingleComponentEffect, public IMidiMapping {
     {
         if(!dsp_)
             return;
-        mlaverb_set_type__ptr_struct_MlaVerb_i32(dsp_, typeIndexFromNorm(norm_[0]));
+        mlaverb_set_type__ptr_struct_Reverb2_i32(dsp_, typeIndexFromNorm(norm_[0]));
         pushContinuous();
     }
 
@@ -316,15 +315,15 @@ class Processor final : public SingleComponentEffect, public IMidiMapping {
             return;
         switch(id) {
             case kTypeParam: applyType(); break;
-            case kSizeParam: mlaverb_set_size__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(value)); break;
-            case kDecayParam: mlaverb_set_decay__ptr_struct_MlaVerb_f32(dsp_, decaySecondsFromNorm(value)); break;
-            case kDampParam: mlaverb_set_damp__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(value)); break;
-            case kMixParam: mlaverb_set_mix__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(value)); break;
-            case kPredelayParam: mlaverb_set_predelay__ptr_struct_MlaVerb_f32(dsp_, predelayMsFromNorm(value)); break;
-            case kWidthParam: mlaverb_set_width__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(value)); break;
-            case kDiffusionParam: mlaverb_set_diffusion__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(value)); break;
-            case kEarlyParam: mlaverb_set_early__ptr_struct_MlaVerb_f32(dsp_, static_cast<float>(value)); break;
-            case kFreezeParam: mlaverb_set_freeze__ptr_struct_MlaVerb_i32(dsp_, value >= 0.5 ? 1 : 0); break;
+            case kSizeParam: mlaverb_set_size__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(value)); break;
+            case kDecayParam: mlaverb_set_decay__ptr_struct_Reverb2_f32(dsp_, decaySecondsFromNorm(value)); break;
+            case kDampParam: mlaverb_set_damp__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(value)); break;
+            case kMixParam: mlaverb_set_mix__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(value)); break;
+            case kPredelayParam: mlaverb_set_predelay__ptr_struct_Reverb2_f32(dsp_, predelayMsFromNorm(value)); break;
+            case kWidthParam: mlaverb_set_width__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(value)); break;
+            case kDiffusionParam: mlaverb_set_diffusion__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(value)); break;
+            case kEarlyParam: mlaverb_set_early__ptr_struct_Reverb2_f32(dsp_, static_cast<float>(value)); break;
+            case kFreezeParam: mlaverb_set_freeze__ptr_struct_Reverb2_i32(dsp_, value >= 0.5 ? 1 : 0); break;
         }
     }
 
