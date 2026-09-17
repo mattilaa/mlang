@@ -1,0 +1,128 @@
+/// \file mla_verb_dsp.mla
+/// \brief C-ABI bridge that drives the shared dsp::reverb2 FDN reverb.
+///
+/// State is per plug-in instance: `mlaverb_create` heap-allocates one
+/// `MlaVerb` and returns an opaque pointer that the C++ VST3 layer stores and
+/// passes back to every call. This keeps multiple loaded instances independent
+/// (mlacker allows several aux/effect slots), unlike module-level globals.
+///
+/// All numeric ranges are physical (seconds, milliseconds, 0..1 controls); the
+/// C++ side maps VST3 normalized parameters onto them.
+
+mod dsp::reverb2;
+use dsp::reverb2::Reverb2;
+use dsp::reverb2::Reverb2Type;
+use dsp::reverb2::Reverb2Frame;
+
+extern fn calloc(count: i64, size: i64) -> ptr<MlaVerb>;
+extern fn free(block: ptr<MlaVerb>) -> void;
+
+/// @brief One reverb instance plus the stashed right-channel output.
+struct MlaVerb {
+    var reverb: Reverb2;
+    var out_right: f32;
+};
+
+fn mlaverb_type_from_index(index: i32) -> Reverb2Type {
+    if index <= 0 { return Reverb2Type::Hall; }
+    if index == 1 { return Reverb2Type::Room; }
+    if index == 2 { return Reverb2Type::Plate; }
+    if index == 3 { return Reverb2Type::Gated; }
+    if index == 4 { return Reverb2Type::Reverse; }
+    if index == 5 { return Reverb2Type::NonlinearShort; }
+    if index == 6 { return Reverb2Type::NonlinearLong; }
+    if index == 7 { return Reverb2Type::Custom; }
+    return Reverb2Type::InfiniteHall;
+}
+
+/// @brief Allocate a reverb instance for a sample rate (8 kHz..384 kHz).
+/// @return Opaque handle owned by the caller; release with `mlaverb_destroy`.
+fn mlaverb_create(sample_rate: f32) -> ptr<MlaVerb> {
+    var rate: f32 = sample_rate;
+    if rate < 8000.0f { rate = 8000.0f; }
+    if rate > 384000.0f { rate = 384000.0f; }
+    // `calloc` zero-fills the block so the fields below read as empty/null before
+    // assignment; that keeps MLang's implicit drop of the previous field value a
+    // safe no-op instead of freeing uninitialised garbage. Assign each field the
+    // constructor rvalue directly so the heap-backed reverb is moved into place
+    // (a whole-struct literal store would copy then drop a temporary, leaving the
+    // delay buffers dangling).
+    let handle: ptr<MlaVerb> = calloc(1, size_of(MlaVerb));
+    unsafe {
+        (*handle).reverb = Reverb2::new(rate);
+        (*handle).out_right = 0.0f;
+    }
+    return handle;
+}
+
+/// @brief Release a reverb instance created by `mlaverb_create`.
+fn mlaverb_destroy(handle: ptr<MlaVerb>) {
+    unsafe {
+        let dead: MlaVerb = *handle;
+        dead.out_right = 0.0f;
+    }
+    free(handle);
+}
+
+/// @brief Clear all reverb history without reallocating.
+fn mlaverb_reset(handle: ptr<MlaVerb>) {
+    unsafe {
+        (*handle).reverb.reset();
+        (*handle).out_right = 0.0f;
+    }
+}
+
+fn mlaverb_set_type(handle: ptr<MlaVerb>, index: i32) {
+    unsafe { (*handle).reverb.set_type(mlaverb_type_from_index(index)); }
+}
+
+fn mlaverb_set_size(handle: ptr<MlaVerb>, value: f32) {
+    unsafe { (*handle).reverb.set_size(value); }
+}
+
+fn mlaverb_set_decay(handle: ptr<MlaVerb>, seconds: f32) {
+    unsafe { (*handle).reverb.set_decay_seconds(seconds); }
+}
+
+fn mlaverb_set_damp(handle: ptr<MlaVerb>, value: f32) {
+    unsafe { (*handle).reverb.set_damping(value); }
+}
+
+fn mlaverb_set_diffusion(handle: ptr<MlaVerb>, value: f32) {
+    unsafe { (*handle).reverb.set_diffusion(value); }
+}
+
+fn mlaverb_set_predelay(handle: ptr<MlaVerb>, milliseconds: f32) {
+    unsafe { (*handle).reverb.set_predelay_ms(milliseconds); }
+}
+
+fn mlaverb_set_early(handle: ptr<MlaVerb>, value: f32) {
+    unsafe { (*handle).reverb.set_early_mix(value); }
+}
+
+fn mlaverb_set_width(handle: ptr<MlaVerb>, value: f32) {
+    unsafe { (*handle).reverb.set_stereo_width(value); }
+}
+
+fn mlaverb_set_mix(handle: ptr<MlaVerb>, value: f32) {
+    unsafe { (*handle).reverb.set_mix(value); }
+}
+
+fn mlaverb_set_freeze(handle: ptr<MlaVerb>, enabled: i32) {
+    unsafe { (*handle).reverb.set_freeze(enabled != 0); }
+}
+
+/// @brief Process one stereo frame. Returns the left output; retrieve the
+/// matching right output with `mlaverb_right` immediately afterwards.
+fn mlaverb_process(handle: ptr<MlaVerb>, input_left: f32, input_right: f32) -> f32 {
+    unsafe {
+        let frame: Reverb2Frame = (*handle).reverb.process_stereo(input_left, input_right);
+        (*handle).out_right = frame.right();
+        return frame.left();
+    }
+}
+
+/// @brief Right output stashed by the most recent `mlaverb_process` call.
+fn mlaverb_right(handle: ptr<MlaVerb>) -> f32 {
+    unsafe { return (*handle).out_right; }
+}

@@ -1,0 +1,53 @@
+[package]
+name = "mla_verb"
+version = "0.1.0"
+module_paths = ["../../modules"]
+
+[dependencies]
+vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", rev = "3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96", submodules = true, build = "none", spinner = false }
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+deps_dir = "build/deps"
+
+# The MLang runtime archive the plug-in links against. Built from the repo root.
+[[task]]
+name = "prepare"
+print = "[mla_verb] Preparing build tree and MLang runtime archive"
+workdir = "{{root}}"
+commands = [
+  "mkdir -p {{build_dir}}/obj {{build_dir}}/cmake",
+  "cmake --build ../../build --target mlang_std -j4"
+]
+
+[[task]]
+name = "compile-dsp"
+phase = "compile"
+print = "[mla_verb] Compiling the MLang reverb DSP object"
+workdir = "{{root}}"
+depends_on = ["prepare"]
+language = "mlang"
+source = "src/mla_verb_dsp.mla"
+output = "{{build_dir}}/obj/mla_verb_dsp.o"
+compile_only = true
+opt_level = "O2"
+
+[[task]]
+name = "configure"
+print = "[mla_verb] Configuring the CMake project for the VST3 effect bundle"
+workdir = "{{root}}"
+depends_on = ["compile-dsp"]
+commands = [
+  "cmake -S {{root}} -B {{build_dir}}/cmake -DCMAKE_BUILD_TYPE=Release -DVST3_SDK_ROOT={{deps_dir}}/vst3sdk -DMLANG_DSP_OBJECT={{build_dir}}/obj/mla_verb_dsp.o -DMLANG_STD_LIBRARY=../../build/libmlang_std.a"
+]
+
+[[task]]
+name = "build"
+phase = "build"
+print = "[mla_verb] Building the Mla Verb .vst3 bundle"
+workdir = "{{root}}"
+depends_on = ["configure"]
+commands = [
+  "cmake --build {{build_dir}}/cmake --target MlaVerb -j4"
+]
