@@ -343,6 +343,35 @@ impl AudioSystem {
         self.pads = next;
         return "";
     }
+    /// After a destructive edit of session sample `sample`, re-send every pad
+    /// that uses it. Returns the number of pads refreshed, or -1 on failure.
+    pub fn refresh_pads(self: AudioSystem, sample: i32, clip: &AudioClip) -> i32 {
+        var source: AudioClip = AudioClip {}; source = clip;
+        let name: str8 = base_name(source.source);
+        var count: i32 = 0;
+        let pads: list<PadAssignment> = self.pads;
+        for entry in pads {
+            if entry.sample != sample { continue; }
+            if self.output.instrument_pad(entry.slot, entry.pad, source.samples, source.channels, source.sample_rate, name) != 0 { count = -1; break; }
+            count = count + 1;
+        }
+        free(name);
+        return count;
+    }
+    /// Empty a sampler pad and forget its session assignment. Owned error or "".
+    pub fn clear_pad(self: &mut Self, slot: i32, pad: i32) -> str8 {
+        if self.output.instrument_clear_pad(slot, pad) != 0 { return format!("Cannot clear pad: {}", __mlang_std_audio_last_error()); }
+        let old: list<PadAssignment> = self.pads; var next: list<PadAssignment> = [];
+        for entry in old { if entry.slot != slot || entry.pad != pad { next.push(entry); } }
+        self.pads = next;
+        return "";
+    }
+    /// Session sample index loaded into a pad, or -1.
+    pub fn pad_sample(self: AudioSystem, slot: i32, pad: i32) -> i32 {
+        let pads: list<PadAssignment> = self.pads;
+        for entry in pads { if entry.slot == slot && entry.pad == pad { return entry.sample; } }
+        return -1;
+    }
     fn forget_pads(self: &mut Self, slot: i32) -> void {
         let old: list<PadAssignment> = self.pads; var next: list<PadAssignment> = [];
         for entry in old { if entry.slot != slot { next.push(entry); } }

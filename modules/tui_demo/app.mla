@@ -26,6 +26,10 @@ use tui_demo::transport::TransportStatus;
 mod tui_demo::sample_view;
 use tui_demo::sample_view::SampleView;
 mod tui_demo::audio_clip;
+mod tui_demo::piano_dialog;
+mod tui_demo::sample_editor;
+use tui_demo::piano_dialog::PianoDialog;
+use tui_demo::sample_editor::SampleEditor;
 use tui_demo::audio_clip::base_name;
 mod tui_demo::bpm_dialog;
 mod tui_demo::note_playback;
@@ -35,6 +39,7 @@ mod tui_demo::midi_controller;
 use tui_demo::midi_controller::MidiInputEvent;
 use tui_demo::audio_controller::AudioSystem;
 use tui_demo::audio_controller::EffectChannel;
+use tui_demo::audio_controller::PadAssignment;
 use std::audio::controller::AudioController;
 mod tui_demo::settings_dialog;
 mod tui_demo::instrument_editor;
@@ -46,6 +51,7 @@ use tui_demo::frame_rate::FrameRate;
 mod tui_demo::session;
 use tui_demo::session::SessionCodec;
 use tui_demo::session::SessionData;
+use tui_demo::session::PresetResult;
 use tui_demo::session::SessionView;
 use tui_demo::midi_controller::MidiController;
 use std::env::detail::__env_args;
@@ -123,7 +129,8 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Move clip down", action: 104, enabled: true },
                                 MenuItem { label: "Trim to selection", action: 105, enabled: true },
                                 MenuItem { label: "Slice selection", action: 106, enabled: true },
-                                MenuItem { label: "Reverse clip", action: 102, enabled: true }] },
+                                MenuItem { label: "Reverse clip", action: 102, enabled: true },
+                                MenuItem { label: "Edit sample (destructive)", action: 107, enabled: true }] },
                     Menu { title: "Add", items: [MenuItem { label: "Audio", action: 60, enabled: true },
                                 MenuItem { label: "VST3 master plugin", action: 91, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Unload master VST3", action: 92, enabled: AudioController::processor_support() },
@@ -233,6 +240,9 @@ pub fn run() -> i32 {
     // Sampler pads: 117 = from the Audio list, 118 = from a file.
     var pad_action: i32 = 0; var pad_slot: i32 = 0; var pad_sample: i32 = -1; var pad_index: i32 = 0;
     var adding_pad_file: bool = false;
+    var preset_request: i32 = 0; var preset_path: str8 = clone(""); var preset_worker: bool = false;
+    var piano: PianoDialog = PianoDialog::new();
+    var sample_editor: SampleEditor = SampleEditor {};
     if !fixture {
         let arguments: list<str8> = __env_args();
         if arguments.len() == 2 { free(request_path); request_path = clone(arguments[1]); session_request = 1; }
@@ -337,6 +347,46 @@ pub fn run() -> i32 {
             free(message); message = clone(session_status); free(session_status);
             session_request = 0; menus.dismiss(); dirty = true;
         }
+        if preset_request != 0 {
+            // 100 = save, 101 = load. Kit presets carry a sampler's pads.
+            var kit_pads: list<i32> = []; var kit_clips: list<AudioClip> = [];
+            if preset_request == 100 {
+                let assigned: list<PadAssignment> = midi.pads;
+                for entry in assigned { if entry.slot == learn_slot { kit_pads.push(entry.pad); kit_clips.push(library.audio.samples[entry.sample]); } }
+            } else { midi.midi.release(); }
+            var preset: PresetResult = SessionCodec::preset_file(preset_path, midi.output, learn_slot, preset_request == 100, kit_pads, kit_clips);
+            free(message); message = preset.status;
+            if preset_request == 101 {
+                if preset.ok && preset.has_pads {
+                    // A kit replaces every pad of the instrument.
+                    let slot: i32 = i32(learn_slot);
+                    let pads: i64 = midi.output.instrument_sampler(slot, 1);
+                    let loaded: i64 = midi.output.instrument_sampler(slot, 2);
+                    var pad_mask: i64 = 1;
+                    for p in 0..pads {
+                        var kept: bool = false; let wanted: list<i32> = preset.pads;
+                        for pad in wanted { if pad == i32(p) { kept = true; } }
+                        if !kept && p < 63 && (loaded / pad_mask) % 2 == 1 { let cleared: str8 = midi.clear_pad(slot, i32(p)); if cleared != "" { free(cleared); } }
+                        if p < 62 { pad_mask = pad_mask * 2; }
+                    }
+                    var failed: str8 = "";
+                    for i in 0..preset.pads.len() {
+                        let clip: AudioClip = preset.clips[i];
+                        let name: str8 = base_name(clip.source);
+                        let index: i32 = library.audio.add_clip(clip);
+                        if index < 0 { failed = clone(library.audio.error); free(name); break; }
+                        let added: AudioClip = library.audio.samples[index];
+                        let error: str8 = midi.assign_pad(slot, preset.pads[i], index, added.samples, added.channels, added.sample_rate, name);
+                        free(name);
+                        if error != "" { failed = error; break; }
+                    }
+                    if failed != "" { free(message); message = format!("Preset parameters loaded, but a pad failed: {}", failed); }
+                    else { free(message); message = format!("Loaded kit preset: {} pad(s) | {}", preset.pads.len(), preset_path); }
+                } else { let unused: list<AudioClip> = preset.clips; for clip in unused { clip.release(); } }
+                midi.resume_midi(preset_worker);
+            }
+            preset_request = 0; dirty = true;
+        }
         let now: i64 = now_ms(); let delta: i32 = i32(now - last_tick > 1000 ? 1000 : now - last_tick); last_tick = now;
         // MIDI dispatch is independent of modal keyboard focus.
         midi.route_selected(library.table);
@@ -356,7 +406,7 @@ pub fn run() -> i32 {
             transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
         }
         // Editing a moving row would otherwise commit to a different row.
-        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active { transport.playing = false; }
+        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active { transport.playing = false; }
         if transport.advance(now, i32(library.table.rows.len())) {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
@@ -370,7 +420,7 @@ pub fn run() -> i32 {
         }
         // Consume every note-on, including a note released within this poll.
         // Modal editors never receive destructive background recording edits.
-        if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !library.renaming && !mixer.bus_focus && library.table.group_detail_rows == 0 {
+        if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !sample_editor.active && !piano.active && !library.renaming && !mixer.bus_focus && library.table.group_detail_rows == 0 {
             let notes: list<MidiInputEvent> = midi.midi.note_events;
             for note in notes { if library.table.record_note(note.note, note.velocity) { dirty = true; } }
         }
@@ -426,9 +476,9 @@ pub fn run() -> i32 {
                     else if learn_action != 0 {
                         if learn_action >= 100 {
                             let worker_running: bool = midi.midi.worker.raw != 0;
-                            if learn_action == 101 { midi.midi.release(); }
-                            message = SessionCodec::preset_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 100);
-                            if learn_action == 101 { midi.resume_midi(worker_running); }
+                            // Handled once per frame below (kit presets also touch the Audio list).
+                            free(preset_path); preset_path = clone(dialog.accepted_path); preset_request = learn_action; preset_worker = worker_running;
+                            message = clone("");
                         } else { message = SessionCodec::learn_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 97); }
                         learn_action = 0;
                     }
@@ -480,7 +530,7 @@ pub fn run() -> i32 {
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active(instrument_editor.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        focus.set_menu_active(instrument_editor.active || sample_editor.active || piano.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             library.table.insert_labels(midi.output);
             let surface: Surface = Surface::new(area.width, area.height);
@@ -490,11 +540,13 @@ pub fn run() -> i32 {
             library.audio.view.reconcile(panes[0].bounds.inset(1));
             paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample);
             instrument_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
+            sample_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
             dialog.paint(surface, area, Theme::dark_blue());
             question.paint(surface, area, Theme::dark_blue());
             library.table.paint_track_dialog(surface, area, Theme::dark_blue());
             library.paint_rename(surface, area, Theme::dark_blue());
             bpm_dialog.paint(surface, area, Theme::dark_blue());
+            piano.paint(surface, area, Theme::dark_blue());
             settings.paint(surface, area, Theme::dark_blue());
             paste_error.paint(surface, area, Theme::dark_blue());
             terminal.present(surface);
@@ -536,6 +588,27 @@ pub fn run() -> i32 {
             else if instrument_editor.active && !dialog.active {
                 instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true;
             }
+            else if sample_editor.active {
+                let action: i32 = sample_editor.on_event(event, panes[1].bounds.width - 2);
+                if action == 1 && !sample_editor.modified { sample_editor.release(); free(message); message = clone("Sample unchanged"); }
+                else if action == 1 {
+                    let index: i32 = sample_editor.index;
+                    let placed: i32 = library.replace_sample(index, sample_editor.take());
+                    let edited: AudioClip = library.audio.samples[index];
+                    let pads: i32 = midi.refresh_pads(index, edited);
+                    free(message);
+                    message = pads < 0 ? format!("Sample {} saved, but a drum pad rejected it: {}", index + 1, __mlang_std_audio_last_error())
+                        : format!("Sample {} saved: {} placement(s), {} drum pad(s) updated", index + 1, placed, pads);
+                }
+                else if action == 2 { sample_editor.release(); free(message); message = clone("Sample edits discarded"); }
+                dirty = true;
+            }
+            else if piano.active {
+                if event.kind != InputKind::None || event.code != 0 {
+                    piano.on_event(event); dirty = true;
+                    if !piano.active { command = piano.result == 2 ? 0 : 119; }
+                }
+            }
             else if settings.active {
                 if event.kind != InputKind::None || event.code != 0 { settings.on_event(event); dirty = true; }
             }
@@ -543,24 +616,7 @@ pub fn run() -> i32 {
                 if event.kind != InputKind::None || event.code != 0 {
                     bpm_dialog.on_event(event); dirty = true;
                     if !bpm_dialog.active && bpm_dialog.result == 1 {
-                        if bpm_dialog.pad_number {
-                            pad_index = bpm_dialog.value - 1;
-                            if pad_action == 117 {
-                                let clip: AudioClip = library.audio.samples[pad_sample];
-                                let name: str8 = base_name(clip.source);
-                                let error: str8 = midi.assign_pad(pad_slot, pad_index, pad_sample, clip.samples, clip.channels, clip.sample_rate, name);
-                                free(message);
-                                message = error == "" ? format!("Pad {}: {}", pad_index + 1, name) : error;
-                                free(name);
-                            } else {
-                                adding_effect = -1; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
-                                adding_pad_file = true; dialog.save_mode = false; dialog.bundle_pattern = "";
-                                dialog.title = format!("Load sample for pad {}", pad_index + 1);
-                                dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
-                                dialog.open(""); focus.set_menu_active(true);
-                            }
-                        }
-                        else if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
+                        if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
                         else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
                         else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
                         else { transport.set_bpm(bpm_dialog.value); }
@@ -603,9 +659,9 @@ pub fn run() -> i32 {
                         else if learn_action != 0 {
                             if learn_action >= 100 {
                                 let worker_running: bool = midi.midi.worker.raw != 0;
-                                if learn_action == 101 { midi.midi.release(); }
-                                message = SessionCodec::preset_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 100);
-                                if learn_action == 101 { midi.resume_midi(worker_running); }
+                                // Handled once per frame below (kit presets also touch the Audio list).
+                                free(preset_path); preset_path = clone(dialog.accepted_path); preset_request = learn_action; preset_worker = worker_running;
+                                message = clone("");
                             } else { message = SessionCodec::learn_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 97); }
                             learn_action = 0;
                         }
@@ -741,7 +797,8 @@ pub fn run() -> i32 {
                     command = library.table.insert_event(event, panes[1].bounds.inset(1)); dirty = true;
                 } else { if library.table.edit_event(event, panes[1].bounds.inset(1)) { dirty = true; } }
             } else if focus.selected == 0 {
-                if library.on_event(event, panes[0].bounds.inset(1)) { dirty = true; }
+                if library.audio_mode && event.code == 101 && event.modifiers == 1 { command = 107; }
+                else if library.on_event(event, panes[0].bounds.inset(1)) { dirty = true; }
             }
             if command > 0 { dirty = true; }
             if command > 0 && command != 115 { adding_insert_track = -1; }
@@ -850,14 +907,53 @@ pub fn run() -> i32 {
             else if command == 117 || command == 118 {
                 let slot: i32 = library.selected_instrument();
                 let selected: i32 = library.audio.view.selected;
-                if slot < 1 || midi.output.parameter_info(slot, 0, 0) < 0.0 {
+                let root: i64 = slot < 1 ? -1 : midi.output.instrument_sampler(slot, 0);
+                if root < 0 {
                     free(message); message = clone("Select a loaded sampler instrument (e.g. Mla Drum) in Instruments first");
                 } else if command == 117 && (selected < 0 || selected >= library.audio.samples.len()) {
                     free(message); message = clone("Select a sample in Audio first (View > Audio)");
                 } else {
                     pad_action = command; pad_slot = slot; pad_sample = selected;
-                    bpm_dialog.open_pad(pad_index + 1, command == 117 ? "Send sample to pad" : "Load pad sample from file");
+                    let pads: i64 = midi.output.instrument_sampler(slot, 1);
+                    var names: list<str8> = [];
+                    for p in 0..pads {
+                        let used: i32 = midi.pad_sample(slot, i32(p));
+                        if used >= 0 && used < library.audio.samples.len() { let clip: AudioClip = library.audio.samples[used]; names.push(base_name(clip.source)); }
+                        else { names.push(clone("")); }
+                    }
+                    piano.open(command == 117 ? "Send sample to drum key" : "Load drum key from file", i32(root), i32(pads),
+                        midi.output.instrument_sampler(slot, 2), names, command == 117 ? "inserts the Audio sample" : "picks a file");
                     focus.set_menu_active(true);
+                }
+            }
+            else if command == 119 {
+                pad_index = piano.pad();
+                if piano.result == 3 {
+                    let error: str8 = midi.clear_pad(pad_slot, pad_index);
+                    free(message); message = error == "" ? format!("Pad {} cleared", pad_index + 1) : error;
+                } else if pad_action == 117 {
+                    let clip: AudioClip = library.audio.samples[pad_sample];
+                    let name: str8 = base_name(clip.source);
+                    let error: str8 = midi.assign_pad(pad_slot, pad_index, pad_sample, clip.samples, clip.channels, clip.sample_rate, name);
+                    free(message);
+                    message = error == "" ? format!("Pad {}: {}", pad_index + 1, name) : error;
+                    free(name);
+                } else {
+                    adding_effect = -1; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                    adding_pad_file = true; dialog.save_mode = false; dialog.bundle_pattern = "";
+                    dialog.title = format!("Load sample for pad {}", pad_index + 1);
+                    dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
+                    dialog.open(""); focus.set_menu_active(true);
+                }
+            }
+            else if command == 107 {
+                let index: i32 = library.audio.view.selected;
+                if index < 0 || index >= library.audio.samples.len() { free(message); message = clone("Select a sample in Audio first (View > Audio)"); }
+                else {
+                    transport.playing = false;
+                    let clip: AudioClip = library.audio.samples[index];
+                    sample_editor.open(clip, index);
+                    free(message); message = clone("Editing a copy: Enter saves to the session and drum pads, Esc discards");
                 }
             }
             else if command == 94 {
@@ -990,6 +1086,11 @@ pub fn run() -> i32 {
                 library.instruments.cancel_pending();
                 if paste_error.active { paste_error.on_event(event); dirty = true; }
                 else if instrument_editor.active && !dialog.active { instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true; }
+                else if sample_editor.active {
+                    if sample_editor.on_event(event, panes[1].bounds.width - 2) == 2 { sample_editor.release(); free(message); message = clone("Sample edits discarded"); }
+                    dirty = true;
+                }
+                else if piano.active { piano.on_event(event); dirty = true; }
                 else if settings.active { settings.on_event(event); dirty = true; }
                 else if bpm_dialog.active { bpm_dialog.on_event(event); dirty = true; }
                 else if library.renaming { library.rename_event(event); dirty = true; }
@@ -1021,7 +1122,7 @@ pub fn run() -> i32 {
     midi.release();
     settings.release();
     free(session_path); free(request_path);
-    instrument_editor.release();
+    instrument_editor.release(); sample_editor.release(); piano.release(); free(preset_path);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();
     return 0;

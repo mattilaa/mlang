@@ -130,11 +130,20 @@ owned by another instrument reject the import. The entire file is validated
 before changing mappings. Empty mapping lists clear that instrument's bindings.
 Exports use atomic file replacement. Ordinary `.mlack` persistence is unchanged.
 
-## Parameter preset files (`.mlapre`, version 1.0)
+## Parameter preset files (`.mlapre`, version 1.0 and 1.1)
 
-String `MLAPRE`, i64 major 1 and minor 0, plugin display-name string, i64 parameter
+String `MLAPRE`, i64 major 1 and minor 0 or 1, plugin display-name string, i64 parameter
 count, then `(i64 stable parameter ID, f64 normalized value)` pairs. Uses the same
-little-endian primitives. Maximum 512 KiB, 16384 parameters, and 4096-byte strings.
+little-endian primitives. Maximum 256 MiB, 16384 parameters, and 4096-byte strings.
+
+Minor 1 is a **kit preset**, written for sampler instruments (such as Mla Drum)
+that have pads loaded from the session. After the parameters: string
+`SAMPLER_PADS`, a count (0–64), then per pad its number (0–127, strictly
+increasing) and the sample in the session's sample-list encoding (path, format,
+PCM, row and detail peaks). Loading a kit replaces every pad of the instrument:
+listed pads receive their samples, and all other pads are cleared. Kit samples
+join the Audio list, reusing an identical existing sample. Minor 0 presets leave
+pads unchanged. Readers that only know 1.0 reject 1.1 files.
 The plugin name and complete parameter-ID set must match; duplicate/missing IDs,
 non-finite values, values outside 0–1, and trailing/truncated data are rejected
 before applying. Read-only parameters are recorded but not written on restore.

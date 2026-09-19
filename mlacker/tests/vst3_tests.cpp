@@ -23,6 +23,8 @@ const char *__mlang_std_audio_controller_parameter_name(int64_t, int64_t, int64_
 int32_t __mlang_std_audio_controller_set_parameter(int64_t, int64_t, int64_t, double);
 int32_t __mlang_std_audio_controller_restore_parameter(int64_t, int64_t, int64_t, double);
 int32_t __mlang_std_audio_controller_unload_instrument(int64_t, int64_t);
+int32_t __mlang_std_audio_controller_instrument_clear_pad(int64_t, int64_t, int64_t);
+int64_t __mlang_std_audio_controller_instrument_sampler(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_instrument_pad(int64_t, int64_t, int64_t, FloatList, int64_t, int64_t, const char*);
 int32_t __mlang_std_audio_controller_midi_target(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_live_note(int64_t, int64_t, int64_t, int64_t, int64_t);
@@ -196,6 +198,8 @@ int main(int argc, char **argv) {
         const std::vector<float> pcm(64, 0.5f);
         CHECK(__mlang_std_audio_controller_instrument_pad(c, 1, 0, FloatList{64, pcm.data()}, 1, 48000, "kick") != 0);
         CHECK(std::strstr(__mlang_std_audio_last_error(), "does not accept pad samples") != nullptr);
+        CHECK(__mlang_std_audio_controller_instrument_sampler(c, 1, 0) == -1);
+        CHECK(__mlang_std_audio_controller_instrument_clear_pad(c, 1, 0) != 0);
         CHECK(__mlang_std_audio_controller_instrument_pad(c, 5, 0, FloatList{64, pcm.data()}, 1, 48000, "kick") != 0);
         CHECK(__mlang_std_audio_controller_instrument_pad(c, 1, 0, FloatList{63, pcm.data()}, 2, 48000, "kick") != 0);
         CHECK(__mlang_std_audio_controller_instrument_pad(c, 1, 0, FloatList{64, pcm.data()}, 3, 48000, "kick") != 0);
@@ -206,6 +210,14 @@ int main(int argc, char **argv) {
             const std::vector<float> hit(4800, 0.5f);
             CHECK(__mlang_std_audio_controller_instrument_pad(c, 3, 16, FloatList{4800, hit.data()}, 1, 48000, "kick") != 0);
             CHECK(std::strstr(__mlang_std_audio_last_error(), "pad must be 0-15") != nullptr);
+            CHECK(__mlang_std_audio_controller_instrument_pad(c, 3, 1, FloatList{4800, hit.data()}, 1, 48000, "kick") == 0);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 0) == 36);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 1) == 16);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 2) == 2);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 3) == -1);
+            // Clearing and overriding: pad 1 empties, then takes a new sample.
+            CHECK(__mlang_std_audio_controller_instrument_clear_pad(c, 3, 1) == 0);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 2) == 0);
             CHECK(__mlang_std_audio_controller_instrument_pad(c, 3, 1, FloatList{4800, hit.data()}, 1, 48000, "kick") == 0);
             __mlang_std_audio_controller_panic(c);
             CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);

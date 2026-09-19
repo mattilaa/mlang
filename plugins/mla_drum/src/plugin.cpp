@@ -417,12 +417,26 @@ class Processor final : public SingleComponentEffect, public IMidiMapping {
         const bool loadFile = std::strcmp(id, mla_sampler::kLoadFileMessage) == 0;
         const bool loadPcm = std::strcmp(id, mla_sampler::kLoadPcmMessage) == 0;
         const bool clear = std::strcmp(id, mla_sampler::kClearMessage) == 0;
-        if(!loadFile && !loadPcm && !clear)
+        const bool info = std::strcmp(id, mla_sampler::kInfoMessage) == 0;
+        if(!loadFile && !loadPcm && !clear && !info)
             return SingleComponentEffect::notify(message);
 
         IAttributeList *attributes = message->getAttributes();
         if(attributes == nullptr)
             return kInvalidArgument;
+        if(info) {
+            int64 occupied = 0;
+            {
+                std::lock_guard<std::mutex> lock(controlMutex_);
+                for(int pad = 0; pad < kNumPads; ++pad)
+                    if(owned_[pad])
+                        occupied |= int64(1) << pad;
+            }
+            attributes->setInt("root", rootKeyFromNorm(norm(kRootKeyParam)));
+            attributes->setInt("pads", kNumPads);
+            attributes->setInt("occupied", occupied);
+            return kResultOk;
+        }
         int64 pad = -1;
         if(attributes->getInt("pad", pad) != kResultOk || pad < 0 || pad >= kNumPads)
             return fail(attributes, "pad must be 0-15");

@@ -2469,3 +2469,194 @@ fn tui_unicode_clipping_and_boxes() {
     free(snapshot);
     surface.release();
 }
+mod tui_demo::sample_editor;
+mod tui_demo::piano_dialog;
+use tui_demo::sample_editor::*;
+use tui_demo::piano_dialog::*;
+
+fn test_clip(frames: i64, value: f32) -> AudioClip {
+    var samples: list<f32> = [];
+    for i in 0..frames { samples.push(value * f32(i + 1) / f32(frames)); }
+    let made: result<AudioClip, str8> = AudioClip::from_pcm("edit-test.wav", samples, 1, 8000, 120);
+    return made.unwrap();
+}
+
+#[test]
+fn tui_sample_edit_primitives() {
+    let pcm: list<f32> = [0.1f, -0.1f, 0.2f, -0.2f, 0.3f, -0.3f, 0.4f, -0.4f];
+    let cropped: list<f32> = pcm_crop(pcm, 2, 1, 3);
+    verify(cropped.len() == 4 && cropped[0] == 0.2f && cropped[3] == -0.3f);
+    let deleted: list<f32> = pcm_delete(pcm, 2, 1, 3);
+    verify(deleted.len() == 4 && deleted[2] == 0.4f && deleted[3] == -0.4f);
+    // Channel order within a frame survives reversing a range.
+    let reversed: list<f32> = pcm_reverse(pcm, 2, 0, 2);
+    verify(reversed[0] == 0.2f && reversed[1] == -0.2f && reversed[2] == 0.1f && reversed[6] == 0.4f);
+    let faded_in: list<f32> = pcm_scale(pcm, 2, 0, 4, 1.0f, 1);
+    verify(faded_in[0] == 0.0f && faded_in[7] == -0.4f);
+    let faded_out: list<f32> = pcm_scale(pcm, 2, 0, 4, 1.0f, 2);
+    verify(faded_out[0] == 0.1f && faded_out[6] == 0.0f);
+    // Gain hard-clips so sessions (which require -1..1) can always be saved.
+    let loud: list<f32> = pcm_scale(pcm, 2, 0, 4, 4.0f, 0);
+    verify(loud[6] == 1.0f && loud[7] == -1.0f && loud[0] == 0.4f);
+    verify(pcm_peak(pcm, 2, 0, 4) == 0.4f && pcm_peak(pcm, 2, 0, 1) == 0.1f);
+    // Out-of-range frames clamp instead of failing.
+    let clamped: list<f32> = pcm_crop(pcm, 2, -5, 99); verify(clamped.len() == 8);
+}
+
+#[test]
+fn tui_sample_editor_edits_undo_and_limits() {
+    let source: AudioClip = test_clip(4000, 0.5f);
+    var editor: SampleEditor = SampleEditor {};
+    editor.open(source, 0);
+    verify(editor.active && !editor.modified);
+    verify(!editor.edit(116)); // crop needs a narrower selection
+    verify(!editor.edit(120)); // cannot delete everything
+    verify(editor.edit(110));  // normalize whole sample
+    verify(editor.modified && editor.clip.frames == 4000 && editor.clip.samples[3999] == 1.0f);
+    verify(source.samples[3999] == 0.5f); // the session copy is untouched
+    editor.view.sel_start = 1000; editor.view.sel_end = 3000;
+    verify(editor.edit(116));
+    verify(editor.clip.frames == 2000 && editor.clip.peaks.len() == (2000 + editor.clip.frames_per_row - 1) / editor.clip.frames_per_row);
+    verify(editor.clip.detail_peaks.len() == editor.clip.peaks.len() * 4);
+    editor.view.sel_start = 0; editor.view.sel_end = 500;
+    verify(editor.edit(115));
+    verify(editor.clip.samples[10] == 0.0f && editor.clip.samples[600] != 0.0f);
+    verify(editor.edit(117) && editor.clip.samples[10] != 0.0f); // undo silence
+    verify(editor.edit(117) && editor.clip.frames == 4000);     // undo crop
+    verify(editor.edit(117) && !editor.modified);                // undo normalize
+    verify(!editor.edit(117));
+    // Undo depth is bounded.
+    for _i in 0..20 { editor.edit(45); }
+    verify(editor.history.len() == 16);
+    let taken: AudioClip = editor.take();
+    verify(!editor.active && taken.frames == 4000);
+    taken.release(); source.release();
+}
+
+#[test]
+fn tui_replace_sample_updates_all_placements() {
+    var library: PatternLibrary = PatternLibrary::new();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.create_track_kind(false, true, area);
+    let clip: AudioClip = test_clip(8000, 0.25f);
+    library.audio.samples.push(clip);
+    library.audio.view.items.push(ListItem { id: 1, label: clone("1 edit-test.wav") });
+    library.table.selected_row = 2;
+    verify(library.table.insert_audio(clip, area));
+    library.table.selected_row = 20;
+    verify(library.table.insert_audio(clip, area));
+    var editor: SampleEditor = SampleEditor {};
+    let stored_clip: AudioClip = library.audio.samples[0]; editor.open(stored_clip, 0);
+    editor.view.sel_start = 0; editor.view.sel_end = 3000;
+    verify(editor.edit(116));
+    verify(library.replace_sample(0, editor.take()) == 2);
+    let track: SequenceTrack = library.table.tracks[library.table.tracks.len() - 1];
+    let first: AudioInstance = track.instances[0]; let second: AudioInstance = track.instances[1];
+    verify(first.clip.frames == 3000 && second.clip.frames == 3000 && first.length_ticks == 0);
+    let stored: AudioClip = library.audio.samples[0]; verify(stored.frames == 3000);
+    // The edited session still round-trips: placements resolve to the sample.
+    let directory: str8 = clone("/private/tmp/mlacker-edit-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/edited.mlack", directory);
+    var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    verify(codec.save(path, library, SessionView {}, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap();
+    let sample: AudioClip = restored.library.audio.samples[0]; verify(sample.frames == 3000);
+    restored.release();
+    let spare: AudioClip = test_clip(10, 0.1f); verify(library.replace_sample(5, spare) == -1);
+    library.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}
+
+#[test]
+fn tui_audio_library_add_clip_reuses_identical_samples() {
+    var audio: AudioLibrary = AudioLibrary {};
+    verify(audio.add_clip(test_clip(100, 0.5f)) == 0);
+    verify(audio.add_clip(test_clip(100, 0.5f)) == 0);
+    verify(audio.add_clip(test_clip(100, 0.25f)) == 1);
+    verify(audio.samples.len() == 2 && audio.view.items.len() == 2);
+    audio.release();
+}
+
+#[test]
+fn tui_piano_dialog_picks_pad_keys() {
+    verify(piano_note_name(60) == "C-4" && piano_note_name(37) == "C#2");
+    verify(piano_is_black(37) && !piano_is_black(36) && !piano_is_black(40) && piano_is_black(46));
+    var piano: PianoDialog = PianoDialog::new();
+    // Pads 1 and 2 loaded: the cursor starts on the first empty pad.
+    piano.open("Pick", 36, 16, 3, [clone("kick.wav"), clone("snare.wav")], "inserts");
+    verify(piano.active && piano.key == 38 && piano.pad() == 2);
+    verify(piano.is_loaded(0) && piano.is_loaded(1) && !piano.is_loaded(2));
+    piano.on_event(InputEvent { kind: InputKind::Menu, key: Key::Left, code: 104 });
+    piano.on_event(InputEvent { kind: InputKind::Menu, key: Key::Left, code: 104 });
+    piano.on_event(InputEvent { kind: InputKind::Menu, key: Key::Left, code: 104 });
+    verify(piano.key == 36); // clamped to the pad range
+    piano.on_event(InputEvent { kind: InputKind::Menu, key: Key::Up, code: 107 });
+    verify(piano.key == 48);
+    piano.on_event(InputEvent { kind: InputKind::Menu, key: Key::Up, code: 107 });
+    verify(piano.key == 51);
+    // Delete only clears a loaded pad.
+    piano.on_event(InputEvent { kind: InputKind::Edit, key: Key::Delete });
+    verify(piano.active);
+    piano.on_event(InputEvent { kind: InputKind::Menu, key: Key::Down, code: 106 });
+    piano.on_event(InputEvent { kind: InputKind::Menu, key: Key::Down, code: 106 });
+    verify(piano.key == 36);
+    piano.on_event(InputEvent { kind: InputKind::Edit, key: Key::Delete });
+    verify(!piano.active && piano.result == 3 && piano.pad() == 0);
+    piano.open("Pick", 36, 16, 0, [], "inserts");
+    piano.on_event(InputEvent { kind: InputKind::Menu, key: Key::Right, code: 108 });
+    piano.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter, code: 13 });
+    verify(!piano.active && piano.result == 1 && piano.pad() == 1);
+    // The keyboard paints: selected key darker gray, dots on loaded pads.
+    piano.open("Pick", 36, 16, 1, [clone("kick.wav")], "inserts");
+    let surface: Surface = Surface::new(100, 30);
+    piano.paint(surface, surface.bounds(), Theme::dark_blue());
+    var selected: i32 = 0; var dots: i32 = 0; var black: i32 = 0;
+    for y in 0..30 { for x in 0..100 {
+        let cell: Cell = surface.cell(i32(x), i32(y));
+        if cell.background == 0x5f5f5f { selected = selected + 1; }
+        if cell.glyph == 0x25cf { dots = dots + 1; }
+        if cell.background == 0x0c0c0c { black = black + 1; }
+    } }
+    // Cursor on the first empty pad, C#2: a 2x2 black key.
+    verify(selected == 4 && dots == 1 && black > 0);
+    piano.on_event(InputEvent { kind: InputKind::Menu, key: Key::Left, code: 104 });
+    piano.paint(surface, surface.bounds(), Theme::dark_blue());
+    selected = 0;
+    for y in 0..30 { for x in 0..100 { let cell: Cell = surface.cell(i32(x), i32(y)); if cell.background == 0x5f5f5f { selected = selected + 1; } } }
+    verify(selected == 10); // C-2: a 3x4 white key minus the C# key over its top-right corner
+    surface.release(); piano.release();
+}
+
+#[test]
+fn tui_piano_dialog_black_keys_sit_between_their_notes() {
+    var piano: PianoDialog = PianoDialog::new();
+    // Pads 1-15 loaded, so the cursor sits on pad 16 (D#3) outside the first octave.
+    piano.open("Pick", 36, 16, 32767, [], "inserts");
+    verify(piano.key == 51);
+    let surface: Surface = Surface::new(100, 30);
+    piano.paint(surface, surface.bounds(), Theme::dark_blue());
+    // Top row of the keyboard: the first row holding an in-range white key.
+    var top: i32 = -1; var left: i32 = -1;
+    for y in 0..30 {
+        for x in 0..100 {
+            let cell: Cell = surface.cell(i32(x), i32(y));
+            if cell.background == 0xf2f2f2 && top < 0 { top = i32(y); left = i32(x); }
+        }
+    }
+    verify(top >= 0);
+    // One octave from C-2, three columns per white key: C# over C|D, D# over
+    // D|E, no key over E|F, then F#, G#, A# over their boundaries.
+    var row: str8 = clone("");
+    for col in 0..21 {
+        let cell: Cell = surface.cell(left + i32(col), top);
+        let next: str8 = format!("{}{}", row, cell.background == 0x0c0c0c ? "B" : "W");
+        free(row); row = next;
+    }
+    verify(row == "WWBBWBBWWWWBBWBBWBBWW");
+    // The lower half is all white keys; separators start each key.
+    let separator: Cell = surface.cell(left + 3, top + 3);
+    verify(separator.glyph == 0x2502 && separator.background == 0xf2f2f2);
+    let label: Cell = surface.cell(left, top + 4);
+    verify(label.glyph == 67); // "C-2" under the C key
+    free(row); surface.release(); piano.release();
+}

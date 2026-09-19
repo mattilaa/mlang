@@ -150,6 +150,31 @@ impl AudioClip {
         out.rebuild_peaks();
         return out;
     }
+    /// Owned clip with the same source, format and row size but new interleaved
+    /// PCM; frames and peaks are recomputed. `samples` must not be shared.
+    pub fn with_samples(self: AudioClip, samples: list<f32>) -> AudioClip {
+        var out: AudioClip = AudioClip { source: clone(self.source) };
+        out.channels = self.channels; out.sample_rate = self.sample_rate;
+        out.frames_per_row = self.frames_per_row;
+        let ch: i64 = self.channels < 1 ? 1 : self.channels;
+        out.frames = samples.len() / ch;
+        out.samples = samples;
+        out.rebuild_peaks();
+        return out;
+    }
+    /// Owned clip from decoded PCM (e.g. a preset), using `bpm` for row size.
+    pub fn from_pcm(source: str8, samples: list<f32>, channels: i64, rate: i64, bpm: i32) -> result<AudioClip, str8> {
+        if bpm <= 0 || rate <= 0 || channels < 1 || channels > 2 { return Err<AudioClip, str8>("Unsupported sample format"); }
+        let step: i64 = rate * 60 / (wide(bpm) * 4);
+        let frames: i64 = samples.len() / channels;
+        if step <= 0 || frames <= 0 || samples.len() != frames * channels { return Err<AudioClip, str8>("Empty or malformed sample"); }
+        if (frames + step - 1) / step > 16384 { return Err<AudioClip, str8>("Audio exceeds 16384 pattern rows"); }
+        var clip: AudioClip = AudioClip { source: clone(source) };
+        clip.channels = channels; clip.sample_rate = rate; clip.frames = frames; clip.frames_per_row = step;
+        clip.samples = samples;
+        clip.rebuild_peaks();
+        return Ok<AudioClip, str8>(clip);
+    }
     pub fn load(path: str8, bpm: i32) -> result<AudioClip, str8> {
         if bpm <= 0 { return Err<AudioClip, str8>("Invalid BPM"); }
         let loaded: result<PcmAudio, str8> = PcmAudio::load(path);

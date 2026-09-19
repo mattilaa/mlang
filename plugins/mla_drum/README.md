@@ -26,7 +26,8 @@ rate. Pads can be filled in three ways:
 - **From any host**, through the `IConnectionPoint` messages in
   [`stdlib/include/mla_sampler_protocol.h`](../../stdlib/include/mla_sampler_protocol.h):
   `mlang.sampler.loadFile` (a 16-bit PCM WAV/AIFF path), `mlang.sampler.loadPcm`
-  (raw float PCM) and `mlang.sampler.clear`. The plug-in has no editor.
+  (raw float PCM), `mlang.sampler.clear`, and `mlang.sampler.info` (reports the
+  root key, pad count and loaded pads). The plug-in has no editor.
 - **From saved state.** The VST3 component state embeds every pad's audio, so
   DAW projects and presets restore the full kit.
 
@@ -80,17 +81,30 @@ build PIC objects as described in the [Mla Verb README](../mla_verb/README.md).
    choose `MlaDrum.vst3`. Repeat for each drum instance you want (kick, snare,
    hats, ...). Each instance gets its own track.
 2. Select the instance in **View → Instruments**, then use either:
-   - **Instrument → Load pad sample from file**: enter a pad number (1–16), then
-     pick a WAV/AIFF. The file is also added to the Audio list, so the session
-     embeds it.
+   - **Instrument → Load pad sample from file**: pick a key on the piano
+     keyboard, then a WAV/AIFF. The file is also added to the Audio list, so the
+     session embeds it.
    - **Instrument → Send audio sample to pad**: sends the sample selected in
-     **View → Audio** to the pad you enter.
+     **View → Audio** to the key you pick.
+
+   The piano marks loaded pads. Enter on one replaces its sample, and Backspace
+   clears it. Samples can be trimmed, faded or normalized with
+   **Audio → Edit sample (destructive)**. Saving an edit re-sends it to every pad
+   that uses the sample.
 3. Put effects on each drum's track (`f` in Pattern view, see mlacker's
    **Track inserts**), for example Mla Distortion on the kick and Mla Verb on the
    claps. The tracks are summed into the master.
 
 `.mlack` sessions store which session sample each pad uses and re-send them on
 open and after audio-device changes.
+
+### Presets
+
+- **In mlacker**, **Instrument → Save plugin preset** writes a kit preset
+  (`.mlapre` 1.1) with all parameters and the pad samples. **Load plugin preset**
+  restores the whole kit, clearing pads the kit does not use.
+- **In other hosts**, the plugin's VST3 state embeds every pad, so the host's own
+  preset and project saving keep the full kit.
 
 ## Design notes
 

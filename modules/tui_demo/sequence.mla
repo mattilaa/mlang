@@ -677,6 +677,31 @@ pub fn is_note(self: SequenceTable) -> bool {
     let offset: i32 = self.selected_column - self.track_start(index);
     return !track.audio && offset >= 0 && offset < track.note_lines * 4 && offset % 4 == 0;
 }
+/// Point every placement of `old` (matched like the session codec: source,
+/// frames and row size) at `edited`. A length change resets the placement's
+/// non-destructive trim to the natural length. Returns the number replaced.
+pub fn replace_clip(self: &mut Self, old: &AudioClip, edited: &AudioClip) -> i32 {
+    var before: AudioClip = AudioClip {}; before = old;
+    var after: AudioClip = AudioClip {}; after = edited;
+    var count: i32 = 0;
+    for t in 0..self.tracks.len() {
+        var track: SequenceTrack = self.tracks[t];
+        if !track.audio { continue; }
+        var changed: bool = false; var updated: list<AudioInstance> = [];
+        for i in 0..track.instances.len() {
+            var next: AudioInstance = AudioInstance {}; next = track.instances[i];
+            if next.clip.source == before.source && next.clip.frames == before.frames && next.clip.frames_per_row == before.frames_per_row {
+                next.clip.release(); next.clip = after.copy(); next.clip.offset = 0;
+                if after.frames != before.frames { next.offset_frames = 0; next.length_ticks = 0; }
+                changed = true; count = count + 1;
+            }
+            updated.push(next);
+        }
+        if changed { track.instances = updated; self.replace_track(i32(t), track); }
+    }
+    if count > 0 { self.revision = self.revision + 1; }
+    return count;
+}
 fn replace_track(self: &mut Self, index: i32, value: SequenceTrack) -> void {
     var tracks: list<SequenceTrack> = [];
     for i in 0..self.tracks.len() { tracks.push(i == index ? value : self.tracks[i]); }

@@ -226,19 +226,22 @@ public:
                     const char *sampleName, std::string &error) {
         auto connection = U::cast<IConnectionPoint>(component);
         if(!connection) { error = "This instrument does not accept pad samples"; return -1; }
-        if(frames < 1 || frames > mla_sampler::kMaxFrames || channels < 1 || channels > 2) {
+        const bool clear = frames == 0;
+        if(!clear && (frames < 1 || frames > mla_sampler::kMaxFrames || channels < 1 || channels > 2 || !pcm)) {
             error = "Pad samples must be mono/stereo with 1-16777216 frames"; return -1;
         }
         auto message = owned(new HostMessage);
-        message->setMessageID(mla_sampler::kLoadPcmMessage);
+        message->setMessageID(clear ? mla_sampler::kClearMessage : mla_sampler::kLoadPcmMessage);
         auto *attributes = message->getAttributes();
-        const std::string label = sampleName ? sampleName : "";
         attributes->setInt("pad", pad);
-        attributes->setInt("channels", channels);
-        attributes->setInt("frames", frames);
-        attributes->setFloat("rate", rate);
-        attributes->setBinary("data", pcm, static_cast<uint32>(frames * channels * sizeof(float)));
-        attributes->setBinary("name", label.data(), static_cast<uint32>(label.size()));
+        if(!clear) {
+            const std::string label = sampleName ? sampleName : "";
+            attributes->setInt("channels", channels);
+            attributes->setInt("frames", frames);
+            attributes->setFloat("rate", rate);
+            attributes->setBinary("data", pcm, static_cast<uint32>(frames * channels * sizeof(float)));
+            attributes->setBinary("name", label.data(), static_cast<uint32>(label.size()));
+        }
         tresult result = kResultFalse;
         try { result = connection->notify(message); } catch(...) { result = kInternalError; }
         if(result == kResultOk) return 0;
@@ -248,6 +251,19 @@ public:
         else
             error = "This instrument does not accept pad samples";
         return -1;
+    }
+
+    // Control thread. -1 when the plugin does not answer the sampler query.
+    int64_t samplerInfo(int32_t key) {
+        auto connection = U::cast<IConnectionPoint>(component);
+        if(!connection || key < 0 || key > 2) return -1;
+        auto message = owned(new HostMessage);
+        message->setMessageID(mla_sampler::kInfoMessage);
+        auto *attributes = message->getAttributes();
+        try { if(connection->notify(message) != kResultOk) return -1; } catch(...) { return -1; }
+        int64 value = -1;
+        const char *id = key == 0 ? "root" : (key == 1 ? "pads" : "occupied");
+        return attributes->getInt(id, value) == kResultOk ? value : -1;
     }
 
     int32 render(float *stereo, int32 frames, uint64_t clock) noexcept {
@@ -314,6 +330,9 @@ int32_t load(const char *path, double rate, int32_t frames,
                 if(static_cast<Processor*>(p)->loadPad(pad, pcm, frames, channels, rate, sampleName, why) == 0) return 0;
             } catch(...) { why = "Pad sample load failed"; }
             std::snprintf(error, errorSize, "%s", why.c_str()); return -1;
+        };
+        out->sampler_info = [](void *p, int32_t key) -> int64_t {
+            try { return static_cast<Processor*>(p)->samplerInfo(key); } catch(...) { return -1; }
         };
         plugin.release(); return 0;
     } catch(const std::exception &e) { std::snprintf(error, errorSize, "VST3 load failed: %s", e.what()); }

@@ -399,6 +399,14 @@ void testLoadFileAndErrors(const std::string &bundle, const std::string &scratch
     plugin.noteOn(kRootKey + 5);
     CHECK(near(plugin.render(kBlock)[100 * 2], 0.5f));
 
+    // The layout query reports the root key, pad count and loaded pads.
+    auto info = message(mla_sampler::kInfoMessage);
+    CHECK(plugin.send(info) == kResultOk);
+    int64 root = -1, pads = -1, occupied = -1;
+    CHECK(info->getAttributes()->getInt("root", root) == kResultOk && root == kRootKey);
+    CHECK(info->getAttributes()->getInt("pads", pads) == kResultOk && pads == 16);
+    CHECK(info->getAttributes()->getInt("occupied", occupied) == kResultOk && occupied == (int64(1) << 5));
+
     auto missing = message(mla_sampler::kLoadFileMessage);
     const std::string nowhere = scratch + "/does-not-exist.wav";
     missing->getAttributes()->setInt("pad", 5);

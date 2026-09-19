@@ -81,6 +81,9 @@ pub struct SessionView {
     var editor: bool; var editor_slot: i32; var editor_selected: i32; var editor_scroll: i32;
     var effect_focus: bool; var effect_selected: i32;
 };
+/// Plugin preset outcome. Kit presets (MLAPRE 1.1) also carry sampler pads:
+/// `pads[i]` is loaded from `clips[i]`; the caller owns the clips.
+pub struct PresetResult { var status: str8; var ok: bool; var has_pads: bool; var pads: list<i32>; var clips: list<AudioClip>; };
 pub struct MidiLearnSnapshot { var key: i32; var slot: i32; var parameter_id: i64; };
 pub struct SessionData { var library: PatternLibrary; var plugins: list<PluginSnapshot>; var view: SessionView; var midi_learn: list<MidiLearnSnapshot>; var effect_volumes: list<i32>; var pads: list<PadAssignment>; };
 impl SessionData {
@@ -154,28 +157,35 @@ impl SessionData {
 pub struct SessionCodec { var reading: bool; var failed: bool; var binary: SessionBuffer; var reader: SessionReader; var cells: i64; };
 impl SessionCodec {
     /// Exposed-parameter preset. Caller joins MIDI before loading; IDs are stable.
-    pub fn preset_file(path: str8, output: AudioController, slot: i64, saving: bool) -> str8 {
+    /// Saving with `pads` (sampler pad numbers, with their `clips`) writes a
+    /// 1.1 kit preset that also embeds the pad samples.
+    pub fn preset_file(path: str8, output: AudioController, slot: i64, saving: bool, pads: list<i32>, clips: list<AudioClip>) -> PresetResult {
+        return SessionCodec::preset_body(path, output, slot, saving, pads, clips);
+    }
+    fn preset_body(path: str8, output: AudioController, slot: i64, saving: bool, pads: list<i32>, clips: list<AudioClip>) -> PresetResult {
+        var result: PresetResult = PresetResult { status: "" };
         let parameters: i64 = output.parameter_info(slot, 0, 0);
-        if slot < 1 || parameters < 0 { return clone("Select a loaded instrument first"); }
+        if slot < 1 || parameters < 0 { result.status = clone("Select a loaded instrument first"); return result; }
         let actual: str8 = saving && !tui::table::table_matches(".*\\.[mM][lL][aA][pP][rR][eE]", path) ? format!("{}.mlapre", path) : clone(path);
         var codec: SessionCodec = SessionCodec { reading: !saving };
         if saving {
             let created: result<SessionBuffer, str8> = SessionBuffer::new(4096);
-            if created.is_err() { free(actual); return clone("Cannot allocate plugin preset"); }
+            if created.is_err() { free(actual); result.status = clone("Cannot allocate plugin preset"); return result; }
             codec.binary = created.unwrap();
         } else {
             let opened: result<File, str8> = File::open(actual);
-            if opened.is_err() { free(actual); return clone("Cannot open plugin preset"); }
+            if opened.is_err() { free(actual); result.status = clone("Cannot open plugin preset"); return result; }
             let file: File = opened.unwrap(); let size: result<i64, str8> = file.size(); file.close();
-            if size.is_err() { free(actual); return clone("Cannot read plugin preset"); }
-            if size.unwrap() > 524288 { free(actual); return clone("Plugin preset exceeds 512 KiB"); }
+            if size.is_err() { free(actual); result.status = clone("Cannot read plugin preset"); return result; }
+            if size.unwrap() > 268435456 { free(actual); result.status = clone("Plugin preset exceeds 256 MiB"); return result; }
             let read: result<SessionReader, str8> = SessionReader::from_file(actual);
-            if read.is_err() { free(actual); return clone("Cannot read plugin preset"); }
+            if read.is_err() { free(actual); result.status = clone("Cannot read plugin preset"); return result; }
             codec.reader = read.unwrap();
         }
         let magic: str8 = codec.text("MLAPRE");
         if magic != "MLAPRE" { codec.failed = true; } if !saving { free(magic); }
-        codec.number(1, 1, 1); codec.number(0, 0, 0);
+        codec.number(1, 1, 1);
+        let minor: i32 = codec.number(saving && pads.len() > 0 ? 1 : 0, 0, 1);
         let plugin_name: str8 = output.instrument_name(slot);
         let name: str8 = codec.text(plugin_name);
         if name != plugin_name { codec.failed = true; } if !saving { free(name); }
@@ -195,24 +205,44 @@ impl SessionCodec {
                 ids.push(id); indices.push(found); values.push(value); previous.push(output.parameter_info(slot, found, 2));
             }
         }
+        // 1.1: tagged sampler pads, strictly increasing pad numbers, session clip encoding.
+        if minor == 1 && !codec.failed {
+            let tag: str8 = codec.text("SAMPLER_PADS"); if tag != "SAMPLER_PADS" { codec.failed = true; } if !saving { free(tag); }
+            let count: i32 = codec.number(i32(pads.len()), 0, 64);
+            var previous: i32 = -1;
+            for i in 0..count {
+                if codec.failed { break; }
+                let pad: i32 = codec.number(saving ? pads[i] : 0, previous + 1, 127); previous = pad;
+                var clip: AudioClip = AudioClip {}; if saving { clip = clips[i]; }
+                let decoded: AudioClip = codec.clip(clip);
+                if !saving { result.pads.push(pad); result.clips.push(decoded); }
+            }
+            if !saving { result.has_pads = true; }
+        }
         if saving {
             if !codec.failed { let written: result<i32, str8> = codec.binary.write_atomic(actual); if written.is_err() { codec.failed = true; } }
             codec.binary.close();
             let status: str8 = codec.failed ? clone("Cannot save plugin preset") : format!("Saved plugin preset: {}", actual);
-            free(actual); return status;
+            result.ok = !codec.failed;
+            free(actual); result.status = status; return result;
         }
         if codec.reader.remaining() != 0 { codec.failed = true; } codec.reader.close();
-        if codec.failed { free(actual); return clone("Invalid/incompatible plugin preset; parameters unchanged"); }
+        if codec.failed {
+            let decoded: list<AudioClip> = result.clips; for clip in decoded { clip.release(); }
+            result.clips = []; result.pads = []; result.has_pads = false;
+            free(actual); result.status = clone("Invalid/incompatible plugin preset; parameters unchanged"); return result;
+        }
         let restart: bool = output.hardware_output();
-        if output.stop() != 0 { free(actual); return clone("Cannot stop audio; preset not loaded"); }
+        if output.stop() != 0 { free(actual); result.status = clone("Cannot stop audio; preset not loaded"); return result; }
         output.panic(); output.midi_learn(-1, 0, 0);
         for i in 0..indices.len() {
             if output.restore_parameter(slot, indices[i], values[i]) != 0 { codec.failed = true; break; }
         }
         if codec.failed { for i in 0..indices.len() { output.restore_parameter(slot, indices[i], previous[i]); } }
         var status: str8 = codec.failed ? clone("Plugin rejected preset; previous parameters restored where possible") : format!("Loaded plugin preset: {}", actual);
+        result.ok = !codec.failed;
         if restart { if output.start() != 0 { free(status); status = clone("Preset processed but audio restart failed; reopen Settings"); } }
-        free(actual); return status;
+        free(actual); result.status = status; return result;
     }
     pub fn learn_suggestion(name: str8) -> str8 {
         let raw: result<std::bytes::Bytes, str8> = std::bytes::Bytes::from_string(name);

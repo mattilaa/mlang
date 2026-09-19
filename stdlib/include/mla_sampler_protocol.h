@@ -32,6 +32,12 @@ inline constexpr const char *kLoadPcmMessage = "mlang.sampler.loadPcm";
 //   "pad"  int    target pad
 inline constexpr const char *kClearMessage = "mlang.sampler.clear";
 
+// Query the pad layout. No input attributes; the plug-in writes back:
+//   "root"     int    MIDI key of pad 0 (pad n plays at root + n)
+//   "pads"     int    number of pads (at most 64)
+//   "occupied" int    bit n set when pad n holds a sample
+inline constexpr const char *kInfoMessage = "mlang.sampler.info";
+
 inline constexpr int kMaxFrames = 16777216;
 
 } // namespace mla_sampler

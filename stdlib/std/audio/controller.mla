@@ -24,6 +24,8 @@ extern fn __mlang_std_audio_controller_parameter_info(handle: i64, slot: i64, in
 extern fn __mlang_std_audio_controller_parameter_name(handle: i64, slot: i64, index: i64) -> str8;
 extern fn __mlang_std_audio_controller_set_parameter(handle: i64, slot: i64, index: i64, value: f64) -> i32;
 extern fn __mlang_std_audio_controller_unload_instrument(handle: i64, slot: i64) -> i32;
+extern fn __mlang_std_audio_controller_instrument_clear_pad(handle: i64, slot: i64, pad: i64) -> i32;
+extern fn __mlang_std_audio_controller_instrument_sampler(handle: i64, slot: i64, key: i64) -> i64;
 extern fn __mlang_std_audio_controller_instrument_pad(handle: i64, slot: i64, pad: i64, samples: list<f32>, channels: i64, rate: i64, name: str8) -> i32;
 extern fn __mlang_std_audio_controller_restore_parameter(handle: i64, slot: i64, index: i64, value: f64) -> i32;
 extern fn __mlang_std_audio_controller_midi_target(handle: i64, source: i64, instrument: i64) -> i32;
@@ -137,6 +139,15 @@ impl AudioController {
     /// in `slot` (1-32), e.g. Mla Drum. Audio may keep running. 0 or -1 (see last_error).
     pub fn instrument_pad(self: AudioController, slot: i64, pad: i64, samples: list<f32>, channels: i64, rate: i64, name: str8) -> i32 {
         return __mlang_std_audio_controller_instrument_pad(self.handle, slot, pad, samples, channels, rate, name);
+    }
+    /// Empty pad `pad` of the sampler instrument in `slot`. 0 or -1.
+    pub fn instrument_clear_pad(self: AudioController, slot: i64, pad: i64) -> i32 {
+        return __mlang_std_audio_controller_instrument_clear_pad(self.handle, slot, pad);
+    }
+    /// Sampler layout: key 0 = MIDI key of pad 0, 1 = pad count, 2 = loaded-pad
+    /// bitmask. -1 when the instrument is not a sampler.
+    pub fn instrument_sampler(self: AudioController, slot: i64, key: i64) -> i64 {
+        return __mlang_std_audio_controller_instrument_sampler(self.handle, slot, key);
     }
     /// Optional host is installed by the application (mlacker installs VST3).
     pub fn processor_support() -> bool { return __mlang_std_audio_controller_processor_support() != 0; }

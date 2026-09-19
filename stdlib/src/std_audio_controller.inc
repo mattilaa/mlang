@@ -777,6 +777,26 @@ int32_t __mlang_std_audio_controller_instrument_pad(int64_t handle, int64_t slot
     }
     audio_clear_error(); return 0;
 }
+/* Control thread; audio may run. Empties a sampler pad. */
+int32_t __mlang_std_audio_controller_instrument_clear_pad(int64_t handle, int64_t slot, int64_t pad) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || pad < 0 || pad > 127) { audio_set_error("Invalid instrument slot or pad"); return -1; }
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    if(!p->context || !p->load_pad) { audio_set_error("This instrument does not accept pad samples"); return -1; }
+    char error[256] = {0};
+    if(p->load_pad(p->context, (int32_t)pad, NULL, 0, 0, 0.0, "", error, (int32_t)sizeof(error)) != 0) {
+        audio_set_error(error[0] ? error : "Instrument could not clear the pad"); return -1;
+    }
+    audio_clear_error(); return 0;
+}
+/* Control thread. Sampler layout of an instrument: key 0 root key, 1 pad
+ * count, 2 loaded-pad bitmask. -1 for non-samplers or invalid slots. */
+int64_t __mlang_std_audio_controller_instrument_sampler(int64_t handle, int64_t slot, int64_t key) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || key < 0 || key > 2) return -1;
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    return p->context && p->sampler_info ? p->sampler_info(p->context, (int32_t)key) : -1;
+}
 const char *__mlang_std_audio_controller_instrument_name(int64_t handle, int64_t slot) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || slot < 1 || slot > 296) return "";
