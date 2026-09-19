@@ -11,6 +11,7 @@ use tui_demo::sequence::*;
 use tui_demo::audio_clip::*;
 use tui_demo::audio_controller::AudioSystem;
 use tui_demo::audio_controller::EffectChannel;
+use tui_demo::audio_controller::PadAssignment;
 use std::audio::controller::AudioController;
 use tui::table::*;
 use tui::listview::*;
@@ -81,7 +82,7 @@ pub struct SessionView {
     var effect_focus: bool; var effect_selected: i32;
 };
 pub struct MidiLearnSnapshot { var key: i32; var slot: i32; var parameter_id: i64; };
-pub struct SessionData { var library: PatternLibrary; var plugins: list<PluginSnapshot>; var view: SessionView; var midi_learn: list<MidiLearnSnapshot>; var effect_volumes: list<i32>; };
+pub struct SessionData { var library: PatternLibrary; var plugins: list<PluginSnapshot>; var view: SessionView; var midi_learn: list<MidiLearnSnapshot>; var effect_volumes: list<i32>; var pads: list<PadAssignment>; };
 impl SessionData {
     pub fn release_plugins(self: &mut Self) -> void {
         let plugins: list<PluginSnapshot> = self.plugins; for plugin in plugins { free(plugin.path); }
@@ -135,6 +136,16 @@ impl SessionData {
             if found < 0 { next.release(); return Err<AudioSystem, str8>("MIDI learn parameter no longer exists"); }
             if next.output.midi_learn(mapping.key, mapping.slot, found) != 0 { next.release(); return Err<AudioSystem, str8>("Cannot restore MIDI learn mapping"); }
         }
+        // Sampler pads reference the embedded sample list, not source files.
+        let pads: list<PadAssignment> = self.pads;
+        for entry in pads {
+            let clip: AudioClip = self.library.audio.samples[entry.sample];
+            let name: str8 = base_name(clip.source);
+            let sent: i32 = next.output.instrument_pad(entry.slot, entry.pad, clip.samples, clip.channels, clip.sample_rate, name);
+            free(name);
+            if sent != 0 { next.release(); return Err<AudioSystem, str8>("Cannot restore a sampler pad; session retained"); }
+        }
+        next.pads = self.pads;
         return Ok<AudioSystem, str8>(next);
     }
 }
@@ -525,7 +536,7 @@ impl SessionCodec {
                 }
             }
         }
-        let extension: bool = self.reading ? self.reader.remaining() > 0 : mappings.len() > 0 || audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0;
+        let extension: bool = self.reading ? self.reader.remaining() > 0 : mappings.len() > 0 || audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0;
         if extension {
             let tag: str8 = self.text("MIDI_LEARN"); if tag != "MIDI_LEARN" { self.failed = true; } if self.reading { free(tag); }
             let mapping_count: i32 = self.number(i32(mappings.len()), 0, 2048);
@@ -549,7 +560,7 @@ impl SessionCodec {
             }
         }
         var effect_volumes: list<i32> = [];
-        let effects_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0;
+        let effects_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0;
         if effects_extension && !self.failed {
             let tag: str8 = self.text("AUX_EFFECTS"); if tag != "AUX_EFFECTS" { self.failed = true; } if self.reading { free(tag); }
             let count: i32 = self.number(i32(audio.effects.len()), 0, 8);
@@ -592,7 +603,7 @@ impl SessionCodec {
                 library.table.release(); library.table = entry.data.copy_pattern();
             }
         }
-        let inserts_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0;
+        let inserts_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0;
         if inserts_extension && !self.failed {
             let tag: str8 = self.text("TRACK_INSERTS"); if tag != "TRACK_INSERTS" { self.failed = true; } if self.reading { free(tag); }
             let count: i32 = self.number(i32(audio.insert_paths.len()), 0, 256);
@@ -626,7 +637,9 @@ impl SessionCodec {
                 if self.reading { entry.data.tracks = tracks; updated.push(entry); }
             }
             let visible: bool = self.flag(library.table.group_detail_rows > 0);
-            let selected: i32 = self.number(library.table.selected_group_detail, -1, 3);
+            // Hidden insert rows load as -1; write that canonically so a
+            // reopened session saves byte-identically.
+            let selected: i32 = self.number(library.table.group_detail_rows > 0 ? library.table.selected_group_detail : -1, -1, 3);
             if self.reading && !self.failed {
                 library.patterns = updated;
                 let entry: PatternEntry = library.patterns[library.index_of(library.active_id)];
@@ -634,11 +647,31 @@ impl SessionCodec {
                 library.table.group_detail_rows = visible ? 4 : 0; library.table.selected_group_detail = visible ? (selected < 0 ? 0 : selected) : -1;
             }
         }
+        // Optional SAMPLER_PADS extension (requires the preceding tags).
+        var pads: list<PadAssignment> = [];
+        let pads_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.pads.len() > 0;
+        if pads_extension && !self.failed {
+            let tag: str8 = self.text("SAMPLER_PADS"); if tag != "SAMPLER_PADS" { self.failed = true; } if self.reading { free(tag); }
+            let pad_count: i32 = self.number(i32(audio.pads.len()), 0, 4096);
+            var previous_key: i32 = -1;
+            for i in 0..pad_count {
+                if self.failed { break; }
+                var entry: PadAssignment = PadAssignment {}; if !self.reading { entry = audio.pads[i]; }
+                entry.slot = self.number(entry.slot, 1, 32);
+                entry.pad = self.number(entry.pad, 0, 127);
+                entry.sample = self.number(entry.sample, 0, sample_count > 0 ? sample_count - 1 : 0);
+                if sample_count == 0 || entry.slot * 128 + entry.pad <= previous_key { self.failed = true; }
+                previous_key = entry.slot * 128 + entry.pad;
+                var loaded: bool = false; for plugin in plugins { if plugin.slot == entry.slot { loaded = true; } }
+                if !loaded { self.failed = true; }
+                pads.push(entry);
+            }
+        }
         if state.editor_slot > 32 {
             var found: bool = false; for plugin in plugins { if plugin.slot == state.editor_slot { found = true; } }
             if !found { self.failed = true; }
         }
-        return SessionData { library: library, plugins: plugins, view: state, midi_learn: mappings, effect_volumes: effect_volumes };
+        return SessionData { library: library, plugins: plugins, view: state, midi_learn: mappings, effect_volumes: effect_volumes, pads: pads };
     }
     pub fn save(self: &mut Self, path: str8, library: &PatternLibrary, view: SessionView, audio: &AudioSystem) -> bool {
         let created: result<SessionBuffer, str8> = SessionBuffer::new(4096); if created.is_err() { return false; }

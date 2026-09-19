@@ -76,7 +76,16 @@ are accepted. Unsupported major or minor versions fail closed.
     track (zero means empty). Finally: insert view visible boolean and selected
     slot index (-1–3). Pattern copies can reference the same instance. Detached
     instances remain available until session close. This extension also requires
-    the preceding `MIDI_LEARN` tag, with zero mappings if necessary.
+    the preceding `MIDI_LEARN` tag, with zero mappings if necessary. When the
+    insert view is hidden the selected slot is stored as -1.
+11. Optional `SAMPLER_PADS` extension follows `TRACK_INSERTS`: a count (0–4096)
+    of `(instrument slot 1–32, pad 0–127, zero-based sample-list index)` integer
+    triples in strictly increasing `slot * 128 + pad` order. Every slot must be an
+    instrument in the plugin list, and every index must be in the sample list.
+    On restoration, after plugins and MIDI learn, each pad's embedded PCM is sent
+    to its instrument (see `stdlib/include/mla_sampler_protocol.h`; used by
+    Mla Drum). If an instrument refuses a pad, the open is rejected. This
+    extension requires the preceding tags, with empty sections if necessary.
 
 The active pattern is serialized from the live editor, not its older library
 snapshot. Audio placements reference the embedded sample list; plugin assignments
@@ -103,7 +112,8 @@ Meters/MIDI activity are transient and start silent; playback never auto-starts.
 
 Version 1.0 does not capture opaque VST3 component/controller state blobs or
 plugin-internal sample libraries. It preserves the exposed parameter state edited
-by mlacker. Future incompatible additions require a new version.
+by mlacker. Sampler pads filled by mlacker are the exception: they are rebuilt
+from the embedded sample list (`SAMPLER_PADS`). Future incompatible additions require a new version.
 
 ## Portable MIDI learn files (`.mlalearn`, version 1.0)
 

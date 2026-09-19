@@ -759,6 +759,24 @@ int32_t __mlang_std_audio_controller_unload_instrument(int64_t handle, int64_t s
     if(p->context) p->destroy(p->context);
     *p = (mlang_audio_processor){0}; c->processor_reset = 1; return 0;
 }
+/* Control thread; audio may run. Hands PCM to a sampler instrument's pad. */
+int32_t __mlang_std_audio_controller_instrument_pad(int64_t handle, int64_t slot, int64_t pad,
+    mlang_list_t samples, int64_t channels, int64_t rate, const char *name) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || pad < 0 || pad > 127 || channels < 1 || channels > 2 || rate <= 0 ||
+       samples.size <= 0 || samples.size % channels || !samples.data) {
+        audio_set_error("Pad sample requires a loaded instrument slot, pad and mono/stereo PCM"); return -1;
+    }
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    if(!p->context) { audio_set_error("Select a loaded instrument"); return -1; }
+    if(!p->load_pad) { audio_set_error("This instrument does not accept pad samples"); return -1; }
+    char error[256] = {0};
+    if(p->load_pad(p->context, (int32_t)pad, (const float*)samples.data, samples.size / channels,
+                   (int32_t)channels, (double)rate, name ? name : "", error, (int32_t)sizeof(error)) != 0) {
+        audio_set_error(error[0] ? error : "Instrument rejected the pad sample"); return -1;
+    }
+    audio_clear_error(); return 0;
+}
 const char *__mlang_std_audio_controller_instrument_name(int64_t handle, int64_t slot) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || slot < 1 || slot > 296) return "";

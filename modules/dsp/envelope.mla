@@ -1,0 +1,167 @@
+/// \file envelope.mla
+/// \brief Allocation-free ADSR amplitude envelope for realtime audio.
+///
+/// @defgroup dsp_envelope dsp::envelope
+/// @ingroup dsp
+/// @brief Attack/decay/sustain/release gain envelope with click-free retrigger.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+use dsp::detail::expf;
+/// \endcond
+
+fn clamp_envelope_f32(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+/// @brief Per-sample multiplier that falls by 60 dB over `seconds`.
+fn envelope_decay_coefficient(seconds: f32, sample_rate_hz: f32) -> f32 {
+    let samples: f32 = seconds * sample_rate_hz;
+    if samples < 1.0f { return 0.0f; }
+    // ln(0.001) = -6.907755: the level reaches -60 dB after `seconds`.
+    return expf(-6.90775527898213705205f / samples);
+}
+
+/// Level below which decay/release stages are considered silent (-80 dB).
+fn envelope_floor() -> f32 { return 0.0001f; }
+
+/// @brief ADSR amplitude envelope.
+///
+/// The attack is a linear ramp to full scale. Decay and release are
+/// exponential, with times measured to a 60 dB fall. `gate_on()` restarts the
+/// attack from the current level, so retriggering never jumps. A sustain level
+/// of zero ends the envelope after the decay, which suits one-shot drums.
+/// Stages: 0 idle, 1 attack, 2 decay, 3 sustain, 4 release.
+pub struct Adsr {
+    var sample_rate: f32;
+    var attack_seconds: f32;
+    var decay_seconds: f32;
+    var sustain: f32;
+    var release_seconds: f32;
+    var attack_step: f32;
+    var decay_coefficient: f32;
+    var release_coefficient: f32;
+    var level: f32;
+    var stage: i32;
+};
+
+impl Adsr {
+    /// @brief Create an idle envelope: 1 ms attack, 200 ms decay, full sustain,
+    /// 100 ms release.
+    pub fn new(sample_rate_hz: f32) -> Adsr {
+        var envelope: Adsr = Adsr {
+            sample_rate: sample_rate_hz < 1000.0f ? 1000.0f : sample_rate_hz,
+            attack_seconds: 0.001f,
+            decay_seconds: 0.2f,
+            sustain: 1.0f,
+            release_seconds: 0.1f,
+            attack_step: 1.0f,
+            decay_coefficient: 0.0f,
+            release_coefficient: 0.0f,
+            level: 0.0f,
+            stage: 0
+        };
+        envelope.update_coefficients();
+        return envelope;
+    }
+
+    fn update_coefficients(self: &mut Self) -> void {
+        let attack_samples: f32 = self.attack_seconds * self.sample_rate;
+        self.attack_step = attack_samples < 1.0f ? 1.0f : 1.0f / attack_samples;
+        self.decay_coefficient = envelope_decay_coefficient(self.decay_seconds, self.sample_rate);
+        self.release_coefficient = envelope_decay_coefficient(self.release_seconds, self.sample_rate);
+    }
+
+    /// @brief Change the sample rate, keeping the stage times in seconds.
+    pub fn set_sample_rate(self: &mut Self, sample_rate_hz: f32) -> void {
+        self.sample_rate = sample_rate_hz < 1000.0f ? 1000.0f : sample_rate_hz;
+        self.update_coefficients();
+    }
+
+    /// @brief Attack time from 0 to 10 seconds (0 = instant).
+    pub fn set_attack_seconds(self: &mut Self, seconds: f32) -> void {
+        self.attack_seconds = clamp_envelope_f32(seconds, 0.0f, 10.0f);
+        self.update_coefficients();
+    }
+
+    /// @brief Decay time to sustain from 0 to 30 seconds (0 = instant).
+    pub fn set_decay_seconds(self: &mut Self, seconds: f32) -> void {
+        self.decay_seconds = clamp_envelope_f32(seconds, 0.0f, 30.0f);
+        self.update_coefficients();
+    }
+
+    /// @brief Sustain level from 0 to 1.
+    pub fn set_sustain(self: &mut Self, level: f32) -> void {
+        self.sustain = clamp_envelope_f32(level, 0.0f, 1.0f);
+    }
+
+    /// @brief Release time from 0 to 30 seconds (0 = instant).
+    pub fn set_release_seconds(self: &mut Self, seconds: f32) -> void {
+        self.release_seconds = clamp_envelope_f32(seconds, 0.0f, 30.0f);
+        self.update_coefficients();
+    }
+
+    /// @brief Start (or restart) the attack from the current level.
+    pub fn gate_on(self: &mut Self) -> void {
+        self.stage = 1;
+    }
+
+    /// @brief Enter the release stage; an idle envelope stays idle.
+    pub fn gate_off(self: &mut Self) -> void {
+        if self.stage != 0 { self.stage = 4; }
+    }
+
+    /// @brief Silence immediately and return to idle.
+    pub fn reset(self: &mut Self) -> void {
+        self.level = 0.0f;
+        self.stage = 0;
+    }
+
+    /// @brief True until the envelope has finished its release (or decayed to
+    /// a zero sustain).
+    pub fn is_active(self: Adsr) -> bool {
+        return self.stage != 0;
+    }
+
+    /// @brief Current stage: 0 idle, 1 attack, 2 decay, 3 sustain, 4 release.
+    pub fn current_stage(self: Adsr) -> i32 {
+        return self.stage;
+    }
+
+    /// @brief Current gain without advancing.
+    pub fn current_level(self: Adsr) -> f32 {
+        return self.level;
+    }
+
+    /// @brief Advance one sample and return the gain in 0..1.
+    pub fn process(self: &mut Self) -> f32 {
+        if self.stage == 1 {
+            self.level = self.level + self.attack_step;
+            if self.level >= 1.0f {
+                self.level = 1.0f;
+                self.stage = 2;
+            }
+        } else if self.stage == 2 {
+            self.level = self.sustain + (self.level - self.sustain) * self.decay_coefficient;
+            if self.level - self.sustain < envelope_floor() {
+                self.level = self.sustain;
+                self.stage = self.sustain < envelope_floor() ? 0 : 3;
+            }
+        } else if self.stage == 3 {
+            self.level = self.sustain;
+            if self.sustain < envelope_floor() { self.stage = 0; }
+        } else if self.stage == 4 {
+            self.level = self.level * self.release_coefficient;
+            if self.level < envelope_floor() {
+                self.level = 0.0f;
+                self.stage = 0;
+            }
+        }
+        return self.level;
+    }
+}
+
+/// @}

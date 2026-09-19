@@ -134,7 +134,9 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Save MIDI learn", action: 97, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Load MIDI learn", action: 98, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Save plugin preset", action: 100, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Load plugin preset", action: 101, enabled: AudioController::processor_support() }] },
+                                MenuItem { label: "Load plugin preset", action: 101, enabled: AudioController::processor_support() },
+                                MenuItem { label: "Send audio sample to pad", action: 117, enabled: AudioController::processor_support() },
+                                MenuItem { label: "Load pad sample from file", action: 118, enabled: AudioController::processor_support() }] },
                     Menu {title: "Effect", items: [
                                 MenuItem { label: "Add effect channel", action: 110, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Load effect plugin", action: 111, enabled: AudioController::processor_support() },
@@ -228,6 +230,9 @@ pub fn run() -> i32 {
     var session_path: str8 = clone(""); var request_path: str8 = clone("");
     var session_request: i32 = 0; var saving_session: bool = false;
     var learn_action: i32 = 0; var learn_slot: i64 = 0;
+    // Sampler pads: 117 = from the Audio list, 118 = from a file.
+    var pad_action: i32 = 0; var pad_slot: i32 = 0; var pad_sample: i32 = -1; var pad_index: i32 = 0;
+    var adding_pad_file: bool = false;
     if !fixture {
         let arguments: list<str8> = __env_args();
         if arguments.len() == 2 { free(request_path); request_path = clone(arguments[1]); session_request = 1; }
@@ -389,7 +394,7 @@ pub fn run() -> i32 {
             if settings.active && settings.pressed_button >= 0 {
                 settings.tick(); dirty = true;
                 if !settings.active && settings.result == 1 {
-                    let applied: result<i32, str8> = midi.configure(settings.midi.selected_id(), settings.output.selected_id());
+                    let applied: result<i32, str8> = midi.configure(settings.midi.selected_id(), settings.output.selected_id(), library.audio.samples);
                     if applied.is_err() { settings.fail(applied.unwrap_err()); }
                     else {
                         free(message);
@@ -538,7 +543,24 @@ pub fn run() -> i32 {
                 if event.kind != InputKind::None || event.code != 0 {
                     bpm_dialog.on_event(event); dirty = true;
                     if !bpm_dialog.active && bpm_dialog.result == 1 {
-                        if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
+                        if bpm_dialog.pad_number {
+                            pad_index = bpm_dialog.value - 1;
+                            if pad_action == 117 {
+                                let clip: AudioClip = library.audio.samples[pad_sample];
+                                let name: str8 = base_name(clip.source);
+                                let error: str8 = midi.assign_pad(pad_slot, pad_index, pad_sample, clip.samples, clip.channels, clip.sample_rate, name);
+                                free(message);
+                                message = error == "" ? format!("Pad {}: {}", pad_index + 1, name) : error;
+                                free(name);
+                            } else {
+                                adding_effect = -1; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                                adding_pad_file = true; dialog.save_mode = false; dialog.bundle_pattern = "";
+                                dialog.title = format!("Load sample for pad {}", pad_index + 1);
+                                dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
+                                dialog.open(""); focus.set_menu_active(true);
+                            }
+                        }
+                        else if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
                         else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
                         else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
                         else { transport.set_bpm(bpm_dialog.value); }
@@ -557,10 +579,22 @@ pub fn run() -> i32 {
                 if event.kind != InputKind::None || event.code != 0 {
                     dialog.on_event(event, area);
                     focus.set_menu_active(dialog.active);
+                    let pad_file_dialog: bool = adding_pad_file;
                     if dialog.accepted {
                         if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, panes[1].bounds.inset(1)); }
                         free(message);
-                        if adding_insert_track >= 0 {
+                        if adding_pad_file {
+                            // Disk samples join the session's Audio list so they are embedded.
+                            if !library.audio.load(dialog.accepted_path, transport.bpm) { message = format!("Cannot load sample: {}", library.audio.error); }
+                            else {
+                                let index: i32 = i32(library.audio.samples.len()) - 1;
+                                let clip: AudioClip = library.audio.samples[index];
+                                let name: str8 = base_name(clip.source);
+                                let error: str8 = midi.assign_pad(pad_slot, pad_index, index, clip.samples, clip.channels, clip.sample_rate, name);
+                                message = error == "" ? format!("Pad {}: {} (added to Audio)", pad_index + 1, name) : error;
+                                free(name);
+                            }
+                        } else if adding_insert_track >= 0 {
                             let id: i32 = midi.add_insert(dialog.accepted_path, library.free_insert_id(i32(midi.insert_paths.len())));
                             if id > 0 { library.table.set_insert(adding_insert_track, adding_insert_position, id); }
                             message = clone(id > 0 ? "Insert effect loaded" : "Cannot load insert: select a VST3 effect (maximum 256 loaded inserts)");
@@ -591,6 +625,7 @@ pub fn run() -> i32 {
                             if !adding_audio && !fixture { free(request_path); request_path = clone(dialog.accepted_path); session_request = saving_session ? 2 : 1; }
                         }
                     }
+                    if pad_file_dialog && !dialog.active { adding_pad_file = false; }
                     dirty = true;
                 }
             }
@@ -812,6 +847,19 @@ pub fn run() -> i32 {
                     else { free(message); message = clone("Select a source track in Pattern view first"); }
                 }
             }
+            else if command == 117 || command == 118 {
+                let slot: i32 = library.selected_instrument();
+                let selected: i32 = library.audio.view.selected;
+                if slot < 1 || midi.output.parameter_info(slot, 0, 0) < 0.0 {
+                    free(message); message = clone("Select a loaded sampler instrument (e.g. Mla Drum) in Instruments first");
+                } else if command == 117 && (selected < 0 || selected >= library.audio.samples.len()) {
+                    free(message); message = clone("Select a sample in Audio first (View > Audio)");
+                } else {
+                    pad_action = command; pad_slot = slot; pad_sample = selected;
+                    bpm_dialog.open_pad(pad_index + 1, command == 117 ? "Send sample to pad" : "Load pad sample from file");
+                    focus.set_menu_active(true);
+                }
+            }
             else if command == 94 {
                 if !instrument_editor.open(midi.output, library.selected_instrument()) {
                     free(message); message = clone("Select a loaded instrument in Instruments first");
@@ -953,6 +1001,7 @@ pub fn run() -> i32 {
                 else if dialog.active {
                     dialog.on_event(event, area);
                     focus.set_menu_active(dialog.active);
+                    if !dialog.active { adding_pad_file = false; }
                     dirty = true;
                 }
                 else if library.table.editing || (library.table.visual && menus.active < 0 && focus.selected == 1) {

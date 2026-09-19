@@ -130,6 +130,24 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
   track strips scroll. Its L/R meters show measured output peaks with smooth
   decay, using the selected meter style and update rate—not MIDI velocity.
 
+### Drum sampler pads
+
+[Mla Drum](../plugins/mla_drum) (and any instrument implementing
+`stdlib/include/mla_sampler_protocol.h`) takes samples into numbered pads. Select
+the loaded instance in **View → Instruments**, then:
+
+- **Instrument → Load pad sample from file** asks for a pad (1–16), then a
+  WAV/AIFF. The file is added to the Audio list too.
+- **Instrument → Send audio sample to pad** sends the sample selected in
+  **View → Audio** to the pad you enter.
+
+Pads can be loaded while audio is playing. Pad 1 plays at the plugin's Root Key
+(default MIDI 36), pad 2 one key higher, and so on. For per-drum effects, load
+one instance per drum family, give each its own Instrument track, and add
+inserts to those tracks. `.mlack` saves which Audio sample each pad uses and
+reloads the pads on open and after audio-device changes. Removing an instrument
+forgets its pads.
+
 ### Mixer faders and MIDI recording
 
 Press `m` to show Mixer, then focus it with `Ctrl+Shift+J` from Pattern view.

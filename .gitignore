@@ -33,6 +33,7 @@ _deps
 CMakeUserPresets.json
 
 # Generated robot/frontend test artifacts (root-level)
+*.vst3*
 fake_*.sh
 fake_*.log
 bench_*.mla

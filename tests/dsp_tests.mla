@@ -1,6 +1,7 @@
 mod std::testing;
 mod dsp::convolution;
 mod dsp::distortion;
+mod dsp::envelope;
 mod dsp::delay;
 mod dsp::filter;
 mod dsp::limiter;
@@ -14,6 +15,7 @@ use dsp::convolution::same_i64;
 use dsp::convolution::valid_f32;
 use dsp::convolution::valid_i64;
 use dsp::distortion::AnalogDistortion;
+use dsp::envelope::Adsr;
 use dsp::delay::DelayFrame;
 use dsp::delay::DelayMode;
 use dsp::delay::FeedbackFilter;
@@ -257,6 +259,62 @@ fn test_dsp_moog_ladder_resonant_sweep_stays_finite() {
         energy = energy + output * output;
     }
     verify(energy > 0.000001f);
+}
+
+#[test]
+fn test_dsp_adsr_stages_reach_sustain_and_release_to_idle() {
+    var env: Adsr = Adsr::new(1000.0f);
+    env.set_attack_seconds(0.01f);
+    env.set_decay_seconds(0.05f);
+    env.set_sustain(0.5f);
+    env.set_release_seconds(0.05f);
+    verify(!env.is_active());
+    env.gate_on();
+    var peak: f32 = 0.0f;
+    for i in 0..10 {
+        peak = env.process();
+    }
+    verify(approx_f32(peak, 1.0f, 0.000001f));
+    verify(env.current_stage() == 2);
+    for i in 0..200 {
+        env.process();
+    }
+    verify(env.current_stage() == 3);
+    verify(approx_f32(env.current_level(), 0.5f, 0.000001f));
+    env.gate_off();
+    verify(env.current_stage() == 4);
+    // 60 dB fall per release time; 0.5 -> -80 dB floor takes well under 5x.
+    for i in 0..250 {
+        env.process();
+    }
+    verify(!env.is_active());
+    verify(approx_f32(env.current_level(), 0.0f, 0.000001f));
+}
+
+#[test]
+fn test_dsp_adsr_zero_sustain_ends_after_decay_and_retrigger_is_continuous() {
+    var env: Adsr = Adsr::new(1000.0f);
+    env.set_attack_seconds(0.0f);
+    env.set_decay_seconds(0.02f);
+    env.set_sustain(0.0f);
+    env.gate_on();
+    verify(approx_f32(env.process(), 1.0f, 0.000001f));
+    for i in 0..200 {
+        env.process();
+    }
+    verify(!env.is_active());
+
+    env.set_attack_seconds(0.1f);
+    env.gate_on();
+    let first: f32 = env.process();
+    verify(first > 0.0f && first < 0.02f);
+    env.gate_off();
+    let released: f32 = env.process();
+    verify(released < first);
+    env.reset();
+    verify(!env.is_active());
+    env.gate_off();
+    verify(!env.is_active());
 }
 
 #[test]
