@@ -74,7 +74,7 @@ next one; Space again unmarks it. Marked rows are drawn a step brighter than the
 rest, and Enter (or OK) opens every marked file instead of the one under the
 cursor. Marks survive moving between directories and are cleared when the
 chooser reopens. Multi-select is only offered where opening several files makes
-sense: **Add → Audio**, **Add → Instrument** (each bundle becomes its own
+sense: **Audio → Add audio**, **Instrument → Add instrument** (each bundle becomes its own
 instance) and pad samples (which fill consecutive pads from the chosen key).
 Session, preset, MIDI-learn, effect/insert and every save chooser stay
 single-file, and Space does nothing there.
@@ -141,7 +141,7 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
 
 ## Instrument tracks
 
-- **Add → Instrument** browses `.vst3` bundles on disk. On selection, the host
+- **Instrument → Add instrument** browses `.vst3` bundles on disk. On selection, the host
   validates the first class marked `Instrument`, its MIDI input and supported
   audio buses. Effects and incompatible/broken bundles report an error without
   adding an entry. Only open trusted plugins.
@@ -156,7 +156,7 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
   track using the selected library instance, unless another track in the pattern
   already uses that instance. The new track then starts unassigned, so it never
   silently shares another track's pads, fader and meters. An unassigned track
-  stays silent until assigned through **Add → Instrument** (a new instance) or
+  stays silent until assigned through **Instrument → Add instrument** (a new instance) or
   Enter in the Instruments list, which asks whether to share or load a new
   instance.
 - Up to 32 instances may be loaded, independently routed and summed before the
@@ -362,7 +362,13 @@ and initial values are copied into memory when the plugin loads.
 
 **Instrument → Remove instrument** stops playback, joins the MIDI worker, stops
 audio, unloads the selected instance, and clears its assignments in every
-pattern. Other instrument IDs remain unchanged; vacant slots can be reused.
+pattern. Delete or Backspace in the left Instruments/Audio list removes the selected
+item; Audio also offers **Remove audio**. Used items offer **Remove sequences**,
+**Keep sequences**, or **Cancel**, across all patterns. Keeping instrument sequences
+preserves notes for assigning another plugin. Keeping audio sequences preserves their
+placed clips while removing the library entry. Removing instrument sequences deletes
+assigned tracks (the final track is cleared); removing audio sequences deletes matching
+placements. Other instrument IDs remain unchanged; vacant slots can be reused.
 Saved `.mlack` sessions restore exposed parameter edits across application
 restarts and audio-device changes. Dynamic parameter-list changes and plugin-originated
 parameter notifications are not handled yet; reopen to refresh cached values.
@@ -386,13 +392,13 @@ preallocated, with sample offsets preserved by the native audio event queue.
 ### Master slot
 
 1. Select MIDI input and master output in **File → Settings**.
-2. Choose **Add → VST3 master plugin**.
+2. Choose **Instrument → VST3 master plugin**.
 3. Select a `.vst3` bundle, or type its full path into the dialog and press Enter.
    The chooser starts in `/Library/Audio/Plug-Ins/VST3`; user plugins are commonly
    under `~/Library/Audio/Plug-Ins/VST3`. Matching bundles are selectable items,
    not directories to navigate into.
 4. Play MIDI input or press Space to play pattern MIDI through the plugin.
-5. **Add → Unload master VST3** restores the reference sine preview instrument.
+5. **Instrument → Unload master VST3** restores the reference sine preview instrument.
 
 The first audio-processor class in a bundle is loaded into one master slot.
 Zero-audio-input plugins act as instruments and replace the reference sine

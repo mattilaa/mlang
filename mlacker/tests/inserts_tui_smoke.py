@@ -27,7 +27,7 @@ def main():
             assert b"VST3 editor:" in frame
             assert b"0.25" in tui.send(b"\r\x150.25\r")
             tui.send(b"\x1b")
-            frame = tui.send(F1 + b"lllllllljj\r")  # Effect > Edit effect plugin.
+            frame = tui.send(F1 + b"llllllljj\r")  # Effect > Edit effect plugin.
             assert b"0.25" in frame, frame[-5000:]
             tui.send(b"\x1b")
             tui.send(b"j\r")

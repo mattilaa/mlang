@@ -283,6 +283,46 @@ impl PatternLibrary {
         if self.instruments.selected < 0 || self.instruments.selected >= self.instruments.items.len() { return 0; }
         let item: ListItem = self.instruments.items[self.instruments.selected]; return item.id;
     }
+    /// Include inactive patterns, but ignore the stale saved copy of the active one.
+    pub fn removal_used(self: &mut Self, audio: bool, id: i32) -> bool {
+        if audio {
+            if id < 0 || id >= self.audio.samples.len() { return false; }
+            let clip: AudioClip = self.audio.samples[id];
+            if self.table.library_audio(clip, false) { return true; }
+            let entries: list<PatternEntry> = self.patterns;
+            for entry in entries {
+                var data: SequenceTable = SequenceTable {}; data = entry.data;
+                if entry.id != self.active_id && data.library_audio(clip, false) { return true; }
+            }
+        } else {
+            if self.table.instrument_in_use(id) { return true; }
+            let entries: list<PatternEntry> = self.patterns;
+            for entry in entries { if entry.id != self.active_id && entry.data.instrument_in_use(id) { return true; } }
+        }
+        return false;
+    }
+    pub fn remove_library_item(self: &mut Self, audio: bool, id: i32, sequences: bool, area: Rect) -> void {
+        if sequences {
+            if audio { self.table.library_audio(self.audio.samples[id], true); }
+            else { self.table.remove_instrument_sequences(id, area); }
+            let old: list<PatternEntry> = self.patterns; var next: list<PatternEntry> = [];
+            for item in old {
+                var entry: PatternEntry = PatternEntry {}; entry = item;
+                if audio { entry.data.library_audio(self.audio.samples[id], true); }
+                else { entry.data.remove_instrument_sequences(id, area); }
+                next.push(entry);
+            }
+            self.patterns = next;
+        }
+        if !audio { self.remove_instrument(id, area); return; }
+        let old: list<AudioClip> = self.audio.samples; var kept: list<AudioClip> = [];
+        for i in 0..old.len() { if i == id { old[i].release(); } else { kept.push(old[i]); } }
+        self.audio.samples = kept;
+        let items: list<ListItem> = self.audio.view.items; var rows: list<ListItem> = [];
+        for i in 0..items.len() { if i == id { free(items[i].label); } else { rows.push(items[i]); } }
+        self.audio.view.items = rows; self.audio.view.cancel_pending(); self.audio.view.reconcile(area);
+        self.table.reconcile(area);
+    }
     pub fn remove_instrument(self: &mut Self, id: i32, area: Rect) -> void {
         self.table.detach_instrument(id);
         let old: list<PatternEntry> = self.patterns; var next: list<PatternEntry> = [];

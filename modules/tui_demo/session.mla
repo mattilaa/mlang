@@ -482,12 +482,34 @@ impl SessionCodec {
             library.patterns = [];
         }
         let magic: str8 = self.text("MLACK"); if magic != "MLACK" { self.failed = true; } if self.reading { free(magic); }
-        self.number(1, 1, 1); self.number(0, 0, 0);
+        // Detached placements retain PCM without returning to the visible library.
+        var stored_samples: list<AudioClip> = library.audio.samples;
+        let visible_samples: i32 = i32(stored_samples.len());
+        if !self.reading {
+            let entries: list<PatternEntry> = library.patterns;
+            for entry in entries {
+                var data: SequenceTable = SequenceTable {}; data = entry.id == library.active_id ? library.table : entry.data;
+                let tracks: list<SequenceTrack> = data.tracks;
+                for track in tracks {
+                    let placements: list<AudioInstance> = track.instances;
+                    for instance in placements {
+                        var found: bool = false;
+                        for sample in stored_samples {
+                            if sample.source == instance.clip.source && sample.frames == instance.clip.frames && sample.frames_per_row == instance.clip.frames_per_row { found = true; }
+                        }
+                        if !found { stored_samples.push(instance.clip); }
+                    }
+                }
+            }
+        }
+        self.number(1, 1, 1);
+        let minor: i32 = self.number(stored_samples.len() > visible_samples ? 1 : 0, 0, 1);
         var state: SessionView = self.view(view);
-        let sample_count: i32 = self.number(i32(library.audio.samples.len()), 0, 256);
+        let sample_count: i32 = self.number(i32(stored_samples.len()), 0, 256);
+        let visible_count: i32 = minor == 1 ? self.number(visible_samples, 0, sample_count) : sample_count;
         for i in 0..sample_count {
             if self.failed { break; }
-            var clip: AudioClip = AudioClip {}; if !self.reading { clip = library.audio.samples[i]; }
+            var clip: AudioClip = AudioClip {}; if !self.reading { clip = stored_samples[i]; }
             let decoded: AudioClip = self.clip(clip);
             if self.reading { library.audio.samples.push(decoded); let name: str8 = base_name(decoded.source); library.audio.view.items.push(ListItem { id: i32(i) + 1, label: format!("{} {}", i + 1, name) }); free(name); }
         }
@@ -525,7 +547,7 @@ impl SessionCodec {
             var entry: PatternEntry = PatternEntry {}; if !self.reading { entry = library.patterns[i]; }
             entry.id = self.number(entry.id, 1, library.next_id - 1); entry.name = self.text(self.reading ? "" : entry.name);
             if !self.reading && entry.id == library.active_id { entry.data = library.table; }
-            entry.data = self.sequence_data(entry.data, library.audio.samples);
+            entry.data = self.sequence_data(entry.data, self.reading ? library.audio.samples : stored_samples);
             if self.reading {
                 if library.index_of(entry.id) >= 0 { self.failed = true; }
                 library.patterns.push(entry);
@@ -700,6 +722,15 @@ impl SessionCodec {
         if state.editor_slot > 32 {
             var found: bool = false; for plugin in plugins { if plugin.slot == state.editor_slot { found = true; } }
             if !found { self.failed = true; }
+        }
+        if self.reading && visible_count < library.audio.samples.len() {
+            let samples: list<AudioClip> = library.audio.samples; var visible: list<AudioClip> = [];
+            let items: list<ListItem> = library.audio.view.items; var rows: list<ListItem> = [];
+            for i in 0..samples.len() {
+                if i < visible_count { visible.push(samples[i]); rows.push(items[i]); }
+                else { samples[i].release(); free(items[i].label); }
+            }
+            library.audio.samples = visible; library.audio.view.items = rows;
         }
         return SessionData { library: library, plugins: plugins, view: state, midi_learn: mappings, effect_volumes: effect_volumes, pads: pads };
     }

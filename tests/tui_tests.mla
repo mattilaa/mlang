@@ -2782,3 +2782,57 @@ fn tui_input_menu_and_pane_keys() {
     verify(back.kind == InputKind::Menu && back.key == Key::Toggle && back.modifiers == 2);
     verify(back.code == 9);
 }
+
+#[test]
+fn tui_library_removal_sequences() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var library: PatternLibrary = PatternLibrary::new();
+    library.table.create_instrument_track(7, area); library.add_instrument(7, "Test");
+    library.add(true);
+    verify(library.removal_used(false, 7));
+    library.remove_library_item(false, 7, true, area);
+    verify(!library.removal_used(false, 7));
+    verify(library.instruments.items.len() == 0);
+    let tracks: list<SequenceTrack> = library.table.tracks;
+    for track in tracks { verify(!track.instrument); }
+    library.release();
+}
+
+#[test]
+fn tui_library_removal_audio_keep_roundtrip() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var library: PatternLibrary = PatternLibrary::new();
+    library.table.create_track_kind(false, true, area);
+    let clip: AudioClip = test_clip(8000, 0.25f);
+    library.audio.add_clip(clip); let stored: AudioClip = library.audio.samples[0]; verify(library.table.insert_audio(stored, area));
+    library.add(true);
+    verify(library.removal_used(true, 0));
+    library.remove_library_item(true, 0, false, area);
+    verify(library.audio.samples.len() == 0 && library.audio.view.items.len() == 0);
+    verify(library.table.tracks[library.table.tracks.len() - 1].instances.len() == 1);
+    let directory: str8 = clone("/private/tmp/mlacker-remove-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/kept.mlack", directory);
+    var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    verify(codec.save(path, library, SessionView {}, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap();
+    verify(restored.library.audio.samples.len() == 0);
+    verify(restored.library.table.tracks[restored.library.table.tracks.len() - 1].instances.len() == 1);
+    restored.release(); library.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}
+
+#[test]
+fn tui_library_removal_audio_sequences() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var library: PatternLibrary = PatternLibrary::new();
+    library.table.create_track_kind(false, true, area);
+    let clip: AudioClip = test_clip(8000, 0.25f);
+    library.audio.add_clip(clip); let stored: AudioClip = library.audio.samples[0]; verify(library.table.insert_audio(stored, area));
+    library.add(true);
+    library.remove_library_item(true, 0, true, area);
+    verify(library.audio.samples.len() == 0);
+    verify(library.table.tracks[library.table.tracks.len() - 1].instances.len() == 0);
+    let entries: list<PatternEntry> = library.patterns;
+    for entry in entries { verify(entry.data.tracks[entry.data.tracks.len() - 1].instances.len() == 0); }
+    library.release();
+}

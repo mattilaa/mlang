@@ -49,7 +49,7 @@ def main():
         frame = send(F1 + b"llljljj\r", 0.5)
         assert b"Instrument track created" in frame, frame[-2000:]
         assert b"Instruments" in frame
-        assert b"Add VST3 instrument" in send(F1 + b"lllllljjj\r")
+        assert b"Add VST3 instrument" in send(F1 + b"llllll\r")
         frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
         assert b"Instrument loaded: Mlacker Test Instrument" in frame, frame[-2000:]
         assert b"001 Mlacker Test" in frame, frame[-6000:]
@@ -71,14 +71,14 @@ def main():
         assert b"PLAY" in frame, frame[-6000:]
         frame = send(b" ")
         assert b"STOP" in frame, frame[-6000:]
-        frame = send(F1 + b"lllllll\r")
+        frame = send(F1 + b"lllllljjj\r")
         assert b"VST3 editor:" in frame and b"Modulation" in frame, frame[-6000:]
         frame = send(b"J\r\x151.5\r")
         assert b"Invalid value" in frame, frame[-6000:]
         frame = send(b"\x150.25\r")
         assert b"0.25" in frame, frame[-6000:]
         send(b"\x1b", 0.4)
-        frame = send(F1 + b"lllllll\r")
+        frame = send(F1 + b"lllllljjj\r")
         assert b"VST3 editor:" in frame and b"0.25" in frame, frame[-6000:]
         frame = send(b"L")
         assert b"255;255;255" in frame and b"192;32;48" in frame, frame[-6000:]
@@ -104,10 +104,12 @@ def main():
         assert b"VST3 editor:" in frame, frame[-6000:]
         send(b"\x1b", 0.4)
         send(b"m")  # Inspector displays command status.
-        frame = send(F1 + b"lllllllj\r")
-        assert b"Instrument removed; track assignments cleared" in frame, frame[-6000:]
+        frame = send(F1 + b"lllllljjjj\r")
+        assert b"Also remove its sequences" in frame, frame[-6000:]
+        frame = send(b"l\r", 0.5)
+        assert b"Item removed; sequences kept." in frame, frame[-6000:]
         # Slot reuse must not shift IDs or retain the old assignment.
-        assert b"Add VST3 instrument" in send(F1 + b"lllllljjj\r")
+        assert b"Add VST3 instrument" in send(F1 + b"llllll\r")
         frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
         assert b"001 Mlacker Test" in frame and b"Instrument: 1" in frame, frame[-6000:]
         send(b"q")

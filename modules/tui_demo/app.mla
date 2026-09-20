@@ -122,6 +122,8 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Clone pattern", action: 53, enabled: true },
                                 MenuItem { label: "Set length", action: 54, enabled: true }] },
                     Menu {title: "Audio", items: [
+                                MenuItem { label: "Add audio", action: 60, enabled: true },
+                                MenuItem { label: "Remove audio", action: 119, enabled: true },
                                 MenuItem { label: "Copy clip", action: 61, enabled: true },
                                 MenuItem { label: "Cut clip", action: 62, enabled: true },
                                 MenuItem { label: "Paste clip", action: 63, enabled: true },
@@ -131,11 +133,10 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Slice selection", action: 106, enabled: true },
                                 MenuItem { label: "Reverse clip", action: 102, enabled: true },
                                 MenuItem { label: "Edit sample (destructive)", action: 107, enabled: true }] },
-                    Menu { title: "Add", items: [MenuItem { label: "Audio", action: 60, enabled: true },
+                    Menu {title: "Instrument", items: [
+                                MenuItem { label: "Add instrument", action: 93, enabled: AudioController::processor_support() },
                                 MenuItem { label: "VST3 master plugin", action: 91, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Unload master VST3", action: 92, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Instrument", action: 93, enabled: AudioController::processor_support() }] },
-                    Menu {title: "Instrument", items: [
                                 MenuItem { label: "Open VST3 editor", action: 94, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Remove instrument", action: 95, enabled: AudioController::processor_support() },
                                 MenuItem { label: "Save MIDI learn", action: 97, enabled: AudioController::processor_support() },
@@ -273,13 +274,14 @@ pub fn run() -> i32 {
     var share_id: i32 = 0;
     paste_error.buttons = [PushButton { label: "OK", action: 1 }];
     var message: str8 = clone("Select a command from the menu.");
-    if AudioController::processor_support() { free(message); message = clone("mlacker | Add > VST3 master plugin to load an instrument or effect."); }
+    if AudioController::processor_support() { free(message); message = clone("mlacker | Instrument > Add instrument | Delete in left list removes selected item."); }
     var running: bool = true;
     var dirty: bool = true;
     var previous_width: i32 = 0;
     var previous_height: i32 = 0;
     var escape_ticks: i32 = 0;
     var confirm_track_action: i32 = 0;
+    var removal_kind: i32 = 0; var removal_id: i32 = 0; var removal_ready: i32 = 0;
     var last_processor_errors: i64 = 0;
     var prev_sample_row: i32 = -1;
     let no_hardware: str8 = __env_get_var("MLANG_TUI_NO_HARDWARE");
@@ -287,6 +289,21 @@ pub fn run() -> i32 {
     free(no_hardware);
     var master_meter_clock: i64 = now_ms();
     while running {
+        if removal_ready != 0 {
+            transport.playing = false;
+            note_playback.update(library.table, transport.ticks, false);
+            midi.sequencer_events(note_playback.events);
+            let error: str8 = removal_kind == 95 ? midi.remove_instrument(removal_id) : clone("");
+            free(message);
+            if error != "" { message = error; }
+            else {
+                free(error);
+                if removal_kind == 95 { instrument_editor.release(); }
+                library.remove_library_item(removal_kind == 119, removal_id, removal_ready == 1, terminal_bounds());
+                message = clone(removal_ready == 1 ? "Item and sequences removed." : "Item removed; sequences kept.");
+            }
+            removal_ready = 0; removal_kind = 0; dirty = true;
+        }
         if session_request != 0 {
             var session_status: str8 = "";
             transport.playing = false;
@@ -601,7 +618,11 @@ pub fn run() -> i32 {
             if question.active && question.pressed_button >= 0 {
                 question.tick(); dirty = true;
                 if !question.active {
-                    if confirm_track_action != 0 {
+                    if removal_kind != 0 {
+                        if question.result == 1 || question.result == 3 { removal_ready = question.result; }
+                        else { removal_kind = 0; }
+                        question.buttons = [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 }];
+                    } else if confirm_track_action != 0 {
                         if question.result == 1 {
                             if confirm_track_action == 54 { library.table.set_length(length_target, terminal_bounds()); }
                             else { library.table.track_action(confirm_track_action, terminal_bounds()); }
@@ -764,7 +785,7 @@ pub fn run() -> i32 {
             }
             else if question.active {
                 question.on_event(event);
-                if !question.active { confirm_track_action = 0; free(message); message = clone("Cancelled."); }
+                if !question.active { removal_kind = 0; question.buttons = [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 }]; confirm_track_action = 0; free(message); message = clone("Cancelled."); }
                 dirty = true;
             }
             else if dialog.active {
@@ -879,7 +900,10 @@ pub fn run() -> i32 {
                     command = library.table.insert_event(event, panes[1].bounds.inset(1)); dirty = true;
                 } else { if library.table.edit_event(event, panes[1].bounds.inset(1)) { dirty = true; } }
             } else if focus.selected == 0 {
-                if library.audio_mode && event.code == 101 && event.modifiers == 1 { command = 107; }
+                if (library.audio_mode || library.instruments_mode) && event.kind == InputKind::Edit && (event.key == Key::Delete || event.key == Key::Backspace) {
+                    command = library.audio_mode ? 119 : 95;
+                }
+                else if library.audio_mode && event.code == 101 && event.modifiers == 1 { command = 107; }
                 else if library.on_event(event, panes[0].bounds.inset(1)) { dirty = true; }
                 if library.share_request > 0 {
                     share_id = library.share_request; library.share_request = 0;
@@ -1058,18 +1082,18 @@ pub fn run() -> i32 {
                     free(message); message = clone("Select a loaded instrument in Instruments first");
                 }
             }
-            else if command == 95 {
-                transport.playing = false;
-                note_playback.update(library.table, transport.ticks, false);
-                midi.sequencer_events(note_playback.events);
-                let id: i32 = library.selected_instrument();
-                let error: str8 = midi.remove_instrument(id);
-                free(message);
-                if error != "" { message = error; }
-                else {
-                    instrument_editor.release(); library.remove_instrument(id, panes[0].bounds.inset(1));
-                    message = clone(midi.instrument_output_failed ? "Instrument removed; audio restart failed": "Instrument removed; track assignments cleared");
-                }
+            else if command == 95 || command == 119 {
+                removal_id = command == 95 ? library.selected_instrument() : library.audio.view.selected;
+                let valid: bool = command == 95 ? removal_id > 0 : (removal_id >= 0 && removal_id < library.audio.samples.len());
+                if valid {
+                    removal_kind = command;
+                    if library.removal_used(command == 119, removal_id) {
+                        question.title = command == 95 ? "Remove instrument" : "Remove audio";
+                        question.question = "Also remove its sequences, or keep them?";
+                        question.buttons = [PushButton { label: "Remove sequences", action: 1 }, PushButton { label: "Keep sequences", action: 3 }, PushButton { label: "Cancel", action: 2 }];
+                        question.width = 72; question.open(); focus.set_menu_active(true);
+                    } else { removal_ready = 3; }
+                } else { free(message); message = clone("Select an item in the left list first."); }
             }
             else if command == 92 {
                 transport.playing = false; free(message); message = midi.set_processor("");
@@ -1205,7 +1229,7 @@ pub fn run() -> i32 {
                 }
                 else if question.active {
                     question.on_event(event);
-                    if !question.active { confirm_track_action = 0; free(message); message = clone("Cancelled."); }
+                    if !question.active { removal_kind = 0; question.buttons = [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 }]; confirm_track_action = 0; free(message); message = clone("Cancelled."); }
                     dirty = true;
                 }
                 else if dialog.active {

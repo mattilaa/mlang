@@ -751,6 +751,41 @@ pub fn assign_instrument(self: &mut Self, id: i32) -> bool {
     track.instrument_id = id; self.replace_track(index, track);
     self.revision = self.revision + 1; self.error = ""; return true;
 }
+/// Inspect or remove all placements of a library sample, preserving other clips.
+pub fn library_audio(self: &mut Self, clip: AudioClip, remove: bool) -> bool {
+    var found: bool = false;
+    let row: i32 = self.selected_row; let column: i32 = self.selected_column;
+    for t in 0..self.tracks.len() {
+        let track: SequenceTrack = self.tracks[t];
+        let instances: list<AudioInstance> = track.instances;
+        for instance in instances {
+            if instance.clip.source == clip.source && instance.clip.frames == clip.frames && instance.clip.frames_per_row == clip.frames_per_row {
+                found = true;
+                if remove {
+                    self.selected_column = self.track_start(i32(t)); self.selected_row = instance.start_row;
+                    self.remove_audio_under_cursor();
+                }
+            }
+        }
+    }
+    self.selected_row = row; self.selected_column = column;
+    if found && remove { self.revision = self.revision + 1; }
+    return found;
+}
+/// Remove assigned tracks; retain an empty final track for the editor.
+pub fn remove_instrument_sequences(self: &mut Self, id: i32, area: Rect) -> void {
+    var t: i32 = i32(self.tracks.len()) - 1;
+    while t >= 0 {
+        let track: SequenceTrack = self.tracks[t];
+        if track.instrument && track.instrument_id == id {
+            self.selected_column = self.track_start(t);
+            if self.tracks.len() == 1 { self.clear_track(); }
+            else { self.remove_track(area); }
+        }
+        t = t - 1;
+    }
+    self.detach_instrument(id); self.reconcile(area);
+}
 pub fn detach_instrument(self: &mut Self, id: i32) -> void {
     let old: list<SequenceTrack> = self.tracks; var next: list<SequenceTrack> = [];
     for item in old {
