@@ -53,7 +53,7 @@ it changes, then what it removes; related entries live in submenus.
 |------|----------|
 | File | New / Open / Recent sessions ▸ / Save / Save as / Settings / Quit |
 | Edit | Undo, Redo, Copy/Cut/Paste clip |
-| View | Patterns, Song, Audio, Instruments, Sample view ▸, Meter ▸, Reset layout, Show details |
+| View | Patterns, Song matrix, Audio, Instruments, Sample view ▸, Meter ▸, Reset layout, Show details |
 | Track | Create MIDI/AUDIO/Instrument track, Rename, Duplicate, Mute, Note lines ▸, Automation ▸, Clear pattern, Delete |
 | Pattern | Add, Clone, Rename, Set length, Remove |
 | Audio | Add audio, Edit sample (destructive), Clip ▸, Remove audio |
@@ -62,16 +62,28 @@ it changes, then what it removes; related entries live in submenus.
 
 ## Song matrix
 
-**Shift+M** shows the song matrix in the pattern pane. Rows are song steps and
-columns are parallel lanes, so several patterns can sit on one row and play
-together. Lane 1 is the plain song list shown in **View → Song**; the other
-lanes are the parallel ones.
+**Shift+M**, or **View → Song matrix**, shows the song matrix in the pattern
+pane. It replaces the old Song sidebar: rows are song steps, columns are
+parallel lanes, and every pattern on a row plays together. The sidebar keeps the
+pattern list.
 
-`h/j/k/l` (or the arrows) move the cursor. **Enter** puts the pattern selected in
-the sidebar into the cell, and **Backspace** clears it. Lane 1 always holds a
-pattern, so a song row never becomes empty; clear one of the other lanes instead.
-An empty lane is always available past the last used one, up to 16 lanes.
-Shift+M closes the matrix again.
+| Key | Action |
+|-----|--------|
+| `h/j/k/l` or arrows | Move the cursor |
+| `Enter` | Choose the cell's pattern from a list of `<no>:<name>`, or "(empty)" |
+| `Backspace` | Empty the cell |
+| `y` / `p` | Copy the cell's pattern / paste it into another cell |
+| `o` / `O` | Insert an empty row below / above, across every lane |
+| `Ctrl+O` / `Ctrl+Shift+O` | Insert a cell below / above in this lane only, leaving the other lanes where they are |
+| `dd` | Remove the whole row |
+| `Shift+M` | Close the matrix |
+
+The matrix replaces the pattern editor in that pane while it is open, and menus
+open above it. A session with no song yet starts the matrix on one empty row.
+
+Cells may be empty, including in lane 1: an empty row is a silent step. An empty
+lane is always available past the last used one, up to 16 lanes. Pasting a
+pattern warns about clashes just like choosing one does.
 
 ### Parallel patterns that clash
 

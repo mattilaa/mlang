@@ -541,15 +541,16 @@ impl SessionCodec {
         }
         let song_count: i32 = self.number(i32(library.song.len()), 0, 65536); var song: list<i32> = [];
         for i in 0..song_count {
-            let id: i32 = self.number(self.reading ? 0 : library.song[i], 1, 1000000);
-            if library.index_of(id) < 0 { self.failed = true; } song.push(id);
+            // 0 is an empty matrix row; the matrix replaced the song list view.
+            let id: i32 = self.number(self.reading ? 0 : library.song[i], 0, 1000000);
+            if id != 0 && library.index_of(id) < 0 { self.failed = true; } song.push(id);
         }
         if self.reading {
             library.song = song;
             let index: i32 = library.index_of(library.active_id);
             if index < 0 { self.failed = true; }
             if !self.failed { let entry: PatternEntry = library.patterns[index]; library.table.release(); library.table = entry.data.copy_pattern(); }
-            library.song_mode = state.sidebar == 1; library.audio_mode = state.sidebar == 2; library.instruments_mode = state.sidebar == 3;
+            library.audio_mode = state.sidebar == 2; library.instruments_mode = state.sidebar == 3;
             library.refresh(); library.view.selected = state.list_selected; library.view.scroll = state.list_scroll;
             library.audio.view.selected = state.audio_selected; library.audio.view.scroll = state.audio_scroll;
             library.instruments.selected = state.instrument_selected; library.instruments.scroll = state.instrument_scroll;

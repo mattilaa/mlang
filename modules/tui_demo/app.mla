@@ -28,6 +28,8 @@ use tui_demo::sample_view::SampleView;
 mod tui_demo::audio_clip;
 mod tui_demo::piano_dialog;
 mod tui_demo::song_matrix;
+mod tui_demo::pattern_picker;
+use tui_demo::pattern_picker::PatternPicker;
 use tui_demo::song_matrix::SongMatrix;
 mod tui_demo::sample_editor;
 use tui_demo::piano_dialog::PianoDialog;
@@ -91,7 +93,7 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Paste clip", action: 63, enabled: true }] },
                     Menu {title: "View", items: [
                                 MenuItem { label: "Patterns", action: 42, enabled: true },
-                                MenuItem { label: "Song", action: 43, enabled: true },
+                                MenuItem { label: "Song matrix", action: 43, enabled: true },
                                 MenuItem { label: "Audio", action: 44, enabled: true },
                                 MenuItem { label: "Instruments", action: 45, enabled: plugins },
                                 MenuItem::submenu("Sample view", [
@@ -181,25 +183,29 @@ fn demo_panes(content: Rect) -> list<Pane> {
             Pane { id: 2, bounds: right[1] }];
 }
 
-fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: &Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView) -> void {
+fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: &Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView, matrix_visible: bool) -> void {
     let theme: Theme = Theme::dark_blue();
     surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
     let library: Pane = panes[0];
     let editor: Pane = panes[1];
     let inspector: Pane = panes[2];
-    let sidebar: Panel = Panel { title: patterns.instruments_mode ? " Instruments " : (patterns.audio_mode ? " Audio " : (patterns.song_mode ? " Song " : " Patterns ")) };
+    let sidebar: Panel = Panel { title: patterns.instruments_mode ? " Instruments " : (patterns.audio_mode ? " Audio " : " Patterns ") };
     let left: Rect = sidebar.paint_focused(surface, library.bounds, theme, focus.is_active(0));
     if patterns.instruments_mode { patterns.instruments.paint(surface, left, theme); }
     else if patterns.audio_mode { patterns.audio.view.paint(surface, left, theme); }
     else { patterns.view.paint(surface, left, theme); }
-    let title: str8 = format!(" Pattern / {} {} ", patterns.active_id, patterns.active_name());
-    let sequence: Panel = Panel { title: title };
-    let top: Rect = sequence.paint_focused(surface, editor.bounds, theme, focus.is_active(1));
-    free(title);
-    table.paint(surface, top, theme);
-    table.paint_audio_style(surface, top, theme, sample.grainy, sample.wave);
-    table.paint_note_lengths(surface, top, theme);
-    table.paint_editor(surface, top, theme);
+    // The song matrix takes over this pane; the caller paints it right after,
+    // still below the menu bar.
+    if !matrix_visible {
+        let title: str8 = format!(" Pattern / {} {} ", patterns.active_id, patterns.active_name());
+        let sequence: Panel = Panel { title: title };
+        let top: Rect = sequence.paint_focused(surface, editor.bounds, theme, focus.is_active(1));
+        free(title);
+        table.paint(surface, top, theme);
+        table.paint_audio_style(surface, top, theme, sample.grainy, sample.wave);
+        table.paint_note_lengths(surface, top, theme);
+        table.paint_editor(surface, top, theme);
+    }
     let show_sample: bool = sample.visible && table.audio_under_cursor();
     var sample_title: str8 = "";
     if show_sample {
@@ -230,7 +236,6 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
     else { label.paint(surface, bottom, theme); table.paint_track_details(surface, bottom, theme); }
     if show_sample { free(sample_title); }
     transport.paint(surface, Rect::new(0, surface.height - 1, surface.width, 1), theme);
-    menus.paint(surface, surface.bounds(), theme);
 }
 
 pub fn run() -> i32 {
@@ -297,6 +302,7 @@ pub fn run() -> i32 {
     clash_question.buttons = [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 },
         PushButton { label: "Split", action: 3 }];
     var clash_row: i32 = 0; var clash_lane: i32 = 0; var clash_id: i32 = 0;
+    var picker: PatternPicker = PatternPicker::new();
     paste_error.buttons = [PushButton { label: "OK", action: 1 }];
     var message: str8 = clone("Select a command from the menu.");
     if AudioController::processor_support() { free(message); message = clone("mlacker | Add > VST3 master plugin to load an instrument or effect."); }
@@ -320,7 +326,7 @@ pub fn run() -> i32 {
             if session_request == 2 {
                 let view: SessionView = SessionView { bpm: transport.bpm, beats: transport.beats_per_bar, unit: transport.beat_unit,
                     row: transport.row < 0 ? 0 : transport.row, phase: transport.phase, pane: focus.selected,
-                    sidebar: library.instruments_mode ? 3 : (library.audio_mode ? 2 : (library.song_mode ? 1 : 0)),
+                    sidebar: library.instruments_mode ? 3 : (library.audio_mode ? 2 : 0),
                     list_selected: library.view.selected, list_scroll: library.view.scroll,
                     audio_selected: library.audio.view.selected, audio_scroll: library.audio.view.scroll,
                     instrument_selected: library.instruments.selected, instrument_scroll: library.instruments.scroll,
@@ -572,7 +578,7 @@ pub fn run() -> i32 {
             transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
         }
         // Editing a moving row would otherwise commit to a different row.
-        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active { transport.playing = false; }
+        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active { transport.playing = false; }
         if transport.advance(now, i32(library.table.rows.len())) {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
@@ -709,7 +715,7 @@ pub fn run() -> i32 {
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             library.table.insert_labels(midi.output);
             let surface: Surface = Surface::new(area.width, area.height);
@@ -717,15 +723,18 @@ pub fn run() -> i32 {
             library.table.reconcile(panes[1].bounds.inset(1));
             library.view.reconcile(panes[0].bounds.inset(1));
             library.audio.view.reconcile(panes[0].bounds.inset(1));
-            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample);
+            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample, matrix.visible);
             matrix.paint(surface, panes[1].bounds, Theme::dark_blue(), library, focus.is_active(1));
             instrument_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
+            // Menus sit above the pane contents, below the modal dialogs.
+            menus.paint(surface, surface.bounds(), Theme::dark_blue());
             sample_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
             dialog.paint(surface, area, Theme::dark_blue());
             question.paint(surface, area, Theme::dark_blue());
             share_question.paint(surface, area, Theme::dark_blue());
             remove_question.paint(surface, area, Theme::dark_blue());
             clash_question.paint(surface, area, Theme::dark_blue());
+            picker.paint(surface, area, Theme::dark_blue());
             library.table.paint_track_dialog(surface, area, Theme::dark_blue());
             library.paint_rename(surface, area, Theme::dark_blue());
             bpm_dialog.paint(surface, area, Theme::dark_blue());
@@ -770,13 +779,13 @@ pub fn run() -> i32 {
             else if (event.code == 19 && event.modifiers == 1) || (event.code == 115 && event.modifiers == 5) { command = 3; dirty = true; }
             // Space starts/stops from every pane, including the mixer and the
             // VST3 editor. Text entry and modal dialogs keep it for themselves.
-            else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !paste_error.active && !library.renaming && !library.table.editing {
+            else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !paste_error.active && !library.renaming && !library.table.editing {
                 transport_request = true; dirty = true;
             }
             // Tab / Shift+Tab cycle every pane of the main view: sidebar,
             // pattern, inspector/mixer, the FX bus, and the VST3 editor.
             else if event.kind == InputKind::Menu && event.key == Key::Toggle && menus.active < 0 &&
-                    !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !paste_error.active && !library.renaming && !library.table.editing {
+                    !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !paste_error.active && !library.renaming && !library.table.editing {
                 let has_bus: bool = mixer.visible && midi.effects.len() > 0;
                 let has_editor: bool = instrument_editor.active;
                 var stop: i32 = focus.selected == 0 ? 0 : (focus.selected == 1 ? 1 : (mixer.bus_focus && has_bus ? 3 : 2));
@@ -840,6 +849,17 @@ pub fn run() -> i32 {
             else if library.renaming {
                 if event.kind != InputKind::None || event.code != 0 { library.rename_event(event); dirty = true; }
             }
+            else if picker.active {
+                picker.on_event(event);
+                if !picker.active {
+                    if picker.result == 2 { free(message); message = clone("Cancelled."); }
+                    else if picker.result == 3 {
+                        free(message);
+                        message = library.set_song_at(matrix.row, matrix.lane, 0) ? clone("Matrix cell cleared") : clone("No cell here");
+                    } else { command = 121; }
+                }
+                dirty = true;
+            }
             else if clash_question.active {
                 clash_question.on_event(event);
                 if !clash_question.active && clash_question.result == 2 { free(message); message = clone("Cancelled."); }
@@ -894,6 +914,8 @@ pub fn run() -> i32 {
             }
             else if (event.code == 77 && event.modifiers == 1) || (event.modifiers == 2 && event.code == 109) {
                 matrix.visible = !matrix.visible;
+                // A session with no song yet opens on one empty row to edit.
+                if matrix.visible && library.song.len() == 0 { library.matrix_insert_row(0, false); }
                 if matrix.visible { focus.selected = 1; }
                 free(message);
                 message = clone(matrix.visible ? "Song matrix: Enter places the pattern selected in the sidebar; parallel lanes play together"
@@ -977,10 +999,48 @@ pub fn run() -> i32 {
                 } else { if library.table.mixer_event(event, panes[1].bounds.inset(1)) { dirty = true; } }
             } else if focus.selected == 1 && matrix.visible {
                 let action: i32 = matrix.on_event(event, i32(library.song.len()), library.song_lanes() + 1);
-                if action == 1 { command = 121; }
+                let area: Rect = terminal_bounds();
+                if action == 1 {
+                    // Pattern list for this cell: "<no>:<name>", plus an empty entry.
+                    var ids: list<i32> = [0]; var labels: list<str8> = [clone("  -  (empty)")];
+                    let entries: list<PatternEntry> = library.patterns;
+                    for entry in entries { ids.push(entry.id); labels.push(format!("{}{}:{}", entry.id < 10 ? "00" : (entry.id < 100 ? "0" : ""), entry.id, entry.name)); }
+                    picker.open(ids, labels, library.song_at(matrix.row, matrix.lane));
+                    focus.set_menu_active(true);
+                }
                 else if action == 2 {
-                    if library.set_song_at(matrix.row, matrix.lane, 0) { free(message); message = clone("Song cell cleared"); }
-                    else { free(message); message = clone("Lane 1 always holds a pattern; clear another lane"); }
+                    free(message);
+                    message = library.set_song_at(matrix.row, matrix.lane, 0) ? clone("Matrix cell cleared") : clone("No cell here");
+                }
+                else if action == 3 || action == 4 {
+                    free(message);
+                    message = library.matrix_insert_row(matrix.row, action == 3)
+                        ? format!("Row inserted {} {}", action == 3 ? "below" : "above", matrix.row + 1) : clone("Cannot insert a row");
+                    if action == 3 { matrix.row = matrix.row + 1; }
+                }
+                else if action == 5 || action == 6 {
+                    free(message);
+                    message = library.matrix_insert_cell(matrix.row, matrix.lane, action == 5)
+                        ? format!("Lane {} shifted down from row {}", matrix.lane + 1, matrix.row + 1) : clone("Cannot shift this lane");
+                    if action == 5 { matrix.row = matrix.row + 1; }
+                }
+                else if action == 7 {
+                    free(message);
+                    message = library.matrix_remove_row(matrix.row) ? clone("Matrix row removed") : clone("No row to remove");
+                }
+                else if action == 8 {
+                    matrix.clipboard = library.song_at(matrix.row, matrix.lane);
+                    free(message);
+                    message = matrix.clipboard > 0 ? format!("Copied pattern {}", matrix.clipboard) : clone("Copied an empty cell");
+                }
+                else if action == 9 {
+                    if matrix.clipboard > 0 && library.song_row_clashes(matrix.row, matrix.lane, matrix.clipboard) > 0 {
+                        command = 122;
+                    } else {
+                        free(message);
+                        message = library.set_song_at(matrix.row, matrix.lane, matrix.clipboard)
+                            ? format!("Pasted pattern {}", matrix.clipboard) : clone("Nothing to paste");
+                    }
                 }
                 dirty = true;
             } else if focus.selected == 1 {
@@ -1171,8 +1231,8 @@ pub fn run() -> i32 {
                     free(message); message = clone("Select a loaded instrument in Instruments first");
                 }
             }
-            else if command == 121 {
-                let id: i32 = library.selected_pattern();
+            else if command == 121 || command == 122 {
+                let id: i32 = command == 122 ? matrix.clipboard : picker.chosen();
                 if id <= 0 { free(message); message = clone("Select a pattern in the sidebar first (View > Patterns)"); }
                 else {
                     let clashes: i32 = library.song_row_clashes(matrix.row, matrix.lane, id);
@@ -1228,8 +1288,13 @@ pub fn run() -> i32 {
                 question.question = command == 22 ? "Delete the selected track and its pattern?" : "Clear all rows of the selected track?";
                 question.open(); focus.set_menu_active(true);
             }
-            else if command == 42 || command == 43 {
-                library.show_song(command == 43);
+            else if command == 42 {
+                matrix.visible = false; library.show_patterns();
+            }
+            else if command == 43 {
+                if library.song.len() == 0 { library.matrix_insert_row(0, false); }
+                matrix.visible = true; focus.selected = 1;
+                free(message); message = clone("Song matrix: Enter chooses a pattern for the cell; parallel lanes play together");
             }
             else if command == 44 { library.show_audio(); }
             else if command == 45 { library.show_instruments(); }
@@ -1346,6 +1411,11 @@ pub fn run() -> i32 {
                 else if settings.active { settings.on_event(event); dirty = true; }
                 else if bpm_dialog.active { bpm_dialog.on_event(event); dirty = true; }
                 else if library.renaming { library.rename_event(event); dirty = true; }
+                else if picker.active {
+                    picker.on_event(event);
+                    if !picker.active && picker.result == 2 { free(message); message = clone("Cancelled."); }
+                    dirty = true;
+                }
                 else if clash_question.active {
                     clash_question.on_event(event); dirty = true;
                 }
@@ -1387,7 +1457,7 @@ pub fn run() -> i32 {
     midi.release();
     settings.release();
     free(session_path); free(request_path);
-    instrument_editor.release(); sample_editor.release(); piano.release(); free(preset_path);
+    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); free(preset_path);
     free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();

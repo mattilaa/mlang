@@ -653,7 +653,7 @@ fn tui_instrument_tracks_and_routing() {
     let copied_track: SequenceTrack = copied.tracks[4]; verify(copied_track.instrument && copied_track.instrument_id == 2);
     library.select(2); library.select(1);
     let saved: SequenceTrack = library.table.tracks[4]; verify(saved.instrument && saved.instrument_id == 2);
-    library.show_song(false); verify(!library.instruments_mode);
+    library.show_patterns(); verify(!library.instruments_mode);
     library.show_instruments(); library.on_event(decode_input("gg"), area);
     library.instruments.selected = 0; library.on_event(decode_input("\r"), area);
     let selected: SequenceTrack = library.table.tracks[4]; verify(selected.instrument_id == 1);
@@ -1413,8 +1413,8 @@ fn tui_pattern_library_independence() {
     library.select(1); let original: TableRow = library.table.rows[0]; verify(original.cells[1] == "C#4");
     library.select(4); let duplicate: TableRow = library.table.rows[0]; verify(duplicate.cells[1] == "D-4");
     verify(library.rename("Intro copy edited"));
-    library.show_song(true);
-    let last: ListItem = library.view.items[4]; verify(last.label == "5  004 Intro copy edited");
+    library.show_patterns();
+    let last: ListItem = library.view.items[3]; verify(last.label == "004 Intro copy edited");
     library.add(false); verify(library.active_id == 5);
     let blank: TableRow = library.table.rows[0]; verify(blank.cells[1] == "" && blank.cells[2] == "");
     library.release();
@@ -1423,69 +1423,43 @@ fn tui_pattern_library_independence() {
 #[test]
 fn tui_song_and_pattern_removal() {
     var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 20, 10);
-    library.show_song(true);
+    library.show_patterns();
     library.on_event(decode_input("j"), area); verify(library.active_id == 2);
-    library.on_event(decode_input("d"), area); library.on_event(decode_input("d"), area);
-    verify(library.song.len() == 3 && library.patterns.len() == 3 && library.active_id == 2);
-    library.remove_active(area); verify(library.patterns.len() == 2 && library.song.len() == 2);
+    // Removing a pattern takes it out of every matrix row.
+    verify(library.song.len() == 4);
+    library.remove_active(area);
+    verify(library.patterns.len() == 2);
     let order: list<i32> = library.song;
     for id in order { verify(id != 2); }
     library.on_event(decode_input("G"), area); verify(library.active_id == 3);
     library.on_event(decode_input("g"), area); library.on_event(decode_input("g"), area); verify(library.active_id == 1);
-    library.remove_song_occurrence(area); library.remove_song_occurrence(area);
-    verify(library.song.len() == 0 && library.patterns.len() == 2 && library.view.selected == -1);
-    library.show_song(false); library.remove_active(area); library.remove_active(area);
+    library.remove_active(area);
+    verify(library.patterns.len() == 1 && library.error == "");
+    library.remove_active(area);
     verify(library.patterns.len() == 1 && library.error != "");
     library.release();
 }
 
 #[test]
-fn tui_song_row_editing() {
-    var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 20, 2);
-    verify(!library.on_event(decode_input("o"), area));
-    verify(!library.on_event(decode_input("K"), area));
-    verify(!library.on_event(decode_input("\x1b[106;5u"), area));
+fn tui_song_matrix_row_and_cell_operations() {
+    var library: PatternLibrary = PatternLibrary::new(); let area: Rect = Rect::new(0, 0, 40, 10);
     verify(library.song.len() == 4 && library.song[0] == 1);
-    library.show_song(true);
-    library.table.edit_event(decode_input("K"), area);
-    library.on_event(decode_input("\x1b[107;5u"), area); verify(library.view.selected == 0);
-    library.on_event(decode_input("\x1b[106;5u"), area);
-    verify(library.song[0] == 2 && library.song[1] == 1 && library.view.selected == 1 && library.active_id == 1);
-    library.on_event(decode_input("\x1b[27;5;106~"), area);
-    verify(library.song[2] == 1 && library.view.selected == 2 && library.view.scroll == 1);
-    library.on_event(decode_input("\x1b[107;5u"), area);
-    verify(library.song[1] == 1 && library.view.selected == 1);
-    library.on_event(decode_input("o"), area);
-    verify(library.song.len() == 5 && library.song[1] == 1 && library.song[2] == 1 && library.view.selected == 1);
-    library.on_event(decode_input("O"), area);
-    verify(library.song.len() == 6 && library.view.selected == 2 && library.view.scroll == 1);
-    library.on_event(decode_input("K"), area);
-    verify(library.song[2] == 2 && library.song[1] == 1 && library.song[3] == 1 && library.active_id == 2);
-    library.on_event(decode_input("\x1b[106;2u"), area);
-    verify(library.song[2] == 1 && library.active_id == 1);
-    let intro: TableRow = library.table.rows[0]; verify(intro.cells[1] == "C#4");
-    library.on_event(decode_input("J"), area); verify(library.song[2] == 1);
-    library.on_event(decode_input("\x1b[107;2u"), area);
-    library.on_event(decode_input("K"), area);
-    library.on_event(decode_input("K"), area); verify(library.song[2] == 3 && library.active_id == 3);
-    library.on_event(decode_input("G"), area);
-    library.on_event(decode_input("\x1b[106;5u"), area); verify(library.view.selected == 5);
-    library.on_event(decode_input("\n"), area); verify(library.view.selected == 5 && library.song.len() == 6);
-    library.on_event(decode_input("d"), area);
-    library.on_event(decode_input("O"), area);
-    library.on_event(decode_input("d"), area); verify(library.song.len() == 7);
-    library.on_event(decode_input("d"), area); verify(library.song.len() == 6);
-    // Pattern IDs may have gaps: assignment follows existing patterns, not IDs.
-    library.select(2); library.remove_active(area);
-    library.view.selected = 0; library.choose_selected();
-    library.on_event(decode_input("K"), area); verify(library.song[0] == 3);
-    library.on_event(decode_input("J"), area); verify(library.song[0] == 1);
-    let count: i32 = i32(library.song.len());
-    for _i in 0..count { library.remove_song_occurrence(area); }
-    library.on_event(decode_input("o"), area); library.on_event(decode_input("O"), area);
-    library.on_event(decode_input("J"), area); library.on_event(decode_input("K"), area);
-    library.on_event(decode_input("\x1b[106;5u"), area);
-    verify(library.song.len() == 0 && library.view.selected == -1);
+    // o/O insert whole rows, empty in every lane.
+    verify(library.set_song_at(0, 1, 3));
+    verify(library.matrix_insert_row(0, true));
+    verify(library.song.len() == 5 && library.song_at(1, 0) == 0 && library.song_at(1, 1) == 0);
+    verify(library.song_at(0, 1) == 3 && library.song_at(2, 0) == library.song[2]);
+    verify(library.matrix_insert_row(0, false));
+    verify(library.song.len() == 6 && library.song_at(0, 0) == 0 && library.song_at(1, 1) == 3);
+    // dd removes the row from every lane.
+    verify(library.matrix_remove_row(0));
+    verify(library.song.len() == 5 && library.song_at(0, 1) == 3);
+    verify(!library.matrix_remove_row(9));
+    // Ctrl+O shifts one lane only, leaving the others in place.
+    let before: i32 = library.song_at(0, 0);
+    verify(library.matrix_insert_cell(0, 1, false));
+    verify(library.song_at(0, 1) == 0 && library.song_at(1, 1) == 3);
+    verify(library.song_at(0, 0) == before);
     library.release();
 }
 
@@ -2868,8 +2842,7 @@ fn song_test_library() -> PatternLibrary {
     library.table.set_cell(0, 1, clone("C-2")); library.table.set_cell(0, 2, clone("100"));
     library.table.set_cell(4, 1, clone("D-2")); library.table.set_cell(4, 2, clone("100"));
     library.add(true);                       // clone -> pattern 2, song row 1
-    library.show_song(true); library.view.selected = 0;
-    library.on_event(decode_input("o"), area); // a second song row
+    library.matrix_insert_row(0, true);       // a second song row
     library.set_song_at(0, 0, 1); library.set_song_at(1, 0, 2);
     return library;
 }
@@ -2883,13 +2856,13 @@ fn tui_song_matrix_lanes_and_rows() {
     // Lane 2 of row 0 runs parallel to lane 1.
     verify(library.set_song_at(0, 1, 2));
     verify(library.song_lanes() == 2 && library.song_at(0, 1) == 2 && library.song_at(1, 1) == 0);
-    // Lane 1 always holds a pattern; other lanes clear back to empty.
-    verify(!library.set_song_at(0, 0, 0));
+    // Any cell can be emptied, lane 1 included; unused lanes disappear.
+    verify(library.set_song_at(0, 0, 0) && library.song_at(0, 0) == 0);
+    verify(library.set_song_at(0, 0, 1));
     verify(library.set_song_at(0, 1, 0) && library.song_lanes() == 1);
     // Inserting a song row keeps the lanes aligned with it.
     verify(library.set_song_at(1, 1, 2));
-    library.view.selected = 0;
-    library.on_event(decode_input("o"), area);
+    verify(library.matrix_insert_row(0, true));
     verify(library.song.len() == 3 && library.song_at(2, 1) == 2 && library.song_at(1, 1) == 0);
     // Out-of-range cells are refused, and lane 16 does not exist.
     verify(!library.set_song_at(9, 1, 2) && !library.set_song_at(0, 16, 2));
@@ -2941,8 +2914,7 @@ fn tui_song_matrix_survives_a_session_round_trip() {
     let area: Rect = Rect::new(0, 0, 120, 20);
     library.table.create_track_kind(false, false, area);
     library.add(true);
-    library.show_song(true); library.view.selected = 0;
-    library.on_event(decode_input("o"), area);
+    library.matrix_insert_row(0, true);
     verify(library.song.len() == 2);
     verify(library.set_song_at(0, 1, 1) && library.set_song_at(1, 2, 2));
     verify(library.song_lanes() == 3);
@@ -2957,4 +2929,36 @@ fn tui_song_matrix_survives_a_session_round_trip() {
     verify(restored.library.song_at(1, 1) == 0 && restored.library.song_at(0, 2) == 0);
     restored.release();
     library.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}
+
+mod tui_demo::song_matrix;
+use tui_demo::song_matrix::SongMatrix;
+
+#[test]
+fn tui_song_matrix_keys() {
+    var matrix: SongMatrix = SongMatrix { visible: true };
+    // Navigation is clamped to the grid; lane 3 is the spare empty one.
+    verify(matrix.on_event(decode_input("j"), 2, 3) == 0 && matrix.row == 1);
+    verify(matrix.on_event(decode_input("j"), 2, 3) == 0 && matrix.row == 1);
+    verify(matrix.on_event(decode_input("l"), 2, 3) == 0 && matrix.lane == 1);
+    verify(matrix.on_event(decode_input("k"), 2, 3) == 0 && matrix.row == 0);
+    verify(matrix.on_event(decode_input("h"), 2, 3) == 0 && matrix.lane == 0);
+    // Enter picks a pattern, Backspace clears the cell.
+    verify(matrix.on_event(decode_input("\r"), 2, 3) == 1);
+    verify(matrix.on_event(decode_input("\x7f"), 2, 3) == 2);
+    // o/O insert whole rows; Ctrl+O/Ctrl+Shift+O shift this lane only.
+    verify(matrix.on_event(decode_input("o"), 2, 3) == 3);
+    verify(matrix.on_event(decode_input("O"), 2, 3) == 4);
+    verify(matrix.on_event(decode_input("\x1b[111;5u"), 2, 3) == 5);
+    verify(matrix.on_event(decode_input("\x1b[79;5u"), 2, 3) == 6);
+    // y copies, p pastes.
+    verify(matrix.on_event(decode_input("y"), 2, 3) == 8);
+    verify(matrix.on_event(decode_input("p"), 2, 3) == 9);
+    // dd removes a row: the first d only arms the chord.
+    verify(matrix.on_event(decode_input("d"), 2, 3) == 0 && matrix.delete_pending);
+    verify(matrix.on_event(decode_input("d"), 2, 3) == 7 && !matrix.delete_pending);
+    // Any other key cancels a pending d.
+    verify(matrix.on_event(decode_input("d"), 2, 3) == 0);
+    verify(matrix.on_event(decode_input("j"), 2, 3) == 0 && !matrix.delete_pending);
+    verify(matrix.on_event(decode_input("d"), 2, 3) == 0 && matrix.delete_pending);
 }

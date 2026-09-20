@@ -48,6 +48,8 @@ are accepted. Unsupported major or minor versions fail closed.
      columns and ROW. Column definitions are rebuilt from track metadata; cells
      must match the resulting column count and writable-column validation rules.
 7. Song order: list of stable pattern IDs, allowing repeated occurrences.
+   This is lane 1 of the song matrix, so 0 marks an empty row. Files written
+   before the matrix never contain 0.
 8. Optional MIDI-learn extension: string `MIDI_LEARN`, followed by a list of
    `(channel * 128 + CC, instrument slot, stable parameter ID)` integer triples.
    At most 2048 entries, strictly increasing keys 0–2047, slots 1–32. Every slot

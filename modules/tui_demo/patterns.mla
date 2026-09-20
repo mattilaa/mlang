@@ -26,7 +26,7 @@ pub struct SongLane { var slots: list<i32>; };
 /// Song order uses stable pattern IDs; repeated occurrences share a pattern.
 pub struct PatternLibrary {
     var patterns: list<PatternEntry>; var song: list<i32>; var active_id: i32; var next_id: i32;
-    var table: SequenceTable; var view: ListView; var song_mode: bool;
+    var table: SequenceTable; var view: ListView;
     var renaming: bool; var editor: TextField; var error: str8;
     var audio: AudioLibrary; var audio_mode: bool;
     var instruments: ListView; var instruments_mode: bool;
@@ -55,7 +55,7 @@ impl PatternLibrary {
         self.release();
         self.patterns = next.patterns; self.song = next.song; self.active_id = next.active_id; self.next_id = next.next_id;
         self.extra_lanes = next.extra_lanes;
-        self.table = next.table; self.view = next.view; self.song_mode = next.song_mode;
+        self.table = next.table; self.view = next.view;
         self.renaming = false; self.editor = next.editor; self.error = next.error;
         self.audio = next.audio; self.audio_mode = next.audio_mode;
         self.instruments = next.instruments; self.instruments_mode = next.instruments_mode;
@@ -130,7 +130,6 @@ impl PatternLibrary {
     pub fn set_song_at(self: &mut Self, row: i32, lane: i32, id: i32) -> bool {
         if row < 0 || row >= self.song.len() || lane < 0 || lane >= 16 { return false; }
         if lane == 0 {
-            if id == 0 { return false; }
             var order: list<i32> = [];
             for i in 0..self.song.len() { order.push(i32(i) == row ? id : self.song[i]); }
             self.song = order; self.refresh(); return true;
@@ -157,6 +156,47 @@ impl PatternLibrary {
         for l in 0..self.extra_lanes.len() { if i32(l) <= last { kept.push(self.extra_lanes[l]); } }
         self.extra_lanes = kept;
         return true;
+    }
+    /// Insert an empty matrix row above or below `row`.
+    pub fn matrix_insert_row(self: &mut Self, row: i32, after: bool) -> bool {
+        if self.song.len() >= 65536 { return false; }
+        let at: i32 = self.song.len() == 0 ? 0 : (after ? row + 1 : row);
+        if at < 0 || at > self.song.len() { return false; }
+        var order: list<i32> = [];
+        for i in 0..self.song.len() {
+            if i32(i) == at { order.push(0); }
+            order.push(self.song[i]);
+        }
+        if at >= self.song.len() { order.push(0); }
+        self.song = order; self.sync_lanes(at, true);
+        self.refresh(); return true;
+    }
+    /// Remove a whole matrix row, lanes included.
+    pub fn matrix_remove_row(self: &mut Self, row: i32) -> bool {
+        if row < 0 || row >= self.song.len() { return false; }
+        var order: list<i32> = [];
+        for i in 0..self.song.len() { if i32(i) != row { order.push(self.song[i]); } }
+        self.song = order; self.sync_lanes(row, false);
+        self.refresh(); return true;
+    }
+    /// Push one lane down from `row`, leaving that cell empty. The other lanes
+    /// keep their rows, so only this column shifts.
+    pub fn matrix_insert_cell(self: &mut Self, row: i32, lane: i32, after: bool) -> bool {
+        if row < 0 || row >= self.song.len() || lane < 0 || lane >= 16 { return false; }
+        let at: i32 = after ? row + 1 : row;
+        if at > self.song.len() { return false; }
+        // The last cell of the lane falls off unless a row is added for it.
+        if self.song_at(i32(self.song.len()) - 1, lane) != 0 && !self.matrix_insert_row(i32(self.song.len()) - 1, true) { return false; }
+        var moved: i32 = 0;
+        for i in 0..self.song.len() {
+            let source: i32 = i32(self.song.len()) - 1 - i32(i);
+            if source < at { break; }
+            let value: i32 = self.song_at(source - 1 < at ? source : source - 1, lane);
+            if source == at { self.set_song_at(source, lane, 0); }
+            else { self.set_song_at(source, lane, self.song_at(source - 1, lane)); }
+            moved = moved + 1;
+        }
+        return moved > 0;
     }
     /// Keep every lane the same length as the song after a row insert/remove.
     fn sync_lanes(self: &mut Self, row: i32, inserted: bool) -> void {
@@ -262,26 +302,19 @@ impl PatternLibrary {
         let old: list<ListItem> = self.view.items;
         for item in old { free(item.label); }
         var items: list<ListItem> = [];
-        if self.song_mode {
-            for i in 0..self.song.len() {
-                let id: i32 = self.song[i]; let index: i32 = self.index_of(id);
-                if index >= 0 {
-                    let entry: PatternEntry = self.patterns[index];
-                    items.push(ListItem { id: id, label: format!("{}  {}{} {}", i + 1, id < 10 ? "00" : (id < 100 ? "0" : ""), id, entry.name) });
-                }
-            }
-        } else {
-            let entries: list<PatternEntry> = self.patterns;
+        let entries: list<PatternEntry> = self.patterns;
+        {
             for entry in entries {
                 items.push(ListItem { id: entry.id, label: format!("{}{} {}", entry.id < 10 ? "00" : (entry.id < 100 ? "0" : ""), entry.id, entry.name) });
             }
         }
         self.view.items = items; self.view.cancel_pending();
     }
-    pub fn show_song(self: &mut Self, song: bool) -> void {
+    /// Show the pattern list in the sidebar (the song lives in the matrix).
+    pub fn show_patterns(self: &mut Self) -> void {
         self.instruments_mode = false; self.instruments.cancel_pending();
         self.audio_mode = false; self.audio.view.cancel_pending();
-        self.song_mode = song; self.view.selected = 0; self.view.scroll = 0; self.refresh();
+        self.view.selected = 0; self.view.scroll = 0; self.refresh();
         for i in 0..self.view.items.len() {
             let item: ListItem = self.view.items[i];
             if item.id == self.active_id { self.view.selected = i32(i); return; }
@@ -304,7 +337,7 @@ impl PatternLibrary {
         let name: str8 = duplicate ? format!("{} copy", self.active_name()) : format!("Pattern {}", id);
         self.patterns.push(PatternEntry { id: id, name: name, data: data });
         self.song.push(id); self.select(id); self.refresh();
-        self.view.selected = self.song_mode ? i32(self.song.len()) - 1 : i32(self.patterns.len()) - 1;
+        self.view.selected = i32(self.patterns.len()) - 1;
     }
     pub fn rename(self: &mut Self, name: str8) -> bool {
         if !table_matches("[A-Za-z0-9][A-Za-z0-9 _-]{0,47}", name) { self.error = "Name: 1-48 letters, digits, spaces, _ or -"; return false; }
@@ -351,7 +384,7 @@ impl PatternLibrary {
         replacement.clipboard_rows = self.table.clipboard_rows;
         self.table.clipboard = []; self.table.clipboard_kinds = [];
         self.table.release(); self.table = replacement; self.active_id = next.id;
-        if !self.song_mode { self.view.selected = next_index; }
+        self.view.selected = next_index;
         self.refresh(); self.view.reconcile(area); self.choose_selected(); self.error = "";
     }
     pub fn remove_song_occurrence(self: &mut Self, area: Rect) -> void {
@@ -415,28 +448,9 @@ impl PatternLibrary {
             if action == 2 { self.insert_selected_audio(area); }
             return action != 0;
         }
-        if self.song_mode {
-            // Modifier-aware Ctrl+J must remain distinct from legacy LF/Enter.
-            if event.modifiers == 5 && (event.code == 106 || event.code == 107) {
-                self.move_song_row(event.code == 106 ? 1 : -1, area); return true;
-            }
-            if ((event.modifiers == 1 || event.modifiers == 2) && (event.code == 74 || event.code == 75)) ||
-                (event.modifiers == 2 && (event.code == 106 || event.code == 107)) {
-                self.change_song_pattern((event.code == 74 || event.code == 106) ? -1 : 1, area); return true;
-            }
-            if event.modifiers == 1 && event.code == 111 {
-                self.insert_song_row(false, area); return true;
-            }
-            if ((event.modifiers == 1 || event.modifiers == 2) && event.code == 79) ||
-                (event.modifiers == 2 && event.code == 111) {
-                self.insert_song_row(true, area); return true;
-            }
-        }
         let action: i32 = self.view.on_event(event, area);
-        if action == 3 {
-            if self.song_mode { self.remove_song_occurrence(area); }
-            else { self.choose_selected(); self.remove_active(area); }
-        } else if action != 0 { self.choose_selected(); }
+        if action == 3 { self.choose_selected(); self.remove_active(area); }
+        else if action != 0 { self.choose_selected(); }
         return action != 0;
     }
     pub fn rename_event(self: &mut Self, event: InputEvent) -> void {
