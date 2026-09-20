@@ -15,7 +15,7 @@ def main():
     tui = VisualTerminal()
     try:
         tui.read(0.8)
-        tui.send(F1 + b"llljl\r")  # Track > Create track > MIDI
+        tui.send(F1 + b"lll\r")  # Track > Create track > MIDI
         frame = tui.send(b"\x1b[108;6uK")  # Pattern pane, create a note
         assert b"C-4" in frame and b"100" in frame, frame[-5000:]
         tui.send(b"vly")

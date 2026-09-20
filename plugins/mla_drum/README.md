@@ -77,14 +77,14 @@ build PIC objects as described in the [Mla Verb README](../mla_verb/README.md).
 
 ## Loading pads in mlacker
 
-1. **Track → Create track → Instrument track**, then **Add → Instrument** and
+1. **Track → Create Instrument track**, then **Instrument → Add instrument** and
    choose `MlaDrum.vst3`. Repeat for each drum instance you want (kick, snare,
    hats, ...). Each instance gets its own track.
 2. Select the instance in **View → Instruments**, then use either:
-   - **Instrument → Load pad sample from file**: pick a key on the piano
+   - **Instrument → Drum pads → Load pad sample from file**: pick a key on the piano
      keyboard, then a WAV/AIFF. The file is also added to the Audio list, so the
      session embeds it.
-   - **Instrument → Send audio sample to pad**: sends the sample selected in
+   - **Instrument → Drum pads → Send audio sample to pad**: sends the sample selected in
      **View → Audio** to the key you pick.
 
    The piano marks loaded pads. Enter on one replaces its sample, and Backspace
@@ -100,8 +100,8 @@ open and after audio-device changes.
 
 ### Presets
 
-- **In mlacker**, **Instrument → Save plugin preset** writes a kit preset
-  (`.mlapre` 1.1) with all parameters and the pad samples. **Load plugin preset**
+- **In mlacker**, **Instrument → Presets → Save plugin preset** writes a kit preset
+  (`.mlapre` 1.1) with all parameters and the pad samples. **Presets → Load plugin preset**
   restores the whole kit, clearing pads the kit does not use.
 - **In other hosts**, the plugin's VST3 state embeds every pad, so the host's own
   preset and project saving keep the full kit.

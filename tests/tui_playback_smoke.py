@@ -56,7 +56,7 @@ def main():
         until(lambda s: "New session" not in s)
         send(F1 + b"ll")
         until(lambda s: "Meter" in s)
-        send(b"jjljj\r")
+        send(b"jjjjjljj\r")
         until(lambda s: "Set update rate" in s and "FPS" in s)
         send(b"\x150\r")
         until(lambda s: "whole number from 1 to 240" in s)
@@ -97,15 +97,15 @@ def main():
 
         # Add an audio instance and follow it at sub-row resolution while zoomed.
         send(b"gg" + F1 + b"lll")
-        until(lambda s: "Create track" in s)
-        send(b"jlj\r")
+        until(lambda s: "Create AUDIO track" in s)
+        send(b"j\r")
         until(lambda s: "Audio 4" in s and "Create track" not in s)
         with tempfile.TemporaryDirectory(prefix="mlang-playback-") as folder:
             path = os.path.join(folder, "follow.wav")
             with wave.open(path, "wb") as wav:
                 wav.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
                 wav.writeframes(struct.pack("<h", 16384) * 72000)
-            send(F1 + b"llllll\r")
+            send(F1 + b"lllll\r")
             until(lambda s: "Add audio" in s)
             send(b"\x15" + path.encode() + b"\r")
             until(lambda s: "WAVE" in s and "Add audio" not in s)
@@ -120,7 +120,7 @@ def main():
         def length_dialog():
             send(F1 + b"llll")
             until(lambda s: "Clone pattern" in s)
-            send(b"jjjj\r")
+            send(b"jjj\r")
             return until(lambda s: "Pattern length (1-16384 rows)" in s)
 
         length_dialog()

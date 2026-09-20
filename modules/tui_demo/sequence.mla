@@ -760,6 +760,47 @@ pub fn detach_instrument(self: &mut Self, id: i32) -> void {
     }
     self.tracks = next; self.revision = self.revision + 1;
 }
+/// Placements of `sample` in this pattern (matched like the session codec).
+pub fn clip_usage(self: SequenceTable, sample: &AudioClip) -> i32 {
+    var source: AudioClip = AudioClip {}; source = sample;
+    var count: i32 = 0;
+    for t in 0..self.tracks.len() {
+        let track: SequenceTrack = self.tracks[t];
+        let instances: list<AudioInstance> = track.instances;
+        for instance in instances {
+            if instance.clip.source == source.source && instance.clip.frames == source.frames &&
+               instance.clip.frames_per_row == source.frames_per_row { count = count + 1; }
+        }
+    }
+    return count;
+}
+/// Drop every placement of `sample`. Returns how many were removed.
+pub fn remove_clips_of(self: &mut Self, sample: &AudioClip) -> i32 {
+    var source: AudioClip = AudioClip {}; source = sample;
+    var count: i32 = 0;
+    for t in 0..self.tracks.len() {
+        var track: SequenceTrack = self.tracks[t];
+        if !track.audio { continue; }
+        var kept: list<AudioInstance> = []; var changed: bool = false;
+        let instances: list<AudioInstance> = track.instances;
+        for instance in instances {
+            if instance.clip.source == source.source && instance.clip.frames == source.frames &&
+               instance.clip.frames_per_row == source.frames_per_row {
+                instance.clip.release(); changed = true; count = count + 1;
+            } else { kept.push(instance); }
+        }
+        if changed { track.instances = kept; self.replace_track(i32(t), track); }
+    }
+    if count > 0 { self.revision = self.revision + 1; }
+    return count;
+}
+/// Tracks assigned to instrument instance `id`.
+pub fn instrument_usage(self: SequenceTable, id: i32) -> i32 {
+    var count: i32 = 0;
+    let tracks: list<SequenceTrack> = self.tracks;
+    for track in tracks { if track.instrument && track.instrument_id == id { count = count + 1; } }
+    return count;
+}
 /// True when any track in this pattern is assigned instrument instance `id`.
 pub fn instrument_in_use(self: SequenceTable, id: i32) -> bool {
     if id <= 0 { return false; }
@@ -841,6 +882,26 @@ pub fn create_track_kind(self: &mut Self, duplicate: bool, audio: bool, area: Re
     }
     self.rows = rows; self.selected_column = self.track_start(i32(self.tracks.len()) - 1);
     self.rebuild_columns(); self.reconcile(area); self.error = "";
+}
+/// Delete every track assigned to instrument instance `id`, keeping at least
+/// one track in the pattern. Returns how many were removed.
+pub fn remove_tracks_using_instrument(self: &mut Self, id: i32, area: Rect) -> i32 {
+    var removed: i32 = 0;
+    // Re-scan after each removal: indices and columns shift.
+    for _pass in 0..64 {
+        var target: i32 = -1;
+        for i in 0..self.tracks.len() {
+            let track: SequenceTrack = self.tracks[i];
+            if target < 0 && track.instrument && track.instrument_id == id { target = i32(i); }
+        }
+        if target < 0 || self.tracks.len() <= 1 { break; }
+        self.selected_column = self.track_start(target);
+        let before: i64 = self.tracks.len();
+        self.remove_track(area);
+        if self.tracks.len() == before { break; }
+        removed = removed + 1;
+    }
+    return removed;
 }
 pub fn remove_track(self: &mut Self, area: Rect) -> void {
     let index: i32 = self.active_track();

@@ -63,11 +63,13 @@ use std::time::sleep_ms;
 use std::time::now_ms;
 
 fn demo_menus(fixture: bool) -> MenuBar {
+    // Grouped like a DAW's menu bar: each menu starts with what it creates,
+    // then what it changes, then what it removes; families use submenus.
+    let plugins: bool = AudioController::processor_support();
     return MenuBar::new([
                     Menu {title: "File", items: [
                                 MenuItem { label: "New session", action: 1, enabled: true },
                                 MenuItem { label: "Open session", action: 2, enabled: true },
-                                MenuItem { label: "Save session", action: 3, enabled: !fixture },
                                 MenuItem::submenu("Recent sessions", [
                                                 MenuItem { label: "Blue hour", action: 8, enabled: true },
                                                 MenuItem::submenu("Templates", [
@@ -75,81 +77,91 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                                                 MenuItem { label: "Dance", action: 10, enabled: true }
                                                         ])
                                         ]),
+                                MenuItem { label: "Save session", action: 3, enabled: !fixture },
+                                MenuItem { label: "Save session as", action: 96, enabled: !fixture },
                                 MenuItem { label: "Settings", action: 90, enabled: true },
-                                MenuItem { label: "Quit", action: 99, enabled: true },
-                                MenuItem { label: "Save session as", action: 96, enabled: !fixture }] },
+                                MenuItem { label: "Quit", action: 99, enabled: true }] },
                     Menu {title: "Edit", items: [
                                 MenuItem { label: "Undo", action: 4, enabled: true },
-                                MenuItem { label: "Redo", action: 5, enabled: true }] },
+                                MenuItem { label: "Redo", action: 5, enabled: true },
+                                MenuItem { label: "Copy clip", action: 61, enabled: true },
+                                MenuItem { label: "Cut clip", action: 62, enabled: true },
+                                MenuItem { label: "Paste clip", action: 63, enabled: true }] },
                     Menu {title: "View", items: [
-                                MenuItem { label: "Reset layout", action: 6, enabled: true },
-                                MenuItem { label: "Show details", action: 7, enabled: true },
-                                MenuItem::submenu("Meter", [
-                                                MenuItem { label: "Solid bars", action: 40, enabled: true },
-                                                MenuItem { label: "Grainy (osc)", action: 41, enabled: true },
-                                                MenuItem { label: "Set update rate", action: 74, enabled: true }]),
-                                MenuItem { label: "Show patterns", action: 42, enabled: true },
-                                MenuItem { label: "Show song", action: 43, enabled: true },
+                                MenuItem { label: "Patterns", action: 42, enabled: true },
+                                MenuItem { label: "Song", action: 43, enabled: true },
+                                MenuItem { label: "Audio", action: 44, enabled: true },
+                                MenuItem { label: "Instruments", action: 45, enabled: plugins },
                                 MenuItem::submenu("Sample view", [
                                                 MenuItem { label: "Normal", action: 70, enabled: true },
                                                 MenuItem { label: "Grainy", action: 71, enabled: true },
                                                 MenuItem::submenu("Type", [
                                                                 MenuItem { label: "Filled blocks", action: 72, enabled: true },
                                                                 MenuItem { label: "Wave (osc)", action: 73, enabled: true }])]),
-                                MenuItem { label: "Audio", action: 44, enabled: true },
-                                MenuItem { label: "Instruments", action: 45, enabled: AudioController::processor_support() }] },
+                                MenuItem::submenu("Meter", [
+                                                MenuItem { label: "Solid bars", action: 40, enabled: true },
+                                                MenuItem { label: "Grainy (osc)", action: 41, enabled: true },
+                                                MenuItem { label: "Set update rate", action: 74, enabled: true }]),
+                                MenuItem { label: "Reset layout", action: 6, enabled: true },
+                                MenuItem { label: "Show details", action: 7, enabled: true }] },
                     Menu {title: "Track", items: [
+                                // Plain entries, not a submenu: a submenu as the first
+                                // item would swallow the Right key that walks the menu bar.
+                                MenuItem { label: "Create MIDI track", action: 21, enabled: true },
+                                MenuItem { label: "Create AUDIO track", action: 28, enabled: true },
+                                MenuItem { label: "Create Instrument track", action: 29, enabled: plugins },
                                 MenuItem { label: "Rename", action: 20, enabled: true },
-                                MenuItem::submenu("Create track", [
-                                                MenuItem { label: "MIDI track", action: 21, enabled: true },
-                                                MenuItem { label: "AUDIO track", action: 28, enabled: true },
-                                                MenuItem { label: "Instrument track", action: 29, enabled: AudioController::processor_support() }]),
-                                MenuItem { label: "Delete", action: 22, enabled: true },
                                 MenuItem { label: "Duplicate", action: 23, enabled: true },
-                                MenuItem { label: "Clear pattern", action: 24, enabled: true },
                                 MenuItem { label: "Mute / unmute", action: 25, enabled: true },
-                                MenuItem { label: "Configure CC1", action: 26, enabled: true },
-                                MenuItem { label: "Configure CC2", action: 27, enabled: true },
-                                MenuItem { label: "Add note line", action: 80, enabled: true },
-                                MenuItem { label: "Remove note line", action: 81, enabled: true },
-                                MenuItem { label: "Duplicate note line", action: 82, enabled: true },
-                                MenuItem { label: "Collapse all", action: 83, enabled: true },
-                                MenuItem { label: "Expand all", action: 84, enabled: true }] },
+                                MenuItem::submenu("Note lines", [
+                                                MenuItem { label: "Add note line", action: 80, enabled: true },
+                                                MenuItem { label: "Duplicate note line", action: 82, enabled: true },
+                                                MenuItem { label: "Remove note line", action: 81, enabled: true },
+                                                MenuItem { label: "Collapse all", action: 83, enabled: true },
+                                                MenuItem { label: "Expand all", action: 84, enabled: true }]),
+                                MenuItem::submenu("Automation", [
+                                                MenuItem { label: "Configure CC1", action: 26, enabled: true },
+                                                MenuItem { label: "Configure CC2", action: 27, enabled: true }]),
+                                MenuItem { label: "Clear pattern", action: 24, enabled: true },
+                                MenuItem { label: "Delete", action: 22, enabled: true }] },
                     Menu {title: "Pattern", items: [
                                 MenuItem { label: "Add pattern", action: 50, enabled: true },
-                                MenuItem { label: "Rename pattern", action: 51, enabled: true },
-                                MenuItem { label: "Remove pattern", action: 52, enabled: true },
                                 MenuItem { label: "Clone pattern", action: 53, enabled: true },
-                                MenuItem { label: "Set length", action: 54, enabled: true }] },
+                                MenuItem { label: "Rename pattern", action: 51, enabled: true },
+                                MenuItem { label: "Set length", action: 54, enabled: true },
+                                MenuItem { label: "Remove pattern", action: 52, enabled: true }] },
                     Menu {title: "Audio", items: [
-                                MenuItem { label: "Copy clip", action: 61, enabled: true },
-                                MenuItem { label: "Cut clip", action: 62, enabled: true },
-                                MenuItem { label: "Paste clip", action: 63, enabled: true },
-                                MenuItem { label: "Move clip up", action: 103, enabled: true },
-                                MenuItem { label: "Move clip down", action: 104, enabled: true },
-                                MenuItem { label: "Trim to selection", action: 105, enabled: true },
-                                MenuItem { label: "Slice selection", action: 106, enabled: true },
-                                MenuItem { label: "Reverse clip", action: 102, enabled: true },
-                                MenuItem { label: "Edit sample (destructive)", action: 107, enabled: true }] },
-                    Menu { title: "Add", items: [MenuItem { label: "Audio", action: 60, enabled: true },
-                                MenuItem { label: "VST3 master plugin", action: 91, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Unload master VST3", action: 92, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Instrument", action: 93, enabled: AudioController::processor_support() }] },
+                                MenuItem { label: "Add audio", action: 60, enabled: true },
+                                MenuItem { label: "Edit sample (destructive)", action: 107, enabled: true },
+                                MenuItem::submenu("Clip", [
+                                                MenuItem { label: "Move clip up", action: 103, enabled: true },
+                                                MenuItem { label: "Move clip down", action: 104, enabled: true },
+                                                MenuItem { label: "Trim to selection", action: 105, enabled: true },
+                                                MenuItem { label: "Slice selection", action: 106, enabled: true },
+                                                MenuItem { label: "Reverse clip", action: 102, enabled: true }]),
+                                MenuItem { label: "Remove audio", action: 120, enabled: true }] },
                     Menu {title: "Instrument", items: [
-                                MenuItem { label: "Open VST3 editor", action: 94, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Remove instrument", action: 95, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Save MIDI learn", action: 97, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Load MIDI learn", action: 98, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Save plugin preset", action: 100, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Load plugin preset", action: 101, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Send audio sample to pad", action: 117, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Load pad sample from file", action: 118, enabled: AudioController::processor_support() }] },
+                                MenuItem { label: "Add instrument", action: 93, enabled: plugins },
+                                MenuItem { label: "Open VST3 editor", action: 94, enabled: plugins },
+                                MenuItem::submenu("Drum pads", [
+                                                MenuItem { label: "Send audio sample to pad", action: 117, enabled: plugins },
+                                                MenuItem { label: "Load pad sample from file", action: 118, enabled: plugins }]),
+                                MenuItem::submenu("Presets", [
+                                                MenuItem { label: "Save plugin preset", action: 100, enabled: plugins },
+                                                MenuItem { label: "Load plugin preset", action: 101, enabled: plugins }]),
+                                MenuItem::submenu("MIDI learn", [
+                                                MenuItem { label: "Save MIDI learn", action: 97, enabled: plugins },
+                                                MenuItem { label: "Load MIDI learn", action: 98, enabled: plugins }]),
+                                MenuItem { label: "Remove instrument", action: 95, enabled: plugins }] },
                     Menu {title: "Effect", items: [
-                                MenuItem { label: "Add effect channel", action: 110, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Load effect plugin", action: 111, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Edit effect plugin", action: 112, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Set track send", action: 113, enabled: AudioController::processor_support() },
-                                MenuItem { label: "Remove effect plugin", action: 114, enabled: AudioController::processor_support() }] }
+                                MenuItem { label: "Add effect channel", action: 110, enabled: plugins },
+                                MenuItem { label: "Load effect plugin", action: 111, enabled: plugins },
+                                MenuItem { label: "Edit effect plugin", action: 112, enabled: plugins },
+                                MenuItem { label: "Set track send", action: 113, enabled: plugins },
+                                MenuItem::submenu("Master", [
+                                                MenuItem { label: "Load master VST3", action: 91, enabled: plugins },
+                                                MenuItem { label: "Unload master VST3", action: 92, enabled: plugins }]),
+                                MenuItem { label: "Remove effect plugin", action: 114, enabled: plugins }] }
             ]);
 }
 
@@ -271,6 +283,10 @@ pub fn run() -> i32 {
     share_question.width = 72; share_question.height = 12;
     share_question.buttons = [PushButton { label: "New instance", action: 1 }, PushButton { label: "Share", action: 3 }];
     var share_id: i32 = 0;
+    // Removing a library item that is still used asks what to do with its uses.
+    var remove_question: QuestionDialog = QuestionDialog::new("Remove", "");
+    remove_question.width = 72; remove_question.height = 12;
+    var remove_request: i32 = 0; var remove_target: i32 = 0; var remove_pending: i32 = 0;
     paste_error.buttons = [PushButton { label: "OK", action: 1 }];
     var message: str8 = clone("Select a command from the menu.");
     if AudioController::processor_support() { free(message); message = clone("mlacker | Add > VST3 master plugin to load an instrument or effect."); }
@@ -356,6 +372,36 @@ pub fn run() -> i32 {
             }
             free(message); message = clone(session_status); free(session_status);
             session_request = 0; menus.dismiss(); dirty = true;
+        }
+        if remove_request != 0 {
+            // 1 = sample (with its clips), 2 = instrument and its tracks,
+            // 3 = instrument only, leaving the tracks for another plugin.
+            let kind: i32 = remove_request; remove_request = 0;
+            let area: Rect = terminal_bounds();
+            free(message);
+            if kind == 1 {
+                let cleared: i32 = midi.drop_sample_pads(remove_target);
+                let clips: i32 = library.remove_sample(remove_target, area);
+                message = clips < 0 ? clone("Select a sample in Audio first")
+                    : format!("Removed sample {}: {} clip(s), {} drum pad(s) cleared", remove_target + 1, clips, cleared);
+                playback_dirty = true;
+            } else {
+                let uses: i32 = library.instrument_usage(remove_target);
+                var tracks: i32 = 0;
+                if kind == 2 { tracks = library.remove_tracks_using_instrument(remove_target, area); }
+                transport.playing = false;
+                note_playback.update(library.table, transport.ticks, false);
+                midi.sequencer_events(note_playback.events);
+                let error: str8 = midi.remove_instrument(remove_target);
+                if error != "" { message = error; }
+                else {
+                    instrument_editor.release(); library.remove_instrument(remove_target, area);
+                    message = kind == 2 ? format!("Removed instrument {} and {} track(s)", remove_target, tracks)
+                        : (uses > 0 ? clone("Instrument removed; track assignments cleared")
+                            : format!("Removed instrument {}", remove_target));
+                }
+            }
+            dirty = true;
         }
         if transport_request {
             transport_request = false;
@@ -516,7 +562,7 @@ pub fn run() -> i32 {
             transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
         }
         // Editing a moving row would otherwise commit to a different row.
-        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active { transport.playing = false; }
+        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active { transport.playing = false; }
         if transport.advance(now, i32(library.table.rows.len())) {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
@@ -530,7 +576,7 @@ pub fn run() -> i32 {
         }
         // Consume every note-on, including a note released within this poll.
         // Modal editors never receive destructive background recording edits.
-        if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !sample_editor.active && !piano.active && !share_question.active && !library.renaming && !mixer.bus_focus && library.table.group_detail_rows == 0 {
+        if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !sample_editor.active && !piano.active && !share_question.active && !remove_question.active && !library.renaming && !mixer.bus_focus && library.table.group_detail_rows == 0 {
             let notes: list<MidiInputEvent> = midi.midi.note_events;
             for note in notes { if library.table.record_note(note.note, note.velocity) { dirty = true; } }
         }
@@ -575,6 +621,15 @@ pub fn run() -> i32 {
             if dialog.active && dialog.pressed_button >= 0 {
                 dialog.tick(); dirty = true;
                 if dialog.accepted { accept_pending = true; }
+            }
+            if remove_question.active && remove_question.pressed_button >= 0 {
+                remove_question.tick(); dirty = true;
+                if !remove_question.active {
+                    if remove_question.result == 1 || remove_question.result == 3 {
+                        remove_request = remove_question.result == 1 ? remove_pending : 3;
+                    } else { free(message); message = clone("Cancelled."); }
+                    remove_pending = 0;
+                }
             }
             if share_question.active && share_question.pressed_button >= 0 {
                 share_question.tick(); dirty = true;
@@ -629,7 +684,7 @@ pub fn run() -> i32 {
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             library.table.insert_labels(midi.output);
             let surface: Surface = Surface::new(area.width, area.height);
@@ -643,6 +698,7 @@ pub fn run() -> i32 {
             dialog.paint(surface, area, Theme::dark_blue());
             question.paint(surface, area, Theme::dark_blue());
             share_question.paint(surface, area, Theme::dark_blue());
+            remove_question.paint(surface, area, Theme::dark_blue());
             library.table.paint_track_dialog(surface, area, Theme::dark_blue());
             library.paint_rename(surface, area, Theme::dark_blue());
             bpm_dialog.paint(surface, area, Theme::dark_blue());
@@ -687,13 +743,13 @@ pub fn run() -> i32 {
             else if (event.code == 19 && event.modifiers == 1) || (event.code == 115 && event.modifiers == 5) { command = 3; dirty = true; }
             // Space starts/stops from every pane, including the mixer and the
             // VST3 editor. Text entry and modal dialogs keep it for themselves.
-            else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !paste_error.active && !library.renaming && !library.table.editing {
+            else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !paste_error.active && !library.renaming && !library.table.editing {
                 transport_request = true; dirty = true;
             }
             // Tab / Shift+Tab cycle every pane of the main view: sidebar,
             // pattern, inspector/mixer, the FX bus, and the VST3 editor.
             else if event.kind == InputKind::Menu && event.key == Key::Toggle && menus.active < 0 &&
-                    !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !paste_error.active && !library.renaming && !library.table.editing {
+                    !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !paste_error.active && !library.renaming && !library.table.editing {
                 let has_bus: bool = mixer.visible && midi.effects.len() > 0;
                 let has_editor: bool = instrument_editor.active;
                 var stop: i32 = focus.selected == 0 ? 0 : (focus.selected == 1 ? 1 : (mixer.bus_focus && has_bus ? 3 : 2));
@@ -756,6 +812,11 @@ pub fn run() -> i32 {
             }
             else if library.renaming {
                 if event.kind != InputKind::None || event.code != 0 { library.rename_event(event); dirty = true; }
+            }
+            else if remove_question.active {
+                remove_question.on_event(event);
+                if !remove_question.active && remove_question.result == 2 { remove_pending = 0; free(message); message = clone("Cancelled."); }
+                dirty = true;
             }
             else if share_question.active {
                 share_question.on_event(event);
@@ -879,7 +940,11 @@ pub fn run() -> i32 {
                     command = library.table.insert_event(event, panes[1].bounds.inset(1)); dirty = true;
                 } else { if library.table.edit_event(event, panes[1].bounds.inset(1)) { dirty = true; } }
             } else if focus.selected == 0 {
-                if library.audio_mode && event.code == 101 && event.modifiers == 1 { command = 107; }
+                if event.kind == InputKind::Edit && event.key == Key::Backspace && event.modifiers == 2 {
+                    command = library.audio_mode ? 120 : (library.instruments_mode ? 95 : 0);
+                    if command == 0 { free(message); message = clone("Shift+Backspace removes the selected sample or instrument"); dirty = true; }
+                }
+                else if library.audio_mode && event.code == 101 && event.modifiers == 1 { command = 107; }
                 else if library.on_event(event, panes[0].bounds.inset(1)) { dirty = true; }
                 if library.share_request > 0 {
                     share_id = library.share_request; library.share_request = 0;
@@ -1058,17 +1123,34 @@ pub fn run() -> i32 {
                     free(message); message = clone("Select a loaded instrument in Instruments first");
                 }
             }
-            else if command == 95 {
-                transport.playing = false;
-                note_playback.update(library.table, transport.ticks, false);
-                midi.sequencer_events(note_playback.events);
-                let id: i32 = library.selected_instrument();
-                let error: str8 = midi.remove_instrument(id);
-                free(message);
-                if error != "" { message = error; }
+            else if command == 120 {
+                let index: i32 = library.audio.view.selected;
+                let uses: i32 = library.sample_usage(index);
+                if index < 0 || index >= library.audio.samples.len() { free(message); message = clone("Select a sample in Audio first (View > Audio)"); }
+                else if uses == 0 { remove_target = index; remove_request = 1; }
                 else {
-                    instrument_editor.release(); library.remove_instrument(id, panes[0].bounds.inset(1));
-                    message = clone(midi.instrument_output_failed ? "Instrument removed; audio restart failed": "Instrument removed; track assignments cleared");
+                    let clip: AudioClip = library.audio.samples[index];
+                    let name: str8 = base_name(clip.source);
+                    remove_target = index; remove_pending = 1;
+                    remove_question.title = format!("Remove sample {}: {}", index + 1, name);
+                    remove_question.question = format!("{} clip(s) in the song use it. Remove them too?", uses);
+                    remove_question.buttons = [PushButton { label: "Remove clips", action: 1 }, PushButton { label: "Cancel", action: 2 }];
+                    remove_question.open(); focus.set_menu_active(true);
+                    free(name);
+                }
+            }
+            else if command == 95 {
+                let id: i32 = library.selected_instrument();
+                let uses: i32 = library.instrument_usage(id);
+                if id < 1 { free(message); message = clone("Select a loaded instrument in Instruments first"); }
+                else if uses == 0 { remove_target = id; remove_request = 3; }
+                else {
+                    let name: str8 = midi.output.instrument_name(id);
+                    remove_target = id; remove_pending = 2;
+                    remove_question.title = format!("Remove {} #{}", name, id);
+                    remove_question.question = format!("{} track(s) play it. Remove those tracks, or keep their notes?", uses);
+                    remove_question.buttons = [PushButton { label: "Remove tracks", action: 1 }, PushButton { label: "Keep tracks", action: 3 }];
+                    remove_question.open(); focus.set_menu_active(true);
                 }
             }
             else if command == 92 {
@@ -1198,6 +1280,11 @@ pub fn run() -> i32 {
                 else if settings.active { settings.on_event(event); dirty = true; }
                 else if bpm_dialog.active { bpm_dialog.on_event(event); dirty = true; }
                 else if library.renaming { library.rename_event(event); dirty = true; }
+                else if remove_question.active {
+                    remove_question.on_event(event);
+                    if !remove_question.active && remove_question.result == 2 { remove_pending = 0; free(message); message = clone("Cancelled."); }
+                    dirty = true;
+                }
                 else if share_question.active {
                     share_question.on_event(event);
                     if !share_question.active { share_id = 0; free(message); message = clone("Cancelled."); }
