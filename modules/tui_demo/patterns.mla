@@ -316,6 +316,69 @@ impl PatternLibrary {
         }
         self.instruments.items = next;
     }
+    /// Placements of Audio-list sample `index` across every pattern.
+    pub fn sample_usage(self: PatternLibrary, index: i32) -> i32 {
+        if index < 0 || index >= self.audio.samples.len() { return 0; }
+        let sample: AudioClip = self.audio.samples[index];
+        var count: i32 = self.table.clip_usage(sample);
+        let entries: list<PatternEntry> = self.patterns;
+        for entry in entries { if entry.id != self.active_id { count = count + entry.data.clip_usage(sample); } }
+        return count;
+    }
+    /// Remove Audio-list sample `index`, dropping every placement of it.
+    /// Returns the number of placements removed, or -1 for an invalid index.
+    pub fn remove_sample(self: &mut Self, index: i32, area: Rect) -> i32 {
+        if index < 0 || index >= self.audio.samples.len() { return -1; }
+        let sample: AudioClip = self.audio.samples[index];
+        var removed: i32 = self.table.remove_clips_of(sample);
+        let entries: list<PatternEntry> = self.patterns; var next: list<PatternEntry> = [];
+        for item in entries {
+            var entry: PatternEntry = PatternEntry {}; entry = item;
+            let count: i32 = entry.data.remove_clips_of(sample);
+            if entry.id != self.active_id { removed = removed + count; }
+            next.push(entry);
+        }
+        self.patterns = next;
+        var kept: list<AudioClip> = [];
+        for i in 0..self.audio.samples.len() { if i32(i) != index { kept.push(self.audio.samples[i]); } }
+        self.audio.samples = kept;
+        sample.release();
+        // Rebuild the list labels: entries are numbered by position.
+        let items: list<ListItem> = self.audio.view.items;
+        for item in items { free(item.label); }
+        var labels: list<ListItem> = [];
+        for i in 0..self.audio.samples.len() {
+            let clip: AudioClip = self.audio.samples[i];
+            let name: str8 = base_name(clip.source);
+            labels.push(ListItem { id: i32(i) + 1, label: format!("{} {}", i + 1, name) });
+            free(name);
+        }
+        self.audio.view.items = labels;
+        if self.audio.view.selected >= self.audio.view.items.len() { self.audio.view.selected = i32(self.audio.view.items.len()) - 1; }
+        self.audio.view.cancel_pending(); self.audio.view.reconcile(area);
+        self.table.reconcile(area);
+        return removed;
+    }
+    /// Tracks assigned to instrument instance `id` across every pattern.
+    pub fn instrument_usage(self: PatternLibrary, id: i32) -> i32 {
+        var count: i32 = self.table.instrument_usage(id);
+        let entries: list<PatternEntry> = self.patterns;
+        for entry in entries { if entry.id != self.active_id { count = count + entry.data.instrument_usage(id); } }
+        return count;
+    }
+    /// Delete every track using instrument instance `id`, in every pattern.
+    pub fn remove_tracks_using_instrument(self: &mut Self, id: i32, area: Rect) -> i32 {
+        var removed: i32 = self.table.remove_tracks_using_instrument(id, area);
+        let entries: list<PatternEntry> = self.patterns; var next: list<PatternEntry> = [];
+        for item in entries {
+            var entry: PatternEntry = PatternEntry {}; entry = item;
+            let count: i32 = entry.data.remove_tracks_using_instrument(id, area);
+            if entry.id != self.active_id { removed = removed + count; }
+            next.push(entry);
+        }
+        self.patterns = next;
+        return removed;
+    }
     /// Destructively replace Audio-list sample `index` with `edited` (ownership
     /// moves in) and update every placement in every pattern. Returns the
     /// number of placements updated, or -1 for an invalid index.

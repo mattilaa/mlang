@@ -23,6 +23,8 @@ fn classify_key(code: i32, modifiers: i32) -> InputEvent {
     // Shift+Tab cycles panes backwards. Terminals spell it CSI Z, or, with the
     // kitty/modifyOtherKeys protocols this app enables, as a modified Tab.
     if mods == 1 && code == 9 { return key_event(InputKind::Menu, Key::Toggle); }
+    // Shift+Backspace removes the selected library item.
+    if mods == 1 && (code == 8 || code == 127) { return key_event(InputKind::Edit, Key::Backspace); }
     if mods != 0 { return no_input(); }
     if code == 113 || code == 3 { return key_event(InputKind::Quit, Key::Escape); }
     if code == 9 { return key_event(InputKind::Menu, Key::Toggle); }
@@ -43,7 +45,8 @@ fn decode_key(code: i32, modifiers: i32) -> InputEvent {
     // commands (q/h/j/k/l). Text fields consume them before shortcut routing.
     event.code = code;
     event.modifiers = modifiers;
-    if modifiers == 2 && code >= 32 { event.kind = InputKind::Text; }
+    // Shift+<printable> is text; DEL (127) is Backspace, not a character.
+    if modifiers == 2 && code >= 32 && code != 127 { event.kind = InputKind::Text; }
     return event;
 }
 

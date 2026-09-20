@@ -372,6 +372,22 @@ impl AudioSystem {
         for entry in pads { if entry.slot == slot && entry.pad == pad { return entry.sample; } }
         return -1;
     }
+    /// A removed session sample invalidates the pads playing it: those pads are
+    /// emptied, and later sample indexes shift down. Returns pads cleared.
+    pub fn drop_sample_pads(self: &mut Self, sample: i32) -> i32 {
+        var cleared: i32 = 0;
+        let old: list<PadAssignment> = self.pads; var next: list<PadAssignment> = [];
+        for entry in old {
+            if entry.sample == sample {
+                if self.output.instrument_clear_pad(entry.slot, entry.pad) == 0 { cleared = cleared + 1; }
+            } else {
+                next.push(PadAssignment { slot: entry.slot, pad: entry.pad,
+                    sample: entry.sample > sample ? entry.sample - 1 : entry.sample });
+            }
+        }
+        self.pads = next;
+        return cleared;
+    }
     fn forget_pads(self: &mut Self, slot: i32) -> void {
         let old: list<PadAssignment> = self.pads; var next: list<PadAssignment> = [];
         for entry in old { if entry.slot != slot { next.push(entry); } }

@@ -44,6 +44,41 @@ asks for a `.mlack` path. **Save session as** chooses another path. **Open sessi
 loads a `.mlack` file. **New session** confirms before resetting to an empty editor.
 Saving stops the sequencer; loading always restores a stopped transport.
 
+## Menus
+
+The menu bar opens with **F1**. Each menu starts with what it creates, then what
+it changes, then what it removes; related entries live in submenus.
+
+| Menu | Contents |
+|------|----------|
+| File | New / Open / Recent sessions ▸ / Save / Save as / Settings / Quit |
+| Edit | Undo, Redo, Copy/Cut/Paste clip |
+| View | Patterns, Song, Audio, Instruments, Sample view ▸, Meter ▸, Reset layout, Show details |
+| Track | Create MIDI/AUDIO/Instrument track, Rename, Duplicate, Mute, Note lines ▸, Automation ▸, Clear pattern, Delete |
+| Pattern | Add, Clone, Rename, Set length, Remove |
+| Audio | Add audio, Edit sample (destructive), Clip ▸, Remove audio |
+| Instrument | Add instrument, Open VST3 editor, Drum pads ▸, Presets ▸, MIDI learn ▸, Remove instrument |
+| Effect | Add effect channel, Load/Edit effect plugin, Set track send, Master ▸, Remove effect plugin |
+
+## Removing library items
+
+**Shift+Backspace** in the library pane removes the selected item: a sample when
+the Audio list is shown, an instrument instance when the Instruments list is.
+**Audio → Remove audio** and **Instrument → Remove instrument** do the same from
+the menu.
+
+An item still in use asks first:
+
+- A sample used by clips: **Remove clips** deletes the sample and every clip of
+  it, or **Cancel** keeps both. Clips cannot outlive their sample, because a
+  session stores each clip as an index into the sample list.
+- An instrument played by tracks: **Remove tracks** deletes those tracks, or
+  **Keep tracks** keeps their notes and only clears the assignment, ready for
+  another plugin.
+
+Removing a sample also empties any drum pad loaded from it and renumbers the
+list.
+
 ## Keys and panes
 
 **F1** opens and closes the menu bar. **Tab** and **Shift+Tab** cycle forwards and
@@ -74,7 +109,7 @@ next one; Space again unmarks it. Marked rows are drawn a step brighter than the
 rest, and Enter (or OK) opens every marked file instead of the one under the
 cursor. Marks survive moving between directories and are cleared when the
 chooser reopens. Multi-select is only offered where opening several files makes
-sense: **Add → Audio**, **Add → Instrument** (each bundle becomes its own
+sense: **Audio → Add audio**, **Instrument → Add instrument** (each bundle becomes its own
 instance) and pad samples (which fill consecutive pads from the chosen key).
 Session, preset, MIDI-learn, effect/insert and every save chooser stay
 single-file, and Space does nothing there.
@@ -141,7 +176,7 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
 
 ## Instrument tracks
 
-- **Add → Instrument** browses `.vst3` bundles on disk. On selection, the host
+- **Instrument → Add instrument** browses `.vst3` bundles on disk. On selection, the host
   validates the first class marked `Instrument`, its MIDI input and supported
   audio buses. Effects and incompatible/broken bundles report an error without
   adding an entry. Only open trusted plugins.
@@ -152,11 +187,11 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
   this track, with its own pads, fader, meters and empty insert slots. **Share**
   links the track to the existing instance. Loading while an Instrument track is selected also
   assigns the new instance automatically.
-- **Track → Create track → Instrument track** creates a note/velocity/LEN/OFF
+- **Track → Create Instrument track** creates a note/velocity/LEN/OFF
   track using the selected library instance, unless another track in the pattern
   already uses that instance. The new track then starts unassigned, so it never
   silently shares another track's pads, fader and meters. An unassigned track
-  stays silent until assigned through **Add → Instrument** (a new instance) or
+  stays silent until assigned through **Instrument → Add instrument** (a new instance) or
   Enter in the Instruments list, which asks whether to share or load a new
   instance.
 - Up to 32 instances may be loaded, independently routed and summed before the
@@ -187,11 +222,11 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
 `stdlib/include/mla_sampler_protocol.h`) takes samples into numbered pads. Select
 the loaded instance in **View → Instruments**, then:
 
-- **Instrument → Send audio sample to pad** sends the sample selected in
+- **Instrument → Drum pads → Send audio sample to pad** sends the sample selected in
   **View → Audio** to a key you pick. Pads go to the selected Instrument track's
   own instance (the picker title shows e.g. `Mla Drum #2`). For other tracks they
   go to the instance selected in the Instruments list.
-- **Instrument → Load pad sample from file** picks the key first, then a WAV/AIFF.
+- **Instrument → Drum pads → Load pad sample from file** picks the key first, then a WAV/AIFF.
   The file is added to the Audio list too.
 
 Both open a piano keyboard. It spans the instrument's pads: pad 1 is the plugin's
@@ -331,7 +366,7 @@ and initial values are copied into memory when the plugin loads.
   for that channel/CC. Values span the parameter range, rounded for discrete controls.
   Bindings belong to the session, survive output changes, and save in `.mlack`.
   New sessions start unmapped; removing an instrument removes its bindings.
-- **Instrument → Save MIDI learn / Load MIDI learn** exports/imports mappings
+- **Instrument → MIDI learn → Save / Load MIDI learn** exports/imports mappings
   for the selected entry in Instruments as a `.mlalearn` file. Saving suggests
   `<plugin name> - `: type a suffix, or Ctrl+U to replace the whole filename/path.
   The extension is appended automatically when omitted. Loading replaces that
@@ -339,7 +374,7 @@ and initial values are copied into memory when the plugin loads.
   Different plugin names, missing/read-only parameters, malformed files, and CCs
   owned by another instrument are rejected without changing existing mappings.
   Plugin parameter values are not included; `.mlack` still saves session mappings.
-- **Instrument → Save plugin preset / Load plugin preset** saves/restores exposed
+- **Instrument → Presets → Save / Load plugin preset** saves/restores exposed
   parameter values in `.mlapre` files for the selected instrument. The suggested
   `<plugin name> - ` prefix is editable (Ctrl+U replaces it); omitted extensions
   are appended. Loading validates the complete file, matches stable parameter
@@ -386,13 +421,13 @@ preallocated, with sample offsets preserved by the native audio event queue.
 ### Master slot
 
 1. Select MIDI input and master output in **File → Settings**.
-2. Choose **Add → VST3 master plugin**.
+2. Choose **Effect → Master → Load master VST3**.
 3. Select a `.vst3` bundle, or type its full path into the dialog and press Enter.
    The chooser starts in `/Library/Audio/Plug-Ins/VST3`; user plugins are commonly
    under `~/Library/Audio/Plug-Ins/VST3`. Matching bundles are selectable items,
    not directories to navigate into.
 4. Play MIDI input or press Space to play pattern MIDI through the plugin.
-5. **Add → Unload master VST3** restores the reference sine preview instrument.
+5. **Effect → Master → Unload master VST3** restores the reference sine preview instrument.
 
 The first audio-processor class in a bundle is loaded into one master slot.
 Zero-audio-input plugins act as instruments and replace the reference sine

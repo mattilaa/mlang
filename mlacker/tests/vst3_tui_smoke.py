@@ -35,28 +35,29 @@ def main():
 
     try:
         assert b"mlacker" in read_for(1)
-        assert b"Load master VST3" in send(b"llllllj\r")
+        # The fixture starts with the menu bar open on File.
+        assert b"Load master VST3" in send(b"lllllll" + b"jjjj" + b"l\r")
         frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
         assert b"Master VST3: Mlacker Test Instrument" in frame, frame[-2000:]
         assert b"audio output disabled" in frame
         with tempfile.TemporaryDirectory(prefix="mlacker-vst3-") as directory:
             bad_bundle = os.path.join(directory, "Broken.vst3")
             os.mkdir(bad_bundle)
-            assert b"Load master VST3" in send(F1 + b"llllllj\r")
+            assert b"Load master VST3" in send(F1 + b"lllllll" + b"jjjj" + b"l\r")
             frame = send(b"\x15" + os.fsencode(bad_bundle) + b"\r", 1)
             assert b"VST3 load failed" in frame
-        assert b"Master VST3 unloaded" in send(F1 + b"lllllljj\r", 0.5)
-        frame = send(F1 + b"llljljj\r", 0.5)
+        assert b"Master VST3 unloaded" in send(F1 + b"lllllll" + b"jjjj" + b"lj\r", 0.5)
+        frame = send(F1 + b"lll" + b"jj\r", 0.5)
         assert b"Instrument track created" in frame, frame[-2000:]
         assert b"Instruments" in frame
-        assert b"Add VST3 instrument" in send(F1 + b"lllllljjj\r")
+        assert b"Add VST3 instrument" in send(F1 + b"llllll\r")
         frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
         assert b"Instrument loaded: Mlacker Test Instrument" in frame, frame[-2000:]
         assert b"001 Mlacker Test" in frame, frame[-6000:]
         assert b"Instrument: 1" in frame, frame[-6000:]
         # Switch away and return via View > Instruments (last View entry).
-        send(F1 + b"lljjj\r")  # Show patterns
-        frame = send(F1 + b"lljjjjjjj\r")
+        send(F1 + b"ll\r")  # Show patterns
+        frame = send(F1 + b"lljjj\r")
         assert b"Instruments" in frame and b"001 Mlacker Test" in frame, frame[-6000:]
         # The list owns normal navigation and Enter, without changing pattern.
         send(b"\x1b[104;6u")  # Ctrl+Shift+H: focus left
@@ -71,14 +72,14 @@ def main():
         assert b"PLAY" in frame, frame[-6000:]
         frame = send(b" ")
         assert b"STOP" in frame, frame[-6000:]
-        frame = send(F1 + b"lllllll\r")
+        frame = send(F1 + b"llllll" + b"j\r")
         assert b"VST3 editor:" in frame and b"Modulation" in frame, frame[-6000:]
         frame = send(b"J\r\x151.5\r")
         assert b"Invalid value" in frame, frame[-6000:]
         frame = send(b"\x150.25\r")
         assert b"0.25" in frame, frame[-6000:]
         send(b"\x1b", 0.4)
-        frame = send(F1 + b"lllllll\r")
+        frame = send(F1 + b"llllll" + b"j\r")
         assert b"VST3 editor:" in frame and b"0.25" in frame, frame[-6000:]
         frame = send(b"L")
         assert b"255;255;255" in frame and b"192;32;48" in frame, frame[-6000:]
@@ -104,10 +105,12 @@ def main():
         assert b"VST3 editor:" in frame, frame[-6000:]
         send(b"\x1b", 0.4)
         send(b"m")  # Inspector displays command status.
-        frame = send(F1 + b"lllllllj\r")
+        frame = send(F1 + b"llllll" + b"jjjjj\r")
+        assert b"track(s) play it" in frame, frame[-6000:]
+        frame = send(b"l\r", 0.6)  # Keep tracks
         assert b"Instrument removed; track assignments cleared" in frame, frame[-6000:]
         # Slot reuse must not shift IDs or retain the old assignment.
-        assert b"Add VST3 instrument" in send(F1 + b"lllllljjj\r")
+        assert b"Add VST3 instrument" in send(F1 + b"llllll\r")
         frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
         assert b"001 Mlacker Test" in frame and b"Instrument: 1" in frame, frame[-6000:]
         send(b"q")
