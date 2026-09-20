@@ -52,6 +52,16 @@ sessions each keep their own directory, and plugin browsing starts at
 `/Library/Audio/Plug-Ins/VST3` until you browse elsewhere. The memory is not
 saved in `.mlack`, so it resets when mlacker restarts.
 
+In the **Files** pane, Space marks the file under the cursor and moves to the
+next one; Space again unmarks it. Marked rows are drawn a step brighter than the
+rest, and Enter (or OK) opens every marked file instead of the one under the
+cursor. Marks survive moving between directories and are cleared when the
+chooser reopens. Multi-select is only offered where opening several files makes
+sense: **Add → Audio**, **Add → Instrument** (each bundle becomes its own
+instance) and pad samples (which fill consecutive pads from the chosen key).
+Session, preset, MIDI-learn, effect/insert and every save chooser stay
+single-file, and Space does nothing there.
+
 Browsing starts focused on the **Directories** pane on the left, where `j/k`
 moves, Enter or `l` expands, and `h` collapses. Tab cycles Path → Directories →
 Files → buttons, and Ctrl+Shift+H/J/K/L moves between them. Typing `/` or `~`

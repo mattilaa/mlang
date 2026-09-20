@@ -1964,6 +1964,79 @@ fn tui_file_dialog_focus_and_path_entry() {
 }
 
 #[test]
+fn tui_file_dialog_multi_select() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    let viewport: Rect = Rect::new(0, 0, 80, 24);
+    dialog.multi_select = true;
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.focus.selected = 2; dialog.file_selected = 0;
+    verify(dialog.files.len() == 2);
+    // Space marks the file under the cursor and steps to the next one.
+    dialog.on_event(decode_input(" "), viewport);
+    verify(dialog.marked.len() == 1 && dialog.file_selected == 1);
+    dialog.on_event(decode_input(" "), viewport);
+    verify(dialog.marked.len() == 2 && dialog.file_selected == 1);
+    // Space again on the same file unmarks it.
+    dialog.on_event(decode_input(" "), viewport);
+    verify(dialog.marked.len() == 1);
+    // Enter opens every marked file, not the one under the cursor.
+    dialog.on_event(decode_input("\r"), viewport);
+    verify(dialog.accepted && !dialog.active);
+    verify(dialog.accepted_paths.len() == 1 && dialog.accepted_path == dialog.accepted_paths[0]);
+    verify(ends_with(dialog.accepted_path, "alpha.session") == 1);
+    // Marks do not survive reopening.
+    dialog.open("tests/fixtures/tui_dialog");
+    verify(dialog.marked.len() == 0 && dialog.accepted_paths.len() == 0);
+    // Two marked files are both accepted, in marking order.
+    dialog.focus.selected = 2; dialog.file_selected = 0;
+    dialog.on_event(decode_input(" "), viewport);
+    dialog.on_event(decode_input(" "), viewport);
+    dialog.on_event(decode_input("\r"), viewport);
+    verify(dialog.accepted_paths.len() == 2);
+    verify(ends_with(dialog.accepted_paths[0], "alpha.session") == 1);
+    dialog.release();
+}
+
+#[test]
+fn tui_file_dialog_multi_select_is_opt_in() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    let viewport: Rect = Rect::new(0, 0, 80, 24);
+    // Session/preset choosers never mark: they open exactly one file.
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.focus.selected = 2; dialog.file_selected = 0;
+    dialog.on_event(decode_input(" "), viewport);
+    verify(dialog.marked.len() == 0 && dialog.file_selected == 0);
+    // Neither do save choosers, even where multi-open is allowed.
+    dialog.multi_select = true; dialog.save_mode = true;
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.focus.selected = 2; dialog.file_selected = 0;
+    dialog.on_event(decode_input(" "), viewport);
+    verify(dialog.marked.len() == 0);
+    dialog.release();
+}
+
+#[test]
+fn tui_file_dialog_marked_rows_are_brighter() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    let bounds: Rect = Rect::new(0, 0, 80, 24);
+    let theme: Theme = Theme::dark_blue();
+    dialog.multi_select = true;
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.focus.selected = 2; dialog.file_selected = 0;
+    dialog.on_event(decode_input(" "), bounds); // mark row 0, cursor moves to row 1
+    let surface: Surface = Surface::new(80, 24);
+    dialog.paint(surface, bounds, theme);
+    let panes: list<Pane> = dialog.panes(bounds);
+    let files: Pane = panes[2];
+    let marked: Cell = surface.cell(files.bounds.x + 1, files.bounds.y + 1);
+    let cursor: Cell = surface.cell(files.bounds.x + 1, files.bounds.y + 2);
+    verify(marked.background == lighten(theme.panel, 26));
+    verify(cursor.background == theme.selection);
+    verify(marked.background != theme.panel && marked.background != theme.selection);
+    surface.release(); dialog.release();
+}
+
+#[test]
 fn tui_file_dialog_shared_buttons() {
     var dialog: OpenSessionDialog = OpenSessionDialog::new();
     let viewport: Rect = Rect::new(0, 0, 80, 24);
