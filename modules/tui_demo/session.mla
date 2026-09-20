@@ -12,6 +12,7 @@ use tui_demo::audio_clip::*;
 use tui_demo::audio_controller::AudioSystem;
 use tui_demo::audio_controller::EffectChannel;
 use tui_demo::audio_controller::PadAssignment;
+use tui_demo::patterns::SongLane;
 use std::audio::controller::AudioController;
 use tui::table::*;
 use tui::listview::*;
@@ -566,7 +567,7 @@ impl SessionCodec {
                 }
             }
         }
-        let extension: bool = self.reading ? self.reader.remaining() > 0 : mappings.len() > 0 || audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0;
+        let extension: bool = self.reading ? self.reader.remaining() > 0 : mappings.len() > 0 || audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0 || library.extra_lanes.len() > 0;
         if extension {
             let tag: str8 = self.text("MIDI_LEARN"); if tag != "MIDI_LEARN" { self.failed = true; } if self.reading { free(tag); }
             let mapping_count: i32 = self.number(i32(mappings.len()), 0, 2048);
@@ -590,7 +591,7 @@ impl SessionCodec {
             }
         }
         var effect_volumes: list<i32> = [];
-        let effects_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0;
+        let effects_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0 || library.extra_lanes.len() > 0;
         if effects_extension && !self.failed {
             let tag: str8 = self.text("AUX_EFFECTS"); if tag != "AUX_EFFECTS" { self.failed = true; } if self.reading { free(tag); }
             let count: i32 = self.number(i32(audio.effects.len()), 0, 8);
@@ -633,7 +634,7 @@ impl SessionCodec {
                 library.table.release(); library.table = entry.data.copy_pattern();
             }
         }
-        let inserts_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0;
+        let inserts_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0 || library.extra_lanes.len() > 0;
         if inserts_extension && !self.failed {
             let tag: str8 = self.text("TRACK_INSERTS"); if tag != "TRACK_INSERTS" { self.failed = true; } if self.reading { free(tag); }
             let count: i32 = self.number(i32(audio.insert_paths.len()), 0, 256);
@@ -679,7 +680,7 @@ impl SessionCodec {
         }
         // Optional SAMPLER_PADS extension (requires the preceding tags).
         var pads: list<PadAssignment> = [];
-        let pads_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.pads.len() > 0;
+        let pads_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.pads.len() > 0 || library.extra_lanes.len() > 0;
         if pads_extension && !self.failed {
             let tag: str8 = self.text("SAMPLER_PADS"); if tag != "SAMPLER_PADS" { self.failed = true; } if self.reading { free(tag); }
             let pad_count: i32 = self.number(i32(audio.pads.len()), 0, 4096);
@@ -696,6 +697,32 @@ impl SessionCodec {
                 if !loaded { self.failed = true; }
                 pads.push(entry);
             }
+        }
+        // Optional SONG_MATRIX extension: the parallel lanes beside `song`.
+        let matrix_extension: bool = self.reading ? self.reader.remaining() > 0 : library.extra_lanes.len() > 0;
+        if matrix_extension && !self.failed {
+            let tag: str8 = self.text("SONG_MATRIX"); if tag != "SONG_MATRIX" { self.failed = true; } if self.reading { free(tag); }
+            let lanes: i32 = self.number(i32(library.extra_lanes.len()), 0, 15);
+            var restored: list<SongLane> = [];
+            for l in 0..lanes {
+                if self.failed { break; }
+                var column: SongLane = SongLane {}; if !self.reading { column = library.extra_lanes[l]; }
+                let count: i32 = self.number(i32(library.song.len()), 0, 65536);
+                if count != library.song.len() { self.failed = true; break; }
+                var slots: list<i32> = [];
+                for r in 0..count {
+                    let stored: i32 = self.reading ? 0 : (r < column.slots.len() ? column.slots[r] : 0);
+                    let id: i32 = self.number(stored, 0, 1000000);
+                    // 0 is an empty cell; anything else must be a real pattern.
+                    var known: bool = id == 0;
+                    let entries: list<PatternEntry> = library.patterns;
+                    for entry in entries { if entry.id == id { known = true; } }
+                    if !known { self.failed = true; }
+                    if self.reading { slots.push(id); }
+                }
+                if self.reading { restored.push(SongLane { slots: slots }); }
+            }
+            if self.reading && !self.failed { library.extra_lanes = restored; }
         }
         if state.editor_slot > 32 {
             var found: bool = false; for plugin in plugins { if plugin.slot == state.editor_slot { found = true; } }

@@ -27,6 +27,8 @@ mod tui_demo::sample_view;
 use tui_demo::sample_view::SampleView;
 mod tui_demo::audio_clip;
 mod tui_demo::piano_dialog;
+mod tui_demo::song_matrix;
+use tui_demo::song_matrix::SongMatrix;
 mod tui_demo::sample_editor;
 use tui_demo::piano_dialog::PianoDialog;
 use tui_demo::sample_editor::SampleEditor;
@@ -287,6 +289,14 @@ pub fn run() -> i32 {
     var remove_question: QuestionDialog = QuestionDialog::new("Remove", "");
     remove_question.width = 72; remove_question.height = 12;
     var remove_request: i32 = 0; var remove_target: i32 = 0; var remove_pending: i32 = 0;
+    // Song matrix (Shift+M) and the warning shown when parallel patterns would
+    // drive one instrument with the same notes.
+    var matrix: SongMatrix = SongMatrix {};
+    var clash_question: QuestionDialog = QuestionDialog::new("Parallel patterns clash", "");
+    clash_question.width = 74; clash_question.height = 12;
+    clash_question.buttons = [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 },
+        PushButton { label: "Split", action: 3 }];
+    var clash_row: i32 = 0; var clash_lane: i32 = 0; var clash_id: i32 = 0;
     paste_error.buttons = [PushButton { label: "OK", action: 1 }];
     var message: str8 = clone("Select a command from the menu.");
     if AudioController::processor_support() { free(message); message = clone("mlacker | Add > VST3 master plugin to load an instrument or effect."); }
@@ -562,7 +572,7 @@ pub fn run() -> i32 {
             transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
         }
         // Editing a moving row would otherwise commit to a different row.
-        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active { transport.playing = false; }
+        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active { transport.playing = false; }
         if transport.advance(now, i32(library.table.rows.len())) {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
@@ -621,6 +631,21 @@ pub fn run() -> i32 {
             if dialog.active && dialog.pressed_button >= 0 {
                 dialog.tick(); dirty = true;
                 if dialog.accepted { accept_pending = true; }
+            }
+            if clash_question.active && clash_question.pressed_button >= 0 {
+                clash_question.tick(); dirty = true;
+                if !clash_question.active {
+                    free(message);
+                    if clash_question.result == 2 { message = clone("Cancelled."); }
+                    else {
+                        var split: i32 = 0;
+                        if clash_question.result == 3 { split = library.split_song_clashes(clash_row, clash_lane, clash_id, terminal_bounds()); }
+                        let placed: bool = library.set_song_at(clash_row, clash_lane, clash_id);
+                        message = !placed ? clone("Cannot place the pattern here")
+                            : (split > 0 ? format!("Row {} lane {}: pattern {}; {} track(s) split onto their own note line", clash_row + 1, clash_lane + 1, clash_id, split)
+                                : format!("Row {} lane {}: pattern {} (clashing notes kept)", clash_row + 1, clash_lane + 1, clash_id));
+                    }
+                }
             }
             if remove_question.active && remove_question.pressed_button >= 0 {
                 remove_question.tick(); dirty = true;
@@ -684,7 +709,7 @@ pub fn run() -> i32 {
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             library.table.insert_labels(midi.output);
             let surface: Surface = Surface::new(area.width, area.height);
@@ -693,12 +718,14 @@ pub fn run() -> i32 {
             library.view.reconcile(panes[0].bounds.inset(1));
             library.audio.view.reconcile(panes[0].bounds.inset(1));
             paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample);
+            matrix.paint(surface, panes[1].bounds, Theme::dark_blue(), library, focus.is_active(1));
             instrument_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
             sample_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
             dialog.paint(surface, area, Theme::dark_blue());
             question.paint(surface, area, Theme::dark_blue());
             share_question.paint(surface, area, Theme::dark_blue());
             remove_question.paint(surface, area, Theme::dark_blue());
+            clash_question.paint(surface, area, Theme::dark_blue());
             library.table.paint_track_dialog(surface, area, Theme::dark_blue());
             library.paint_rename(surface, area, Theme::dark_blue());
             bpm_dialog.paint(surface, area, Theme::dark_blue());
@@ -743,13 +770,13 @@ pub fn run() -> i32 {
             else if (event.code == 19 && event.modifiers == 1) || (event.code == 115 && event.modifiers == 5) { command = 3; dirty = true; }
             // Space starts/stops from every pane, including the mixer and the
             // VST3 editor. Text entry and modal dialogs keep it for themselves.
-            else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !paste_error.active && !library.renaming && !library.table.editing {
+            else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !paste_error.active && !library.renaming && !library.table.editing {
                 transport_request = true; dirty = true;
             }
             // Tab / Shift+Tab cycle every pane of the main view: sidebar,
             // pattern, inspector/mixer, the FX bus, and the VST3 editor.
             else if event.kind == InputKind::Menu && event.key == Key::Toggle && menus.active < 0 &&
-                    !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !paste_error.active && !library.renaming && !library.table.editing {
+                    !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !paste_error.active && !library.renaming && !library.table.editing {
                 let has_bus: bool = mixer.visible && midi.effects.len() > 0;
                 let has_editor: bool = instrument_editor.active;
                 var stop: i32 = focus.selected == 0 ? 0 : (focus.selected == 1 ? 1 : (mixer.bus_focus && has_bus ? 3 : 2));
@@ -813,6 +840,11 @@ pub fn run() -> i32 {
             else if library.renaming {
                 if event.kind != InputKind::None || event.code != 0 { library.rename_event(event); dirty = true; }
             }
+            else if clash_question.active {
+                clash_question.on_event(event);
+                if !clash_question.active && clash_question.result == 2 { free(message); message = clone("Cancelled."); }
+                dirty = true;
+            }
             else if remove_question.active {
                 remove_question.on_event(event);
                 if !remove_question.active && remove_question.result == 2 { remove_pending = 0; free(message); message = clone("Cancelled."); }
@@ -859,6 +891,14 @@ pub fn run() -> i32 {
             }
             else if event.code == 109 && event.modifiers == 1 {
                 mixer.visible = !mixer.visible; dirty = true;
+            }
+            else if (event.code == 77 && event.modifiers == 1) || (event.modifiers == 2 && event.code == 109) {
+                matrix.visible = !matrix.visible;
+                if matrix.visible { focus.selected = 1; }
+                free(message);
+                message = clone(matrix.visible ? "Song matrix: Enter places the pattern selected in the sidebar; parallel lanes play together"
+                    : "Song matrix closed");
+                dirty = true;
             }
             else if event.kind == InputKind::Menu && event.key == Key::Function1 {
                 command = menus.on_key(Key::Toggle);
@@ -935,6 +975,14 @@ pub fn run() -> i32 {
                 } else if event.kind == InputKind::Menu && event.key == Key::Right && library.table.active_track() == library.table.tracks.len() - 1 && midi.effects.len() > 0 {
                     mixer.bus_focus = true; mixer.selected_effect = 0; dirty = true;
                 } else { if library.table.mixer_event(event, panes[1].bounds.inset(1)) { dirty = true; } }
+            } else if focus.selected == 1 && matrix.visible {
+                let action: i32 = matrix.on_event(event, i32(library.song.len()), library.song_lanes() + 1);
+                if action == 1 { command = 121; }
+                else if action == 2 {
+                    if library.set_song_at(matrix.row, matrix.lane, 0) { free(message); message = clone("Song cell cleared"); }
+                    else { free(message); message = clone("Lane 1 always holds a pattern; clear another lane"); }
+                }
+                dirty = true;
             } else if focus.selected == 1 {
                 if !library.table.editing && (library.table.group_detail_rows > 0 || (event.code == 102 && event.modifiers == 1)) {
                     command = library.table.insert_event(event, panes[1].bounds.inset(1)); dirty = true;
@@ -1123,6 +1171,24 @@ pub fn run() -> i32 {
                     free(message); message = clone("Select a loaded instrument in Instruments first");
                 }
             }
+            else if command == 121 {
+                let id: i32 = library.selected_pattern();
+                if id <= 0 { free(message); message = clone("Select a pattern in the sidebar first (View > Patterns)"); }
+                else {
+                    let clashes: i32 = library.song_row_clashes(matrix.row, matrix.lane, id);
+                    if clashes == 0 {
+                        free(message);
+                        message = library.set_song_at(matrix.row, matrix.lane, id)
+                            ? format!("Row {} lane {}: pattern {}", matrix.row + 1, matrix.lane + 1, id)
+                            : clone("Cannot place the pattern here");
+                    } else {
+                        clash_row = matrix.row; clash_lane = matrix.lane; clash_id = id;
+                        clash_question.title = format!("{} note(s) clash in row {}", clashes, matrix.row + 1);
+                        clash_question.question = clone("Same instrument and note as a parallel pattern. Split gives it its own note line.");
+                        clash_question.open(); focus.set_menu_active(true); dirty = true;
+                    }
+                }
+            }
             else if command == 120 {
                 let index: i32 = library.audio.view.selected;
                 let uses: i32 = library.sample_usage(index);
@@ -1280,6 +1346,9 @@ pub fn run() -> i32 {
                 else if settings.active { settings.on_event(event); dirty = true; }
                 else if bpm_dialog.active { bpm_dialog.on_event(event); dirty = true; }
                 else if library.renaming { library.rename_event(event); dirty = true; }
+                else if clash_question.active {
+                    clash_question.on_event(event); dirty = true;
+                }
                 else if remove_question.active {
                     remove_question.on_event(event);
                     if !remove_question.active && remove_question.result == 2 { remove_pending = 0; free(message); message = clone("Cancelled."); }

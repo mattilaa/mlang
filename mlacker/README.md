@@ -60,6 +60,37 @@ it changes, then what it removes; related entries live in submenus.
 | Instrument | Add instrument, Open VST3 editor, Drum pads ▸, Presets ▸, MIDI learn ▸, Remove instrument |
 | Effect | Add effect channel, Load/Edit effect plugin, Set track send, Master ▸, Remove effect plugin |
 
+## Song matrix
+
+**Shift+M** shows the song matrix in the pattern pane. Rows are song steps and
+columns are parallel lanes, so several patterns can sit on one row and play
+together. Lane 1 is the plain song list shown in **View → Song**; the other
+lanes are the parallel ones.
+
+`h/j/k/l` (or the arrows) move the cursor. **Enter** puts the pattern selected in
+the sidebar into the cell, and **Backspace** clears it. Lane 1 always holds a
+pattern, so a song row never becomes empty; clear one of the other lanes instead.
+An empty lane is always available past the last used one, up to 16 lanes.
+Shift+M closes the matrix again.
+
+### Parallel patterns that clash
+
+Two patterns on the same row can drive one instrument with the same note at the
+same step, e.g. two patterns hitting the same drum pad. Placing such a pattern
+warns first, counting the clashing notes:
+
+- **OK** places it anyway, leaving the notes as they are.
+- **Cancel** leaves the cell alone.
+- **Split** places it and gives each clashing track its own note line, so the
+  parallel patterns stop sharing one. A split track is renamed with the
+  `Track 1 - 2`, `Track 1 - 3` convention, counting the patterns that share the
+  instrument in that row. Splitting again replaces the suffix rather than
+  stacking it.
+
+Only real collisions warn: the same instrument playing different notes, or the
+same note at different steps, is left alone. The matrix is arrangement state —
+the transport still plays the selected pattern.
+
 ## Removing library items
 
 **Shift+Backspace** in the library pane removes the selected item: a sample when

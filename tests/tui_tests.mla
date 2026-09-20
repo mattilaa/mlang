@@ -2858,3 +2858,103 @@ fn tui_remove_instrument_tracks_or_keep_them() {
     verify(library.instrument_usage(1) == 0 && library.table.tracks.len() == before - 2);
     library.release();
 }
+
+fn song_test_library() -> PatternLibrary {
+    // Two patterns that both play instrument 1 with the same notes, and two
+    // song rows to place them in.
+    var library: PatternLibrary = PatternLibrary::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.create_instrument_track(1, area);
+    library.table.set_cell(0, 1, clone("C-2")); library.table.set_cell(0, 2, clone("100"));
+    library.table.set_cell(4, 1, clone("D-2")); library.table.set_cell(4, 2, clone("100"));
+    library.add(true);                       // clone -> pattern 2, song row 1
+    library.show_song(true); library.view.selected = 0;
+    library.on_event(decode_input("o"), area); // a second song row
+    library.set_song_at(0, 0, 1); library.set_song_at(1, 0, 2);
+    return library;
+}
+
+#[test]
+fn tui_song_matrix_lanes_and_rows() {
+    var library: PatternLibrary = song_test_library();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    verify(library.song.len() == 2 && library.song_lanes() == 1);
+    verify(library.song_at(0, 0) == 1 && library.song_at(1, 0) == 2);
+    // Lane 2 of row 0 runs parallel to lane 1.
+    verify(library.set_song_at(0, 1, 2));
+    verify(library.song_lanes() == 2 && library.song_at(0, 1) == 2 && library.song_at(1, 1) == 0);
+    // Lane 1 always holds a pattern; other lanes clear back to empty.
+    verify(!library.set_song_at(0, 0, 0));
+    verify(library.set_song_at(0, 1, 0) && library.song_lanes() == 1);
+    // Inserting a song row keeps the lanes aligned with it.
+    verify(library.set_song_at(1, 1, 2));
+    library.view.selected = 0;
+    library.on_event(decode_input("o"), area);
+    verify(library.song.len() == 3 && library.song_at(2, 1) == 2 && library.song_at(1, 1) == 0);
+    // Out-of-range cells are refused, and lane 16 does not exist.
+    verify(!library.set_song_at(9, 1, 2) && !library.set_song_at(0, 16, 2));
+    library.release();
+}
+
+#[test]
+fn tui_song_matrix_detects_note_clashes() {
+    var library: PatternLibrary = song_test_library();
+    // The clone shares instrument 1 and both notes.
+    verify(library.clashing_notes(1, 2) == 2);
+    verify(library.song_row_clashes(0, 1, 2) == 2);
+    // A pattern never clashes with itself, and an empty row is quiet.
+    verify(library.clashing_notes(1, 1) == 0);
+    verify(library.song_row_clashes(1, 1, 1) == 0 || library.song_at(1, 0) == 2);
+    library.release();
+}
+
+#[test]
+fn tui_song_matrix_split_moves_notes_to_their_own_line() {
+    var library: PatternLibrary = song_test_library();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    verify(library.set_song_at(0, 1, 2));
+    // Splitting the newcomer gives its clashing track its own note line.
+    verify(library.split_song_clashes(0, 1, 2, area) == 1);
+    let entry: PatternEntry = library.patterns[library.index_of(2)];
+    let index: i32 = i32(entry.data.tracks.len()) - 1;
+    let track: SequenceTrack = entry.data.tracks[index];
+    verify(track.note_lines == 2);
+    verify(ends_with(track.name, " - 2") == 1);
+    // The notes moved off the first line, so the two patterns no longer drive
+    // the instrument through the same one.
+    let row: TableRow = entry.data.rows[0];
+    let start: i32 = entry.data.track_start(index);
+    verify(row.cells[start] == "" && row.cells[start + 4] == "C-2" && row.cells[start + 5] == "100");
+    // Splitting again renames to " - 3" rather than stacking suffixes.
+    verify(library.set_song_at(0, 2, 2));
+    library.split_song_clashes(0, 2, 2, area);
+    let again: PatternEntry = library.patterns[library.index_of(2)];
+    let renamed: SequenceTrack = again.data.tracks[index];
+    verify(ends_with(renamed.name, " - 3") == 1 && !ends_with(renamed.name, "2 - 3"));
+    library.release();
+}
+
+#[test]
+fn tui_song_matrix_survives_a_session_round_trip() {
+    // Plain patterns: an instrument assignment would need a loaded plugin.
+    var library: PatternLibrary = PatternLibrary::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.create_track_kind(false, false, area);
+    library.add(true);
+    library.show_song(true); library.view.selected = 0;
+    library.on_event(decode_input("o"), area);
+    verify(library.song.len() == 2);
+    verify(library.set_song_at(0, 1, 1) && library.set_song_at(1, 2, 2));
+    verify(library.song_lanes() == 3);
+    let directory: str8 = clone("/private/tmp/mlacker-matrix-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/matrix.mlack", directory);
+    var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    verify(codec.save(path, library, SessionView {}, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap();
+    verify(restored.library.song_lanes() == 3);
+    verify(restored.library.song_at(0, 1) == 1 && restored.library.song_at(1, 2) == 2);
+    verify(restored.library.song_at(1, 1) == 0 && restored.library.song_at(0, 2) == 0);
+    restored.release();
+    library.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}

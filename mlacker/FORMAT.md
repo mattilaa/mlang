@@ -87,6 +87,13 @@ are accepted. Unsupported major or minor versions fail closed.
     Mla Drum). If an instrument refuses a pad, the open is rejected. This
     extension requires the preceding tags, with empty sections if necessary.
 
+12. Optional `SONG_MATRIX` extension follows `SAMPLER_PADS`: a lane count
+    (0–15) and, per lane, a row count matching the song length followed by one
+    pattern ID per row, where 0 is an empty cell. These are the parallel lanes
+    beside the song list of step 7, which is lane 1. Every non-zero ID must
+    exist in the pattern list. This extension also requires the preceding tags,
+    with empty sections if necessary.
+
 The active pattern is serialized from the live editor, not its older library
 snapshot. Audio placements reference the embedded sample list; plugin assignments
 reference stable slots, including holes left by removed instruments.
@@ -97,7 +104,7 @@ Maximum file size is 256 MiB; strings are limited to 4096 bytes; at most 256
 samples, 33 plugins (including master) plus 8 aux effects and 256 inserts,
 16384 parameters per plugin, 1024 patterns,
 64 tracks per pattern, 16384 rows per pattern, 8 million cells per document, and
-65536 song entries are accepted. Each sample has at most 16777216 frames and one
+65536 song entries and 15 parallel song lanes are accepted. Each sample has at most 16777216 frames and one
 or two channels. Invalid counts, non-finite/out-of-range numeric data, malformed
 cell values, duplicate pattern IDs, and dangling song/instrument/sample references
 are rejected. Application editing limits may be stricter than archive limits.

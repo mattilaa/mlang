@@ -1,0 +1,101 @@
+mod tui_demo::patterns;
+mod tui::widgets;
+use tui_demo::patterns::PatternLibrary;
+use tui_demo::patterns::PatternEntry;
+use tui::widgets::Panel;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::input::*;
+use tui::menu::Key;
+use std::strbuf::free;
+use std::strbuf::sub;
+use std::strbuf::len;
+
+/// Song matrix: rows are song steps, columns are parallel lanes. Every pattern
+/// in a row plays together, so the same instrument can be driven from several
+/// lanes at once. Shown in the pattern pane, it edits the library's song.
+/// `on_event` results: 0 handled, 1 assign the selected pattern here, 2 clear.
+pub struct SongMatrix {
+    var visible: bool; var row: i32; var lane: i32;
+    var scroll: i32; var lane_scroll: i32;
+};
+impl SongMatrix {
+    /// `lanes` already includes the spare empty lane past the last used one.
+    fn clamp(self: &mut Self, rows: i32, lanes: i32) -> void {
+        if self.row >= rows { self.row = rows - 1; }
+        if self.row < 0 { self.row = 0; }
+        if self.lane >= lanes { self.lane = lanes - 1; }
+        if self.lane < 0 { self.lane = 0; }
+    }
+    pub fn on_event(self: &mut Self, event: InputEvent, rows: i32, lanes: i32) -> i32 {
+        self.clamp(rows, lanes);
+        if event.kind == InputKind::Menu {
+            if event.key == Key::Up { self.row = self.row - 1; self.clamp(rows, lanes); return 0; }
+            if event.key == Key::Down { self.row = self.row + 1; self.clamp(rows, lanes); return 0; }
+            if event.key == Key::Left { self.lane = self.lane - 1; self.clamp(rows, lanes); return 0; }
+            if event.key == Key::Right { self.lane = self.lane + 1; self.clamp(rows, lanes); return 0; }
+            if event.key == Key::Enter { return 1; }
+        }
+        if event.kind == InputKind::Edit && (event.key == Key::Backspace || event.key == Key::Delete) { return 2; }
+        return 0;
+    }
+    pub fn paint(self: &mut Self, surface: Surface, area: Rect, theme: Theme, library: &PatternLibrary, focused: bool) -> void {
+        if !self.visible { return; }
+        var source: PatternLibrary = PatternLibrary {}; source = library;
+        self.clamp(i32(source.song.len()), source.song_lanes() + 1);
+        let panel: Panel = Panel { title: " Song matrix " };
+        let body: Rect = panel.paint_focused(surface, area, theme, focused);
+        if body.width < 12 || body.height < 3 { return; }
+        let lanes: i32 = source.song_lanes() + 1;
+        let width: i32 = 14;
+        let visible_lanes: i32 = (body.width - 5) / width < 1 ? 1 : (body.width - 5) / width;
+        if self.lane < self.lane_scroll { self.lane_scroll = self.lane; }
+        if self.lane >= self.lane_scroll + visible_lanes { self.lane_scroll = self.lane - visible_lanes + 1; }
+        let rows: i32 = i32(source.song.len());
+        let visible_rows: i32 = body.height - 1;
+        if self.row < self.scroll { self.scroll = self.row; }
+        if self.row >= self.scroll + visible_rows { self.scroll = self.row - visible_rows + 1; }
+        // Header: lane numbers.
+        surface.text(Rect::new(body.x, body.y, 4, 1), "ROW", theme.muted, theme.panel);
+        for column in 0..visible_lanes {
+            let lane: i32 = self.lane_scroll + i32(column);
+            if lane >= lanes { break; }
+            let label: str8 = format!("L{}", lane + 1);
+            surface.text(Rect::new(body.x + 5 + i32(column) * width, body.y, width - 1, 1), label,
+                lane == self.lane ? theme.accent : theme.muted, theme.panel);
+            free(label);
+        }
+        for line in 0..visible_rows {
+            let row: i32 = self.scroll + i32(line);
+            if row >= rows { break; }
+            let y: i32 = body.y + 1 + i32(line);
+            let number: str8 = format!("{}{}", row < 9 ? "00" : (row < 99 ? "0" : ""), row + 1);
+            surface.text(Rect::new(body.x, y, 4, 1), number, theme.muted, theme.panel); free(number);
+            for column in 0..visible_lanes {
+                let lane: i32 = self.lane_scroll + i32(column);
+                if lane >= lanes { break; }
+                let id: i32 = source.song_at(row, lane);
+                let cell: Rect = Rect::new(body.x + 5 + i32(column) * width, y, width - 1, 1);
+                let selected: bool = row == self.row && lane == self.lane;
+                let background: i32 = selected ? theme.selection : theme.panel;
+                surface.fill(cell, Cell { glyph: 32, foreground: theme.foreground, background: background });
+                var text: str8 = "";
+                if id > 0 {
+                    let index: i32 = source.index_of(id);
+                    if index >= 0 {
+                        let entry: PatternEntry = source.patterns[index];
+                        text = len(entry.name) > 10 ? sub(entry.name, 0, 10) : format!("{}", entry.name);
+                    }
+                }
+                surface.text(cell, id > 0 ? text : "-", id > 0 ? theme.foreground : theme.muted, background);
+                if id > 0 { free(text); }
+            }
+        }
+        if body.height > 1 {
+            surface.text(Rect::new(body.x, body.y + body.height - 1, body.width, 1),
+                "h/j/k/l move  Enter places the selected pattern  Backspace clears  Shift+M closes",
+                theme.muted, theme.panel);
+        }
+    }
+}

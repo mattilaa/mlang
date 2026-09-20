@@ -27,6 +27,21 @@ use std::strbuf::find;
 use std::strbuf::sub;
 pub struct AutomationSlot { var parameter: str8; var minimum: i64; var maximum: i64; };
 pub struct NoteSpan { var start: i64; var end: i64; };
+/// "Track 1 - 2" -> "Track 1": splitting twice must not stack suffixes.
+fn strip_split_suffix(name: str8) -> str8 {
+    let size: i64 = len(name);
+    for i in 0..size {
+        let at: i64 = size - 1 - i;
+        if at < 3 { break; }
+        let candidate: str8 = sub(name, at - 3, 3);
+        let tail: str8 = sub(name, at, size - at);
+        let matched: bool = candidate == " - " && table_matches("[0-9]{1,2}", tail);
+        free(candidate);
+        if matched { free(tail); return sub(name, 0, at - 3); }
+        free(tail);
+    }
+    return clone(name);
+}
 pub struct AudioInstance { var clip: AudioClip; var start_row: i32; var length_ticks: i32; var offset_frames: i64; };
 impl AudioInstance {
     /// Borrowed render view: metadata is gated by LEN and the non-destructive
@@ -992,6 +1007,58 @@ pub fn configure_slot(self: &mut Self, slot: i32, spec: str8) -> bool {
     self.replace_track(index, track); self.rebuild_columns(); self.error = ""; return true;
 }
 /// 80 adds a blank note line, 81 removes it, 82 duplicates NOTE/VEL/LEN/OFF.
+/// Move every note of track `index` onto note line `line`, adding lines until
+/// it exists, and rename the track "<name> - <line + 1>". Used when parallel
+/// song patterns would drive one instrument with the same notes.
+pub fn move_notes_to_line(self: &mut Self, index: i32, line: i32, area: Rect) -> bool {
+    if index < 0 || index >= self.tracks.len() || line < 1 || line > 15 { return false; }
+    var track: SequenceTrack = self.tracks[index];
+    if track.audio { return false; }
+    let first: i32 = self.track_start(index);
+    while track.note_lines <= line {
+        var grown: SequenceTrack = self.tracks[index];
+        let column: i32 = first + track.note_lines * 4;
+        var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
+        for row in previous {
+            var cells: list<str8> = [];
+            for c in 0..row.cells.len() {
+                if c == column { for _f in 0..4 { cells.push(clone("")); } }
+                cells.push(row.cells[c]);
+            }
+            if column >= row.cells.len() { for _f in 0..4 { cells.push(clone("")); } }
+            rows.push(TableRow { cells: cells });
+        }
+        self.rows = rows;
+        grown.note_lines = grown.note_lines + 1;
+        self.replace_track(index, grown);
+        track = self.tracks[index];
+    }
+    // Move line 0 onto the target line; the source line is left empty.
+    let source: i32 = first; let target: i32 = first + line * 4;
+    var moved: list<TableRow> = []; let rows: list<TableRow> = self.rows;
+    for row in rows {
+        // Copy the source line first: the target sits after it, so freeing in
+        // place would leave the target reading freed cells.
+        var carried: list<str8> = [];
+        for f in 0..4 { carried.push(clone(row.cells[source + f])); }
+        var cells: list<str8> = [];
+        for c in 0..row.cells.len() {
+            if c >= target && c < target + 4 { free(row.cells[c]); cells.push(clone(carried[c - target])); }
+            else if c >= source && c < source + 4 { free(row.cells[c]); cells.push(clone("")); }
+            else { cells.push(row.cells[c]); }
+        }
+        for value in carried { free(value); }
+        moved.push(TableRow { cells: cells });
+    }
+    self.rows = moved;
+    var renamed: SequenceTrack = self.tracks[index];
+    let base: str8 = strip_split_suffix(renamed.name);
+    free(renamed.name); renamed.name = format!("{} - {}", base, line + 1); free(base);
+    self.replace_track(index, renamed);
+    self.revision = self.revision + 1;
+    self.rebuild_columns(); self.reconcile(area);
+    return true;
+}
 pub fn note_line_action(self: &mut Self, command: i32, area: Rect) -> void {
     let index: i32 = self.active_track(); if index < 0 { return; }
     var track: SequenceTrack = self.tracks[index];
