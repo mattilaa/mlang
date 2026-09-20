@@ -43,6 +43,23 @@ asks for a `.mlack` path. **Save session as** chooses another path. **Open sessi
 loads a `.mlack` file. **New session** confirms before resetting to an empty editor.
 Saving stops the sequencer; loading always restores a stopped transport.
 
+## File browser
+
+Every chooser (sessions, samples, VST3 bundles, MIDI-learn and preset files)
+remembers the directory it last browsed for the rest of the run, so reopening it
+returns there. The kinds are remembered separately: plugins, samples, presets and
+sessions each keep their own directory, and plugin browsing starts at
+`/Library/Audio/Plug-Ins/VST3` until you browse elsewhere. The memory is not
+saved in `.mlack`, so it resets when mlacker restarts.
+
+Browsing starts focused on the **Directories** pane on the left, where `j/k`
+moves, Enter or `l` expands, and `h` collapses. Tab cycles Path → Directories →
+Files → buttons, and Ctrl+Shift+H/J/K/L moves between them. Typing `/` or `~`
+jumps to the path field and starts a fresh absolute path; Ctrl+U clears the field
+and focuses it. Save choosers open in the path field instead, since they start
+from a suggested filename. Relative paths typed into the field resolve against
+the directory being browsed.
+
 Version 1.0 stores all patterns and song order, track types and assignments,
 NOTE/VEL/LEN/OFF/automation data, audio placements, loaded samples, loaded
 instrument/master-plugin paths and normalized parameter states, BPM/time signature,

@@ -57,8 +57,9 @@ def main():
             expect(tui.send(b"\r"), b"Load sample for pad 3")
             expect(tui.send(b"\x15" + bytes(kick) + b"\r", 0.7), b"Pad 3: kick.wav (added to Audio)")
 
-            # From the Audio list (the newly added snare is selected).
-            expect(tui.send(b"\tllllll\r"), b"Add audio")
+            # From the Audio list (the newly added snare is selected). The audio
+            # chooser reopens in the directory the pad sample came from.
+            expect(tui.send(b"\tllllll\r"), b"Add audio", b"kick.wav")
             tui.send(b"\x15" + bytes(snare) + b"\r", 0.7)
             expect(tui.send(SEND_TO_PAD), b"Send sample to drum key", b"pad 1: empty")
             tui.send(b"l")

@@ -223,7 +223,9 @@ impl OpenSessionDialog {
         self.reset_buttons();
         self.active = true; self.accepted = false;
         free(self.accepted_path); self.accepted_path = clone("");
-        self.focus.selected = 0; self.focus.menu_active = false;
+        // Browsing starts in the directory tree (pane 1); a save chooser starts
+        // in the path field, where its suggested filename is edited.
+        self.focus.selected = self.save_mode ? 0 : 1; self.focus.menu_active = false;
         let working: str8 = cwd();
         let path: str8 = len(initial_directory) == 0 ? clone(working) : join_owned(working, initial_directory);
         self.path_field.set_text(path);
@@ -378,6 +380,15 @@ impl OpenSessionDialog {
             if event.kind == InputKind::Menu && event.key == Key::Enter { self.submit_path(); }
             else { self.path_field.on_event(event); }
             return;
+        }
+        // From the lists, Ctrl+U or the start of an absolute path jumps to the
+        // path field, so a path can be typed without tabbing there first. Plain
+        // letters cannot: h/j/k/l navigate the lists.
+        if self.focus.selected != 0 && (event.code == 21 || event.code == 47 || event.code == 126) {
+            // "/" and "~" begin a fresh absolute path rather than extending the
+            // browsed one; Ctrl+U clears the field itself.
+            if event.code != 21 { self.path_field.set_text(""); }
+            self.focus.selected = 0; self.path_field.on_event(event); return;
         }
         if event.kind != InputKind::Menu { return; }
         if self.focus.selected == 1 {

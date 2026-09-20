@@ -241,6 +241,9 @@ pub fn run() -> i32 {
     var pad_action: i32 = 0; var pad_slot: i32 = 0; var pad_sample: i32 = -1; var pad_index: i32 = 0;
     var adding_pad_file: bool = false;
     var preset_request: i32 = 0; var preset_path: str8 = clone(""); var preset_worker: bool = false;
+    // Last directory browsed per kind, so each chooser reopens where it was.
+    var last_session_dir: str8 = clone(""); var last_audio_dir: str8 = clone("");
+    var last_plugin_dir: str8 = clone("/Library/Audio/Plug-Ins/VST3"); var last_preset_dir: str8 = clone("");
     var piano: PianoDialog = PianoDialog::new();
     var sample_editor: SampleEditor = SampleEditor {};
     if !fixture {
@@ -470,6 +473,11 @@ pub fn run() -> i32 {
             if dialog.active && dialog.pressed_button >= 0 {
                 dialog.tick(); dirty = true;
                 if dialog.accepted {
+                    // Reopen each chooser where it last browsed.
+                    if adding_audio || adding_pad_file { free(last_audio_dir); last_audio_dir = clone(dialog.directory); }
+                    else if adding_plugin || adding_instrument || adding_effect >= 0 || adding_insert_track >= 0 { free(last_plugin_dir); last_plugin_dir = clone(dialog.directory); }
+                    else if learn_action != 0 { free(last_preset_dir); last_preset_dir = clone(dialog.directory); }
+                    else { free(last_session_dir); last_session_dir = clone(dialog.directory); }
                     if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, terminal_bounds()); }
                     free(message);
                     if adding_insert_track >= 0 {
@@ -670,6 +678,11 @@ pub fn run() -> i32 {
                     focus.set_menu_active(dialog.active);
                     let pad_file_dialog: bool = adding_pad_file;
                     if dialog.accepted {
+                        // Reopen each chooser where it last browsed.
+                        if adding_audio || adding_pad_file { free(last_audio_dir); last_audio_dir = clone(dialog.directory); }
+                        else if adding_plugin || adding_instrument || adding_effect >= 0 || adding_insert_track >= 0 { free(last_plugin_dir); last_plugin_dir = clone(dialog.directory); }
+                        else if learn_action != 0 { free(last_preset_dir); last_preset_dir = clone(dialog.directory); }
+                        else { free(last_session_dir); last_session_dir = clone(dialog.directory); }
                         if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, panes[1].bounds.inset(1)); }
                         free(message);
                         if adding_pad_file {
@@ -862,7 +875,7 @@ pub fn run() -> i32 {
                 adding_audio = false; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = "";
                 saving_session = command != 2; dialog.save_mode = saving_session;
                 dialog.title = saving_session ? "Save session (.mlack)" : "Open session"; dialog.file_pattern = fixture ? "" : ".*\\.[mM][lL][aA][cC][kK]";
-                dialog.open("");
+                dialog.open(last_session_dir);
                 focus.set_menu_active(true);
             }
             else if command == 60 {
@@ -871,7 +884,7 @@ pub fn run() -> i32 {
                 dialog.save_mode = false; saving_session = false;
                 adding_audio = true; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = ""; dialog.title = "Add audio";
                 dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
-                dialog.open(""); focus.set_menu_active(true);
+                dialog.open(last_audio_dir); focus.set_menu_active(true);
             }
             else if command == 91 || command == 93 {
                 adding_effect = -1;
@@ -880,7 +893,7 @@ pub fn run() -> i32 {
                 transport.playing = false; adding_audio = false; adding_plugin = command == 91; adding_instrument = command == 93;
                 dialog.title = adding_instrument ? "Add VST3 instrument" : "Load master VST3"; dialog.file_pattern = ".*\\.[vV][sS][tT]3";
                 dialog.bundle_pattern = dialog.file_pattern;
-                dialog.open("/Library/Audio/Plug-Ins/VST3"); focus.set_menu_active(true);
+                dialog.open(last_plugin_dir); focus.set_menu_active(true);
             }
             else if command == 97 || command == 98 || command == 100 || command == 101 {
                 adding_effect = -1;
@@ -898,7 +911,7 @@ pub fn run() -> i32 {
                         dialog.title = command == 100 ? "Save plugin preset (.mlapre)" : "Load plugin preset (.mlapre)";
                         dialog.file_pattern = command == 100 ? "" : ".*\\.[mM][lL][aA][pP][rR][eE]";
                     }
-                    dialog.open("");
+                    dialog.open(last_preset_dir);
                     if command == 97 || command == 100 {
                         let suggested: str8 = SessionCodec::learn_suggestion(midi.output.instrument_name(learn_slot));
                         dialog.path_field.set_text(suggested); free(suggested);
@@ -927,7 +940,7 @@ pub fn run() -> i32 {
                         adding_effect = -1; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
                         transport.playing = false; dialog.save_mode = false; dialog.title = "Load VST3 insert effect";
                         dialog.file_pattern = ".*\\.[vV][sS][tT]3"; dialog.bundle_pattern = dialog.file_pattern;
-                        dialog.open("/Library/Audio/Plug-Ins/VST3"); focus.set_menu_active(true);
+                        dialog.open(last_plugin_dir); focus.set_menu_active(true);
                     }
                 }
             }
@@ -937,7 +950,7 @@ pub fn run() -> i32 {
                     adding_effect = mixer.selected_effect; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
                     transport.playing = false; dialog.save_mode = false; dialog.title = "Load VST3 effect";
                     dialog.file_pattern = ".*\\.[vV][sS][tT]3"; dialog.bundle_pattern = dialog.file_pattern;
-                    dialog.open("/Library/Audio/Plug-Ins/VST3"); focus.set_menu_active(true);
+                    dialog.open(last_plugin_dir); focus.set_menu_active(true);
                 } else if command == 112 {
                     if !instrument_editor.open(midi.output, mixer.selected_effect + 33) { free(message); message = clone("Load an effect plugin first"); }
                 } else if command == 114 { free(message); message = midi.load_effect(mixer.selected_effect, ""); }
@@ -990,7 +1003,7 @@ pub fn run() -> i32 {
                     adding_pad_file = true; dialog.save_mode = false; dialog.bundle_pattern = "";
                     dialog.title = format!("Load sample for pad {}", pad_index + 1);
                     dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
-                    dialog.open(""); focus.set_menu_active(true);
+                    dialog.open(last_audio_dir); focus.set_menu_active(true);
                 }
             }
             else if command == 107 {
@@ -1182,6 +1195,7 @@ pub fn run() -> i32 {
     settings.release();
     free(session_path); free(request_path);
     instrument_editor.release(); sample_editor.release(); piano.release(); free(preset_path);
+    free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();
     return 0;
