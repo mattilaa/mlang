@@ -717,6 +717,7 @@ pub fn run() -> i32 {
         focus.reconcile(panes);
         focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
+            library.table.instrument_labels(midi.output);
             library.table.insert_labels(midi.output);
             let surface: Surface = Surface::new(area.width, area.height);
             if !surface.is_valid() { instrument_editor.release(); midi.release(); settings.release(); library.release(); dialog.release(); bpm_dialog.release(); free(message); terminal.finish(); return 1; }

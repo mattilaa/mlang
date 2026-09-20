@@ -223,6 +223,9 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
   validates the first class marked `Instrument`, its MIDI input and supported
   audio buses. Effects and incompatible/broken bundles report an error without
   adding an entry. Only open trusted plugins.
+- Each Instrument track shows its instance under the track name in the pattern
+  view, numbered as in the Instruments list (e.g. `001 Mla Drum`), or
+  `- unassigned -` until one is assigned.
 - **View → Instruments** shows session-wide loaded instances, numbered by ID.
   `j/k`, `gg`, and `G` navigate; Enter assigns the selected instance to the
   current Instrument track. If another track already plays that instance,

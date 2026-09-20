@@ -2962,3 +2962,27 @@ fn tui_song_matrix_keys() {
     verify(matrix.on_event(decode_input("j"), 2, 3) == 0 && !matrix.delete_pending);
     verify(matrix.on_event(decode_input("d"), 2, 3) == 0 && matrix.delete_pending);
 }
+
+#[test]
+fn tui_pattern_view_shows_instrument_under_track_name() {
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    let plain: i32 = table.header_height();
+    // A MIDI-only pattern keeps the two-line header.
+    table.instrument_labels(AudioController {});
+    verify(!table.group_subtitles && table.header_height() == plain);
+    // An instrument track adds the line, showing the slot number.
+    table.create_instrument_track(0, area);
+    table.instrument_labels(AudioController {});
+    verify(table.group_subtitles && table.header_height() == plain + 1);
+    let group: TableGroup = table.groups[table.groups.len() - 1];
+    verify(group.subtitle == "- unassigned -");
+    table.assign_instrument(7);
+    table.instrument_labels(AudioController {});
+    let assigned: TableGroup = table.groups[table.groups.len() - 1];
+    verify(starts_with(assigned.subtitle, "007 ") == 1);
+    // Tracks that play no instrument keep an empty line under their name.
+    let first: TableGroup = table.groups[0];
+    verify(first.subtitle == "");
+    table.release();
+}

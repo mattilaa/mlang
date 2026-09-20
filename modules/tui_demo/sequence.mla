@@ -129,6 +129,30 @@ pub fn set_insert(self: &mut Self, index: i32, position: i32, id: i32) -> void {
         }
     }
 }
+/// Show each instrument track's instance under its name, numbered as in the
+/// Instruments list. Call before painting; the labels are owned by the groups.
+pub fn instrument_labels(self: &mut Self, output: AudioController) -> void {
+    var any: bool = false;
+    let tracks: list<SequenceTrack> = self.tracks;
+    for track in tracks { if track.instrument { any = true; } }
+    self.group_subtitles = any;
+    if !any { return; }
+    let old: list<TableGroup> = self.groups; var groups: list<TableGroup> = [];
+    for i in 0..old.len() {
+        var group: TableGroup = old[i];
+        if group.subtitle != "" { free(group.subtitle); }
+        let track: SequenceTrack = self.tracks[i];
+        if !track.instrument { group.subtitle = ""; }
+        else if track.instrument_id <= 0 { group.subtitle = clone("- unassigned -"); }
+        else {
+            let name: str8 = output.instrument_name(track.instrument_id);
+            group.subtitle = format!("{}{} {}", track.instrument_id < 10 ? "00" : (track.instrument_id < 100 ? "0" : ""),
+                track.instrument_id, name == "" ? "instrument" : name);
+        }
+        groups.push(group);
+    }
+    self.groups = groups;
+}
 pub fn insert_labels(self: &mut Self, output: AudioController) -> void {
     if self.group_detail_rows == 0 { return; }
     let old: list<TableGroup> = self.groups; var groups: list<TableGroup> = [];
@@ -726,7 +750,7 @@ pub fn rebuild_columns(self: &mut Self) -> void {
     self.visual = false; self.visual_rows = false;
     self.revision = self.revision + 1;
     let old_groups: list<TableGroup> = self.groups;
-    for group in old_groups { free(group.title); }
+    for group in old_groups { free(group.title); if group.subtitle != "" { free(group.subtitle); } }
     var columns: list<TableColumn> = [TableColumn { title: "ROW", width: 4, value_type: "u32", read_only: true }];
     var groups: list<TableGroup> = [];
     for i in 0..self.tracks.len() {
@@ -1115,7 +1139,7 @@ pub fn release(self: &mut Self) -> void {
     let tracks: list<SequenceTrack> = self.tracks;
     for track in tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.release_audio(); }
     let groups: list<TableGroup> = self.groups;
-    for group in groups { free(group.title); }
+    for group in groups { free(group.title); if group.subtitle != "" { free(group.subtitle); } }
     let rows: list<TableRow> = self.rows;
     for row in rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
     let notes: array<str8, 128> = self.notes;
