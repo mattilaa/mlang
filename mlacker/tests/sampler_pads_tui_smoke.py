@@ -57,8 +57,9 @@ def main():
             expect(tui.send(b"\r"), b"Load sample for pad 3")
             expect(tui.send(b"\x15" + bytes(kick) + b"\r", 0.7), b"Pad 3: kick.wav (added to Audio)")
 
-            # From the Audio list (the newly added snare is selected).
-            expect(tui.send(b"\tllllll\r"), b"Add audio")
+            # From the Audio list (the newly added snare is selected). The audio
+            # chooser reopens in the directory the pad sample came from.
+            expect(tui.send(b"\tllllll\r"), b"Add audio", b"kick.wav")
             tui.send(b"\x15" + bytes(snare) + b"\r", 0.7)
             expect(tui.send(SEND_TO_PAD), b"Send sample to drum key", b"pad 1: empty")
             tui.send(b"l")
@@ -147,6 +148,18 @@ def main():
             expect(tui.send(b"\tjjjjjj\r"), b"Save session (.mlack)")
             frame = expect(tui.send(b"\x15" + bytes(path) + b"\r", 0.7), b"Saved:")
             assert b"Pad 2:" not in frame, frame[-4000:]
+
+            # Space marks several files in the audio chooser; Enter opens them all.
+            expect(tui.send(b"\tllllll\r"), b"Add audio", b"kick.wav")
+            tui.send(b"\x1b[108;6u")  # focus the Files pane
+            tui.send(b"  ")            # mark kick.wav and snare.wav
+            expect(tui.send(b"\r", 0.9), b"Added 2 samples")
+            # Sessions are single-open: Space must not mark there.
+            expect(tui.send(b"\tj\r"), b"Open session")
+            tui.send(b"\x1b[108;6u")
+            frame = tui.send(b" ")
+            assert b"Marked" not in frame, frame[-4000:]
+            tui.send(b"\x1b", 0.6)
         finally:
             tui.close()
 

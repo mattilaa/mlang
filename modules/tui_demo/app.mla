@@ -240,7 +240,11 @@ pub fn run() -> i32 {
     // Sampler pads: 117 = from the Audio list, 118 = from a file.
     var pad_action: i32 = 0; var pad_slot: i32 = 0; var pad_sample: i32 = -1; var pad_index: i32 = 0;
     var adding_pad_file: bool = false;
+    var accept_pending: bool = false;
     var preset_request: i32 = 0; var preset_path: str8 = clone(""); var preset_worker: bool = false;
+    // Last directory browsed per kind, so each chooser reopens where it was.
+    var last_session_dir: str8 = clone(""); var last_audio_dir: str8 = clone("");
+    var last_plugin_dir: str8 = clone("/Library/Audio/Plug-Ins/VST3"); var last_preset_dir: str8 = clone("");
     var piano: PianoDialog = PianoDialog::new();
     var sample_editor: SampleEditor = SampleEditor {};
     if !fixture {
@@ -351,6 +355,95 @@ pub fn run() -> i32 {
             }
             free(message); message = clone(session_status); free(session_status);
             session_request = 0; menus.dismiss(); dirty = true;
+        }
+        if accept_pending {
+            // One place for every chooser result, whichever way it was accepted
+            // (Enter in the browser, or the OK button). Multi-selected files
+            // arrive in dialog.accepted_paths; flows that take a single file use
+            // the first one.
+            accept_pending = false;
+            let paths: list<str8> = dialog.accepted_paths;
+            let first: str8 = dialog.accepted_path;
+            if adding_audio || adding_pad_file { free(last_audio_dir); last_audio_dir = clone(dialog.directory); }
+            else if adding_plugin || adding_instrument || adding_effect >= 0 || adding_insert_track >= 0 { free(last_plugin_dir); last_plugin_dir = clone(dialog.directory); }
+            else if learn_action != 0 { free(last_preset_dir); last_preset_dir = clone(dialog.directory); }
+            else { free(last_session_dir); last_session_dir = clone(dialog.directory); }
+            free(message);
+            if adding_audio {
+                // The first sample lands on the selected audio track; the rest
+                // join the Audio list.
+                var loaded: i32 = 0;
+                for i in 0..paths.len() {
+                    let ok: bool = i == 0 ? library.load_audio(paths[i], transport.bpm, terminal_bounds()) : library.audio.load(paths[i], transport.bpm);
+                    if ok { loaded = loaded + 1; }
+                }
+                message = paths.len() == 1 ? format!("Selected: {}", first)
+                    : (loaded == paths.len() ? format!("Added {} samples", loaded)
+                        : format!("Added {} of {} samples: {}", loaded, paths.len(), library.audio.error));
+                adding_audio = false;
+            }
+            else if adding_pad_file {
+                // Several files fill consecutive pads from the chosen key.
+                var filled: i32 = 0; var failure: str8 = ""; var first_name: str8 = clone("");
+                for i in 0..paths.len() {
+                    let pad: i32 = pad_index + i32(i);
+                    if pad >= i32(midi.output.instrument_sampler(pad_slot, 1)) { failure = clone("ran out of pads"); break; }
+                    if !library.audio.load(paths[i], transport.bpm) { failure = clone(library.audio.error); break; }
+                    let index: i32 = i32(library.audio.samples.len()) - 1;
+                    let clip: AudioClip = library.audio.samples[index];
+                    let name: str8 = base_name(clip.source);
+                    let error: str8 = midi.assign_pad(pad_slot, pad, index, clip.samples, clip.channels, clip.sample_rate, name);
+                    if i == 0 { free(first_name); first_name = clone(name); }
+                    free(name);
+                    if error != "" { failure = error; break; }
+                    filled = filled + 1;
+                }
+                message = failure != "" ? format!("Filled {} pad(s), then stopped: {}", filled, failure)
+                    : (filled == 1 ? format!("Pad {}: {} (added to Audio)", pad_index + 1, first_name)
+                        : format!("Pads {}-{}: {} samples added to Audio", pad_index + 1, pad_index + filled, filled));
+                free(first_name);
+                if failure != "" { free(failure); }
+                adding_pad_file = false;
+            }
+            else if adding_insert_track >= 0 {
+                let id: i32 = midi.add_insert(first, library.free_insert_id(i32(midi.insert_paths.len())));
+                if id > 0 { library.table.set_insert(adding_insert_track, adding_insert_position, id); }
+                message = clone(id > 0 ? "Insert effect loaded" : "Cannot load insert: select a VST3 effect (maximum 256 loaded inserts)");
+                adding_insert_track = -1;
+            }
+            else if adding_effect >= 0 { message = midi.load_effect(adding_effect, first); adding_effect = -1; }
+            else if learn_action != 0 {
+                if learn_action >= 100 {
+                    // Handled below; kit presets also touch the Audio list.
+                    free(preset_path); preset_path = clone(first); preset_request = learn_action; preset_worker = midi.midi.worker.raw != 0;
+                    message = clone("");
+                } else { message = SessionCodec::learn_file(first, midi.output, learn_slot, learn_action == 97); }
+                learn_action = 0;
+            }
+            else if adding_instrument {
+                // Each chosen bundle becomes its own instance.
+                var names: str8 = clone(""); var failure: str8 = "";
+                for i in 0..paths.len() {
+                    let error: str8 = midi.add_instrument(paths[i]);
+                    if error != "" { failure = error; break; }
+                    let id: i32 = midi.last_instrument_id;
+                    let name: str8 = midi.output.instrument_name(id);
+                    library.add_instrument(id, name);
+                    let joined: str8 = format!("{}{}#{} {}", names, names == "" ? "" : ", ", id, name);
+                    free(names); names = joined;
+                }
+                message = failure != "" ? failure
+                    : (paths.len() == 1 ? format!("Instrument loaded: {} | {}", midi.output.instrument_name(midi.last_instrument_id), midi.instrument_output_failed ? "Audio restart failed; reopen Settings" : "Enter assigns to selected Instrument track")
+                        : format!("Instruments loaded: {}", names));
+                free(names);
+                adding_instrument = false;
+            }
+            else if adding_plugin { message = midi.set_processor(first); adding_plugin = false; }
+            else {
+                message = format!("Selected: {}", first);
+                if !fixture { free(request_path); request_path = clone(first); session_request = saving_session ? 2 : 1; }
+            }
+            dirty = true;
         }
         if preset_request != 0 {
             // 100 = save, 101 = load. Kit presets carry a sampler's pads.
@@ -469,40 +562,7 @@ pub fn run() -> i32 {
             }
             if dialog.active && dialog.pressed_button >= 0 {
                 dialog.tick(); dirty = true;
-                if dialog.accepted {
-                    if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, terminal_bounds()); }
-                    free(message);
-                    if adding_insert_track >= 0 {
-                        let id: i32 = midi.add_insert(dialog.accepted_path, library.free_insert_id(i32(midi.insert_paths.len())));
-                        if id > 0 { library.table.set_insert(adding_insert_track, adding_insert_position, id); }
-                        message = clone(id > 0 ? "Insert effect loaded" : "Cannot load insert: select a VST3 effect (maximum 256 loaded inserts)");
-                        adding_insert_track = -1;
-                    } else if adding_effect >= 0 { message = midi.load_effect(adding_effect, dialog.accepted_path); adding_effect = -1; }
-                    else if learn_action != 0 {
-                        if learn_action >= 100 {
-                            let worker_running: bool = midi.midi.worker.raw != 0;
-                            // Handled once per frame below (kit presets also touch the Audio list).
-                            free(preset_path); preset_path = clone(dialog.accepted_path); preset_request = learn_action; preset_worker = worker_running;
-                            message = clone("");
-                        } else { message = SessionCodec::learn_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 97); }
-                        learn_action = 0;
-                    }
-                    else if adding_instrument {
-                        let error: str8 = midi.add_instrument(dialog.accepted_path);
-                        if error != "" { message = error; }
-                        else {
-                            let id: i32 = midi.last_instrument_id;
-                            let name: str8 = midi.output.instrument_name(id);
-                            library.add_instrument(id, name);
-                            message = format!("Instrument loaded: {} | {}", name, midi.instrument_output_failed ? "Audio restart failed; reopen Settings": "Enter assigns to selected Instrument track");
-                        }
-                    }
-                    else if adding_plugin { message = midi.set_processor(dialog.accepted_path); }
-                    else {
-                        message = format!("Selected: {}", dialog.accepted_path);
-                        if !adding_audio && !fixture { free(request_path); request_path = clone(dialog.accepted_path); session_request = saving_session ? 2 : 1; }
-                    }
-                }
+                if dialog.accepted { accept_pending = true; }
             }
             if share_question.active && share_question.pressed_button >= 0 {
                 share_question.tick(); dirty = true;
@@ -669,52 +729,8 @@ pub fn run() -> i32 {
                     dialog.on_event(event, area);
                     focus.set_menu_active(dialog.active);
                     let pad_file_dialog: bool = adding_pad_file;
-                    if dialog.accepted {
-                        if adding_audio { library.load_audio(dialog.accepted_path, transport.bpm, panes[1].bounds.inset(1)); }
-                        free(message);
-                        if adding_pad_file {
-                            // Disk samples join the session's Audio list so they are embedded.
-                            if !library.audio.load(dialog.accepted_path, transport.bpm) { message = format!("Cannot load sample: {}", library.audio.error); }
-                            else {
-                                let index: i32 = i32(library.audio.samples.len()) - 1;
-                                let clip: AudioClip = library.audio.samples[index];
-                                let name: str8 = base_name(clip.source);
-                                let error: str8 = midi.assign_pad(pad_slot, pad_index, index, clip.samples, clip.channels, clip.sample_rate, name);
-                                message = error == "" ? format!("Pad {}: {} (added to Audio)", pad_index + 1, name) : error;
-                                free(name);
-                            }
-                        } else if adding_insert_track >= 0 {
-                            let id: i32 = midi.add_insert(dialog.accepted_path, library.free_insert_id(i32(midi.insert_paths.len())));
-                            if id > 0 { library.table.set_insert(adding_insert_track, adding_insert_position, id); }
-                            message = clone(id > 0 ? "Insert effect loaded" : "Cannot load insert: select a VST3 effect (maximum 256 loaded inserts)");
-                            adding_insert_track = -1;
-                        } else if adding_effect >= 0 { message = midi.load_effect(adding_effect, dialog.accepted_path); adding_effect = -1; }
-                        else if learn_action != 0 {
-                            if learn_action >= 100 {
-                                let worker_running: bool = midi.midi.worker.raw != 0;
-                                // Handled once per frame below (kit presets also touch the Audio list).
-                                free(preset_path); preset_path = clone(dialog.accepted_path); preset_request = learn_action; preset_worker = worker_running;
-                                message = clone("");
-                            } else { message = SessionCodec::learn_file(dialog.accepted_path, midi.output, learn_slot, learn_action == 97); }
-                            learn_action = 0;
-                        }
-                        else if adding_instrument {
-                            let error: str8 = midi.add_instrument(dialog.accepted_path);
-                            if error != "" { message = error; }
-                            else {
-                                let id: i32 = midi.last_instrument_id;
-                                let name: str8 = midi.output.instrument_name(id);
-                                library.add_instrument(id, name);
-                                message = format!("Instrument loaded: {} | {}", name, midi.instrument_output_failed ? "Audio restart failed; reopen Settings": "Enter assigns to selected Instrument track");
-                            }
-                        }
-                        else if adding_plugin { message = midi.set_processor(dialog.accepted_path); }
-                        else {
-                            message = format!("Selected: {}", dialog.accepted_path);
-                            if !adding_audio && !fixture { free(request_path); request_path = clone(dialog.accepted_path); session_request = saving_session ? 2 : 1; }
-                        }
-                    }
-                    if pad_file_dialog && !dialog.active { adding_pad_file = false; }
+                    if dialog.accepted { accept_pending = true; }
+                    if pad_file_dialog && !dialog.active && !dialog.accepted { adding_pad_file = false; }
                     dirty = true;
                 }
             }
@@ -860,27 +876,28 @@ pub fn run() -> i32 {
                 adding_effect = -1;
                 learn_action = 0;
                 adding_audio = false; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = "";
-                saving_session = command != 2; dialog.save_mode = saving_session;
+                saving_session = command != 2; dialog.save_mode = saving_session; dialog.multi_select = false;
                 dialog.title = saving_session ? "Save session (.mlack)" : "Open session"; dialog.file_pattern = fixture ? "" : ".*\\.[mM][lL][aA][cC][kK]";
-                dialog.open("");
+                dialog.open(last_session_dir);
                 focus.set_menu_active(true);
             }
             else if command == 60 {
                 adding_effect = -1;
                 learn_action = 0;
                 dialog.save_mode = false; saving_session = false;
-                adding_audio = true; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = ""; dialog.title = "Add audio";
+                adding_audio = true; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = ""; dialog.title = "Add audio"; dialog.multi_select = true;
                 dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
-                dialog.open(""); focus.set_menu_active(true);
+                dialog.open(last_audio_dir); focus.set_menu_active(true);
             }
             else if command == 91 || command == 93 {
                 adding_effect = -1;
                 learn_action = 0;
                 dialog.save_mode = false; saving_session = false;
                 transport.playing = false; adding_audio = false; adding_plugin = command == 91; adding_instrument = command == 93;
+                dialog.multi_select = adding_instrument;
                 dialog.title = adding_instrument ? "Add VST3 instrument" : "Load master VST3"; dialog.file_pattern = ".*\\.[vV][sS][tT]3";
                 dialog.bundle_pattern = dialog.file_pattern;
-                dialog.open("/Library/Audio/Plug-Ins/VST3"); focus.set_menu_active(true);
+                dialog.open(last_plugin_dir); focus.set_menu_active(true);
             }
             else if command == 97 || command == 98 || command == 100 || command == 101 {
                 adding_effect = -1;
@@ -891,14 +908,14 @@ pub fn run() -> i32 {
                     learn_action = command; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
                     midi.output.midi_learn(-1, 0, 0);
                     if command == 101 { transport.playing = false; }
-                    dialog.save_mode = command == 97 || command == 100; dialog.bundle_pattern = "";
+                    dialog.save_mode = command == 97 || command == 100; dialog.bundle_pattern = ""; dialog.multi_select = false;
                     dialog.title = command == 97 ? "Save MIDI learn (.mlalearn)" : "Load MIDI learn (.mlalearn)";
                     dialog.file_pattern = command == 97 ? "" : ".*\\.[mM][lL][aA][lL][eE][aA][rR][nN]";
                     if command >= 100 {
                         dialog.title = command == 100 ? "Save plugin preset (.mlapre)" : "Load plugin preset (.mlapre)";
                         dialog.file_pattern = command == 100 ? "" : ".*\\.[mM][lL][aA][pP][rR][eE]";
                     }
-                    dialog.open("");
+                    dialog.open(last_preset_dir);
                     if command == 97 || command == 100 {
                         let suggested: str8 = SessionCodec::learn_suggestion(midi.output.instrument_name(learn_slot));
                         dialog.path_field.set_text(suggested); free(suggested);
@@ -925,9 +942,9 @@ pub fn run() -> i32 {
                     else {
                         adding_insert_track = index; adding_insert_position = position;
                         adding_effect = -1; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
-                        transport.playing = false; dialog.save_mode = false; dialog.title = "Load VST3 insert effect";
+                        transport.playing = false; dialog.save_mode = false; dialog.multi_select = false; dialog.title = "Load VST3 insert effect";
                         dialog.file_pattern = ".*\\.[vV][sS][tT]3"; dialog.bundle_pattern = dialog.file_pattern;
-                        dialog.open("/Library/Audio/Plug-Ins/VST3"); focus.set_menu_active(true);
+                        dialog.open(last_plugin_dir); focus.set_menu_active(true);
                     }
                 }
             }
@@ -935,9 +952,9 @@ pub fn run() -> i32 {
                 if mixer.selected_effect < 0 || mixer.selected_effect >= midi.effects.len() { free(message); message = clone("Add/select an effect channel in Mixer first"); }
                 else if command == 111 {
                     adding_effect = mixer.selected_effect; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
-                    transport.playing = false; dialog.save_mode = false; dialog.title = "Load VST3 effect";
+                    transport.playing = false; dialog.save_mode = false; dialog.multi_select = false; dialog.title = "Load VST3 effect";
                     dialog.file_pattern = ".*\\.[vV][sS][tT]3"; dialog.bundle_pattern = dialog.file_pattern;
-                    dialog.open("/Library/Audio/Plug-Ins/VST3"); focus.set_menu_active(true);
+                    dialog.open(last_plugin_dir); focus.set_menu_active(true);
                 } else if command == 112 {
                     if !instrument_editor.open(midi.output, mixer.selected_effect + 33) { free(message); message = clone("Load an effect plugin first"); }
                 } else if command == 114 { free(message); message = midi.load_effect(mixer.selected_effect, ""); }
@@ -987,10 +1004,10 @@ pub fn run() -> i32 {
                     free(name);
                 } else {
                     adding_effect = -1; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
-                    adding_pad_file = true; dialog.save_mode = false; dialog.bundle_pattern = "";
+                    adding_pad_file = true; dialog.save_mode = false; dialog.bundle_pattern = ""; dialog.multi_select = true;
                     dialog.title = format!("Load sample for pad {}", pad_index + 1);
                     dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
-                    dialog.open(""); focus.set_menu_active(true);
+                    dialog.open(last_audio_dir); focus.set_menu_active(true);
                 }
             }
             else if command == 107 {
@@ -1161,7 +1178,7 @@ pub fn run() -> i32 {
                 else if dialog.active {
                     dialog.on_event(event, area);
                     focus.set_menu_active(dialog.active);
-                    if !dialog.active { adding_pad_file = false; }
+                    if !dialog.active && !dialog.accepted { adding_pad_file = false; }
                     dirty = true;
                 }
                 else if library.table.editing || (library.table.visual && menus.active < 0 && focus.selected == 1) {
@@ -1182,6 +1199,7 @@ pub fn run() -> i32 {
     settings.release();
     free(session_path); free(request_path);
     instrument_editor.release(); sample_editor.release(); piano.release(); free(preset_path);
+    free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();
     return 0;

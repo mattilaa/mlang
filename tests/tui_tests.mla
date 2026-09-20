@@ -1937,11 +1937,113 @@ fn tui_question_custom_buttons() {
 }
 
 #[test]
+fn tui_file_dialog_focus_and_path_entry() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    let viewport: Rect = Rect::new(0, 0, 80, 24);
+    // Save choosers edit a suggested filename, so they start in the path field.
+    dialog.save_mode = true;
+    dialog.open("tests/fixtures/tui_dialog");
+    verify(dialog.focus.selected == 0);
+    // Browsing starts in the directory list instead.
+    dialog.save_mode = false;
+    dialog.open("tests/fixtures/tui_dialog");
+    verify(dialog.focus.selected == 1);
+    // Ctrl+U from the list clears the path field and moves focus there.
+    dialog.on_event(decode_input("\x15"), viewport);
+    verify(dialog.focus.selected == 0 && dialog.path_field.text == "");
+    // A leading "/" also jumps there, keeping the typed character.
+    dialog.open("tests/fixtures/tui_dialog");
+    verify(dialog.focus.selected == 1);
+    dialog.on_event(decode_input("/"), viewport);
+    verify(dialog.focus.selected == 0 && dialog.path_field.text == "/");
+    // Plain letters still navigate the tree rather than typing a path.
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.on_event(decode_input("k"), viewport);
+    verify(dialog.focus.selected == 1);
+    dialog.release();
+}
+
+#[test]
+fn tui_file_dialog_multi_select() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    let viewport: Rect = Rect::new(0, 0, 80, 24);
+    dialog.multi_select = true;
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.focus.selected = 2; dialog.file_selected = 0;
+    verify(dialog.files.len() == 2);
+    // Space marks the file under the cursor and steps to the next one.
+    dialog.on_event(decode_input(" "), viewport);
+    verify(dialog.marked.len() == 1 && dialog.file_selected == 1);
+    dialog.on_event(decode_input(" "), viewport);
+    verify(dialog.marked.len() == 2 && dialog.file_selected == 1);
+    // Space again on the same file unmarks it.
+    dialog.on_event(decode_input(" "), viewport);
+    verify(dialog.marked.len() == 1);
+    // Enter opens every marked file, not the one under the cursor.
+    dialog.on_event(decode_input("\r"), viewport);
+    verify(dialog.accepted && !dialog.active);
+    verify(dialog.accepted_paths.len() == 1 && dialog.accepted_path == dialog.accepted_paths[0]);
+    verify(ends_with(dialog.accepted_path, "alpha.session") == 1);
+    // Marks do not survive reopening.
+    dialog.open("tests/fixtures/tui_dialog");
+    verify(dialog.marked.len() == 0 && dialog.accepted_paths.len() == 0);
+    // Two marked files are both accepted, in marking order.
+    dialog.focus.selected = 2; dialog.file_selected = 0;
+    dialog.on_event(decode_input(" "), viewport);
+    dialog.on_event(decode_input(" "), viewport);
+    dialog.on_event(decode_input("\r"), viewport);
+    verify(dialog.accepted_paths.len() == 2);
+    verify(ends_with(dialog.accepted_paths[0], "alpha.session") == 1);
+    dialog.release();
+}
+
+#[test]
+fn tui_file_dialog_multi_select_is_opt_in() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    let viewport: Rect = Rect::new(0, 0, 80, 24);
+    // Session/preset choosers never mark: they open exactly one file.
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.focus.selected = 2; dialog.file_selected = 0;
+    dialog.on_event(decode_input(" "), viewport);
+    verify(dialog.marked.len() == 0 && dialog.file_selected == 0);
+    // Neither do save choosers, even where multi-open is allowed.
+    dialog.multi_select = true; dialog.save_mode = true;
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.focus.selected = 2; dialog.file_selected = 0;
+    dialog.on_event(decode_input(" "), viewport);
+    verify(dialog.marked.len() == 0);
+    dialog.release();
+}
+
+#[test]
+fn tui_file_dialog_marked_rows_are_brighter() {
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    let bounds: Rect = Rect::new(0, 0, 80, 24);
+    let theme: Theme = Theme::dark_blue();
+    dialog.multi_select = true;
+    dialog.open("tests/fixtures/tui_dialog");
+    dialog.focus.selected = 2; dialog.file_selected = 0;
+    dialog.on_event(decode_input(" "), bounds); // mark row 0, cursor moves to row 1
+    let surface: Surface = Surface::new(80, 24);
+    dialog.paint(surface, bounds, theme);
+    let panes: list<Pane> = dialog.panes(bounds);
+    let files: Pane = panes[2];
+    let marked: Cell = surface.cell(files.bounds.x + 1, files.bounds.y + 1);
+    let cursor: Cell = surface.cell(files.bounds.x + 1, files.bounds.y + 2);
+    verify(marked.background == lighten(theme.panel, 26));
+    verify(cursor.background == theme.selection);
+    verify(marked.background != theme.panel && marked.background != theme.selection);
+    surface.release(); dialog.release();
+}
+
+#[test]
 fn tui_file_dialog_shared_buttons() {
     var dialog: OpenSessionDialog = OpenSessionDialog::new();
     let viewport: Rect = Rect::new(0, 0, 80, 24);
     dialog.open("tests/fixtures/tui_dialog");
-    dialog.on_event(decode_input("\x1b[106;6u"), viewport);
+    // Browsing starts in the directory tree; the buttons sit below it.
+    verify(dialog.focus.selected == 1);
+    dialog.on_event(decode_input("\x1b[108;6u"), viewport);
     verify(dialog.focus.selected == 2);
     dialog.on_event(decode_input("\x1b[106;6u"), viewport);
     verify(dialog.focus.selected == 3);
@@ -1987,7 +2089,8 @@ fn tui_path_text_editing() {
 fn tui_open_session_directory_tree() {
     var dialog: OpenSessionDialog = OpenSessionDialog::new();
     dialog.open("tests/fixtures/tui_dialog");
-    verify(dialog.active && !dialog.accepted && dialog.focus.selected == 0);
+    // Browsing opens focused on the directory tree.
+    verify(dialog.active && !dialog.accepted && dialog.focus.selected == 1);
     verify(dialog.files.len() == 2);
     verify(dialog.files[0] == "alpha.session");
     verify(dialog.nodes.len() == 3);
@@ -2034,6 +2137,10 @@ fn tui_dialog_focus_and_rendering() {
     let path: Pane = panes[0]; let tree: Pane = panes[1]; let files: Pane = panes[2];
     verify(path.bounds.height == 1 && tree.bounds.y == path.bounds.y + 1);
     verify(files.bounds.x > tree.bounds.x && tree.bounds.y == files.bounds.y);
+    // Browsing starts in the tree; move up to the path row first.
+    verify(dialog.focus.selected == 1);
+    dialog.on_event(decode_input("\x1b[107;6u"), bounds);
+    verify(dialog.focus.selected == 0);
     dialog.on_event(decode_input("\x1b[106;6u"), bounds); // path -> files (nearest center)
     verify(dialog.focus.selected == 2);
     dialog.on_event(decode_input("\x1b[104;6u"), bounds);

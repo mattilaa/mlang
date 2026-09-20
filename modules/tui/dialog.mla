@@ -182,9 +182,14 @@ fn join_owned(base: str8, name: str8) -> str8 {
 }
 
 /// Filesystem chooser. Owns strings/tree storage; call release once. A successful
-/// selection returns a path in accepted_path; the application loads its format.
+/// selection returns a path in accepted_path (and every marked file in
+/// accepted_paths); the application loads its format.
 pub struct OpenSessionDialog : Dialog {
     var accepted: bool; var accepted_path: str8;
+    /// Every accepted file, in marking order; one entry for a plain Enter.
+    var accepted_paths: list<str8>;
+    /// Full paths marked with Space, kept while browsing other directories.
+    var marked: list<str8>;
     var directory: str8; var path_field: TextField;
     var nodes: list<DirectoryNode>; var tree_selected: i32;
     var files: list<str8>; var file_selected: i32;
@@ -195,6 +200,9 @@ pub struct OpenSessionDialog : Dialog {
     var save_mode: bool;
     /// Matching directories can be selected as opaque bundles (e.g. .vst3).
     var bundle_pattern: str8{""};
+    /// Space marks several files only where opening many makes sense (audio
+    /// and plugin choosers). Never for sessions, presets or save dialogs.
+    var multi_select: bool;
 };
 impl OpenSessionDialog {
     pub fn new() -> OpenSessionDialog {
@@ -216,14 +224,45 @@ impl OpenSessionDialog {
     }
     pub fn release(self: &mut Self) -> void {
         self.clear_nodes(); self.clear_files();
+        self.clear_marked(); self.clear_accepted();
         free(self.directory); free(self.accepted_path); self.path_field.release();
     }
     /// Does not change the process working directory or write filesystem data.
+    fn clear_marked(self: &mut Self) -> void {
+        let marked: list<str8> = self.marked; for path in marked { free(path); } self.marked = [];
+    }
+    fn clear_accepted(self: &mut Self) -> void {
+        let paths: list<str8> = self.accepted_paths; for path in paths { free(path); } self.accepted_paths = [];
+    }
+    /// True when `path` is marked for multi-open.
+    pub fn is_marked(self: OpenSessionDialog, path: str8) -> bool {
+        let marked: list<str8> = self.marked;
+        for entry in marked { if entry == path { return true; } }
+        return false;
+    }
+    /// Space toggles the file under the cursor.
+    fn toggle_marked(self: &mut Self) -> void {
+        if self.file_selected < 0 || self.file_selected >= self.files.len() { return; }
+        let target: str8 = join_owned(self.directory, self.files[self.file_selected]);
+        var kept: list<str8> = []; var removed: bool = false;
+        let marked: list<str8> = self.marked;
+        for entry in marked {
+            if entry == target { free(entry); removed = true; } else { kept.push(entry); }
+        }
+        if removed { free(target); } else { kept.push(target); }
+        self.marked = kept;
+        self.status = removed ? "Unmarked. Space marks files; Enter opens every marked file."
+            : "Marked. Space unmarks; Enter opens every marked file.";
+        if self.file_selected + 1 < self.files.len() { self.file_selected = self.file_selected + 1; }
+    }
     pub fn open(self: &mut Self, initial_directory: str8) -> void {
         self.reset_buttons();
         self.active = true; self.accepted = false;
+        self.clear_marked(); self.clear_accepted();
         free(self.accepted_path); self.accepted_path = clone("");
-        self.focus.selected = 0; self.focus.menu_active = false;
+        // Browsing starts in the directory tree (pane 1); a save chooser starts
+        // in the path field, where its suggested filename is edited.
+        self.focus.selected = self.save_mode ? 0 : 1; self.focus.menu_active = false;
         let working: str8 = cwd();
         let path: str8 = len(initial_directory) == 0 ? clone(working) : join_owned(working, initial_directory);
         self.path_field.set_text(path);
@@ -238,7 +277,8 @@ impl OpenSessionDialog {
         let action: i32 = self.tick_buttons();
         if action == 2 { self.cancel(); }
         else if action == 1 {
-            if self.path_field.text != self.directory { self.submit_path(); }
+            if self.marked.len() > 0 { self.accept_marked(); }
+            else if self.path_field.text != self.directory { self.submit_path(); }
             else if self.file_selected >= 0 && self.file_selected < self.files.len() {
                 let target: str8 = join_owned(self.directory, self.files[self.file_selected]);
                 self.accept_file(target); free(target);
@@ -341,6 +381,22 @@ impl OpenSessionDialog {
         }
         let copy: str8 = clone(path);
         free(self.accepted_path); self.accepted_path = copy;
+        self.clear_accepted(); self.accepted_paths.push(clone(path));
+        self.accepted = true; self.active = false; self.result = 1;
+    }
+    /// Accept every marked file. All must still pass the filter and exist.
+    fn accept_marked(self: &mut Self) -> void {
+        let marked: list<str8> = self.marked;
+        for path in marked {
+            if !self.matches_file(path) { self.status = "A marked file does not match the filter."; return; }
+            if file_exists(path) == 0 && !(is_dir(path) == 1 && self.matches_bundle(path)) {
+                self.status = "A marked file no longer exists or is inaccessible."; return;
+            }
+        }
+        self.clear_accepted();
+        var first: str8 = "";
+        for path in marked { if first == "" { first = path; } self.accepted_paths.push(clone(path)); }
+        free(self.accepted_path); self.accepted_path = clone(first);
         self.accepted = true; self.active = false; self.result = 1;
     }
     pub fn submit_path(self: &mut Self) -> void {
@@ -379,6 +435,17 @@ impl OpenSessionDialog {
             else { self.path_field.on_event(event); }
             return;
         }
+        // From the lists, Ctrl+U or the start of an absolute path jumps to the
+        // path field, so a path can be typed without tabbing there first. Plain
+        // letters cannot: h/j/k/l navigate the lists.
+        if self.focus.selected != 0 && (event.code == 21 || event.code == 47 || event.code == 126) {
+            // "/" and "~" begin a fresh absolute path rather than extending the
+            // browsed one; Ctrl+U clears the field itself.
+            if event.code != 21 { self.path_field.set_text(""); }
+            self.focus.selected = 0; self.path_field.on_event(event); return;
+        }
+        // Space marks/unmarks the file under the cursor for multi-open.
+        if self.focus.selected == 2 && event.code == 32 && self.multi_select && !self.save_mode { self.toggle_marked(); return; }
         if event.kind != InputKind::Menu { return; }
         if self.focus.selected == 1 {
             if event.key == Key::Up { self.select_directory(self.tree_selected - 1); }
@@ -388,7 +455,8 @@ impl OpenSessionDialog {
         } else if self.focus.selected == 2 {
             if event.key == Key::Up && self.file_selected > 0 { self.file_selected = self.file_selected - 1; }
             if event.key == Key::Down && self.file_selected + 1 < self.files.len() { self.file_selected = self.file_selected + 1; }
-            if event.key == Key::Enter && self.file_selected >= 0 && self.file_selected < self.files.len() {
+            if event.key == Key::Enter && self.marked.len() > 0 { self.accept_marked(); }
+            else if event.key == Key::Enter && self.file_selected >= 0 && self.file_selected < self.files.len() {
                 let target: str8 = join_owned(self.directory, self.files[self.file_selected]);
                 self.accept_file(target); free(target);
             }
@@ -429,7 +497,11 @@ impl OpenSessionDialog {
             let index: i32 = start + i32(row);
             if index < 0 || index >= self.files.len() { break; }
             let line: Rect = Rect::new(file_body.x, file_body.y + i32(row), file_body.width, 1);
-            let selected_bg: i32 = index == self.file_selected ? theme.selection : theme.panel;
+            let full: str8 = join_owned(self.directory, self.files[index]);
+            // Marked rows sit a step brighter than their unmarked neighbours.
+            let base: i32 = index == self.file_selected ? theme.selection : theme.panel;
+            let selected_bg: i32 = self.is_marked(full) ? lighten(base, 26) : base;
+            free(full);
             surface.fill(line, Cell { glyph: 32, foreground: theme.foreground, background: selected_bg });
             surface.text(line, self.files[index], theme.foreground, selected_bg);
         }

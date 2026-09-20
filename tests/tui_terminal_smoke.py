@@ -331,7 +331,7 @@ def main():
                     os.write(master, b"jjjjj")  # next import starts on row 6
                     read_frame(1)
                 os.write(master, b"\tllllll\r")
-                assert b"Add audio" in read_frame(None, 0)
+                assert b"Add audio" in read_frame(None, 1)
                 os.write(master, b"\x15" + path.encode() + b"\r")
                 imported = read_frame(1)
                 assert b"L  WAVE  R" in imported
@@ -496,7 +496,7 @@ def main():
         os.write(master, b"\t")
         read_frame(None)
         os.write(master, b"j\r")
-        browser = read_frame(None, 0)
+        browser = read_frame(None, 1)
         assert b"Open session" in browser and b"Path: " in browser
         assert b"Directories" in browser and b"Files" in browser
         os.write(master, b"\x15tests/fixtures/tui_dialog\r")
@@ -516,15 +516,27 @@ def main():
         os.write(master, b"\x1b[106;6u\r")
         assert b"Selected:" in read_frame(2)
         # An invalid typed path keeps the dialog open, even when it contains q.
+        # Ctrl+U moves focus from the directory tree to the path field, so the
+        # marker may land a frame later than the keystroke.
+        def frame_containing(marker, limit=4):
+            for _ in range(limit):
+                frame = read_until(b"\x1b[0m")
+                if marker in frame:
+                    return frame
+            raise AssertionError(f"missing {marker!r}")
+
         os.write(master, b"\tj\r")
-        read_frame(None, 0)
+        read_frame(None, 1)
         os.write(master, b"\x15qhjk-does-not-exist.session\r")
-        assert b"inaccessible" in read_frame(None, 0)
-        os.write(master, b"\x15tests/fixtures/tui_dialog/qhjk session.session\r")
-        assert b"Selected:" in read_frame(2)
+        frame_containing(b"inaccessible")
+        # Choosers reopen in the directory they last browsed, so a relative path
+        # would resolve against that; type an absolute one.
+        fixture_dir = os.path.abspath("tests/fixtures/tui_dialog")
+        os.write(master, b"\x15" + os.path.join(fixture_dir, "qhjk session.session").encode() + b"\r")
+        frame_containing(b"Selected:")
         # Cancellation restores pane focus and small viewports remain usable.
         os.write(master, b"\tj\r")
-        read_frame(None, 0)
+        read_frame(None, 1)
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 6, 12, 0, 0))
         read_until(b"\x1b[0m")
         os.write(master, b"\x1b")
