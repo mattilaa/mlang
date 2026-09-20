@@ -88,7 +88,7 @@ impl TableColumn {
     }
 }
 pub struct TableRow { var cells: list<str8>; };
-pub struct TableGroup { var title: str8; var first: i32; var count: i32; var details: list<str8>; };
+pub struct TableGroup { var title: str8; var first: i32; var count: i32; var details: list<str8>; var subtitle: str8{""}; };
 
 /// Strings are borrowed. Scrollbar visibility does not disable scrolling.
 pub struct Table {
@@ -99,6 +99,8 @@ pub struct Table {
     var groups: list<TableGroup>{[]}; var frozen_columns: i32;
     var alternate_group_text: bool{false};
     var group_detail_rows: i32; var selected_group_detail: i32{-1};
+    /// One extra header line under each group title, e.g. a track's instrument.
+    var group_subtitles: bool;
     var visual: bool; var visual_rows: bool; var anchor_row: i32; var anchor_column: i32;
     pub fn visual_cell(self: Table, row: i32, column: i32) -> bool {
         return self.visual && row >= (self.anchor_row < self.selected_row ? self.anchor_row : self.selected_row) &&
@@ -136,7 +138,7 @@ pub struct Table {
         for i in 0..self.frozen_count() { width = width + self.column_width(i32(i)); }
         return width;
     }
-    pub fn header_height(self: Table) -> i32 { return self.groups.len() > 0 ? 2 + self.group_detail_rows : 1; }
+    pub fn header_height(self: Table) -> i32 { return self.groups.len() > 0 ? 2 + self.group_detail_rows + (self.group_subtitles ? 1 : 0) : 1; }
     pub fn column_x(self: Table, column: i32) -> i32 {
         var x: i32 = column < self.frozen_count() ? 0 : -self.scroll_x;
         for c in 0..column { x = x + self.column_width(i32(c)); }
@@ -309,9 +311,16 @@ pub struct Table {
             let bg: i32 = active ? theme.selection : theme.menu_background;
             canvas.fill(visible, Cell { glyph: 32, foreground: theme.muted, background: bg });
             canvas.text(visible, group.title, active ? theme.accent : theme.muted, bg);
+            if self.group_subtitles {
+                let under: Rect = Rect::new(start, 1, width, 1);
+                let line: Rect = under.intersect(Rect::new(frozen, 1, body.width - frozen, 1));
+                canvas.fill(line, Cell { glyph: 32, foreground: theme.muted, background: bg });
+                canvas.text(line, group.subtitle, active ? theme.accent : theme.muted, bg);
+            }
+            let first_detail: i32 = self.group_subtitles ? 2 : 1;
             for row in 0..self.group_detail_rows {
-                let detail: Rect = Rect::new(start, i32(row) + 1, width, 1);
-                let line: Rect = detail.intersect(Rect::new(frozen, i32(row) + 1, body.width - frozen, 1));
+                let detail: Rect = Rect::new(start, i32(row) + first_detail, width, 1);
+                let line: Rect = detail.intersect(Rect::new(frozen, i32(row) + first_detail, body.width - frozen, 1));
                 let selected: bool = active && row == self.selected_group_detail;
                 let background: i32 = selected ? theme.selection : theme.panel;
                 canvas.fill(line, Cell { glyph: 32, foreground: theme.foreground, background: background });

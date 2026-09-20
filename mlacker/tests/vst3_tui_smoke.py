@@ -55,6 +55,8 @@ def main():
         assert b"Instrument loaded: Mlacker Test Instrument" in frame, frame[-2000:]
         assert b"001 Mlacker Test" in frame, frame[-6000:]
         assert b"Instrument: 1" in frame, frame[-6000:]
+        # The pattern view names the instance under the track name.
+        assert b"001 Mlacker" in frame, frame[-6000:]
         # Switch away and return via View > Instruments (last View entry).
         send(F1 + b"ll\r")  # Show patterns
         frame = send(F1 + b"lljjj\r")

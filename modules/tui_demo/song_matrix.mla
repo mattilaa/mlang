@@ -1,0 +1,127 @@
+mod tui_demo::patterns;
+mod tui::widgets;
+use tui_demo::patterns::PatternLibrary;
+use tui_demo::patterns::PatternEntry;
+use tui::widgets::Panel;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::input::*;
+use tui::menu::Key;
+use std::strbuf::free;
+use std::strbuf::sub;
+use std::strbuf::len;
+
+/// Song matrix: rows are song steps, columns are parallel lanes. Every pattern
+/// in a row plays together, so the same instrument can be driven from several
+/// lanes at once. Shown in the pattern pane, it edits the library's song.
+/// `on_event` results: 0 handled, 1 open the pattern picker for this cell,
+/// 2 clear the cell, 3 insert a row below, 4 insert a row above, 5 insert a
+/// cell below in this lane, 6 insert a cell above, 7 remove the row,
+/// 8 copy the cell, 9 paste into the cell.
+pub struct SongMatrix {
+    var visible: bool; var row: i32; var lane: i32;
+    var scroll: i32; var lane_scroll: i32;
+    /// Pattern held by `y`, pasted with `p`.
+    var clipboard: i32;
+    /// First `d` of the `dd` chord.
+    var delete_pending: bool;
+};
+impl SongMatrix {
+    /// `lanes` already includes the spare empty lane past the last used one.
+    fn clamp(self: &mut Self, rows: i32, lanes: i32) -> void {
+        if self.row >= rows { self.row = rows - 1; }
+        if self.row < 0 { self.row = 0; }
+        if self.lane >= lanes { self.lane = lanes - 1; }
+        if self.lane < 0 { self.lane = 0; }
+    }
+    pub fn on_event(self: &mut Self, event: InputEvent, rows: i32, lanes: i32) -> i32 {
+        self.clamp(rows, lanes);
+        // "dd" removes a row; any other key cancels the pending first "d".
+        let pending: bool = self.delete_pending;
+        self.delete_pending = false;
+        if event.modifiers == 1 && event.code == 100 {
+            if pending { return 7; }
+            self.delete_pending = true; return 0;
+        }
+        if event.kind == InputKind::Menu {
+            if event.key == Key::Up { self.row = self.row - 1; self.clamp(rows, lanes); return 0; }
+            if event.key == Key::Down { self.row = self.row + 1; self.clamp(rows, lanes); return 0; }
+            if event.key == Key::Left { self.lane = self.lane - 1; self.clamp(rows, lanes); return 0; }
+            if event.key == Key::Right { self.lane = self.lane + 1; self.clamp(rows, lanes); return 0; }
+            if event.key == Key::Enter { return 1; }
+        }
+        if event.kind == InputKind::Edit && (event.key == Key::Backspace || event.key == Key::Delete) { return 2; }
+        // Ctrl+O / Ctrl+Shift+O move only this lane; plain o/O move whole rows.
+        if event.modifiers == 5 && event.code == 111 { return 5; }
+        if event.modifiers == 5 && event.code == 79 { return 6; }
+        if event.modifiers == 1 && event.code == 111 { return 3; }
+        if (event.modifiers == 1 || event.modifiers == 2) && event.code == 79 { return 4; }
+        if event.modifiers == 1 && event.code == 121 { return 8; }
+        if event.modifiers == 1 && event.code == 112 { return 9; }
+        return 0;
+    }
+    /// `playing` is the row the transport is on, or -1 when the matrix is idle.
+    pub fn paint(self: &mut Self, surface: Surface, area: Rect, theme: Theme, library: &PatternLibrary, focused: bool, playing: i32) -> void {
+        if !self.visible { return; }
+        var source: PatternLibrary = PatternLibrary {}; source = library;
+        self.clamp(i32(source.song.len()), source.song_lanes() + 1);
+        let panel: Panel = Panel { title: " Song matrix " };
+        let body: Rect = panel.paint_focused(surface, area, theme, focused);
+        if body.width < 12 || body.height < 3 { return; }
+        let lanes: i32 = source.song_lanes() + 1;
+        let width: i32 = 14;
+        let visible_lanes: i32 = (body.width - 5) / width < 1 ? 1 : (body.width - 5) / width;
+        if self.lane < self.lane_scroll { self.lane_scroll = self.lane; }
+        if self.lane >= self.lane_scroll + visible_lanes { self.lane_scroll = self.lane - visible_lanes + 1; }
+        let rows: i32 = i32(source.song.len());
+        let visible_rows: i32 = body.height - 1;
+        if self.row < self.scroll { self.scroll = self.row; }
+        if self.row >= self.scroll + visible_rows { self.scroll = self.row - visible_rows + 1; }
+        // Header: lane numbers.
+        surface.text(Rect::new(body.x, body.y, 4, 1), "ROW", theme.muted, theme.panel);
+        for column in 0..visible_lanes {
+            let lane: i32 = self.lane_scroll + i32(column);
+            if lane >= lanes { break; }
+            let label: str8 = format!("L{}", lane + 1);
+            surface.text(Rect::new(body.x + 5 + i32(column) * width, body.y, width - 1, 1), label,
+                lane == self.lane ? theme.accent : theme.muted, theme.panel);
+            free(label);
+        }
+        for line in 0..visible_rows {
+            let row: i32 = self.scroll + i32(line);
+            if row >= rows { break; }
+            let y: i32 = body.y + 1 + i32(line);
+            let number: str8 = format!("{}{}", row < 9 ? "00" : (row < 99 ? "0" : ""), row + 1);
+            let number_bg: i32 = row == playing ? lighten(theme.panel, 36) : theme.panel;
+            surface.fill(Rect::new(body.x, y, 4, 1), Cell { glyph: 32, foreground: theme.muted, background: number_bg });
+            surface.text(Rect::new(body.x, y, 4, 1), number, row == playing ? theme.accent : theme.muted, number_bg); free(number);
+            for column in 0..visible_lanes {
+                let lane: i32 = self.lane_scroll + i32(column);
+                if lane >= lanes { break; }
+                let id: i32 = source.song_at(row, lane);
+                let cell: Rect = Rect::new(body.x + 5 + i32(column) * width, y, width - 1, 1);
+                let selected: bool = row == self.row && lane == self.lane;
+                // The playing row sits brighter than the rest of the grid.
+                let base: i32 = row == playing ? lighten(theme.panel, 36) : theme.panel;
+                let background: i32 = selected ? lighten(base, 24) : base;
+                surface.fill(cell, Cell { glyph: 32, foreground: theme.foreground, background: background });
+                var text: str8 = "";
+                if id > 0 {
+                    let index: i32 = source.index_of(id);
+                    if index >= 0 {
+                        let entry: PatternEntry = source.patterns[index];
+                        text = len(entry.name) > 10 ? sub(entry.name, 0, 10) : format!("{}", entry.name);
+                    }
+                }
+                surface.text(cell, id > 0 ? text : "-", id > 0 ? theme.foreground : theme.muted, background);
+                if id > 0 { free(text); }
+            }
+        }
+        if body.height > 1 {
+            surface.text(Rect::new(body.x, body.y + body.height - 1, body.width, 1),
+                "hjkl move  Enter pattern  y/p copy  o/O row  dd delete  Ctrl+P plays the matrix",
+                theme.muted, theme.panel);
+        }
+    }
+}

@@ -53,12 +53,65 @@ it changes, then what it removes; related entries live in submenus.
 |------|----------|
 | File | New / Open / Recent sessions ▸ / Save / Save as / Settings / Quit |
 | Edit | Undo, Redo, Copy/Cut/Paste clip |
-| View | Patterns, Song, Audio, Instruments, Sample view ▸, Meter ▸, Reset layout, Show details |
+| View | Patterns, Song matrix, Audio, Instruments, Sample view ▸, Meter ▸, Reset layout, Show details |
 | Track | Create MIDI/AUDIO/Instrument track, Rename, Duplicate, Mute, Note lines ▸, Automation ▸, Clear pattern, Delete |
 | Pattern | Add, Clone, Rename, Set length, Remove |
 | Audio | Add audio, Edit sample (destructive), Clip ▸, Remove audio |
 | Instrument | Add instrument, Open VST3 editor, Drum pads ▸, Presets ▸, MIDI learn ▸, Remove instrument |
 | Effect | Add effect channel, Load/Edit effect plugin, Set track send, Master ▸, Remove effect plugin |
+
+## Song matrix
+
+**Shift+M**, or **View → Song matrix**, shows the song matrix in the pattern
+pane. It replaces the old Song sidebar: rows are song steps, columns are
+parallel lanes, and every pattern on a row plays together. The sidebar keeps the
+pattern list.
+
+| Key | Action |
+|-----|--------|
+| `h/j/k/l` or arrows | Move the cursor |
+| `Enter` | Choose the cell's pattern from a list of `<no>:<name>`, or "(empty)" |
+| `Backspace` | Empty the cell |
+| `y` / `p` | Copy the cell's pattern / paste it into another cell |
+| `o` / `O` | Insert an empty row below / above, across every lane |
+| `Ctrl+O` / `Ctrl+Shift+O` | Insert a cell below / above in this lane only, leaving the other lanes where they are |
+| `dd` | Remove the whole row |
+| `Ctrl+P` | Play the matrix from the cursor row |
+| `Shift+M` | Close the matrix |
+
+**Ctrl+P** plays the song from the cursor row: every pattern in a row plays
+together, then the transport moves to the next row holding patterns, wrapping at
+the end. The playing row is drawn brighter. Plain **Space** always means "the
+selected pattern", so pressing it during matrix playback leaves the song and
+plays that pattern alone; Ctrl+P again stops.
+
+Within a row, the patterns play to the length of the longest one, and shorter
+patterns repeat to fill it. Audio clips come from the lowest lane's pattern.
+
+The matrix replaces the pattern editor in that pane while it is open, and menus
+open above it. A session with no song yet starts the matrix on one empty row.
+
+Cells may be empty, including in lane 1: an empty row is a silent step. An empty
+lane is always available past the last used one, up to 16 lanes. Pasting a
+pattern warns about clashes just like choosing one does.
+
+### Parallel patterns that clash
+
+Two patterns on the same row can drive one instrument with the same note at the
+same step, e.g. two patterns hitting the same drum pad. Placing such a pattern
+warns first, counting the clashing notes:
+
+- **OK** places it anyway, leaving the notes as they are.
+- **Cancel** leaves the cell alone.
+- **Split** places it and gives each clashing track its own note line, so the
+  parallel patterns stop sharing one. A split track is renamed with the
+  `Track 1 - 2`, `Track 1 - 3` convention, counting the patterns that share the
+  instrument in that row. Splitting again replaces the suffix rather than
+  stacking it.
+
+Only real collisions warn: the same instrument playing different notes, or the
+same note at different steps, is left alone. The matrix is arrangement state —
+the transport still plays the selected pattern.
 
 ## Removing library items
 
@@ -180,6 +233,9 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
   validates the first class marked `Instrument`, its MIDI input and supported
   audio buses. Effects and incompatible/broken bundles report an error without
   adding an entry. Only open trusted plugins.
+- Each Instrument track shows its instance under the track name in the pattern
+  view, numbered as in the Instruments list (e.g. `001 Mla Drum`), or
+  `- unassigned -` until one is assigned.
 - **View → Instruments** shows session-wide loaded instances, numbered by ID.
   `j/k`, `gg`, and `G` navigate; Enter assigns the selected instance to the
   current Instrument track. If another track already plays that instance,

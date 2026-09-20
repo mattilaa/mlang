@@ -27,6 +27,21 @@ use std::strbuf::find;
 use std::strbuf::sub;
 pub struct AutomationSlot { var parameter: str8; var minimum: i64; var maximum: i64; };
 pub struct NoteSpan { var start: i64; var end: i64; };
+/// "Track 1 - 2" -> "Track 1": splitting twice must not stack suffixes.
+fn strip_split_suffix(name: str8) -> str8 {
+    let size: i64 = len(name);
+    for i in 0..size {
+        let at: i64 = size - 1 - i;
+        if at < 3 { break; }
+        let candidate: str8 = sub(name, at - 3, 3);
+        let tail: str8 = sub(name, at, size - at);
+        let matched: bool = candidate == " - " && table_matches("[0-9]{1,2}", tail);
+        free(candidate);
+        if matched { free(tail); return sub(name, 0, at - 3); }
+        free(tail);
+    }
+    return clone(name);
+}
 pub struct AudioInstance { var clip: AudioClip; var start_row: i32; var length_ticks: i32; var offset_frames: i64; };
 impl AudioInstance {
     /// Borrowed render view: metadata is gated by LEN and the non-destructive
@@ -113,6 +128,30 @@ pub fn set_insert(self: &mut Self, index: i32, position: i32, id: i32) -> void {
             track.inserts = ids; self.replace_track(i32(i), track);
         }
     }
+}
+/// Show each instrument track's instance under its name, numbered as in the
+/// Instruments list. Call before painting; the labels are owned by the groups.
+pub fn instrument_labels(self: &mut Self, output: AudioController) -> void {
+    var any: bool = false;
+    let tracks: list<SequenceTrack> = self.tracks;
+    for track in tracks { if track.instrument { any = true; } }
+    self.group_subtitles = any;
+    if !any { return; }
+    let old: list<TableGroup> = self.groups; var groups: list<TableGroup> = [];
+    for i in 0..old.len() {
+        var group: TableGroup = old[i];
+        if group.subtitle != "" { free(group.subtitle); }
+        let track: SequenceTrack = self.tracks[i];
+        if !track.instrument { group.subtitle = ""; }
+        else if track.instrument_id <= 0 { group.subtitle = clone("- unassigned -"); }
+        else {
+            let name: str8 = output.instrument_name(track.instrument_id);
+            group.subtitle = format!("{}{} {}", track.instrument_id < 10 ? "00" : (track.instrument_id < 100 ? "0" : ""),
+                track.instrument_id, name == "" ? "instrument" : name);
+        }
+        groups.push(group);
+    }
+    self.groups = groups;
 }
 pub fn insert_labels(self: &mut Self, output: AudioController) -> void {
     if self.group_detail_rows == 0 { return; }
@@ -711,7 +750,7 @@ pub fn rebuild_columns(self: &mut Self) -> void {
     self.visual = false; self.visual_rows = false;
     self.revision = self.revision + 1;
     let old_groups: list<TableGroup> = self.groups;
-    for group in old_groups { free(group.title); }
+    for group in old_groups { free(group.title); if group.subtitle != "" { free(group.subtitle); } }
     var columns: list<TableColumn> = [TableColumn { title: "ROW", width: 4, value_type: "u32", read_only: true }];
     var groups: list<TableGroup> = [];
     for i in 0..self.tracks.len() {
@@ -992,6 +1031,98 @@ pub fn configure_slot(self: &mut Self, slot: i32, spec: str8) -> bool {
     self.replace_track(index, track); self.rebuild_columns(); self.error = ""; return true;
 }
 /// 80 adds a blank note line, 81 removes it, 82 duplicates NOTE/VEL/LEN/OFF.
+/// Move every note of track `index` onto note line `line`, adding lines until
+/// it exists, and rename the track "<name> - <line + 1>". Used when parallel
+/// song patterns would drive one instrument with the same notes.
+/// Grow track `index` to at least `count` note lines, adding empty columns.
+pub fn ensure_note_lines(self: &mut Self, index: i32, count: i32) -> bool {
+    if index < 0 || index >= self.tracks.len() || count < 1 || count > 16 { return false; }
+    var track: SequenceTrack = self.tracks[index];
+    if track.audio { return false; }
+    let first: i32 = self.track_start(index);
+    while track.note_lines < count {
+        var grown: SequenceTrack = self.tracks[index];
+        let column: i32 = first + track.note_lines * 4;
+        var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
+        for row in previous {
+            var cells: list<str8> = [];
+            for c in 0..row.cells.len() {
+                if c == column { for _f in 0..4 { cells.push(clone("")); } }
+                cells.push(row.cells[c]);
+            }
+            if column >= row.cells.len() { for _f in 0..4 { cells.push(clone("")); } }
+            rows.push(TableRow { cells: cells });
+        }
+        self.rows = rows;
+        grown.note_lines = grown.note_lines + 1;
+        self.replace_track(index, grown);
+        track = self.tracks[index];
+    }
+    return true;
+}
+/// Append every track of `source`, looping its rows when it is shorter. Used to
+/// play one song-matrix row: the parallel patterns become one table.
+pub fn append_tracks_from(self: &mut Self, source: &SequenceTable, area: Rect) -> void {
+    var other: SequenceTable = SequenceTable {}; other = source;
+    let source_rows: i64 = other.rows.len();
+    if source_rows == 0 { return; }
+    for t in 0..other.tracks.len() {
+        let track: SequenceTrack = other.tracks[t];
+        self.create_track_kind(false, track.audio, area);
+        let index: i32 = i32(self.tracks.len()) - 1;
+        if !track.audio { self.ensure_note_lines(index, track.note_lines); }
+        var copy: SequenceTrack = self.tracks[index];
+        free(copy.name); copy.name = clone(track.name);
+        copy.muted = track.muted; copy.volume = track.volume; copy.pan = track.pan;
+        copy.instrument = track.instrument; copy.instrument_id = track.instrument_id;
+        copy.sends = track.copy_sends(); copy.inserts = track.inserts;
+        copy.cc1 = AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum };
+        copy.cc2 = AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum };
+        self.replace_track(index, copy);
+        let columns: i32 = other.track_columns(i32(t));
+        let from: i32 = other.track_start(i32(t)); let to: i32 = self.track_start(index);
+        for r in 0..self.rows.len() {
+            let row: TableRow = other.rows[wide(i32(r)) % source_rows];
+            for c in 0..columns {
+                if from + i32(c) >= row.cells.len() || to + i32(c) >= self.columns.len() { break; }
+                self.set_cell(i32(r), to + i32(c), clone(row.cells[from + i32(c)]));
+            }
+        }
+    }
+    self.rebuild_columns();
+}
+pub fn move_notes_to_line(self: &mut Self, index: i32, line: i32, area: Rect) -> bool {
+    if index < 0 || index >= self.tracks.len() || line < 1 || line > 15 { return false; }
+    var track: SequenceTrack = self.tracks[index];
+    if track.audio { return false; }
+    if !self.ensure_note_lines(index, line + 1) { return false; }
+    let first: i32 = self.track_start(index);
+    // Move line 0 onto the target line; the source line is left empty.
+    let source: i32 = first; let target: i32 = first + line * 4;
+    var moved: list<TableRow> = []; let rows: list<TableRow> = self.rows;
+    for row in rows {
+        // Copy the source line first: the target sits after it, so freeing in
+        // place would leave the target reading freed cells.
+        var carried: list<str8> = [];
+        for f in 0..4 { carried.push(clone(row.cells[source + f])); }
+        var cells: list<str8> = [];
+        for c in 0..row.cells.len() {
+            if c >= target && c < target + 4 { free(row.cells[c]); cells.push(clone(carried[c - target])); }
+            else if c >= source && c < source + 4 { free(row.cells[c]); cells.push(clone("")); }
+            else { cells.push(row.cells[c]); }
+        }
+        for value in carried { free(value); }
+        moved.push(TableRow { cells: cells });
+    }
+    self.rows = moved;
+    var renamed: SequenceTrack = self.tracks[index];
+    let base: str8 = strip_split_suffix(renamed.name);
+    free(renamed.name); renamed.name = format!("{} - {}", base, line + 1); free(base);
+    self.replace_track(index, renamed);
+    self.revision = self.revision + 1;
+    self.rebuild_columns(); self.reconcile(area);
+    return true;
+}
 pub fn note_line_action(self: &mut Self, command: i32, area: Rect) -> void {
     let index: i32 = self.active_track(); if index < 0 { return; }
     var track: SequenceTrack = self.tracks[index];
@@ -1048,7 +1179,7 @@ pub fn release(self: &mut Self) -> void {
     let tracks: list<SequenceTrack> = self.tracks;
     for track in tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.release_audio(); }
     let groups: list<TableGroup> = self.groups;
-    for group in groups { free(group.title); }
+    for group in groups { free(group.title); if group.subtitle != "" { free(group.subtitle); } }
     let rows: list<TableRow> = self.rows;
     for row in rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
     let notes: array<str8, 128> = self.notes;

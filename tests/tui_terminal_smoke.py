@@ -130,39 +130,28 @@ def main():
         assert b"005 Pattern 5" not in read_frame(0)
         os.write(master, b"gg")
         read_frame(0)
+        # The song lives in the matrix now (Shift+M); the sidebar keeps patterns.
         os.write(master, F1 + b"ll")
-        assert b"Song" in read_frame(None)
+        assert b"Song matrix" in read_frame(None)
         os.write(master, b"j\r")
-        song = read_frame(0)
-        assert b" Song " in song and b"2  002 Verse" in song and b"3  002 Verse" in song
-        os.write(master, b"\x1b[106;5u")
-        assert b"2  001 Intro" in read_frame(0)
-        os.write(master, b"\x1b[107;5u")
-        assert b"1  001 Intro" in read_frame(0)
+        matrix = read_frame(1)       # the matrix takes the pattern pane
+        assert b"Song matrix" in matrix and b"ROW" in matrix and b"L1" in matrix
         os.write(master, b"o")
-        assert b"2  001 Intro" in read_frame(0)
-        os.write(master, b"O")
-        assert b"3  001 Intro" in read_frame(0)
-        os.write(master, b"K")
-        changed = read_frame(0)
-        assert b"2  002 Verse" in changed and b"Pattern / 2 Verse" in changed
-        os.write(master, b"J")
-        changed = read_frame(0)
-        assert b"2  001 Intro" in changed and b"Pattern / 1 Intro" in changed
-        os.write(master, b"ddddgg")
-        assert b"2  002 Verse" in read_frame(0)
-        os.write(master, b"jj")
-        assert b"Pattern / 2 Verse" in read_frame(0)
+        assert b"Row inserted" in read_frame(1)
         os.write(master, b"dd")
-        assert b"3  003 Chorus" in read_frame(0)
+        assert b"Matrix row removed" in read_frame(1)
+        os.write(master, b"M")       # close it again
+        read_frame(1)
         os.write(master, F1 + b"ll")
         read_frame(None)
         os.write(master, b"\r")
-        assert b" Patterns " in read_frame(0)
+        assert b" Patterns " in read_frame(1)
         os.write(master, b"gg")
-        read_frame(0)
+        read_frame(1)
         # Tab cycles panes forwards and Shift+Tab backwards, in both the CSI Z
         # spelling and the modified-Tab one this app's keyboard mode produces.
+        os.write(master, b"\x1b[104;6u")  # start from the library pane
+        read_frame(0)
         os.write(master, b"\t")
         read_frame(1)
         os.write(master, b"\t")
