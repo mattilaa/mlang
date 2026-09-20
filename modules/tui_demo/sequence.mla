@@ -1034,12 +1034,13 @@ pub fn configure_slot(self: &mut Self, slot: i32, spec: str8) -> bool {
 /// Move every note of track `index` onto note line `line`, adding lines until
 /// it exists, and rename the track "<name> - <line + 1>". Used when parallel
 /// song patterns would drive one instrument with the same notes.
-pub fn move_notes_to_line(self: &mut Self, index: i32, line: i32, area: Rect) -> bool {
-    if index < 0 || index >= self.tracks.len() || line < 1 || line > 15 { return false; }
+/// Grow track `index` to at least `count` note lines, adding empty columns.
+pub fn ensure_note_lines(self: &mut Self, index: i32, count: i32) -> bool {
+    if index < 0 || index >= self.tracks.len() || count < 1 || count > 16 { return false; }
     var track: SequenceTrack = self.tracks[index];
     if track.audio { return false; }
     let first: i32 = self.track_start(index);
-    while track.note_lines <= line {
+    while track.note_lines < count {
         var grown: SequenceTrack = self.tracks[index];
         let column: i32 = first + track.note_lines * 4;
         var rows: list<TableRow> = []; let previous: list<TableRow> = self.rows;
@@ -1057,6 +1058,45 @@ pub fn move_notes_to_line(self: &mut Self, index: i32, line: i32, area: Rect) ->
         self.replace_track(index, grown);
         track = self.tracks[index];
     }
+    return true;
+}
+/// Append every track of `source`, looping its rows when it is shorter. Used to
+/// play one song-matrix row: the parallel patterns become one table.
+pub fn append_tracks_from(self: &mut Self, source: &SequenceTable, area: Rect) -> void {
+    var other: SequenceTable = SequenceTable {}; other = source;
+    let source_rows: i64 = other.rows.len();
+    if source_rows == 0 { return; }
+    for t in 0..other.tracks.len() {
+        let track: SequenceTrack = other.tracks[t];
+        self.create_track_kind(false, track.audio, area);
+        let index: i32 = i32(self.tracks.len()) - 1;
+        if !track.audio { self.ensure_note_lines(index, track.note_lines); }
+        var copy: SequenceTrack = self.tracks[index];
+        free(copy.name); copy.name = clone(track.name);
+        copy.muted = track.muted; copy.volume = track.volume; copy.pan = track.pan;
+        copy.instrument = track.instrument; copy.instrument_id = track.instrument_id;
+        copy.sends = track.copy_sends(); copy.inserts = track.inserts;
+        copy.cc1 = AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum };
+        copy.cc2 = AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum };
+        self.replace_track(index, copy);
+        let columns: i32 = other.track_columns(i32(t));
+        let from: i32 = other.track_start(i32(t)); let to: i32 = self.track_start(index);
+        for r in 0..self.rows.len() {
+            let row: TableRow = other.rows[wide(i32(r)) % source_rows];
+            for c in 0..columns {
+                if from + i32(c) >= row.cells.len() || to + i32(c) >= self.columns.len() { break; }
+                self.set_cell(i32(r), to + i32(c), clone(row.cells[from + i32(c)]));
+            }
+        }
+    }
+    self.rebuild_columns();
+}
+pub fn move_notes_to_line(self: &mut Self, index: i32, line: i32, area: Rect) -> bool {
+    if index < 0 || index >= self.tracks.len() || line < 1 || line > 15 { return false; }
+    var track: SequenceTrack = self.tracks[index];
+    if track.audio { return false; }
+    if !self.ensure_note_lines(index, line + 1) { return false; }
+    let first: i32 = self.track_start(index);
     // Move line 0 onto the target line; the source line is left empty.
     let source: i32 = first; let target: i32 = first + line * 4;
     var moved: list<TableRow> = []; let rows: list<TableRow> = self.rows;

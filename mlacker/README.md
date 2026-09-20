@@ -76,7 +76,17 @@ pattern list.
 | `o` / `O` | Insert an empty row below / above, across every lane |
 | `Ctrl+O` / `Ctrl+Shift+O` | Insert a cell below / above in this lane only, leaving the other lanes where they are |
 | `dd` | Remove the whole row |
+| `Ctrl+P` | Play the matrix from the cursor row |
 | `Shift+M` | Close the matrix |
+
+**Ctrl+P** plays the song from the cursor row: every pattern in a row plays
+together, then the transport moves to the next row holding patterns, wrapping at
+the end. The playing row is drawn brighter. Plain **Space** always means "the
+selected pattern", so pressing it during matrix playback leaves the song and
+plays that pattern alone; Ctrl+P again stops.
+
+Within a row, the patterns play to the length of the longest one, and shorter
+patterns repeat to fill it. Audio clips come from the lowest lane's pattern.
 
 The matrix replaces the pattern editor in that pane while it is open, and menus
 open above it. A session with no song yet starts the matrix on one empty row.

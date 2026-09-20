@@ -500,6 +500,42 @@ impl PatternLibrary {
         }
         self.instruments.items = next;
     }
+    /// One playable table for a song-matrix row: the lowest lane's pattern with
+    /// every other lane's tracks appended, each looping to the longest pattern.
+    /// Empty rows give an empty table.
+    pub fn merge_song_row(self: PatternLibrary, row: i32, area: Rect) -> SequenceTable {
+        var merged: SequenceTable = SequenceTable {};
+        var length: i32 = 0; var base: i32 = -1;
+        for l in 0..self.song_lanes() {
+            let id: i32 = self.song_at(row, i32(l));
+            let index: i32 = self.index_of(id);
+            if id <= 0 || index < 0 { continue; }
+            let entry: PatternEntry = self.patterns[index];
+            if base < 0 { base = i32(l); }
+            if i32(entry.data.rows.len()) > length { length = i32(entry.data.rows.len()); }
+        }
+        if base < 0 { return merged; }
+        let first: PatternEntry = self.patterns[self.index_of(self.song_at(row, base))];
+        merged = first.data.copy_pattern();
+        if i32(merged.rows.len()) < length { merged.set_length(length, area); }
+        for l in base + 1..self.song_lanes() {
+            let id: i32 = self.song_at(row, i32(l));
+            let index: i32 = self.index_of(id);
+            if id <= 0 || index < 0 { continue; }
+            let entry: PatternEntry = self.patterns[index];
+            merged.append_tracks_from(entry.data, area);
+        }
+        return merged;
+    }
+    /// Next matrix row holding at least one pattern, wrapping. -1 when empty.
+    pub fn next_song_row(self: PatternLibrary, row: i32) -> i32 {
+        for step in 1..self.song.len() + 1 {
+            let candidate: i32 = i32((wide(row) + wide(i32(step))) % self.song.len());
+            for l in 0..self.song_lanes() { if self.song_at(candidate, i32(l)) > 0 { return candidate; } }
+        }
+        for l in 0..self.song_lanes() { if self.song_at(row, i32(l)) > 0 { return row; } }
+        return -1;
+    }
     /// Placements of Audio-list sample `index` across every pattern.
     pub fn sample_usage(self: PatternLibrary, index: i32) -> i32 {
         if index < 0 || index >= self.audio.samples.len() { return 0; }

@@ -51,6 +51,15 @@ def main():
         expect(tui.send(b"\r", 1.0), b"clash")
         frame = expect(tui.send(b"ll\r", 1.2), b"split onto their own note line")
         assert b"lane 2" in frame, frame[-4000:]
+        # Ctrl+P plays the matrix from the cursor row; the status bar runs.
+        frame = expect(tui.send(b"\x10", 0.9), b"Playing the matrix from row", b"PLAY")
+        # Space leaves matrix playback and plays the selected pattern instead.
+        tui.send(b" ", 0.6)
+        frame = expect(tui.send(b" ", 0.6), b"STOP")
+        # Ctrl+P again toggles matrix playback off, in either spelling.
+        expect(tui.send(b"\x1b[112;5u", 0.9), b"Playing the matrix")
+        expect(tui.send(b"\x10", 0.9), b"Matrix stopped")
+
         # The split renamed the track of the pattern that was placed, so open
         # that pattern in the editor to see it.
         expect(tui.send(b"M", 0.8), b"Song matrix closed")

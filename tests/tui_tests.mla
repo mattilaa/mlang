@@ -2986,3 +2986,55 @@ fn tui_pattern_view_shows_instrument_under_track_name() {
     verify(first.subtitle == "");
     table.release();
 }
+
+#[test]
+fn tui_song_matrix_merges_a_row_for_playback() {
+    var library: PatternLibrary = song_test_library();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    // Row 0 holds pattern 1; add pattern 2 beside it.
+    verify(library.set_song_at(0, 1, 2));
+    let one: PatternEntry = library.patterns[library.index_of(1)];
+    let tracks: i64 = one.data.tracks.len();
+    var merged: SequenceTable = library.merge_song_row(0, area);
+    // Both patterns' tracks play together.
+    verify(merged.tracks.len() == tracks * 2);
+    let appended: SequenceTrack = merged.tracks[merged.tracks.len() - 1];
+    verify(appended.instrument && appended.instrument_id == 1);
+    // The appended notes came across.
+    let row: TableRow = merged.rows[0];
+    let start: i32 = merged.track_start(i32(merged.tracks.len()) - 1);
+    verify(row.cells[start] == "C-2" && row.cells[start + 1] == "100");
+    merged.release();
+    // An empty row merges to an empty table, and playback skips it.
+    verify(library.matrix_insert_row(0, false));
+    var blank: SequenceTable = library.merge_song_row(0, area);
+    verify(blank.rows.len() == 0);
+    blank.release();
+    // next_song_row skips empty rows and wraps.
+    verify(library.next_song_row(0) == 1);
+    verify(library.next_song_row(i32(library.song.len()) - 1) == 1);
+    library.release();
+}
+
+#[test]
+fn tui_song_matrix_marks_the_playing_row() {
+    var library: PatternLibrary = song_test_library();
+    var matrix: SongMatrix = SongMatrix { visible: true };
+    let bounds: Rect = Rect::new(0, 0, 60, 12);
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(60, 12);
+    matrix.paint(surface, bounds, theme, library, true, 1);
+    // Row 2 plays: its cells sit brighter than the idle row above.
+    var playing_bg: i32 = 0; var idle_bg: i32 = 0;
+    for y in 0..12 {
+        // Lane 2, away from the cursor cell in lane 1.
+        let cell: Cell = surface.cell(20, i32(y));
+        let tens: Cell = surface.cell(1, i32(y));
+        let ones: Cell = surface.cell(3, i32(y));
+        if tens.glyph == 48 && ones.glyph == 50 { playing_bg = cell.background; }
+        if tens.glyph == 48 && ones.glyph == 49 { idle_bg = cell.background; }
+    }
+    verify(playing_bg != 0 && idle_bg != 0 && playing_bg != idle_bg);
+    verify(playing_bg == lighten(theme.panel, 36) && idle_bg == theme.panel);
+    surface.release(); library.release();
+}

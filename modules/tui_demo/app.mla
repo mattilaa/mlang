@@ -303,6 +303,10 @@ pub fn run() -> i32 {
         PushButton { label: "Split", action: 3 }];
     var clash_row: i32 = 0; var clash_lane: i32 = 0; var clash_id: i32 = 0;
     var picker: PatternPicker = PatternPicker::new();
+    // Matrix playback: the merged table of the playing row, and which row it is.
+    var song_playing: bool = false; var song_row: i32 = -1;
+    var song_table: SequenceTable = SequenceTable {};
+    var song_request: i32 = 0;
     paste_error.buttons = [PushButton { label: "OK", action: 1 }];
     var message: str8 = clone("Select a command from the menu.");
     if AudioController::processor_support() { free(message); message = clone("mlacker | Add > VST3 master plugin to load an instrument or effect."); }
@@ -419,8 +423,38 @@ pub fn run() -> i32 {
             }
             dirty = true;
         }
+        if song_request != 0 {
+            let start: bool = song_request == 1; song_request = 0;
+            transport.playing = false;
+            note_playback.update(song_playing ? song_table : library.table, transport.ticks, false);
+            midi.sequencer_events(note_playback.events);
+            song_table.release(); song_table = SequenceTable {};
+            note_playback = NotePlayback {};
+            free(message);
+            if !start { song_playing = false; song_row = -1; message = clone("Matrix stopped"); }
+            else {
+                song_row = matrix.row;
+                song_table = library.merge_song_row(song_row, terminal_bounds());
+                if song_table.rows.len() == 0 {
+                    song_playing = false; song_row = -1; message = clone("Matrix row is empty");
+                } else {
+                    song_playing = true;
+                    transport.toggle(now_ms(), 0, i32(song_table.rows.len()));
+                    message = format!("Playing the matrix from row {}", song_row + 1);
+                }
+            }
+            playback_dirty = true; dirty = true;
+        }
         if transport_request {
             transport_request = false;
+            if song_playing {
+                // Space always means "the selected pattern"; leave matrix play.
+                note_playback.update(song_table, transport.ticks, false);
+                midi.sequencer_events(note_playback.events);
+                song_playing = false; song_row = -1; transport.playing = false;
+                song_table.release(); song_table = SequenceTable {};
+                note_playback = NotePlayback {};
+            }
             transport.toggle(now_ms(), library.table.selected_row, i32(library.table.rows.len()));
             if !midi.sample_playback(library.table, transport.ticks, transport.playing, transport.bpm) {
                 transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)");
@@ -579,7 +613,23 @@ pub fn run() -> i32 {
         }
         // Editing a moving row would otherwise commit to a different row.
         if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active { transport.playing = false; }
-        if transport.advance(now, i32(library.table.rows.len())) {
+        if song_playing {
+            let previous: i32 = transport.row;
+            if transport.advance(now, i32(song_table.rows.len())) { playback_dirty = true; }
+            if transport.row < previous {
+                // The row finished: move to the next matrix row holding patterns.
+                let next: i32 = library.next_song_row(song_row);
+                if next < 0 { song_playing = false; transport.playing = false; }
+                else if next != song_row {
+                    song_row = next;
+                    song_table.release(); song_table = library.merge_song_row(song_row, terminal_bounds());
+                    note_playback = NotePlayback {};
+                    if song_table.rows.len() == 0 { song_playing = false; transport.playing = false; }
+                }
+                playback_dirty = true; dirty = true;
+            }
+        }
+        else if transport.advance(now, i32(library.table.rows.len())) {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
         } else if !transport.playing {
@@ -596,10 +646,10 @@ pub fn run() -> i32 {
             let notes: list<MidiInputEvent> = midi.midi.note_events;
             for note in notes { if library.table.record_note(note.note, note.velocity) { dirty = true; } }
         }
-        if !midi.sample_playback(library.table, transport.ticks, transport.playing, transport.bpm) {
+        if !midi.sample_playback(song_playing ? song_table : library.table, transport.ticks, transport.playing, transport.bpm) {
             transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)"); dirty = true;
         }
-        note_playback.update(library.table, transport.ticks, transport.playing);
+        note_playback.update(song_playing ? song_table : library.table, transport.ticks, transport.playing);
         midi.sequencer_events(note_playback.events);
         if mixer.update(library.table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
         let meter_delta: i32 = i32(now - master_meter_clock);
@@ -725,7 +775,7 @@ pub fn run() -> i32 {
             library.view.reconcile(panes[0].bounds.inset(1));
             library.audio.view.reconcile(panes[0].bounds.inset(1));
             paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample, matrix.visible);
-            matrix.paint(surface, panes[1].bounds, Theme::dark_blue(), library, focus.is_active(1));
+            matrix.paint(surface, panes[1].bounds, Theme::dark_blue(), library, focus.is_active(1), song_playing ? song_row : -1);
             instrument_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
             // Menus sit above the pane contents, below the modal dialogs.
             menus.paint(surface, surface.bounds(), Theme::dark_blue());
@@ -780,6 +830,16 @@ pub fn run() -> i32 {
             else if (event.code == 19 && event.modifiers == 1) || (event.code == 115 && event.modifiers == 5) { command = 3; dirty = true; }
             // Space starts/stops from every pane, including the mixer and the
             // VST3 editor. Text entry and modal dialogs keep it for themselves.
+            // Ctrl+P plays the matrix. Terminals send it as the control byte
+            // 0x10, or as a modified "p" in the kitty/modifyOtherKeys modes;
+            // Ctrl+Space works too where a terminal reports it.
+            else if ((event.code == 16 && event.modifiers == 1) || (event.code == 112 && event.modifiers == 5) ||
+                     (event.code == 32 && event.modifiers == 5)) && matrix.visible && menus.active < 0 &&
+                    !dialog.active && !settings.active && !bpm_dialog.active && !question.active &&
+                    !share_question.active && !remove_question.active && !clash_question.active && !picker.active &&
+                    !paste_error.active && !library.renaming {
+                song_request = song_playing ? 2 : 1; dirty = true;
+            }
             else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !paste_error.active && !library.renaming && !library.table.editing {
                 transport_request = true; dirty = true;
             }
@@ -1458,7 +1518,7 @@ pub fn run() -> i32 {
     midi.release();
     settings.release();
     free(session_path); free(request_path);
-    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); free(preset_path);
+    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); song_table.release(); free(preset_path);
     free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();

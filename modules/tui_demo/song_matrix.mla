@@ -61,7 +61,8 @@ impl SongMatrix {
         if event.modifiers == 1 && event.code == 112 { return 9; }
         return 0;
     }
-    pub fn paint(self: &mut Self, surface: Surface, area: Rect, theme: Theme, library: &PatternLibrary, focused: bool) -> void {
+    /// `playing` is the row the transport is on, or -1 when the matrix is idle.
+    pub fn paint(self: &mut Self, surface: Surface, area: Rect, theme: Theme, library: &PatternLibrary, focused: bool, playing: i32) -> void {
         if !self.visible { return; }
         var source: PatternLibrary = PatternLibrary {}; source = library;
         self.clamp(i32(source.song.len()), source.song_lanes() + 1);
@@ -92,14 +93,18 @@ impl SongMatrix {
             if row >= rows { break; }
             let y: i32 = body.y + 1 + i32(line);
             let number: str8 = format!("{}{}", row < 9 ? "00" : (row < 99 ? "0" : ""), row + 1);
-            surface.text(Rect::new(body.x, y, 4, 1), number, theme.muted, theme.panel); free(number);
+            let number_bg: i32 = row == playing ? lighten(theme.panel, 36) : theme.panel;
+            surface.fill(Rect::new(body.x, y, 4, 1), Cell { glyph: 32, foreground: theme.muted, background: number_bg });
+            surface.text(Rect::new(body.x, y, 4, 1), number, row == playing ? theme.accent : theme.muted, number_bg); free(number);
             for column in 0..visible_lanes {
                 let lane: i32 = self.lane_scroll + i32(column);
                 if lane >= lanes { break; }
                 let id: i32 = source.song_at(row, lane);
                 let cell: Rect = Rect::new(body.x + 5 + i32(column) * width, y, width - 1, 1);
                 let selected: bool = row == self.row && lane == self.lane;
-                let background: i32 = selected ? theme.selection : theme.panel;
+                // The playing row sits brighter than the rest of the grid.
+                let base: i32 = row == playing ? lighten(theme.panel, 36) : theme.panel;
+                let background: i32 = selected ? lighten(base, 24) : base;
                 surface.fill(cell, Cell { glyph: 32, foreground: theme.foreground, background: background });
                 var text: str8 = "";
                 if id > 0 {
@@ -115,7 +120,7 @@ impl SongMatrix {
         }
         if body.height > 1 {
             surface.text(Rect::new(body.x, body.y + body.height - 1, body.width, 1),
-                "hjkl move  Enter pattern  y/p copy/paste  o/O row  Ctrl+O/Ctrl+Shift+O lane  dd delete row",
+                "hjkl move  Enter pattern  y/p copy  o/O row  dd delete  Ctrl+P plays the matrix",
                 theme.muted, theme.panel);
         }
     }
