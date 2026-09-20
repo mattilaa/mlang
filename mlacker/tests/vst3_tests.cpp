@@ -229,7 +229,26 @@ int main(int argc, char **argv) {
             CHECK(__mlang_std_audio_pcm_block_sample(b, 31, 0) == 0.f);
             CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 32, 0) - 0.125f) < 1.e-4f);
             CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 128, 1) - 0.125f) < 1.e-4f);
+            // Two instances of the same bundle must stay independent: slot 4
+            // has no samples, so hitting it is silent and leaves slot 3 alone.
             __mlang_std_audio_controller_panic(c);
+            CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+            CHECK(__mlang_std_audio_controller_load_instrument(c, 4, drum) == 0);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 4, 2) == 0);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 2) == 2);
+            __mlang_std_audio_controller_instrument_peak(c, 3, 0); __mlang_std_audio_controller_instrument_peak(c, 4, 0);
+            int64_t later = __mlang_std_audio_controller_info(c, 2);
+            CHECK(__mlang_std_audio_controller_post(c, 0, 6, 0, 37, 127, 1, later + 16, 4, 1) == 0);
+            CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+            // Slot 3 may still be ringing from its earlier one-shot hit; slot 4 must stay silent.
+            CHECK(__mlang_std_audio_controller_instrument_peak(c, 4, 0) == 0);
+            CHECK(__mlang_std_audio_controller_instrument_peak(c, 4, 1) == 0);
+            // Loading a pad into slot 4 leaves slot 3's pads untouched.
+            CHECK(__mlang_std_audio_controller_instrument_pad(c, 4, 5, FloatList{4800, hit.data()}, 1, 48000, "hat") == 0);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 4, 2) == 32);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 2) == 2);
+            __mlang_std_audio_controller_panic(c);
+            CHECK(__mlang_std_audio_controller_unload_instrument(c, 4) == 0);
             CHECK(__mlang_std_audio_controller_unload_instrument(c, 3) == 0);
             std::printf("vst3_host: Mla Drum pad end-to-end passed\n");
         }

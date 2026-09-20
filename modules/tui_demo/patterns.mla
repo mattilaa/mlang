@@ -27,6 +27,9 @@ pub struct PatternLibrary {
     var renaming: bool; var editor: TextField; var error: str8;
     var audio: AudioLibrary; var audio_mode: bool;
     var instruments: ListView; var instruments_mode: bool;
+    /// Instance the user tried to assign while another track already uses it;
+    /// the application asks whether to share it or load a new instance.
+    var share_request: i32;
 };
 impl PatternLibrary {
     /// Reuse only plugin IDs no longer referenced by any committed/live pattern.
@@ -229,7 +232,12 @@ impl PatternLibrary {
     pub fn on_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         if self.instruments_mode {
             let action: i32 = self.instruments.on_event(event, area);
-            if action == 2 { self.table.assign_instrument(self.selected_instrument()); }
+            if action == 2 {
+                let id: i32 = self.selected_instrument();
+                let index: i32 = self.table.active_track();
+                if index >= 0 && id > 0 && self.table.instrument_used_by_other(id, index) { self.share_request = id; }
+                else { self.table.assign_instrument(id); }
+            }
             return action != 0;
         }
         if self.audio_mode {

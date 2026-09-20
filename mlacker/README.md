@@ -103,11 +103,18 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
   adding an entry. Only open trusted plugins.
 - **View → Instruments** shows session-wide loaded instances, numbered by ID.
   `j/k`, `gg`, and `G` navigate; Enter assigns the selected instance to the
-  current Instrument track. Loading while an Instrument track is selected also
+  current Instrument track. If another track already plays that instance,
+  mlacker asks first. **New instance** loads another copy of the same plugin for
+  this track, with its own pads, fader, meters and empty insert slots. **Share**
+  links the track to the existing instance. Loading while an Instrument track is selected also
   assigns the new instance automatically.
 - **Track → Create track → Instrument track** creates a note/velocity/LEN/OFF
-  track using the selected library instance. If none is loaded it remains silent
-  until assigned through **Add → Instrument** or the Instruments list.
+  track using the selected library instance, unless another track in the pattern
+  already uses that instance. The new track then starts unassigned, so it never
+  silently shares another track's pads, fader and meters. An unassigned track
+  stays silent until assigned through **Add → Instrument** (a new instance) or
+  Enter in the Instruments list, which asks whether to share or load a new
+  instance.
 - Up to 32 instances may be loaded, independently routed and summed before the
   master processor. Loading the same bundle again creates another instance.
   Assigning the same entry to multiple tracks shares plugin state and its 16 MIDI
@@ -137,7 +144,9 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
 the loaded instance in **View → Instruments**, then:
 
 - **Instrument → Send audio sample to pad** sends the sample selected in
-  **View → Audio** to a key you pick.
+  **View → Audio** to a key you pick. Pads go to the selected Instrument track's
+  own instance (the picker title shows e.g. `Mla Drum #2`). For other tracks they
+  go to the instance selected in the Instruments list.
 - **Instrument → Load pad sample from file** picks the key first, then a WAV/AIFF.
   The file is added to the Audio list too.
 

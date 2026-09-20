@@ -105,6 +105,33 @@ def main():
             expect(tui.send(b"h"), b"kick.wav")
             tui.send(b"\x1b", 0.6)
 
+            # A second Instrument track must not silently share instance #1.
+            expect(tui.send(b"\tllljljj\r"), b"created unassigned (instance 1 is used by another track)")
+            expect(tui.send(b"\tlllllljjj\r"), b"Add VST3 instrument")
+            expect(tui.send(b"\x15" + bytes(Path(sys.argv[2]).resolve()) + b"\r", 0.9), b"Instrument loaded: Mla Drum")
+            # Pads follow the selected track's instance (#2), not the list.
+            expect(tui.send(b"k"), b"001 Mla Drum")  # Instruments list back to #1
+            frame = expect(tui.send(SEND_TO_PAD), b"Mla Drum #2", b"pad 1: empty")
+            assert b"Enter replaces" not in frame, frame[-4000:]
+            tui.send(b"\x1b", 0.6)
+
+            # Enter on instance #1 from a third track asks share-or-new.
+            expect(tui.send(b"\tllljljj\r"), b"created unassigned")
+            tui.send(b"kk")  # Instruments list to #1
+            frame = expect(tui.send(b"\r", 0.6), b"Mla Drum #1 already plays", b"New instance", b"Share")
+            frame = expect(tui.send(b"\r", 1.2), b"New instance: Mla Drum #3 for this track")
+            expect(tui.send(SEND_TO_PAD), b"Mla Drum #3", b"pad 1: empty")
+            tui.send(b"\x1b", 0.6)
+            # Choosing Share links a fourth track to #1 explicitly.
+            expect(tui.send(b"\tllljljj\r"), b"created unassigned")
+            tui.send(b"kkk")
+            expect(tui.send(b"\r", 0.6), b"already plays")
+            tui.send(b"l", 0.3)
+            expect(tui.send(b"\r", 0.8), b"Track now shares instrument #1")
+            # #1 holds pads 1 and 3, so the picker opens on pad 2 of the shared kit.
+            expect(tui.send(SEND_TO_PAD), b"Mla Drum #1", b"pad 2: empty")
+            tui.send(b"\x1b", 0.6)
+
             # Device changes rebuild every instrument; pads must be re-sent.
             expect(tui.send(b"\tjjjj\r"), b"Master output (AUHAL)")  # File > Settings
             tui.send(b"\rk\r")
@@ -113,12 +140,13 @@ def main():
             assert b"sampler pads" not in frame, frame[-4000:]
 
             # A cancelled pad file dialog must not capture the next file dialog.
+            # (The fourth track shares #1, whose first empty pad is pad 2.)
             tui.send(PAD_FROM_FILE)
             expect(tui.send(b"\r"), b"Load sample for pad 2")
             tui.send(b"\x1b", 0.6)
             expect(tui.send(b"\tjjjjjj\r"), b"Save session (.mlack)")
             frame = expect(tui.send(b"\x15" + bytes(path) + b"\r", 0.7), b"Saved:")
-            assert b"Pad 2" not in frame, frame[-4000:]
+            assert b"Pad 2:" not in frame, frame[-4000:]
         finally:
             tui.close()
 

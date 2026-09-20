@@ -261,6 +261,11 @@ pub fn run() -> i32 {
     var playback_dirty: bool = false; var play_pattern: i32 = library.active_id;
     var question: QuestionDialog = QuestionDialog::new("New session", "Start a new session?");
     var paste_error: QuestionDialog = QuestionDialog::new("Cannot paste selection", "");
+    // Share an instrument instance, or give the track its own new instance.
+    var share_question: QuestionDialog = QuestionDialog::new("Instrument already in use", "");
+    share_question.width = 72; share_question.height = 12;
+    share_question.buttons = [PushButton { label: "New instance", action: 1 }, PushButton { label: "Share", action: 3 }];
+    var share_id: i32 = 0;
     paste_error.buttons = [PushButton { label: "OK", action: 1 }];
     var message: str8 = clone("Select a command from the menu.");
     if AudioController::processor_support() { free(message); message = clone("mlacker | Add > VST3 master plugin to load an instrument or effect."); }
@@ -406,7 +411,7 @@ pub fn run() -> i32 {
             transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
         }
         // Editing a moving row would otherwise commit to a different row.
-        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active { transport.playing = false; }
+        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active { transport.playing = false; }
         if transport.advance(now, i32(library.table.rows.len())) {
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             playback_dirty = true;
@@ -420,7 +425,7 @@ pub fn run() -> i32 {
         }
         // Consume every note-on, including a note released within this poll.
         // Modal editors never receive destructive background recording edits.
-        if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !sample_editor.active && !piano.active && !library.renaming && !mixer.bus_focus && library.table.group_detail_rows == 0 {
+        if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !sample_editor.active && !piano.active && !share_question.active && !library.renaming && !mixer.bus_focus && library.table.group_detail_rows == 0 {
             let notes: list<MidiInputEvent> = midi.midi.note_events;
             for note in notes { if library.table.record_note(note.note, note.velocity) { dirty = true; } }
         }
@@ -499,6 +504,28 @@ pub fn run() -> i32 {
                     }
                 }
             }
+            if share_question.active && share_question.pressed_button >= 0 {
+                share_question.tick(); dirty = true;
+                if !share_question.active {
+                    free(message);
+                    if share_question.result == 3 {
+                        library.table.assign_instrument(share_id);
+                        message = format!("Track now shares instrument #{} (same sound, pads, fader and inserts)", share_id);
+                    } else if share_question.result == 1 {
+                        transport.playing = false;
+                        let error: str8 = midi.add_instrument(midi.instrument_paths[share_id - 1]);
+                        if error != "" { message = error; }
+                        else {
+                            let id: i32 = midi.last_instrument_id;
+                            let name: str8 = midi.output.instrument_name(id);
+                            library.add_instrument(id, name);
+                            library.table.clear_active_inserts();
+                            message = format!("New instance: {} #{} for this track (own pads, fader and inserts)", name, id);
+                        }
+                    } else { message = clone("Cancelled."); }
+                    share_id = 0;
+                }
+            }
             if question.active && question.pressed_button >= 0 {
                 question.tick(); dirty = true;
                 if !question.active {
@@ -530,7 +557,7 @@ pub fn run() -> i32 {
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active(instrument_editor.active || sample_editor.active || piano.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        focus.set_menu_active(instrument_editor.active || sample_editor.active || piano.active || share_question.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             library.table.insert_labels(midi.output);
             let surface: Surface = Surface::new(area.width, area.height);
@@ -543,6 +570,7 @@ pub fn run() -> i32 {
             sample_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
             dialog.paint(surface, area, Theme::dark_blue());
             question.paint(surface, area, Theme::dark_blue());
+            share_question.paint(surface, area, Theme::dark_blue());
             library.table.paint_track_dialog(surface, area, Theme::dark_blue());
             library.paint_rename(surface, area, Theme::dark_blue());
             bpm_dialog.paint(surface, area, Theme::dark_blue());
@@ -625,6 +653,11 @@ pub fn run() -> i32 {
             }
             else if library.renaming {
                 if event.kind != InputKind::None || event.code != 0 { library.rename_event(event); dirty = true; }
+            }
+            else if share_question.active {
+                share_question.on_event(event);
+                if !share_question.active { share_id = 0; free(message); message = clone("Cancelled."); }
+                dirty = true;
             }
             else if question.active {
                 question.on_event(event);
@@ -799,6 +832,16 @@ pub fn run() -> i32 {
             } else if focus.selected == 0 {
                 if library.audio_mode && event.code == 101 && event.modifiers == 1 { command = 107; }
                 else if library.on_event(event, panes[0].bounds.inset(1)) { dirty = true; }
+                if library.share_request > 0 {
+                    share_id = library.share_request; library.share_request = 0;
+                    let user: i32 = library.table.instrument_user(share_id, library.table.active_track());
+                    let other: SequenceTrack = library.table.tracks[user];
+                    let name: str8 = midi.output.instrument_name(share_id);
+                    // One line: dialog text does not wrap. Sharing links sound, pads, fader and inserts.
+                    share_question.title = format!("{} #{} already plays '{}'", name, share_id, other.name);
+                    share_question.question = format!("Load a new {} for this track, or share #{}?", name, share_id);
+                    share_question.open(); focus.set_menu_active(true); dirty = true;
+                }
             }
             if command > 0 { dirty = true; }
             if command > 0 && command != 115 { adding_insert_track = -1; }
@@ -905,7 +948,10 @@ pub fn run() -> i32 {
                 }
             }
             else if command == 117 || command == 118 {
-                let slot: i32 = library.selected_instrument();
+                // The selected Instrument track decides which instance gets the
+                // pad; the Instruments list is the fallback for other tracks.
+                let track_slot: i32 = library.table.active_instrument();
+                let slot: i32 = track_slot > 0 ? track_slot : library.selected_instrument();
                 let selected: i32 = library.audio.view.selected;
                 let root: i64 = slot < 1 ? -1 : midi.output.instrument_sampler(slot, 0);
                 if root < 0 {
@@ -921,7 +967,8 @@ pub fn run() -> i32 {
                         if used >= 0 && used < library.audio.samples.len() { let clip: AudioClip = library.audio.samples[used]; names.push(base_name(clip.source)); }
                         else { names.push(clone("")); }
                     }
-                    piano.open(command == 117 ? "Send sample to drum key" : "Load drum key from file", i32(root), i32(pads),
+                    let title: str8 = format!("{} | {} #{}", command == 117 ? "Send sample to drum key" : "Load drum key from file", midi.output.instrument_name(slot), slot);
+                    piano.open(title, i32(root), i32(pads),
                         midi.output.instrument_sampler(slot, 2), names, command == 117 ? "inserts the Audio sample" : "picks a file");
                     focus.set_menu_active(true);
                 }
@@ -989,9 +1036,16 @@ pub fn run() -> i32 {
             else if command == 44 { library.show_audio(); }
             else if command == 45 { library.show_instruments(); }
             else if command == 29 {
-                library.table.create_instrument_track(library.selected_instrument(), panes[1].bounds.inset(1));
+                // Never join an instance another track already plays through: two
+                // tracks on one instance share its pads, fader and meters. Sharing
+                // stays available explicitly (Enter in Instruments, Track > Duplicate).
+                let candidate: i32 = library.selected_instrument();
+                let shared: bool = library.table.instrument_in_use(candidate);
+                library.table.create_instrument_track(shared ? 0 : candidate, panes[1].bounds.inset(1));
                 library.show_instruments();
-                free(message); message = clone("Instrument track created. Add > Instrument loads a plugin; Enter in Instruments assigns it.");
+                free(message);
+                message = shared ? format!("Instrument track created unassigned (instance {} is used by another track). Add > Instrument loads a new one; Enter in Instruments shares it.", candidate)
+                    : clone("Instrument track created. Add > Instrument loads a plugin; Enter in Instruments assigns it.");
             }
             else if command == 50 || command == 53 { library.add(command == 53); }
             else if command == 51 {
@@ -1094,6 +1148,11 @@ pub fn run() -> i32 {
                 else if settings.active { settings.on_event(event); dirty = true; }
                 else if bpm_dialog.active { bpm_dialog.on_event(event); dirty = true; }
                 else if library.renaming { library.rename_event(event); dirty = true; }
+                else if share_question.active {
+                    share_question.on_event(event);
+                    if !share_question.active { share_id = 0; free(message); message = clone("Cancelled."); }
+                    dirty = true;
+                }
                 else if question.active {
                     question.on_event(event);
                     if !question.active { confirm_track_action = 0; free(message); message = clone("Cancelled."); }
