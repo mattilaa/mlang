@@ -20,6 +20,9 @@ fn classify_key(code: i32, modifiers: i32) -> InputEvent {
         if code == 108 || code == 76 { return key_event(InputKind::Pane, Key::Right); }
     }
     if mods == 4 && code == 99 { return key_event(InputKind::Quit, Key::Escape); }
+    // Shift+Tab cycles panes backwards. Terminals spell it CSI Z, or, with the
+    // kitty/modifyOtherKeys protocols this app enables, as a modified Tab.
+    if mods == 1 && code == 9 { return key_event(InputKind::Menu, Key::Toggle); }
     if mods != 0 { return no_input(); }
     if code == 113 || code == 3 { return key_event(InputKind::Quit, Key::Escape); }
     if code == 9 { return key_event(InputKind::Menu, Key::Toggle); }

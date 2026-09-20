@@ -161,6 +161,20 @@ def main():
         assert b" Patterns " in read_frame(0)
         os.write(master, b"gg")
         read_frame(0)
+        # Tab cycles panes forwards and Shift+Tab backwards, in both the CSI Z
+        # spelling and the modified-Tab one this app's keyboard mode produces.
+        os.write(master, b"\t")
+        read_frame(1)
+        os.write(master, b"\t")
+        read_frame(2)
+        os.write(master, b"\x1b[Z")
+        read_frame(1)
+        os.write(master, b"\x1b[9;2u")
+        read_frame(0)
+        os.write(master, b"\x1b[9;2u")  # wraps backwards to the last pane
+        read_frame(2)
+        os.write(master, b"\t")
+        read_frame(0)
         # The sequence is a real 64-row table; column/row input stays in its pane.
         os.write(master, b"\x1b[108;6u")
         read_frame(1)

@@ -2782,3 +2782,21 @@ fn tui_input_menu_and_pane_keys() {
     verify(back.kind == InputKind::Menu && back.key == Key::Toggle && back.modifiers == 2);
     verify(back.code == 9);
 }
+
+#[test]
+fn tui_input_shift_tab_spellings() {
+    // Every spelling a terminal may use for Shift+Tab reaches pane cycling.
+    let csi_z: InputEvent = decode_input("\x1b[Z");
+    verify(csi_z.kind == InputKind::Menu && csi_z.key == Key::Toggle && csi_z.modifiers == 2);
+    // kitty keyboard protocol: modified Tab as CSI 9;2u.
+    let kitty: InputEvent = decode_input("\x1b[9;2u");
+    verify(kitty.kind == InputKind::Menu && kitty.key == Key::Toggle && kitty.modifiers == 2 && kitty.code == 9);
+    // modifyOtherKeys: CSI 27;2;9~.
+    let other: InputEvent = decode_input("\x1b[27;2;9~");
+    verify(other.kind == InputKind::Menu && other.key == Key::Toggle && other.modifiers == 2);
+    // Plain Tab still cycles forwards, and Ctrl+Tab is not pane navigation.
+    let plain: InputEvent = decode_input("\t");
+    verify(plain.kind == InputKind::Menu && plain.key == Key::Toggle && plain.modifiers == 1);
+    let ctrl: InputEvent = decode_input("\x1b[9;5u");
+    verify(ctrl.kind == InputKind::None);
+}
