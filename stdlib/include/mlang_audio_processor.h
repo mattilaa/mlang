@@ -30,6 +30,16 @@ typedef struct mlang_audio_processor {
     void (*parameter)(void *context, int32_t index, double value, int32_t offset);
     /* Control thread: mirror accepted edits into cached/controller state. */
     void (*parameter_edited)(void *context, int32_t index, double normalized);
+    /* Optional, control thread, audio may be running: copy interleaved PCM
+     * (frames * channels floats, 1-2 channels) into sampler pad `pad`
+     * (mla_sampler_protocol.h). Returns 0, or -1 with a reason in `error`.
+     * The processor owns realtime-safe hand-off to its audio thread. */
+    int32_t (*load_pad)(void *context, int32_t pad, const float *interleaved, int64_t frames,
+                        int32_t channels, double rate, const char *name, char *error, int32_t error_size);
+    /* frames == 0 (interleaved may be NULL) empties the pad instead. */
+    /* Optional, control thread: sampler layout. key 0 = root MIDI key of pad 0,
+     * 1 = pad count, 2 = bitmask of loaded pads. -1 when unsupported. */
+    int64_t (*sampler_info)(void *context, int32_t key);
 } mlang_audio_processor;
 typedef int32_t (*mlang_audio_processor_factory)(const char *path, double rate,
     int32_t max_frames, mlang_audio_processor *out, char *error, int32_t error_size);

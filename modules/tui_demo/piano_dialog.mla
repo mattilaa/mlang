@@ -1,0 +1,146 @@
+mod tui::dialog;
+use tui::dialog::Dialog;
+use tui::focus::PaneFocus;
+use tui::layout::Alignment;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::input::*;
+use tui::menu::Key;
+use std::strbuf::clone;
+use std::strbuf::free;
+
+/// Tracker spelling, matching the pattern NOTE column (MIDI 60 = C-4).
+pub fn piano_note_name(key: i32) -> str8 {
+    let names: array<str8, 12> = {"C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"};
+    return format!("{}{}", names[key % 12], key / 12 - 1);
+}
+pub fn piano_is_black(key: i32) -> bool {
+    let n: i32 = key % 12;
+    return n == 1 || n == 3 || n == 6 || n == 8 || n == 10;
+}
+fn white_index(key: i32) -> i32 {
+    // White keys before `key` within its octave, plus seven per octave.
+    let offsets: array<i32, 12> = {0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6};
+    return (key / 12) * 7 + offsets[key % 12];
+}
+
+/// Pick a sampler pad on an ASCII piano. Keys outside the instrument's pad range
+/// are dimmed and cannot be selected; loaded pads show a dot.
+/// result: 1 = insert/replace at `key`, 2 = cancelled, 3 = clear the pad at `key`.
+pub struct PianoDialog : Dialog {
+    var root: i32; var pads: i32; var occupied: i64; var key: i32;
+    var names: list<str8>; var action: str8;
+};
+impl PianoDialog {
+    pub fn new() -> PianoDialog {
+        return PianoDialog { title: "Choose drum key", width: 74, height: 14, action: "",
+            focus: PaneFocus::new(0), button_alignment: Alignment::Center, buttons: [] };
+    }
+    /// `names` holds one display name per pad ("" when unknown).
+    pub fn open(self: &mut Self, title: str8, root: i32, pads: i32, occupied: i64, names: list<str8>, action: str8) -> void {
+        self.release_names();
+        self.title = title; self.action = action;
+        self.root = root < 0 ? 0 : (root > 127 ? 127 : root);
+        self.pads = pads < 1 ? 1 : pads;
+        if self.root + self.pads > 128 { self.pads = 128 - self.root; }
+        self.occupied = occupied; self.names = names;
+        // Start on the first empty pad, else pad 1.
+        self.key = self.root;
+        for pad in 0..self.pads {
+            if !self.is_loaded(i32(pad)) { self.key = self.root + i32(pad); break; }
+        }
+        self.result = 0; self.active = true;
+    }
+    pub fn pad(self: PianoDialog) -> i32 { return self.key - self.root; }
+    pub fn is_loaded(self: PianoDialog, pad: i32) -> bool {
+        if pad < 0 || pad >= 63 { return false; }
+        var mask: i64 = 1;
+        for _i in 0..pad { mask = mask * 2; }
+        return (self.occupied / mask) % 2 == 1;
+    }
+    fn select(self: &mut Self, key: i32) -> void {
+        let last: i32 = self.root + self.pads - 1;
+        self.key = key < self.root ? self.root : (key > last ? last : key);
+    }
+    pub fn on_event(self: &mut Self, event: InputEvent) -> void {
+        if event.kind == InputKind::Menu {
+            if event.key == Key::Escape && event.code < 32 { self.active = false; self.result = 2; return; }
+            if event.key == Key::Left { self.select(self.key - 1); return; }
+            if event.key == Key::Right { self.select(self.key + 1); return; }
+            if event.key == Key::Up { self.select(self.key + 12); return; }
+            if event.key == Key::Down { self.select(self.key - 12); return; }
+            if event.key == Key::Enter { self.active = false; self.result = 1; return; }
+        }
+        if event.kind == InputKind::Edit && (event.key == Key::Backspace || event.key == Key::Delete) {
+            if self.is_loaded(self.pad()) { self.active = false; self.result = 3; }
+        }
+    }
+    pub fn paint(self: PianoDialog, surface: Surface, area: Rect, theme: Theme) -> void {
+        if !self.active { return; }
+        let body: Rect = self.paint_frame(surface, area, theme);
+        if body.height < 8 || body.width < 24 { return; }
+        let key_width: i32 = 3;
+        let last: i32 = self.root + self.pads - 1;
+        // Whole octaves around the pads, scrolled to keep the cursor visible.
+        let octaves: i32 = body.width / (7 * key_width) < 1 ? 1 : body.width / (7 * key_width);
+        var first_octave: i32 = self.root / 12;
+        let last_octave: i32 = last / 12;
+        if last_octave - first_octave + 1 > octaves {
+            first_octave = self.key / 12 - octaves + 1 < first_octave ? first_octave : self.key / 12 - octaves + 1;
+        }
+        let shown: i32 = last_octave - first_octave + 1 > octaves ? octaves : last_octave - first_octave + 1;
+        let first: i32 = first_octave * 12;
+        let stop: i32 = (first_octave + shown) * 12 > 128 ? 128 : (first_octave + shown) * 12;
+        let x0: i32 = body.x + (body.width - shown * 7 * key_width) / 2;
+        let y0: i32 = body.y + 1;
+        let base: i32 = white_index(first);
+        let selected: i32 = 0x5f5f5f;
+        let marker: i32 = 0xd8453a;
+        // White keys first, then black keys over their upper two rows.
+        for k in first..stop {
+            let key: i32 = i32(k);
+            if piano_is_black(key) { continue; }
+            let in_range: bool = key >= self.root && key <= last;
+            let background: i32 = key == self.key ? selected : (in_range ? 0xf2f2f2 : 0xb9b9b9);
+            let x: i32 = x0 + (white_index(key) - base) * key_width;
+            surface.fill(Rect::new(x, y0, key_width, 4), Cell { glyph: 32, foreground: 0x777777, background: background });
+            for row in 0..4 { surface.put(x, y0 + i32(row), Cell { glyph: 0x2502, foreground: 0x777777, background: background }); }
+            if in_range && self.is_loaded(key - self.root) {
+                surface.put(x + 1, y0 + 3, Cell { glyph: 0x25cf, foreground: marker, background: background });
+            }
+            if key % 12 == 0 {
+                let label: str8 = piano_note_name(key);
+                surface.text(Rect::new(x, y0 + 4, key_width, 1), label, theme.muted, theme.panel); free(label);
+            }
+        }
+        for k in first..stop {
+            let key: i32 = i32(k);
+            if !piano_is_black(key) { continue; }
+            let in_range: bool = key >= self.root && key <= last;
+            let background: i32 = key == self.key ? selected : (in_range ? 0x0c0c0c : 0x3a3a3a);
+            // white_index counts the white keys before this black key, so the
+            // gap it sits on is at that many key widths; straddle it by one column.
+            let x: i32 = x0 + (white_index(key) - base) * key_width - 1;
+            surface.fill(Rect::new(x, y0, 2, 2), Cell { glyph: 32, foreground: marker, background: background });
+            if in_range && self.is_loaded(key - self.root) {
+                surface.put(x, y0 + 1, Cell { glyph: 0x25cf, foreground: marker, background: background });
+            }
+        }
+        let note: str8 = piano_note_name(self.key);
+        let pad: i32 = self.pad();
+        var name: str8 = "";
+        if pad < self.names.len() { name = self.names[pad]; }
+        let loaded: bool = self.is_loaded(pad);
+        let info: str8 = loaded
+            ? format!("{} (MIDI {}) pad {}: {}  Enter replaces, Del clears", note, self.key, pad + 1, name == "" ? "loaded" : name)
+            : format!("{} (MIDI {}) pad {}: empty  Enter {}", note, self.key, pad + 1, self.action);
+        surface.text(Rect::new(body.x, y0 + 6, body.width, 1), info, theme.foreground, theme.panel);
+        surface.text(Rect::new(body.x, y0 + 7, body.width, 1), "h/l key  j/k octave  Enter choose  Esc cancel", theme.muted, theme.panel);
+        free(note); free(info);
+    }
+    fn release_names(self: &mut Self) -> void {
+        let names: list<str8> = self.names; for name in names { free(name); } self.names = [];
+    }
+    pub fn release(self: &mut Self) -> void { self.release_names(); }
+}

@@ -76,7 +76,16 @@ are accepted. Unsupported major or minor versions fail closed.
     track (zero means empty). Finally: insert view visible boolean and selected
     slot index (-1–3). Pattern copies can reference the same instance. Detached
     instances remain available until session close. This extension also requires
-    the preceding `MIDI_LEARN` tag, with zero mappings if necessary.
+    the preceding `MIDI_LEARN` tag, with zero mappings if necessary. When the
+    insert view is hidden the selected slot is stored as -1.
+11. Optional `SAMPLER_PADS` extension follows `TRACK_INSERTS`: a count (0–4096)
+    of `(instrument slot 1–32, pad 0–127, zero-based sample-list index)` integer
+    triples in strictly increasing `slot * 128 + pad` order. Every slot must be an
+    instrument in the plugin list, and every index must be in the sample list.
+    On restoration, after plugins and MIDI learn, each pad's embedded PCM is sent
+    to its instrument (see `stdlib/include/mla_sampler_protocol.h`; used by
+    Mla Drum). If an instrument refuses a pad, the open is rejected. This
+    extension requires the preceding tags, with empty sections if necessary.
 
 The active pattern is serialized from the live editor, not its older library
 snapshot. Audio placements reference the embedded sample list; plugin assignments
@@ -103,7 +112,8 @@ Meters/MIDI activity are transient and start silent; playback never auto-starts.
 
 Version 1.0 does not capture opaque VST3 component/controller state blobs or
 plugin-internal sample libraries. It preserves the exposed parameter state edited
-by mlacker. Future incompatible additions require a new version.
+by mlacker. Sampler pads filled by mlacker are the exception: they are rebuilt
+from the embedded sample list (`SAMPLER_PADS`). Future incompatible additions require a new version.
 
 ## Portable MIDI learn files (`.mlalearn`, version 1.0)
 
@@ -120,11 +130,20 @@ owned by another instrument reject the import. The entire file is validated
 before changing mappings. Empty mapping lists clear that instrument's bindings.
 Exports use atomic file replacement. Ordinary `.mlack` persistence is unchanged.
 
-## Parameter preset files (`.mlapre`, version 1.0)
+## Parameter preset files (`.mlapre`, version 1.0 and 1.1)
 
-String `MLAPRE`, i64 major 1 and minor 0, plugin display-name string, i64 parameter
+String `MLAPRE`, i64 major 1 and minor 0 or 1, plugin display-name string, i64 parameter
 count, then `(i64 stable parameter ID, f64 normalized value)` pairs. Uses the same
-little-endian primitives. Maximum 512 KiB, 16384 parameters, and 4096-byte strings.
+little-endian primitives. Maximum 256 MiB, 16384 parameters, and 4096-byte strings.
+
+Minor 1 is a **kit preset**, written for sampler instruments (such as Mla Drum)
+that have pads loaded from the session. After the parameters: string
+`SAMPLER_PADS`, a count (0–64), then per pad its number (0–127, strictly
+increasing) and the sample in the session's sample-list encoding (path, format,
+PCM, row and detail peaks). Loading a kit replaces every pad of the instrument:
+listed pads receive their samples, and all other pads are cleared. Kit samples
+join the Audio list, reusing an identical existing sample. Minor 0 presets leave
+pads unchanged. Readers that only know 1.0 reject 1.1 files.
 The plugin name and complete parameter-ID set must match; duplicate/missing IDs,
 non-finite values, values outside 0–1, and trailing/truncated data are rejected
 before applying. Read-only parameters are recorded but not written on restore.

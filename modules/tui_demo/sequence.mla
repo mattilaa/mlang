@@ -677,6 +677,31 @@ pub fn is_note(self: SequenceTable) -> bool {
     let offset: i32 = self.selected_column - self.track_start(index);
     return !track.audio && offset >= 0 && offset < track.note_lines * 4 && offset % 4 == 0;
 }
+/// Point every placement of `old` (matched like the session codec: source,
+/// frames and row size) at `edited`. A length change resets the placement's
+/// non-destructive trim to the natural length. Returns the number replaced.
+pub fn replace_clip(self: &mut Self, old: &AudioClip, edited: &AudioClip) -> i32 {
+    var before: AudioClip = AudioClip {}; before = old;
+    var after: AudioClip = AudioClip {}; after = edited;
+    var count: i32 = 0;
+    for t in 0..self.tracks.len() {
+        var track: SequenceTrack = self.tracks[t];
+        if !track.audio { continue; }
+        var changed: bool = false; var updated: list<AudioInstance> = [];
+        for i in 0..track.instances.len() {
+            var next: AudioInstance = AudioInstance {}; next = track.instances[i];
+            if next.clip.source == before.source && next.clip.frames == before.frames && next.clip.frames_per_row == before.frames_per_row {
+                next.clip.release(); next.clip = after.copy(); next.clip.offset = 0;
+                if after.frames != before.frames { next.offset_frames = 0; next.length_ticks = 0; }
+                changed = true; count = count + 1;
+            }
+            updated.push(next);
+        }
+        if changed { track.instances = updated; self.replace_track(i32(t), track); }
+    }
+    if count > 0 { self.revision = self.revision + 1; }
+    return count;
+}
 fn replace_track(self: &mut Self, index: i32, value: SequenceTrack) -> void {
     var tracks: list<SequenceTrack> = [];
     for i in 0..self.tracks.len() { tracks.push(i == index ? value : self.tracks[i]); }
@@ -734,6 +759,48 @@ pub fn detach_instrument(self: &mut Self, id: i32) -> void {
         next.push(track);
     }
     self.tracks = next; self.revision = self.revision + 1;
+}
+/// True when any track in this pattern is assigned instrument instance `id`.
+pub fn instrument_in_use(self: SequenceTable, id: i32) -> bool {
+    if id <= 0 { return false; }
+    let tracks: list<SequenceTrack> = self.tracks;
+    for track in tracks { if track.instrument && track.instrument_id == id { return true; } }
+    return false;
+}
+/// True when a track other than `index` is assigned instrument instance `id`.
+pub fn instrument_used_by_other(self: SequenceTable, id: i32, index: i32) -> bool {
+    if id <= 0 { return false; }
+    for i in 0..self.tracks.len() {
+        let track: SequenceTrack = self.tracks[i];
+        if i32(i) != index && track.instrument && track.instrument_id == id { return true; }
+    }
+    return false;
+}
+/// First track (other than `index`) using instance `id`, or -1.
+pub fn instrument_user(self: SequenceTable, id: i32, index: i32) -> i32 {
+    for i in 0..self.tracks.len() {
+        let track: SequenceTrack = self.tracks[i];
+        if i32(i) != index && track.instrument && track.instrument_id == id { return i32(i); }
+    }
+    return -1;
+}
+/// Detach the active track from its insert instances (only this track; a
+/// track that just moved to its own instrument must not keep feeding the
+/// inserts of the tracks it left).
+pub fn clear_active_inserts(self: &mut Self) -> void {
+    let index: i32 = self.active_track();
+    if index < 0 { return; }
+    var track: SequenceTrack = self.tracks[index];
+    track.inserts = [0, 0, 0, 0]; self.replace_track(index, track);
+    self.revision = self.revision + 1;
+}
+/// Instrument instance of the selected track, or 0 when it is not an assigned
+/// Instrument track.
+pub fn active_instrument(self: SequenceTable) -> i32 {
+    let index: i32 = self.active_track();
+    if index < 0 { return 0; }
+    let track: SequenceTrack = self.tracks[index];
+    return track.instrument ? track.instrument_id : 0;
 }
 pub fn create_instrument_track(self: &mut Self, id: i32, area: Rect) -> void {
     if self.tracks.len() >= 64 { self.error = "Maximum 64 tracks"; return; }

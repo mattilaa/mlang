@@ -18,6 +18,32 @@ impl AudioLibrary {
         free(name); self.view.selected = i32(self.samples.len()) - 1;
         self.view.cancel_pending(); self.error = ""; return true;
     }
+    /// Index of a sample with identical format and PCM, or -1.
+    pub fn find_clip(self: AudioLibrary, source: &AudioClip) -> i32 {
+        var clip: AudioClip = AudioClip {}; clip = source;
+        for i in 0..self.samples.len() {
+            let other: AudioClip = self.samples[i];
+            if other.source != clip.source || other.frames != clip.frames || other.channels != clip.channels ||
+               other.sample_rate != clip.sample_rate || other.frames_per_row != clip.frames_per_row ||
+               other.samples.len() != clip.samples.len() { continue; }
+            var same: bool = true;
+            for s in 0..clip.samples.len() { if other.samples[s] != clip.samples[s] { same = false; break; } }
+            if same { return i32(i); }
+        }
+        return -1;
+    }
+    /// Take ownership of a decoded clip; reuses an identical existing sample
+    /// (releasing `clip`). Returns the sample index, or -1 at the 256 limit.
+    pub fn add_clip(self: &mut Self, clip: AudioClip) -> i32 {
+        let existing: i32 = self.find_clip(clip);
+        if existing >= 0 { clip.release(); return existing; }
+        if self.samples.len() >= 256 { clip.release(); self.error = "Maximum 256 samples"; return -1; }
+        self.samples.push(clip);
+        let name: str8 = base_name(clip.source);
+        self.view.items.push(ListItem { id: i32(self.samples.len()), label: format!("{} {}", self.samples.len(), name) });
+        free(name); self.view.cancel_pending(); self.error = "";
+        return i32(self.samples.len()) - 1;
+    }
     pub fn release(self: AudioLibrary) -> void {
         let samples: list<AudioClip> = self.samples; for sample in samples { sample.release(); }
         let items: list<ListItem> = self.view.items; for item in items { free(item.label); }

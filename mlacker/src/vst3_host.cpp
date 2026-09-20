@@ -1,4 +1,5 @@
 #include "mlang_audio_processor.h"
+#include "mla_sampler_protocol.h"
 #include "parameter_changes.h"
 #include "public.sdk/source/vst/hosting/module.h"
 #include "public.sdk/source/vst/hosting/plugprovider.h"
@@ -219,6 +220,52 @@ public:
         p.value.store(value, std::memory_order_relaxed);
     }
 
+    // Control thread. Sampler pads travel as mla_sampler_protocol messages to
+    // the component's IConnectionPoint; the plugin owns the audio hand-off.
+    int32_t loadPad(int32_t pad, const float *pcm, int64_t frames, int32_t channels, double rate,
+                    const char *sampleName, std::string &error) {
+        auto connection = U::cast<IConnectionPoint>(component);
+        if(!connection) { error = "This instrument does not accept pad samples"; return -1; }
+        const bool clear = frames == 0;
+        if(!clear && (frames < 1 || frames > mla_sampler::kMaxFrames || channels < 1 || channels > 2 || !pcm)) {
+            error = "Pad samples must be mono/stereo with 1-16777216 frames"; return -1;
+        }
+        auto message = owned(new HostMessage);
+        message->setMessageID(clear ? mla_sampler::kClearMessage : mla_sampler::kLoadPcmMessage);
+        auto *attributes = message->getAttributes();
+        attributes->setInt("pad", pad);
+        if(!clear) {
+            const std::string label = sampleName ? sampleName : "";
+            attributes->setInt("channels", channels);
+            attributes->setInt("frames", frames);
+            attributes->setFloat("rate", rate);
+            attributes->setBinary("data", pcm, static_cast<uint32>(frames * channels * sizeof(float)));
+            attributes->setBinary("name", label.data(), static_cast<uint32>(label.size()));
+        }
+        tresult result = kResultFalse;
+        try { result = connection->notify(message); } catch(...) { result = kInternalError; }
+        if(result == kResultOk) return 0;
+        const void *why = nullptr; uint32 size = 0;
+        if(attributes->getBinary("error", why, size) == kResultOk && why && size)
+            error.assign(static_cast<const char *>(why), size);
+        else
+            error = "This instrument does not accept pad samples";
+        return -1;
+    }
+
+    // Control thread. -1 when the plugin does not answer the sampler query.
+    int64_t samplerInfo(int32_t key) {
+        auto connection = U::cast<IConnectionPoint>(component);
+        if(!connection || key < 0 || key > 2) return -1;
+        auto message = owned(new HostMessage);
+        message->setMessageID(mla_sampler::kInfoMessage);
+        auto *attributes = message->getAttributes();
+        try { if(connection->notify(message) != kResultOk) return -1; } catch(...) { return -1; }
+        int64 value = -1;
+        const char *id = key == 0 ? "root" : (key == 1 ? "pads" : "occupied");
+        return attributes->getInt(id, value) == kResultOk ? value : -1;
+    }
+
     int32 render(float *stereo, int32 frames, uint64_t clock) noexcept {
         if(frames < 0 || frames > maxFrames || overflow) return -1;
         data.numSamples = frames; context.projectTimeSamples = static_cast<TSamples>(clock);
@@ -275,6 +322,17 @@ int32_t load(const char *path, double rate, int32_t frames,
             auto &parameter = host->cached[i];
             parameter.value.store(value, std::memory_order_relaxed);
             if(auto controller = host->provider->getControllerPtr()) controller->setParamNormalized(parameter.info.id, value);
+        };
+        out->load_pad = [](void *p, int32_t pad, const float *pcm, int64_t frames, int32_t channels, double rate,
+                           const char *sampleName, char *error, int32_t errorSize) -> int32_t {
+            std::string why;
+            try {
+                if(static_cast<Processor*>(p)->loadPad(pad, pcm, frames, channels, rate, sampleName, why) == 0) return 0;
+            } catch(...) { why = "Pad sample load failed"; }
+            std::snprintf(error, errorSize, "%s", why.c_str()); return -1;
+        };
+        out->sampler_info = [](void *p, int32_t key) -> int64_t {
+            try { return static_cast<Processor*>(p)->samplerInfo(key); } catch(...) { return -1; }
         };
         plugin.release(); return 0;
     } catch(const std::exception &e) { std::snprintf(error, errorSize, "VST3 load failed: %s", e.what()); }

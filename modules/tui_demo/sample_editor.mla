@@ -1,0 +1,206 @@
+mod tui_demo::audio_clip;
+mod tui_demo::sample_view;
+mod tui::widgets;
+use tui_demo::audio_clip::AudioClip;
+use tui_demo::audio_clip::base_name;
+use tui_demo::sample_view::SampleView;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::widgets::Panel;
+use tui::input::*;
+use tui::menu::Key;
+use std::strbuf::clone;
+use std::strbuf::free;
+
+// Destructive edits on interleaved PCM. Each returns a new list; the source is
+// never modified because clips share sample data between placements. Frame
+// ranges are [from, to) and clamped to the sample.
+
+fn clamp_frames(value: i64, frames: i64) -> i64 { return value < 0 ? 0 : (value > frames ? frames : value); }
+
+/// Keep only frames [from, to).
+pub fn pcm_crop(samples: &list<f32>, channels: i64, from: i64, to: i64) -> list<f32> {
+    var source: list<f32> = []; source = samples;
+    let frames: i64 = source.len() / channels;
+    let a: i64 = clamp_frames(from, frames); let b: i64 = clamp_frames(to, frames);
+    var out: list<f32> = [];
+    let lo: i64 = a * channels; let hi: i64 = b * channels;
+    for i in lo..hi { out.push(source[i]); }
+    return out;
+}
+/// Remove frames [from, to), closing the gap.
+pub fn pcm_delete(samples: &list<f32>, channels: i64, from: i64, to: i64) -> list<f32> {
+    var source: list<f32> = []; source = samples;
+    let frames: i64 = source.len() / channels;
+    let a: i64 = clamp_frames(from, frames) * channels; let b: i64 = clamp_frames(to, frames) * channels;
+    var out: list<f32> = [];
+    for i in 0..source.len() { if i < a || i >= b { out.push(source[i]); } }
+    return out;
+}
+/// Reverse frames [from, to), keeping channel order within each frame.
+pub fn pcm_reverse(samples: &list<f32>, channels: i64, from: i64, to: i64) -> list<f32> {
+    var source: list<f32> = []; source = samples;
+    let frames: i64 = source.len() / channels;
+    let a: i64 = clamp_frames(from, frames); let b: i64 = clamp_frames(to, frames);
+    var out: list<f32> = [];
+    for f in 0..frames {
+        let src: i64 = f >= a && f < b ? a + b - 1 - f : f;
+        for c in 0..channels { out.push(source[src * channels + c]); }
+    }
+    return out;
+}
+/// Multiply frames [from, to) by a linear ramp and clip to -1..1. `shape`
+/// 0 = constant `gain`, 1 = fade in (0 -> 1), 2 = fade out (1 -> 0).
+pub fn pcm_scale(samples: &list<f32>, channels: i64, from: i64, to: i64, gain: f32, shape: i32) -> list<f32> {
+    var source: list<f32> = []; source = samples;
+    let frames: i64 = source.len() / channels;
+    let a: i64 = clamp_frames(from, frames); let b: i64 = clamp_frames(to, frames);
+    let span: i64 = b - a > 1 ? b - a - 1 : 1;
+    var out: list<f32> = [];
+    for f in 0..frames {
+        var g: f32 = 1.0f;
+        if f >= a && f < b {
+            g = gain;
+            if shape == 1 { g = f32(f - a) / f32(span); }
+            if shape == 2 { g = f32(b - 1 - f) / f32(span); }
+        }
+        for c in 0..channels {
+            // Hard clip: sessions and 16-bit exports only hold -1..1.
+            let v: f32 = source[f * channels + c] * g;
+            out.push(v > 1.0f ? 1.0f : (v < -1.0f ? -1.0f : v));
+        }
+    }
+    return out;
+}
+/// Largest absolute value in frames [from, to).
+pub fn pcm_peak(samples: &list<f32>, channels: i64, from: i64, to: i64) -> f32 {
+    var source: list<f32> = []; source = samples;
+    let frames: i64 = source.len() / channels;
+    let a: i64 = clamp_frames(from, frames) * channels; let b: i64 = clamp_frames(to, frames) * channels;
+    var peak: f32 = 0.0f;
+    for i in a..b { let v: f32 = source[i] < 0.0f ? -source[i] : source[i]; if v > peak { peak = v; } }
+    return peak;
+}
+
+/// Destructive editor for one Audio-list sample. Edits apply to a working copy
+/// with up to 16 undo steps; nothing changes in the session until `commit`.
+/// on_event results: 0 handled/ignored, 1 commit, 2 discard.
+pub struct SampleEditor {
+    var active: bool; var index: i32; var clip: AudioClip; var history: list<AudioClip>;
+    var view: SampleView; var modified: bool; var status: str8{""};
+};
+impl SampleEditor {
+    pub fn open(self: &mut Self, source: &AudioClip, index: i32) -> void {
+        self.release();
+        var clip: AudioClip = AudioClip {}; clip = source;
+        self.clip = clip.copy(); self.clip.offset = 0; self.index = index;
+        self.view = SampleView { grainy: true, zoom: 0 };
+        self.view.reset_selection(self.clip.frames);
+        self.view.anchor_frame = 0; self.view.anchor_active = true;
+        self.modified = false; self.status = ""; self.active = true;
+    }
+    /// Selection in frames; the whole sample when nothing narrower is selected.
+    pub fn selection_start(self: SampleEditor) -> i64 {
+        return self.view.sel_frames == self.clip.frames && self.view.sel_end > self.view.sel_start ? self.view.sel_start : 0;
+    }
+    pub fn selection_end(self: SampleEditor) -> i64 {
+        return self.view.sel_frames == self.clip.frames && self.view.sel_end > self.view.sel_start ? self.view.sel_end : self.clip.frames;
+    }
+    fn whole(self: SampleEditor) -> bool {
+        return self.selection_start() <= 0 && self.selection_end() >= self.clip.frames;
+    }
+    fn apply(self: &mut Self, samples: list<f32>, status: str8, keep_selection: bool) -> void {
+        let from: i64 = self.selection_start(); let to: i64 = self.selection_end();
+        let next: AudioClip = self.clip.with_samples(samples);
+        self.history.push(self.clip);
+        if self.history.len() > 16 {
+            let old: list<AudioClip> = self.history; var kept: list<AudioClip> = [];
+            for i in 0..old.len() { let item: AudioClip = old[i]; if i == 0 { item.release(); } else { kept.push(item); } }
+            self.history = kept;
+        }
+        self.clip = next; self.modified = true; self.status = status;
+        self.view.reset_selection(self.clip.frames);
+        if keep_selection { self.view.sel_start = from; self.view.sel_end = to; }
+        self.view.anchor_frame = keep_selection ? from : 0; self.view.anchor_active = true;
+    }
+    /// Apply an edit by command letter; also used by tests. Returns false with
+    /// `status` set when the edit is not possible.
+    pub fn edit(self: &mut Self, command: i32) -> bool {
+        let ch: i64 = self.clip.channels < 1 ? 1 : self.clip.channels;
+        let from: i64 = self.selection_start(); let to: i64 = self.selection_end();
+        if command == 116 { // t: crop to selection
+            if self.whole() { self.status = "Select a range first (Ctrl+N/M start, Shift+N/M end)"; return false; }
+            self.apply(pcm_crop(self.clip.samples, ch, from, to), "Cropped to selection", false); return true;
+        }
+        if command == 120 { // x: delete selection
+            if self.whole() { self.status = "Cannot delete the whole sample"; return false; }
+            self.apply(pcm_delete(self.clip.samples, ch, from, to), "Deleted selection", false); return true;
+        }
+        if command == 114 { self.apply(pcm_reverse(self.clip.samples, ch, from, to), "Reversed", true); return true; }
+        if command == 105 { self.apply(pcm_scale(self.clip.samples, ch, from, to, 1.0f, 1), "Faded in", true); return true; }
+        if command == 111 { self.apply(pcm_scale(self.clip.samples, ch, from, to, 1.0f, 2), "Faded out", true); return true; }
+        if command == 115 { self.apply(pcm_scale(self.clip.samples, ch, from, to, 0.0f, 0), "Silenced", true); return true; }
+        if command == 45 { self.apply(pcm_scale(self.clip.samples, ch, from, to, 0.89125094f, 0), "Gain -1 dB", true); return true; }
+        if command == 43 || command == 61 { self.apply(pcm_scale(self.clip.samples, ch, from, to, 1.12201845f, 0), "Gain +1 dB", true); return true; }
+        if command == 110 { // n: normalize selection peak to 0 dBFS
+            let peak: f32 = pcm_peak(self.clip.samples, ch, from, to);
+            if peak < 0.000001f { self.status = "Selection is silent"; return false; }
+            self.apply(pcm_scale(self.clip.samples, ch, from, to, 1.0f / peak, 0), "Normalized to 0 dBFS", true); return true;
+        }
+        if command == 97 { self.view.reset_selection(self.clip.frames); self.status = "Selected all"; return true; }
+        if command == 117 { // u: undo
+            if self.history.len() == 0 { self.status = "Nothing to undo"; return false; }
+            let old: list<AudioClip> = self.history; var kept: list<AudioClip> = [];
+            for i in 0..old.len() - 1 { kept.push(old[i]); }
+            self.clip.release(); self.clip = old[old.len() - 1]; self.history = kept;
+            self.modified = self.history.len() > 0; self.status = "Undone";
+            self.view.reset_selection(self.clip.frames); self.view.anchor_frame = 0; self.view.anchor_active = true;
+            return true;
+        }
+        return false;
+    }
+    pub fn on_event(self: &mut Self, event: InputEvent, width: i32) -> i32 {
+        if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { return 2; }
+        if event.kind == InputKind::Menu && event.key == Key::Enter { return 1; }
+        if self.view.on_event(event, self.clip, width) { self.status = ""; return 0; }
+        // '+' arrives with or without Shift depending on the terminal.
+        if (event.modifiers == 1 && event.code >= 32) || (event.modifiers == 2 && event.code == 43) { self.edit(event.code); }
+        return 0;
+    }
+    pub fn paint(self: SampleEditor, surface: Surface, area: Rect, theme: Theme) -> void {
+        if !self.active { return; }
+        let name: str8 = base_name(self.clip.source);
+        let title: str8 = format!(" Edit sample {}: {}{} ", self.index + 1, name, self.modified ? " [modified]" : "");
+        let panel: Panel = Panel { title: title };
+        let body: Rect = panel.paint_focused(surface, area, theme, true);
+        free(title); free(name);
+        if body.height < 5 { return; }
+        let wave: Rect = Rect::new(body.x, body.y, body.width, body.height - 3);
+        self.view.paint_at(surface, wave, theme, self.clip, 0, 0);
+        let rate: i64 = self.clip.sample_rate > 0 ? self.clip.sample_rate : 1;
+        let from: i64 = self.selection_start(); let to: i64 = self.selection_end();
+        let info: str8 = format!("Selection {}..{} ms of {} ms | {} ch {} Hz{}{}", from * 1000 / rate, to * 1000 / rate,
+            self.clip.frames * 1000 / rate, self.clip.channels, self.clip.sample_rate, self.status == "" ? "" : " | ", self.status);
+        surface.text(Rect::new(body.x, body.y + body.height - 3, body.width, 1), info, theme.accent, theme.panel); free(info);
+        surface.text(Rect::new(body.x, body.y + body.height - 2, body.width, 1),
+            "Ctrl+N/M start  Shift+N/M end  Ctrl+H/L zoom  a all  t crop  x delete  r reverse  i/o fade in/out",
+            theme.muted, theme.panel);
+        surface.text(Rect::new(body.x, body.y + body.height - 1, body.width, 1),
+            "n normalize  -/+ gain 1 dB  s silence  u undo  Enter save to session + drum pads  Esc discard",
+            theme.muted, theme.panel);
+    }
+    /// Hand the edited clip to the caller (ownership moves); closes the editor.
+    pub fn take(self: &mut Self) -> AudioClip {
+        let clip: AudioClip = self.clip;
+        let old: list<AudioClip> = self.history; for item in old { item.release(); }
+        self.history = []; self.clip = AudioClip {}; self.active = false; self.modified = false;
+        return clip;
+    }
+    pub fn release(self: &mut Self) -> void {
+        let old: list<AudioClip> = self.history; for item in old { item.release(); }
+        self.history = [];
+        self.clip.release();
+        self.clip = AudioClip {}; self.active = false; self.modified = false;
+    }
+}

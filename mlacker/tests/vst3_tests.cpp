@@ -23,6 +23,9 @@ const char *__mlang_std_audio_controller_parameter_name(int64_t, int64_t, int64_
 int32_t __mlang_std_audio_controller_set_parameter(int64_t, int64_t, int64_t, double);
 int32_t __mlang_std_audio_controller_restore_parameter(int64_t, int64_t, int64_t, double);
 int32_t __mlang_std_audio_controller_unload_instrument(int64_t, int64_t);
+int32_t __mlang_std_audio_controller_instrument_clear_pad(int64_t, int64_t, int64_t);
+int64_t __mlang_std_audio_controller_instrument_sampler(int64_t, int64_t, int64_t);
+int32_t __mlang_std_audio_controller_instrument_pad(int64_t, int64_t, int64_t, FloatList, int64_t, int64_t, const char*);
 int32_t __mlang_std_audio_controller_midi_target(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_live_note(int64_t, int64_t, int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_controller_live_control(int64_t, int64_t, int64_t, int64_t);
@@ -190,6 +193,66 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_load_instrument(c, 2, argv[1]) == 0);
     CHECK(__mlang_std_audio_controller_load_instrument(c, 1, argv[2]) != 0);
     CHECK(std::strcmp(__mlang_std_audio_controller_instrument_name(c, 1), "Mlacker Test Instrument") == 0);
+    {
+        // Sampler pads: a plain instrument rejects them; bad slots/formats never reach a plugin.
+        const std::vector<float> pcm(64, 0.5f);
+        CHECK(__mlang_std_audio_controller_instrument_pad(c, 1, 0, FloatList{64, pcm.data()}, 1, 48000, "kick") != 0);
+        CHECK(std::strstr(__mlang_std_audio_last_error(), "does not accept pad samples") != nullptr);
+        CHECK(__mlang_std_audio_controller_instrument_sampler(c, 1, 0) == -1);
+        CHECK(__mlang_std_audio_controller_instrument_clear_pad(c, 1, 0) != 0);
+        CHECK(__mlang_std_audio_controller_instrument_pad(c, 5, 0, FloatList{64, pcm.data()}, 1, 48000, "kick") != 0);
+        CHECK(__mlang_std_audio_controller_instrument_pad(c, 1, 0, FloatList{63, pcm.data()}, 2, 48000, "kick") != 0);
+        CHECK(__mlang_std_audio_controller_instrument_pad(c, 1, 0, FloatList{64, pcm.data()}, 3, 48000, "kick") != 0);
+        // End to end with Mla Drum when its bundle has been built (see CMakeLists).
+        if(const char *drum = std::getenv("MLA_DRUM_VST3")) {
+            CHECK(__mlang_std_audio_controller_load_instrument(c, 3, drum) == 0);
+            CHECK(std::strcmp(__mlang_std_audio_controller_instrument_name(c, 3), "Mla Drum") == 0);
+            const std::vector<float> hit(4800, 0.5f);
+            CHECK(__mlang_std_audio_controller_instrument_pad(c, 3, 16, FloatList{4800, hit.data()}, 1, 48000, "kick") != 0);
+            CHECK(std::strstr(__mlang_std_audio_last_error(), "pad must be 0-15") != nullptr);
+            CHECK(__mlang_std_audio_controller_instrument_pad(c, 3, 1, FloatList{4800, hit.data()}, 1, 48000, "kick") == 0);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 0) == 36);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 1) == 16);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 2) == 2);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 3) == -1);
+            // Clearing and overriding: pad 1 empties, then takes a new sample.
+            CHECK(__mlang_std_audio_controller_instrument_clear_pad(c, 3, 1) == 0);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 2) == 0);
+            CHECK(__mlang_std_audio_controller_instrument_pad(c, 3, 1, FloatList{4800, hit.data()}, 1, 48000, "kick") == 0);
+            __mlang_std_audio_controller_panic(c);
+            CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+            const int64_t now = __mlang_std_audio_controller_info(c, 2);
+            // Pad 2 sits one key above the default root (36).
+            CHECK(__mlang_std_audio_controller_post(c, 0, 6, 0, 37, 127, 0, now + 32, 3, 1) == 0);
+            CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+            // Sample-accurate start; 0.5 through the controller's default 0.25 master gain.
+            CHECK(__mlang_std_audio_pcm_block_sample(b, 31, 0) == 0.f);
+            CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 32, 0) - 0.125f) < 1.e-4f);
+            CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 128, 1) - 0.125f) < 1.e-4f);
+            // Two instances of the same bundle must stay independent: slot 4
+            // has no samples, so hitting it is silent and leaves slot 3 alone.
+            __mlang_std_audio_controller_panic(c);
+            CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+            CHECK(__mlang_std_audio_controller_load_instrument(c, 4, drum) == 0);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 4, 2) == 0);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 2) == 2);
+            __mlang_std_audio_controller_instrument_peak(c, 3, 0); __mlang_std_audio_controller_instrument_peak(c, 4, 0);
+            int64_t later = __mlang_std_audio_controller_info(c, 2);
+            CHECK(__mlang_std_audio_controller_post(c, 0, 6, 0, 37, 127, 1, later + 16, 4, 1) == 0);
+            CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+            // Slot 3 may still be ringing from its earlier one-shot hit; slot 4 must stay silent.
+            CHECK(__mlang_std_audio_controller_instrument_peak(c, 4, 0) == 0);
+            CHECK(__mlang_std_audio_controller_instrument_peak(c, 4, 1) == 0);
+            // Loading a pad into slot 4 leaves slot 3's pads untouched.
+            CHECK(__mlang_std_audio_controller_instrument_pad(c, 4, 5, FloatList{4800, hit.data()}, 1, 48000, "hat") == 0);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 4, 2) == 32);
+            CHECK(__mlang_std_audio_controller_instrument_sampler(c, 3, 2) == 2);
+            __mlang_std_audio_controller_panic(c);
+            CHECK(__mlang_std_audio_controller_unload_instrument(c, 4) == 0);
+            CHECK(__mlang_std_audio_controller_unload_instrument(c, 3) == 0);
+            std::printf("vst3_host: Mla Drum pad end-to-end passed\n");
+        }
+    }
     __mlang_std_audio_controller_panic(c);
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
     int64_t clock = __mlang_std_audio_controller_info(c, 2);

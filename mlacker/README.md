@@ -103,11 +103,18 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
   adding an entry. Only open trusted plugins.
 - **View → Instruments** shows session-wide loaded instances, numbered by ID.
   `j/k`, `gg`, and `G` navigate; Enter assigns the selected instance to the
-  current Instrument track. Loading while an Instrument track is selected also
+  current Instrument track. If another track already plays that instance,
+  mlacker asks first. **New instance** loads another copy of the same plugin for
+  this track, with its own pads, fader, meters and empty insert slots. **Share**
+  links the track to the existing instance. Loading while an Instrument track is selected also
   assigns the new instance automatically.
 - **Track → Create track → Instrument track** creates a note/velocity/LEN/OFF
-  track using the selected library instance. If none is loaded it remains silent
-  until assigned through **Add → Instrument** or the Instruments list.
+  track using the selected library instance, unless another track in the pattern
+  already uses that instance. The new track then starts unassigned, so it never
+  silently shares another track's pads, fader and meters. An unassigned track
+  stays silent until assigned through **Add → Instrument** (a new instance) or
+  Enter in the Instruments list, which asks whether to share or load a new
+  instance.
 - Up to 32 instances may be loaded, independently routed and summed before the
   master processor. Loading the same bundle again creates another instance.
   Assigning the same entry to multiple tracks shares plugin state and its 16 MIDI
@@ -129,6 +136,62 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
   and output clipping. The rightmost **Master** mixer strip stays pinned while
   track strips scroll. Its L/R meters show measured output peaks with smooth
   decay, using the selected meter style and update rate—not MIDI velocity.
+
+### Drum sampler pads
+
+[Mla Drum](../plugins/mla_drum) (and any instrument implementing
+`stdlib/include/mla_sampler_protocol.h`) takes samples into numbered pads. Select
+the loaded instance in **View → Instruments**, then:
+
+- **Instrument → Send audio sample to pad** sends the sample selected in
+  **View → Audio** to a key you pick. Pads go to the selected Instrument track's
+  own instance (the picker title shows e.g. `Mla Drum #2`). For other tracks they
+  go to the instance selected in the Instruments list.
+- **Instrument → Load pad sample from file** picks the key first, then a WAV/AIFF.
+  The file is added to the Audio list too.
+
+Both open a piano keyboard. It spans the instrument's pads: pad 1 is the plugin's
+Root Key (default MIDI 36, `C-2`), pad 2 one key higher, and so on. Keys outside
+the pads are dimmed. The selected key is dark gray, and a red dot marks pads that
+already hold a sample. The line under the keyboard names the key, pad and current
+sample. `h/l` (or Left/Right) moves one key and `j/k` one octave. The picker opens
+on the first empty pad. Enter inserts the sample, replacing any sample already on
+that pad. Backspace/Delete clears a loaded pad. Esc cancels.
+
+Pads can be loaded while audio is playing. For per-drum effects, load
+one instance per drum family, give each its own Instrument track, and add
+inserts to those tracks. `.mlack` saves which Audio sample each pad uses and
+reloads the pads on open and after audio-device changes. Removing an instrument
+forgets its pads. **Save plugin preset** on a sampler writes a kit preset that
+embeds its pad samples. Loading it restores all pads and clears pads the kit
+does not use.
+
+### Destructive sample editing
+
+**Audio → Edit sample (destructive)**, or `e` in the Audio list, opens the selected
+sample in an editor over the Pattern view. Edits work on a copy with 16 undo
+steps. **Enter** saves the result into the session, and **Esc** discards it.
+Saving replaces the sample in the Audio list and in every pattern placement.
+Placements whose length changed return to the natural length. Every drum pad
+that uses the sample is re-sent at once.
+
+Select a range with `Ctrl+N`/`Ctrl+M` (start) and `Shift+N`/`Shift+M` (end).
+`Ctrl+H`/`Ctrl+L` zoom, and `a` selects everything. Without a narrower selection,
+edits apply to the whole sample.
+
+| Key | Edit |
+|-----|------|
+| `t` | Crop to the selection |
+| `x` | Delete the selection |
+| `r` | Reverse |
+| `i` / `o` | Linear fade in / fade out |
+| `n` | Normalize the selection peak to 0 dBFS |
+| `-` / `+` | Gain −1 dB / +1 dB |
+| `s` | Silence |
+| `u` | Undo |
+
+Results are hard-clipped to −1..1, the range sessions store. Edits change the
+session copy only. The source WAV/AIFF on disk is never rewritten.
 
 ### Mixer faders and MIDI recording
 
@@ -237,7 +300,10 @@ and initial values are copied into memory when the plugin loads.
   are appended. Loading validates the complete file, matches stable parameter
   IDs, and pauses audio/MIDI input while applying values. MIDI-learn mappings
   remain unchanged. These are parameter presets, not opaque VST3 state: internal
-  sample libraries and other non-parameter plugin state are not included.
+  sample libraries and other non-parameter plugin state are not included. The
+  exception is sampler pads loaded from mlacker (Mla Drum): the preset becomes a
+  kit that embeds those samples, and loading it restores every pad (see
+  **Drum sampler pads**).
 - `Shift+J` decreases and `Shift+K` increases the selected value.
 - Enter opens manual entry; Ctrl+U clears the field and Enter validates/commits.
   Invalid input stays in the field. Esc cancels entry; Esc outside entry closes

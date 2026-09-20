@@ -1,0 +1,176 @@
+/// \file mla_drum_dsp.mla
+/// \brief C-ABI bridge: one drum-sampler voice (playhead, ADSR, pan, choke).
+///
+/// Each voice is a plain value type (scalars plus the value-type `Adsr`, no
+/// heap-backed `list` fields), heap-allocated with `calloc` and handed to the
+/// C++ VST3 layer as an opaque pointer. The C++ side owns the decoded sample
+/// buffers and the voice pool; MLang cannot index raw pointers, so each render
+/// call receives the two neighbouring stereo frames the playhead sits between
+/// (`mladrum_voice_frame` says which). All gain, pitch, envelope, pan and
+/// choke math lives here.
+///
+/// The playhead is kept in `f64` frames so long samples stay exact; the C++
+/// side converts the integer frame index.
+
+mod dsp::envelope;
+use dsp::envelope::Adsr;
+
+extern fn calloc(count: i64, size: i64) -> ptr<DrumVoice>;
+extern fn free(block: ptr<DrumVoice>) -> void;
+extern fn floor(value: f64) -> f64;
+extern fn sinf(value: f32) -> f32;
+extern fn cosf(value: f32) -> f32;
+
+/// @brief One playing (or idle) sample voice.
+struct DrumVoice {
+    var envelope: Adsr;
+    var sample_rate: f32;
+    /// Read position in source frames and advance per output frame.
+    var position: f64;
+    var step: f64;
+    /// Source length in frames; the voice ends when the playhead passes it.
+    var frames: f64;
+    var gain_left: f32;
+    var gain_right: f32;
+    /// Choke fade: 1 while playing, ramps to 0 by `fade_step` once choked.
+    var fade: f32;
+    var fade_step: f32;
+    /// 1 = gate ignores note-off and plays to the end of the sample.
+    var one_shot: i32;
+    var active: i32;
+};
+
+fn clamp_voice_f32(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+/// @brief Allocate an idle voice for a sample rate (8 kHz..384 kHz).
+fn mladrum_voice_create(sample_rate: f32) -> ptr<DrumVoice> {
+    var rate: f32 = sample_rate;
+    if rate < 8000.0f { rate = 8000.0f; }
+    if rate > 384000.0f { rate = 384000.0f; }
+    let voice: ptr<DrumVoice> = calloc(1, size_of(DrumVoice));
+    unsafe {
+        (*voice).envelope = Adsr::new(rate);
+        (*voice).sample_rate = rate;
+        (*voice).fade = 1.0f;
+        (*voice).one_shot = 1;
+    }
+    return voice;
+}
+
+/// @brief Release a voice created by `mladrum_voice_create`.
+fn mladrum_voice_destroy(voice: ptr<DrumVoice>) {
+    free(voice);
+}
+
+/// @brief Amp envelope times in seconds and sustain level 0..1. Takes effect
+/// immediately, including on sounding voices.
+fn mladrum_voice_set_envelope(voice: ptr<DrumVoice>, attack: f32, decay: f32, sustain: f32, release: f32) {
+    unsafe {
+        (*voice).envelope.set_attack_seconds(attack);
+        (*voice).envelope.set_decay_seconds(decay);
+        (*voice).envelope.set_sustain(sustain);
+        (*voice).envelope.set_release_seconds(release);
+    }
+}
+
+/// @brief 1 = one-shot (note-off ignored), 0 = gated (note-off releases).
+fn mladrum_voice_set_one_shot(voice: ptr<DrumVoice>, one_shot: i32) {
+    unsafe { (*voice).one_shot = one_shot; }
+}
+
+/// @brief Start a sample from its first frame.
+/// @param frames Source length in frames (> 0).
+/// @param step Source frames per output frame (rate ratio times pitch ratio).
+/// @param gain Linear gain (level and velocity already applied).
+/// @param pan -1 (left) .. +1 (right), constant-power.
+fn mladrum_voice_start(voice: ptr<DrumVoice>, frames: f64, step: f64, gain: f32, pan: f32) {
+    let p: f32 = clamp_voice_f32(pan, -1.0f, 1.0f);
+    // Constant-power law: angle 0..pi/2 across the stereo field.
+    let angle: f32 = (p + 1.0f) * 0.78539816339744830962f;
+    unsafe {
+        (*voice).position = 0.0;
+        (*voice).step = step > 0.0 ? step : 1.0;
+        (*voice).frames = frames;
+        // sqrt(2) keeps a centred voice at unity in both channels.
+        (*voice).gain_left = gain * cosf(angle) * 1.41421356237309504880f;
+        (*voice).gain_right = gain * sinf(angle) * 1.41421356237309504880f;
+        (*voice).fade = 1.0f;
+        (*voice).fade_step = 0.0f;
+        (*voice).envelope.reset();
+        (*voice).envelope.gate_on();
+        (*voice).active = frames > 0.0 ? 1 : 0;
+    }
+}
+
+/// @brief Note-off: enter the envelope release unless the voice is one-shot.
+fn mladrum_voice_release(voice: ptr<DrumVoice>) {
+    unsafe {
+        if (*voice).one_shot == 0 { (*voice).envelope.gate_off(); }
+    }
+}
+
+/// @brief Fade the voice out over `seconds` (mono choke), ignoring one-shot.
+fn mladrum_voice_choke(voice: ptr<DrumVoice>, seconds: f32) {
+    unsafe {
+        if (*voice).active == 0 { return; }
+        let samples: f32 = seconds * (*voice).sample_rate;
+        let step: f32 = samples < 1.0f ? 1.0f : 1.0f / samples;
+        // Never slow down a choke that is already fading faster.
+        if step > (*voice).fade_step { (*voice).fade_step = step; }
+    }
+}
+
+/// @brief Silence immediately (sample swapped out, transport reset).
+fn mladrum_voice_stop(voice: ptr<DrumVoice>) {
+    unsafe {
+        (*voice).active = 0;
+        (*voice).envelope.reset();
+    }
+}
+
+/// @brief 1 while the voice still produces sound.
+fn mladrum_voice_is_active(voice: ptr<DrumVoice>) -> i32 {
+    unsafe { return (*voice).active; }
+}
+
+/// @brief Integer source frame under the playhead (as f64). The caller passes
+/// that frame and the next one to `mladrum_voice_render`.
+fn mladrum_voice_frame(voice: ptr<DrumVoice>) -> f64 {
+    unsafe { return floor((*voice).position); }
+}
+
+/// @brief Render one output frame and advance. Returns the left sample and
+/// writes the right one through `out_right`. The voice deactivates itself at
+/// the end of the sample, the end of the envelope, or the end of a choke.
+fn mladrum_voice_render(voice: ptr<DrumVoice>, left0: f32, right0: f32, left1: f32, right1: f32, out_right: ptr<f32>) -> f32 {
+    unsafe {
+        if (*voice).active == 0 {
+            *out_right = 0.0f;
+            return 0.0f;
+        }
+        let position: f64 = (*voice).position;
+        let frac: f32 = clamp_voice_f32(f32(position - floor(position)), 0.0f, 1.0f);
+        let left: f32 = left0 + (left1 - left0) * frac;
+        let right: f32 = right0 + (right1 - right0) * frac;
+
+        let amp: f32 = (*voice).envelope.process() * (*voice).fade;
+        *out_right = right * amp * (*voice).gain_right;
+        let out_left: f32 = left * amp * (*voice).gain_left;
+
+        (*voice).position = position + (*voice).step;
+        if (*voice).fade_step > 0.0f {
+            (*voice).fade = (*voice).fade - (*voice).fade_step;
+            if (*voice).fade <= 0.0f {
+                (*voice).fade = 0.0f;
+                (*voice).active = 0;
+            }
+        }
+        if (*voice).position >= (*voice).frames { (*voice).active = 0; }
+        if !(*voice).envelope.is_active() { (*voice).active = 0; }
+        return out_left;
+    }
+}

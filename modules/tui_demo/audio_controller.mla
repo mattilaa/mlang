@@ -5,6 +5,8 @@ mod tui_demo::sequence;
 use tui_demo::sequence::SequenceTable;
 use tui_demo::sequence::SequenceTrack;
 use tui_demo::sequence::AudioInstance;
+use tui_demo::audio_clip::AudioClip;
+use tui_demo::audio_clip::base_name;
 use std::audio::controller::*;
 use std::audio::detail::__mlang_std_audio_last_error;
 use std::midi::input_count;
@@ -15,6 +17,8 @@ use std::strbuf::free;
 
 /// Control-thread owner. AUHAL owns rendering; MIDI uses its separate lane.
 pub struct EffectChannel { var path: str8{""}; var volume: i32{100}; };
+/// Sampler-instrument pad (0-based) filled from the session sample list.
+pub struct PadAssignment { var slot: i32; var pad: i32; var sample: i32; };
 pub struct SamplePlacement { var sample: i64; var track: i64; var start: i64; var duration: i64; var rate: i64; var next: i64; var head: i64; };
 pub struct AudioSystem {
     var output: AudioController; var midi: MidiController;
@@ -26,6 +30,7 @@ pub struct AudioSystem {
     var instrument_output_failed: bool;
     var effects: list<EffectChannel>;
     var insert_paths: list<str8>;
+    var pads: list<PadAssignment>;
     var sample_placements: list<SamplePlacement>; var samples_running: bool;
     var sample_output: i64; var sample_last: i64;
 };
@@ -39,6 +44,7 @@ impl AudioSystem {
         self.last_instrument_id = next.last_instrument_id; self.instrument_output_failed = next.instrument_output_failed;
         self.effects = next.effects;
         self.insert_paths = next.insert_paths;
+        self.pads = next.pads;
         self.samples_running = false; self.sample_placements = []; self.sample_output = 0;
     }
     pub fn start(hardware: bool) -> AudioSystem {
@@ -54,7 +60,9 @@ impl AudioSystem {
         return system;
     }
     /// Prepare new output before retiring old resources. Failure leaves old output.
-    pub fn configure(self: &mut Self, midi_id: i64, output_id: i64) -> result<i32, str8> {
+    /// `samples` is the session sample list; sampler pads live inside their
+    /// plugin instances and are re-sent after the instruments reload.
+    pub fn configure(self: &mut Self, midi_id: i64, output_id: i64, samples: &list<AudioClip>) -> result<i32, str8> {
         if midi_id < -2 || output_id < -2 { return Err<i32, str8>("Invalid device selection"); }
         if midi_id >= std::midi::input_count() { return Err<i32, str8>("MIDI adapter unavailable; reopen Settings"); }
         var next: AudioController = AudioController {};
@@ -78,6 +86,14 @@ impl AudioSystem {
                     if next.load_instrument(i + 1, self.instrument_paths[i]) != 0 { next.close(); return Err<i32, str8>(__mlang_std_audio_last_error()); }
                     if next.copy_parameters_from(self.output, i + 1) != 0 { next.close(); return Err<i32, str8>("Cannot preserve instrument parameters; settings unchanged"); }
                 }
+            }
+            let pads: list<PadAssignment> = self.pads;
+            for entry in pads {
+                let clip: AudioClip = samples[entry.sample];
+                let name: str8 = base_name(clip.source);
+                let sent: i32 = next.instrument_pad(entry.slot, entry.pad, clip.samples, clip.channels, clip.sample_rate, name);
+                free(name);
+                if sent != 0 { next.close(); return Err<i32, str8>("Cannot preserve sampler pads; settings unchanged"); }
             }
             if next.copy_midi_learn_from(self.output) != 0 { next.close(); return Err<i32, str8>("Cannot preserve MIDI learn; settings unchanged"); }
             for i in 0..self.effects.len() {
@@ -301,9 +317,65 @@ impl AudioSystem {
         let old: list<str8> = self.instrument_paths; var next: list<str8> = [];
         for i in 0..old.len() { if i + 1 == slot { free(old[i]); next.push(""); } else { next.push(old[i]); } }
         self.instrument_paths = next;
+        self.forget_pads(slot);
         self.instrument_output_failed = restart && self.output.start() != 0;
         if worker { self.midi = MidiController::start_selected(self.midi_id, self.output.handle); }
         return "";
+    }
+    /// Send interleaved PCM to a sampler instrument pad and remember the
+    /// sample-list index for sessions. Audio keeps running; the plugin swaps
+    /// the pad on its audio thread. Returns owned error text, or "" on success.
+    pub fn assign_pad(self: &mut Self, slot: i32, pad: i32, sample: i32, samples: list<f32>, channels: i64, rate: i64, name: str8) -> str8 {
+        if slot < 1 || slot > self.instrument_paths.len() { return clone("Select a loaded instrument in Instruments first"); }
+        if self.instrument_paths[slot - 1] == "" { return clone("Select a loaded instrument in Instruments first"); }
+        if self.output.instrument_pad(slot, pad, samples, channels, rate, name) != 0 {
+            return format!("Pad sample failed: {}", __mlang_std_audio_last_error());
+        }
+        let old: list<PadAssignment> = self.pads; var next: list<PadAssignment> = [];
+        var placed: bool = false;
+        // Keep ascending (slot, pad) order; the session format requires it.
+        for entry in old {
+            let key: i32 = entry.slot * 128 + entry.pad;
+            if !placed && key >= slot * 128 + pad { next.push(PadAssignment { slot: slot, pad: pad, sample: sample }); placed = true; }
+            if key != slot * 128 + pad { next.push(entry); }
+        }
+        if !placed { next.push(PadAssignment { slot: slot, pad: pad, sample: sample }); }
+        self.pads = next;
+        return "";
+    }
+    /// After a destructive edit of session sample `sample`, re-send every pad
+    /// that uses it. Returns the number of pads refreshed, or -1 on failure.
+    pub fn refresh_pads(self: AudioSystem, sample: i32, clip: &AudioClip) -> i32 {
+        var source: AudioClip = AudioClip {}; source = clip;
+        let name: str8 = base_name(source.source);
+        var count: i32 = 0;
+        let pads: list<PadAssignment> = self.pads;
+        for entry in pads {
+            if entry.sample != sample { continue; }
+            if self.output.instrument_pad(entry.slot, entry.pad, source.samples, source.channels, source.sample_rate, name) != 0 { count = -1; break; }
+            count = count + 1;
+        }
+        free(name);
+        return count;
+    }
+    /// Empty a sampler pad and forget its session assignment. Owned error or "".
+    pub fn clear_pad(self: &mut Self, slot: i32, pad: i32) -> str8 {
+        if self.output.instrument_clear_pad(slot, pad) != 0 { return format!("Cannot clear pad: {}", __mlang_std_audio_last_error()); }
+        let old: list<PadAssignment> = self.pads; var next: list<PadAssignment> = [];
+        for entry in old { if entry.slot != slot || entry.pad != pad { next.push(entry); } }
+        self.pads = next;
+        return "";
+    }
+    /// Session sample index loaded into a pad, or -1.
+    pub fn pad_sample(self: AudioSystem, slot: i32, pad: i32) -> i32 {
+        let pads: list<PadAssignment> = self.pads;
+        for entry in pads { if entry.slot == slot && entry.pad == pad { return entry.sample; } }
+        return -1;
+    }
+    fn forget_pads(self: &mut Self, slot: i32) -> void {
+        let old: list<PadAssignment> = self.pads; var next: list<PadAssignment> = [];
+        for entry in old { if entry.slot != slot { next.push(entry); } }
+        self.pads = next;
     }
     /// Returns an owned status string. Load outside the audio callback; retain
     /// the old processor if the new bundle cannot initialize.
@@ -368,5 +440,6 @@ impl AudioSystem {
         self.instrument_paths = [];
         let insert_paths: list<str8> = self.insert_paths; for path in insert_paths { free(path); } self.insert_paths = [];
         let effects: list<EffectChannel> = self.effects; for effect in effects { if effect.path != "" { free(effect.path); } } self.effects = [];
+        self.pads = [];
     }
 }

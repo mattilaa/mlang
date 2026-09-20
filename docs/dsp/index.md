@@ -8,6 +8,7 @@ Submodules:
 - [dsp::convolution](convolution.md)
 - [dsp::filter](filter.md)
 - [dsp::distortion](distortion.md)
+- [dsp::envelope](envelope.md)
 - [dsp::delay](delay.md)
 - [dsp::fft](fft.md)
 - [dsp::limiter](limiter.md)
@@ -15,7 +16,7 @@ Submodules:
 - [dsp::reverb2](reverb2.md)
 
 Import specific DSP modules such as `dsp::convolution`, `dsp::filter`,
-`dsp::distortion`, `dsp::delay`, `dsp::fft`, `dsp::limiter`, `dsp::reverb`, and
+`dsp::distortion`, `dsp::envelope`, `dsp::delay`, `dsp::fft`, `dsp::limiter`, `dsp::reverb`, and
 `dsp::reverb2` in application code. This library is installed and discovered
 separately from the `std` namespace.
 

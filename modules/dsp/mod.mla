@@ -5,6 +5,7 @@
 /// - `dsp::convolution`
 /// - `dsp::filter`
 /// - `dsp::distortion`
+/// - `dsp::envelope`
 /// - `dsp::delay`
 /// - `dsp::fft`
 /// - `dsp::limiter`
@@ -19,6 +20,7 @@
 mod dsp::convolution;
 mod dsp::filter;
 mod dsp::distortion;
+mod dsp::envelope;
 mod dsp::delay;
 mod dsp::fft;
 mod dsp::limiter;

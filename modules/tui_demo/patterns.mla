@@ -27,6 +27,9 @@ pub struct PatternLibrary {
     var renaming: bool; var editor: TextField; var error: str8;
     var audio: AudioLibrary; var audio_mode: bool;
     var instruments: ListView; var instruments_mode: bool;
+    /// Instance the user tried to assign while another track already uses it;
+    /// the application asks whether to share it or load a new instance.
+    var share_request: i32;
 };
 impl PatternLibrary {
     /// Reuse only plugin IDs no longer referenced by any committed/live pattern.
@@ -229,7 +232,12 @@ impl PatternLibrary {
     pub fn on_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         if self.instruments_mode {
             let action: i32 = self.instruments.on_event(event, area);
-            if action == 2 { self.table.assign_instrument(self.selected_instrument()); }
+            if action == 2 {
+                let id: i32 = self.selected_instrument();
+                let index: i32 = self.table.active_track();
+                if index >= 0 && id > 0 && self.table.instrument_used_by_other(id, index) { self.share_request = id; }
+                else { self.table.assign_instrument(id); }
+            }
             return action != 0;
         }
         if self.audio_mode {
@@ -307,6 +315,28 @@ impl PatternLibrary {
             } else { next.push(item); }
         }
         self.instruments.items = next;
+    }
+    /// Destructively replace Audio-list sample `index` with `edited` (ownership
+    /// moves in) and update every placement in every pattern. Returns the
+    /// number of placements updated, or -1 for an invalid index.
+    pub fn replace_sample(self: &mut Self, index: i32, edited: AudioClip) -> i32 {
+        if index < 0 || index >= self.audio.samples.len() { edited.release(); return -1; }
+        let old: AudioClip = self.audio.samples[index];
+        var count: i32 = self.table.replace_clip(old, edited);
+        let entries: list<PatternEntry> = self.patterns; var next: list<PatternEntry> = [];
+        for item in entries {
+            var entry: PatternEntry = PatternEntry {}; entry = item;
+            // The live copy of the active pattern was counted above.
+            let placed: i32 = entry.data.replace_clip(old, edited);
+            if entry.id != self.active_id { count = count + placed; }
+            next.push(entry);
+        }
+        self.patterns = next;
+        let samples: list<AudioClip> = self.audio.samples; var kept: list<AudioClip> = [];
+        for i in 0..samples.len() { kept.push(i == index ? edited : samples[i]); }
+        self.audio.samples = kept;
+        old.release();
+        return count;
     }
     pub fn insert_selected_audio(self: &mut Self, area: Rect) -> bool {
         let index: i32 = self.audio.view.selected;
