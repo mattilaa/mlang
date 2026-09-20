@@ -5,6 +5,9 @@ import tempfile
 from pathlib import Path
 from session_tui_smoke import Terminal
 
+# The menu bar opens with F1; Tab cycles panes.
+F1 = b"\x1bOP"
+
 
 def main():
     with tempfile.TemporaryDirectory(prefix="mlacker-inserts-") as folder:
@@ -12,7 +15,7 @@ def main():
         tui = Terminal()
         try:
             tui.read(.8)
-            tui.send(b"\tllljljj\r")  # Instrument track.
+            tui.send(F1 + b"llljljj\r")  # Instrument track.
             tui.send(b"\x1b[108;6u")  # Focus Pattern view.
             frame = tui.send(b"f")
             assert b"- empty -" in frame, frame[-5000:]
@@ -24,7 +27,7 @@ def main():
             assert b"VST3 editor:" in frame
             assert b"0.25" in tui.send(b"\r\x150.25\r")
             tui.send(b"\x1b")
-            frame = tui.send(b"\tlllllllljj\r")  # Effect > Edit effect plugin.
+            frame = tui.send(F1 + b"lllllllljj\r")  # Effect > Edit effect plugin.
             assert b"0.25" in frame, frame[-5000:]
             tui.send(b"\x1b")
             tui.send(b"j\r")
@@ -45,7 +48,7 @@ def main():
             assert b"0.25" in tui.send(b"\r")
             tui.send(b"\x1b")
             # Replacing the audio device must keep insert parameter state.
-            assert b"MIDI input adapter" in tui.send(b"\tjjjj\r")
+            assert b"MIDI input adapter" in tui.send(F1 + b"jjjj\r")
             tui.send(b"\rk\r"); tui.send(b"\t\rk\r")
             assert b"Settings applied. Audio disabled." in tui.send(b"\t\r", .6)
             assert b"0.25" in tui.send(b"\r")

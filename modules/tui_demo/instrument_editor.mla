@@ -17,6 +17,9 @@ pub struct InstrumentEditor {
     var active: bool; var slot: i64; var selected: i32;
     var learning: bool;
     var scroll: i32; var sliders: list<Slider>; var title: str8{""};
+    /// Tab can move focus to another pane while the editor stays open; it only
+    /// consumes keys while focused.
+    var focused: bool{true};
 };
 impl InstrumentEditor {
     pub fn release(self: &mut Self) -> void {
@@ -30,7 +33,7 @@ impl InstrumentEditor {
         output.midi_learn(-1, 0, 0);
         let count: i32 = i32(output.parameter_info(slot, 0, 0));
         if count < 0 { return false; }
-        self.slot = slot; self.selected = 0; self.scroll = 0;
+        self.slot = slot; self.selected = 0; self.scroll = 0; self.focused = true;
         self.title = format!(" VST3 editor: {} ", output.instrument_name(slot));
         for i in 0..count {
             let steps: f64 = output.parameter_info(slot, i, 1);
@@ -106,7 +109,7 @@ impl InstrumentEditor {
     pub fn paint(self: &mut Self, surface: Surface, area: Rect, theme: Theme) -> void {
         if !self.active { return; }
         let panel: Panel = Panel { title: self.title };
-        let body: Rect = panel.paint(surface, area, theme);
+        let body: Rect = panel.paint_focused(surface, area, theme, self.focused);
         if body.width < 1 || body.height < 1 { return; }
         if self.sliders.len() == 0 { surface.text(body, "No exposed parameters. Esc closes", theme.muted, theme.panel); return; }
         let rows: i32 = self.rows(area);

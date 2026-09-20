@@ -1,6 +1,9 @@
 """Pattern visual selection and modal paste errors in a hardware-free PTY."""
 from session_tui_smoke import Terminal
 
+# The menu bar opens with F1; Tab cycles panes.
+F1 = b"\x1bOP"
+
 
 class VisualTerminal(Terminal):
     def read(self, seconds=0.35):
@@ -12,7 +15,7 @@ def main():
     tui = VisualTerminal()
     try:
         tui.read(0.8)
-        tui.send(b"\tllljl\r")  # Track > Create track > MIDI
+        tui.send(F1 + b"llljl\r")  # Track > Create track > MIDI
         frame = tui.send(b"\x1b[108;6uK")  # Pattern pane, create a note
         assert b"C-4" in frame and b"100" in frame, frame[-5000:]
         tui.send(b"vly")
@@ -38,7 +41,7 @@ def main():
         frame = tui.send(b"\x1b")
         assert b"New session" not in frame, "Visual Escape opened a menu"
         tui.send(b"v")
-        assert b"New session" in tui.send(b"\t")
+        assert b"New session" in tui.send(F1)
         assert b"New session" not in tui.send(b"\x1b"), "Visual selection stole Escape from the menu"
         tui.send(b"\x1b")
         frame = tui.send(b"gghoK")

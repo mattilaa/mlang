@@ -241,6 +241,7 @@ pub fn run() -> i32 {
     var pad_action: i32 = 0; var pad_slot: i32 = 0; var pad_sample: i32 = -1; var pad_index: i32 = 0;
     var adding_pad_file: bool = false;
     var accept_pending: bool = false;
+    var transport_request: bool = false;
     var preset_request: i32 = 0; var preset_path: str8 = clone(""); var preset_worker: bool = false;
     // Last directory browsed per kind, so each chooser reopens where it was.
     var last_session_dir: str8 = clone(""); var last_audio_dir: str8 = clone("");
@@ -355,6 +356,17 @@ pub fn run() -> i32 {
             }
             free(message); message = clone(session_status); free(session_status);
             session_request = 0; menus.dismiss(); dirty = true;
+        }
+        if transport_request {
+            transport_request = false;
+            transport.toggle(now_ms(), library.table.selected_row, i32(library.table.rows.len()));
+            if !midi.sample_playback(library.table, transport.ticks, transport.playing, transport.bpm) {
+                transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)");
+            }
+            note_playback.update(library.table, transport.ticks, transport.playing);
+            midi.sequencer_events(note_playback.events);
+            if transport.row >= 0 { library.table.selected_row = transport.row; }
+            dirty = true;
         }
         if accept_pending {
             // One place for every chooser result, whichever way it was accepted
@@ -617,7 +629,7 @@ pub fn run() -> i32 {
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active(instrument_editor.active || sample_editor.active || piano.active || share_question.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             library.table.insert_labels(midi.output);
             let surface: Surface = Surface::new(area.width, area.height);
@@ -673,7 +685,38 @@ pub fn run() -> i32 {
             }
             if paste_error.active { paste_error.on_event(event); dirty = true; }
             else if (event.code == 19 && event.modifiers == 1) || (event.code == 115 && event.modifiers == 5) { command = 3; dirty = true; }
-            else if instrument_editor.active && !dialog.active {
+            // Space starts/stops from every pane, including the mixer and the
+            // VST3 editor. Text entry and modal dialogs keep it for themselves.
+            else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !paste_error.active && !library.renaming && !library.table.editing {
+                transport_request = true; dirty = true;
+            }
+            // Tab / Shift+Tab cycle every pane of the main view: sidebar,
+            // pattern, inspector/mixer, the FX bus, and the VST3 editor.
+            else if event.kind == InputKind::Menu && event.key == Key::Toggle && menus.active < 0 &&
+                    !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !paste_error.active && !library.renaming && !library.table.editing {
+                let has_bus: bool = mixer.visible && midi.effects.len() > 0;
+                let has_editor: bool = instrument_editor.active;
+                var stop: i32 = focus.selected == 0 ? 0 : (focus.selected == 1 ? 1 : (mixer.bus_focus && has_bus ? 3 : 2));
+                if has_editor && instrument_editor.focused { stop = 4; }
+                let back: bool = event.modifiers == 2;
+                var next: i32 = stop;
+                for _i in 0..5 {
+                    next = back ? (next + 4) % 5 : (next + 1) % 5;
+                    // The editor covers the pattern pane, so skip it while open.
+                    if next == 1 && has_editor { continue; }
+                    if next == 3 && !has_bus { continue; }
+                    if next == 4 && !has_editor { continue; }
+                    break;
+                }
+                instrument_editor.focused = next == 4;
+                if next != 4 {
+                    focus.selected = next == 0 ? 0 : (next == 1 ? 1 : 2);
+                    mixer.bus_focus = next == 3;
+                    if next == 3 && mixer.selected_effect < 0 { mixer.selected_effect = 0; }
+                }
+                dirty = true;
+            }
+            else if instrument_editor.active && instrument_editor.focused && !dialog.active {
                 instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true;
             }
             else if sample_editor.active {
@@ -745,7 +788,7 @@ pub fn run() -> i32 {
             else if menus.active >= 0 {
                 if event.kind != InputKind::None { dirty = true; }
                 if event.kind == InputKind::Menu {
-                    command = menus.on_key(event.key);
+                    command = menus.on_key(event.key == Key::Function1 ? Key::Toggle : event.key);
                     focus.set_menu_active(menus.active >= 0);
                     dirty = true;
                 }
@@ -753,21 +796,11 @@ pub fn run() -> i32 {
             else if(event.code == 98 && event.modifiers == 5) ||(event.code == 2 && event.modifiers == 1) {
                 bpm_dialog.open(transport.bpm); dirty = true;
             }
-            else if event.code == 32 && event.modifiers == 1 {
-                transport.toggle(now_ms(), library.table.selected_row, i32(library.table.rows.len()));
-                if !midi.sample_playback(library.table, transport.ticks, transport.playing, transport.bpm) {
-                    transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)");
-                }
-                note_playback.update(library.table, transport.ticks, transport.playing);
-                midi.sequencer_events(note_playback.events);
-                if transport.row >= 0 { library.table.selected_row = transport.row; }
-                dirty = true;
-            }
             else if event.code == 109 && event.modifiers == 1 {
                 mixer.visible = !mixer.visible; dirty = true;
             }
-            else if event.kind == InputKind::Menu && event.key == Key::Toggle {
-                command = menus.on_key(event.key);
+            else if event.kind == InputKind::Menu && event.key == Key::Function1 {
+                command = menus.on_key(Key::Toggle);
                 focus.set_menu_active(menus.active >= 0);
                 dirty = true;
             } else if event.kind == InputKind::Pane {
@@ -1156,7 +1189,7 @@ pub fn run() -> i32 {
                 library.audio.view.cancel_pending();
                 library.instruments.cancel_pending();
                 if paste_error.active { paste_error.on_event(event); dirty = true; }
-                else if instrument_editor.active && !dialog.active { instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true; }
+                else if instrument_editor.active && instrument_editor.focused && !dialog.active { instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true; }
                 else if sample_editor.active {
                     if sample_editor.on_event(event, panes[1].bounds.width - 2) == 2 { sample_editor.release(); free(message); message = clone("Sample edits discarded"); }
                     dirty = true;

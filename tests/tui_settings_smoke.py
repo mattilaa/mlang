@@ -9,6 +9,9 @@ import sys
 import termios
 import time
 
+# The menu bar opens with F1; Tab cycles panes.
+F1 = b"\x1bOP"
+
 
 def main():
     master, slave = os.openpty()
@@ -44,12 +47,12 @@ def main():
         frame = send(b"\x1b")
         assert b"MIDI input adapter" not in frame and b"Patterns" in frame
         # Reopen and select disabled MIDI/output, with no device access on apply.
-        send(b"\tjjj\r")
+        send(F1 + b"jjj\r")
         send(b"\rk\r")
         send(b"\t\rk\r")
         frame = send(b"\t\r")
         assert b"Settings applied. Audio disabled." in frame
-        frame = send(b"\tjjj\r")
+        frame = send(F1 + b"jjj\r")
         assert b"MIDI input adapter" in frame and b"Disabled" in frame
         # Resize with an expanded dropdown, exercising clipping and overlay.
         send(b"\r")

@@ -14,6 +14,9 @@ import termios
 import time
 import wave
 
+# The menu bar opens with F1; Tab cycles panes.
+F1 = b"\x1bOP"
+
 
 def main():
     master, slave = os.openpty()
@@ -51,7 +54,7 @@ def main():
         until(lambda s: "New session" in s)
         send(b"\x1b")
         until(lambda s: "New session" not in s)
-        send(b"\tll")
+        send(F1 + b"ll")
         until(lambda s: "Meter" in s)
         send(b"jjljj\r")
         until(lambda s: "Set update rate" in s and "FPS" in s)
@@ -81,7 +84,7 @@ def main():
         until(lambda s: "BPM 200" in s and "Set BPM" not in s and "PLAY" in s)
         send(b" ")
         until(lambda s: "STOP" in s)
-        send(b"\t")
+        send(F1)
         until(lambda s: "New session" in s)
         send(b" ")
         assert "STOP" in until(lambda s: "New session" in s)  # menu owns Space
@@ -93,7 +96,7 @@ def main():
         until(lambda s: "Set BPM" not in s and "BPM 200" in s)
 
         # Add an audio instance and follow it at sub-row resolution while zoomed.
-        send(b"gg\tlll")
+        send(b"gg" + F1 + b"lll")
         until(lambda s: "Create track" in s)
         send(b"jlj\r")
         until(lambda s: "Audio 4" in s and "Create track" not in s)
@@ -102,7 +105,7 @@ def main():
             with wave.open(path, "wb") as wav:
                 wav.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
                 wav.writeframes(struct.pack("<h", 16384) * 72000)
-            send(b"\tllllll\r")
+            send(F1 + b"llllll\r")
             until(lambda s: "Add audio" in s)
             send(b"\x15" + path.encode() + b"\r")
             until(lambda s: "WAVE" in s and "Add audio" not in s)
@@ -115,7 +118,7 @@ def main():
             send(b" ")
             until(lambda s: "STOP" in s)
         def length_dialog():
-            send(b"\tllll")
+            send(F1 + b"llll")
             until(lambda s: "Clone pattern" in s)
             send(b"jjjj\r")
             return until(lambda s: "Pattern length (1-16384 rows)" in s)
@@ -139,7 +142,7 @@ def main():
         send(b"\x1532\r")  # newly appended empty rows need no confirmation
         until(lambda s: "Set length" not in s)
         # New MIDI notes default to one sixteenth; LEN supports fractional rows.
-        send(b"\tllll")
+        send(F1 + b"llll")
         until(lambda s: "Add pattern" in s)
         send(b"\r")
         until(lambda s: "Add pattern" not in s)

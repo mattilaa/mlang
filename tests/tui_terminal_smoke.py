@@ -14,6 +14,9 @@ import time
 import tempfile
 import wave
 
+# The menu bar opens with F1; Tab cycles panes.
+F1 = b"\x1bOP"
+
 
 def main():
     master, slave = os.openpty()
@@ -109,7 +112,7 @@ def main():
         assert b"Pattern / 1 Intro" in read_frame(0, table_text=((28, 4), "C-4"))
 
         def pattern_menu(item):
-            os.write(master, b"\tllll")
+            os.write(master, F1 + b"llll")
             assert b"Add pattern" in read_frame(None)
             os.write(master, b"j" * item + b"\r")
 
@@ -127,7 +130,7 @@ def main():
         assert b"005 Pattern 5" not in read_frame(0)
         os.write(master, b"gg")
         read_frame(0)
-        os.write(master, b"\tll")
+        os.write(master, F1 + b"ll")
         assert b"Show song" in read_frame(None)
         os.write(master, b"jjjj\r")
         song = read_frame(0)
@@ -152,7 +155,7 @@ def main():
         assert b"Pattern / 2 Verse" in read_frame(0)
         os.write(master, b"dd")
         assert b"3  003 Chorus" in read_frame(0)
-        os.write(master, b"\tll")
+        os.write(master, F1 + b"ll")
         read_frame(None)
         os.write(master, b"jjj\r")
         assert b" Patterns " in read_frame(0)
@@ -169,14 +172,14 @@ def main():
         mixer_frame = read_frame(1)
         assert b" Mixer " in mixer_frame and b"VOL" in mixer_frame and b"100" in mixer_frame and b"P0" in mixer_frame
         assert b"STOP" in mixer_frame  # no synthetic animation while stopped
-        os.write(master, b"\tll")
+        os.write(master, F1 + b"ll")
         assert b"Meter" in read_frame(None)
         os.write(master, b"jjl")
         assert b"Grainy (osc)" in read_frame(None)
         os.write(master, b"j\r")
         grainy = read_frame(1).decode()
         assert any("\u2800" <= glyph <= "\u28ff" for glyph in grainy)
-        os.write(master, b"\tll")
+        os.write(master, F1 + b"ll")
         read_frame(None)
         os.write(master, b"jjl")
         read_frame(None)
@@ -249,7 +252,7 @@ def main():
         os.write(master, b"hhhh")
         read_frame(1)
         def track_menu(item):
-            os.write(master, b"\tlll")
+            os.write(master, F1 + b"lll")
             assert b"Create track" in read_frame(None)
             os.write(master, b"j" * item + b"\r")
 
@@ -330,7 +333,7 @@ def main():
                     assert b"L  WAVE" not in read_frame(1)
                     os.write(master, b"jjjjj")  # next import starts on row 6
                     read_frame(1)
-                os.write(master, b"\tllllll\r")
+                os.write(master, F1 + b"llllll\r")
                 assert b"Add audio" in read_frame(None, 1)
                 os.write(master, b"\x15" + path.encode() + b"\r")
                 imported = read_frame(1)
@@ -341,7 +344,7 @@ def main():
                     assert any(0x2800 < ord(c) <= 0x28ff for c in imported.decode())
                 os.write(master, b"z")
                 assert b"L  WAVE x2  R" in read_frame(1)
-                os.write(master, b"\t")
+                os.write(master, F1)
                 read_frame(None)
                 os.write(master, b"z")
                 read_frame(None)
@@ -356,11 +359,11 @@ def main():
                 os.write(master, b"\x1b[104;5u")
                 assert b" Sample: " in read_frame(1)
                 # Both views share the texture and type controls.
-                os.write(master, b"\tll")
+                os.write(master, F1 + b"ll")
                 read_frame(None)
                 os.write(master, b"jjjjjlj\r")
                 assert b"Grainy Filled" in read_frame(1, pattern_grainy=True)
-                os.write(master, b"\tll")
+                os.write(master, F1 + b"ll")
                 read_frame(None)
                 os.write(master, b"jjjjjljjlj\r")
                 assert b"Grainy Wave" in read_frame(1, pattern_grainy=True)
@@ -373,11 +376,11 @@ def main():
                 assert b" Inspector " in read_frame(2)
                 os.write(master, b"\x1b[107;6u")
                 read_frame(1)
-                os.write(master, b"\tll")
+                os.write(master, F1 + b"ll")
                 read_frame(None)
                 os.write(master, b"jjjjjl\r")
                 read_frame(1)
-                os.write(master, b"\tll")
+                os.write(master, F1 + b"ll")
                 read_frame(None)
                 os.write(master, b"jjjjjljjl\r")
                 read_frame(1)
@@ -395,7 +398,7 @@ def main():
         # Loaded samples survive removal of their source files and placements.
         os.write(master, b"jjjjj\x7f")
         assert b"L  WAVE" not in read_frame(1)
-        os.write(master, b"\tll")
+        os.write(master, F1 + b"ll")
         read_frame(None)
         os.write(master, b"jjjjjj\r")
         assert b" Audio " in read_frame(1)
@@ -409,7 +412,7 @@ def main():
         assert b"L  WAVE" in read_frame(0)
         os.write(master, b"\x1b[108;6u\x7f")
         assert b"L  WAVE" in read_frame(1)  # the first instance remains
-        os.write(master, b"gg\tll")
+        os.write(master, b"gg" + F1 + b"ll")
         read_frame(None)
         os.write(master, b"jjj\r")
         assert b" Patterns " in read_frame(1)
@@ -422,7 +425,7 @@ def main():
         read_frame(1, table_cell=((28, 4), (60, 91, 128)), table_text=((24, 4), "001"))
         # Menu navigation must not mutate the underlying table, even after
         # scrolling beyond its viewport; column and pane keys are captured too.
-        os.write(master, b"\t")
+        os.write(master, F1)
         read_frame(None)
         os.write(master, b"j" * 70 + b"llGm\x1b[106;6u")
         read_frame(None)
@@ -448,20 +451,20 @@ def main():
                              (b"\x1b[108;6u", 1), (b"\x1b[106;6u", 2)]:
             os.write(master, packet)
             read_frame(pane)
-        os.write(master, b"\t")
+        os.write(master, F1)
         assert b"New session" in read_frame(None)
         os.write(master, b"\x1b[107;6u")
         read_frame(None)  # menu retains keyboard ownership
         os.write(master, b"\x1b")
         read_frame(2)  # previous pane restored, not the first pane
-        for dismissal in (b"\t",):
-            os.write(master, b"\t")
+        for dismissal in (F1,):
+            os.write(master, F1)
             read_frame(None)
             os.write(master, dismissal)
             read_frame(2)
         # Non-file modal: configurable base buttons keep focus out of the view.
         for answer, status in [(b"\r", b"confirmed"), (b"l\r", b"cancelled")]:
-            os.write(master, b"\t")
+            os.write(master, F1)
             read_frame(None)
             os.write(master, b"\r")
             question = read_frame(None)
@@ -477,7 +480,7 @@ def main():
                     break
         # Cascades remain beside their ancestors. h closes only one level;
         # Escape from the grandchild closes every menu and restores pane 2.
-        os.write(master, b"\t")
+        os.write(master, F1)
         read_frame(None)
         os.write(master, b"jjl")
         cascade = read_frame(None)
@@ -493,7 +496,7 @@ def main():
         closed = read_frame(2)
         assert b"Blue hour" not in closed and b"Ambient" not in closed
         # File -> Open session creates a modal browser, not a status-only action.
-        os.write(master, b"\t")
+        os.write(master, F1)
         read_frame(None)
         os.write(master, b"j\r")
         browser = read_frame(None, 1)
@@ -525,7 +528,7 @@ def main():
                     return frame
             raise AssertionError(f"missing {marker!r}")
 
-        os.write(master, b"\tj\r")
+        os.write(master, F1 + b"j\r")
         read_frame(None, 1)
         os.write(master, b"\x15qhjk-does-not-exist.session\r")
         frame_containing(b"inaccessible")
@@ -535,7 +538,7 @@ def main():
         os.write(master, b"\x15" + os.path.join(fixture_dir, "qhjk session.session").encode() + b"\r")
         frame_containing(b"Selected:")
         # Cancellation restores pane focus and small viewports remain usable.
-        os.write(master, b"\tj\r")
+        os.write(master, F1 + b"j\r")
         read_frame(None, 1)
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 6, 12, 0, 0))
         read_until(b"\x1b[0m")

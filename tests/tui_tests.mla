@@ -2767,3 +2767,18 @@ fn tui_piano_dialog_black_keys_sit_between_their_notes() {
     verify(label.glyph == 67); // "C-2" under the C key
     free(row); surface.release(); piano.release();
 }
+
+#[test]
+fn tui_input_menu_and_pane_keys() {
+    // F1 opens the menu bar (SS3 and CSI spellings); Tab is left for panes.
+    let ss3: InputEvent = decode_input("\x1bOP");
+    verify(ss3.kind == InputKind::Menu && ss3.key == Key::Function1);
+    let csi: InputEvent = decode_input("\x1b[11~");
+    verify(csi.kind == InputKind::Menu && csi.key == Key::Function1);
+    let tab: InputEvent = decode_input("\t");
+    verify(tab.kind == InputKind::Menu && tab.key == Key::Toggle && tab.modifiers == 1);
+    // Shift+Tab cycles panes backwards.
+    let back: InputEvent = decode_input("\x1b[Z");
+    verify(back.kind == InputKind::Menu && back.key == Key::Toggle && back.modifiers == 2);
+    verify(back.code == 9);
+}

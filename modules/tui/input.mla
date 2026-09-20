@@ -107,6 +107,8 @@ impl InputDecoder {
         self.commit();
         var output: InputEvent = no_input();
         if !self.invalid && (self.event_type == 1 || self.event_type == 2) && self.modifiers > 0 {
+            // Shift+Tab (CSI Z) cycles panes backwards; Tab itself is a plain key.
+            if byte == 90 { output = InputEvent { kind: InputKind::Menu, key: Key::Toggle, code: 9, modifiers: 2 }; }
             if byte == 117 { output = decode_key(self.code, self.modifiers); }
             else if byte == 126 && self.code == 27 { output = decode_key(self.third, self.modifiers); }
             else if self.modifiers == 1 {
@@ -114,6 +116,8 @@ impl InputDecoder {
                 if byte == 66 { output = key_event(InputKind::Menu, Key::Down); }
                 if byte == 67 { output = key_event(InputKind::Menu, Key::Right); }
                 if byte == 68 { output = key_event(InputKind::Menu, Key::Left); }
+                if byte == 80 { output = key_event(InputKind::Menu, Key::Function1); }
+                if byte == 126 && self.code == 11 { output = key_event(InputKind::Menu, Key::Function1); }
                 if byte == 72 { output = key_event(InputKind::Edit, Key::Home); }
                 if byte == 70 { output = key_event(InputKind::Edit, Key::End); }
                 if byte == 126 && self.code == 3 { output = key_event(InputKind::Edit, Key::Delete); }

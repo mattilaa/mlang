@@ -32,7 +32,8 @@ SDK license and usage notices remain in `build/deps/vst3sdk/LICENSE.txt` and
 
 Launching mlacker without a filename starts one empty, 64-row **Untitled**
 pattern, with no tracks, song entries, instruments, or samples. Menus stay closed.
-Tab opens the menu bar. To open an existing session at startup:
+F1 opens the menu bar, and Tab / Shift+Tab cycle the panes. To open an existing
+session at startup:
 
 ```sh
 mlacker/build/cmake/bin/mlacker "my song.mlack"
@@ -42,6 +43,22 @@ mlacker/build/cmake/bin/mlacker "my song.mlack"
 asks for a `.mlack` path. **Save session as** chooses another path. **Open session**
 loads a `.mlack` file. **New session** confirms before resetting to an empty editor.
 Saving stops the sequencer; loading always restores a stopped transport.
+
+## Keys and panes
+
+**F1** opens and closes the menu bar. **Tab** and **Shift+Tab** cycle forwards and
+backwards through every pane of the main view: the sidebar, the pattern editor,
+the inspector/mixer, the FX bus (when the mixer shows effect channels) and the
+VST3 editor (while it is open). The pattern pane is skipped while the VST3 editor
+covers it, and the editor keeps its own keys only while it holds focus, so Tab
+moves out of it without closing it. `Ctrl+Shift+H/J/K/L` still moves between
+panes by direction.
+
+**Space** starts and stops the sequencer from every pane, including the mixer,
+the FX bus and the VST3 editor. Text entry, modal dialogs and an open menu keep
+Space for themselves.
+
+Inside a dialog, Tab keeps cycling that dialog's own panes.
 
 ## File browser
 
@@ -222,7 +239,8 @@ session copy only. The source WAV/AIFF on disk is never rewritten.
 
 ### Mixer faders and MIDI recording
 
-Press `m` to show Mixer, then focus it with `Ctrl+Shift+J` from Pattern view.
+Press `m` to show Mixer, then focus it with Tab (or `Ctrl+Shift+J`) from Pattern
+view.
 `h/l` or Left/Right selects tracks. Each strip has a vertical volume fader beside
 its VU meter, with the 0–100 value underneath. `Shift+J/K` lowers/raises volume;
 these keys still edit cells when Pattern view has focus. Gain affects preview,

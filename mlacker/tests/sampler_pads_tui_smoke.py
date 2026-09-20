@@ -11,13 +11,16 @@ from pathlib import Path
 
 from session_tui_smoke import Terminal
 
+# The menu bar opens with F1; Tab cycles panes.
+F1 = b"\x1bOP"
+
 # Instrument menu (8th menu): items 4/5 presets, 6/7 pad actions.
-SAVE_PRESET = b"\tlllllll" + b"j" * 4 + b"\r"
-LOAD_PRESET = b"\tlllllll" + b"j" * 5 + b"\r"
-SEND_TO_PAD = b"\tlllllll" + b"j" * 6 + b"\r"
-PAD_FROM_FILE = b"\tlllllll" + b"j" * 7 + b"\r"
+SAVE_PRESET = F1 + b"lllllll" + b"j" * 4 + b"\r"
+LOAD_PRESET = F1 + b"lllllll" + b"j" * 5 + b"\r"
+SEND_TO_PAD = F1 + b"lllllll" + b"j" * 6 + b"\r"
+PAD_FROM_FILE = F1 + b"lllllll" + b"j" * 7 + b"\r"
 # Audio menu (6th menu): item 8 is the destructive sample editor.
-EDIT_SAMPLE = b"\tlllll" + b"j" * 8 + b"\r"
+EDIT_SAMPLE = F1 + b"lllll" + b"j" * 8 + b"\r"
 BACKSPACE = b"\x7f"
 
 
@@ -47,8 +50,8 @@ def main():
         tui = Terminal(cwd=directory)
         try:
             tui.read(0.8)
-            expect(tui.send(b"\tllljljj\r"), b"Instrument track created")
-            expect(tui.send(b"\tlllllljjj\r"), b"Add VST3 instrument")
+            expect(tui.send(F1 + b"llljljj\r"), b"Instrument track created")
+            expect(tui.send(F1 + b"lllllljjj\r"), b"Add VST3 instrument")
             expect(tui.send(b"\x15" + bytes(Path(sys.argv[2]).resolve()) + b"\r", 0.9), b"Instrument loaded: Mla Drum")
 
             # From disk: the piano opens on the first empty pad (Root Key C-2 = 36).
@@ -59,7 +62,7 @@ def main():
 
             # From the Audio list (the newly added snare is selected). The audio
             # chooser reopens in the directory the pad sample came from.
-            expect(tui.send(b"\tllllll\r"), b"Add audio", b"kick.wav")
+            expect(tui.send(F1 + b"llllll\r"), b"Add audio", b"kick.wav")
             tui.send(b"\x15" + bytes(snare) + b"\r", 0.7)
             expect(tui.send(SEND_TO_PAD), b"Send sample to drum key", b"pad 1: empty")
             tui.send(b"l")
@@ -107,8 +110,8 @@ def main():
             tui.send(b"\x1b", 0.6)
 
             # A second Instrument track must not silently share instance #1.
-            expect(tui.send(b"\tllljljj\r"), b"created unassigned (instance 1 is used by another track)")
-            expect(tui.send(b"\tlllllljjj\r"), b"Add VST3 instrument")
+            expect(tui.send(F1 + b"llljljj\r"), b"created unassigned (instance 1 is used by another track)")
+            expect(tui.send(F1 + b"lllllljjj\r"), b"Add VST3 instrument")
             expect(tui.send(b"\x15" + bytes(Path(sys.argv[2]).resolve()) + b"\r", 0.9), b"Instrument loaded: Mla Drum")
             # Pads follow the selected track's instance (#2), not the list.
             expect(tui.send(b"k"), b"001 Mla Drum")  # Instruments list back to #1
@@ -117,14 +120,14 @@ def main():
             tui.send(b"\x1b", 0.6)
 
             # Enter on instance #1 from a third track asks share-or-new.
-            expect(tui.send(b"\tllljljj\r"), b"created unassigned")
+            expect(tui.send(F1 + b"llljljj\r"), b"created unassigned")
             tui.send(b"kk")  # Instruments list to #1
             frame = expect(tui.send(b"\r", 0.6), b"Mla Drum #1 already plays", b"New instance", b"Share")
             frame = expect(tui.send(b"\r", 1.2), b"New instance: Mla Drum #3 for this track")
             expect(tui.send(SEND_TO_PAD), b"Mla Drum #3", b"pad 1: empty")
             tui.send(b"\x1b", 0.6)
             # Choosing Share links a fourth track to #1 explicitly.
-            expect(tui.send(b"\tllljljj\r"), b"created unassigned")
+            expect(tui.send(F1 + b"llljljj\r"), b"created unassigned")
             tui.send(b"kkk")
             expect(tui.send(b"\r", 0.6), b"already plays")
             tui.send(b"l", 0.3)
@@ -134,7 +137,7 @@ def main():
             tui.send(b"\x1b", 0.6)
 
             # Device changes rebuild every instrument; pads must be re-sent.
-            expect(tui.send(b"\tjjjj\r"), b"Master output (AUHAL)")  # File > Settings
+            expect(tui.send(F1 + b"jjjj\r"), b"Master output (AUHAL)")  # File > Settings
             tui.send(b"\rk\r")
             tui.send(b"\t\rk\r")
             frame = expect(tui.send(b"\t\r", 0.8), b"Settings applied")
@@ -145,17 +148,17 @@ def main():
             tui.send(PAD_FROM_FILE)
             expect(tui.send(b"\r"), b"Load sample for pad 2")
             tui.send(b"\x1b", 0.6)
-            expect(tui.send(b"\tjjjjjj\r"), b"Save session (.mlack)")
+            expect(tui.send(F1 + b"jjjjjj\r"), b"Save session (.mlack)")
             frame = expect(tui.send(b"\x15" + bytes(path) + b"\r", 0.7), b"Saved:")
             assert b"Pad 2:" not in frame, frame[-4000:]
 
             # Space marks several files in the audio chooser; Enter opens them all.
-            expect(tui.send(b"\tllllll\r"), b"Add audio", b"kick.wav")
+            expect(tui.send(F1 + b"llllll\r"), b"Add audio", b"kick.wav")
             tui.send(b"\x1b[108;6u")  # focus the Files pane
             tui.send(b"  ")            # mark kick.wav and snare.wav
             expect(tui.send(b"\r", 0.9), b"Added 2 samples")
             # Sessions are single-open: Space must not mark there.
-            expect(tui.send(b"\tj\r"), b"Open session")
+            expect(tui.send(F1 + b"j\r"), b"Open session")
             tui.send(b"\x1b[108;6u")
             frame = tui.send(b" ")
             assert b"Marked" not in frame, frame[-4000:]

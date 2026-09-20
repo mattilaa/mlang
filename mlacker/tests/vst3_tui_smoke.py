@@ -9,6 +9,9 @@ import tempfile
 import termios
 import time
 
+# The menu bar opens with F1; Tab cycles panes.
+F1 = b"\x1bOP"
+
 
 def main():
     master, slave = os.openpty()
@@ -39,21 +42,21 @@ def main():
         with tempfile.TemporaryDirectory(prefix="mlacker-vst3-") as directory:
             bad_bundle = os.path.join(directory, "Broken.vst3")
             os.mkdir(bad_bundle)
-            assert b"Load master VST3" in send(b"\tllllllj\r")
+            assert b"Load master VST3" in send(F1 + b"llllllj\r")
             frame = send(b"\x15" + os.fsencode(bad_bundle) + b"\r", 1)
             assert b"VST3 load failed" in frame
-        assert b"Master VST3 unloaded" in send(b"\tlllllljj\r", 0.5)
-        frame = send(b"\tllljljj\r", 0.5)
+        assert b"Master VST3 unloaded" in send(F1 + b"lllllljj\r", 0.5)
+        frame = send(F1 + b"llljljj\r", 0.5)
         assert b"Instrument track created" in frame, frame[-2000:]
         assert b"Instruments" in frame
-        assert b"Add VST3 instrument" in send(b"\tlllllljjj\r")
+        assert b"Add VST3 instrument" in send(F1 + b"lllllljjj\r")
         frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
         assert b"Instrument loaded: Mlacker Test Instrument" in frame, frame[-2000:]
         assert b"001 Mlacker Test" in frame, frame[-6000:]
         assert b"Instrument: 1" in frame, frame[-6000:]
         # Switch away and return via View > Instruments (last View entry).
-        send(b"\tlljjj\r")  # Show patterns
-        frame = send(b"\tlljjjjjjj\r")
+        send(F1 + b"lljjj\r")  # Show patterns
+        frame = send(F1 + b"lljjjjjjj\r")
         assert b"Instruments" in frame and b"001 Mlacker Test" in frame, frame[-6000:]
         # The list owns normal navigation and Enter, without changing pattern.
         send(b"\x1b[104;6u")  # Ctrl+Shift+H: focus left
@@ -61,14 +64,21 @@ def main():
         assert b"Instrument: 1" in frame
         frame = send(b"m")
         assert b"Mixer" in frame and b"Master" in frame and b"L R" in frame
-        frame = send(b"\tlllllll\r")
+        # Tab reaches the mixer pane; Space starts/stops there too.
+        frame = send(b"\t\t")
+        assert b"Mixer" in frame, frame[-6000:]
+        frame = send(b" ")
+        assert b"PLAY" in frame, frame[-6000:]
+        frame = send(b" ")
+        assert b"STOP" in frame, frame[-6000:]
+        frame = send(F1 + b"lllllll\r")
         assert b"VST3 editor:" in frame and b"Modulation" in frame, frame[-6000:]
         frame = send(b"J\r\x151.5\r")
         assert b"Invalid value" in frame, frame[-6000:]
         frame = send(b"\x150.25\r")
         assert b"0.25" in frame, frame[-6000:]
         send(b"\x1b", 0.4)
-        frame = send(b"\tlllllll\r")
+        frame = send(F1 + b"lllllll\r")
         assert b"VST3 editor:" in frame and b"0.25" in frame, frame[-6000:]
         frame = send(b"L")
         assert b"255;255;255" in frame and b"192;32;48" in frame, frame[-6000:]
@@ -79,12 +89,25 @@ def main():
         assert b"192;32;48" not in frame
         frame = send(b"\x1b[C\x1b[C\x1b[C")
         assert b"Extra control" in frame and b"VST3 editor:" in frame
+        # Space starts/stops from inside the editor, and Tab cycles out of it
+        # and back without closing it.
+        frame = send(b" ")
+        assert b"PLAY" in frame and b"VST3 editor:" in frame, frame[-6000:]
+        frame = send(b" ")
+        assert b"STOP" in frame, frame[-6000:]
+        frame = send(b"\t")
+        assert b"VST3 editor:" in frame and b"New session" not in frame, frame[-6000:]
+        frame = send(b"\x1b[Z")
+        assert b"VST3 editor:" in frame, frame[-6000:]
+        # The editor still owns its own keys once focus returns.
+        frame = send(b"\x1b[C")
+        assert b"VST3 editor:" in frame, frame[-6000:]
         send(b"\x1b", 0.4)
         send(b"m")  # Inspector displays command status.
-        frame = send(b"\tlllllllj\r")
+        frame = send(F1 + b"lllllllj\r")
         assert b"Instrument removed; track assignments cleared" in frame, frame[-6000:]
         # Slot reuse must not shift IDs or retain the old assignment.
-        assert b"Add VST3 instrument" in send(b"\tlllllljjj\r")
+        assert b"Add VST3 instrument" in send(F1 + b"lllllljjj\r")
         frame = send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", 1)
         assert b"001 Mlacker Test" in frame and b"Instrument: 1" in frame, frame[-6000:]
         send(b"q")
