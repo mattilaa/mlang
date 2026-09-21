@@ -28,6 +28,7 @@ def main() -> int:
     run_step([py, "tests/lsp_mlangd-mla_formatting_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd_format_config_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_completion_docs_transcript.py", "--mlangd", str(mlangd)])
+    run_step([py, "tests/lsp_mlangd-mla_completion_imports_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_completion_symbol_docs_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_diagnostic_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_semantic_tokens_transcript.py", "--mlangd", str(mlangd)])
