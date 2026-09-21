@@ -30,6 +30,8 @@ mod tui_demo::piano_dialog;
 mod tui_demo::song_matrix;
 mod tui_demo::pattern_picker;
 use tui_demo::pattern_picker::PatternPicker;
+mod tui_demo::output_picker;
+use tui_demo::output_picker::OutputPicker;
 use tui_demo::song_matrix::SongMatrix;
 mod tui_demo::sample_editor;
 use tui_demo::piano_dialog::PianoDialog;
@@ -117,6 +119,7 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Rename", action: 20, enabled: true },
                                 MenuItem { label: "Duplicate", action: 23, enabled: true },
                                 MenuItem { label: "Mute / unmute", action: 25, enabled: true },
+                                MenuItem { label: "Set output channel", action: 30, enabled: true },
                                 MenuItem::submenu("Note lines", [
                                                 MenuItem { label: "Add note line", action: 80, enabled: true },
                                                 MenuItem { label: "Duplicate note line", action: 82, enabled: true },
@@ -303,6 +306,11 @@ pub fn run() -> i32 {
         PushButton { label: "Split", action: 3 }];
     var clash_row: i32 = 0; var clash_lane: i32 = 0; var clash_id: i32 = 0;
     var picker: PatternPicker = PatternPicker::new();
+    // Output channel of the selected mixer strip (Track > Set output channel).
+    // kind 1 = the instrument a MIDI track plays, 2 = the audio channel this
+    // track feeds.
+    var outputs: OutputPicker = OutputPicker::new();
+    var output_kind: i32 = 0; var output_track: i32 = -1;
     // Matrix playback: the merged table of the playing row, and which row it is.
     var song_playing: bool = false; var song_row: i32 = -1;
     var song_table: SequenceTable = SequenceTable {};
@@ -612,7 +620,7 @@ pub fn run() -> i32 {
             transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
         }
         // Editing a moving row would otherwise commit to a different row.
-        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active { transport.playing = false; }
+        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active { transport.playing = false; }
         if song_playing {
             let previous: i32 = transport.row;
             if transport.advance(now, i32(song_table.rows.len())) { playback_dirty = true; }
@@ -657,6 +665,7 @@ pub fn run() -> i32 {
             if instrument_editor.sync(midi.output) { dirty = true; }
             if mixer.update_master(midi.output.master_peak(0), midi.output.master_peak(1), meter_delta) { playback_dirty = true; }
             if mixer.update_instruments(midi.output, meter_delta) { playback_dirty = true; }
+            if mixer.update_channels(midi.output, meter_delta) { playback_dirty = true; }
             if mixer.update_effects(midi.output, midi.effects, meter_delta) { playback_dirty = true; }
             master_meter_clock = now;
         }
@@ -765,7 +774,7 @@ pub fn run() -> i32 {
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             library.table.instrument_labels(midi.output);
             library.table.insert_labels(midi.output);
@@ -786,6 +795,7 @@ pub fn run() -> i32 {
             remove_question.paint(surface, area, Theme::dark_blue());
             clash_question.paint(surface, area, Theme::dark_blue());
             picker.paint(surface, area, Theme::dark_blue());
+            outputs.paint(surface, area, Theme::dark_blue());
             library.table.paint_track_dialog(surface, area, Theme::dark_blue());
             library.paint_rename(surface, area, Theme::dark_blue());
             bpm_dialog.paint(surface, area, Theme::dark_blue());
@@ -836,17 +846,17 @@ pub fn run() -> i32 {
             else if ((event.code == 16 && event.modifiers == 1) || (event.code == 112 && event.modifiers == 5) ||
                      (event.code == 32 && event.modifiers == 5)) && matrix.visible && menus.active < 0 &&
                     !dialog.active && !settings.active && !bpm_dialog.active && !question.active &&
-                    !share_question.active && !remove_question.active && !clash_question.active && !picker.active &&
+                    !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !outputs.active &&
                     !paste_error.active && !library.renaming {
                 song_request = song_playing ? 2 : 1; dirty = true;
             }
-            else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !paste_error.active && !library.renaming && !library.table.editing {
+            else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !outputs.active && !paste_error.active && !library.renaming && !library.table.editing {
                 transport_request = true; dirty = true;
             }
             // Tab / Shift+Tab cycle every pane of the main view: sidebar,
             // pattern, inspector/mixer, the FX bus, and the VST3 editor.
             else if event.kind == InputKind::Menu && event.key == Key::Toggle && menus.active < 0 &&
-                    !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !paste_error.active && !library.renaming && !library.table.editing {
+                    !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !outputs.active && !paste_error.active && !library.renaming && !library.table.editing {
                 let has_bus: bool = mixer.visible && midi.effects.len() > 0;
                 let has_editor: bool = instrument_editor.active;
                 var stop: i32 = focus.selected == 0 ? 0 : (focus.selected == 1 ? 1 : (mixer.bus_focus && has_bus ? 3 : 2));
@@ -918,6 +928,14 @@ pub fn run() -> i32 {
                         free(message);
                         message = library.set_song_at(matrix.row, matrix.lane, 0) ? clone("Matrix cell cleared") : clone("No cell here");
                     } else { command = 121; }
+                }
+                dirty = true;
+            }
+            else if outputs.active {
+                outputs.on_event(event);
+                if !outputs.active {
+                    if outputs.result == 2 { free(message); message = clone("Cancelled."); }
+                    else { command = 31; }
                 }
                 dirty = true;
             }
@@ -1343,6 +1361,63 @@ pub fn run() -> i32 {
             else if command == 92 {
                 transport.playing = false; free(message); message = midi.set_processor("");
             }
+            else if command == 30 {
+                // A MIDI track chooses the instrument it plays; an audio or
+                // instrument track chooses the channel it feeds.
+                let index: i32 = library.table.active_track();
+                if index < 0 { free(message); message = clone("Select a track first"); }
+                else {
+                    let track: SequenceTrack = library.table.tracks[index];
+                    var ids: list<i32> = [0]; var labels: list<str8> = [];
+                    output_track = index; output_kind = track.audio || track.instrument ? 2 : 1;
+                    var current: i32 = 0;
+                    if output_kind == 1 {
+                        labels.push(clone("  MST  master (preview tone)"));
+                        for i in 0..midi.instrument_paths.len() {
+                            if midi.instrument_paths[i] == "" { continue; }
+                            // instrument_name borrows the plugin's own name; never free it.
+                            let name: str8 = midi.output.instrument_name(i + 1);
+                            ids.push(i32(i) + 1); labels.push(format!("  I{}   {}", i + 1, name));
+                        }
+                    } else {
+                        labels.push(clone("  MST  master"));
+                        current = library.table.track_output(index);
+                        let channels: list<SequenceTrack> = library.table.tracks;
+                        for t in 0..channels.len() {
+                            let other: SequenceTrack = channels[t];
+                            if !other.audio || i32(t) == index || library.table.output_loops(index, i32(t) + 1) { continue; }
+                            ids.push(i32(t) + 1); labels.push(format!("  A{}   {}", t + 1, other.name));
+                        }
+                    }
+                    if ids.len() == 1 {
+                        free(message);
+                        message = output_kind == 1 ? clone("No instrument loaded yet (Instrument > Add instrument)")
+                            : clone("No AUDIO track to feed; create one with Track > Create AUDIO track");
+                        let spare: list<str8> = labels; for label in spare { free(label); }
+                    } else {
+                        outputs.title = output_kind == 1 ? "MIDI output" : "Output channel";
+                        outputs.open(ids, labels, current);
+                        focus.set_menu_active(true);
+                    }
+                }
+            }
+            else if command == 31 {
+                let choice: i32 = outputs.chosen();
+                let index: i32 = output_track;
+                free(message);
+                if output_kind == 1 {
+                    let shared: bool = choice > 0 && library.table.instrument_used_by_other(choice, index);
+                    if !library.table.set_instrument_output(index, choice) { message = clone(library.table.error); }
+                    else if choice == 0 { message = clone("MIDI output: master (preview tone)"); }
+                    else {
+                        let name: str8 = midi.output.instrument_name(wide(choice));
+                        message = shared ? format!("MIDI output: {} #{}, shared with another track (same pads, fader and inserts)", name, choice)
+                            : format!("MIDI output: {} #{}", name, choice);
+                    }
+                } else if !library.table.set_track_output(index, choice) { message = clone(library.table.error); }
+                else { message = choice == 0 ? clone("Output channel: master") : format!("Output channel: A{}", choice); }
+                playback_dirty = true;
+            }
             else if command == 22 || command == 24 {
                 confirm_track_action = command;
                 question.title = command == 22 ? "Delete track" : "Clear track";
@@ -1477,6 +1552,11 @@ pub fn run() -> i32 {
                     if !picker.active && picker.result == 2 { free(message); message = clone("Cancelled."); }
                     dirty = true;
                 }
+                else if outputs.active {
+                    outputs.on_event(event);
+                    if !outputs.active && outputs.result == 2 { free(message); message = clone("Cancelled."); }
+                    dirty = true;
+                }
                 else if clash_question.active {
                     clash_question.on_event(event); dirty = true;
                 }
@@ -1518,7 +1598,7 @@ pub fn run() -> i32 {
     midi.release();
     settings.release();
     free(session_path); free(request_path);
-    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); song_table.release(); free(preset_path);
+    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); free(preset_path);
     free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();

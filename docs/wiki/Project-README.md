@@ -5,6 +5,9 @@ MLang - Programming Language
 
 For more documentation, visit the [MLang GitHub Wiki](https://github.com/mattilaa/mlang/wiki).
 
+The terminal tracker application is now [mlacker](https://github.com/mattilaa/mlang/blob/main/mlacker/README.md), a separate
+`mlang.toml` project with AUHAL output and VST3 master-plugin hosting.
+
 ## Table Of Contents
 
 - [What Is Mlang](#what-is-mlang)

@@ -36,6 +36,7 @@
 - [[dsp::limiter|DSP-Limiter]]
 - [[dsp::reverb|DSP-Reverb]]
 - [[dsp::reverb2|DSP-Reverb2]]
+- [[dsp::envelope|DSP-Envelope]]
 
 ## Stdlib Modules
 - [[std::algorithm::genetic|Stdlib-Algorithm-Genetic]]

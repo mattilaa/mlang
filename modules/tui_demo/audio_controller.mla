@@ -204,6 +204,18 @@ impl AudioSystem {
                 self.output.insert_route(s, n, id);
             }
         }
+        // Output channels: a track feeds master (0) or another audio track,
+        // which then applies its own inserts, fader and sends.
+        for s in 0..96 {
+            var destination: i32 = 0;
+            for t in 0..table.tracks.len() {
+                let track: SequenceTrack = table.tracks[t];
+                if (!track.instrument && s == t) || (track.instrument && track.instrument_id > 0 && s == 63 + wide(track.instrument_id)) {
+                    destination = table.track_output(i32(t));
+                }
+            }
+            self.output.output_route(s, wide(destination));
+        }
         for i in 0..table.tracks.len() {
             let track: SequenceTrack = table.tracks[i];
             self.output.track_volume(i, track.instrument ? track.instrument_id : 0, track.muted ? 0 : track.volume);

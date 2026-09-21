@@ -482,6 +482,9 @@ impl SessionCodec {
             let initial: list<PatternEntry> = library.patterns; for entry in initial { free(entry.name); entry.data.release(); }
             library.patterns = [];
         }
+        // Output channels are the last extension; everything before it is
+        // written (empty if need be) so the chain stays readable in order.
+        let routed: bool = !self.reading && library.has_output_routes();
         let magic: str8 = self.text("MLACK"); if magic != "MLACK" { self.failed = true; } if self.reading { free(magic); }
         self.number(1, 1, 1); self.number(0, 0, 0);
         var state: SessionView = self.view(view);
@@ -568,7 +571,7 @@ impl SessionCodec {
                 }
             }
         }
-        let extension: bool = self.reading ? self.reader.remaining() > 0 : mappings.len() > 0 || audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0 || library.extra_lanes.len() > 0;
+        let extension: bool = self.reading ? self.reader.remaining() > 0 : mappings.len() > 0 || audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0 || library.extra_lanes.len() > 0 || routed;
         if extension {
             let tag: str8 = self.text("MIDI_LEARN"); if tag != "MIDI_LEARN" { self.failed = true; } if self.reading { free(tag); }
             let mapping_count: i32 = self.number(i32(mappings.len()), 0, 2048);
@@ -592,7 +595,7 @@ impl SessionCodec {
             }
         }
         var effect_volumes: list<i32> = [];
-        let effects_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0 || library.extra_lanes.len() > 0;
+        let effects_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.effects.len() > 0 || audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0 || library.extra_lanes.len() > 0 || routed;
         if effects_extension && !self.failed {
             let tag: str8 = self.text("AUX_EFFECTS"); if tag != "AUX_EFFECTS" { self.failed = true; } if self.reading { free(tag); }
             let count: i32 = self.number(i32(audio.effects.len()), 0, 8);
@@ -635,7 +638,7 @@ impl SessionCodec {
                 library.table.release(); library.table = entry.data.copy_pattern();
             }
         }
-        let inserts_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0 || library.extra_lanes.len() > 0;
+        let inserts_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.insert_paths.len() > 0 || library.table.group_detail_rows > 0 || audio.pads.len() > 0 || library.extra_lanes.len() > 0 || routed;
         if inserts_extension && !self.failed {
             let tag: str8 = self.text("TRACK_INSERTS"); if tag != "TRACK_INSERTS" { self.failed = true; } if self.reading { free(tag); }
             let count: i32 = self.number(i32(audio.insert_paths.len()), 0, 256);
@@ -681,7 +684,7 @@ impl SessionCodec {
         }
         // Optional SAMPLER_PADS extension (requires the preceding tags).
         var pads: list<PadAssignment> = [];
-        let pads_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.pads.len() > 0 || library.extra_lanes.len() > 0;
+        let pads_extension: bool = self.reading ? self.reader.remaining() > 0 : audio.pads.len() > 0 || library.extra_lanes.len() > 0 || routed;
         if pads_extension && !self.failed {
             let tag: str8 = self.text("SAMPLER_PADS"); if tag != "SAMPLER_PADS" { self.failed = true; } if self.reading { free(tag); }
             let pad_count: i32 = self.number(i32(audio.pads.len()), 0, 4096);
@@ -700,7 +703,7 @@ impl SessionCodec {
             }
         }
         // Optional SONG_MATRIX extension: the parallel lanes beside `song`.
-        let matrix_extension: bool = self.reading ? self.reader.remaining() > 0 : library.extra_lanes.len() > 0;
+        let matrix_extension: bool = self.reading ? self.reader.remaining() > 0 : library.extra_lanes.len() > 0 || routed;
         if matrix_extension && !self.failed {
             let tag: str8 = self.text("SONG_MATRIX"); if tag != "SONG_MATRIX" { self.failed = true; } if self.reading { free(tag); }
             let lanes: i32 = self.number(i32(library.extra_lanes.len()), 0, 15);
@@ -724,6 +727,34 @@ impl SessionCodec {
                 if self.reading { restored.push(SongLane { slots: slots }); }
             }
             if self.reading && !self.failed { library.extra_lanes = restored; }
+        }
+        // Optional TRACK_OUTPUTS extension: the output channel of every track,
+        // 0 for master. Destinations outside the pattern are rejected here; a
+        // route to a track that is no longer an AUDIO track reads as master.
+        let outputs_extension: bool = self.reading ? self.reader.remaining() > 0 : routed;
+        if outputs_extension && !self.failed {
+            let tag: str8 = self.text("TRACK_OUTPUTS"); if tag != "TRACK_OUTPUTS" { self.failed = true; } if self.reading { free(tag); }
+            let patterns: list<PatternEntry> = library.patterns; var updated: list<PatternEntry> = [];
+            for p in 0..patterns.len() {
+                if self.failed { break; }
+                var entry: PatternEntry = patterns[p]; if !self.reading && entry.id == library.active_id { entry.data = library.table; }
+                let track_count: i32 = self.number(i32(entry.data.tracks.len()), 0, 64);
+                if track_count != entry.data.tracks.len() { self.failed = true; break; }
+                var tracks: list<SequenceTrack> = [];
+                for t in 0..track_count {
+                    var track: SequenceTrack = entry.data.tracks[t];
+                    let destination: i32 = self.number(track.output, 0, track_count);
+                    if destination - 1 == i32(t) { self.failed = true; break; }
+                    if self.reading { track.output = destination; }
+                    tracks.push(track);
+                }
+                if self.reading { entry.data.tracks = tracks; updated.push(entry); }
+            }
+            if self.reading && !self.failed {
+                library.patterns = updated;
+                let entry: PatternEntry = library.patterns[library.index_of(library.active_id)];
+                library.table.release(); library.table = entry.data.copy_pattern();
+            }
         }
         if state.editor_slot > 32 {
             var found: bool = false; for plugin in plugins { if plugin.slot == state.editor_slot { found = true; } }

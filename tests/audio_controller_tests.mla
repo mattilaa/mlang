@@ -137,3 +137,52 @@ fn audio_controller_sample_ownership() {
     controller.process(block, 4096); verify(block.left(4095) == 0.0f);
     block.close(); controller.close();
 }
+
+#[test]
+fn audio_controller_output_routing() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(1024);
+    verify(allocated.is_ok()); if allocated.is_err() { controller.close(); return; }
+    let block: PcmBlock = allocated.unwrap();
+    controller.midi_target(3, 0); controller.live_note(true, 0, 69, 127);
+    controller.process(block, 1024); verify(controller.master_peak(0) > 0);
+    // A track that mixes straight into master has no channel meter of its own.
+    verify(controller.track_peak(3, 0) == 0);
+    // Track 3 now feeds track 5, so track 5's fader owns the signal.
+    verify(controller.output_route(3, 6) == 0);
+    controller.process(block, 1024); verify(controller.master_peak(0) > 0);
+    // Both channels carry it now: track 3 on its way out, track 5 as its sum.
+    // Reading a peak consumes it, so take each one once.
+    let feeder: i32 = controller.track_peak(3, 0);
+    let destination: i32 = controller.track_peak(5, 0);
+    let bystander: i32 = controller.track_peak(4, 0);
+    verify(feeder > 0 && destination > 0 && bystander == 0);
+    verify(controller.track_peak(64, 0) == 0);
+    verify(controller.track_peak(3, 2) == 0);
+    verify(controller.track_volume(5, 0, 0) == 0);
+    controller.process(block, 1024); verify(controller.master_peak(0) == 0);
+    // Silencing the destination silences its meter, not its feeder's.
+    let silent: i32 = controller.track_peak(5, 0);
+    let still_playing: i32 = controller.track_peak(3, 0);
+    verify(silent == 0 && still_playing > 0);
+    verify(controller.track_volume(5, 0, 100) == 0);
+    controller.process(block, 1024); verify(controller.master_peak(0) > 0);
+    // The feeding track keeps its own fader: both apply in series.
+    verify(controller.track_volume(3, 0, 0) == 0);
+    controller.process(block, 1024); verify(controller.master_peak(0) == 0);
+    verify(controller.track_volume(3, 0, 100) == 0);
+    // A cycle is refused at the source and falls back to master on the rest.
+    verify(controller.output_route(3, 4) == -1);
+    verify(controller.output_route(5, 4) == 0);
+    controller.process(block, 1024); verify(controller.master_peak(0) > 0);
+    verify(controller.output_route(3, 0) == 0);
+    verify(controller.output_route(5, 0) == 0);
+    verify(controller.output_route(-1, 0) == -1);
+    verify(controller.output_route(96, 0) == -1);
+    verify(controller.output_route(3, 65) == -1);
+    verify(controller.output_route(3, -1) == -1);
+    controller.process(block, 1024); verify(controller.master_peak(0) > 0);
+    block.close(); controller.close();
+}

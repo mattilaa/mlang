@@ -38,6 +38,8 @@ typedef struct {
     _Atomic uint32_t peak;
     _Atomic uint32_t master_peak[2];
     _Atomic uint32_t instrument_peak[32][2];
+    /* Post-fader output of a track that owns a buffer (inserts or routing). */
+    _Atomic uint32_t track_peak[64][2];
     _Atomic uint64_t live_target;
     _Atomic uint32_t track_volume[64], instrument_volume[32];
     /* Packed slot (6 bits), parameter index (14), step count (32).
@@ -55,6 +57,9 @@ typedef struct {
     mlang_audio_processor effects[8];
     mlang_audio_processor inserts[256];
     _Atomic uint32_t insert_route[96][4];
+    /* Output channel per source (tracks 0-63, instruments 64-95):
+     * 0 = master, 1-64 = the PCM track it feeds instead. */
+    _Atomic uint32_t output_route[96];
     float track_buffer[64][8192];
     _Atomic uint32_t sends[96][8], effect_volume[8], effect_peak[8][2];
     float effect_buffer[8][8192];
@@ -89,9 +94,11 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     atomic_init(&c->panic, 0); atomic_init(&c->peak, 0);
     atomic_init(&c->master_peak[0], 0); atomic_init(&c->master_peak[1], 0);
     for(int i = 0; i < 32; ++i) for(int ch = 0; ch < 2; ++ch) atomic_init(&c->instrument_peak[i][ch], 0);
+    for(int i = 0; i < 64; ++i) for(int ch = 0; ch < 2; ++ch) atomic_init(&c->track_peak[i][ch], 0);
     atomic_init(&c->live_target, 0);
     for(int i = 0; i < 96; ++i) for(int fx = 0; fx < 8; ++fx) atomic_init(&c->sends[i][fx], 0);
     for(int i = 0; i < 96; ++i) for(int n = 0; n < 4; ++n) atomic_init(&c->insert_route[i][n], 0);
+    for(int i = 0; i < 96; ++i) atomic_init(&c->output_route[i], 0);
     for(int fx = 0; fx < 8; ++fx) {
         atomic_init(&c->effect_volume[fx], 100);
         for(int ch = 0; ch < 2; ++ch) atomic_init(&c->effect_peak[fx][ch], 0);
@@ -218,6 +225,13 @@ int32_t __mlang_std_audio_controller_instrument_peak(int64_t handle, int64_t slo
     if(!c || slot < 1 || slot > 32 || channel < 0 || channel > 1) return 0;
     return (int32_t)atomic_exchange_explicit(&c->instrument_peak[slot - 1][channel], 0, memory_order_relaxed);
 }
+/* Post-fader output of a track channel, 0 for one that mixes straight into
+ * master without a buffer of its own. */
+int32_t __mlang_std_audio_controller_track_peak(int64_t handle, int64_t track, int64_t channel) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || track < 0 || track >= 64 || channel < 0 || channel > 1) return 0;
+    return (int32_t)atomic_exchange_explicit(&c->track_peak[track][channel], 0, memory_order_relaxed);
+}
 
 static void ac_dispatch(ac_controller *c, const ac_event *e) {
     if(e->kind == 10) {
@@ -299,14 +313,31 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     }
     uint64_t clock = atomic_load_explicit(&c->clock, memory_order_relaxed);
     uint32_t routes[96][4]; int routed[96] = {0};
+    /* Output channel of each source (-1 = master) and the tracks that need a
+     * buffer of their own: those with inserts, those feeding another track,
+     * and those fed by one. */
+    int target[96]; int buffered[64] = {0};
     for(int i = 0; i < 256; ++i) if(c->inserts[i].context) c->inserts[i].begin(c->inserts[i].context, reset);
     for(int source = 0; source < 96; ++source) {
         for(int n = 0; n < 4; ++n) {
             routes[source][n] = atomic_load_explicit(&c->insert_route[source][n], memory_order_relaxed);
             if(routes[source][n]) routed[source] = 1;
         }
-        if(source < 64 && routed[source]) memset(c->track_buffer[source], 0, frames * 2u * sizeof(float));
+        uint32_t out_route = atomic_load_explicit(&c->output_route[source], memory_order_relaxed);
+        target[source] = out_route > 0 && out_route <= 64 && (int)out_route - 1 != source ? (int)out_route - 1 : -1;
+        if(source < 64 && routed[source]) buffered[source] = 1;
+        if(target[source] >= 0) { buffered[target[source]] = 1; if(source < 64) buffered[source] = 1; }
     }
+    for(int t = 0; t < 64; ++t) if(buffered[t]) memset(c->track_buffer[t], 0, frames * 2u * sizeof(float));
+    /* Feeders before their destination; a cycle falls back to master. */
+    int order[64], count = 0, indegree[64] = {0}, cycled[64] = {0};
+    for(int t = 0; t < 64; ++t) if(buffered[t] && target[t] >= 0) ++indegree[target[t]];
+    for(int t = 0; t < 64; ++t) if(buffered[t] && indegree[t] == 0) order[count++] = t;
+    for(int i = 0; i < count; ++i) {
+        int destination = target[order[i]];
+        if(destination >= 0 && --indegree[destination] == 0) order[count++] = destination;
+    }
+    for(int t = 0; t < 64; ++t) if(buffered[t] && indegree[t] > 0) { cycled[t] = 1; order[count++] = t; }
     float sends[96][8], dry[96];
     for(int source = 0; source < 96; ++source) dry[source] = 1.f;
     for(int fx = 0; fx < 8; ++fx) {
@@ -344,7 +375,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             if(v->sample < 0) {
                 int track = v->source >= 65536 ? v->source - 65536 : v->source;
                 double volume = track >= 0 && track < 64 ? atomic_load_explicit(&c->track_volume[track], memory_order_relaxed) / 100.0 : 1.0;
-                if(track >= 0 && track < 64 && routed[track]) volume = 1.0;
+                if(track >= 0 && track < 64 && buffered[track]) volume = 1.0;
                 double value = sin(v->phase * 6.283185307179586) * v->gain * volume;
                 l += value; r += value; v->phase += v->step;
                 v->phase -= floor(v->phase);
@@ -359,14 +390,14 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
                     float a = s->data[pos * s->channels + channel], b = s->data[next * s->channels + channel];
                     int track = v->source >= 65536 ? v->source - 65536 : v->source;
                     double volume = track >= 0 && track < 64 ? atomic_load_explicit(&c->track_volume[track], memory_order_relaxed) / 100.0 : 1.0;
-                    if(track >= 0 && track < 64 && routed[track]) volume = 1.0;
+                    if(track >= 0 && track < 64 && buffered[track]) volume = 1.0;
                     double value = (a + (b - a) * mix) * v->gain * volume;
                     if(ch == 0) l += value; else r += value;
                 }
                 v->phase += v->step;
             }
             int track = v->source >= 65536 ? v->source - 65536 : v->source;
-            if(track >= 0 && track < 64 && routed[track]) {
+            if(track >= 0 && track < 64 && buffered[track]) {
                 c->track_buffer[track][f * 2] += (float)(l - before_l);
                 c->track_buffer[track][f * 2 + 1] += (float)(r - before_r);
                 l = before_l; r = before_r; continue;
@@ -385,15 +416,8 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         out[f * 2] = (float)l;
         out[f * 2 + 1] = (float)r;
     }
-    for(int t = 0; t < 64; ++t) if(routed[t]) {
-        ac_insert_process(c, routes[t], c->track_buffer[t], frames, clock);
-        float volume = atomic_load_explicit(&c->track_volume[t], memory_order_relaxed) / 100.f;
-        for(uint32_t f = 0; f < frames * 2u; ++f) {
-            float value = c->track_buffer[t][f] * volume; if(!isfinite(value)) continue;
-            out[f] += value * dry[t];
-            for(int fx = 0; fx < 8; ++fx) if(sends[t][fx] > 0) c->effect_buffer[fx][f] += value * sends[t][fx];
-        }
-    }
+    // Instruments first: one routed into a track must reach its buffer before
+    // that track runs its own inserts and fader.
     for(int i = 0; i < 32; ++i) {
         mlang_audio_processor *p = &c->instruments[i];
         if(!p->context) continue;
@@ -404,11 +428,12 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         }
         ac_insert_process(c, routes[64 + i], c->instrument_buffer, frames, clock);
         float volume = atomic_load_explicit(&c->instrument_volume[i], memory_order_relaxed) / 100.f;
+        float *destination = target[64 + i] >= 0 ? c->track_buffer[target[64 + i]] : out;
         float peaks[2] = {0, 0};
         for(uint32_t f = 0; f < frames * 2u; ++f) {
             if(isfinite(c->instrument_buffer[f])) {
                 float value = c->instrument_buffer[f] * volume;
-                out[f] += value * dry[64 + i];
+                destination[f] += value * dry[64 + i];
                 for(int fx = 0; fx < 8; ++fx)
                     if(sends[64 + i][fx] > 0) c->effect_buffer[fx][f] += value * sends[64 + i][fx];
                 peaks[f & 1] = fmaxf(peaks[f & 1], fabsf(value));
@@ -418,6 +443,26 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             uint32_t value = (uint32_t)(fminf(peaks[ch], 1.f) * 1000.f);
             uint32_t old = atomic_load_explicit(&c->instrument_peak[i][ch], memory_order_relaxed);
             while(old < value && !atomic_compare_exchange_weak_explicit(&c->instrument_peak[i][ch], &old, value,
+                memory_order_relaxed, memory_order_relaxed)) {}
+        }
+    }
+    for(int i = 0; i < count; ++i) {
+        int t = order[i];
+        ac_insert_process(c, routes[t], c->track_buffer[t], frames, clock);
+        float volume = atomic_load_explicit(&c->track_volume[t], memory_order_relaxed) / 100.f;
+        float *destination = target[t] >= 0 && !cycled[t] ? c->track_buffer[target[t]] : out;
+        float peaks[2] = {0, 0};
+        for(uint32_t f = 0; f < frames * 2u; ++f) {
+            float value = c->track_buffer[t][f] * volume; if(!isfinite(value)) continue;
+            destination[f] += value * dry[t];
+            for(int fx = 0; fx < 8; ++fx) if(sends[t][fx] > 0) c->effect_buffer[fx][f] += value * sends[t][fx];
+            peaks[f & 1] = fmaxf(peaks[f & 1], fabsf(value));
+        }
+        /* Everything the channel carries: its own voices plus what feeds it. */
+        for(int ch = 0; ch < 2; ++ch) {
+            uint32_t value = (uint32_t)(fminf(peaks[ch], 1.f) * 1000.f);
+            uint32_t old = atomic_load_explicit(&c->track_peak[t][ch], memory_order_relaxed);
+            while(old < value && !atomic_compare_exchange_weak_explicit(&c->track_peak[t][ch], &old, value,
                 memory_order_relaxed, memory_order_relaxed)) {}
         }
     }
@@ -642,6 +687,14 @@ int32_t __mlang_std_audio_controller_insert_route(int64_t handle, int64_t source
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || source < 0 || source >= 96 || position < 0 || position >= 4 || id < 0 || id > 256) return -1;
     atomic_store_explicit(&c->insert_route[source][position], (uint32_t)id, memory_order_relaxed); return 0;
+}
+/* Output channel of a source: 0 = master, 1-64 = that PCM track's channel.
+ * A source cannot feed itself; a routing cycle falls back to master. */
+int32_t __mlang_std_audio_controller_output_route(int64_t handle, int64_t source, int64_t destination) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || source < 0 || source >= 96 || destination < 0 || destination > 64) return -1;
+    if(destination > 0 && destination - 1 == source) return -1;
+    atomic_store_explicit(&c->output_route[source], (uint32_t)destination, memory_order_relaxed); return 0;
 }
 int32_t __mlang_std_audio_controller_load_insert(int64_t handle, int64_t id, const char *path) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;

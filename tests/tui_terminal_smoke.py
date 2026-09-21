@@ -260,19 +260,19 @@ def main():
             os.write(master, keys)
 
         # Track menu acts on the group containing the selected child column.
-        track_menu(b"jjjjjj\rjjj\r")
+        track_menu(b"jjjjjjj\rjjj\r")
         read_frame(1, table_text=((39, 3), "NOTE"))
-        track_menu(b"jjjjjj\rjjjj\r")
+        track_menu(b"jjjjjjj\rjjjj\r")
         read_frame(1, table_text=((51, 3), "CC1"))
-        track_menu(b"jjjjjj\r\r")
+        track_menu(b"jjjjjjj\r\r")
         read_frame(1, table_text=((51, 4), "   "))
         os.write(master, b"hhh")  # select VEL in the original note line
         read_frame(1)
-        track_menu(b"jjjjjj\rj\r")
+        track_menu(b"jjjjjjj\rj\r")
         read_frame(1, table_text=((51, 4), "C-4"))
-        track_menu(b"jjjjjj\rjj\r")
+        track_menu(b"jjjjjjj\rjj\r")
         read_frame(1, table_text=((51, 4), "   "))
-        track_menu(b"jjjjjj\rjj\r")
+        track_menu(b"jjjjjjj\rjj\r")
         read_frame(1, table_text=((28, 4), "C-4"))
         track_menu(b"jjj\r")
         assert b"Rename track" in read_frame(None)
@@ -287,7 +287,7 @@ def main():
         read_frame(1)
         track_menu(b"jjjj\r")
         assert b"Track 4 copy" in read_frame(1, table_text=((24, 4), "001"))
-        track_menu(b"jjjjjjjjj\r")
+        track_menu(b"jjjjjjjjjj\r")
         assert b"Delete track" in read_frame(None)
         os.write(master, b"\r")
         read_frame(None)
@@ -296,7 +296,7 @@ def main():
             if b"Delete track" not in frame:
                 assert b"Track 4 copy" not in frame
                 break
-        track_menu(b"jjjjjjjj\r")
+        track_menu(b"jjjjjjjjj\r")
         assert b"Clear track" in read_frame(None)
         os.write(master, b"\r")
         read_frame(None)
@@ -304,11 +304,11 @@ def main():
             pass
         track_menu(b"jjjjj\r")
         assert b"[M]" in read_frame(1)
-        track_menu(b"jjjjjjj\r\r")
+        track_menu(b"jjjjjjjj\r\r")
         assert b"Configure CC1" in read_frame(None)
         os.write(master, b"\x15pitchbend\r")
         assert b"CC1=pitchbend" in read_frame(1)
-        track_menu(b"jjjjjjj\rj\r")
+        track_menu(b"jjjjjjjj\rj\r")
         assert b"Configure CC2" in read_frame(None)
         os.write(master, b"\x15cutoff:0:1000\r")
         assert b"CC2=cutoff:0:1000" in read_frame(1)

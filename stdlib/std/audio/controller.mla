@@ -33,6 +33,7 @@ extern fn __mlang_std_audio_controller_live_note(handle: i64, on: i64, channel: 
 extern fn __mlang_std_audio_controller_live_control(handle: i64, channel: i64, controller: i64, value: i64) -> i32;
 extern fn __mlang_std_audio_controller_master_peak(handle: i64, channel: i64) -> i32;
 extern fn __mlang_std_audio_controller_instrument_peak(handle: i64, slot: i64, channel: i64) -> i32;
+extern fn __mlang_std_audio_controller_track_peak(handle: i64, track: i64, channel: i64) -> i32;
 extern fn __mlang_std_audio_controller_track_volume(handle: i64, track: i64, slot: i64, percent: i64) -> i32;
 extern fn __mlang_std_audio_controller_midi_learn(handle: i64, key: i64, slot: i64, index: i64) -> i32;
 extern fn __mlang_std_audio_controller_midi_learn_info(handle: i64, key: i64, property: i64) -> i64;
@@ -54,6 +55,7 @@ pub struct AudioEvent {
 pub struct AudioController { var handle: i64; };
 extern fn __mlang_std_audio_controller_load_insert(handle: i64, id: i64, path: str8) -> i32;
 extern fn __mlang_std_audio_controller_insert_route(handle: i64, source: i64, position: i64, id: i64) -> i32;
+extern fn __mlang_std_audio_controller_output_route(handle: i64, source: i64, destination: i64) -> i32;
 extern fn __mlang_std_audio_controller_load_effect(handle: i64, fx: i64, path: str8) -> i32;
 extern fn __mlang_std_audio_controller_effect_send(handle: i64, track: i64, slot: i64, fx: i64, percent: i64) -> i32;
 extern fn __mlang_std_audio_controller_effect_volume(handle: i64, fx: i64, percent: i64) -> i32;
@@ -63,6 +65,10 @@ impl AudioController {
     pub fn load_insert(self: AudioController, id: i64, path: str8) -> i32 { return __mlang_std_audio_controller_load_insert(self.handle, id, path); }
     /// Source 0-63=PCM/preview tracks, 64-95=instrument outputs. Position 0-3, ID 0=bypass.
     pub fn insert_route(self: AudioController, source: i64, position: i64, id: i64) -> i32 { return __mlang_std_audio_controller_insert_route(self.handle, source, position, id); }
+    /// Output channel of a source: destination 0 = master, 1-64 = that PCM
+    /// track, which then applies its own inserts, fader and sends. A source
+    /// cannot feed itself, and a routing cycle falls back to master.
+    pub fn output_route(self: AudioController, source: i64, destination: i64) -> i32 { return __mlang_std_audio_controller_output_route(self.handle, source, destination); }
     /// Aux channels 0-7; parameter APIs address them as slots 33-40.
     /// Load/replace while stopped, with MIDI producer joined. Empty path unloads.
     pub fn load_effect(self: AudioController, fx: i64, path: str8) -> i32 { return __mlang_std_audio_controller_load_effect(self.handle, fx, path); }
@@ -71,6 +77,11 @@ impl AudioController {
     pub fn effect_send(self: AudioController, track: i64, slot: i64, fx: i64, percent: i64) -> i32 { return __mlang_std_audio_controller_effect_send(self.handle, track, slot, fx, percent); }
     pub fn effect_volume(self: AudioController, fx: i64, percent: i64) -> i32 { return __mlang_std_audio_controller_effect_volume(self.handle, fx, percent); }
     pub fn effect_peak(self: AudioController, fx: i64, channel: i64) -> i32 { return __mlang_std_audio_controller_effect_peak(self.handle, fx, channel); }
+    /// Single UI consumer: track 0-63, channel 0/1, post-fader peak 0-1000 of
+    /// everything the channel carries, its own voices and whatever is routed
+    /// into it. Reads 0 for a track that mixes straight into master with no
+    /// inserts and no routing, which needs no buffer of its own.
+    pub fn track_peak(self: AudioController, track: i64, channel: i64) -> i32 { return __mlang_std_audio_controller_track_peak(self.handle, track, channel); }
     /// Single UI consumer: slot 1-32, channel 0/1, post-fader/pre-master peak 0-1000.
     pub fn instrument_peak(self: AudioController, slot: i64, channel: i64) -> i32 { return __mlang_std_audio_controller_instrument_peak(self.handle, slot, channel); }
     /// Atomic output gain. Shared VST instrument slots share the same PCM gain.
