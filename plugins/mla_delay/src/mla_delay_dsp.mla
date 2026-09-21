@@ -1,0 +1,50 @@
+/// Per-instance C ABI for the same dsp::delay used by delay_audio_demo.
+/// Allocate only on setup; parameter updates and processing retain the buffers.
+mod dsp::delay;
+use dsp::delay::StereoDelay;
+use dsp::delay::DelayFrame;
+use dsp::delay::DelayMode;
+use dsp::delay::FeedbackFilter;
+extern fn calloc(count: i64, size: i64) -> ptr<StereoDelay>;
+extern fn free(block: ptr<StereoDelay>) -> void;
+
+fn mladelay_create(rate: f32) -> ptr<StereoDelay> {
+    // Keep the DSP directly behind the pointer, as in mla_verb. Moving an
+    // owning DSP through a nested wrapper field can drop its delay buffers.
+    let handle: ptr<StereoDelay> = calloc(1, size_of(StereoDelay));
+    unsafe { *handle = StereoDelay::new(rate, 5051.0f); }
+    return handle;
+}
+fn mladelay_destroy(handle: ptr<StereoDelay>) {
+    unsafe { let dead: StereoDelay = *handle; dead.reset(); }
+    free(handle);
+}
+fn mladelay_reset(handle: ptr<StereoDelay>) { unsafe { (*handle).reset(); } }
+
+/// IDs match the first ten controls in plugin.cpp; ramp is in samples.
+fn mladelay_set(handle: ptr<StereoDelay>, index: i32, value: f32, ramp: i64) {
+    unsafe {
+        if index == 0 { (*handle).set_mode(value >= 0.5f ? DelayMode::PingPong : DelayMode::Forward); }
+        else if index == 1 { (*handle).set_delay_target_ms(value, ramp); }
+        else if index == 2 { (*handle).set_feedback(value); }
+        else if index == 3 { (*handle).set_mix_target(value, ramp); }
+        else if index == 4 {
+            var filter: FeedbackFilter = FeedbackFilter::None;
+            if value >= 2.5f { filter = FeedbackFilter::Bandpass; }
+            else if value >= 1.5f { filter = FeedbackFilter::Highpass; }
+            else if value >= 0.5f { filter = FeedbackFilter::Lowpass; }
+            (*handle).set_filter_target(filter, ramp);
+        }
+        else if index == 5 { (*handle).set_filter_wet_output(value >= 0.5f); }
+        else if index == 6 { (*handle).set_filter_cutoff_target_hz(value, ramp); }
+        else if index == 7 { (*handle).set_filter_resonance_target(value, ramp); }
+        else if index == 8 { (*handle).set_damping_target(value, ramp); }
+        else if index == 9 { (*handle).set_jitter_target_ms(value, ramp); }
+    }
+}
+fn mladelay_process(handle: ptr<StereoDelay>, left: f32, right: f32, out_right: ptr<f32>) -> f32 {
+    unsafe {
+        let frame: DelayFrame = (*handle).process_stereo(left, right);
+        *out_right = frame.right(); return frame.left();
+    }
+}
