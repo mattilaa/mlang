@@ -122,7 +122,7 @@ def main():
         assert b"Rename pattern" in read_frame(None)
         os.write(master, b"\x15Break\r")
         assert b"004 Break" in read_frame(0)
-        pattern_menu(b"jjjjj\r")     # Remove pattern, below the follow toggle
+        pattern_menu(b"jjjjjj\r")    # Remove pattern, last under the matrix entries
         assert b"004 Break" not in read_frame(0)
         pattern_menu(b"\r")
         assert b"Pattern / 5 Pattern 5" in read_frame(0, table_text=((28, 4), "   "))

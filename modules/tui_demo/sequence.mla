@@ -804,6 +804,40 @@ pub fn copy_pattern(self: SequenceTable) -> SequenceTable {
     copy.audio_clipboard = self.audio_clipboard.copy();
     copy.rebuild_columns(); return copy;
 }
+/// One matrix row's worth of this pattern: `count` rows starting at `start`,
+/// wrapping so a pattern shorter than the matrix row repeats to fill it. Audio
+/// clips keep their place relative to the slice and are dropped when they start
+/// outside it.
+pub fn copy_slice(self: SequenceTable, start: i32, count: i32) -> SequenceTable {
+    var copy: SequenceTable = self.copy_pattern();
+    let source_rows: i64 = self.rows.len();
+    if count <= 0 || source_rows == 0 || (start == 0 && wide(count) == source_rows) { return copy; }
+    var rows: list<TableRow> = []; let old: list<TableRow> = copy.rows;
+    for r in 0..count {
+        let source: TableRow = old[(wide(start) + wide(i32(r))) % source_rows];
+        var cells: list<str8> = []; let values: list<str8> = source.cells;
+        for value in values { cells.push(clone(value)); }
+        rows.push(TableRow { cells: cells });
+    }
+    for row in old { let values: list<str8> = row.cells; for value in values { free(value); } }
+    copy.rows = rows;
+    var tracks: list<SequenceTrack> = []; let source_tracks: list<SequenceTrack> = copy.tracks;
+    for track in source_tracks {
+        let placed: list<AudioInstance> = track.instances;
+        var moved: SequenceTrack = SequenceTrack {}; moved = track;
+        var instances: list<AudioInstance> = [];
+        for instance in placed {
+            let row: i32 = instance.start_row - start;
+            if row >= 0 && row < count {
+                instances.push(AudioInstance { clip: instance.clip, start_row: row,
+                    length_ticks: instance.length_ticks, offset_frames: instance.offset_frames });
+            } else { instance.clip.release(); }
+        }
+        moved.instances = instances; tracks.push(moved);
+    }
+    copy.tracks = tracks;
+    copy.selected_row = 0; copy.rebuild_columns(); return copy;
+}
 pub fn track_columns(self: SequenceTable, index: i32) -> i32 {
     let track: SequenceTrack = self.tracks[index]; return track.audio ? (track.instances.len() > 0 ? 4 : 3) : track.note_lines * 4 + 2;
 }
@@ -1172,7 +1206,7 @@ pub fn ensure_note_lines(self: &mut Self, index: i32, count: i32) -> bool {
 /// Bring another pattern's tracks in beside these. `shared_once` keeps one
 /// channel when both patterns carry it (same kind, name and instrument), for
 /// views that show a song row's channels rather than play its notes.
-pub fn append_tracks_from(self: &mut Self, source: &SequenceTable, area: Rect, shared_once: bool) -> void {
+pub fn append_tracks_from(self: &mut Self, source: &SequenceTable, area: Rect, shared_once: bool, start: i32) -> void {
     var other: SequenceTable = SequenceTable {}; other = source;
     let source_rows: i64 = other.rows.len();
     if source_rows == 0 { return; }
@@ -1204,7 +1238,7 @@ pub fn append_tracks_from(self: &mut Self, source: &SequenceTable, area: Rect, s
         let columns: i32 = other.track_columns(i32(t));
         let from: i32 = other.track_start(i32(t)); let to: i32 = self.track_start(index);
         for r in 0..self.rows.len() {
-            let row: TableRow = other.rows[wide(i32(r)) % source_rows];
+            let row: TableRow = other.rows[(wide(start) + wide(i32(r))) % source_rows];
             for c in 0..columns {
                 if from + i32(c) >= row.cells.len() || to + i32(c) >= self.columns.len() { break; }
                 self.set_cell(i32(r), to + i32(c), clone(row.cells[from + i32(c)]));

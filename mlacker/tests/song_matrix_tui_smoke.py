@@ -84,6 +84,17 @@ def main():
         frame = tui.send(b"k", 0.9)
         assert b"Pattern 1: Untitled" not in frame, frame[-3000:]
         expect(tui.send(F1 + b"llll" + b"j" * 4 + b"\r", 0.9), b"Follow matrix patterns: on")
+
+        # A pattern longer than one matrix row takes as many rows as it needs,
+        # and the lane beside it keeps its own shorter patterns.
+        tui.send(b"k" * 4 + b"h" * 4, 0.9)       # row 1, lane 1: it holds pattern 1
+        tui.send(b"M", 0.7)                      # editor, on that pattern
+        expect(tui.send(F1 + b"llll" + b"jjj\r", 0.8), b"Pattern length")
+        tui.send(b"\x15128\r", 0.9)
+        frame = expect(tui.send(b"M", 0.8), b"Song matrix")
+        assert "\u252c".encode() in frame, frame[-3000:]
+        # Its second row belongs to it: nothing else can start there.
+        expect(tui.send(b"j\r", 0.9), b"plays pattern")
         expect(tui.send(b"M", 0.8), b"Song matrix closed")
     finally:
         tui.close()

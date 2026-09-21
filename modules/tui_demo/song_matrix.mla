@@ -2,6 +2,7 @@ mod tui_demo::patterns;
 mod tui::widgets;
 use tui_demo::patterns::PatternLibrary;
 use tui_demo::patterns::PatternEntry;
+use tui_demo::patterns::SongCover;
 use tui::widgets::Panel;
 use tui::geometry::*;
 use tui::surface::*;
@@ -99,7 +100,8 @@ impl SongMatrix {
             for column in 0..visible_lanes {
                 let lane: i32 = self.lane_scroll + i32(column);
                 if lane >= lanes { break; }
-                let id: i32 = source.song_at(row, lane);
+                let cover: SongCover = source.song_cover(row, lane);
+                let id: i32 = cover.id;
                 let cell: Rect = Rect::new(body.x + 5 + i32(column) * width, y, width - 1, 1);
                 let selected: bool = row == self.row && lane == self.lane;
                 // The playing row sits brighter than the rest of the grid.
@@ -107,14 +109,24 @@ impl SongMatrix {
                 let background: i32 = selected ? lighten(base, 24) : base;
                 surface.fill(cell, Cell { glyph: 32, foreground: theme.foreground, background: background });
                 var text: str8 = "";
-                if id > 0 {
+                if id > 0 && cover.offset == 0 {
                     let index: i32 = source.index_of(id);
                     if index >= 0 {
                         let entry: PatternEntry = source.patterns[index];
-                        text = len(entry.name) > 10 ? sub(entry.name, 0, 10) : format!("{}", entry.name);
+                        let span: i32 = source.song_span(id);
+                        // A pattern longer than one matrix row names itself on
+                        // the row it starts and keeps the rows it still fills.
+                        let room: i32 = span > 1 ? 8 : 10;
+                        let name: str8 = len(entry.name) > wide(room) ? sub(entry.name, 0, wide(room)) : format!("{}", entry.name);
+                        text = span > 1 ? format!("{} ┬", name) : format!("{}", name);
+                        free(name);
                     }
                 }
-                surface.text(cell, id > 0 ? text : "-", id > 0 ? theme.foreground : theme.muted, background);
+                if id > 0 && cover.offset > 0 {
+                    let last: bool = cover.offset + 1 == source.song_span(id);
+                    text = format!("{}", last ? "       ┴" : "       │");
+                }
+                surface.text(cell, id > 0 ? text : "-", id > 0 ? (cover.offset > 0 ? theme.muted : theme.foreground) : theme.muted, background);
                 if id > 0 { free(text); }
             }
         }

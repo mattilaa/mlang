@@ -21,6 +21,7 @@ mod tui_demo::mixer;
 use tui_demo::mixer::Mixer;
 mod tui_demo::patterns;
 use tui_demo::patterns::PatternLibrary;
+use tui_demo::patterns::SongCover;
 mod tui_demo::transport;
 use tui_demo::transport::TransportStatus;
 mod tui_demo::sample_view;
@@ -138,6 +139,7 @@ fn demo_menus(fixture: bool, follow_matrix: bool) -> MenuBar {
                                 MenuItem { label: "Set length", action: 54, enabled: true },
                                 MenuItem { label: follow_matrix ? "[x] Follow matrix patterns" : "[ ] Follow matrix patterns",
                                     action: 55, enabled: true },
+                                MenuItem { label: "Set matrix row length", action: 56, enabled: true },
                                 MenuItem { label: "Remove pattern", action: 52, enabled: true }] },
                     Menu {title: "Audio", items: [
                                 MenuItem { label: "Add audio", action: 60, enabled: true },
@@ -728,6 +730,7 @@ pub fn run() -> i32 {
                 if !bpm_dialog.active && bpm_dialog.result == 1 {
                     if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
                     else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
+                    else if bpm_dialog.matrix_steps { library.matrix_steps = bpm_dialog.value; }
                     else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
                     else { transport.set_bpm(bpm_dialog.value); }
                 }
@@ -951,6 +954,7 @@ pub fn run() -> i32 {
                     if !bpm_dialog.active && bpm_dialog.result == 1 {
                         if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
                         else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
+                        else if bpm_dialog.matrix_steps { library.matrix_steps = bpm_dialog.value; }
                         else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
                         else { transport.set_bpm(bpm_dialog.value); }
                     }
@@ -1135,7 +1139,13 @@ pub fn run() -> i32 {
                         }
                     }
                 }
-                if action == 1 {
+                if action == 1 && library.song_continues(matrix.row, matrix.lane) {
+                    let cover: SongCover = library.song_cover(matrix.row, matrix.lane);
+                    free(message);
+                    message = format!("Row {} plays pattern {} from row {}; clear it there to place another",
+                        matrix.row + 1, cover.id, matrix.row + 1 - cover.offset);
+                }
+                else if action == 1 {
                     // Pattern list for this cell: "<no>:<name>", plus an empty entry.
                     var ids: list<i32> = [0]; var labels: list<str8> = [clone("  -  (empty)")];
                     let entries: list<PatternEntry> = library.patterns;
@@ -1144,8 +1154,12 @@ pub fn run() -> i32 {
                     focus.set_menu_active(true);
                 }
                 else if action == 2 {
+                    let cover: SongCover = library.song_cover(matrix.row, matrix.lane);
+                    let origin: i32 = matrix.row - cover.offset;
                     free(message);
-                    message = library.set_song_at(matrix.row, matrix.lane, 0) ? clone("Matrix cell cleared") : clone("No cell here");
+                    message = library.set_song_at(origin, matrix.lane, 0)
+                        ? (cover.offset > 0 ? format!("Cleared pattern {} from row {}", cover.id, origin + 1) : clone("Matrix cell cleared"))
+                        : clone("No cell here");
                 }
                 else if action == 3 || action == 4 {
                     free(message);
@@ -1370,8 +1384,15 @@ pub fn run() -> i32 {
                 let id: i32 = command == 122 ? matrix.clipboard : picker.chosen();
                 if id <= 0 { free(message); message = clone("Select a pattern in the sidebar first (View > Patterns)"); }
                 else {
+                    let blocked: i32 = library.song_placement_blocked(matrix.row, matrix.lane, id);
                     let clashes: i32 = library.song_row_clashes(matrix.row, matrix.lane, id);
-                    if clashes == 0 {
+                    if blocked != 0 {
+                        free(message);
+                        message = blocked < 0
+                            ? format!("Row {} already plays a pattern that started above it", matrix.row + 1)
+                            : format!("Pattern {} needs {} matrix rows and pattern {} is in the way", id, library.song_span(id), blocked);
+                    }
+                    else if clashes == 0 {
                         free(message);
                         message = library.set_song_at(matrix.row, matrix.lane, id)
                             ? format!("Row {} lane {}: pattern {}", matrix.row + 1, matrix.lane + 1, id)
@@ -1505,6 +1526,11 @@ pub fn run() -> i32 {
             else if command == 50 || command == 53 { library.add(command == 53); }
             else if command == 51 {
                 library.editor.set_text(library.active_name()); library.renaming = true; library.error = "";
+            }
+            else if command == 56 {
+                transport.playing = false; song_playing = false;
+                bpm_dialog.open_matrix_steps(library.matrix_steps);
+                focus.set_menu_active(true);
             }
             else if command == 55 {
                 follow_matrix = !follow_matrix;

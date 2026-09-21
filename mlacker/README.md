@@ -55,7 +55,7 @@ it changes, then what it removes; related entries live in submenus.
 | Edit | Undo, Redo, Copy/Cut/Paste clip |
 | View | Patterns, Song matrix, Audio, Instruments, Sample view ▸, Meter ▸, Reset layout, Show details |
 | Track | Create MIDI/AUDIO/Instrument track, Rename, Duplicate, Mute, Note lines ▸, Automation ▸, Clear pattern, Delete |
-| Pattern | Add, Clone, Rename, Set length, Follow matrix patterns, Remove |
+| Pattern | Add, Clone, Rename, Set length, Follow matrix patterns, Set matrix row length, Remove |
 | Audio | Add audio, Edit sample (destructive), Clip ▸, Remove audio |
 | Instrument | Add instrument, Open VST3 editor, Drum pads ▸, Presets ▸, MIDI learn ▸, Remove instrument |
 | Effect | Add effect channel, Load/Edit effect plugin, Set track send, Master ▸, Remove effect plugin |
@@ -85,8 +85,42 @@ the end. The playing row is drawn brighter. Plain **Space** always means "the
 selected pattern", so pressing it during matrix playback leaves the song and
 plays that pattern alone; Ctrl+P again stops.
 
-Within a row, the patterns play to the length of the longest one, and shorter
-patterns repeat to fill it. Every lane brings its own tracks with their clips,
+### Row length and long patterns
+
+One matrix row holds a fixed stretch of pattern time. A new song uses 64 rows;
+a song opened from a file that predates the setting takes the length most of its
+patterns have, so a song written from 16-row patterns plays them one per matrix
+row instead of repeating each of them four times. **Pattern → Set matrix row
+length** changes it, and from then on the song keeps what you chose. A pattern longer than
+that occupies as many matrix rows as it needs and plays a different stretch of
+itself in each, so the lanes beside it move on to their own patterns instead of
+waiting for it. A 128-row pattern beside two 64-row ones looks like this:
+
+```
+ROW  L1              L2
+001  Verse       ┬   DrumsA
+002          ┴       DrumsB
+003  Chorus          DrumsA
+```
+
+With a 16-row grid, four 16-row patterns in a lane fill exactly the time one
+64-row pattern takes beside them:
+
+```
+ROW  L1              L2
+002  Beat A          Untitled ┬
+003  Beat B                 │
+004  Beat A                 │
+005  Snarefill              ┴
+```
+
+The rows a pattern covers belong to it: placing another pattern there is refused
+with the row it started on, and Backspace on such a row clears the pattern that
+covers it. A pattern shorter than the row length repeats to fill its row, as
+before, and a song that never changes the length keeps playing exactly as it did.
+
+Within a row, every lane plays its own stretch, and a lane holding nothing is
+silent. Every lane brings its own tracks with their clips,
 faders, sends, inserts and output channels, and the mixer the engine follows is
 the row that is playing, not whatever pattern the sidebar has selected. A row
 that starts the song with a pattern carrying no effects therefore no longer
