@@ -31,8 +31,11 @@ run at the next available frame. Dense bursts can exhaust the callback budget.
 The reference renderer has 128 shared MIDI/sample voices and a sine preview
 instrument, with a short click-reduction ramp and conservative master gain.
 It is not an Audio Unit plugin host. `add_sample(pcm)` copies a decoded PcmAudio
-while stopped, returning a sample ID or -1; up to 64 copies are retained until
-close. The source PcmAudio can then be freed. PCM voices use linear interpolation
+returning a sample ID or -1, and may be called while the device renders: the
+entry is published only once it is complete, and no voice can name an ID before
+registration returns. Freeing them with `clear_samples()` still needs a stopped
+controller. Up to 64 copies are retained until close. The source PcmAudio can
+then be freed. PCM voices use linear interpolation
 when source and output rates differ. `PlaySample` starts a registered sample;
 `StopSource` releases every voice belonging to a source. `MasterGain` accepts
 0–1. `process(block, frames)` runs the same renderer into a preallocated PcmBlock

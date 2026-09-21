@@ -86,7 +86,11 @@ selected pattern", so pressing it during matrix playback leaves the song and
 plays that pattern alone; Ctrl+P again stops.
 
 Within a row, the patterns play to the length of the longest one, and shorter
-patterns repeat to fill it. Audio clips come from the lowest lane's pattern.
+patterns repeat to fill it. Every lane brings its own tracks with their clips,
+faders, sends, inserts and output channels, and the mixer the engine follows is
+the row that is playing, not whatever pattern the sidebar has selected. A row
+that starts the song with a pattern carrying no effects therefore no longer
+takes the next row's routing with it.
 
 The matrix replaces the pattern editor in that pane while it is open, and menus
 open above it. A session with no song yet starts the matrix on one empty row.
@@ -570,6 +574,12 @@ Current scope:
   playback, and row 1 of a pattern the matrix moves to, play their own notes even
   though the update that schedules them arrives a frame after the transport did.
   A pattern keeps its own grid, so matrix rows of different lengths stay in step.
+  Audio clips follow the same rule: a matrix row change silences the previous
+  row's clips and re-arms the new pattern's from the row it starts on. Arming a
+  pattern never stops the audio device: clip PCM is registered while it renders
+  and cached per clip for the session, so effect tails and instrument voices
+  survive starting playback and every matrix row change. Only a full sample
+  table (256 clips) reloads the hard way.
 - Pattern audio samples feed Master directly, respecting track mute/volume, start
   row and LEN. Starting inside a sample seeks into its embedded PCM; stopping
   playback releases its voices. FX sliders blend the dry path with parallel

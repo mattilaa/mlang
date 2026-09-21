@@ -3209,3 +3209,88 @@ fn tui_playback_follows_a_pattern_change_mid_song() {
     verify(repeat.on == 1 && repeat.note == 62 && repeat.tick == 90000);
     first.release(); second.release();
 }
+
+#[test]
+fn tui_merged_song_row_keeps_fx_routing_and_clips() {
+    var library: PatternLibrary = PatternLibrary::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    // Pattern 1: an audio track with a clip, fed by an instrument track that
+    // carries an insert and an aux send.
+    library.table.create_track_kind(false, true, area);
+    var clip: AudioClip = AudioClip { source: clone("embedded.wav"), channels: 2, sample_rate: 8000, frames: 4000, frames_per_row: 1000 };
+    for _i in 0..4000 { clip.samples.push(0.5f); clip.samples.push(0.25f); }
+    for _i in 0..4 { clip.peaks.push(WavePeak { left: 500, right: 250 }); }
+    library.table.selected_row = 0; verify(library.table.insert_audio(clip, area));
+    library.table.create_instrument_track(1, area);
+    let instrument: i32 = i32(library.table.tracks.len()) - 1;
+    library.table.set_insert(instrument, 0, 3);
+    verify(library.table.set_send(instrument, 1, 40));
+    verify(library.table.set_track_output(instrument, 1));
+    // A second lane's pattern joins it in the same song row.
+    library.add(true);
+    verify(library.set_song_at(0, 0, 1) && library.set_song_at(0, 1, 2));
+    var merged: SequenceTable = library.merge_song_row(0, area);
+    verify(merged.tracks.len() == 4);
+    // Lane 1 arrives through copy_pattern, lane 2 through append_tracks_from:
+    // both keep the routing the mixer set, and the clip that plays.
+    for t in 0..merged.tracks.len() {
+        let track: SequenceTrack = merged.tracks[t];
+        if track.audio { verify(track.instances.len() == 1); }
+        else { verify(track.insert_id(0) == 3 && track.send_level(1) == 40 && track.output == 1); }
+    }
+    let routed: str8 = track_output_label(merged.tracks, instrument);
+    verify(routed == "I1>A1"); free(routed);
+    merged.release(); library.release(); clip.release();
+}
+
+#[test]
+fn tui_clips_restart_on_the_pattern_the_matrix_moves_to() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    // One row of audio, so a clip cannot outlive the row it starts on.
+    var clip: AudioClip = AudioClip { source: clone("embedded.wav"), channels: 2, sample_rate: 8000, frames: 1000, frames_per_row: 1000 };
+    for _i in 0..1000 { clip.samples.push(0.5f); clip.samples.push(0.25f); }
+    clip.peaks.push(WavePeak { left: 500, right: 250 });
+    var table: SequenceTable = SequenceTable::new();
+    table.set_length(4, area);
+    table.create_track_kind(false, true, area);
+    table.selected_row = 0; verify(table.insert_audio(clip, area));
+    let opened: result<AudioController, str8> = AudioController::new(8000, 128);
+    var audio: AudioSystem = AudioSystem {}; audio.output = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(1024); let block: PcmBlock = allocated.unwrap();
+    audio.sync_volumes(table);
+    // Playing from row 0 of this pattern: the clip sounds.
+    audio.restart_samples(0);
+    verify(audio.sample_playback(table, 0, true, 120));
+    audio.output.process(block, 1024); verify(audio.output.master_peak(0) > 0);
+    verify(audio.registered_clips.len() == 1);
+    // The matrix moves on: a pattern of another length takes over mid-song and
+    // starts from its own row 0, so its clip plays there instead of keeping the
+    // grid the previous pattern happened to use.
+    var other: SequenceTable = SequenceTable::new();
+    other.set_length(2, area);
+    other.create_track_kind(false, true, area);
+    other.selected_row = 0; verify(other.insert_audio(clip, area));
+    audio.sync_volumes(other);
+    audio.restart_samples(0);
+    // Row 3 of the four-row pattern is not a boundary of the two-row one.
+    verify(audio.sample_playback(other, 46920, true, 120));
+    // Re-arming uploads nothing: the same audio keeps its registration, so the
+    // switch needs no stopped device and no effect tail is cut.
+    verify(audio.registered_clips.len() == 1);
+    audio.output.process(block, 1024); verify(audio.output.master_peak(0) > 0);
+    // Its own two-row loop repeats it; the previous four-row grid does not.
+    verify(audio.sample_playback(other, 60000, true, 120));
+    audio.output.process(block, 1024); verify(audio.output.master_peak(0) == 0);
+    verify(audio.sample_playback(other, 75000, true, 120));
+    audio.output.process(block, 1024); verify(audio.output.master_peak(0) > 0);
+    // Different audio of the same shape keeps its own registration.
+    var quiet: AudioClip = AudioClip { source: clone("embedded.wav"), channels: 2, sample_rate: 8000, frames: 1000, frames_per_row: 1000 };
+    for _i in 0..1000 { quiet.samples.push(0.1f); quiet.samples.push(0.05f); }
+    quiet.peaks.push(WavePeak { left: 100, right: 50 });
+    other.selected_row = 1; verify(other.insert_audio(quiet, area));
+    audio.restart_samples(0);
+    verify(audio.sample_playback(other, 75000, true, 120));
+    verify(audio.registered_clips.len() == 2);
+    block.close(); audio.release(); table.release(); other.release(); clip.release(); quiet.release();
+}
+

@@ -1182,7 +1182,10 @@ pub fn append_tracks_from(self: &mut Self, source: &SequenceTable, area: Rect) -
         free(copy.name); copy.name = clone(track.name);
         copy.muted = track.muted; copy.volume = track.volume; copy.pan = track.pan;
         copy.instrument = track.instrument; copy.instrument_id = track.instrument_id;
-        copy.sends = track.copy_sends(); copy.inserts = track.inserts;
+        copy.sends = track.copy_sends(); copy.inserts = track.inserts; copy.output = track.output;
+        // Clips live in the track, not in its cells: a merged lane plays its
+        // audio, not just its LEN column.
+        copy.instances = track.copy_audio();
         copy.cc1 = AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum };
         copy.cc2 = AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum };
         self.replace_track(index, copy);

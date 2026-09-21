@@ -49,7 +49,10 @@ typedef struct {
     uint64_t live_panic;
     ac_voice voices[AC_VOICES];
     ac_sample samples[AC_SAMPLES];
-    int sample_count, running;
+    /* Registration appends while the device runs: the entry is written before
+     * the count publishes it, and only a stopped controller may free them. */
+    _Atomic int sample_count;
+    int running;
     double rate, gain, frequencies[128];
     int64_t buffer_frames;
     mlang_audio_processor processor;
@@ -274,7 +277,7 @@ static void ac_dispatch(ac_controller *c, const ac_event *e) {
         }
     }
     if(off || e->kind == 5 || !slot) return;
-    if(e->kind == 4 && e->sample >= c->sample_count) return;
+    if(e->kind == 4 && e->sample >= atomic_load_explicit(&c->sample_count, memory_order_acquire)) return;
     memset(slot, 0, sizeof(*slot)); slot->active = 1;
     slot->source = (int)e->source; slot->channel = (int)e->channel; slot->note = (int)e->note;
     slot->sample = e->kind == 4 ? (int)e->sample : -1;
@@ -516,32 +519,39 @@ int32_t __mlang_std_audio_controller_clear_samples(int64_t handle) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || c->running) return -1;
     ac_silence(c);
-    for(int i = 0; i < c->sample_count; ++i) free(c->samples[i].data);
-    c->sample_count = 0;
+    int count = atomic_load_explicit(&c->sample_count, memory_order_relaxed);
+    for(int i = 0; i < count; ++i) free(c->samples[i].data);
+    atomic_store_explicit(&c->sample_count, 0, memory_order_release);
     for(int lane = 0; lane < 2; ++lane)
         atomic_store_explicit(&c->queues[lane].read, atomic_load_explicit(&c->queues[lane].write, memory_order_acquire), memory_order_release);
     return 0;
 }
+/* Control thread, safe while rendering: a new entry is published only after it
+ * is complete, and no voice can name an id before registration returns. */
 int64_t __mlang_std_audio_controller_sample_data(int64_t handle, mlang_list_t samples, int64_t channels, int64_t rate) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || c->running || channels < 1 || channels > 2 || rate <= 0 ||
-       samples.size <= 0 || samples.size % channels || !samples.data || c->sample_count == AC_SAMPLES ||
+    int count = c ? atomic_load_explicit(&c->sample_count, memory_order_relaxed) : 0;
+    if(!c || channels < 1 || channels > 2 || rate <= 0 ||
+       samples.size <= 0 || samples.size % channels || !samples.data || count == AC_SAMPLES ||
        (uint64_t)samples.size > SIZE_MAX / sizeof(float)) return -1;
     size_t bytes = (size_t)samples.size * sizeof(float);
     float *data = malloc(bytes); if(!data) return -1;
     memcpy(data, samples.data, bytes);
-    int id = c->sample_count++;
-    c->samples[id] = (ac_sample){data, samples.size / channels, (int)channels, (double)rate}; return id;
+    c->samples[count] = (ac_sample){data, samples.size / channels, (int)channels, (double)rate};
+    atomic_store_explicit(&c->sample_count, count + 1, memory_order_release);
+    return count;
 }
 int64_t __mlang_std_audio_controller_sample(int64_t handle, int64_t pcm) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     mlang_pcm_audio_t *p = (mlang_pcm_audio_t*)(intptr_t)pcm;
-    if(!c || c->running || !p || p->frame_count <= 0 || c->sample_count == AC_SAMPLES) return -1;
+    int count = c ? atomic_load_explicit(&c->sample_count, memory_order_relaxed) : 0;
+    if(!c || !p || p->frame_count <= 0 || count == AC_SAMPLES) return -1;
     size_t bytes = (size_t)p->frame_count * (size_t)p->channels * sizeof(float);
     float *data = malloc(bytes); if(!data) return -1;
     memcpy(data, p->samples, bytes);
-    int id = c->sample_count++;
-    c->samples[id] = (ac_sample){data, p->frame_count, p->channels, p->sample_rate}; return id;
+    c->samples[count] = (ac_sample){data, p->frame_count, p->channels, p->sample_rate};
+    atomic_store_explicit(&c->sample_count, count + 1, memory_order_release);
+    return count;
 }
 
 int32_t __mlang_std_audio_controller_process(int64_t handle, int64_t block, int64_t frames) {
@@ -590,7 +600,8 @@ int32_t __mlang_std_audio_controller_close(int64_t handle) {
 #if defined(__APPLE__)
     if(c->unit) { AudioUnitUninitialize(c->unit); AudioComponentInstanceDispose(c->unit); }
 #endif
-    for(int i = 0; i < c->sample_count; ++i) free(c->samples[i].data);
+    int registered = atomic_load_explicit(&c->sample_count, memory_order_relaxed);
+    for(int i = 0; i < registered; ++i) free(c->samples[i].data);
     if(c->processor.context) c->processor.destroy(c->processor.context);
     for(int i = 0; i < 32; ++i)
         if(c->instruments[i].context) c->instruments[i].destroy(c->instruments[i].context);

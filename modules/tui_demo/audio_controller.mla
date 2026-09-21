@@ -20,6 +20,23 @@ pub struct EffectChannel { var path: str8{""}; var volume: i32{100}; };
 /// Sampler-instrument pad (0-based) filled from the session sample list.
 pub struct PadAssignment { var slot: i32; var pad: i32; var sample: i32; };
 pub struct SamplePlacement { var sample: i64; var track: i64; var start: i64; var duration: i64; var rate: i64; var next: i64; var head: i64; };
+/// PCM already registered with the controller. Clips are matched by content,
+/// so re-arming a pattern reuses the registration instead of stopping the
+/// device to upload the same audio again.
+pub struct RegisteredClip { var id: i64; var frames: i64; var channels: i64; var rate: i64; var fingerprint: i64; };
+/// Cheap content key: enough spread to separate two clips of equal geometry,
+/// including one a destructive edit rewrote in place.
+pub fn clip_fingerprint(samples: list<f32>) -> i64 {
+    let count: i64 = samples.len();
+    let step: i64 = count > 64 ? count / 64 : 1;
+    var hash: i64 = count % 1000000007;
+    var i: i64 = 0;
+    while i < count {
+        hash = (hash * 131 + wide(i32(samples[i] * 32767.0f)) + 2147483648) % 1000000007;
+        i = i + step;
+    }
+    return hash;
+}
 pub struct AudioSystem {
     var output: AudioController; var midi: MidiController;
     var midi_id: i64{-1}; var output_id: i64{-1};
@@ -33,6 +50,12 @@ pub struct AudioSystem {
     var pads: list<PadAssignment>;
     var sample_placements: list<SamplePlacement>; var samples_running: bool;
     var sample_output: i64; var sample_last: i64;
+    /// Tick where row 0 of the pattern holding the placements falls, and the
+    /// row it starts on (-1 takes it from the tick, which is right while one
+    /// pattern keeps playing). Both mirror NotePlayback, so clips and notes
+    /// share a pattern's grid.
+    var sample_epoch: i64; var sample_start_row: i32{-1};
+    var registered_clips: list<RegisteredClip>;
 };
 impl AudioSystem {
     pub fn adopt(self: &mut Self, source: &AudioSystem) -> void {
@@ -46,6 +69,7 @@ impl AudioSystem {
         self.insert_paths = next.insert_paths;
         self.pads = next.pads;
         self.samples_running = false; self.sample_placements = []; self.sample_output = 0;
+        self.sample_epoch = 0; self.sample_start_row = -1; self.registered_clips = [];
     }
     pub fn start(hardware: bool) -> AudioSystem {
         var system: AudioSystem = AudioSystem { hardware_requested: hardware };
@@ -142,33 +166,51 @@ impl AudioSystem {
         if bpm <= 0 { return false; }
         let period: i64 = table.rows.len() * 15000;
         if !self.samples_running || self.sample_output != self.output.handle || tick < self.sample_last {
-            let worker: bool = self.midi.worker.raw != 0;
-            let restart: bool = self.output.hardware_output();
-            self.midi.release();
-            if self.output.stop() != 0 {
-                if worker { self.midi = MidiController::start_selected(self.midi_id, self.output.handle); }
-                return false;
-            }
-            self.output.clear_samples(); self.sample_placements = [];
-            var valid: bool = true;
-            for t in 0..table.tracks.len() {
-                let track: SequenceTrack = table.tracks[t];
-                if !track.audio { continue; }
-                let instances: list<AudioInstance> = track.instances;
-                for instance in instances {
-                    let rc: AudioClip = instance.render_clip();
-                    let id: i64 = self.output.add_sample_data(instance.clip.samples, instance.clip.channels, instance.clip.sample_rate);
-                    if id < 0 { valid = false; continue; }
-                    let start: i64 = wide(instance.start_row) * 15000;
-                    let duration: i64 = rc.frames * wide(bpm) * 1000 / instance.clip.sample_rate;
-                    var next: i64 = tick / period * period + start;
-                    if next + duration <= tick { next = next + period; }
-                    self.sample_placements.push(SamplePlacement { sample: id, track: t, start: start, duration: duration,
-                        rate: instance.clip.sample_rate, next: next, head: rc.offset });
+            // The pattern starts on this row now; its clips repeat on its own
+            // length from there, whatever the previous pattern's length was.
+            let row_start: i64 = tick - tick % 15000;
+            let row: i64 = self.sample_start_row >= 0 ? wide(self.sample_start_row) : tick / 15000 % wide(i32(table.rows.len()));
+            self.sample_epoch = row_start - row * 15000;
+            self.sample_start_row = -1;
+            // Arming a pattern never stops the device: registration appends
+            // while it renders, so effect tails and instrument voices survive a
+            // matrix row change. Only a full cache (256 clips) reloads.
+            if self.sample_output != self.output.handle { self.registered_clips = []; }
+            var valid: bool = false;
+            for attempt in 0..2 {
+                if valid { break; }
+                if attempt == 1 {
+                    // Every slot is taken by clips this session no longer uses.
+                    // Emptying them is the one case that needs a stopped device.
+                    let worker: bool = self.midi.worker.raw != 0;
+                    let restart: bool = self.output.hardware_output();
+                    self.midi.release();
+                    if self.output.stop() != 0 {
+                        if worker { self.midi = MidiController::start_selected(self.midi_id, self.output.handle); }
+                        return false;
+                    }
+                    self.output.clear_samples(); self.registered_clips = [];
+                    if restart { if self.output.start() != 0 { return false; } }
+                    if worker { self.midi = MidiController::start_selected(self.midi_id, self.output.handle); }
+                }
+                self.sample_placements = []; valid = true;
+                for t in 0..table.tracks.len() {
+                    let track: SequenceTrack = table.tracks[t];
+                    if !track.audio { continue; }
+                    let instances: list<AudioInstance> = track.instances;
+                    for instance in instances {
+                        let rc: AudioClip = instance.render_clip();
+                        let id: i64 = self.register_clip(instance.clip);
+                        if id < 0 { valid = false; continue; }
+                        let start: i64 = wide(instance.start_row) * 15000;
+                        let duration: i64 = rc.frames * wide(bpm) * 1000 / instance.clip.sample_rate;
+                        var next: i64 = self.sample_epoch + (tick - self.sample_epoch) / period * period + start;
+                        if next + duration <= tick { next = next + period; }
+                        self.sample_placements.push(SamplePlacement { sample: id, track: t, start: start, duration: duration,
+                            rate: instance.clip.sample_rate, next: next, head: rc.offset });
+                    }
                 }
             }
-            if restart { if self.output.start() != 0 { valid = false; } }
-            if worker { self.midi = MidiController::start_selected(self.midi_id, self.output.handle); }
             self.sample_output = self.output.handle; self.samples_running = true;
             if !valid { self.samples_running = false; return false; }
         }
@@ -189,6 +231,32 @@ impl AudioSystem {
             updated.push(placement);
         }
         self.sample_placements = updated; self.sample_last = tick; return true;
+    }
+    /// Controller-side PCM id for a clip, uploading it only the first time.
+    /// Returns -1 when the controller is full or refuses the data.
+    fn register_clip(self: &mut Self, clip: AudioClip) -> i64 {
+        let fingerprint: i64 = clip_fingerprint(clip.samples);
+        let known: list<RegisteredClip> = self.registered_clips;
+        for entry in known {
+            if entry.fingerprint == fingerprint && entry.frames == clip.frames
+                && entry.channels == clip.channels && entry.rate == clip.sample_rate { return entry.id; }
+        }
+        let id: i64 = self.output.add_sample_data(clip.samples, clip.channels, clip.sample_rate);
+        if id < 0 { return -1; }
+        self.registered_clips.push(RegisteredClip { id: id, frames: clip.frames, channels: clip.channels,
+            rate: clip.sample_rate, fingerprint: fingerprint });
+        return id;
+    }
+    /// The playing pattern changed: silence its clips and re-arm the next
+    /// pattern's placements on the next `sample_playback`.
+    pub fn restart_samples(self: &mut Self, row: i32) -> void {
+        if self.samples_running {
+            let placements: list<SamplePlacement> = self.sample_placements;
+            for placement in placements {
+                self.output.post(AudioEvent { kind: AudioEventKind::StopSource, source: placement.track }, 0);
+            }
+        }
+        self.samples_running = false; self.sample_placements = []; self.sample_start_row = row;
     }
     pub fn sync_volumes(self: AudioSystem, source: &SequenceTable) -> void {
         var table: SequenceTable = SequenceTable {}; table = source;
