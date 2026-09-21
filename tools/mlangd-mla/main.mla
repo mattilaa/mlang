@@ -389,40 +389,9 @@ fn is_ident_char(ch: str8) -> bool {
 
 fn line_text_at(text: str8, line0: i64) -> str8 {
     if line0 < 0 { return String::new(); }
-    let n: i64 = len(text);
-    var cur: i64 = 0;
-    var start: i64 = 0;
-    var found_start: i32 = 0;
-    for i in 0..n {
-        if cur == line0 {
-            start = i;
-            found_start = 1;
-            break;
-        }
-        let ch: str8 = sub(text, i, 1);
-        if eq(ch, "\n") == 1 {
-            cur = cur + 1;
-        }
-    }
-    if found_start == 0 {
-        if cur == line0 {
-            start = n;
-        } else {
-            return String::new();
-        }
-    }
-    var endi: i64 = start;
-    var found_end: i32 = 0;
-    for j in start..n {
-        let ch: str8 = sub(text, j, 1);
-        if eq(ch, "\n") == 1 { break; }
-        endi = j + 1;
-        found_end = 1;
-    }
-    if found_end == 0 {
-        endi = start;
-    }
-    return sub(text, start, endi - start);
+    // The native range extractor clamps the end column to the line length.
+    // Avoid sub(text, i, 1): each byte allocates and rescans the whole string.
+    return extract_range_text(text, line0, 0, line0, len(text));
 }
 
 fn text_starts_with_at(text: str8, pos: i64, needle: str8) -> bool {
@@ -2272,6 +2241,11 @@ fn completion_documentation(label: str8) -> str8 {
     if eq(label, "match") == 1 {
         return "Pattern matching expression over enum/option/result and literals.";
     }
+    // Keywords are not user declarations. Their built-in detail is sufficient
+    // documentation; never scan a large document looking for a declaration.
+    let keyword_detail: str8 = completion_detail(label);
+    if starts_with(keyword_detail, "keyword:") == 1 { return keyword_detail; }
+
     return String::new();
 }
 
