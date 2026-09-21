@@ -96,6 +96,14 @@ are accepted. Unsupported major or minor versions fail closed.
     exist in the pattern list. This extension also requires the preceding tags,
     with empty sections if necessary.
 
+13. Optional `TRACK_OUTPUTS` extension follows `SONG_MATRIX`: per pattern, a
+    track count matching that pattern followed by one output channel per track.
+    0 is the master bus; any other value is the destination track index + 1
+    within the same pattern, and a track may not name itself. It is written only
+    when some track leaves master, and it also requires the preceding tags, with
+    empty sections if necessary. A route to a track that is no longer an AUDIO
+    track is loaded as written and plays to master.
+
 The active pattern is serialized from the live editor, not its older library
 snapshot. Audio placements reference the embedded sample list; plugin assignments
 reference stable slots, including holes left by removed instruments.

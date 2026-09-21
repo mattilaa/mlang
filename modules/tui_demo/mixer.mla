@@ -15,6 +15,7 @@ use tui::theme::*;
 use tui::meter::VuMeter;
 use tui_demo::sequence::SequenceTrack;
 use tui_demo::sequence::SequenceTable;
+use tui_demo::sequence::output_label_text;
 use tui_demo::sequence::AudioInstance;
 use tui_demo::audio_clip::WavePeak;
 use tui::table::TableRow;
@@ -25,14 +26,18 @@ pub struct MeterLevel { var left: i32; var right: i32; };
 /// Meters are derived from sequenced notes and audio peaks, never synthetic.
 pub struct Mixer { var visible: bool; var grainy: bool{true}; var levels: list<MeterLevel>; var master: MeterLevel; var instrument_levels: list<MeterLevel>; var effect_volumes: list<i32>; var effect_levels: list<MeterLevel>; var bus_focus: bool; var selected_effect: i32;
     var expanded: list<i32>; var send_track: i32{-1}; var selected_send: i32{-1};
+    /// Measured post-fader output of every channel the engine buffers.
+    var channel_levels: list<MeterLevel>;
 };
 impl Mixer {
     pub fn expanded_track(self: Mixer, index: i32) -> bool {
         if index < 0 || index >= self.expanded.len() { return false; }
         return self.expanded[index] != 0;
     }
+    /// Every strip is the same width: the OUT row spells out a full
+    /// destination ("OUT:MST", "I12>A12") on channels of every kind.
     pub fn track_width(self: Mixer, instrument: bool, index: i32) -> i32 {
-        return (instrument ? 8 : 6) + (self.expanded_track(index) ? i32(self.effect_volumes.len()) * 5 : 0);
+        return 8 + (self.expanded_track(index) ? i32(self.effect_volumes.len()) * 5 : 0);
     }
     /// Consume navigation inside an expanded track; false lets channel navigation proceed.
     pub fn send_navigation(self: &mut Self, event: InputEvent, index: i32) -> bool {
@@ -94,6 +99,29 @@ impl Mixer {
             next.push(level);
         }
         self.instrument_levels = next; return changed;
+    }
+    /// Consume each channel's measured output once. A track the engine mixes
+    /// straight into master reports nothing and keeps its simulated meter.
+    pub fn update_channels(self: &mut Self, output: AudioController, delta: i32) -> bool {
+        var next: list<MeterLevel> = []; var changed: bool = false;
+        for i in 0..64 {
+            var old: MeterLevel = MeterLevel {};
+            if i < self.channel_levels.len() { old = self.channel_levels[i]; }
+            let level: MeterLevel = MeterLevel { left: meter_ramp(old.left, output.track_peak(i, 0), delta),
+                right: meter_ramp(old.right, output.track_peak(i, 1), delta) };
+            if level.left != old.left || level.right != old.right { changed = true; }
+            next.push(level);
+        }
+        self.channel_levels = next; return changed;
+    }
+    /// What the strip puts out: its own notes and clips, or the measured
+    /// channel output once inserts or routed instruments feed it.
+    pub fn channel_level(self: Mixer, index: i32, volume: i32, pan: i32, right: bool, muted: bool) -> i32 {
+        let simulated: i32 = self.level(index, volume, pan, right, muted);
+        if muted || index < 0 || index >= self.channel_levels.len() { return simulated; }
+        let measured: MeterLevel = self.channel_levels[index];
+        let value: i32 = right ? measured.right : measured.left;
+        return value > simulated ? value : simulated;
     }
     pub fn update_master(self: &mut Self, left: i32, right: i32, delta: i32) -> bool {
         let next: MeterLevel = MeterLevel { left: meter_ramp(self.master.left, left, delta), right: meter_ramp(self.master.right, right, delta) };
@@ -178,11 +206,13 @@ impl Mixer {
         while span > available && start < selected && start < tracks.len() {
             let track: SequenceTrack = tracks[start]; span = span - self.track_width(track.instrument, start); start = start + 1;
         }
+        // The OUT row sits below the fader value, on the last row of the strip.
+        let lift: i32 = area.height > 4 ? 1 : 0;
         var cursor: i32 = 0;
         for index in start..tracks.len() {
             if cursor >= available { break; }
             let track: SequenceTrack = tracks[index];
-            let base: i32 = track.instrument ? 8 : 6;
+            let base: i32 = 8;
             let preferred: i32 = self.track_width(track.instrument, i32(index));
             let width: i32 = available - cursor < preferred ? available - cursor : preferred;
             let x: i32 = area.x + cursor; cursor = cursor + width;
@@ -202,21 +232,32 @@ impl Mixer {
             if area.height > 3 && strip.width >= 4 {
                 let fader: Slider = Slider { minimum: 0.0, maximum: 100.0, value: f64(track.volume), value_type: "i32" };
                 var fader_theme: Theme = theme; fader_theme.panel = bg; fader_theme.selection = bg;
-                fader.paint_vertical(surface, Rect::new(x, area.y + 3, 3, area.height - 3), fader_theme, index == selected && !self.bus_focus && self.selected_send < 0);
-                let left: VuMeter = VuMeter { level: self.level(index, track.volume, track.audio ? track.pan : 0, false, track.muted), grainy: self.grainy };
-                let right: VuMeter = VuMeter { level: self.level(index, track.volume, track.pan, true, track.muted), grainy: self.grainy };
+                fader.paint_vertical(surface, Rect::new(x, area.y + 3, 3, area.height - 3 - lift), fader_theme, index == selected && !self.bus_focus && self.selected_send < 0);
+                let left: VuMeter = VuMeter { level: self.channel_level(index, track.volume, track.audio ? track.pan : 0, false, track.muted), grainy: self.grainy };
+                let right: VuMeter = VuMeter { level: self.channel_level(index, track.volume, track.pan, true, track.muted), grainy: self.grainy };
                 let meter_x: i32 = x + 3;
-                left.paint(surface, Rect::new(meter_x, area.y + 3, 1, area.height - 4), bg);
-                if track.audio && strip.width >= 5 { right.paint(surface, Rect::new(meter_x + 1, area.y + 3, 1, area.height - 4), bg); }
+                left.paint(surface, Rect::new(meter_x, area.y + 3, 1, area.height - 4 - lift), bg);
+                if track.audio && strip.width >= 5 { right.paint(surface, Rect::new(meter_x + 1, area.y + 3, 1, area.height - 4 - lift), bg); }
                 if track.instrument && strip.width >= 7 {
                     var pcm: MeterLevel = MeterLevel {};
                     if track.instrument_id > 0 && track.instrument_id <= self.instrument_levels.len() { pcm = self.instrument_levels[track.instrument_id - 1]; }
                     let pcm_left: VuMeter = VuMeter { level: pcm.left, grainy: self.grainy };
                     let pcm_right: VuMeter = VuMeter { level: pcm.right, grainy: self.grainy };
                     surface.text(Rect::new(x + 3, area.y + 2, 4, 1), "M LR", theme.muted, bg);
-                    pcm_left.paint(surface, Rect::new(x + 5, area.y + 3, 1, area.height - 4), bg);
-                    pcm_right.paint(surface, Rect::new(x + 6, area.y + 3, 1, area.height - 4), bg);
+                    pcm_left.paint(surface, Rect::new(x + 5, area.y + 3, 1, area.height - 4 - lift), bg);
+                    pcm_right.paint(surface, Rect::new(x + 6, area.y + 3, 1, area.height - 4 - lift), bg);
                 }
+            }
+            // Where this channel goes: master, another audio track, or (for an
+            // instrument track) the instance it plays.
+            if lift > 0 {
+                var destination: i32 = track.output;
+                if destination > tracks.len() || destination - 1 == i32(index) { destination = 0; }
+                if destination > 0 { let other: SequenceTrack = tracks[destination - 1]; if !other.audio { destination = 0; } }
+                let text: str8 = output_label_text(track.instrument ? track.instrument_id : 0, destination);
+                surface.text(Rect::new(x, area.y + area.height - 1, strip.width, 1), text,
+                    destination > 0 ? theme.accent : theme.muted, bg);
+                free(text);
             }
             // Five cells per FX: label, bounded fader, and a complete 100% value.
             let capacity: i32 = (width - base_width) / 5;
@@ -235,11 +276,11 @@ impl Mixer {
                     if area.height > 3 {
                         var send_theme: Theme = theme; send_theme.panel = send_bg; send_theme.selection = send_bg;
                         let slider: Slider = Slider { minimum: 0.0, maximum: 100.0, value: f64(value), value_type: "i32" };
-                        slider.paint_vertical(surface, Rect::new(sx, area.y + 3, 4, area.height - 3), send_theme, active);
+                        slider.paint_vertical(surface, Rect::new(sx, area.y + 3, 4, area.height - 3 - lift), send_theme, active);
                     }
                     if area.height > 2 {
                         let text: str8 = format!("{}{}", value, "%");
-                        surface.text(Rect::new(sx, area.y + area.height - 1, 4, 1), text, active ? theme.accent : theme.foreground, send_bg); free(text);
+                        surface.text(Rect::new(sx, area.y + area.height - 1 - lift, 4, 1), text, active ? theme.accent : theme.foreground, send_bg); free(text);
                     }
                 }
             }
@@ -260,13 +301,15 @@ impl Mixer {
                 if area.height > 3 && width >= 5 {
                     var fader_theme: Theme = theme; fader_theme.panel = bg; fader_theme.selection = bg;
                     let fader: Slider = Slider { minimum: 0.0, maximum: 100.0, value: f64(self.effect_volumes[index]), value_type: "i32" };
-                    fader.paint_vertical(surface, Rect::new(x, area.y + 3, 3, area.height - 3), fader_theme, self.bus_focus && index == self.selected_effect);
+                    fader.paint_vertical(surface, Rect::new(x, area.y + 3, 3, area.height - 3 - lift), fader_theme, self.bus_focus && index == self.selected_effect);
                     var level: MeterLevel = MeterLevel {}; if index < self.effect_levels.len() { level = self.effect_levels[index]; }
                     let left: VuMeter = VuMeter { level: level.left, grainy: self.grainy }; let right: VuMeter = VuMeter { level: level.right, grainy: self.grainy };
                     surface.text(Rect::new(x + 3, area.y + 2, 2, 1), "LR", theme.muted, bg);
-                    left.paint(surface, Rect::new(x + 3, area.y + 3, 1, area.height - 4), bg);
-                    right.paint(surface, Rect::new(x + 4, area.y + 3, 1, area.height - 4), bg);
+                    left.paint(surface, Rect::new(x + 3, area.y + 3, 1, area.height - 4 - lift), bg);
+                    right.paint(surface, Rect::new(x + 4, area.y + 3, 1, area.height - 4 - lift), bg);
                 }
+                // An aux return always lands on the master bus.
+                if lift > 0 { surface.text(Rect::new(x, area.y + area.height - 1, width, 1), "OUT:MST", theme.muted, bg); }
             }
         }
         // Fixed to the right, independent of the horizontally scrolling tracks.
@@ -279,8 +322,8 @@ impl Mixer {
         if area.height > 3 {
             let left: VuMeter = VuMeter { level: self.master.left, grainy: self.grainy };
             let right: VuMeter = VuMeter { level: self.master.right, grainy: self.grainy };
-            left.paint(surface, Rect::new(x, area.y + 3, 1, area.height - 3), bg);
-            if master_width >= 3 { right.paint(surface, Rect::new(x + 2, area.y + 3, 1, area.height - 3), bg); }
+            left.paint(surface, Rect::new(x, area.y + 3, 1, area.height - 3 - lift), bg);
+            if master_width >= 3 { right.paint(surface, Rect::new(x + 2, area.y + 3, 1, area.height - 3 - lift), bg); }
         }
     }
 }

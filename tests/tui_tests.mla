@@ -139,7 +139,7 @@ fn tui_mixer_fx_zoom() {
     var table: SequenceTable = SequenceTable::new();
     var mixer: Mixer = Mixer { effect_volumes: [100, 100, 100, 100] };
     verify(mixer.send_navigation(decode_input("z"), 0)); verify(mixer.expanded_track(0));
-    verify_eq_i32(26, mixer.track_width(false, 0)); verify_eq_i32(6, mixer.track_width(false, 1));
+    verify_eq_i32(28, mixer.track_width(false, 0)); verify_eq_i32(8, mixer.track_width(false, 1));
     verify(mixer.send_navigation(decode_input("l"), 0)); verify(mixer.selected_send == 0);
     let track: SequenceTrack = table.tracks[0];
     verify_eq_i32(1, mixer.send_value(decode_input("K"), track));
@@ -152,8 +152,9 @@ fn tui_mixer_fx_zoom() {
     let surface: Surface = Surface::new(40, 12);
     mixer.paint(surface, Rect::new(0, 0, 40, 12), Theme::dark_blue(), table.tracks, 0);
     // Narrow track bank scrolls FX controls without displacing Master.
-    let label: Cell = surface.cell(13, 0); verify_eq_i32(52, label.glyph); // FX4
-    let percent: Cell = surface.cell(12, 11); verify_eq_i32(37, percent.glyph);
+    let label: Cell = surface.cell(10, 0); verify_eq_i32(52, label.glyph); // FX4
+    // The send value sits one row above the OUT row that closes every strip.
+    let percent: Cell = surface.cell(9, 10); verify_eq_i32(37, percent.glyph);
     let master: Cell = surface.cell(34, 0); verify_eq_i32(77, master.glyph);
     verify(!mixer.send_navigation(decode_input("l"), 0)); verify(mixer.selected_send == -1);
     verify(mixer.send_navigation(decode_input("z"), 1));
@@ -295,6 +296,38 @@ fn tui_samples_reach_master() {
     verify(audio.sample_playback(table, 16000, false, 120));
     block.close(); audio.release(); table.release(); clip.release();
 }
+#[test]
+fn tui_mixer_meters_the_routed_channel_output() {
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    table.create_track_kind(false, true, area);            // destination channel
+    table.create_track_kind(false, true, area);            // the track routed into it
+    let source: i32 = i32(table.tracks.len()) - 1;
+    let destination: i32 = source - 1;
+    var clip: AudioClip = AudioClip { source: clone("embedded.wav"), channels: 2, sample_rate: 8000, frames: 4000, frames_per_row: 1000 };
+    for _i in 0..4000 { clip.samples.push(0.5f); clip.samples.push(0.25f); }
+    for _i in 0..4 { clip.peaks.push(WavePeak { left: 500, right: 250 }); }
+    table.selected_row = 1; verify(table.insert_audio(clip, area));
+    verify(table.set_track_output(source, destination + 1));
+    let opened: result<AudioController, str8> = AudioController::new(8000, 128);
+    var audio: AudioSystem = AudioSystem {}; audio.output = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(1024); let block: PcmBlock = allocated.unwrap();
+    audio.sync_volumes(table);
+    verify(audio.sample_playback(table, 15000, true, 120));
+    verify(audio.output.process(block, 1024) == 0);
+    var mixer: Mixer = Mixer { visible: true };
+    verify(mixer.update_channels(audio.output, 1000));
+    // The destination holds no clip of its own, yet meters what feeds it.
+    verify(mixer.level(destination, 100, 0, false, false) == 0);
+    verify(mixer.channel_level(destination, 100, 0, false, false) > 0);
+    verify(mixer.channel_level(destination, 100, 0, true, false) > 0);
+    // Muting still reads silent, and a channel the engine does not buffer
+    // keeps the simulated meter of its own notes and clips.
+    verify(mixer.channel_level(destination, 100, 0, false, true) == 0);
+    verify(mixer.channel_level(63, 100, 0, false, false) == mixer.level(63, 100, 0, false, false));
+    block.close(); audio.release(); table.release(); clip.release();
+}
+
 extern fn mkdtemp(path: str8) -> str8;
 
 #[test]
@@ -1548,9 +1581,9 @@ fn tui_vu_meter_and_mixer() {
     verify(before != mixer.level(0, 100, 0, false, false));
     verify(mixer.level(0, 100, 0, false, true) == 0 && mixer.level(0, 100, 100, false, false) == 0);
     mixer.paint(surface, Rect::new(0, 0, 27, 16), theme, table.tracks, 1);
-    let selected: Cell = surface.cell(6, 0); let other: Cell = surface.cell(0, 0);
+    let selected: Cell = surface.cell(8, 0); let other: Cell = surface.cell(0, 0);
     verify(selected.background == lighten(theme.panel, 8) && other.background == theme.panel);
-    let volume: Cell = surface.cell(6, 1); let pan: Cell = surface.cell(6, 2);
+    let volume: Cell = surface.cell(8, 1); let pan: Cell = surface.cell(8, 2);
     verify(volume.glyph == 86 && pan.glyph == 80);
     verify(mixer.update_master(900, 400, 20));
     verify(mixer.master.left > mixer.master.right && mixer.master.right > 0);
@@ -1602,10 +1635,11 @@ fn tui_meter_styles_and_channel_counts() {
     var table: SequenceTable = SequenceTable::new(); table.zoom_tracks(2, true, Rect::new(0, 0, 120, 12)); table.create_track_kind(false, true, Rect::new(0, 0, 40, 12));
     let mixer: Mixer = Mixer { visible: true };
     mixer.paint(surface, Rect::new(0, 0, 24, 12), theme, table.tracks, 3);
-    let mono: Cell = surface.cell(3, 10); let empty: Cell = surface.cell(4, 10);
-    let left: Cell = surface.cell(15, 10); let right: Cell = surface.cell(16, 10);
+    // Meters stop above the fader value and the OUT row beneath it.
+    let mono: Cell = surface.cell(3, 9); let empty: Cell = surface.cell(4, 9);
+    let left: Cell = surface.cell(11, 9); let right: Cell = surface.cell(12, 9);
     verify(mono.glyph != 32 && empty.glyph == 32 && left.glyph != 32 && right.glyph != 32);
-    let identity: Cell = surface.cell(12, 0); verify(identity.glyph == 65);
+    let identity: Cell = surface.cell(8, 0); verify(identity.glyph == 65);
     let master: Cell = surface.cell(18, 0); verify(master.glyph == 77);
     table.release(); surface.release();
 }
@@ -3038,3 +3072,80 @@ fn tui_song_matrix_marks_the_playing_row() {
     verify(playing_bg == lighten(theme.panel, 36) && idle_bg == theme.panel);
     surface.release(); library.release();
 }
+
+use tui_demo::sequence::track_output_label;
+
+#[test]
+fn tui_track_output_channels_and_labels() {
+    var table: SequenceTable = SequenceTable::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    table.create_track_kind(false, false, area);     // 0: MIDI
+    table.create_track_kind(false, true, area);      // 1: AUDIO
+    table.create_track_kind(false, true, area);      // 2: AUDIO
+    // Master by default, on every kind of channel.
+    let first: str8 = track_output_label(table.tracks, 0); verify(first == "OUT:MST"); free(first);
+    // Only an audio track takes another channel, and never itself.
+    verify(!table.set_track_output(1, 2));
+    verify(table.error == "A track cannot feed itself");
+    verify(!table.set_track_output(2, 1));
+    verify(table.error == "Only an AUDIO track can take another channel");
+    verify(table.set_track_output(2, 2) && table.track_output(2) == 2);
+    let routed: str8 = track_output_label(table.tracks, 2); verify(routed == "OUT:A2"); free(routed);
+    // A route back into the feeding track would loop.
+    verify(!table.set_track_output(1, 3));
+    verify(table.error == "That route would loop back to this track");
+    // An instrument track shows the instance it plays, and both hops once routed.
+    verify(table.set_instrument_output(0, 4));
+    let played: str8 = track_output_label(table.tracks, 0); verify(played == "OUT:I4"); free(played);
+    verify(table.set_track_output(0, 2));
+    let both: str8 = track_output_label(table.tracks, 0); verify(both == "I4>A2"); free(both);
+    // Detaching the instrument leaves a plain MIDI track on the same channel.
+    verify(table.set_instrument_output(0, 0));
+    let detached: str8 = track_output_label(table.tracks, 0); verify(detached == "OUT:A2"); free(detached);
+    verify(!table.set_instrument_output(1, 4));
+    verify(table.error == "An AUDIO track has no MIDI output");
+    table.release();
+}
+
+#[test]
+fn tui_removing_a_track_remaps_output_channels() {
+    var table: SequenceTable = SequenceTable::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    table.create_track_kind(false, true, area);      // 0: AUDIO
+    table.create_track_kind(false, true, area);      // 1: AUDIO
+    table.create_track_kind(false, false, area);     // 2: MIDI -> A2
+    verify(table.set_track_output(2, 2));
+    // Removing track 0 shifts the destination down with it.
+    table.selected_column = table.track_start(0);
+    table.remove_track(area);
+    verify(table.tracks.len() == 2);
+    let shifted: SequenceTrack = table.tracks[1]; verify(shifted.output == 1);
+    let label: str8 = track_output_label(table.tracks, 1); verify(label == "OUT:A1"); free(label);
+    // Removing the destination itself drops the route back to master.
+    table.selected_column = table.track_start(0);
+    table.remove_track(area);
+    let orphan: SequenceTrack = table.tracks[0]; verify(orphan.output == 0);
+    table.release();
+}
+
+#[test]
+fn tui_output_channels_survive_a_session_round_trip() {
+    var library: PatternLibrary = PatternLibrary::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.create_track_kind(false, true, area);     // 0: AUDIO
+    library.table.create_track_kind(false, false, area);    // 1: MIDI -> A1
+    verify(library.table.set_track_output(1, 1));
+    verify(library.has_output_routes());
+    let directory: str8 = clone("/private/tmp/mlacker-output-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/outputs.mlack", directory);
+    var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    verify(codec.save(path, library, SessionView {}, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap();
+    verify(restored.library.table.track_output(1) == 1);
+    let label: str8 = track_output_label(restored.library.table.tracks, 1);
+    verify(label == "OUT:A1"); free(label);
+    restored.release();
+    library.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}
+

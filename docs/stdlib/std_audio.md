@@ -75,6 +75,19 @@ retain their preview/master routing. Panic resets every slot; close destroys
 all instances on the control thread. A failed instrument block silences only
 that slot's contribution and increments `processor_errors()`.
 
+Channels can also feed each other instead of the master bus:
+`output_route(source, destination)` takes a source (PCM/preview track 0–63, or
+instrument output 64–95) and a destination of 0 for master or 1–64 for that PCM
+track's channel. The destination's inserts, fader and sends then apply on top of
+the source's own post-fader signal, and feeders always render before the channel
+they feed. A source cannot feed itself (the call returns -1), and a routing cycle
+falls back to master rather than dropping audio.
+
+`track_peak(track, channel)` consumes the post-fader peak of a buffered channel
+the same way, covering its own voices plus everything routed into it. A track
+that mixes straight into master with no inserts and no routing owns no buffer and
+reads 0.
+
 `ControlChange` (master) and `InstrumentControlChange` (slot in `sample`) use
 `midi.note` for the controller number and `midi.velocity` for its integer value.
 CC numbers 0–127 accept 0–127; controller 129 is pitch bend and accepts 0–16383.

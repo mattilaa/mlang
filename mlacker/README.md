@@ -352,6 +352,46 @@ selected. Audio tracks do not record MIDI. Menus, dialogs, plugin editors, text
 editing, and visual selection suspend recording. Volume is saved in `.mlack`;
 record-arm is transient and starts off when a session is loaded.
 
+### Output channels
+
+The bottom row of every mixer strip names where the channel goes, under the
+`0–100` fader value:
+
+| Row | Meaning |
+|-----|---------|
+| `OUT:MST` | Straight to Master (the default on every channel) |
+| `OUT:A3` | Into audio track 3, which then applies its own inserts, fader and sends |
+| `OUT:I4` | An instrument track: its notes play instrument instance 4, whose audio goes to Master |
+| `I4>A3` | Instrument 4, routed on into audio track 3 |
+
+**Track → Set output channel** lists the destinations for the selected track and
+routes it with Enter (`j/k` selects, Esc cancels). What it offers depends on the
+kind of track:
+
+- A **MIDI track** picks the instrument its notes play: `MST` keeps the built-in
+  preview tone, `I1`, `I2`, … assign a loaded instance, exactly like Enter in the
+  Instruments view. Picking an instance another track already plays shares it
+  (same pads, fader and inserts), which the status line reports.
+- An **instrument or audio track** picks the audio channel it feeds: `MST` or any
+  other audio track. Master is always the default.
+
+A track cannot feed itself, only audio tracks take other channels, and a route
+that would loop back is refused. Tracks sharing one instrument instance share its
+output channel, as they already share its inserts and sends. Deleting a track
+clears the routes into it and shifts the ones past it. Routed audio arrives before
+the destination's inserts, so the destination's chain, fader and sends all apply
+on top of the source's own. Sends stay post-fader on the source itself.
+
+A channel that something is routed into meters what it actually puts out: its
+`L`/`R` bars show the measured post-fader output of the whole channel, its own
+clips and every source routed into it, instead of the levels derived from its
+pattern. The same measured meter appears on channels with inserts. Channels that
+mix straight into Master with neither keep their pattern-derived meters, and an
+instrument strip's `M LR` pair still shows that instance alone, before its
+destination's chain.
+
+Output channels are saved in `.mlack` per pattern track.
+
 ### Track inserts
 
 With Pattern view focused, `f` toggles four insert slots between each track name

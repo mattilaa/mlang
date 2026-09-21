@@ -37,6 +37,17 @@ pub struct PatternLibrary {
     var share_request: i32;
 };
 impl PatternLibrary {
+    /// True when any track in any pattern feeds a channel other than master;
+    /// the session writes its TRACK_OUTPUTS extension only for those.
+    pub fn has_output_routes(self: PatternLibrary) -> bool {
+        var routed: bool = false; let patterns: list<PatternEntry> = self.patterns;
+        for entry in patterns {
+            var data: SequenceTable = SequenceTable {}; data = entry.id == self.active_id ? self.table : entry.data;
+            let tracks: list<SequenceTrack> = data.tracks;
+            for track in tracks { if track.output > 0 { routed = true; } }
+        }
+        return routed;
+    }
     /// Reuse only plugin IDs no longer referenced by any committed/live pattern.
     pub fn free_insert_id(self: PatternLibrary, count: i32) -> i32 {
         for id in 1..count + 1 {
