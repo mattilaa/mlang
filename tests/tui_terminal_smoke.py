@@ -122,7 +122,7 @@ def main():
         assert b"Rename pattern" in read_frame(None)
         os.write(master, b"\x15Break\r")
         assert b"004 Break" in read_frame(0)
-        pattern_menu(b"jjjj\r")
+        pattern_menu(b"jjjjj\r")     # Remove pattern, below the follow toggle
         assert b"004 Break" not in read_frame(0)
         pattern_menu(b"\r")
         assert b"Pattern / 5 Pattern 5" in read_frame(0, table_text=((28, 4), "   "))
@@ -146,12 +146,14 @@ def main():
         read_frame(None)
         os.write(master, b"\r")
         assert b" Patterns " in read_frame(1)
+        # Browsing the matrix leaves its last cell's pattern selected, so come
+        # back to pattern 1 explicitly from the library pane.
+        os.write(master, b"\x1b[104;6u")
+        read_frame(0)
         os.write(master, b"gg")
-        read_frame(1)
+        read_frame(0)
         # Tab cycles panes forwards and Shift+Tab backwards, in both the CSI Z
         # spelling and the modified-Tab one this app's keyboard mode produces.
-        os.write(master, b"\x1b[104;6u")  # start from the library pane
-        read_frame(0)
         os.write(master, b"\t")
         read_frame(1)
         os.write(master, b"\t")

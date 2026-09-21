@@ -3029,7 +3029,7 @@ fn tui_song_matrix_merges_a_row_for_playback() {
     verify(library.set_song_at(0, 1, 2));
     let one: PatternEntry = library.patterns[library.index_of(1)];
     let tracks: i64 = one.data.tracks.len();
-    var merged: SequenceTable = library.merge_song_row(0, area);
+    var merged: SequenceTable = library.merge_song_row(0, area, false);
     // Both patterns' tracks play together.
     verify(merged.tracks.len() == tracks * 2);
     let appended: SequenceTrack = merged.tracks[merged.tracks.len() - 1];
@@ -3041,7 +3041,7 @@ fn tui_song_matrix_merges_a_row_for_playback() {
     merged.release();
     // An empty row merges to an empty table, and playback skips it.
     verify(library.matrix_insert_row(0, false));
-    var blank: SequenceTable = library.merge_song_row(0, area);
+    var blank: SequenceTable = library.merge_song_row(0, area, false);
     verify(blank.rows.len() == 0);
     blank.release();
     // next_song_row skips empty rows and wraps.
@@ -3229,7 +3229,7 @@ fn tui_merged_song_row_keeps_fx_routing_and_clips() {
     // A second lane's pattern joins it in the same song row.
     library.add(true);
     verify(library.set_song_at(0, 0, 1) && library.set_song_at(0, 1, 2));
-    var merged: SequenceTable = library.merge_song_row(0, area);
+    var merged: SequenceTable = library.merge_song_row(0, area, false);
     verify(merged.tracks.len() == 4);
     // Lane 1 arrives through copy_pattern, lane 2 through append_tracks_from:
     // both keep the routing the mixer set, and the clip that plays.
@@ -3294,3 +3294,69 @@ fn tui_clips_restart_on_the_pattern_the_matrix_moves_to() {
     block.close(); audio.release(); table.release(); other.release(); clip.release(); quiet.release();
 }
 
+
+#[test]
+fn tui_matrix_browsing_follows_the_cell_pattern() {
+    var library: PatternLibrary = song_test_library();
+    // Row 0 holds pattern 1, row 1 pattern 2; the clone is active to start.
+    verify(library.active_id == 2);
+    verify(library.follow_matrix_cell(0, 0) && library.active_id == 1);
+    verify(library.selected_pattern() == 1);
+    // The same cell twice is not a change, and an empty cell keeps the pattern.
+    verify(!library.follow_matrix_cell(0, 0));
+    verify(!library.follow_matrix_cell(0, 1) && library.active_id == 1);
+    verify(!library.follow_matrix_cell(9, 0) && library.active_id == 1);
+    // Edits made through the mixer land in the pattern the cursor is on.
+    verify(library.table.set_track_output(0, 0));
+    verify(library.follow_matrix_cell(1, 0) && library.active_id == 2);
+    verify(library.selected_pattern() == 2);
+    library.release();
+}
+
+#[test]
+fn tui_merged_row_shows_each_channel_once() {
+    var library: PatternLibrary = PatternLibrary::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    // Pattern 1: a drum channel and a bass channel. Pattern 2 is a clone that
+    // gains a lead of its own, so the two share two channels out of three.
+    library.table.create_instrument_track(1, area);
+    library.table.rename_track("Drums");
+    library.table.create_instrument_track(2, area);
+    library.table.rename_track("Bass");
+    library.add(true);
+    library.table.create_instrument_track(3, area);
+    library.table.rename_track("Lead");
+    verify(library.set_song_at(0, 0, 1) && library.set_song_at(0, 1, 2));
+    // Playing the row keeps every lane's tracks: both patterns' notes sound.
+    var played: SequenceTable = library.merge_song_row(0, area, false);
+    verify(played.tracks.len() == 5);
+    // The mixer's view of the same row lists each channel once.
+    var shown: SequenceTable = library.merge_song_row(0, area, true);
+    verify(shown.tracks.len() == 3);
+    let first: SequenceTrack = shown.tracks[0]; verify(first.name == "Drums");
+    let second: SequenceTrack = shown.tracks[1]; verify(second.name == "Bass");
+    let third: SequenceTrack = shown.tracks[2]; verify(third.name == "Lead");
+    // A channel that only looks alike, on another instrument, is its own strip.
+    played.release(); shown.release();
+    library.select(2);
+    library.table.create_instrument_track(4, area);
+    library.table.rename_track("Drums");
+    var mixed: SequenceTable = library.merge_song_row(0, area, true);
+    verify(mixed.tracks.len() == 4);
+    mixed.release(); library.release();
+}
+
+#[test]
+fn tui_following_the_song_row_shows_its_pattern() {
+    var library: PatternLibrary = song_test_library();
+    // Row 0 holds pattern 1 in lane 1, row 1 holds pattern 2.
+    verify(library.song_row_pattern(0) == 1 && library.song_row_pattern(1) == 2);
+    verify(library.follow_pattern(library.song_row_pattern(0)));
+    verify(library.active_id == 1 && library.selected_pattern() == 1);
+    verify(!library.follow_pattern(library.song_row_pattern(0)));
+    verify(library.follow_pattern(library.song_row_pattern(1)) && library.active_id == 2);
+    // An empty row names no pattern and changes nothing.
+    verify(library.matrix_insert_row(1, true) && library.song_row_pattern(2) == 0);
+    verify(!library.follow_pattern(library.song_row_pattern(2)) && library.active_id == 2);
+    library.release();
+}

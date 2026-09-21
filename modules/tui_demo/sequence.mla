@@ -1169,12 +1169,24 @@ pub fn ensure_note_lines(self: &mut Self, index: i32, count: i32) -> bool {
 }
 /// Append every track of `source`, looping its rows when it is shorter. Used to
 /// play one song-matrix row: the parallel patterns become one table.
-pub fn append_tracks_from(self: &mut Self, source: &SequenceTable, area: Rect) -> void {
+/// Bring another pattern's tracks in beside these. `shared_once` keeps one
+/// channel when both patterns carry it (same kind, name and instrument), for
+/// views that show a song row's channels rather than play its notes.
+pub fn append_tracks_from(self: &mut Self, source: &SequenceTable, area: Rect, shared_once: bool) -> void {
     var other: SequenceTable = SequenceTable {}; other = source;
     let source_rows: i64 = other.rows.len();
     if source_rows == 0 { return; }
     for t in 0..other.tracks.len() {
         let track: SequenceTrack = other.tracks[t];
+        if shared_once {
+            var present: bool = false;
+            let existing: list<SequenceTrack> = self.tracks;
+            for channel in existing {
+                if channel.audio == track.audio && channel.instrument_id == track.instrument_id
+                    && channel.name == track.name { present = true; }
+            }
+            if present { continue; }
+        }
         self.create_track_kind(false, track.audio, area);
         let index: i32 = i32(self.tracks.len()) - 1;
         if !track.audio { self.ensure_note_lines(index, track.note_lines); }

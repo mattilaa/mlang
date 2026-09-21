@@ -55,7 +55,7 @@ it changes, then what it removes; related entries live in submenus.
 | Edit | Undo, Redo, Copy/Cut/Paste clip |
 | View | Patterns, Song matrix, Audio, Instruments, Sample view ▸, Meter ▸, Reset layout, Show details |
 | Track | Create MIDI/AUDIO/Instrument track, Rename, Duplicate, Mute, Note lines ▸, Automation ▸, Clear pattern, Delete |
-| Pattern | Add, Clone, Rename, Set length, Remove |
+| Pattern | Add, Clone, Rename, Set length, Follow matrix patterns, Remove |
 | Audio | Add audio, Edit sample (destructive), Clip ▸, Remove audio |
 | Instrument | Add instrument, Open VST3 editor, Drum pads ▸, Presets ▸, MIDI learn ▸, Remove instrument |
 | Effect | Add effect channel, Load/Edit effect plugin, Set track send, Master ▸, Remove effect plugin |
@@ -94,6 +94,22 @@ takes the next row's routing with it.
 
 The matrix replaces the pattern editor in that pane while it is open, and menus
 open above it. A session with no song yet starts the matrix on one empty row.
+
+**Pattern → Follow matrix patterns** (on by default, shown as `[x]` in the menu)
+keeps the rest of the app on the pattern the matrix points at:
+
+- *Browsing*: moving the cursor over a cell selects that cell's pattern, so the
+  editor behind the matrix, the sidebar and the mixer show its channels, faders,
+  sends, inserts and output routing. The status line names it. Empty cells keep
+  the pattern already shown.
+- *Playing*: each matrix row moves the editor and sidebar to the pattern the row
+  starts from, and the mixer shows the whole row: every lane's channels, with a
+  channel that several parallel patterns share drawn once (same kind, name and
+  instrument). Those strips are the song's, not one pattern's, so they are a view
+  only; stop the matrix or turn the option off to mix.
+
+With the option off, the editor and mixer stay on the selected pattern. The
+setting lasts for the session and is not saved in `.mlack`.
 
 Cells may be empty, including in lane 1: an empty row is a silent step. An empty
 lane is always available past the last used one, up to 16 lanes. Pasting a

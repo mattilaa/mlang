@@ -120,6 +120,32 @@ impl PatternLibrary {
         self.table.release(); self.table = replacement; self.active_id = id;
         self.error = "";
     }
+    /// Browsing the matrix shows the cell's pattern everywhere else: the
+    /// sidebar highlight, the pattern editor behind the matrix and the mixer
+    /// channels with their sends, inserts and output routing. Empty cells keep
+    /// the current pattern. True when the selection moved.
+    pub fn follow_matrix_cell(self: &mut Self, row: i32, lane: i32) -> bool {
+        return self.follow_pattern(self.song_at(row, lane));
+    }
+    /// Show a pattern everywhere: editor, sidebar highlight and mixer channels.
+    /// False when it is already shown or does not exist.
+    pub fn follow_pattern(self: &mut Self, id: i32) -> bool {
+        if id <= 0 || id == self.active_id || self.index_of(id) < 0 { return false; }
+        self.select(id);
+        for i in 0..self.view.items.len() {
+            let item: ListItem = self.view.items[i];
+            if item.id == id { self.view.selected = i32(i); }
+        }
+        return true;
+    }
+    /// Pattern a song row starts from: its lowest lane holding one, or 0.
+    pub fn song_row_pattern(self: PatternLibrary, row: i32) -> i32 {
+        for lane in 0..self.song_lanes() {
+            let id: i32 = self.song_at(row, i32(lane));
+            if id > 0 && self.index_of(id) >= 0 { return id; }
+        }
+        return 0;
+    }
     /// Columns in the song matrix, counting the base `song` column.
     /// Pattern highlighted in the sidebar list (song mode uses its row), or 0.
     pub fn selected_pattern(self: PatternLibrary) -> i32 {
@@ -514,27 +540,36 @@ impl PatternLibrary {
     /// One playable table for a song-matrix row: the lowest lane's pattern with
     /// every other lane's tracks appended, each looping to the longest pattern.
     /// Empty rows give an empty table.
-    pub fn merge_song_row(self: PatternLibrary, row: i32, area: Rect) -> SequenceTable {
+    /// Merge a song row's lanes into one table. `shared_once` keeps a channel
+    /// both patterns carry only once, for the mixer's view of the row; playback
+    /// passes false so every lane's notes are there.
+    pub fn merge_song_row(self: PatternLibrary, row: i32, area: Rect, shared_once: bool) -> SequenceTable {
         var merged: SequenceTable = SequenceTable {};
         var length: i32 = 0; var base: i32 = -1;
+        // The pattern being edited lives in `table`; its stored copy is only
+        // written back when the selection moves, so read the live one.
         for l in 0..self.song_lanes() {
             let id: i32 = self.song_at(row, i32(l));
             let index: i32 = self.index_of(id);
             if id <= 0 || index < 0 { continue; }
             let entry: PatternEntry = self.patterns[index];
+            var data: SequenceTable = SequenceTable {}; data = id == self.active_id ? self.table : entry.data;
             if base < 0 { base = i32(l); }
-            if i32(entry.data.rows.len()) > length { length = i32(entry.data.rows.len()); }
+            if i32(data.rows.len()) > length { length = i32(data.rows.len()); }
         }
         if base < 0 { return merged; }
-        let first: PatternEntry = self.patterns[self.index_of(self.song_at(row, base))];
-        merged = first.data.copy_pattern();
+        let lead: i32 = self.song_at(row, base);
+        let first: PatternEntry = self.patterns[self.index_of(lead)];
+        var head: SequenceTable = SequenceTable {}; head = lead == self.active_id ? self.table : first.data;
+        merged = head.copy_pattern();
         if i32(merged.rows.len()) < length { merged.set_length(length, area); }
         for l in base + 1..self.song_lanes() {
             let id: i32 = self.song_at(row, i32(l));
             let index: i32 = self.index_of(id);
             if id <= 0 || index < 0 { continue; }
             let entry: PatternEntry = self.patterns[index];
-            merged.append_tracks_from(entry.data, area);
+            var data: SequenceTable = SequenceTable {}; data = id == self.active_id ? self.table : entry.data;
+            merged.append_tracks_from(data, area, shared_once);
         }
         return merged;
     }

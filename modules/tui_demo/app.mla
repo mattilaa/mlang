@@ -68,7 +68,7 @@ use std::io::read_keycode_nonblocking;
 use std::time::sleep_ms;
 use std::time::now_ms;
 
-fn demo_menus(fixture: bool) -> MenuBar {
+fn demo_menus(fixture: bool, follow_matrix: bool) -> MenuBar {
     // Grouped like a DAW's menu bar: each menu starts with what it creates,
     // then what it changes, then what it removes; families use submenus.
     let plugins: bool = AudioController::processor_support();
@@ -136,6 +136,8 @@ fn demo_menus(fixture: bool) -> MenuBar {
                                 MenuItem { label: "Clone pattern", action: 53, enabled: true },
                                 MenuItem { label: "Rename pattern", action: 51, enabled: true },
                                 MenuItem { label: "Set length", action: 54, enabled: true },
+                                MenuItem { label: follow_matrix ? "[x] Follow matrix patterns" : "[ ] Follow matrix patterns",
+                                    action: 55, enabled: true },
                                 MenuItem { label: "Remove pattern", action: 52, enabled: true }] },
                     Menu {title: "Audio", items: [
                                 MenuItem { label: "Add audio", action: 60, enabled: true },
@@ -186,7 +188,7 @@ fn demo_panes(content: Rect) -> list<Pane> {
             Pane { id: 2, bounds: right[1] }];
 }
 
-fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: &Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView, matrix_visible: bool) -> void {
+fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: &Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView, matrix_visible: bool, channels: &SequenceTable, merged_channels: bool) -> void {
     let theme: Theme = Theme::dark_blue();
     surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
     let library: Pane = panes[0];
@@ -230,7 +232,8 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
     }
     else if mixer.visible {
         let mix_area: Rect = Rect::new(bottom.x, bottom.y, bottom.width, bottom.height - (mixer.effect_volumes.len() > 0 && bottom.height > 1 ? 1 : 0));
-        mixer.paint(surface, mix_area, theme, table.tracks, table.active_track());
+        if merged_channels { mixer.paint(surface, mix_area, theme, channels.tracks, channels.active_track()); }
+        else { mixer.paint(surface, mix_area, theme, table.tracks, table.active_track()); }
         if mixer.effect_volumes.len() > 0 && bottom.height > 1 { surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), message, theme.muted, theme.panel); }
         if(patterns.error != "" || table.error != "") && bottom.height > 0 {
             surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
@@ -245,7 +248,13 @@ pub fn run() -> i32 {
     let fixture_env: str8 = __env_get_var("MLANG_TUI_DEMO");
     let fixture: bool = fixture_env == "1" || !AudioController::processor_support(); free(fixture_env);
     var terminal: Terminal = Terminal::begin();
-    var menus: MenuBar = demo_menus(fixture);
+    // Browsing or playing the matrix shows that pattern: editor, sidebar and
+    // the mixer's channels. Pattern > Follow matrix patterns turns it off.
+    var follow_matrix: bool = true;
+    // Channels of the playing song row, one strip per channel even when
+    // parallel patterns share it. Only the mixer reads it.
+    var mixer_table: SequenceTable = SequenceTable {};
+    var menus: MenuBar = demo_menus(fixture, follow_matrix);
     if fixture { menus.open(0); }
     var focus: PaneFocus = PaneFocus::new(0);
     var input: InputDecoder = InputDecoder::new();
@@ -439,10 +448,15 @@ pub fn run() -> i32 {
             song_table.release(); song_table = SequenceTable {};
             note_playback = NotePlayback {};
             free(message);
-            if !start { song_playing = false; song_row = -1; message = clone("Matrix stopped"); }
+            if !start {
+                song_playing = false; song_row = -1; message = clone("Matrix stopped");
+                mixer_table.release(); mixer_table = SequenceTable {};
+            }
             else {
                 song_row = matrix.row;
-                song_table = library.merge_song_row(song_row, terminal_bounds());
+                song_table = library.merge_song_row(song_row, terminal_bounds(), false);
+                mixer_table.release(); mixer_table = library.merge_song_row(song_row, terminal_bounds(), true);
+                if follow_matrix { if library.follow_pattern(library.song_row_pattern(song_row)) { play_pattern = library.active_id; } }
                 if song_table.rows.len() == 0 {
                     song_playing = false; song_row = -1; message = clone("Matrix row is empty");
                 } else {
@@ -636,7 +650,10 @@ pub fn run() -> i32 {
                 if next < 0 { song_playing = false; transport.playing = false; }
                 else if next != song_row {
                     song_row = next;
-                    song_table.release(); song_table = library.merge_song_row(song_row, terminal_bounds());
+                    song_table.release(); song_table = library.merge_song_row(song_row, terminal_bounds(), false);
+                    mixer_table.release(); mixer_table = library.merge_song_row(song_row, terminal_bounds(), true);
+                    // The editor, sidebar and mixer move to the row that plays.
+                    if follow_matrix { if library.follow_pattern(library.song_row_pattern(song_row)) { play_pattern = library.active_id; } }
                     note_playback = NotePlayback { start_row: 0 };
                     midi.restart_samples(0);
                     if song_table.rows.len() == 0 { song_playing = false; transport.playing = false; }
@@ -650,6 +667,16 @@ pub fn run() -> i32 {
         } else if !transport.playing {
             let cursor: i32 = library.table.selected_row < 0 ? 0 : library.table.selected_row;
             if transport.row != cursor { transport.follow_row(cursor); dirty = true; }
+        }
+        // Browsing the matrix selects the pattern under the cursor, so the
+        // mixer, the inspector and the editor behind the matrix all show that
+        // pattern's tracks and routing. Nothing follows while the transport
+        // runs: switching patterns would stop it.
+        // `&&` evaluates both sides, so the guard cannot carry the call.
+        if follow_matrix && matrix.visible && focus.selected == 1 && !transport.playing && !song_playing {
+            if library.follow_matrix_cell(matrix.row, matrix.lane) {
+                play_pattern = library.active_id; playback_dirty = true; dirty = true;
+            }
         }
         if library.table.selected_row != prev_sample_row {
             if sample.anchor_active { sample.anchor_active = false; dirty = true; }
@@ -666,7 +693,12 @@ pub fn run() -> i32 {
         }
         note_playback.update(song_playing ? song_table : library.table, transport.ticks, transport.playing);
         midi.sequencer_events(note_playback.events);
-        if mixer.update(library.table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
+        // The mixer shows the playing song row while following it, so its
+        // meters come from the same channels the strips do.
+        let following_channels: bool = follow_matrix && song_playing && mixer_table.tracks.len() > 0;
+        if following_channels {
+            if mixer.update(mixer_table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
+        } else if mixer.update(library.table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
         let meter_delta: i32 = i32(now - master_meter_clock);
         if meter_delta >= 1000 / frame_rate.fps {
             if instrument_editor.sync(midi.output) { dirty = true; }
@@ -790,7 +822,7 @@ pub fn run() -> i32 {
             library.table.reconcile(panes[1].bounds.inset(1));
             library.view.reconcile(panes[0].bounds.inset(1));
             library.audio.view.reconcile(panes[0].bounds.inset(1));
-            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample, matrix.visible);
+            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample, matrix.visible, mixer_table, following_channels);
             matrix.paint(surface, panes[1].bounds, Theme::dark_blue(), library, focus.is_active(1), song_playing ? song_row : -1);
             instrument_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
             // Menus sit above the pane contents, below the modal dialogs.
@@ -1059,6 +1091,12 @@ pub fn run() -> i32 {
                 let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
                 let rc: AudioClip = instance.render_clip();
                 if sample.on_event(event, rc, panes[2].bounds.width - 2) { dirty = true; }
+            } else if focus.selected == 2 && mixer.visible && follow_matrix && song_playing && mixer_table.tracks.len() > 0 {
+                // The strips belong to the playing song row, not to one
+                // pattern, so they are a view of the mix, not a place to edit.
+                free(message);
+                message = clone("Mixer follows the matrix; stop it or turn off Pattern > Follow matrix patterns to mix");
+                dirty = true;
             } else if focus.selected == 2 && mixer.visible && !(sample.visible && library.table.audio_under_cursor()) {
                 if mixer.send_navigation(event, library.table.active_track()) { dirty = true; }
                 else if !mixer.bus_focus && mixer.selected_send >= 0 {
@@ -1084,8 +1122,19 @@ pub fn run() -> i32 {
                     mixer.bus_focus = true; mixer.selected_effect = 0; dirty = true;
                 } else { if library.table.mixer_event(event, panes[1].bounds.inset(1)) { dirty = true; } }
             } else if focus.selected == 1 && matrix.visible {
+                let previous_row: i32 = matrix.row; let previous_lane: i32 = matrix.lane;
                 let action: i32 = matrix.on_event(event, i32(library.song.len()), library.song_lanes() + 1);
                 let area: Rect = terminal_bounds();
+                if action == 0 && follow_matrix && !transport.playing && !song_playing {
+                    if matrix.row != previous_row || matrix.lane != previous_lane {
+                        // Browsing names the pattern the mixer and the editor
+                        // behind the matrix now show.
+                        if library.follow_matrix_cell(matrix.row, matrix.lane) {
+                            free(message);
+                            message = format!("Pattern {}: {}", library.active_id, library.active_name());
+                        }
+                    }
+                }
                 if action == 1 {
                     // Pattern list for this cell: "<no>:<name>", plus an empty entry.
                     var ids: list<i32> = [0]; var labels: list<str8> = [clone("  -  (empty)")];
@@ -1457,6 +1506,15 @@ pub fn run() -> i32 {
             else if command == 51 {
                 library.editor.set_text(library.active_name()); library.renaming = true; library.error = "";
             }
+            else if command == 55 {
+                follow_matrix = !follow_matrix;
+                menus = demo_menus(fixture, follow_matrix);
+                free(message);
+                if follow_matrix {
+                    if song_playing { library.follow_pattern(library.song_row_pattern(song_row)); play_pattern = library.active_id; }
+                    message = clone("Follow matrix patterns: on. The editor and mixer show the row the matrix browses or plays.");
+                } else { message = clone("Follow matrix patterns: off. The editor and mixer stay on the selected pattern."); }
+            }
             else if command == 52 { library.remove_active(panes[0].bounds.inset(1)); }
             else if command == 54 {
                 transport.playing = false;
@@ -1605,7 +1663,7 @@ pub fn run() -> i32 {
     midi.release();
     settings.release();
     free(session_path); free(request_path);
-    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); free(preset_path);
+    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); mixer_table.release(); free(preset_path);
     free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();

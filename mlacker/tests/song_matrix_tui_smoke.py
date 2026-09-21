@@ -67,6 +67,24 @@ def main():
         tui.send(b"\x1b[104;6u", 0.5)            # focus the sidebar
         frame = tui.send(b"k", 0.8)              # select pattern 1
         assert b"- 2" in frame, frame[-4000:]
+
+        # Browsing the matrix follows the pattern under the cursor: the editor
+        # and the mixer show that pattern's tracks and routing, with nothing
+        # playing.
+        tui.send(b"\x1b[108;6u", 0.5)            # focus the pattern pane
+        expect(tui.send(b"M", 0.8), b"Song matrix")
+        tui.send(b"o", 0.6)                      # an empty row below, no clash
+        tui.send(b"\r", 0.7)                     # pattern picker for the cell
+        expect(tui.send(b"jj\r", 1.0), b"pattern 2")
+        # Moving the cursor names the pattern the mixer and editor now show.
+        expect(tui.send(b"k", 0.9), b"Pattern 1: Untitled")
+        expect(tui.send(b"j", 0.9), b"Pattern 2: Untitled copy")
+        # Pattern > Follow matrix patterns turns the whole behaviour off.
+        expect(tui.send(F1 + b"llll" + b"j" * 4 + b"\r", 0.9), b"Follow matrix patterns: off")
+        frame = tui.send(b"k", 0.9)
+        assert b"Pattern 1: Untitled" not in frame, frame[-3000:]
+        expect(tui.send(F1 + b"llll" + b"j" * 4 + b"\r", 0.9), b"Follow matrix patterns: on")
+        expect(tui.send(b"M", 0.8), b"Song matrix closed")
     finally:
         tui.close()
 
