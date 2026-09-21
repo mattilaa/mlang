@@ -564,7 +564,12 @@ Current scope:
   persistence, arbitrary named-parameter automation, sidechains,
   latency compensation, or transport/tempo synchronization yet.
 - Existing UI-loop sequencer timing is retained. The audio API supports absolute
-  frame scheduling, but a look-ahead sequencer is still future work.
+  frame scheduling, but a look-ahead sequencer is still future work. Because the
+  UI loop drives it, a note can start up to one frame late, never a loop late:
+  each pattern is scheduled from the row it starts on, so the row that starts
+  playback, and row 1 of a pattern the matrix moves to, play their own notes even
+  though the update that schedules them arrives a frame after the transport did.
+  A pattern keeps its own grid, so matrix rows of different lengths stay in step.
 - Pattern audio samples feed Master directly, respecting track mute/volume, start
   row and LEN. Starting inside a sample seeks into its embedded PCM; stopping
   playback releases its voices. FX sliders blend the dry path with parallel

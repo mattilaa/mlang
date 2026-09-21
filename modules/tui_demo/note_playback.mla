@@ -28,6 +28,13 @@ pub struct NotePlayback {
     var active: list<PlayingNote>; var events: list<NoteEvent>;
     var running: bool; var last: i64;
     var score: list<ScheduledNote>; var revision: i64;
+    /// Tick where row 0 of the playing pattern falls. Set when playback or a
+    /// new pattern starts, so a pattern keeps its own grid whatever the
+    /// previous one's length was.
+    var epoch: i64;
+    /// Row the transport starts this pattern on, or -1 to take it from the
+    /// tick, which is right while one pattern keeps playing.
+    var start_row: i32{-1};
 };
 impl NotePlayback {
     fn finish_at(self: &mut Self, tick: i64, all: bool) -> void {
@@ -72,7 +79,7 @@ impl NotePlayback {
                     if controller == 129 {
                         if value < -8192 || value > 8191 { continue; }
                     } else if value < 0 || value > 127 { continue; }
-                    var start: i64 = r * 15000;
+                    var start: i64 = self.epoch + r * 15000;
                     if start < from { start = start + (from - start + period - 1) / period * period; }
                     self.score.push(ScheduledNote { track: t, line: slot, note: controller,
                         velocity: controller == 129 ? value + 8192 : value, start: start, control: 1,
@@ -85,7 +92,7 @@ impl NotePlayback {
                     let velocity: result<i64, str8> = table_integer(data.cells[column + 1]);
                     if note < 0 || velocity.is_err() { continue; }
                     let value: i64 = velocity.unwrap(); if value <= 0 || value > 127 { continue; }
-                    var start: i64 = r * 15000 + table.note_offset(i32(r), column);
+                    var start: i64 = self.epoch + r * 15000 + table.note_offset(i32(r), column);
                     // No retroactive note-ons on start/seek. A first-row early
                     // note is scheduled before the NEXT loop's first row.
                     if start < from { start = start + (from - start + period - 1) / period * period; }
@@ -104,7 +111,17 @@ impl NotePlayback {
         }
         if self.running && tick < self.last { self.finish_at(tick, true); self.running = false; }
         if !self.running || self.revision != table.revision {
-            self.rebuild_score(table, self.running ? self.last + 1 : tick);
+            if !self.running {
+                // The update that starts a pattern arrives a UI frame after the
+                // transport did, so schedule from the row in progress instead of
+                // the tick reached since: the row a pattern starts on plays its
+                // own notes, not the next loop's.
+                let row_start: i64 = tick - tick % 15000;
+                let row: i64 = self.start_row >= 0 ? wide(self.start_row) : tick / 15000 % wide(i32(table.rows.len()));
+                self.epoch = row_start - row * 15000;
+                self.start_row = -1;
+                self.rebuild_score(table, row_start);
+            } else { self.rebuild_score(table, self.last + 1); }
         }
         self.running = true;
         let period: i64 = wide(i32(table.rows.len())) * 15000;

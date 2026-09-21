@@ -448,6 +448,7 @@ pub fn run() -> i32 {
                 } else {
                     song_playing = true;
                     transport.toggle(now_ms(), 0, i32(song_table.rows.len()));
+                    note_playback.start_row = 0;
                     message = format!("Playing the matrix from row {}", song_row + 1);
                 }
             }
@@ -464,6 +465,7 @@ pub fn run() -> i32 {
                 note_playback = NotePlayback {};
             }
             transport.toggle(now_ms(), library.table.selected_row, i32(library.table.rows.len()));
+            note_playback.start_row = transport.row;
             if !midi.sample_playback(library.table, transport.ticks, transport.playing, transport.bpm) {
                 transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)");
             }
@@ -631,7 +633,7 @@ pub fn run() -> i32 {
                 else if next != song_row {
                     song_row = next;
                     song_table.release(); song_table = library.merge_song_row(song_row, terminal_bounds());
-                    note_playback = NotePlayback {};
+                    note_playback = NotePlayback { start_row: 0 };
                     if song_table.rows.len() == 0 { song_playing = false; transport.playing = false; }
                 }
                 playback_dirty = true; dirty = true;

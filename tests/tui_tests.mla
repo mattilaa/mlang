@@ -3149,3 +3149,63 @@ fn tui_output_channels_survive_a_session_round_trip() {
     library.release(); std::fs::remove_tree(directory); free(path); free(directory);
 }
 
+
+/// One note on row `row` of an otherwise empty pattern of `rows` rows.
+fn one_note_pattern(rows: i32, row: i32, name: str8) -> SequenceTable {
+    let area: Rect = Rect::new(0, 0, 100, 12);
+    var table: SequenceTable = SequenceTable::new();
+    table.set_length(rows, area);
+    for r in 0..rows { table.selected_row = i32(r); table.clear_row(); }
+    table.selected_row = row; table.selected_column = 1;
+    table.edit_event(decode_input("\r"), area); table.editor.set_text(name); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 2;
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("100"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 1;
+    return table;
+}
+
+#[test]
+fn tui_playback_starts_on_the_row_it_was_started_from() {
+    var table: SequenceTable = one_note_pattern(4, 0, "C-4");
+    var playback: NotePlayback = NotePlayback {};
+    // Stopped, cursor on row 0, then Space: the transport starts at tick 0 but
+    // the first update only arrives a UI frame later.
+    playback.update(table, 0, false);
+    playback.start_row = 0;
+    playback.update(table, 1920, true);
+    verify(playback.events.len() == 1);
+    let on: NoteEvent = playback.events[0];
+    verify(on.on == 1 && on.note == 60 && on.tick == 0);
+    // It does not play twice, and the loop keeps its timing.
+    playback.update(table, 3840, true); verify(playback.events.len() == 0);
+    playback.update(table, 60000, true);
+    verify(playback.events.len() == 2);   // note-off of the first hit, then row 0 again
+    let looped: NoteEvent = playback.events[1];
+    verify(looped.on == 1 && looped.tick == 60000);
+    table.release();
+}
+
+#[test]
+fn tui_playback_follows_a_pattern_change_mid_song() {
+    var first: SequenceTable = one_note_pattern(4, 0, "C-4");
+    var second: SequenceTable = one_note_pattern(2, 0, "D-4");
+    var playback: NotePlayback = NotePlayback {};
+    playback.start_row = 0;
+    playback.update(first, 0, true); verify(playback.events.len() == 1);
+    // The matrix moves to the next row: a shorter pattern takes over a frame
+    // after the previous one wrapped, and starts from its own row 0.
+    playback = NotePlayback {}; playback.start_row = 0;
+    playback.update(second, 61920, true);
+    verify(playback.events.len() == 1);
+    let on: NoteEvent = playback.events[0];
+    verify(on.on == 1 && on.note == 62 && on.tick == 60000);
+    // Its own loop follows the new length, not the old grid: one row of note,
+    // then the next hit two rows after the first.
+    playback.update(second, 75000, true); verify(playback.events.len() == 1);
+    let release: NoteEvent = playback.events[0]; verify(release.on == 0 && release.tick == 75000);
+    playback.update(second, 89999, true); verify(playback.events.len() == 0);
+    playback.update(second, 90000, true); verify(playback.events.len() == 1);
+    let repeat: NoteEvent = playback.events[0];
+    verify(repeat.on == 1 && repeat.note == 62 && repeat.tick == 90000);
+    first.release(); second.release();
+}
