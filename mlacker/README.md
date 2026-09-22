@@ -669,3 +669,16 @@ MLANG_TUI_NO_HARDWARE=1 mlacker/build/cmake/bin/mlacker
 
 Run that command from the repository root. To test only the widgets without
 fetching/building the SDK, continue compiling `examples/tui_demo.mla` as before.
+
+### Effect plugin presets
+
+**Effect → Presets → Load plugin preset / Save plugin preset** uses `.mlafxpre`
+files. Select an effect channel in Mixer, a loaded insert in the track's insert
+rows, or open the desired effect's parameter editor and move focus out with Tab.
+An open effect editor takes precedence. Saving adds `.mlafxpre` when
+needed; loading filters for that extension, case-insensitively.
+
+FX presets save exposed plugin parameters by stable ID and check the plugin name
+and parameter layout before loading. Invalid or incompatible files leave the
+parameters unchanged. Instrument presets continue to use `.mlapre` and may
+include sampler pads; the two formats are deliberately distinct.

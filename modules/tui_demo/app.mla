@@ -172,7 +172,10 @@ fn demo_menus(fixture: bool, follow_matrix: bool) -> MenuBar {
                                 MenuItem::submenu("Master", [
                                                 MenuItem { label: "Load master VST3", action: 91, enabled: plugins },
                                                 MenuItem { label: "Unload master VST3", action: 92, enabled: plugins }]),
-                                MenuItem { label: "Remove effect plugin", action: 114, enabled: plugins }] }
+                                MenuItem { label: "Remove effect plugin", action: 114, enabled: plugins },
+                                MenuItem::submenu("Presets", [
+                                                MenuItem { label: "Load plugin preset", action: 140, enabled: plugins },
+                                                MenuItem { label: "Save plugin preset", action: 141, enabled: plugins }])] }
             ]);
 }
 
@@ -581,15 +584,20 @@ pub fn run() -> i32 {
             dirty = true;
         }
         if preset_request != 0 {
-            // 100 = save, 101 = load. Kit presets carry a sampler's pads.
+            // Instrument presets may carry pads; FX presets contain parameters only.
+            let effect_preset: bool = preset_request == 140 || preset_request == 141;
+            let saving_preset: bool = preset_request == 100 || preset_request == 141;
             var kit_pads: list<i32> = []; var kit_clips: list<AudioClip> = [];
             if preset_request == 100 {
                 let assigned: list<PadAssignment> = midi.pads;
                 for entry in assigned { if entry.slot == learn_slot { kit_pads.push(entry.pad); kit_clips.push(library.audio.samples[entry.sample]); } }
-            } else { midi.midi.release(); }
-            var preset: PresetResult = SessionCodec::preset_file(preset_path, midi.output, learn_slot, preset_request == 100, kit_pads, kit_clips);
+            }
+            if !saving_preset { midi.midi.release(); }
+            var preset: PresetResult = PresetResult {};
+            if effect_preset { preset = SessionCodec::effect_preset_file(preset_path, midi.output, learn_slot, saving_preset); }
+            else { preset = SessionCodec::preset_file(preset_path, midi.output, learn_slot, saving_preset, kit_pads, kit_clips); }
             free(message); message = preset.status;
-            if preset_request == 101 {
+            if !saving_preset {
                 if preset.ok && preset.has_pads {
                     // A kit replaces every pad of the instrument.
                     let slot: i32 = i32(learn_slot);
@@ -617,6 +625,7 @@ pub fn run() -> i32 {
                     else { free(message); message = format!("Loaded kit preset: {} pad(s) | {}", preset.pads.len(), preset_path); }
                 } else { let unused: list<AudioClip> = preset.clips; for clip in unused { clip.release(); } }
                 midi.resume_midi(preset_worker);
+                if preset.ok && instrument_editor.active && instrument_editor.slot == learn_slot { instrument_editor.open(midi.output, learn_slot); }
             }
             preset_request = 0; dirty = true;
         }
@@ -1272,7 +1281,35 @@ pub fn run() -> i32 {
                     }
                     dialog.open(last_preset_dir);
                     if command == 97 || command == 100 {
-                        let suggested: str8 = SessionCodec::learn_suggestion(midi.output.instrument_name(learn_slot));
+                        let suggested: str8 = SessionCodec::learn_suggestion(learn_slot == 0 ? midi.output.processor_name() : midi.output.instrument_name(learn_slot));
+                        dialog.path_field.set_text(suggested); free(suggested);
+                    }
+                    focus.set_menu_active(true);
+                }
+            }
+            else if command == 140 || command == 141 {
+                learn_slot = -1;
+                if instrument_editor.active && (instrument_editor.slot == 0 || instrument_editor.slot >= 33) { learn_slot = instrument_editor.slot; }
+                else if focus.selected == 1 && library.table.group_detail_rows > 0 {
+                    let index: i32 = library.table.active_track();
+                    if index >= 0 {
+                        let track: SequenceTrack = library.table.tracks[index];
+                        let id: i32 = track.insert_id(library.table.selected_group_detail);
+                        if id > 0 { learn_slot = id + 40; }
+                    }
+                } else if mixer.selected_effect >= 0 && mixer.selected_effect < midi.effects.len() { learn_slot = mixer.selected_effect + 33; }
+                if learn_slot < 0 || midi.output.parameter_info(learn_slot, 0, 0) < 0.0 {
+                    free(message); message = clone("Select a loaded effect in Mixer or open its editor first");
+                } else {
+                    learn_action = command; adding_effect = -1; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                    midi.output.midi_learn(-1, 0, 0);
+                    if command == 140 { transport.playing = false; }
+                    dialog.save_mode = command == 141; dialog.bundle_pattern = ""; dialog.multi_select = false;
+                    dialog.title = command == 141 ? "Save plugin preset (.mlafxpre)" : "Load plugin preset (.mlafxpre)";
+                    dialog.file_pattern = command == 141 ? "" : ".*\\.[mM][lL][aA][fF][xX][pP][rR][eE]";
+                    dialog.open(last_preset_dir);
+                    if command == 141 {
+                        let suggested: str8 = SessionCodec::learn_suggestion(learn_slot == 0 ? midi.output.processor_name() : midi.output.instrument_name(learn_slot));
                         dialog.path_field.set_text(suggested); free(suggested);
                     }
                     focus.set_menu_active(true);

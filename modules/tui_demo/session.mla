@@ -161,13 +161,19 @@ impl SessionCodec {
     /// Saving with `pads` (sampler pad numbers, with their `clips`) writes a
     /// 1.1 kit preset that also embeds the pad samples.
     pub fn preset_file(path: str8, output: AudioController, slot: i64, saving: bool, pads: list<i32>, clips: list<AudioClip>) -> PresetResult {
-        return SessionCodec::preset_body(path, output, slot, saving, pads, clips);
+        return SessionCodec::preset_body(path, output, slot, saving, pads, clips, false);
     }
-    fn preset_body(path: str8, output: AudioController, slot: i64, saving: bool, pads: list<i32>, clips: list<AudioClip>) -> PresetResult {
+    pub fn effect_preset_file(path: str8, output: AudioController, slot: i64, saving: bool) -> PresetResult {
+        return SessionCodec::preset_body(path, output, slot, saving, [], [], true);
+    }
+    fn preset_body(path: str8, output: AudioController, slot: i64, saving: bool, pads: list<i32>, clips: list<AudioClip>, effect: bool) -> PresetResult {
         var result: PresetResult = PresetResult { status: "" };
         let parameters: i64 = output.parameter_info(slot, 0, 0);
-        if slot < 1 || parameters < 0 { result.status = clone("Select a loaded instrument first"); return result; }
-        let actual: str8 = saving && !tui::table::table_matches(".*\\.[mM][lL][aA][pP][rR][eE]", path) ? format!("{}.mlapre", path) : clone(path);
+        let valid_slot: bool = effect ? (slot == 0 || (slot >= 33 && slot <= 296)) : (slot >= 1 && slot <= 32);
+        if !valid_slot || parameters < 0 { result.status = clone(effect ? "Select a loaded effect first" : "Select a loaded instrument first"); return result; }
+        let extension: str8 = effect ? ".mlafxpre" : ".mlapre";
+        let pattern: str8 = effect ? ".*\\.[mM][lL][aA][fF][xX][pP][rR][eE]" : ".*\\.[mM][lL][aA][pP][rR][eE]";
+        let actual: str8 = saving && !tui::table::table_matches(pattern, path) ? format!("{}{}", path, extension) : clone(path);
         var codec: SessionCodec = SessionCodec { reading: !saving };
         if saving {
             let created: result<SessionBuffer, str8> = SessionBuffer::new(4096);
@@ -183,11 +189,12 @@ impl SessionCodec {
             if read.is_err() { free(actual); result.status = clone("Cannot read plugin preset"); return result; }
             codec.reader = read.unwrap();
         }
-        let magic: str8 = codec.text("MLAPRE");
-        if magic != "MLAPRE" { codec.failed = true; } if !saving { free(magic); }
+        let expected_magic: str8 = effect ? "MLAFXPRE" : "MLAPRE";
+        let magic: str8 = codec.text(expected_magic);
+        if magic != expected_magic { codec.failed = true; } if !saving { free(magic); }
         codec.number(1, 1, 1);
-        let minor: i32 = codec.number(saving && pads.len() > 0 ? 1 : 0, 0, 1);
-        let plugin_name: str8 = output.instrument_name(slot);
+        let minor: i32 = codec.number(saving && pads.len() > 0 ? 1 : 0, 0, effect ? 0 : 1);
+        let plugin_name: str8 = slot == 0 ? output.processor_name() : output.instrument_name(slot);
         let name: str8 = codec.text(plugin_name);
         if name != plugin_name { codec.failed = true; } if !saving { free(name); }
         let count: i32 = codec.number(i32(parameters), 0, 16384);
@@ -280,7 +287,7 @@ impl SessionCodec {
         let magic: str8 = codec.text("MLALEARN");
         if magic != "MLALEARN" { codec.failed = true; } if !saving { free(magic); }
         codec.number(1, 1, 1); codec.number(0, 0, 0);
-        let plugin_name: str8 = output.instrument_name(slot);
+        let plugin_name: str8 = slot == 0 ? output.processor_name() : output.instrument_name(slot);
         let name: str8 = codec.text(plugin_name);
         if name != plugin_name { codec.failed = true; } if !saving { free(name); }
         var keys: list<i64> = []; var ids: list<i64> = []; var indices: list<i64> = [];

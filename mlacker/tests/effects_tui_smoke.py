@@ -28,6 +28,35 @@ def main():
             assert b"VST3 editor:" in frame and b"Modulation" in frame, frame[-5000:]
             assert b"0.25" in tui.send(b"\r\x150.25\r")
             tui.send(b"\x1b")
+            # Presets target the selected FX channel and append the FX extension.
+            preset_base = Path(folder) / "echo settings"
+            save_preset = F1 + b"lllllll" + b"j" * 6 + b"lj\r"
+            load_preset = F1 + b"lllllll" + b"j" * 6 + b"l\r"
+            frame = tui.send(save_preset)
+            assert b"Save plugin preset (.mlafxpre)" in frame, frame[-5000:]
+            frame = tui.send(b"\x15" + os.fsencode(preset_base) + b"\r", .6)
+            preset = preset_base.with_suffix(".mlafxpre")
+            assert preset.exists() and b"MLAFXPRE" in preset.read_bytes()
+            tui.send(F1 + b"llllllljj\r")
+            assert b"0.75" in tui.send(b"\r\x150.75\r")
+            tui.send(b"\x1b")
+            assert b"Load plugin preset (.mlafxpre)" in tui.send(load_preset)
+            frame = tui.send(b"\x15" + os.fsencode(preset) + b"\r", .6)
+            frame = tui.send(F1 + b"llllllljj\r")
+            assert b"VST3 editor:" in frame and b"0.25" in frame, frame[-5000:]
+            tui.send(b"\x1b")
+            # Uppercase suffix is accepted, without appending a second suffix.
+            upper = Path(folder) / "upper.MLAFXPRE"
+            tui.send(save_preset)
+            tui.send(b"\x15" + os.fsencode(upper) + b"\r", .6)
+            assert upper.exists() and not Path(str(upper) + ".mlafxpre").exists()
+            # Truncated input is rejected before changing parameter values.
+            invalid = Path(folder) / "invalid.mlafxpre"
+            invalid.write_bytes(preset.read_bytes()[:-1])
+            tui.send(load_preset)
+            tui.send(b"\x15" + os.fsencode(invalid) + b"\r", .6)
+            assert b"0.25" in tui.send(F1 + b"llllllljj\r")
+            tui.send(b"\x1b")
             frame = tui.send(F1 + b"lllllll" + b"jjj\r")
             assert b"Set track send" in frame, frame[-5000:]
             assert b"whole number from 0 to 100" in tui.send(b"\x15101\r")
