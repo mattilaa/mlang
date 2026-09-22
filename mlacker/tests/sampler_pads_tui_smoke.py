@@ -140,6 +140,7 @@ def main():
             expect(tui.send(F1 + b"jjjjj\r"), b"Master output (AUHAL)")  # File > Settings
             tui.send(b"\rk\r")
             tui.send(b"\t\rk\r")
+            tui.send(b"\t\rjj\r")  # Request 512 frames before applying.
             frame = expect(tui.send(b"\t\r", 0.8), b"Settings applied")
             assert b"sampler pads" not in frame, frame[-4000:]
 

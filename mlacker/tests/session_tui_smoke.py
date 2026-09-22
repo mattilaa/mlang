@@ -165,6 +165,7 @@ def main():
             assert b"MIDI input adapter" in tui.send(F1 + b"jjjjj\r")
             tui.send(b"\rk\r")
             tui.send(b"\t\rk\r")
+            tui.send(b"\t\rjj\r")  # Request 512 frames before applying.
             frame = tui.send(b"\t\r", 0.6)
             assert b"Settings applied. Audio disabled." in frame, frame[-5000:]
             frame = tui.send(F1 + b"llllll" + b"j\r")
@@ -207,6 +208,7 @@ def main():
             assert b"MIDI input adapter" in tui.send(F1 + b"jjjjj\r")
             tui.send(b"\rk\r")
             tui.send(b"\t\rk\r")
+            tui.send(b"\t\rjj\r")  # Request 512 frames before applying.
             frame = tui.send(b"\t\r", 0.6)
             assert b"Settings applied. Audio disabled." in frame, frame[-5000:]
             tui.send(b"\x13", 0.6)

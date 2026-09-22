@@ -20,15 +20,26 @@ use std::strbuf::clone;
 use std::strbuf::free;
 
 pub struct SettingsDialog : Dialog {
-    var midi: DropDown; var output: DropDown; var error: str8;
+    var midi: DropDown; var output: DropDown; var buffer: DropDown; var error: str8;
 };
 impl SettingsDialog {
     pub fn new() -> SettingsDialog {
-        return SettingsDialog { title: "Settings", width: 64, height: 16,
+        return SettingsDialog { title: "Settings", width: 64, height: 19,
             error: clone(""), focus: PaneFocus::new(0), button_alignment: Alignment::Center,
             buttons: [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 }] };
     }
     pub fn open(self: &mut Self, midi_id: i64, output_id: i64) -> void {
+        self.open_with_buffer(midi_id, output_id, 128);
+    }
+    pub fn open_with_buffer(self: &mut Self, midi_id: i64, output_id: i64, frames: i64) -> void {
+        var buffer_items: list<DropDownItem> = [];
+        var size: i64 = 32;
+        while size <= 4096 {
+            buffer_items.push(DropDownItem { id: size, label: format!("{} frames", size) });
+            size = size * 2;
+        }
+        self.buffer.set_items(buffer_items, frames);
+        for item in buffer_items { free(item.label); }
         var midi_items: list<DropDownItem> = [DropDownItem { id: -2, label: clone("Disabled") }, DropDownItem { id: -1, label: clone("System default") }];
         let midi_count: i64 = std::midi::input_count();
         for id in 0..midi_count {
@@ -52,14 +63,15 @@ impl SettingsDialog {
     pub fn on_event(self: &mut Self, event: InputEvent) -> void {
         if self.pressed_button >= 0 { return; }
         if event.kind == InputKind::Pane || (event.kind == InputKind::Menu && event.key == Key::Toggle) {
-            self.midi.cancel(); self.output.cancel();
+            self.midi.cancel(); self.output.cancel(); self.buffer.cancel();
             let back: bool = event.kind == InputKind::Pane && (event.key == Key::Up || event.key == Key::Left);
-            if back { self.focus.selected = self.focus.selected == 3 ? 1 : (self.focus.selected == 1 ? 0 : 3); }
-            else { self.focus.selected = self.focus.selected == 0 ? 1 : (self.focus.selected == 1 ? 3 : 0); }
+            if back { self.focus.selected = self.focus.selected == 0 ? 3 : self.focus.selected - 1; }
+            else { self.focus.selected = self.focus.selected == 3 ? 0 : self.focus.selected + 1; }
             return;
         }
         if self.focus.selected == 0 { if self.midi.on_event(event) { return; } }
         if self.focus.selected == 1 { if self.output.on_event(event) { return; } }
+        if self.focus.selected == 2 { if self.buffer.on_event(event) { return; } }
         if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 {
             self.active = false; self.result = 2; return;
         }
@@ -74,15 +86,19 @@ impl SettingsDialog {
         let body: Rect = self.paint_frame(surface, viewport, theme);
         let midi_row: Rect = Rect::new(body.x + 1, body.y + 1, body.width - 2, body.height > 1 ? 1 : 0);
         let output_row: Rect = Rect::new(body.x + 1, body.y + 4, body.width - 2, body.height > 4 ? 1 : 0);
+        let buffer_row: Rect = Rect::new(body.x + 1, body.y + 7, body.width - 2, body.height > 7 ? 1 : 0);
         surface.text(body, "MIDI input adapter", theme.foreground, theme.panel);
         if body.height > 3 { surface.text(Rect::new(body.x, body.y + 3, body.width, 1), "Master output (AUHAL)", theme.foreground, theme.panel); }
         self.midi.paint(surface, midi_row, theme, self.focus.selected == 0);
         self.output.paint(surface, output_row, theme, self.focus.selected == 1);
-        if body.height > 6 { surface.text(Rect::new(body.x, body.y + 6, body.width, 1), "128-frame request / native device sample rate", theme.muted, theme.panel); }
-        if body.height > 7 { surface.text(Rect::new(body.x, body.y + 7, body.width, 1), self.error, theme.accent, theme.panel); }
+        if body.height > 6 { surface.text(Rect::new(body.x, body.y + 6, body.width, 1), "Buffer size (samples per channel)", theme.foreground, theme.panel); }
+        self.buffer.paint(surface, buffer_row, theme, self.focus.selected == 2);
+        if body.height > 9 { surface.text(Rect::new(body.x, body.y + 9, body.width, 1), "Requested size; device may use a different size.", theme.muted, theme.panel); }
+        if body.height > 10 { surface.text(Rect::new(body.x, body.y + 10, body.width, 1), self.error, theme.accent, theme.panel); }
         // Overlays are last, so they cover labels, fields and buttons.
         self.midi.paint_popup(surface, midi_row, viewport, theme);
         self.output.paint_popup(surface, output_row, viewport, theme);
+        self.buffer.paint_popup(surface, buffer_row, viewport, theme);
     }
-    pub fn release(self: &mut Self) -> void { self.midi.release(); self.output.release(); free(self.error); }
+    pub fn release(self: &mut Self) -> void { self.midi.release(); self.output.release(); self.buffer.release(); free(self.error); }
 }

@@ -536,7 +536,11 @@ preallocated, with sample offsets preserved by the native audio event queue.
 
 ### Master slot
 
-1. Select MIDI input and master output in **File → Settings**.
+1. Select MIDI input, master output, and buffer size in **File → Settings**.
+   Buffer choices are 32–4096 frames (samples per channel), default 128.
+   Smaller buffers reduce latency; larger buffers allow more processing time.
+   The requested size survives device changes and session opens during this run.
+   After applying, the status shows the actual device buffer size and sample rate.
 2. Choose **Effect → Master → Load master VST3**.
 3. Select a `.vst3` bundle, or type its full path into the dialog and press Enter.
    The chooser starts in `/Library/Audio/Plug-Ins/VST3`; user plugins are commonly
@@ -601,7 +605,7 @@ Current scope:
   playback releases its voices. FX sliders blend the dry path with parallel
   effect returns. PCM is copied while audio is stopped before playback
   (up to 256 placements per pattern); the callback receives lock-free events only.
-- AUHAL's 128-frame request is not a measured end-to-end latency guarantee.
+- AUHAL's selected buffer-size request is not a measured end-to-end latency guarantee.
 
 ## Tests
 
