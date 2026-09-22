@@ -42,6 +42,7 @@ pub struct AudioSystem {
     var midi_id: i64{-1}; var output_id: i64{-1};
     var hardware_requested: bool;
     var requested_buffer_frames: i64{128};
+    var requested_sample_rate: i64{0};
     var processor_path: str8{""};
     var instrument_paths: list<str8>;
     var last_instrument_id: i32;
@@ -65,6 +66,7 @@ impl AudioSystem {
         self.output = next.output; self.midi = next.midi; self.midi_id = next.midi_id; self.output_id = next.output_id;
         self.hardware_requested = next.hardware_requested;
         self.requested_buffer_frames = next.requested_buffer_frames;
+        self.requested_sample_rate = next.requested_sample_rate;
         self.processor_path = next.processor_path; self.instrument_paths = next.instrument_paths;
         self.last_instrument_id = next.last_instrument_id; self.instrument_output_failed = next.instrument_output_failed;
         self.effects = next.effects;
@@ -92,17 +94,21 @@ impl AudioSystem {
         return self.configure_buffer(midi_id, output_id, self.requested_buffer_frames, samples);
     }
     pub fn configure_buffer(self: &mut Self, midi_id: i64, output_id: i64, frames: i64, samples: &list<AudioClip>) -> result<i32, str8> {
+        return self.configure_audio(midi_id, output_id, frames, self.requested_sample_rate, samples);
+    }
+    pub fn configure_audio(self: &mut Self, midi_id: i64, output_id: i64, frames: i64, rate: i64, samples: &list<AudioClip>) -> result<i32, str8> {
+        if rate != 0 && rate != 44100 && rate != 48000 && rate != 96000 { return Err<i32, str8>("Select 44.1, 48 or 96 kHz"); }
         if frames < 32 || frames > 4096 { return Err<i32, str8>("Buffer size must be 32..4096 frames"); }
         if midi_id < -2 || output_id < -2 { return Err<i32, str8>("Invalid device selection"); }
         if midi_id >= std::midi::input_count() { return Err<i32, str8>("MIDI adapter unavailable; reopen Settings"); }
         var next: AudioController = AudioController {};
         if output_id != -2 {
-            let opened: result<AudioController, str8> = AudioController::open(output_id, frames);
+            let opened: result<AudioController, str8> = AudioController::open_at_rate(output_id, frames, rate);
             if opened.is_err() { return Err<i32, str8>(__mlang_std_audio_last_error()); }
             next = opened.unwrap();
         }
         if output_id == -2 && (self.instrument_paths.len() > 0 || self.processor_path != "" || self.effects.len() > 0 || self.insert_paths.len() > 0) {
-            let created: result<AudioController, str8> = AudioController::new(48000, frames);
+            let created: result<AudioController, str8> = AudioController::new(rate == 0 ? 48000 : rate, frames);
             if created.is_err() { return Err<i32, str8>(__mlang_std_audio_last_error()); }
             next = created.unwrap();
         }
@@ -153,6 +159,7 @@ impl AudioSystem {
         self.output = next; self.midi_id = midi_id; self.output_id = output_id;
         self.hardware_requested = output_id != -2;
         self.requested_buffer_frames = frames;
+        self.requested_sample_rate = rate;
         self.midi = MidiController::start_selected(midi_id, self.output.handle);
         return Ok<i32, str8>(0);
     }
@@ -319,7 +326,7 @@ impl AudioSystem {
     pub fn load_effect(self: &mut Self, index: i32, path: str8) -> str8 {
         if index < 0 || index >= self.effects.len() { return clone("Select an effect channel in Mixer first"); }
         if self.output.handle == 0 {
-            let created: result<AudioController, str8> = AudioController::new(48000, self.requested_buffer_frames);
+            let created: result<AudioController, str8> = AudioController::new(self.requested_sample_rate == 0 ? 48000 : self.requested_sample_rate, self.requested_buffer_frames);
             if created.is_err() { return clone("Cannot create effect output"); } self.output = created.unwrap(); self.reconnect_midi();
         }
         let worker: bool = self.midi.worker.raw != 0; self.midi.release();
@@ -362,7 +369,7 @@ impl AudioSystem {
         for i in 0..self.instrument_paths.len() { if self.instrument_paths[i] == "" && slot > self.instrument_paths.len() { slot = i32(i) + 1; } }
         if slot > 32 { return clone("Maximum 32 loaded instruments"); }
         if self.output.handle == 0 {
-            let created: result<AudioController, str8> = AudioController::new(48000, self.requested_buffer_frames);
+            let created: result<AudioController, str8> = AudioController::new(self.requested_sample_rate == 0 ? 48000 : self.requested_sample_rate, self.requested_buffer_frames);
             if created.is_err() { return clone(__mlang_std_audio_last_error()); }
             self.output = created.unwrap();
             self.reconnect_midi();
@@ -484,7 +491,7 @@ impl AudioSystem {
     /// the old processor if the new bundle cannot initialize.
     pub fn set_processor(self: &mut Self, path: str8) -> str8 {
         if self.output.handle == 0 {
-            let created: result<AudioController, str8> = AudioController::new(48000, self.requested_buffer_frames);
+            let created: result<AudioController, str8> = AudioController::new(self.requested_sample_rate == 0 ? 48000 : self.requested_sample_rate, self.requested_buffer_frames);
             if created.is_err() { return clone(__mlang_std_audio_last_error()); }
             self.output = created.unwrap();
             self.reconnect_midi();
@@ -516,7 +523,7 @@ impl AudioSystem {
     pub fn add_insert(self: &mut Self, path: str8, id: i32) -> i32 {
         if id < 1 || id > 256 || id > self.insert_paths.len() + 1 { return -1; }
         if self.output.handle == 0 {
-            let created: result<AudioController, str8> = AudioController::new(48000, self.requested_buffer_frames);
+            let created: result<AudioController, str8> = AudioController::new(self.requested_sample_rate == 0 ? 48000 : self.requested_sample_rate, self.requested_buffer_frames);
             if created.is_err() { return -1; } self.output = created.unwrap(); self.reconnect_midi();
         }
         let worker: bool = self.midi.worker.raw != 0; let restart: bool = self.output.hardware_output();

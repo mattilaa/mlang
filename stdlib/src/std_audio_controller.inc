@@ -568,9 +568,18 @@ static OSStatus ac_callback(void *context, AudioUnitRenderActionFlags *flags,
     if(!data) return noErr;
     for(UInt32 i = 0; i < data->mNumberBuffers; ++i)
         if(data->mBuffers[i].mData) memset(data->mBuffers[i].mData, 0, data->mBuffers[i].mDataByteSize);
-    if(frames <= 4096 && data->mNumberBuffers == 1 && data->mBuffers[0].mData &&
-       data->mBuffers[0].mDataByteSize >= frames * 2u * sizeof(float))
-        ac_render(context, data->mBuffers[0].mData, frames);
+    if(data->mNumberBuffers == 1 && data->mBuffers[0].mData &&
+       data->mBuffers[0].mDataByteSize >= (uint64_t)frames * 2u * sizeof(float)) {
+        /* Rate conversion can request more client frames than hardware frames.
+           Keep every DSP/plugin call within the fixed 4096-frame capacity. */
+        float *samples = data->mBuffers[0].mData;
+        for(UInt32 offset = 0; offset < frames;) {
+            UInt32 count = frames - offset;
+            if(count > 4096) count = 4096;
+            ac_render(context, samples + (size_t)offset * 2u, count);
+            offset += count;
+        }
+    }
     return noErr;
 }
 #endif
@@ -621,11 +630,16 @@ int32_t __mlang_std_audio_controller_start(int64_t handle) {
 #endif
     audio_set_error("audio controller has no hardware output"); return -1;
 }
-int64_t __mlang_std_audio_controller_open(int64_t device, int64_t frames) {
+int64_t __mlang_std_audio_controller_open_rate(int64_t device, int64_t frames, int64_t requested_rate) {
+    if(requested_rate != 0 && (requested_rate < 8000 || requested_rate > 384000)) {
+        audio_set_error("Invalid audio sample rate"); return 0;
+    }
 #if defined(__APPLE__)
     AudioDeviceID id = coreaudio_device_for_index(device < 0 ? coreaudio_default_output_index() : device);
     if(id == kAudioObjectUnknown) { audio_set_error("AUHAL output device unavailable"); return 0; }
-    double rate = coreaudio_nominal_sample_rate(id);
+    /* Set the AUHAL client stream rate. CoreAudio converts to the device rate
+       when necessary, without changing the format of other running clients. */
+    double rate = requested_rate ? (double)requested_rate : coreaudio_nominal_sample_rate(id);
     int64_t handle = __mlang_std_audio_controller_new((int64_t)rate, frames);
     ac_controller *c = (ac_controller*)(intptr_t)handle; if(!c) return 0;
     UInt32 size = sizeof(UInt32), actual = (UInt32)frames;
@@ -660,8 +674,11 @@ int64_t __mlang_std_audio_controller_open(int64_t device, int64_t frames) {
     }
     return handle;
 #else
-    (void)device; (void)frames; audio_set_error("AUHAL output requires macOS"); return 0;
+    (void)device; (void)frames; (void)requested_rate; audio_set_error("AUHAL output requires macOS"); return 0;
 #endif
+}
+int64_t __mlang_std_audio_controller_open(int64_t device, int64_t frames) {
+    return __mlang_std_audio_controller_open_rate(device, frames, 0);
 }
 int64_t __mlang_std_audio_controller_info(int64_t handle, int64_t key) {
     ac_controller *c = (ac_controller*)(intptr_t)handle; if(!c) return 0;

@@ -714,7 +714,7 @@ pub fn run() -> i32 {
             if settings.active && settings.pressed_button >= 0 {
                 settings.tick(); dirty = true;
                 if !settings.active && settings.result == 1 {
-                    let applied: result<i32, str8> = midi.configure_buffer(settings.midi.selected_id(), settings.output.selected_id(), settings.buffer.selected_id(), library.audio.samples);
+                    let applied: result<i32, str8> = midi.configure_audio(settings.midi.selected_id(), settings.output.selected_id(), settings.buffer.selected_id(), settings.rate.selected_id(), library.audio.samples);
                     if applied.is_err() { settings.fail(applied.unwrap_err()); }
                     else {
                         free(message);
@@ -1204,7 +1204,7 @@ pub fn run() -> i32 {
             if command > 0 && command != 115 { adding_insert_track = -1; }
             if command == 99 { running = false; }
             else if command == 90 {
-                transport.playing = false; settings.open_with_buffer(midi.midi_id, midi.output_id, midi.requested_buffer_frames); focus.set_menu_active(true);
+                transport.playing = false; settings.open_audio(midi.midi_id, midi.output_id, midi.requested_buffer_frames, midi.requested_sample_rate); focus.set_menu_active(true);
             }
             else if command == 1 {
                 question.title = "New session"; question.question = "Start a new session?";

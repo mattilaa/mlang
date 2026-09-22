@@ -52,10 +52,11 @@ def main():
         send(b"\t\rk\r")
         frame = send(b"\t\rjj\r")  # 128 -> 512 frames
         assert b"512 frames" in frame
+        send(b"\t\rjjj\r")  # Device default -> 96 kHz
         frame = send(b"\t\r")
         assert b"Settings applied. Audio disabled." in frame
         frame = send(F1 + b"jjj\r")
-        assert b"MIDI input adapter" in frame and b"Disabled" in frame and b"512 frames" in frame
+        assert b"MIDI input adapter" in frame and b"Disabled" in frame and b"512 frames" in frame and b"96 kHz" in frame
         # Resize with an expanded dropdown, exercising clipping and overlay.
         send(b"\r")
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 10, 30, 0, 0))

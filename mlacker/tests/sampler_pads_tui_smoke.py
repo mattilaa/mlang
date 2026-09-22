@@ -141,6 +141,7 @@ def main():
             tui.send(b"\rk\r")
             tui.send(b"\t\rk\r")
             tui.send(b"\t\rjj\r")  # Request 512 frames before applying.
+            tui.send(b"\t\rjjj\r")  # Device default -> 96 kHz
             frame = expect(tui.send(b"\t\r", 0.8), b"Settings applied")
             assert b"sampler pads" not in frame, frame[-4000:]
 

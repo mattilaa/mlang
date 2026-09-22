@@ -5,6 +5,7 @@ use std::audio::PcmBlock;
 use std::audio::detail::__mlang_std_audio_last_error;
 extern fn __mlang_std_audio_controller_new(rate: i64, frames: i64) -> i64;
 extern fn __mlang_std_audio_controller_open(device: i64, frames: i64) -> i64;
+extern fn __mlang_std_audio_controller_open_rate(device: i64, frames: i64, rate: i64) -> i64;
 extern fn __mlang_std_audio_controller_post(handle: i64, lane: i64, kind: i64, channel: i64, note: i64, velocity: i64, source: i64, frame: i64, sample: i64, gain: f64) -> i32;
 extern fn __mlang_std_audio_controller_panic(handle: i64) -> void;
 extern fn __mlang_std_audio_controller_sample(handle: i64, pcm: i64) -> i64;
@@ -172,6 +173,13 @@ impl AudioController {
     /// Buffer size is a hardware hint, not a guaranteed latency. Query actual.
     pub fn open(device: i64, frames: i64) -> result<AudioController, str8> {
         let handle: i64 = __mlang_std_audio_controller_open(device, frames);
+        if handle == 0 { return Err<AudioController, str8>(__mlang_std_audio_last_error()); }
+        return Ok<AudioController, str8>(AudioController { handle: handle });
+    }
+    /// Open AUHAL at an explicit processing rate; 0 uses the native device rate.
+    /// CoreAudio converts the client stream if the device uses another rate.
+    pub fn open_at_rate(device: i64, frames: i64, rate: i64) -> result<AudioController, str8> {
+        let handle: i64 = __mlang_std_audio_controller_open_rate(device, frames, rate);
         if handle == 0 { return Err<AudioController, str8>(__mlang_std_audio_last_error()); }
         return Ok<AudioController, str8>(AudioController { handle: handle });
     }

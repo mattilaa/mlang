@@ -96,10 +96,10 @@ impl SessionData {
     /// Construct a replacement without touching the running session.
     pub fn prepare_audio(self: SessionData, source: &AudioSystem) -> result<AudioSystem, str8> {
         var current: AudioSystem = AudioSystem {}; current = source;
-        var next: AudioSystem = AudioSystem { midi_id: current.midi_id, output_id: current.output_id, hardware_requested: current.hardware_requested, requested_buffer_frames: current.requested_buffer_frames };
+        var next: AudioSystem = AudioSystem { midi_id: current.midi_id, output_id: current.output_id, hardware_requested: current.hardware_requested, requested_buffer_frames: current.requested_buffer_frames, requested_sample_rate: current.requested_sample_rate };
         // A failed initial device open is not a request for silent/offline audio.
         let hardware: bool = current.hardware_requested;
-        let opened: result<AudioController, str8> = hardware ? AudioController::open(current.output_id, current.requested_buffer_frames) : AudioController::new(48000, current.requested_buffer_frames);
+        let opened: result<AudioController, str8> = hardware ? AudioController::open_at_rate(current.output_id, current.requested_buffer_frames, current.requested_sample_rate) : AudioController::new(current.requested_sample_rate == 0 ? 48000 : current.requested_sample_rate, current.requested_buffer_frames);
         if opened.is_err() { return Err<AudioSystem, str8>("Cannot prepare session audio output"); }
         next.output = opened.unwrap();
         let plugins: list<PluginSnapshot> = self.plugins;

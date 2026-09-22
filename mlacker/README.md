@@ -536,10 +536,13 @@ preallocated, with sample offsets preserved by the native audio event queue.
 
 ### Master slot
 
-1. Select MIDI input, master output, and buffer size in **File → Settings**.
+1. Select MIDI input, master output, buffer size, and sample rate in **File → Settings**.
    Buffer choices are 32–4096 frames (samples per channel), default 128.
    Smaller buffers reduce latency; larger buffers allow more processing time.
-   The requested size survives device changes and session opens during this run.
+   Sample rates are Device default, 44.1, 48, and 96 kHz. The explicit rate sets
+   audio-engine and plugin processing; CoreAudio converts to the device rate if
+   needed. Device default keeps the native device rate.
+   Both selections survive device changes and session opens during this run.
    After applying, the status shows the actual device buffer size and sample rate.
 2. Choose **Effect → Master → Load master VST3**.
 3. Select a `.vst3` bundle, or type its full path into the dialog and press Enter.
