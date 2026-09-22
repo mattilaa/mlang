@@ -397,14 +397,19 @@ plugin PCM peaks, after the instrument fader and before the master chain. PCM
 meters share the meter style, update rate, and smooth decay. Tracks using the
 same loaded instance display the same cached stereo output readings.
 
-`Shift+R` in Mixer toggles the selected MIDI/instrument track's record arm. Its
-upper `R` becomes white on red while armed. Incoming MIDI note-ons overwrite NOTE
-and VEL at the selected pattern row/note line without advancing the cursor. A new
-note defaults to LEN 1.00 and OFF 0.00; existing timing is retained. The last note
-in a chord wins on that note line. Other armed tracks are not written unless
-selected. Audio tracks do not record MIDI. Menus, dialogs, plugin editors, text
-editing, and visual selection suspend recording. Volume is saved in `.mlack`;
-record-arm is transient and starts off when a session is loaded.
+`Shift+R` in Mixer arms the selected MIDI/instrument track (red `R`). Press
+Space to record from the selected row; press Space again to stop and enter the
+track name (Enter accepts, Esc keeps the old name). Each take targets one synth
+track, with up to 64 automatically added note lines. Notes on the same row are
+inserted in ascending pitch order with their velocities and timing intact.
+LEN captures key-hold duration. OFF captures early/late timing relative to the
+nearest sixteenth-note row, to 0.01 row precision. Rows are appended as recording
+reaches the end; the take does not loop. All recorded cells remain editable.
+The live MIDI path monitors the synth during recording.
+
+While stopped, incoming notes still provide single-cell step entry on the armed
+track. Audio tracks do not record MIDI. Opening a modal editor stops a timed take.
+Volume is saved in `.mlack`; record-arm is transient and starts off on load.
 
 ### Output channels
 

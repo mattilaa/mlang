@@ -3454,3 +3454,31 @@ fn tui_session_without_a_grid_takes_it_from_its_patterns() {
     restored.release();
     library.release(); std::fs::remove_tree(directory); free(path); free(directory);
 }
+
+#[test]
+fn tui_timed_recording_chords() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var table: SequenceTable = SequenceTable::new();
+    table.clear_row();
+    verify(!table.start_recording());
+    verify(table.mixer_event(decode_input("R"), area));
+    verify(table.start_recording());
+    verify(table.record_timed(67, 110, 0, 1500, true));
+    verify(table.record_timed(60, 90, 0, 1800, true));
+    verify(table.record_timed(64, 100, 0, 2100, true));
+    let chord: TableRow = table.rows[0];
+    verify(chord.cells[1] == "C-4" && chord.cells[5] == "E-4" && chord.cells[9] == "G-4");
+    verify(chord.cells[2] == "90" && chord.cells[6] == "100" && chord.cells[10] == "110");
+    verify(chord.cells[4] == "0.12" && chord.cells[8] == "0.14" && chord.cells[12] == "0.10");
+    verify(table.record_timed(67, 0, 0, 16500, false));
+    let released: TableRow = table.rows[0]; verify(released.cells[11] == "1.00");
+    table.selected_row = 1; table.clear_row();
+    verify(table.record_timed(72, 80, 0, 14850, true));
+    let early: TableRow = table.rows[1]; verify(early.cells[4] == "-0.01");
+    table.grow_recording(15000 * 80);
+    verify(table.rows.len() >= 82);
+    table.stop_recording(31800, area);
+    let finished: TableRow = table.rows[0]; verify(finished.cells[3] == "2.00");
+    verify(table.recording_track == -1 && table.editing && table.edit_mode == 1);
+    table.release();
+}

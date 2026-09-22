@@ -67,7 +67,7 @@ impl NotePlayback {
             let data: TableRow = table.rows[r];
             for t in 0..table.tracks.len() {
                 let track: SequenceTrack = table.tracks[t];
-                if track.audio || track.muted { continue; }
+                if track.audio || track.muted || i32(t) == table.recording_track { continue; }
                 // Automation is row-timed, independent of NOTE/LEN/OFF and visibility.
                 for slot in 1..3 {
                     let controller: i64 = pattern_controller_number(slot == 1 ? track.cc1.parameter : track.cc2.parameter);

@@ -483,7 +483,8 @@ pub fn run() -> i32 {
                 song_table.release(); song_table = SequenceTable {};
                 note_playback = NotePlayback {};
             }
-            transport.toggle(now_ms(), library.table.selected_row, i32(library.table.rows.len()));
+            if !transport.playing { library.table.start_recording(); }
+            transport.toggle(now_ms(), library.table.selected_row, library.table.recording_track >= 0 ? 2147483647 : i32(library.table.rows.len()));
             note_playback.start_row = transport.row;
             if transport.playing { midi.restart_samples(transport.row); }
             if !midi.sample_playback(library.table, transport.ticks, transport.playing, transport.bpm) {
@@ -652,6 +653,20 @@ pub fn run() -> i32 {
         }
         // Editing a moving row would otherwise commit to a different row.
         if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active { transport.playing = false; }
+        if library.table.recording_track >= 0 {
+            let armed: SequenceTrack = library.table.tracks[library.table.recording_track];
+            if !armed.record_armed { transport.playing = false; }
+            let record_now: i64 = transport.ticks + (transport.playing ? (now - transport.clock_ms) * wide(transport.bpm) : 0);
+            let notes: list<MidiInputEvent> = midi.midi.note_events;
+            for note in notes {
+                let tick: i64 = record_now - (now - note.received_ms) * wide(transport.bpm);
+                if library.table.record_timed(note.note, note.velocity, note.channel, tick, note.kind == 1) { dirty = true; }
+            }
+            if transport.playing && !song_playing {
+                library.table.grow_recording(transport.ticks + (now - transport.clock_ms) * wide(transport.bpm));
+            } else { library.table.stop_recording(transport.ticks, terminal_bounds()); focus.selected = 1; dirty = true; }
+        }
+        transport.recording = library.table.recording_track >= 0;
         if song_playing {
             let previous: i32 = transport.row;
             if transport.advance(now, i32(song_table.rows.len())) { playback_dirty = true; }
@@ -697,7 +712,9 @@ pub fn run() -> i32 {
         // Modal editors never receive destructive background recording edits.
         if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !sample_editor.active && !piano.active && !share_question.active && !remove_question.active && !library.renaming && !mixer.bus_focus && library.table.group_detail_rows == 0 {
             let notes: list<MidiInputEvent> = midi.midi.note_events;
-            for note in notes { if library.table.record_note(note.note, note.velocity) { dirty = true; } }
+            if library.table.recording_track < 0 && !library.table.editing {
+                for note in notes { if note.kind == 1 { if library.table.record_note(note.note, note.velocity) { dirty = true; } } }
+            }
         }
         if !midi.sample_playback(song_playing ? song_table : library.table, transport.ticks, transport.playing, transport.bpm) {
             transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)"); dirty = true;

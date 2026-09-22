@@ -345,7 +345,7 @@ impl AudioSystem {
     pub fn route_selected(self: AudioSystem, source: &SequenceTable) -> void {
         var table: SequenceTable = SequenceTable {}; table = source;
         if self.output.handle == 0 { return; }
-        let index: i32 = table.active_track();
+        let index: i32 = table.recording_track >= 0 ? table.recording_track : table.active_track();
         if index < 0 { self.output.midi_target(0, -1); return; }
         let track: SequenceTrack = table.tracks[index];
         var slot: i32 = 0;

@@ -13,6 +13,7 @@ pub struct TransportStatus {
     var beats_per_bar: i32{4};
     var beat_unit: i32{4};
     var midi_received: bool;
+    var recording: bool;
     var playing: bool; var row: i32; var phase: i64; var clock_ms: i64;
     var ticks: i64;
 };
@@ -71,7 +72,7 @@ impl TransportStatus {
         }
         if offset + 2 < area.width {
             surface.text(Rect::new(area.x + offset + 2, area.y, area.width - offset - 2, 1),
-                self.playing ? "PLAY" : "STOP", self.playing ? theme.accent : theme.muted, theme.panel);
+                self.recording ? "REC" : (self.playing ? "PLAY" : "STOP"), self.playing ? theme.accent : theme.muted, theme.panel);
         }
         free(text);
     }
