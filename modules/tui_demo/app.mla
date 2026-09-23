@@ -58,6 +58,7 @@ use tui_demo::frame_rate::FrameRate;
 mod tui_demo::session;
 use tui_demo::session::SessionCodec;
 use tui_demo::session::SessionData;
+use tui_demo::session::PatternData;
 use tui_demo::session::PresetResult;
 use tui_demo::session::SessionView;
 use tui_demo::midi_controller::MidiController;
@@ -140,7 +141,9 @@ fn demo_menus(fixture: bool, follow_matrix: bool) -> MenuBar {
                                 MenuItem { label: follow_matrix ? "[x] Follow matrix patterns" : "[ ] Follow matrix patterns",
                                     action: 55, enabled: true },
                                 MenuItem { label: "Set matrix row length", action: 56, enabled: true },
-                                MenuItem { label: "Remove pattern", action: 52, enabled: true }] },
+                                MenuItem { label: "Remove pattern", action: 52, enabled: true },
+                                MenuItem { label: "Save pattern", action: 57, enabled: true },
+                                MenuItem { label: "Load pattern", action: 58, enabled: true }] },
                     Menu {title: "Audio", items: [
                                 MenuItem { label: "Add audio", action: 60, enabled: true },
                                 MenuItem { label: "Edit sample (destructive)", action: 107, enabled: true },
@@ -272,6 +275,7 @@ pub fn run() -> i32 {
     var library: PatternLibrary = fixture ? PatternLibrary::new() : PatternLibrary::empty();
     var session_path: str8 = clone(""); var request_path: str8 = clone("");
     var session_request: i32 = 0; var saving_session: bool = false;
+    var pattern_action: i32 = 0; var last_pattern_dir: str8 = clone("");
     var learn_action: i32 = 0; var learn_slot: i64 = 0;
     // Sampler pads: 117 = from the Audio list, 118 = from a file.
     var pad_action: i32 = 0; var pad_slot: i32 = 0; var pad_sample: i32 = -1; var pad_index: i32 = 0;
@@ -503,12 +507,29 @@ pub fn run() -> i32 {
             accept_pending = false;
             let paths: list<str8> = dialog.accepted_paths;
             let first: str8 = dialog.accepted_path;
-            if adding_audio || adding_pad_file { free(last_audio_dir); last_audio_dir = clone(dialog.directory); }
+            if pattern_action != 0 { free(last_pattern_dir); last_pattern_dir = clone(dialog.directory); }
+            else if adding_audio || adding_pad_file { free(last_audio_dir); last_audio_dir = clone(dialog.directory); }
             else if adding_plugin || adding_instrument || adding_effect >= 0 || adding_insert_track >= 0 { free(last_plugin_dir); last_plugin_dir = clone(dialog.directory); }
             else if learn_action != 0 { free(last_preset_dir); last_preset_dir = clone(dialog.directory); }
             else { free(last_session_dir); last_session_dir = clone(dialog.directory); }
             free(message);
-            if adding_audio {
+            if pattern_action != 0 {
+                if pattern_action == 57 {
+                    let saved: bool = SessionCodec::save_pattern(first, library.active_name(), library.table);
+                    message = clone(saved ? "Saved pattern (.mlapatt)" : "Cannot save pattern");
+                } else {
+                    let loaded: result<PatternData, str8> = SessionCodec::load_pattern(first);
+                    if loaded.is_err() { message = clone(loaded.unwrap_err()); }
+                    else {
+                        let data: PatternData = loaded.unwrap();
+                        let imported: bool = library.import_pattern(data.name, data.table, data.clips);
+                        message = clone(imported ? "Loaded pattern; assign instruments to its tracks" : library.error);
+                        data.release();
+                    }
+                }
+                pattern_action = 0;
+            }
+            else if adding_audio {
                 // The first sample lands on the selected audio track; the rest
                 // join the Audio list.
                 var loaded: i32 = 0;
@@ -1240,7 +1261,7 @@ pub fn run() -> i32 {
                     share_question.open(); focus.set_menu_active(true); dirty = true;
                 }
             }
-            if command > 0 { dirty = true; }
+            if command > 0 { dirty = true; pattern_action = 0; }
             if command > 0 && command != 115 { adding_insert_track = -1; }
             if command == 99 { running = false; }
             else if command == 90 {
@@ -1577,6 +1598,16 @@ pub fn run() -> i32 {
                 message = shared ? format!("Instrument track created unassigned (instance {} is used by another track). Add > Instrument loads a new one; Enter in Instruments shares it.", candidate)
                     : clone("Instrument track created. Add > Instrument loads a plugin; Enter in Instruments assigns it.");
             }
+            else if command == 57 || command == 58 {
+                pattern_action = command; learn_action = 0; adding_audio = false; adding_plugin = false;
+                adding_instrument = false; adding_effect = -1; adding_insert_track = -1; adding_pad_file = false;
+                transport.playing = false; dialog.save_mode = command == 57; dialog.multi_select = false; dialog.bundle_pattern = "";
+                dialog.title = command == 57 ? "Save pattern (.mlapatt)" : "Load pattern (.mlapatt)";
+                dialog.file_pattern = command == 57 ? "" : ".*\\.[mM][lL][aA][pP][aA][tT][tT]";
+                dialog.open(last_pattern_dir);
+                if command == 57 { dialog.path_field.set_text(library.active_name()); }
+                focus.set_menu_active(true);
+            }
             else if command == 50 || command == 53 { library.add(command == 53); }
             else if command == 51 {
                 library.editor.set_text(library.active_name()); library.renaming = true; library.error = "";
@@ -1744,7 +1775,7 @@ pub fn run() -> i32 {
     settings.release();
     free(session_path); free(request_path);
     instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); mixer_table.release(); free(preset_path);
-    free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
+    free(last_pattern_dir); free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();
     return 0;

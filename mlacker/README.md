@@ -55,7 +55,7 @@ it changes, then what it removes; related entries live in submenus.
 | Edit | Undo, Redo, Copy/Cut/Paste clip |
 | View | Patterns, Song matrix, Audio, Instruments, Sample view ▸, Meter ▸, Reset layout, Show details |
 | Track | Create MIDI/AUDIO/Instrument track, Rename, Duplicate, Mute, Note lines ▸, Automation ▸, Clear pattern, Delete |
-| Pattern | Add, Clone, Rename, Set length, Follow matrix patterns, Set matrix row length, Remove |
+| Pattern | Add, Clone, Rename, Set length, Follow matrix patterns, Set matrix row length, Remove, Save pattern, Load pattern |
 | Audio | Add audio, Edit sample (destructive), Clip ▸, Remove audio |
 | Instrument | Add instrument, Open VST3 editor, Drum pads ▸, Presets ▸, MIDI learn ▸, Remove instrument |
 | Effect | Add effect channel, Load/Edit effect plugin, Set track send, Master ▸, Remove effect plugin |
@@ -250,6 +250,12 @@ opaque presets, internal sample banks, and non-parameter controller state are no
 stored in 1.0; exposed parameter values are restored by ID. Device changes still
 reload plugins with defaults. See [the binary format](FORMAT.md) for the schema
 and limits.
+
+**Pattern → Save pattern / Load pattern** uses `.mlapatt` files. Saving includes
+the active pattern’s notes, track settings and embedded audio clips. Loading adds
+and selects a new pattern without changing the song matrix. Instrument assignments
+and effect routing are cleared so you can assign plugins in the current session.
+The save dialog appends `.mlapatt` when needed.
 
 ## Pattern visual selection
 

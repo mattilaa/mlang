@@ -3482,3 +3482,38 @@ fn tui_timed_recording_chords() {
     verify(table.recording_track == -1 && table.editing && table.edit_mode == 1);
     table.release();
 }
+
+#[test]
+fn tui_pattern_file_round_trip() {
+    var library: PatternLibrary = PatternLibrary::new();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.create_instrument_track(7, area);
+    library.table.create_track_kind(false, true, area);
+    let clip: AudioClip = test_clip(4000, 0.25f);
+    verify(library.table.insert_audio(clip, area));
+    let directory: str8 = clone("/private/tmp/mlacker-pattern-test-XXXXXX"); mkdtemp(directory);
+    let base: str8 = format!("{}/pattern", directory);
+    let path: str8 = format!("{}.mlapatt", base);
+    verify(SessionCodec::save_pattern(base, "My pattern", library.table));
+    let loaded: result<tui_demo::session::PatternData, str8> = SessionCodec::load_pattern(path);
+    verify(loaded.is_ok());
+    let data: tui_demo::session::PatternData = loaded.unwrap();
+    verify(data.name == "My pattern" && data.clips.len() == 1);
+    verify(data.table.rows.len() == library.table.rows.len());
+    verify(data.table.tracks.len() == library.table.tracks.len());
+    for i in 0..data.table.rows.len() {
+        let actual: TableRow = data.table.rows[i]; let expected: TableRow = library.table.rows[i];
+        for j in 0..actual.cells.len() { verify(actual.cells[j] == expected.cells[j]); }
+    }
+    let tracks: list<SequenceTrack> = data.table.tracks;
+    for track in tracks { verify(track.instrument_id == 0); }
+    let last: SequenceTrack = tracks[tracks.len() - 1];
+    verify(last.instances.len() == 1);
+    let before: i64 = library.song.len();
+    verify(library.import_pattern(data.name, data.table, data.clips));
+    let name: str8 = library.active_name();
+    verify(library.active_id == 4 && name == "My pattern");
+    verify(library.song.len() == before && library.audio.samples.len() == 1);
+    data.release(); library.release(); clip.release();
+    std::fs::remove_tree(directory); free(base); free(path); free(directory);
+}

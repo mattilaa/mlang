@@ -801,7 +801,7 @@ pub fn paint_note_lengths(self: SequenceTable, surface: Surface, area: Rect, the
                 let bg: i32 = note_cell.background;
                 var glyph: i32 = 0x2800;
                 for part in 0..4 { if mask / powers[part * 2] % 4 != 0 { glyph = glyph + dots[part]; } }
-                surface.put(x, body.y + i32(y), Cell { glyph: glyph, foreground: lighten(bg, 12), background: bg });
+                surface.put(x, body.y + i32(y), Cell { glyph: glyph, foreground: darken(note_cell.foreground, 92), background: bg });
             }
         }
     }

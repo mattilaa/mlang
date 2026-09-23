@@ -432,6 +432,19 @@ impl PatternLibrary {
         if self.view.selected < 0 || self.view.selected >= self.view.items.len() { return; }
         let item: ListItem = self.view.items[self.view.selected]; self.select(item.id);
     }
+    /// Copy a validated pattern into this session without changing song order.
+    pub fn import_pattern(self: &mut Self, name: str8, table: &SequenceTable, clips: list<AudioClip>) -> bool {
+        if self.patterns.len() >= 128 { self.error = "Maximum 128 patterns"; return false; }
+        var missing: i32 = 0;
+        for clip in clips { if self.audio.find_clip(clip) < 0 { missing = missing + 1; } }
+        if self.audio.samples.len() + missing > 256 { self.error = "Pattern would exceed 256 loaded samples"; return false; }
+        for clip in clips { self.audio.add_clip(clip.copy()); }
+        let id: i32 = self.next_id; self.next_id = self.next_id + 1;
+        var source: SequenceTable = SequenceTable {}; source = table;
+        var imported: SequenceTable = source.copy_pattern();
+        self.patterns.push(PatternEntry { id: id, name: clone(name), data: imported });
+        self.select(id); self.show_patterns(); self.error = ""; return true;
+    }
     pub fn add(self: &mut Self, duplicate: bool) -> void {
         if self.patterns.len() >= 128 { self.error = "Maximum 128 patterns"; return; }
         var data: SequenceTable = self.table.copy_pattern();

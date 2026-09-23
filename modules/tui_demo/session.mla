@@ -154,6 +154,14 @@ impl SessionData {
     }
 }
 
+/// Portable pattern: owned sequence and embedded source clips.
+pub struct PatternData { var name: str8; var table: SequenceTable; var clips: list<AudioClip>; };
+impl PatternData {
+    pub fn release(self: PatternData) -> void {
+        free(self.name); self.table.release();
+        let clips: list<AudioClip> = self.clips; for clip in clips { clip.release(); }
+    }
+}
 /// Sticky errors prevent a later successful operation from masking truncation.
 pub struct SessionCodec { var reading: bool; var failed: bool; var binary: SessionBuffer; var reader: SessionReader; var cells: i64; };
 impl SessionCodec {
@@ -783,6 +791,58 @@ impl SessionCodec {
             if !found { self.failed = true; }
         }
         return SessionData { library: library, plugins: plugins, view: state, midi_learn: mappings, effect_volumes: effect_volumes, pads: pads };
+    }
+    pub fn save_pattern(path: str8, name: str8, source: &SequenceTable) -> bool {
+        let created: result<SessionBuffer, str8> = SessionBuffer::new(4096);
+        if created.is_err() { return false; }
+        var codec: SessionCodec = SessionCodec { binary: created.unwrap() };
+        var table: SequenceTable = SequenceTable {}; table = source;
+        // Collect only clips placed in this pattern, including detached placements.
+        var clips: list<AudioClip> = []; let tracks: list<SequenceTrack> = table.tracks;
+        for track in tracks {
+            let instances: list<AudioInstance> = track.instances;
+            for instance in instances {
+                var found: bool = false;
+                for clip in clips {
+                    if clip.source == instance.clip.source && clip.frames == instance.clip.frames && clip.frames_per_row == instance.clip.frames_per_row { found = true; }
+                }
+                if !found { clips.push(instance.clip); }
+            }
+        }
+        codec.text("MLAPATT"); codec.number(1, 1, 1); codec.number(0, 0, 0); codec.text(name);
+        codec.number(i32(clips.len()), 0, 256);
+        for clip in clips { codec.clip(clip); }
+        codec.sequence_data(table, clips);
+        let actual: str8 = tui::table::table_matches(".*\\.[mM][lL][aA][pP][aA][tT][tT]", path) ? clone(path) : format!("{}.mlapatt", path);
+        if !codec.failed { let written: result<i32, str8> = codec.binary.write_atomic(actual); if written.is_err() { codec.failed = true; } }
+        free(actual); codec.binary.close(); return !codec.failed;
+    }
+    pub fn load_pattern(path: str8) -> result<PatternData, str8> {
+        let opened: result<File, str8> = File::open(path);
+        if opened.is_err() { return Err<PatternData, str8>("Cannot open pattern file"); }
+        let file: File = opened.unwrap(); let size: result<i64, str8> = file.size(); file.close();
+        if size.is_err() { return Err<PatternData, str8>("Cannot read pattern file"); }
+        if size.unwrap() < 31 || size.unwrap() > 268435456 { return Err<PatternData, str8>("Pattern exceeds 256 MiB or is truncated"); }
+        let read: result<SessionReader, str8> = SessionReader::from_file(path);
+        if read.is_err() { return Err<PatternData, str8>("Cannot read pattern file"); }
+        var codec: SessionCodec = SessionCodec { reading: true, reader: read.unwrap() };
+        let magic: str8 = codec.text(""); if magic != "MLAPATT" { codec.failed = true; } free(magic);
+        codec.number(1, 1, 1); codec.number(0, 0, 0);
+        var data: PatternData = PatternData { name: codec.text("") };
+        let count: i32 = codec.number(0, 0, 256);
+        for i in 0..count { if codec.failed { break; } data.clips.push(codec.clip(AudioClip {})); }
+        data.table = codec.sequence_data(data.table, data.clips);
+        if codec.reader.remaining() != 0 { codec.failed = true; } codec.reader.close();
+        if codec.failed { data.release(); return Err<PatternData, str8>("Invalid, truncated or unsupported .mlapatt pattern"); }
+        // Instance IDs and effect buses belong to the originating session.
+        let tracks: list<SequenceTrack> = data.table.tracks; var detached: list<SequenceTrack> = [];
+        for item in tracks {
+            var track: SequenceTrack = SequenceTrack {}; track = item;
+            track.instrument_id = 0; track.inserts = []; track.sends = []; track.output = 0;
+            detached.push(track);
+        }
+        data.table.tracks = detached;
+        return Ok<PatternData, str8>(data);
     }
     pub fn save(self: &mut Self, path: str8, library: &PatternLibrary, view: SessionView, audio: &AudioSystem) -> bool {
         let created: result<SessionBuffer, str8> = SessionBuffer::new(4096); if created.is_err() { return false; }
