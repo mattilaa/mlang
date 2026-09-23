@@ -104,6 +104,13 @@ are accepted. Unsupported major or minor versions fail closed.
     empty sections if necessary. A route to a track that is no longer an AUDIO
     track is loaded as written and plays to master.
 
+14. Optional `MATRIX_GRID` extension follows `TRACK_OUTPUTS`: the number of
+    pattern rows one matrix row holds (1-16384). It is written only when a song
+    changed it from the default 64. A session without the tag takes the length
+    most of its patterns have (the shortest of those on a tie), so a song of
+    16-row patterns plays them one per matrix row. Like the others, it requires the preceding
+    tags, with empty sections if necessary.
+
 The active pattern is serialized from the live editor, not its older library
 snapshot. Audio placements reference the embedded sample list; plugin assignments
 reference stable slots, including holes left by removed instruments.

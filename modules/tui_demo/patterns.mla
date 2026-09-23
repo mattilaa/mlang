@@ -35,7 +35,14 @@ pub struct PatternLibrary {
     /// Instance the user tried to assign while another track already uses it;
     /// the application asks whether to share it or load a new instance.
     var share_request: i32;
+    /// Rows of pattern time in one matrix row. A pattern longer than this
+    /// occupies several matrix rows and plays a slice in each, so lanes holding
+    /// shorter patterns move on without waiting for it.
+    var matrix_steps: i32{64};
 };
+/// Pattern covering a matrix cell: `offset` counts the matrix rows since it
+/// started, so 0 is the row it was placed on. id 0 means the cell is silent.
+pub struct SongCover { var id: i32; var offset: i32; };
 impl PatternLibrary {
     /// True when any track in any pattern feeds a channel other than master;
     /// the session writes its TRACK_OUTPUTS extension only for those.
@@ -65,7 +72,7 @@ impl PatternLibrary {
         var next: PatternLibrary = PatternLibrary {}; next = source;
         self.release();
         self.patterns = next.patterns; self.song = next.song; self.active_id = next.active_id; self.next_id = next.next_id;
-        self.extra_lanes = next.extra_lanes;
+        self.extra_lanes = next.extra_lanes; self.matrix_steps = next.matrix_steps;
         self.table = next.table; self.view = next.view;
         self.renaming = false; self.editor = next.editor; self.error = next.error;
         self.audio = next.audio; self.audio_mode = next.audio_mode;
@@ -141,8 +148,68 @@ impl PatternLibrary {
     /// Pattern a song row starts from: its lowest lane holding one, or 0.
     pub fn song_row_pattern(self: PatternLibrary, row: i32) -> i32 {
         for lane in 0..self.song_lanes() {
-            let id: i32 = self.song_at(row, i32(lane));
-            if id > 0 && self.index_of(id) >= 0 { return id; }
+            let cover: SongCover = self.song_cover(row, i32(lane));
+            if cover.id > 0 && self.index_of(cover.id) >= 0 { return cover.id; }
+        }
+        return 0;
+    }
+    /// Matrix row length for a song that never set one: the length most of its
+    /// patterns have, and the shortest of those when it is a tie. A song of
+    /// 64-row patterns keeps 64; one built from 16-row patterns tiles them one
+    /// per matrix row instead of repeating each to fill four of them.
+    pub fn derive_matrix_steps(self: PatternLibrary) -> i32 {
+        let entries: list<PatternEntry> = self.patterns;
+        var best: i32 = 0; var best_count: i32 = 0;
+        for entry in entries {
+            let rows: i32 = i32(entry.data.rows.len());
+            if rows < 1 { continue; }
+            var count: i32 = 0;
+            for other in entries { if i32(other.data.rows.len()) == rows { count = count + 1; } }
+            if count > best_count || (count == best_count && rows < best) { best = rows; best_count = count; }
+        }
+        return best > 0 ? best : 64;
+    }
+    /// Matrix rows a pattern occupies: one per `matrix_steps` rows of its own,
+    /// at least one.
+    pub fn song_span(self: PatternLibrary, id: i32) -> i32 {
+        let index: i32 = self.index_of(id);
+        if id <= 0 || index < 0 { return 1; }
+        let unit: i32 = self.matrix_steps < 1 ? 1 : self.matrix_steps;
+        var rows: i32 = 0;
+        let entry: PatternEntry = self.patterns[index];
+        rows = id == self.active_id ? i32(self.table.rows.len()) : i32(entry.data.rows.len());
+        let span: i32 = (rows + unit - 1) / unit;
+        return span < 1 ? 1 : span;
+    }
+    /// What plays in a matrix cell: the pattern placed there, or the one still
+    /// running from a row above it.
+    pub fn song_cover(self: PatternLibrary, row: i32, lane: i32) -> SongCover {
+        if row < 0 || row >= self.song.len() { return SongCover {}; }
+        for back in 0..row + 1 {
+            let at: i32 = row - i32(back);
+            let id: i32 = self.song_at(at, lane);
+            if id <= 0 { continue; }
+            // The nearest pattern above either reaches this row or leaves it
+            // silent; a pattern never plays through one placed under it.
+            return self.song_span(id) > i32(back) ? SongCover { id: id, offset: i32(back) } : SongCover {};
+        }
+        return SongCover {};
+    }
+    /// True when a cell belongs to a pattern that started above it.
+    pub fn song_continues(self: PatternLibrary, row: i32, lane: i32) -> bool {
+        let cover: SongCover = self.song_cover(row, lane);
+        return cover.id > 0 && cover.offset > 0;
+    }
+    /// Rows a placement needs, and whether they are free. `id` 0 (clearing) and
+    /// a pattern that fits in one row always are.
+    pub fn song_placement_blocked(self: PatternLibrary, row: i32, lane: i32, id: i32) -> i32 {
+        if id <= 0 { return 0; }
+        if self.song_continues(row, lane) { return -1; }
+        let span: i32 = self.song_span(id);
+        for ahead in 1..span {
+            let at: i32 = row + i32(ahead);
+            if at >= self.song.len() { break; }
+            if self.song_at(at, lane) > 0 { return self.song_at(at, lane); }
         }
         return 0;
     }
@@ -166,6 +233,9 @@ impl PatternLibrary {
     /// Row 0 of lane 0 always holds a pattern, so the song is never empty.
     pub fn set_song_at(self: &mut Self, row: i32, lane: i32, id: i32) -> bool {
         if row < 0 || row >= self.song.len() || lane < 0 || lane >= 16 { return false; }
+        // A pattern owns every matrix row it spans, so it cannot start inside
+        // another one or grow over a pattern already placed below it.
+        if self.song_placement_blocked(row, lane, id) != 0 { return false; }
         if lane == 0 {
             var order: list<i32> = [];
             for i in 0..self.song.len() { order.push(i32(i) == row ? id : self.song[i]); }
@@ -362,6 +432,19 @@ impl PatternLibrary {
         if self.view.selected < 0 || self.view.selected >= self.view.items.len() { return; }
         let item: ListItem = self.view.items[self.view.selected]; self.select(item.id);
     }
+    /// Copy a validated pattern into this session without changing song order.
+    pub fn import_pattern(self: &mut Self, name: str8, table: &SequenceTable, clips: list<AudioClip>) -> bool {
+        if self.patterns.len() >= 128 { self.error = "Maximum 128 patterns"; return false; }
+        var missing: i32 = 0;
+        for clip in clips { if self.audio.find_clip(clip) < 0 { missing = missing + 1; } }
+        if self.audio.samples.len() + missing > 256 { self.error = "Pattern would exceed 256 loaded samples"; return false; }
+        for clip in clips { self.audio.add_clip(clip.copy()); }
+        let id: i32 = self.next_id; self.next_id = self.next_id + 1;
+        var source: SequenceTable = SequenceTable {}; source = table;
+        var imported: SequenceTable = source.copy_pattern();
+        self.patterns.push(PatternEntry { id: id, name: clone(name), data: imported });
+        self.select(id); self.show_patterns(); self.error = ""; return true;
+    }
     pub fn add(self: &mut Self, duplicate: bool) -> void {
         if self.patterns.len() >= 128 { self.error = "Maximum 128 patterns"; return; }
         var data: SequenceTable = self.table.copy_pattern();
@@ -545,31 +628,30 @@ impl PatternLibrary {
     /// passes false so every lane's notes are there.
     pub fn merge_song_row(self: PatternLibrary, row: i32, area: Rect, shared_once: bool) -> SequenceTable {
         var merged: SequenceTable = SequenceTable {};
-        var length: i32 = 0; var base: i32 = -1;
-        // The pattern being edited lives in `table`; its stored copy is only
-        // written back when the selection moves, so read the live one.
+        let unit: i32 = self.matrix_steps < 1 ? 1 : self.matrix_steps;
+        var base: i32 = -1;
+        // A lane plays the slice of its pattern that belongs to this matrix
+        // row, so a pattern twice as long simply takes two rows while the lane
+        // beside it moves on to its next pattern.
         for l in 0..self.song_lanes() {
-            let id: i32 = self.song_at(row, i32(l));
-            let index: i32 = self.index_of(id);
-            if id <= 0 || index < 0 { continue; }
-            let entry: PatternEntry = self.patterns[index];
-            var data: SequenceTable = SequenceTable {}; data = id == self.active_id ? self.table : entry.data;
-            if base < 0 { base = i32(l); }
-            if i32(data.rows.len()) > length { length = i32(data.rows.len()); }
+            let cover: SongCover = self.song_cover(row, i32(l));
+            if cover.id > 0 && base < 0 { base = i32(l); }
         }
         if base < 0 { return merged; }
-        let lead: i32 = self.song_at(row, base);
-        let first: PatternEntry = self.patterns[self.index_of(lead)];
-        var head: SequenceTable = SequenceTable {}; head = lead == self.active_id ? self.table : first.data;
-        merged = head.copy_pattern();
-        if i32(merged.rows.len()) < length { merged.set_length(length, area); }
+        let lead: SongCover = self.song_cover(row, base);
+        let first: PatternEntry = self.patterns[self.index_of(lead.id)];
+        // The pattern being edited lives in `table`; its stored copy is only
+        // written back when the selection moves, so read the live one.
+        var head: SequenceTable = SequenceTable {}; head = lead.id == self.active_id ? self.table : first.data;
+        merged = head.copy_slice(lead.offset * unit, unit);
+        if i32(merged.rows.len()) < unit { merged.set_length(unit, area); }
         for l in base + 1..self.song_lanes() {
-            let id: i32 = self.song_at(row, i32(l));
-            let index: i32 = self.index_of(id);
-            if id <= 0 || index < 0 { continue; }
+            let cover: SongCover = self.song_cover(row, i32(l));
+            let index: i32 = self.index_of(cover.id);
+            if cover.id <= 0 || index < 0 { continue; }
             let entry: PatternEntry = self.patterns[index];
-            var data: SequenceTable = SequenceTable {}; data = id == self.active_id ? self.table : entry.data;
-            merged.append_tracks_from(data, area, shared_once);
+            var data: SequenceTable = SequenceTable {}; data = cover.id == self.active_id ? self.table : entry.data;
+            merged.append_tracks_from(data, area, shared_once, cover.offset * unit);
         }
         return merged;
     }
@@ -577,9 +659,15 @@ impl PatternLibrary {
     pub fn next_song_row(self: PatternLibrary, row: i32) -> i32 {
         for step in 1..self.song.len() + 1 {
             let candidate: i32 = i32((wide(row) + wide(i32(step))) % self.song.len());
-            for l in 0..self.song_lanes() { if self.song_at(candidate, i32(l)) > 0 { return candidate; } }
+            for l in 0..self.song_lanes() {
+                let cover: SongCover = self.song_cover(candidate, i32(l));
+                if cover.id > 0 { return candidate; }
+            }
         }
-        for l in 0..self.song_lanes() { if self.song_at(row, i32(l)) > 0 { return row; } }
+        for l in 0..self.song_lanes() {
+            let cover: SongCover = self.song_cover(row, i32(l));
+            if cover.id > 0 { return row; }
+        }
         return -1;
     }
     /// Placements of Audio-list sample `index` across every pattern.

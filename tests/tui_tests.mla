@@ -250,6 +250,9 @@ mod tui_demo::patterns;
 use tui::listview::*;
 use tui_demo::patterns::PatternLibrary;
 mod tui_demo::session;
+use tui_demo::patterns::SongCover;
+mod std::env;
+use std::env::println;
 use tui_demo::session::SessionCodec;
 use tui_demo::session::SessionData;
 use tui_demo::session::SessionView;
@@ -3359,4 +3362,219 @@ fn tui_following_the_song_row_shows_its_pattern() {
     verify(library.matrix_insert_row(1, true) && library.song_row_pattern(2) == 0);
     verify(!library.follow_pattern(library.song_row_pattern(2)) && library.active_id == 2);
     library.release();
+}
+
+#[test]
+fn tui_matrix_rows_hold_a_fixed_stretch_of_pattern() {
+    var library: PatternLibrary = PatternLibrary::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.create_instrument_track(1, area);
+    library.table.set_length(128, area);                      // pattern 1: two matrix rows
+    library.table.set_cell(0, 1, clone("C-2")); library.table.set_cell(0, 2, clone("100"));
+    library.table.set_cell(64, 1, clone("D-2")); library.table.set_cell(64, 2, clone("100"));
+    library.add(true); library.table.set_length(64, area);    // pattern 2: one row
+    library.add(true);                                        // pattern 3: one row
+    while library.song.len() < 3 { library.matrix_insert_row(0, true); }
+    for r in 0..library.song.len() { library.set_song_at(i32(r), 0, 0); library.set_song_at(i32(r), 1, 0); }
+    verify(library.matrix_steps == 64);
+    verify(library.set_song_at(0, 0, 1));
+    verify(library.song_span(1) == 2 && library.song_span(2) == 1);
+    // The long pattern owns both rows of its lane: nothing else starts inside it.
+    verify(library.song_placement_blocked(1, 0, 2) == -1);
+    verify(!library.set_song_at(1, 0, 2));
+    verify(library.song_continues(1, 0) && !library.song_continues(0, 0));
+    // The lane beside it plays two short patterns meanwhile.
+    verify(library.set_song_at(0, 1, 2) && library.set_song_at(1, 1, 3));
+    let second: SongCover = library.song_cover(1, 0);
+    verify(second.id == 1 && second.offset == 1);
+    let beside: SongCover = library.song_cover(1, 1);
+    verify(beside.id == 3 && beside.offset == 0);
+    // Each matrix row plays its own stretch of the long pattern.
+    var first_row: SequenceTable = library.merge_song_row(0, area, false);
+    verify(first_row.rows.len() == 64);
+    let opening: TableRow = first_row.rows[0]; verify(opening.cells[1] == "C-2");
+    var second_row: SequenceTable = library.merge_song_row(1, area, false);
+    verify(second_row.rows.len() == 64);
+    let later: TableRow = second_row.rows[0]; verify(later.cells[1] == "D-2");
+    // Both rows play, and the empty one after them is skipped.
+    verify(library.next_song_row(0) == 1 && library.next_song_row(1) == 0);
+    // A pattern already below blocks a longer one from growing over it.
+    verify(library.set_song_at(0, 0, 0) && library.set_song_at(1, 0, 3));
+    verify(library.song_placement_blocked(0, 0, 1) == 3);
+    verify(!library.set_song_at(0, 0, 1));
+    first_row.release(); second_row.release(); library.release();
+}
+
+#[test]
+fn tui_matrix_grid_survives_a_session_round_trip() {
+    var library: PatternLibrary = PatternLibrary::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.create_track_kind(false, false, area);
+    library.matrix_steps = 16;
+    let directory: str8 = clone("/private/tmp/mlacker-grid-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/grid.mlack", directory);
+    var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    verify(codec.save(path, library, SessionView {}, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap();
+    verify(restored.library.matrix_steps == 16);
+    restored.release();
+    // The default is not written at all, and loads as 64.
+    library.matrix_steps = 64;
+    verify(codec.save(path, library, SessionView {}, audio));
+    let plain: result<SessionData, str8> = SessionCodec::load(path); verify(plain.is_ok());
+    var basic: SessionData = plain.unwrap();
+    verify(basic.library.matrix_steps == 64);
+    basic.release();
+    library.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}
+
+
+#[test]
+fn tui_session_without_a_grid_takes_it_from_its_patterns() {
+    var library: PatternLibrary = PatternLibrary::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.create_track_kind(false, false, area);
+    library.table.set_length(64, area);          // pattern 1: 64 rows
+    library.add(false); library.table.set_length(16, area);
+    library.add(false); library.table.set_length(16, area);
+    library.add(false); library.table.set_length(8, area);
+    // Most patterns are 16 rows long, so that is one matrix row.
+    verify(library.derive_matrix_steps() == 16);
+    verify(library.matrix_steps == 64);          // not written: this is a 1.0 song
+    let directory: str8 = clone("/private/tmp/mlacker-derive-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/derive.mlack", directory);
+    var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    verify(codec.save(path, library, SessionView {}, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap();
+    verify(restored.library.matrix_steps == 16);
+    // A 64-row pattern then takes four matrix rows, and a 16-row one takes one.
+    verify(restored.library.song_span(1) == 4 && restored.library.song_span(2) == 1);
+    restored.release();
+    library.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}
+
+#[test]
+fn tui_timed_recording_chords() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var table: SequenceTable = SequenceTable::new();
+    table.clear_row();
+    verify(!table.start_recording());
+    verify(table.mixer_event(decode_input("R"), area));
+    verify(table.start_recording());
+    verify(table.record_timed(67, 110, 0, 1500, true));
+    verify(table.record_timed(60, 90, 0, 1800, true));
+    verify(table.record_timed(64, 100, 0, 2100, true));
+    let chord: TableRow = table.rows[0];
+    verify(chord.cells[1] == "C-4" && chord.cells[5] == "E-4" && chord.cells[9] == "G-4");
+    verify(chord.cells[2] == "90" && chord.cells[6] == "100" && chord.cells[10] == "110");
+    verify(chord.cells[4] == "0.12" && chord.cells[8] == "0.14" && chord.cells[12] == "0.10");
+    verify(table.record_timed(67, 0, 0, 16500, false));
+    let released: TableRow = table.rows[0]; verify(released.cells[11] == "1.00");
+    table.selected_row = 1; table.clear_row();
+    verify(table.record_timed(72, 80, 0, 14850, true));
+    let early: TableRow = table.rows[1]; verify(early.cells[4] == "-0.01");
+    table.grow_recording(15000 * 80);
+    verify(table.rows.len() >= 82);
+    table.stop_recording(31800, area);
+    let finished: TableRow = table.rows[0]; verify(finished.cells[3] == "2.00");
+    verify(table.recording_track == -1 && table.editing && table.edit_mode == 1);
+    table.release();
+}
+
+#[test]
+fn tui_pattern_file_round_trip() {
+    var library: PatternLibrary = PatternLibrary::new();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.create_instrument_track(7, area);
+    library.table.create_track_kind(false, true, area);
+    let clip: AudioClip = test_clip(4000, 0.25f);
+    verify(library.table.insert_audio(clip, area));
+    let directory: str8 = clone("/private/tmp/mlacker-pattern-test-XXXXXX"); mkdtemp(directory);
+    let base: str8 = format!("{}/pattern", directory);
+    let path: str8 = format!("{}.mlapatt", base);
+    verify(SessionCodec::save_pattern(base, "My pattern", library.table));
+    let loaded: result<tui_demo::session::PatternData, str8> = SessionCodec::load_pattern(path);
+    verify(loaded.is_ok());
+    let data: tui_demo::session::PatternData = loaded.unwrap();
+    verify(data.name == "My pattern" && data.clips.len() == 1);
+    verify(data.table.rows.len() == library.table.rows.len());
+    verify(data.table.tracks.len() == library.table.tracks.len());
+    for i in 0..data.table.rows.len() {
+        let actual: TableRow = data.table.rows[i]; let expected: TableRow = library.table.rows[i];
+        for j in 0..actual.cells.len() { verify(actual.cells[j] == expected.cells[j]); }
+    }
+    let tracks: list<SequenceTrack> = data.table.tracks;
+    for track in tracks { verify(track.instrument_id == 0); }
+    let last: SequenceTrack = tracks[tracks.len() - 1];
+    verify(last.instances.len() == 1);
+    let before: i64 = library.song.len();
+    verify(library.import_pattern(data.name, data.table, data.clips));
+    let name: str8 = library.active_name();
+    verify(library.active_id == 4 && name == "My pattern");
+    verify(library.song.len() == before && library.audio.samples.len() == 1);
+    data.release(); library.release(); clip.release();
+    std::fs::remove_tree(directory); free(base); free(path); free(directory);
+}
+
+#[test]
+fn tui_record_count_in_and_signature() {
+    var clock: TransportStatus = TransportStatus { bpm: 120 };
+    clock.toggle(1000, 8, 64); clock.begin_count_in();
+    verify(clock.count_in == 240000 && clock.metronome_beat() == 0);
+    verify(clock.metronome_beat() == -1);
+    clock.advance(1500, 64); verify(clock.metronome_beat() == 1 && clock.row == 8);
+    clock.advance(2000, 64); verify(clock.metronome_beat() == 2 && clock.ticks == 120000);
+    clock.advance(2500, 64); verify(clock.metronome_beat() == 3 && clock.count_in == 60000);
+    clock.advance(3000, 64); verify(clock.metronome_beat() == 0 && clock.count_in == 0 && clock.row == 8);
+    clock.advance(3125, 64); verify(clock.row == 9);
+    clock.toggle(3125, 0, 64); verify(clock.metronome_beat() == -1);
+    clock.beats_per_bar = 3; clock.beat_unit = 8;
+    clock.toggle(4000, 0, 64); clock.begin_count_in();
+    verify(clock.count_in == 90000 && clock.metronome_beat() == 0);
+    clock.advance(4250, 64); verify(clock.metronome_beat() == 1 && clock.row == 0);
+    clock.advance(4500, 64); verify(clock.metronome_beat() == 2 && clock.row == 0);
+    clock.advance(4775, 64); verify(clock.metronome_beat() == 0 && clock.count_in == 0 && clock.ticks == 3000);
+}
+
+#[test]
+fn tui_record_loop_replaces_previous_take() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var table: SequenceTable = SequenceTable::new();
+    table.set_length(4, area); table.selected_row = 0; table.selected_column = 1;
+    verify(table.mixer_event(decode_input("R"), area));
+    table.recording_extend = false; verify(table.start_recording());
+    verify(table.record_timed(60, 90, 0, 0, true));
+    verify(table.record_timed(64, 80, 0, 100, true));
+    let chord: TableRow = table.rows[0]; verify(chord.cells[1] == "C-4" && chord.cells[5] == "E-4");
+    table.grow_recording(60000);
+    verify(table.rows.len() == 4);
+    let cleared: TableRow = table.rows[0]; verify(cleared.cells[1] == "" && cleared.cells[5] == "");
+    verify(table.record_timed(67, 70, 0, 61500, true));
+    verify(table.record_timed(60, 0, 0, 62000, false));
+    verify(table.record_timed(67, 0, 0, 64500, false));
+    let replaced: TableRow = table.rows[0];
+    verify(replaced.cells[1] == "G-4" && replaced.cells[5] == "");
+    verify(replaced.cells[3] == "0.20" && replaced.cells[4] == "0.10");
+    table.stop_recording(65000, area); table.release();
+}
+
+#[test]
+fn tui_record_metronome_audio() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok());
+    var audio: AudioSystem = AudioSystem { output: opened.unwrap() };
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(2048);
+    let block: PcmBlock = allocated.unwrap();
+    audio.metronome(true); verify(audio.output.process(block, 2048) == 0);
+    verify(audio.output.master_peak(0) > 0 && block.left(2047) == 0.0f);
+    var high_crossings: i32 = 0;
+    for i in 1..1440 { if block.left(i) * block.left(i - 1) < 0.0f { high_crossings = high_crossings + 1; } }
+    audio.metronome(false); verify(audio.output.process(block, 2048) == 0);
+    var low_crossings: i32 = 0;
+    for i in 1..1440 { if block.left(i) * block.left(i - 1) < 0.0f { low_crossings = low_crossings + 1; } }
+    verify(high_crossings > low_crossings && low_crossings > 20);
+    verify(block.left(2047) == 0.0f);
+    block.close(); audio.release();
 }

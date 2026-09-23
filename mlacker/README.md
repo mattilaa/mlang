@@ -55,10 +55,11 @@ it changes, then what it removes; related entries live in submenus.
 | Edit | Undo, Redo, Copy/Cut/Paste clip |
 | View | Patterns, Song matrix, Audio, Instruments, Sample view ▸, Meter ▸, Reset layout, Show details |
 | Track | Create MIDI/AUDIO/Instrument track, Rename, Duplicate, Mute, Note lines ▸, Automation ▸, Clear pattern, Delete |
-| Pattern | Add, Clone, Rename, Set length, Follow matrix patterns, Remove |
+| Pattern | Add, Clone, Rename, Set length, Follow matrix patterns, Set matrix row length, Remove, Save pattern, Load pattern |
 | Audio | Add audio, Edit sample (destructive), Clip ▸, Remove audio |
 | Instrument | Add instrument, Open VST3 editor, Drum pads ▸, Presets ▸, MIDI learn ▸, Remove instrument |
 | Effect | Add effect channel, Load/Edit effect plugin, Set track send, Master ▸, Remove effect plugin |
+| Record | Play metronome, Extend pattern when playing, Metronome ▸ |
 
 ## Song matrix
 
@@ -85,8 +86,42 @@ the end. The playing row is drawn brighter. Plain **Space** always means "the
 selected pattern", so pressing it during matrix playback leaves the song and
 plays that pattern alone; Ctrl+P again stops.
 
-Within a row, the patterns play to the length of the longest one, and shorter
-patterns repeat to fill it. Every lane brings its own tracks with their clips,
+### Row length and long patterns
+
+One matrix row holds a fixed stretch of pattern time. A new song uses 64 rows;
+a song opened from a file that predates the setting takes the length most of its
+patterns have, so a song written from 16-row patterns plays them one per matrix
+row instead of repeating each of them four times. **Pattern → Set matrix row
+length** changes it, and from then on the song keeps what you chose. A pattern longer than
+that occupies as many matrix rows as it needs and plays a different stretch of
+itself in each, so the lanes beside it move on to their own patterns instead of
+waiting for it. A 128-row pattern beside two 64-row ones looks like this:
+
+```
+ROW  L1              L2
+001  Verse       ┬   DrumsA
+002          ┴       DrumsB
+003  Chorus          DrumsA
+```
+
+With a 16-row grid, four 16-row patterns in a lane fill exactly the time one
+64-row pattern takes beside them:
+
+```
+ROW  L1              L2
+002  Beat A          Untitled ┬
+003  Beat B                 │
+004  Beat A                 │
+005  Snarefill              ┴
+```
+
+The rows a pattern covers belong to it: placing another pattern there is refused
+with the row it started on, and Backspace on such a row clears the pattern that
+covers it. A pattern shorter than the row length repeats to fill its row, as
+before, and a song that never changes the length keeps playing exactly as it did.
+
+Within a row, every lane plays its own stretch, and a lane holding nothing is
+silent. Every lane brings its own tracks with their clips,
 faders, sends, inserts and output channels, and the mixer the engine follows is
 the row that is playing, not whatever pattern the sidebar has selected. A row
 that starts the song with a pattern carrying no effects therefore no longer
@@ -216,6 +251,12 @@ opaque presets, internal sample banks, and non-parameter controller state are no
 stored in 1.0; exposed parameter values are restored by ID. Device changes still
 reload plugins with defaults. See [the binary format](FORMAT.md) for the schema
 and limits.
+
+**Pattern → Save pattern / Load pattern** uses `.mlapatt` files. Saving includes
+the active pattern’s notes, track settings and embedded audio clips. Loading adds
+and selects a new pattern without changing the song matrix. Instrument assignments
+and effect routing are cleared so you can assign plugins in the current session.
+The save dialog appends `.mlapatt` when needed.
 
 ## Pattern visual selection
 
@@ -363,14 +404,33 @@ plugin PCM peaks, after the instrument fader and before the master chain. PCM
 meters share the meter style, update rate, and smooth decay. Tracks using the
 same loaded instance display the same cached stereo output readings.
 
-`Shift+R` in Mixer toggles the selected MIDI/instrument track's record arm. Its
-upper `R` becomes white on red while armed. Incoming MIDI note-ons overwrite NOTE
-and VEL at the selected pattern row/note line without advancing the cursor. A new
-note defaults to LEN 1.00 and OFF 0.00; existing timing is retained. The last note
-in a chord wins on that note line. Other armed tracks are not written unless
-selected. Audio tracks do not record MIDI. Menus, dialogs, plugin editors, text
-editing, and visual selection suspend recording. Volume is saved in `.mlack`;
-record-arm is transient and starts off when a session is loaded.
+`Shift+R` in Mixer arms the selected MIDI/instrument track (red `R`). Press
+Space to record from the selected row; press Space again to stop and enter the
+track name (Enter accepts, Esc keeps the old name). Each take targets one synth
+track, with up to 64 automatically added note lines. Notes on the same row are
+inserted in ascending pitch order with their velocities and timing intact.
+LEN captures key-hold duration. OFF captures early/late timing relative to the
+nearest sixteenth-note row, to 0.01 row precision. All recorded cells remain editable.
+
+The **Record** menu has two options, enabled by default:
+
+- **Play metronome**: clicks at the current tempo and time signature, with a higher
+  first beat and lower remaining beats. An armed recording starts after one full
+  bar of count-in; pattern playback and note capture wait until it finishes.
+  Turning this off starts recording immediately. **Metronome → On recording**
+  (default) limits clicks to recording and its count-in; **Always** also clicks
+  during normal pattern and song playback. These modes are mutually exclusive.
+- **Extend pattern when playing**: grows the pattern while recording (up to the
+  pattern limit of 16,384 rows). With it off, recording loops at the existing
+  length, replacing the armed track's notes as each row is reached. Other tracks
+  remain intact. The choice takes effect at the start of a take.
+
+Press Space to stop, including during the count-in.
+The live MIDI path monitors the synth during recording.
+
+While stopped, incoming notes still provide single-cell step entry on the armed
+track. Audio tracks do not record MIDI. Opening a modal editor stops a timed take.
+Volume is saved in `.mlack`; record-arm is transient and starts off on load.
 
 ### Output channels
 
@@ -635,3 +695,16 @@ MLANG_TUI_NO_HARDWARE=1 mlacker/build/cmake/bin/mlacker
 
 Run that command from the repository root. To test only the widgets without
 fetching/building the SDK, continue compiling `examples/tui_demo.mla` as before.
+
+### Effect plugin presets
+
+**Effect → Presets → Load plugin preset / Save plugin preset** uses `.mlafxpre`
+files. Select an effect channel in Mixer, a loaded insert in the track's insert
+rows, or open the desired effect's parameter editor and move focus out with Tab.
+An open effect editor takes precedence. Saving adds `.mlafxpre` when
+needed; loading filters for that extension, case-insensitively.
+
+FX presets save exposed plugin parameters by stable ID and check the plugin name
+and parameter layout before loading. Invalid or incompatible files leave the
+parameters unchanged. Instrument presets continue to use `.mlapre` and may
+include sampler pads; the two formats are deliberately distinct.

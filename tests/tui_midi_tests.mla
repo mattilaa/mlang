@@ -33,7 +33,7 @@ fn midi_recording_keeps_quick_note_on() {
     verify(queue.try_push(MidiInputEvent { kind: 1, note: 60, velocity: 87 }));
     verify(queue.try_push(MidiInputEvent { kind: 2, note: 60 }));
     controller.poll(1);
-    verify(controller.last_velocity == 0 && controller.note_events.len() == 1);
+    verify(controller.last_velocity == 0 && controller.note_events.len() == 2);
     let note: MidiInputEvent = controller.note_events[0]; verify(note.note == 60 && note.velocity == 87);
     controller.poll(2); verify(controller.note_events.len() == 0);
     controller.release();

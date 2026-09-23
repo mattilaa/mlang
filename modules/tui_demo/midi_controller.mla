@@ -133,6 +133,7 @@ impl MidiController {
         self.last_note = event.note; self.last_velocity = event.velocity; self.last_channel = event.channel; return 0;
     }
     pub fn note_off(self: &mut Self, event: MidiInputEvent) -> i32 {
+        if self.note_events.len() < 256 { self.note_events.push(event); }
         if self.last_note == event.note && self.last_channel == event.channel { self.last_velocity = 0; }
         return 0;
     }

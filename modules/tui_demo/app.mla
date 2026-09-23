@@ -21,6 +21,7 @@ mod tui_demo::mixer;
 use tui_demo::mixer::Mixer;
 mod tui_demo::patterns;
 use tui_demo::patterns::PatternLibrary;
+use tui_demo::patterns::SongCover;
 mod tui_demo::transport;
 use tui_demo::transport::TransportStatus;
 mod tui_demo::sample_view;
@@ -57,6 +58,7 @@ use tui_demo::frame_rate::FrameRate;
 mod tui_demo::session;
 use tui_demo::session::SessionCodec;
 use tui_demo::session::SessionData;
+use tui_demo::session::PatternData;
 use tui_demo::session::PresetResult;
 use tui_demo::session::SessionView;
 use tui_demo::midi_controller::MidiController;
@@ -68,7 +70,7 @@ use std::io::read_keycode_nonblocking;
 use std::time::sleep_ms;
 use std::time::now_ms;
 
-fn demo_menus(fixture: bool, follow_matrix: bool) -> MenuBar {
+fn demo_menus(fixture: bool, follow_matrix: bool, metronome: bool, extend: bool, metronome_always: bool) -> MenuBar {
     // Grouped like a DAW's menu bar: each menu starts with what it creates,
     // then what it changes, then what it removes; families use submenus.
     let plugins: bool = AudioController::processor_support();
@@ -138,7 +140,10 @@ fn demo_menus(fixture: bool, follow_matrix: bool) -> MenuBar {
                                 MenuItem { label: "Set length", action: 54, enabled: true },
                                 MenuItem { label: follow_matrix ? "[x] Follow matrix patterns" : "[ ] Follow matrix patterns",
                                     action: 55, enabled: true },
-                                MenuItem { label: "Remove pattern", action: 52, enabled: true }] },
+                                MenuItem { label: "Set matrix row length", action: 56, enabled: true },
+                                MenuItem { label: "Remove pattern", action: 52, enabled: true },
+                                MenuItem { label: "Save pattern", action: 57, enabled: true },
+                                MenuItem { label: "Load pattern", action: 58, enabled: true }] },
                     Menu {title: "Audio", items: [
                                 MenuItem { label: "Add audio", action: 60, enabled: true },
                                 MenuItem { label: "Edit sample (destructive)", action: 107, enabled: true },
@@ -170,7 +175,16 @@ fn demo_menus(fixture: bool, follow_matrix: bool) -> MenuBar {
                                 MenuItem::submenu("Master", [
                                                 MenuItem { label: "Load master VST3", action: 91, enabled: plugins },
                                                 MenuItem { label: "Unload master VST3", action: 92, enabled: plugins }]),
-                                MenuItem { label: "Remove effect plugin", action: 114, enabled: plugins }] }
+                                MenuItem { label: "Remove effect plugin", action: 114, enabled: plugins },
+                                MenuItem::submenu("Presets", [
+                                                MenuItem { label: "Load plugin preset", action: 140, enabled: plugins },
+                                                MenuItem { label: "Save plugin preset", action: 141, enabled: plugins }])] },
+                    Menu { title: "Record", items: [
+                        MenuItem { label: metronome ? "[x] Play metronome" : "[ ] Play metronome", action: 150, enabled: true },
+                        MenuItem { label: extend ? "[x] Extend pattern when playing" : "[ ] Extend pattern when playing", action: 151, enabled: true },
+                        MenuItem::submenu("Metronome", [
+                            MenuItem { label: !metronome_always ? "[x] On recording" : "[ ] On recording", action: 152, enabled: true },
+                            MenuItem { label: metronome_always ? "[x] Always" : "[ ] Always", action: 153, enabled: true }])] }
             ]);
 }
 
@@ -254,7 +268,8 @@ pub fn run() -> i32 {
     // Channels of the playing song row, one strip per channel even when
     // parallel patterns share it. Only the mixer reads it.
     var mixer_table: SequenceTable = SequenceTable {};
-    var menus: MenuBar = demo_menus(fixture, follow_matrix);
+    var play_metronome: bool = true; var extend_recording: bool = true; var metronome_always: bool = false;
+    var menus: MenuBar = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always);
     if fixture { menus.open(0); }
     var focus: PaneFocus = PaneFocus::new(0);
     var input: InputDecoder = InputDecoder::new();
@@ -267,6 +282,7 @@ pub fn run() -> i32 {
     var library: PatternLibrary = fixture ? PatternLibrary::new() : PatternLibrary::empty();
     var session_path: str8 = clone(""); var request_path: str8 = clone("");
     var session_request: i32 = 0; var saving_session: bool = false;
+    var pattern_action: i32 = 0; var last_pattern_dir: str8 = clone("");
     var learn_action: i32 = 0; var learn_slot: i64 = 0;
     // Sampler pads: 117 = from the Audio list, 118 = from a file.
     var pad_action: i32 = 0; var pad_slot: i32 = 0; var pad_sample: i32 = -1; var pad_index: i32 = 0;
@@ -478,13 +494,16 @@ pub fn run() -> i32 {
                 song_table.release(); song_table = SequenceTable {};
                 note_playback = NotePlayback {};
             }
-            transport.toggle(now_ms(), library.table.selected_row, i32(library.table.rows.len()));
+            let starting: bool = !transport.playing;
+            if starting { library.table.recording_extend = extend_recording; library.table.start_recording(); }
+            transport.toggle(now_ms(), library.table.selected_row, library.table.recording_track >= 0 && extend_recording ? 2147483647 : i32(library.table.rows.len()));
+            if starting && library.table.recording_track >= 0 && play_metronome { transport.begin_count_in(); }
             note_playback.start_row = transport.row;
             if transport.playing { midi.restart_samples(transport.row); }
-            if !midi.sample_playback(library.table, transport.ticks, transport.playing, transport.bpm) {
+            if !midi.sample_playback(library.table, transport.ticks, transport.playing && transport.count_in == 0, transport.bpm) {
                 transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)");
             }
-            note_playback.update(library.table, transport.ticks, transport.playing);
+            note_playback.update(library.table, transport.ticks, transport.playing && transport.count_in == 0);
             midi.sequencer_events(note_playback.events);
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             dirty = true;
@@ -497,12 +516,29 @@ pub fn run() -> i32 {
             accept_pending = false;
             let paths: list<str8> = dialog.accepted_paths;
             let first: str8 = dialog.accepted_path;
-            if adding_audio || adding_pad_file { free(last_audio_dir); last_audio_dir = clone(dialog.directory); }
+            if pattern_action != 0 { free(last_pattern_dir); last_pattern_dir = clone(dialog.directory); }
+            else if adding_audio || adding_pad_file { free(last_audio_dir); last_audio_dir = clone(dialog.directory); }
             else if adding_plugin || adding_instrument || adding_effect >= 0 || adding_insert_track >= 0 { free(last_plugin_dir); last_plugin_dir = clone(dialog.directory); }
             else if learn_action != 0 { free(last_preset_dir); last_preset_dir = clone(dialog.directory); }
             else { free(last_session_dir); last_session_dir = clone(dialog.directory); }
             free(message);
-            if adding_audio {
+            if pattern_action != 0 {
+                if pattern_action == 57 {
+                    let saved: bool = SessionCodec::save_pattern(first, library.active_name(), library.table);
+                    message = clone(saved ? "Saved pattern (.mlapatt)" : "Cannot save pattern");
+                } else {
+                    let loaded: result<PatternData, str8> = SessionCodec::load_pattern(first);
+                    if loaded.is_err() { message = clone(loaded.unwrap_err()); }
+                    else {
+                        let data: PatternData = loaded.unwrap();
+                        let imported: bool = library.import_pattern(data.name, data.table, data.clips);
+                        message = clone(imported ? "Loaded pattern; assign instruments to its tracks" : library.error);
+                        data.release();
+                    }
+                }
+                pattern_action = 0;
+            }
+            else if adding_audio {
                 // The first sample lands on the selected audio track; the rest
                 // join the Audio list.
                 var loaded: i32 = 0;
@@ -579,15 +615,20 @@ pub fn run() -> i32 {
             dirty = true;
         }
         if preset_request != 0 {
-            // 100 = save, 101 = load. Kit presets carry a sampler's pads.
+            // Instrument presets may carry pads; FX presets contain parameters only.
+            let effect_preset: bool = preset_request == 140 || preset_request == 141;
+            let saving_preset: bool = preset_request == 100 || preset_request == 141;
             var kit_pads: list<i32> = []; var kit_clips: list<AudioClip> = [];
             if preset_request == 100 {
                 let assigned: list<PadAssignment> = midi.pads;
                 for entry in assigned { if entry.slot == learn_slot { kit_pads.push(entry.pad); kit_clips.push(library.audio.samples[entry.sample]); } }
-            } else { midi.midi.release(); }
-            var preset: PresetResult = SessionCodec::preset_file(preset_path, midi.output, learn_slot, preset_request == 100, kit_pads, kit_clips);
+            }
+            if !saving_preset { midi.midi.release(); }
+            var preset: PresetResult = PresetResult {};
+            if effect_preset { preset = SessionCodec::effect_preset_file(preset_path, midi.output, learn_slot, saving_preset); }
+            else { preset = SessionCodec::preset_file(preset_path, midi.output, learn_slot, saving_preset, kit_pads, kit_clips); }
             free(message); message = preset.status;
-            if preset_request == 101 {
+            if !saving_preset {
                 if preset.ok && preset.has_pads {
                     // A kit replaces every pad of the instrument.
                     let slot: i32 = i32(learn_slot);
@@ -615,6 +656,7 @@ pub fn run() -> i32 {
                     else { free(message); message = format!("Loaded kit preset: {} pad(s) | {}", preset.pads.len(), preset_path); }
                 } else { let unused: list<AudioClip> = preset.clips; for clip in unused { clip.release(); } }
                 midi.resume_midi(preset_worker);
+                if preset.ok && instrument_editor.active && instrument_editor.slot == learn_slot { instrument_editor.open(midi.output, learn_slot); }
             }
             preset_request = 0; dirty = true;
         }
@@ -641,6 +683,23 @@ pub fn run() -> i32 {
         }
         // Editing a moving row would otherwise commit to a different row.
         if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active { transport.playing = false; }
+        if library.table.recording_track >= 0 {
+            let armed: SequenceTrack = library.table.tracks[library.table.recording_track];
+            if !armed.record_armed { transport.playing = false; }
+            let pending: i64 = transport.playing ? (now - transport.clock_ms) * wide(transport.bpm) : 0;
+            let record_now: i64 = transport.ticks + pending - transport.count_in;
+            let notes: list<MidiInputEvent> = midi.midi.note_events;
+            for note in notes {
+                let tick: i64 = record_now - (now - note.received_ms) * wide(transport.bpm);
+                if transport.playing && pending >= transport.count_in && (transport.count_in == 0 || tick >= transport.ticks) {
+                    if library.table.record_timed(note.note, note.velocity, note.channel, tick, note.kind == 1) { dirty = true; }
+                }
+            }
+            if transport.playing && !song_playing {
+                if pending >= transport.count_in { library.table.grow_recording(record_now); }
+            } else { library.table.stop_recording(transport.ticks, terminal_bounds()); focus.selected = 1; dirty = true; }
+        }
+        transport.recording = library.table.recording_track >= 0;
         if song_playing {
             let previous: i32 = transport.row;
             if transport.advance(now, i32(song_table.rows.len())) { playback_dirty = true; }
@@ -668,6 +727,9 @@ pub fn run() -> i32 {
             let cursor: i32 = library.table.selected_row < 0 ? 0 : library.table.selected_row;
             if transport.row != cursor { transport.follow_row(cursor); dirty = true; }
         }
+        if play_metronome && transport.playing && (metronome_always || transport.recording) {
+            let beat: i32 = transport.metronome_beat(); if beat >= 0 { midi.metronome(beat == 0); }
+        }
         // Browsing the matrix selects the pattern under the cursor, so the
         // mixer, the inspector and the editor behind the matrix all show that
         // pattern's tracks and routing. Nothing follows while the transport
@@ -686,12 +748,14 @@ pub fn run() -> i32 {
         // Modal editors never receive destructive background recording edits.
         if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !instrument_editor.active && !sample_editor.active && !piano.active && !share_question.active && !remove_question.active && !library.renaming && !mixer.bus_focus && library.table.group_detail_rows == 0 {
             let notes: list<MidiInputEvent> = midi.midi.note_events;
-            for note in notes { if library.table.record_note(note.note, note.velocity) { dirty = true; } }
+            if library.table.recording_track < 0 && !library.table.editing {
+                for note in notes { if note.kind == 1 { if library.table.record_note(note.note, note.velocity) { dirty = true; } } }
+            }
         }
-        if !midi.sample_playback(song_playing ? song_table : library.table, transport.ticks, transport.playing, transport.bpm) {
+        if !midi.sample_playback(song_playing ? song_table : library.table, transport.ticks, transport.playing && transport.count_in == 0, transport.bpm) {
             transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)"); dirty = true;
         }
-        note_playback.update(song_playing ? song_table : library.table, transport.ticks, transport.playing);
+        note_playback.update(song_playing ? song_table : library.table, transport.ticks, transport.playing && transport.count_in == 0);
         midi.sequencer_events(note_playback.events);
         // The mixer shows the playing song row while following it, so its
         // meters come from the same channels the strips do.
@@ -728,6 +792,7 @@ pub fn run() -> i32 {
                 if !bpm_dialog.active && bpm_dialog.result == 1 {
                     if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
                     else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
+                    else if bpm_dialog.matrix_steps { library.matrix_steps = bpm_dialog.value; }
                     else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
                     else { transport.set_bpm(bpm_dialog.value); }
                 }
@@ -951,6 +1016,7 @@ pub fn run() -> i32 {
                     if !bpm_dialog.active && bpm_dialog.result == 1 {
                         if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
                         else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
+                        else if bpm_dialog.matrix_steps { library.matrix_steps = bpm_dialog.value; }
                         else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
                         else { transport.set_bpm(bpm_dialog.value); }
                     }
@@ -1135,7 +1201,13 @@ pub fn run() -> i32 {
                         }
                     }
                 }
-                if action == 1 {
+                if action == 1 && library.song_continues(matrix.row, matrix.lane) {
+                    let cover: SongCover = library.song_cover(matrix.row, matrix.lane);
+                    free(message);
+                    message = format!("Row {} plays pattern {} from row {}; clear it there to place another",
+                        matrix.row + 1, cover.id, matrix.row + 1 - cover.offset);
+                }
+                else if action == 1 {
                     // Pattern list for this cell: "<no>:<name>", plus an empty entry.
                     var ids: list<i32> = [0]; var labels: list<str8> = [clone("  -  (empty)")];
                     let entries: list<PatternEntry> = library.patterns;
@@ -1144,8 +1216,12 @@ pub fn run() -> i32 {
                     focus.set_menu_active(true);
                 }
                 else if action == 2 {
+                    let cover: SongCover = library.song_cover(matrix.row, matrix.lane);
+                    let origin: i32 = matrix.row - cover.offset;
                     free(message);
-                    message = library.set_song_at(matrix.row, matrix.lane, 0) ? clone("Matrix cell cleared") : clone("No cell here");
+                    message = library.set_song_at(origin, matrix.lane, 0)
+                        ? (cover.offset > 0 ? format!("Cleared pattern {} from row {}", cover.id, origin + 1) : clone("Matrix cell cleared"))
+                        : clone("No cell here");
                 }
                 else if action == 3 || action == 4 {
                     free(message);
@@ -1200,7 +1276,7 @@ pub fn run() -> i32 {
                     share_question.open(); focus.set_menu_active(true); dirty = true;
                 }
             }
-            if command > 0 { dirty = true; }
+            if command > 0 { dirty = true; pattern_action = 0; }
             if command > 0 && command != 115 { adding_insert_track = -1; }
             if command == 99 { running = false; }
             else if command == 90 {
@@ -1258,7 +1334,35 @@ pub fn run() -> i32 {
                     }
                     dialog.open(last_preset_dir);
                     if command == 97 || command == 100 {
-                        let suggested: str8 = SessionCodec::learn_suggestion(midi.output.instrument_name(learn_slot));
+                        let suggested: str8 = SessionCodec::learn_suggestion(learn_slot == 0 ? midi.output.processor_name() : midi.output.instrument_name(learn_slot));
+                        dialog.path_field.set_text(suggested); free(suggested);
+                    }
+                    focus.set_menu_active(true);
+                }
+            }
+            else if command == 140 || command == 141 {
+                learn_slot = -1;
+                if instrument_editor.active && (instrument_editor.slot == 0 || instrument_editor.slot >= 33) { learn_slot = instrument_editor.slot; }
+                else if focus.selected == 1 && library.table.group_detail_rows > 0 {
+                    let index: i32 = library.table.active_track();
+                    if index >= 0 {
+                        let track: SequenceTrack = library.table.tracks[index];
+                        let id: i32 = track.insert_id(library.table.selected_group_detail);
+                        if id > 0 { learn_slot = id + 40; }
+                    }
+                } else if mixer.selected_effect >= 0 && mixer.selected_effect < midi.effects.len() { learn_slot = mixer.selected_effect + 33; }
+                if learn_slot < 0 || midi.output.parameter_info(learn_slot, 0, 0) < 0.0 {
+                    free(message); message = clone("Select a loaded effect in Mixer or open its editor first");
+                } else {
+                    learn_action = command; adding_effect = -1; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                    midi.output.midi_learn(-1, 0, 0);
+                    if command == 140 { transport.playing = false; }
+                    dialog.save_mode = command == 141; dialog.bundle_pattern = ""; dialog.multi_select = false;
+                    dialog.title = command == 141 ? "Save plugin preset (.mlafxpre)" : "Load plugin preset (.mlafxpre)";
+                    dialog.file_pattern = command == 141 ? "" : ".*\\.[mM][lL][aA][fF][xX][pP][rR][eE]";
+                    dialog.open(last_preset_dir);
+                    if command == 141 {
+                        let suggested: str8 = SessionCodec::learn_suggestion(learn_slot == 0 ? midi.output.processor_name() : midi.output.instrument_name(learn_slot));
                         dialog.path_field.set_text(suggested); free(suggested);
                     }
                     focus.set_menu_active(true);
@@ -1370,8 +1474,15 @@ pub fn run() -> i32 {
                 let id: i32 = command == 122 ? matrix.clipboard : picker.chosen();
                 if id <= 0 { free(message); message = clone("Select a pattern in the sidebar first (View > Patterns)"); }
                 else {
+                    let blocked: i32 = library.song_placement_blocked(matrix.row, matrix.lane, id);
                     let clashes: i32 = library.song_row_clashes(matrix.row, matrix.lane, id);
-                    if clashes == 0 {
+                    if blocked != 0 {
+                        free(message);
+                        message = blocked < 0
+                            ? format!("Row {} already plays a pattern that started above it", matrix.row + 1)
+                            : format!("Pattern {} needs {} matrix rows and pattern {} is in the way", id, library.song_span(id), blocked);
+                    }
+                    else if clashes == 0 {
                         free(message);
                         message = library.set_song_at(matrix.row, matrix.lane, id)
                             ? format!("Row {} lane {}: pattern {}", matrix.row + 1, matrix.lane + 1, id)
@@ -1502,13 +1613,34 @@ pub fn run() -> i32 {
                 message = shared ? format!("Instrument track created unassigned (instance {} is used by another track). Add > Instrument loads a new one; Enter in Instruments shares it.", candidate)
                     : clone("Instrument track created. Add > Instrument loads a plugin; Enter in Instruments assigns it.");
             }
+            else if command == 57 || command == 58 {
+                pattern_action = command; learn_action = 0; adding_audio = false; adding_plugin = false;
+                adding_instrument = false; adding_effect = -1; adding_insert_track = -1; adding_pad_file = false;
+                transport.playing = false; dialog.save_mode = command == 57; dialog.multi_select = false; dialog.bundle_pattern = "";
+                dialog.title = command == 57 ? "Save pattern (.mlapatt)" : "Load pattern (.mlapatt)";
+                dialog.file_pattern = command == 57 ? "" : ".*\\.[mM][lL][aA][pP][aA][tT][tT]";
+                dialog.open(last_pattern_dir);
+                if command == 57 { dialog.path_field.set_text(library.active_name()); }
+                focus.set_menu_active(true);
+            }
+            else if command >= 150 && command <= 153 {
+                if command == 150 { play_metronome = !play_metronome; }
+                else if command == 151 { extend_recording = !extend_recording; }
+                else { metronome_always = command == 153; }
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always);
+            }
             else if command == 50 || command == 53 { library.add(command == 53); }
             else if command == 51 {
                 library.editor.set_text(library.active_name()); library.renaming = true; library.error = "";
             }
+            else if command == 56 {
+                transport.playing = false; song_playing = false;
+                bpm_dialog.open_matrix_steps(library.matrix_steps);
+                focus.set_menu_active(true);
+            }
             else if command == 55 {
                 follow_matrix = !follow_matrix;
-                menus = demo_menus(fixture, follow_matrix);
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always);
                 free(message);
                 if follow_matrix {
                     if song_playing { library.follow_pattern(library.song_row_pattern(song_row)); play_pattern = library.active_id; }
@@ -1664,7 +1796,7 @@ pub fn run() -> i32 {
     settings.release();
     free(session_path); free(request_path);
     instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); mixer_table.release(); free(preset_path);
-    free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
+    free(last_pattern_dir); free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();
     return 0;
