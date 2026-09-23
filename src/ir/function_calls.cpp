@@ -2147,6 +2147,7 @@ llvm::Value* CodeGenerator::ensurePropertyMutexHandle(
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
     auto* currentHandle =
         builder.CreateLoad(int64Type, handleSlotPtr, namePrefix + ".cur");
+    currentHandle->setAlignment(llvm::Align(8));
     currentHandle->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
 
     llvm::Function* curFn = builder.GetInsertBlock()->getParent();
@@ -2165,7 +2166,7 @@ llvm::Value* CodeGenerator::ensurePropertyMutexHandle(
         createInternalMutexHandle(recursive, namePrefix + ".new");
     auto* cmpxchg = builder.CreateAtomicCmpXchg(
         handleSlotPtr, llvm::ConstantInt::get(int64Type, 0), candidate,
-        llvm::MaybeAlign(), llvm::AtomicOrdering::SequentiallyConsistent,
+        llvm::Align(8), llvm::AtomicOrdering::SequentiallyConsistent,
         llvm::AtomicOrdering::SequentiallyConsistent);
     cmpxchg->setWeak(false);
     llvm::Value* installed =
@@ -2353,6 +2354,9 @@ llvm::Value* CodeGenerator::generateAtomicI64Load(FunctionCallNode* node)
     ptr = builder.CreateBitCast(ptr, int64PtrType, "atomic.ptr_i64");
 #endif
     auto* loadInst = builder.CreateLoad(int64Type, ptr, "atomic.load");
+    // Natural alignment keeps this a lock-free instruction. Without it LLVM
+    // expands the access to __atomic_load, which needs libatomic on Linux.
+    loadInst->setAlignment(llvm::Align(8));
     loadInst->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
     return loadInst;
 }
@@ -2387,6 +2391,7 @@ llvm::Value* CodeGenerator::generateAtomicI64Store(FunctionCallNode* node)
     ptr = builder.CreateBitCast(ptr, int64PtrType, "atomic.ptr_i64");
 #endif
     auto* storeInst = builder.CreateStore(valueVal, ptr);
+    storeInst->setAlignment(llvm::Align(8));
     storeInst->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
     return valueVal;
 }
@@ -2421,7 +2426,7 @@ llvm::Value* CodeGenerator::generateAtomicI64Add(FunctionCallNode* node)
     ptr = builder.CreateBitCast(ptr, int64PtrType, "atomic.ptr_i64");
 #endif
     return builder.CreateAtomicRMW(
-        llvm::AtomicRMWInst::Add, ptr, addVal, llvm::MaybeAlign(),
+        llvm::AtomicRMWInst::Add, ptr, addVal, llvm::Align(8),
         llvm::AtomicOrdering::SequentiallyConsistent);
 }
 

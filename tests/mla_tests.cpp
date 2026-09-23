@@ -2372,6 +2372,68 @@ TEST_F(MLATest, BranchPredictionHintsPreserveRuntimeBehavior)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, AtomicOperationsCarryNaturalAlignment)
+{
+    // IR is generated before the module has a DataLayout, so an atomic access
+    // that does not state its alignment gets LLVM's default (i64 at align 4).
+    // LLVM then expands it to the generic __atomic_load/__atomic_store, which
+    // live in libatomic on Linux and in libSystem on macOS: the same IR links
+    // on one platform and fails on the other. Keep every atomic lock-free.
+    writeSource(R"(
+        mod std::thread;
+        use std::thread::*;
+        struct Counter {
+            @property(atomic) var total: i64;
+            @property(atomic) var flag: bool;
+        };
+        fn main() -> i32 {
+            let cell: atomic64 = atomic_new(1);
+            atomic_store_value(cell, 41);
+            let loaded: i64 = atomic_load_value(cell);
+            let previous: i64 = atomic_add_value(cell, 1);
+            atomic_free_handle(cell);
+            var counter: Counter = Counter {};
+            counter.setTotal(loaded + previous);
+            counter.setFlag(true);
+            return counter.getTotal() == 82 && counter.getFlag() ? 0 : 1;
+        }
+    )");
+    ASSERT_TRUE(compile(true, "-O0"));
+    EXPECT_EQ(runExitCode(), 0);
+
+    const fs::path irFile = fs::path(testDir) / "atomic_align.ll";
+    ASSERT_EQ(system((compilerPath + " -O0 -emit-llvm -o " +
+                      irFile.string() + " " + sourceFile).c_str()), 0);
+    std::ifstream input(irFile);
+    ASSERT_TRUE(input.is_open());
+    std::string line;
+    int atomics = 0;
+    while(std::getline(input, line))
+    {
+        const bool isAtomic = line.find("load atomic ") != std::string::npos ||
+                              line.find("store atomic ") != std::string::npos ||
+                              line.find("atomicrmw ") != std::string::npos ||
+                              line.find("cmpxchg ") != std::string::npos;
+        if(!isAtomic)
+            continue;
+        ++atomics;
+        const auto alignAt = line.rfind("align ");
+        ASSERT_NE(alignAt, std::string::npos) << line;
+        const int alignment = std::stoi(line.substr(alignAt + 6));
+        // i64/i32 cells are the widest atomics the stdlib exposes; a bool
+        // property is one byte. Anything narrower than its own access width
+        // becomes a libcall.
+        int width = 8;
+        if(line.find(" i32") != std::string::npos)
+            width = 4;
+        if(line.find(" i8") != std::string::npos ||
+           line.find(" i1 ") != std::string::npos)
+            width = 1;
+        EXPECT_GE(alignment, width) << line;
+    }
+    EXPECT_GT(atomics, 0);
+}
+
 TEST_F(MLATest, LoopLocalsHaveBoundedStackAtO0)
 {
     writeSource(R"(

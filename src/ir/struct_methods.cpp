@@ -19,6 +19,26 @@ llvm::Value* successfulVoidExpression(llvm::LLVMContext& context)
     // invalid and crashes on LLVM 17.
     return llvm::ConstantInt::getFalse(context);
 }
+
+// Natural alignment of an atomic property's storage. IR is generated before the
+// module has a DataLayout, so IRBuilder would otherwise pick LLVM's defaults
+// (i64 at align 4); an atomic access narrower than its own width is expanded to
+// the generic __atomic_* libcalls, which need libatomic on Linux.
+llvm::Align atomicPropertyAlign(llvm::Type* type)
+{
+    uint64_t bytes = 8;
+    if(type->isIntegerTy())
+        bytes = (type->getIntegerBitWidth() + 7) / 8;
+    else if(type->isFloatTy())
+        bytes = 4;
+    else if(type->isDoubleTy())
+        bytes = 8;
+    if(bytes < 1)
+        bytes = 1;
+    if(bytes > 16)
+        bytes = 16;
+    return llvm::Align(llvm::PowerOf2Ceil(bytes));
+}
 } // namespace
 
 void CodeGenerator::generateStructMethods(StructDefNode* node)
@@ -768,16 +788,27 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
         builder.CreateStructGEP(structType, selfPtr, layout->storageIndex,
                                 method->propertyFieldName + "_ptr");
 
+    // LLVM has no atomic access narrower than a byte, and a bool field stores
+    // 0 or 1 in a whole byte, so `bool` properties do their atomics as i8.
+    llvm::Type* accessType = llvmFieldType->isIntegerTy(1)
+                                 ? llvm::Type::getInt8Ty(context)
+                                 : llvmFieldType;
+
     if(!method->isPropertySetter)
     {
         auto* loadInst =
-            builder.CreateLoad(llvmFieldType, fieldPtr, "atomic.prop.load");
+            builder.CreateLoad(accessType, fieldPtr, "atomic.prop.load");
+        loadInst->setAlignment(atomicPropertyAlign(accessType));
         loadInst->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
+        llvm::Value* result = loadInst;
+        if(accessType != llvmFieldType)
+            result = builder.CreateTrunc(loadInst, llvmFieldType,
+                                         "atomic.prop.bool");
         exitCleanupScope();
         if(currentFunctionExceptionFrame)
             builder.CreateCall(exceptionsPopFrameFunc,
                                {currentFunctionExceptionFrame});
-        builder.CreateRet(loadInst);
+        builder.CreateRet(result);
         llvm::verifyFunction(*function);
         return true;
     }
@@ -792,6 +823,8 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
 
     llvm::Value* desired =
         builder.CreateLoad(llvmFieldType, valueStorage, "atomic.prop.desired");
+    if(accessType != llvmFieldType)
+        desired = builder.CreateZExt(desired, accessType, "atomic.prop.wide");
     llvm::Function* curFn = builder.GetInsertBlock()->getParent();
     llvm::BasicBlock* loopBB =
         llvm::BasicBlock::Create(context, "atomic.prop.cas", curFn);
@@ -802,10 +835,11 @@ bool CodeGenerator::generateAtomicPropertyMethodBody(
     builder.SetInsertPoint(loopBB);
 
     auto* expected =
-        builder.CreateLoad(llvmFieldType, fieldPtr, "atomic.prop.expected");
+        builder.CreateLoad(accessType, fieldPtr, "atomic.prop.expected");
+    expected->setAlignment(atomicPropertyAlign(accessType));
     expected->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
     auto* cmpxchg = builder.CreateAtomicCmpXchg(
-        fieldPtr, expected, desired, llvm::MaybeAlign(),
+        fieldPtr, expected, desired, atomicPropertyAlign(accessType),
         llvm::AtomicOrdering::SequentiallyConsistent,
         llvm::AtomicOrdering::SequentiallyConsistent);
     cmpxchg->setWeak(false);
