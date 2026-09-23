@@ -3517,3 +3517,64 @@ fn tui_pattern_file_round_trip() {
     data.release(); library.release(); clip.release();
     std::fs::remove_tree(directory); free(base); free(path); free(directory);
 }
+
+#[test]
+fn tui_record_count_in_and_signature() {
+    var clock: TransportStatus = TransportStatus { bpm: 120 };
+    clock.toggle(1000, 8, 64); clock.begin_count_in();
+    verify(clock.count_in == 240000 && clock.metronome_beat() == 0);
+    verify(clock.metronome_beat() == -1);
+    clock.advance(1500, 64); verify(clock.metronome_beat() == 1 && clock.row == 8);
+    clock.advance(2000, 64); verify(clock.metronome_beat() == 2 && clock.ticks == 120000);
+    clock.advance(2500, 64); verify(clock.metronome_beat() == 3 && clock.count_in == 60000);
+    clock.advance(3000, 64); verify(clock.metronome_beat() == 0 && clock.count_in == 0 && clock.row == 8);
+    clock.advance(3125, 64); verify(clock.row == 9);
+    clock.toggle(3125, 0, 64); verify(clock.metronome_beat() == -1);
+    clock.beats_per_bar = 3; clock.beat_unit = 8;
+    clock.toggle(4000, 0, 64); clock.begin_count_in();
+    verify(clock.count_in == 90000 && clock.metronome_beat() == 0);
+    clock.advance(4250, 64); verify(clock.metronome_beat() == 1 && clock.row == 0);
+    clock.advance(4500, 64); verify(clock.metronome_beat() == 2 && clock.row == 0);
+    clock.advance(4775, 64); verify(clock.metronome_beat() == 0 && clock.count_in == 0 && clock.ticks == 3000);
+}
+
+#[test]
+fn tui_record_loop_replaces_previous_take() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var table: SequenceTable = SequenceTable::new();
+    table.set_length(4, area); table.selected_row = 0; table.selected_column = 1;
+    verify(table.mixer_event(decode_input("R"), area));
+    table.recording_extend = false; verify(table.start_recording());
+    verify(table.record_timed(60, 90, 0, 0, true));
+    verify(table.record_timed(64, 80, 0, 100, true));
+    let chord: TableRow = table.rows[0]; verify(chord.cells[1] == "C-4" && chord.cells[5] == "E-4");
+    table.grow_recording(60000);
+    verify(table.rows.len() == 4);
+    let cleared: TableRow = table.rows[0]; verify(cleared.cells[1] == "" && cleared.cells[5] == "");
+    verify(table.record_timed(67, 70, 0, 61500, true));
+    verify(table.record_timed(60, 0, 0, 62000, false));
+    verify(table.record_timed(67, 0, 0, 64500, false));
+    let replaced: TableRow = table.rows[0];
+    verify(replaced.cells[1] == "G-4" && replaced.cells[5] == "");
+    verify(replaced.cells[3] == "0.20" && replaced.cells[4] == "0.10");
+    table.stop_recording(65000, area); table.release();
+}
+
+#[test]
+fn tui_record_metronome_audio() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok());
+    var audio: AudioSystem = AudioSystem { output: opened.unwrap() };
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(2048);
+    let block: PcmBlock = allocated.unwrap();
+    audio.metronome(true); verify(audio.output.process(block, 2048) == 0);
+    verify(audio.output.master_peak(0) > 0 && block.left(2047) == 0.0f);
+    var high_crossings: i32 = 0;
+    for i in 1..1440 { if block.left(i) * block.left(i - 1) < 0.0f { high_crossings = high_crossings + 1; } }
+    audio.metronome(false); verify(audio.output.process(block, 2048) == 0);
+    var low_crossings: i32 = 0;
+    for i in 1..1440 { if block.left(i) * block.left(i - 1) < 0.0f { low_crossings = low_crossings + 1; } }
+    verify(high_crossings > low_crossings && low_crossings > 20);
+    verify(block.left(2047) == 0.0f);
+    block.close(); audio.release();
+}

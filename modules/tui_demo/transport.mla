@@ -16,6 +16,7 @@ pub struct TransportStatus {
     var recording: bool;
     var playing: bool; var row: i32; var phase: i64; var clock_ms: i64;
     var ticks: i64;
+    var count_in: i64; var click_ticks: i64; var last_click: i64{-1};
 };
 impl TransportStatus {
     pub fn toggle(self: &mut Self, now: i64, selected: i32, count: i32) -> void {
@@ -23,6 +24,7 @@ impl TransportStatus {
         if count <= 0 { return; }
         self.row = selected < 0 ? 0 : (selected >= count ? count - 1 : selected);
         self.phase = 0; self.clock_ms = now; self.playing = true;
+        self.count_in = 0; self.click_ticks = 0; self.last_click = -1;
         self.ticks = wide(self.row) * 15000;
         self.elapsed_ms = i32(wide(self.row) * 15000 / wide(self.bpm));
     }
@@ -31,12 +33,28 @@ impl TransportStatus {
         if count <= 0 { self.playing = false; self.row = -1; self.elapsed_ms = 0; return true; }
         let delta: i64 = now > self.clock_ms ? now - self.clock_ms : 0;
         self.clock_ms = now;
-        let phase: i64 = self.phase + delta * wide(self.bpm);
-        self.ticks = self.ticks + delta * wide(self.bpm);
+        var elapsed: i64 = delta * wide(self.bpm);
+        self.click_ticks = self.click_ticks + elapsed;
+        if self.count_in > 0 {
+            let consumed: i64 = elapsed < self.count_in ? elapsed : self.count_in;
+            self.count_in = self.count_in - consumed; elapsed = elapsed - consumed;
+        }
+        let phase: i64 = self.phase + elapsed;
+        self.ticks = self.ticks + elapsed;
         self.row = i32((wide(self.row) + phase / 15000) % wide(count));
         self.phase = phase % 15000;
         self.elapsed_ms = i32((wide(self.row) * 15000 + self.phase) / wide(self.bpm));
         return delta > 0;
+    }
+    pub fn begin_count_in(self: &mut Self) -> void {
+        self.count_in = wide(self.beats_per_bar) * 240000 / wide(self.beat_unit);
+    }
+    /// One click per signature beat, independent of pattern looping.
+    pub fn metronome_beat(self: &mut Self) -> i32 {
+        if !self.playing { return -1; }
+        let beat: i64 = self.click_ticks / (240000 / wide(self.beat_unit));
+        if beat == self.last_click { return -1; }
+        self.last_click = beat; return i32(beat % wide(self.beats_per_bar));
     }
     pub fn set_bpm(self: &mut Self, value: i32) -> bool {
         if value < 20 || value > 400 { return false; }
@@ -72,7 +90,7 @@ impl TransportStatus {
         }
         if offset + 2 < area.width {
             surface.text(Rect::new(area.x + offset + 2, area.y, area.width - offset - 2, 1),
-                self.recording ? "REC" : (self.playing ? "PLAY" : "STOP"), self.playing ? theme.accent : theme.muted, theme.panel);
+                self.playing && self.count_in > 0 ? "COUNT IN" : (self.recording ? "REC" : (self.playing ? "PLAY" : "STOP")), self.playing ? theme.accent : theme.muted, theme.panel);
         }
         free(text);
     }

@@ -144,6 +144,7 @@ pub fn track_output_label(tracks: list<SequenceTrack>, index: i32) -> str8 {
 }
 pub struct SequenceTable : Table {
     var recording_track: i32{-1}; var recorded_keys: list<RecordedKey>;
+    var recording_extend: bool{true}; var recording_cleared: i64{-1};
     var notes: array<str8, 128>;
     var editor: TextField; var editing: bool; var error: str8;
     var delete_pending: bool;
@@ -304,14 +305,34 @@ pub fn start_recording(self: &mut Self) -> bool {
     let index: i32 = self.active_track(); if index < 0 { return false; }
     let track: SequenceTrack = self.tracks[index];
     if track.audio || !track.record_armed { return false; }
-    self.recording_track = index; self.recorded_keys = []; return true;
+    self.recording_track = index; self.recorded_keys = []; self.recording_cleared = wide(self.selected_row) - 1; return true;
 }
 pub fn grow_recording(self: &mut Self, tick: i64) -> void {
-    let count: i32 = i32(tick / 15000) + 2;
+    if !self.recording_extend { self.clear_recording_rows(tick); return; }
+    let requested: i64 = tick / 15000 + 2;
+    let count: i32 = i32(requested > 16384 ? 16384 : requested);
     while self.rows.len() < count {
         var cells: list<str8> = [format!("{}", self.rows.len() + 1)]; for _c in 1..self.columns.len() { cells.push(clone("")); }
         self.rows.push(TableRow { cells: cells }); self.revision = self.revision + 1;
     }
+}
+/// Clear only the armed track as each row is reached; retain chords within a row.
+pub fn clear_recording_rows(self: &mut Self, tick: i64) -> void {
+    if self.recording_track < 0 || self.rows.len() == 0 { return; }
+    let target: i64 = tick / 15000;
+    if target <= self.recording_cleared { return; }
+    var start: i64 = self.recording_cleared + 1;
+    if target - start >= self.rows.len() { start = target - self.rows.len() + 1; }
+    let first: i32 = self.track_start(self.recording_track);
+    let track: SequenceTrack = self.tracks[self.recording_track];
+    for absolute in start..target + 1 {
+        let row: i32 = i32(absolute % self.rows.len());
+        var retained: list<RecordedKey> = []; let keys: list<RecordedKey> = self.recorded_keys;
+        for key in keys { if key.row != row { retained.push(key); } }
+        self.recorded_keys = retained;
+        for column in 0..(track.note_lines * 4) { self.write_owned_cell(row, first + i32(column), clone("")); }
+    }
+    self.recording_cleared = target; self.revision = self.revision + 1;
 }
 pub fn release_recorded(self: &mut Self, note: i64, channel: i64, tick: i64, all: bool) -> void {
     var keys: list<RecordedKey> = []; let old: list<RecordedKey> = self.recorded_keys;
@@ -331,8 +352,10 @@ pub fn record_timed(self: &mut Self, note: i64, velocity: i64, channel: i64, tic
     self.release_recorded(note, channel, tick, false);
     if !on || velocity <= 0 { return true; }
     let time: i64 = tick < 0 ? 0 : tick;
-    let row_index: i32 = i32((time + 7500) / 15000);
+    let absolute_row: i64 = (time + 7500) / 15000;
     self.grow_recording(time + 7500);
+    if self.recording_extend && absolute_row >= self.rows.len() { return false; }
+    let row_index: i32 = i32(absolute_row % self.rows.len());
     let first: i32 = self.track_start(self.recording_track);
     let track: SequenceTrack = self.tracks[self.recording_track];
     let row: TableRow = self.rows[row_index];
@@ -362,7 +385,7 @@ pub fn record_timed(self: &mut Self, note: i64, velocity: i64, channel: i64, tic
     self.write_owned_cell(row_index, first + insert * 4, clone(self.notes[note]));
     self.write_owned_cell(row_index, first + insert * 4 + 1, format!("{}", velocity));
     self.write_owned_cell(row_index, first + insert * 4 + 2, clone("1.00"));
-    self.write_owned_cell(row_index, first + insert * 4 + 3, offset_text(time - wide(row_index) * 15000));
+    self.write_owned_cell(row_index, first + insert * 4 + 3, offset_text(time - absolute_row * 15000));
     self.revision = self.revision + 1; return true;
 }
 pub fn stop_recording(self: &mut Self, tick: i64, area: Rect) -> void {

@@ -59,6 +59,7 @@ it changes, then what it removes; related entries live in submenus.
 | Audio | Add audio, Edit sample (destructive), Clip ▸, Remove audio |
 | Instrument | Add instrument, Open VST3 editor, Drum pads ▸, Presets ▸, MIDI learn ▸, Remove instrument |
 | Effect | Add effect channel, Load/Edit effect plugin, Set track send, Master ▸, Remove effect plugin |
+| Record | Play metronome, Extend pattern when playing, Metronome ▸ |
 
 ## Song matrix
 
@@ -409,8 +410,22 @@ track name (Enter accepts, Esc keeps the old name). Each take targets one synth
 track, with up to 64 automatically added note lines. Notes on the same row are
 inserted in ascending pitch order with their velocities and timing intact.
 LEN captures key-hold duration. OFF captures early/late timing relative to the
-nearest sixteenth-note row, to 0.01 row precision. Rows are appended as recording
-reaches the end; the take does not loop. All recorded cells remain editable.
+nearest sixteenth-note row, to 0.01 row precision. All recorded cells remain editable.
+
+The **Record** menu has two options, enabled by default:
+
+- **Play metronome**: clicks at the current tempo and time signature, with a higher
+  first beat and lower remaining beats. An armed recording starts after one full
+  bar of count-in; pattern playback and note capture wait until it finishes.
+  Turning this off starts recording immediately. **Metronome → On recording**
+  (default) limits clicks to recording and its count-in; **Always** also clicks
+  during normal pattern and song playback. These modes are mutually exclusive.
+- **Extend pattern when playing**: grows the pattern while recording (up to the
+  pattern limit of 16,384 rows). With it off, recording loops at the existing
+  length, replacing the armed track's notes as each row is reached. Other tracks
+  remain intact. The choice takes effect at the start of a take.
+
+Press Space to stop, including during the count-in.
 The live MIDI path monitors the synth during recording.
 
 While stopped, incoming notes still provide single-cell step entry on the armed

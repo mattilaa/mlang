@@ -70,7 +70,7 @@ use std::io::read_keycode_nonblocking;
 use std::time::sleep_ms;
 use std::time::now_ms;
 
-fn demo_menus(fixture: bool, follow_matrix: bool) -> MenuBar {
+fn demo_menus(fixture: bool, follow_matrix: bool, metronome: bool, extend: bool, metronome_always: bool) -> MenuBar {
     // Grouped like a DAW's menu bar: each menu starts with what it creates,
     // then what it changes, then what it removes; families use submenus.
     let plugins: bool = AudioController::processor_support();
@@ -178,7 +178,13 @@ fn demo_menus(fixture: bool, follow_matrix: bool) -> MenuBar {
                                 MenuItem { label: "Remove effect plugin", action: 114, enabled: plugins },
                                 MenuItem::submenu("Presets", [
                                                 MenuItem { label: "Load plugin preset", action: 140, enabled: plugins },
-                                                MenuItem { label: "Save plugin preset", action: 141, enabled: plugins }])] }
+                                                MenuItem { label: "Save plugin preset", action: 141, enabled: plugins }])] },
+                    Menu { title: "Record", items: [
+                        MenuItem { label: metronome ? "[x] Play metronome" : "[ ] Play metronome", action: 150, enabled: true },
+                        MenuItem { label: extend ? "[x] Extend pattern when playing" : "[ ] Extend pattern when playing", action: 151, enabled: true },
+                        MenuItem::submenu("Metronome", [
+                            MenuItem { label: !metronome_always ? "[x] On recording" : "[ ] On recording", action: 152, enabled: true },
+                            MenuItem { label: metronome_always ? "[x] Always" : "[ ] Always", action: 153, enabled: true }])] }
             ]);
 }
 
@@ -262,7 +268,8 @@ pub fn run() -> i32 {
     // Channels of the playing song row, one strip per channel even when
     // parallel patterns share it. Only the mixer reads it.
     var mixer_table: SequenceTable = SequenceTable {};
-    var menus: MenuBar = demo_menus(fixture, follow_matrix);
+    var play_metronome: bool = true; var extend_recording: bool = true; var metronome_always: bool = false;
+    var menus: MenuBar = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always);
     if fixture { menus.open(0); }
     var focus: PaneFocus = PaneFocus::new(0);
     var input: InputDecoder = InputDecoder::new();
@@ -487,14 +494,16 @@ pub fn run() -> i32 {
                 song_table.release(); song_table = SequenceTable {};
                 note_playback = NotePlayback {};
             }
-            if !transport.playing { library.table.start_recording(); }
-            transport.toggle(now_ms(), library.table.selected_row, library.table.recording_track >= 0 ? 2147483647 : i32(library.table.rows.len()));
+            let starting: bool = !transport.playing;
+            if starting { library.table.recording_extend = extend_recording; library.table.start_recording(); }
+            transport.toggle(now_ms(), library.table.selected_row, library.table.recording_track >= 0 && extend_recording ? 2147483647 : i32(library.table.rows.len()));
+            if starting && library.table.recording_track >= 0 && play_metronome { transport.begin_count_in(); }
             note_playback.start_row = transport.row;
             if transport.playing { midi.restart_samples(transport.row); }
-            if !midi.sample_playback(library.table, transport.ticks, transport.playing, transport.bpm) {
+            if !midi.sample_playback(library.table, transport.ticks, transport.playing && transport.count_in == 0, transport.bpm) {
                 transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)");
             }
-            note_playback.update(library.table, transport.ticks, transport.playing);
+            note_playback.update(library.table, transport.ticks, transport.playing && transport.count_in == 0);
             midi.sequencer_events(note_playback.events);
             if transport.row >= 0 { library.table.selected_row = transport.row; }
             dirty = true;
@@ -677,14 +686,17 @@ pub fn run() -> i32 {
         if library.table.recording_track >= 0 {
             let armed: SequenceTrack = library.table.tracks[library.table.recording_track];
             if !armed.record_armed { transport.playing = false; }
-            let record_now: i64 = transport.ticks + (transport.playing ? (now - transport.clock_ms) * wide(transport.bpm) : 0);
+            let pending: i64 = transport.playing ? (now - transport.clock_ms) * wide(transport.bpm) : 0;
+            let record_now: i64 = transport.ticks + pending - transport.count_in;
             let notes: list<MidiInputEvent> = midi.midi.note_events;
             for note in notes {
                 let tick: i64 = record_now - (now - note.received_ms) * wide(transport.bpm);
-                if library.table.record_timed(note.note, note.velocity, note.channel, tick, note.kind == 1) { dirty = true; }
+                if transport.playing && pending >= transport.count_in && (transport.count_in == 0 || tick >= transport.ticks) {
+                    if library.table.record_timed(note.note, note.velocity, note.channel, tick, note.kind == 1) { dirty = true; }
+                }
             }
             if transport.playing && !song_playing {
-                library.table.grow_recording(transport.ticks + (now - transport.clock_ms) * wide(transport.bpm));
+                if pending >= transport.count_in { library.table.grow_recording(record_now); }
             } else { library.table.stop_recording(transport.ticks, terminal_bounds()); focus.selected = 1; dirty = true; }
         }
         transport.recording = library.table.recording_track >= 0;
@@ -715,6 +727,9 @@ pub fn run() -> i32 {
             let cursor: i32 = library.table.selected_row < 0 ? 0 : library.table.selected_row;
             if transport.row != cursor { transport.follow_row(cursor); dirty = true; }
         }
+        if play_metronome && transport.playing && (metronome_always || transport.recording) {
+            let beat: i32 = transport.metronome_beat(); if beat >= 0 { midi.metronome(beat == 0); }
+        }
         // Browsing the matrix selects the pattern under the cursor, so the
         // mixer, the inspector and the editor behind the matrix all show that
         // pattern's tracks and routing. Nothing follows while the transport
@@ -737,10 +752,10 @@ pub fn run() -> i32 {
                 for note in notes { if note.kind == 1 { if library.table.record_note(note.note, note.velocity) { dirty = true; } } }
             }
         }
-        if !midi.sample_playback(song_playing ? song_table : library.table, transport.ticks, transport.playing, transport.bpm) {
+        if !midi.sample_playback(song_playing ? song_table : library.table, transport.ticks, transport.playing && transport.count_in == 0, transport.bpm) {
             transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)"); dirty = true;
         }
-        note_playback.update(song_playing ? song_table : library.table, transport.ticks, transport.playing);
+        note_playback.update(song_playing ? song_table : library.table, transport.ticks, transport.playing && transport.count_in == 0);
         midi.sequencer_events(note_playback.events);
         // The mixer shows the playing song row while following it, so its
         // meters come from the same channels the strips do.
@@ -1608,6 +1623,12 @@ pub fn run() -> i32 {
                 if command == 57 { dialog.path_field.set_text(library.active_name()); }
                 focus.set_menu_active(true);
             }
+            else if command >= 150 && command <= 153 {
+                if command == 150 { play_metronome = !play_metronome; }
+                else if command == 151 { extend_recording = !extend_recording; }
+                else { metronome_always = command == 153; }
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always);
+            }
             else if command == 50 || command == 53 { library.add(command == 53); }
             else if command == 51 {
                 library.editor.set_text(library.active_name()); library.renaming = true; library.error = "";
@@ -1619,7 +1640,7 @@ pub fn run() -> i32 {
             }
             else if command == 55 {
                 follow_matrix = !follow_matrix;
-                menus = demo_menus(fixture, follow_matrix);
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always);
                 free(message);
                 if follow_matrix {
                     if song_playing { library.follow_pattern(library.song_row_pattern(song_row)); play_pattern = library.active_id; }

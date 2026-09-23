@@ -39,6 +39,7 @@ pub fn clip_fingerprint(samples: list<f32>) -> i64 {
 }
 pub struct AudioSystem {
     var output: AudioController; var midi: MidiController;
+    var click_output: i64; var click_high: i64{-1}; var click_low: i64{-1};
     var midi_id: i64{-1}; var output_id: i64{-1};
     var hardware_requested: bool;
     var requested_buffer_frames: i64{128};
@@ -74,6 +75,7 @@ impl AudioSystem {
         self.pads = next.pads;
         self.samples_running = false; self.sample_placements = []; self.sample_output = 0;
         self.sample_epoch = 0; self.sample_start_row = -1; self.registered_clips = [];
+        self.click_output = 0; self.click_high = -1; self.click_low = -1;
     }
     pub fn start(hardware: bool) -> AudioSystem {
         var system: AudioSystem = AudioSystem { hardware_requested: hardware };
@@ -203,7 +205,7 @@ impl AudioSystem {
                         if worker { self.midi = MidiController::start_selected(self.midi_id, self.output.handle); }
                         return false;
                     }
-                    self.output.clear_samples(); self.registered_clips = [];
+                    self.output.clear_samples(); self.registered_clips = []; self.click_high = -1; self.click_low = -1;
                     if restart { if self.output.start() != 0 { return false; } }
                     if worker { self.midi = MidiController::start_selected(self.midi_id, self.output.handle); }
                 }
@@ -245,6 +247,25 @@ impl AudioSystem {
             updated.push(placement);
         }
         self.sample_placements = updated; self.sample_last = tick; return true;
+    }
+    /// Short decaying clicks use the existing realtime PCM mixer, outside track routing.
+    pub fn metronome(self: &mut Self, accent: bool) -> void {
+        if self.output.handle == 0 { return; }
+        if self.click_output != self.output.handle {
+            self.click_output = self.output.handle; self.click_high = -1; self.click_low = -1;
+        }
+        if self.click_high < 0 || self.click_low < 0 {
+            var high: list<f32> = []; var low: list<f32> = [];
+            for i in 0..1440 {
+                let envelope: f32 = 0.18f * f32(1440 - i) / 1440.0f;
+                high.push((i % 24 < 12 ? 1.0f : -1.0f) * envelope);
+                low.push((i % 48 < 24 ? 1.0f : -1.0f) * envelope);
+            }
+            if self.click_high < 0 { self.click_high = self.output.add_sample_data(high, 1, 48000); }
+            if self.click_low < 0 { self.click_low = self.output.add_sample_data(low, 1, 48000); }
+        }
+        let sample: i64 = accent ? self.click_high : self.click_low;
+        if sample >= 0 { self.output.post(AudioEvent { kind: AudioEventKind::PlaySample, sample: sample, source: 32767 }, 0); }
     }
     /// Controller-side PCM id for a clip, uploading it only the first time.
     /// Returns -1 when the controller is full or refuses the data.
