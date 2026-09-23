@@ -48,6 +48,9 @@ use tui_demo::audio_controller::EffectChannel;
 use tui_demo::audio_controller::PadAssignment;
 use std::audio::controller::AudioController;
 mod tui_demo::settings_dialog;
+mod tui_demo::settings_store;
+use tui_demo::settings_store::StartupSettings;
+use tui_demo::settings_store::StoreResult;
 mod tui_demo::instrument_editor;
 use tui_demo::instrument_editor::InstrumentEditor;
 use tui_demo::settings_dialog::SettingsDialog;
@@ -188,6 +191,15 @@ fn demo_panes(content: Rect) -> list<Pane> {
             Pane { id: 2, bounds: right[1] }];
 }
 
+/// Asked when the stored settings name devices this machine no longer has.
+fn missing_devices_dialog() -> QuestionDialog {
+    var ask: QuestionDialog = QuestionDialog::new("Some devices are unavailable",
+        "Some of the previously saved devices are not available. Do you still want to save the settings?");
+    ask.width = 76; ask.height = 12;
+    ask.buttons = [PushButton { label: "Save", action: 1 }, PushButton { label: "Cancel", action: 2 }];
+    return ask;
+}
+
 fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: &Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView, matrix_visible: bool, channels: &SequenceTable, merged_channels: bool) -> void {
     let theme: Theme = Theme::dark_blue();
     surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
@@ -320,6 +332,10 @@ pub fn run() -> i32 {
     // track feeds.
     var outputs: OutputPicker = OutputPicker::new();
     var output_kind: i32 = 0; var output_track: i32 = -1;
+    // 1 = write the settings file, 2 = ask first because a remembered device
+    // is gone. The question is the user's last chance to keep the old file.
+    var settings_request: i32 = 0;
+    var settings_question: QuestionDialog = missing_devices_dialog();
     // Matrix playback: the merged table of the playing row, and which row it is.
     var song_playing: bool = false; var song_row: i32 = -1;
     var song_table: SequenceTable = SequenceTable {};
@@ -336,8 +352,14 @@ pub fn run() -> i32 {
     var last_processor_errors: i64 = 0;
     var prev_sample_row: i32 = -1;
     let no_hardware: str8 = __env_get_var("MLANG_TUI_NO_HARDWARE");
+    // Devices and folders remembered in ~/Documents/Mlacker/.mlacker.conf.
+    var launch: StartupSettings = tui_demo::settings_store::startup();
+    var devices_missing: bool = launch.missing;
     var midi: AudioSystem = AudioSystem::start(terminal.active && no_hardware != "1");
     free(no_hardware);
+    let restored: result<i32, str8> = midi.configure_audio(launch.midi_id, launch.output_id,
+        launch.settings.buffer_frames, launch.settings.sample_rate, library.audio.samples);
+    if restored.is_err() { devices_missing = true; }
     var master_meter_clock: i64 = now_ms();
     while running {
         if session_request != 0 {
@@ -409,6 +431,22 @@ pub fn run() -> i32 {
             }
             free(message); message = clone(session_status); free(session_status);
             session_request = 0; menus.dismiss(); dirty = true;
+        }
+        if settings_request != 0 {
+            let ask: bool = settings_request == 2;
+            settings_request = 0;
+            if ask {
+                settings_question.open(); focus.set_menu_active(true); dirty = true;
+            } else {
+                var written: StoreResult = tui_demo::settings_store::store_current(
+                    settings.folder.text, midi.midi_id, midi.output_id,
+                    midi.requested_buffer_frames, midi.requested_sample_rate);
+                if written.failed { free(message); message = clone(written.error); }
+                free(written.error);
+                tui_demo::settings_store::settings_release(launch.settings);
+                launch.settings = written.settings;
+                devices_missing = false; dirty = true;
+            }
         }
         if remove_request != 0 {
             // 1 = sample (with its clips), 2 = instrument and its tracks,
@@ -640,7 +678,7 @@ pub fn run() -> i32 {
             transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
         }
         // Editing a moving row would otherwise commit to a different row.
-        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active { transport.playing = false; }
+        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active || settings_question.active { transport.playing = false; }
         if song_playing {
             let previous: i32 = transport.row;
             if transport.advance(now, i32(song_table.rows.len())) { playback_dirty = true; }
@@ -717,6 +755,7 @@ pub fn run() -> i32 {
                     let applied: result<i32, str8> = midi.configure_audio(settings.midi.selected_id(), settings.output.selected_id(), settings.buffer.selected_id(), settings.rate.selected_id(), library.audio.samples);
                     if applied.is_err() { settings.fail(applied.unwrap_err()); }
                     else {
+                        settings_request = devices_missing ? 2 : 1;
                         free(message);
                         if !midi.output.hardware_output() { message = clone("Settings applied. Audio disabled."); }
                         else { message = format!("AUHAL: {} Hz / {} frames. Settings applied.", midi.output.sample_rate(), midi.output.buffer_frames()); }
@@ -749,6 +788,13 @@ pub fn run() -> i32 {
                             : (split > 0 ? format!("Row {} lane {}: pattern {}; {} track(s) split onto their own note line", clash_row + 1, clash_lane + 1, clash_id, split)
                                 : format!("Row {} lane {}: pattern {} (clashing notes kept)", clash_row + 1, clash_lane + 1, clash_id));
                     }
+                }
+            }
+            if settings_question.active && settings_question.pressed_button >= 0 {
+                settings_question.tick(); dirty = true;
+                if !settings_question.active {
+                    if settings_question.result == 1 { settings_request = 1; devices_missing = false; }
+                    else { free(message); message = tui_demo::settings_store::settings_kept_message(); }
                 }
             }
             if remove_question.active && remove_question.pressed_button >= 0 {
@@ -813,7 +859,7 @@ pub fn run() -> i32 {
         let viewport: Viewport = menus.viewport(area);
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
-        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active || settings_question.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
         if dirty || area.width != previous_width || area.height != previous_height {
             library.table.instrument_labels(midi.output);
             library.table.insert_labels(midi.output);
@@ -832,6 +878,7 @@ pub fn run() -> i32 {
             question.paint(surface, area, Theme::dark_blue());
             share_question.paint(surface, area, Theme::dark_blue());
             remove_question.paint(surface, area, Theme::dark_blue());
+            settings_question.paint(surface, area, Theme::dark_blue());
             clash_question.paint(surface, area, Theme::dark_blue());
             picker.paint(surface, area, Theme::dark_blue());
             outputs.paint(surface, area, Theme::dark_blue());
@@ -981,6 +1028,10 @@ pub fn run() -> i32 {
             else if clash_question.active {
                 clash_question.on_event(event);
                 if !clash_question.active && clash_question.result == 2 { free(message); message = clone("Cancelled."); }
+                dirty = true;
+            }
+            else if settings_question.active {
+                settings_question.on_event(event);
                 dirty = true;
             }
             else if remove_question.active {
@@ -1204,7 +1255,10 @@ pub fn run() -> i32 {
             if command > 0 && command != 115 { adding_insert_track = -1; }
             if command == 99 { running = false; }
             else if command == 90 {
-                transport.playing = false; settings.open_audio(midi.midi_id, midi.output_id, midi.requested_buffer_frames, midi.requested_sample_rate); focus.set_menu_active(true);
+                transport.playing = false;
+                settings.open_full(midi.midi_id, midi.output_id, midi.requested_buffer_frames,
+                    midi.requested_sample_rate, launch.settings.root);
+                focus.set_menu_active(true);
             }
             else if command == 1 {
                 question.title = "New session"; question.question = "Start a new session?";
@@ -1256,7 +1310,14 @@ pub fn run() -> i32 {
                         dialog.title = command == 100 ? "Save plugin preset (.mlapre)" : "Load plugin preset (.mlapre)";
                         dialog.file_pattern = command == 100 ? "" : ".*\\.[mM][lL][aA][pP][rR][eE]";
                     }
-                    dialog.open(last_preset_dir);
+                    // Plugin presets live under the Mlacker folder, one
+                    // directory per Mla plugin and a shared one for the rest.
+                    // MIDI learn files stay wherever they were last browsed.
+                    if command >= 100 {
+                        let plugin: str8 = midi.output.instrument_name(learn_slot);
+                        let folder: str8 = tui_demo::settings_store::plugin_preset_dir(launch.settings.root, plugin);
+                        dialog.open(folder); free(folder);
+                    } else { dialog.open(last_preset_dir); }
                     if command == 97 || command == 100 {
                         let suggested: str8 = SessionCodec::learn_suggestion(midi.output.instrument_name(learn_slot));
                         dialog.path_field.set_text(suggested); free(suggested);
@@ -1663,7 +1724,8 @@ pub fn run() -> i32 {
     midi.release();
     settings.release();
     free(session_path); free(request_path);
-    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); mixer_table.release(); free(preset_path);
+    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); mixer_table.release();
+    tui_demo::settings_store::settings_release(launch.settings); free(preset_path);
     free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();

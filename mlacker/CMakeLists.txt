@@ -70,6 +70,8 @@ set_tests_properties(effects_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TI
 add_test(NAME inserts_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/inserts_tui_smoke.py" "$<TARGET_FILE:mlacker>" "$<TARGET_BUNDLE_DIR:MlackerTestEffect>")
 set_tests_properties(inserts_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 120)
 add_test(NAME song_matrix_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/song_matrix_tui_smoke.py" "$<TARGET_FILE:mlacker>" "$<TARGET_BUNDLE_DIR:MlackerTestInstrument>")
+add_test(NAME settings_store_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/settings_store_tui_smoke.py" "$<TARGET_FILE:mlacker>")
+set_tests_properties(settings_store_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 120)
 add_test(NAME output_routing_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/output_routing_tui_smoke.py" "$<TARGET_FILE:mlacker>" "$<TARGET_BUNDLE_DIR:MlackerTestInstrument>")
 set_tests_properties(output_routing_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 120)
 add_test(NAME visual_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/visual_tui_smoke.py" "$<TARGET_FILE:mlacker>")

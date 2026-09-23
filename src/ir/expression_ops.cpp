@@ -885,9 +885,15 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     {
         if(!lhsIsString || !rhsIsString)
         {
+            // Name the operands: synthesized nodes carry no line, and without
+            // them this diagnostic cannot be traced back to any source.
             reportError(node->line,
-                        "string operations require both operands to be string "
-                        "types");
+                        std::string("string operations require both operands "
+                                    "to be string types (left '") +
+                            typeKindName(lhsKind) + "' " +
+                            node->left->toString() + ", right '" +
+                            typeKindName(rhsKind) + "' " +
+                            node->right->toString() + ")");
             return nullptr;
         }
         if(!sameStringRuntimeKind)

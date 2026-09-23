@@ -1,0 +1,305 @@
+/// Where mlacker keeps its own files, and the settings it remembers between
+/// runs. The root holds presets and the `.mlacker.conf` TOML file itself:
+///
+///     ~/Documents/Mlacker/.mlacker.conf
+///     ~/Documents/Mlacker/Presets/                  other plugins
+///     ~/Documents/Mlacker/Presets/MlaPlugins/MlaDrum
+///     ~/Documents/Mlacker/Presets/MlaPlugins/MlaVerb
+///     ~/Documents/Mlacker/Presets/MlaPlugins/MlaDistortion
+///     ~/Documents/Mlacker/Presets/MlaPlugins/MlaDelay
+mod std::fs;
+mod std::toml;
+mod std::env::detail;
+mod std::strbuf;
+mod std::bytes;
+mod std::midi;
+mod std::audio;
+mod tui::geometry;
+use std::env::detail::__env_get_var;
+use std::toml::TomlDoc;
+use std::strbuf::clone;
+use std::strbuf::free;
+use std::strbuf::len;
+use std::strbuf::sub;
+use std::bytes::Bytes;
+use tui::geometry::wide;
+
+/// Devices are remembered by name: ids shift when hardware comes and goes.
+/// An empty name means the system default, "disabled" means no device.
+pub struct MlackerSettings {
+    var root: str8;
+    var midi_name: str8;
+    var output_name: str8;
+    var buffer_frames: i64;
+    var sample_rate: i64;
+};
+/// Defaults for a machine that has never saved anything.
+pub fn settings_defaults() -> MlackerSettings {
+    return MlackerSettings { root: clone(""), midi_name: clone(""), output_name: clone(""),
+        buffer_frames: 128, sample_rate: 0 };
+}
+/// Methods on this struct collide with the many `release`/`copy` methods the
+/// rest of the program defines, so these stay plain functions.
+pub fn settings_release(settings: MlackerSettings) -> void {
+    free(settings.root); free(settings.midi_name); free(settings.output_name);
+}
+pub fn settings_duplicate(settings: MlackerSettings) -> MlackerSettings {
+    return MlackerSettings { root: clone(settings.root), midi_name: clone(settings.midi_name),
+        output_name: clone(settings.output_name), buffer_frames: settings.buffer_frames,
+        sample_rate: settings.sample_rate };
+}
+/// Text and numbers are compared apart: one chain mixing both trips the
+/// compiler's string-operand check.
+pub fn settings_match(left: MlackerSettings, right: MlackerSettings) -> bool {
+    if left.root != right.root { return false; }
+    if left.midi_name != right.midi_name { return false; }
+    if left.output_name != right.output_name { return false; }
+    if left.buffer_frames != right.buffer_frames { return false; }
+    return left.sample_rate == right.sample_rate;
+}
+
+/// Plain digits only; anything else keeps the caller's fallback.
+pub fn parse_number(text: str8, fallback: i64) -> i64 {
+    let parsed: result<Bytes, str8> = Bytes::from_string(text);
+    if parsed.is_err() { return fallback; }
+    let bytes: Bytes = parsed.unwrap();
+    if bytes.len() == 0 { bytes.close(); return fallback; }
+    var value: i64 = 0;
+    var i: i64 = 0;
+    while i < bytes.len() {
+        let digit: i32 = bytes.get(i);
+        if digit < 48 || digit > 57 { bytes.close(); return fallback; }
+        value = value * 10 + wide(digit - 48);
+        if value > 4000000000 { bytes.close(); return fallback; }
+        i = i + 1;
+    }
+    bytes.close(); return value;
+}
+
+pub fn home_dir() -> str8 {
+    let home: str8 = __env_get_var("HOME");
+    if home != "" { return home; }
+    free(home); return clone(".");
+}
+
+/// Where mlacker looks for its configuration before any setting is known.
+/// `MLACKER_HOME` overrides it, which keeps test runs out of the real home.
+pub fn default_root() -> str8 {
+    let override_root: str8 = __env_get_var("MLACKER_HOME");
+    if override_root != "" { return override_root; }
+    free(override_root);
+    let home: str8 = home_dir();
+    let root: str8 = format!("{}/Documents/Mlacker", home);
+    free(home); return root;
+}
+
+pub fn config_file(root: str8) -> str8 { return format!("{}/.mlacker.conf", root); }
+
+/// Preset directory for a plugin. The Mla plugins keep one folder each under
+/// `Presets/MlaPlugins`; everything else shares `Presets`.
+pub fn preset_dir(root: str8, plugin: str8) -> str8 {
+    let compact: str8 = strip_spaces(plugin);
+    // The Mla plugins by name: a host plugin merely starting with "Mla", like
+    // "Mlacker Test Instrument", belongs in the shared folder.
+    var own: bool = false;
+    let known: list<str8> = ["MlaDrum", "MlaVerb", "MlaDistortion", "MlaDelay"];
+    for name in known { if compact == name { own = true; } }
+    let dir: str8 = own ? format!("{}/Presets/MlaPlugins/{}", root, compact)
+        : format!("{}/Presets", root);
+    free(compact); return dir;
+}
+
+/// "Mla Drum" -> "MlaDrum": plugin names carry spaces, directories do not.
+pub fn strip_spaces(text: str8) -> str8 {
+    let parsed: result<Bytes, str8> = Bytes::from_string(text);
+    if parsed.is_err() { return clone(text); }
+    let bytes: Bytes = parsed.unwrap();
+    var out: str8 = clone("");
+    var i: i64 = 0;
+    while i < bytes.len() {
+        let code: i32 = bytes.get(i);
+        if code != 32 && code != 45 && code != 95 {
+            let piece: str8 = sub(text, i, 1);
+            let joined: str8 = format!("{}{}", out, piece);
+            free(out); free(piece); out = joined;
+        }
+        i = i + 1;
+    }
+    bytes.close(); return out;
+}
+
+/// Create the root and its preset folders. Existing directories are kept.
+pub fn ensure_layout(root: str8) -> bool {
+    if root == "" { return false; }
+    let made: result<i32, str8> = std::fs::mkdir_p(root);
+    if made.is_err() { return false; }
+    let presets: str8 = format!("{}/Presets", root);
+    let plugins: str8 = format!("{}/Presets/MlaPlugins", root);
+    std::fs::mkdir_p(presets); std::fs::mkdir_p(plugins);
+    free(presets); free(plugins);
+    let names: list<str8> = ["MlaDrum", "MlaVerb", "MlaDistortion", "MlaDelay"];
+    for name in names {
+        let dir: str8 = format!("{}/Presets/MlaPlugins/{}", root, name);
+        std::fs::mkdir_p(dir); free(dir);
+    }
+    return true;
+}
+
+fn read_file(path: str8) -> MlackerSettings {
+    var settings: MlackerSettings = settings_defaults();
+    let text: result<str8, str8> = std::fs::read_all_text(path);
+    if text.is_err() { return settings; }
+    let source: str8 = text.unwrap();
+    var document: TomlDoc = std::toml::parse(source);
+    free(source);
+    settings.root = std::toml::get_string(document, "paths.root", "");
+    settings.midi_name = std::toml::get_string(document, "midi.input", "");
+    settings.output_name = std::toml::get_string(document, "audio.output", "");
+    let frames: str8 = std::toml::get_string(document, "audio.buffer_frames", "128");
+    settings.buffer_frames = parse_number(frames, 128); free(frames);
+    let rate: str8 = std::toml::get_string(document, "audio.sample_rate", "0");
+    settings.sample_rate = parse_number(rate, 0); free(rate);
+    return settings;
+}
+
+/// Settings from disk, or the defaults when nothing is stored yet. The file in
+/// `base` is read first; when it points somewhere else, that root's own file
+/// wins, so moving the directory keeps the settings with it.
+pub fn load_from(base: str8) -> MlackerSettings {
+    let path: str8 = config_file(base);
+    var settings: MlackerSettings = read_file(path);
+    free(path);
+    if settings.root != "" && settings.root != base {
+        let moved: str8 = config_file(settings.root);
+        if std::fs::file_exists(moved) == 1 {
+            var elsewhere: MlackerSettings = read_file(moved);
+            if elsewhere.root != "" { settings_release(settings); settings = elsewhere; }
+            else { settings_release(elsewhere); }
+        }
+        free(moved);
+    }
+    if settings.root == "" { free(settings.root); settings.root = clone(base); }
+    if settings.buffer_frames < 32 { settings.buffer_frames = 128; }
+    return settings;
+}
+pub fn load() -> MlackerSettings {
+    let base: str8 = default_root();
+    var settings: MlackerSettings = load_from(base);
+    free(base); return settings;
+}
+
+/// Write the settings as TOML. A root away from `base` also leaves a copy
+/// there, so the next launch still finds where everything went.
+pub fn store_to(settings: MlackerSettings, base: str8) -> str8 {
+    if !ensure_layout(settings.root) { return format!("Cannot create {}", settings.root); }
+    let text: str8 = format!("# mlacker settings\n\n[paths]\nroot = \"{}\"\n\n[midi]\ninput = \"{}\"\n\n[audio]\noutput = \"{}\"\nbuffer_frames = {}\nsample_rate = {}\n",
+        settings.root, settings.midi_name, settings.output_name, settings.buffer_frames, settings.sample_rate);
+    let path: str8 = config_file(settings.root);
+    let written: result<i32, str8> = std::fs::write_all_text(path, text);
+    free(path);
+    var error: str8 = clone("");
+    if written.is_err() { free(error); error = format!("Cannot write {}/.mlacker.conf", settings.root); }
+    if error == "" && settings.root != base {
+        if ensure_layout(base) {
+            let pointer: str8 = config_file(base);
+            std::fs::write_all_text(pointer, text); free(pointer);
+        }
+    }
+    free(text); return error;
+}
+pub fn store(settings: MlackerSettings) -> str8 {
+    let base: str8 = default_root();
+    let error: str8 = store_to(settings, base);
+    free(base); return error;
+}
+
+/// Name of a MIDI input for the settings file: "" is the system default and
+/// "disabled" is no input at all.
+pub fn midi_name_of(id: i64) -> str8 {
+    if id == -2 { return clone("disabled"); }
+    if id < 0 { return clone(""); }
+    if id >= std::midi::input_count() { return clone(""); }
+    return clone(std::midi::input_name(id));
+}
+
+pub fn output_name_of(id: i64) -> str8 {
+    if id == -2 { return clone("disabled"); }
+    if id < 0 { return clone(""); }
+    if id >= std::audio::output_device_count() { return clone(""); }
+    return clone(std::audio::output_device_name(id));
+}
+
+/// Device id for a remembered name, or -3 when that device is gone. The caller
+/// falls back to the system default and says so.
+pub fn midi_id_of(name: str8) -> i64 {
+    if name == "disabled" { return -2; }
+    if name == "" { return -1; }
+    let count: i64 = std::midi::input_count();
+    // Bound to a typed local first: a qualified stdlib call used straight as a
+    // comparison operand comes back typed i32.
+    for id in 0..count {
+        let candidate: str8 = std::midi::input_name(id);
+        if candidate == name { return id; }
+    }
+    return -3;
+}
+
+pub fn output_id_of(name: str8) -> i64 {
+    if name == "disabled" { return -2; }
+    if name == "" { return -1; }
+    let count: i64 = std::audio::output_device_count();
+    for id in 0..count {
+        let candidate: str8 = std::audio::output_device_name(id);
+        if candidate == name { return id; }
+    }
+    return -3;
+}
+
+/// What a launch needs: the stored settings plus the device ids they resolve
+/// to now, and whether anything they name has gone missing.
+pub struct StartupSettings {
+    var settings: MlackerSettings; var midi_id: i64; var output_id: i64; var missing: bool;
+};
+/// Read the configuration and resolve its devices. Missing ones come back as
+/// the system default (-1) with `missing` set, so the caller can ask before
+/// overwriting the file.
+pub fn startup() -> StartupSettings {
+    var settings: MlackerSettings = load();
+    ensure_layout(settings.root);
+    let midi: i64 = midi_id_of(settings.midi_name);
+    let output: i64 = output_id_of(settings.output_name);
+    return StartupSettings { settings: settings, midi_id: midi == -3 ? -1 : midi,
+        output_id: output == -3 ? -1 : output, missing: midi == -3 || output == -3 };
+}
+
+/// Settings written back after the Settings dialog applied, with the error
+/// text when the file could not be written.
+pub struct StoreResult { var settings: MlackerSettings; var error: str8; var failed: bool; };
+/// Snapshot what the program is running with and write it to the folder the
+/// dialog named. An empty folder falls back to the default root.
+pub fn store_current(folder: str8, midi_id: i64, output_id: i64, frames: i64, rate: i64) -> StoreResult {
+    var next: MlackerSettings = MlackerSettings { root: clone(folder),
+        midi_name: midi_name_of(midi_id), output_name: output_name_of(output_id),
+        buffer_frames: frames, sample_rate: rate };
+    if next.root == "" { free(next.root); next.root = default_root(); }
+    let error: str8 = store(next);
+    return StoreResult { settings: next, error: error, failed: error != "" };
+}
+
+/// Text for the question asked when a remembered device is gone. Kept here so
+/// the application file stays clear of it.
+pub fn missing_devices_title() -> str8 { return clone("Some devices are unavailable"); }
+pub fn missing_devices_question() -> str8 {
+    return clone("Some of the previously saved devices are not available. Do you still want to save the settings?");
+}
+pub fn settings_kept_message() -> str8 {
+    return clone("Settings applied for this run; the saved file was left alone.");
+}
+
+/// Preset folder for a plugin, created if it is not there yet, so the file
+/// dialog always opens somewhere real.
+pub fn plugin_preset_dir(root: str8, plugin: str8) -> str8 {
+    let dir: str8 = preset_dir(root, plugin);
+    std::fs::mkdir_p(dir);
+    return dir;
+}

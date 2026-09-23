@@ -5,6 +5,7 @@ import re
 import select
 import struct
 import subprocess
+import tempfile
 import sys
 import termios
 import time
@@ -17,7 +18,7 @@ def main():
     master, slave = os.openpty()
     before = termios.tcgetattr(slave)
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
-    env = dict(os.environ, TERM="xterm-256color", MLANG_TUI_NO_HARDWARE="1")
+    env = dict(os.environ, MLACKER_HOME=tempfile.mkdtemp(prefix="mlacker-home-"), TERM="xterm-256color", MLANG_TUI_NO_HARDWARE="1")
     env.pop("NO_COLOR", None)
     process = subprocess.Popen([sys.argv[1]], stdin=slave, stdout=slave, stderr=slave, env=env)
 
@@ -53,7 +54,7 @@ def main():
         frame = send(b"\t\rjj\r")  # 128 -> 512 frames
         assert b"512 frames" in frame
         send(b"\t\rjjj\r")  # Device default -> 96 kHz
-        frame = send(b"\t\r")
+        frame = send(b"\t\t\r")  # past the Mlacker folder field to OK
         assert b"Settings applied. Audio disabled." in frame
         frame = send(F1 + b"jjj\r")
         assert b"MIDI input adapter" in frame and b"Disabled" in frame and b"512 frames" in frame and b"96 kHz" in frame

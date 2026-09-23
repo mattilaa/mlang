@@ -152,6 +152,57 @@ An item still in use asks first:
 Removing a sample also empties any drum pad loaded from it and renumbers the
 list.
 
+## The Mlacker folder
+
+mlacker keeps its own files under one directory, `~/Documents/Mlacker` by
+default. **File → Settings** shows it as *Mlacker folder (presets and settings)*
+and takes any path you type there; `MLACKER_HOME` overrides it for a run, which
+is how the tests stay out of a real home directory.
+
+```
+~/Documents/Mlacker/.mlacker.conf                     settings, as TOML
+~/Documents/Mlacker/Presets/                          every other plugin
+~/Documents/Mlacker/Presets/MlaPlugins/MlaDrum/       Mla Drum
+~/Documents/Mlacker/Presets/MlaPlugins/MlaVerb/       Mla Verb
+~/Documents/Mlacker/Presets/MlaPlugins/MlaDistortion/ Mla Distortion
+~/Documents/Mlacker/Presets/MlaPlugins/MlaDelay/      Mla Delay
+```
+
+The folders are created at startup, and **Instrument → Presets → Save/Load
+plugin preset** opens in the one belonging to the selected plugin. MIDI-learn
+files are not presets and keep browsing wherever you last were.
+
+Applying Settings writes `.mlacker.conf`:
+
+```toml
+# mlacker settings
+
+[paths]
+root = "/Users/you/Documents/Mlacker"
+
+[midi]
+input = "IAC Driver Bus 1"
+
+[audio]
+output = "Studio Interface"
+buffer_frames = 256
+sample_rate = 48000
+```
+
+Devices are remembered by name, since ids move when hardware comes and goes; an
+empty name is the system default and `disabled` is no device. The next launch
+reads the file and applies it. A device named there that the machine no longer
+has falls back to the system default, and applying Settings then asks before
+overwriting the file:
+
+> Some of the previously saved devices are not available. Do you still want to
+> save the settings?
+
+**Save** stores what is actually running, **Cancel** keeps the file as it was so
+the devices are still named when they come back. Choosing a folder away from the
+default writes the settings there and leaves a copy in the default location, so
+the next launch still finds where everything went.
+
 ## Keys and panes
 
 **F1** opens and closes the menu bar. **Tab** and **Shift+Tab** cycle forwards and

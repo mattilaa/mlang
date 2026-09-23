@@ -51,7 +51,7 @@ def main():
             assert b"MIDI input adapter" in tui.send(F1 + b"jjjjj\r")
             tui.send(b"\rk\r"); tui.send(b"\t\rk\r")
             # Tab past the buffer size and sample rate dropdowns to the buttons.
-            assert b"Settings applied. Audio disabled." in tui.send(b"\t\t\t\r", .6)
+            assert b"Settings applied. Audio disabled." in tui.send(b"\t\t\t\t\r", .6)
             assert b"0.25" in tui.send(b"\r")
             tui.send(b"\x1b")
             tui.send(b"\x7f")

@@ -15,10 +15,15 @@ from pathlib import Path
 F1 = b"\x1bOP"
 
 
+# Presets and .mlacker.conf belong to a scratch folder, never the real home.
+os.environ.setdefault("MLACKER_HOME", tempfile.mkdtemp(prefix="mlacker-home-"))
+
+
 class Terminal:
     def __init__(self, *args, cwd=None):
         self.master, self.slave = os.openpty()
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 28, 120, 0, 0))
+        # Presets and .mlacker.conf go to a scratch folder, never the real home.
         env = dict(os.environ, TERM="xterm-256color", MLANG_TUI_NO_HARDWARE="1")
         env.pop("MLANG_TUI_DEMO", None)
         env.pop("NO_COLOR", None)
@@ -124,7 +129,9 @@ def main():
             assert b"Save plugin preset (.mlapre)" in frame and b"Mlacker Test Instrument - " in frame, frame[-5000:]
             frame = tui.send(b"Warm patch\r", 0.6)
             assert b"Saved plugin preset:" in frame, frame[-5000:]
-            patch = Path(directory) / "Mlacker Test Instrument - Warm patch.mlapre"
+            # Plugin presets go to the Mlacker folder, not the session folder.
+            presets = Path(os.environ["MLACKER_HOME"]) / "Presets"
+            patch = presets / "Mlacker Test Instrument - Warm patch.mlapre"
             patch_data = patch.read_bytes()
             assert patch_data.startswith(struct.pack("<q", 6) + b"MLAPRE" + struct.pack("<qq", 1, 0))
             custom_patch = Path(directory) / "custom.mlapre"
@@ -167,7 +174,7 @@ def main():
             tui.send(b"\t\rk\r")
             tui.send(b"\t\rjj\r")  # Request 512 frames before applying.
             tui.send(b"\t\rjjj\r")  # Device default -> 96 kHz
-            frame = tui.send(b"\t\r", 0.6)
+            frame = tui.send(b"\t\t\r", 0.6)  # past the Mlacker folder field
             assert b"Settings applied. Audio disabled." in frame, frame[-5000:]
             frame = tui.send(F1 + b"llllll" + b"j\r")
             assert b"VST3 editor: Mlacker Test Instrument" in frame and b"0.25" in frame, frame[-5000:]
@@ -211,7 +218,7 @@ def main():
             tui.send(b"\t\rk\r")
             tui.send(b"\t\rjj\r")  # Request 512 frames before applying.
             tui.send(b"\t\rjjj\r")  # Device default -> 96 kHz
-            frame = tui.send(b"\t\r", 0.6)
+            frame = tui.send(b"\t\t\r", 0.6)  # past the Mlacker folder field
             assert b"Settings applied. Audio disabled." in frame, frame[-5000:]
             tui.send(b"\x13", 0.6)
             assert master_path.read_bytes() == master_saved, "Master plugin state changed on output replacement"

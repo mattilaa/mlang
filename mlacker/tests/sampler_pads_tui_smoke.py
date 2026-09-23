@@ -3,6 +3,7 @@ sample editing, kit presets and session round trip.
 
 Usage: sampler_pads_tui_smoke.py <mlacker> <MlaDrum.vst3>. No audio hardware.
 """
+import os
 import struct
 import sys
 import tempfile
@@ -46,7 +47,8 @@ def main():
         write_wav(snare, -12000)
         path = root / "pads.mlack"
         other = root / "other.mlack"
-        kit = root / "Mla Drum - Kit.mlapre"
+        # Plugin presets go to the Mlacker folder, one directory per Mla plugin.
+        kit = Path(os.environ["MLACKER_HOME"]) / "Presets" / "MlaPlugins" / "MlaDrum" / "Mla Drum - Kit.mlapre"
         tui = Terminal(cwd=directory)
         try:
             tui.read(0.8)
@@ -142,7 +144,7 @@ def main():
             tui.send(b"\t\rk\r")
             tui.send(b"\t\rjj\r")  # Request 512 frames before applying.
             tui.send(b"\t\rjjj\r")  # Device default -> 96 kHz
-            frame = expect(tui.send(b"\t\r", 0.8), b"Settings applied")
+            frame = expect(tui.send(b"\t\t\r", 0.8), b"Settings applied")  # past the folder field
             assert b"sampler pads" not in frame, frame[-4000:]
 
             # A cancelled pad file dialog must not capture the next file dialog.

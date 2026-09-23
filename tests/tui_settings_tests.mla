@@ -65,10 +65,12 @@ fn settings_modal_focus_and_buttons() {
     settings.output.set_items([DropDownItem { id: -2, label: "Disabled" }], -2);
     settings.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter }); verify(settings.midi.expanded);
     settings.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }); verify(settings.active && !settings.midi.expanded);
+    // MIDI, output, buffer, rate, Mlacker folder, then the buttons.
     settings.on_event(InputEvent { kind: InputKind::Pane, key: Key::Down }); verify(settings.focus.selected == 1);
     settings.on_event(InputEvent { kind: InputKind::Pane, key: Key::Down }); verify(settings.focus.selected == 2);
-    settings.on_event(InputEvent { kind: InputKind::Pane, key: Key::Down }); verify(settings.focus.selected == 4);
     settings.on_event(InputEvent { kind: InputKind::Pane, key: Key::Down }); verify(settings.focus.selected == 3);
+    settings.on_event(InputEvent { kind: InputKind::Pane, key: Key::Down }); verify(settings.focus.selected == 4);
+    settings.on_event(InputEvent { kind: InputKind::Pane, key: Key::Down }); verify(settings.focus.selected == 5);
     settings.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter }); verify(settings.pressed_button == 0);
     for _i in 0..10 { settings.tick(); }
     verify(!settings.active && settings.result == 1);
