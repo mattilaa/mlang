@@ -291,6 +291,60 @@ impl Biquad {
         self.a2 = v.inverse_a0 * (v.alpha - 1.0f);
     }
 
+    /// @brief Configure a two-pole band-reject (notch) filter using explicit Q.
+    pub fn set_bandreject_q(self: &mut Self, cutoff_hz: f32, q: f32, sample_rate_hz: f32) -> void {
+        let v: FilterDesign = Biquad::design_values_q(cutoff_hz, q, sample_rate_hz);
+        self.b0 = v.inverse_a0;
+        self.b1 = v.inverse_a0 * (0.0f - 2.0f * v.cosine);
+        self.b2 = v.inverse_a0;
+        self.a1 = v.inverse_a0 * (2.0f * v.cosine);
+        self.a2 = v.inverse_a0 * (v.alpha - 1.0f);
+    }
+
+    /// @brief Configure a peaking (bell) equalizer section.
+    ///
+    /// `gain_db` boosts or cuts around `center_hz`; `q` sets the bandwidth.
+    /// Zero gain gives an exact unity response.
+    pub fn set_peaking(self: &mut Self, center_hz: f32, gain_db: f32, q: f32, sample_rate_hz: f32) -> void {
+        let v: FilterDesign = Biquad::design_values_q(center_hz, q, sample_rate_hz);
+        // A = 10^(gain / 40), expressed with expf(ln(10) / 40 * gain).
+        let a: f32 = expf(0.05756462732485114210f * clamp_f32(gain_db, -48.0f, 48.0f));
+        let inverse_a0: f32 = 1.0f / (1.0f + v.alpha / a);
+        self.b0 = inverse_a0 * (1.0f + v.alpha * a);
+        self.b1 = inverse_a0 * (0.0f - 2.0f * v.cosine);
+        self.b2 = inverse_a0 * (1.0f - v.alpha * a);
+        self.a1 = inverse_a0 * (2.0f * v.cosine);
+        self.a2 = inverse_a0 * (v.alpha / a - 1.0f);
+    }
+
+    /// @brief Configure a low-shelf equalizer section.
+    ///
+    /// `q` of `0.7071` gives the steepest shelf without overshoot; larger values
+    /// add a resonant bump at the corner.
+    pub fn set_low_shelf(self: &mut Self, corner_hz: f32, gain_db: f32, q: f32, sample_rate_hz: f32) -> void {
+        self.set_shelf(corner_hz, gain_db, q, sample_rate_hz, 1.0f);
+    }
+
+    /// @brief Configure a high-shelf equalizer section.
+    pub fn set_high_shelf(self: &mut Self, corner_hz: f32, gain_db: f32, q: f32, sample_rate_hz: f32) -> void {
+        self.set_shelf(corner_hz, gain_db, q, sample_rate_hz, -1.0f);
+    }
+
+    // RBJ cookbook shelves: `side` is 1 for low shelf and -1 for high shelf.
+    fn set_shelf(self: &mut Self, corner_hz: f32, gain_db: f32, q: f32, sample_rate_hz: f32, side: f32) -> void {
+        let v: FilterDesign = Biquad::design_values_q(corner_hz, q, sample_rate_hz);
+        let gain: f32 = clamp_f32(gain_db, -48.0f, 48.0f);
+        let a: f32 = expf(0.05756462732485114210f * gain);
+        let two_sqrt_a_alpha: f32 = 2.0f * expf(0.02878231366242557105f * gain) * v.alpha;
+        let c: f32 = side * v.cosine;
+        let inverse_a0: f32 = 1.0f / ((a + 1.0f) + (a - 1.0f) * c + two_sqrt_a_alpha);
+        self.b0 = inverse_a0 * a * ((a + 1.0f) - (a - 1.0f) * c + two_sqrt_a_alpha);
+        self.b1 = inverse_a0 * side * 2.0f * a * ((a - 1.0f) - (a + 1.0f) * c);
+        self.b2 = inverse_a0 * a * ((a + 1.0f) - (a - 1.0f) * c - two_sqrt_a_alpha);
+        self.a1 = inverse_a0 * side * 2.0f * ((a - 1.0f) + (a + 1.0f) * c);
+        self.a2 = inverse_a0 * (0.0f - ((a + 1.0f) + (a - 1.0f) * c - two_sqrt_a_alpha));
+    }
+
     /// @brief Process one sample without allocating or locking.
     pub fn process(self: &mut Self, input: f32) -> f32 {
         var output: f32 = self.b0 * input + self.b1 * self.x1 + self.b2 * self.x2

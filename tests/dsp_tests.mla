@@ -42,6 +42,8 @@ use dsp::reverb2::Reverb2Frame;
 use dsp::reverb2::Reverb2Type;
 use std::testing::verify;
 
+extern fn sinf(value: f32) -> f32;
+
 fn approx_f32(a: f32, b: f32, eps: f32) -> bool {
     var diff: f32 = a - b;
     if diff < 0.0f {
@@ -177,6 +179,48 @@ fn test_dsp_biquad_lowpass_and_highpass_dc() {
         band_output = bandpass.process(1.0f);
     }
     verify(approx_f32(band_output, 0.0f, 0.001f));
+}
+
+fn biquad_sine_gain(design: Biquad, hz: f32) -> f32 {
+    var filter: Biquad = design;
+    var peak: f32 = 0.0f;
+    for i in 0..9600 {
+        let x: f32 = sinf(6.28318530717958647692f * hz * f32(i) / 48000.0f);
+        let y: f32 = filter.process(x);
+        if i >= 4800 && y > peak {
+            peak = y;
+        }
+    }
+    return peak;
+}
+
+#[test]
+fn test_dsp_biquad_equalizer_sections() {
+    var bell: Biquad = Biquad::new();
+    bell.set_peaking(1000.0f, 12.0f, 1.0f, 48000.0f);
+    verify(approx_f32(biquad_sine_gain(bell, 1000.0f), 3.981f, 0.05f));
+
+    var flat: Biquad = Biquad::new();
+    flat.set_peaking(1000.0f, 0.0f, 4.0f, 48000.0f);
+    verify(approx_f32(biquad_sine_gain(flat, 3000.0f), 1.0f, 0.001f));
+
+    var narrow: Biquad = Biquad::new();
+    narrow.set_peaking(1000.0f, 12.0f, 8.0f, 48000.0f);
+    verify(biquad_sine_gain(narrow, 2000.0f) < 1.1f);
+
+    var low: Biquad = Biquad::new();
+    low.set_low_shelf(500.0f, -12.0f, 0.70710678f, 48000.0f);
+    verify(approx_f32(biquad_sine_gain(low, 20.0f), 0.251f, 0.01f));
+    verify(approx_f32(biquad_sine_gain(low, 12000.0f), 1.0f, 0.01f));
+
+    var high: Biquad = Biquad::new();
+    high.set_high_shelf(2000.0f, 6.0f, 0.70710678f, 48000.0f);
+    verify(approx_f32(biquad_sine_gain(high, 100.0f), 1.0f, 0.01f));
+    verify(approx_f32(biquad_sine_gain(high, 20000.0f), 1.995f, 0.05f));
+
+    var notch: Biquad = Biquad::new();
+    notch.set_bandreject_q(1000.0f, 2.0f, 48000.0f);
+    verify(biquad_sine_gain(notch, 1000.0f) < 0.01f);
 }
 
 #[test]
