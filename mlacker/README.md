@@ -731,3 +731,13 @@ FX presets save exposed plugin parameters by stable ID and check the plugin name
 and parameter layout before loading. Invalid or incompatible files leave the
 parameters unchanged. Instrument presets continue to use `.mlapre` and may
 include sampler pads; the two formats are deliberately distinct.
+
+In the Audio, Instruments and Patterns sidebar, `Ctrl+N` toggles a `*`
+mark on the cursor item without activating it. Mark several items, then use
+`y` to copy and `p` to duplicate them, or `Backspace` to remove them.
+Without marks, these commands use the cursor item. Used audio/instruments
+show the existing removal confirmation; instrument notes can be kept for
+a replacement plugin. Audio duplicates are saved beside the original as
+`Sample - N.wav`, using float32 WAV to preserve the loaded samples and
+skipping existing filenames. Removing audio from the list leaves its disk file.
+Instrument copies restore exposed parameters and sampler pad assignments.

@@ -1,0 +1,159 @@
+mod tui_demo::patterns;
+mod tui_demo::audio_controller;
+mod std::fs;
+use tui_demo::patterns::*;
+use tui_demo::sequence::*;
+use tui_demo::audio_clip::*;
+use tui_demo::audio_controller::*;
+use tui::listview::*;
+use tui::table::table_matches;
+use tui::table::table_integer;
+use std::strbuf::*;
+use std::fs::file_exists;
+extern fn __mlang_std_audio_sample_copy_file(path: str8, pcm: list<f32>, channels: i64, rate: i64) -> i32;
+
+pub struct CopiedPad { var pad: i32; var clip: AudioClip; };
+pub struct SidebarCopy {
+    var name: str8; var path: str8; var clip: AudioClip; var pattern: SequenceTable;
+    var parameter_ids: list<f64>; var values: list<f64>; var pads: list<CopiedPad>;
+};
+pub fn duplicate_stem(name: str8) -> str8 {
+    let dash: i64 = rfind(name, " - ");
+    if dash >= 0 {
+        let suffix: str8 = sub(name, dash + 3, len(name) - dash - 3);
+        let numbered: bool = table_matches("[0-9]+", suffix); free(suffix);
+        if numbered { return sub(name, 0, dash); }
+    }
+    return clone(name);
+}
+pub fn duplicate_start(name: str8) -> i64 {
+    let dash: i64 = rfind(name, " - "); if dash < 0 { return 1; }
+    let suffix: str8 = sub(name, dash + 3, len(name) - dash - 3);
+    let parsed: result<i64, str8> = table_integer(suffix); free(suffix);
+    if parsed.is_ok() { let number: i64 = parsed.unwrap(); if number >= 1 && number < 99999 { return number + 1; } }
+    return 1;
+}
+pub struct SidebarPaste { var library: PatternLibrary; var audio: AudioSystem; var count: i32; };
+/// Owns snapshots: navigation, editing or removing the source cannot change y/p.
+pub struct SidebarClipboard { var kind: i32; var entries: list<SidebarCopy>; var error: str8; };
+impl SidebarClipboard {
+    pub fn release(self: &mut Self) -> void {
+        let entries: list<SidebarCopy> = self.entries;
+        for entry in entries {
+            free(entry.name); free(entry.path); entry.clip.release(); entry.pattern.release();
+            let pads: list<CopiedPad> = entry.pads; for pad in pads { pad.clip.release(); }
+        }
+        self.entries = []; self.kind = 0;
+    }
+    pub fn copy(self: &mut Self, source: &PatternLibrary, system: &AudioSystem) -> i32 {
+        var library: PatternLibrary = PatternLibrary {}; library = source;
+        var audio: AudioSystem = AudioSystem {}; audio = system;
+        self.release(); self.error = "";
+        self.kind = library.audio_mode ? 1 : (library.instruments_mode ? 2 : 3);
+        var view: ListView = ListView {}; view = library.audio_mode ? library.audio.view : (library.instruments_mode ? library.instruments : library.view);
+        let ids: list<i32> = view.targets();
+        for id in ids {
+            var entry: SidebarCopy = SidebarCopy { name: clone(""), path: clone("") };
+            if self.kind == 1 {
+                if id < 1 || id > library.audio.samples.len() { continue; }
+                let clip: AudioClip = library.audio.samples[id - 1]; entry.clip = clip.copy();
+                free(entry.name); entry.name = base_name(clip.source);
+            } else if self.kind == 2 {
+                if id < 1 || id > audio.instrument_paths.len() { continue; }
+                if audio.instrument_paths[id - 1] == "" { continue; }
+                free(entry.path); entry.path = clone(audio.instrument_paths[id - 1]);
+                free(entry.name); entry.name = clone(audio.output.instrument_name(id));
+                let count: i64 = audio.output.parameter_info(id, 0, 0);
+                for p in 0..count { entry.parameter_ids.push(audio.output.parameter_info(id, p, 4)); entry.values.push(audio.output.parameter_info(id, p, 2)); }
+                let pads: list<PadAssignment> = audio.pads;
+                for pad in pads {
+                    if pad.slot == id && pad.sample >= 0 && pad.sample < library.audio.samples.len() {
+                        let clip: AudioClip = library.audio.samples[pad.sample]; entry.pads.push(CopiedPad { pad: pad.pad, clip: clip.copy() });
+                    }
+                }
+            } else {
+                let index: i32 = library.index_of(id); if index < 0 { continue; }
+                let pattern: PatternEntry = library.patterns[index]; free(entry.name); entry.name = clone(pattern.name);
+                var data: SequenceTable = SequenceTable {}; data = id == library.active_id ? library.table : pattern.data;
+                entry.pattern = data.copy_pattern();
+            }
+            self.entries.push(entry);
+        }
+        return i32(self.entries.len());
+    }
+    fn name_available(self: SidebarClipboard, source: &PatternLibrary, name: str8) -> bool {
+        var library: PatternLibrary = PatternLibrary {}; library = source;
+        if self.kind == 3 { let entries: list<PatternEntry> = library.patterns; for entry in entries { if entry.name == name { return false; } } }
+        else { let items: list<ListItem> = library.instruments.items; for item in items {
+            let space: i64 = find(item.label, " "); let label: str8 = sub(item.label, space + 1, len(item.label) - space - 1);
+            let same: bool = label == name; free(label); if same { return false; }
+        } }
+        return true;
+    }
+    pub fn paste(self: &mut Self, source: &PatternLibrary, system: &AudioSystem) -> SidebarPaste {
+        var library: PatternLibrary = PatternLibrary {}; library = source;
+        var audio: AudioSystem = AudioSystem {}; audio = system;
+        self.error = ""; var copied: i32 = 0;
+        let current: i32 = library.audio_mode ? 1 : (library.instruments_mode ? 2 : 3);
+        if current != self.kind || self.entries.len() == 0 { self.error = "Copy items from this list with y first"; return SidebarPaste { library: library, audio: audio }; }
+        let entries: list<SidebarCopy> = self.entries;
+        for entry in entries {
+            if self.kind == 1 {
+                if library.audio.samples.len() >= 256 { self.error = "Maximum 256 samples"; break; }
+                let slash: i64 = rfind(entry.clip.source, "/");
+                let directory: str8 = sub(entry.clip.source, 0, slash + 1);
+                let dot: i64 = rfind(entry.name, ".");
+                let bare: str8 = dot > 0 ? sub(entry.name, 0, dot) : clone(entry.name);
+                let start: i64 = duplicate_start(bare); let stem: str8 = duplicate_stem(bare); free(bare);
+                var path: str8 = clone("");
+                for n in start..100000 {
+                    free(path); path = format!("{}{} - {}.wav", directory, stem, n);
+                    if file_exists(path) == 0 { break; }
+                }
+                free(directory); free(stem);
+                let saved: i32 = __mlang_std_audio_sample_copy_file(path, entry.clip.samples, entry.clip.channels, entry.clip.sample_rate);
+                if saved != 0 { free(path); self.error = "Cannot create audio copy beside the original"; break; }
+                var duplicate: AudioClip = entry.clip.copy(); free(duplicate.source); duplicate.source = path;
+                let index: i32 = library.audio.add_clip(duplicate); library.audio.view.selected = index;
+            } else {
+                let start: i64 = duplicate_start(entry.name); let stem: str8 = duplicate_stem(entry.name); var name: str8 = clone("");
+                for n in start..100000 { free(name); name = format!("{} - {}", stem, n); if self.name_available(library, name) { break; } }
+                free(stem);
+                if self.kind == 3 {
+                    var clips: list<AudioClip> = []; let tracks: list<SequenceTrack> = entry.pattern.tracks;
+                    for track in tracks { let instances: list<AudioInstance> = track.instances; for instance in instances { clips.push(instance.clip); } }
+                    if !library.import_pattern(name, entry.pattern, clips) { free(name); self.error = library.error; break; }
+                } else {
+                    let worker: bool = audio.midi.worker.raw != 0; audio.midi.release();
+                    let loaded: str8 = audio.add_instrument(entry.path);
+                    if loaded != "" { free(loaded); free(name); audio.resume_midi(worker); self.error = "Cannot duplicate instrument"; break; }
+                    let id: i32 = audio.last_instrument_id; let restart: bool = audio.output.hardware_output();
+                    var ok: bool = audio.output.stop() == 0;
+                    for p in 0..entry.values.len() {
+                        if !ok { break; }
+                        var target: i64 = -1; let count: i64 = audio.output.parameter_info(id, 0, 0);
+                        for q in 0..count { if audio.output.parameter_info(id, q, 4) == entry.parameter_ids[p] { target = q; } }
+                        if target < 0 { ok = false; break; }
+                        if audio.output.restore_parameter(id, target, entry.values[p]) != 0 { ok = false; break; }
+                    }
+                    let pads: list<CopiedPad> = entry.pads;
+                    for pad in pads {
+                        if !ok { break; }
+                        let sample: i32 = library.audio.add_clip(pad.clip.copy());
+                        if sample < 0 { ok = false; break; }
+                        let error: str8 = audio.assign_pad(id, pad.pad, sample, pad.clip.samples, pad.clip.channels, pad.clip.sample_rate, pad.clip.source);
+                        if error != "" { free(error); ok = false; }
+                    }
+                    if restart { audio.output.start(); } audio.resume_midi(worker);
+                    if !ok { let error: str8 = audio.remove_instrument(id); if error != "" { free(error); } free(name); self.error = "Cannot restore duplicated instrument settings"; break; }
+                    // Add to the library without changing the current track's assignment.
+                    library.instruments.items.push(ListItem { id: id, label: format!("{}{} {}", id < 10 ? "00" : "0", id, name) });
+                    library.instruments.selected = i32(library.instruments.items.len()) - 1;
+                }
+                free(name);
+            }
+            copied = copied + 1;
+        }
+        return SidebarPaste { library: library, audio: audio, count: copied };
+    }
+}

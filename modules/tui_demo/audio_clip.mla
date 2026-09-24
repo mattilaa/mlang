@@ -178,7 +178,7 @@ impl AudioClip {
     pub fn load(path: str8, bpm: i32) -> result<AudioClip, str8> {
         if bpm <= 0 { return Err<AudioClip, str8>("Invalid BPM"); }
         let loaded: result<PcmAudio, str8> = PcmAudio::load(path);
-        if loaded.is_err() { return Err<AudioClip, str8>("Cannot decode audio: use mono/stereo 16-bit PCM WAV or AIFF"); }
+        if loaded.is_err() { return Err<AudioClip, str8>("Cannot decode audio: use mono/stereo PCM16/float32 WAV or PCM16 AIFF"); }
         let audio: PcmAudio = loaded.unwrap();
         let frames: i64 = audio.frame_count(); let rate: i64 = audio.sample_rate();
         let channels: i64 = audio.channels();

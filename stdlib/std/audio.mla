@@ -53,7 +53,7 @@ alias audio_mixer = AudioMixer;
 alias audio_track = AudioTrack;
 alias audio_return_track = AudioReturnTrack;
 
-/// @brief Owned decoded mono/stereo 16-bit PCM WAV or AIFF file.
+/// @brief Owned decoded mono/stereo 16-bit PCM or float32 WAV, or 16-bit AIFF file.
 pub struct PcmAudio {
     var handle: i64;
 };
@@ -129,7 +129,7 @@ pub fn output_device_name(device_id: i64) -> str8 {
 }
 
 impl PcmAudio {
-    /// @brief Decode a mono/stereo 16-bit PCM WAV, AIFF, or AIFF-C file.
+    /// @brief Decode a mono/stereo 16-bit PCM or float32 WAV, or 16-bit AIFF/AIFF-C file.
     ///
     /// Paths beginning with `~/` are expanded using the current home directory.
     pub fn load(path: str8) -> result<PcmAudio, str8> {
