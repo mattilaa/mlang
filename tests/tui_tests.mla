@@ -3578,3 +3578,79 @@ fn tui_record_metronome_audio() {
     verify(block.left(2047) == 0.0f);
     block.close(); audio.release();
 }
+
+#[test]
+fn tui_vertical_zoom_keeps_rows_and_places_offset_notes() {
+    var table: SequenceTable = SequenceTable::new();
+    let area: Rect = Rect::new(0, 0, 100, 24);
+    table.zoom_tracks(2, true, area);
+    table.selected_column = 1; table.selected_row = 0; table.edit_event(decode_input("\r"), area); table.editor.set_text("C-4"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 4; table.edit_event(decode_input("\r"), area); table.editor.set_text("0.00"); table.edit_event(decode_input("\r"), area);
+    table.selected_row = 1; table.selected_column = 1; table.edit_event(decode_input("\r"), area); table.editor.set_text("D-4"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 4; table.edit_event(decode_input("\r"), area); table.editor.set_text("-0.50"); table.edit_event(decode_input("\r"), area);
+    table.selected_row = 2; table.selected_column = 1; table.edit_event(decode_input("\r"), area); table.editor.set_text("E-4"); table.edit_event(decode_input("\r"), area);
+    table.selected_column = 4; table.edit_event(decode_input("\r"), area); table.editor.set_text("-1.75"); table.edit_event(decode_input("\r"), area);
+    table.selected_row = 0; table.selected_column = 1;
+    let count: i64 = table.rows.len(); let revision: i64 = table.revision;
+    let surface: Surface = Surface::new(100, 24); let theme: Theme = Theme::dark_blue();
+    table.cycle_vertical_zoom(area); verify(table.row_scale == 2);
+    table.paint(surface, area, theme); table.paint_subdivision_notes(surface, area, theme);
+    let body: Rect = table.body(area); let x: i32 = table.column_x(1);
+    let number: Cell = surface.cell(0, body.y + 1); verify(number.glyph == 46);
+    table.cycle_vertical_zoom(area); verify(table.row_scale == 4);
+    table.paint(surface, area, theme); table.paint_subdivision_notes(surface, area, theme);
+    let main: Cell = surface.cell(x, body.y); let quarter: Cell = surface.cell(x, body.y + 1); let half: Cell = surface.cell(x, body.y + 2);
+    verify(main.glyph == 67 && quarter.glyph == 69 && half.glyph == 68);
+    verify(main.foreground > half.foreground && half.foreground > quarter.foreground);
+    let next_number: Cell = surface.cell(0, body.y + 4); verify(next_number.glyph != 32);
+    let dark: Cell = surface.cell(0, body.y + 1); let light: Cell = surface.cell(0, body.y + 2);
+    verify(dark.background < light.background && light.background < next_number.background);
+    verify(table.rows.len() == count && table.revision == revision);
+    table.selected_row = 63; table.reconcile(area);
+    table.selected_subrow = 3; table.reconcile(area);
+    let selected: Rect = table.selected_rect(area); verify(selected.height == 1 && selected.y >= body.y && selected.y < body.y + body.height);
+    table.cycle_vertical_zoom(area); verify(table.row_scale == 1 && table.selected_row == 63);
+    let stored: TableRow = table.rows[2]; verify(stored.cells[1] == "E-4" && stored.cells[4] == "-1.75");
+    surface.release(); table.release();
+}
+
+#[test]
+fn tui_subdivision_notes_edit_save_and_play_without_zoom() {
+    let area: Rect = Rect::new(0, 0, 120, 24);
+    var sequence: SequenceTable = SequenceTable::empty(); sequence.create_track_kind(false, false, area);
+    sequence.selected_row = 0; sequence.selected_column = 1;
+    sequence.cycle_vertical_zoom(area); sequence.cycle_vertical_zoom(area);
+    let pitches: list<str8> = ["C-4", "D-4", "E-4", "F-4"];
+    for i in 0..4 {
+        verify(sequence.selected_row == 0 && sequence.selected_subrow == i);
+        sequence.edit_event(decode_input("\r"), area); sequence.editor.set_text(pitches[i]);
+        sequence.edit_event(decode_input("\r"), area); verify(!sequence.editing);
+        sequence.edit_event(decode_input("j"), area);
+    }
+    verify(sequence.selected_row == 1 && sequence.selected_subrow == 0 && sequence.rows.len() == 64);
+    sequence.edit_event(decode_input("k"), area); verify(sequence.selected_row == 0 && sequence.selected_subrow == 3);
+    sequence.edit_event(decode_input("\r"), area); verify(sequence.editor.text == "F-4");
+    sequence.editor.set_text("G-4"); sequence.edit_event(decode_input("\r"), area);
+    verify(sequence.mixer_event(decode_input("R"), area));
+    verify(sequence.record_note(67, 101));
+    sequence.cycle_vertical_zoom(area); verify(sequence.row_spacing() == 1 && sequence.selected_subrow == 0);
+    var playback: NotePlayback = NotePlayback { start_row: 0 };
+    for i in 0..4 {
+        playback.update(sequence, i * 3750, true);
+        verify(playback.events.len() == 1);
+        let event: NoteEvent = playback.events[0];
+        verify(event.on == 1 && event.tick == i * 3750 && event.note == (i == 3 ? 67 : 60 + i * 2));
+    }
+    let directory: str8 = clone("/private/tmp/mlacker-subrow-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/subrows.mlapatt", directory);
+    var holder: PatternLibrary = PatternLibrary::empty(); holder.table.release(); holder.table = sequence;
+    verify(SessionCodec::save_pattern(path, "Subrows", holder.table));
+    let loaded: result<tui_demo::session::PatternData, str8> = SessionCodec::load_pattern(path); verify(loaded.is_ok());
+    let data: tui_demo::session::PatternData = loaded.unwrap();
+    var replay: NotePlayback = NotePlayback { start_row: 0 };
+    for i in 0..4 {
+        replay.update(data.table, i * 3750, true); verify(replay.events.len() == 1);
+        let event: NoteEvent = replay.events[0]; verify(event.on == 1 && event.tick == i * 3750);
+    }
+    data.release(); holder.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}

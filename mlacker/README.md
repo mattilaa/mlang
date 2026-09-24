@@ -258,6 +258,19 @@ and selects a new pattern without changing the song matrix. Instrument assignmen
 and effect routing are cleared so you can assign plugins in the current session.
 The save dialog appends `.mlapatt` when needed.
 
+In the Pattern pane, **Ctrl-Z** cycles vertical detail through **1/16 → 1/32 →
+1/64 → 1/16**. Only original sixteenth-note rows have row numbers; intermediate
+lines show `.` and use alternating darker backgrounds. Up/Down (or `j`/`k`)
+visits each visible subdivision: the 1/64 view has three editable positions
+between numbered rows. Enter edits a note, velocity, length or offset; Shift-J/K
+adjusts values and Backspace clears the selected field. MIDI step entry on an
+armed track also uses the selected subdivision. Notes entered between
+rows are stored with timing offsets and play at every zoom level, including
+1/16. They survive session and pattern save/load without increasing the pattern's
+main row count. Chords at each visible position share horizontal note lanes.
+The 1/32 notes are slightly darker and 1/64 notes darker again; note-length lines
+expand with the view.
+
 ## Pattern visual selection
 
 In normal Pattern mode, `o` inserts a blank row below the cursor and `O` inserts
