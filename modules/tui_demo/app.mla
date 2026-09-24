@@ -216,12 +216,14 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
     // The song matrix takes over this pane; the caller paints it right after,
     // still below the menu bar.
     if !matrix_visible {
-        let title: str8 = format!(" Pattern / {} {} ", patterns.active_id, patterns.active_name());
+        let title: str8 = format!(" Pattern / {} {} | 1/{} ", patterns.active_id, patterns.active_name(), table.row_spacing() * 16);
         let sequence: Panel = Panel { title: title };
         let top: Rect = sequence.paint_focused(surface, editor.bounds, theme, focus.is_active(1));
         free(title);
+        table.mark_hidden_notes();
         table.paint(surface, top, theme);
         table.paint_audio_style(surface, top, theme, sample.grainy, sample.wave);
+        table.paint_subdivision_notes(surface, top, theme);
         table.paint_note_lengths(surface, top, theme);
         table.paint_editor(surface, top, theme);
     }
@@ -1092,6 +1094,9 @@ pub fn run() -> i32 {
             }
             else if(event.code == 98 && event.modifiers == 5) ||(event.code == 2 && event.modifiers == 1) {
                 bpm_dialog.open(transport.bpm); dirty = true;
+            }
+            else if ((event.code == 26 && event.modifiers == 1) || (event.code == 122 && event.modifiers == 5)) && focus.selected == 1 && !matrix.visible {
+                library.table.cycle_vertical_zoom(panes[1].bounds.inset(1)); dirty = true;
             }
             else if event.code == 109 && event.modifiers == 1 {
                 mixer.visible = !mixer.visible; dirty = true;
