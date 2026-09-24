@@ -287,7 +287,11 @@ duration. The maximum pattern length remains 16384 rows.
 In the Pattern pane, `v` starts a rectangular selection at the current cell.
 Use `h/j/k/l` to extend it; selected cells have a brighter background. `y` copies
 the selection, `d` cuts/clears its cells without removing rows, and `p` pastes at
-the current cell. `Esc` or `v` cancels selection. The internal clipboard survives
+the current cell. `gg` and `G` extend an active selection to the first or last
+visible position, including subdivisions. Use `gg v G y` to copy from top to
+bottom, or `v gg` / `v G` to select toward either end from the cursor.
+Backspace clears the selected cells without removing rows or replacing the
+clipboard; `d` still cuts them. `Esc` or `v` cancels selection. The internal clipboard survives
 pattern switches; it is not the operating-system clipboard or session data.
 
 `Shift+V` selects whole rows across every track; `j/k` extends the row range.

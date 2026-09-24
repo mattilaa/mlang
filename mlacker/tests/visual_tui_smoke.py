@@ -52,6 +52,15 @@ def main():
         assert b"C-4" not in frame and b"004" in frame, frame[-5000:]
         frame = tui.send(b"p")
         assert frame.count(b"C-4") == 4, frame[-5000:]
+        # Whole-pattern and reverse boundary selections retain the anchor.
+        tui.send(b"ggvGy")
+        frame = tui.send(b"Gvgg\x7f")
+        assert b"C-4" not in frame, frame[-5000:]
+        frame = tui.send(b"p")
+        assert frame.count(b"C-4") == 4, frame[-5000:]
+        tui.send(b"jvG\x08")
+        frame = tui.send(b"gg")
+        assert frame.count(b"C-4") == 1, frame[-5000:]
     finally:
         tui.close()
     print("PASS: visual copy/cut/paste/transpose, matching-column OK modal, new-note velocity, Escape")

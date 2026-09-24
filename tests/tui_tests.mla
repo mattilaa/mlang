@@ -3745,3 +3745,40 @@ fn tui_subdivision_insert_delete_moves_only_one_visible_slot() {
     verify(sequence.rows.len() == 65 && sequence.selected_row == 64 && sequence.selected_subrow == 0);
     sequence.release();
 }
+
+#[test]
+fn tui_visual_boundary_selection_copy_and_backspace() {
+    let area: Rect = Rect::new(0, 0, 120, 24);
+    for zoom in 0..3 {
+        var sequence: SequenceTable = SequenceTable::empty(); sequence.create_track_kind(false, false, area);
+        sequence.set_length(4, area); sequence.selected_row = 0; sequence.selected_column = 1;
+        for _i in 0..zoom { sequence.cycle_vertical_zoom(area); }
+        sequence.edit_event(decode_input("\r"), area); sequence.editor.set_text("C-4"); sequence.edit_event(decode_input("\r"), area);
+        sequence.edit_event(decode_input("G"), area);
+        verify(sequence.selected_row == 3 && sequence.selected_subrow == sequence.row_spacing() - 1);
+        sequence.edit_event(decode_input("\r"), area); sequence.editor.set_text("D-4"); sequence.edit_event(decode_input("\r"), area);
+        sequence.edit_event(decode_input("g"), area); sequence.edit_event(decode_input("g"), area);
+        verify(sequence.selected_row == 0 && sequence.selected_subrow == 0);
+        sequence.edit_event(decode_input("v"), area); sequence.edit_event(decode_input("G"), area);
+        verify(sequence.visual && sequence.anchor_row == 0 && sequence.anchor_subrow == 0);
+        sequence.edit_event(decode_input("y"), area);
+        verify(!sequence.visual && sequence.clipboard.len() == 4 * sequence.row_spacing());
+        // Select backwards to the first subdivision, then clear without cutting.
+        sequence.edit_event(decode_input("G"), area); sequence.edit_event(decode_input("v"), area);
+        sequence.edit_event(decode_input("g"), area); sequence.edit_event(decode_input("g"), area);
+        verify(sequence.visual && sequence.selected_row == 0 && sequence.selected_subrow == 0);
+        sequence.edit_event(decode_input("\x7f"), area);
+        verify(!sequence.visual && !sequence.paste_error && sequence.rows.len() == 4);
+        let empty: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0); verify(empty.len() == 0);
+        verify(sequence.clipboard.len() == 4 * sequence.row_spacing());
+        sequence.edit_event(decode_input("p"), area); verify(!sequence.paste_error);
+        let restored: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0); verify(restored.len() == 2);
+        // v-G also works from a middle row without moving the anchor.
+        sequence.selected_row = 1; sequence.selected_subrow = 0;
+        sequence.edit_event(decode_input("v"), area); sequence.edit_event(decode_input("G"), area);
+        verify(sequence.visual && sequence.anchor_row == 1);
+        sequence.edit_event(decode_input("\x08"), area);
+        let remaining: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0); verify(remaining.len() == 1);
+        sequence.release();
+    }
+}

@@ -1955,6 +1955,19 @@ pub fn copy_visual(self: &mut Self, cut: bool, area: Rect) -> void {
     if cut { self.apply_clipboard(true, area); }
     self.reconcile(area);
 }
+/// Delete the selected cells while retaining the previous paste buffer.
+pub fn erase_visual(self: &mut Self, area: Rect) -> void {
+    let saved: list<TableRow> = self.clipboard; let kinds: list<str8> = self.clipboard_kinds;
+    let whole: bool = self.clipboard_rows; let spacing: i32 = self.clipboard_spacing;
+    var audio: AudioClip = AudioClip {}; audio = self.audio_clipboard;
+    self.clipboard = []; self.clipboard_kinds = []; self.audio_clipboard = AudioClip {};
+    let track: i32 = self.active_track();
+    if track >= 0 && self.tracks[track].audio { self.visual_audio_copy(true, area); }
+    else { self.copy_visual(true, area); }
+    self.clear_clipboard(); self.audio_clipboard.release();
+    self.clipboard = saved; self.clipboard_kinds = kinds; self.clipboard_rows = whole; self.clipboard_spacing = spacing;
+    self.audio_clipboard = audio;
+}
 pub fn paste_visual(self: &mut Self, area: Rect) -> void { self.apply_clipboard(false, area); }
 fn apply_clipboard(self: &mut Self, erase: bool, area: Rect) -> void {
     self.error = ""; self.paste_error = false;
@@ -2129,8 +2142,21 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         }
         return true;
     }
+    // Boundary movement uses visible positions and keeps the selection anchor.
+    let jump_top: bool = event.modifiers == 1 && event.code == 103;
+    if !jump_top { self.top_pending = false; }
+    if (event.code == 71 && (event.modifiers == 1 || event.modifiers == 2)) || (event.code == 103 && event.modifiers == 2) {
+        self.selected_row = i32(self.rows.len()) - 1; self.selected_subrow = self.row_spacing() - 1;
+        self.reconcile(area); return true;
+    }
+    if jump_top {
+        if self.top_pending { self.selected_row = 0; self.selected_subrow = 0; self.top_pending = false; self.reconcile(area); }
+        else { self.top_pending = true; }
+        return true;
+    }
     if self.visual {
-        self.delete_pending = false; self.top_pending = false;
+        self.delete_pending = false;
+        if event.kind == InputKind::Edit && event.key == Key::Backspace && event.modifiers == 1 { self.erase_visual(area); return true; }
         if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { self.visual = false; return true; }
         if (event.modifiers == 1 || event.modifiers == 2) &&
                 (event.code == 74 || event.code == 75 || (event.modifiers == 2 && (event.code == 106 || event.code == 107))) {
@@ -2174,8 +2200,6 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
             (event.code == 111 && event.modifiers == 2) { self.insert_row(true, area); return true; }
     let delete_key: bool = event.modifiers == 1 && event.code == 100;
     if !delete_key { self.delete_pending = false; }
-    let top_key: bool = event.modifiers == 1 && event.code == 103;
-    if !top_key { self.top_pending = false; }
     self.reconcile(area);
     if (event.code == 90 && (event.modifiers == 1 || event.modifiers == 2)) || (event.code == 122 && event.modifiers == 2) {
         self.zoom_tracks(-1, true, area); return true;
@@ -2190,15 +2214,6 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         if !track.audio { self.zoom_tracks(-1, false, area); return true; }
         track.wave_zoom = !track.wave_zoom;
         self.replace_track(index, track); self.rebuild_columns(); self.reconcile(area); return true;
-    }
-    if (event.code == 71 && (event.modifiers == 1 || event.modifiers == 2)) ||
-            (event.code == 103 && event.modifiers == 2) {
-        self.selected_row = i32(self.rows.len()) - 1; self.reconcile(area); return true;
-    }
-    if top_key {
-        if self.top_pending { self.selected_row = 0; self.top_pending = false; self.reconcile(area); }
-        else { self.top_pending = true; }
-        return true;
     }
     if self.selected_row < 0 || self.selected_column < 0 { return self.on_event(event, area); }
     if delete_key {
