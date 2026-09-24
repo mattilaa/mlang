@@ -920,3 +920,39 @@ int32_t __mlang_std_audio_controller_load_processor(int64_t handle, const char *
     c->processor = next; c->processor_reset = 1; ac_silence(c);
     audio_clear_error(); return 0;
 }
+
+/* Exclusive float WAV export for a duplicated, possibly edited session sample.
+ * No existing path is ever truncated; PCM channels and precision are retained. */
+int32_t __mlang_std_audio_sample_copy_file(const char *path, mlang_list_t pcm,
+                                         int64_t channels, int64_t rate) {
+    if (!path || !*path || !pcm.data || pcm.size <= 0 || channels < 1 || channels > 32 ||
+        pcm.size % channels || rate < 1 || rate > 384000 ||
+        (uint64_t)pcm.size > (UINT32_MAX - 36u) / 4u) return -1;
+    FILE *file = fopen(path, "wbx");
+    if (!file) return -1;
+    uint32_t size = (uint32_t)pcm.size * 4u;
+    unsigned char header[44] = {0};
+    memcpy(header, "RIFF", 4); memcpy(header + 8, "WAVEfmt ", 8);
+    memcpy(header + 36, "data", 4);
+    uint32_t values[] = {size + 36u, 16, (uint32_t)rate,
+                        (uint32_t)(rate * channels * 4), size};
+    unsigned offsets[] = {4, 16, 24, 28, 40};
+    for (unsigned i = 0; i < 5; ++i)
+        for (unsigned b = 0; b < 4; ++b) header[offsets[i] + b] = (unsigned char)(values[i] >> (b * 8));
+    header[20] = 3; header[22] = (unsigned char)channels;
+    header[32] = (unsigned char)(channels * 4); header[34] = 32;
+    int ok = fwrite(header, 1, sizeof(header), file) == sizeof(header);
+    const float *samples = (const float *)pcm.data;
+    unsigned char bytes[4096];
+    for (int64_t start = 0; ok && start < pcm.size; start += 1024) {
+        size_t count = (size_t)(pcm.size - start); if (count > 1024) count = 1024;
+        for (size_t i = 0; i < count; ++i) {
+            uint32_t bits; memcpy(&bits, samples + start + i, sizeof(bits));
+            for (unsigned b = 0; b < 4; ++b) bytes[i * 4 + b] = (unsigned char)(bits >> (b * 8));
+        }
+        ok = fwrite(bytes, 4, count, file) == count;
+    }
+    if (fclose(file) != 0) ok = 0;
+    if (!ok) remove(path);
+    return ok ? 0 : -1;
+}

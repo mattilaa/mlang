@@ -3703,3 +3703,130 @@ fn tui_subdivision_clipboard_keeps_spacing_and_hidden_indicator() {
     verify(sequence.rows.len() == 64);
     surface.release(); sequence.release();
 }
+
+#[test]
+fn tui_subdivision_insert_delete_moves_only_one_visible_slot() {
+    let area: Rect = Rect::new(0, 0, 120, 24);
+    var sequence: SequenceTable = SequenceTable::empty(); sequence.create_track_kind(false, false, area);
+    sequence.selected_row = 0; sequence.selected_column = 1;
+    sequence.cycle_vertical_zoom(area); sequence.cycle_vertical_zoom(area);
+    let pitches: list<str8> = ["C-4", "D-4", "E-4", "F-4", "G-4"];
+    for pitch in pitches {
+        sequence.edit_event(decode_input("\r"), area); sequence.editor.set_text(pitch); sequence.edit_event(decode_input("\r"), area);
+        sequence.edit_event(decode_input("j"), area);
+    }
+    sequence.selected_row = 0; sequence.selected_subrow = 1;
+    sequence.edit_event(decode_input("d"), area); sequence.edit_event(decode_input("d"), area);
+    verify(sequence.rows.len() == 64 && sequence.selected_subrow == 1);
+    let deleted: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0);
+    verify(deleted.len() == 4);
+    for i in 0..4 { let note: tui_demo::sequence::ViewNote = deleted[i]; verify(note.slot == i); }
+    sequence.edit_event(decode_input("\r"), area); verify(sequence.editor.text == "E-4"); sequence.edit_event(decode_input("\r"), area);
+    sequence.edit_event(decode_input("o"), area);
+    verify(sequence.selected_row == 0 && sequence.selected_subrow == 2);
+    sequence.edit_event(decode_input("\r"), area); verify(sequence.editor.text == ""); sequence.edit_event(decode_input("\r"), area);
+    let below: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0);
+    let moved: tui_demo::sequence::ViewNote = below[2]; verify(moved.slot == 3);
+    sequence.edit_event(decode_input("O"), area);
+    let above: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0);
+    let moved_again: tui_demo::sequence::ViewNote = above[2]; verify(moved_again.slot == 4);
+    let last: tui_demo::sequence::ViewNote = above[3]; verify(last.slot == 5);
+    verify(sequence.rows.len() == 64);
+    // At 1/32, the edit step is two 1/64 positions.
+    sequence.cycle_vertical_zoom(area); sequence.cycle_vertical_zoom(area);
+    sequence.selected_row = 1; sequence.selected_subrow = 0;
+    sequence.edit_event(decode_input("O"), area);
+    sequence.cycle_vertical_zoom(area);
+    let half: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0);
+    let shifted: tui_demo::sequence::ViewNote = half[2]; verify(shifted.slot == 6);
+    // A final-slot insertion provides a new empty position without dropping notes.
+    sequence.selected_row = 63; sequence.selected_subrow = 3;
+    sequence.edit_event(decode_input("o"), area);
+    verify(sequence.rows.len() == 65 && sequence.selected_row == 64 && sequence.selected_subrow == 0);
+    sequence.release();
+}
+
+#[test]
+fn tui_visual_boundary_selection_copy_and_backspace() {
+    let area: Rect = Rect::new(0, 0, 120, 24);
+    for zoom in 0..3 {
+        var sequence: SequenceTable = SequenceTable::empty(); sequence.create_track_kind(false, false, area);
+        sequence.set_length(4, area); sequence.selected_row = 0; sequence.selected_column = 1;
+        for _i in 0..zoom { sequence.cycle_vertical_zoom(area); }
+        sequence.edit_event(decode_input("\r"), area); sequence.editor.set_text("C-4"); sequence.edit_event(decode_input("\r"), area);
+        sequence.edit_event(decode_input("G"), area);
+        verify(sequence.selected_row == 3 && sequence.selected_subrow == sequence.row_spacing() - 1);
+        sequence.edit_event(decode_input("\r"), area); sequence.editor.set_text("D-4"); sequence.edit_event(decode_input("\r"), area);
+        sequence.edit_event(decode_input("g"), area); sequence.edit_event(decode_input("g"), area);
+        verify(sequence.selected_row == 0 && sequence.selected_subrow == 0);
+        sequence.edit_event(decode_input("v"), area); sequence.edit_event(decode_input("G"), area);
+        verify(sequence.visual && sequence.anchor_row == 0 && sequence.anchor_subrow == 0);
+        sequence.edit_event(decode_input("y"), area);
+        verify(!sequence.visual && sequence.clipboard.len() == 4 * sequence.row_spacing());
+        // Select backwards to the first subdivision, then clear without cutting.
+        sequence.edit_event(decode_input("G"), area); sequence.edit_event(decode_input("v"), area);
+        sequence.edit_event(decode_input("g"), area); sequence.edit_event(decode_input("g"), area);
+        verify(sequence.visual && sequence.selected_row == 0 && sequence.selected_subrow == 0);
+        sequence.edit_event(decode_input("\x7f"), area);
+        verify(!sequence.visual && !sequence.paste_error && sequence.rows.len() == 4);
+        let empty: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0); verify(empty.len() == 0);
+        verify(sequence.clipboard.len() == 4 * sequence.row_spacing());
+        sequence.edit_event(decode_input("p"), area); verify(!sequence.paste_error);
+        let restored: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0); verify(restored.len() == 2);
+        // v-G also works from a middle row without moving the anchor.
+        sequence.selected_row = 1; sequence.selected_subrow = 0;
+        sequence.edit_event(decode_input("v"), area); sequence.edit_event(decode_input("G"), area);
+        verify(sequence.visual && sequence.anchor_row == 1);
+        sequence.edit_event(decode_input("\x08"), area);
+        let remaining: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0); verify(remaining.len() == 1);
+        sequence.release();
+    }
+}
+
+mod tui_demo::sidebar_clipboard;
+use tui_demo::sidebar_clipboard::SidebarClipboard;
+use tui_demo::sidebar_clipboard::SidebarPaste;
+
+#[test]
+fn tui_sidebar_marks_and_pattern_snapshot() {
+    var view: ListView = ListView { items: [ListItem { id: 4, label: "A" }, ListItem { id: 9, label: "B" }] };
+    verify(view.toggle_mark()); view.selected = 1; verify(view.toggle_mark());
+    let both: list<i32> = view.targets(); verify(both.len() == 2 && both[0] == 4 && both[1] == 9);
+    verify(view.toggle_mark()); let one: list<i32> = view.targets(); verify(one.len() == 1 && one[0] == 4);
+    var library: PatternLibrary = PatternLibrary::empty(); var audio: AudioSystem = AudioSystem {};
+    let area: Rect = Rect::new(0, 0, 120, 24);
+    library.table.create_track_kind(false, false, area);
+    library.table.edit_event(decode_input("K"), area);
+    var clipboard: SidebarClipboard = SidebarClipboard {};
+    verify(clipboard.copy(library, audio) == 1);
+    library.table.clear_row();
+    let pasted: SidebarPaste = clipboard.paste(library, audio); library = pasted.library; audio = pasted.audio;
+    verify(pasted.count == 1 && library.patterns.len() == 2);
+    let name: str8 = library.active_name(); verify(name == "Untitled - 1");
+    let row: TableRow = library.table.rows[0]; verify(row.cells[1] == "C-4");
+    library.select(1); let original: TableRow = library.table.rows[0]; verify(original.cells[1] == "");
+    clipboard.release(); library.release(); audio.release();
+}
+
+#[test]
+fn tui_sidebar_audio_copy_is_numbered_lossless_and_exclusive() {
+    let directory: str8 = clone("/private/tmp/mlacker-sidebar-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/Kick - 4.wav", directory);
+    let occupied: str8 = format!("{}/Kick - 5.wav", directory);
+    let saved: result<i32, str8> = std::fs::write_all_text(occupied, "keep"); verify(saved.is_ok());
+    var clip: AudioClip = test_clip(4000, 0.25f); free(clip.source); clip.source = clone(path);
+    var library: PatternLibrary = PatternLibrary::empty(); var audio: AudioSystem = AudioSystem {};
+    verify(library.audio.add_clip(clip) == 0); library.show_audio();
+    var clipboard: SidebarClipboard = SidebarClipboard {}; verify(clipboard.copy(library, audio) == 1);
+    let pasted: SidebarPaste = clipboard.paste(library, audio); library = pasted.library; audio = pasted.audio;
+    verify(pasted.count == 1 && library.audio.samples.len() == 2);
+    let expected: str8 = format!("{}/Kick - 6.wav", directory);
+    let copy: AudioClip = library.audio.samples[1]; verify(copy.source == expected);
+    let decoded: result<AudioClip, str8> = AudioClip::load(expected, 120); verify(decoded.is_ok());
+    let wave: AudioClip = decoded.unwrap(); verify(wave.channels == 1 && wave.sample_rate == 8000 && wave.frames == 4000);
+    for i in 0..wave.samples.len() { verify(wave.samples[i] == copy.samples[i]); }
+    let opened: result<std::fs::File, str8> = std::fs::File::open(occupied); let file: std::fs::File = opened.unwrap();
+    let size: result<i64, str8> = file.size(); verify(size.unwrap() == 4); file.close();
+    wave.release(); clipboard.release(); library.release(); audio.release();
+    std::fs::remove_tree(directory); free(path); free(occupied); free(expected); free(directory);
+}

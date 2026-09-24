@@ -594,7 +594,7 @@ impl PatternLibrary {
         self.patterns = next;
         let items: list<ListItem> = self.instruments.items; var kept: list<ListItem> = [];
         for item in items { if item.id == id { free(item.label); } else { kept.push(item); } }
-        self.instruments.items = kept; self.instruments.cancel_pending(); self.instruments.reconcile(area);
+        self.instruments.items = kept; self.instruments.marks = []; self.instruments.cancel_pending(); self.instruments.reconcile(area);
     }
     pub fn show_instruments(self: &mut Self) -> void {
         self.instruments_mode = true; self.audio_mode = false;
@@ -695,7 +695,7 @@ impl PatternLibrary {
         self.patterns = next;
         var kept: list<AudioClip> = [];
         for i in 0..self.audio.samples.len() { if i32(i) != index { kept.push(self.audio.samples[i]); } }
-        self.audio.samples = kept;
+        self.audio.samples = kept; self.audio.view.marks = [];
         sample.release();
         // Rebuild the list labels: entries are numbered by position.
         let items: list<ListItem> = self.audio.view.items;
@@ -751,7 +751,7 @@ impl PatternLibrary {
         self.patterns = next;
         let samples: list<AudioClip> = self.audio.samples; var kept: list<AudioClip> = [];
         for i in 0..samples.len() { kept.push(i == index ? edited : samples[i]); }
-        self.audio.samples = kept;
+        self.audio.samples = kept; self.audio.view.marks = [];
         old.release();
         return count;
     }

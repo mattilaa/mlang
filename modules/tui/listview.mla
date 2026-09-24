@@ -12,9 +12,27 @@ pub struct ListItem { var id: i32; var label: str8; };
 /// Borrows item labels. Returns actions; deletion/activation belongs to caller.
 pub struct ListView {
     var items: list<ListItem>; var selected: i32; var scroll: i32;
+    var marks: list<i32>;
     var top_pending: bool; var delete_pending: bool;
 };
 impl ListView {
+    pub fn marked(self: ListView, id: i32) -> bool {
+        let marks: list<i32> = self.marks; for mark in marks { if mark == id { return true; } } return false;
+    }
+    pub fn toggle_mark(self: &mut Self) -> bool {
+        if self.selected < 0 || self.selected >= self.items.len() { return false; }
+        let item: ListItem = self.items[self.selected]; var next: list<i32> = [];
+        let marked: bool = self.marked(item.id); let old: list<i32> = self.marks;
+        for id in old { if id != item.id { next.push(id); } }
+        if !marked { next.push(item.id); } self.marks = next; self.cancel_pending(); return true;
+    }
+    /// Stable IDs in display order; the cursor is the fallback when none is marked.
+    pub fn targets(self: ListView) -> list<i32> {
+        var selected: list<i32> = []; let items: list<ListItem> = self.items;
+        for item in items { if self.marked(item.id) { selected.push(item.id); } }
+        if selected.len() == 0 && self.selected >= 0 && self.selected < items.len() { let item: ListItem = items[self.selected]; selected.push(item.id); }
+        return selected;
+    }
     pub fn cancel_pending(self: &mut Self) -> void { self.top_pending = false; self.delete_pending = false; }
     pub fn reconcile(self: &mut Self, area: Rect) -> void {
         let count: i32 = i32(self.items.len());
@@ -63,7 +81,10 @@ impl ListView {
             let bg: i32 = index == self.selected ? theme.selection : (index % 2 == 1 ? darken(theme.panel, 82) : theme.panel);
             let line: Rect = Rect::new(area.x, area.y + i32(y), area.width, 1);
             surface.fill(line, Cell { glyph: 32, foreground: theme.foreground, background: bg });
-            surface.text(line, item.label, theme.foreground, bg);
+            if self.marked(item.id) {
+                surface.text(Rect::new(line.x, line.y, 2, 1), "* ", theme.accent, bg);
+                surface.text(Rect::new(line.x + 2, line.y, line.width - 2, 1), item.label, theme.foreground, bg);
+            } else { surface.text(line, item.label, theme.foreground, bg); }
         }
     }
 }

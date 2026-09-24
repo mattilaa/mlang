@@ -15,6 +15,10 @@ use tui::focus::*;
 use tui::input::*;
 use tui::dialog::*;
 use tui::table::*;
+mod tui_demo::sidebar_clipboard;
+use tui_demo::sidebar_clipboard::SidebarClipboard;
+use tui_demo::sidebar_clipboard::SidebarPaste;
+use tui::listview::ListView;
 mod tui_demo::sequence;
 use tui_demo::sequence::SequenceTable;
 mod tui_demo::mixer;
@@ -323,6 +327,8 @@ pub fn run() -> i32 {
     // Removing a library item that is still used asks what to do with its uses.
     var remove_question: QuestionDialog = QuestionDialog::new("Remove", "");
     remove_question.width = 72; remove_question.height = 12;
+    var sidebar_clipboard: SidebarClipboard = SidebarClipboard {};
+    var sidebar_remove: list<i32> = []; var sidebar_remove_kind: i32 = 0;
     var remove_request: i32 = 0; var remove_target: i32 = 0; var remove_pending: i32 = 0;
     // Song matrix (Shift+M) and the warning shown when parallel patterns would
     // drive one instrument with the same notes.
@@ -427,6 +433,29 @@ pub fn run() -> i32 {
             }
             free(message); message = clone(session_status); free(session_status);
             session_request = 0; menus.dismiss(); dirty = true;
+        }
+        if sidebar_remove.len() > 0 && remove_request == 0 && remove_pending == 0 && !remove_question.active {
+            // Work backwards because sample list IDs are renumbered on removal.
+            let id: i32 = sidebar_remove[sidebar_remove.len() - 1]; var remaining: list<i32> = [];
+            for i in 0..sidebar_remove.len() - 1 { remaining.push(sidebar_remove[i]); } sidebar_remove = remaining;
+            if sidebar_remove_kind == 3 {
+                if library.index_of(id) >= 0 { library.select(id); library.remove_active(terminal_bounds()); }
+                free(message); message = clone(library.error == "" ? "Pattern removed" : library.error);
+            } else {
+                remove_target = sidebar_remove_kind == 1 ? id - 1 : id;
+                let uses: i32 = sidebar_remove_kind == 1 ? library.sample_usage(remove_target) : library.instrument_usage(id);
+                if uses == 0 { remove_request = sidebar_remove_kind == 1 ? 1 : 3; }
+                else {
+                    remove_pending = sidebar_remove_kind;
+                    remove_question.title = sidebar_remove_kind == 1 ? "Remove marked audio" : "Remove marked instrument";
+                    remove_question.question = sidebar_remove_kind == 1 ? format!("{} clip(s) use this sample. Remove them too?", uses) : format!("{} track(s) use this instrument. Remove tracks or keep their notes?", uses);
+                    remove_question.buttons = sidebar_remove_kind == 1
+                        ? [PushButton { label: "Remove clips", action: 1 }, PushButton { label: "Cancel", action: 2 }]
+                        : [PushButton { label: "Remove tracks", action: 1 }, PushButton { label: "Keep tracks", action: 3 }];
+                    remove_question.open(); focus.set_menu_active(true);
+                }
+            }
+            dirty = true;
         }
         if remove_request != 0 {
             // 1 = sample (with its clips), 2 = instrument and its tracks,
@@ -823,7 +852,7 @@ pub fn run() -> i32 {
                 if !remove_question.active {
                     if remove_question.result == 1 || remove_question.result == 3 {
                         remove_request = remove_question.result == 1 ? remove_pending : 3;
-                    } else { free(message); message = clone("Cancelled."); }
+                    } else { sidebar_remove = []; free(message); message = clone("Cancelled."); }
                     remove_pending = 0;
                 }
             }
@@ -1053,7 +1082,7 @@ pub fn run() -> i32 {
             }
             else if remove_question.active {
                 remove_question.on_event(event);
-                if !remove_question.active && remove_question.result == 2 { remove_pending = 0; free(message); message = clone("Cancelled."); }
+                if !remove_question.active && remove_question.result == 2 { remove_pending = 0; sidebar_remove = []; free(message); message = clone("Cancelled."); }
                 dirty = true;
             }
             else if share_question.active {
@@ -1264,9 +1293,28 @@ pub fn run() -> i32 {
                     command = library.table.insert_event(event, panes[1].bounds.inset(1)); dirty = true;
                 } else { if library.table.edit_event(event, panes[1].bounds.inset(1)) { dirty = true; } }
             } else if focus.selected == 0 {
-                if event.kind == InputKind::Edit && event.key == Key::Backspace && event.modifiers == 2 {
-                    command = library.audio_mode ? 120 : (library.instruments_mode ? 95 : 0);
-                    if command == 0 { free(message); message = clone("Shift+Backspace removes the selected sample or instrument"); dirty = true; }
+                if (event.code == 14 && event.modifiers == 1) || (event.code == 110 && event.modifiers == 5) {
+                    if library.audio_mode { library.audio.view.toggle_mark(); }
+                    else if library.instruments_mode { library.instruments.toggle_mark(); }
+                    else { library.view.toggle_mark(); }
+                    dirty = true;
+                }
+                else if event.kind == InputKind::Edit && event.key == Key::Backspace && (event.modifiers == 1 || event.modifiers == 2) {
+                    var view: ListView = ListView {}; view = library.audio_mode ? library.audio.view : (library.instruments_mode ? library.instruments : library.view);
+                    sidebar_remove = view.targets(); sidebar_remove_kind = library.audio_mode ? 1 : (library.instruments_mode ? 2 : 3);
+                    library.audio.view.marks = []; library.instruments.marks = []; library.view.marks = [];
+                    dirty = true;
+                }
+                else if event.code == 121 && event.modifiers == 1 {
+                    let count: i32 = sidebar_clipboard.copy(library, midi);
+                    free(message); message = format!("Copied {} list item(s); p duplicates", count); dirty = true;
+                }
+                else if event.code == 112 && event.modifiers == 1 {
+                    transport.playing = false;
+                    let pasted: SidebarPaste = sidebar_clipboard.paste(library, midi);
+                    library = pasted.library; midi = pasted.audio; let count: i32 = pasted.count;
+                    free(message); message = sidebar_clipboard.error == "" ? format!("Duplicated {} list item(s)", count) : format!("Duplicated {}: {}", count, sidebar_clipboard.error);
+                    playback_dirty = true; dirty = true;
                 }
                 else if library.audio_mode && event.code == 101 && event.modifiers == 1 { command = 107; }
                 else if library.on_event(event, panes[0].bounds.inset(1)) { dirty = true; }
@@ -1764,7 +1812,7 @@ pub fn run() -> i32 {
                 }
                 else if remove_question.active {
                     remove_question.on_event(event);
-                    if !remove_question.active && remove_question.result == 2 { remove_pending = 0; free(message); message = clone("Cancelled."); }
+                    if !remove_question.active && remove_question.result == 2 { remove_pending = 0; sidebar_remove = []; free(message); message = clone("Cancelled."); }
                     dirty = true;
                 }
                 else if share_question.active {
@@ -1802,6 +1850,7 @@ pub fn run() -> i32 {
     free(session_path); free(request_path);
     instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); mixer_table.release(); free(preset_path);
     free(last_pattern_dir); free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
+    sidebar_clipboard.release();
     library.release(); dialog.release(); bpm_dialog.release(); free(message);
     terminal.finish();
     return 0;

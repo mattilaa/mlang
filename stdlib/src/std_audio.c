@@ -788,18 +788,32 @@ static int audio_decode_wav(mlang_pcm_audio_t* out,
         }
         offset = data_offset + chunk_size + (chunk_size & 1u);
     }
-    if(format != 1 || bits != 16 || channels < 1 || channels > 2 ||
+    if(!((format == 1 && bits == 16) || (format == 3 && bits == 32)) ||
+       channels < 1 || channels > 2 ||
        sample_rate == 0 || !pcm)
         return -1;
-    const size_t sample_count = pcm_bytes / 2u;
+    const size_t sample_bytes = bits / 8u;
+    if(pcm_bytes % sample_bytes != 0)
+        return -1;
+    const size_t sample_count = pcm_bytes / sample_bytes;
     if(sample_count == 0 || sample_count % channels != 0)
         return -1;
     out->samples = (float*)malloc(sample_count * sizeof(float));
     if(!out->samples)
         return -2;
     for(size_t i = 0; i < sample_count; ++i)
-        out->samples[i] = (float)(int16_t)audio_read_u16_le(pcm + i * 2u) /
-                          32768.0f;
+    {
+        if(format == 3)
+        {
+            const uint32_t value = audio_read_u32_le(pcm + i * 4u);
+            memcpy(&out->samples[i], &value, sizeof(value));
+            if(!isfinite(out->samples[i]))
+                out->samples[i] = 0.0f;
+        }
+        else
+            out->samples[i] = (float)(int16_t)audio_read_u16_le(pcm + i * 2u) /
+                              32768.0f;
+    }
     out->sample_rate = sample_rate;
     out->channels = channels;
     out->frame_count = (int64_t)(sample_count / channels);
@@ -910,7 +924,7 @@ int64_t __mlang_std_audio_pcm_load(const char* path)
         free(audio);
         audio_set_error(rc == -2
             ? "std::audio PCM sample allocation failed"
-            : "std::audio requires mono/stereo 16-bit PCM WAV, AIFF, or AIFF-C");
+            : "std::audio requires mono/stereo 16-bit PCM or float32 WAV, or 16-bit AIFF/AIFF-C");
         return 0;
     }
     audio_clear_error();

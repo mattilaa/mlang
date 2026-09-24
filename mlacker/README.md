@@ -262,7 +262,10 @@ In the Pattern pane, **Ctrl-Z** cycles vertical detail through **1/16 → 1/32 �
 1/64 → 1/16**. Only original sixteenth-note rows have row numbers; intermediate
 lines show `.` and use alternating darker backgrounds. Up/Down (or `j`/`k`)
 visits each visible subdivision: the 1/64 view has three editable positions
-between numbered rows. Enter edits a note, velocity, length or offset; Shift-J/K
+between numbered rows. At these zoom levels, `dd` deletes one visible note-time
+slot, and `o`/`O` inserts a blank slot below/above the cursor. Later notes shift by
+one 1/32 or 1/64 step; adjacent subdivisions remain intact. The pattern grows if
+needed to keep notes at the end. Main-row automation and audio keep their anchors. Enter edits a note, velocity, length or offset; Shift-J/K
 adjusts values and Backspace clears the selected field. MIDI step entry on an
 armed track also uses the selected subdivision. Notes entered between
 rows are stored with timing offsets and play at every zoom level, including
@@ -284,7 +287,11 @@ duration. The maximum pattern length remains 16384 rows.
 In the Pattern pane, `v` starts a rectangular selection at the current cell.
 Use `h/j/k/l` to extend it; selected cells have a brighter background. `y` copies
 the selection, `d` cuts/clears its cells without removing rows, and `p` pastes at
-the current cell. `Esc` or `v` cancels selection. The internal clipboard survives
+the current cell. `gg` and `G` extend an active selection to the first or last
+visible position, including subdivisions. Use `gg v G y` to copy from top to
+bottom, or `v gg` / `v G` to select toward either end from the cursor.
+Backspace clears the selected cells without removing rows or replacing the
+clipboard; `d` still cuts them. `Esc` or `v` cancels selection. The internal clipboard survives
 pattern switches; it is not the operating-system clipboard or session data.
 
 `Shift+V` selects whole rows across every track; `j/k` extends the row range.
@@ -724,3 +731,13 @@ FX presets save exposed plugin parameters by stable ID and check the plugin name
 and parameter layout before loading. Invalid or incompatible files leave the
 parameters unchanged. Instrument presets continue to use `.mlapre` and may
 include sampler pads; the two formats are deliberately distinct.
+
+In the Audio, Instruments and Patterns sidebar, `Ctrl+N` toggles a `*`
+mark on the cursor item without activating it. Mark several items, then use
+`y` to copy and `p` to duplicate them, or `Backspace` to remove them.
+Without marks, these commands use the cursor item. Used audio/instruments
+show the existing removal confirmation; instrument notes can be kept for
+a replacement plugin. Audio duplicates are saved beside the original as
+`Sample - N.wav`, using float32 WAV to preserve the loaded samples and
+skipping existing filenames. Removing audio from the list leaves its disk file.
+Instrument copies restore exposed parameters and sampler pad assignments.

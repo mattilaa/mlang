@@ -1793,7 +1793,73 @@ pub fn set_length(self: &mut Self, count: i32, area: Rect) -> bool {
     self.selected_row = selected_row; self.selected_column = selected_column;
     self.reconcile(area); return true;
 }
+/// Insert/delete one visible note-time slot without removing its neighbouring
+/// subdivisions. Main-row automation and audio placements keep their anchors.
+pub fn shift_subdivision(self: &mut Self, above: bool, removing: bool, area: Rect) -> bool {
+    self.delete_pending = false; self.top_pending = false;
+    self.reconcile(area);
+    if self.selected_row < 0 { return false; }
+    let scale: i32 = self.row_spacing(); let step: i64 = 15000 / wide(scale);
+    let slot: i32 = self.selected_row * scale + self.selected_subrow + (!removing && !above ? 1 : 0);
+    let selected_track: i32 = self.active_track();
+    let selected_offset: i32 = selected_track >= 0 ? self.selected_column - self.track_start(selected_track) : 0;
+    var candidate: SequenceTable = self.copy_pattern();
+    // Clear only notes in the staged copy. Automation/audio remain row-based.
+    for t in 0..candidate.tracks.len() {
+        let track: SequenceTrack = candidate.tracks[t]; if track.audio { continue; }
+        let first: i32 = candidate.track_start(i32(t));
+        for r in 0..candidate.rows.len() {
+            for c in 0..(track.note_lines * 4) { candidate.write_owned_cell(i32(r), first + i32(c), clone("")); }
+        }
+    }
+    for t in 0..self.tracks.len() {
+        let track: SequenceTrack = self.tracks[t]; if track.audio { continue; }
+        let first: i32 = self.track_start(i32(t));
+        for r in 0..self.rows.len() {
+            let row: TableRow = self.rows[r];
+            for line in 0..track.note_lines {
+                let column: i32 = first + i32(line) * 4; if row.cells[column] == "" { continue; }
+                let original: i64 = r * 15000 + self.note_offset(i32(r), column);
+                var tick: i64 = original;
+                if original >= 0 && original < self.rows.len() * 15000 {
+                    let position: i64 = (original + step / 2) / step;
+                    if removing && position == slot { continue; }
+                    if position >= slot { tick = original + (removing ? -step : step); }
+                }
+                let destination: i32 = tick >= 0 && tick < 245760000 ? i32(tick / 15000) : i32(r);
+                if tick >= 245760000 && tick != original { self.error = "Maximum pattern length is 16384 rows"; candidate.release(); return false; }
+                if destination >= candidate.rows.len() { candidate.set_length(destination + 1, area); }
+                let target_track: SequenceTrack = candidate.tracks[t]; let target_first: i32 = candidate.track_start(i32(t));
+                let target: TableRow = candidate.rows[destination]; var free_line: i32 = -1;
+                for n in 0..target_track.note_lines { if free_line < 0 && target.cells[target_first + i32(n) * 4] == "" { free_line = i32(n); } }
+                if free_line < 0 {
+                    free_line = target_track.note_lines;
+                    if !candidate.ensure_note_lines(i32(t), free_line + 1) { self.error = "Maximum 64 notes per main row"; candidate.release(); return false; }
+                    candidate.rebuild_columns();
+                }
+                let target_column: i32 = candidate.track_start(i32(t)) + free_line * 4;
+                for f in 0..3 { candidate.write_owned_cell(destination, target_column + i32(f), clone(row.cells[column + i32(f)])); }
+                candidate.write_owned_cell(destination, target_column + 3, offset_text(tick - wide(destination) * 15000));
+            }
+        }
+    }
+    // An insertion after the final visible slot still needs a blank destination.
+    if !removing && slot >= candidate.rows.len() * scale {
+        if candidate.rows.len() >= 16384 { self.error = "Maximum pattern length is 16384 rows"; candidate.release(); return false; }
+        candidate.set_length(i32(candidate.rows.len()) + 1, area);
+    }
+    let old_rows: list<TableRow> = self.rows;
+    for row in old_rows { let cells: list<str8> = row.cells; for cell in cells { free(cell); } }
+    let old_tracks: list<SequenceTrack> = self.tracks;
+    for track in old_tracks { free(track.name); free(track.cc1.parameter); free(track.cc2.parameter); track.release_audio(); }
+    self.rows = candidate.rows; self.tracks = candidate.tracks;
+    candidate.rows = []; candidate.tracks = []; candidate.release();
+    self.rebuild_columns(); self.selected_row = slot / scale; self.selected_subrow = slot % scale;
+    if selected_track >= 0 { self.selected_column = self.track_start(selected_track) + selected_offset; }
+    self.visual = false; self.revision = self.revision + 1; self.error = ""; self.reconcile(area); return true;
+}
 pub fn insert_row(self: &mut Self, above: bool, area: Rect) -> void {
+    if self.row_spacing() > 1 { self.shift_subdivision(above, false, area); return; }
     self.delete_pending = false; self.top_pending = false;
     if self.rows.len() >= 16384 { self.error = "Maximum pattern length is 16384 rows"; return; }
     self.reconcile(area);
@@ -1827,6 +1893,7 @@ pub fn insert_row(self: &mut Self, above: bool, area: Rect) -> void {
     self.revision = self.revision + 1; self.reconcile(area);
 }
 pub fn delete_row(self: &mut Self, area: Rect) -> void {
+    if self.row_spacing() > 1 { self.shift_subdivision(false, true, area); return; }
     self.revision = self.revision + 1;
     if self.selected_row < 0 || self.selected_row >= self.rows.len() { return; }
     let previous: list<TableRow> = self.rows;
@@ -1887,6 +1954,19 @@ pub fn copy_visual(self: &mut Self, cut: bool, area: Rect) -> void {
     self.visual = false; self.selected_row = first_row / self.row_spacing(); self.selected_subrow = first_row % self.row_spacing(); self.selected_column = first_col;
     if cut { self.apply_clipboard(true, area); }
     self.reconcile(area);
+}
+/// Delete the selected cells while retaining the previous paste buffer.
+pub fn erase_visual(self: &mut Self, area: Rect) -> void {
+    let saved: list<TableRow> = self.clipboard; let kinds: list<str8> = self.clipboard_kinds;
+    let whole: bool = self.clipboard_rows; let spacing: i32 = self.clipboard_spacing;
+    var audio: AudioClip = AudioClip {}; audio = self.audio_clipboard;
+    self.clipboard = []; self.clipboard_kinds = []; self.audio_clipboard = AudioClip {};
+    let track: i32 = self.active_track();
+    if track >= 0 && self.tracks[track].audio { self.visual_audio_copy(true, area); }
+    else { self.copy_visual(true, area); }
+    self.clear_clipboard(); self.audio_clipboard.release();
+    self.clipboard = saved; self.clipboard_kinds = kinds; self.clipboard_rows = whole; self.clipboard_spacing = spacing;
+    self.audio_clipboard = audio;
 }
 pub fn paste_visual(self: &mut Self, area: Rect) -> void { self.apply_clipboard(false, area); }
 fn apply_clipboard(self: &mut Self, erase: bool, area: Rect) -> void {
@@ -2062,8 +2142,21 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         }
         return true;
     }
+    // Boundary movement uses visible positions and keeps the selection anchor.
+    let jump_top: bool = event.modifiers == 1 && event.code == 103;
+    if !jump_top { self.top_pending = false; }
+    if (event.code == 71 && (event.modifiers == 1 || event.modifiers == 2)) || (event.code == 103 && event.modifiers == 2) {
+        self.selected_row = i32(self.rows.len()) - 1; self.selected_subrow = self.row_spacing() - 1;
+        self.reconcile(area); return true;
+    }
+    if jump_top {
+        if self.top_pending { self.selected_row = 0; self.selected_subrow = 0; self.top_pending = false; self.reconcile(area); }
+        else { self.top_pending = true; }
+        return true;
+    }
     if self.visual {
-        self.delete_pending = false; self.top_pending = false;
+        self.delete_pending = false;
+        if event.kind == InputKind::Edit && event.key == Key::Backspace && event.modifiers == 1 { self.erase_visual(area); return true; }
         if event.kind == InputKind::Menu && event.key == Key::Escape && event.code < 32 { self.visual = false; return true; }
         if (event.modifiers == 1 || event.modifiers == 2) &&
                 (event.code == 74 || event.code == 75 || (event.modifiers == 2 && (event.code == 106 || event.code == 107))) {
@@ -2107,8 +2200,6 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
             (event.code == 111 && event.modifiers == 2) { self.insert_row(true, area); return true; }
     let delete_key: bool = event.modifiers == 1 && event.code == 100;
     if !delete_key { self.delete_pending = false; }
-    let top_key: bool = event.modifiers == 1 && event.code == 103;
-    if !top_key { self.top_pending = false; }
     self.reconcile(area);
     if (event.code == 90 && (event.modifiers == 1 || event.modifiers == 2)) || (event.code == 122 && event.modifiers == 2) {
         self.zoom_tracks(-1, true, area); return true;
@@ -2123,15 +2214,6 @@ pub fn edit_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
         if !track.audio { self.zoom_tracks(-1, false, area); return true; }
         track.wave_zoom = !track.wave_zoom;
         self.replace_track(index, track); self.rebuild_columns(); self.reconcile(area); return true;
-    }
-    if (event.code == 71 && (event.modifiers == 1 || event.modifiers == 2)) ||
-            (event.code == 103 && event.modifiers == 2) {
-        self.selected_row = i32(self.rows.len()) - 1; self.reconcile(area); return true;
-    }
-    if top_key {
-        if self.top_pending { self.selected_row = 0; self.top_pending = false; self.reconcile(area); }
-        else { self.top_pending = true; }
-        return true;
     }
     if self.selected_row < 0 || self.selected_column < 0 { return self.on_event(event, area); }
     if delete_key {
