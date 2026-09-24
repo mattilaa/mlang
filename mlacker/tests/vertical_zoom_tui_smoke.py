@@ -35,6 +35,12 @@ def main():
         # Enhanced terminal Ctrl-Z follows the same path.
         frame = tui.send(b"\x1b[122;5u")
         assert b"1/32" in frame, frame[-4000:]
+        frame = tui.send(b"o\r\x15A-4\r")
+        assert b"A-4" in frame, frame[-4000:]
+        frame = tui.send(b"dd")
+        assert b"A-4" not in frame and b"1/32" in frame, frame[-4000:]
+        frame = tui.send(b"O\r\x15B-4\r")
+        assert b"B-4" in frame, frame[-4000:]
     finally:
         tui.close()
 

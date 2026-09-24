@@ -3703,3 +3703,45 @@ fn tui_subdivision_clipboard_keeps_spacing_and_hidden_indicator() {
     verify(sequence.rows.len() == 64);
     surface.release(); sequence.release();
 }
+
+#[test]
+fn tui_subdivision_insert_delete_moves_only_one_visible_slot() {
+    let area: Rect = Rect::new(0, 0, 120, 24);
+    var sequence: SequenceTable = SequenceTable::empty(); sequence.create_track_kind(false, false, area);
+    sequence.selected_row = 0; sequence.selected_column = 1;
+    sequence.cycle_vertical_zoom(area); sequence.cycle_vertical_zoom(area);
+    let pitches: list<str8> = ["C-4", "D-4", "E-4", "F-4", "G-4"];
+    for pitch in pitches {
+        sequence.edit_event(decode_input("\r"), area); sequence.editor.set_text(pitch); sequence.edit_event(decode_input("\r"), area);
+        sequence.edit_event(decode_input("j"), area);
+    }
+    sequence.selected_row = 0; sequence.selected_subrow = 1;
+    sequence.edit_event(decode_input("d"), area); sequence.edit_event(decode_input("d"), area);
+    verify(sequence.rows.len() == 64 && sequence.selected_subrow == 1);
+    let deleted: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0);
+    verify(deleted.len() == 4);
+    for i in 0..4 { let note: tui_demo::sequence::ViewNote = deleted[i]; verify(note.slot == i); }
+    sequence.edit_event(decode_input("\r"), area); verify(sequence.editor.text == "E-4"); sequence.edit_event(decode_input("\r"), area);
+    sequence.edit_event(decode_input("o"), area);
+    verify(sequence.selected_row == 0 && sequence.selected_subrow == 2);
+    sequence.edit_event(decode_input("\r"), area); verify(sequence.editor.text == ""); sequence.edit_event(decode_input("\r"), area);
+    let below: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0);
+    let moved: tui_demo::sequence::ViewNote = below[2]; verify(moved.slot == 3);
+    sequence.edit_event(decode_input("O"), area);
+    let above: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0);
+    let moved_again: tui_demo::sequence::ViewNote = above[2]; verify(moved_again.slot == 4);
+    let last: tui_demo::sequence::ViewNote = above[3]; verify(last.slot == 5);
+    verify(sequence.rows.len() == 64);
+    // At 1/32, the edit step is two 1/64 positions.
+    sequence.cycle_vertical_zoom(area); sequence.cycle_vertical_zoom(area);
+    sequence.selected_row = 1; sequence.selected_subrow = 0;
+    sequence.edit_event(decode_input("O"), area);
+    sequence.cycle_vertical_zoom(area);
+    let half: list<tui_demo::sequence::ViewNote> = sequence.view_notes(0);
+    let shifted: tui_demo::sequence::ViewNote = half[2]; verify(shifted.slot == 6);
+    // A final-slot insertion provides a new empty position without dropping notes.
+    sequence.selected_row = 63; sequence.selected_subrow = 3;
+    sequence.edit_event(decode_input("o"), area);
+    verify(sequence.rows.len() == 65 && sequence.selected_row == 64 && sequence.selected_subrow == 0);
+    sequence.release();
+}

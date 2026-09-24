@@ -262,7 +262,10 @@ In the Pattern pane, **Ctrl-Z** cycles vertical detail through **1/16 → 1/32 �
 1/64 → 1/16**. Only original sixteenth-note rows have row numbers; intermediate
 lines show `.` and use alternating darker backgrounds. Up/Down (or `j`/`k`)
 visits each visible subdivision: the 1/64 view has three editable positions
-between numbered rows. Enter edits a note, velocity, length or offset; Shift-J/K
+between numbered rows. At these zoom levels, `dd` deletes one visible note-time
+slot, and `o`/`O` inserts a blank slot below/above the cursor. Later notes shift by
+one 1/32 or 1/64 step; adjacent subdivisions remain intact. The pattern grows if
+needed to keep notes at the end. Main-row automation and audio keep their anchors. Enter edits a note, velocity, length or offset; Shift-J/K
 adjusts values and Backspace clears the selected field. MIDI step entry on an
 armed track also uses the selected subdivision. Notes entered between
 rows are stored with timing offsets and play at every zoom level, including
