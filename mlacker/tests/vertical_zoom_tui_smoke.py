@@ -20,6 +20,16 @@ def main():
         frame = tui.send(b"k\r")
         assert b"F-4" in frame, frame[-4000:]
         tui.send(b"\x15G-4\r")
+        # Copy a single subrow to the following main row, then cut/paste it
+        # between main rows. None of these operations should copy row-zero C-4.
+        tui.send(b"vyjp")
+        frame = tui.send(b"\r")
+        assert b"G-4" in frame, frame[-4000:]
+        tui.send(b"\r")
+        tui.send(b"vdjp")
+        frame = tui.send(b"\r")
+        assert b"G-4" in frame, frame[-4000:]
+        tui.send(b"\r")
         frame = tui.send(b"\x1a")
         assert b"1/16" in frame and b"1/64" not in frame, frame[-4000:]
         # Enhanced terminal Ctrl-Z follows the same path.

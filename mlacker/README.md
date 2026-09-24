@@ -268,6 +268,9 @@ armed track also uses the selected subdivision. Notes entered between
 rows are stored with timing offsets and play at every zoom level, including
 1/16. They survive session and pattern save/load without increasing the pattern's
 main row count. Chords at each visible position share horizontal note lanes.
+Numbered rows become slightly brighter when finer notes are hidden at the current
+zoom. Visual copy/cut/paste includes the selected subdivision positions and keeps
+their timing spacing even when pasted at a different zoom or into another pattern.
 The 1/32 notes are slightly darker and 1/64 notes darker again; note-length lines
 expand with the view.
 

@@ -3654,3 +3654,52 @@ fn tui_subdivision_notes_edit_save_and_play_without_zoom() {
     }
     data.release(); holder.release(); std::fs::remove_tree(directory); free(path); free(directory);
 }
+
+#[test]
+fn tui_subdivision_clipboard_keeps_spacing_and_hidden_indicator() {
+    let area: Rect = Rect::new(0, 0, 120, 24);
+    var sequence: SequenceTable = SequenceTable::empty(); sequence.create_track_kind(false, false, area);
+    sequence.selected_row = 0; sequence.selected_column = 1;
+    sequence.cycle_vertical_zoom(area); sequence.cycle_vertical_zoom(area);
+    sequence.edit_event(decode_input("j"), area);
+    sequence.edit_event(decode_input("\r"), area); sequence.editor.set_text("C-4"); sequence.edit_event(decode_input("\r"), area);
+    sequence.edit_event(decode_input("j"), area);
+    sequence.edit_event(decode_input("\r"), area); sequence.editor.set_text("D-4"); sequence.edit_event(decode_input("\r"), area);
+    sequence.edit_event(decode_input("k"), area);
+    sequence.edit_event(decode_input("v"), area); sequence.edit_event(decode_input("j"), area); sequence.edit_event(decode_input("y"), area);
+    verify(sequence.clipboard.len() == 2 && sequence.clipboard_spacing == 4);
+    sequence.selected_row = 1; sequence.selected_subrow = 2;
+    sequence.edit_event(decode_input("p"), area); verify(!sequence.paste_error);
+    sequence.edit_event(decode_input("\r"), area); verify(sequence.editor.text == "C-4"); sequence.edit_event(decode_input("\r"), area);
+    sequence.edit_event(decode_input("j"), area);
+    sequence.edit_event(decode_input("\r"), area); verify(sequence.editor.text == "D-4"); sequence.edit_event(decode_input("\r"), area);
+    // Cutting two subrows must leave their original notes in main row zero intact.
+    sequence.edit_event(decode_input("k"), area);
+    sequence.edit_event(decode_input("v"), area); sequence.edit_event(decode_input("j"), area); sequence.edit_event(decode_input("d"), area);
+    verify(!sequence.paste_error);
+    sequence.edit_event(decode_input("\r"), area); verify(sequence.editor.text == ""); sequence.edit_event(decode_input("\r"), area);
+    // A clipboard retains its quarter-row timing when pasted without zoom.
+    sequence.cycle_vertical_zoom(area); sequence.selected_row = 2; sequence.selected_column = 1;
+    sequence.edit_event(decode_input("p"), area); verify(!sequence.paste_error);
+    sequence.mark_hidden_notes(); verify(sequence.bright_rows.len() == 2);
+    sequence.selected_row = 4;
+    let surface: Surface = Surface::new(120, 24); let theme: Theme = Theme::dark_blue();
+    sequence.paint(surface, area, theme); let body: Rect = sequence.body(area);
+    let marked: Cell = surface.cell(0, body.y); let plain: Cell = surface.cell(0, body.y + 6);
+    verify(marked.background > plain.background);
+    var playback: NotePlayback = NotePlayback { start_row: 2 };
+    playback.update(sequence, 30000, true); verify(playback.events.len() == 1);
+    let first: NoteEvent = playback.events[0]; verify(first.note == 60 && first.tick == 30000);
+    playback.update(sequence, 33750, true); verify(playback.events.len() == 1);
+    let second: NoteEvent = playback.events[0]; verify(second.note == 62 && second.tick == 33750);
+    sequence.cycle_vertical_zoom(area); sequence.cycle_vertical_zoom(area);
+    sequence.mark_hidden_notes(); verify(sequence.bright_rows.len() == 0);
+    // Whole-row selection includes hidden VEL/LEN/OFF and rebases OFF correctly.
+    sequence.selected_row = 0; sequence.selected_subrow = 1; sequence.selected_column = 1;
+    sequence.edit_event(decode_input("V"), area); sequence.edit_event(decode_input("y"), area);
+    sequence.selected_row = 3; sequence.selected_subrow = 3; sequence.selected_column = 1;
+    sequence.edit_event(decode_input("p"), area); verify(!sequence.paste_error);
+    sequence.edit_event(decode_input("\r"), area); verify(sequence.editor.text == "C-4"); sequence.edit_event(decode_input("\r"), area);
+    verify(sequence.rows.len() == 64);
+    surface.release(); sequence.release();
+}

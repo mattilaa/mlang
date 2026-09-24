@@ -103,8 +103,16 @@ pub struct Table {
     var group_detail_rows: i32; var selected_group_detail: i32{-1};
     /// One extra header line under each group title, e.g. a track's instrument.
     var group_subtitles: bool;
-    var visual: bool; var visual_rows: bool; var anchor_row: i32; var anchor_column: i32;
+    var visual: bool; var visual_rows: bool; var anchor_row: i32; var anchor_column: i32; var anchor_subrow: i32;
+    var bright_rows: list<i32>;
     pub fn row_spacing(self: Table) -> i32 { return self.row_scale == 2 || self.row_scale == 4 ? self.row_scale : 1; }
+    pub fn visual_position(self: Table, row: i32, subrow: i32, column: i32) -> bool {
+        let here: i32 = row * self.row_spacing() + subrow;
+        let anchor: i32 = self.anchor_row * self.row_spacing() + self.anchor_subrow;
+        let selected: i32 = self.selected_row * self.row_spacing() + self.selected_subrow;
+        return self.visual && here >= (anchor < selected ? anchor : selected) && here <= (anchor > selected ? anchor : selected) &&
+            (self.visual_rows || (column >= (self.anchor_column < self.selected_column ? self.anchor_column : self.selected_column) && column <= (self.anchor_column > self.selected_column ? self.anchor_column : self.selected_column)));
+    }
     pub fn visual_cell(self: Table, row: i32, column: i32) -> bool {
         return self.visual && row >= (self.anchor_row < self.selected_row ? self.anchor_row : self.selected_row) &&
             row <= (self.anchor_row > self.selected_row ? self.anchor_row : self.selected_row) &&
@@ -272,10 +280,12 @@ pub struct Table {
             if row_index >= self.rows.len() { break; }
             let row: TableRow = self.rows[row_index];
             let subrow: i32 = i32(y) % self.row_spacing();
-            let stripe: i32 = subrow == 0 ? (row_index % 2 == 1 ? darken(theme.panel, 82) : theme.panel)
+            var stripe: i32 = subrow == 0 ? (row_index % 2 == 1 ? darken(theme.panel, 82) : theme.panel)
                 : darken(theme.panel, subrow % 2 == 1 ? 64 : 74);
+            let marked: list<i32> = self.bright_rows;
+            if subrow == 0 { for mark in marked { if mark == row_index { stripe = lighten(stripe, 10); } } }
             let base_bg: i32 = row_index == self.selected_row && subrow == self.selected_subrow ? theme.selection : stripe;
-            let bg: i32 = self.visual_rows && self.visual_cell(row_index, 0) ? lighten(base_bg, 20) : base_bg;
+            let bg: i32 = self.visual_rows && self.visual_position(row_index, subrow, 0) ? lighten(base_bg, 20) : base_bg;
             canvas.fill(Rect::new(0, i32(y) + body.y, body.width, 1), Cell { glyph: 32, foreground: theme.foreground, background: bg });
             for order in 0..self.columns.len() {
                 let c: i32 = (i32(order) + self.frozen_count()) % i32(self.columns.len());
@@ -283,7 +293,7 @@ pub struct Table {
                 let width: i32 = self.column_width(i32(c));
                 if width == 0 { continue; }
                 let definition: TableColumn = self.columns[c];
-                let cell_bg: i32 = !self.visual_rows && !definition.read_only && self.visual_cell(row_index, c) ? lighten(bg, 20) : (c == self.selected_column ? lighten(bg, 8) : bg);
+                let cell_bg: i32 = !self.visual_rows && !definition.read_only && self.visual_position(row_index, subrow, c) ? lighten(bg, 20) : (c == self.selected_column ? lighten(bg, 8) : bg);
                 let base_fg: i32 = self.dim_column(c) ? darken(theme.foreground, 88) : theme.foreground;
                 let part: i32 = i32(y) % self.row_spacing();
                 let fg: i32 = darken(base_fg, part == 0 ? 100 : (self.row_spacing() == 4 && part % 2 == 1 ? 68 : 84));
