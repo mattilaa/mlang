@@ -101,6 +101,14 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
     // defaults (e.g. `let x: i32{7};` or `let p: Point{x: 3};`).
     {
         auto& defaults = structMemberDefaults[node->name];
+        // Inherited fields keep their base struct's defaults.
+        if(!node->baseName.empty())
+        {
+            auto baseDefaultsIt = structMemberDefaults.find(node->baseName);
+            if(baseDefaultsIt != structMemberDefaults.end())
+                defaults.insert(baseDefaultsIt->second.begin(),
+                                baseDefaultsIt->second.end());
+        }
         for(auto* member : node->members->members)
         {
             if(member && member->initExpr)

@@ -1,0 +1,46 @@
+mod std::testing;
+use std::testing::verify;
+
+struct Inner { var a: i32{20}; var f: f64{1.5}; };
+struct Outer { var b: i32{5}; var inner: Inner; };
+struct Deep { var outer: Outer; var c: i32{7}; };
+struct Custom { var inner: Inner{a: 3}; };
+struct Base { var inner: Inner; var k: i32{2}; };
+struct Derived : Base { var extra: Inner; };
+
+#[test]
+fn test_struct_literal_applies_field_defaults() {
+    let inner: Inner = Inner {};
+    verify(inner.a == 20 && inner.f == 1.5);
+    let set: Inner = Inner { a: 1 };
+    verify(set.a == 1 && set.f == 1.5);
+}
+
+#[test]
+fn test_nested_struct_fields_take_their_type_defaults() {
+    let outer: Outer = Outer {};
+    verify(outer.b == 5 && outer.inner.a == 20 && outer.inner.f == 1.5);
+    let deep: Deep = Deep {};
+    verify(deep.c == 7 && deep.outer.b == 5 && deep.outer.inner.a == 20);
+    var braces: Outer {};
+    verify(braces.inner.a == 20);
+}
+
+#[test]
+fn test_nested_defaults_under_explicit_initializers() {
+    let partial: Outer = Outer { b: 9 };
+    verify(partial.b == 9 && partial.inner.a == 20);
+    let dotted: Outer = Outer { inner.a: 3 };
+    verify(dotted.inner.a == 3 && dotted.inner.f == 1.5);
+    let whole: Outer = Outer { inner: Inner { a: 1 } };
+    verify(whole.inner.a == 1 && whole.inner.f == 1.5);
+    // A field's own default wins over its type's defaults.
+    let custom: Custom = Custom {};
+    verify(custom.inner.a == 3 && custom.inner.f == 1.5);
+}
+
+#[test]
+fn test_derived_struct_keeps_base_defaults() {
+    let derived: Derived = Derived {};
+    verify(derived.k == 2 && derived.inner.a == 20 && derived.extra.a == 20);
+}

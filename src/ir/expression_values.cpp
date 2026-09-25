@@ -1648,22 +1648,75 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     llvm::Value* structVal = llvm::Constant::getNullValue(structType);
 
     // Apply per-member defaults (from `var x: T{expr};` or
-    // `let x: T = expr;` field declarations). Explicit field initializers in
-    // the literal below will overwrite anything set here.
+    // `let x: T = expr;` field declarations). A by-value struct field without
+    // a default of its own takes its type's defaults, recursively, so
+    // `Outer {}` matches building each nested `Inner {}`. Explicit field
+    // initializers in the literal below will overwrite anything set here.
+    std::function<llvm::Value*(
+        const std::string&, llvm::StructType*,
+        const std::vector<std::pair<std::string, TypeNode*>>&, llvm::Value*,
+        int)>
+        applyMemberDefaults =
+            [&](const std::string& currentStructName,
+                llvm::StructType* currentStructType,
+                const std::vector<std::pair<std::string, TypeNode*>>&
+                    currentMembers,
+                llvm::Value* currentStructVal, int depth) -> llvm::Value*
     {
-        auto defaultsIt = structMemberDefaults.find(structTypeName);
-        if(defaultsIt != structMemberDefaults.end())
+        auto defaultsIt = structMemberDefaults.find(currentStructName);
+        const std::map<std::string, ExpressionNode*>* defaults =
+            defaultsIt != structMemberDefaults.end() ? &defaultsIt->second
+                                                     : nullptr;
+        for(size_t i = 0; depth < 64 && i < currentMembers.size(); ++i)
         {
-            for(const auto& kv : defaultsIt->second)
+            if(defaults && defaults->count(currentMembers[i].first))
+                continue;
+            std::string nestedName =
+                getNestedStructTypeName(currentMembers[i].second);
+            if(nestedName.empty())
+                continue;
+            auto nestedMembersIt = structMembers.find(nestedName);
+            const StructFieldLayout* layout =
+                getStructFieldLayout(currentStructName, static_cast<int>(i));
+            if(nestedMembersIt == structMembers.end() || !layout ||
+               layout->packedBit)
+                continue;
+            auto* nestedType = llvm::dyn_cast<llvm::StructType>(
+                currentStructType->getElementType(layout->storageIndex));
+            if(!nestedType)
+                continue;
+            llvm::Value* nestedValue = builder.CreateExtractValue(
+                currentStructVal, {layout->storageIndex},
+                currentStructName + "." + currentMembers[i].first +
+                    ".default");
+            nestedValue =
+                applyMemberDefaults(nestedName, nestedType,
+                                    nestedMembersIt->second, nestedValue,
+                                    depth + 1);
+            if(!nestedValue)
+                return nullptr;
+            currentStructVal = builder.CreateInsertValue(
+                currentStructVal, nestedValue, {layout->storageIndex},
+                currentStructName + "." + currentMembers[i].first);
+        }
+        if(defaults)
+        {
+            for(const auto& kv : *defaults)
             {
-                structVal = applyNestedFieldInit(structTypeName, structType,
-                                                 members, structVal, {kv.first},
-                                                 0, kv.second, kv.first, false);
-                if(!structVal)
+                currentStructVal = applyNestedFieldInit(
+                    currentStructName, currentStructType, currentMembers,
+                    currentStructVal, {kv.first}, 0, kv.second, kv.first,
+                    false);
+                if(!currentStructVal)
                     return nullptr;
             }
         }
-    }
+        return currentStructVal;
+    };
+    structVal = applyMemberDefaults(structTypeName, structType, members,
+                                    structVal, 0);
+    if(!structVal)
+        return nullptr;
 
     // Process each field initialization
     for(const auto& fieldInit : node->fields)
