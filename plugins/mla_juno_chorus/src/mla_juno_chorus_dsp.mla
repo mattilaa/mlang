@@ -1,0 +1,47 @@
+/// Per-instance C ABI for dsp::chorus. Allocate only on setup; parameter
+/// updates and processing retain the delay line.
+mod dsp::chorus;
+use dsp::chorus::ChorusFrame;
+use dsp::chorus::ChorusMode;
+use dsp::chorus::JunoChorus;
+extern fn calloc(count: i64, size: i64) -> ptr<JunoChorus>;
+extern fn free(block: ptr<JunoChorus>) -> void;
+
+fn mlajuno_create(rate: f32) -> ptr<JunoChorus> {
+    let handle: ptr<JunoChorus> = calloc(1, size_of(JunoChorus));
+    unsafe { *handle = JunoChorus::new(rate); }
+    return handle;
+}
+fn mlajuno_destroy(handle: ptr<JunoChorus>) {
+    unsafe { let dead: JunoChorus = *handle; dead.reset(); }
+    free(handle);
+}
+fn mlajuno_reset(handle: ptr<JunoChorus>) { unsafe { (*handle).reset(); } }
+
+/// 0 mode (0 Off, 1 I, 2 II, 3 I+II), 1 mix, 2 depth, 3 width, 4 tone Hz,
+/// 5 warmth, 6 noise (0/1), 7 noise dB, 8 output dB.
+fn mlajuno_set(handle: ptr<JunoChorus>, index: i32, value: f32) {
+    unsafe {
+        if index == 0 {
+            var mode: ChorusMode = ChorusMode::Off;
+            if value >= 2.5f { mode = ChorusMode::Both; }
+            else if value >= 1.5f { mode = ChorusMode::Two; }
+            else if value >= 0.5f { mode = ChorusMode::One; }
+            (*handle).set_mode(mode);
+        }
+        else if index == 1 { (*handle).set_mix(value); }
+        else if index == 2 { (*handle).set_depth(value); }
+        else if index == 3 { (*handle).set_width(value); }
+        else if index == 4 { (*handle).set_tone_hz(value); }
+        else if index == 5 { (*handle).set_drive(value); }
+        else if index == 6 { (*handle).set_noise(value >= 0.5f); }
+        else if index == 7 { (*handle).set_noise_db(value); }
+        else if index == 8 { (*handle).set_output_db(value); }
+    }
+}
+fn mlajuno_process(handle: ptr<JunoChorus>, left: f32, right: f32, out_right: ptr<f32>) -> f32 {
+    unsafe {
+        let frame: ChorusFrame = (*handle).process_stereo(left, right);
+        *out_right = frame.right(); return frame.left();
+    }
+}

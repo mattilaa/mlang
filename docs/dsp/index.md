@@ -5,6 +5,7 @@ Module file: `modules/dsp/mod.mla`
 Digital signal processing namespace root.
 
 Submodules:
+- [dsp::chorus](chorus.md)
 - [dsp::convolution](convolution.md)
 - [dsp::filter](filter.md)
 - [dsp::distortion](distortion.md)
@@ -17,7 +18,7 @@ Submodules:
 - [dsp::reverb2](reverb2.md)
 - [dsp::stutter](stutter.md)
 
-Import specific DSP modules such as `dsp::convolution`, `dsp::filter`,
+Import specific DSP modules such as `dsp::chorus`, `dsp::convolution`, `dsp::filter`,
 `dsp::distortion`, `dsp::envelope`, `dsp::delay`, `dsp::fft`, `dsp::limiter`, `dsp::multimode`, `dsp::reverb`,
 `dsp::reverb2`, and `dsp::stutter` in application code. This library is installed and discovered
 separately from the `std` namespace.

@@ -1,0 +1,253 @@
+/// \file chorus.mla
+/// \brief Juno-style stereo BBD ensemble chorus.
+///
+/// @defgroup dsp_chorus dsp::chorus
+/// @ingroup dsp
+/// @brief Two anti-phase taps on one bucket-brigade-style delay line.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+mod dsp::filter;
+mod std::vec;
+use dsp::detail::expf;
+use dsp::detail::tanhf;
+use dsp::filter::hermite_interpolate_f32;
+use std::vec::set_f32;
+/// \endcond
+
+extern fn floorf(value: f32) -> f32;
+extern fn llroundf(value: f32) -> i64;
+
+fn chorus_clamp(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+/// @brief The chorus switch positions of the Juno-60/106.
+pub enum ChorusMode : i32 {
+    /// Dry only; the chorus fades out.
+    Off = 0,
+    /// Slow, wide sweep (about 0.5 Hz).
+    One = 1,
+    /// Faster sweep over the same range (about 0.86 Hz).
+    Two = 2,
+    /// Both buttons: a fast, shallow shimmer (about 9.75 Hz).
+    Both = 3
+};
+
+/// @brief One processed stereo sample.
+pub struct ChorusFrame {
+    var left_value: f32;
+    var right_value: f32;
+};
+
+impl ChorusFrame {
+    /// @brief Return the left output sample.
+    pub fn left(self: ChorusFrame) -> f32 { return self.left_value; }
+
+    /// @brief Return the right output sample.
+    pub fn right(self: ChorusFrame) -> f32 { return self.right_value; }
+}
+
+/// @brief Juno-106 style ensemble: a mono BBD line with two taps swept in
+/// anti-phase by one triangle LFO, left = dry + tap 1, right = dry + tap 2.
+///
+/// The wet path is band-limited before and after the line like the BBD's
+/// anti-alias and reconstruction filters, softly saturated like its
+/// compander, and can carry the chip's hiss, which is filtered and modulated
+/// with the signal. Storage is allocated only by `new()`; processing and
+/// parameter changes do not allocate or lock.
+pub struct JunoChorus {
+    var line: list<f32>;
+    var write_index: i64;
+    var sample_rate_hz: f32;
+    var mode: ChorusMode;
+    var lfo_phase: f32;
+    var lfo_rate_hz: f32;
+    /// Tap delay centre and half swing in ms: current and target.
+    var centre_ms: f32;
+    var swing_ms: f32;
+    var centre_target_ms: f32;
+    var swing_target_ms: f32;
+    var glide: f32;
+    var depth: f32;
+    var mix: f32;
+    var width: f32;
+    var drive: f32;
+    var tone_coefficient: f32;
+    var noise_on: bool;
+    var noise_gain: f32;
+    var output_gain: f32;
+    /// Wet share 0 .. 1, ramped when the mode switches on or off.
+    var wet: f32;
+    var wet_step: f32;
+    var pre1: f32;
+    var pre2: f32;
+    var left1: f32;
+    var left2: f32;
+    var right1: f32;
+    var right2: f32;
+    var seed: i64;
+};
+
+impl JunoChorus {
+    /// @brief Allocate the delay line for `sample_rate_hz`.
+    pub fn new(sample_rate_hz: f32) -> JunoChorus {
+        let rate: f32 = sample_rate_hz < 1000.0f ? 1000.0f : sample_rate_hz;
+        // The deepest tap is under 7 ms at the maximum depth; keep 16 ms.
+        let capacity: i64 = llroundf(rate * 0.016f) + 8;
+        var chorus: JunoChorus = JunoChorus {
+            line: [0.0f; capacity],
+            write_index: 0,
+            sample_rate_hz: rate,
+            mode: ChorusMode::One,
+            lfo_phase: 0.0f,
+            lfo_rate_hz: 0.513f,
+            centre_ms: 3.505f,
+            swing_ms: 1.845f,
+            centre_target_ms: 3.505f,
+            swing_target_ms: 1.845f,
+            glide: 1.0f - expf(-1.0f / (rate * 0.05f)),
+            depth: 1.0f,
+            mix: 0.5f,
+            width: 1.0f,
+            drive: 0.3f,
+            tone_coefficient: 0.0f,
+            noise_on: false,
+            noise_gain: 0.0f,
+            output_gain: 1.0f,
+            wet: 1.0f,
+            wet_step: 1.0f / (rate * 0.02f),
+            pre1: 0.0f, pre2: 0.0f, left1: 0.0f, left2: 0.0f, right1: 0.0f, right2: 0.0f,
+            seed: 22222
+        };
+        chorus.set_tone_hz(9000.0f);
+        chorus.set_noise_db(-62.0f);
+        return chorus;
+    }
+
+    /// @brief Clear the line, filters and LFO; settings are kept.
+    pub fn reset(self: &mut Self) -> void {
+        for i in 0..self.line.len() { set_f32(self.line, i, 0.0f); }
+        self.write_index = 0; self.lfo_phase = 0.0f;
+        self.pre1 = 0.0f; self.pre2 = 0.0f; self.left1 = 0.0f; self.left2 = 0.0f; self.right1 = 0.0f; self.right2 = 0.0f;
+        self.centre_ms = self.centre_target_ms; self.swing_ms = self.swing_target_ms * self.depth;
+        self.wet = self.mode == ChorusMode::Off ? 0.0f : 1.0f;
+    }
+
+    /// @brief Switch mode. Rate changes at once; the sweep range glides over
+    /// about 50 ms and Off fades the chorus out over 20 ms.
+    pub fn set_mode(self: &mut Self, mode: ChorusMode) -> void {
+        self.mode = mode;
+        if mode == ChorusMode::Both {
+            self.lfo_rate_hz = 9.75f; self.centre_target_ms = 3.5f; self.swing_target_ms = 0.2f;
+        } else if mode == ChorusMode::Two {
+            self.lfo_rate_hz = 0.863f; self.centre_target_ms = 3.505f; self.swing_target_ms = 1.845f;
+        } else if mode == ChorusMode::One {
+            self.lfo_rate_hz = 0.513f; self.centre_target_ms = 3.505f; self.swing_target_ms = 1.845f;
+        }
+    }
+
+    /// @brief Current mode.
+    pub fn chorus_mode(self: JunoChorus) -> ChorusMode { return self.mode; }
+
+    /// @brief Scale the sweep, 0 .. 1.5 (1 = the Juno's range).
+    pub fn set_depth(self: &mut Self, depth: f32) -> void { self.depth = chorus_clamp(depth, 0.0f, 1.5f); }
+
+    /// @brief Dry/wet balance 0 .. 1. 0.5 is the Juno: dry and each tap at
+    /// full level; 0 is dry only, 1 wet only.
+    pub fn set_mix(self: &mut Self, mix: f32) -> void { self.mix = chorus_clamp(mix, 0.0f, 1.0f); }
+
+    /// @brief Stereo spread of the two taps, 0 (mono) .. 1 (Juno) .. 1.5.
+    pub fn set_width(self: &mut Self, width: f32) -> void { self.width = chorus_clamp(width, 0.0f, 1.5f); }
+
+    /// @brief Compander saturation of the wet path, 0 .. 1.
+    pub fn set_drive(self: &mut Self, drive: f32) -> void { self.drive = chorus_clamp(drive, 0.0f, 1.0f); }
+
+    /// @brief Cutoff of the BBD's filters, 2 .. 18 kHz (below Nyquist).
+    pub fn set_tone_hz(self: &mut Self, hz: f32) -> void {
+        let limit: f32 = self.sample_rate_hz * 0.45f;
+        let cutoff: f32 = chorus_clamp(hz, 2000.0f, limit < 18000.0f ? limit : 18000.0f);
+        self.tone_coefficient = 1.0f - expf(-6.2831853f * cutoff / self.sample_rate_hz);
+    }
+
+    /// @brief Switch the BBD hiss on or off.
+    pub fn set_noise(self: &mut Self, on: bool) -> void { self.noise_on = on; }
+
+    /// @brief Hiss level, -96 .. -30 dBFS of white noise into the line.
+    pub fn set_noise_db(self: &mut Self, db: f32) -> void {
+        self.noise_gain = expf(chorus_clamp(db, -96.0f, -30.0f) * 0.115129255f);
+    }
+
+    /// @brief Output level, -24 .. +12 dB.
+    pub fn set_output_db(self: &mut Self, db: f32) -> void {
+        self.output_gain = expf(chorus_clamp(db, -24.0f, 12.0f) * 0.115129255f);
+    }
+
+    fn white(self: &mut Self) -> f32 {
+        self.seed = (self.seed * 1103515245 + 12345) % 2147483648;
+        return f32(self.seed) / 1073741824.0f - 1.0f;
+    }
+
+    /// Hermite read `delay_samples` behind the newest sample.
+    fn tap(self: JunoChorus, delay_samples: f32) -> f32 {
+        let whole: f32 = floorf(delay_samples);
+        let fraction: f32 = delay_samples - whole;
+        let size: i64 = self.line.len();
+        var index: i64 = self.write_index - 1 - llroundf(whole);
+        while index < 2 { index = index + size; }
+        // Oldest to newest around the fractional point.
+        let x2: f32 = self.line[(index - 2) % size];
+        let x1: f32 = self.line[(index - 1) % size];
+        let x0: f32 = self.line[index % size];
+        let xm1: f32 = self.line[(index + 1) % size];
+        return hermite_interpolate_f32(xm1, x0, x1, x2, fraction);
+    }
+
+    /// @brief Process one stereo sample.
+    pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> ChorusFrame {
+        // Sweep: one triangle LFO, the taps in anti-phase.
+        self.lfo_phase = self.lfo_phase + self.lfo_rate_hz / self.sample_rate_hz;
+        if self.lfo_phase >= 1.0f { self.lfo_phase = self.lfo_phase - 1.0f; }
+        let triangle: f32 = self.lfo_phase < 0.5f ? 4.0f * self.lfo_phase - 1.0f : 3.0f - 4.0f * self.lfo_phase;
+        self.centre_ms = self.centre_ms + (self.centre_target_ms - self.centre_ms) * self.glide;
+        self.swing_ms = self.swing_ms + (self.swing_target_ms * self.depth - self.swing_ms) * self.glide;
+        let samples_per_ms: f32 = self.sample_rate_hz * 0.001f;
+        let left_delay: f32 = (self.centre_ms + self.swing_ms * triangle) * samples_per_ms;
+        let right_delay: f32 = (self.centre_ms - self.swing_ms * triangle) * samples_per_ms;
+
+        // Into the line: mono sum plus hiss, band-limited, then the compander.
+        var feed: f32 = 0.5f * (input_left + input_right);
+        if self.noise_on && self.mode != ChorusMode::Off { feed = feed + self.white() * self.noise_gain; }
+        let a: f32 = self.tone_coefficient;
+        self.pre1 = self.pre1 + a * (feed - self.pre1);
+        self.pre2 = self.pre2 + a * (self.pre1 - self.pre2);
+        let k: f32 = 0.3f + 3.0f * self.drive;
+        set_f32(self.line, self.write_index, tanhf(self.pre2 * k) / k);
+        self.write_index = self.write_index + 1;
+        if self.write_index >= self.line.len() { self.write_index = 0; }
+
+        // Out of the line: reconstruction filters per tap.
+        let raw_left: f32 = self.tap(left_delay);
+        let raw_right: f32 = self.tap(right_delay);
+        self.left1 = self.left1 + a * (raw_left - self.left1);
+        self.left2 = self.left2 + a * (self.left1 - self.left2);
+        self.right1 = self.right1 + a * (raw_right - self.right1);
+        self.right2 = self.right2 + a * (self.right1 - self.right2);
+        let mid: f32 = 0.5f * (self.left2 + self.right2);
+        let side: f32 = 0.5f * (self.left2 - self.right2) * self.width;
+
+        if self.mode == ChorusMode::Off { self.wet = self.wet - self.wet_step < 0.0f ? 0.0f : self.wet - self.wet_step; }
+        else { self.wet = self.wet + self.wet_step > 1.0f ? 1.0f : self.wet + self.wet_step; }
+        let wet_gain: f32 = chorus_clamp(2.0f * self.mix, 0.0f, 1.0f) * self.wet;
+        let dry_gain: f32 = 1.0f - (1.0f - chorus_clamp(2.0f - 2.0f * self.mix, 0.0f, 1.0f)) * self.wet;
+        return ChorusFrame {
+            left_value: (input_left * dry_gain + (mid + side) * wet_gain) * self.output_gain,
+            right_value: (input_right * dry_gain + (mid - side) * wet_gain) * self.output_gain
+        };
+    }
+}
+
+/// @}
