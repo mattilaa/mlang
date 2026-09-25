@@ -80,7 +80,7 @@ Parameters persist through `.mlack` sessions and plugin state/presets.
 
 **Free** uses Delay directly. **Manual** uses `60000 × Beats / BPM` milliseconds.
 **Host** follows valid VST3 host tempo, falling back to BPM when the host does
-not provide it. Mlacker currently needs that fallback. Synced delay is clamped
+not provide it. Mlacker sends its sequencer BPM. Synced delay is clamped
 to 1–5000 ms. A dotted eighth note is `0.75` beats.
 
 **Filter** types are None plus the eight `dsp::multimode` models of

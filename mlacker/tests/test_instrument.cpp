@@ -3,6 +3,7 @@
 #include "public.sdk/source/main/pluginfactory.h"
 #include "pluginterfaces/vst/ivstevents.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "pluginterfaces/vst/ivstprocesscontext.h"
 #include <array>
 #include <algorithm>
 using namespace Steinberg;
@@ -58,6 +59,12 @@ public:
     tresult PLUGIN_API process(ProcessData &data) override {
         if(data.numOutputs != 1 || data.symbolicSampleSize != kSample32) return kResultFalse;
         int32 next = 0, count = data.inputEvents ? data.inputEvents->getEventCount() : 0;
+        // Observable transport: while the host plays at a valid tempo and
+        // beat, the effect scales by tempo / 240.
+        float transport = 1;
+        const uint32 playing = ProcessContext::kPlaying | ProcessContext::kTempoValid | ProcessContext::kProjectTimeMusicValid;
+        if(data.processContext && (data.processContext->state & playing) == playing && data.processContext->projectTimeMusic >= 0)
+            transport = static_cast<float>(data.processContext->tempo / 240);
         for(int32 f = 0; f < data.numSamples; ++f) {
             if(data.inputParameterChanges) for(int32 q = 0; q < data.inputParameterChanges->getParameterCount(); ++q) {
                 auto *queue = data.inputParameterChanges->getParameterData(q);
@@ -89,7 +96,7 @@ public:
             }
             for(int32 ch = 0; ch < data.outputs[0].numChannels; ++ch) {
 #ifdef MLACKER_TEST_EFFECT
-                data.outputs[0].channelBuffers32[ch][f] = data.inputs[0].channelBuffers32[ch][f] * 0.5f * controls[0] * controls[1] * controls[2];
+                data.outputs[0].channelBuffers32[ch][f] = data.inputs[0].channelBuffers32[ch][f] * 0.5f * controls[0] * controls[1] * controls[2] * transport;
 #else
                 data.outputs[0].channelBuffers32[ch][f] = level * controls[0] * controls[1] * controls[2];
 #endif

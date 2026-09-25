@@ -64,6 +64,8 @@ extern fn __mlang_std_audio_controller_effect_peak(handle: i64, fx: i64, channel
 extern fn __mlang_std_audio_controller_master_param(handle: i64, index: i64, value: f64) -> i32;
 extern fn __mlang_std_audio_controller_spectrum_capture(handle: i64, size: i64) -> i32;
 extern fn __mlang_std_audio_controller_spectrum_level(handle: i64, low_hz: f64, high_hz: f64) -> f64;
+extern fn __mlang_std_audio_controller_transport(handle: i64, tempo: f64, beat: f64, playing: i32) -> i32;
+extern fn __mlang_std_audio_controller_transport_beat(handle: i64) -> f64;
 impl AudioController {
     /// Stopped owner, MIDI joined. IDs 1-256; parameter slots 41-296. Empty path unloads.
     pub fn load_insert(self: AudioController, id: i64, path: str8) -> i32 { return __mlang_std_audio_controller_load_insert(self.handle, id, path); }
@@ -100,6 +102,14 @@ impl AudioController {
     pub fn master_changes(self: AudioController) -> i64 { return __mlang_std_audio_controller_info(self.handle, 6); }
     /// Linear master volume 0..4 (1 = unity), ramped per block.
     pub fn master_volume(self: AudioController, gain: f64) -> i32 { return __mlang_std_audio_controller_master_param(self.handle, 13, gain); }
+    /// Sequencer transport for tempo-synced plugins: tempo 20-999 BPM (0 =
+    /// none), beat in quarter notes from song start, or negative to keep the
+    /// running position. The render thread advances the beat while playing.
+    pub fn transport(self: AudioController, tempo: f64, beat: f64, playing: bool) -> i32 {
+        return __mlang_std_audio_controller_transport(self.handle, tempo, beat, playing ? 1 : 0);
+    }
+    /// Beat position after the latest rendered block.
+    pub fn transport_beat(self: AudioController) -> f64 { return __mlang_std_audio_controller_transport_beat(self.handle); }
     /// Single UI consumer: FFT the newest `size` post-master samples (power of
     /// two, 256..8192, Hann window). Returns the bin count, or -1.
     pub fn spectrum_capture(self: AudioController, size: i64) -> i32 { return __mlang_std_audio_controller_spectrum_capture(self.handle, size); }

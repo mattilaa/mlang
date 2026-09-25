@@ -808,6 +808,7 @@ pub fn run() -> i32 {
         if !midi.sample_playback(song_playing ? song_table : library.table, transport.ticks, transport.playing && transport.count_in == 0, transport.bpm) {
             transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)"); dirty = true;
         }
+        midi.sync_transport(transport.bpm, transport.ticks, transport.playing && transport.count_in == 0);
         note_playback.update(song_playing ? song_table : library.table, transport.ticks, transport.playing && transport.count_in == 0);
         midi.sequencer_events(note_playback.events);
         // The mixer shows the playing song row while following it, so its

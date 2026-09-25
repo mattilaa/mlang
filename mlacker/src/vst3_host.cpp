@@ -51,6 +51,7 @@ public:
     int32 parameterCount = 0;
     std::string name;
     bool active = false, processing = false, instrument = false, overflow = false;
+    uint32 transportState = 0;
     int32 maxFrames = 0;
 
     ~Processor() {
@@ -266,11 +267,21 @@ public:
         return attributes->getInt(id, value) == kResultOk ? value : -1;
     }
 
+    // Audio thread, before render: the sequencer's tempo and beat position.
+    void transport(double tempo, double beat, int32_t playing) noexcept {
+        transportState = 0;
+        if(tempo > 0) { context.tempo = tempo; transportState |= ProcessContext::kTempoValid; }
+        if(tempo > 0 && std::isfinite(beat)) {
+            context.projectTimeMusic = beat; transportState |= ProcessContext::kProjectTimeMusicValid;
+            if(playing) transportState |= ProcessContext::kPlaying;
+        }
+    }
+
     int32 render(float *stereo, int32 frames, uint64_t clock) noexcept {
         if(frames < 0 || frames > maxFrames || overflow) return -1;
         data.numSamples = frames; context.projectTimeSamples = static_cast<TSamples>(clock);
         context.continousTimeSamples = static_cast<TSamples>(clock);
-        context.state = ProcessContext::kContTimeValid;
+        context.state = ProcessContext::kContTimeValid | transportState;
         if(data.numInputs) {
             auto &bus = data.inputs[0]; bus.silenceFlags = 0;
             for(int32 f = 0; f < frames; ++f) {
@@ -307,6 +318,7 @@ int32_t load(const char *path, double rate, int32_t frames,
         out->begin = [](void *p, int32_t reset) { static_cast<Processor*>(p)->begin(reset != 0); };
         out->note = [](void *p, int32_t on, int32_t ch, int32_t note, int32_t vel, int32_t offset) { static_cast<Processor*>(p)->note(on, ch, note, vel, offset); };
         out->process = [](void *p, float *buffer, int32_t frames, uint64_t clock) { return static_cast<Processor*>(p)->render(buffer, frames, clock); };
+        out->transport = [](void *p, double tempo, double beat, int32_t playing) { static_cast<Processor*>(p)->transport(tempo, beat, playing); };
         out->destroy = [](void *p) { delete static_cast<Processor*>(p); };
         out->name = [](void *p) { return static_cast<Processor*>(p)->name.c_str(); };
         out->control = [](void *p, int32_t ch, int32_t cc, int32_t value, int32_t offset) { static_cast<Processor*>(p)->control(ch, cc, value, offset); };

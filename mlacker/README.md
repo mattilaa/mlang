@@ -731,8 +731,16 @@ Current scope:
   input bus and one output bus, and the first MIDI input bus.
 - One master slot plus 32 instrument slots, eight aux returns, and four inserts
   per track; no native plugin editor windows, opaque preset
-  persistence, arbitrary named-parameter automation, sidechains,
-  latency compensation, or transport/tempo synchronization yet.
+  persistence, arbitrary named-parameter automation, sidechains, or
+  latency compensation yet.
+- Every plugin's `ProcessContext` carries the sequencer tempo and quarter-note
+  position (`projectTimeMusic`), with `kPlaying` while the transport runs (after
+  any count-in), so tempo-synced effects such as Mla Delay and
+  [Mla Stutter](../plugins/mla_stutter/README.md) follow the BPM. The position
+  is sent on start, stop and tempo changes; the audio thread advances it
+  sample-accurately in between. Playback starts at the starting row's beat
+  (four rows per beat) and keeps counting across pattern loops and matrix rows. There is no time
+  signature, bar position or loop range yet.
 - Existing UI-loop sequencer timing is retained. The audio API supports absolute
   frame scheduling, but a look-ahead sequencer is still future work. Because the
   UI loop drives it, a note can start up to one frame late, never a loop late:

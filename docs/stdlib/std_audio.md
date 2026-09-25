@@ -136,6 +136,20 @@ the bin count), then `spectrum_level(low_hz, high_hz)` for the loudest level
 in dBFS between two frequencies. A span narrower than one bin interpolates
 between the neighbouring bins, so log-spaced display columns stay smooth.
 
+### Sequencer transport
+
+`transport(tempo, beat, playing)` tells tempo-synced processors where the
+song is: tempo 20–999 BPM (0 clears it), `beat` in quarter notes from the song
+start, or negative to keep the running position (for a tempo change or a
+stop). It returns 0, or -1 for an out-of-range value, and is safe to call
+while audio runs. The render thread adopts it at the next block and advances
+the beat itself while playing, so an application sends it only on start,
+stop, relocation and tempo changes. Before each block, every loaded processor
+with the optional `transport` callback of `mlang_audio_processor` receives the
+tempo, the block's first beat and the playing flag; mlacker's VST3 host turns
+that into the `ProcessContext` tempo, `projectTimeMusic` and `kPlaying`
+fields. `transport_beat()` reads the position after the latest block.
+
 Common audio output and duplex processing helpers:
 - macOS uses CoreAudio Audio Queue input/output.
 - Linux uses JACK2 when `libjack` and a running JACK server are available.

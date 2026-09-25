@@ -257,3 +257,35 @@ fn audio_controller_master_bus_eq_volume_and_spectrum() {
     verify(controller.spectrum_capture(1000) == -1);
     block.close(); controller.close();
 }
+
+fn near_beat(controller: AudioController, expected: f64) -> bool {
+    let beat: f64 = controller.transport_beat();
+    return beat > expected - 0.000001 && beat < expected + 0.000001;
+}
+
+#[test]
+fn audio_controller_transport_beat_follows_tempo() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(1024);
+    verify(allocated.is_ok()); if allocated.is_err() { controller.close(); return; }
+    let block: PcmBlock = allocated.unwrap();
+    verify(controller.transport(10.0, 0.0, true) == -1);
+    verify(controller.transport(1000.0, 0.0, true) == -1);
+    // 120 BPM at 48 kHz: 24000 frames per beat.
+    verify(controller.transport(120.0, 2.0, true) == 0);
+    controller.process(block, 1000); controller.process(block, 200);
+    verify(near_beat(controller, 2.05));
+    // A tempo change keeps the running position; stopping freezes it.
+    verify(controller.transport(240.0, -1.0, true) == 0);
+    controller.process(block, 600);
+    verify(near_beat(controller, 2.1));
+    verify(controller.transport(240.0, -1.0, false) == 0);
+    controller.process(block, 600);
+    verify(near_beat(controller, 2.1));
+    verify(controller.transport(120.0, 0.0, false) == 0);
+    controller.process(block, 600);
+    verify(near_beat(controller, 0.0));
+    block.close(); controller.close();
+}

@@ -150,7 +150,7 @@ public:
     }
     uint32 PLUGIN_API getTailSamples() override { return kInfiniteTail; }
     tresult PLUGIN_API process(ProcessData& data) override {
-        // Follow valid host tempo; mlacker currently falls back to the BPM knob.
+        // Follow valid host tempo, else fall back to the BPM knob.
         const auto* context = data.processContext;
         const double tempo = context && (context->state & ProcessContext::kTempoValid) && std::isfinite(context->tempo) && context->tempo > 0 ? context->tempo : 0;
         if(tempo != hostBpm_) { hostBpm_ = tempo; if(plain(kTempo) == 2) pushDelay(false); }

@@ -93,6 +93,14 @@ typedef struct {
     double master_state[AC_MASTER_FILTERS][2][4];
     /* EQ wet share: crossfades toward the enabled switch over ~20 ms. */
     double master_eq_mix;
+    /* Sequencer transport, seqlocked: the control thread makes the serial odd,
+     * writes, then even. The render thread adopts a stable snapshot, then
+     * advances the beat itself while playing. */
+    _Atomic uint64_t transport_serial, transport_bits[2], transport_beat_out;
+    _Atomic uint32_t transport_flags;
+    uint64_t transport_seen;
+    double transport_tempo, transport_beat;
+    int transport_playing;
     float master_dry[8192];
     float spectrum_ring[AC_SPECTRUM_RING];
     _Atomic uint64_t spectrum_write;
@@ -258,6 +266,9 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
         c->master_value[i] = ac_master_defaults[i];
     }
     atomic_init(&c->master_serial, 0); atomic_init(&c->spectrum_write, 0);
+    atomic_init(&c->transport_serial, 0); atomic_init(&c->transport_flags, 0);
+    atomic_init(&c->transport_bits[0], 0); atomic_init(&c->transport_bits[1], 0);
+    atomic_init(&c->transport_beat_out, 0);
     c->master_eq_mix = 1.0;
     ac_master_design(c);
     for(int i = 0; i < 128; ++i) c->frequencies[i] = 440.0 * pow(2.0, (i - 69) / 12.0);
@@ -444,6 +455,35 @@ static void ac_insert_process(ac_controller *c, const uint32_t route[4], float *
         }
     }
 }
+static uint64_t ac_double_bits(double value) { uint64_t bits; memcpy(&bits, &value, sizeof(bits)); return bits; }
+static double ac_bits_double(uint64_t bits) { double value; memcpy(&value, &bits, sizeof(value)); return value; }
+/* Once per block: adopt a published transport, then hand it to every loaded
+ * processor. flags bit 0 = playing, bit 1 = the beat is new (else keep ours). */
+static void ac_transport_begin(ac_controller *c) {
+    uint64_t serial = atomic_load_explicit(&c->transport_serial, memory_order_acquire);
+    if(serial != c->transport_seen && !(serial & 1)) {
+        double tempo = ac_bits_double(atomic_load_explicit(&c->transport_bits[0], memory_order_relaxed));
+        double beat = ac_bits_double(atomic_load_explicit(&c->transport_bits[1], memory_order_relaxed));
+        uint32_t flags = atomic_load_explicit(&c->transport_flags, memory_order_relaxed);
+        atomic_thread_fence(memory_order_acquire);
+        if(atomic_load_explicit(&c->transport_serial, memory_order_relaxed) == serial) {
+            c->transport_seen = serial; c->transport_tempo = tempo; c->transport_playing = flags & 1;
+            if(flags & 2) c->transport_beat = beat;
+        }
+    }
+    mlang_audio_processor *groups[4] = {&c->processor, c->instruments, c->effects, c->inserts};
+    const int sizes[4] = {1, 32, 8, 256};
+    for(int g = 0; g < 4; ++g)
+        for(int i = 0; i < sizes[g]; ++i) {
+            mlang_audio_processor *p = &groups[g][i];
+            if(p->context && p->transport) p->transport(p->context, c->transport_tempo, c->transport_beat, c->transport_playing);
+        }
+}
+static void ac_transport_end(ac_controller *c, uint32_t frames) {
+    if(c->transport_playing && c->transport_tempo > 0)
+        c->transport_beat += frames * c->transport_tempo / (60.0 * c->rate);
+    atomic_store_explicit(&c->transport_beat_out, ac_double_bits(c->transport_beat), memory_order_relaxed);
+}
 static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     if(frames == 0) return; /* Do not consume events/reset on an empty block. */
     uint64_t panic = atomic_load_explicit(&c->panic, memory_order_acquire);
@@ -460,6 +500,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         }
     }
     uint64_t clock = atomic_load_explicit(&c->clock, memory_order_relaxed);
+    ac_transport_begin(c);
     uint32_t routes[96][4]; int routed[96] = {0};
     /* Output channel of each source (-1 = master) and the tracks that need a
      * buffer of their own: those with inserts, those feeding another track,
@@ -661,6 +702,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         while(old < value && !atomic_compare_exchange_weak_explicit(&c->master_peak[ch], &old, value,
             memory_order_relaxed, memory_order_relaxed)) {}
     }
+    ac_transport_end(c, frames);
     atomic_store_explicit(&c->clock, clock + frames, memory_order_release);
 }
 
@@ -861,6 +903,26 @@ int32_t __mlang_std_audio_controller_master_param(int64_t handle, int64_t index,
     atomic_store_explicit(&c->master_target[index], ac_float_bits((float)value), memory_order_relaxed);
     atomic_fetch_add_explicit(&c->master_serial, 1, memory_order_release);
     return 0;
+}
+
+/* Control thread (single writer), safe while rendering. tempo 0 clears it,
+ * otherwise 20-999 BPM. beat < 0 keeps the render thread's running position. */
+int32_t __mlang_std_audio_controller_transport(int64_t handle, double tempo, double beat, int32_t playing) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || !isfinite(tempo) || !isfinite(beat) || (tempo != 0 && (tempo < 20 || tempo > 999))) return -1;
+    uint64_t serial = atomic_load_explicit(&c->transport_serial, memory_order_relaxed);
+    atomic_store_explicit(&c->transport_serial, serial + 1, memory_order_relaxed);
+    atomic_thread_fence(memory_order_release);
+    atomic_store_explicit(&c->transport_bits[0], ac_double_bits(tempo), memory_order_relaxed);
+    atomic_store_explicit(&c->transport_bits[1], ac_double_bits(beat < 0 ? 0 : beat), memory_order_relaxed);
+    atomic_store_explicit(&c->transport_flags, (playing ? 1u : 0u) | (beat >= 0 ? 2u : 0u), memory_order_relaxed);
+    atomic_store_explicit(&c->transport_serial, serial + 2, memory_order_release);
+    return 0;
+}
+/* Beat position after the latest rendered block. */
+double __mlang_std_audio_controller_transport_beat(int64_t handle) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    return c ? ac_bits_double(atomic_load_explicit(&c->transport_beat_out, memory_order_relaxed)) : 0;
 }
 
 /* In-place iterative radix-2 FFT over interleaved complex doubles. */

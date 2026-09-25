@@ -59,6 +59,8 @@ pub struct AudioSystem {
     /// share a pattern's grid.
     var sample_epoch: i64; var sample_start_row: i32{-1};
     var registered_clips: list<RegisteredClip>;
+    /// Transport last handed to `output` for tempo-synced plugins.
+    var transport_output: i64; var transport_bpm: i32; var transport_playing: bool;
 };
 impl AudioSystem {
     pub fn adopt(self: &mut Self, source: &AudioSystem) -> void {
@@ -247,6 +249,16 @@ impl AudioSystem {
             updated.push(placement);
         }
         self.sample_placements = updated; self.sample_last = tick; return true;
+    }
+    /// Tell tempo-synced plugins the sequencer BPM and beat (60000 ticks per
+    /// quarter note). The audio thread runs the beat on by itself, so only a
+    /// start, stop, tempo change or new device resends the position.
+    pub fn sync_transport(self: &mut Self, bpm: i32, tick: i64, playing: bool) -> void {
+        if self.output.handle == 0 || bpm <= 0 { return; }
+        if self.transport_output == self.output.handle && self.transport_bpm == bpm && self.transport_playing == playing { return; }
+        let beat: f64 = f64(tick < 0 ? 0 : tick) / 60000.0;
+        if self.output.transport(f64(bpm), beat, playing) != 0 { return; }
+        self.transport_output = self.output.handle; self.transport_bpm = bpm; self.transport_playing = playing;
     }
     /// Short decaying clicks use the existing realtime PCM mixer, outside track routing.
     pub fn metronome(self: &mut Self, accent: bool) -> void {

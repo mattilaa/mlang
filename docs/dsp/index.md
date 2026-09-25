@@ -15,10 +15,11 @@ Submodules:
 - [dsp::multimode](multimode.md)
 - [dsp::reverb](reverb.md)
 - [dsp::reverb2](reverb2.md)
+- [dsp::stutter](stutter.md)
 
 Import specific DSP modules such as `dsp::convolution`, `dsp::filter`,
-`dsp::distortion`, `dsp::envelope`, `dsp::delay`, `dsp::fft`, `dsp::limiter`, `dsp::multimode`, `dsp::reverb`, and
-`dsp::reverb2` in application code. This library is installed and discovered
+`dsp::distortion`, `dsp::envelope`, `dsp::delay`, `dsp::fft`, `dsp::limiter`, `dsp::multimode`, `dsp::reverb`,
+`dsp::reverb2`, and `dsp::stutter` in application code. This library is installed and discovered
 separately from the `std` namespace.
 
 The compiler searches the repository's `modules/` directory in source builds,

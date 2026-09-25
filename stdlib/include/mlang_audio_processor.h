@@ -40,6 +40,11 @@ typedef struct mlang_audio_processor {
     /* Optional, control thread: sampler layout. key 0 = root MIDI key of pad 0,
      * 1 = pad count, 2 = bitmask of loaded pads. -1 when unsupported. */
     int64_t (*sampler_info)(void *context, int32_t key);
+    /* Optional, audio thread, before each process in a block: the sequencer
+     * transport at the block's first frame. tempo <= 0 when none was set;
+     * beat counts quarter notes from song start and keeps its last value
+     * (still valid) while stopped. */
+    void (*transport)(void *context, double tempo, double beat, int32_t playing);
 } mlang_audio_processor;
 typedef int32_t (*mlang_audio_processor_factory)(const char *path, double rate,
     int32_t max_frames, mlang_audio_processor *out, char *error, int32_t error_size);
