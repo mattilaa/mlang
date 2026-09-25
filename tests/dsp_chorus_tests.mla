@@ -1,0 +1,113 @@
+mod std::testing;
+mod dsp::chorus;
+use dsp::chorus::ChorusFrame;
+use dsp::chorus::ChorusMode;
+use dsp::chorus::JunoChorus;
+use std::testing::verify;
+
+fn abs32(value: f32) -> f32 { return value < 0.0f ? -value : value; }
+
+#[test]
+fn test_chorus_off_passes_dry_input() {
+    var chorus: JunoChorus = JunoChorus::new(48000.0f);
+    chorus.set_mode(ChorusMode::Off);
+    chorus.reset();
+    for i in 0..2000 {
+        let input: f32 = f32(i % 50) * 0.01f - 0.25f;
+        let frame: ChorusFrame = chorus.process_stereo(input, -input);
+        verify(frame.left() == input && frame.right() == -input);
+    }
+}
+
+// Wet-only impulse response at width 1: the left channel is tap 1 alone and
+// the right tap 2. At the start the LFO is at its low point, so the taps sit
+// at the two ends of the mode's sweep. Returns where each echo peaks, in ms.
+fn echo_ms(mode: ChorusMode, right: bool) -> f32 {
+    var chorus: JunoChorus = JunoChorus::new(48000.0f);
+    chorus.set_mode(mode); chorus.reset(); chorus.set_mix(1.0f); chorus.set_width(1.0f); chorus.set_drive(0.0f);
+    chorus.set_tone_hz(18000.0f);
+    var best: f32 = 0.0f; var at: i64 = 0;
+    for i in 0..480 {
+        let frame: ChorusFrame = chorus.process_stereo(i == 0 ? 1.0f : 0.0f, i == 0 ? 1.0f : 0.0f);
+        let value: f32 = abs32(right ? frame.right() : frame.left());
+        if value > best { best = value; at = i; }
+    }
+    return f32(at) / 48.0f;
+}
+
+fn near_ms(value: f32, expected: f32) -> bool { return value >= expected - 0.05f && value <= expected + 0.15f; }
+
+#[test]
+fn test_chorus_modes_use_juno_delay_ranges() {
+    // I and II sweep 1.66 .. 5.35 ms; I+II 3.3 .. 3.7 ms. The filters add a
+    // few samples of group delay.
+    verify(near_ms(echo_ms(ChorusMode::One, false), 1.66f) && near_ms(echo_ms(ChorusMode::One, true), 5.35f));
+    verify(near_ms(echo_ms(ChorusMode::Two, false), 1.66f) && near_ms(echo_ms(ChorusMode::Two, true), 5.35f));
+    verify(near_ms(echo_ms(ChorusMode::Both, false), 3.3f) && near_ms(echo_ms(ChorusMode::Both, true), 3.7f));
+}
+
+#[test]
+fn test_chorus_taps_sweep_in_anti_phase() {
+    var chorus: JunoChorus = JunoChorus::new(48000.0f);
+    chorus.set_mode(ChorusMode::One); chorus.reset(); chorus.set_mix(1.0f);
+    // Feed a steady tone; after a quarter LFO cycle the taps are far apart,
+    // so the channels differ.
+    var difference: f32 = 0.0f;
+    for i in 0..30000 {
+        let phase: f32 = f32(i % 96) / 96.0f;
+        let input: f32 = phase < 0.5f ? 0.5f : -0.5f;
+        let frame: ChorusFrame = chorus.process_stereo(input, input);
+        if i > 20000 { difference = difference + abs32(frame.left() - frame.right()); }
+    }
+    verify(difference > 100.0f);
+}
+
+#[test]
+fn test_chorus_noise_toggle_adds_filtered_hiss() {
+    var quiet: JunoChorus = JunoChorus::new(48000.0f);
+    var hissy: JunoChorus = JunoChorus::new(48000.0f);
+    hissy.set_noise(true); hissy.set_noise_db(-50.0f);
+    var quiet_energy: f32 = 0.0f; var hiss_energy: f32 = 0.0f; var peak: f32 = 0.0f;
+    for i in 0..48000 {
+        let a: ChorusFrame = quiet.process_stereo(0.0f, 0.0f);
+        let b: ChorusFrame = hissy.process_stereo(0.0f, 0.0f);
+        quiet_energy = quiet_energy + abs32(a.left()) + abs32(a.right());
+        hiss_energy = hiss_energy + abs32(b.left()) + abs32(b.right());
+        if abs32(b.left()) > peak { peak = abs32(b.left()); }
+    }
+    verify(quiet_energy == 0.0f);
+    verify(hiss_energy > 1.0f && peak < 0.02f);
+    // Hiss belongs to the chorus: switching it off silences the noise too.
+    hissy.set_mode(ChorusMode::Off);
+    for i in 0..2000 { hissy.process_stereo(0.0f, 0.0f); }
+    let after: ChorusFrame = hissy.process_stereo(0.0f, 0.0f);
+    verify(after.left() == 0.0f && after.right() == 0.0f);
+}
+
+#[test]
+fn test_chorus_mix_zero_is_dry_and_output_gain_applies() {
+    var chorus: JunoChorus = JunoChorus::new(48000.0f);
+    chorus.set_mix(0.0f); chorus.set_output_db(-6.0f);
+    for i in 0..1000 {
+        let frame: ChorusFrame = chorus.process_stereo(0.4f, 0.2f);
+        verify(abs32(frame.left() - 0.4f * 0.501187f) < 0.0001f);
+        verify(abs32(frame.right() - 0.2f * 0.501187f) < 0.0001f);
+    }
+}
+
+#[test]
+fn test_chorus_stays_finite_at_extremes() {
+    var chorus: JunoChorus = JunoChorus::new(8000.0f);
+    chorus.set_depth(1.5f); chorus.set_drive(1.0f); chorus.set_width(1.5f); chorus.set_tone_hz(18000.0f);
+    chorus.set_noise(true); chorus.set_noise_db(-30.0f); chorus.set_output_db(12.0f);
+    for step in 0..4 {
+        if step == 1 { chorus.set_mode(ChorusMode::Two); }
+        if step == 2 { chorus.set_mode(ChorusMode::Both); }
+        if step == 3 { chorus.set_mode(ChorusMode::One); }
+        for i in 0..8000 {
+            let loud: f32 = i % 2 == 0 ? 4.0f : -4.0f;
+            let frame: ChorusFrame = chorus.process_stereo(loud, -loud);
+            verify(frame.left() == frame.left() && abs32(frame.left()) < 100.0f && abs32(frame.right()) < 100.0f);
+        }
+    }
+}
