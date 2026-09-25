@@ -58,7 +58,7 @@ Other layers (all need `-DBUILD_TESTS=ON`, the CMake default):
 
 **Apps on top of the toolchain**, each a standalone `mlang.toml` project built with `build/mlang pkg --config <dir>/mlang.toml build` (they need `build/libmlang_std.a` first, and fetch the pinned VST3 SDK):
 - `mlacker/` — terminal tracker (AUHAL output, VST3 host, `.mlack` sessions); shares UI code with `modules/tui_demo`. Run: `build/mlang pkg --config mlacker/mlang.toml run run`.
-- `plugins/mla_verb`, `plugins/mla_distortion`, `plugins/mla_delay`, `plugins/mla_eq`, `plugins/mla_filter` — VST3 effects: DSP in MLang (`modules/dsp/*`), thin C++ `plugin.cpp` wrapper. Output bundle lands in `<plugin>/build/cmake/VST3/`.
+- `plugins/mla_verb`, `plugins/mla_distortion`, `plugins/mla_delay`, `plugins/mla_eq`, `plugins/mla_filter`, `plugins/mla_stutter` — VST3 effects: DSP in MLang (`modules/dsp/*`), thin C++ `plugin.cpp` wrapper. Output bundle lands in `<plugin>/build/cmake/VST3/`.
 
 ## Conventions
 

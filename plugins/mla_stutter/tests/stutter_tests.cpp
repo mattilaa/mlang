@@ -140,9 +140,43 @@ int main() {
     check(b.processor.setState(&invalid) != kResultOk, "reject NaN state");
     check(std::abs(b.processor.getParamNormalized(kFirstParam + kWidth) - normalized(kWidth, 3)) < 1e-9, "failed restore is atomic");
 
+    // Cut: the live input, chopped on the grid; Gate 1 passes half of each slice.
+    Fixture cut; cut.neutral(); cut.set(kMode, kOn); cut.set(kStyle, kCut);
+    auto chops = cut.render(ramp(4096));
+    for(int i = 0; i < 4096; ++i) check(chops[0][i] == (i % 1024 < 512 ? input[i] : 0.f), "cut chops the live input");
+
+    // Beat origin: engaging mid-beat replays from the start of the beat.
+    Fixture origin; origin.neutral(); origin.set(kOrigin, kBeat);
+    origin.render(ramp(2048));
+    origin.set(kMode, kOn);
+    auto fromBeat = origin.render(ramp(2048, 2048));
+    for(int i = 0; i < 2048; ++i) check(fromBeat[0][i] == input[i % 1024], "beat origin replays the beat start");
+
+    // Variation: Roll halves the slice from the second repeat on.
+    Fixture roll; roll.neutral(); roll.set(kMode, kOn); roll.set(kVariation, 1);
+    auto rolled = roll.render(ramp(4096));
+    for(int i = 2048; i < 4096; ++i) check(rolled[0][i] == input[i % 512], "roll splits the repeats");
+    ParameterInfo variationInfo{};
+    roll.processor.getParameterInfo(kVariation, variationInfo);
+    check(variationInfo.stepCount == kVariationCount - 1, "seven variations");
+
+    // A state saved before Style/Origin/Variation existed still loads.
+    MemoryStream old; IBStreamer oldWriter(&old, kLittleEndian);
+    for(int i = 0; i < kFirstReleaseCount; ++i) oldWriter.writeDouble(i == kGate ? normalized(kGate, .3) : normalized(i, specs[i].initial));
+    old.seek(0, IBStream::kIBSeekSet, nullptr);
+    Fixture legacy; legacy.set(kStyle, kCut);
+    check(legacy.processor.setState(&old) == kResultOk, "load first-release state");
+    check(std::abs(legacy.processor.getParamNormalized(kFirstParam + kGate) - normalized(kGate, .3)) < 1e-9, "first-release gate");
+    check(legacy.processor.getParamNormalized(kFirstParam + kStyle) == 0, "new controls take defaults");
+    MemoryStream partial; IBStreamer partialWriter(&partial, kLittleEndian);
+    for(int i = 0; i < kFirstReleaseCount + 1; ++i) partialWriter.writeDouble(0);
+    partial.seek(0, IBStream::kIBSeekSet, nullptr);
+    check(legacy.processor.setState(&partial) != kResultOk, "reject a state cut between new controls");
+
     // Every width, extreme tempo and fades stay finite at 48 kHz.
     for(int width = 0; width < kWidthCount; ++width) {
         Fixture stress(48000); stress.set(kMode, kOn); stress.set(kWidth, width); stress.set(kFade, 20);
+        stress.set(kVariation, width % kVariationCount); stress.set(kOrigin, width % 3); stress.set(kStyle, width % 2);
         stress.set(kTempo, kManual); stress.set(kBpm, width % 2 ? 20 : 400);
         std::vector<float> noise(8192); uint32_t seed = 1u + width;
         for(auto& v : noise) { seed = seed * 1664525u + 1013904223u; v = static_cast<float>(seed >> 8) / 8388608.f - 1.f; }

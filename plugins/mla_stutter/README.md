@@ -73,6 +73,13 @@ generic editor use normalized `0..1`; list controls use indices.
 | Tempo Source | Host, Manual | Host |
 | BPM | 20–400 | 120 |
 | Bypass | Off / On | Off |
+| Style | Repeat, Cut | Repeat |
+| Origin | Grid, Beat, Bar | Grid |
+| Variation | Straight, Roll, Reverse, Pitch Down, Pitch Up, Skip 3-3-2, Random | Straight |
+
+Style, Origin and Variation come after Bypass in the editor. Their IDs were
+added after the first ten, so sessions saved before they existed still load,
+with these three at their defaults.
 
 **Stutter**: **On** starts at the next Width grid line and repeats until it is
 switched off, then fades back to the input over Fade. **Auto** repeats during
@@ -86,6 +93,34 @@ slice repeats replays its start faster, the classic stutter roll.
 declicks the slice edges and engage/release; `0` gives sample-exact repeats.
 **Mix** is the stutter's share while it is engaged. Outside a stutter the
 input always passes unchanged.
+
+**Style**: **Repeat** records a slice and replays it on every grid line.
+**Cut** repeats nothing: the live sound keeps playing and is cut on the grid,
+passing the first **Gate** share of each slice. Gate 1 would cut nothing, so
+Cut treats it as 1/2 (a straight 1/16 chop by default).
+
+**Origin** picks where a repeated slice starts. **Grid** takes it at the grid
+line where the stutter engages. **Beat** takes it from the start of the beat
+that line falls in, so engaging on the third 1/16 of a beat replays the beat's
+first 1/16. **Bar** does the same from the start of the 4-beat bar. Origin only
+matters for Repeat, and reaches back at most as far as the 12.5-second buffer
+holds, less the slice.
+
+**Variation** changes each repeat after the first slice (in Cut style it
+changes each cut):
+
+| Variation | Repeats |
+|---|---|
+| Straight | every slice alike: `e e e e` |
+| Roll | halves the slice every two repeats (2, 4, 8, then 16 splits): a build-up |
+| Reverse | every other repeat plays backwards |
+| Pitch Down | each repeat a semitone lower, down to two octaves |
+| Pitch Up | each repeat a semitone higher, up to two octaves |
+| Skip 3-3-2 | only cells 1, 4 and 7 of every 8 sound: `e--e--e-` |
+| Random | each repeat is normal, split in 2 or 4, reversed, an octave down, or a rest |
+
+In Cut style, Reverse and the pitch variations cut straight, and Random picks
+splits and rests.
 
 **Tempo Source Host** uses the host tempo and, while the host plays, its
 musical position (`projectTimeMusic`), so the grid matches the song. With no
@@ -113,7 +148,8 @@ ctest --test-dir plugins/mla_stutter/build/cmake --output-on-failure
 ```
 
 Processor coverage includes pass-through when off, sample-exact repeats on the
-grid, Width changes while holding, release, Auto periods, host tempo and
+grid, Cut chopping, Beat origin, Roll, loading states saved before the newer
+controls, Width changes while holding, release, Auto periods, host tempo and
 position sync (waiting for the grid line, and relocation), manual tempo, gate,
 bypass, silent buffers, parameter metadata, state round-trip and
 invalid-state rejection, and finite output for every width at extreme tempi.

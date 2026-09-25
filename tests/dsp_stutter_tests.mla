@@ -3,6 +3,9 @@ mod dsp::stutter;
 use dsp::stutter::StereoStutter;
 use dsp::stutter::StutterFrame;
 use dsp::stutter::StutterMode;
+use dsp::stutter::StutterOrigin;
+use dsp::stutter::StutterStyle;
+use dsp::stutter::StutterVariation;
 use std::testing::verify;
 
 // 1024 Hz at 120 BPM is exactly 512 samples per beat, so a 1/16 cell
@@ -156,4 +159,134 @@ fn test_stutter_joining_mid_cell_waits_for_the_line() {
     }
     for i in 0..64 { verify(out[i] == f32(i)); }
     for i in 192..320 { verify(out[i] == f32(64 + (i - 192))); }
+}
+
+fn near(value: f32, expected: f32) -> bool { return value > expected - 0.001f && value < expected + 0.001f; }
+
+#[test]
+fn test_stutter_cut_chops_live_input() {
+    var stutter: StereoStutter = grid_stutter();
+    stutter.set_style(StutterStyle::Cut);
+    stutter.set_mode(StutterMode::On);
+    var out: list<f32> = [];
+    for i in 0..384 {
+        let frame: StutterFrame = stutter.process_stereo(f32(i), 0.0f);
+        out.push(frame.left());
+    }
+    // Gate 1 cuts at half: live for 64 samples, silent for 64, never repeated.
+    for i in 0..384 { verify(out[i] == (i % 128 < 64 ? f32(i) : 0.0f)); }
+    stutter.set_gate(0.25);
+    for i in 384..512 {
+        let frame: StutterFrame = stutter.process_stereo(f32(i), 0.0f);
+        verify(frame.left() == (i % 128 < 32 ? f32(i) : 0.0f));
+    }
+}
+
+#[test]
+fn test_stutter_beat_origin_repeats_from_the_beat_start() {
+    var stutter: StereoStutter = grid_stutter();
+    stutter.set_origin(StutterOrigin::Beat);
+    var out: list<f32> = [];
+    for i in 0..768 {
+        if i == 300 { stutter.set_mode(StutterMode::On); }
+        let frame: StutterFrame = stutter.process_stereo(f32(i), 0.0f);
+        out.push(frame.left());
+    }
+    // Engages on the grid line at 384, three cells into beat 0: the slice is
+    // the beat's first 1/16 (samples 0..127), repeated from then on.
+    for i in 0..384 { verify(out[i] == f32(i)); }
+    for i in 384..768 { verify(out[i] == f32(i % 128)); }
+}
+
+#[test]
+fn test_stutter_bar_origin_repeats_from_the_bar_start() {
+    var stutter: StereoStutter = grid_stutter();
+    stutter.set_origin(StutterOrigin::Bar);
+    var out: list<f32> = [];
+    for i in 0..1408 {
+        if i == 1100 { stutter.set_mode(StutterMode::On); }
+        let frame: StutterFrame = stutter.process_stereo(f32(i), 0.0f);
+        out.push(frame.left());
+    }
+    for i in 1152..1408 { verify(out[i] == f32(i % 128)); }
+}
+
+#[test]
+fn test_stutter_roll_splits_repeats_faster() {
+    var stutter: StereoStutter = grid_stutter();
+    stutter.set_variation(StutterVariation::Roll);
+    stutter.set_mode(StutterMode::On);
+    var out: list<f32> = [];
+    for i in 0..1024 {
+        let frame: StutterFrame = stutter.process_stereo(f32(i), 0.0f);
+        out.push(frame.left());
+    }
+    for i in 128..256 { verify(out[i] == f32(i - 128)); }  // repeat 1: whole
+    for i in 256..512 { verify(out[i] == f32(i % 64)); }   // repeats 2-3: halves
+    for i in 512..768 { verify(out[i] == f32(i % 32)); }   // repeats 4-5: quarters
+    for i in 768..1024 { verify(out[i] == f32(i % 16)); }  // repeats 6-7: eighths
+}
+
+#[test]
+fn test_stutter_reverse_alternates_direction() {
+    var stutter: StereoStutter = grid_stutter();
+    stutter.set_variation(StutterVariation::Reverse);
+    stutter.set_mode(StutterMode::On);
+    var out: list<f32> = [];
+    for i in 0..384 {
+        let frame: StutterFrame = stutter.process_stereo(f32(i), 0.0f);
+        out.push(frame.left());
+    }
+    for i in 128..256 { verify(out[i] == f32(255 - i)); }
+    for i in 256..384 { verify(out[i] == f32(i - 256)); }
+}
+
+#[test]
+fn test_stutter_pitch_variations_change_read_speed() {
+    var down: StereoStutter = grid_stutter();
+    down.set_variation(StutterVariation::PitchDown);
+    down.set_mode(StutterMode::On);
+    var up: StereoStutter = grid_stutter();
+    up.set_variation(StutterVariation::PitchUp);
+    up.set_mode(StutterMode::On);
+    for i in 0..384 {
+        let low: StutterFrame = down.process_stereo(f32(i), 0.0f);
+        let high: StutterFrame = up.process_stereo(f32(i), 0.0f);
+        // Repeat 2 reads two semitones away from the original speed.
+        if i == 256 + 100 {
+            verify(near(low.left(), 100.0f * 0.890899f));
+            verify(near(high.left(), 100.0f * 1.122462f));
+        }
+    }
+}
+
+#[test]
+fn test_stutter_skip_plays_three_three_two() {
+    var stutter: StereoStutter = grid_stutter();
+    stutter.set_variation(StutterVariation::Skip);
+    stutter.set_mode(StutterMode::On);
+    var out: list<f32> = [];
+    for i in 0..1024 {
+        let frame: StutterFrame = stutter.process_stereo(f32(i), 0.0f);
+        out.push(frame.left());
+    }
+    for i in 0..1024 {
+        let step: i64 = i / 128;
+        let sounding: bool = step == 0 || step == 3 || step == 6;
+        verify(out[i] == (sounding ? f32(i % 128) : 0.0f));
+    }
+}
+
+#[test]
+fn test_stutter_random_stays_within_the_slice() {
+    var stutter: StereoStutter = grid_stutter();
+    stutter.set_variation(StutterVariation::Random);
+    stutter.set_mode(StutterMode::On);
+    var rests: i64 = 0;
+    for i in 0..8192 {
+        let frame: StutterFrame = stutter.process_stereo(f32(i) + 1.0f, 0.0f);
+        verify(frame.left() >= 0.0f && frame.left() <= 128.0f);
+        if i >= 128 && frame.left() == 0.0f { rests = rests + 1; }
+    }
+    verify(rests > 0 && rests < 8000);
 }

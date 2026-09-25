@@ -2371,6 +2371,11 @@ int main(int argc, char** argv)
                 std::cout << "Generating LLVM IR..." << std::endl;
             }
 
+            // The backend sets the target triple and data layout. Do it
+            // before code generation, so size_of and every other layout query
+            // see the target's padding and alignment, not LLVM's defaults.
+            Backend backend(module, targetArch);
+
             generator.generateCode(program);
 
             // Check for semantic errors
@@ -2389,9 +2394,6 @@ int main(int argc, char** argv)
                 std::cout << "\n=== AST ===" << std::endl;
                 std::cout << program->toString() << std::endl;
             }
-
-            // Initialize backend
-            Backend backend(module, targetArch);
 
             if(verbose)
             {

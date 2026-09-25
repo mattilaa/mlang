@@ -1,9 +1,9 @@
 /// \file stutter.mla
-/// \brief Tempo-locked stereo stutter (beat repeat).
+/// \brief Tempo-locked stereo stutter (beat repeat and rhythmic cut).
 ///
 /// @defgroup dsp_stutter dsp::stutter
 /// @ingroup dsp
-/// @brief Captures one grid slice of the input and repeats it in time.
+/// @brief Repeats or chops grid slices of the input in time.
 /// @{
 
 /// \cond INTERNAL_IMPORTS
@@ -13,6 +13,7 @@ use std::vec::set_f32;
 
 extern fn floor(value: f64) -> f64;
 extern fn llround(value: f64) -> i64;
+extern fn pow(base: f64, exponent: f64) -> f64;
 
 fn stutter_floor(value: f64) -> i64 { return llround(floor(value)); }
 
@@ -26,10 +27,46 @@ fn stutter_clamp(value: f64, low: f64, high: f64) -> f64 {
 pub enum StutterMode : i32 {
     /// Pass the input through.
     Off = 0,
-    /// Repeat during the last `hold` beats of every `period` beats.
+    /// Stutter during the last `hold` beats of every `period` beats.
     Auto = 1,
-    /// Repeat from the next grid line until switched off.
+    /// Stutter from the next grid line until switched off.
     On = 2
+};
+
+/// @brief What the stutter plays while engaged.
+pub enum StutterStyle : i32 {
+    /// Replay one captured slice on every grid line.
+    Repeat = 0,
+    /// Keep the live input and cut it on the grid: nothing repeats.
+    Cut = 1
+};
+
+/// @brief Where a repeated slice starts.
+pub enum StutterOrigin : i32 {
+    /// At the grid line where the stutter engages.
+    Grid = 0,
+    /// At the start of the beat holding that grid line.
+    Beat = 1,
+    /// At the start of the bar (4 beats) holding it.
+    Bar = 2
+};
+
+/// @brief How successive slices vary. The first slice always plays as is.
+pub enum StutterVariation : i32 {
+    /// Every slice alike.
+    Straight = 0,
+    /// Slices split in 2, 4, 8, 16 every two cells: a speeding-up roll.
+    Roll = 1,
+    /// Every other repeat plays backwards.
+    Reverse = 2,
+    /// Each repeat a semitone lower, down to two octaves.
+    PitchDown = 3,
+    /// Each repeat a semitone higher, up to two octaves.
+    PitchUp = 4,
+    /// Only cells 1, 4 and 7 of every 8 sound: a 3-3-2 rhythm.
+    Skip = 5,
+    /// Each repeat picks a split, reverse, octave drop or rest.
+    Random = 6
 };
 
 /// @brief One processed stereo sample.
@@ -46,14 +83,21 @@ impl StutterFrame {
     pub fn right(self: StutterFrame) -> f32 { return self.right_value; }
 }
 
-/// @brief Stereo beat repeater locked to a tempo and a beat position.
+/// @brief Stereo stutter locked to a tempo and a beat position.
 ///
 /// The beat grid is divided into cells `width` beats long. On a cell boundary
-/// where the stutter is engaged, the first cell plays the live input while
-/// recording it, and the following cells replay that recording from its
-/// start, so each repeat lands on the grid. Storage is allocated only by
-/// `new()`; processing and parameter changes do not allocate or lock.
+/// where the stutter is engaged, the first cell plays a slice (live, or from
+/// the start of the beat or bar) while recording it, and the following cells
+/// replay that recording, so each repeat lands on the grid. In `Cut` style
+/// the live input plays instead and the gate, splits and rests chop it.
+/// Storage is allocated only by `new()`; processing and parameter changes do
+/// not allocate or lock.
 pub struct StereoStutter {
+    /// Rolling input history, `written` frames so far.
+    var history_left: list<f32>;
+    var history_right: list<f32>;
+    var written: i64;
+    /// The slice being repeated.
     var left_buffer: list<f32>;
     var right_buffer: list<f32>;
     var sample_rate_hz: f64;
@@ -62,6 +106,9 @@ pub struct StereoStutter {
     var beats_per_sample: f64;
     var width_beats: f64;
     var mode: StutterMode;
+    var style: StutterStyle;
+    var origin: StutterOrigin;
+    var variation: StutterVariation;
     var auto_period_beats: f64;
     var auto_hold_beats: f64;
     var gate: f64;
@@ -70,22 +117,38 @@ pub struct StereoStutter {
     /// Current grid cell, and the sample offset into it.
     var cell: i64;
     var position: i64;
-    /// 0 = idle, 1 = capturing the first cell, 2 = repeating it.
+    /// 0 = idle, 1 = first slice (recording), 2 = repeating it.
     var state: i32;
     var captured: i64;
+    /// History frame the first slice reads from.
+    var source_start: i64;
+    /// Cells since the stutter engaged (0 = the first slice).
+    var repeat: i64;
+    /// This cell's variation: splits, 0 = forward / 1 = reverse, read
+    /// speed, and whether it rests.
+    var cell_splits: i64;
+    var cell_reverse: bool;
+    var cell_speed: f64;
+    var cell_muted: bool;
+    var seed: i64;
     /// Share of the stutter voice in the output, ramped over `fade_samples`.
     var wet: f32;
 };
 
 impl StereoStutter {
-    /// @brief Allocate a stutter able to capture `max_seconds` of audio.
+    /// @brief Allocate a stutter able to hold `max_seconds` of audio.
     ///
-    /// Longer cells replay the first `max_seconds` and are silent after that.
+    /// Both the slice and the history for `Beat`/`Bar` origins fit in it;
+    /// longer cells are silent past it, and an origin further back than the
+    /// history holds starts as far back as it can.
     pub fn new(sample_rate_hz: f32, max_seconds: f32) -> StereoStutter {
         let rate: f64 = sample_rate_hz < 1000.0f ? 1000.0 : f64(sample_rate_hz);
         let seconds: f64 = stutter_clamp(f64(max_seconds), 0.01, 60.0);
         let capacity: i64 = stutter_floor(rate * seconds) + 1;
         var stutter: StereoStutter = StereoStutter {
+            history_left: [0.0f; capacity],
+            history_right: [0.0f; capacity],
+            written: 0,
             left_buffer: [0.0f; capacity],
             right_buffer: [0.0f; capacity],
             sample_rate_hz: rate,
@@ -94,6 +157,9 @@ impl StereoStutter {
             beats_per_sample: 0.0,
             width_beats: 0.25,
             mode: StutterMode::Off,
+            style: StutterStyle::Repeat,
+            origin: StutterOrigin::Grid,
+            variation: StutterVariation::Straight,
             auto_period_beats: 4.0,
             auto_hold_beats: 1.0,
             gate: 1.0,
@@ -103,6 +169,13 @@ impl StereoStutter {
             position: 0,
             state: 0,
             captured: 0,
+            source_start: 0,
+            repeat: 0,
+            cell_splits: 1,
+            cell_reverse: false,
+            cell_speed: 1.0,
+            cell_muted: false,
+            seed: 1,
             wet: 0.0f
         };
         stutter.set_tempo_bpm(120.0);
@@ -110,9 +183,10 @@ impl StereoStutter {
         return stutter;
     }
 
-    /// @brief Forget the capture and the grid position; storage is kept.
+    /// @brief Forget the slice, history and grid position; storage is kept.
     pub fn reset(self: &mut Self) -> void {
         self.cell = -1; self.position = 0; self.state = 0; self.captured = 0; self.wet = 0.0f;
+        self.written = 0; self.repeat = 0; self.clear_variation();
     }
 
     /// @brief Tempo in BPM, clamped to 20 .. 999.
@@ -139,19 +213,29 @@ impl StereoStutter {
         self.width_beats = stutter_clamp(beats, 0.015625, 16.0);
     }
 
-    /// @brief Off, Auto or On. Leaving a repeat fades back to the input.
+    /// @brief Off, Auto or On. Leaving a stutter fades back to the input.
     pub fn set_mode(self: &mut Self, mode: StutterMode) -> void {
         self.mode = mode;
         if mode == StutterMode::Off { self.state = 0; }
     }
 
-    /// @brief Auto mode: repeat during the last `hold` of every `period` beats.
+    /// @brief Repeat a slice, or cut the live input.
+    pub fn set_style(self: &mut Self, style: StutterStyle) -> void { self.style = style; }
+
+    /// @brief Where the next repeated slice starts.
+    pub fn set_origin(self: &mut Self, origin: StutterOrigin) -> void { self.origin = origin; }
+
+    /// @brief How successive slices vary; applies from the next cell.
+    pub fn set_variation(self: &mut Self, variation: StutterVariation) -> void { self.variation = variation; }
+
+    /// @brief Auto mode: stutter during the last `hold` of every `period` beats.
     pub fn set_auto(self: &mut Self, period_beats: f64, hold_beats: f64) -> void {
         self.auto_period_beats = stutter_clamp(period_beats, 0.25, 64.0);
         self.auto_hold_beats = stutter_clamp(hold_beats, 0.0, self.auto_period_beats);
     }
 
     /// @brief Audible share of each slice, 0.05 .. 1; the rest is silent.
+    /// `Cut` style treats 1 as 1/2, since a full gate would cut nothing.
     pub fn set_gate(self: &mut Self, gate: f64) -> void { self.gate = stutter_clamp(gate, 0.05, 1.0); }
 
     /// @brief Declick fade at slice edges and on engage/release, 0 .. 50 ms.
@@ -164,7 +248,7 @@ impl StereoStutter {
         self.mix = mix < 0.0f ? 0.0f : (mix > 1.0f ? 1.0f : mix);
     }
 
-    /// @brief Whether a slice is being captured or repeated.
+    /// @brief Whether a stutter is in progress.
     pub fn is_active(self: StereoStutter) -> bool { return self.state != 0; }
 
     fn engaged_at(self: StereoStutter, cell: i64) -> bool {
@@ -176,55 +260,149 @@ impl StereoStutter {
         return offset >= self.auto_period_beats - self.auto_hold_beats;
     }
 
-    /// A capture starts only on a grid line. Entering a cell part way (first
+    fn cell_samples(self: StereoStutter) -> f64 { return self.width_beats / self.beats_per_sample; }
+
+    fn clear_variation(self: &mut Self) -> void {
+        self.cell_splits = 1; self.cell_reverse = false; self.cell_speed = 1.0; self.cell_muted = false;
+    }
+
+    fn next_random(self: &mut Self) -> i64 {
+        self.seed = (self.seed * 1103515245 + 12345) % 2147483648;
+        return self.seed / 65536;
+    }
+
+    /// Decide how the current cell plays from the variation and the repeat count.
+    fn choose_variation(self: &mut Self) -> void {
+        self.clear_variation();
+        let r: i64 = self.repeat;
+        let cut: bool = self.style == StutterStyle::Cut;
+        if self.variation == StutterVariation::Roll {
+            let doublings: i64 = r / 2 > 4 ? 4 : r / 2;
+            var splits: i64 = 1;
+            for i in 0..doublings { splits = splits * 2; }
+            self.cell_splits = splits;
+        } else if self.variation == StutterVariation::Reverse {
+            self.cell_reverse = !cut && r % 2 == 1;
+        } else if self.variation == StutterVariation::PitchDown || self.variation == StutterVariation::PitchUp {
+            let steps: f64 = f64(r > 24 ? 24 : r);
+            if !cut { self.cell_speed = pow(2.0, (self.variation == StutterVariation::PitchUp ? steps : -steps) / 12.0); }
+        } else if self.variation == StutterVariation::Skip {
+            let step: i64 = r % 8;
+            self.cell_muted = step != 0 && step != 3 && step != 6;
+        } else if self.variation == StutterVariation::Random && r > 0 {
+            let pick: i64 = self.next_random() % 8;
+            if pick == 3 { self.cell_splits = 2; }
+            else if pick == 4 { self.cell_splits = 4; }
+            else if pick == 5 { if cut { self.cell_splits = 2; } else { self.cell_reverse = true; } }
+            else if pick == 6 { self.cell_muted = true; }
+            else if pick == 7 { if cut { self.cell_splits = 4; } else { self.cell_speed = 0.5; } }
+        }
+    }
+
+    /// Frames back from now to the start of the beat or bar, if the origin
+    /// asks for one, limited to what the history still holds.
+    fn origin_offset(self: StereoStutter) -> i64 {
+        if self.origin == StutterOrigin::Grid { return 0; }
+        let unit: f64 = self.origin == StutterOrigin::Bar ? 4.0 : 1.0;
+        let into: f64 = self.beat - f64(stutter_floor(self.beat / unit)) * unit;
+        var frames: i64 = llround(into / self.beats_per_sample);
+        if frames >= llround(unit / self.beats_per_sample) { frames = 0; }
+        var limit: i64 = self.history_left.len() - llround(self.cell_samples()) - 2;
+        if limit > self.written - 1 { limit = self.written - 1; }
+        if limit < 0 { limit = 0; }
+        return frames > limit ? limit : frames;
+    }
+
+    /// A stutter starts only on a grid line. Entering a cell part way (first
     /// block, or a jump in the beat) waits for the next line, or keeps a
-    /// running repeat in phase with the grid.
+    /// running stutter in phase with the grid.
     fn enter_cell(self: &mut Self, cell: i64) -> void {
         let offset: f64 = self.beat - f64(cell) * self.width_beats;
         let into: i64 = offset <= 0.0 ? 0 : stutter_floor(offset / self.beats_per_sample);
         self.cell = cell; self.position = into;
-        if !self.engaged_at(cell) { self.state = 0; }
-        else if self.state != 0 { self.state = 2; }
-        else if into == 0 { self.state = 1; self.captured = 0; }
+        if !self.engaged_at(cell) { self.state = 0; return; }
+        if self.state != 0 { self.state = 2; self.repeat = self.repeat + 1; }
+        else if into == 0 {
+            self.state = 1; self.captured = 0; self.repeat = 0;
+            self.source_start = self.written - 1 - self.origin_offset();
+        }
+        else { return; }
+        self.choose_variation();
     }
 
-    /// Slice envelope: fade in on repeats, fade out before the gate and the
-    /// end of the recording.
-    fn envelope(self: StereoStutter) -> f32 {
-        let fade: f64 = self.fade_samples < 1.0 ? 1.0 : self.fade_samples;
-        let at: f64 = f64(self.position);
-        var gain: f64 = 1.0;
-        if self.state != 1 { gain = stutter_clamp((at + 1.0) / fade, 0.0, 1.0); }
-        let length: f64 = self.width_beats / self.beats_per_sample;
-        gain = gain * stutter_clamp((self.gate * length - at) / fade, 0.0, 1.0);
-        if self.state != 1 { gain = gain * stutter_clamp((f64(self.captured) - at) / fade, 0.0, 1.0); }
-        return f32(gain);
+    fn history_frame(self: StereoStutter, frame: i64) -> StutterFrame {
+        let slot: i64 = frame % self.history_left.len();
+        return StutterFrame { left_value: self.history_left[slot], right_value: self.history_right[slot] };
+    }
+
+    /// Linear read of the slice; silent outside what was recorded.
+    fn slice_frame(self: StereoStutter, at: f64) -> StutterFrame {
+        if at < 0.0 { return StutterFrame { left_value: 0.0f, right_value: 0.0f }; }
+        let index: i64 = stutter_floor(at);
+        if index >= self.captured { return StutterFrame { left_value: 0.0f, right_value: 0.0f }; }
+        let next: i64 = index + 1 < self.captured ? index + 1 : index;
+        let blend: f32 = f32(at - f64(index));
+        return StutterFrame {
+            left_value: self.left_buffer[index] + (self.left_buffer[next] - self.left_buffer[index]) * blend,
+            right_value: self.right_buffer[index] + (self.right_buffer[next] - self.right_buffer[index]) * blend
+        };
     }
 
     /// @brief Process one stereo sample and advance the beat.
     pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> StutterFrame {
+        let slot: i64 = self.written % self.history_left.len();
+        set_f32(self.history_left, slot, input_left);
+        set_f32(self.history_right, slot, input_right);
+        self.written = self.written + 1;
         let cell: i64 = stutter_floor(self.beat / self.width_beats);
         if cell != self.cell { self.enter_cell(cell); } else { self.position = self.position + 1; }
-        var left: f32 = 0.0f; var right: f32 = 0.0f;
-        if self.state == 1 {
+
+        // Where in the cell's current split we are.
+        let fade: f64 = self.fade_samples < 1.0 ? 1.0 : self.fade_samples;
+        let split: f64 = self.cell_samples() / f64(self.cell_splits);
+        let at: f64 = f64(self.position);
+        let piece: i64 = stutter_floor(at / split);
+        let local: f64 = at - f64(piece) * split;
+        let cut: bool = self.style == StutterStyle::Cut;
+        let gate: f64 = cut && self.gate >= 1.0 ? 0.5 : self.gate;
+        var gain: f64 = stutter_clamp((gate * split - local) / fade, 0.0, 1.0);
+        // The first slice continues the dry signal; everything after fades in.
+        if self.repeat != 0 || piece != 0 { gain = gain * stutter_clamp((local + 1.0) / fade, 0.0, 1.0); }
+        if self.cell_muted { gain = 0.0; }
+
+        var voice: StutterFrame = StutterFrame { left_value: input_left, right_value: input_right };
+        if cut {
+            if self.state == 0 { gain = 1.0; }
+        } else if self.state == 1 {
+            voice = self.history_frame(self.source_start + self.position);
             if self.position < self.left_buffer.len() {
-                set_f32(self.left_buffer, self.position, input_left);
-                set_f32(self.right_buffer, self.position, input_right);
+                set_f32(self.left_buffer, self.position, voice.left());
+                set_f32(self.right_buffer, self.position, voice.right());
                 self.captured = self.position + 1;
             }
-            left = input_left; right = input_right;
-        } else if self.position < self.captured {
-            left = self.left_buffer[self.position]; right = self.right_buffer[self.position];
+        } else {
+            var read: f64 = local;
+            if self.cell_reverse { read = split - 1.0 - local; }
+            else if self.cell_speed != 1.0 {
+                read = local * self.cell_speed;
+                if self.cell_speed > 1.0 && self.captured > 0 {
+                    read = read - f64(stutter_floor(read / f64(self.captured))) * f64(self.captured);
+                }
+            } else {
+                gain = gain * stutter_clamp((f64(self.captured) - read) / fade, 0.0, 1.0);
+            }
+            voice = self.slice_frame(read);
         }
-        let gain: f32 = self.envelope();
+
         let step: f32 = self.fade_samples < 1.0 ? 1.0f : f32(1.0 / self.fade_samples);
         if self.state != 0 { self.wet = self.wet + step > 1.0f ? 1.0f : self.wet + step; }
         else { self.wet = self.wet - step < 0.0f ? 0.0f : self.wet - step; }
         let share: f32 = self.wet * self.mix;
+        let level: f32 = f32(gain) * share;
         self.beat = self.beat + self.beats_per_sample;
         return StutterFrame {
-            left_value: input_left * (1.0f - share) + left * gain * share,
-            right_value: input_right * (1.0f - share) + right * gain * share
+            left_value: input_left * (1.0f - share) + voice.left() * level,
+            right_value: input_right * (1.0f - share) + voice.right() * level
         };
     }
 }

@@ -4,6 +4,9 @@ mod dsp::stutter;
 use dsp::stutter::StereoStutter;
 use dsp::stutter::StutterFrame;
 use dsp::stutter::StutterMode;
+use dsp::stutter::StutterOrigin;
+use dsp::stutter::StutterStyle;
+use dsp::stutter::StutterVariation;
 extern fn calloc(count: i64, size: i64) -> ptr<StereoStutter>;
 extern fn free(block: ptr<StereoStutter>) -> void;
 
@@ -20,7 +23,9 @@ fn mlastutter_destroy(handle: ptr<StereoStutter>) {
 fn mlastutter_reset(handle: ptr<StereoStutter>) { unsafe { (*handle).reset(); } }
 
 /// 0 mode (0 Off, 1 Auto, 2 On), 1 width beats, 2 auto period, 3 auto hold,
-/// 4 gate, 5 fade ms, 6 mix. Period and hold always arrive as a pair.
+/// 4 gate, 5 fade ms, 6 mix, 7 style (0 Repeat, 1 Cut), 8 origin (0 Grid,
+/// 1 Beat, 2 Bar), 9 variation (StutterVariation order). Period and hold
+/// always arrive as a pair.
 fn mlastutter_set(handle: ptr<StereoStutter>, index: i32, value: f64, extra: f64) {
     unsafe {
         if index == 0 {
@@ -33,6 +38,22 @@ fn mlastutter_set(handle: ptr<StereoStutter>, index: i32, value: f64, extra: f64
         else if index == 4 { (*handle).set_gate(value); }
         else if index == 5 { (*handle).set_fade_ms(value); }
         else if index == 6 { (*handle).set_mix(f32(value)); }
+        else if index == 7 { (*handle).set_style(value >= 0.5 ? StutterStyle::Cut : StutterStyle::Repeat); }
+        else if index == 8 {
+            var origin: StutterOrigin = StutterOrigin::Grid;
+            if value >= 1.5 { origin = StutterOrigin::Bar; } else if value >= 0.5 { origin = StutterOrigin::Beat; }
+            (*handle).set_origin(origin);
+        }
+        else if index == 9 {
+            var variation: StutterVariation = StutterVariation::Straight;
+            if value >= 5.5 { variation = StutterVariation::Random; }
+            else if value >= 4.5 { variation = StutterVariation::Skip; }
+            else if value >= 3.5 { variation = StutterVariation::PitchUp; }
+            else if value >= 2.5 { variation = StutterVariation::PitchDown; }
+            else if value >= 1.5 { variation = StutterVariation::Reverse; }
+            else if value >= 0.5 { variation = StutterVariation::Roll; }
+            (*handle).set_variation(variation);
+        }
     }
 }
 /// Block start: tempo, and the host beat when it is running (follow != 0).

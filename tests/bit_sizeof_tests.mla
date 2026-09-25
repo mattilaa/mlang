@@ -215,3 +215,20 @@ fn test_bitset_len_tracks_bits_not_bools_as_bytes() {
 
     bs.close();
 }
+
+struct PaddedLayout {
+    var small: i32;
+    var wide: f64;
+    var flag: bool;
+    var count: i64;
+    var level: f32;
+};
+
+// size_of uses the target's alignment: 8-byte i64/f64 fields are padded to
+// 8 bytes on 64-bit targets, so allocations sized with it hold the value.
+#[test]
+fn test_size_of_includes_target_padding() {
+    verify_eq_i64(size_of(PaddedLayout), 40);
+    let value: PaddedLayout = PaddedLayout {};
+    verify_eq_i64(size_of(value), 40);
+}

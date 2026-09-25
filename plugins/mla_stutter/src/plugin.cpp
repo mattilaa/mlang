@@ -34,11 +34,22 @@ enum Index {
     kTempo = 7,
     kBpm = 8,
     kBypass = 9,
+    // Added after the first release: appended so saved IDs stay stable.
+    kStyle = 10,
+    kOrigin = 11,
+    kVariation = 12,
     kCount
 };
+// States saved before Style/Origin/Variation hold only the first ten values.
+constexpr int kFirstReleaseCount = kStyle;
 constexpr ParamID kFirstParam = 100;
 enum Mode { kOff, kAuto, kOn };
 enum TempoSource { kHost, kManual };
+enum Style { kRepeat, kCut };
+enum Origin { kGrid, kBeat, kBar };
+constexpr int kVariationCount = 7;
+static const TChar* const kVariationNames[kVariationCount] = {
+    STR16("Straight"), STR16("Roll"), STR16("Reverse"), STR16("Pitch Down"), STR16("Pitch Up"), STR16("Skip 3-3-2"), STR16("Random")};
 // Width list, straight and triplet note values, as quarter-note beats.
 constexpr int kWidthCount = 10;
 static const TChar* const kWidthNames[kWidthCount] = {
@@ -65,6 +76,9 @@ static const Spec specs[kCount] = {
     {STR16("Tempo Source"), STR16(""), 0, 1, kHost, 1},
     {STR16("BPM"), STR16("BPM"), 20, 400, 120, 0},
     {STR16("Bypass"), STR16(""), 0, 1, 0, 1},
+    {STR16("Style"), STR16(""), 0, 1, kRepeat, 1},
+    {STR16("Origin"), STR16(""), 0, 2, kGrid, 2},
+    {STR16("Variation"), STR16(""), 0, kVariationCount - 1, 0, kVariationCount - 1},
 };
 static double normalized(int i, double plain) { return (plain - specs[i].low) / (specs[i].high - specs[i].low); }
 static double physical(int i, double norm) {
@@ -73,7 +87,12 @@ static double physical(int i, double norm) {
 }
 class Processor final : public SingleComponentEffect, public IMidiMapping {
 public:
-    Processor() { for(int i = 0; i < kCount; ++i) norm_[i] = normalized(i, specs[i].initial); }
+    Processor() : norm_(defaults()) {}
+    static std::array<double, kCount> defaults() {
+        std::array<double, kCount> values{};
+        for(int i = 0; i < kCount; ++i) values[i] = normalized(i, specs[i].initial);
+        return values;
+    }
     ~Processor() override { destroy(); }
     DEFINE_INTERFACES
         DEF_INTERFACE(IMidiMapping)
@@ -86,12 +105,15 @@ public:
         addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
         addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
         for(int i = 0; i < kCount; ++i) {
-            if(i == kMode || i == kWidth || i == kHold || i == kTempo) {
+            if(i == kMode || i == kWidth || i == kHold || i == kTempo || i == kStyle || i == kOrigin || i == kVariation) {
                 auto* parameter = new StringListParameter(specs[i].title, kFirstParam + i);
                 if(i == kMode) for(const TChar* name : {STR16("Off"), STR16("Auto"), STR16("On")}) parameter->appendString(name);
                 if(i == kWidth) for(const TChar* name : kWidthNames) parameter->appendString(name);
                 if(i == kHold) for(const TChar* name : kHoldNames) parameter->appendString(name);
                 if(i == kTempo) { parameter->appendString(STR16("Host")); parameter->appendString(STR16("Manual")); }
+                if(i == kStyle) { parameter->appendString(STR16("Repeat")); parameter->appendString(STR16("Cut")); }
+                if(i == kOrigin) for(const TChar* name : {STR16("Grid"), STR16("Beat"), STR16("Bar")}) parameter->appendString(name);
+                if(i == kVariation) for(const TChar* name : kVariationNames) parameter->appendString(name);
                 parameter->getInfo().defaultNormalizedValue = norm_[i];
                 parameter->setNormalized(norm_[i]); parameters.addParameter(parameter);
             } else {
@@ -168,8 +190,17 @@ public:
     tresult PLUGIN_API setState(IBStream* state) override {
         if(!state) return kResultFalse;
         IBStreamer stream(state, kLittleEndian);
-        std::array<double, kCount> values{};
-        for(auto& value : values) if(!stream.readDouble(value) || !std::isfinite(value) || value < 0 || value > 1) return kResultFalse;
+        // Older states end after Bypass; the newer controls keep their defaults.
+        std::array<double, kCount> values = defaults();
+        for(int i = 0; i < kCount; ++i) {
+            double value = 0;
+            if(!stream.readDouble(value)) {
+                if(i == kFirstReleaseCount) break;
+                return kResultFalse;
+            }
+            if(!std::isfinite(value) || value < 0 || value > 1) return kResultFalse;
+            values[i] = value;
+        }
         norm_ = values;
         for(int i = 0; i < kCount; ++i) setParamNormalized(kFirstParam + i, norm_[i]);
         applyAll(); return kResultOk;
@@ -207,9 +238,12 @@ private:
             case kWidth: push(kWidth, kWidthBeats[static_cast<int>(plain(kWidth))]); break;
             case kPeriod: case kHold: push(kPeriod, plain(kPeriod), kHoldBeats[static_cast<int>(plain(kHold))]); break;
             case kGate: case kFade: case kMix: push(i, plain(i)); break;
+            case kStyle: push(7, plain(kStyle)); break;
+            case kOrigin: push(8, plain(kOrigin)); break;
+            case kVariation: push(9, plain(kVariation)); break;
         }
     }
-    void applyAll() { for(int i = 0; i <= kMix; ++i) pushControl(i); }
+    void applyAll() { for(int i = 0; i < kCount; ++i) pushControl(i); }
     void applyOne(ParamID id, double value) {
         if(id < kFirstParam || id >= kFirstParam + kCount || !std::isfinite(value)) return;
         const int i = static_cast<int>(id - kFirstParam);
