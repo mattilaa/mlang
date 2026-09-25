@@ -641,6 +641,7 @@ private:
 
     llvm::Value* generateExpression(ExpressionNode* node);
     llvm::Value* generateMatchExpression(MatchExpressionNode* node);
+    llvm::Value* generateShortCircuitLogicalOp(BinaryOpNode* node);
     llvm::Value* generateTernaryExpression(TernaryNode* node);
     llvm::Value* generateTryExpression(TryExpressionNode* node);
     llvm::Value* generateSizeofExpression(SizeofExpressionNode* node);

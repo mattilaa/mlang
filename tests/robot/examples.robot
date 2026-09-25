@@ -492,7 +492,6 @@ MLang Frontend BackendOnly PrintsUsage
     Should Contain    ${run.stdout}    Usage:
 
 MLang Frontend CompileFlagsOnly PrintsNoInputError
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify C++ parity: compile mode with only flags errors with no-input message and does not invoke backend.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_flags_only
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -541,7 +540,6 @@ MLang Frontend CompileOnly LinkOrOutput WithValue StillNoInputError
     Should Contain    ${run_l.stdout}    Usage:
 
 MLang Frontend CompileOnly TestsFlag WithoutInput IsAccepted
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify C++ parity: compile-stream --tests without explicit input is accepted (defaults handled by backend).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_only_tests_no_input
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -742,7 +740,6 @@ MLang Frontend BackendWithoutValueInPassthroughIsForwarded
     Should Contain    ${log_text}    dummy_input.mla --backend
 
 MLang Frontend Normalizes Signaled Backend Exit To One
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify frontend maps signaled backend termination to exit code 1.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_backend_signal_exit
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -760,7 +757,6 @@ MLang Frontend Normalizes Signaled Backend Exit To One
     Should Be Equal As Integers    ${run.rc}    1
 
 MLang Frontend Preserves Normal Backend Exit Code
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify frontend forwards normal exited backend return code without normalization.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_backend_exit_code
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -778,7 +774,6 @@ MLang Frontend Preserves Normal Backend Exit Code
     Should Be Equal As Integers    ${run.rc}    7
 
 MLang Frontend Missing Backend Executable Returns 127
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify frontend returns 127 when backend executable path does not exist.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_backend_spawn_fail
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -1976,7 +1971,6 @@ MLang Frontend RunTests Defaults To Tests Directory
     Should Contain    ${log_text}    --tests tests/
 
 MLang Frontend DirectTests Defaults To Tests Directory
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify direct `--tests` without explicit path defaults to `tests` directory (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_default_path
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -5718,7 +5712,6 @@ MLang Frontend Compile Mode Rejects NoRun Flag
     Should Contain    ${run.stdout}    Usage:
 
 MLang Frontend Compile Mode Surfaces DoubleFree Diagnostics
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify compile-time memory safety diagnostics from backend are surfaced by mlang-frontend-mla.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_double_free_diag
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
@@ -5743,7 +5736,6 @@ MLang Frontend Compile Mode Surfaces DoubleFree Diagnostics
     Should Contain    ${run.stderr}    double free or use-after-free
 
 MLang Frontend Compile Mode Surfaces HandleFree Diagnostics
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify compile-time *_free handle diagnostics are surfaced by mlang-frontend-mla.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_handle_free_diag
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}

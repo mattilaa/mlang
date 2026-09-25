@@ -141,6 +141,10 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
 
 llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
 {
+    if((node->op == BinaryOpNode::OP_AND || node->op == BinaryOpNode::OP_OR) &&
+       builder.GetInsertBlock() && builder.GetInsertBlock()->getParent())
+        return generateShortCircuitLogicalOp(node);
+
     llvm::Value* L = generateExpression(node->left);
     llvm::Value* R = generateExpression(node->right);
 
@@ -1830,6 +1834,87 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
     }
 
     return node->isPrefix ? newVal : oldVal;
+}
+
+// `&&` and `||` evaluate their right operand only when the left one does not
+// already decide the result, so guards such as `i < xs.len() && xs[i] == v`
+// never run the guarded expression.
+llvm::Value* CodeGenerator::generateShortCircuitLogicalOp(BinaryOpNode* node)
+{
+    const bool isAnd = node->op == BinaryOpNode::OP_AND;
+    auto toBoolValue = [&](llvm::Value* v, const char* name) -> llvm::Value*
+    {
+        if(v->getType()->isIntegerTy(1))
+            return v;
+        if(v->getType()->isIntegerTy())
+            return builder.CreateICmpNE(
+                v, llvm::ConstantInt::get(v->getType(), 0), name);
+        if(v->getType()->isFloatingPointTy())
+            return builder.CreateFCmpONE(
+                v, llvm::ConstantFP::get(v->getType(), 0.0), name);
+        reportError(node->line,
+                    "logical operations require numeric or boolean operands");
+        return nullptr;
+    };
+
+    llvm::Value* L = generateExpression(node->left);
+    if(!L)
+        return nullptr;
+    llvm::Value* Lb = toBoolValue(L, "lbool");
+    if(!Lb)
+        return nullptr;
+
+    auto incomingMoved = movedVariables;
+    auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingActiveBorrowers = activeBorrowers;
+    auto incomingActiveMutBorrower = activeMutBorrower;
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* lhsEnd = builder.GetInsertBlock();
+    llvm::BasicBlock* rhsBB = llvm::BasicBlock::Create(
+        context, isAnd ? "and.rhs" : "or.rhs", function);
+    llvm::BasicBlock* mergeBB =
+        llvm::BasicBlock::Create(context, isAnd ? "and.end" : "or.end");
+    if(isAnd)
+        builder.CreateCondBr(Lb, rhsBB, mergeBB);
+    else
+        builder.CreateCondBr(Lb, mergeBB, rhsBB);
+
+    builder.SetInsertPoint(rhsBB);
+    llvm::Value* R = generateExpression(node->right);
+    if(!R)
+        return nullptr;
+    llvm::Value* Rb = toBoolValue(R, "rbool");
+    if(!Rb)
+        return nullptr;
+    const bool rhsFallsThrough =
+        !mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock());
+    if(rhsFallsThrough)
+        builder.CreateBr(mergeBB);
+    llvm::BasicBlock* rhsEnd = builder.GetInsertBlock();
+
+    mergeBB->insertInto(function);
+    builder.SetInsertPoint(mergeBB);
+    llvm::PHINode* phi = builder.CreatePHI(builder.getInt1Ty(), 2,
+                                           isAnd ? "andtmp" : "ortmp");
+    phi->addIncoming(isAnd ? builder.getFalse() : builder.getTrue(), lhsEnd);
+    if(rhsFallsThrough)
+        phi->addIncoming(Rb, rhsEnd);
+
+    // The right operand may not run: a move there is only a possible move,
+    // and a &mut borrow it starts is not guaranteed to be active.
+    movedVariables.insert(incomingMoved.begin(), incomingMoved.end());
+    for(const auto& kv : incomingPointerBorrowTarget)
+        pointerBorrowTarget.emplace(kv.first, kv.second);
+    for(const auto& kv : incomingActiveBorrowers)
+        activeBorrowers[kv.first].insert(kv.second.begin(), kv.second.end());
+    std::map<std::string, std::string> mergedActiveMutBorrower;
+    for(const auto& kv : activeMutBorrower)
+        if(incomingActiveMutBorrower.count(kv.first))
+            mergedActiveMutBorrower[kv.first] = kv.second;
+    activeMutBorrower = std::move(mergedActiveMutBorrower);
+
+    return phi;
 }
 
 llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
