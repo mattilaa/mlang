@@ -5,6 +5,7 @@ mod dsp::envelope;
 mod dsp::delay;
 mod dsp::filter;
 mod dsp::limiter;
+mod dsp::multimode;
 mod dsp::reverb;
 mod dsp::reverb2;
 
@@ -34,6 +35,11 @@ use dsp::filter::linear_interpolate_f32;
 use dsp::filter::nearest_interpolate_f32;
 use dsp::limiter::LimiterFrame;
 use dsp::limiter::StereoLimiter;
+use dsp::multimode::FilterModel;
+use dsp::multimode::MultimodeFilter;
+use dsp::multimode::MultimodeFrame;
+use dsp::multimode::StereoMultimodeFilter;
+use dsp::multimode::filter_model_from_index;
 use dsp::reverb::Reverb;
 use dsp::reverb::ReverbType;
 use dsp::reverb::StereoFrame;
@@ -43,6 +49,7 @@ use dsp::reverb2::Reverb2Type;
 use std::testing::verify;
 
 extern fn sinf(value: f32) -> f32;
+extern fn sqrtf(value: f32) -> f32;
 
 fn approx_f32(a: f32, b: f32, eps: f32) -> bool {
     var diff: f32 = a - b;
@@ -221,6 +228,83 @@ fn test_dsp_biquad_equalizer_sections() {
     var notch: Biquad = Biquad::new();
     notch.set_bandreject_q(1000.0f, 2.0f, 48000.0f);
     verify(biquad_sine_gain(notch, 1000.0f) < 0.01f);
+}
+
+fn multimode_sine_gain(model: FilterModel, cutoff_hz: f32, hz: f32) -> f32 {
+    var filter: MultimodeFilter = MultimodeFilter::new();
+    filter.set_model(model);
+    filter.configure(cutoff_hz, 0.0f, 48000.0f);
+    // RMS of the settled half, scaled so a unity sine reads 1.
+    var energy: f32 = 0.0f;
+    for i in 0..9600 {
+        let y: f32 = filter.process(sinf(6.28318530717958647692f * hz * f32(i) / 48000.0f));
+        if i >= 4800 {
+            energy = energy + y * y;
+        }
+    }
+    return sqrtf(energy / 2400.0f);
+}
+
+#[test]
+fn test_dsp_multimode_models_pass_and_stop_bands() {
+    // Low-pass family passes 100 Hz and stops 8 kHz around a 1 kHz cutoff.
+    verify(multimode_sine_gain(FilterModel::Lowpass12, 1000.0f, 100.0f) > 0.95f);
+    verify(multimode_sine_gain(FilterModel::Lowpass24, 1000.0f, 100.0f) > 0.95f);
+    verify(multimode_sine_gain(FilterModel::Moog12, 1000.0f, 100.0f) > 0.9f);
+    verify(multimode_sine_gain(FilterModel::Moog24, 1000.0f, 100.0f) > 0.9f);
+    verify(multimode_sine_gain(FilterModel::Lowpass12, 1000.0f, 8000.0f) < 0.03f);
+    verify(multimode_sine_gain(FilterModel::Moog12, 1000.0f, 8000.0f) < 0.06f);
+    // 24 dB slopes are steeper than their 12 dB counterparts.
+    verify(multimode_sine_gain(FilterModel::Lowpass24, 1000.0f, 8000.0f) < 0.001f);
+    verify(multimode_sine_gain(FilterModel::Moog24, 1000.0f, 8000.0f) < 0.005f);
+    verify(multimode_sine_gain(FilterModel::Highpass12, 1000.0f, 8000.0f) > 0.95f);
+    verify(multimode_sine_gain(FilterModel::Highpass24, 1000.0f, 8000.0f) > 0.95f);
+    verify(multimode_sine_gain(FilterModel::Highpass24, 1000.0f, 125.0f)
+        < multimode_sine_gain(FilterModel::Highpass12, 1000.0f, 125.0f) * 0.2f);
+    verify(multimode_sine_gain(FilterModel::Bandpass12, 1000.0f, 1000.0f) > 0.9f);
+    verify(multimode_sine_gain(FilterModel::Bandpass24, 1000.0f, 1000.0f) > 0.4f);
+    verify(multimode_sine_gain(FilterModel::Bandpass24, 1000.0f, 8000.0f)
+        < multimode_sine_gain(FilterModel::Bandpass12, 1000.0f, 8000.0f));
+    verify(filter_model_from_index(0) == FilterModel::Lowpass12);
+    verify(filter_model_from_index(7) == FilterModel::Moog24);
+}
+
+#[test]
+fn test_dsp_stereo_multimode_ramps_and_crossfades() {
+    var filter: StereoMultimodeFilter = StereoMultimodeFilter::new(48000.0f, 200.0f);
+    filter.set_model_target(FilterModel::Lowpass24, 0);
+    filter.set_cutoff_target_hz(3200.0f, 4);
+    var frame: MultimodeFrame = filter.process_stereo(0.0f, 0.0f);
+    frame = filter.process_stereo(0.0f, 0.0f);
+    // Two of four log steps from 200 Hz to 3200 Hz lands on 800 Hz.
+    verify(approx_f32(filter.cutoff_hz(), 800.0f, 1.0f));
+    frame = filter.process_stereo(0.0f, 0.0f);
+    frame = filter.process_stereo(0.0f, 0.0f);
+    verify(approx_f32(filter.cutoff_hz(), 3200.0f, 0.5f));
+    filter.set_resonance_target_db(40.0f, 0);
+    verify(approx_f32(filter.resonance_db(), 36.0f, 0.0001f));
+    filter.set_resonance_target_db(0.0f, 0);
+
+    // Crossfade from a low-pass to a high-pass while a DC signal runs: the
+    // output glides from 1 to 0 without jumping.
+    for i in 0..4800 {
+        frame = filter.process_stereo(1.0f, 1.0f);
+    }
+    verify(approx_f32(frame.left(), 1.0f, 0.001f));
+    filter.set_model_target(FilterModel::Highpass24, 480);
+    verify(filter.model() == FilterModel::Highpass24);
+    var previous: f32 = frame.left();
+    var largest_step: f32 = 0.0f;
+    for i in 0..4800 {
+        frame = filter.process_stereo(1.0f, 1.0f);
+        var step: f32 = frame.left() - previous;
+        if step < 0.0f { step = 0.0f - step; }
+        if step > largest_step { largest_step = step; }
+        previous = frame.left();
+    }
+    verify(largest_step < 0.05f);
+    verify(approx_f32(frame.left(), 0.0f, 0.001f));
+    verify(approx_f32(frame.right(), frame.left(), 0.000001f));
 }
 
 #[test]
@@ -612,6 +696,88 @@ fn test_dsp_delay_filter_type_crossfade_is_smooth() {
     for i in 0..30 {
         let frame: DelayFrame = delay.process_stereo(0.1f, 0.1f);
         verify(frame.left() == frame.left());
+    }
+}
+
+fn delay_tone_energy(filter: FeedbackFilter, hz: f32) -> f32 {
+    var delay: StereoDelay = StereoDelay::new(48000.0f, 100.0f);
+    delay.set_delay_ms(5.0f);
+    delay.set_feedback(0.0f);
+    delay.set_mix(1.0f);
+    delay.set_filter(filter);
+    delay.set_filter_cutoff_hz(1000.0f);
+    delay.set_filter_resonance(0.0f);
+    delay.set_damping(1.0f);
+    var energy: f32 = 0.0f;
+    for i in 0..9600 {
+        let x: f32 = sinf(6.28318530717958647692f * hz * f32(i) / 48000.0f);
+        let frame: DelayFrame = delay.process_stereo(x, x);
+        if i >= 4800 { energy = energy + frame.left() * frame.left(); }
+    }
+    return energy / 2400.0f;
+}
+
+#[test]
+fn test_dsp_delay_multimode_filters_color_repeats() {
+    // Wet tap through each new response at a 1 kHz cutoff (energy 1 = unity).
+    verify(delay_tone_energy(FeedbackFilter::Lowpass24, 100.0f) > 0.9f);
+    verify(delay_tone_energy(FeedbackFilter::Lowpass24, 8000.0f) < 0.0001f);
+    verify(delay_tone_energy(FeedbackFilter::Moog24, 100.0f) > 0.8f);
+    verify(delay_tone_energy(FeedbackFilter::Moog24, 8000.0f) < 0.0001f);
+    verify(delay_tone_energy(FeedbackFilter::Moog12, 8000.0f) > delay_tone_energy(FeedbackFilter::Moog24, 8000.0f));
+    verify(delay_tone_energy(FeedbackFilter::Highpass24, 8000.0f) > 0.9f);
+    verify(delay_tone_energy(FeedbackFilter::Highpass24, 125.0f) < 0.0001f);
+    verify(delay_tone_energy(FeedbackFilter::Bandpass24, 1000.0f) > 0.9f);
+    verify(delay_tone_energy(FeedbackFilter::Bandpass24, 8000.0f) < delay_tone_energy(FeedbackFilter::Bandpass, 8000.0f));
+    // The 24 dB low-pass is steeper than the original 12 dB state-variable one.
+    verify(delay_tone_energy(FeedbackFilter::Lowpass24, 4000.0f) < delay_tone_energy(FeedbackFilter::Lowpass, 4000.0f) * 0.1f);
+}
+
+#[test]
+fn test_dsp_delay_multimode_crossfades_and_regenerates_finitely() {
+    var delay: StereoDelay = StereoDelay::new(48000.0f, 100.0f);
+    delay.set_delay_ms(4.0f);
+    delay.set_feedback(0.0f);
+    delay.set_mix(1.0f);
+    delay.set_filter(FeedbackFilter::Lowpass);
+    delay.set_filter_cutoff_hz(800.0f);
+    delay.set_damping(1.0f);
+    var previous: f32 = 0.0f;
+    for i in 0..2000 {
+        let frame: DelayFrame = delay.process_stereo(0.1f, 0.1f);
+        previous = frame.left();
+    }
+    // SVF -> Moog 24 -> Lowpass 24 -> Highpass 24 -> SVF, each over 480 samples.
+    var largest_step: f32 = 0.0f;
+    for step in 0..4 {
+        if step == 0 { delay.set_filter_target(FeedbackFilter::Moog24, 480); }
+        if step == 1 { delay.set_filter_target(FeedbackFilter::Lowpass24, 480); }
+        if step == 2 { delay.set_filter_target(FeedbackFilter::Highpass24, 480); }
+        if step == 3 { delay.set_filter_target(FeedbackFilter::Lowpass, 480); }
+        for i in 0..2400 {
+            let frame: DelayFrame = delay.process_stereo(0.1f, 0.1f);
+            var delta: f32 = frame.left() - previous;
+            if delta < 0.0f { delta = 0.0f - delta; }
+            if delta > largest_step { largest_step = delta; }
+            previous = frame.left();
+        }
+    }
+    verify(largest_step < 0.005f);
+    verify(approx_f32(previous, 0.1f, 0.001f));
+
+    // Resonant Moog in a hot feedback loop stays bounded and finite.
+    var hot: StereoDelay = StereoDelay::new(48000.0f, 100.0f);
+    hot.set_delay_ms(7.0f);
+    hot.set_feedback(1.2f);
+    hot.set_mix(1.0f);
+    hot.set_filter(FeedbackFilter::Moog24);
+    hot.set_filter_cutoff_hz(1800.0f);
+    hot.set_filter_resonance(1.0f);
+    hot.set_damping(1.0f);
+    for i in 0..48000 {
+        let frame: DelayFrame = hot.process_stereo(i == 0 ? 1.0f : 0.0f, 0.0f);
+        verify(frame.left() == frame.left());
+        verify(frame.left() > -4.0f && frame.left() < 4.0f);
     }
 }
 

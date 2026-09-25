@@ -59,7 +59,7 @@ Parameters persist through `.mlack` sessions and plugin state/presets.
 | Delay | 1–5000 ms | 375 ms |
 | Feedback | 0–1.20 | 0.58 |
 | Mix | 0 dry–1 wet | 0.60 |
-| Filter | None, Lowpass, Highpass, Bandpass | Lowpass |
+| Filter | None, Moog 12, Moog 24, Lowpass 12, Lowpass 24, Highpass 12, Highpass 24, Bandpass 24, Bandpass 12 | Lowpass 12 |
 | Filter Scope | Feedback, Delay | Delay |
 | Cutoff | 20–20000 Hz; DSP clamps below Nyquist | 4200 Hz |
 | Resonance | 0–1 | 0.25 |
@@ -82,6 +82,15 @@ Parameters persist through `.mlack` sessions and plugin state/presets.
 **Host** follows valid VST3 host tempo, falling back to BPM when the host does
 not provide it. Mlacker currently needs that fallback. Synced delay is clamped
 to 1–5000 ms. A dotted eighth note is `0.75` beats.
+
+**Filter** types: Lowpass/Highpass/Bandpass 12 are the original state-variable
+filters. The Moog and 24 dB types are the `dsp::multimode` models shared with
+[Mla Filter](../mla_filter/README.md) and the `package_manager_coreaudio_filter`
+example. Resonance `0..1` maps to `0..24 dB` for them. Type changes crossfade over
+Filter Ramp. In mlacker the list indices are: 0 None, 1 Moog 12, 2 Moog 24,
+3 Lowpass 12, 4 Lowpass 24, 5 Highpass 12, 6 Highpass 24, 7 Bandpass 24,
+8 Bandpass 12. This order keeps sessions and presets saved with the earlier
+four-entry list (None/Lowpass/Highpass/Bandpass) on the same filters.
 
 **Delay** filter scope colors the wet tap; **Feedback** filters repeats
 progressively. Feedback above 1 permits the demo's self-oscillation behavior.
@@ -115,6 +124,7 @@ python3 plugins/mla_delay/tests/mlacker_editor_smoke.py \
 ```
 
 Processor coverage includes impulse timing, ping-pong routing, instance isolation,
+legacy Filter-value compatibility, Moog/24 dB repeat filtering,
 reset, bypass, silent buffers, manual/host tempo, parameter metadata, state
 round-trip and invalid-state rejection, and finite output at high feedback.
 The PTY smoke test loads the actual bundle in mlacker, edits Feedback, scrolls

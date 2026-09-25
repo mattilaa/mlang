@@ -29,8 +29,14 @@ fn mladelay_set(handle: ptr<StereoDelay>, index: i32, value: f32, ramp: i64) {
         else if index == 2 { (*handle).set_feedback(value); }
         else if index == 3 { (*handle).set_mix_target(value, ramp); }
         else if index == 4 {
+            // `value` is the FeedbackFilter enum value (0 .. 8), not the UI index.
             var filter: FeedbackFilter = FeedbackFilter::None;
-            if value >= 2.5f { filter = FeedbackFilter::Bandpass; }
+            if value >= 7.5f { filter = FeedbackFilter::Moog24; }
+            else if value >= 6.5f { filter = FeedbackFilter::Moog12; }
+            else if value >= 5.5f { filter = FeedbackFilter::Bandpass24; }
+            else if value >= 4.5f { filter = FeedbackFilter::Highpass24; }
+            else if value >= 3.5f { filter = FeedbackFilter::Lowpass24; }
+            else if value >= 2.5f { filter = FeedbackFilter::Bandpass; }
             else if value >= 1.5f { filter = FeedbackFilter::Highpass; }
             else if value >= 0.5f { filter = FeedbackFilter::Lowpass; }
             (*handle).set_filter_target(filter, ramp);

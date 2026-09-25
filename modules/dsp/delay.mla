@@ -8,10 +8,14 @@
 
 /// \cond INTERNAL_IMPORTS
 mod dsp::detail;
+mod dsp::multimode;
 mod std::ringbuffer;
 use dsp::detail::llroundf;
 use dsp::detail::tanf;
 use dsp::detail::tanhf;
+use dsp::multimode::FilterModel;
+use dsp::multimode::MultimodeFrame;
+use dsp::multimode::StereoMultimodeFilter;
 use std::ringbuffer::RingBufferF32;
 /// \endcond
 
@@ -28,12 +32,41 @@ pub enum DelayMode : i32 {
 };
 
 /// @brief Filter applied inside the feedback path.
+///
+/// `Lowpass`, `Highpass`, and `Bandpass` are the original 12 dB state-variable
+/// responses. The remaining values run the matching `dsp::multimode` model:
+/// Butterworth-tuned 24 dB biquad cascades and the 12/24 dB Moog ladder.
 pub enum FeedbackFilter : i32 {
     None = 0,
     Lowpass = 1,
     Highpass = 2,
-    Bandpass = 3
+    Bandpass = 3,
+    Lowpass24 = 4,
+    Highpass24 = 5,
+    Bandpass24 = 6,
+    Moog12 = 7,
+    Moog24 = 8
 };
+
+fn feedback_filter_is_model(filter_type: FeedbackFilter) -> bool {
+    return filter_type == FeedbackFilter::Lowpass24 || filter_type == FeedbackFilter::Highpass24
+        || filter_type == FeedbackFilter::Bandpass24 || filter_type == FeedbackFilter::Moog12
+        || filter_type == FeedbackFilter::Moog24;
+}
+
+fn feedback_filter_model(filter_type: FeedbackFilter) -> FilterModel {
+    if filter_type == FeedbackFilter::Lowpass24 { return FilterModel::Lowpass24; }
+    if filter_type == FeedbackFilter::Highpass24 { return FilterModel::Highpass24; }
+    if filter_type == FeedbackFilter::Bandpass24 { return FilterModel::Bandpass24; }
+    if filter_type == FeedbackFilter::Moog12 { return FilterModel::Moog12; }
+    return FilterModel::Moog24;
+}
+
+/// Delay resonance (0 .. 1) mapped onto the multimode `0 .. 24 dB` range,
+/// roughly the peak of the state-variable filter at full resonance.
+fn feedback_model_resonance_db(resonance: f32) -> f32 {
+    return 24.0f * delay_clamp(resonance, 0.0f, 1.0f);
+}
 
 /// @brief One processed stereo sample.
 pub struct DelayFrame {
@@ -81,6 +114,10 @@ pub struct StereoDelay {
     var filter_low_step: f32;
     var filter_band_step: f32;
     var filter_high_step: f32;
+    /// Weight of the multimode path (24 dB and Moog responses).
+    var filter_model_mix: f32;
+    var filter_model_target: f32;
+    var filter_model_step: f32;
     var filter_type_ramp_remaining: i64;
     var filter_wet_output: bool;
     var damping: f32;
@@ -103,6 +140,10 @@ pub struct StereoDelay {
     var left_loop_filter_state2: f32;
     var right_loop_filter_state1: f32;
     var right_loop_filter_state2: f32;
+    /// Multimode filters for the audible tap (resonant) and the regenerating
+    /// loop (held at 0 dB resonance for stability, like the loop SVF).
+    var wet_model: StereoMultimodeFilter;
+    var loop_model: StereoMultimodeFilter;
     var jitter_depth_samples: f32;
     var jitter_depth_target_samples: f32;
     var jitter_depth_step_samples: f32;
@@ -148,6 +189,9 @@ impl StereoDelay {
             filter_low_step: 0.0f,
             filter_band_step: 0.0f,
             filter_high_step: 0.0f,
+            filter_model_mix: 0.0f,
+            filter_model_target: 0.0f,
+            filter_model_step: 0.0f,
             filter_type_ramp_remaining: 0,
             filter_wet_output: true,
             damping: 0.65f,
@@ -170,6 +214,8 @@ impl StereoDelay {
             left_loop_filter_state2: 0.0f,
             right_loop_filter_state1: 0.0f,
             right_loop_filter_state2: 0.0f,
+            wet_model: StereoMultimodeFilter::new(safe_rate, 5000.0f),
+            loop_model: StereoMultimodeFilter::new(safe_rate, 5000.0f),
             jitter_depth_samples: 0.0f,
             jitter_depth_target_samples: 0.0f,
             jitter_depth_step_samples: 0.0f,
@@ -297,9 +343,17 @@ impl StereoDelay {
         self.mix_ramp_remaining = ramp_samples;
     }
 
-    /// @brief Select no filter, low-pass, band-pass, or high-pass immediately.
+    /// @brief Select the feedback-filter response immediately.
     pub fn set_filter(self: &mut Self, filter_type: FeedbackFilter) -> void {
         self.filter_type = filter_type;
+        let is_model: bool = feedback_filter_is_model(filter_type);
+        self.filter_model_mix = is_model ? 1.0f : 0.0f;
+        self.filter_model_target = self.filter_model_mix;
+        self.filter_model_step = 0.0f;
+        if is_model {
+            self.wet_model.set_model_target(feedback_filter_model(filter_type), 0);
+            self.loop_model.set_model_target(feedback_filter_model(filter_type), 0);
+        }
         self.filter_low_mix = filter_type == FeedbackFilter::Lowpass ? 1.0f : 0.0f;
         self.filter_band_mix = filter_type == FeedbackFilter::Bandpass ? 1.0f : 0.0f;
         self.filter_high_mix = filter_type == FeedbackFilter::Highpass ? 1.0f : 0.0f;
@@ -332,6 +386,24 @@ impl StereoDelay {
             f32(ramp_samples);
         self.filter_high_step = (self.filter_high_target - self.filter_high_mix) /
             f32(ramp_samples);
+        let is_model: bool = feedback_filter_is_model(filter_type);
+        if is_model {
+            let model: FilterModel = feedback_filter_model(filter_type);
+            if self.filter_model_mix <= 0.0f && self.filter_model_target <= 0.0f {
+                // The multimode path is silent: load the model with fresh
+                // history and let the path weight below fade it in.
+                self.wet_model.set_model_target(model, 0);
+                self.loop_model.set_model_target(model, 0);
+                self.wet_model.reset();
+                self.loop_model.reset();
+            } else {
+                self.wet_model.set_model_target(model, ramp_samples);
+                self.loop_model.set_model_target(model, ramp_samples);
+            }
+        }
+        self.filter_model_target = is_model ? 1.0f : 0.0f;
+        self.filter_model_step = (self.filter_model_target - self.filter_model_mix) /
+            f32(ramp_samples);
         self.filter_type_ramp_remaining = ramp_samples;
     }
 
@@ -347,6 +419,8 @@ impl StereoDelay {
     pub fn set_filter_cutoff_hz(self: &mut Self, cutoff_hz: f32) -> void {
         let cutoff: f32 = delay_clamp(cutoff_hz, 20.0f, self.sample_rate_hz * 0.495f);
         self.filter_g = tanf(3.14159265358979323846f * cutoff / self.sample_rate_hz);
+        self.wet_model.set_cutoff_target_hz(cutoff, 0);
+        self.loop_model.set_cutoff_target_hz(cutoff, 0);
         self.filter_g_target = self.filter_g;
         self.filter_g_step = 0.0f;
         self.filter_ramp_remaining = 0;
@@ -364,6 +438,8 @@ impl StereoDelay {
         }
         let cutoff: f32 = delay_clamp(cutoff_hz, 20.0f, self.sample_rate_hz * 0.495f);
         self.filter_g_target = tanf(3.14159265358979323846f * cutoff / self.sample_rate_hz);
+        self.wet_model.set_cutoff_target_hz(cutoff, ramp_samples);
+        self.loop_model.set_cutoff_target_hz(cutoff, ramp_samples);
         self.filter_g_step = (self.filter_g_target - self.filter_g) / f32(ramp_samples);
         self.filter_ramp_remaining = ramp_samples;
     }
@@ -374,6 +450,7 @@ impl StereoDelay {
     /// resonant peak (`Q` approximately 10).
     pub fn set_filter_resonance(self: &mut Self, resonance: f32) -> void {
         self.filter_k = 2.0f - 1.9f * delay_clamp(resonance, 0.0f, 1.0f);
+        self.wet_model.set_resonance_target_db(feedback_model_resonance_db(resonance), 0);
         self.filter_k_target = self.filter_k;
         self.filter_k_step = 0.0f;
         self.resonance_ramp_remaining = 0;
@@ -390,6 +467,7 @@ impl StereoDelay {
             return;
         }
         self.filter_k_target = 2.0f - 1.9f * delay_clamp(resonance, 0.0f, 1.0f);
+        self.wet_model.set_resonance_target_db(feedback_model_resonance_db(resonance), ramp_samples);
         self.filter_k_step = (self.filter_k_target - self.filter_k) / f32(ramp_samples);
         self.resonance_ramp_remaining = ramp_samples;
     }
@@ -437,6 +515,8 @@ impl StereoDelay {
         self.left_loop_filter_state2 = 0.0f;
         self.right_loop_filter_state1 = 0.0f;
         self.right_loop_filter_state2 = 0.0f;
+        self.wet_model.reset();
+        self.loop_model.reset();
         self.jitter_value = 0.0f;
         self.jitter_target = 0.0f;
         self.jitter_counter = 1;
@@ -541,18 +621,21 @@ impl StereoDelay {
         self.filter_low_mix = self.filter_low_mix + self.filter_low_step;
         self.filter_band_mix = self.filter_band_mix + self.filter_band_step;
         self.filter_high_mix = self.filter_high_mix + self.filter_high_step;
+        self.filter_model_mix = self.filter_model_mix + self.filter_model_step;
         self.filter_type_ramp_remaining = self.filter_type_ramp_remaining - 1;
         if self.filter_type_ramp_remaining == 0 {
             self.filter_low_mix = self.filter_low_target;
             self.filter_band_mix = self.filter_band_target;
             self.filter_high_mix = self.filter_high_target;
+            self.filter_model_mix = self.filter_model_target;
+            self.filter_model_step = 0.0f;
             self.filter_low_step = 0.0f;
             self.filter_band_step = 0.0f;
             self.filter_high_step = 0.0f;
         }
     }
 
-    fn filter_feedback_left(self: &mut Self, input: f32) -> f32 {
+    fn filter_feedback_left(self: &mut Self, input: f32, model_out: f32) -> f32 {
         let g: f32 = self.filter_g;
         let a1: f32 = 1.0f / (1.0f + g * (g + self.filter_k));
         let a2: f32 = g * a1;
@@ -565,9 +648,10 @@ impl StereoDelay {
         self.left_filter_state2 = 2.0f * low - self.left_filter_state2;
         let high: f32 = input - self.filter_k * band - low;
         let filter_mix: f32 = self.filter_low_mix + self.filter_band_mix +
-            self.filter_high_mix;
+            self.filter_high_mix + self.filter_model_mix;
         let raw_filtered: f32 = low * self.filter_low_mix +
-            band * self.filter_band_mix + high * self.filter_high_mix;
+            band * self.filter_band_mix + high * self.filter_high_mix +
+            model_out * self.filter_model_mix;
         let resonance_amount: f32 = delay_clamp((1.0f - self.filter_k) / 0.9f,
                                                  0.0f, 1.0f);
         let limited: f32 = tanhf(raw_filtered);
@@ -577,7 +661,7 @@ impl StereoDelay {
         return input + (filtered - input) * self.damping;
     }
 
-    fn filter_feedback_right(self: &mut Self, input: f32) -> f32 {
+    fn filter_feedback_right(self: &mut Self, input: f32, model_out: f32) -> f32 {
         let g: f32 = self.filter_g;
         let a1: f32 = 1.0f / (1.0f + g * (g + self.filter_k));
         let a2: f32 = g * a1;
@@ -590,9 +674,10 @@ impl StereoDelay {
         self.right_filter_state2 = 2.0f * low - self.right_filter_state2;
         let high: f32 = input - self.filter_k * band - low;
         let filter_mix: f32 = self.filter_low_mix + self.filter_band_mix +
-            self.filter_high_mix;
+            self.filter_high_mix + self.filter_model_mix;
         let raw_filtered: f32 = low * self.filter_low_mix +
-            band * self.filter_band_mix + high * self.filter_high_mix;
+            band * self.filter_band_mix + high * self.filter_high_mix +
+            model_out * self.filter_model_mix;
         let resonance_amount: f32 = delay_clamp((1.0f - self.filter_k) / 0.9f,
                                                  0.0f, 1.0f);
         let limited: f32 = tanhf(raw_filtered);
@@ -602,7 +687,7 @@ impl StereoDelay {
         return input + (filtered - input) * self.damping;
     }
 
-    fn filter_loop_left(self: &mut Self, input: f32) -> f32 {
+    fn filter_loop_left(self: &mut Self, input: f32, model_out: f32) -> f32 {
         let g: f32 = self.filter_g;
         let loop_k: f32 = self.filter_k < 1.41421356237f
             ? 1.41421356237f : self.filter_k;
@@ -617,14 +702,14 @@ impl StereoDelay {
         self.left_loop_filter_state2 = 2.0f * low - self.left_loop_filter_state2;
         let high: f32 = input - loop_k * band - low;
         let filter_mix: f32 = self.filter_low_mix + self.filter_band_mix +
-            self.filter_high_mix;
+            self.filter_high_mix + self.filter_model_mix;
         let filtered: f32 = input * (1.0f - filter_mix) +
             low * self.filter_low_mix + band * self.filter_band_mix +
-            high * self.filter_high_mix;
+            high * self.filter_high_mix + model_out * self.filter_model_mix;
         return input + (filtered - input) * self.damping;
     }
 
-    fn filter_loop_right(self: &mut Self, input: f32) -> f32 {
+    fn filter_loop_right(self: &mut Self, input: f32, model_out: f32) -> f32 {
         let g: f32 = self.filter_g;
         let loop_k: f32 = self.filter_k < 1.41421356237f
             ? 1.41421356237f : self.filter_k;
@@ -639,10 +724,10 @@ impl StereoDelay {
         self.right_loop_filter_state2 = 2.0f * low - self.right_loop_filter_state2;
         let high: f32 = input - loop_k * band - low;
         let filter_mix: f32 = self.filter_low_mix + self.filter_band_mix +
-            self.filter_high_mix;
+            self.filter_high_mix + self.filter_model_mix;
         let filtered: f32 = input * (1.0f - filter_mix) +
             low * self.filter_low_mix + band * self.filter_band_mix +
-            high * self.filter_high_mix;
+            high * self.filter_high_mix + model_out * self.filter_model_mix;
         return input + (filtered - input) * self.damping;
     }
 
@@ -673,14 +758,29 @@ impl StereoDelay {
             self.right_first_repeat_buffer, read_position);
         let regenerated_left: f32 = delayed_left - first_repeat_left;
         let regenerated_right: f32 = delayed_right - first_repeat_right;
+        let tap_left: f32 = self.filter_wet_output ? delayed_left : regenerated_left;
+        let tap_right: f32 = self.filter_wet_output ? delayed_right : regenerated_right;
+        // The multimode path only runs while it contributes to the blend.
+        var wet_model_left: f32 = 0.0f;
+        var wet_model_right: f32 = 0.0f;
+        var loop_model_left: f32 = 0.0f;
+        var loop_model_right: f32 = 0.0f;
+        if self.filter_model_mix > 0.0f || self.filter_model_target > 0.0f {
+            let wet_frame: MultimodeFrame = self.wet_model.process_stereo(tap_left, tap_right);
+            let loop_frame: MultimodeFrame = self.loop_model.process_stereo(delayed_left, delayed_right);
+            wet_model_left = wet_frame.left();
+            wet_model_right = wet_frame.right();
+            loop_model_left = loop_frame.left();
+            loop_model_right = loop_frame.right();
+        }
         let feedback_left: f32 = self.filter_wet_output
-            ? self.filter_feedback_left(delayed_left)
-            : first_repeat_left + self.filter_feedback_left(regenerated_left);
+            ? self.filter_feedback_left(delayed_left, wet_model_left)
+            : first_repeat_left + self.filter_feedback_left(regenerated_left, wet_model_left);
         let feedback_right: f32 = self.filter_wet_output
-            ? self.filter_feedback_right(delayed_right)
-            : first_repeat_right + self.filter_feedback_right(regenerated_right);
-        let loop_left: f32 = self.loop_feedback(self.filter_loop_left(delayed_left));
-        let loop_right: f32 = self.loop_feedback(self.filter_loop_right(delayed_right));
+            ? self.filter_feedback_right(delayed_right, wet_model_right)
+            : first_repeat_right + self.filter_feedback_right(regenerated_right, wet_model_right);
+        let loop_left: f32 = self.loop_feedback(self.filter_loop_left(delayed_left, loop_model_left));
+        let loop_right: f32 = self.loop_feedback(self.filter_loop_right(delayed_right, loop_model_right));
 
         var write_left: f32 = input_left + loop_left;
         var write_right: f32 = input_right + loop_right;

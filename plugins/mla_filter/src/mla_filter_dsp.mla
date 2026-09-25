@@ -1,0 +1,34 @@
+/// Per-instance C ABI for Mla Filter: the dsp::multimode stereo filter with
+/// the eight models of package_manager_coreaudio_filter. Ramps are in samples.
+mod dsp::multimode;
+use dsp::multimode::MultimodeFrame;
+use dsp::multimode::StereoMultimodeFilter;
+use dsp::multimode::filter_model_from_index;
+extern fn calloc(count: i64, size: i64) -> ptr<StereoMultimodeFilter>;
+extern fn free(block: ptr<StereoMultimodeFilter>) -> void;
+
+fn mlafilter_create(rate: f32) -> ptr<StereoMultimodeFilter> {
+    let handle: ptr<StereoMultimodeFilter> = calloc(1, size_of(StereoMultimodeFilter));
+    unsafe { *handle = StereoMultimodeFilter::new(rate, 2000.0f); }
+    return handle;
+}
+fn mlafilter_destroy(handle: ptr<StereoMultimodeFilter>) { free(handle); }
+fn mlafilter_reset(handle: ptr<StereoMultimodeFilter>) { unsafe { (*handle).reset(); } }
+
+/// `model` indexes FilterModel: 0 LP12, 1 LP24, 2 HP12, 3 HP24, 4 BP12,
+/// 5 BP24, 6 Moog12, 7 Moog24.
+fn mlafilter_set_model(handle: ptr<StereoMultimodeFilter>, model: i32, ramp: i64) {
+    unsafe { (*handle).set_model_target(filter_model_from_index(model), ramp); }
+}
+fn mlafilter_set_cutoff(handle: ptr<StereoMultimodeFilter>, hz: f32, ramp: i64) {
+    unsafe { (*handle).set_cutoff_target_hz(hz, ramp); }
+}
+fn mlafilter_set_resonance(handle: ptr<StereoMultimodeFilter>, db: f32, ramp: i64) {
+    unsafe { (*handle).set_resonance_target_db(db, ramp); }
+}
+fn mlafilter_process(handle: ptr<StereoMultimodeFilter>, left: f32, right: f32, out_right: ptr<f32>) -> f32 {
+    unsafe {
+        let frame: MultimodeFrame = (*handle).process_stereo(left, right);
+        *out_right = frame.right(); return frame.left();
+    }
+}

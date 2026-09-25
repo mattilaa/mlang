@@ -47,13 +47,17 @@ enum Index {
     kCount
 };
 constexpr ParamID kFirstParam = 100;
+// Filter list index -> dsp::delay::FeedbackFilter value. The original
+// None/Lowpass/Highpass/Bandpass entries sit at 0/3/5/8 so that normalized
+// values saved with the old four-entry list (0, 1/3, 2/3, 1) still select them.
+static const int kFilterTypes[] = {0, 7, 8, 1, 4, 2, 5, 6, 3};
 struct Spec { const TChar* title; const TChar* unit; double low, high, initial; int steps; };
 static const Spec specs[kCount] = {
     {STR16("Mode"), STR16(""), 0, 1, 1, 1},
     {STR16("Delay"), STR16("ms"), 1, 5000, 375, 0},
     {STR16("Feedback"), STR16(""), 0, 1.2, 0.58, 0},
     {STR16("Mix"), STR16(""), 0, 1, 0.6, 0},
-    {STR16("Filter"), STR16(""), 0, 3, 1, 3},
+    {STR16("Filter"), STR16(""), 0, 8, 3, 8},
     {STR16("Filter Scope"), STR16(""), 0, 1, 1, 1},
     {STR16("Cutoff"), STR16("Hz"), 20, 20000, 4200, 0},
     {STR16("Resonance"), STR16(""), 0, 1, 0.25, 0},
@@ -95,7 +99,11 @@ public:
             if(i == kMode || i == kFilter || i == kScope || i == kTempo) {
                 auto* parameter = new StringListParameter(specs[i].title, kFirstParam + i);
                 if(i == kMode) { parameter->appendString(STR16("Forward")); parameter->appendString(STR16("Ping-Pong")); }
-                if(i == kFilter) { parameter->appendString(STR16("None")); parameter->appendString(STR16("Lowpass")); parameter->appendString(STR16("Highpass")); parameter->appendString(STR16("Bandpass")); }
+                if(i == kFilter) {
+                    for(const TChar* name : {STR16("None"), STR16("Moog 12"), STR16("Moog 24"), STR16("Lowpass 12"), STR16("Lowpass 24"),
+                                             STR16("Highpass 12"), STR16("Highpass 24"), STR16("Bandpass 24"), STR16("Bandpass 12")})
+                        parameter->appendString(name);
+                }
                 if(i == kScope) { parameter->appendString(STR16("Feedback")); parameter->appendString(STR16("Delay")); }
                 if(i == kTempo) { parameter->appendString(STR16("Free")); parameter->appendString(STR16("Manual")); parameter->appendString(STR16("Host")); }
                 parameter->getInfo().defaultNormalizedValue = norm_[i];
@@ -218,7 +226,8 @@ private:
             case kDamping: r = kDampingRamp; break;
             case kJitter: r = kJitterRamp; break;
         }
-        push(i, plain(i), immediate || r < 0 ? 0 : ramp(r));
+        const double value = i == kFilter ? kFilterTypes[static_cast<int>(plain(kFilter))] : plain(i);
+        push(i, value, immediate || r < 0 ? 0 : ramp(r));
     }
     void applyAll() {
         for(int i = 0; i <= kJitter; ++i) if(i != kDelay) pushControl(i, true);
