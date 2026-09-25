@@ -123,6 +123,15 @@ are accepted. Unsupported major or minor versions fail closed.
     A session without it opens with the analyzer hidden and the default bus:
     20 Hz high-pass, flat bands at 100/500/2500/8000 Hz with Q 1, and 100%.
 
+16. Optional `MATRIX_LOOPS` extension follows `MASTER_BUS`: a count, then per
+    entry the lane (0–15, 0 being the song list of step 7), the row, and a
+    kind: 1 for a cell whose pattern loops down its lane, 2 for a split that
+    ends a loop or a long pattern. A looping cell must hold a pattern in the
+    sections above; a split cell must be empty there, since those sections
+    store plain pattern IDs. It is written only when the matrix has a loop or
+    a split, and it requires the preceding tags (a default `MASTER_BUS` is
+    written when only this extension is needed).
+
 The active pattern is serialized from the live editor, not its older library
 snapshot. Audio placements reference the embedded sample list; plugin assignments
 reference stable slots, including holes left by removed instruments.

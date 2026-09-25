@@ -53,11 +53,13 @@ def main():
         assert b"lane 2" in frame, frame[-4000:]
         # Ctrl+P plays the matrix from the cursor row; the status bar runs.
         frame = expect(tui.send(b"\x10", 0.9), b"Playing the matrix from row", b"PLAY")
-        # Space leaves matrix playback and plays the selected pattern instead.
-        tui.send(b" ", 0.6)
-        frame = expect(tui.send(b" ", 0.6), b"STOP")
-        # Ctrl+P again toggles matrix playback off, in either spelling.
-        expect(tui.send(b"\x1b[112;5u", 0.9), b"Playing the matrix")
+        # In the matrix, Space stops and starts the matrix too: every lane of
+        # the row plays, not just the pattern under the cursor.
+        expect(tui.send(b" ", 0.9), b"Matrix stopped", b"STOP")
+        expect(tui.send(b" ", 0.9), b"Playing the matrix from row", b"PLAY")
+        # Ctrl+P toggles matrix playback too, in either spelling.
+        expect(tui.send(b"\x1b[112;5u", 0.9), b"Matrix stopped")
+        expect(tui.send(b"\x10", 0.9), b"Playing the matrix")
         expect(tui.send(b"\x10", 0.9), b"Matrix stopped")
 
         # The split renamed the track of the pattern that was placed, so open
@@ -95,6 +97,26 @@ def main():
         assert "\u252c".encode() in frame, frame[-3000:]
         # Its second row belongs to it: nothing else can start there.
         expect(tui.send(b"j\r", 0.9), b"plays pattern")
+
+        # Looping: a pattern placed on a new row repeats down its lane as a
+        # darker copy until a split, which shows where the loop ends.
+        tui.send(b"o", 0.6)                      # row 3, below the long pattern
+        expect(tui.send(b"\r", 0.7), b"Choose pattern")
+        expect(tui.send(b"jj\r", 1.0), b"pattern 2")
+        tui.send(b"o", 0.6)                      # row 4
+        tui.send(b"o", 0.6)                      # row 5
+        tui.send(b"kk", 0.6)                     # back to row 3
+        frame = expect(tui.send(b"r", 0.9), b"loops from row 3")
+        assert "Untitl \u252c \u00bb".encode() in frame, frame[-3000:]
+        # The pattern spans rows 3-4, so its first repeat starts on row 5.
+        frame = expect(tui.send(b"jj", 0.8), "\u00bb Untitl".encode())
+        expect(tui.send(b"s", 0.9), b"Split at row 5", "\u2573 end".encode())
+        # Backspace on the split lets the loop run on; on a repeat it splits.
+        expect(tui.send(b"\x7f", 0.9), b"Split removed at row 5")
+        expect(tui.send(b"\x7f", 0.9), b"Loop ends at row 5")
+        # r on the pattern switches its loop off again.
+        expect(tui.send(b"kk", 0.6), b"Song matrix")
+        expect(tui.send(b"r", 0.9), b"no longer loops")
         expect(tui.send(b"M", 0.8), b"Song matrix closed")
     finally:
         tui.close()

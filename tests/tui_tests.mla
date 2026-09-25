@@ -3861,3 +3861,147 @@ fn test_spectrum_gradient_is_smooth_and_varied() {
     verify(spectrum_green(spectrum_color(450)) > spectrum_blue(spectrum_color(450)));
     verify(spectrum_red(spectrum_color(850)) > spectrum_green(spectrum_color(850)));
 }
+
+fn loop_test_library() -> PatternLibrary {
+    // Pattern 1: 16 rows (C-2 on row 0); pattern 2: 64 rows (E-2 on row 32);
+    // pattern 3: 16 rows (G-2 on row 0). A 16-row matrix grid, six song rows.
+    var library: PatternLibrary = PatternLibrary::empty();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.table.create_track_kind(false, false, area);
+    library.table.set_length(16, area);
+    library.table.set_cell(0, 1, clone("C-2")); library.table.set_cell(0, 2, clone("100"));
+    library.add(false); library.table.create_track_kind(false, false, area); library.table.set_length(64, area);
+    library.table.set_cell(32, 1, clone("E-2")); library.table.set_cell(32, 2, clone("100"));
+    library.add(false); library.table.create_track_kind(false, false, area); library.table.set_length(16, area);
+    library.table.set_cell(0, 1, clone("G-2")); library.table.set_cell(0, 2, clone("100"));
+    library.matrix_steps = 16;
+    while library.song.len() < 6 { library.matrix_insert_row(i32(library.song.len()) - 1, true); }
+    for r in 0..library.song.len() { library.set_song_at(i32(r), 0, 0); }
+    return library;
+}
+
+#[test]
+fn tui_matrix_loop_repeats_until_the_next_pattern() {
+    var library: PatternLibrary = loop_test_library();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    verify(library.set_song_at(0, 0, 1) && library.set_song_at(0, 1, 2));
+    // Without looping the short pattern plays its one row only.
+    let once: SongCover = library.song_cover(1, 0);
+    verify(once.id == 0);
+    // Looping repeats it down the lane, beside the long pattern.
+    verify(library.toggle_song_loop(0, 0) == 0 && library.song_loops(0, 0));
+    for r in 1..6 {
+        let cover: SongCover = library.song_cover(i32(r), 0);
+        verify(cover.id == 1 && cover.offset == i32(r) && library.song_loop_repeat(i32(r), 0));
+        verify(!library.song_continues(i32(r), 0));
+    }
+    // Matrix row 3 mixes the loop repeat with the long pattern's third quarter.
+    var third: SequenceTable = library.merge_song_row(2, area, false);
+    verify(third.rows.len() == 16 && third.tracks.len() >= 2);
+    let top: TableRow = third.rows[0];
+    verify(top.cells[third.track_start(0)] == "C-2" && top.cells[third.track_start(1)] == "E-2");
+    third.release();
+    // Toggling from a repeat row switches the loop of the pattern above.
+    verify(library.toggle_song_loop(3, 0) == 0 && !library.song_loops(0, 0));
+    verify(library.toggle_song_loop(3, 0) == -1);
+    verify(library.toggle_song_loop(0, 0) == 0);
+    // A pattern placed on a repeat takes over from there.
+    verify(library.set_song_at(3, 0, 3));
+    let taken: SongCover = library.song_cover(3, 0);
+    verify(taken.id == 3 && taken.offset == 0);
+    let still: SongCover = library.song_cover(2, 0);
+    verify(still.id == 1);
+    let after: SongCover = library.song_cover(4, 0);
+    verify(after.id == 0);
+    library.release();
+}
+
+#[test]
+fn tui_matrix_split_ends_loops_and_long_patterns() {
+    var library: PatternLibrary = loop_test_library();
+    verify(library.set_song_at(0, 0, 1) && library.set_song_at(0, 1, 2));
+    library.toggle_song_loop(0, 0);
+    // Splitting a repeat silences the lane from there; the first row keeps it.
+    verify(library.split_song(3, 0) && library.song_split(3, 0));
+    let before: SongCover = library.song_cover(2, 0);
+    verify(before.id == 1);
+    for r in 3..6 { let cover: SongCover = library.song_cover(i32(r), 0); verify(cover.id == 0); }
+    // Nothing to split where nothing runs, or where a pattern starts.
+    verify(!library.split_song(3, 0) && !library.split_song(0, 0));
+    // Removing the split lets the loop run on again.
+    verify(library.set_song_raw(3, 0, 0) && !library.song_split(3, 0));
+    let resumed: SongCover = library.song_cover(5, 0);
+    verify(resumed.id == 1);
+    // A long pattern can be cut short the same way.
+    verify(library.split_song(2, 1));
+    let cut: SongCover = library.song_cover(2, 1);
+    verify(cut.id == 0);
+    let kept: SongCover = library.song_cover(1, 1);
+    verify(kept.id == 2 && kept.offset == 1);
+    library.release();
+}
+
+#[test]
+fn tui_matrix_loops_move_with_rows_and_survive_a_session() {
+    var library: PatternLibrary = loop_test_library();
+    verify(library.set_song_at(1, 0, 1) && library.set_song_at(0, 1, 3));
+    library.toggle_song_loop(1, 0); library.split_song(4, 0);
+    // A row inserted above moves the loop and its split with their cells.
+    verify(library.matrix_insert_row(0, false));
+    verify(library.song_loops(2, 0) && library.song_split(5, 0) && library.song_at(2, 0) == 1);
+    // Shifting one lane down moves them too.
+    verify(library.matrix_insert_cell(0, 0, false));
+    verify(library.song_loops(3, 0) && library.song_split(6, 0));
+    let directory: str8 = clone("/private/tmp/mlacker-loop-test-XXXXXX"); mkdtemp(directory);
+    let path: str8 = format!("{}/loops.mlack", directory);
+    var audio: AudioSystem = AudioSystem {}; var codec: SessionCodec = SessionCodec {};
+    verify(codec.save(path, library, SessionView {}, audio));
+    let loaded: result<SessionData, str8> = SessionCodec::load(path); verify(loaded.is_ok());
+    var restored: SessionData = loaded.unwrap();
+    verify(restored.library.song_loops(3, 0) && restored.library.song_split(6, 0));
+    verify(restored.library.song_at(3, 0) == 1 && restored.library.song_at(1, 1) == 3);
+    let repeat: SongCover = restored.library.song_cover(5, 0);
+    verify(repeat.id == 1 && repeat.offset == 2);
+    restored.release();
+    // Removing the pattern removes its loop.
+    library.select(1); library.remove_active(Rect::new(0, 0, 120, 20));
+    verify(!library.has_song_loops() || library.song_split(5, 0));
+    library.release(); std::fs::remove_tree(directory); free(path); free(directory);
+}
+
+#[test]
+fn tui_matrix_loop_keys() {
+    var matrix: SongMatrix = SongMatrix { visible: true };
+    verify(matrix.on_event(decode_input("r"), 2, 3) == 10);
+    verify(matrix.on_event(decode_input("s"), 2, 3) == 11);
+}
+
+#[test]
+fn tui_matrix_parallel_lane_keeps_every_note_line() {
+    // Lane 2 holds a chord track (three note lines and a CC value); merging
+    // it beside lane 1 must keep all of them, not just the first line.
+    var library: PatternLibrary = loop_test_library();
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    library.select(2);
+    verify(library.table.ensure_note_lines(0, 3));
+    library.table.rebuild_columns();
+    let start: i32 = library.table.track_start(0);
+    library.table.set_cell(0, start + 4, clone("E-3")); library.table.set_cell(0, start + 5, clone("90"));
+    library.table.set_cell(0, start + 8, clone("G-3")); library.table.set_cell(0, start + 9, clone("80"));
+    let automation: i32 = library.table.automation_column(0, 1);
+    library.table.set_cell(0, automation, clone("64"));
+    library.select(1);
+    verify(library.set_song_at(0, 0, 1) && library.set_song_at(0, 1, 2));
+    var merged: SequenceTable = library.merge_song_row(0, area, false);
+    // Lane 1 brings its tracks first; lane 2's chord track follows them.
+    let lead: PatternEntry = library.patterns[library.index_of(1)];
+    let chord: i32 = i32(lead.data.tracks.len());
+    let track: SequenceTrack = merged.tracks[chord];
+    verify(track.note_lines == 3);
+    let first: i32 = merged.track_start(chord);
+    let row: TableRow = merged.rows[0];
+    verify(row.cells[first + 4] == "E-3" && row.cells[first + 5] == "90");
+    verify(row.cells[first + 8] == "G-3" && row.cells[first + 9] == "80");
+    verify(row.cells[merged.automation_column(chord, 1)] == "64");
+    merged.release(); library.release();
+}

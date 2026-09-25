@@ -90,14 +90,43 @@ pattern list.
 | `o` / `O` | Insert an empty row below / above, across every lane |
 | `Ctrl+O` / `Ctrl+Shift+O` | Insert a cell below / above in this lane only, leaving the other lanes where they are |
 | `dd` | Remove the whole row |
-| `Ctrl+P` | Play the matrix from the cursor row |
+| `r` | Loop the cell's pattern down its lane, or stop it looping |
+| `s` | Split: end a loop (or a long pattern) at this row |
+| `Space` / `Ctrl+P` | Play the matrix from the cursor row, or stop |
 | `Shift+M` | Close the matrix |
 
-**Ctrl+P** plays the song from the cursor row: every pattern in a row plays
-together, then the transport moves to the next row holding patterns, wrapping at
-the end. The playing row is drawn brighter. Plain **Space** always means "the
-selected pattern", so pressing it during matrix playback leaves the song and
-plays that pattern alone; Ctrl+P again stops.
+**Space** or **Ctrl+P** in the matrix plays the song from the cursor row: every
+pattern in a row plays together, then the transport moves to the next row
+holding patterns, wrapping at the end. The playing row is drawn brighter.
+Pressing either again stops. Outside the matrix, Space plays the selected
+pattern alone, as before.
+
+### Looping patterns
+
+**r** on a cell switches looping for the pattern playing there (on the cell
+where it starts, or on any of its rows). A looping pattern keeps repeating down
+its lane after its own rows, and the rows it repeats into show a darker copy
+of it, `» Name`; the cell it starts on is marked `Name »`. A 16-row pattern
+looping on a 16-row grid beside a 64-row one fills the three rows next to the
+long pattern with repeats:
+
+```
+ROW  L1              L2
+001  Beat A »        Verse ┬
+002  » Beat A              │
+003  » Beat A              │
+004  » Beat A              ┴
+```
+
+The loop runs until the next pattern placed in its lane, which takes over from
+its row, or until a split. **s** on a repeat row splits the loop there: the
+cell shows `╳ end` and the lane is silent from that row. **s** on a later row
+of a long pattern cuts it short the same way. Backspace on a split removes it
+and lets the loop run on; Backspace on a repeat row splits there rather than
+removing the pattern it repeats. Rows inserted or removed, and lanes shifted
+with Ctrl+O, carry loops and splits with their cells, and sessions save them.
+A pattern that does not loop plays its own rows only, and one shorter than the
+matrix row still repeats to fill that row, as before.
 
 ### Row length and long patterns
 
@@ -178,8 +207,7 @@ warns first, counting the clashing notes:
   stacking it.
 
 Only real collisions warn: the same instrument playing different notes, or the
-same note at different steps, is left alone. The matrix is arrangement state —
-the transport still plays the selected pattern.
+same note at different steps, is left alone.
 
 ## Removing library items
 
