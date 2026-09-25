@@ -1,0 +1,182 @@
+/// Per-section C ABI for Mla EQ. The C++ wrapper owns the section pool (eight
+/// bands plus up to four high-pass and four low-pass stages); every section is
+/// a stereo pair of dsp::filter::Biquad with smoothed frequency, gain and Q.
+mod dsp::filter;
+use dsp::filter::Biquad;
+extern fn calloc(count: i64, size: i64) -> ptr<EqSection>;
+extern fn free(block: ptr<EqSection>) -> void;
+extern fn sinf(value: f32) -> f32;
+extern fn expf(value: f32) -> f32;
+extern fn logf(value: f32) -> f32;
+
+/// Section kinds (shared with plugin.cpp): 0 off, 1 bell, 2 low shelf,
+/// 3 high shelf, 4 notch, 5 high-pass, 6 low-pass. While a control glides the
+/// coefficients are redesigned every 16 samples; a settled section never is.
+
+struct EqSection {
+    var left: Biquad;
+    var right: Biquad;
+    var kind: i32;
+    var rate: f32;
+    /// Smoothed controls. Frequency and Q glide in the log domain.
+    var log_freq: f32;
+    var gain_db: f32;
+    var log_q: f32;
+    var target_log_freq: f32;
+    var target_gain_db: f32;
+    var target_log_q: f32;
+    /// One-pole coefficient per 16-sample step, and samples until the next step.
+    var smooth: f32;
+    var countdown: i32;
+    var settled: i32;
+};
+
+fn clamp_eq_f32(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+fn abs_eq_f32(value: f32) -> f32 { return value < 0.0f ? 0.0f - value : value; }
+
+/// Butterworth Q of `stage` (0-based) for a cascade of `stages` biquads.
+/// Stage 0 carries the highest Q, so the user's resonance scales only that one.
+fn mlaeq_butterworth_q(stages: i32, stage: i32) -> f32 {
+    let denominator: f32 = 4.0f * f32(stages);
+    let angle: f32 = (2.0f * f32(stage) + 1.0f) * 3.14159265358979323846f / denominator;
+    return 1.0f / (2.0f * sinf(angle));
+}
+
+fn design(handle: ptr<EqSection>) {
+    unsafe {
+        let freq: f32 = expf((*handle).log_freq);
+        let q: f32 = expf((*handle).log_q);
+        let gain: f32 = (*handle).gain_db;
+        let rate: f32 = (*handle).rate;
+        let kind: i32 = (*handle).kind;
+        if kind == 1 {
+            (*handle).left.set_peaking(freq, gain, q, rate);
+            (*handle).right.set_peaking(freq, gain, q, rate);
+        } else if kind == 2 {
+            (*handle).left.set_low_shelf(freq, gain, q, rate);
+            (*handle).right.set_low_shelf(freq, gain, q, rate);
+        } else if kind == 3 {
+            (*handle).left.set_high_shelf(freq, gain, q, rate);
+            (*handle).right.set_high_shelf(freq, gain, q, rate);
+        } else if kind == 4 {
+            (*handle).left.set_bandreject_q(freq, q, rate);
+            (*handle).right.set_bandreject_q(freq, q, rate);
+        } else if kind == 5 {
+            (*handle).left.set_highpass_q(freq, q, rate);
+            (*handle).right.set_highpass_q(freq, q, rate);
+        } else if kind == 6 {
+            (*handle).left.set_lowpass_q(freq, q, rate);
+            (*handle).right.set_lowpass_q(freq, q, rate);
+        }
+    }
+}
+
+fn mlaeq_section_create(rate: f32) -> ptr<EqSection> {
+    let handle: ptr<EqSection> = calloc(1, size_of(EqSection));
+    unsafe {
+        (*handle).left = Biquad::new();
+        (*handle).right = Biquad::new();
+        (*handle).kind = 0;
+        (*handle).rate = clamp_eq_f32(rate, 8000.0f, 384000.0f);
+        (*handle).log_freq = logf(1000.0f);
+        (*handle).log_q = logf(0.70710678f);
+        (*handle).target_log_freq = (*handle).log_freq;
+        (*handle).target_log_q = (*handle).log_q;
+        // About 20 ms to settle within 1/e, evaluated every 16 samples.
+        (*handle).smooth = 1.0f - expf(0.0f - 16.0f / (0.02f * (*handle).rate));
+        (*handle).settled = 1;
+    }
+    return handle;
+}
+fn mlaeq_section_destroy(handle: ptr<EqSection>) { free(handle); }
+fn mlaeq_section_reset(handle: ptr<EqSection>) {
+    unsafe { (*handle).left.reset(); (*handle).right.reset(); }
+}
+
+/// Retarget a section. `immediate` != 0 jumps without gliding (setup, state
+/// restore, or a kind change). A kind change or switching on also clears history.
+fn mlaeq_section_set(handle: ptr<EqSection>, kind: i32, freq: f32, gain_db: f32, q: f32, immediate: i32) {
+    unsafe {
+        let nyquist_guard: f32 = (*handle).rate * 0.49f;
+        (*handle).target_log_freq = logf(clamp_eq_f32(freq, 10.0f, nyquist_guard));
+        (*handle).target_gain_db = clamp_eq_f32(gain_db, -48.0f, 48.0f);
+        (*handle).target_log_q = logf(clamp_eq_f32(q, 0.05f, 96.0f));
+        let changed_kind: bool = kind != (*handle).kind;
+        if changed_kind {
+            (*handle).kind = kind;
+            (*handle).left.reset();
+            (*handle).right.reset();
+        }
+        if immediate != 0 || changed_kind {
+            (*handle).log_freq = (*handle).target_log_freq;
+            (*handle).gain_db = (*handle).target_gain_db;
+            (*handle).log_q = (*handle).target_log_q;
+            (*handle).settled = 1;
+            design(handle);
+        } else {
+            (*handle).settled = 0;
+        }
+    }
+}
+
+/// Configure one stage of a 12/24/36/48 dB Butterworth high- or low-pass
+/// cascade. `resonance_q` of 0.7071 is flat; higher values peak the corner.
+fn mlaeq_section_set_pass(handle: ptr<EqSection>, highpass: i32, stages: i32, stage: i32, freq: f32, resonance_q: f32, immediate: i32) {
+    var q: f32 = mlaeq_butterworth_q(stages, stage);
+    if stage == 0 { q = q * clamp_eq_f32(resonance_q, 0.1f, 18.0f) * 1.41421356f; }
+    mlaeq_section_set(handle, highpass != 0 ? 5 : 6, freq, 0.0f, q, immediate);
+}
+
+fn glide(handle: ptr<EqSection>) {
+    unsafe {
+        let k: f32 = (*handle).smooth;
+        let df: f32 = (*handle).target_log_freq - (*handle).log_freq;
+        let dg: f32 = (*handle).target_gain_db - (*handle).gain_db;
+        let dq: f32 = (*handle).target_log_q - (*handle).log_q;
+        if abs_eq_f32(df) < 0.0005f && abs_eq_f32(dg) < 0.005f && abs_eq_f32(dq) < 0.0005f {
+            (*handle).log_freq = (*handle).target_log_freq;
+            (*handle).gain_db = (*handle).target_gain_db;
+            (*handle).log_q = (*handle).target_log_q;
+            (*handle).settled = 1;
+        } else {
+            (*handle).log_freq = (*handle).log_freq + k * df;
+            (*handle).gain_db = (*handle).gain_db + k * dg;
+            (*handle).log_q = (*handle).log_q + k * dq;
+        }
+        design(handle);
+    }
+}
+
+/// 1 when the section is currently a no-op (off, or a settled 0 dB bell/shelf),
+/// so the host loop can skip it.
+fn mlaeq_section_is_identity(handle: ptr<EqSection>) -> i32 {
+    unsafe {
+        let kind: i32 = (*handle).kind;
+        if kind == 0 { return 1; }
+        if (kind == 1 || kind == 2 || kind == 3)
+            && (*handle).settled != 0 && (*handle).gain_db == 0.0f {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+fn mlaeq_section_process(handle: ptr<EqSection>, left: f32, right: f32, out_right: ptr<f32>) -> f32 {
+    unsafe {
+        if (*handle).kind == 0 { *out_right = right; return left; }
+        if (*handle).settled == 0 {
+            (*handle).countdown = (*handle).countdown - 1;
+            if (*handle).countdown <= 0 {
+                (*handle).countdown = 16;
+                glide(handle);
+            }
+        }
+        *out_right = (*handle).right.process(right);
+        return (*handle).left.process(left);
+    }
+}

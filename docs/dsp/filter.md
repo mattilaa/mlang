@@ -19,8 +19,18 @@ sample processing with these coefficient design methods:
 - `process(input) -> f32`
 - `reset()`
 
-The explicit-Q variants `set_lowpass_q`, `set_highpass_q`, and
-`set_bandpass_q` are available for constructing tuned cascades.
+The explicit-Q variants `set_lowpass_q`, `set_highpass_q`, `set_bandpass_q`,
+and `set_bandreject_q` are available for constructing tuned cascades.
+
+Equalizer sections (RBJ cookbook shapes, gain clamped to `±48 dB`):
+
+- `set_peaking(center_hz, gain_db, q, sample_rate_hz)` — bell boost/cut; higher
+  `q` narrows the affected band. `0 dB` is exactly unity.
+- `set_low_shelf(corner_hz, gain_db, q, sample_rate_hz)`
+- `set_high_shelf(corner_hz, gain_db, q, sample_rate_hz)` — `q = 0.7071` is the
+  steepest shelf without overshoot; larger values add a bump at the corner.
+
+`plugins/mla_eq` builds a 4/8-band parametric EQ from these sections.
 
 Cutoff is clamped to `1 Hz .. 0.495 * sample_rate` and resonance to
 `0 .. 36 dB` before coefficient calculation.
