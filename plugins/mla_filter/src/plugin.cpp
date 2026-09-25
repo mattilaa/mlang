@@ -29,14 +29,22 @@ enum Index {
     kResonance = 2,
     kMix = 3,
     kOutputGain = 4,
-    kGlide = 5,
+    kCutoffRamp = 5,
     kBypass = 6,
+    kResonanceRamp = 7,
+    kMixRamp = 8,
+    kOutputRamp = 9,
+    kTypeRamp = 10,
     kCount
 };
 // Index order matches dsp::multimode::FilterModel.
 enum Model { kLowpass12, kLowpass24, kHighpass12, kHighpass24, kBandpass12, kBandpass24, kMoog12, kMoog24, kModels };
 constexpr ParamID kFirstParam = 100;
-constexpr double kModelFadeMs = 20;
+// Presets and states saved before the ramp controls held only the first seven.
+constexpr int kLegacyCount = kBypass + 1;
+// Default ramps outlast mlacker's row-timed automation steps (a 1/16 row at
+// 120 BPM is 125 ms) so stepped values glide instead of zippering.
+constexpr double kDefaultRampMs = 120;
 struct Spec { const TChar* title; const TChar* unit; double low, high, initial; int steps; bool log; };
 static const Spec specs[kCount] = {
     {STR16("Type"), STR16(""), 0, kModels - 1, kMoog24, kModels - 1, false},
@@ -44,8 +52,12 @@ static const Spec specs[kCount] = {
     {STR16("Resonance"), STR16("dB"), 0, 36, 0, 0, false},
     {STR16("Mix"), STR16(""), 0, 1, 1, 0, false},
     {STR16("Output"), STR16("dB"), -24, 24, 0, 0, false},
-    {STR16("Glide"), STR16("ms"), 0, 2000, 20, 0, false},
+    {STR16("Cutoff Ramp"), STR16("ms"), 0, 2000, kDefaultRampMs, 0, false},
     {STR16("Bypass"), STR16(""), 0, 1, 0, 1, false},
+    {STR16("Resonance Ramp"), STR16("ms"), 0, 2000, kDefaultRampMs, 0, false},
+    {STR16("Mix Ramp"), STR16("ms"), 0, 2000, kDefaultRampMs, 0, false},
+    {STR16("Output Ramp"), STR16("ms"), 0, 2000, kDefaultRampMs, 0, false},
+    {STR16("Type Ramp"), STR16("ms"), 0, 2000, 80, 0, false},
 };
 // Cutoff uses a logarithmic normalized mapping: equal travel per octave.
 static double normalized(int i, double plain) {
@@ -53,6 +65,21 @@ static double normalized(int i, double plain) {
     if(s.log) return std::log(plain / s.low) / std::log(s.high / s.low);
     return (plain - s.low) / (s.high - s.low);
 }
+// Linear per-sample ramp towards a target; retargeting starts from the
+// in-flight value.
+struct Ramp {
+    float value = 1, step = 0, target = 1;
+    int64_t remaining = 0;
+    void set(float to, int64_t samples) {
+        target = to;
+        if(samples <= 0) { value = to; step = 0; remaining = 0; return; }
+        step = (to - value) / static_cast<float>(samples); remaining = samples;
+    }
+    float next() {
+        if(remaining > 0) value = --remaining == 0 ? target : value + step;
+        return value;
+    }
+};
 static double physical(int i, double norm) {
     const Spec& s = specs[i];
     if(s.log) return s.low * std::pow(s.high / s.low, norm);
@@ -130,9 +157,7 @@ public:
         destroy(); rate_ = setup.sampleRate;
         dsp_ = mlafilter_create__f32(static_cast<float>(rate_));
         if(!dsp_) return kOutOfMemory;
-        // About 20 ms mix/output glide.
-        smooth_ = static_cast<float>(1 - std::exp(-1 / (0.02 * rate_)));
-        applyAll(true); mix_ = mixTarget_; gain_ = gainTarget_;
+        applyAll(true);
         return kResultOk;
     }
     tresult PLUGIN_API setActive(TBool state) override {
@@ -164,10 +189,9 @@ public:
             const float right = (in.silenceFlags & 2) ? 0.f : in.channelBuffers32[1][i];
             float wetLeft = left, wetRight = right;
             if(dsp_) wetLeft = mlafilter_process__ptr_struct_StereoMultimodeFilter_f32_f32_ptr_f32(dsp_, left, right, &wetRight);
-            mix_ += smooth_ * (mixTarget_ - mix_);
-            gain_ += smooth_ * (gainTarget_ - gain_);
-            out.channelBuffers32[0][i] = bypass ? left : (left + (wetLeft - left) * mix_) * gain_;
-            out.channelBuffers32[1][i] = bypass ? right : (right + (wetRight - right) * mix_) * gain_;
+            const float mix = mix_.next(), gain = gain_.next();
+            out.channelBuffers32[0][i] = bypass ? left : (left + (wetLeft - left) * mix) * gain;
+            out.channelBuffers32[1][i] = bypass ? right : (right + (wetRight - right) * mix) * gain;
             if(out.channelBuffers32[0][i] != 0 || out.channelBuffers32[1][i] != 0) silent = false;
         }
         out.silenceFlags = silent ? 3 : 0;
@@ -177,7 +201,17 @@ public:
         if(!state) return kResultFalse;
         IBStreamer stream(state, kLittleEndian);
         std::array<double, kCount> values{};
-        for(auto& value : values) if(!stream.readDouble(value) || !std::isfinite(value) || value < 0 || value > 1) return kResultFalse;
+        for(int i = 0; i < kCount; ++i) values[i] = normalized(i, specs[i].initial);
+        for(int i = 0; i < kCount; ++i) {
+            double value = 0;
+            if(!stream.readDouble(value)) {
+                // Older states end after Bypass; the ramps keep their defaults.
+                if(i == kLegacyCount) break;
+                return kResultFalse;
+            }
+            if(!std::isfinite(value) || value < 0 || value > 1) return kResultFalse;
+            values[i] = value;
+        }
         norm_ = values;
         for(int i = 0; i < kCount; ++i) setParamNormalized(kFirstParam + i, norm_[i]);
         applyAll(true); return kResultOk;
@@ -191,19 +225,19 @@ public:
 private:
     StereoMultimodeFilter* dsp_ = nullptr;
     double rate_ = 44100;
-    float mix_ = 1, mixTarget_ = 1, gain_ = 1, gainTarget_ = 1, smooth_ = 1;
+    Ramp mix_, gain_;
     std::array<double, kCount> norm_{};
     double plain(int i) const { return physical(i, norm_[i]); }
     int64_t samples(double ms) const { return static_cast<int64_t>(rate_ * ms / 1000); }
+    int64_t ramp(int i, bool immediate) const { return immediate ? 0 : samples(plain(i)); }
     void destroy() { if(dsp_) { mlafilter_destroy__ptr_struct_StereoMultimodeFilter(dsp_); dsp_ = nullptr; } }
     void push(int i, bool immediate) {
         if(!dsp_) return;
-        const int64_t glide = immediate ? 0 : samples(plain(kGlide));
-        if(i == kType) mlafilter_set_model__ptr_struct_StereoMultimodeFilter_i32_i64(dsp_, static_cast<int>(plain(kType)), immediate ? 0 : samples(kModelFadeMs));
-        else if(i == kCutoff) mlafilter_set_cutoff__ptr_struct_StereoMultimodeFilter_f32_i64(dsp_, static_cast<float>(plain(kCutoff)), glide);
-        else if(i == kResonance) mlafilter_set_resonance__ptr_struct_StereoMultimodeFilter_f32_i64(dsp_, static_cast<float>(plain(kResonance)), glide);
-        else if(i == kMix) mixTarget_ = static_cast<float>(plain(kMix));
-        else if(i == kOutputGain) gainTarget_ = static_cast<float>(std::pow(10.0, plain(kOutputGain) / 20));
+        if(i == kType) mlafilter_set_model__ptr_struct_StereoMultimodeFilter_i32_i64(dsp_, static_cast<int>(plain(kType)), ramp(kTypeRamp, immediate));
+        else if(i == kCutoff) mlafilter_set_cutoff__ptr_struct_StereoMultimodeFilter_f32_i64(dsp_, static_cast<float>(plain(kCutoff)), ramp(kCutoffRamp, immediate));
+        else if(i == kResonance) mlafilter_set_resonance__ptr_struct_StereoMultimodeFilter_f32_i64(dsp_, static_cast<float>(plain(kResonance)), ramp(kResonanceRamp, immediate));
+        else if(i == kMix) mix_.set(static_cast<float>(plain(kMix)), ramp(kMixRamp, immediate));
+        else if(i == kOutputGain) gain_.set(static_cast<float>(std::pow(10.0, plain(kOutputGain) / 20)), ramp(kOutputRamp, immediate));
     }
     void applyAll(bool immediate) { for(int i = 0; i < kCount; ++i) push(i, immediate); }
     void applyOne(ParamID id, double value) {

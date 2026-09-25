@@ -55,18 +55,27 @@ uses a logarithmic mapping: `0.5` is about 632 Hz. Parameters persist through
 | Resonance | 0–36 dB | 0 dB |
 | Mix | 0 dry–1 filtered | 1 |
 | Output | −24–+24 dB | 0 dB |
-| Glide | 0–2000 ms cutoff/resonance ramp | 20 ms |
+| Cutoff Ramp | 0–2000 ms | 120 ms |
 | Bypass | Off / On | Off |
+| Resonance Ramp | 0–2000 ms | 120 ms |
+| Mix Ramp | 0–2000 ms | 120 ms |
+| Output Ramp | 0–2000 ms | 120 ms |
+| Type Ramp | 0–2000 ms type crossfade | 80 ms |
 
 Resonance `0 dB` is a flat Butterworth response (the ladder has no peak). High
 settings get loud, and Moog near 36 dB approaches self-oscillation, so lower
 Output as needed.
 The 24 dB biquad types split resonance across both stages, like the example.
 
-Cutoff and resonance changes ramp over **Glide**, and cutoff moves evenly per
-octave. Type changes crossfade over 20 ms, so switching while audio plays does
-not click. Mix and Output glide over about 20 ms. Automation uses the final
-value in each processing block, like the sibling plugins.
+Cutoff, Resonance, Mix, and Output changes ramp linearly over their Ramp
+controls, and cutoff moves evenly per octave. The 120 ms defaults outlast a
+1/16 row at 120 BPM, so row-timed mlacker automation and stepped MIDI CC glide
+instead of zippering. Type changes crossfade over **Type Ramp**, so switching
+while audio plays does not click (0 switches instantly). Initial setup and
+state restoration apply values immediately. Automation uses the final value in
+each processing block, like the sibling plugins. Cutoff Ramp keeps the old
+Glide parameter's ID, so older sessions recall their saved Glide time there;
+states saved before the other ramps load them at their defaults.
 
 MIDI mappings: CC 1 → Mix, CC 7 → Output, CC 70 → Type, CC 71 → Resonance,
 CC 74 → Cutoff.
@@ -88,8 +97,8 @@ python3 plugins/mla_filter/tests/mlacker_editor_smoke.py \
 ```
 
 Processor coverage: metadata and log-mapping round trips, pass and stop bands of
-all eight types, 24 dB types steeper than 12 dB, resonance peaks, Glide timing,
+all eight types, 24 dB types steeper than 12 dB, resonance peaks, ramp timing and defaults,
 click-free type crossfades, Mix/Output/Bypass, silent buffers, finite output at
-36 dB resonance at both frequency extremes, and state round trip with
-invalid-state rejection. `dsp::multimode` itself is tested in
+36 dB resonance at both frequency extremes, and state round trip (including
+seven-value legacy states) with invalid-state rejection. `dsp::multimode` itself is tested in
 `tests/dsp_tests.mla`.

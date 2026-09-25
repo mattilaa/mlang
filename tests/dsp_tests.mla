@@ -731,6 +731,14 @@ fn test_dsp_delay_multimode_filters_color_repeats() {
     verify(delay_tone_energy(FeedbackFilter::Bandpass24, 8000.0f) < delay_tone_energy(FeedbackFilter::Bandpass, 8000.0f));
     // The 24 dB low-pass is steeper than the original 12 dB state-variable one.
     verify(delay_tone_energy(FeedbackFilter::Lowpass24, 4000.0f) < delay_tone_energy(FeedbackFilter::Lowpass, 4000.0f) * 0.1f);
+    // The 12 dB multimode biquads pass their band and are gentler than 24 dB.
+    verify(delay_tone_energy(FeedbackFilter::Lowpass12, 100.0f) > 0.9f);
+    verify(delay_tone_energy(FeedbackFilter::Lowpass12, 8000.0f) < 0.01f);
+    verify(delay_tone_energy(FeedbackFilter::Lowpass12, 4000.0f) > delay_tone_energy(FeedbackFilter::Lowpass24, 4000.0f));
+    verify(delay_tone_energy(FeedbackFilter::Highpass12, 8000.0f) > 0.9f);
+    verify(delay_tone_energy(FeedbackFilter::Highpass12, 125.0f) < 0.01f);
+    verify(delay_tone_energy(FeedbackFilter::Bandpass12, 1000.0f) > 0.9f);
+    verify(delay_tone_energy(FeedbackFilter::Bandpass12, 8000.0f) > delay_tone_energy(FeedbackFilter::Bandpass24, 8000.0f));
 }
 
 #[test]
