@@ -68,7 +68,6 @@ ${MLANG}           ${EXECDIR}/build/mlang
 
 *** Test Cases ***
 Compile All Examples
-    [Tags]    fix-me-later    robot:skip-on-failure
     File Should Exist    ${MLANG}
     FOR    ${example}    IN    @{EXAMPLES}
         File Should Exist    ${example}
@@ -342,7 +341,6 @@ Mlang Bench Runner
     Should Contain    ${run.stdout}    bench_exception_throw_catch_unwind
 
 Type Inference Regression
-    [Tags]    fix-me-later    robot:skip-on-failure
     ${run}=    Run Process    ${MLANG}    test    ${EXECDIR}/tests/type_inference_tests.mla
     ...    stdout=PIPE    stderr=PIPE    cwd=${ARTIFACT DIR}    env:PATH=${ARTIFACT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0    msg=Type inference regression failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
@@ -6622,7 +6620,6 @@ Pkg Builds Explicitly Included Packages Into Isolated Targets
     Should Contain    ${converter.stdout}    converter package built separately
 
 Pkg Lock Pins Git And Verifies Archive Checksums Offline
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify exact Git revisions, archive SHA-256 locking,
     ...                locked manifest checks, offline cache use, and tamper detection.
     ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_reproducibility
@@ -6685,7 +6682,7 @@ Pkg Lock Pins Git And Verifies Archive Checksums Offline
     ...    msg=Offline fetch failed\n${offline.stdout}\n${offline.stderr}
 
     ${stale}=    Run Process    /bin/sh    -lc
-    ...    cp '${project}/mlang.toml' '${project}/mlang.toml.saved' && sed 's/archive = "tar.gz"/archive = "zip"/' '${project}/mlang.toml.saved' > '${project}/mlang.toml'
+    ...    cp '${project}/mlang.toml' '${project}/mlang.toml.saved' && sed 's/archive \= "tar.gz"/archive \= "zip"/' '${project}/mlang.toml.saved' > '${project}/mlang.toml'
     Should Be Equal As Integers    ${stale.rc}    0
     ${locked_stale}=    Run Process    ${MLANG}    pkg    fetch    --locked
     ...    cwd=${project}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
@@ -6704,7 +6701,6 @@ Pkg Lock Pins Git And Verifies Archive Checksums Offline
     Should Contain    ${verify_tampered.stderr}    Archive verification failed
 
 Pkg Resolves Transitive Path Packages And Semantic Versions
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify path MLang packages, transitive builds, semantic
     ...                constraints, deterministic graph inspection, and locked versions.
     ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_path_dependencies
@@ -6741,7 +6737,7 @@ Pkg Resolves Transitive Path Packages And Semantic Versions
     Should Be Equal As Integers    ${verify.rc}    0
 
     ${bad_version}=    Run Process    /bin/sh    -lc
-    ...    sed 's/version = "~2.1"/version = "^3.0"/' '${base}/packages/core/mlang.toml' > '${base}/packages/core/mlang.toml.new' && mv '${base}/packages/core/mlang.toml.new' '${base}/packages/core/mlang.toml'
+    ...    sed 's/version \= "~2.1"/version \= "^3.0"/' '${base}/packages/core/mlang.toml' > '${base}/packages/core/mlang.toml.new' && mv '${base}/packages/core/mlang.toml.new' '${base}/packages/core/mlang.toml'
     Should Be Equal As Integers    ${bad_version.rc}    0
     ${rejected}=    Run Process    ${MLANG}    pkg    build    --locked
     ...    cwd=${base}    stdout=PIPE    stderr=PIPE
