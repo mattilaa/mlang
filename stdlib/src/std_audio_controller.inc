@@ -7,8 +7,9 @@
 #define AC_SAMPLES 256u
 /* Master bus: 24 dB/oct high-pass, four peaking bands, then volume. Parameter
  * slots: 0 = HP Hz (0 = off), 1 + 3*band = band Hz, gain dB, Q; 13 = linear
- * volume. Defaults are transparent: HP off, flat bands, unity volume. */
-#define AC_MASTER_PARAMS 14
+ * volume; 14 = EQ (high-pass and bands) enabled, 1 or 0. Defaults are
+ * transparent: HP off, flat bands, unity volume, EQ enabled. */
+#define AC_MASTER_PARAMS 15
 #define AC_MASTER_FILTERS 6
 /* Post-master mono tap for the analyzer: power of two, >= largest FFT. */
 #define AC_SPECTRUM_RING 16384u
@@ -90,6 +91,9 @@ typedef struct {
     double master_value[AC_MASTER_PARAMS];
     double master_coef[AC_MASTER_FILTERS][5];
     double master_state[AC_MASTER_FILTERS][2][4];
+    /* EQ wet share: crossfades toward the enabled switch over ~20 ms. */
+    double master_eq_mix;
+    float master_dry[8192];
     float spectrum_ring[AC_SPECTRUM_RING];
     _Atomic uint64_t spectrum_write;
     /* Control-thread analyzer snapshot (single UI consumer). */
@@ -114,7 +118,7 @@ static void ac_silence(ac_controller *c) {
 static uint32_t ac_float_bits(float value) { uint32_t bits; memcpy(&bits, &value, sizeof(bits)); return bits; }
 static float ac_bits_float(uint32_t bits) { float value; memcpy(&value, &bits, sizeof(value)); return value; }
 static const float ac_master_defaults[AC_MASTER_PARAMS] = {
-    0.f, 100.f, 0.f, 1.f, 500.f, 0.f, 1.f, 2500.f, 0.f, 1.f, 8000.f, 0.f, 1.f, 1.f };
+    0.f, 100.f, 0.f, 1.f, 500.f, 0.f, 1.f, 2500.f, 0.f, 1.f, 8000.f, 0.f, 1.f, 1.f, 1.f };
 
 /* RBJ biquads, normalized by a0: {b0, b1, b2, a1, a2}. */
 static void ac_biquad(double *k, double b0, double b1, double b2, double a0, double a1, double a2) {
@@ -159,7 +163,7 @@ static void ac_master_update(ac_controller *c, uint32_t frames) {
             double next = exp(log(*value) + (log(target) - log(*value)) * k);
             if(fabs(log(target) - log(next)) < 1e-4) next = target; else moving = 1;
             *value = next;
-        } else if(i != 13) {
+        } else if(i < 13) {
             double next = *value + (target - *value) * k;
             if(fabs(target - next) < 1e-4) next = target; else moving = 1;
             *value = next;
@@ -170,6 +174,14 @@ static void ac_master_update(ac_controller *c, uint32_t frames) {
 }
 static void ac_master_process(ac_controller *c, float *out, uint32_t frames) {
     ac_master_update(c, frames);
+    double mix_to = ac_bits_float(atomic_load_explicit(&c->master_target[14], memory_order_relaxed)) >= 0.5f ? 1.0 : 0.0;
+    double mix = c->master_eq_mix;
+    if(mix == 0.0 && mix_to == 0.0) {
+        /* Bypassed: no filtering, and a clean start when switched back on. */
+        memset(c->master_state, 0, sizeof(c->master_state));
+    } else {
+    int blend = mix != 1.0 || mix_to != 1.0;
+    if(blend) memcpy(c->master_dry, out, frames * 2u * sizeof(float));
     for(int s = 0; s < AC_MASTER_FILTERS; ++s) {
         const double *k = c->master_coef[s];
         /* An off high-pass or a flat peaking band is exact identity; skip it. */
@@ -187,6 +199,18 @@ static void ac_master_process(ac_controller *c, float *out, uint32_t frames) {
                 out[f * 2 + ch] = (float)y;
             }
         }
+    }
+    if(blend) {
+        double step = 1.0 / (c->rate * 0.02);
+        for(uint32_t f = 0; f < frames; ++f) {
+            mix = mix_to > mix ? fmin(mix_to, mix + step) : fmax(mix_to, mix - step);
+            for(int ch = 0; ch < 2; ++ch) {
+                float dry = c->master_dry[f * 2 + ch];
+                out[f * 2 + ch] = (float)(dry + (out[f * 2 + ch] - dry) * mix);
+            }
+        }
+        c->master_eq_mix = mix;
+    }
     }
     /* Volume ramps linearly across the block. */
     double from = c->master_value[13];
@@ -234,6 +258,7 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
         c->master_value[i] = ac_master_defaults[i];
     }
     atomic_init(&c->master_serial, 0); atomic_init(&c->spectrum_write, 0);
+    c->master_eq_mix = 1.0;
     ac_master_design(c);
     for(int i = 0; i < 128; ++i) c->frequencies[i] = 440.0 * pow(2.0, (i - 69) / 12.0);
     return (int64_t)(intptr_t)c;
@@ -832,6 +857,7 @@ int32_t __mlang_std_audio_controller_master_param(int64_t handle, int64_t index,
     if(gain && (value < -24 || value > 24)) return -1;
     if(index <= 12 && index >= 1 && (index - 1) % 3 == 2 && (value < 0.1 || value > 18)) return -1;
     if(index == 13 && (value < 0 || value > 4)) return -1;
+    if(index == 14 && value != 0 && value != 1) return -1;
     atomic_store_explicit(&c->master_target[index], ac_float_bits((float)value), memory_order_relaxed);
     atomic_fetch_add_explicit(&c->master_serial, 1, memory_order_release);
     return 0;

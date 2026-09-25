@@ -540,11 +540,17 @@ meters. With the pane focused:
 |---|---|
 | Left / Right | Select HP, EQ1–EQ4 or Master |
 | Enter | On an EQ band, cycle gain → frequency → Q (the selected value is highlighted) |
-| Up / Down or `k` / `j` | Fine step: 0.5 dB, 1/6 octave, 1/12-octave Q, 1% |
-| `K` / `J` | Coarse step (6 fine steps) |
+| Up / Down or `k` / `j` | Fine step: 0.1 dB, 1/6 octave, 1/12-octave Q, 1% |
+| `K` / `J` | Coarse step: 1 dB, an octave, half-octave Q, 6% |
 | `0` | Reset the selected value |
+| `Shift+E` | Switch the EQ (high-pass and bands) in or out |
 
 Stepping the high-pass below 10 Hz switches it off; stepping up turns it back on.
+`Shift+E` bypasses the whole EQ without losing its settings: the `EQ` badge at
+the top right of the graph is lit white on red while the EQ is in, like MIDI
+learn's `L`, and its strips are dimmed while it is out. The switch crossfades
+over about 20 ms; the master volume applies either way, and the analyzer always
+shows the output after the EQ stage.
 Changes glide over about 30 ms, so adjusting them while playing does not click.
 Wider bands have a lower Q. The analyzer view, its detail and rate, and the
 master bus are saved in `.mlack` (`MASTER_BUS`).

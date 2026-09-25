@@ -31,9 +31,14 @@ def main():
             expect(frame, b"Spectrum / Master", b"100Hz", b"1kHz", b"HP", b"EQ1", b"EQ4", b"Master")
             # Defaults: 20 Hz high-pass, bands at 100/500/2.5k/8k Hz, Q 1, unity volume.
             expect(frame, b"20 ", b"100 ", b"500 ", b"2.5k", b"8.0k", b"Q1.0", b"100%")
-            # Focus the analyzer pane; EQ1 gain up two half-dB steps.
+            # Focus the analyzer pane; EQ1 gain up two 0.1 dB steps, then 1 dB.
             frame = tui.send(b"\t\t" + UP + UP, 0.5)
-            expect(frame, b"+1.0")
+            expect(frame, b"+0.2")
+            expect(tui.send(b"K", 0.4), b"+1.2")
+            # Shift+E switches the EQ out and back in, keeping the band.
+            expect(tui.send(b"E", 0.4), b"EQ off |", b"+1.2")
+            expect(tui.send(b"E", 0.4), b"EQ on |")
+            expect(tui.send(b"E", 0.4), b"EQ off |")
             # Master volume: four strips to the right, one step down.
             frame = tui.send(RIGHT * 4 + b"j", 0.5)
             expect(frame, b"99%")
@@ -45,7 +50,9 @@ def main():
         try:
             frame = tui.read(1.0)
             # The analyzer is still open with the saved bus.
-            expect(frame, b"Opened:", b"Spectrum / Master", b"+1.0", b"99%")
+            expect(frame, b"Opened:", b"Spectrum / Master", b"+1.2", b"99%")
+            # The EQ stays switched out after reopening, in the focused pane.
+            expect(tui.send(b"E", 0.4), b"EQ on |")
             # View > Spectrum analyzer > Change details.
             expect(tui.send(F1 + b"ll" + b"j" * 7 + RIGHT + b"\r", 0.5), b"Spectrum detail: Braille (fine)")
             # View > Show spectrum analyzer closes it again.

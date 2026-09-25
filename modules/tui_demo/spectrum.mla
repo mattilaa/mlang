@@ -16,8 +16,9 @@ use std::strbuf::clone;
 
 /// Master bus settings: pushed to the controller and saved with a session.
 /// Band gains are tenths of a dB, Qs hundredths, the high-pass 0 when off.
+/// `eq_on` switches the high-pass and bands in or out; volume always applies.
 pub struct MasterBus {
-    var hp_hz: i32{20}; var volume: i32{100};
+    var hp_hz: i32{20}; var volume: i32{100}; var eq_on: bool{true};
     var hz0: i32{100}; var hz1: i32{500}; var hz2: i32{2500}; var hz3: i32{8000};
     var gain0: i32; var gain1: i32; var gain2: i32; var gain3: i32;
     var q0: i32{100}; var q1: i32{100}; var q2: i32{100}; var q3: i32{100};
@@ -35,7 +36,7 @@ impl MasterBus {
     /// A session only stores the bus when it differs from these defaults.
     pub fn is_default(self: MasterBus) -> bool {
         let fresh: MasterBus = MasterBus {};
-        if self.hp_hz != fresh.hp_hz || self.volume != fresh.volume { return false; }
+        if self.hp_hz != fresh.hp_hz || self.volume != fresh.volume || !self.eq_on { return false; }
         for band in 0..4 {
             let b: i32 = i32(band);
             if self.band_hz(b) != fresh.band_hz(b) || self.band_gain(b) != 0 || self.band_q(b) != fresh.band_q(b) { return false; }
@@ -60,6 +61,7 @@ impl MasterBus {
             output.master_band(band, f64(self.band_hz(b)), f64(self.band_gain(b)) / 10.0, f64(self.band_q(b)) / 100.0);
         }
         output.master_volume(f64(self.volume) / 100.0);
+        output.master_eq_enabled(self.eq_on);
     }
 }
 
@@ -166,17 +168,22 @@ impl SpectrumView {
     pub fn handles(self: SpectrumView, event: InputEvent) -> bool {
         if event.kind == InputKind::Menu && (event.key == Key::Left || event.key == Key::Right || event.key == Key::Up ||
             event.key == Key::Down || event.key == Key::Enter) { return true; }
-        if event.modifiers == 1 && (event.code == 106 || event.code == 107 || event.code == 74 || event.code == 75 || event.code == 48) { return true; }
-        return event.modifiers == 2 && (event.code == 106 || event.code == 107);
+        if event.modifiers == 1 && (event.code == 106 || event.code == 107 || event.code == 74 || event.code == 75 || event.code == 48 || event.code == 69) { return true; }
+        return event.modifiers == 2 && (event.code == 106 || event.code == 107 || event.code == 101);
     }
     /// Keys while the pane is focused: Left/Right pick a control, Enter the
-    /// field, Up/Down (k/j) change it finely, K/J coarsely, 0 resets it.
+    /// field, Up/Down (k/j) change it finely, K/J coarsely, 0 resets it, and
+    /// Shift+E switches the EQ (high-pass and bands) in or out.
     /// Returns true when the bus changed and was pushed to `output`.
     pub fn on_event(self: &mut Self, event: InputEvent, output: AudioController) -> bool {
         if event.kind == InputKind::Menu && event.key == Key::Left { self.selected = spectrum_clamp(self.selected - 1, 0, 5); self.part = 0; return false; }
         if event.kind == InputKind::Menu && event.key == Key::Right { self.selected = spectrum_clamp(self.selected + 1, 0, 5); self.part = 0; return false; }
         if event.kind == InputKind::Menu && event.key == Key::Enter {
             self.part = self.selected >= 1 && self.selected <= 4 ? (self.part + 1) % 3 : 0; return false;
+        }
+        if (event.code == 69 && event.modifiers == 1) || (event.code == 101 && event.modifiers == 2) {
+            var toggled: MasterBus = self.bus; toggled.eq_on = !toggled.eq_on; self.bus = toggled;
+            output.master_eq_enabled(self.bus.eq_on); return true;
         }
         var steps: i32 = 0;
         if (event.kind == InputKind::Menu && event.key == Key::Up) || (event.code == 107 && event.modifiers == 1) { steps = 1; }
@@ -195,11 +202,11 @@ impl SpectrumView {
         } else if self.selected == 5 {
             bus.volume = reset ? fresh.volume : spectrum_clamp(bus.volume + steps, 0, 150);
         } else {
-            // Gain moves 0.5 dB (3 dB coarse), frequency a sixth of an octave
+            // Gain moves 0.1 dB (1 dB coarse), frequency a sixth of an octave
             // (an octave), Q a twelfth of an octave's ratio (half an octave).
             let band: i32 = self.selected - 1;
             var hz: i32 = bus.band_hz(band); var gain: i32 = bus.band_gain(band); var q: i32 = bus.band_q(band);
-            if self.part == 0 { gain = reset ? 0 : spectrum_clamp(gain + steps * 5, -120, 120); }
+            if self.part == 0 { gain = reset ? 0 : spectrum_clamp(gain + (steps == 1 || steps == -1 ? steps : steps / 6 * 10), -120, 120); }
             else if self.part == 1 { hz = reset ? fresh.band_hz(band) : spectrum_clamp(spectrum_scale(hz, steps), 20, 20000); }
             else { q = reset ? fresh.band_q(band) : spectrum_clamp(i32(f64(q) * exp(f64(steps) * log(2.0) / 12.0) + (steps > 0 ? 0.5 : -0.5)), 30, 1000); }
             bus.set_band(band, hz, gain, q);
@@ -211,6 +218,7 @@ impl SpectrumView {
     /// Owned one-line summary of the selected control for the status bar.
     pub fn status(self: SpectrumView) -> str8 {
         if self.selected == 0 {
+            if !self.bus.eq_on { return clone("EQ off: high-pass and bands bypassed | Shift+E turns it on"); }
             if self.bus.hp_hz == 0 { return clone("High-pass off | Up turns it on"); }
             let text: str8 = spectrum_hz_text(self.bus.hp_hz); let line: str8 = format!("High-pass {} Hz, 24 dB/oct | 0 resets", text); free(text); return line;
         }
@@ -218,8 +226,9 @@ impl SpectrumView {
         let band: i32 = self.selected - 1;
         let hz: str8 = spectrum_hz_text(self.bus.band_hz(band)); let gain: str8 = spectrum_db_text(self.bus.band_gain(band));
         let q: i32 = self.bus.band_q(band);
-        let line: str8 = format!("EQ{} {} Hz {} dB Q {}.{}{} | Enter selects {}", band + 1, hz, gain, q / 100, q % 100 / 10, q % 10,
-            self.part == 0 ? "gain" : (self.part == 1 ? "frequency" : "Q"));
+        // The EQ state leads: the graph may be too narrow for the whole line.
+        let line: str8 = format!("{} | EQ{} {} Hz {} dB Q {}.{}{} | Enter: {}", self.bus.eq_on ? "EQ on" : "EQ off", band + 1, hz, gain,
+            q / 100, q % 100 / 10, q % 10, self.part == 0 ? "gain" : (self.part == 1 ? "frequency" : "Q"));
         free(hz); free(gain); return line;
     }
     /// The top row of the graph carries the status message, as the mixer's
@@ -230,6 +239,11 @@ impl SpectrumView {
         let graph: Rect = SpectrumView::graph_area(area);
         if graph.height > 2 && graph.width > 0 {
             surface.text(Rect::new(graph.x, graph.y, graph.width, 1), message, theme.muted, theme.panel);
+            // EQ state badge, lit like MIDI learn's `L` while the EQ is in.
+            if graph.width >= 8 {
+                surface.text(Rect::new(graph.x + graph.width - 4, graph.y, 4, 1), " EQ ",
+                    self.bus.eq_on ? 0xFFFFFF : theme.muted, self.bus.eq_on ? 0xC02030 : lighten(theme.panel, 4));
+            }
             self.paint_graph(surface, Rect::new(graph.x, graph.y + 1, graph.width, graph.height - 1), theme);
         } else { self.paint_graph(surface, graph, theme); }
         if SpectrumView::eq_width(area) > 0 { self.paint_controls(surface, area, theme, master_left, master_right, focused); }
@@ -343,6 +357,17 @@ impl SpectrumView {
                 spectrum_rail(surface, Rect::new(x, rail_top, w, rail_height), (f64(self.bus.band_gain(band)) + 120.0) / 240.0, 0.5, theme, bg, active && self.part == 0);
                 if area.height > 3 { surface.text(Rect::new(x, area.y + area.height - 1, w, 1), gain, active && self.part == 0 ? theme.accent : theme.foreground, bg); }
                 free(hz); free(gain); free(qt);
+            }
+        }
+        // A bypassed EQ keeps its settings, drawn dimmed.
+        if !self.bus.eq_on {
+            let span: i32 = width * 5;
+            for y in 0..area.height {
+                for x in 0..span {
+                    let px: i32 = start + i32(x); let py: i32 = area.y + i32(y);
+                    let cell: Cell = surface.cell(px, py);
+                    surface.put(px, py, Cell { glyph: cell.glyph, foreground: darken(cell.foreground, 45), background: cell.background });
+                }
             }
         }
     }

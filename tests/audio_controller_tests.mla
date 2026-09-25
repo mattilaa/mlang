@@ -237,6 +237,19 @@ fn audio_controller_master_bus_eq_volume_and_spectrum() {
     verify(at_tone > -40.0);
     verify(at_tone > controller.spectrum_level(150.0, 250.0) + 6.0);
 
+    // The analyzer reads after the EQ: a 12 dB cut at the tone shows up.
+    verify(controller.master_band(1, 440.0, -12.0, 1.0) == 0);
+    master_bus_peak(controller, block);
+    verify(controller.spectrum_capture(4096) == 2049);
+    let cut: f64 = controller.spectrum_level(400.0, 480.0);
+    verify(cut < at_tone - 9.0 && cut > at_tone - 15.0);
+    // Switching the EQ out restores the tone; back in, the cut returns.
+    verify(controller.master_eq_enabled(false) == 0);
+    verify(master_bus_peak(controller, block) > flat * 0.9f);
+    verify(controller.master_eq_enabled(true) == 0);
+    verify(master_bus_peak(controller, block) < flat * 0.5f);
+    verify(controller.master_band(1, 440.0, 0.0, 1.0) == 0);
+
     // Out-of-range settings are rejected.
     verify(controller.master_band(4, 440.0, 0.0, 1.0) == -1);
     verify(controller.master_band(0, 440.0, 30.0, 1.0) == -1);

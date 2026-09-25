@@ -93,6 +93,9 @@ impl AudioController {
         if __mlang_std_audio_controller_master_param(self.handle, 2 + band * 3, gain_db) != 0 { return -1; }
         return __mlang_std_audio_controller_master_param(self.handle, 3 + band * 3, q);
     }
+    /// Switch the high-pass and EQ bands in or out (default in), crossfading
+    /// over ~20 ms. Volume, clipping and the analyzer tap follow either way.
+    pub fn master_eq_enabled(self: AudioController, enabled: bool) -> i32 { return __mlang_std_audio_controller_master_param(self.handle, 14, enabled ? 1.0 : 0.0); }
     /// Number of master-bus changes so far: 0 on a fresh controller.
     pub fn master_changes(self: AudioController) -> i64 { return __mlang_std_audio_controller_info(self.handle, 6); }
     /// Linear master volume 0..4 (1 = unity), ramped per block.

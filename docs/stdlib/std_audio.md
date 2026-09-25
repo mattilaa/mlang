@@ -124,6 +124,8 @@ about 30 ms, with frequencies moving in log space.
 - `master_band(band, hz, gain_db, q)`: band 0–3, centre 5–40000 Hz, gain
   −24…24 dB (0 bypasses the band), Q 0.1–18.
 - `master_volume(gain)`: linear 0–4, where 1 is unity.
+- `master_eq_enabled(on)`: switch the high-pass and bands in or out (default
+  in), crossfading over about 20 ms. Volume and the analyzer follow either way.
 - `master_changes()`: how many settings have been published; 0 on a fresh
   controller, so an application can tell when it must apply its bus again.
 

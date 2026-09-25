@@ -811,6 +811,8 @@ impl SessionCodec {
                 let q: i32 = self.number(bus.band_q(b), 30, 1000);
                 bus.set_band(b, hz, gain, q);
             }
+            // EQ in/out came later: a file ending before it has the EQ in.
+            if !self.reading || self.reader.remaining() > 0 { bus.eq_on = self.flag(bus.eq_on); }
             if !bus.valid() { self.failed = true; }
             if self.reading { state.master = bus; state.master_saved = true; }
         }

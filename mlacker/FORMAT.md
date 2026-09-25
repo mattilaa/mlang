@@ -116,7 +116,9 @@ are accepted. Unsupported major or minor versions fail closed.
     (1–60 FPS); then the master high-pass in Hz (0 = off, otherwise 10–1000),
     the master volume in percent (0–150) and, for each of the four EQ bands, its
     centre (20–20000 Hz), gain in tenths of a dB (−120–120) and Q in hundredths
-    (30–1000). It is written only when one of these differs from its default,
+    (30–1000), then whether the EQ (high-pass and bands) is switched in
+    (boolean; a file that ends before it has the EQ in). It is written only
+    when one of these differs from its default,
     and it also requires the preceding tags, with empty sections if necessary.
     A session without it opens with the analyzer hidden and the default bus:
     20 Hz high-pass, flat bands at 100/500/2500/8000 Hz with Q 1, and 100%.
