@@ -1,5 +1,4 @@
-build
-build-release/
+build*
 dist/
 artifacts
 .pabotsuitenames
@@ -17,6 +16,7 @@ docs/out
 .venv
 PIPE
 .S
+*.lock
 .cache
 .DS_store
 CMakeLists.txt.user
