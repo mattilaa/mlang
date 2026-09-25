@@ -3955,6 +3955,25 @@ function_call
             $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
                                                  $8, yylineno);
         }
+    /* `a::B<T>::f(...)` at the start of an expression: after `a::B` with a
+       GENERIC_LT lookahead the parser shifts into the generic struct literal
+       `a::B<T> { ... }`, so the call needs the same prefix to stay viable. */
+    | module_path COLONCOLON IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            std::string callee = std::string(join_module_path($1, $3)) + "<" +
+                                 static_cast<TypeListNode*>($5)->toString() +
+                                 ">::" + $8;
+            $$ = mla_ast_function_call_simple(strdup(callee.c_str()),
+                                              NULL, NULL, yylineno);
+        }
+    | module_path COLONCOLON IDENTIFIER GENERIC_LT type_list GT COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            std::string callee = std::string(join_module_path($1, $3)) + "<" +
+                                 static_cast<TypeListNode*>($5)->toString() +
+                                 ">::" + $8;
+            $$ = mla_ast_function_call_from_list(strdup(callee.c_str()),
+                                                 $10, yylineno);
+        }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
         {
             if(strcmp($1, "add") == 0)
