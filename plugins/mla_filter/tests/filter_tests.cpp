@@ -106,9 +106,9 @@ int main() {
     check(a.gainDb(1000) > a.gainDb(100), "moog resonance peaks");
     a.set(kResonance, 0);
 
-    // Glide: a cutoff jump is ramped over the Glide time.
+    // Cutoff Ramp: a cutoff jump is ramped over the ramp time.
     Fixture glide; glide.set(kType, kLowpass12); glide.set(kCutoff, 200); glide.gainDb(100);
-    glide.set(kGlide, 500); glide.set(kCutoff, 10000);
+    glide.set(kCutoffRamp, 500); glide.set(kCutoff, 10000);
     auto input = Fixture::sine(3000, 2400);
     auto early = glide.render(input);
     double early3k = 0, in3k = 0;
@@ -116,6 +116,19 @@ int main() {
     check(10 * std::log10(early3k / in3k) < -12, "cutoff still gliding after 50 ms");
     glide.gainDb(3000); // let the 500 ms glide finish
     check(glide.gainDb(3000) > -0.5, "glide reaches its target");
+
+    // Default ramps smooth stepped automation: a mix jump from dry to a
+    // 200 Hz low-pass takes at least the default ramp to settle.
+    Fixture step; step.set(kType, kLowpass12); step.set(kCutoff, 200); step.set(kMix, 0);
+    step.render(std::vector<float>(12000, 0.5f)); // let the dry ramp settle
+    step.set(kMix, 1);
+    std::vector<float> tone = Fixture::sine(5000, static_cast<int>(kRate * kDefaultRampMs / 1000));
+    auto ramped = step.render(tone);
+    double half = 0, halfIn = 0;
+    for(size_t i = 0; i < tone.size() / 2; ++i) { half += ramped[0][i] * ramped[0][i]; halfIn += tone[i] * tone[i]; }
+    check(10 * std::log10(half / halfIn) > -6, "mix still ramping after half the default ramp");
+    for(int i : {kCutoffRamp, kResonanceRamp, kMixRamp, kOutputRamp})
+        check(specs[i].initial >= 100, "default ramps are long enough to hide steps");
 
     // Type changes crossfade: no step larger than the signal allows.
     Fixture fade; fade.set(kType, kLowpass24); fade.set(kCutoff, 500);
@@ -157,6 +170,14 @@ int main() {
     check(b.processor.setState(&state) == kResultOk, "restore state");
     check(std::abs(b.processor.getParamNormalized(kFirstParam + kCutoff) - normalized(kCutoff, 3300)) < 1e-9, "restored cutoff");
     check(std::abs(b.gainDb(3300) - a.gainDb(3300)) < 0.1, "restored response");
+    // States saved before the ramp controls (seven values) still load, with
+    // default ramps.
+    MemoryStream legacy; IBStreamer old(&legacy, kLittleEndian);
+    for(int i = 0; i < kLegacyCount; ++i) old.writeDouble(i == kCutoff ? normalized(kCutoff, 500) : normalized(i, specs[i].initial));
+    legacy.seek(0, IBStream::kIBSeekSet, nullptr);
+    check(b.processor.setState(&legacy) == kResultOk, "restore legacy state");
+    check(std::abs(b.processor.getParamNormalized(kFirstParam + kCutoff) - normalized(kCutoff, 500)) < 1e-9, "legacy cutoff");
+    check(std::abs(b.processor.getParamNormalized(kFirstParam + kMixRamp) - normalized(kMixRamp, kDefaultRampMs)) < 1e-9, "legacy default ramp");
     MemoryStream truncated;
     check(b.processor.setState(&truncated) != kResultOk, "reject truncated state");
     MemoryStream invalid; IBStreamer bad(&invalid, kLittleEndian);

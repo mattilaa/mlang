@@ -47,17 +47,18 @@ enum Index {
     kCount
 };
 constexpr ParamID kFirstParam = 100;
-// Filter list index -> dsp::delay::FeedbackFilter value. The original
-// None/Lowpass/Highpass/Bandpass entries sit at 0/3/5/8 so that normalized
-// values saved with the old four-entry list (0, 1/3, 2/3, 1) still select them.
-static const int kFilterTypes[] = {0, 7, 8, 1, 4, 2, 5, 6, 3};
+// Filter list index -> dsp::delay::FeedbackFilter value. The list is None
+// followed by Mla Filter's eight types, in its order, all running the same
+// dsp::multimode models.
+enum FilterType { kNone, kLowpass12, kLowpass24, kHighpass12, kHighpass24, kBandpass12, kBandpass24, kMoog12, kMoog24, kFilterCount };
+static const int kFilterTypes[kFilterCount] = {0, 9, 4, 10, 5, 11, 6, 7, 8};
 struct Spec { const TChar* title; const TChar* unit; double low, high, initial; int steps; };
 static const Spec specs[kCount] = {
     {STR16("Mode"), STR16(""), 0, 1, 1, 1},
     {STR16("Delay"), STR16("ms"), 1, 5000, 375, 0},
     {STR16("Feedback"), STR16(""), 0, 1.2, 0.58, 0},
     {STR16("Mix"), STR16(""), 0, 1, 0.6, 0},
-    {STR16("Filter"), STR16(""), 0, 8, 3, 8},
+    {STR16("Filter"), STR16(""), 0, kFilterCount - 1, kLowpass12, kFilterCount - 1},
     {STR16("Filter Scope"), STR16(""), 0, 1, 1, 1},
     {STR16("Cutoff"), STR16("Hz"), 20, 20000, 4200, 0},
     {STR16("Resonance"), STR16(""), 0, 1, 0.25, 0},
@@ -100,8 +101,8 @@ public:
                 auto* parameter = new StringListParameter(specs[i].title, kFirstParam + i);
                 if(i == kMode) { parameter->appendString(STR16("Forward")); parameter->appendString(STR16("Ping-Pong")); }
                 if(i == kFilter) {
-                    for(const TChar* name : {STR16("None"), STR16("Moog 12"), STR16("Moog 24"), STR16("Lowpass 12"), STR16("Lowpass 24"),
-                                             STR16("Highpass 12"), STR16("Highpass 24"), STR16("Bandpass 24"), STR16("Bandpass 12")})
+                    for(const TChar* name : {STR16("None"), STR16("Lowpass 12"), STR16("Lowpass 24"), STR16("Highpass 12"), STR16("Highpass 24"),
+                                             STR16("Bandpass 12"), STR16("Bandpass 24"), STR16("Moog 12"), STR16("Moog 24")})
                         parameter->appendString(name);
                 }
                 if(i == kScope) { parameter->appendString(STR16("Feedback")); parameter->appendString(STR16("Delay")); }

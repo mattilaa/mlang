@@ -35,7 +35,8 @@ pub enum DelayMode : i32 {
 ///
 /// `Lowpass`, `Highpass`, and `Bandpass` are the original 12 dB state-variable
 /// responses. The remaining values run the matching `dsp::multimode` model:
-/// Butterworth-tuned 24 dB biquad cascades and the 12/24 dB Moog ladder.
+/// 12 dB biquads, Butterworth-tuned 24 dB biquad cascades, and the 12/24 dB
+/// Moog ladder.
 pub enum FeedbackFilter : i32 {
     None = 0,
     Lowpass = 1,
@@ -45,16 +46,23 @@ pub enum FeedbackFilter : i32 {
     Highpass24 = 5,
     Bandpass24 = 6,
     Moog12 = 7,
-    Moog24 = 8
+    Moog24 = 8,
+    Lowpass12 = 9,
+    Highpass12 = 10,
+    Bandpass12 = 11
 };
 
 fn feedback_filter_is_model(filter_type: FeedbackFilter) -> bool {
-    return filter_type == FeedbackFilter::Lowpass24 || filter_type == FeedbackFilter::Highpass24
+    return filter_type == FeedbackFilter::Lowpass12 || filter_type == FeedbackFilter::Highpass12
+        || filter_type == FeedbackFilter::Bandpass12 || filter_type == FeedbackFilter::Lowpass24 || filter_type == FeedbackFilter::Highpass24
         || filter_type == FeedbackFilter::Bandpass24 || filter_type == FeedbackFilter::Moog12
         || filter_type == FeedbackFilter::Moog24;
 }
 
 fn feedback_filter_model(filter_type: FeedbackFilter) -> FilterModel {
+    if filter_type == FeedbackFilter::Lowpass12 { return FilterModel::Lowpass12; }
+    if filter_type == FeedbackFilter::Highpass12 { return FilterModel::Highpass12; }
+    if filter_type == FeedbackFilter::Bandpass12 { return FilterModel::Bandpass12; }
     if filter_type == FeedbackFilter::Lowpass24 { return FilterModel::Lowpass24; }
     if filter_type == FeedbackFilter::Highpass24 { return FilterModel::Highpass24; }
     if filter_type == FeedbackFilter::Bandpass24 { return FilterModel::Bandpass24; }
@@ -114,7 +122,7 @@ pub struct StereoDelay {
     var filter_low_step: f32;
     var filter_band_step: f32;
     var filter_high_step: f32;
-    /// Weight of the multimode path (24 dB and Moog responses).
+    /// Weight of the multimode path (biquad and Moog models).
     var filter_model_mix: f32;
     var filter_model_target: f32;
     var filter_model_step: f32;
