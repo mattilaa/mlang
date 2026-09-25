@@ -1,0 +1,232 @@
+/// \file stutter.mla
+/// \brief Tempo-locked stereo stutter (beat repeat).
+///
+/// @defgroup dsp_stutter dsp::stutter
+/// @ingroup dsp
+/// @brief Captures one grid slice of the input and repeats it in time.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod std::vec;
+use std::vec::set_f32;
+/// \endcond
+
+extern fn floor(value: f64) -> f64;
+extern fn llround(value: f64) -> i64;
+
+fn stutter_floor(value: f64) -> i64 { return llround(floor(value)); }
+
+fn stutter_clamp(value: f64, low: f64, high: f64) -> f64 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+/// @brief When the stutter engages.
+pub enum StutterMode : i32 {
+    /// Pass the input through.
+    Off = 0,
+    /// Repeat during the last `hold` beats of every `period` beats.
+    Auto = 1,
+    /// Repeat from the next grid line until switched off.
+    On = 2
+};
+
+/// @brief One processed stereo sample.
+pub struct StutterFrame {
+    var left_value: f32;
+    var right_value: f32;
+};
+
+impl StutterFrame {
+    /// @brief Return the left output sample.
+    pub fn left(self: StutterFrame) -> f32 { return self.left_value; }
+
+    /// @brief Return the right output sample.
+    pub fn right(self: StutterFrame) -> f32 { return self.right_value; }
+}
+
+/// @brief Stereo beat repeater locked to a tempo and a beat position.
+///
+/// The beat grid is divided into cells `width` beats long. On a cell boundary
+/// where the stutter is engaged, the first cell plays the live input while
+/// recording it, and the following cells replay that recording from its
+/// start, so each repeat lands on the grid. Storage is allocated only by
+/// `new()`; processing and parameter changes do not allocate or lock.
+pub struct StereoStutter {
+    var left_buffer: list<f32>;
+    var right_buffer: list<f32>;
+    var sample_rate_hz: f64;
+    var tempo_bpm: f64;
+    var beat: f64;
+    var beats_per_sample: f64;
+    var width_beats: f64;
+    var mode: StutterMode;
+    var auto_period_beats: f64;
+    var auto_hold_beats: f64;
+    var gate: f64;
+    var fade_samples: f64;
+    var mix: f32;
+    /// Current grid cell, and the sample offset into it.
+    var cell: i64;
+    var position: i64;
+    /// 0 = idle, 1 = capturing the first cell, 2 = repeating it.
+    var state: i32;
+    var captured: i64;
+    /// Share of the stutter voice in the output, ramped over `fade_samples`.
+    var wet: f32;
+};
+
+impl StereoStutter {
+    /// @brief Allocate a stutter able to capture `max_seconds` of audio.
+    ///
+    /// Longer cells replay the first `max_seconds` and are silent after that.
+    pub fn new(sample_rate_hz: f32, max_seconds: f32) -> StereoStutter {
+        let rate: f64 = sample_rate_hz < 1000.0f ? 1000.0 : f64(sample_rate_hz);
+        let seconds: f64 = stutter_clamp(f64(max_seconds), 0.01, 60.0);
+        let capacity: i64 = stutter_floor(rate * seconds) + 1;
+        var stutter: StereoStutter = StereoStutter {
+            left_buffer: [0.0f; capacity],
+            right_buffer: [0.0f; capacity],
+            sample_rate_hz: rate,
+            tempo_bpm: 120.0,
+            beat: 0.0,
+            beats_per_sample: 0.0,
+            width_beats: 0.25,
+            mode: StutterMode::Off,
+            auto_period_beats: 4.0,
+            auto_hold_beats: 1.0,
+            gate: 1.0,
+            fade_samples: 0.0,
+            mix: 1.0f,
+            cell: -1,
+            position: 0,
+            state: 0,
+            captured: 0,
+            wet: 0.0f
+        };
+        stutter.set_tempo_bpm(120.0);
+        stutter.set_fade_ms(3.0);
+        return stutter;
+    }
+
+    /// @brief Forget the capture and the grid position; storage is kept.
+    pub fn reset(self: &mut Self) -> void {
+        self.cell = -1; self.position = 0; self.state = 0; self.captured = 0; self.wet = 0.0f;
+    }
+
+    /// @brief Tempo in BPM, clamped to 20 .. 999.
+    pub fn set_tempo_bpm(self: &mut Self, bpm: f64) -> void {
+        self.tempo_bpm = stutter_clamp(bpm, 20.0, 999.0);
+        self.beats_per_sample = self.tempo_bpm / (60.0 * self.sample_rate_hz);
+    }
+
+    /// @brief Follow an external beat position (quarter notes).
+    ///
+    /// Positions within two samples of the running one are ignored, so a
+    /// host that reports each block's start does not jitter the grid.
+    pub fn sync_beat(self: &mut Self, beat: f64) -> void {
+        let safe: f64 = beat < 0.0 ? 0.0 : beat;
+        let drift: f64 = safe > self.beat ? safe - self.beat : self.beat - safe;
+        if drift > 2.0 * self.beats_per_sample { self.beat = safe; }
+    }
+
+    /// @brief Running beat position.
+    pub fn beat_position(self: StereoStutter) -> f64 { return self.beat; }
+
+    /// @brief Slice length in beats (1/64 note .. 4 bars of 4/4).
+    pub fn set_width_beats(self: &mut Self, beats: f64) -> void {
+        self.width_beats = stutter_clamp(beats, 0.015625, 16.0);
+    }
+
+    /// @brief Off, Auto or On. Leaving a repeat fades back to the input.
+    pub fn set_mode(self: &mut Self, mode: StutterMode) -> void {
+        self.mode = mode;
+        if mode == StutterMode::Off { self.state = 0; }
+    }
+
+    /// @brief Auto mode: repeat during the last `hold` of every `period` beats.
+    pub fn set_auto(self: &mut Self, period_beats: f64, hold_beats: f64) -> void {
+        self.auto_period_beats = stutter_clamp(period_beats, 0.25, 64.0);
+        self.auto_hold_beats = stutter_clamp(hold_beats, 0.0, self.auto_period_beats);
+    }
+
+    /// @brief Audible share of each slice, 0.05 .. 1; the rest is silent.
+    pub fn set_gate(self: &mut Self, gate: f64) -> void { self.gate = stutter_clamp(gate, 0.05, 1.0); }
+
+    /// @brief Declick fade at slice edges and on engage/release, 0 .. 50 ms.
+    pub fn set_fade_ms(self: &mut Self, ms: f64) -> void {
+        self.fade_samples = stutter_clamp(ms, 0.0, 50.0) * self.sample_rate_hz / 1000.0;
+    }
+
+    /// @brief Stutter share of the output while engaged, 0 .. 1.
+    pub fn set_mix(self: &mut Self, mix: f32) -> void {
+        self.mix = mix < 0.0f ? 0.0f : (mix > 1.0f ? 1.0f : mix);
+    }
+
+    /// @brief Whether a slice is being captured or repeated.
+    pub fn is_active(self: StereoStutter) -> bool { return self.state != 0; }
+
+    fn engaged_at(self: StereoStutter, cell: i64) -> bool {
+        if self.mode == StutterMode::On { return true; }
+        if self.mode != StutterMode::Auto || self.auto_hold_beats <= 0.0 { return false; }
+        let start: f64 = f64(cell) * self.width_beats + 0.000001;
+        let periods: i64 = stutter_floor(start / self.auto_period_beats);
+        let offset: f64 = start - f64(periods) * self.auto_period_beats;
+        return offset >= self.auto_period_beats - self.auto_hold_beats;
+    }
+
+    /// A capture starts only on a grid line. Entering a cell part way (first
+    /// block, or a jump in the beat) waits for the next line, or keeps a
+    /// running repeat in phase with the grid.
+    fn enter_cell(self: &mut Self, cell: i64) -> void {
+        let offset: f64 = self.beat - f64(cell) * self.width_beats;
+        let into: i64 = offset <= 0.0 ? 0 : stutter_floor(offset / self.beats_per_sample);
+        self.cell = cell; self.position = into;
+        if !self.engaged_at(cell) { self.state = 0; }
+        else if self.state != 0 { self.state = 2; }
+        else if into == 0 { self.state = 1; self.captured = 0; }
+    }
+
+    /// Slice envelope: fade in on repeats, fade out before the gate and the
+    /// end of the recording.
+    fn envelope(self: StereoStutter) -> f32 {
+        let fade: f64 = self.fade_samples < 1.0 ? 1.0 : self.fade_samples;
+        let at: f64 = f64(self.position);
+        var gain: f64 = 1.0;
+        if self.state != 1 { gain = stutter_clamp((at + 1.0) / fade, 0.0, 1.0); }
+        let length: f64 = self.width_beats / self.beats_per_sample;
+        gain = gain * stutter_clamp((self.gate * length - at) / fade, 0.0, 1.0);
+        if self.state != 1 { gain = gain * stutter_clamp((f64(self.captured) - at) / fade, 0.0, 1.0); }
+        return f32(gain);
+    }
+
+    /// @brief Process one stereo sample and advance the beat.
+    pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> StutterFrame {
+        let cell: i64 = stutter_floor(self.beat / self.width_beats);
+        if cell != self.cell { self.enter_cell(cell); } else { self.position = self.position + 1; }
+        var left: f32 = 0.0f; var right: f32 = 0.0f;
+        if self.state == 1 {
+            if self.position < self.left_buffer.len() {
+                set_f32(self.left_buffer, self.position, input_left);
+                set_f32(self.right_buffer, self.position, input_right);
+                self.captured = self.position + 1;
+            }
+            left = input_left; right = input_right;
+        } else if self.position < self.captured {
+            left = self.left_buffer[self.position]; right = self.right_buffer[self.position];
+        }
+        let gain: f32 = self.envelope();
+        let step: f32 = self.fade_samples < 1.0 ? 1.0f : f32(1.0 / self.fade_samples);
+        if self.state != 0 { self.wet = self.wet + step > 1.0f ? 1.0f : self.wet + step; }
+        else { self.wet = self.wet - step < 0.0f ? 0.0f : self.wet - step; }
+        let share: f32 = self.wet * self.mix;
+        self.beat = self.beat + self.beats_per_sample;
+        return StutterFrame {
+            left_value: input_left * (1.0f - share) + left * gain * share,
+            right_value: input_right * (1.0f - share) + right * gain * share
+        };
+    }
+}
+
+/// @}

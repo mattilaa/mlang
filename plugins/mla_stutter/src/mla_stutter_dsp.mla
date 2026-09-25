@@ -1,0 +1,53 @@
+/// Per-instance C ABI for dsp::stutter. Allocate only on setup; parameter
+/// updates, transport sync and processing retain the capture buffers.
+mod dsp::stutter;
+use dsp::stutter::StereoStutter;
+use dsp::stutter::StutterFrame;
+use dsp::stutter::StutterMode;
+extern fn calloc(count: i64, size: i64) -> ptr<StereoStutter>;
+extern fn free(block: ptr<StereoStutter>) -> void;
+
+fn mlastutter_create(rate: f32) -> ptr<StereoStutter> {
+    // The longest slice, a 1/1 note at 20 BPM, is 12 seconds.
+    let handle: ptr<StereoStutter> = calloc(1, size_of(StereoStutter));
+    unsafe { *handle = StereoStutter::new(rate, 12.5f); }
+    return handle;
+}
+fn mlastutter_destroy(handle: ptr<StereoStutter>) {
+    unsafe { let dead: StereoStutter = *handle; dead.reset(); }
+    free(handle);
+}
+fn mlastutter_reset(handle: ptr<StereoStutter>) { unsafe { (*handle).reset(); } }
+
+/// 0 mode (0 Off, 1 Auto, 2 On), 1 width beats, 2 auto period, 3 auto hold,
+/// 4 gate, 5 fade ms, 6 mix. Period and hold always arrive as a pair.
+fn mlastutter_set(handle: ptr<StereoStutter>, index: i32, value: f64, extra: f64) {
+    unsafe {
+        if index == 0 {
+            var mode: StutterMode = StutterMode::Off;
+            if value >= 1.5 { mode = StutterMode::On; } else if value >= 0.5 { mode = StutterMode::Auto; }
+            (*handle).set_mode(mode);
+        }
+        else if index == 1 { (*handle).set_width_beats(value); }
+        else if index == 2 { (*handle).set_auto(value, extra); }
+        else if index == 4 { (*handle).set_gate(value); }
+        else if index == 5 { (*handle).set_fade_ms(value); }
+        else if index == 6 { (*handle).set_mix(f32(value)); }
+    }
+}
+/// Block start: tempo, and the host beat when it is running (follow != 0).
+fn mlastutter_sync(handle: ptr<StereoStutter>, tempo: f64, beat: f64, follow: i32) {
+    unsafe {
+        (*handle).set_tempo_bpm(tempo);
+        if follow != 0 { (*handle).sync_beat(beat); }
+    }
+}
+fn mlastutter_active(handle: ptr<StereoStutter>) -> i32 {
+    unsafe { return (*handle).is_active() ? 1 : 0; }
+}
+fn mlastutter_process(handle: ptr<StereoStutter>, left: f32, right: f32, out_right: ptr<f32>) -> f32 {
+    unsafe {
+        let frame: StutterFrame = (*handle).process_stereo(left, right);
+        *out_right = frame.right(); return frame.left();
+    }
+}

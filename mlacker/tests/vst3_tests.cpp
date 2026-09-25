@@ -48,6 +48,8 @@ void __mlang_std_audio_controller_panic(int64_t);
 int32_t __mlang_std_audio_controller_stop(int64_t);
 int32_t __mlang_std_audio_controller_close(int64_t);
 int64_t __mlang_std_audio_controller_info(int64_t, int64_t);
+int32_t __mlang_std_audio_controller_transport(int64_t, double, double, int32_t);
+double __mlang_std_audio_controller_transport_beat(int64_t);
 int64_t __mlang_std_audio_pcm_block_new(int64_t);
 float __mlang_std_audio_pcm_block_sample(int64_t, int64_t, int64_t);
 int32_t __mlang_std_audio_pcm_block_close(int64_t);
@@ -483,6 +485,14 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_effect_send(c, 0, 1, 0, 100) == 0);
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
     CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .015625f) < 1.e-7f); // no dry signal
+    // The sequencer transport reaches the effect's ProcessContext: 120 BPM halves it.
+    CHECK(__mlang_std_audio_controller_transport(c, 120, 4, 1) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .0078125f) < 1.e-7f);
+    CHECK(std::abs(__mlang_std_audio_controller_transport_beat(c) - (4 + 256 * 2 / 48000.0)) < 1.e-9);
+    CHECK(__mlang_std_audio_controller_transport(c, 120, -1, 0) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(std::abs(__mlang_std_audio_pcm_block_sample(b, 200, 0) - .015625f) < 1.e-7f); // stopped
     CHECK(__mlang_std_audio_controller_effect_send(c, 0, 1, 0, 0) == 0);
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
     CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .125f); // dry unchanged
