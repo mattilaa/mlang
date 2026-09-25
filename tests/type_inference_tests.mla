@@ -9,6 +9,36 @@ struct Point {
     let y: i32 = 0;
 };
 
+// Builder clause and container types (builder types must be declared).
+field Name: str8;
+field Width: i32;
+field Height: i32;
+field Title: str8;
+field Text: str8;
+field Method: str8;
+field Url: str8;
+field Value: str8;
+field BoundingBox: tuple<i32, i32, i32, i32>;
+
+struct View {
+    var name: str8;
+    var width: i32;
+    var height: i32;
+    var title: str8;
+};
+struct Widget {
+    var name: str8;
+    var width: i32;
+    var text: str8;
+};
+struct Body { var text: str8; };
+struct Header { var name: str8; var value: str8; };
+struct HttpRequest {
+    var method: str8;
+    var url: str8;
+    var body: Body;
+};
+
 #[test]
 fn test_infer_int_and_float() {
     let a = 41;
