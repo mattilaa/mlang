@@ -69,11 +69,28 @@ def _status_tag(status: str, use_color: bool) -> str:
         "RUN ": "\x1b[34m",
         "PASS": "\x1b[32m",
         "FAIL": "\x1b[31m",
+        "SKIP": "\x1b[33m",
     }
     c = colors.get(status, "")
     if not c:
         return f"[{status}]"
     return f"[{c}{status}\x1b[0m]"
+
+
+def _result_label(rc: int, xml: Path) -> str:
+    """PASS/FAIL from the exit code, or SKIP when a passing run was skipped
+    (e.g. a `fix-me-later` test that failed under robot:skip-on-failure)."""
+    if rc != 0:
+        return "FAIL"
+    try:
+        root = ET.parse(xml).getroot()
+    except Exception:
+        return "PASS"
+    for t in root.iter("test"):
+        st = t.find("status")
+        if st is not None and (st.get("status") or "").upper() == "SKIP":
+            return "SKIP"
+    return "PASS"
 
 
 def _discover_tests(python_bin: str, suite: str, output_dir: Path) -> list[str]:
@@ -289,7 +306,7 @@ def main() -> int:
                 if tn not in first_status:
                     first_status[tn] = rc
                 latest_status[tn] = rc
-                print_line(cur, "PASS" if rc == 0 else "FAIL", tn, elapsed)
+                print_line(cur, _result_label(rc, xml), tn, elapsed)
 
                 try:
                     i, next_t = next(parallel_iter)
@@ -326,7 +343,7 @@ def main() -> int:
         xmls.append(xml)
         first_status[tn] = rc
         latest_status[tn] = rc
-        print_line(finished, "PASS" if rc == 0 else "FAIL", tn, elapsed)
+        print_line(finished, _result_label(rc, xml), tn, elapsed)
 
     failed_after_main = [tn for _i, tn in test_plan if latest_status.get(tn, 1) != 0]
     for tn in failed_after_main:

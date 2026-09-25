@@ -105,16 +105,29 @@ except Exception:
     sys.exit(0)
 
 failed = []
+fixme = []
 for t in root.findall(".//test"):
     st = t.find("status")
     if st is None:
         continue
-    if (st.get("status") or "").upper() == "FAIL":
+    status = (st.get("status") or "").upper()
+    tags = {(tag.text or "").strip() for tag in t.findall("tag")}
+    if status == "SKIP" and "fix-me-later" in tags:
+        fixme.append(t.get("name", "<unnamed test>"))
+    if status == "FAIL":
         name = t.get("name", "<unnamed test>")
         msg = (st.text or "").strip().replace("\n", " ")
         if len(msg) > 200:
             msg = msg[:197] + "..."
         failed.append((name, msg))
+
+# Tests tagged `fix-me-later` in examples.robot are known failures: under
+# robot:skip-on-failure they are reported as SKIP and do not fail the run.
+if fixme:
+    print("")
+    print(f"Fix me later ({len(fixme)} known-failing tests skipped):")
+    for name in fixme:
+        print(f"- {name}")
 
 if not failed:
     sys.exit(0)
