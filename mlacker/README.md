@@ -28,6 +28,19 @@ revision. Generated SDK sources and binaries stay under ignored `build/`.
 SDK license and usage notices remain in `build/deps/vst3sdk/LICENSE.txt` and
 `VST3_Usage_Guidelines.pdf`; preserve applicable notices when distributing.
 
+## Install
+
+```sh
+build/mlang pkg --config mlacker/mlang.toml run install          # mlacker -> ~/.local/bin
+build/mlang pkg --config mlacker/mlang.toml run install-plugins  # Mla*.vst3 -> ~/.local/mlaplugins
+build/mlang pkg --config mlacker/mlang.toml run install-all      # both
+```
+
+Each task builds what it installs first and ad-hoc signs the copies. Override the
+destinations with `--option bin_dir=DIR` and `--option plugin_dir=DIR`, or the
+plugin set with `--option plugins="mla_verb mla_eq"` (names under `plugins/`).
+Existing bundles of the same name are replaced.
+
 ## Sessions (.mlack 1.0)
 
 Launching mlacker without a filename starts one empty, 64-row **Untitled**

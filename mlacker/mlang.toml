@@ -11,6 +11,12 @@ min_mlang_version = "0.2.0"
 build_dir = "build"
 deps_dir = "build/deps"
 
+# Install locations; override with `--option bin_dir=...` / `--option plugin_dir=...`.
+[tool.mlang.options]
+bin_dir = "~/.local/bin"
+plugin_dir = "~/.local/mlaplugins"
+plugins = "mla_verb mla_distortion mla_delay mla_eq mla_filter mla_drum"
+
 [[task]]
 name = "prepare"
 workdir = "{{root}}"
@@ -55,3 +61,47 @@ name = "test"
 workdir = "{{root}}"
 depends_on = ["build"]
 commands = ["ctest --test-dir {{build_dir}}/cmake --output-on-failure"]
+
+[[task]]
+name = "install"
+print = "[mlacker] Installing mlacker to {{option.bin_dir}}"
+workdir = "{{root}}"
+depends_on = ["build"]
+shell = [
+  "set -e",
+  "bin_dir={{option.bin_dir}}",
+  "mkdir -p \"$bin_dir\"",
+  "cp -f {{build_dir}}/cmake/bin/mlacker \"$bin_dir/mlacker\"",
+  "chmod +x \"$bin_dir/mlacker\"",
+  "codesign --force --sign - \"$bin_dir/mlacker\"",
+  "echo \"Installed $bin_dir/mlacker\""
+]
+
+[[task]]
+name = "build-plugins"
+print = "[mlacker] Building the Mla VST3 plugins"
+workdir = "{{root}}/.."
+depends_on = ["prepare"]
+shell = [
+  "set -e",
+  "for plugin in {{option.plugins}}; do build/mlang pkg --config plugins/$plugin/mlang.toml build; done"
+]
+
+[[task]]
+name = "install-plugins"
+print = "[mlacker] Installing the Mla VST3 plugins to {{option.plugin_dir}}"
+workdir = "{{root}}/.."
+depends_on = ["build-plugins"]
+shell = [
+  "set -e",
+  "plugin_dir={{option.plugin_dir}}",
+  "mkdir -p \"$plugin_dir\"",
+  "for plugin in {{option.plugins}}; do for bundle in plugins/$plugin/build/cmake/VST3/Release/*.vst3; do dest=\"$plugin_dir/$(basename \"$bundle\")\"; rm -rf \"$dest\"; cp -R \"$bundle\" \"$dest\"; codesign --force --sign - \"$dest\"; echo \"Installed $dest\"; done; done"
+]
+
+[[task]]
+name = "install-all"
+print = "[mlacker] Installed mlacker and the Mla VST3 plugins"
+workdir = "{{root}}"
+depends_on = ["install", "install-plugins"]
+commands = ["echo mlacker install-all completed"]
