@@ -14,6 +14,8 @@ mod tui::textfield;
 mod tui::table;
 mod tui::slider;
 mod tui_demo::instrument_editor;
+mod tui_demo::spectrum;
+use tui_demo::spectrum::spectrum_color;
 use tui::slider::Slider;
 use tui_demo::instrument_editor::InstrumentEditor;
 use std::audio::controller::AudioController;
@@ -3829,4 +3831,33 @@ fn tui_sidebar_audio_copy_is_numbered_lossless_and_exclusive() {
     let size: result<i64, str8> = file.size(); verify(size.unwrap() == 4); file.close();
     wave.release(); clipboard.release(); library.release(); audio.release();
     std::fs::remove_tree(directory); free(path); free(occupied); free(expected); free(directory);
+}
+
+fn spectrum_red(color: i32) -> i32 { return (color >> 16) & 255; }
+fn spectrum_green(color: i32) -> i32 { return (color >> 8) & 255; }
+fn spectrum_blue(color: i32) -> i32 { return color & 255; }
+
+#[test]
+fn test_spectrum_gradient_stops() {
+    verify(spectrum_color(0) == 0x4B32C8);     // indigo floor
+    verify(spectrum_color(430) == 0x28DC8C);   // green in the middle
+    verify(spectrum_color(670) == 0xFFD84A);   // yellow
+    verify(spectrum_color(1000) == 0xFF5CD2);  // magenta at 0 dBFS
+    verify(spectrum_color(-50) == spectrum_color(0) && spectrum_color(2000) == spectrum_color(1000));
+}
+
+#[test]
+fn test_spectrum_gradient_is_smooth_and_varied() {
+    // Neighbouring levels never jump by more than a small step per channel,
+    // and the lower half is not all one hue.
+    var previous: i32 = spectrum_color(0);
+    for level in 1..1001 {
+        let color: i32 = spectrum_color(i32(level));
+        let dr: i32 = spectrum_red(color) - spectrum_red(previous); let dg: i32 = spectrum_green(color) - spectrum_green(previous); let db: i32 = spectrum_blue(color) - spectrum_blue(previous);
+        verify(dr < 4 && dr > -4 && dg < 4 && dg > -4 && db < 4 && db > -4);
+        previous = color;
+    }
+    verify(spectrum_blue(spectrum_color(100)) > spectrum_green(spectrum_color(100)));
+    verify(spectrum_green(spectrum_color(450)) > spectrum_blue(spectrum_color(450)));
+    verify(spectrum_red(spectrum_color(850)) > spectrum_green(spectrum_color(850)));
 }

@@ -99,6 +99,27 @@ fn spectrum_db_text(tenths: i32) -> str8 {
     let magnitude: i32 = tenths < 0 ? -tenths : tenths;
     return format!("{}{}.{}", tenths > 0 ? "+" : (tenths < 0 ? "-" : " "), magnitude / 10, magnitude % 10);
 }
+fn spectrum_channel_mix(from: i32, to: i32, shift: i32, t: i32, span: i32) -> i32 {
+    let a: i32 = (from >> shift) & 255; let b: i32 = (to >> shift) & 255;
+    return (a + (b - a) * t / span) << shift;
+}
+/// Analyzer color at `level` (0 = floor, 1000 = 0 dBFS): a smooth vertical
+/// gradient from indigo through blue, cyan, green, lime, yellow, orange and
+/// red to magenta at the top.
+pub fn spectrum_color(level: i32) -> i32 {
+    let stops: list<i32> = [0, 160, 300, 430, 550, 670, 790, 900, 1000];
+    let colors: list<i32> = [0x4B32C8, 0x2F6CF0, 0x16BDE0, 0x28DC8C, 0x9CE646, 0xFFD84A, 0xFF8C3C, 0xFF4658, 0xFF5CD2];
+    let at: i32 = spectrum_clamp(level, 0, 1000);
+    for i in 1..stops.len() {
+        if at <= stops[i] {
+            let span: i32 = stops[i] - stops[i - 1];
+            let t: i32 = at - stops[i - 1];
+            let from: i32 = colors[i - 1]; let to: i32 = colors[i];
+            return spectrum_channel_mix(from, to, 16, t, span) + spectrum_channel_mix(from, to, 8, t, span) + spectrum_channel_mix(from, to, 0, t, span);
+        }
+    }
+    return colors[colors.len() - 1];
+}
 /// Eighth-block glyph for 1-8 filled eighths of a cell.
 fn spectrum_block(eighths: i32) -> i32 { return eighths >= 8 ? 0x2588 : 0x2580 + eighths; }
 /// Braille bits of the bottom `count` dots (0-4) of a cell's left or right column.
@@ -271,6 +292,9 @@ impl SpectrumView {
         let rows: i32 = graph.height - 1;
         if rows <= 0 { return; }
         let bars: i32 = self.bar_count(graph.width);
+        // One gradient color per row, taken at the row's middle.
+        var row_colors: list<i32> = [];
+        for row in 0..rows { row_colors.push(spectrum_color(((rows - 1 - i32(row)) * 2 + 1) * 500 / rows)); }
         for column in 0..graph.width {
             let x: i32 = graph.x + i32(column);
             if self.detail == 1 {
@@ -285,7 +309,7 @@ impl SpectrumView {
                     if l == 0 && left_peak > base && left_peak <= base + 4 { glyph = glyph + spectrum_braille_dot(left_peak - base, false); }
                     if r == 0 && right_peak > base && right_peak <= base + 4 { glyph = glyph + spectrum_braille_dot(right_peak - base, true); }
                     if glyph != 0x2800 {
-                        surface.put(x, graph.y + i32(row), Cell { glyph: glyph, foreground: VuMeter::color((base + 2) * 1000 / (rows * 4)), background: theme.panel });
+                        surface.put(x, graph.y + i32(row), Cell { glyph: glyph, foreground: row_colors[row], background: theme.panel });
                     }
                 }
                 continue;
@@ -297,7 +321,7 @@ impl SpectrumView {
             for row in 0..rows {
                 let base: i32 = (rows - 1 - i32(row)) * 8;
                 let amount: i32 = spectrum_clamp(filled - base, 0, 8);
-                let color: i32 = VuMeter::color((base + 4) * 1000 / (rows * 8));
+                let color: i32 = row_colors[row];
                 if amount > 0 {
                     surface.put(x, graph.y + i32(row), Cell { glyph: spectrum_block(amount), foreground: color, background: theme.panel });
                 } else if peak > base {
