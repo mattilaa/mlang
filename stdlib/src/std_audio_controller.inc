@@ -5,6 +5,18 @@
 #define AC_QUEUE 1024u
 #define AC_VOICES 128u
 #define AC_SAMPLES 256u
+/* Master bus: 24 dB/oct high-pass, four peaking bands, then volume. Parameter
+ * slots: 0 = HP Hz (0 = off), 1 + 3*band = band Hz, gain dB, Q; 13 = linear
+ * volume; 14 = EQ (high-pass and bands) enabled, 1 or 0. Defaults are
+ * transparent: HP off, flat bands, unity volume, EQ enabled. */
+#define AC_MASTER_PARAMS 15
+#define AC_MASTER_FILTERS 6
+/* Post-master mono tap for the analyzer: power of two, >= largest FFT. */
+#define AC_SPECTRUM_RING 16384u
+#define AC_SPECTRUM_MAX 8192
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "../include/mlang_audio_processor.h"
 static mlang_audio_processor_factory ac_processor_factory;
 static mlang_audio_processor_factory ac_instrument_factory;
@@ -70,6 +82,24 @@ typedef struct {
     int32_t render_offset, processor_reset;
     _Atomic uint64_t processor_errors;
     double render_gains[4096];
+    /* Control thread publishes targets and bumps the serial; the render
+     * thread glides toward them and owns everything after that. */
+    _Atomic uint32_t master_target[AC_MASTER_PARAMS];
+    _Atomic uint64_t master_serial;
+    uint64_t master_seen;
+    int master_gliding;
+    double master_value[AC_MASTER_PARAMS];
+    double master_coef[AC_MASTER_FILTERS][5];
+    double master_state[AC_MASTER_FILTERS][2][4];
+    /* EQ wet share: crossfades toward the enabled switch over ~20 ms. */
+    double master_eq_mix;
+    float master_dry[8192];
+    float spectrum_ring[AC_SPECTRUM_RING];
+    _Atomic uint64_t spectrum_write;
+    /* Control-thread analyzer snapshot (single UI consumer). */
+    double *spectrum_db;
+    int spectrum_bins;
+    double spectrum_bin_hz;
 #if defined(__APPLE__)
     AudioComponentInstance unit;
 #endif
@@ -82,6 +112,114 @@ static mlang_audio_processor *ac_plugin(ac_controller *c, int64_t slot) {
 
 static void ac_silence(ac_controller *c) {
     memset(c->voices, 0, sizeof(c->voices));
+    memset(c->master_state, 0, sizeof(c->master_state));
+}
+
+static uint32_t ac_float_bits(float value) { uint32_t bits; memcpy(&bits, &value, sizeof(bits)); return bits; }
+static float ac_bits_float(uint32_t bits) { float value; memcpy(&value, &bits, sizeof(value)); return value; }
+static const float ac_master_defaults[AC_MASTER_PARAMS] = {
+    0.f, 100.f, 0.f, 1.f, 500.f, 0.f, 1.f, 2500.f, 0.f, 1.f, 8000.f, 0.f, 1.f, 1.f, 1.f };
+
+/* RBJ biquads, normalized by a0: {b0, b1, b2, a1, a2}. */
+static void ac_biquad(double *k, double b0, double b1, double b2, double a0, double a1, double a2) {
+    k[0] = b0 / a0; k[1] = b1 / a0; k[2] = b2 / a0; k[3] = a1 / a0; k[4] = a2 / a0;
+}
+static void ac_master_design(ac_controller *c) {
+    const double nyquist = c->rate * 0.45;
+    double hp = fmin(fmax(c->master_value[0], 5.0), nyquist);
+    double w = 2.0 * M_PI * hp / c->rate, cw = cos(w), sw = sin(w);
+    /* Fourth-order Butterworth as two sections. */
+    const double q[2] = {0.54119610014619698, 1.30656296487637653};
+    for(int s = 0; s < 2; ++s) {
+        double alpha = sw / (2.0 * q[s]);
+        ac_biquad(c->master_coef[s], (1 + cw) / 2, -(1 + cw), (1 + cw) / 2, 1 + alpha, -2 * cw, 1 - alpha);
+    }
+    for(int band = 0; band < 4; ++band) {
+        double hz = fmin(fmax(c->master_value[1 + band * 3], 10.0), nyquist);
+        double gain = c->master_value[2 + band * 3];
+        double qv = fmin(fmax(c->master_value[3 + band * 3], 0.1), 18.0);
+        double a = pow(10.0, gain / 40.0);
+        double bw = 2.0 * M_PI * hz / c->rate, bc = cos(bw), alpha = sin(bw) / (2.0 * qv);
+        ac_biquad(c->master_coef[2 + band], 1 + alpha * a, -2 * bc, 1 - alpha * a, 1 + alpha / a, -2 * bc, 1 - alpha / a);
+    }
+}
+/* Once per block: follow the latest targets with a ~30 ms glide (frequencies
+ * in log space), redesigning filters only while something moves. */
+static void ac_master_update(ac_controller *c, uint32_t frames) {
+    uint64_t serial = atomic_load_explicit(&c->master_serial, memory_order_acquire);
+    if(serial != c->master_seen) { c->master_seen = serial; c->master_gliding = 1; }
+    if(!c->master_gliding) return;
+    double k = 1.0 - exp(-(double)frames / (c->rate * 0.03));
+    int moving = 0;
+    for(int i = 0; i < AC_MASTER_PARAMS; ++i) {
+        double target = ac_bits_float(atomic_load_explicit(&c->master_target[i], memory_order_relaxed));
+        double *value = &c->master_value[i];
+        int log_scale = i == 0 || (i >= 1 && i <= 12 && (i - 1) % 3 == 0);
+        if(i == 0 && (target <= 0 || *value <= 0)) {
+            /* Switching the high-pass on or off is immediate, from rest. */
+            if(*value != target) memset(c->master_state, 0, 2 * sizeof(c->master_state[0]));
+            *value = target;
+        } else if(log_scale) {
+            double next = exp(log(*value) + (log(target) - log(*value)) * k);
+            if(fabs(log(target) - log(next)) < 1e-4) next = target; else moving = 1;
+            *value = next;
+        } else if(i < 13) {
+            double next = *value + (target - *value) * k;
+            if(fabs(target - next) < 1e-4) next = target; else moving = 1;
+            *value = next;
+        }
+    }
+    c->master_gliding = moving;
+    ac_master_design(c);
+}
+static void ac_master_process(ac_controller *c, float *out, uint32_t frames) {
+    ac_master_update(c, frames);
+    double mix_to = ac_bits_float(atomic_load_explicit(&c->master_target[14], memory_order_relaxed)) >= 0.5f ? 1.0 : 0.0;
+    double mix = c->master_eq_mix;
+    if(mix == 0.0 && mix_to == 0.0) {
+        /* Bypassed: no filtering, and a clean start when switched back on. */
+        memset(c->master_state, 0, sizeof(c->master_state));
+    } else {
+    int blend = mix != 1.0 || mix_to != 1.0;
+    if(blend) memcpy(c->master_dry, out, frames * 2u * sizeof(float));
+    for(int s = 0; s < AC_MASTER_FILTERS; ++s) {
+        const double *k = c->master_coef[s];
+        /* An off high-pass or a flat peaking band is exact identity; skip it. */
+        if(s < 2 && c->master_value[0] <= 0) continue;
+        if(s >= 2 && c->master_value[2 + (s - 2) * 3] == 0.0) {
+            memset(c->master_state[s], 0, sizeof(c->master_state[s])); continue;
+        }
+        for(int ch = 0; ch < 2; ++ch) {
+            double *z = c->master_state[s][ch];
+            for(uint32_t f = 0; f < frames; ++f) {
+                double x = out[f * 2 + ch];
+                if(!isfinite(x)) x = 0;
+                double y = k[0] * x + k[1] * z[0] + k[2] * z[1] - k[3] * z[2] - k[4] * z[3];
+                z[1] = z[0]; z[0] = x; z[3] = z[2]; z[2] = y;
+                out[f * 2 + ch] = (float)y;
+            }
+        }
+    }
+    if(blend) {
+        double step = 1.0 / (c->rate * 0.02);
+        for(uint32_t f = 0; f < frames; ++f) {
+            mix = mix_to > mix ? fmin(mix_to, mix + step) : fmax(mix_to, mix - step);
+            for(int ch = 0; ch < 2; ++ch) {
+                float dry = c->master_dry[f * 2 + ch];
+                out[f * 2 + ch] = (float)(dry + (out[f * 2 + ch] - dry) * mix);
+            }
+        }
+        c->master_eq_mix = mix;
+    }
+    }
+    /* Volume ramps linearly across the block. */
+    double from = c->master_value[13];
+    double to = ac_bits_float(atomic_load_explicit(&c->master_target[13], memory_order_relaxed));
+    for(uint32_t f = 0; f < frames; ++f) {
+        double g = from + (to - from) * (double)(f + 1) / (double)frames;
+        out[f * 2] = (float)(out[f * 2] * g); out[f * 2 + 1] = (float)(out[f * 2 + 1] * g);
+    }
+    c->master_value[13] = to;
 }
 
 int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
@@ -115,6 +253,13 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
         free(c); audio_set_error("audio controller: lock-free atomics unavailable"); return 0;
     }
     c->rate = rate; c->buffer_frames = frames; c->gain = 0.25;
+    for(int i = 0; i < AC_MASTER_PARAMS; ++i) {
+        atomic_init(&c->master_target[i], ac_float_bits(ac_master_defaults[i]));
+        c->master_value[i] = ac_master_defaults[i];
+    }
+    atomic_init(&c->master_serial, 0); atomic_init(&c->spectrum_write, 0);
+    c->master_eq_mix = 1.0;
+    ac_master_design(c);
     for(int i = 0; i < 128; ++i) c->frequencies[i] = 440.0 * pow(2.0, (i - 69) / 12.0);
     return (int64_t)(intptr_t)c;
 }
@@ -493,7 +638,10 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         memset(out, 0, frames * 2u * sizeof(float));
         atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed);
     }
+    /* The master bus is the last stage before the device. */
+    ac_master_process(c, out, frames);
     float master[2] = {0, 0};
+    uint64_t tap = atomic_load_explicit(&c->spectrum_write, memory_order_relaxed);
     for(uint32_t f = 0; f < frames; ++f) {
         double l = isfinite(out[f * 2]) ? out[f * 2] * c->render_gains[f] : 0;
         double r = isfinite(out[f * 2 + 1]) ? out[f * 2 + 1] * c->render_gains[f] : 0;
@@ -501,8 +649,10 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         out[f * 2 + 1] = (float)fmax(-1, fmin(1, r));
         master[0] = fmaxf(master[0], fabsf(out[f * 2]));
         master[1] = fmaxf(master[1], fabsf(out[f * 2 + 1]));
+        c->spectrum_ring[(tap + f) & (AC_SPECTRUM_RING - 1u)] = 0.5f * (out[f * 2] + out[f * 2 + 1]);
         peak = fmaxf(peak, fmaxf(fabsf(out[f * 2]), fabsf(out[f * 2 + 1])));
     }
+    atomic_store_explicit(&c->spectrum_write, tap + frames, memory_order_release);
     uint32_t bits; memcpy(&bits, &peak, sizeof(bits));
     atomic_store_explicit(&c->peak, bits, memory_order_relaxed);
     for(int ch = 0; ch < 2; ++ch) {
@@ -616,6 +766,7 @@ int32_t __mlang_std_audio_controller_close(int64_t handle) {
         if(c->instruments[i].context) c->instruments[i].destroy(c->instruments[i].context);
     for(int i = 0; i < 8; ++i) if(c->effects[i].context) c->effects[i].destroy(c->effects[i].context);
     for(int i = 0; i < 256; ++i) if(c->inserts[i].context) c->inserts[i].destroy(c->inserts[i].context);
+    free(c->spectrum_db);
     free(c); return 0;
 }
 int32_t __mlang_std_audio_controller_start(int64_t handle) {
@@ -687,6 +838,7 @@ int64_t __mlang_std_audio_controller_info(int64_t handle, int64_t key) {
     if(key == 2) return atomic_load_explicit(&c->clock, memory_order_acquire);
     if(key == 3) return atomic_load_explicit(&c->dropped, memory_order_relaxed);
     if(key == 4) return atomic_load_explicit(&c->processor_errors, memory_order_relaxed);
+    if(key == 6) return (int64_t)atomic_load_explicit(&c->master_serial, memory_order_relaxed);
 #if defined(__APPLE__)
     if(key == 5) return c->unit != NULL;
 #endif
@@ -694,6 +846,97 @@ int64_t __mlang_std_audio_controller_info(int64_t handle, int64_t key) {
 }
 
 int32_t __mlang_std_audio_controller_processor_support(void) { return ac_processor_factory != NULL; }
+
+/* Control thread, safe while rendering. index as in AC_MASTER_PARAMS. */
+int32_t __mlang_std_audio_controller_master_param(int64_t handle, int64_t index, double value) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || index < 0 || index >= AC_MASTER_PARAMS || !isfinite(value)) return -1;
+    int frequency = index == 0 || (index <= 12 && (index - 1) % 3 == 0);
+    int gain = index <= 12 && index >= 1 && (index - 1) % 3 == 1;
+    if(frequency && (value < 5 || value > 40000) && !(index == 0 && value == 0)) return -1;
+    if(gain && (value < -24 || value > 24)) return -1;
+    if(index <= 12 && index >= 1 && (index - 1) % 3 == 2 && (value < 0.1 || value > 18)) return -1;
+    if(index == 13 && (value < 0 || value > 4)) return -1;
+    if(index == 14 && value != 0 && value != 1) return -1;
+    atomic_store_explicit(&c->master_target[index], ac_float_bits((float)value), memory_order_relaxed);
+    atomic_fetch_add_explicit(&c->master_serial, 1, memory_order_release);
+    return 0;
+}
+
+/* In-place iterative radix-2 FFT over interleaved complex doubles. */
+static void ac_fft(double *data, int n) {
+    for(int i = 1, j = 0; i < n; ++i) {
+        int bit = n >> 1;
+        for(; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if(i < j) {
+            double tr = data[i * 2], ti = data[i * 2 + 1];
+            data[i * 2] = data[j * 2]; data[i * 2 + 1] = data[j * 2 + 1];
+            data[j * 2] = tr; data[j * 2 + 1] = ti;
+        }
+    }
+    for(int len = 2; len <= n; len <<= 1) {
+        double angle = -2.0 * M_PI / len, wr = cos(angle), wi = sin(angle);
+        for(int i = 0; i < n; i += len) {
+            double cr = 1, ci = 0;
+            for(int k = 0; k < len / 2; ++k) {
+                double *a = &data[(i + k) * 2], *b = &data[(i + k + len / 2) * 2];
+                double xr = b[0] * cr - b[1] * ci, xi = b[0] * ci + b[1] * cr;
+                b[0] = a[0] - xr; b[1] = a[1] - xi; a[0] += xr; a[1] += xi;
+                double next = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = next;
+            }
+        }
+    }
+}
+/* Single UI consumer: Hann-windowed FFT of the newest `size` post-master
+ * samples (power of two, 256..8192). Returns the bin count, or -1. */
+int32_t __mlang_std_audio_controller_spectrum_capture(int64_t handle, int64_t size) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || size < 256 || size > AC_SPECTRUM_MAX || (size & (size - 1))) return -1;
+    if(!c->spectrum_db) {
+        c->spectrum_db = calloc(AC_SPECTRUM_MAX / 2 + 1, sizeof(double));
+        if(!c->spectrum_db) return -1;
+    }
+    double *work = malloc((size_t)size * 2 * sizeof(double));
+    if(!work) return -1;
+    uint64_t end = atomic_load_explicit(&c->spectrum_write, memory_order_acquire);
+    double window_sum = 0;
+    for(int64_t i = 0; i < size; ++i) {
+        double w = 0.5 - 0.5 * cos(2.0 * M_PI * (double)i / (double)(size - 1));
+        uint64_t at = end - (uint64_t)size + (uint64_t)i;
+        float sample = end >= (uint64_t)(size - i) ? c->spectrum_ring[at & (AC_SPECTRUM_RING - 1u)] : 0.f;
+        work[i * 2] = (isfinite(sample) ? sample : 0.0) * w; work[i * 2 + 1] = 0; window_sum += w;
+    }
+    ac_fft(work, (int)size);
+    int bins = (int)(size / 2) + 1;
+    for(int b = 0; b < bins; ++b) {
+        double magnitude = sqrt(work[b * 2] * work[b * 2] + work[b * 2 + 1] * work[b * 2 + 1]) * 2.0 / window_sum;
+        c->spectrum_db[b] = magnitude > 1e-9 ? 20.0 * log10(magnitude) : -180.0;
+    }
+    free(work);
+    c->spectrum_bins = bins; c->spectrum_bin_hz = c->rate / (double)size;
+    return bins;
+}
+/* Loudest level (dBFS) of the last capture between two frequencies. A span
+ * narrower than a bin interpolates between the neighbours of its centre. */
+double __mlang_std_audio_controller_spectrum_level(int64_t handle, double low_hz, double high_hz) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || !c->spectrum_db || c->spectrum_bins < 2 || !(high_hz >= low_hz) || low_hz < 0) return -180.0;
+    double first = low_hz / c->spectrum_bin_hz, last = high_hz / c->spectrum_bin_hz;
+    int lo = (int)ceil(first), hi = (int)floor(last);
+    if(hi >= c->spectrum_bins) hi = c->spectrum_bins - 1;
+    if(lo < 1) lo = 1;
+    if(lo <= hi) {
+        double best = -180.0;
+        for(int b = lo; b <= hi; ++b) if(c->spectrum_db[b] > best) best = c->spectrum_db[b];
+        return best;
+    }
+    double centre = (first + last) / 2;
+    int below = (int)floor(centre); double t = centre - below;
+    if(below < 1) { below = 1; t = 0; }
+    if(below + 1 >= c->spectrum_bins) return c->spectrum_db[c->spectrum_bins - 1];
+    return c->spectrum_db[below] * (1 - t) + c->spectrum_db[below + 1] * t;
+}
 int32_t __mlang_std_audio_controller_effect_send(int64_t handle, int64_t track, int64_t slot, int64_t fx, int64_t percent) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || track < 0 || track >= 64 || slot < 0 || slot > 32 || fx < 0 || fx >= 8 || percent < 0 || percent > 100) return -1;

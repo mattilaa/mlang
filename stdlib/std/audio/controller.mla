@@ -61,6 +61,9 @@ extern fn __mlang_std_audio_controller_load_effect(handle: i64, fx: i64, path: s
 extern fn __mlang_std_audio_controller_effect_send(handle: i64, track: i64, slot: i64, fx: i64, percent: i64) -> i32;
 extern fn __mlang_std_audio_controller_effect_volume(handle: i64, fx: i64, percent: i64) -> i32;
 extern fn __mlang_std_audio_controller_effect_peak(handle: i64, fx: i64, channel: i64) -> i32;
+extern fn __mlang_std_audio_controller_master_param(handle: i64, index: i64, value: f64) -> i32;
+extern fn __mlang_std_audio_controller_spectrum_capture(handle: i64, size: i64) -> i32;
+extern fn __mlang_std_audio_controller_spectrum_level(handle: i64, low_hz: f64, high_hz: f64) -> f64;
 impl AudioController {
     /// Stopped owner, MIDI joined. IDs 1-256; parameter slots 41-296. Empty path unloads.
     pub fn load_insert(self: AudioController, id: i64, path: str8) -> i32 { return __mlang_std_audio_controller_load_insert(self.handle, id, path); }
@@ -78,6 +81,31 @@ impl AudioController {
     pub fn effect_send(self: AudioController, track: i64, slot: i64, fx: i64, percent: i64) -> i32 { return __mlang_std_audio_controller_effect_send(self.handle, track, slot, fx, percent); }
     pub fn effect_volume(self: AudioController, fx: i64, percent: i64) -> i32 { return __mlang_std_audio_controller_effect_volume(self.handle, fx, percent); }
     pub fn effect_peak(self: AudioController, fx: i64, channel: i64) -> i32 { return __mlang_std_audio_controller_effect_peak(self.handle, fx, channel); }
+    /// Master bus, the last stage before the device: a 24 dB/oct high-pass,
+    /// four peaking bands and a volume, each gliding to new values (~30 ms)
+    /// while audio runs. All default to transparent. High-pass `hz` 5..40000,
+    /// or 0 to switch it off (the default); ~20 Hz removes inaudible rumble.
+    pub fn master_high_pass(self: AudioController, hz: f64) -> i32 { return __mlang_std_audio_controller_master_param(self.handle, 0, hz); }
+    /// Peaking band 0-3: centre 5..40000 Hz, gain -24..24 dB (0 = bypassed), Q 0.1..18.
+    pub fn master_band(self: AudioController, band: i64, hz: f64, gain_db: f64, q: f64) -> i32 {
+        if band < 0 || band > 3 { return -1; }
+        if __mlang_std_audio_controller_master_param(self.handle, 1 + band * 3, hz) != 0 { return -1; }
+        if __mlang_std_audio_controller_master_param(self.handle, 2 + band * 3, gain_db) != 0 { return -1; }
+        return __mlang_std_audio_controller_master_param(self.handle, 3 + band * 3, q);
+    }
+    /// Switch the high-pass and EQ bands in or out (default in), crossfading
+    /// over ~20 ms. Volume, clipping and the analyzer tap follow either way.
+    pub fn master_eq_enabled(self: AudioController, enabled: bool) -> i32 { return __mlang_std_audio_controller_master_param(self.handle, 14, enabled ? 1.0 : 0.0); }
+    /// Number of master-bus changes so far: 0 on a fresh controller.
+    pub fn master_changes(self: AudioController) -> i64 { return __mlang_std_audio_controller_info(self.handle, 6); }
+    /// Linear master volume 0..4 (1 = unity), ramped per block.
+    pub fn master_volume(self: AudioController, gain: f64) -> i32 { return __mlang_std_audio_controller_master_param(self.handle, 13, gain); }
+    /// Single UI consumer: FFT the newest `size` post-master samples (power of
+    /// two, 256..8192, Hann window). Returns the bin count, or -1.
+    pub fn spectrum_capture(self: AudioController, size: i64) -> i32 { return __mlang_std_audio_controller_spectrum_capture(self.handle, size); }
+    /// Loudest level in dBFS of the last capture between two frequencies
+    /// (-180 when silent or not captured yet).
+    pub fn spectrum_level(self: AudioController, low_hz: f64, high_hz: f64) -> f64 { return __mlang_std_audio_controller_spectrum_level(self.handle, low_hz, high_hz); }
     /// Single UI consumer: track 0-63, channel 0/1, post-fader peak 0-1000 of
     /// everything the channel carries, its own voices and whatever is routed
     /// into it. Reads 0 for a track that mixes straight into master with no
