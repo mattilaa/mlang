@@ -95,7 +95,22 @@ int main() {
     bad.writeDouble(std::numeric_limits<double>::quiet_NaN()); invalid.seek(0, IBStream::kIBSeekSet, nullptr);
     check(b.processor.setState(&invalid) != kResultOk, "reject NaN state");
     check(std::abs(b.processor.getParamNormalized(kFirstParam + kFeedback) - normalized(kFeedback, .81)) < 1e-9, "failed restore is atomic");
-    for(int filter = 0; filter < 4; ++filter) {
+    // Sessions saved with the old None/Lowpass/Highpass/Bandpass list stored
+    // normalized 0, 1/3, 2/3, 1; they must still select the same filters.
+    const int legacy[] = {0, 1, 2, 3};
+    for(int old = 0; old < 4; ++old) {
+        const int index = static_cast<int>(physical(kFilter, old / 3.0));
+        check(kFilterTypes[index] == legacy[old], "legacy filter values keep their filter");
+    }
+    // New low-/band-pass models filter the repeat: an impulse through a 200 Hz
+    // Moog 24 comes back smeared well below its unfiltered peak.
+    for(int index : {1, 2, 4, 7}) {
+        Fixture model; model.neutral(); model.set(kCutoffRamp, 0); model.set(kFilter, index); model.set(kCutoff, 200); model.set(kDamping, 1);
+        auto echo = model.render(400, 1);
+        double peak = 0; for(int i = 0; i < 400; ++i) peak = std::max(peak, static_cast<double>(std::abs(echo[0][i])));
+        check(peak > 0.001 && peak < 0.5, "multimode filter colors the repeat");
+    }
+    for(int filter = 0; filter < 9; ++filter) {
         Fixture stress(48000); stress.neutral(); stress.set(kFilter, filter); stress.set(kResonance, 1);
         stress.set(kFeedback, 1.2); stress.set(kJitter, 50); stress.set(kDamping, 1);
         stress.render(8192, 1);

@@ -43,6 +43,12 @@ let output: DelayFrame = delay.process_stereo(input_left, input_right);
 ```
 
 The low-pass and high-pass modes use a topology-preserving two-pole filter.
+`FeedbackFilter` also offers `Lowpass24`, `Highpass24`, `Bandpass24`, `Moog12`,
+and `Moog24`, which run the matching [dsp::multimode](multimode.md) model with
+the same cutoff, resonance (0..1 mapped to 0..24 dB), damping, scope, and
+ramps. The loop copy of these models is held at 0 dB resonance for stability,
+as with the loop state-variable filter. `set_filter_target` crossfades between
+any two responses, including model to model.
 `set_filter_resonance(0..1)` moves from a broadly damped response to a strong,
 bounded peak around the selected cutoff. Resonant soft limiting controls the
 peak without attenuating the filter's complete passband, keeping the wet signal

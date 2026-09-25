@@ -1,0 +1,335 @@
+/// \file multimode.mla
+/// \brief Selectable biquad and Moog-ladder filter models with smooth control.
+///
+/// @defgroup dsp_multimode dsp::multimode
+/// @ingroup dsp
+/// @brief The eight filter models of the CoreAudio filter-sweep example, as
+/// reusable realtime-safe mono and stereo processors.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+mod dsp::filter;
+use dsp::detail::expf;
+use dsp::detail::logf;
+use dsp::filter::Biquad;
+use dsp::filter::MoogLadder;
+/// \endcond
+
+fn multimode_clamp(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+/// @brief Filter response. 12 dB models are one biquad, 24 dB models are two
+/// cascaded Butterworth-tuned biquads, and Moog models are the TPT ladder.
+pub enum FilterModel : i32 {
+    Lowpass12 = 0,
+    Lowpass24 = 1,
+    Highpass12 = 2,
+    Highpass24 = 3,
+    Bandpass12 = 4,
+    Bandpass24 = 5,
+    Moog12 = 6,
+    Moog24 = 7
+};
+
+/// @brief Map a host/UI index (`0 .. 7`, in `FilterModel` order) to a model.
+/// Out-of-range indices select `Moog24`, the example's default.
+pub fn filter_model_from_index(index: i32) -> FilterModel {
+    if index == 0 { return FilterModel::Lowpass12; }
+    if index == 1 { return FilterModel::Lowpass24; }
+    if index == 2 { return FilterModel::Highpass12; }
+    if index == 3 { return FilterModel::Highpass24; }
+    if index == 4 { return FilterModel::Bandpass12; }
+    if index == 5 { return FilterModel::Bandpass24; }
+    if index == 6 { return FilterModel::Moog12; }
+    return FilterModel::Moog24;
+}
+
+/// @brief One-channel filter running a single `FilterModel`.
+///
+/// `resonance_db` spans `0 .. 36 dB` for every model: `0 dB` is a flat
+/// Butterworth response (biquads) or a non-resonant ladder, and 36 dB is close
+/// to self-oscillation. Coefficients change only in `configure()`.
+pub struct MultimodeFilter {
+    var model: FilterModel;
+    var stage1: Biquad;
+    var stage2: Biquad;
+    var ladder: MoogLadder;
+};
+
+impl MultimodeFilter {
+    /// @brief Create a 24 dB Moog ladder at 1 kHz with cleared history.
+    pub fn new() -> MultimodeFilter {
+        var filter: MultimodeFilter = MultimodeFilter {
+            model: FilterModel::Moog24,
+            stage1: Biquad::new(),
+            stage2: Biquad::new(),
+            ladder: MoogLadder::new()
+        };
+        filter.configure(1000.0f, 0.0f, 48000.0f);
+        return filter;
+    }
+
+    /// @brief Return the active response.
+    pub fn model(self: MultimodeFilter) -> FilterModel { return self.model; }
+
+    /// @brief Switch response and clear history. Call `configure()` afterwards.
+    pub fn set_model(self: &mut Self, model: FilterModel) -> void {
+        self.model = model;
+        self.reset();
+    }
+
+    /// @brief Design coefficients for the active model.
+    pub fn configure(self: &mut Self, cutoff_hz: f32, resonance_db: f32, sample_rate_hz: f32) -> void {
+        let resonance: f32 = multimode_clamp(resonance_db, 0.0f, 36.0f);
+        let model: FilterModel = self.model;
+        if model == FilterModel::Moog12 || model == FilterModel::Moog24 {
+            self.ladder.set_lowpass(cutoff_hz, resonance, sample_rate_hz);
+        } else if model == FilterModel::Lowpass12 {
+            self.stage1.set_lowpass(cutoff_hz, resonance, sample_rate_hz);
+        } else if model == FilterModel::Highpass12 {
+            self.stage1.set_highpass(cutoff_hz, resonance, sample_rate_hz);
+        } else if model == FilterModel::Bandpass12 {
+            self.stage1.set_bandpass(cutoff_hz, resonance, sample_rate_hz);
+        } else {
+            // Fourth-order Butterworth Q pair; resonance is split across both
+            // stages so it describes the whole cascade.
+            let q_scale: f32 = expf(0.05756462732485114210f * resonance);
+            let q1: f32 = 0.54119610014619698440f * q_scale;
+            let q2: f32 = 1.30656296487637652790f * q_scale;
+            if model == FilterModel::Highpass24 {
+                self.stage1.set_highpass_q(cutoff_hz, q1, sample_rate_hz);
+                self.stage2.set_highpass_q(cutoff_hz, q2, sample_rate_hz);
+            } else if model == FilterModel::Bandpass24 {
+                self.stage1.set_bandpass_q(cutoff_hz, q1, sample_rate_hz);
+                self.stage2.set_bandpass_q(cutoff_hz, q2, sample_rate_hz);
+            } else {
+                self.stage1.set_lowpass_q(cutoff_hz, q1, sample_rate_hz);
+                self.stage2.set_lowpass_q(cutoff_hz, q2, sample_rate_hz);
+            }
+        }
+    }
+
+    /// @brief Process one sample without allocating.
+    pub fn process(self: &mut Self, input: f32) -> f32 {
+        let model: FilterModel = self.model;
+        if model == FilterModel::Moog12 { return self.ladder.process_12db(input); }
+        if model == FilterModel::Moog24 { return self.ladder.process_24db(input); }
+        let first: f32 = self.stage1.process(input);
+        if model == FilterModel::Lowpass12 || model == FilterModel::Highpass12
+            || model == FilterModel::Bandpass12 {
+            return first;
+        }
+        return self.stage2.process(first);
+    }
+
+    /// @brief Clear history without changing coefficients or model.
+    pub fn reset(self: &mut Self) -> void {
+        self.stage1.reset();
+        self.stage2.reset();
+        self.ladder.reset();
+    }
+}
+
+/// @brief One processed stereo sample.
+pub struct MultimodeFrame {
+    var left_value: f32;
+    var right_value: f32;
+};
+
+impl MultimodeFrame {
+    /// @brief Return the left output sample.
+    pub fn left(self: MultimodeFrame) -> f32 { return self.left_value; }
+
+    /// @brief Return the right output sample.
+    pub fn right(self: MultimodeFrame) -> f32 { return self.right_value; }
+}
+
+/// @brief Stereo multimode filter with ramped cutoff/resonance and
+/// crossfaded model changes.
+///
+/// Cutoff ramps are linear in log-frequency so sweeps move evenly per octave.
+/// A model change configures an idle second filter pair and crossfades to it,
+/// so switching while audio rings does not click. Coefficients are redesigned
+/// per sample only while a ramp runs.
+pub struct StereoMultimodeFilter {
+    var sample_rate_hz: f32;
+    var left_a: MultimodeFilter;
+    var right_a: MultimodeFilter;
+    var left_b: MultimodeFilter;
+    var right_b: MultimodeFilter;
+    /// Weight of pair B; pair A contributes `1 - mix_b`.
+    var mix_b: f32;
+    var mix_b_step: f32;
+    var mix_remaining: i64;
+    var target_is_b: bool;
+    var log_cutoff: f32;
+    var log_cutoff_target: f32;
+    var log_cutoff_step: f32;
+    var cutoff_remaining: i64;
+    var resonance_db: f32;
+    var resonance_target_db: f32;
+    var resonance_step_db: f32;
+    var resonance_remaining: i64;
+};
+
+impl StereoMultimodeFilter {
+    /// @brief Create a 24 dB Moog ladder at `cutoff_hz` with no resonance.
+    pub fn new(sample_rate_hz: f32, cutoff_hz: f32) -> StereoMultimodeFilter {
+        let rate: f32 = multimode_clamp(sample_rate_hz, 1000.0f, 768000.0f);
+        let log_cutoff: f32 = logf(multimode_clamp(cutoff_hz, 1.0f, rate * 0.495f));
+        var filter: StereoMultimodeFilter = StereoMultimodeFilter {
+            sample_rate_hz: rate,
+            left_a: MultimodeFilter::new(),
+            right_a: MultimodeFilter::new(),
+            left_b: MultimodeFilter::new(),
+            right_b: MultimodeFilter::new(),
+            mix_b: 0.0f, mix_b_step: 0.0f, mix_remaining: 0, target_is_b: false,
+            log_cutoff: log_cutoff, log_cutoff_target: log_cutoff,
+            log_cutoff_step: 0.0f, cutoff_remaining: 0,
+            resonance_db: 0.0f, resonance_target_db: 0.0f,
+            resonance_step_db: 0.0f, resonance_remaining: 0
+        };
+        filter.configure_pairs();
+        return filter;
+    }
+
+    /// @brief Return the model being faded to (or playing).
+    pub fn model(self: StereoMultimodeFilter) -> FilterModel {
+        return self.target_is_b ? self.left_b.model() : self.left_a.model();
+    }
+
+    /// @brief Return the in-flight cutoff in Hz.
+    pub fn cutoff_hz(self: StereoMultimodeFilter) -> f32 { return expf(self.log_cutoff); }
+
+    /// @brief Return the in-flight resonance in dB.
+    pub fn resonance_db(self: StereoMultimodeFilter) -> f32 { return self.resonance_db; }
+
+    fn configure_pairs(self: &mut Self) -> void {
+        let cutoff: f32 = expf(self.log_cutoff);
+        if self.mix_b < 1.0f {
+            self.left_a.configure(cutoff, self.resonance_db, self.sample_rate_hz);
+            self.right_a.configure(cutoff, self.resonance_db, self.sample_rate_hz);
+        }
+        if self.mix_b > 0.0f {
+            self.left_b.configure(cutoff, self.resonance_db, self.sample_rate_hz);
+            self.right_b.configure(cutoff, self.resonance_db, self.sample_rate_hz);
+        }
+    }
+
+    /// @brief Select a model, crossfading over `ramp_samples` (0 = switch now).
+    pub fn set_model_target(self: &mut Self, model: FilterModel, ramp_samples: i64) -> void {
+        if model == self.model() { return; }
+        let cutoff: f32 = expf(self.log_cutoff);
+        if ramp_samples <= 0 {
+            self.left_a.set_model(model);
+            self.right_a.set_model(model);
+            self.left_a.configure(cutoff, self.resonance_db, self.sample_rate_hz);
+            self.right_a.configure(cutoff, self.resonance_db, self.sample_rate_hz);
+            self.mix_b = 0.0f;
+            self.mix_b_step = 0.0f;
+            self.mix_remaining = 0;
+            self.target_is_b = false;
+            return;
+        }
+        // Load the model into the pair currently fading out (or silent), then
+        // crossfade towards it from wherever the blend is now.
+        self.target_is_b = !self.target_is_b;
+        if self.target_is_b {
+            self.left_b.set_model(model);
+            self.right_b.set_model(model);
+            self.left_b.configure(cutoff, self.resonance_db, self.sample_rate_hz);
+            self.right_b.configure(cutoff, self.resonance_db, self.sample_rate_hz);
+        } else {
+            self.left_a.set_model(model);
+            self.right_a.set_model(model);
+            self.left_a.configure(cutoff, self.resonance_db, self.sample_rate_hz);
+            self.right_a.configure(cutoff, self.resonance_db, self.sample_rate_hz);
+        }
+        let target: f32 = self.target_is_b ? 1.0f : 0.0f;
+        self.mix_b_step = (target - self.mix_b) / f32(ramp_samples);
+        self.mix_remaining = ramp_samples;
+    }
+
+    /// @brief Ramp cutoff in log-frequency over `ramp_samples` (0 = now).
+    pub fn set_cutoff_target_hz(self: &mut Self, cutoff_hz: f32, ramp_samples: i64) -> void {
+        let target: f32 = logf(multimode_clamp(cutoff_hz, 1.0f, self.sample_rate_hz * 0.495f));
+        self.log_cutoff_target = target;
+        if ramp_samples <= 0 {
+            self.log_cutoff = target;
+            self.log_cutoff_step = 0.0f;
+            self.cutoff_remaining = 0;
+            self.configure_pairs();
+            return;
+        }
+        self.log_cutoff_step = (target - self.log_cutoff) / f32(ramp_samples);
+        self.cutoff_remaining = ramp_samples;
+    }
+
+    /// @brief Ramp resonance (`0 .. 36 dB`) over `ramp_samples` (0 = now).
+    pub fn set_resonance_target_db(self: &mut Self, resonance_db: f32, ramp_samples: i64) -> void {
+        let target: f32 = multimode_clamp(resonance_db, 0.0f, 36.0f);
+        self.resonance_target_db = target;
+        if ramp_samples <= 0 {
+            self.resonance_db = target;
+            self.resonance_step_db = 0.0f;
+            self.resonance_remaining = 0;
+            self.configure_pairs();
+            return;
+        }
+        self.resonance_step_db = (target - self.resonance_db) / f32(ramp_samples);
+        self.resonance_remaining = ramp_samples;
+    }
+
+    fn advance(self: &mut Self) -> void {
+        var changed: bool = false;
+        if self.cutoff_remaining > 0 {
+            self.cutoff_remaining = self.cutoff_remaining - 1;
+            self.log_cutoff = self.cutoff_remaining == 0
+                ? self.log_cutoff_target : self.log_cutoff + self.log_cutoff_step;
+            changed = true;
+        }
+        if self.resonance_remaining > 0 {
+            self.resonance_remaining = self.resonance_remaining - 1;
+            self.resonance_db = self.resonance_remaining == 0
+                ? self.resonance_target_db : self.resonance_db + self.resonance_step_db;
+            changed = true;
+        }
+        if self.mix_remaining > 0 {
+            self.mix_remaining = self.mix_remaining - 1;
+            self.mix_b = self.mix_remaining == 0
+                ? (self.target_is_b ? 1.0f : 0.0f) : self.mix_b + self.mix_b_step;
+        }
+        if changed { self.configure_pairs(); }
+    }
+
+    /// @brief Process one stereo sample.
+    pub fn process_stereo(self: &mut Self, left: f32, right: f32) -> MultimodeFrame {
+        self.advance();
+        var out_left: f32 = 0.0f;
+        var out_right: f32 = 0.0f;
+        let mix_a: f32 = 1.0f - self.mix_b;
+        if mix_a > 0.0f {
+            out_left = self.left_a.process(left) * mix_a;
+            out_right = self.right_a.process(right) * mix_a;
+        }
+        if self.mix_b > 0.0f {
+            out_left = out_left + self.left_b.process(left) * self.mix_b;
+            out_right = out_right + self.right_b.process(right) * self.mix_b;
+        }
+        return MultimodeFrame { left_value: out_left, right_value: out_right };
+    }
+
+    /// @brief Clear all filter history, keeping settings and in-flight ramps.
+    pub fn reset(self: &mut Self) -> void {
+        self.left_a.reset();
+        self.right_a.reset();
+        self.left_b.reset();
+        self.right_b.reset();
+    }
+}
+
+/// @}
