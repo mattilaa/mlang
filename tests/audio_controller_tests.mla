@@ -186,3 +186,61 @@ fn audio_controller_output_routing() {
     controller.process(block, 1024); verify(controller.master_peak(0) > 0);
     block.close(); controller.close();
 }
+
+fn master_bus_peak(controller: AudioController, block: PcmBlock) -> f32 {
+    // Settle glides, then measure the loudest sample of a fresh block.
+    for _i in 0..8 { controller.process(block, 1024); }
+    verify(controller.process(block, 1024) == 0);
+    var peak: f32 = 0.0f;
+    for f in 0..1024 {
+        let v: f32 = block.left(f) < 0.0f ? -block.left(f) : block.left(f);
+        if v > peak { peak = v; }
+    }
+    return peak;
+}
+
+#[test]
+fn audio_controller_master_bus_eq_volume_and_spectrum() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(1024);
+    verify(allocated.is_ok()); if allocated.is_err() { controller.close(); return; }
+    let block: PcmBlock = allocated.unwrap();
+    verify(controller.midi_target(0, 0) == 0);
+    verify(controller.live_note(true, 0, 69, 100) == 0); // 440 Hz preview tone
+    verify(controller.master_changes() == 0);
+    let flat: f32 = master_bus_peak(controller, block);
+    verify(flat > 0.0f);
+
+    // Volume scales the output; 0 silences it.
+    verify(controller.master_volume(0.5) == 0);
+    verify(controller.master_changes() == 1);
+    let half: f32 = master_bus_peak(controller, block);
+    verify(half > flat * 0.4f && half < flat * 0.6f);
+    verify(controller.master_volume(0.0) == 0);
+    verify(master_bus_peak(controller, block) == 0.0f);
+    verify(controller.master_volume(1.0) == 0);
+
+    // A band boosted at the tone raises it; a high-pass above it cuts it.
+    verify(controller.master_band(1, 440.0, 12.0, 1.0) == 0);
+    verify(master_bus_peak(controller, block) > flat * 1.5f);
+    verify(controller.master_band(1, 440.0, 0.0, 1.0) == 0);
+    verify(controller.master_high_pass(3000.0) == 0);
+    verify(master_bus_peak(controller, block) < flat * 0.5f);
+    verify(controller.master_high_pass(0.0) == 0);
+
+    // The analyzer sees the tone at 440 Hz, not an octave away.
+    master_bus_peak(controller, block);
+    verify(controller.spectrum_capture(4096) == 2049);
+    let at_tone: f64 = controller.spectrum_level(400.0, 480.0);
+    verify(at_tone > -40.0);
+    verify(at_tone > controller.spectrum_level(150.0, 250.0) + 6.0);
+
+    // Out-of-range settings are rejected.
+    verify(controller.master_band(4, 440.0, 0.0, 1.0) == -1);
+    verify(controller.master_band(0, 440.0, 30.0, 1.0) == -1);
+    verify(controller.master_high_pass(2.0) == -1);
+    verify(controller.spectrum_capture(1000) == -1);
+    block.close(); controller.close();
+}

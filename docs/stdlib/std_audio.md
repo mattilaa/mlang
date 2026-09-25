@@ -111,6 +111,29 @@ post-master, post-gain/clipping peak since the previous read, scaled 0–1000.
 One UI consumer should read at meter refresh cadence, then apply display decay.
 Stopping output clears pending peaks. These APIs also work with offline output.
 
+### Master bus and spectrum analyzer
+
+The master bus is the last stage before the device: after the aux returns and
+the optional master processor, the output runs through a 24 dB/oct high-pass,
+four peaking EQ bands and a volume, then the fixed master gain and clipping.
+Every setting defaults to transparent (high-pass off, flat bands, unity volume)
+and can change while audio runs: the render thread glides to new values over
+about 30 ms, with frequencies moving in log space.
+
+- `master_high_pass(hz)`: cutoff 5–40000 Hz, or 0 to switch it off.
+- `master_band(band, hz, gain_db, q)`: band 0–3, centre 5–40000 Hz, gain
+  −24…24 dB (0 bypasses the band), Q 0.1–18.
+- `master_volume(gain)`: linear 0–4, where 1 is unity.
+- `master_changes()`: how many settings have been published; 0 on a fresh
+  controller, so an application can tell when it must apply its bus again.
+
+The final output, the same signal `master_peak` measures, is also written to a
+mono ring for analysis. A single UI consumer calls `spectrum_capture(size)` to
+Hann-window and FFT the newest `size` samples (power of two, 256–8192; returns
+the bin count), then `spectrum_level(low_hz, high_hz)` for the loudest level
+in dBFS between two frequencies. A span narrower than one bin interpolates
+between the neighbouring bins, so log-spaced display columns stay smooth.
+
 Common audio output and duplex processing helpers:
 - macOS uses CoreAudio Audio Queue input/output.
 - Linux uses JACK2 when `libjack` and a running JACK server are available.

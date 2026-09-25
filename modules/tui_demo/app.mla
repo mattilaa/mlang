@@ -23,6 +23,9 @@ mod tui_demo::sequence;
 use tui_demo::sequence::SequenceTable;
 mod tui_demo::mixer;
 use tui_demo::mixer::Mixer;
+mod tui_demo::spectrum;
+use tui_demo::spectrum::SpectrumView;
+use tui_demo::spectrum::MasterBus;
 mod tui_demo::patterns;
 use tui_demo::patterns::PatternLibrary;
 use tui_demo::patterns::SongCover;
@@ -74,7 +77,7 @@ use std::io::read_keycode_nonblocking;
 use std::time::sleep_ms;
 use std::time::now_ms;
 
-fn demo_menus(fixture: bool, follow_matrix: bool, metronome: bool, extend: bool, metronome_always: bool) -> MenuBar {
+fn demo_menus(fixture: bool, follow_matrix: bool, metronome: bool, extend: bool, metronome_always: bool, spectrum: bool) -> MenuBar {
     // Grouped like a DAW's menu bar: each menu starts with what it creates,
     // then what it changes, then what it removes; families use submenus.
     let plugins: bool = AudioController::processor_support();
@@ -114,6 +117,10 @@ fn demo_menus(fixture: bool, follow_matrix: bool, metronome: bool, extend: bool,
                                                 MenuItem { label: "Solid bars", action: 40, enabled: true },
                                                 MenuItem { label: "Grainy (osc)", action: 41, enabled: true },
                                                 MenuItem { label: "Set update rate", action: 74, enabled: true }]),
+                                MenuItem { label: spectrum ? "[x] Show spectrum analyzer" : "[ ] Show spectrum analyzer", action: 160, enabled: true },
+                                MenuItem::submenu("Spectrum analyzer", [
+                                                MenuItem { label: "Change details", action: 161, enabled: true },
+                                                MenuItem { label: "Update rate", action: 162, enabled: true }]),
                                 MenuItem { label: "Reset layout", action: 6, enabled: true },
                                 MenuItem { label: "Show details", action: 7, enabled: true }] },
                     Menu {title: "Track", items: [
@@ -206,7 +213,7 @@ fn demo_panes(content: Rect) -> list<Pane> {
             Pane { id: 2, bounds: right[1] }];
 }
 
-fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: &Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView, matrix_visible: bool, channels: &SequenceTable, merged_channels: bool) -> void {
+fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: &Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView, matrix_visible: bool, channels: &SequenceTable, merged_channels: bool, spectrum: &SpectrumView) -> void {
     let theme: Theme = Theme::dark_blue();
     surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
     let library: Pane = panes[0];
@@ -231,17 +238,24 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
         table.paint_note_lengths(surface, top, theme);
         table.paint_editor(surface, top, theme);
     }
-    let show_sample: bool = sample.visible && table.audio_under_cursor();
+    let show_spectrum: bool = spectrum.visible;
+    let show_sample: bool = !show_spectrum && sample.visible && table.audio_under_cursor();
     var sample_title: str8 = "";
     if show_sample {
         let track: SequenceTrack = table.tracks[table.active_track()];
         let instance: AudioInstance = track.instances[track.instance_at(table.selected_row)];
         let name: str8 = base_name(instance.clip.source); sample_title = format!(" Sample: {} ", name); free(name);
     }
-    let details: Panel = Panel { title: show_sample ? sample_title : (mixer.visible ? " Mixer " : " Inspector ") };
+    let details: Panel = Panel { title: show_spectrum ? " Spectrum / Master " : (show_sample ? sample_title : (mixer.visible ? " Mixer " : " Inspector ")) };
     let bottom: Rect = details.paint_focused(surface, inspector.bounds, theme, focus.is_active(2));
     let label: Label = Label { text: patterns.error != "" ? patterns.error : (table.error != "" ? table.error : (table.editing ? "Editing: Enter saves | Esc cancels": message)) };
-    if show_sample {
+    if show_spectrum {
+        spectrum.paint(surface, bottom, theme, mixer.master.left, mixer.master.right, focus.is_active(2), message);
+        if(patterns.error != "" || table.error != "") && bottom.height > 0 {
+            surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
+        }
+    }
+    else if show_sample {
         let track: SequenceTrack = table.tracks[table.active_track()];
         let instance: AudioInstance = track.instances[track.instance_at(table.selected_row)];
         let render_clip: AudioClip = instance.render_clip();
@@ -275,7 +289,10 @@ pub fn run() -> i32 {
     // parallel patterns share it. Only the mixer reads it.
     var mixer_table: SequenceTable = SequenceTable {};
     var play_metronome: bool = true; var extend_recording: bool = true; var metronome_always: bool = false;
-    var menus: MenuBar = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always);
+    // Spectrum analyzer and master bus (Ctrl+Shift+M), shown in the mixer's
+    // pane. `spectrum_area` is where it was last painted, for the analysis.
+    var spectrum: SpectrumView = SpectrumView::new(); var spectrum_area: Rect = Rect::new(0, 0, 0, 0);
+    var menus: MenuBar = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible);
     if fixture { menus.open(0); }
     var focus: PaneFocus = PaneFocus::new(0);
     var input: InputDecoder = InputDecoder::new();
@@ -377,7 +394,9 @@ pub fn run() -> i32 {
                     instrument_selected: library.instruments.selected, instrument_scroll: library.instruments.scroll,
                     mixer: mixer.visible, meter_grainy: mixer.grainy, meter_fps: frame_rate.fps, effect_focus: mixer.bus_focus, effect_selected: mixer.selected_effect,
                     sample: sample.visible, sample_grainy: sample.grainy, sample_wave: sample.wave, sample_zoom: sample.zoom,
-                    editor: instrument_editor.active, editor_slot: i32(instrument_editor.slot), editor_selected: instrument_editor.selected, editor_scroll: instrument_editor.scroll };
+                    editor: instrument_editor.active, editor_slot: i32(instrument_editor.slot), editor_selected: instrument_editor.selected, editor_scroll: instrument_editor.scroll,
+                    spectrum: spectrum.visible, spectrum_detail: spectrum.detail, spectrum_fps: spectrum.fps, master: spectrum.bus,
+                    master_saved: spectrum.visible || spectrum.detail != 0 || spectrum.fps != 30 || !spectrum.bus.is_default() };
                 var serializer: SessionCodec = SessionCodec {};
                 let saved: bool = serializer.save(request_path, library, view, midi);
                 if saved { free(session_path); session_path = clone(request_path); session_status = format!("Saved: {}", session_path); }
@@ -414,6 +433,9 @@ pub fn run() -> i32 {
                             mixer = Mixer { visible: v.mixer, grainy: v.meter_grainy, bus_focus: v.effect_focus, selected_effect: v.effect_selected };
                             mixer.update_effects(midi.output, midi.effects, 0);
                             sample = SampleView { visible: v.sample, grainy: v.sample_grainy, wave: v.sample_wave, zoom: v.sample_zoom };
+                            spectrum = SpectrumView::new();
+                            if v.master_saved { spectrum.visible = v.spectrum; spectrum.detail = v.spectrum_detail; spectrum.fps = v.spectrum_fps; spectrum.bus = v.master; }
+                            menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible);
                             frame_rate.set(v.meter_fps, now_ms()); note_playback = NotePlayback {}; play_pattern = library.active_id;
                             instrument_editor.release();
                             instrument_editor.slot = v.editor_slot;
@@ -803,6 +825,8 @@ pub fn run() -> i32 {
             if mixer.update_effects(midi.output, midi.effects, meter_delta) { playback_dirty = true; }
             master_meter_clock = now;
         }
+        // Pushes the master bus to a new controller, then analyses at its own rate.
+        if spectrum.update(midi.output, now, spectrum_area) { playback_dirty = true; }
         if playback_dirty && frame_rate.ready(now) { dirty = true; }
         if sample.visible && !library.table.audio_under_cursor() { sample.visible = false; dirty = true; }
         for _ui_step in 0..ui_steps {
@@ -825,6 +849,7 @@ pub fn run() -> i32 {
                     else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
                     else if bpm_dialog.matrix_steps { library.matrix_steps = bpm_dialog.value; }
                     else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
+                    else if bpm_dialog.spectrum_rate { spectrum.fps = bpm_dialog.value; }
                     else { transport.set_bpm(bpm_dialog.value); }
                 }
             }
@@ -918,7 +943,8 @@ pub fn run() -> i32 {
             library.table.reconcile(panes[1].bounds.inset(1));
             library.view.reconcile(panes[0].bounds.inset(1));
             library.audio.view.reconcile(panes[0].bounds.inset(1));
-            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample, matrix.visible, mixer_table, following_channels);
+            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample, matrix.visible, mixer_table, following_channels, spectrum);
+            let details_pane: Pane = panes[2]; spectrum_area = details_pane.bounds.inset(1);
             matrix.paint(surface, panes[1].bounds, Theme::dark_blue(), library, focus.is_active(1), song_playing ? song_row : -1);
             instrument_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
             // Menus sit above the pane contents, below the modal dialogs.
@@ -1049,6 +1075,7 @@ pub fn run() -> i32 {
                         else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
                         else if bpm_dialog.matrix_steps { library.matrix_steps = bpm_dialog.value; }
                         else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
+                        else if bpm_dialog.spectrum_rate { spectrum.fps = bpm_dialog.value; }
                         else { transport.set_bpm(bpm_dialog.value); }
                     }
                 }
@@ -1127,6 +1154,8 @@ pub fn run() -> i32 {
             else if ((event.code == 26 && event.modifiers == 1) || (event.code == 122 && event.modifiers == 5)) && focus.selected == 1 && !matrix.visible {
                 library.table.cycle_vertical_zoom(panes[1].bounds.inset(1)); dirty = true;
             }
+            // Ctrl+Shift+M (kitty/CSI-u); plain Ctrl+M is Enter on most terminals.
+            else if (event.code == 109 || event.code == 77) && event.modifiers == 6 { command = 160; }
             else if event.code == 109 && event.modifiers == 1 {
                 mixer.visible = !mixer.visible; dirty = true;
             }
@@ -1147,6 +1176,9 @@ pub fn run() -> i32 {
             } else if event.kind == InputKind::Pane {
                 focus.navigate(event.key, panes);
                 dirty = true;
+            } else if focus.selected == 2 && spectrum.visible && spectrum.handles(event) {
+                spectrum.on_event(event, midi.output);
+                free(message); message = spectrum.status(); dirty = true;
             } else if event.code == 115 && event.modifiers == 1 && library.table.visual && focus.selected == 1 && library.table.audio_under_cursor() {
                 free(message);
                 message = library.table.slice_audio(panes[1].bounds.inset(1))
@@ -1680,7 +1712,7 @@ pub fn run() -> i32 {
                 if command == 150 { play_metronome = !play_metronome; }
                 else if command == 151 { extend_recording = !extend_recording; }
                 else { metronome_always = command == 153; }
-                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always);
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible);
             }
             else if command == 50 || command == 53 { library.add(command == 53); }
             else if command == 51 {
@@ -1693,7 +1725,7 @@ pub fn run() -> i32 {
             }
             else if command == 55 {
                 follow_matrix = !follow_matrix;
-                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always);
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible);
                 free(message);
                 if follow_matrix {
                     if song_playing { library.follow_pattern(library.song_row_pattern(song_row)); play_pattern = library.active_id; }
@@ -1708,6 +1740,18 @@ pub fn run() -> i32 {
             else if command == 70 || command == 71 { sample.grainy = command == 71; }
             else if command == 72 || command == 73 { sample.wave = command == 73; }
             else if command == 74 { bpm_dialog.open_meter_rate(frame_rate.fps); }
+            else if command == 160 {
+                spectrum.visible = !spectrum.visible;
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible);
+                free(message);
+                message = spectrum.visible ? clone("Spectrum / Master: Left/Right picks HP, EQ1-4 or Master; Enter picks gain/freq/Q; Up/Down adjusts")
+                    : clone("Spectrum analyzer closed");
+            }
+            else if command == 161 {
+                spectrum.detail = (spectrum.detail + 1) % 3; spectrum.levels = []; spectrum.peaks = [];
+                free(message); message = format!("Spectrum detail: {}", spectrum.detail_name());
+            }
+            else if command == 162 { bpm_dialog.open_spectrum_rate(spectrum.fps); }
             else if command == 40 || command == 41 {
                 mixer.grainy = command == 41;
                 free(message); message = clone(mixer.grainy ? "Meter style: grainy (osc)": "Meter style: solid bars");

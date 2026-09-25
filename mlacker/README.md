@@ -508,6 +508,47 @@ destination's chain.
 
 Output channels are saved in `.mlack` per pattern track.
 
+### Spectrum analyzer and master bus
+
+`Ctrl+Shift+M` (from the sidebar, Pattern view or Mixer), or **View → Show
+spectrum analyzer**, shows the analyzer in the Mixer's pane, together with the
+master bus: a high-pass, a four-band EQ and the master volume. They are the last
+stage before the output device, after aux returns and the master plugin, and the
+analyzer shows exactly what leaves it (the same signal as the master meter).
+
+The graph spans 20 Hz–20 kHz on a log axis, labelled underneath (`100Hz`,
+`300Hz`, `1kHz`, …). Levels are dBFS, tilted +3 dB/octave around 1 kHz so music
+reads evenly; bars rise at once and fall at 40 dB/s, with a fading `▒`/`░` trail
+up to their recent peak. **View → Spectrum analyzer → Change details** cycles:
+
+- **Blocks** (default): one bar per column, with eighth-block tops for detail
+  finer than a cell.
+- **Braille (fine)**: two bars per column and four dots per cell, with a
+  floating peak dot.
+- **Wide bars**: two-column bars with gaps.
+
+**Update rate** sets how often it analyses (1–60 FPS, default 30), independent
+of the meter rate.
+
+To the right are the controls: **HP** (a 24 dB/octave high-pass, 20 Hz by
+default so inaudible rumble never reaches the output), **EQ1–EQ4** (peaking
+bands at 100 Hz, 500 Hz, 2.5 kHz and 8 kHz, ±12 dB, each with its own Q) and
+**Master** with the volume slider (0–150%, 100% unity) beside the master L/R
+meters. With the pane focused:
+
+| Key | Action |
+|---|---|
+| Left / Right | Select HP, EQ1–EQ4 or Master |
+| Enter | On an EQ band, cycle gain → frequency → Q (the selected value is highlighted) |
+| Up / Down or `k` / `j` | Fine step: 0.5 dB, 1/6 octave, 1/12-octave Q, 1% |
+| `K` / `J` | Coarse step (6 fine steps) |
+| `0` | Reset the selected value |
+
+Stepping the high-pass below 10 Hz switches it off; stepping up turns it back on.
+Changes glide over about 30 ms, so adjusting them while playing does not click.
+Wider bands have a lower Q. The analyzer view, its detail and rate, and the
+master bus are saved in `.mlack` (`MASTER_BUS`).
+
 ### Track inserts
 
 With Pattern view focused, `f` toggles four insert slots between each track name
@@ -720,7 +761,8 @@ instrument-slot mixing. Four PTY tests cover Settings, plugin selection/load/unl
 Instrument track creation/assignment, Instruments view, existing widgets and
 playback. They open no audio devices.
 The session PTY test separately checks real empty startup, command-line opening,
-parameter/editor-state round trips and rejected files. Legacy widget tests opt in
+parameter/editor-state round trips and rejected files. The spectrum PTY test toggles the
+analyzer, edits the master bus and checks it survives a session round trip. Legacy widget tests opt in
 to seeded demo data with `MLANG_TUI_DEMO=1`; normal mlacker startup does not.
 
 For a hardware-free manual run:

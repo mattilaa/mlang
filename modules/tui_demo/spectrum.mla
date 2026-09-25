@@ -1,0 +1,371 @@
+mod tui::meter;
+mod tui::input;
+mod std::math;
+mod std::audio::controller;
+use tui::input::*;
+use tui::menu::Key;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use tui::meter::VuMeter;
+use std::audio::controller::AudioController;
+use std::math::log;
+use std::math::exp;
+use std::strbuf::free;
+use std::strbuf::clone;
+
+/// Master bus settings: pushed to the controller and saved with a session.
+/// Band gains are tenths of a dB, Qs hundredths, the high-pass 0 when off.
+pub struct MasterBus {
+    var hp_hz: i32{20}; var volume: i32{100};
+    var hz0: i32{100}; var hz1: i32{500}; var hz2: i32{2500}; var hz3: i32{8000};
+    var gain0: i32; var gain1: i32; var gain2: i32; var gain3: i32;
+    var q0: i32{100}; var q1: i32{100}; var q2: i32{100}; var q3: i32{100};
+};
+impl MasterBus {
+    pub fn band_hz(self: MasterBus, band: i32) -> i32 { return band == 0 ? self.hz0 : (band == 1 ? self.hz1 : (band == 2 ? self.hz2 : self.hz3)); }
+    pub fn band_gain(self: MasterBus, band: i32) -> i32 { return band == 0 ? self.gain0 : (band == 1 ? self.gain1 : (band == 2 ? self.gain2 : self.gain3)); }
+    pub fn band_q(self: MasterBus, band: i32) -> i32 { return band == 0 ? self.q0 : (band == 1 ? self.q1 : (band == 2 ? self.q2 : self.q3)); }
+    pub fn set_band(self: &mut Self, band: i32, hz: i32, gain: i32, q: i32) -> void {
+        if band == 0 { self.hz0 = hz; self.gain0 = gain; self.q0 = q; }
+        else if band == 1 { self.hz1 = hz; self.gain1 = gain; self.q1 = q; }
+        else if band == 2 { self.hz2 = hz; self.gain2 = gain; self.q2 = q; }
+        else if band == 3 { self.hz3 = hz; self.gain3 = gain; self.q3 = q; }
+    }
+    /// A session only stores the bus when it differs from these defaults.
+    pub fn is_default(self: MasterBus) -> bool {
+        let fresh: MasterBus = MasterBus {};
+        if self.hp_hz != fresh.hp_hz || self.volume != fresh.volume { return false; }
+        for band in 0..4 {
+            let b: i32 = i32(band);
+            if self.band_hz(b) != fresh.band_hz(b) || self.band_gain(b) != 0 || self.band_q(b) != fresh.band_q(b) { return false; }
+        }
+        return true;
+    }
+    pub fn valid(self: MasterBus) -> bool {
+        if self.hp_hz != 0 && (self.hp_hz < 10 || self.hp_hz > 1000) { return false; }
+        if self.volume < 0 || self.volume > 150 { return false; }
+        for band in 0..4 {
+            let b: i32 = i32(band);
+            if self.band_hz(b) < 20 || self.band_hz(b) > 20000 || self.band_gain(b) < -120 || self.band_gain(b) > 120 ||
+               self.band_q(b) < 30 || self.band_q(b) > 1000 { return false; }
+        }
+        return true;
+    }
+    pub fn apply(self: MasterBus, output: AudioController) -> void {
+        if output.handle == 0 { return; }
+        output.master_high_pass(f64(self.hp_hz));
+        for band in 0..4 {
+            let b: i32 = i32(band);
+            output.master_band(band, f64(self.band_hz(b)), f64(self.band_gain(b)) / 10.0, f64(self.band_q(b)) / 100.0);
+        }
+        output.master_volume(f64(self.volume) / 100.0);
+    }
+}
+
+/// Spectrum analyzer with the master bus controls, shown in the mixer's pane.
+/// Detail 0 draws one bar per column with eighth-block tops, 1 two Braille
+/// bars per column, 2 wide bars. Levels are dBFS, tilted +3 dB/octave around
+/// 1 kHz so music reads evenly; bars rise at once and fall at 40 dB/s.
+pub struct SpectrumView {
+    var visible: bool; var detail: i32; var fps: i32{30};
+    var bus: MasterBus;
+    /// 0 = high-pass, 1-4 = EQ bands, 5 = master volume. Part 0 gain,
+    /// 1 frequency, 2 Q (the high-pass and volume have one part each).
+    var selected: i32{1}; var part: i32;
+    var levels: list<f64>; var peaks: list<f64>;
+    var clock: i64; var applied: i64;
+};
+
+fn spectrum_clamp(value: i32, low: i32, high: i32) -> i32 { return value < low ? low : (value > high ? high : value); }
+fn spectrum_fraction(db: f64) -> f64 { let f: f64 = (db + 84.0) / 84.0; return f < 0.0 ? 0.0 : (f > 1.0 ? 1.0 : f); }
+/// Frequency at `position` (0..1) of the 20 Hz - 20 kHz log axis.
+fn spectrum_hz(position: f64) -> f64 { return 20.0 * exp(position * log(1000.0)); }
+fn spectrum_x(hz: f64, width: i32) -> i32 { return i32(log(hz / 20.0) / log(1000.0) * f64(width)); }
+/// Multiply by 2^(steps/6): a sixth of an octave per step.
+fn spectrum_scale(value: i32, steps: i32) -> i32 {
+    let next: i32 = i32(f64(value) * exp(f64(steps) * log(2.0) / 6.0) + 0.5);
+    if next == value { return steps > 0 ? value + 1 : value - 1; }
+    return next;
+}
+pub fn spectrum_hz_text(hz: i32) -> str8 {
+    if hz >= 10000 { return format!("{}k", hz / 1000); }
+    if hz >= 1000 { return format!("{}.{}k", hz / 1000, hz % 1000 / 100); }
+    return format!("{}", hz);
+}
+fn spectrum_db_text(tenths: i32) -> str8 {
+    let magnitude: i32 = tenths < 0 ? -tenths : tenths;
+    return format!("{}{}.{}", tenths > 0 ? "+" : (tenths < 0 ? "-" : " "), magnitude / 10, magnitude % 10);
+}
+/// Eighth-block glyph for 1-8 filled eighths of a cell.
+fn spectrum_block(eighths: i32) -> i32 { return eighths >= 8 ? 0x2588 : 0x2580 + eighths; }
+/// Braille bits of the bottom `count` dots (0-4) of a cell's left or right column.
+fn spectrum_braille_fill(count: i32, right: bool) -> i32 {
+    if count <= 0 { return 0; }
+    if right { return count == 1 ? 0x80 : (count == 2 ? 0xA0 : (count == 3 ? 0xB0 : 0xB8)); }
+    return count == 1 ? 0x40 : (count == 2 ? 0x44 : (count == 3 ? 0x46 : 0x47));
+}
+/// Braille bit of the single dot at height `position` (1 bottom .. 4 top).
+fn spectrum_braille_dot(position: i32, right: bool) -> i32 {
+    if right { return position == 1 ? 0x80 : (position == 2 ? 0x20 : (position == 3 ? 0x10 : 0x08)); }
+    return position == 1 ? 0x40 : (position == 2 ? 0x04 : (position == 3 ? 0x02 : 0x01));
+}
+
+impl SpectrumView {
+    /// Always construct through here: a nested struct's field defaults are
+    /// not applied by `SpectrumView {}`, which would leave the bus at 0 Hz and 0%.
+    pub fn new() -> SpectrumView { return SpectrumView { bus: MasterBus {} }; }
+    pub fn detail_name(self: SpectrumView) -> str8 { return self.detail == 1 ? "Braille (fine)" : (self.detail == 2 ? "Wide bars" : "Blocks"); }
+    /// Width of the controls at the right: five EQ strips and the master strip.
+    pub fn eq_width(area: Rect) -> i32 { return area.width >= 72 ? 44 : (area.width >= 40 ? 37 : 0); }
+    fn strip_width(area: Rect) -> i32 { return area.width >= 72 ? 7 : 6; }
+    pub fn graph_area(area: Rect) -> Rect {
+        return Rect::new(area.x, area.y, area.width - SpectrumView::eq_width(area) - (SpectrumView::eq_width(area) > 0 ? 1 : 0), area.height);
+    }
+    fn bar_count(self: SpectrumView, width: i32) -> i32 {
+        if self.detail == 1 { return width * 2; }
+        if self.detail == 2 { return (width + 1) / 3; }
+        return width;
+    }
+    /// Push the bus whenever the controller changed (new device or session).
+    pub fn sync(self: &mut Self, output: AudioController) -> void {
+        // A fresh controller has seen no changes, even at a reused address.
+        if output.handle != 0 && (output.handle != self.applied || output.master_changes() == 0) { self.bus.apply(output); self.applied = output.handle; }
+    }
+    /// Analyse at the update rate; true when the picture changed.
+    pub fn update(self: &mut Self, output: AudioController, now: i64, area: Rect) -> bool {
+        self.sync(output);
+        if !self.visible || output.handle == 0 { return false; }
+        let elapsed: i64 = now - self.clock;
+        if elapsed < wide(1000 / (self.fps < 1 ? 1 : self.fps)) { return false; }
+        self.clock = now;
+        let graph: Rect = SpectrumView::graph_area(area);
+        let bars: i32 = self.bar_count(graph.width);
+        if bars <= 0 { return false; }
+        let size: i64 = self.detail == 1 ? 8192 : (self.detail == 2 ? 2048 : 4096);
+        if output.spectrum_capture(size) < 0 { return false; }
+        let fall: f64 = 40.0 * f64(elapsed > 500 ? 500 : elapsed) / 1000.0;
+        var levels: list<f64> = []; var peaks: list<f64> = []; var changed: bool = bars != self.levels.len();
+        for i in 0..bars {
+            let low: f64 = spectrum_hz(f64(i) / f64(bars)); let high: f64 = spectrum_hz(f64(i + 1) / f64(bars));
+            let centre: f64 = exp((log(low) + log(high)) / 2.0);
+            let db: f64 = output.spectrum_level(low, high) + 3.0 * log(centre / 1000.0) / log(2.0);
+            var old: f64 = -180.0; var old_peak: f64 = -180.0;
+            if i < self.levels.len() { old = self.levels[i]; }
+            if i < self.peaks.len() { old_peak = self.peaks[i]; }
+            let level: f64 = db > old - fall ? db : old - fall;
+            let peak: f64 = level > old_peak - fall * 0.3 ? level : old_peak - fall * 0.3;
+            if i32(spectrum_fraction(level) * 1000.0) != i32(spectrum_fraction(old) * 1000.0) { changed = true; }
+            levels.push(level); peaks.push(peak);
+        }
+        self.levels = levels; self.peaks = peaks;
+        return changed;
+    }
+    /// Keys the analyzer owns while its pane is focused; the rest (transport,
+    /// menus, pane navigation) keep their usual meaning.
+    pub fn handles(self: SpectrumView, event: InputEvent) -> bool {
+        if event.kind == InputKind::Menu && (event.key == Key::Left || event.key == Key::Right || event.key == Key::Up ||
+            event.key == Key::Down || event.key == Key::Enter) { return true; }
+        if event.modifiers == 1 && (event.code == 106 || event.code == 107 || event.code == 74 || event.code == 75 || event.code == 48) { return true; }
+        return event.modifiers == 2 && (event.code == 106 || event.code == 107);
+    }
+    /// Keys while the pane is focused: Left/Right pick a control, Enter the
+    /// field, Up/Down (k/j) change it finely, K/J coarsely, 0 resets it.
+    /// Returns true when the bus changed and was pushed to `output`.
+    pub fn on_event(self: &mut Self, event: InputEvent, output: AudioController) -> bool {
+        if event.kind == InputKind::Menu && event.key == Key::Left { self.selected = spectrum_clamp(self.selected - 1, 0, 5); self.part = 0; return false; }
+        if event.kind == InputKind::Menu && event.key == Key::Right { self.selected = spectrum_clamp(self.selected + 1, 0, 5); self.part = 0; return false; }
+        if event.kind == InputKind::Menu && event.key == Key::Enter {
+            self.part = self.selected >= 1 && self.selected <= 4 ? (self.part + 1) % 3 : 0; return false;
+        }
+        var steps: i32 = 0;
+        if (event.kind == InputKind::Menu && event.key == Key::Up) || (event.code == 107 && event.modifiers == 1) { steps = 1; }
+        if (event.kind == InputKind::Menu && event.key == Key::Down) || (event.code == 106 && event.modifiers == 1) { steps = -1; }
+        if (event.code == 75 && event.modifiers == 1) || (event.code == 107 && event.modifiers == 2) { steps = 6; }
+        if (event.code == 74 && event.modifiers == 1) || (event.code == 106 && event.modifiers == 2) { steps = -6; }
+        let reset: bool = event.code == 48 && event.modifiers == 1;
+        if steps == 0 && !reset { return false; }
+        let fresh: MasterBus = MasterBus {};
+        var bus: MasterBus = self.bus;
+        if self.selected == 0 {
+            // Below 10 Hz the high-pass switches off; stepping up turns it back on.
+            if reset { bus.hp_hz = fresh.hp_hz; }
+            else if bus.hp_hz == 0 { if steps > 0 { bus.hp_hz = 10; } }
+            else { let next: i32 = spectrum_scale(bus.hp_hz, steps); bus.hp_hz = next < 10 ? 0 : spectrum_clamp(next, 10, 1000); }
+        } else if self.selected == 5 {
+            bus.volume = reset ? fresh.volume : spectrum_clamp(bus.volume + steps, 0, 150);
+        } else {
+            // Gain moves 0.5 dB (3 dB coarse), frequency a sixth of an octave
+            // (an octave), Q a twelfth of an octave's ratio (half an octave).
+            let band: i32 = self.selected - 1;
+            var hz: i32 = bus.band_hz(band); var gain: i32 = bus.band_gain(band); var q: i32 = bus.band_q(band);
+            if self.part == 0 { gain = reset ? 0 : spectrum_clamp(gain + steps * 5, -120, 120); }
+            else if self.part == 1 { hz = reset ? fresh.band_hz(band) : spectrum_clamp(spectrum_scale(hz, steps), 20, 20000); }
+            else { q = reset ? fresh.band_q(band) : spectrum_clamp(i32(f64(q) * exp(f64(steps) * log(2.0) / 12.0) + (steps > 0 ? 0.5 : -0.5)), 30, 1000); }
+            bus.set_band(band, hz, gain, q);
+        }
+        self.bus = bus;
+        self.bus.apply(output); self.applied = output.handle;
+        return true;
+    }
+    /// Owned one-line summary of the selected control for the status bar.
+    pub fn status(self: SpectrumView) -> str8 {
+        if self.selected == 0 {
+            if self.bus.hp_hz == 0 { return clone("High-pass off | Up turns it on"); }
+            let text: str8 = spectrum_hz_text(self.bus.hp_hz); let line: str8 = format!("High-pass {} Hz, 24 dB/oct | 0 resets", text); free(text); return line;
+        }
+        if self.selected == 5 { return format!("Master volume {}{} | Up/Down (k/j), K/J coarse, 0 resets", self.bus.volume, "%"); }
+        let band: i32 = self.selected - 1;
+        let hz: str8 = spectrum_hz_text(self.bus.band_hz(band)); let gain: str8 = spectrum_db_text(self.bus.band_gain(band));
+        let q: i32 = self.bus.band_q(band);
+        let line: str8 = format!("EQ{} {} Hz {} dB Q {}.{}{} | Enter selects {}", band + 1, hz, gain, q / 100, q % 100 / 10, q % 10,
+            self.part == 0 ? "gain" : (self.part == 1 ? "frequency" : "Q"));
+        free(hz); free(gain); return line;
+    }
+    /// The top row of the graph carries the status message, as the mixer's
+    /// last row does.
+    pub fn paint(self: SpectrumView, surface: Surface, area: Rect, theme: Theme, master_left: i32, master_right: i32, focused: bool, message: str8) -> void {
+        surface.fill(area, Cell { glyph: 32, foreground: theme.foreground, background: theme.panel });
+        if area.width <= 0 || area.height <= 0 { return; }
+        let graph: Rect = SpectrumView::graph_area(area);
+        if graph.height > 2 && graph.width > 0 {
+            surface.text(Rect::new(graph.x, graph.y, graph.width, 1), message, theme.muted, theme.panel);
+            self.paint_graph(surface, Rect::new(graph.x, graph.y + 1, graph.width, graph.height - 1), theme);
+        } else { self.paint_graph(surface, graph, theme); }
+        if SpectrumView::eq_width(area) > 0 { self.paint_controls(surface, area, theme, master_left, master_right, focused); }
+    }
+    fn paint_graph(self: SpectrumView, surface: Surface, graph: Rect, theme: Theme) -> void {
+        if graph.width <= 0 || graph.height <= 0 { return; }
+        // The last row names frequencies: dark text on a bright band.
+        let label_y: i32 = graph.y + graph.height - 1;
+        let band_bg: i32 = 0xC1CAD8; let band_fg: i32 = theme.background;
+        surface.fill(Rect::new(graph.x, label_y, graph.width, 1), Cell { glyph: 32, foreground: band_fg, background: band_bg });
+        let marks: list<i32> = [100, 1000, 10000, 300, 3000, 30, 50, 200, 500, 2000, 5000, 20000];
+        let names: list<str8> = ["100Hz", "1kHz", "10kHz", "300Hz", "3kHz", "30", "50", "200", "500", "2k", "5k", "20k"];
+        var taken: list<i32> = []; for _x in 0..graph.width { taken.push(0); }
+        for m in 0..marks.len() {
+            let name: str8 = names[m]; let length: i32 = i32(len(name));
+            var x: i32 = spectrum_x(f64(marks[m]), graph.width) - (m < 5 ? 0 : length / 2);
+            if x + length > graph.width { x = graph.width - length; }
+            if x < 0 { x = 0; }
+            var free_span: bool = x + length <= graph.width;
+            for i in 0..length + 2 { let at: i32 = x - 1 + i32(i); if at >= 0 && at < graph.width && taken[at] != 0 { free_span = false; } }
+            if !free_span { continue; }
+            surface.text(Rect::new(graph.x + x, label_y, length, 1), name, band_fg, band_bg);
+            var next: list<i32> = []; for i in 0..graph.width { next.push(i >= x && i < x + length ? 1 : taken[i]); } taken = next;
+        }
+        let rows: i32 = graph.height - 1;
+        if rows <= 0 { return; }
+        let bars: i32 = self.bar_count(graph.width);
+        for column in 0..graph.width {
+            let x: i32 = graph.x + i32(column);
+            if self.detail == 1 {
+                let left: i32 = i32(column) * 2; let right: i32 = left + 1;
+                let left_dots: i32 = self.filled(left, rows * 4); let right_dots: i32 = self.filled(right, rows * 4);
+                let left_peak: i32 = self.peak_units(left, rows * 4); let right_peak: i32 = self.peak_units(right, rows * 4);
+                for row in 0..rows {
+                    let base: i32 = (rows - 1 - i32(row)) * 4;
+                    let l: i32 = spectrum_clamp(left_dots - base, 0, 4); let r: i32 = spectrum_clamp(right_dots - base, 0, 4);
+                    // A peak-hold dot floats above a bar that has fallen away.
+                    var glyph: i32 = 0x2800 + spectrum_braille_fill(l, false) + spectrum_braille_fill(r, true);
+                    if l == 0 && left_peak > base && left_peak <= base + 4 { glyph = glyph + spectrum_braille_dot(left_peak - base, false); }
+                    if r == 0 && right_peak > base && right_peak <= base + 4 { glyph = glyph + spectrum_braille_dot(right_peak - base, true); }
+                    if glyph != 0x2800 {
+                        surface.put(x, graph.y + i32(row), Cell { glyph: glyph, foreground: VuMeter::color((base + 2) * 1000 / (rows * 4)), background: theme.panel });
+                    }
+                }
+                continue;
+            }
+            var bar: i32 = i32(column);
+            if self.detail == 2 { if i32(column) % 3 == 2 { continue; } bar = i32(column) / 3; }
+            if bar >= bars { continue; }
+            let filled: i32 = self.filled(bar, rows * 8); let peak: i32 = self.peak_units(bar, rows * 8);
+            for row in 0..rows {
+                let base: i32 = (rows - 1 - i32(row)) * 8;
+                let amount: i32 = spectrum_clamp(filled - base, 0, 8);
+                let color: i32 = VuMeter::color((base + 4) * 1000 / (rows * 8));
+                if amount > 0 {
+                    surface.put(x, graph.y + i32(row), Cell { glyph: spectrum_block(amount), foreground: color, background: theme.panel });
+                } else if peak > base {
+                    // Fading trail from the bar top up to its recent peak.
+                    let above: i32 = (base - filled) / 8;
+                    surface.put(x, graph.y + i32(row), Cell { glyph: above == 0 ? 0x2592 : 0x2591, foreground: darken(color, 70), background: theme.panel });
+                }
+            }
+        }
+    }
+    fn filled(self: SpectrumView, bar: i32, units: i32) -> i32 {
+        if bar < 0 || bar >= self.levels.len() { return 0; }
+        return i32(spectrum_fraction(self.levels[bar]) * f64(units));
+    }
+    fn peak_units(self: SpectrumView, bar: i32, units: i32) -> i32 {
+        if bar < 0 || bar >= self.peaks.len() { return 0; }
+        return i32(spectrum_fraction(self.peaks[bar]) * f64(units));
+    }
+    fn paint_controls(self: SpectrumView, surface: Surface, area: Rect, theme: Theme, master_left: i32, master_right: i32, focused: bool) -> void {
+        let width: i32 = SpectrumView::strip_width(area);
+        let start: i32 = area.x + area.width - SpectrumView::eq_width(area);
+        let master_width: i32 = SpectrumView::eq_width(area) - width * 5;
+        for strip in 0..6 {
+            let index: i32 = i32(strip);
+            let x: i32 = start + index * width;
+            let w: i32 = index == 5 ? master_width : width - 1;
+            let active: bool = focused && self.selected == index;
+            let bg: i32 = active ? lighten(theme.panel, 12) : lighten(theme.panel, index == 5 ? 6 : 4);
+            surface.fill(Rect::new(x, area.y, w, area.height), Cell { glyph: 32, foreground: theme.foreground, background: bg });
+            let title: str8 = index == 0 ? "HP" : (index == 5 ? "Master" : "");
+            if index >= 1 && index <= 4 { let t: str8 = format!("EQ{}", index); surface.text(Rect::new(x, area.y, w, 1), t, active ? theme.accent : theme.foreground, bg); free(t); }
+            else { surface.text(Rect::new(x, area.y, w, 1), title, active ? theme.accent : (index == 5 ? theme.accent : theme.foreground), bg); }
+            let rail_top: i32 = area.y + 3; let rail_height: i32 = area.height - 4;
+            if index == 0 {
+                let hz: str8 = self.bus.hp_hz == 0 ? "off" : spectrum_hz_text(self.bus.hp_hz);
+                if area.height > 1 { surface.text(Rect::new(x, area.y + 1, w, 1), hz, active ? theme.accent : theme.foreground, bg); }
+                if self.bus.hp_hz != 0 { free(hz); }
+                if area.height > 2 { surface.text(Rect::new(x, area.y + 2, w, 1), "24dB", theme.muted, bg); }
+                // Log position of the cutoff between 10 Hz and 1 kHz.
+                let position: f64 = self.bus.hp_hz == 0 ? 0.0 : log(f64(self.bus.hp_hz) / 10.0) / log(100.0);
+                spectrum_rail(surface, Rect::new(x, rail_top, w, rail_height), position, -1.0, theme, bg, active);
+            } else if index == 5 {
+                if area.height > 1 { let v: str8 = format!("{}{}", self.bus.volume, "%"); surface.text(Rect::new(x, area.y + 1, w, 1), v, active ? theme.accent : theme.foreground, bg); free(v); }
+                if area.height > 2 { surface.text(Rect::new(x, area.y + 2, w, 1), "VOL L R", theme.muted, bg); }
+                spectrum_rail(surface, Rect::new(x, rail_top, 3, rail_height), f64(self.bus.volume) / 150.0, 100.0 / 150.0, theme, bg, active);
+                let left: VuMeter = VuMeter { level: master_left }; let right: VuMeter = VuMeter { level: master_right };
+                if w >= 6 {
+                    left.paint(surface, Rect::new(x + 4, rail_top, 1, rail_height + 1), bg);
+                    right.paint(surface, Rect::new(w >= 7 ? x + 6 : x + 5, rail_top, 1, rail_height + 1), bg);
+                }
+            } else {
+                let band: i32 = index - 1;
+                let hz: str8 = spectrum_hz_text(self.bus.band_hz(band)); let gain: str8 = spectrum_db_text(self.bus.band_gain(band));
+                let q: i32 = self.bus.band_q(band); let qt: str8 = format!("Q{}.{}", q / 100, q % 100 / 10);
+                if area.height > 1 { surface.text(Rect::new(x, area.y + 1, w, 1), hz, active && self.part == 1 ? theme.accent : theme.foreground, bg); }
+                if area.height > 2 { surface.text(Rect::new(x, area.y + 2, w, 1), qt, active && self.part == 2 ? theme.accent : theme.muted, bg); }
+                spectrum_rail(surface, Rect::new(x, rail_top, w, rail_height), (f64(self.bus.band_gain(band)) + 120.0) / 240.0, 0.5, theme, bg, active && self.part == 0);
+                if area.height > 3 { surface.text(Rect::new(x, area.y + area.height - 1, w, 1), gain, active && self.part == 0 ? theme.accent : theme.foreground, bg); }
+                free(hz); free(gain); free(qt);
+            }
+        }
+    }
+}
+
+/// Vertical slider rail: knob at `position` (0 bottom .. 1 top), an optional
+/// `centre` tick (unity or 0 dB), and a filled bar from the centre to the knob.
+fn spectrum_rail(surface: Surface, area: Rect, position: f64, centre: f64, theme: Theme, bg: i32, active: bool) -> void {
+    if area.width <= 0 || area.height <= 0 { return; }
+    let x: i32 = area.x + (area.width - 1) / 2;
+    let knob: i32 = area.height - 1 - i32((position < 0.0 ? 0.0 : (position > 1.0 ? 1.0 : position)) * f64(area.height - 1) + 0.5);
+    let middle: i32 = centre < 0.0 ? -1 : area.height - 1 - i32(centre * f64(area.height - 1) + 0.5);
+    for row in 0..area.height {
+        let y: i32 = i32(row);
+        let between: bool = middle >= 0 && ((y >= knob && y < middle) || (y <= knob && y > middle));
+        var glyph: i32 = 0x2502; var color: i32 = theme.muted;
+        if between { glyph = 0x2503; color = darken(theme.accent, 80); }
+        if y == middle { glyph = 0x253C; color = theme.muted; }
+        if y == knob { glyph = 0x2501; color = active ? theme.accent : theme.foreground; }
+        surface.put(x, area.y + y, Cell { glyph: glyph, foreground: color, background: bg });
+        if y == knob && area.width >= 3 {
+            surface.put(x - 1, area.y + y, Cell { glyph: 0x2501, foreground: color, background: bg });
+            surface.put(x + 1, area.y + y, Cell { glyph: 0x2501, foreground: color, background: bg });
+        }
+    }
+}
