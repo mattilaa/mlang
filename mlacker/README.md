@@ -725,7 +725,12 @@ controller. A controller the track has no column for gets a new one, shown at
 once: turning the filter cutoff knob (CC74) during a take adds a `CC74` column
 holding the movement. Later messages in the same 1/64 step replace earlier ones.
 
-The host translates controllers using the plugin's `IMidiMapping` assignments
+A CC that is MIDI-learned to a parameter of the track's instrument drives that
+parameter during playback, exactly as the knob did while recording; the learn
+binding of the track's own MIDI channel wins, else the first channel binding
+that CC to that instrument. Other controllers go to the plugin as MIDI.
+
+The host translates those controllers using the plugin's `IMidiMapping` assignments
 for event bus 0 and the track's MIDI channel. Assignments are cached at load time;
 unmapped controllers and custom `name:min:max` slots are not sent. Plugins without
 MIDI mappings cannot receive these controls yet. Parameter queues are bounded and

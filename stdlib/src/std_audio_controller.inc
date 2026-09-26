@@ -392,12 +392,36 @@ int32_t __mlang_std_audio_controller_track_peak(int64_t handle, int64_t track, i
     return (int32_t)atomic_exchange_explicit(&c->track_peak[track][channel], 0, memory_order_relaxed);
 }
 
+/* A pattern CC for instrument `slot` drives the parameter that CC is MIDI
+ * learned to on that instrument, as the knob did when it was recorded. The
+ * event's channel is the track's, not the keyboard's, so it is tried first
+ * and then every other channel. Returns 1 when a learned parameter took it. */
+static int ac_learned_control(ac_controller *c, int64_t slot, int64_t channel, int64_t controller, int64_t value) {
+    if(slot < 1 || slot > 32 || controller < 0 || controller > 127 || channel < 0 || channel > 15) return 0;
+    for(int n = -1; n < 16; ++n) {
+        if(n == channel) continue;
+        int64_t ch = n < 0 ? channel : n;
+        uint64_t mapping = atomic_load_explicit(&c->learn_map[ch * 128 + controller], memory_order_acquire);
+        if(!mapping || (int64_t)(mapping & 63) != slot) continue;
+        mlang_audio_processor *p = ac_plugin(c, slot);
+        if(!p->context || !p->parameter) return 0;
+        double steps = (double)(mapping >> 20);
+        double normalized = (double)value / 127.0;
+        if(steps > 0) normalized = floor(normalized * steps + 0.5) / steps;
+        p->parameter(p->context, (int32_t)((mapping >> 6) & 16383), normalized, c->render_offset);
+        return 1;
+    }
+    return 0;
+}
+
 static void ac_dispatch(ac_controller *c, const ac_event *e) {
     if(e->kind == 10) {
         mlang_audio_processor *p = ac_plugin(c, e->sample);
         if(p->context && p->parameter) p->parameter(p->context, (int32_t)e->note, e->gain, c->render_offset);
         return;
     }
+    /* Live knobs (source >= 65536) were resolved against MIDI learn already. */
+    if(e->kind == 9 && e->source < 65536 && ac_learned_control(c, e->sample, e->channel, e->note, e->velocity)) return;
     if(e->kind == 8 || e->kind == 9) {
         mlang_audio_processor *p = e->kind == 8 ? &c->processor :
             (e->sample > 0 ? &c->instruments[e->sample - 1] : NULL);

@@ -445,6 +445,18 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_live_control(c, 2, 7, 0) == 0); // different channel, not bound
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
     CHECK(__mlang_std_audio_controller_parameter_info(c, 2, 0, 2) == 1);
+    // A pattern CC for the learned instrument drives the learned parameter,
+    // whatever channel its track plays on; other instruments keep raw CCs.
+    CHECK(__mlang_std_audio_controller_post(c, 0, 9, 5, 7, 32, 1, -1, 2, 1) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 2, 0, 2) == 32.0 / 127.0);
+    CHECK(__mlang_std_audio_controller_post(c, 0, 9, 5, 7, 127, 1, -1, 1, 1) == 0);
+    CHECK(__mlang_std_audio_controller_post(c, 1, 9, 5, 7, 127, 65537, -1, 2, 1) == 0); // live, unbound channel
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 2, 0, 2) == 32.0 / 127.0);
+    CHECK(__mlang_std_audio_controller_live_control(c, 3, 7, 127) == 0);
+    CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
+    CHECK(__mlang_std_audio_controller_parameter_info(c, 2, 0, 2) == 1);
     CHECK(__mlang_std_audio_controller_midi_learn(c, -1, 2, 4) == -1); // read-only
     CHECK(__mlang_std_audio_controller_midi_learn(c, -1, 2, 40) == -1);
     CHECK(__mlang_std_audio_controller_midi_learn(c, 2048, 2, 0) == -1);
