@@ -89,6 +89,8 @@ set_tests_properties(inserts_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TI
 add_test(NAME song_matrix_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/song_matrix_tui_smoke.py" "$<TARGET_FILE:mlacker>" "$<TARGET_BUNDLE_DIR:MlackerTestInstrument>")
 add_test(NAME matrix_record_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/matrix_record_tui_smoke.py" "$<TARGET_FILE:mlacker>")
 set_tests_properties(matrix_record_tui PROPERTIES TIMEOUT 60)
+add_test(NAME automation_curve_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation_curve_tui_smoke.py" "$<TARGET_FILE:mlacker>")
+set_tests_properties(automation_curve_tui PROPERTIES TIMEOUT 60)
 add_test(NAME output_routing_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/output_routing_tui_smoke.py" "$<TARGET_FILE:mlacker>" "$<TARGET_BUNDLE_DIR:MlackerTestInstrument>")
 set_tests_properties(output_routing_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 120)
 add_test(NAME spectrum_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/spectrum_tui_smoke.py" "$<TARGET_FILE:mlacker>")

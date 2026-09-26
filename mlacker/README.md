@@ -739,6 +739,17 @@ are collapsed. Instrument tracks target their assigned instance (Track → Set
 output channel chooses it); MIDI tracks target the master plugin. Muted tracks
 do not send these events. Empty cells leave the current parameter value unchanged.
 
+**Curves between two values.** Put the cursor on a CC value and press
+**Ctrl+V** to mark it (amber), then mark a second value in the same column
+(Ctrl+V on a marked value unmarks it; unzoomed, a cell's first value is
+marked, at 1/64 zoom the step under the cursor). **Ctrl+A** opens the curve
+dialog: **Linear** (the default), **Logarithmic** (rises fast, then settles),
+**Exponential** (starts slow, then speeds up), **S-curve** (eases in and out)
+or **Inverse S** (fast at both ends, flat in the middle), with a preview and
+OK/Cancel. OK ramps from the first value to the second through every 1/64
+step between them, writing a step only where the value changes, so a slow
+ramp leaves the steps in between empty and replaces what was there.
+
 While recording, every controller and pitch-bend message from the MIDI input is
 written to the armed track at the nearest 1/64 note, in the column for that
 controller. A controller the track has no column for gets a new one, shown at

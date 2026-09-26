@@ -27,6 +27,12 @@ use std::strbuf::free;
 use std::strbuf::len;
 use std::strbuf::find;
 use std::strbuf::sub;
+mod std::math;
+use std::math::pow;
+use std::math::log;
+use std::math::sin;
+use std::math::cos;
+use std::math::round;
 pub struct AutomationSlot { var parameter: str8; var minimum: i64; var maximum: i64; };
 /// Automation columns a track may hold.
 pub fn automation_limit() -> i32 { return 16; }
@@ -92,6 +98,19 @@ pub fn automation_text(steps: list<str8>) -> str8 {
     return text;
 }
 pub fn free_steps(steps: list<str8>) -> void { for step in steps { free(step); } }
+/// Ramp shapes between two CC values, in the order the curve dialog lists them.
+pub fn curve_names() -> list<str8> { return ["Linear", "Logarithmic", "Exponential", "S-curve", "Inverse S"]; }
+/// How far (0-1) a ramp of `shape` has gone at fraction `t` of its time:
+/// logarithmic rises fast and settles, exponential starts slow and speeds up,
+/// S-curve eases in and out, inverse S moves fast at both ends.
+pub fn curve_shape(shape: i32, t: f64) -> f64 {
+    let pi: f64 = 3.141592653589793;
+    if shape == 1 { return log(1.0 + 9.0 * t) / log(10.0); }
+    if shape == 2 { return (pow(10.0, t) - 1.0) / 9.0; }
+    if shape == 3 { return (1.0 - cos(pi * t)) / 2.0; }
+    if shape == 4 { return t + sin(2.0 * pi * t) / (2.0 * pi); }
+    return t;
+}
 /// True when every step of `text` is empty or a value within the limits.
 pub fn automation_valid(text: str8, minimum: i64, maximum: i64) -> bool {
     if text == "" { return true; }
@@ -258,6 +277,9 @@ pub struct SequenceTable : Table {
     var audio_clipboard: AudioClip;
     /// Automation column headers, owned here and replaced by rebuild_columns.
     var column_titles: list<str8>;
+    /// CC values marked with Ctrl+V for a curve: one automation column (track
+    /// index and one-based slot) and up to two 1/64 positions, row * 4 + step.
+    var curve_track: i32{-1}; var curve_slot: i32; var curve_points: list<i64>;
 };
 impl SequenceTable {
 pub fn set_insert(self: &mut Self, index: i32, position: i32, id: i32) -> void {
@@ -1048,6 +1070,24 @@ pub fn paint_automation(self: SequenceTable, surface: Surface, area: Rect, theme
                 if target.width > 0 { surface.put(target.x, target.y, text.cell(i32(dx), 0)); }
             }
             text.release(); free(value);
+        }
+    }
+    // Curve marks: amber on the marked step's line (its cell unzoomed).
+    if self.curve_track < 0 || self.curve_track >= self.tracks.len() { return; }
+    let marked: SequenceTrack = self.tracks[self.curve_track];
+    if self.curve_slot < 1 || self.curve_slot > marked.automation.len() { return; }
+    let column: i32 = self.automation_column(self.curve_track, self.curve_slot);
+    let width: i32 = self.column_width(column); let x: i32 = area.x + self.column_x(column);
+    let points: list<i64> = self.curve_points;
+    for point in points {
+        let row: i64 = point / wide(automation_steps_per_row());
+        let line: i64 = (row - wide(self.scroll_y)) * wide(spacing) + point % wide(automation_steps_per_row()) / wide(per_line);
+        if line < 0 || line >= body.height { continue; }
+        for dx in 0..width {
+            let pixel: Rect = Rect::new(x + i32(dx), body.y + i32(line), 1, 1); let target: Rect = pixel.intersect(clip);
+            if target.width == 0 { continue; }
+            let cell: Cell = surface.cell(target.x, target.y);
+            surface.put(target.x, target.y, Cell { glyph: cell.glyph, foreground: 0x1a1a1a, background: 0xe0a030 });
         }
     }
 }
@@ -2009,6 +2049,96 @@ pub fn is_offset(self: SequenceTable) -> bool {
 fn write_owned_cell(self: &mut Self, row: i32, column: i32, value: str8) -> void {
     let data: TableRow = self.rows[row]; let old: str8 = data.cells[column];
     if self.set_cell(row, column, value) { free(old); } else { free(value); }
+}
+/// Owned value of 1/64 position `position` in automation `column`, "" if empty.
+fn position_text(self: SequenceTable, column: i32, position: i64) -> str8 {
+    let steps_per_row: i64 = wide(automation_steps_per_row());
+    if position < 0 || position / steps_per_row >= self.rows.len() { return clone(""); }
+    let row: TableRow = self.rows[position / steps_per_row];
+    let steps: list<str8> = automation_steps(row.cells[column]);
+    let value: str8 = clone(steps[position % steps_per_row]); free_steps(steps); return value;
+}
+/// Ctrl+V: mark the CC value under the cursor as one end of a curve, or unmark
+/// it. Unzoomed, a cell's first value is marked. Marking in another CC column
+/// starts over; a third mark replaces the oldest. Returns how many points are
+/// marked, or -1 with `error` set.
+pub fn toggle_curve_point(self: &mut Self) -> i32 {
+    let slot: i32 = self.automation_slot_at(self.selected_column); let index: i32 = self.active_track();
+    if slot == 0 || index < 0 || self.selected_row < 0 || self.selected_row >= self.rows.len() {
+        self.error = "Select a CC value to mark"; return -1;
+    }
+    let row: TableRow = self.rows[self.selected_row];
+    let steps: list<str8> = automation_steps(row.cells[self.selected_column]);
+    var step: i32 = -1;
+    if self.row_spacing() > 1 { if steps[self.automation_step()] != "" { step = self.automation_step(); } }
+    else { for s in 0..steps.len() { if step < 0 && steps[s] != "" { step = i32(s); } } }
+    free_steps(steps);
+    if step < 0 { self.error = "Mark a CC value, not an empty step"; return -1; }
+    if self.curve_track != index || self.curve_slot != slot { self.curve_points = []; self.curve_track = index; self.curve_slot = slot; }
+    let position: i64 = wide(self.selected_row) * wide(automation_steps_per_row()) + wide(step);
+    var kept: list<i64> = []; var removed: bool = false;
+    let points: list<i64> = self.curve_points;
+    for point in points { if point == position { removed = true; } else { kept.push(point); } }
+    if !removed {
+        kept.push(position);
+        if kept.len() > 2 { let newest: list<i64> = [kept[1], kept[2]]; kept = newest; }
+    }
+    let count: i32 = i32(kept.len());
+    self.curve_points = kept; self.error = ""; return count;
+}
+pub fn clear_curve_points(self: &mut Self) -> void { self.curve_points = []; self.curve_track = -1; self.curve_slot = 0; }
+/// True when two marked CC values with steps between them are ready for a
+/// curve; `error` says what is missing otherwise.
+pub fn curve_ready(self: &mut Self) -> bool {
+    if self.curve_points.len() != 2 { self.error = "Mark two CC values with Ctrl+V first"; return false; }
+    if self.curve_track < 0 || self.curve_track >= self.tracks.len() { self.error = "The marked CC column is gone; mark again"; return false; }
+    let track: SequenceTrack = self.tracks[self.curve_track];
+    if self.curve_slot < 1 || self.curve_slot > track.automation.len() { self.error = "The marked CC column is gone; mark again"; return false; }
+    let column: i32 = self.automation_column(self.curve_track, self.curve_slot);
+    let first: i64 = self.curve_points[0]; let second: i64 = self.curve_points[1];
+    let a: str8 = self.position_text(column, first); let b: str8 = self.position_text(column, second);
+    let valued: bool = a != "" && b != ""; free(a); free(b);
+    if !valued { self.error = "A marked CC value was changed; mark again"; return false; }
+    let gap: i64 = first > second ? first - second : second - first;
+    if gap < 2 { self.error = "The marked values are neighbours: no step between them"; return false; }
+    self.error = ""; return true;
+}
+/// Ramp from one marked CC value to the other along curve `shape`, one 1/64
+/// step at a time. A step is written only where the value changes; steps that
+/// would repeat the last value are left empty. Returns the steps written, or
+/// -1 with `error` set. The marks are cleared.
+pub fn apply_curve(self: &mut Self, shape: i32) -> i32 {
+    if !self.curve_ready() { return -1; }
+    let column: i32 = self.automation_column(self.curve_track, self.curve_slot);
+    let track: SequenceTrack = self.tracks[self.curve_track];
+    let slot: AutomationSlot = track.automation[self.curve_slot - 1];
+    let first: i64 = self.curve_points[0]; let second: i64 = self.curve_points[1];
+    let a: i64 = first < second ? first : second; let b: i64 = first < second ? second : first;
+    let start_text: str8 = self.position_text(column, a); let end_text: str8 = self.position_text(column, b);
+    let start_parsed: result<i64, str8> = table_integer(start_text); let end_parsed: result<i64, str8> = table_integer(end_text);
+    free(start_text); free(end_text);
+    if start_parsed.is_err() || end_parsed.is_err() { self.error = "A marked CC value is not a number"; return -1; }
+    let start: i64 = start_parsed.unwrap(); let end: i64 = end_parsed.unwrap();
+    let per_row: i64 = wide(automation_steps_per_row());
+    var last: i64 = start; var written: i32 = 0;
+    let first_row: i64 = a / per_row; let last_row: i64 = b / per_row + 1;
+    for r in first_row..last_row {
+        let row: TableRow = self.rows[r];
+        let steps: list<str8> = automation_steps(row.cells[column]); var updated: list<str8> = [];
+        for s in 0..steps.len() {
+            let position: i64 = r * per_row + s;
+            if position <= a || position >= b { updated.push(clone(steps[s])); continue; }
+            let t: f64 = f64(position - a) / f64(b - a);
+            var value: i64 = wide(i32(round(f64(start) + f64(end - start) * curve_shape(shape, t))));
+            if value < slot.minimum { value = slot.minimum; }
+            if value > slot.maximum { value = slot.maximum; }
+            if value != last { updated.push(format!("{}", value)); last = value; written = written + 1; }
+            else { updated.push(clone("")); }
+        }
+        free_steps(steps);
+        if !self.store_automation(i32(r), column, automation_text(updated)) { return -1; }
+    }
+    self.clear_curve_points(); self.revision = self.revision + 1; self.error = ""; return written;
 }
 /// Store an owned automation cell text after checking the slot's limits.
 fn store_automation(self: &mut Self, row: i32, column: i32, text: str8) -> bool {
