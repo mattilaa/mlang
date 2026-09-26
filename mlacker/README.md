@@ -101,6 +101,12 @@ holding patterns, wrapping at the end. The playing row is drawn brighter.
 Pressing either again stops. Outside the matrix, Space plays the selected
 pattern alone, as before.
 
+The next row is merged and scheduled while the current one plays, at a moment
+when no note is due for 40 ms (or two pattern rows before the change at the
+latest), so the change itself does no work on the downbeat. Notes still
+sounding when a row ends keep their length and get their note-offs in the next
+row. Editing anything while the matrix plays prepares the next row again.
+
 ### Looping patterns
 
 **r** on a cell switches looping for the pattern playing there (on the cell

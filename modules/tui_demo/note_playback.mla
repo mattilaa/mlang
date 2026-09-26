@@ -103,6 +103,32 @@ impl NotePlayback {
             }
         }
     }
+    /// Build the score of a pattern that starts at tick `epoch`, ahead of time,
+    /// so starting it costs nothing when the transport gets there.
+    pub fn prepare(self: &mut Self, source: &SequenceTable, epoch: i64) -> void {
+        self.events = []; self.active = [];
+        self.epoch = epoch; self.start_row = -1;
+        self.rebuild_score(source, epoch);
+        self.running = true; self.last = epoch - 1;
+    }
+    /// Take over the notes `previous` still holds when this playback replaces
+    /// it, so they end at their own length rather than never.
+    pub fn carry_voices(self: &mut Self, previous: &NotePlayback) -> void {
+        var old: NotePlayback = NotePlayback {}; old = previous;
+        let voices: list<PlayingNote> = old.active;
+        for voice in voices {
+            self.active.push(PlayingNote { track: voice.track, line: voice.line, note: voice.note, end: voice.end, instrument: voice.instrument });
+        }
+    }
+    /// Tick of the next note-on, note-off or CC this playback will send, or -1.
+    pub fn next_event_tick(self: NotePlayback) -> i64 {
+        var next: i64 = -1;
+        let voices: list<PlayingNote> = self.active;
+        for voice in voices { if next < 0 || voice.end < next { next = voice.end; } }
+        let score: list<ScheduledNote> = self.score;
+        for note in score { if next < 0 || note.start < next { next = note.start; } }
+        return next;
+    }
     pub fn update(self: &mut Self, source: &SequenceTable, tick: i64, playing: bool) -> void {
         self.events = [];
         var table: SequenceTable = SequenceTable {}; table = source;

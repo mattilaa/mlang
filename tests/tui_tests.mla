@@ -4005,3 +4005,68 @@ fn tui_matrix_parallel_lane_keeps_every_note_line() {
     verify(row.cells[merged.automation_column(chord, 1)] == "64");
     merged.release(); library.release();
 }
+
+fn playback_test_table(rows: i32, row: i32, note: str8, length: str8) -> SequenceTable {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var table: SequenceTable = SequenceTable::new();
+    for r in 0..64 { table.selected_row = i32(r); table.clear_row(); }
+    table.selected_row = 0;
+    table.set_length(rows, area);
+    if note != "" {
+        table.set_cell(row, 1, clone(note)); table.set_cell(row, 2, clone("100"));
+        if length != "" { table.set_cell(row, 3, clone(length)); }
+    }
+    return table;
+}
+
+#[test]
+fn tui_prepared_matrix_row_plays_like_a_fresh_one() {
+    // The next matrix row's score, built ahead with the row change tick as
+    // its epoch, fires the same notes at the same ticks as one built there.
+    var next: SequenceTable = playback_test_table(16, 0, "C-2", "");
+    next.set_cell(4, 1, clone("D-2")); next.set_cell(4, 2, clone("90"));
+    let boundary: i64 = 16 * 15000;
+    var fresh: NotePlayback = NotePlayback { start_row: 0 };
+    var early: NotePlayback = NotePlayback {};
+    early.prepare(next, boundary);
+    verify(early.next_event_tick() == boundary);
+    var tick: i64 = boundary;
+    var fresh_notes: i32 = 0; var early_notes: i32 = 0;
+    while tick < boundary + 16 * 15000 {
+        fresh.update(next, tick, true); early.update(next, tick, true);
+        verify(fresh.events.len() == early.events.len());
+        for i in 0..fresh.events.len() {
+            let a: NoteEvent = fresh.events[i]; let b: NoteEvent = early.events[i];
+            verify(a.on == b.on && a.note == b.note && a.tick == b.tick);
+            if a.on == 1 { fresh_notes = fresh_notes + 1; early_notes = early_notes + 1; }
+        }
+        tick = tick + 5000;
+    }
+    verify(fresh_notes == 2 && early_notes == 2);
+    next.release();
+}
+
+#[test]
+fn tui_matrix_row_change_ends_held_notes() {
+    // A note with LEN 8 on row 12 of a 16-row matrix row outlasts the row by
+    // four rows. The next row's playback takes it over and sends its note-off.
+    var first: SequenceTable = playback_test_table(16, 12, "C-2", "8.00");
+    var second: SequenceTable = playback_test_table(16, 0, "", "");
+    var playing: NotePlayback = NotePlayback { start_row: 0 };
+    var tick: i64 = 0;
+    while tick < 16 * 15000 { playing.update(first, tick, true); tick = tick + 5000; }
+    let held: NoteEvent = NoteEvent { tick: -1 };
+    verify(playing.next_event_tick() == 20 * 15000);
+    var next: NotePlayback = NotePlayback {};
+    next.prepare(second, 16 * 15000);
+    next.carry_voices(playing);
+    var off_tick: i64 = -1;
+    while tick <= 24 * 15000 {
+        next.update(second, tick, true);
+        let events: list<NoteEvent> = next.events;
+        for event in events { if event.on == 0 && event.note == 36 { off_tick = event.tick; } }
+        tick = tick + 5000;
+    }
+    verify(off_tick == 20 * 15000 && held.tick == -1);
+    first.release(); second.release();
+}
