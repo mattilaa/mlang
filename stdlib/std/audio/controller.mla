@@ -228,7 +228,10 @@ impl AudioController {
         return Ok<AudioController, str8>(AudioController { handle: handle });
     }
     /// Nonblocking: 0=posted, 1=full, -1=invalid. Exactly ONE producer per lane.
-    /// Lane 0: main/sequencer; lane 1: dedicated MIDI input producer.
+    /// Lane 0: main (immediate); lane 1: dedicated MIDI input producer;
+    /// lane 2: sequencer events stamped with the absolute `frame_clock` frame
+    /// they sound on, posted ahead of time in nondecreasing frame order
+    /// (frame -1 = as soon as possible, still after everything queued before).
     /// Overflow requests panic to avoid stuck notes. 256 events/lane/callback.
     pub fn post(self: AudioController, event: AudioEvent, lane: i64) -> i32 {
         let kind: i64 = match event.kind {

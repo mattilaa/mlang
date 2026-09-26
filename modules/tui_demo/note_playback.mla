@@ -32,6 +32,14 @@ pub struct NotePlayback {
     /// Row the transport starts this pattern on, or -1 to take it from the
     /// tick, which is right while one pattern keeps playing.
     var start_row: i32{-1};
+    /// Ticks past the transport that events are sent ahead, stamped with the
+    /// audio frame they sound on, so a busy UI frame never delays them.
+    var lookahead: i64;
+    /// A matrix row plays once: nothing past its end is sent ahead, since the
+    /// next row brings its own playback.
+    var once: bool;
+    /// Last tick events were sent up to.
+    var horizon: i64;
 };
 impl NotePlayback {
     fn finish_at(self: &mut Self, tick: i64, all: bool) -> void {
@@ -113,8 +121,11 @@ impl NotePlayback {
         self.events = []; self.active = [];
         self.epoch = epoch; self.start_row = -1;
         self.rebuild_score(source, epoch);
-        self.running = true; self.last = epoch - 1;
+        // Updated from before the row starts, sending ahead once it is close.
+        self.running = true; self.last = -1; self.horizon = epoch - 1;
     }
+    /// True once events of this playback were sent.
+    pub fn started(self: NotePlayback) -> bool { return self.running && self.horizon >= self.epoch; }
     /// Take over the notes `previous` still holds when this playback replaces
     /// it, so they end at their own length rather than never.
     pub fn carry_voices(self: &mut Self, previous: &NotePlayback) -> void {
@@ -137,7 +148,7 @@ impl NotePlayback {
         self.events = [];
         var table: SequenceTable = SequenceTable {}; table = source;
         if !playing || table.rows.len() == 0 {
-            self.finish_at(tick, true); self.running = false; self.last = tick; self.score = []; return;
+            self.finish_at(tick, true); self.running = false; self.last = tick; self.horizon = tick; self.score = []; return;
         }
         if self.running && tick < self.last { self.finish_at(tick, true); self.running = false; }
         if !self.running || self.revision != table.revision {
@@ -151,17 +162,21 @@ impl NotePlayback {
                 self.epoch = row_start - row * 15000;
                 self.start_row = -1;
                 self.rebuild_score(table, row_start);
-            } else { self.rebuild_score(table, self.last + 1); }
+                self.horizon = row_start - 1;
+            } else { self.rebuild_score(table, self.horizon + 1); }
         }
         self.running = true;
         let period: i64 = wide(i32(table.rows.len())) * 15000;
+        var horizon: i64 = tick + (self.lookahead > 0 ? self.lookahead : 0);
+        if self.once && horizon > self.epoch + period - 1 { horizon = self.epoch + period - 1; }
+        if horizon < self.horizon { horizon = self.horizon; }
         while true {
-            var event_tick: i64 = tick + 1;
+            var event_tick: i64 = horizon + 1;
             let voices: list<PlayingNote> = self.active;
             for voice in voices { if voice.end < event_tick { event_tick = voice.end; } }
             let score: list<ScheduledNote> = self.score;
             for note in score { if note.start < event_tick { event_tick = note.start; } }
-            if event_tick > tick { break; }
+            if event_tick > horizon { break; }
             self.finish_at(event_tick, false);
             var updated: list<ScheduledNote> = [];
             for note in score {
@@ -178,6 +193,6 @@ impl NotePlayback {
             }
             self.score = updated;
         }
-        self.last = tick;
+        self.last = tick; self.horizon = horizon;
     }
 }

@@ -591,6 +591,29 @@ int main(int argc, char **argv) {
         CHECK(std::llabs(slow - 24000) <= 2 && std::llabs(fast - 12000) <= 2);
         std::puts("PASS: Mla Delay follows the host tempo");
     }
+    {
+        // Lane 2 carries sequencer events stamped with the frame they sound
+        // on: one stamped 100 frames into a block starts there, and one
+        // stamped far ahead holds back only its own lane.
+        int64_t d = __mlang_std_audio_controller_new(48000, 128);
+        std::vector<float> tone(4800, 1.f);
+        CHECK(__mlang_std_audio_controller_sample_data(d, FloatList{4800, tone.data()}, 1, 48000) == 0);
+        CHECK(__mlang_std_audio_controller_post(d, 3, 4, 0, 0, 0, 0, -1, 0, 1) == -1); // three lanes only
+        int64_t start = __mlang_std_audio_controller_info(d, 2);
+        CHECK(__mlang_std_audio_controller_post(d, 2, 4, 0, 0, 0, 0, start + 100, 0, 1) == 0);
+        CHECK(__mlang_std_audio_controller_process(d, b, 256) == 0);
+        CHECK(__mlang_std_audio_pcm_block_sample(b, 99, 0) == 0.f && __mlang_std_audio_pcm_block_sample(b, 200, 0) > 0.f);
+        CHECK(__mlang_std_audio_controller_close(d) == 0);
+        d = __mlang_std_audio_controller_new(48000, 128);
+        CHECK(__mlang_std_audio_controller_sample_data(d, FloatList{4800, tone.data()}, 1, 48000) == 0);
+        start = __mlang_std_audio_controller_info(d, 2);
+        CHECK(__mlang_std_audio_controller_post(d, 2, 4, 0, 0, 0, 0, start + 48000, 0, 1) == 0);
+        CHECK(__mlang_std_audio_controller_post(d, 0, 4, 0, 0, 0, 0, -1, 0, 1) == 0);
+        CHECK(__mlang_std_audio_controller_process(d, b, 256) == 0);
+        CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) > 0.f);
+        CHECK(__mlang_std_audio_controller_close(d) == 0);
+        std::puts("PASS: frame-stamped sequencer lane");
+    }
     CHECK(__mlang_std_audio_pcm_block_close(b) == 0);
     std::puts("PASS: real VST3 bundle load, frame-timed MIDI, output, panic, failed replacement, reload");
 }

@@ -4326,6 +4326,55 @@ fn tui_prepared_matrix_row_plays_like_a_fresh_one() {
     next.release();
 }
 
+fn has_note_on(source: &NotePlayback, tick: i64) -> bool {
+    var playback: NotePlayback = NotePlayback {}; playback = source;
+    let events: list<NoteEvent> = playback.events;
+    for event in events { if event.on == 1 && event.tick == tick { return true; } }
+    return false;
+}
+
+#[test]
+fn tui_playback_sends_notes_ahead() {
+    // Notes on row 0 and row 4 (tick 60000) of a 16-row pattern.
+    var table: SequenceTable = playback_test_table(16, 4, "C-2", "");
+    table.set_cell(0, 1, clone("D-2")); table.set_cell(0, 2, clone("90"));
+    // Without lookahead a note goes out once the transport reaches it.
+    var plain: NotePlayback = NotePlayback { start_row: 0 };
+    plain.update(table, 0, true); verify(has_note_on(plain, 0));
+    plain.update(table, 55000, true); verify(!has_note_on(plain, 60000));
+    plain.update(table, 60000, true); verify(has_note_on(plain, 60000));
+    // 60 ms ahead at 120 BPM (7200 ticks), it goes out early, and only once.
+    var ahead: NotePlayback = NotePlayback { start_row: 0, lookahead: 7200 };
+    ahead.update(table, 0, true); verify(has_note_on(ahead, 0));
+    ahead.update(table, 55000, true); verify(has_note_on(ahead, 60000));
+    ahead.update(table, 60000, true); verify(!has_note_on(ahead, 60000));
+    // A pattern loops into its next pass ahead; a matrix row stops at its end.
+    ahead.update(table, 235000, true); verify(has_note_on(ahead, 240000));
+    var row: NotePlayback = NotePlayback { start_row: 0, lookahead: 7200, once: true };
+    row.update(table, 0, true); row.update(table, 235000, true); verify(!has_note_on(row, 240000));
+    // The next row, prepared ahead, sends its first notes before the change.
+    var next: NotePlayback = NotePlayback {};
+    next.prepare(table, 240000); next.lookahead = 7200; next.once = true;
+    next.update(table, 230000, true); verify(next.events.len() == 0 && !next.started());
+    next.update(table, 235000, true); verify(has_note_on(next, 240000) && next.started());
+    next.update(table, 240000, true); verify(!has_note_on(next, 240000));
+    table.release();
+}
+
+#[test]
+fn tui_sequencer_ticks_map_to_audio_frames() {
+    // 120 BPM is 120000 ticks a second: one second after the anchor tick is
+    // one second of frames after the anchor frame.
+    let audio: AudioSystem = AudioSystem { scheduling: true, schedule_tick: 15000, schedule_frame: 48000,
+        schedule_bpm: 120, schedule_rate: 48000 };
+    verify(audio.frame_of(15000) == 48000 && audio.frame_of(135000) == 96000 && audio.frame_of(16500) == 48600);
+    verify(audio.lookahead_ticks(120) == 7200);
+    // No hardware output, no stamps: notes are sent as they fall due.
+    var idle: AudioSystem = AudioSystem {};
+    idle.schedule_transport(0, 120, true);
+    verify(!idle.scheduling && idle.lookahead_ticks(120) == 0);
+}
+
 #[test]
 fn tui_matrix_row_change_ends_held_notes() {
     // A note with LEN 8 on row 12 of a 16-row matrix row outlasts the row by

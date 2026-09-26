@@ -3,6 +3,7 @@
  * lock, log, or call MLang. One producer per ring, one render consumer.
  */
 #define AC_QUEUE 1024u
+#define AC_LANES 3
 #define AC_VOICES 128u
 #define AC_SAMPLES 256u
 /* Master bus: 24 dB/oct high-pass, four peaking bands, then volume. Parameter
@@ -44,7 +45,10 @@ typedef struct {
     int64_t frames, channels, rate;
 } ac_sample;
 typedef struct {
-    ac_queue queues[2]; /* 0 main/sequencer, 1 MIDI worker */
+    /* 0 main (immediate), 1 MIDI worker, 2 sequencer notes stamped with the
+     * frame they sound on, posted ahead in frame order. A future frame holds
+     * back only its own lane. */
+    ac_queue queues[AC_LANES];
     _Atomic uint64_t dropped, clock, panic;
     uint64_t seen_panic;
     _Atomic uint32_t peak;
@@ -236,7 +240,7 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     }
     ac_controller *c = calloc(1, sizeof(*c));
     if(!c) { audio_set_error("audio controller: allocation failed"); return 0; }
-    for(int i = 0; i < 2; ++i) {
+    for(int i = 0; i < AC_LANES; ++i) {
         atomic_init(&c->queues[i].read, 0); atomic_init(&c->queues[i].write, 0);
     }
     atomic_init(&c->dropped, 0); atomic_init(&c->clock, 0);
@@ -280,7 +284,7 @@ int32_t __mlang_std_audio_controller_post(int64_t handle, int64_t lane,
     int64_t kind, int64_t channel, int64_t note, int64_t velocity,
     int64_t source, int64_t frame, int64_t sample, double gain) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || lane < 0 || lane > 1 || kind < 1 || kind > 10 || frame < -1 ||
+    if(!c || lane < 0 || lane >= AC_LANES || kind < 1 || kind > 10 || frame < -1 ||
        source < 0 || source > INT32_MAX || !isfinite(gain) || gain < 0 || gain > 1) return -1;
     if((kind == 1 || kind == 2 || kind == 6 || kind == 7) && (channel < 0 || channel > 15 ||
         note < 0 || note > 127 || velocity < 0 || velocity > 127)) return -1;
@@ -518,7 +522,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         if(c->instruments[i].context) c->instruments[i].begin(c->instruments[i].context, reset);
     if(panic != c->seen_panic) {
         ac_silence(c); c->seen_panic = panic;
-        for(int lane = 0; lane < 2; ++lane) {
+        for(int lane = 0; lane < AC_LANES; ++lane) {
             ac_queue *q = &c->queues[lane];
             atomic_store_explicit(&q->read, atomic_load_explicit(&q->write, memory_order_acquire), memory_order_release);
         }
@@ -562,11 +566,11 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             dry[source] = fminf(dry[source], 1.f - sends[source][fx]);
         }
     }
-    unsigned budget[2] = {256, 256};
+    unsigned budget[AC_LANES] = {256, 256, 256};
     float peak = 0;
     for(uint32_t f = 0; f < frames; ++f) {
         c->render_offset = (int32_t)f;
-        for(int lane = 0; lane < 2; ++lane) {
+        for(int lane = 0; lane < AC_LANES; ++lane) {
             ac_queue *q = &c->queues[lane];
             while(budget[lane]) {
                 uint64_t r = atomic_load_explicit(&q->read, memory_order_relaxed);
@@ -738,7 +742,7 @@ int32_t __mlang_std_audio_controller_clear_samples(int64_t handle) {
     int count = atomic_load_explicit(&c->sample_count, memory_order_relaxed);
     for(int i = 0; i < count; ++i) free(c->samples[i].data);
     atomic_store_explicit(&c->sample_count, 0, memory_order_release);
-    for(int lane = 0; lane < 2; ++lane)
+    for(int lane = 0; lane < AC_LANES; ++lane)
         atomic_store_explicit(&c->queues[lane].read, atomic_load_explicit(&c->queues[lane].write, memory_order_acquire), memory_order_release);
     return 0;
 }
@@ -813,7 +817,7 @@ int32_t __mlang_std_audio_controller_stop(int64_t handle) {
     atomic_store_explicit(&c->master_peak[1], 0, memory_order_relaxed);
     for(int i = 0; i < 32; ++i) for(int ch = 0; ch < 2; ++ch) atomic_store_explicit(&c->instrument_peak[i][ch], 0, memory_order_relaxed);
     for(int i = 0; i < 8; ++i) for(int ch = 0; ch < 2; ++ch) atomic_store_explicit(&c->effect_peak[i][ch], 0, memory_order_relaxed);
-    for(int lane = 0; lane < 2; ++lane) {
+    for(int lane = 0; lane < AC_LANES; ++lane) {
         ac_queue *q = &c->queues[lane];
         atomic_store_explicit(&q->read, atomic_load_explicit(&q->write, memory_order_acquire), memory_order_release);
     }

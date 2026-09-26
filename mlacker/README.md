@@ -108,6 +108,15 @@ latest), so the change itself does no work on the downbeat. Notes still
 sounding when a row ends keep their length and get their note-offs in the next
 row. Editing anything while the matrix plays prepares the next row again.
 
+On an audio device, sequencer notes and CCs go to the audio engine 60 ms ahead
+of the transport, each stamped with the exact audio frame it sounds on, so
+every track keeps sample-accurate time with the others however busy the UI is
+(merging a row with long patterns can take tens of milliseconds). The next row
+sends its first notes ahead the same way before the change, and once it has, it
+plays even if you edit in the meantime; a row never sends anything past its
+own end. Audio clips and the metronome are still started when the UI
+reaches them.
+
 ### Recording in the matrix
 
 **Shift+R** on a cell arms its pattern: its lane header shows a red **R** and
