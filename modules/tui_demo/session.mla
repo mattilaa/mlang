@@ -169,7 +169,9 @@ impl PatternData {
     }
 }
 /// Sticky errors prevent a later successful operation from masking truncation.
-pub struct SessionCodec { var reading: bool; var failed: bool; var binary: SessionBuffer; var reader: SessionReader; var cells: i64; };
+/// `minor` is the document's minor version: 0 stores two fixed automation
+/// slots per track, 1 a counted list.
+pub struct SessionCodec { var reading: bool; var failed: bool; var binary: SessionBuffer; var reader: SessionReader; var cells: i64; var minor: i32; };
 impl SessionCodec {
     /// Exposed-parameter preset. Caller joins MIDI before loading; IDs are stable.
     /// Saving with `pads` (sampler pad numbers, with their `clips`) writes a
@@ -440,10 +442,17 @@ impl SessionCodec {
             track.audio = self.flag(track.audio); track.instrument = self.flag(track.instrument);
             track.instrument_id = self.number(track.instrument_id, 0, 32);
             track.note_lines = self.number(track.note_lines, 1, 64); track.wave_zoom = self.flag(track.wave_zoom); track.zoom_stage = self.number(track.zoom_stage, 0, 2);
-            track.cc1.parameter = self.text(self.reading ? "" : track.cc1.parameter);
-            track.cc1.minimum = self.integer(track.cc1.minimum, -2147483648, 2147483647); track.cc1.maximum = self.integer(track.cc1.maximum, track.cc1.minimum, 2147483647);
-            track.cc2.parameter = self.text(self.reading ? "" : track.cc2.parameter);
-            track.cc2.minimum = self.integer(track.cc2.minimum, -2147483648, 2147483647); track.cc2.maximum = self.integer(track.cc2.maximum, track.cc2.minimum, 2147483647);
+            // 1.0 documents always carry two slots.
+            let slots: i32 = self.minor == 0 ? 2 : self.number(i32(track.automation.len()), 0, automation_limit());
+            var automation: list<AutomationSlot> = [];
+            for s in 0..slots {
+                var slot: AutomationSlot = AutomationSlot { parameter: "" }; if !self.reading { slot = track.automation[s]; }
+                let parameter: str8 = self.text(self.reading ? "" : slot.parameter);
+                let minimum: i64 = self.integer(slot.minimum, -2147483648, 2147483647);
+                let maximum: i64 = self.integer(slot.maximum, minimum, 2147483647);
+                automation.push(AutomationSlot { parameter: parameter, minimum: minimum, maximum: maximum });
+            }
+            if self.reading { track.automation = automation; }
             let instances: i32 = self.number(i32(track.instances.len()), 0, 16384); var placements: list<AudioInstance> = [];
             if (track.audio && track.instrument) || (!track.audio && instances > 0) { self.failed = true; }
             for j in 0..instances {
@@ -517,7 +526,7 @@ impl SessionCodec {
         // in order; MASTER_BUS precedes MATRIX_LOOPS.
         let mastered: bool = mastered_view || looped;
         let magic: str8 = self.text("MLACK"); if magic != "MLACK" { self.failed = true; } if self.reading { free(magic); }
-        self.number(1, 1, 1); self.number(0, 0, 0);
+        self.number(1, 1, 1); self.minor = self.number(1, 0, 1);
         var state: SessionView = self.view(view);
         let sample_count: i32 = self.number(i32(library.audio.samples.len()), 0, 256);
         for i in 0..sample_count {
@@ -873,7 +882,7 @@ impl SessionCodec {
                 if !found { clips.push(instance.clip); }
             }
         }
-        codec.text("MLAPATT"); codec.number(1, 1, 1); codec.number(0, 0, 0); codec.text(name);
+        codec.text("MLAPATT"); codec.number(1, 1, 1); codec.minor = codec.number(1, 0, 1); codec.text(name);
         codec.number(i32(clips.len()), 0, 256);
         for clip in clips { codec.clip(clip); }
         codec.sequence_data(table, clips);
@@ -891,7 +900,7 @@ impl SessionCodec {
         if read.is_err() { return Err<PatternData, str8>("Cannot read pattern file"); }
         var codec: SessionCodec = SessionCodec { reading: true, reader: read.unwrap() };
         let magic: str8 = codec.text(""); if magic != "MLAPATT" { codec.failed = true; } free(magic);
-        codec.number(1, 1, 1); codec.number(0, 0, 0);
+        codec.number(1, 1, 1); codec.minor = codec.number(1, 0, 1);
         var data: PatternData = PatternData { name: codec.text("") };
         let count: i32 = codec.number(0, 0, 256);
         for i in 0..count { if codec.failed { break; } data.clips.push(codec.clip(AudioClip {})); }

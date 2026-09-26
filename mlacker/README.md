@@ -41,7 +41,7 @@ destinations with `--option bin_dir=DIR` and `--option plugin_dir=DIR`, or the
 plugin set with `--option plugins="mla_verb mla_eq"` (names under `plugins/`).
 Existing bundles of the same name are replaced.
 
-## Sessions (.mlack 1.0)
+## Sessions (.mlack 1.1)
 
 Launching mlacker without a filename starts one empty, 64-row **Untitled**
 pattern, with no tracks, song entries, instruments, or samples. Menus stay closed.
@@ -277,7 +277,7 @@ and focuses it. Save choosers open in the path field instead, since they start
 from a suggested filename. Relative paths typed into the field resolve against
 the directory being browsed.
 
-Version 1.0 stores all patterns and song order, track types and assignments,
+Version 1.1 stores all patterns and song order, track types and assignments,
 NOTE/VEL/LEN/OFF/automation data, audio placements, loaded samples, loaded
 instrument/master-plugin paths and normalized parameter states, BPM/time signature,
 playhead/cursors, pane focus, track zoom, scroll positions, sidebar mode, mixer and
@@ -297,7 +297,8 @@ There is no autosave or unsaved-change prompt on Open/Quit yet. Native plugin
 opaque presets, internal sample banks, and non-parameter controller state are not
 stored in 1.0; exposed parameter values are restored by ID. Device changes still
 reload plugins with defaults. See [the binary format](FORMAT.md) for the schema
-and limits.
+and limits. Sessions and `.mlapatt` files saved as 1.0 still open: their tracks
+keep both of their old CC columns.
 
 **Pattern → Save pattern / Load pattern** uses `.mlapatt` files. Saving includes
 the active pattern’s notes, track settings and embedded audio clips. Loading adds
@@ -695,15 +696,34 @@ Saved `.mlack` sessions restore exposed parameter edits across application
 restarts and audio-device changes. Dynamic parameter-list changes and plugin-originated
 parameter notifications are not handled yet; reopen to refresh cached values.
 
-### Pattern CC1 / CC2
+### Pattern CC columns
 
-Both automation columns send their non-empty values at the pattern row boundary,
-even without a note or when the columns are collapsed. **Track → Configure CC1 /
-Configure CC2** selects `cc:N` (0–127; values 0–127) or `pitchbend` (values
--8192–8191). Defaults are CC1 = `cc:1`, CC2 = `cc:74`; the column labels are slot
-names, not fixed MIDI controller numbers. Instrument tracks target their assigned
-instance; MIDI tracks target the master plugin. Muted/audio tracks do not send
-these events. Empty cells leave the current parameter value unchanged.
+Each MIDI track has its own list of automation columns after its note lines, one
+per controller, headed by what it plays: `CC1`, `CC74`, `PB` for pitch bend.
+A new track has only `CC1` (modulation wheel). **Track → Automation → Add CC
+column** adds one for `cc:N` (0–127; values 0–127), `pitchbend` (values
+-8192–8191) or a custom `name:min:max`, up to 16 per track and one per
+controller; **Configure CC column** changes the selected one (the first one
+when the cursor is elsewhere) and **Remove CC column** deletes the selected
+one with its values after confirmation. AUDIO tracks have no CC columns.
+Columns belong to the track in its pattern, so every pattern can automate
+different controllers.
+
+A cell holds one value, sent on its row, or four 1/64-note steps written as
+`12 . 31 40` (`.` is an empty step). At 1/64 vertical detail (Ctrl-Z) each line
+of a row is one step: Enter and Shift-J/K edit the step under the cursor. At
+1/16 detail Enter edits the whole cell text and Shift-J/K moves every step; a
+value followed by `+` has more steps between the lines shown, and its row
+number is highlighted. Values are sent even without a note or when the columns
+are collapsed. Instrument tracks target their assigned instance (Track → Set
+output channel chooses it); MIDI tracks target the master plugin. Muted tracks
+do not send these events. Empty cells leave the current parameter value unchanged.
+
+While recording, every controller and pitch-bend message from the MIDI input is
+written to the armed track at the nearest 1/64 note, in the column for that
+controller. A controller the track has no column for gets a new one, shown at
+once: turning the filter cutoff knob (CC74) during a take adds a `CC74` column
+holding the movement. Later messages in the same 1/64 step replace earlier ones.
 
 The host translates controllers using the plugin's `IMidiMapping` assignments
 for event bus 0 and the track's MIDI channel. Assignments are cached at load time;

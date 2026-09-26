@@ -99,7 +99,8 @@ def main():
         send(b"gg" + F1 + b"lll")
         until(lambda s: "Create AUDIO track" in s)
         send(b"j\r")
-        until(lambda s: "Audio 4" in s and "Create track" not in s)
+        # An empty AUDIO track is just its LEN column; the mixer names it A4.
+        until(lambda s: "Audio" in s and "A4" in s and "Create track" not in s)
         with tempfile.TemporaryDirectory(prefix="mlang-playback-") as folder:
             path = os.path.join(folder, "follow.wav")
             with wave.open(path, "wb") as wav:

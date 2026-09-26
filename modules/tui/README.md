@@ -200,7 +200,7 @@ and start rows.
 
 Each instance references decoded samples and carries its own start row.
 A read-only waveform column
-beside CC1/CC2 draws time downward, with green left-channel bars extending left
+beside the LEN column draws time downward, with green left-channel bars extending left
 from the center line and red right-channel bars extending right. Mono is shown
 on both sides. Waveforms scroll with the table, while ROW stays frozen.
 
@@ -382,7 +382,7 @@ MIDI tracks start collapsed to NOTE/VEL for every note line. In the Pattern view
 
 1. NOTE / VEL (default)
 2. NOTE / VEL / LEN / OFF
-3. All columns, including CC1 / CC2
+3. All columns, including the CC columns
 
 The next press returns to stage 1. Shift+Z advances every MIDI track's stage
 independently. Track → Collapse all selects stage 1; Expand all selects stage 3.
@@ -443,7 +443,7 @@ samples. Extending again does not restore discarded data. Playback stops when
 opening the length dialog.
 
 `tui::table::Table` renders the demo's 64-row sequence with a frozen ROW column
-and three independent tracks, each containing compact NOTE, VEL, LEN, OFF, CC1, and CC2
+and three independent tracks, each containing compact NOTE, VEL, LEN, OFF, and CC1
 columns. Focus the sequence pane with Ctrl+Shift+L; `l`/`h`
 select the next/previous column and `j`/`k` (or Down/Up) select rows. Navigation
 stops at the edges and scrolls the selection into view, with a fixed header.
@@ -485,14 +485,14 @@ the group containing the selected child column gets the selection highlight.
 Set `frozen_columns: 1` to pin ROW during horizontal navigation. The scrollbar
 represents only the unfrozen columns. Selecting another track scrolls it into
 view; if the whole group fits, it is kept together. Wider groups scroll by child
-column. Column widths are NOTE=6, VEL=5, LEN=6, OFF=6, CC1=6, CC2=6, including spacing.
+column. Column widths are NOTE=6, VEL=5, LEN=6, OFF=6 and 6 per CC column, including spacing.
 VEL is left-aligned with two trailing spaces after a three-digit value.
 
 The demo's **Track** menu always targets the selected column's track:
 
 - Rename opens a text dialog (Enter saves, Escape cancels).
 - Create track → MIDI track / AUDIO track appends an empty track of the chosen
-  type and selects it. MIDI has NOTE, VEL, LEN, OFF, CC1, CC2; AUDIO has CC1, CC2, LEN.
+  type and selects it. MIDI has NOTE, VEL, LEN, OFF, CC1; AUDIO has LEN.
   Mixed groups have different widths; navigation, frozen ROW, deletion, and
   duplication follow their actual column ranges. Duplicate preserves track type.
 - Duplicate appends an independent copy of the pattern, mute flag, and automation
@@ -500,16 +500,17 @@ The demo's **Track** menu always targets the selected column's track:
 - Delete removes the track after confirmation; at least one track is retained.
 - Clear pattern clears only that track's cells after confirmation.
 - Mute / unmute toggles the track flag and its `[M]` header indicator.
-- Configure CC1 / CC2 assigns the corresponding per-track automation slot.
+- Automation → Add / Configure / Remove CC column edits the track's list of
+  automation columns (up to 16 on a MIDI track, one per controller).
 
 Each automation slot accepts `cc:N` for MIDI CC 0–127 (values 0–127),
 `pitchbend` (signed values -8192–8191), or `name:min:max` for a custom integer
 parameter, e.g. `cutoff:0:1000`. Custom names use letters, digits, and underscores
 and start with a letter. Limits must fit i32. Existing slot values must fit new
 limits or configuration is rejected without changing data. The Inspector shows
-the selected track's mute state and both parameter assignments.
+the selected track's mute state and its parameter assignments.
 
-New tracks start with CC1=`cc:1` and CC2=`cc:74`. There is a 64-track demo limit.
+New MIDI tracks start with one column, CC1=`cc:1`. There is a 64-track demo limit.
 These actions change in-memory demo data, not audio/MIDI output; mute is state
 for a future playback engine, and custom parameters need an application mapping.
 
@@ -555,9 +556,9 @@ source. These are sequencer-derived levels, not measurements from an audio devic
 
 #### Typed columns and editing
 
-MIDI tracks support 1–16 NOTE/VEL/LEN/OFF groups followed by their shared CC1/CC2 columns.
+MIDI tracks support 1–16 NOTE/VEL/LEN/OFF groups followed by their shared CC columns.
 **Track → Add note line** inserts a blank group after the selected group (or appends
-it before CC1 when an automation column is selected). **Duplicate note line**
+it before the CC columns when one is selected). **Duplicate note line**
 copies the selected NOTE/VEL/LEN/OFF group for every row and selects the copy. **Remove
 note line** removes that group, keeping at least one. Selecting NOTE, VEL, LEN or
 OFF identifies the group; Remove/Duplicate require such a selection. These actions
@@ -600,7 +601,8 @@ the reusable widget library. It owns its cell strings and a compiler-provided
 spelling: MIDI 0 is `C--1`, MIDI 60 is `C-4`, and MIDI 127 is `G-9`; sharps use
 `#`, e.g. `C#4`. Manual notes must occur in this array as well as match the
 column regex. ROW is read-only, NOTE starts selected, VEL is bounded to 0–127,
-and each track has two nullable i32 automation columns with independent limits.
+and each MIDI track has nullable automation columns with independent limits;
+a cell holds one integer or four 1/64-note steps (`12 . 31 40`).
 
 - Shift+J decreases and Shift+K increases the selected value. Notes step by a
   semitone; integer columns step by one. Endpoints stop without wrapping.
@@ -610,7 +612,7 @@ and each track has two nullable i32 automation columns with independent limits.
   clears the draft. Pane/menu navigation is suspended until commit or cancel.
 - Columns can opt into `nullable: true`: an empty string represents no value
   and bypasses the value regex/range checks, but unsupported types still fail.
-  NOTE, VEL, CC1, and CC2 enable this in the demo. An empty NOTE means a rest.
+  NOTE, VEL and the CC columns enable this in the demo. An empty NOTE means a rest.
   Enter, Ctrl+U, Enter clears a single cell.
 - Shift+Backspace clears all editable cells in the selected row, preserving its
   read-only ROW number. `dd` deletes the row, shifts following rows upward, and

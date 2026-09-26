@@ -110,6 +110,8 @@ pub struct MidiController {
     var connected: bool; var last_note: i64{-1}; var last_velocity: i64;
     var last_channel: i64; var activity_until: i64; var lost_events: i64;
     var note_events: list<MidiInputEvent>;
+    /// CC and pitch-bend messages of the last poll, for recording automation.
+    var control_events: list<MidiInputEvent>;
 };
 impl MidiController {
     pub fn start() -> MidiController {
@@ -143,12 +145,13 @@ impl MidiController {
             2 => self.note_off(event),
             _ => 0
         };
+        if (event.kind == 6 || event.kind == 7) && self.control_events.len() < 256 { self.control_events.push(event); }
         if event.kind == 4 { self.connected = true; }
         if event.kind == 5 { self.connected = false; }
         if (event.kind >= 1 && event.kind <= 3) || event.kind == 6 || event.kind == 7 { self.activity_until = event.received_ms + 150; }
     }
     pub fn poll(self: &mut Self, now: i64) -> bool {
-        self.note_events = [];
+        self.note_events = []; self.control_events = [];
         var event: MidiInputEvent = MidiInputEvent {};
         let queue: SpscQueue<MidiInputEvent> = SpscQueue<MidiInputEvent> { handle: self.queue_handle };
         if queue.is_valid() {

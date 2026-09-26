@@ -1,20 +1,17 @@
 mod tui_demo::sequence;
 use tui_demo::sequence::SequenceTable;
 use tui_demo::sequence::SequenceTrack;
+use tui_demo::sequence::AutomationSlot;
+use tui_demo::sequence::automation_controller;
+use tui_demo::sequence::automation_steps;
+use tui_demo::sequence::automation_steps_per_row;
+use tui_demo::sequence::free_steps;
 use tui::table::*;
 use tui::geometry::wide;
 use std::strbuf::sub;
 use std::strbuf::len;
 use std::strbuf::free;
 
-fn pattern_controller_number(parameter: str8) -> i64 {
-    if parameter == "pitchbend" { return 129; }
-    if !table_matches("cc:[0-9]{1,3}", parameter) { return -1; }
-    let suffix: str8 = sub(parameter, 3, len(parameter) - 3);
-    let parsed: result<i64, str8> = table_integer(suffix); free(suffix);
-    if parsed.is_err() { return -1; }
-    let number: i64 = parsed.unwrap(); return number <= 127 ? number : -1;
-}
 
 /// Timestamped demo events for a future MIDI output/audio-thread consumer.
 /// Ticks are musical time (15000 per sixteenth), not UI frame timestamps.
@@ -68,22 +65,29 @@ impl NotePlayback {
             for t in 0..table.tracks.len() {
                 let track: SequenceTrack = table.tracks[t];
                 if track.audio || track.muted || i32(t) == table.recording_track { continue; }
-                // Automation is row-timed, independent of NOTE/LEN/OFF and visibility.
-                for slot in 1..3 {
-                    let controller: i64 = pattern_controller_number(slot == 1 ? track.cc1.parameter : track.cc2.parameter);
-                    let column: i32 = table.automation_column(i32(t), i32(slot));
+                // Automation plays in 1/64 steps of its row, independent of
+                // NOTE/LEN/OFF and visibility.
+                for slot in 0..track.automation.len() {
+                    let definition: AutomationSlot = track.automation[slot];
+                    let controller: i64 = automation_controller(definition.parameter);
+                    let column: i32 = table.automation_column(i32(t), i32(slot) + 1);
                     if controller < 0 || data.cells[column] == "" { continue; }
-                    let parsed: result<i64, str8> = table_integer(data.cells[column]);
-                    if parsed.is_err() { continue; }
-                    let value: i64 = parsed.unwrap();
-                    if controller == 129 {
-                        if value < -8192 || value > 8191 { continue; }
-                    } else if value < 0 || value > 127 { continue; }
-                    var start: i64 = self.epoch + r * 15000;
-                    if start < from { start = start + (from - start + period - 1) / period * period; }
-                    self.score.push(ScheduledNote { track: t, line: slot, note: controller,
-                        velocity: controller == 129 ? value + 8192 : value, start: start, control: 1,
-                        instrument: track.instrument ? (track.instrument_id > 0 ? wide(track.instrument_id) : -1) : 0 });
+                    let steps: list<str8> = automation_steps(data.cells[column]);
+                    for step in 0..steps.len() {
+                        if steps[step] == "" { continue; }
+                        let parsed: result<i64, str8> = table_integer(steps[step]);
+                        if parsed.is_err() { continue; }
+                        let value: i64 = parsed.unwrap();
+                        if controller == 129 {
+                            if value < -8192 || value > 8191 { continue; }
+                        } else if value < 0 || value > 127 { continue; }
+                        var start: i64 = self.epoch + r * 15000 + step * 15000 / wide(automation_steps_per_row());
+                        if start < from { start = start + (from - start + period - 1) / period * period; }
+                        self.score.push(ScheduledNote { track: t, line: wide(i32(slot)) + 1, note: controller,
+                            velocity: controller == 129 ? value + 8192 : value, start: start, control: 1,
+                            instrument: track.instrument ? (track.instrument_id > 0 ? wide(track.instrument_id) : -1) : 0 });
+                    }
+                    free_steps(steps);
                 }
                 for line in 0..track.note_lines {
                     let column: i32 = table.track_start(i32(t)) + i32(line) * 4;

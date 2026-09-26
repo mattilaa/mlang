@@ -140,8 +140,9 @@ fn demo_menus(fixture: bool, follow_matrix: bool, metronome: bool, extend: bool,
                                                 MenuItem { label: "Collapse all", action: 83, enabled: true },
                                                 MenuItem { label: "Expand all", action: 84, enabled: true }]),
                                 MenuItem::submenu("Automation", [
-                                                MenuItem { label: "Configure CC1", action: 26, enabled: true },
-                                                MenuItem { label: "Configure CC2", action: 27, enabled: true }]),
+                                                MenuItem { label: "Add CC column", action: 27, enabled: true },
+                                                MenuItem { label: "Configure CC column", action: 26, enabled: true },
+                                                MenuItem { label: "Remove CC column", action: 85, enabled: true }]),
                                 MenuItem { label: "Clear pattern", action: 24, enabled: true },
                                 MenuItem { label: "Delete", action: 22, enabled: true }] },
                     Menu {title: "Pattern", items: [
@@ -235,6 +236,7 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
         table.paint(surface, top, theme);
         table.paint_audio_style(surface, top, theme, sample.grainy, sample.wave);
         table.paint_subdivision_notes(surface, top, theme);
+        table.paint_automation(surface, top, theme);
         table.paint_note_lengths(surface, top, theme);
         table.paint_editor(surface, top, theme);
     }
@@ -754,6 +756,14 @@ pub fn run() -> i32 {
                 let tick: i64 = record_now - (now - note.received_ms) * wide(transport.bpm);
                 if transport.playing && pending >= transport.count_in && (transport.count_in == 0 || tick >= transport.ticks) {
                     if library.table.record_timed(note.note, note.velocity, note.channel, tick, note.kind == 1) { dirty = true; }
+                }
+            }
+            // Controllers moved during the take land in the track's CC columns.
+            let controls: list<MidiInputEvent> = midi.midi.control_events;
+            for control in controls {
+                let tick: i64 = record_now - (now - control.received_ms) * wide(transport.bpm);
+                if transport.playing && pending >= transport.count_in && (transport.count_in == 0 || tick >= transport.ticks) {
+                    if library.table.record_control(control.note, control.velocity, tick) { dirty = true; }
                 }
             }
             if transport.playing && !song_playing {
@@ -1752,6 +1762,18 @@ pub fn run() -> i32 {
                 question.question = command == 22 ? "Delete the selected track and its pattern?" : "Clear all rows of the selected track?";
                 question.open(); focus.set_menu_active(true);
             }
+            else if command == 85 {
+                let slot: i32 = library.table.automation_slot_at(library.table.selected_column);
+                free(message);
+                if slot == 0 { message = clone("Select a CC column first (expand the track with z)"); }
+                else {
+                    message = clone("");
+                    confirm_track_action = command;
+                    question.title = "Remove CC column";
+                    question.question = "Remove the selected CC column and its values?";
+                    question.open(); focus.set_menu_active(true);
+                }
+            }
             else if command == 42 {
                 matrix.visible = false; library.show_patterns();
             }
@@ -1881,8 +1903,10 @@ pub fn run() -> i32 {
                     : clone(library.table.error);
             }
             else if(command >= 20 && command <= 28) ||(command >= 80 && command <= 84) {
+                library.table.error = "";
                 library.table.track_action(command, panes[1].bounds.inset(1));
-                free(message); message = clone("Track updated. Mute affects demo state only.");
+                free(message);
+                message = library.table.error != "" ? clone(library.table.error) : clone("Track updated. Mute affects demo state only.");
             }
             else if command > 0 {
                 free(message); message = clone("Command selected. Ready for the application handler.");
