@@ -552,6 +552,45 @@ int main(int argc, char **argv) {
     CHECK(__mlang_std_audio_controller_process(c, b, 256) == 0);
     CHECK(__mlang_std_audio_pcm_block_sample(b, 200, 0) == .125f); // mute also mutes insert output
     CHECK(__mlang_std_audio_controller_close(c) == 0);
+    // Mla Delay with Tempo Source = Host follows the sequencer tempo mlacker
+    // sends: a one-beat echo lands 500 ms after an impulse at 120 BPM and
+    // 250 ms after it at 240 BPM.
+    if(const char *delay = std::getenv("MLA_DELAY_VST3")) {
+        const auto echo_after = [&](double bpm) -> int64_t {
+            int64_t d = __mlang_std_audio_controller_new(48000, 128);
+            // As aux effect 1 (parameter slot 33), fed only by track 0's send.
+            CHECK(__mlang_std_audio_controller_load_effect(d, 0, delay) == 0);
+            CHECK(__mlang_std_audio_controller_effect_send(d, 0, 0, 0, 100) == 0);
+            // Parameter indices follow the plugin's IDs 100 + index; stepped
+            // controls take their step, continuous ones 0-1.
+            CHECK(__mlang_std_audio_controller_set_parameter(d, 33, 0, 0) == 0);            // Forward
+            CHECK(__mlang_std_audio_controller_set_parameter(d, 33, 2, 0) == 0);            // no feedback
+            CHECK(__mlang_std_audio_controller_set_parameter(d, 33, 3, 1) == 0);            // wet only
+            CHECK(__mlang_std_audio_controller_set_parameter(d, 33, 4, 0) == 0);            // no filter
+            CHECK(__mlang_std_audio_controller_set_parameter(d, 33, 10, 2) == 0);           // Tempo Source: Host
+            CHECK(__mlang_std_audio_controller_set_parameter(d, 33, 12, (1 - .0625) / (16 - .0625)) == 0); // 1 beat
+            CHECK(__mlang_std_audio_controller_transport(d, bpm, 0, 1) == 0);
+            // Let the delay-time and mix ramps settle before the impulse.
+            for(int i = 0; i < 40; ++i) CHECK(__mlang_std_audio_controller_process(d, b, 256) == 0);
+            // 10 ms: sample voices fade in over 3 ms, so a single-frame click
+            // would be nearly silent.
+            std::vector<float> click(480, 1.f);
+            CHECK(__mlang_std_audio_controller_sample_data(d, FloatList{480, click.data()}, 1, 48000) == 0);
+            const int64_t start = __mlang_std_audio_controller_info(d, 2);
+            CHECK(__mlang_std_audio_controller_post(d, 0, 4, 0, 0, 0, 0, start, 0, 1) == 0);
+            int64_t found = -1;
+            for(int block = 0; block < 160 && found < 0; ++block) {
+                CHECK(__mlang_std_audio_controller_process(d, b, 256) == 0);
+                for(int f = 0; f < 256 && found < 0; ++f)
+                    if(std::abs(__mlang_std_audio_pcm_block_sample(b, f, 0)) > 1.e-4f) found = start + block * 256 + f;
+            }
+            CHECK(__mlang_std_audio_controller_close(d) == 0);
+            return found < 0 ? -1 : found - start;
+        };
+        const int64_t slow = echo_after(120), fast = echo_after(240);
+        CHECK(std::llabs(slow - 24000) <= 2 && std::llabs(fast - 12000) <= 2);
+        std::puts("PASS: Mla Delay follows the host tempo");
+    }
     CHECK(__mlang_std_audio_pcm_block_close(b) == 0);
     std::puts("PASS: real VST3 bundle load, frame-timed MIDI, output, panic, failed replacement, reload");
 }
