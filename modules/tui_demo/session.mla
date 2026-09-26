@@ -510,7 +510,12 @@ impl SessionCodec {
         // changed it needs the extension.
         let gridded: bool = !self.reading && library.matrix_steps != 64;
         // The analyzer view and master bus, when either differs from defaults.
-        let mastered: bool = !self.reading && view.master_saved;
+        let mastered_view: bool = !self.reading && view.master_saved;
+        // Looping cells and loop splits in the song matrix.
+        let looped: bool = !self.reading && library.has_song_loops();
+        // Every extension is written when a later one is, so the chain stays
+        // in order; MASTER_BUS precedes MATRIX_LOOPS.
+        let mastered: bool = mastered_view || looped;
         let magic: str8 = self.text("MLACK"); if magic != "MLACK" { self.failed = true; } if self.reading { free(magic); }
         self.number(1, 1, 1); self.number(0, 0, 0);
         var state: SessionView = self.view(view);
@@ -571,7 +576,7 @@ impl SessionCodec {
         let song_count: i32 = self.number(i32(library.song.len()), 0, 65536); var song: list<i32> = [];
         for i in 0..song_count {
             // 0 is an empty matrix row; the matrix replaced the song list view.
-            let id: i32 = self.number(self.reading ? 0 : library.song[i], 0, 1000000);
+            let id: i32 = self.number(self.reading ? 0 : song_cell_id(library.song[i]), 0, 1000000);
             if id != 0 && library.index_of(id) < 0 { self.failed = true; } song.push(id);
         }
         if self.reading {
@@ -741,7 +746,7 @@ impl SessionCodec {
                 if count != library.song.len() { self.failed = true; break; }
                 var slots: list<i32> = [];
                 for r in 0..count {
-                    let stored: i32 = self.reading ? 0 : (r < column.slots.len() ? column.slots[r] : 0);
+                    let stored: i32 = self.reading ? 0 : (r < column.slots.len() ? song_cell_id(column.slots[r]) : 0);
                     let id: i32 = self.number(stored, 0, 1000000);
                     // 0 is an empty cell; anything else must be a real pattern.
                     var known: bool = id == 0;
@@ -815,6 +820,35 @@ impl SessionCodec {
             if !self.reading || self.reader.remaining() > 0 { bus.eq_on = self.flag(bus.eq_on); }
             if !bus.valid() { self.failed = true; }
             if self.reading { state.master = bus; state.master_saved = true; }
+        }
+        // Optional MATRIX_LOOPS extension: cells whose pattern loops down its
+        // lane (kind 1) and splits that end a loop or long pattern (kind 2),
+        // as lane, row, kind. The lanes above store these cells' plain IDs.
+        let loops_extension: bool = self.reading ? self.reader.remaining() > 0 : looped;
+        if loops_extension && !self.failed {
+            let tag: str8 = self.text("MATRIX_LOOPS"); if tag != "MATRIX_LOOPS" { self.failed = true; } if self.reading { free(tag); }
+            var cells: list<i32> = [];
+            if !self.reading {
+                for l in 0..library.song_lanes() {
+                    for r in 0..library.song.len() {
+                        if library.song_loops(i32(r), i32(l)) { cells.push(i32(l)); cells.push(i32(r)); cells.push(1); }
+                        if library.song_split(i32(r), i32(l)) { cells.push(i32(l)); cells.push(i32(r)); cells.push(2); }
+                    }
+                }
+            }
+            let count: i32 = self.number(i32(cells.len()) / 3, 0, 1048576);
+            for i in 0..count {
+                if self.failed { break; }
+                let lane: i32 = self.number(self.reading ? 0 : cells[i * 3], 0, 15);
+                let row: i32 = self.number(self.reading ? 0 : cells[i * 3 + 1], 0, 65535);
+                let kind: i32 = self.number(self.reading ? 0 : cells[i * 3 + 2], 1, 2);
+                if !self.reading { continue; }
+                // A loop needs a pattern in its cell; a split needs an empty one.
+                if lane >= library.song_lanes() || row >= library.song.len() { self.failed = true; break; }
+                let id: i32 = library.song_at(row, lane);
+                if (kind == 1) != (id > 0) || library.song_raw(row, lane) != id { self.failed = true; break; }
+                library.set_song_raw(row, lane, kind == 1 ? id + song_loop_flag() : song_end_marker());
+            }
         }
         if state.editor_slot > 32 {
             var found: bool = false; for plugin in plugins { if plugin.slot == state.editor_slot { found = true; } }

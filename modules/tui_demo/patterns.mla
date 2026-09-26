@@ -43,6 +43,13 @@ pub struct PatternLibrary {
 /// Pattern covering a matrix cell: `offset` counts the matrix rows since it
 /// started, so 0 is the row it was placed on. id 0 means the cell is silent.
 pub struct SongCover { var id: i32; var offset: i32; };
+/// A matrix cell stores a pattern ID, the ID plus `SONG_LOOP` when the
+/// pattern keeps looping down its lane, or `SONG_END` where a loop (or a long
+/// pattern) is split off. IDs stay below 1000000, so the bit never collides.
+pub fn song_loop_flag() -> i32 { return 2097152; }
+pub fn song_end_marker() -> i32 { return -1; }
+/// Pattern ID stored in a raw matrix cell value (0 for empty or a split).
+pub fn song_cell_id(raw: i32) -> i32 { return raw <= 0 ? 0 : raw % song_loop_flag(); }
 impl PatternLibrary {
     /// True when any track in any pattern feeds a channel other than master;
     /// the session writes its TRACK_OUTPUTS extension only for those.
@@ -181,24 +188,66 @@ impl PatternLibrary {
         let span: i32 = (rows + unit - 1) / unit;
         return span < 1 ? 1 : span;
     }
-    /// What plays in a matrix cell: the pattern placed there, or the one still
-    /// running from a row above it.
+    /// What plays in a matrix cell: the pattern placed there, the one still
+    /// running from a row above it, or a looping one repeating down the lane.
     pub fn song_cover(self: PatternLibrary, row: i32, lane: i32) -> SongCover {
         if row < 0 || row >= self.song.len() { return SongCover {}; }
         for back in 0..row + 1 {
             let at: i32 = row - i32(back);
-            let id: i32 = self.song_at(at, lane);
+            let raw: i32 = self.song_raw(at, lane);
+            // A split ends whatever runs from above.
+            if raw == song_end_marker() { return SongCover {}; }
+            let id: i32 = song_cell_id(raw);
             if id <= 0 { continue; }
             // The nearest pattern above either reaches this row or leaves it
-            // silent; a pattern never plays through one placed under it.
-            return self.song_span(id) > i32(back) ? SongCover { id: id, offset: i32(back) } : SongCover {};
+            // silent; a pattern never plays through one placed under it. A
+            // looping one repeats until the next pattern or split in its lane.
+            let reaches: bool = self.song_span(id) > i32(back) || raw >= song_loop_flag();
+            return reaches ? SongCover { id: id, offset: i32(back) } : SongCover {};
         }
         return SongCover {};
     }
-    /// True when a cell belongs to a pattern that started above it.
+    /// True when a cell belongs to a pattern that started above it and is
+    /// still inside that pattern's own rows (not a loop repeat).
     pub fn song_continues(self: PatternLibrary, row: i32, lane: i32) -> bool {
         let cover: SongCover = self.song_cover(row, lane);
-        return cover.id > 0 && cover.offset > 0;
+        return cover.id > 0 && cover.offset > 0 && cover.offset < self.song_span(cover.id);
+    }
+    /// True when a cell plays a repeat of a looping pattern placed above it.
+    pub fn song_loop_repeat(self: PatternLibrary, row: i32, lane: i32) -> bool {
+        let cover: SongCover = self.song_cover(row, lane);
+        return cover.id > 0 && cover.offset >= self.song_span(cover.id);
+    }
+    /// True when any matrix cell loops or splits; sessions then store them.
+    pub fn has_song_loops(self: PatternLibrary) -> bool {
+        for l in 0..self.song_lanes() {
+            for r in 0..self.song.len() {
+                let raw: i32 = self.song_raw(i32(r), i32(l));
+                if raw < 0 || raw >= song_loop_flag() { return true; }
+            }
+        }
+        return false;
+    }
+    /// True when the pattern placed at this cell loops down its lane.
+    pub fn song_loops(self: PatternLibrary, row: i32, lane: i32) -> bool { return self.song_raw(row, lane) >= song_loop_flag(); }
+    /// True when this cell splits off a loop or a long pattern.
+    pub fn song_split(self: PatternLibrary, row: i32, lane: i32) -> bool { return self.song_raw(row, lane) == song_end_marker(); }
+    /// Switch looping for the pattern covering a cell (placed there or above).
+    /// Returns the pattern's row, or -1 when the cell plays nothing.
+    pub fn toggle_song_loop(self: &mut Self, row: i32, lane: i32) -> i32 {
+        let cover: SongCover = self.song_cover(row, lane);
+        if cover.id <= 0 { return -1; }
+        let origin: i32 = row - cover.offset;
+        let raw: i32 = self.song_raw(origin, lane);
+        self.set_song_raw(origin, lane, raw >= song_loop_flag() ? cover.id : cover.id + song_loop_flag());
+        return origin;
+    }
+    /// Split a loop or a long pattern at `row`: from there down the lane is
+    /// silent. A split cell is removed again with `set_song_at(row, lane, 0)`.
+    pub fn split_song(self: &mut Self, row: i32, lane: i32) -> bool {
+        let cover: SongCover = self.song_cover(row, lane);
+        if cover.id <= 0 || cover.offset == 0 { return false; }
+        self.set_song_raw(row, lane, song_end_marker()); return true;
     }
     /// Rows a placement needs, and whether they are free. `id` 0 (clearing) and
     /// a pattern that fits in one row always are.
@@ -221,8 +270,10 @@ impl PatternLibrary {
         return item.id;
     }
     pub fn song_lanes(self: PatternLibrary) -> i32 { return i32(self.extra_lanes.len()) + 1; }
-    /// Pattern ID at a matrix cell, or 0 when empty/out of range.
-    pub fn song_at(self: PatternLibrary, row: i32, lane: i32) -> i32 {
+    /// Pattern ID at a matrix cell, or 0 when empty, split or out of range.
+    pub fn song_at(self: PatternLibrary, row: i32, lane: i32) -> i32 { return song_cell_id(self.song_raw(row, lane)); }
+    /// Stored cell value: ID, ID plus the loop flag, split marker or 0.
+    pub fn song_raw(self: PatternLibrary, row: i32, lane: i32) -> i32 {
         if row < 0 || row >= self.song.len() || lane < 0 { return 0; }
         if lane == 0 { return self.song[row]; }
         if lane - 1 >= self.extra_lanes.len() { return 0; }
@@ -230,12 +281,18 @@ impl PatternLibrary {
         return row < column.slots.len() ? column.slots[row] : 0;
     }
     /// Put a pattern (or 0 to clear) into a matrix cell, adding lanes as needed.
-    /// Row 0 of lane 0 always holds a pattern, so the song is never empty.
+    /// A new pattern starts without looping. Placing one over a loop repeat
+    /// ends that loop there.
     pub fn set_song_at(self: &mut Self, row: i32, lane: i32, id: i32) -> bool {
         if row < 0 || row >= self.song.len() || lane < 0 || lane >= 16 { return false; }
         // A pattern owns every matrix row it spans, so it cannot start inside
         // another one or grow over a pattern already placed below it.
         if self.song_placement_blocked(row, lane, id) != 0 { return false; }
+        self.set_song_raw(row, lane, id); return true;
+    }
+    /// Store a raw cell value without placement checks.
+    pub fn set_song_raw(self: &mut Self, row: i32, lane: i32, id: i32) -> bool {
+        if row < 0 || row >= self.song.len() || lane < 0 || lane >= 16 { return false; }
         if lane == 0 {
             var order: list<i32> = [];
             for i in 0..self.song.len() { order.push(i32(i) == row ? id : self.song[i]); }
@@ -293,14 +350,14 @@ impl PatternLibrary {
         let at: i32 = after ? row + 1 : row;
         if at > self.song.len() { return false; }
         // The last cell of the lane falls off unless a row is added for it.
-        if self.song_at(i32(self.song.len()) - 1, lane) != 0 && !self.matrix_insert_row(i32(self.song.len()) - 1, true) { return false; }
+        if self.song_raw(i32(self.song.len()) - 1, lane) != 0 && !self.matrix_insert_row(i32(self.song.len()) - 1, true) { return false; }
         var moved: i32 = 0;
+        // Move stored values, so loop flags and splits travel with their cells.
         for i in 0..self.song.len() {
             let source: i32 = i32(self.song.len()) - 1 - i32(i);
             if source < at { break; }
-            let value: i32 = self.song_at(source - 1 < at ? source : source - 1, lane);
-            if source == at { self.set_song_at(source, lane, 0); }
-            else { self.set_song_at(source, lane, self.song_at(source - 1, lane)); }
+            if source == at { self.set_song_raw(source, lane, 0); }
+            else { self.set_song_raw(source, lane, self.song_raw(source - 1, lane)); }
             moved = moved + 1;
         }
         return moved > 0;
@@ -483,7 +540,7 @@ impl PatternLibrary {
         }
         var song: list<i32> = []; let order: list<i32> = self.song;
         var dropped: list<i32> = [];
-        for i in 0..order.len() { if order[i] == removed { dropped.push(i32(i)); } else { song.push(order[i]); } }
+        for i in 0..order.len() { if song_cell_id(order[i]) == removed { dropped.push(i32(i)); } else { song.push(order[i]); } }
         self.patterns = entries; self.song = song;
         // Same rows leave every lane, and the pattern clears from the others.
         var lanes: list<SongLane> = [];
@@ -492,7 +549,7 @@ impl PatternLibrary {
             for r in 0..column.slots.len() {
                 var gone: bool = false;
                 for index in dropped { if index == i32(r) { gone = true; } }
-                if !gone { slots.push(column.slots[r] == removed ? 0 : column.slots[r]); }
+                if !gone { slots.push(song_cell_id(column.slots[r]) == removed ? 0 : column.slots[r]); }
             }
             lanes.push(SongLane { slots: slots });
         }
@@ -545,7 +602,7 @@ impl PatternLibrary {
         self.view.cancel_pending();
         let selected: i32 = self.view.selected;
         if selected < 0 || selected >= self.song.len() { return; }
-        let target: i32 = self.index_of(self.song[selected]) + direction;
+        let target: i32 = self.index_of(song_cell_id(self.song[selected])) + direction;
         if target < 0 || target >= self.patterns.len() { return; }
         let entry: PatternEntry = self.patterns[target];
         var order: list<i32> = [];

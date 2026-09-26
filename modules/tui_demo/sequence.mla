@@ -1084,12 +1084,15 @@ pub fn copy_slice(self: SequenceTable, start: i32, count: i32) -> SequenceTable 
     for row in old { let values: list<str8> = row.cells; for value in values { free(value); } }
     copy.rows = rows;
     var tracks: list<SequenceTrack> = []; let source_tracks: list<SequenceTrack> = copy.tracks;
+    // A loop repeat asks for a slice past the pattern's end: clips keep their
+    // place in the pattern it wraps into.
+    let phase: i32 = i32(wide(start) % source_rows);
     for track in source_tracks {
         let placed: list<AudioInstance> = track.instances;
         var moved: SequenceTrack = SequenceTrack {}; moved = track;
         var instances: list<AudioInstance> = [];
         for instance in placed {
-            let row: i32 = instance.start_row - start;
+            let row: i32 = instance.start_row - phase;
             if row >= 0 && row < count {
                 instances.push(AudioInstance { clip: instance.clip, start_row: row,
                     length_ticks: instance.length_ticks, offset_frames: instance.offset_frames });
@@ -1497,6 +1500,10 @@ pub fn append_tracks_from(self: &mut Self, source: &SequenceTable, area: Rect, s
         copy.cc1 = AutomationSlot { parameter: clone(track.cc1.parameter), minimum: track.cc1.minimum, maximum: track.cc1.maximum };
         copy.cc2 = AutomationSlot { parameter: clone(track.cc2.parameter), minimum: track.cc2.minimum, maximum: track.cc2.maximum };
         self.replace_track(index, copy);
+        // Growing note lines widens the rows but not the column list; the copy
+        // below stops at the column count, so rebuild it first or every note
+        // line after the first (chords) and the CC columns are dropped.
+        self.rebuild_columns();
         let columns: i32 = other.track_columns(i32(t));
         let from: i32 = other.track_start(i32(t)); let to: i32 = self.track_start(index);
         for r in 0..self.rows.len() {

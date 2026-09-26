@@ -364,6 +364,12 @@ pub fn run() -> i32 {
     // Matrix playback: the merged table of the playing row, and which row it is.
     var song_playing: bool = false; var song_row: i32 = -1;
     var song_table: SequenceTable = SequenceTable {};
+    // The next matrix row, merged and scheduled ahead of time during a quiet
+    // moment of the playing row, so the row change is a swap: merging at the
+    // boundary stalls this UI-driven sequencer and delays the downbeat.
+    var prepared_row: i32 = -1; var prepared_revision: i64 = -1;
+    var prepared_table: SequenceTable = SequenceTable {}; var prepared_mixer: SequenceTable = SequenceTable {};
+    var prepared_playback: NotePlayback = NotePlayback {};
     var song_request: i32 = 0;
     paste_error.buttons = [PushButton { label: "OK", action: 1 }];
     var message: str8 = clone("Select a command from the menu.");
@@ -511,6 +517,8 @@ pub fn run() -> i32 {
         }
         if song_request != 0 {
             let start: bool = song_request == 1; song_request = 0;
+            if prepared_row >= 0 { prepared_table.release(); prepared_mixer.release(); }
+            prepared_table = SequenceTable {}; prepared_mixer = SequenceTable {}; prepared_row = -1;
             transport.playing = false;
             note_playback.update(song_playing ? song_table : library.table, transport.ticks, false);
             midi.sequencer_events(note_playback.events);
@@ -762,11 +770,24 @@ pub fn run() -> i32 {
                 if next < 0 { song_playing = false; transport.playing = false; }
                 else if next != song_row {
                     song_row = next;
-                    song_table.release(); song_table = library.merge_song_row(song_row, terminal_bounds(), false);
-                    mixer_table.release(); mixer_table = library.merge_song_row(song_row, terminal_bounds(), true);
+                    var upcoming: NotePlayback = NotePlayback { start_row: 0 };
+                    if prepared_row == next && prepared_revision == library.table.revision {
+                        // Prepared ahead: swap, no merge on the downbeat.
+                        song_table.release(); song_table = prepared_table;
+                        mixer_table.release(); mixer_table = prepared_mixer;
+                        upcoming = prepared_playback;
+                    } else {
+                        if prepared_row >= 0 { prepared_table.release(); prepared_mixer.release(); }
+                        song_table.release(); song_table = library.merge_song_row(song_row, terminal_bounds(), false);
+                        mixer_table.release(); mixer_table = library.merge_song_row(song_row, terminal_bounds(), true);
+                    }
+                    prepared_table = SequenceTable {}; prepared_mixer = SequenceTable {}; prepared_row = -1;
                     // The editor, sidebar and mixer move to the row that plays.
                     if follow_matrix { if library.follow_pattern(library.song_row_pattern(song_row)) { play_pattern = library.active_id; } }
-                    note_playback = NotePlayback { start_row: 0 };
+                    // Notes still sounding from the last row end at their own
+                    // length: dropping them left their note-offs unsent.
+                    upcoming.carry_voices(note_playback);
+                    note_playback = upcoming;
                     midi.restart_samples(0);
                     if song_table.rows.len() == 0 { song_playing = false; transport.playing = false; }
                 }
@@ -811,6 +832,22 @@ pub fn run() -> i32 {
         midi.sync_transport(transport.bpm, transport.ticks, transport.playing && transport.count_in == 0);
         note_playback.update(song_playing ? song_table : library.table, transport.ticks, transport.playing && transport.count_in == 0);
         midi.sequencer_events(note_playback.events);
+        // Merge and schedule the next matrix row once this frame's notes are
+        // out and none is due for a while (or two rows before the change).
+        if song_playing && transport.playing && prepared_row < 0 && song_table.rows.len() > 0 && transport.bpm > 0 {
+            let boundary: i64 = note_playback.epoch + wide(i32(song_table.rows.len())) * 15000;
+            let due: i64 = note_playback.next_event_tick();
+            let quiet: bool = due < 0 || due - transport.ticks >= 40 * wide(transport.bpm);
+            let closing: bool = boundary - transport.ticks <= 30000;
+            let next: i32 = library.next_song_row(song_row);
+            if (quiet || closing) && next >= 0 && next != song_row && boundary > transport.ticks {
+                prepared_row = next; prepared_revision = library.table.revision;
+                prepared_table = library.merge_song_row(next, terminal_bounds(), false);
+                prepared_mixer = library.merge_song_row(next, terminal_bounds(), true);
+                prepared_playback = NotePlayback {};
+                prepared_playback.prepare(prepared_table, boundary);
+            }
+        }
         // The mixer shows the playing song row while following it, so its
         // meters come from the same channels the strips do.
         let following_channels: bool = follow_matrix && song_playing && mixer_table.tracks.len() > 0;
@@ -983,6 +1020,11 @@ pub fn run() -> i32 {
             }
             received_input = true;
             let event: InputEvent = input.feed(byte);
+            // Any edit may change the next row: prepare it again afterwards.
+            if prepared_row >= 0 && (event.kind != InputKind::None || event.code != 0) {
+                prepared_table.release(); prepared_mixer.release();
+                prepared_table = SequenceTable {}; prepared_mixer = SequenceTable {}; prepared_row = -1;
+            }
             // dd is consecutive input in the active sequence, never across a
             // menu, dialog, pane switch, or unrelated key.
             if event.kind != InputKind::None || event.code != 0 {
@@ -1013,7 +1055,12 @@ pub fn run() -> i32 {
                 song_request = song_playing ? 2 : 1; dirty = true;
             }
             else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !outputs.active && !paste_error.active && !library.renaming && !library.table.editing {
-                transport_request = true; dirty = true;
+                // In the song matrix, Space plays the matrix from the cursor
+                // row, every lane mixed, like Ctrl+P; it stops whatever plays.
+                // Elsewhere it plays the selected pattern.
+                if matrix.visible && focus.selected == 1 { song_request = song_playing || transport.playing ? 2 : 1; }
+                else { transport_request = true; }
+                dirty = true;
             }
             // Tab / Shift+Tab cycle every pane of the main view: sidebar,
             // pattern, inspector/mixer, the FX bus, and the VST3 editor.
@@ -1180,13 +1227,14 @@ pub fn run() -> i32 {
             } else if focus.selected == 2 && spectrum.visible && spectrum.handles(event) {
                 spectrum.on_event(event, midi.output);
                 free(message); message = spectrum.status(); dirty = true;
-            } else if event.code == 115 && event.modifiers == 1 && library.table.visual && focus.selected == 1 && library.table.audio_under_cursor() {
+            // While the song matrix covers the pattern pane it owns `s` (split).
+            } else if event.code == 115 && event.modifiers == 1 && library.table.visual && focus.selected == 1 && !matrix.visible && library.table.audio_under_cursor() {
                 free(message);
                 message = library.table.slice_audio(panes[1].bounds.inset(1))
                     ? clone("Sliced audio clip into three parts.")
                     : clone(library.table.error);
                 dirty = true;
-            } else if event.code == 115 && event.modifiers == 1 &&(focus.selected == 1 || focus.selected == 2) {
+            } else if event.code == 115 && event.modifiers == 1 && ((focus.selected == 1 && !matrix.visible) || focus.selected == 2) {
                 if library.table.audio_under_cursor() {
                     sample.visible = !sample.visible;
                     if sample.visible {
@@ -1281,6 +1329,33 @@ pub fn run() -> i32 {
                     for entry in entries { ids.push(entry.id); labels.push(format!("{}{}:{}", entry.id < 10 ? "00" : (entry.id < 100 ? "0" : ""), entry.id, entry.name)); }
                     picker.open(ids, labels, library.song_at(matrix.row, matrix.lane));
                     focus.set_menu_active(true);
+                }
+                else if action == 2 && library.song_split(matrix.row, matrix.lane) {
+                    library.set_song_raw(matrix.row, matrix.lane, 0);
+                    free(message); message = format!("Split removed at row {}", matrix.row + 1);
+                }
+                else if action == 2 && library.song_loop_repeat(matrix.row, matrix.lane) {
+                    // Clearing a loop repeat ends the loop there rather than
+                    // removing the pattern it repeats.
+                    library.split_song(matrix.row, matrix.lane);
+                    free(message); message = format!("Loop ends at row {}", matrix.row + 1);
+                }
+                else if action == 10 {
+                    let origin: i32 = library.toggle_song_loop(matrix.row, matrix.lane);
+                    free(message);
+                    if origin < 0 { message = clone("No pattern plays in this cell"); }
+                    else {
+                        let id: i32 = library.song_at(origin, matrix.lane);
+                        message = library.song_loops(origin, matrix.lane)
+                            ? format!("Pattern {} loops from row {} until the next pattern or split", id, origin + 1)
+                            : format!("Pattern {} at row {} no longer loops", id, origin + 1);
+                    }
+                }
+                else if action == 11 {
+                    free(message);
+                    message = library.split_song(matrix.row, matrix.lane)
+                        ? format!("Split at row {}: the lane is silent from here", matrix.row + 1)
+                        : clone("Split a loop repeat or a long pattern's later row");
                 }
                 else if action == 2 {
                     let cover: SongCover = library.song_cover(matrix.row, matrix.lane);
