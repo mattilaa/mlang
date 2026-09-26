@@ -20,7 +20,8 @@ use std::strbuf::len;
 /// 2 clear the cell, 3 insert a row below, 4 insert a row above, 5 insert a
 /// cell below in this lane, 6 insert a cell above, 7 remove the row,
 /// 8 copy the cell, 9 paste into the cell, 10 switch looping for the pattern
-/// playing in the cell, 11 split the loop or long pattern at the cell.
+/// playing in the cell, 11 split the loop or long pattern at the cell, 12 arm
+/// or disarm the cell's pattern for recording.
 pub struct SongMatrix {
     var visible: bool; var row: i32; var lane: i32;
     var scroll: i32; var lane_scroll: i32;
@@ -28,6 +29,10 @@ pub struct SongMatrix {
     var clipboard: i32;
     /// First `d` of the `dd` chord.
     var delete_pending: bool;
+    /// Row and lane where the pattern armed for recording starts, -1 when none.
+    var armed_row: i32{-1}; var armed_lane: i32{-1};
+    /// A take is running into the armed pattern.
+    var recording: bool;
 };
 impl SongMatrix {
     /// `lanes` already includes the spare empty lane past the last used one.
@@ -61,6 +66,7 @@ impl SongMatrix {
         if (event.modifiers == 1 || event.modifiers == 2) && event.code == 79 { return 4; }
         if event.modifiers == 1 && event.code == 121 { return 8; }
         if event.modifiers == 1 && event.code == 112 { return 9; }
+        if (event.modifiers == 1 && event.code == 82) || (event.modifiers == 2 && (event.code == 114 || event.code == 82)) { return 12; }
         if event.modifiers == 1 && event.code == 114 { return 10; }
         if event.modifiers == 1 && event.code == 115 { return 11; }
         return 0;
@@ -90,6 +96,13 @@ impl SongMatrix {
             let label: str8 = format!("L{}", lane + 1);
             surface.text(Rect::new(body.x + 5 + i32(column) * width, body.y, width - 1, 1), label,
                 lane == self.lane ? theme.accent : theme.muted, theme.panel);
+            // The armed lane carries a red R, solid while its take records.
+            if lane == self.armed_lane {
+                let mark: Rect = Rect::new(body.x + 5 + i32(column) * width + i32(len(label)) + 1, body.y, 3, 1);
+                let red: i32 = self.recording ? 0xd03030 : 0x902828;
+                surface.fill(mark, Cell { glyph: 32, foreground: 0xffffff, background: red });
+                surface.text(Rect::new(mark.x + 1, mark.y, 1, 1), "R", 0xffffff, red);
+            }
             free(label);
         }
         for line in 0..visible_rows {
@@ -109,7 +122,8 @@ impl SongMatrix {
                 let selected: bool = row == self.row && lane == self.lane;
                 // The playing row sits brighter than the rest of the grid.
                 let base: i32 = row == playing ? lighten(theme.panel, 36) : theme.panel;
-                let background: i32 = selected ? lighten(base, 24) : base;
+                var background: i32 = selected ? lighten(base, 24) : base;
+                if row == self.armed_row && lane == self.armed_lane { background = selected ? 0x7a3434 : 0x5a2626; }
                 surface.fill(cell, Cell { glyph: 32, foreground: theme.foreground, background: background });
                 // Loop repeats are darker copies of the pattern; a split
                 // ends a loop or a long pattern.
@@ -147,7 +161,7 @@ impl SongMatrix {
         }
         if body.height > 1 {
             surface.text(Rect::new(body.x, body.y + body.height - 1, body.width, 1),
-                "hjkl move  Enter pattern  y/p copy  r loop  s split  o/O row  dd delete  Space/Ctrl+P play",
+                "hjkl move  Enter pattern  y/p copy  r loop  R arm  s split  o/O row  dd delete  Space/Ctrl+P play",
                 theme.muted, theme.panel);
         }
     }

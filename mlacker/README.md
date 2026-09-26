@@ -92,6 +92,7 @@ pattern list.
 | `dd` | Remove the whole row |
 | `r` | Loop the cell's pattern down its lane, or stop it looping |
 | `s` | Split: end a loop (or a long pattern) at this row |
+| `Shift+R` | Arm the cell's pattern for recording, or disarm it |
 | `Space` / `Ctrl+P` | Play the matrix from the cursor row, or stop |
 | `Shift+M` | Close the matrix |
 
@@ -106,6 +107,25 @@ when no note is due for 40 ms (or two pattern rows before the change at the
 latest), so the change itself does no work on the downbeat. Notes still
 sounding when a row ends keep their length and get their note-offs in the next
 row. Editing anything while the matrix plays prepares the next row again.
+
+### Recording in the matrix
+
+**Shift+R** on a cell arms its pattern: its lane header shows a red **R** and
+the cell turns red. **Ctrl+P** (or Space) then plays the matrix and records
+MIDI notes and controllers into that pattern while the other lanes play along.
+Playback starts on the armed pattern's row, or on the cursor row when that lies
+inside the pattern. The pattern opens in the editor and grows row by row for as
+long as the take runs, across matrix rows and past the end of the song, which
+wraps around. Its own notes are not played back during the take; you hear what
+you play. Only **Ctrl+P** (or Space) stops the take. The pattern then ends at
+the nearest bar line (moving on a bar when that would cut off a recorded note),
+the pattern is disarmed, and as after any take the track can be named.
+
+The take goes to the pattern's armed MIDI track, else the MIDI track under its
+cursor, else its first MIDI track; a track armed only for the take is disarmed
+again afterwards. The pattern must hold a MIDI track. A matrix take has no
+count-in. A longer pattern takes as many matrix rows as it needs, up to the next
+pattern placed below it in its lane.
 
 ### Looping patterns
 

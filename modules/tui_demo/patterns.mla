@@ -39,6 +39,9 @@ pub struct PatternLibrary {
     /// occupies several matrix rows and plays a slice in each, so lanes holding
     /// shorter patterns move on without waiting for it.
     var matrix_steps: i32{64};
+    /// Pattern a matrix take is recording into, or 0. Matrix rows leave it
+    /// out: the take is heard from the MIDI input, not played back again.
+    var recording_pattern: i32;
 };
 /// Pattern covering a matrix cell: `offset` counts the matrix rows since it
 /// started, so 0 is the row it was placed on. id 0 means the cell is silent.
@@ -690,11 +693,17 @@ impl PatternLibrary {
         // A lane plays the slice of its pattern that belongs to this matrix
         // row, so a pattern twice as long simply takes two rows while the lane
         // beside it moves on to its next pattern.
+        var recording: bool = false;
         for l in 0..self.song_lanes() {
             let cover: SongCover = self.song_cover(row, i32(l));
+            if cover.id > 0 && cover.id == self.recording_pattern { recording = true; continue; }
             if cover.id > 0 && base < 0 { base = i32(l); }
         }
-        if base < 0 { return merged; }
+        if base < 0 {
+            // A take on a row nothing else plays still needs the row's time.
+            if recording { merged = SequenceTable::empty(); merged.set_length(unit, area); }
+            return merged;
+        }
         let lead: SongCover = self.song_cover(row, base);
         let first: PatternEntry = self.patterns[self.index_of(lead.id)];
         // The pattern being edited lives in `table`; its stored copy is only
@@ -705,7 +714,7 @@ impl PatternLibrary {
         for l in base + 1..self.song_lanes() {
             let cover: SongCover = self.song_cover(row, i32(l));
             let index: i32 = self.index_of(cover.id);
-            if cover.id <= 0 || index < 0 { continue; }
+            if cover.id <= 0 || index < 0 || cover.id == self.recording_pattern { continue; }
             let entry: PatternEntry = self.patterns[index];
             var data: SequenceTable = SequenceTable {}; data = cover.id == self.active_id ? self.table : entry.data;
             merged.append_tracks_from(data, area, shared_once, cover.offset * unit);

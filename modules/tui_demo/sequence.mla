@@ -402,6 +402,32 @@ pub fn mixer_event(self: &mut Self, event: InputEvent, area: Rect) -> bool {
     }
     return true;
 }
+/// Arm or disarm track `index` for recording; AUDIO tracks never arm.
+pub fn set_record_armed(self: &mut Self, index: i32, armed: bool) -> bool {
+    if index < 0 || index >= self.tracks.len() { return false; }
+    var track: SequenceTrack = self.tracks[index];
+    if track.audio { return false; }
+    track.record_armed = armed; self.replace_track(index, track); return true;
+}
+/// Track a matrix take records into: an armed MIDI track, else the MIDI track
+/// under the cursor, else the first MIDI track; -1 when there is none.
+pub fn recording_candidate(self: SequenceTable) -> i32 {
+    for i in 0..self.tracks.len() { let track: SequenceTrack = self.tracks[i]; if !track.audio && track.record_armed { return i32(i); } }
+    let active: i32 = self.active_track();
+    if active >= 0 { let track: SequenceTrack = self.tracks[active]; if !track.audio { return active; } }
+    for i in 0..self.tracks.len() { let track: SequenceTrack = self.tracks[i]; if !track.audio { return i32(i); } }
+    return -1;
+}
+/// Pattern length a take stopped at `tick` leaves: the nearest bar line of
+/// `bar_rows` rows, moved on by whole bars while that would cut off notes.
+pub fn take_length(self: SequenceTable, tick: i64, bar_rows: i32) -> i32 {
+    let bar: i64 = wide(bar_rows < 1 ? 1 : bar_rows);
+    var bars: i64 = (tick + bar * 7500) / (bar * 15000);
+    if bars < 1 { bars = 1; }
+    var length: i64 = bars * bar;
+    while length < 16384 && self.length_truncates_data(i32(length)) { length = length + bar; }
+    return i32(length > 16384 ? 16384 : length);
+}
 /// Start a take on one armed synth; subsequent cursor movement cannot reroute it.
 pub fn start_recording(self: &mut Self) -> bool {
     let index: i32 = self.active_track(); if index < 0 { return false; }

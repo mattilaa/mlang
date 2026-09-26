@@ -3038,6 +3038,67 @@ fn tui_song_matrix_keys() {
 }
 
 #[test]
+fn tui_song_matrix_arms_a_pattern_for_recording() {
+    var matrix: SongMatrix = SongMatrix { visible: true };
+    // Shift+R arms (in either key encoding); plain r still loops.
+    verify(matrix.on_event(decode_input("R"), 2, 3) == 12);
+    verify(matrix.on_event(decode_input("\x1b[114;2u"), 2, 3) == 12);
+    verify(matrix.on_event(decode_input("r"), 2, 3) == 10);
+    var library: PatternLibrary = PatternLibrary::new();
+    let surface: Surface = Surface::new(80, 12); let theme: Theme = Theme::dark_blue();
+    matrix.armed_row = 0; matrix.armed_lane = 0;
+    for pass in 0..2 {
+        matrix.recording = pass == 1;
+        matrix.paint(surface, surface.bounds(), theme, library, true, -1);
+        // The armed lane's header carries a red R, brighter while recording.
+        let red: i32 = pass == 1 ? 0xd03030 : 0x902828; var marked: bool = false;
+        for y in 0..12 { for x in 0..80 { let cell: Cell = surface.cell(i32(x), i32(y)); if cell.glyph == 82 && cell.background == red { marked = true; } } }
+        verify(marked);
+    }
+    surface.release(); library.release();
+}
+
+#[test]
+fn tui_matrix_take_leaves_its_pattern_out_of_the_row() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    // Song rows: pattern 1, 2, 2, 3; lane 2 of row 1 also plays pattern 2.
+    var library: PatternLibrary = PatternLibrary::new();
+    verify(library.set_song_at(0, 1, 2));
+    var both: SequenceTable = library.merge_song_row(0, area, false); verify(both.tracks.len() == 6); both.release();
+    library.recording_pattern = 2;
+    var others: SequenceTable = library.merge_song_row(0, area, false); verify(others.tracks.len() == 3); others.release();
+    library.recording_pattern = 1;
+    var lane_two: SequenceTable = library.merge_song_row(0, area, false); verify(lane_two.tracks.len() == 3); lane_two.release();
+    // A row the take plays alone keeps its length, with nothing to play.
+    library.recording_pattern = 3;
+    var alone: SequenceTable = library.merge_song_row(3, area, false);
+    verify(alone.tracks.len() == 0 && alone.rows.len() == 64); alone.release();
+    library.recording_pattern = 0;
+    var back: SequenceTable = library.merge_song_row(3, area, false); verify(back.tracks.len() == 3); back.release();
+    library.release();
+}
+
+#[test]
+fn tui_matrix_take_track_and_length() {
+    let area: Rect = Rect::new(0, 0, 120, 20);
+    var table: SequenceTable = SequenceTable::new();
+    // An armed MIDI track wins, then the cursor track, then the first MIDI one.
+    verify(table.recording_candidate() == 0);
+    table.selected_column = table.track_start(2); verify(table.recording_candidate() == 2);
+    verify(table.set_record_armed(1, true) && table.recording_candidate() == 1);
+    verify(table.set_record_armed(1, false) && table.recording_candidate() == 2);
+    table.create_track_kind(false, true, area); verify(!table.set_record_armed(3, true) && table.recording_candidate() == 0);
+    // The take ends at the nearest bar line and never cuts off a note.
+    for r in 0..64 { table.selected_row = i32(r); table.clear_row(); }
+    verify(table.take_length(0, 16) == 16 && table.take_length(15000 * 23, 16) == 16);
+    verify(table.take_length(15000 * 25, 16) == 32 && table.take_length(15000 * 90, 16) == 96);
+    table.selected_row = 20; table.selected_column = 1;
+    table.edit_event(decode_input("\r"), area); table.editor.set_text("C-4"); table.edit_event(decode_input("\r"), area);
+    verify(table.take_length(15000 * 17, 16) == 32 && table.take_length(15000 * 17, 12) == 24);
+    table.release();
+}
+
+#[test]
 fn tui_pattern_view_shows_instrument_under_track_name() {
     var table: SequenceTable = SequenceTable::new();
     let area: Rect = Rect::new(0, 0, 120, 20);

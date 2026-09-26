@@ -87,4 +87,6 @@ add_test(NAME terminal_tui COMMAND "${Python3_EXECUTABLE}" "${MLANG_ROOT}/tests/
 add_test(NAME playback_tui COMMAND "${Python3_EXECUTABLE}" "${MLANG_ROOT}/tests/tui_playback_smoke.py" "$<TARGET_FILE:mlacker>")
 set_tests_properties(settings_tui vst3_tui terminal_tui playback_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 120)
 set_tests_properties(settings_tui vst3_tui terminal_tui playback_tui PROPERTIES ENVIRONMENT "MLANG_TUI_DEMO=1")
+add_test(NAME matrix_record_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/matrix_record_tui_smoke.py" "$<TARGET_FILE:mlacker>")
+set_tests_properties(matrix_record_tui PROPERTIES TIMEOUT 60)
 set_tests_properties(vst3_host PROPERTIES TIMEOUT 30)

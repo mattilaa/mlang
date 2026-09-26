@@ -366,6 +366,11 @@ pub fn run() -> i32 {
     // Matrix playback: the merged table of the playing row, and which row it is.
     var song_playing: bool = false; var song_row: i32 = -1;
     var song_table: SequenceTable = SequenceTable {};
+    // Matrix recording: the pattern armed with Shift+R in the matrix (0 when
+    // none), whether a take is running into it, the pattern time where the
+    // take began, and the track the take armed itself (-1 when it was armed).
+    var matrix_armed_id: i32 = 0; var matrix_recording: bool = false;
+    var matrix_record_offset: i64 = 0; var matrix_auto_armed: i32 = -1;
     // The next matrix row, merged and scheduled ahead of time during a quiet
     // moment of the playing row, so the row change is a swap: merging at the
     // boundary stalls this UI-driven sequencer and delays the downbeat.
@@ -533,16 +538,40 @@ pub fn run() -> i32 {
             }
             else {
                 song_row = matrix.row;
+                // An armed pattern records from where it starts, or from the
+                // cursor when that is inside it; the editor shows it growing.
+                if matrix_armed_id > 0 && library.index_of(matrix_armed_id) >= 0 {
+                    let unit: i32 = library.matrix_steps < 1 ? 1 : library.matrix_steps;
+                    let cover: SongCover = library.song_cover(matrix.row, matrix.armed_lane);
+                    let inside: bool = cover.id == matrix_armed_id && matrix.row - cover.offset == matrix.armed_row;
+                    song_row = inside ? matrix.row : matrix.armed_row;
+                    library.select(matrix_armed_id); play_pattern = library.active_id;
+                    let index: i32 = library.table.recording_candidate();
+                    if index >= 0 {
+                        let track: SequenceTrack = library.table.tracks[index];
+                        matrix_auto_armed = track.record_armed ? -1 : index;
+                        library.table.set_record_armed(index, true);
+                        library.table.selected_column = library.table.track_start(index);
+                        library.table.recording_extend = true;
+                        if library.table.start_recording() {
+                            matrix_recording = true; matrix.recording = true;
+                            library.recording_pattern = matrix_armed_id;
+                            matrix_record_offset = wide(inside ? cover.offset : 0) * wide(unit) * 15000;
+                        }
+                    }
+                }
                 song_table = library.merge_song_row(song_row, terminal_bounds(), false);
                 mixer_table.release(); mixer_table = library.merge_song_row(song_row, terminal_bounds(), true);
-                if follow_matrix { if library.follow_pattern(library.song_row_pattern(song_row)) { play_pattern = library.active_id; } }
+                if follow_matrix && !matrix_recording { if library.follow_pattern(library.song_row_pattern(song_row)) { play_pattern = library.active_id; } }
                 if song_table.rows.len() == 0 {
                     song_playing = false; song_row = -1; message = clone("Matrix row is empty");
                 } else {
                     song_playing = true;
                     transport.toggle(now_ms(), 0, i32(song_table.rows.len()));
                     note_playback.start_row = 0; midi.restart_samples(0);
-                    message = format!("Playing the matrix from row {}", song_row + 1);
+                    message = matrix_recording ? format!("Recording into pattern {} from matrix row {}", matrix_armed_id, song_row + 1)
+                        : (matrix_armed_id > 0 ? clone("The armed pattern has no MIDI track to record into")
+                            : format!("Playing the matrix from row {}", song_row + 1));
                 }
             }
             playback_dirty = true; dirty = true;
@@ -751,11 +780,14 @@ pub fn run() -> i32 {
             if !armed.record_armed { transport.playing = false; }
             let pending: i64 = transport.playing ? (now - transport.clock_ms) * wide(transport.bpm) : 0;
             let record_now: i64 = transport.ticks + pending - transport.count_in;
+            // Matrix time runs on across rows; the take counts from where its
+            // pattern started.
+            let base: i64 = matrix_recording ? matrix_record_offset : 0;
             let notes: list<MidiInputEvent> = midi.midi.note_events;
             for note in notes {
                 let tick: i64 = record_now - (now - note.received_ms) * wide(transport.bpm);
                 if transport.playing && pending >= transport.count_in && (transport.count_in == 0 || tick >= transport.ticks) {
-                    if library.table.record_timed(note.note, note.velocity, note.channel, tick, note.kind == 1) { dirty = true; }
+                    if library.table.record_timed(note.note, note.velocity, note.channel, base + tick, note.kind == 1) { dirty = true; }
                 }
             }
             // Controllers moved during the take land in the track's CC columns.
@@ -763,12 +795,26 @@ pub fn run() -> i32 {
             for control in controls {
                 let tick: i64 = record_now - (now - control.received_ms) * wide(transport.bpm);
                 if transport.playing && pending >= transport.count_in && (transport.count_in == 0 || tick >= transport.ticks) {
-                    if library.table.record_control(control.note, control.velocity, tick) { dirty = true; }
+                    if library.table.record_control(control.note, control.velocity, base + tick) { dirty = true; }
                 }
             }
-            if transport.playing && !song_playing {
-                if pending >= transport.count_in { library.table.grow_recording(record_now); }
-            } else { library.table.stop_recording(transport.ticks, terminal_bounds()); focus.selected = 1; dirty = true; }
+            if transport.playing && (!song_playing || matrix_recording) {
+                if pending >= transport.count_in { library.table.grow_recording(base + record_now); }
+            } else {
+                library.table.stop_recording(base + transport.ticks, terminal_bounds());
+                if matrix_recording {
+                    // The take ends the pattern at the nearest bar line, never
+                    // cutting off what was recorded.
+                    let bar_rows: i32 = transport.beats_per_bar * 16 / (transport.beat_unit < 1 ? 1 : transport.beat_unit);
+                    library.table.set_length(library.table.take_length(base + transport.ticks, bar_rows), terminal_bounds());
+                    if matrix_auto_armed >= 0 { library.table.set_record_armed(matrix_auto_armed, false); }
+                    free(message);
+                    message = format!("Recorded pattern {}: {} rows", matrix_armed_id, library.table.rows.len());
+                    matrix_recording = false; matrix.recording = false; matrix_auto_armed = -1;
+                    library.recording_pattern = 0; matrix_armed_id = 0; matrix.armed_row = -1; matrix.armed_lane = -1;
+                }
+                focus.selected = 1; dirty = true;
+            }
         }
         transport.recording = library.table.recording_track >= 0;
         if song_playing {
@@ -781,7 +827,8 @@ pub fn run() -> i32 {
                 else if next != song_row {
                     song_row = next;
                     var upcoming: NotePlayback = NotePlayback { start_row: 0 };
-                    if prepared_row == next && prepared_revision == library.table.revision {
+                    // A take edits only the pattern the rows leave out.
+                    if prepared_row == next && (prepared_revision == library.table.revision || matrix_recording) {
                         // Prepared ahead: swap, no merge on the downbeat.
                         song_table.release(); song_table = prepared_table;
                         mixer_table.release(); mixer_table = prepared_mixer;
@@ -793,7 +840,7 @@ pub fn run() -> i32 {
                     }
                     prepared_table = SequenceTable {}; prepared_mixer = SequenceTable {}; prepared_row = -1;
                     // The editor, sidebar and mixer move to the row that plays.
-                    if follow_matrix { if library.follow_pattern(library.song_row_pattern(song_row)) { play_pattern = library.active_id; } }
+                    if follow_matrix && !matrix_recording { if library.follow_pattern(library.song_row_pattern(song_row)) { play_pattern = library.active_id; } }
                     // Notes still sounding from the last row end at their own
                     // length: dropping them left their note-offs unsent.
                     upcoming.carry_voices(note_playback);
@@ -983,6 +1030,14 @@ pub fn run() -> i32 {
         let panes: list<Pane> = demo_panes(viewport.content());
         focus.reconcile(panes);
         focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        // Inserting or removing matrix rows moves the armed cell; follow its
+        // pattern down the lane, and disarm when it is no longer there.
+        if matrix_armed_id > 0 && !matrix_recording && library.song_at(matrix.armed_row, matrix.armed_lane) != matrix_armed_id {
+            var found: i32 = -1;
+            for r in 0..library.song.len() { if found < 0 && library.song_at(i32(r), matrix.armed_lane) == matrix_armed_id { found = i32(r); } }
+            if found < 0 { matrix_armed_id = 0; matrix.armed_lane = -1; }
+            matrix.armed_row = found; dirty = true;
+        }
         if dirty || area.width != previous_width || area.height != previous_height {
             library.table.instrument_labels(midi.output);
             library.table.insert_labels(midi.output);
@@ -1395,6 +1450,19 @@ pub fn run() -> i32 {
                     matrix.clipboard = library.song_at(matrix.row, matrix.lane);
                     free(message);
                     message = matrix.clipboard > 0 ? format!("Copied pattern {}", matrix.clipboard) : clone("Copied an empty cell");
+                }
+                else if action == 12 {
+                    free(message);
+                    let cover: SongCover = library.song_cover(matrix.row, matrix.lane);
+                    if song_playing || transport.playing { message = clone("Stop playback to arm a pattern"); }
+                    else if cover.id <= 0 { message = clone("Arm a cell that holds a pattern"); }
+                    else if matrix_armed_id == cover.id && matrix.armed_lane == matrix.lane && matrix.armed_row == matrix.row - cover.offset {
+                        matrix_armed_id = 0; matrix.armed_row = -1; matrix.armed_lane = -1;
+                        message = clone("Recording disarmed");
+                    } else {
+                        matrix_armed_id = cover.id; matrix.armed_row = matrix.row - cover.offset; matrix.armed_lane = matrix.lane;
+                        message = format!("Pattern {} armed: Ctrl+P plays the matrix and records into it until Ctrl+P stops", cover.id);
+                    }
                 }
                 else if action == 9 {
                     if matrix.clipboard > 0 && library.song_row_clashes(matrix.row, matrix.lane, matrix.clipboard) > 0 {
