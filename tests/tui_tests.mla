@@ -731,9 +731,16 @@ fn tui_menu_function_key_shortcuts() {
     let theme: Theme = Theme::dark_blue();
     let surface: Surface = Surface::new(40, 8);
     menus.paint(surface, bounds, theme);
-    let bracket: Cell = surface.cell(1, 0); let file: Cell = surface.cell(5, 0);
-    let edit_key: Cell = surface.cell(11, 0); let edit: Cell = surface.cell(15, 0);
+    // Each title starts at its "[", with two spaces before the next one.
+    let bracket: Cell = surface.cell(0, 0); let file: Cell = surface.cell(4, 0);
+    let edit_key: Cell = surface.cell(10, 0); let edit: Cell = surface.cell(14, 0);
     verify(bracket.glyph == 91 && file.glyph == 70 && edit_key.glyph == 91 && edit.glyph == 69);
+    let gap: Cell = surface.cell(8, 0); let gap2: Cell = surface.cell(9, 0);
+    verify(gap.glyph == 32 && gap2.glyph == 32);
+    // Only the open menu's own text is highlighted, not the gap after it.
+    let after: Cell = surface.cell(18, 0);
+    verify(edit_key.background == theme.selection && after.background == theme.menu_background);
+    verify(bracket.background == theme.menu_background && gap2.background == theme.menu_background);
     // Shortcuts are a darker blue than the titles.
     verify(bracket.foreground == darken(theme.accent, 72) && file.foreground == theme.foreground);
     surface.release();

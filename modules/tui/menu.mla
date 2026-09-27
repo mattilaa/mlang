@@ -244,10 +244,12 @@ impl MenuBar {
             let menu: Menu = self.menus[i];
             let width: i32 = self.tab_width(i32(i));
             let bg: i32 = i == self.active ? theme.selection : theme.menu_background;
-            let tab_area: Rect = Rect::new(x, bounds.y, width, 1);
+            // With shortcuts a title starts at its "[" and two plain cells
+            // follow it ("[F1]File  [F2]Edit"); otherwise one pads each side.
+            let tab_area: Rect = self.shortcuts ? Rect::new(x, bounds.y, width - 2, 1) : Rect::new(x, bounds.y, width, 1);
             let tab: Rect = tab_area.intersect(bounds);
             surface.fill(tab, Cell { glyph: 32, foreground: theme.foreground, background: bg });
-            var text_area: Rect = Rect::new(x + 1, bounds.y, width - 2, 1);
+            var text_area: Rect = Rect::new(self.shortcuts ? x : x + 1, bounds.y, width - 2, 1);
             if self.shortcuts {
                 // The function key in a darker blue than the title.
                 let label: str8 = shortcut_label(i32(i));
