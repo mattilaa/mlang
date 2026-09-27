@@ -1496,15 +1496,34 @@ static void print_pkg_usage(const std::string& programName)
         << "  One-shot:   " << tool
         << " pkg run <task>   # fetches if needed, then runs the task chain\n"
         << "\nExamples:\n"
-        << "  cd examples/package_manager_vst3_coreaudio_synth && \\\n"
-        << "      ../../build/mlang pkg run preview-square --tasks --color\n"
+        << "  " << tool << " pkg init\n"
+        << "  " << tool << " pkg init --no-readme\n"
+        << "  " << tool << " pkg help build\n"
         << "  " << tool
-        << " pkg examples/package_manager_vst3_coreaudio_synth/mlang.toml "
-           "--tasks --color\n"
+        << " pkg add cjson --git https://github.com/DaveGamble/cJSON.git\n"
+        << "  " << tool << " pkg add local-lib --path ../local-lib\n"
         << "  " << tool
-        << " pkg --color tests/mla_tests.toml            # implies --tasks\n"
+        << " pkg add zlib --pkg-config zlib --system\n"
+        << "  " << tool << " pkg lock --offline\n"
+        << "  " << tool << " pkg verify\n"
+        << "  " << tool << " pkg vendor vendor\n"
+        << "  " << tool << " pkg tree\n"
+        << "  " << tool << " pkg why cjson\n"
+        << "  " << tool << " pkg fetch\n"
+        << "  " << tool << " pkg build --release --features telemetry\n"
+        << "  " << tool << " pkg run app\n"
+        << "  " << tool << " pkg clean --deps\n"
+        << "  " << tool << " pkg package --output app.tar.gz\n"
+        << "  " << tool << " pkg publish --registry file:///tmp/registry\n"
         << "  " << tool
-        << " pkg fetch --config examples/foo/mlang.toml  # --config anywhere\n"
+        << " pkg install app@^1.0 --registry file:///tmp/registry\n"
+        << "  " << tool << " pkg audit --deny high\n"
+        << "  " << tool << " pkg sbom --output build/app.cdx.json\n"
+        << "  " << tool << " pkg sign app.tar.gz --key private.pem\n"
+        << "  " << tool
+        << " pkg verify-signature app.tar.gz --key public.pem\n"
+        << "  " << tool << " pkg --tests tests/mlang.toml\n"
+        << "  " << tool << " pkg mlang.toml --tasks --color\n"
         << "  " << tool
         << " pkg --config bootstrap/mlang.toml run build-and-install --option "
            "install_prefix=$HOME/.local --option bin_dir=$HOME/.local/bin\n";
