@@ -406,15 +406,31 @@ impl AudioSystem {
         self.resume_midi(worker); return message;
     }
     pub fn route_selected(self: AudioSystem, source: &SequenceTable) -> void {
-        var table: SequenceTable = SequenceTable {}; table = source;
         if self.output.handle == 0 { return; }
+        let target: i64 = AudioSystem::live_target(source);
+        if target < 0 { self.output.midi_target(0, -1); return; }
+        self.output.midi_target(target % 64, target / 64);
+    }
+    /// Where live notes go: instrument slot * 64 + track (slot 0 = preview
+    /// synth), or -1 when the armed/selected track is audio, muted or unassigned.
+    pub fn live_target(source: &SequenceTable) -> i64 {
+        var table: SequenceTable = SequenceTable {}; table = source;
         let index: i32 = table.recording_track >= 0 ? table.recording_track : table.active_track();
-        if index < 0 { self.output.midi_target(0, -1); return; }
+        if index < 0 || index >= 64 { return -1; }
         let track: SequenceTrack = table.tracks[index];
-        var slot: i32 = 0;
-        if track.audio || track.muted { slot = -1; }
-        else if track.instrument { slot = track.instrument_id > 0 ? track.instrument_id : -1; }
-        self.output.midi_target(index, slot);
+        if track.audio || track.muted { return -1; }
+        if track.instrument { return track.instrument_id > 0 ? wide(track.instrument_id) * 64 + wide(index) : -1; }
+        return wide(index);
+    }
+    /// Virtual keyboard note on the main lane, tagged as live input like a
+    /// MIDI keyboard's notes. A note-off must use the target of its note-on.
+    pub fn keyboard_note(self: AudioSystem, target: i64, on: bool, note: i32, velocity: i32) -> void {
+        if self.output.handle == 0 || target < 0 || note < 0 || note > 127 { return; }
+        let slot: i64 = target / 64;
+        var kind: AudioEventKind = on ? AudioEventKind::NoteOn : AudioEventKind::NoteOff;
+        if slot > 0 { kind = on ? AudioEventKind::InstrumentNoteOn : AudioEventKind::InstrumentNoteOff; }
+        self.output.post(AudioEvent { kind: kind, sample: slot, source: target % 64 + 65536,
+            midi: AudioMidiEvent { channel: 0, note: wide(note), velocity: on ? wide(velocity) : 0 } }, 0);
     }
     // A device worker may already exist when loading creates an offline output.
     pub fn resume_midi(self: &mut Self, was_running: bool) -> void {

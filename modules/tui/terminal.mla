@@ -34,6 +34,13 @@ impl Terminal {
         write(stdout(), output);
         free(output);
     }
+    /// Ask kitty-protocol terminals (kitty, Ghostty, WezTerm, foot, Alacritty,
+    /// recent iTerm2) to also report key repeats and releases. Others ignore
+    /// it. finish() pops the whole keyboard mode, restoring the terminal.
+    pub fn report_key_releases(self: Terminal, on: bool) -> void {
+        if !self.active { return; }
+        write(stdout(), on ? "\x1b[=3;1u" : "\x1b[=1;1u");
+    }
     pub fn finish(self: &mut Self) -> void {
         if !self.active { return; }
         write(stdout(), reset());

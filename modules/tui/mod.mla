@@ -16,3 +16,4 @@ mod tui::meter;
 mod tui::listview;
 mod tui::dropdown;
 mod tui::slider;
+mod tui::piano;

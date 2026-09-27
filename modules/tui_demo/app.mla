@@ -44,6 +44,9 @@ use tui_demo::output_picker::OutputPicker;
 use tui_demo::song_matrix::SongMatrix;
 mod tui_demo::sample_editor;
 use tui_demo::piano_dialog::PianoDialog;
+mod tui_demo::virtual_keyboard;
+use tui_demo::virtual_keyboard::VirtualKeyboard;
+use tui_demo::virtual_keyboard::HeldNote;
 use tui_demo::sample_editor::SampleEditor;
 use tui_demo::audio_clip::base_name;
 mod tui_demo::bpm_dialog;
@@ -80,7 +83,7 @@ use std::io::read_keycode_nonblocking;
 use std::time::sleep_ms;
 use std::time::now_ms;
 
-fn demo_menus(fixture: bool, follow_matrix: bool, metronome: bool, extend: bool, metronome_always: bool, spectrum: bool) -> MenuBar {
+fn demo_menus(fixture: bool, follow_matrix: bool, metronome: bool, extend: bool, metronome_always: bool, spectrum: bool, keyboard: bool) -> MenuBar {
     // Grouped like a DAW's menu bar: each menu starts with what it creates,
     // then what it changes, then what it removes; families use submenus.
     let plugins: bool = AudioController::processor_support();
@@ -124,6 +127,7 @@ fn demo_menus(fixture: bool, follow_matrix: bool, metronome: bool, extend: bool,
                                 MenuItem::submenu("Spectrum analyzer", [
                                                 MenuItem { label: "Change details", action: 161, enabled: true },
                                                 MenuItem { label: "Update rate", action: 162, enabled: true }]),
+                                MenuItem { label: keyboard ? "[x] Show virtual keyboard" : "[ ] Show virtual keyboard", action: 163, enabled: true },
                                 MenuItem { label: "Reset layout", action: 6, enabled: true },
                                 MenuItem { label: "Show details", action: 7, enabled: true }] },
                     Menu {title: "Track", items: [
@@ -217,7 +221,7 @@ fn demo_panes(content: Rect) -> list<Pane> {
             Pane { id: 2, bounds: right[1] }];
 }
 
-fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: &Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView, matrix_visible: bool, channels: &SequenceTable, merged_channels: bool, spectrum: &SpectrumView) -> void {
+fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: &Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView, matrix_visible: bool, channels: &SequenceTable, merged_channels: bool, spectrum: &SpectrumView, keyboard: &VirtualKeyboard, keyboard_title: str8) -> void {
     let theme: Theme = Theme::dark_blue();
     surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
     let library: Pane = panes[0];
@@ -243,18 +247,26 @@ fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<
         table.paint_note_lengths(surface, top, theme);
         table.paint_editor(surface, top, theme);
     }
-    let show_spectrum: bool = spectrum.visible;
-    let show_sample: bool = !show_spectrum && sample.visible && table.audio_under_cursor();
+    // The virtual keyboard (Shift+P) covers whatever else this pane shows.
+    let show_keyboard: bool = keyboard.visible;
+    let show_spectrum: bool = !show_keyboard && spectrum.visible;
+    let show_sample: bool = !show_keyboard && !show_spectrum && sample.visible && table.audio_under_cursor();
     var sample_title: str8 = "";
     if show_sample {
         let track: SequenceTrack = table.tracks[table.active_track()];
         let instance: AudioInstance = track.instances[track.instance_at(table.selected_row)];
         let name: str8 = base_name(instance.clip.source); sample_title = format!(" Sample: {} ", name); free(name);
     }
-    let details: Panel = Panel { title: show_spectrum ? " Spectrum / Master " : (show_sample ? sample_title : (mixer.visible ? " Mixer " : " Inspector ")) };
+    let details: Panel = Panel { title: show_keyboard ? keyboard_title : (show_spectrum ? " Spectrum / Master " : (show_sample ? sample_title : (mixer.visible ? " Mixer " : " Inspector ")) )};
     let bottom: Rect = details.paint_focused(surface, inspector.bounds, theme, focus.is_active(2));
     let label: Label = Label { text: patterns.error != "" ? patterns.error : (table.error != "" ? table.error : (table.editing ? "Editing: Enter saves | Esc cancels": message)) };
-    if show_spectrum {
+    if show_keyboard {
+        keyboard.paint(surface, bottom, theme, table.editing ? "Editing: Enter saves | Esc cancels" : message);
+        if(patterns.error != "" || table.error != "") && bottom.height > 0 {
+            surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
+        }
+    }
+    else if show_spectrum {
         spectrum.paint(surface, bottom, theme, mixer.master.left, mixer.master.right, focus.is_active(2), message);
         if(patterns.error != "" || table.error != "") && bottom.height > 0 {
             surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
@@ -297,7 +309,9 @@ pub fn run() -> i32 {
     // Spectrum analyzer and master bus (Ctrl+Shift+M), shown in the mixer's
     // pane. `spectrum_area` is where it was last painted, for the analysis.
     var spectrum: SpectrumView = SpectrumView::new(); var spectrum_area: Rect = Rect::new(0, 0, 0, 0);
-    var menus: MenuBar = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible);
+    // Computer-keyboard piano in the same pane (View menu / Shift+P).
+    var keyboard: VirtualKeyboard = VirtualKeyboard {};
+    var menus: MenuBar = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
     if fixture { menus.open(0); }
     var focus: PaneFocus = PaneFocus::new(0);
     var input: InputDecoder = InputDecoder::new();
@@ -454,7 +468,7 @@ pub fn run() -> i32 {
                             sample = SampleView { visible: v.sample, grainy: v.sample_grainy, wave: v.sample_wave, zoom: v.sample_zoom };
                             spectrum = SpectrumView::new();
                             if v.master_saved { spectrum.visible = v.spectrum; spectrum.detail = v.spectrum_detail; spectrum.fps = v.spectrum_fps; spectrum.bus = v.master; }
-                            menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible);
+                            menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
                             frame_rate.set(v.meter_fps, now_ms()); note_playback = NotePlayback {}; play_pattern = library.active_id;
                             instrument_editor.release();
                             instrument_editor.slot = v.editor_slot;
@@ -771,6 +785,12 @@ pub fn run() -> i32 {
         // whatever pattern the sidebar happens to have selected.
         midi.sync_volumes(song_playing ? song_table : library.table);
         let midi_active: bool = midi.poll(now);
+        // Virtual keyboard notes whose keys stopped repeating end now; its
+        // notes join the MIDI input for step entry and recording.
+        let released: list<HeldNote> = keyboard.release_due(now, !keyboard.visible);
+        if released.len() > 0 { dirty = true; }
+        for held in released { midi.keyboard_note(held.target, false, held.note, 0); }
+        midi.midi.inject(keyboard.take_events());
         let processor_errors: i64 = midi.output.processor_errors();
         if processor_errors > last_processor_errors {
             free(message); message = clone("VST3 processing failed; a plugin block was silenced."); dirty = true;
@@ -824,7 +844,9 @@ pub fn run() -> i32 {
                     matrix_recording = false; matrix.recording = false; matrix_auto_armed = -1;
                     library.recording_pattern = 0; matrix_armed_id = 0; matrix.armed_row = -1; matrix.armed_lane = -1;
                 }
-                focus.selected = 1; dirty = true;
+                // A take played on the virtual keyboard keeps it focused for the next one.
+                if !keyboard.visible || focus.selected != 2 { focus.selected = 1; }
+                dirty = true;
             }
         }
         transport.recording = library.table.recording_track >= 0;
@@ -1092,7 +1114,15 @@ pub fn run() -> i32 {
             library.table.reconcile(panes[1].bounds.inset(1));
             library.view.reconcile(panes[0].bounds.inset(1));
             library.audio.view.reconcile(panes[0].bounds.inset(1));
-            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample, matrix.visible, mixer_table, following_channels, spectrum);
+            var keyboard_title: str8 = "";
+            if keyboard.visible {
+                let target: i64 = AudioSystem::live_target(library.table);
+                var track_name: str8 = "Select a MIDI or Instrument track";
+                if target >= 0 { let track: SequenceTrack = library.table.tracks[target % 64]; track_name = track.name; }
+                keyboard_title = keyboard.title(track_name);
+            }
+            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample, matrix.visible, mixer_table, following_channels, spectrum, keyboard, keyboard_title);
+            if keyboard.visible { free(keyboard_title); }
             let details_pane: Pane = panes[2]; spectrum_area = details_pane.bounds.inset(1);
             matrix.paint(surface, panes[1].bounds, Theme::dark_blue(), library, focus.is_active(1), song_playing ? song_row : -1);
             instrument_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
@@ -1132,6 +1162,14 @@ pub fn run() -> i32 {
             }
             received_input = true;
             let event: InputEvent = input.feed(byte);
+            // Key releases (reported only while the virtual keyboard shows)
+            // end its notes and reach nothing else.
+            if event.released {
+                let ended: list<HeldNote> = keyboard.on_release(event, now_ms());
+                if ended.len() > 0 { dirty = true; }
+                for held in ended { midi.keyboard_note(held.target, false, held.note, 0); }
+                continue;
+            }
             // Any edit may change the next row: prepare it again afterwards.
             if prepared_row >= 0 && !prepared_playback.started() && (event.kind != InputKind::None || event.code != 0) {
                 prepared_table.release(); prepared_mixer.release();
@@ -1178,7 +1216,7 @@ pub fn run() -> i32 {
             // pattern, inspector/mixer, the FX bus, and the VST3 editor.
             else if event.kind == InputKind::Menu && event.key == Key::Toggle && menus.active < 0 &&
                     !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !curve_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !outputs.active && !paste_error.active && !library.renaming && !library.table.editing {
-                let has_bus: bool = mixer.visible && midi.effects.len() > 0;
+                let has_bus: bool = mixer.visible && !keyboard.visible && midi.effects.len() > 0;
                 let has_editor: bool = instrument_editor.active;
                 var stop: i32 = focus.selected == 0 ? 0 : (focus.selected == 1 ? 1 : (mixer.bus_focus && has_bus ? 3 : 2));
                 if has_editor && instrument_editor.focused { stop = 4; }
@@ -1304,6 +1342,18 @@ pub fn run() -> i32 {
                     library.table.edit_event(event, panes[1].bounds.inset(1)); dirty = true;
                 }
             }
+            // The focused virtual keyboard plays its keys ("q" included) and
+            // leaves pane moves, Tab, Space and shortcuts to the app.
+            else if keyboard.visible && focus.selected == 2 && !mixer.bus_focus && !instrument_editor.focused && menus.active < 0 && VirtualKeyboard::handles(event) {
+                let target: i64 = AudioSystem::live_target(library.table);
+                let octave: i32 = keyboard.octave;
+                let note: i32 = keyboard.on_event(event, target, now_ms());
+                if note >= 0 { midi.keyboard_note(target, true, note, keyboard.velocity); dirty = true; }
+                else if keyboard.octave != octave { dirty = true; }
+                else if target < 0 && VirtualKeyboard::key_offset(event.code) >= 0 {
+                    free(message); message = clone("Keyboard: select a MIDI or Instrument track (audio and muted tracks do not play)"); dirty = true;
+                }
+            }
             else if event.kind == InputKind::Quit { running = false; }
             // Exclusive input ownership: never call a widget handler from a
             // boolean guard. The compiler may evaluate every operand.
@@ -1337,6 +1387,8 @@ pub fn run() -> i32 {
             }
             // Ctrl+Shift+M (kitty/CSI-u); plain Ctrl+M is Enter on most terminals.
             else if (event.code == 109 || event.code == 77) && event.modifiers == 6 { command = 160; }
+            // Shift+P: legacy terminals send "P", kitty/CSI-u a shifted "p".
+            else if (event.code == 80 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 112 || event.code == 80)) { command = 163; }
             else if event.code == 109 && event.modifiers == 1 {
                 mixer.visible = !mixer.visible; dirty = true;
             }
@@ -1946,7 +1998,7 @@ pub fn run() -> i32 {
                 if command == 150 { play_metronome = !play_metronome; }
                 else if command == 151 { extend_recording = !extend_recording; }
                 else { metronome_always = command == 153; }
-                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible);
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
             }
             else if command == 50 || command == 53 { library.add(command == 53); }
             else if command == 51 {
@@ -1959,7 +2011,7 @@ pub fn run() -> i32 {
             }
             else if command == 55 {
                 follow_matrix = !follow_matrix;
-                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible);
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
                 free(message);
                 if follow_matrix {
                     if song_playing { library.follow_pattern(library.song_row_pattern(song_row)); play_pattern = library.active_id; }
@@ -1976,10 +2028,22 @@ pub fn run() -> i32 {
             else if command == 74 { bpm_dialog.open_meter_rate(frame_rate.fps); }
             else if command == 160 {
                 spectrum.visible = !spectrum.visible;
-                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible);
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
                 free(message);
                 message = spectrum.visible ? clone("Spectrum / Master: Left/Right picks HP, EQ1-4 or Master; Enter picks gain/freq/Q; Up/Down adjusts")
                     : clone("Spectrum analyzer closed");
+            }
+            else if command == 163 {
+                keyboard.visible = !keyboard.visible;
+                // Kitty-protocol terminals then report key releases: a note
+                // lasts exactly as long as its key is held.
+                terminal.report_key_releases(keyboard.visible); input.releases = keyboard.visible;
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
+                // Keys only play while the pane has focus.
+                if keyboard.visible { focus.selected = 2; mixer.bus_focus = false; instrument_editor.focused = false; }
+                free(message);
+                message = keyboard.visible ? clone("Keyboard: z-m and q-p play the selected track; Left/Right or -/= change octave; Space plays")
+                    : clone("Virtual keyboard closed");
             }
             else if command == 161 {
                 spectrum.detail = (spectrum.detail + 1) % 3; spectrum.levels = []; spectrum.peaks = [];

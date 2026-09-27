@@ -5,6 +5,8 @@ pub enum InputKind { None, Menu, Pane, Quit, Text, Edit };
 pub struct InputEvent {
     var kind: InputKind; var key: Key;
     var code: i32{0}; var modifiers: i32{1}; var raw_byte: bool{false};
+    /// A key release (kitty event type 3), only from a decoder with `releases` on.
+    var released: bool{false};
 };
 
 fn no_input() -> InputEvent { return InputEvent { kind: InputKind::None, key: Key::Escape }; }
@@ -52,15 +54,18 @@ fn decode_key(code: i32, modifiers: i32) -> InputEvent {
 
 /// Incremental legacy/CSI-u/kitty/modifyOtherKeys decoder. Never interpret raw
 /// Ctrl-H (Backspace) or Ctrl-J (Enter) as Ctrl-Shift pane movement.
+/// Key releases are dropped unless `releases` is set (see
+/// Terminal::report_key_releases); they then arrive with `released` set.
 pub struct InputDecoder {
     var state: i32; var parameter: i32; var subfield: i32;
     var number: i32; var digits: bool; var code: i32; var modifiers: i32;
     var third: i32; var event_type: i32; var invalid: bool; var length: i32;
+    var releases: bool;
 };
 impl InputDecoder {
     pub fn new() -> InputDecoder {
         return InputDecoder { state: 0, parameter: 0, subfield: 0, number: 0, digits: false,
-            code: 0, modifiers: 1, third: 0, event_type: 1, invalid: false, length: 0 };
+            code: 0, modifiers: 1, third: 0, event_type: 1, invalid: false, length: 0, releases: false };
     }
     fn reset(self: &mut Self) -> void {
         self.state = 0; self.parameter = 0; self.subfield = 0; self.number = 0;
@@ -112,6 +117,9 @@ impl InputDecoder {
         if byte < 64 || byte > 126 { self.invalid = true; return no_input(); }
         self.commit();
         var output: InputEvent = no_input();
+        if !self.invalid && self.releases && self.event_type == 3 && byte == 117 && self.modifiers > 0 {
+            output = decode_key(self.code, self.modifiers); output.released = true;
+        }
         if !self.invalid && (self.event_type == 1 || self.event_type == 2) && self.modifiers > 0 {
             // Shift+Tab (CSI Z) cycles panes backwards; Tab itself is a plain key.
             if byte == 90 { output = InputEvent { kind: InputKind::Menu, key: Key::Toggle, code: 9, modifiers: 2 }; }
