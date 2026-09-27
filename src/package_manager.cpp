@@ -1419,7 +1419,7 @@ static void print_pkg_usage(const std::string& programName)
         << "  " << tool << " pkg init [--no-readme]\n"
         << "      Scaffold mlang.toml, src/main.mla, and README.md in the current dir.\n"
         << "  " << tool << " pkg help <build|run>\n"
-        << "      Print the '# Build and run' instructions from README.md.\n"
+        << "      Print the 'Build and run' README.md section (any heading level).\n"
         << "  " << tool
         << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] "
            "[--submodules] [--version REQ]\n"
@@ -3503,24 +3503,61 @@ static bool print_package_readme_instructions(
         return false;
     }
 
+    // ATX heading level (1-6) of `line`, or 0; `title` receives the trimmed text.
+    auto heading_level = [](const std::string& line, std::string& title) {
+        size_t level = 0;
+        while(level < line.size() && line[level] == '#')
+            ++level;
+        if(level == 0 || level > 6)
+            return 0;
+        size_t begin = line.find_first_not_of(" \t", level);
+        size_t end = line.find_last_not_of(" \t\r#");
+        title = (begin == std::string::npos || end == std::string::npos ||
+                 end < begin)
+                    ? std::string()
+                    : line.substr(begin, end - begin + 1);
+        return static_cast<int>(level);
+    };
+    auto is_build_and_run = [](const std::string& title) {
+        static const std::string wanted = "build and run";
+        if(title.size() != wanted.size())
+            return false;
+        for(size_t i = 0; i < title.size(); ++i)
+            if(std::tolower(static_cast<unsigned char>(title[i])) != wanted[i])
+                return false;
+        return true;
+    };
+
+    // The section runs until the next heading of the same or a higher level;
+    // `#` lines inside fenced code blocks are shell comments, not headings.
     std::string line;
     std::string section;
-    bool found = false;
+    int sectionLevel = 0;
+    bool inFence = false;
     while(std::getline(in, line))
     {
-        if(!found)
+        const size_t indent = line.find_first_not_of(' ');
+        const bool fence = indent != std::string::npos && indent < 4 &&
+                           (line.compare(indent, 3, "```") == 0 ||
+                            line.compare(indent, 3, "~~~") == 0);
+        std::string title;
+        const int level = inFence ? 0 : heading_level(line, title);
+        if(fence)
+            inFence = !inFence;
+        if(sectionLevel == 0)
         {
-            if(line == "# Build and run" || line == "#Build and run")
+            if(level > 0 && is_build_and_run(title))
             {
-                found = true;
+                sectionLevel = level;
                 section += line + "\n";
             }
             continue;
         }
-        if(line.rfind("# ", 0) == 0 || line.rfind("#", 0) == 0)
+        if(level > 0 && level <= sectionLevel)
             break;
         section += line + "\n";
     }
+    const bool found = sectionLevel > 0;
 
     const auto contentStart = section.find('\n');
     const bool hasInstructions =
@@ -3529,7 +3566,7 @@ static bool print_package_readme_instructions(
             std::string::npos;
     if(!hasInstructions)
     {
-        std::cerr << "README.md must contain a '# Build and run' section "
+        std::cerr << "README.md must contain a 'Build and run' heading "
                      "with instructions. Example:\n\n"
                   << package_readme_template("your-project") << "\n";
         return false;

@@ -5911,6 +5911,26 @@ Tls Client Server Handshake With Generated Certificate
     Should Contain    ${server_stdout}    TLS_SERVER_READY
     Should Contain    ${server_stdout}    TLS_SERVER_OK
 
+Pkg Help Build Finds Nested Build And Run Heading
+    [Documentation]    `pkg help build` prints a "Build and run" section at any heading
+    ...                level, keeps its subsections and fenced `#` comments, and stops at
+    ...                the next heading of the same level.
+    ${proj}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_help_build
+    ${setup}=    Catenate    SEPARATOR=\n
+    ...    set -e
+    ...    rm -rf '${proj}' && mkdir -p '${proj}'
+    ...    printf '[package]\\nname = "helpapp"\\nversion = "0.1.0"\\n' > '${proj}/mlang.toml'
+    ...    printf '# helpapp\\n\\n## Build and run\\n\\n```sh\\n# fetch first\\nmlang pkg build\\n```\\n\\n### Options\\nuse -O2\\n\\n## Install\\nnot shown\\n' > '${proj}/README.md'
+    ${setup_r}=    Run Process    /bin/sh    -c    ${setup}
+    Should Be Equal As Integers    ${setup_r.rc}    0    msg=${setup_r.stderr}
+    ${run}=    Run Process    ${MLANG}    pkg    help    build
+    ...    cwd=${proj}    env:MLANG_PKG_IMPL=cpp
+    Should Be Equal As Integers    ${run.rc}    0    msg=${run.stderr}
+    Should Contain    ${run.stdout}    \## Build and run
+    Should Contain    ${run.stdout}    \# fetch first
+    Should Contain    ${run.stdout}    use -O2
+    Should Not Contain    ${run.stdout}    not shown
+
 Pkg Fetch Build Parity (CPP vs MLA)
     [Documentation]    Create a local git C dependency and verify both
     ...                package-manager backends (MLANG_PKG_IMPL=cpp|mla)
