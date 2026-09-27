@@ -1,5 +1,5 @@
 mod tui::dialog;
-mod tui_demo::sequence;
+mod mlacker_ui::sequence;
 use tui::dialog::Dialog;
 use tui::button::PushButton;
 use tui::focus::PaneFocus;
@@ -9,8 +9,8 @@ use tui::surface::*;
 use tui::theme::*;
 use tui::input::*;
 use tui::menu::Key;
-use tui_demo::sequence::curve_names;
-use tui_demo::sequence::curve_shape;
+use mlacker_ui::sequence::curve_names;
+use mlacker_ui::sequence::curve_shape;
 
 /// Ctrl+A in the pattern: choose the curve that ramps between the two marked
 /// CC values. j/k (or Up/Down) pick a shape, Tab reaches OK/Cancel, Enter on

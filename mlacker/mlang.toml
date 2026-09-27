@@ -1,7 +1,7 @@
 [package]
 name = "mlacker"
 version = "0.1.0"
-module_paths = ["../modules"]
+module_paths = ["modules", "../modules"]
 
 [dependencies]
 vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", rev = "3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96", submodules = true, build = "none", spinner = false }
@@ -56,10 +56,17 @@ depends_on = ["build"]
 log_output = false
 shell = ["exec {{build_dir}}/cmake/bin/mlacker"]
 
+# MLang unit tests for mlacker_ui; they read fixtures relative to the repo root.
+[[task]]
+name = "unit-test"
+workdir = "{{root}}/.."
+depends_on = ["prepare"]
+commands = ["build/mlang --tests mlacker/tests"]
+
 [[task]]
 name = "test"
 workdir = "{{root}}"
-depends_on = ["build"]
+depends_on = ["build", "unit-test"]
 commands = ["ctest --test-dir {{build_dir}}/cmake --output-on-failure"]
 
 [[task]]

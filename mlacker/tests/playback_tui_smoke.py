@@ -1,6 +1,6 @@
 """PTY regression for the BPM dialog, playback following, and sample following.
 
-Usage: python3 tests/tui_playback_smoke.py /tmp/mlang_tui_demo
+Usage: python3 mlacker/tests/playback_tui_smoke.py mlacker/build/cmake/bin/mlacker
 """
 import fcntl
 import os

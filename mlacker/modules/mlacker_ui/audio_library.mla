@@ -1,7 +1,7 @@
-mod tui_demo::audio_clip;
+mod mlacker_ui::audio_clip;
 mod tui::listview;
-use tui_demo::audio_clip::AudioClip;
-use tui_demo::audio_clip::base_name;
+use mlacker_ui::audio_clip::AudioClip;
+use mlacker_ui::audio_clip::base_name;
 use tui::listview::*;
 use std::strbuf::free;
 

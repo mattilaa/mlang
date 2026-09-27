@@ -1,7 +1,7 @@
 mod std::testing;
-mod tui_demo::midi_controller;
+mod mlacker_ui::midi_controller;
 use std::testing::verify;
-use tui_demo::midi_controller::*;
+use mlacker_ui::midi_controller::*;
 use std::sync::SpscQueue;
 use std::thread::*;
 use std::audio::controller::AudioController;

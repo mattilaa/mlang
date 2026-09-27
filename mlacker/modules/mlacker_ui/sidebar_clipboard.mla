@@ -1,10 +1,10 @@
-mod tui_demo::patterns;
-mod tui_demo::audio_controller;
+mod mlacker_ui::patterns;
+mod mlacker_ui::audio_controller;
 mod std::fs;
-use tui_demo::patterns::*;
-use tui_demo::sequence::*;
-use tui_demo::audio_clip::*;
-use tui_demo::audio_controller::*;
+use mlacker_ui::patterns::*;
+use mlacker_ui::sequence::*;
+use mlacker_ui::audio_clip::*;
+use mlacker_ui::audio_controller::*;
 use tui::listview::*;
 use tui::table::table_matches;
 use tui::table::table_integer;

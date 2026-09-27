@@ -20,7 +20,7 @@ class Terminal:
         self.master, self.slave = os.openpty()
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 28, 120, 0, 0))
         env = dict(os.environ, TERM="xterm-256color", MLANG_TUI_NO_HARDWARE="1")
-        env.pop("MLANG_TUI_DEMO", None)
+        env.pop("MLACKER_DEMO", None)
         env.pop("NO_COLOR", None)
         self.process = subprocess.Popen([os.path.abspath(sys.argv[1]), *args], stdin=self.slave, stdout=self.slave, stderr=self.slave, env=env, cwd=cwd)
 

@@ -1,6 +1,6 @@
 mod tui::surface;
-mod tui_demo::audio_clip;
-use tui_demo::audio_clip::WavePeak;
+mod mlacker_ui::audio_clip;
+use mlacker_ui::audio_clip::WavePeak;
 use tui::geometry::*;
 use tui::surface::*;
 

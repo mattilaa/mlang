@@ -1,8 +1,8 @@
-mod tui_demo::patterns;
+mod mlacker_ui::patterns;
 mod tui::widgets;
-use tui_demo::patterns::PatternLibrary;
-use tui_demo::patterns::PatternEntry;
-use tui_demo::patterns::SongCover;
+use mlacker_ui::patterns::PatternLibrary;
+use mlacker_ui::patterns::PatternEntry;
+use mlacker_ui::patterns::SongCover;
 use tui::widgets::Panel;
 use tui::geometry::*;
 use tui::surface::*;

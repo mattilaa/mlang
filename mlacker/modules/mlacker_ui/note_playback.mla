@@ -1,20 +1,17 @@
-mod tui_demo::sequence;
-use tui_demo::sequence::SequenceTable;
-use tui_demo::sequence::SequenceTrack;
+mod mlacker_ui::sequence;
+use mlacker_ui::sequence::SequenceTable;
+use mlacker_ui::sequence::SequenceTrack;
+use mlacker_ui::sequence::AutomationSlot;
+use mlacker_ui::sequence::automation_controller;
+use mlacker_ui::sequence::automation_steps;
+use mlacker_ui::sequence::automation_steps_per_row;
+use mlacker_ui::sequence::free_steps;
 use tui::table::*;
 use tui::geometry::wide;
 use std::strbuf::sub;
 use std::strbuf::len;
 use std::strbuf::free;
 
-fn pattern_controller_number(parameter: str8) -> i64 {
-    if parameter == "pitchbend" { return 129; }
-    if !table_matches("cc:[0-9]{1,3}", parameter) { return -1; }
-    let suffix: str8 = sub(parameter, 3, len(parameter) - 3);
-    let parsed: result<i64, str8> = table_integer(suffix); free(suffix);
-    if parsed.is_err() { return -1; }
-    let number: i64 = parsed.unwrap(); return number <= 127 ? number : -1;
-}
 
 /// Timestamped demo events for a future MIDI output/audio-thread consumer.
 /// Ticks are musical time (15000 per sixteenth), not UI frame timestamps.
@@ -28,6 +25,21 @@ pub struct NotePlayback {
     var active: list<PlayingNote>; var events: list<NoteEvent>;
     var running: bool; var last: i64;
     var score: list<ScheduledNote>; var revision: i64;
+    /// Tick where row 0 of the playing pattern falls. Set when playback or a
+    /// new pattern starts, so a pattern keeps its own grid whatever the
+    /// previous one's length was.
+    var epoch: i64;
+    /// Row the transport starts this pattern on, or -1 to take it from the
+    /// tick, which is right while one pattern keeps playing.
+    var start_row: i32{-1};
+    /// Ticks past the transport that events are sent ahead, stamped with the
+    /// audio frame they sound on, so a busy UI frame never delays them.
+    var lookahead: i64;
+    /// A matrix row plays once: nothing past its end is sent ahead, since the
+    /// next row brings its own playback.
+    var once: bool;
+    /// Last tick events were sent up to.
+    var horizon: i64;
 };
 impl NotePlayback {
     fn finish_at(self: &mut Self, tick: i64, all: bool) -> void {
@@ -60,23 +72,30 @@ impl NotePlayback {
             let data: TableRow = table.rows[r];
             for t in 0..table.tracks.len() {
                 let track: SequenceTrack = table.tracks[t];
-                if track.audio || track.muted { continue; }
-                // Automation is row-timed, independent of NOTE/LEN/OFF and visibility.
-                for slot in 1..3 {
-                    let controller: i64 = pattern_controller_number(slot == 1 ? track.cc1.parameter : track.cc2.parameter);
-                    let column: i32 = table.automation_column(i32(t), i32(slot));
+                if track.audio || track.muted || i32(t) == table.recording_track { continue; }
+                // Automation plays in 1/64 steps of its row, independent of
+                // NOTE/LEN/OFF and visibility.
+                for slot in 0..track.automation.len() {
+                    let definition: AutomationSlot = track.automation[slot];
+                    let controller: i64 = automation_controller(definition.parameter);
+                    let column: i32 = table.automation_column(i32(t), i32(slot) + 1);
                     if controller < 0 || data.cells[column] == "" { continue; }
-                    let parsed: result<i64, str8> = table_integer(data.cells[column]);
-                    if parsed.is_err() { continue; }
-                    let value: i64 = parsed.unwrap();
-                    if controller == 129 {
-                        if value < -8192 || value > 8191 { continue; }
-                    } else if value < 0 || value > 127 { continue; }
-                    var start: i64 = r * 15000;
-                    if start < from { start = start + (from - start + period - 1) / period * period; }
-                    self.score.push(ScheduledNote { track: t, line: slot, note: controller,
-                        velocity: controller == 129 ? value + 8192 : value, start: start, control: 1,
-                        instrument: track.instrument ? (track.instrument_id > 0 ? wide(track.instrument_id) : -1) : 0 });
+                    let steps: list<str8> = automation_steps(data.cells[column]);
+                    for step in 0..steps.len() {
+                        if steps[step] == "" { continue; }
+                        let parsed: result<i64, str8> = table_integer(steps[step]);
+                        if parsed.is_err() { continue; }
+                        let value: i64 = parsed.unwrap();
+                        if controller == 129 {
+                            if value < -8192 || value > 8191 { continue; }
+                        } else if value < 0 || value > 127 { continue; }
+                        var start: i64 = self.epoch + r * 15000 + step * 15000 / wide(automation_steps_per_row());
+                        if start < from { start = start + (from - start + period - 1) / period * period; }
+                        self.score.push(ScheduledNote { track: t, line: wide(i32(slot)) + 1, note: controller,
+                            velocity: controller == 129 ? value + 8192 : value, start: start, control: 1,
+                            instrument: track.instrument ? (track.instrument_id > 0 ? wide(track.instrument_id) : -1) : 0 });
+                    }
+                    free_steps(steps);
                 }
                 for line in 0..track.note_lines {
                     let column: i32 = table.track_start(i32(t)) + i32(line) * 4;
@@ -85,7 +104,7 @@ impl NotePlayback {
                     let velocity: result<i64, str8> = table_integer(data.cells[column + 1]);
                     if note < 0 || velocity.is_err() { continue; }
                     let value: i64 = velocity.unwrap(); if value <= 0 || value > 127 { continue; }
-                    var start: i64 = r * 15000 + table.note_offset(i32(r), column);
+                    var start: i64 = self.epoch + r * 15000 + table.note_offset(i32(r), column);
                     // No retroactive note-ons on start/seek. A first-row early
                     // note is scheduled before the NEXT loop's first row.
                     if start < from { start = start + (from - start + period - 1) / period * period; }
@@ -96,25 +115,68 @@ impl NotePlayback {
             }
         }
     }
+    /// Build the score of a pattern that starts at tick `epoch`, ahead of time,
+    /// so starting it costs nothing when the transport gets there.
+    pub fn prepare(self: &mut Self, source: &SequenceTable, epoch: i64) -> void {
+        self.events = []; self.active = [];
+        self.epoch = epoch; self.start_row = -1;
+        self.rebuild_score(source, epoch);
+        // Updated from before the row starts, sending ahead once it is close.
+        self.running = true; self.last = -1; self.horizon = epoch - 1;
+    }
+    /// True once events of this playback were sent.
+    pub fn started(self: NotePlayback) -> bool { return self.running && self.horizon >= self.epoch; }
+    /// Take over the notes `previous` still holds when this playback replaces
+    /// it, so they end at their own length rather than never.
+    pub fn carry_voices(self: &mut Self, previous: &NotePlayback) -> void {
+        var old: NotePlayback = NotePlayback {}; old = previous;
+        let voices: list<PlayingNote> = old.active;
+        for voice in voices {
+            self.active.push(PlayingNote { track: voice.track, line: voice.line, note: voice.note, end: voice.end, instrument: voice.instrument });
+        }
+    }
+    /// Tick of the next note-on, note-off or CC this playback will send, or -1.
+    pub fn next_event_tick(self: NotePlayback) -> i64 {
+        var next: i64 = -1;
+        let voices: list<PlayingNote> = self.active;
+        for voice in voices { if next < 0 || voice.end < next { next = voice.end; } }
+        let score: list<ScheduledNote> = self.score;
+        for note in score { if next < 0 || note.start < next { next = note.start; } }
+        return next;
+    }
     pub fn update(self: &mut Self, source: &SequenceTable, tick: i64, playing: bool) -> void {
         self.events = [];
         var table: SequenceTable = SequenceTable {}; table = source;
         if !playing || table.rows.len() == 0 {
-            self.finish_at(tick, true); self.running = false; self.last = tick; self.score = []; return;
+            self.finish_at(tick, true); self.running = false; self.last = tick; self.horizon = tick; self.score = []; return;
         }
         if self.running && tick < self.last { self.finish_at(tick, true); self.running = false; }
         if !self.running || self.revision != table.revision {
-            self.rebuild_score(table, self.running ? self.last + 1 : tick);
+            if !self.running {
+                // The update that starts a pattern arrives a UI frame after the
+                // transport did, so schedule from the row in progress instead of
+                // the tick reached since: the row a pattern starts on plays its
+                // own notes, not the next loop's.
+                let row_start: i64 = tick - tick % 15000;
+                let row: i64 = self.start_row >= 0 ? wide(self.start_row) : tick / 15000 % wide(i32(table.rows.len()));
+                self.epoch = row_start - row * 15000;
+                self.start_row = -1;
+                self.rebuild_score(table, row_start);
+                self.horizon = row_start - 1;
+            } else { self.rebuild_score(table, self.horizon + 1); }
         }
         self.running = true;
         let period: i64 = wide(i32(table.rows.len())) * 15000;
+        var horizon: i64 = tick + (self.lookahead > 0 ? self.lookahead : 0);
+        if self.once && horizon > self.epoch + period - 1 { horizon = self.epoch + period - 1; }
+        if horizon < self.horizon { horizon = self.horizon; }
         while true {
-            var event_tick: i64 = tick + 1;
+            var event_tick: i64 = horizon + 1;
             let voices: list<PlayingNote> = self.active;
             for voice in voices { if voice.end < event_tick { event_tick = voice.end; } }
             let score: list<ScheduledNote> = self.score;
             for note in score { if note.start < event_tick { event_tick = note.start; } }
-            if event_tick > tick { break; }
+            if event_tick > horizon { break; }
             self.finish_at(event_tick, false);
             var updated: list<ScheduledNote> = [];
             for note in score {
@@ -131,6 +193,6 @@ impl NotePlayback {
             }
             self.score = updated;
         }
-        self.last = tick;
+        self.last = tick; self.horizon = horizon;
     }
 }

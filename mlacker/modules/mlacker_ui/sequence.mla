@@ -1,4 +1,4 @@
-/// Editable sequence used by tui_demo; not part of the reusable TUI library.
+/// Editable sequence used by mlacker; not part of the reusable TUI library.
 mod tui::table;
 mod std::bytes;
 use std::bytes::Bytes;
@@ -6,14 +6,14 @@ mod std::audio::controller;
 use std::audio::controller::AudioController;
 mod tui::textfield;
 mod tui::dialog;
-mod tui_demo::audio_clip;
-mod tui_demo::duration;
-use tui_demo::duration::*;
-use tui_demo::audio_clip::*;
-mod tui_demo::waveform;
-use tui_demo::waveform::paint_wave_channel_style;
-use tui_demo::waveform::paint_grainy_row;
-use tui_demo::waveform::paint_grainy_row_duration;
+mod mlacker_ui::audio_clip;
+mod mlacker_ui::duration;
+use mlacker_ui::duration::*;
+use mlacker_ui::audio_clip::*;
+mod mlacker_ui::waveform;
+use mlacker_ui::waveform::paint_wave_channel_style;
+use mlacker_ui::waveform::paint_grainy_row;
+use mlacker_ui::waveform::paint_grainy_row_duration;
 use tui::dialog::Dialog;
 use tui::table::*;
 use tui::textfield::TextField;

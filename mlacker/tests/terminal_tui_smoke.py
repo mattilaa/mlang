@@ -1,6 +1,6 @@
-"""Exercise the built TUI demo in a real PTY, without third-party packages.
+"""Exercise the built mlacker TUI in a real PTY, without third-party packages.
 
-Usage: python3 tests/tui_terminal_smoke.py /tmp/mlang_tui_demo
+Usage: python3 mlacker/tests/terminal_tui_smoke.py mlacker/build/cmake/bin/mlacker
 """
 import fcntl
 import os

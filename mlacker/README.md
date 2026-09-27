@@ -1,9 +1,9 @@
 # mlacker
 
 Terminal tracker built with MLang, the shared `tui` widget library, macOS AUHAL,
-and a native VST3 host. This is the full application project; the old
-`examples/tui_demo.mla` remains an SDK-free entrypoint for widget development.
-Both entrypoints share `modules/tui_demo/app.mla` and the existing tracker model.
+and a native VST3 host. The tracker's UI and model live in `modules/mlacker_ui/`
+(imported as `mlacker_ui::*`); `mlang.toml` puts both `modules/` and the
+repository's `../modules` on the module path.
 
 ## Build and run
 
@@ -934,7 +934,7 @@ parameter/editor-state round trips and rejected files. The spectrum PTY test tog
 analyzer, edits the master bus and checks it survives a session round trip. The
 virtual keyboard PTY test toggles the keyboard, changes octave, step-enters a note
 and checks that Space and `q` behave. Legacy widget tests opt in
-to seeded demo data with `MLANG_TUI_DEMO=1`; normal mlacker startup does not.
+to seeded demo data with `MLACKER_DEMO=1`; normal mlacker startup does not.
 
 For a hardware-free manual run:
 
@@ -942,8 +942,9 @@ For a hardware-free manual run:
 MLANG_TUI_NO_HARDWARE=1 mlacker/build/cmake/bin/mlacker
 ```
 
-Run that command from the repository root. To test only the widgets without
-fetching/building the SDK, continue compiling `examples/tui_demo.mla` as before.
+Run that command from the repository root. The `mlacker_ui` unit tests
+(`tests/*.mla`) need no SDK; run them from the repository root with
+`build/mlang --tests mlacker/tests` or `build/mlang pkg --config mlacker/mlang.toml run unit-test`.
 
 ### Effect plugin presets
 

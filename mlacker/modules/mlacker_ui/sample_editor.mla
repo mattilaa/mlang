@@ -1,9 +1,9 @@
-mod tui_demo::audio_clip;
-mod tui_demo::sample_view;
+mod mlacker_ui::audio_clip;
+mod mlacker_ui::sample_view;
 mod tui::widgets;
-use tui_demo::audio_clip::AudioClip;
-use tui_demo::audio_clip::base_name;
-use tui_demo::sample_view::SampleView;
+use mlacker_ui::audio_clip::AudioClip;
+use mlacker_ui::audio_clip::base_name;
+use mlacker_ui::sample_view::SampleView;
 use tui::geometry::*;
 use tui::surface::*;
 use tui::theme::*;

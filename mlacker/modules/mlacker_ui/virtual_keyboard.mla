@@ -1,12 +1,12 @@
 mod tui::piano;
-mod tui_demo::midi_controller;
+mod mlacker_ui::midi_controller;
 use tui::geometry::*;
 use tui::surface::*;
 use tui::theme::*;
 use tui::input::*;
 use tui::menu::Key;
 use tui::piano::*;
-use tui_demo::midi_controller::MidiInputEvent;
+use mlacker_ui::midi_controller::MidiInputEvent;
 use std::strbuf::free;
 
 /// A sounding note, the key code playing it, and the live target (see
