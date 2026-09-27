@@ -1,3 +1,4 @@
+[![Build and Test](https://github.com/mattilaa/mlang/actions/workflows/build.yml/badge.svg)](https://github.com/mattilaa/mlang/actions/workflows/build.yml)
 # mlang
 MLang - Programming Language
 
