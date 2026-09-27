@@ -31,11 +31,14 @@ enum Index {
     kFat = 6,
     kAttack = 7,
     kBypass = 8,
+    kTruePeak = 9,
     kCount
 };
 constexpr ParamID kFirstParam = 100;
-// Read-only meter, outside the saved range.
-constexpr ParamID kReductionMeter = kFirstParam + kCount;
+// Read-only meter, outside the saved range; fixed so new controls never move it.
+constexpr ParamID kReductionMeter = kFirstParam + 90;
+// States saved before True Peak existed hold the first nine values only.
+constexpr int kLegacyCount = kTruePeak;
 enum Mode { kMaximizer, kSmooth };
 // Stepped values are whole numbers from low to high, as VST3 RangeParameter
 // and StringListParameter index them.
@@ -50,6 +53,7 @@ static const Spec specs[kCount] = {
     {STR16("Fat"), STR16(""), 0, 1, 0.3, 0},
     {STR16("Attack"), STR16("ms"), 0.1, 50, 5, 0},
     {STR16("Bypass"), STR16(""), 0, 1, 0, 1},
+    {STR16("True Peak"), STR16(""), 0, 1, 1, 1},
 };
 constexpr double kMeterRangeDb = 24;
 static double normalized(int i, double plain) { return (plain - specs[i].low) / (specs[i].high - specs[i].low); }
@@ -68,7 +72,7 @@ public:
         addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
         addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
         for(int i = 0; i < kCount; ++i) {
-            if(i == kMode || i == kAutoRelease) {
+            if(i == kMode || i == kAutoRelease || i == kTruePeak) {
                 auto* parameter = new StringListParameter(specs[i].title, kFirstParam + i);
                 if(i == kMode) { parameter->appendString(STR16("Maximizer")); parameter->appendString(STR16("Smooth")); }
                 else { parameter->appendString(STR16("Off")); parameter->appendString(STR16("On")); }
@@ -104,7 +108,8 @@ public:
         if(!state && dsp_) mlalimiter_reset__ptr_struct_PunchLimiter(dsp_);
         return SingleComponentEffect::setActive(state);
     }
-    // The 1.5 ms look-ahead; bypass is delayed by the same amount.
+    // 1.5 ms look-ahead, two true-peak detector delays, the clipper and the
+    // 0.5 ms guard; the same with True Peak on or off, and bypass matches it.
     uint32 PLUGIN_API getLatencySamples() override {
         return dsp_ ? static_cast<uint32>(mlalimiter_latency__ptr_struct_PunchLimiter(dsp_)) : 0;
     }
@@ -153,7 +158,16 @@ public:
         if(!state) return kResultFalse;
         IBStreamer stream(state, kLittleEndian);
         std::array<double, kCount> values{};
-        for(auto& value : values) if(!stream.readDouble(value) || !std::isfinite(value) || value < 0 || value > 1) return kResultFalse;
+        for(int i = 0; i < kCount; ++i) values[i] = normalized(i, specs[i].initial);
+        for(int i = 0; i < kCount; ++i) {
+            double value = 0;
+            if(!stream.readDouble(value)) {
+                if(i == kLegacyCount) break; // pre-True Peak state
+                return kResultFalse;
+            }
+            if(!std::isfinite(value) || value < 0 || value > 1) return kResultFalse;
+            values[i] = value;
+        }
         norm_ = values;
         for(int i = 0; i < kCount; ++i) setParamNormalized(kFirstParam + i, norm_[i]);
         applyAll(); return kResultOk;

@@ -22,7 +22,7 @@ fn mlalimiter_reduction(handle: ptr<PunchLimiter>) -> f32 { unsafe { return (*ha
 
 /// 0 mode (0 Maximizer, 1 Smooth), 1 threshold dB, 2 ceiling dB,
 /// 3 release ms, 4 auto release (0/1), 5 punch, 6 fat, 7 attack ms,
-/// 8 bypass (0/1).
+/// 8 bypass (0/1), 9 true peak (0/1).
 fn mlalimiter_set(handle: ptr<PunchLimiter>, index: i32, value: f32) {
     unsafe {
         if index == 0 {
@@ -36,6 +36,7 @@ fn mlalimiter_set(handle: ptr<PunchLimiter>, index: i32, value: f32) {
         else if index == 6 { (*handle).set_fat(value); }
         else if index == 7 { (*handle).set_attack_ms(value); }
         else if index == 8 { (*handle).set_bypass(value >= 0.5f); }
+        else if index == 9 { (*handle).set_true_peak(value >= 0.5f); }
     }
 }
 fn mlalimiter_process(handle: ptr<PunchLimiter>, left: f32, right: f32, out_right: ptr<f32>) -> f32 {

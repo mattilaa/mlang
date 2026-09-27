@@ -8,7 +8,10 @@ VST3 wrapper following `mla_juno_chorus`.
 It takes the Waves L2 Ultramaximizer as the reference for how it works:
 Threshold drives the signal into a transparent 1.5 ms look-ahead brickwall
 limiter, the output never exceeds the Ceiling, and Auto Release adapts the
-release to the material, like L2's ARC. **Smooth** mode takes Waves
+release to the material, like L2's ARC. **True Peak** (on by default) goes
+further than L2's sample-peak ceiling: it also limits the peaks the waveform
+reaches *between* samples, so the Ceiling is in dBTP as streaming services
+measure it. **Smooth** mode takes Waves
 Renaissance Axx as the reference: a musical soft-knee compressor with its own
 Attack in front of the limiter, for single sources and buses. **Punch** and
 **Fat** add character on top. It is an original implementation and contains
@@ -67,6 +70,7 @@ controls use indices.
 | Fat | 0–1 | 0.3 |
 | Attack | 0.1–50 ms (Smooth mode) | 5 ms |
 | Bypass | Off / On | Off |
+| True Peak | Off / On | On |
 
 The plugin also has a read-only **Reduction** output parameter (0–24 dB) that
 reports the deepest gain reduction in each block, for host meters.
@@ -100,9 +104,36 @@ much of each transient gets through before it acts. It is denser and a
 little quieter at the same Threshold (there is no make-up gain), and suits
 single instruments and buses.
 
-The plugin reports 1.5 ms + 1 sample of latency (73 samples at 48 kHz) for
-host delay compensation. Bypass outputs the dry input delayed by the same
-amount, so switching it doesn't shift the timing.
+**True Peak**: a DAC, or a lossy encoder (MP3, AAC, Ogg) on a streaming
+service, reconstructs the continuous waveform, which can peak above the
+samples. The overshoot is up to 3 dB on bright material, and more with Punch
+clipping. With True Peak on, the limiter detects peaks at seven points between
+every pair of samples (8× oversampling), and a short guard stage after the
+clipper catches what the clipper adds between samples. The Ceiling then
+holds for the reconstructed waveform. For streaming, set the Ceiling to
+−1 dB (dBTP). Measured against an independent 32× reference meter:
+
+| Material | True Peak off | True Peak on |
+|---|---|---|
+| Quarter-rate sine sampled at 45°, ceiling −1 dB | +2.0 dBTP | −1.00 dBTP |
+| Drum beat band-limited to 20 kHz, Punch 1 | +1.2 dBTP | −0.97 dBTP |
+| Beat with white noise up to Nyquist, Punch 1 | +2.3 dBTP | −0.67 dBTP |
+
+The detection is exact below about 20 kHz (at 48 kHz). Energy between
+there and Nyquist can read a few tenths of a dB higher on an ideal
+full-band meter, but DAC and codec filters remove that band. True Peak
+roughly doubles the CPU cost, to about 6% of one core at 48 kHz here.
+Off, the Ceiling applies to sample values only, as in L2.
+
+The plugin reports 145 samples of latency at 48 kHz (1.5 ms look-ahead,
+two 24-sample true-peak detectors, the clipper and the 0.5 ms guard) for
+host delay compensation. The latency is the same with True Peak on or off.
+Bypass outputs the dry input delayed by the same amount, so switching either
+doesn't shift the timing.
+
+Plugin states saved before True Peak existed still load, with True Peak on.
+mlacker sessions made with the earlier nine-control version will report
+that the parameter layout changed and need the limiter re-inserted.
 
 Automation uses the final value in each processing block, like the sibling
 plugins. Threshold and Ceiling glide over about 10 ms.
@@ -125,12 +156,15 @@ python3 plugins/mla_limiter/tests/mlacker_editor_smoke.py \
 ```
 
 The DSP tests check that the ceiling holds in both modes and at any Punch
-and Fat. They also check that Threshold drives loudness, that Punch ducks
+and Fat, and that True Peak keeps a 45° quarter-rate sine under the ceiling
+between samples (and that it doesn't when off). They also check that Threshold drives loudness, that Punch ducks
 less, that the output is bit-exact and latency-aligned below the limit, the
 reduction reporting, the latency-aligned bypass, and finite output at
 extremes. Processor coverage adds the ceiling on a drum beat across every
 mode × Punch × Fat, the Ceiling control, the Fat bass lift, Auto Release,
-the reduction meter output, silent buffers, parameter metadata, the reported
-latency, state round-trip and invalid-state rejection, at 8 kHz and 384 kHz.
+the reduction meter output, True Peak checked against an independent 32×
+reference interpolator, silent buffers, parameter metadata, the reported
+latency, state round-trip, loading pre-True Peak states and invalid-state
+rejection, at 8 kHz and 384 kHz.
 The PTY smoke test loads the bundle in mlacker, edits Threshold, scrolls
 through the controls, and reopens a saved session to check the edited value.

@@ -69,11 +69,12 @@ fn test_punch_limiter_is_clean_below_the_limit() {
     limiter.set_threshold_db(0.0f); limiter.set_ceiling_db(0.0f); limiter.set_punch(0.0f); limiter.set_fat(0.0f);
     limiter.reset();
     let latency: i64 = limiter.latency_samples();
-    verify(latency == 73);
+    // 72 look-ahead + 2 x 24 detector + 1 clipper + 24 guard at 48 kHz.
+    verify(latency == 145);
     for i in 0..4800 {
         let frame: PunchLimiterFrame = limiter.process_stereo(i == 100 ? 0.5f : 0.0f, i == 200 ? -0.25f : 0.0f);
-        let left_expected: f32 = i == 173 ? 0.5f : 0.0f;
-        let right_expected: f32 = i == 273 ? -0.25f : 0.0f;
+        let left_expected: f32 = i == 245 ? 0.5f : 0.0f;
+        let right_expected: f32 = i == 345 ? -0.25f : 0.0f;
         verify(abs32(frame.left() - left_expected) < 0.00001f && abs32(frame.right() - right_expected) < 0.00001f);
     }
     verify(limiter.gain_reduction_db() < 0.001f);
@@ -97,7 +98,7 @@ fn test_punch_limiter_bypass_is_latency_aligned() {
     limiter.set_threshold_db(-20.0f); limiter.set_bypass(true);
     for i in 0..2000 {
         let frame: PunchLimiterFrame = limiter.process_stereo(hot(i), -hot(i));
-        let expected: f32 = i >= 73 ? hot(i - 73) : 0.0f;
+        let expected: f32 = i >= 145 ? hot(i - 145) : 0.0f;
         verify(frame.left() == expected && frame.right() == -expected);
     }
 }
@@ -113,4 +114,29 @@ fn test_punch_limiter_extremes_stay_finite() {
         verify(frame.left() == frame.left() && abs32(frame.left()) <= 1.0f);
         verify(frame.right() == frame.right() && abs32(frame.right()) <= 1.0f);
     }
+}
+
+// A quarter-rate sine at 45 degrees: samples at 0.707 of a peak that lies
+// between them. Returns the largest midpoint of adjacent output samples
+// scaled by the exact fs/4 reconstruction factor (sqrt 2 over the samples).
+fn quarter_rate_peak(true_peak: bool) -> f32 {
+    var limiter: PunchLimiter = PunchLimiter::new(48000.0f);
+    limiter.set_threshold_db(-9.0f); limiter.set_ceiling_db(-1.0f); limiter.set_true_peak(true_peak); limiter.reset();
+    var peak: f32 = 0.0f;
+    let pattern: list<f32> = [0.6363961f, 0.6363961f, -0.6363961f, -0.6363961f];
+    for i in 0..24000 {
+        let frame: PunchLimiterFrame = limiter.process_stereo(pattern[i % 4], pattern[i % 4]);
+        if i >= 12000 && abs32(frame.left()) * 1.4142136f > peak { peak = abs32(frame.left()) * 1.4142136f; }
+    }
+    return peak;
+}
+
+#[test]
+fn test_punch_limiter_true_peak_between_samples() {
+    // -1 dB is 0.8912509. Sample-peak mode reaches it with its samples, so
+    // the waveform peaks 3 dB higher; true-peak mode keeps the waveform there
+    // (this estimate uses the largest sample, so allow +0.03 dB).
+    verify(quarter_rate_peak(false) > 1.2f);
+    let held: f32 = quarter_rate_peak(true);
+    verify(held <= 0.8944f && held > 0.87f);
 }

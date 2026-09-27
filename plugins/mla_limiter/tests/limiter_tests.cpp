@@ -68,6 +68,23 @@ static double power(const std::vector<float>& values, int from = 0) {
     double sum = 0; for(size_t i = from; i < values.size(); ++i) sum += values[i] * values[i]; return sum / (values.size() - from);
 }
 static double db(double ratio) { return 10 * std::log10(ratio); }
+static double bessel(double x) { double s = 1, t = 1; for(int m = 1; m < 40; ++m) { t *= (x / 2 / m) * (x / 2 / m); s += t; } return s; }
+// Reference true peak, independent of the plugin's detector: 32 points per
+// sample from a 256-tap Kaiser-windowed sinc.
+static double truePeak(const std::vector<float>& v, int from) {
+    const int half = 128; double best = 0;
+    for(int n = from; n + half < static_cast<int>(v.size()); ++n)
+        for(int k = 0; k < 32; ++k) {
+            const double t = n + k / 32.0; double sum = 0;
+            for(int i = n - half + 1; i <= n + half; ++i) {
+                const double d = t - i, x = d / half;
+                if(i < 0 || std::abs(x) >= 1) continue;
+                sum += v[i] * (d == 0 ? 1 : std::sin(M_PI * d) / (M_PI * d)) * bessel(9 * std::sqrt(1 - x * x)) / bessel(9);
+            }
+            best = std::max(best, std::abs(sum));
+        }
+    return best;
+}
 int main() {
     Fixture a;
     check(a.processor.getParameterCount() == kCount + 1, "parameter count (controls + meter)");
@@ -81,7 +98,7 @@ int main() {
     a.processor.getParameterInfo(kCount, meterInfo);
     check(meterInfo.id == kReductionMeter && (meterInfo.flags & ParameterInfo::kIsReadOnly), "read-only reduction meter");
     const int latency = static_cast<int>(a.processor.getLatencySamples());
-    check(latency == 73, "1.5 ms look-ahead + 1 sample latency at 48 kHz");
+    check(latency == 72 + 2 * 24 + 1 + 24, "look-ahead, detectors, clipper and guard latency at 48 kHz");
 
     const int rate = 48000, length = 2 * rate;
     auto input = beat(length, rate);
@@ -96,6 +113,21 @@ int main() {
                 check(peak(out[0]) <= ceiling + 1e-6 && peak(out[1]) <= ceiling + 1e-6, "output never exceeds the ceiling");
                 check(db(power(out[0], rate / 2) / power(input, rate / 2)) > 4, "threshold drive makes it louder");
             }
+    // True Peak: a quarter-rate sine sampled at 45 degrees peaks 3 dB between
+    // its samples. Off, the samples obey the ceiling but the waveform does
+    // not; on, the reconstructed waveform does too.
+    {
+        std::vector<float> sine(rate / 4);
+        for(int i = 0; i < rate / 4; ++i) sine[i] = .9f * static_cast<float>(std::sin(M_PI / 2 * i + M_PI / 4));
+        const double limit = std::pow(10.0, -1.0 / 20);
+        for(int on : {0, 1}) {
+            Fixture limiter; limiter.set(kTruePeak, on); limiter.set(kCeiling, -1); limiter.set(kThreshold, -9);
+            auto out = limiter.render(sine);
+            const double tp = truePeak(out[0], rate / 8);
+            if(on) check(tp <= limit * 1.001, "true peak holds the ceiling between samples");
+            else check(tp > limit * 1.25 && peak(out[0], rate / 8) <= limit + 1e-6, "sample-peak mode lets inter-sample peaks through");
+        }
+    }
     // Ceiling moves the output peak.
     {
         Fixture limiter; limiter.set(kCeiling, -6); limiter.set(kThreshold, -12);
@@ -157,6 +189,16 @@ int main() {
     check(b.processor.setState(&state) == kResultOk, "restore state");
     check(std::abs(b.processor.getParamNormalized(kFirstParam + kPunch) - normalized(kPunch, 0.8)) < 1e-9, "restored punch");
     check(b.processor.getParamNormalized(kFirstParam + kMode) == 1, "restored mode");
+    // A state saved before True Peak existed (nine values) still loads.
+    {
+        MemoryStream legacy; IBStreamer writer(&legacy, kLittleEndian);
+        for(int i = 0; i < kTruePeak; ++i) writer.writeDouble(i == kPunch ? 0.9 : normalized(i, specs[i].initial));
+        legacy.seek(0, IBStream::kIBSeekSet, nullptr);
+        Fixture old;
+        check(old.processor.setState(&legacy) == kResultOk, "load pre-True Peak state");
+        check(std::abs(old.processor.getParamNormalized(kFirstParam + kPunch) - 0.9) < 1e-9, "legacy value restored");
+        check(old.processor.getParamNormalized(kFirstParam + kTruePeak) == 1, "legacy state defaults True Peak on");
+    }
     MemoryStream truncated;
     check(b.processor.setState(&truncated) != kResultOk, "reject truncated state");
     MemoryStream invalid; IBStreamer bad(&invalid, kLittleEndian);
