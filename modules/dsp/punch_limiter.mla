@@ -1,0 +1,551 @@
+/// \file punch_limiter.mla
+/// \brief Look-ahead brickwall maximizer with auto release, punch and fat.
+///
+/// This is an original implementation based on general dynamics-processing
+/// techniques. It follows the controls and behaviour of classic mastering
+/// maximizers (threshold drive, output ceiling, auto release) and smooth
+/// compressor/limiters, but does not contain or derive from proprietary code.
+///
+/// @defgroup dsp_punch_limiter dsp::punch_limiter
+/// @ingroup dsp
+/// @brief Brickwall limiter whose loudest transients are shaped by a soft
+/// clipper (punch) and whose low end is saturated (fat).
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+mod std::vec;
+use dsp::detail::expf;
+use dsp::detail::logf;
+use dsp::detail::llroundf;
+use dsp::detail::tanhf;
+use std::vec::set_f32;
+/// \endcond
+
+extern fn sinf(value: f32) -> f32;
+extern fn sqrtf(value: f32) -> f32;
+
+/// Interpolator length in input samples; its delay is half of it.
+fn punch_taps() -> i64 { return 48; }
+fn punch_detector_delay() -> i64 { return 24; }
+/// Oversampling factor of the true-peak estimate.
+fn punch_phases() -> i64 { return 8; }
+
+fn punch_clamp(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+fn punch_abs(value: f32) -> f32 { return value < 0.0f ? -value : value; }
+
+fn punch_db_to_gain(db: f32) -> f32 { return expf(db * 0.115129255f); }
+
+fn punch_gain_to_db(gain: f32) -> f32 { return 8.6858896f * logf(gain < 0.000000001f ? 0.000000001f : gain); }
+
+/// One-pole smoothing coefficient for a time constant of `ms` at `rate`.
+fn punch_coefficient(ms: f32, rate: f32) -> f32 { return 1.0f - expf(-1000.0f / (ms * rate)); }
+
+/// One-pole step toward `target` that lands on it instead of stalling a few
+/// ulps short.
+fn punch_glide(value: f32, target: f32, coefficient: f32) -> f32 {
+    let next: f32 = value + (target - value) * coefficient;
+    if next == value || punch_abs(target - next) < 0.000001f { return target; }
+    return next;
+}
+
+/// Soft clipper: linear to `knee`, then a tanh shoulder of width `width`
+/// that never reaches 1.
+fn punch_clip(u: f32, knee: f32, width: f32) -> f32 {
+    let a: f32 = punch_abs(u);
+    if a <= knee { return u; }
+    let y: f32 = knee + width * tanhf((a - knee) / width);
+    return u < 0.0f ? -y : y;
+}
+
+/// log(cosh(z)) for z >= 0 without overflow.
+fn punch_log_cosh(z: f32) -> f32 { return z + logf(1.0f + expf(-2.0f * z)) - 0.6931472f; }
+
+/// Antiderivative of the clipper's distortion `punch_clip(u) - u` (zero
+/// below the knee), for anti-aliased clipping.
+fn punch_excess_integral(u: f32, knee: f32, width: f32) -> f32 {
+    let a: f32 = punch_abs(u);
+    if a <= knee { return 0.0f; }
+    let over: f32 = a - knee;
+    return width * width * punch_log_cosh(over / width) - 0.5f * over * over;
+}
+
+/// Zeroth-order modified Bessel function, for the Kaiser window.
+fn punch_bessel_i0(x: f32) -> f32 {
+    var sum: f32 = 1.0f;
+    var term: f32 = 1.0f;
+    let half: f32 = 0.5f * x;
+    for m in 1..30 {
+        let r: f32 = half / f32(m);
+        term = term * r * r;
+        sum = sum + term;
+    }
+    return sum;
+}
+
+/// True-peak estimate of a stereo stream: the samples plus seven points
+/// between each pair, from a 48-tap Kaiser-windowed sinc (8x oversampling,
+/// flat to about 0.47 x the sample rate). Both peaks refer to the sample
+/// `punch_detector_delay()` steps back and the gap after it.
+struct TruePeakDetector {
+    var coefficients: list<f32>;
+    var history_left: list<f32>;
+    var history_right: list<f32>;
+    var pos: i64;
+    var sample_peak: f32;
+    var true_peak: f32;
+};
+
+impl TruePeakDetector {
+    fn new() -> TruePeakDetector {
+        let taps: i64 = punch_taps();
+        var detector: TruePeakDetector = TruePeakDetector {
+            coefficients: [0.0f; taps * (punch_phases() - 1)], history_left: [0.0f; taps], history_right: [0.0f; taps],
+            pos: 0, sample_peak: 0.0f, true_peak: 0.0f
+        };
+        let half: f32 = f32(punch_detector_delay());
+        let beta: f32 = 4.55f;
+        let norm: f32 = punch_bessel_i0(beta);
+        let phases: i64 = punch_phases();
+        for k in 1..phases {
+            var sum: f32 = 0.0f;
+            for j in 0..taps {
+                // Distance from the output point back to input x[n - j].
+                let d: f32 = f32(j) - half + f32(k) / f32(phases);
+                let x: f32 = d / half;
+                let window: f32 = punch_bessel_i0(beta * sqrtf(punch_clamp(1.0f - x * x, 0.0f, 1.0f))) / norm;
+                let value: f32 = sinf(3.1415927f * d) / (3.1415927f * d) * window;
+                set_f32(detector.coefficients, (k - 1) * taps + j, value);
+                sum = sum + value;
+            }
+            for j in 0..taps { set_f32(detector.coefficients, (k - 1) * taps + j, detector.coefficients[(k - 1) * taps + j] / sum); }
+        }
+        return detector;
+    }
+
+    fn clear(self: &mut Self) -> void {
+        for i in 0..self.history_left.len() { set_f32(self.history_left, i, 0.0f); set_f32(self.history_right, i, 0.0f); }
+        self.pos = 0; self.sample_peak = 0.0f; self.true_peak = 0.0f;
+    }
+
+    /// Push one frame; the inter-sample points are computed only if `full`.
+    fn push(self: &mut Self, left: f32, right: f32, full: bool) -> void {
+        let taps: i64 = punch_taps();
+        set_f32(self.history_left, self.pos, left);
+        set_f32(self.history_right, self.pos, right);
+        var centre: i64 = self.pos - punch_detector_delay();
+        if centre < 0 { centre = centre + taps; }
+        var peak: f32 = punch_abs(self.history_left[centre]);
+        if punch_abs(self.history_right[centre]) > peak { peak = punch_abs(self.history_right[centre]); }
+        self.sample_peak = peak;
+        if full {
+            let points: i64 = punch_phases() - 1;
+            for k in 0..points {
+                var sum_left: f32 = 0.0f;
+                var sum_right: f32 = 0.0f;
+                let base: i64 = k * taps;
+                var index: i64 = self.pos;
+                for j in 0..taps {
+                    let c: f32 = self.coefficients[base + j];
+                    sum_left = sum_left + c * self.history_left[index];
+                    sum_right = sum_right + c * self.history_right[index];
+                    index = index - 1;
+                    if index < 0 { index = taps - 1; }
+                }
+                if punch_abs(sum_left) > peak { peak = punch_abs(sum_left); }
+                if punch_abs(sum_right) > peak { peak = punch_abs(sum_right); }
+            }
+        }
+        self.true_peak = peak;
+        self.pos = self.pos + 1;
+        if self.pos >= taps { self.pos = 0; }
+    }
+}
+
+/// @brief The two characters.
+pub enum PunchLimiterMode : i32 {
+    /// Transparent look-ahead brickwall maximizer (the L2 style).
+    Maximizer = 0,
+    /// A soft-knee 3:1 compressor with its own attack in front of the
+    /// limiter: smoother and denser, for single sources and buses (the
+    /// Renaissance style).
+    Smooth = 1
+};
+
+/// @brief One processed stereo sample.
+pub struct PunchLimiterFrame {
+    var left_value: f32;
+    var right_value: f32;
+};
+
+impl PunchLimiterFrame {
+    /// @brief Return the left output sample.
+    pub fn left(self: PunchLimiterFrame) -> f32 { return self.left_value; }
+
+    /// @brief Return the right output sample.
+    pub fn right(self: PunchLimiterFrame) -> f32 { return self.right_value; }
+}
+
+/// @brief Linked-stereo look-ahead maximizer with auto release, punch and fat.
+///
+/// Threshold drives the input: lowering it adds gain in front of the
+/// limiter, and the output never exceeds the ceiling. The limiter looks
+/// 1.5 ms ahead and ramps its gain down before each peak arrives. Punch lets
+/// peaks up to 6 dB over the limit past the limiter and rounds them off in an
+/// anti-aliased soft clipper instead, so drums keep their snap while the body
+/// of the mix is not ducked. Fat saturates and lifts the low band before the
+/// limiter. Storage is allocated only by `new()`; processing and parameter
+/// changes do not allocate or lock.
+pub struct PunchLimiter {
+    var sample_rate_hz: f32;
+    var mode: PunchLimiterMode;
+    var threshold_db: f32;
+    var ceiling_db: f32;
+    var release_ms: f32;
+    var attack_ms: f32;
+    var arc: bool;
+    var punch: f32;
+    var fat: f32;
+    var bypass: bool;
+    var true_peak: bool;
+    var drive: f32;
+    var ceiling: f32;
+    /// Ceiling and drive after a ~10 ms glide, so moves do not click.
+    var drive_smooth: f32;
+    var ceiling_smooth: f32;
+    var glide: f32;
+    /// Fat: two-pole low band per channel.
+    var fat_coefficient: f32;
+    var low_left1: f32;
+    var low_left2: f32;
+    var low_right1: f32;
+    var low_right2: f32;
+    /// Smooth mode compressor, in dB.
+    var comp_env_db: f32;
+    var comp_attack: f32;
+    var comp_gain: f32;
+    /// Limiter: held gain in dB, its release and the auto-release average.
+    var lookahead: i64;
+    var held_db: f32;
+    var hold_remaining: i64;
+    var arc_average_db: f32;
+    var arc_coefficient: f32;
+    var release_coefficient: f32;
+    var release_fast: f32;
+    var release_slow: f32;
+    /// Boxcar over the last `lookahead` gains, ramping each reduction in.
+    var gains: list<f32>;
+    var gain_pos: i64;
+    var gain_sum: f32;
+    var limiter_gain: f32;
+    /// Delay lines: the driven signal (look-ahead) and the raw input (full
+    /// latency, for bypass).
+    var delay_left: list<f32>;
+    var delay_right: list<f32>;
+    var raw_left: list<f32>;
+    var raw_right: list<f32>;
+    var delay_pos: i64;
+    var raw_pos: i64;
+    /// Clipper: previous input per channel.
+    var clip_prev_left: f32;
+    var clip_prev_right: f32;
+    /// Detectors in front of the limiter and after the clipper.
+    var detector: TruePeakDetector;
+    var guard_detector: TruePeakDetector;
+    /// True-peak guard: a 0.5 ms look-ahead stage after the clipper.
+    var guard_lookahead: i64;
+    var guard_held_db: f32;
+    var guard_hold: i64;
+    var guard_release: f32;
+    var guard_gains: list<f32>;
+    var guard_pos: i64;
+    var guard_sum: f32;
+    var guard_gain: f32;
+    var guard_left: list<f32>;
+    var guard_right: list<f32>;
+    var guard_delay_pos: i64;
+};
+
+impl PunchLimiter {
+    /// @brief Allocate a limiter for `sample_rate_hz` (8 .. 384 kHz).
+    pub fn new(sample_rate_hz: f32) -> PunchLimiter {
+        let rate: f32 = punch_clamp(sample_rate_hz, 8000.0f, 384000.0f);
+        var lookahead: i64 = llroundf(rate * 0.0015f);
+        if lookahead < 1 { lookahead = 1; }
+        var guard: i64 = llroundf(rate * 0.0005f);
+        if guard < 1 { guard = 1; }
+        let detector_delay: i64 = punch_detector_delay();
+        let latency: i64 = lookahead + 2 * detector_delay + 1 + guard;
+        var limiter: PunchLimiter = PunchLimiter {
+            sample_rate_hz: rate,
+            mode: PunchLimiterMode::Maximizer,
+            threshold_db: -6.0f, ceiling_db: -0.3f, release_ms: 60.0f, attack_ms: 5.0f,
+            arc: true, punch: 0.3f, fat: 0.3f, bypass: false, true_peak: true,
+            drive: 1.0f, ceiling: 1.0f, drive_smooth: 1.0f, ceiling_smooth: 1.0f,
+            glide: punch_coefficient(10.0f, rate),
+            fat_coefficient: 1.0f - expf(-6.2831853f * 110.0f / rate),
+            low_left1: 0.0f, low_left2: 0.0f, low_right1: 0.0f, low_right2: 0.0f,
+            comp_env_db: -120.0f, comp_attack: 0.0f, comp_gain: 1.0f,
+            lookahead: lookahead, held_db: 0.0f, hold_remaining: 0,
+            arc_average_db: 0.0f, arc_coefficient: punch_coefficient(250.0f, rate),
+            release_coefficient: 0.0f, release_fast: 0.0f, release_slow: 0.0f,
+            gains: [1.0f; lookahead], gain_pos: 0, gain_sum: f32(lookahead), limiter_gain: 1.0f,
+            delay_left: [0.0f; lookahead + detector_delay + 1], delay_right: [0.0f; lookahead + detector_delay + 1],
+            raw_left: [0.0f; latency + 1], raw_right: [0.0f; latency + 1], delay_pos: 0, raw_pos: 0,
+            clip_prev_left: 0.0f, clip_prev_right: 0.0f,
+            detector: TruePeakDetector::new(), guard_detector: TruePeakDetector::new(),
+            guard_lookahead: guard, guard_held_db: 0.0f, guard_hold: 0,
+            guard_release: punch_coefficient(20.0f, rate),
+            guard_gains: [1.0f; guard], guard_pos: 0, guard_sum: f32(guard), guard_gain: 1.0f,
+            guard_left: [0.0f; guard + detector_delay + 1], guard_right: [0.0f; guard + detector_delay + 1],
+            guard_delay_pos: 0
+        };
+        limiter.set_threshold_db(-6.0f);
+        limiter.set_ceiling_db(-0.3f);
+        limiter.set_release_ms(60.0f);
+        limiter.set_attack_ms(5.0f);
+        limiter.reset();
+        return limiter;
+    }
+
+    /// @brief Clear the delay lines, filters and gain envelopes.
+    pub fn reset(self: &mut Self) -> void {
+        for i in 0..self.gains.len() { set_f32(self.gains, i, 1.0f); }
+        for i in 0..self.delay_left.len() { set_f32(self.delay_left, i, 0.0f); set_f32(self.delay_right, i, 0.0f); }
+        for i in 0..self.raw_left.len() { set_f32(self.raw_left, i, 0.0f); set_f32(self.raw_right, i, 0.0f); }
+        self.raw_pos = 0;
+        self.gain_pos = 0; self.gain_sum = f32(self.lookahead); self.limiter_gain = 1.0f; self.delay_pos = 0;
+        self.held_db = 0.0f; self.hold_remaining = 0; self.arc_average_db = 0.0f;
+        self.low_left1 = 0.0f; self.low_left2 = 0.0f; self.low_right1 = 0.0f; self.low_right2 = 0.0f;
+        self.comp_env_db = -120.0f; self.comp_gain = 1.0f;
+        self.clip_prev_left = 0.0f; self.clip_prev_right = 0.0f;
+        self.drive_smooth = self.drive; self.ceiling_smooth = self.ceiling;
+        self.detector.clear(); self.guard_detector.clear();
+        for i in 0..self.guard_gains.len() { set_f32(self.guard_gains, i, 1.0f); }
+        for i in 0..self.guard_left.len() { set_f32(self.guard_left, i, 0.0f); set_f32(self.guard_right, i, 0.0f); }
+        self.guard_pos = 0; self.guard_sum = f32(self.guard_lookahead); self.guard_gain = 1.0f;
+        self.guard_held_db = 0.0f; self.guard_hold = 0; self.guard_delay_pos = 0;
+    }
+
+    /// @brief Maximizer or Smooth.
+    pub fn set_mode(self: &mut Self, mode: PunchLimiterMode) -> void { self.mode = mode; }
+
+    /// @brief Threshold -30 .. 0 dB: the input is driven by -threshold dB.
+    pub fn set_threshold_db(self: &mut Self, db: f32) -> void {
+        self.threshold_db = punch_clamp(db, -30.0f, 0.0f);
+        self.drive = punch_db_to_gain(-self.threshold_db);
+    }
+
+    /// @brief Output ceiling -12 .. 0 dBFS; no sample exceeds it.
+    pub fn set_ceiling_db(self: &mut Self, db: f32) -> void {
+        self.ceiling_db = punch_clamp(db, -12.0f, 0.0f);
+        self.ceiling = punch_db_to_gain(self.ceiling_db);
+    }
+
+    /// @brief Release 1 .. 1000 ms. With auto release it is the centre of
+    /// the range the release moves in.
+    pub fn set_release_ms(self: &mut Self, ms: f32) -> void {
+        self.release_ms = punch_clamp(ms, 1.0f, 1000.0f);
+        self.release_coefficient = punch_coefficient(self.release_ms, self.sample_rate_hz);
+        self.release_fast = punch_coefficient(self.release_ms * 0.3f, self.sample_rate_hz);
+        self.release_slow = punch_coefficient(self.release_ms * 3.0f, self.sample_rate_hz);
+    }
+
+    /// @brief Auto release: recover fast from short peaks, slowly from
+    /// sustained reduction, to avoid both distortion and pumping.
+    pub fn set_arc(self: &mut Self, enabled: bool) -> void { self.arc = enabled; }
+
+    /// @brief Smooth mode compressor attack, 0.1 .. 50 ms.
+    pub fn set_attack_ms(self: &mut Self, ms: f32) -> void {
+        self.attack_ms = punch_clamp(ms, 0.1f, 50.0f);
+        self.comp_attack = punch_coefficient(self.attack_ms, self.sample_rate_hz);
+    }
+
+    /// @brief Punch 0 .. 1: how far (0 .. 6 dB) peaks pass the limiter into
+    /// the soft clipper.
+    pub fn set_punch(self: &mut Self, value: f32) -> void { self.punch = punch_clamp(value, 0.0f, 1.0f); }
+
+    /// @brief Fat 0 .. 1: saturation and lift (up to about +4.6 dB) of the
+    /// band below about 110 Hz.
+    pub fn set_fat(self: &mut Self, value: f32) -> void { self.fat = punch_clamp(value, 0.0f, 1.0f); }
+
+    /// @brief True-peak mode: detect peaks between samples (8x oversampled)
+    /// and guard the clipper's output, so the reconstructed waveform stays
+    /// under the ceiling (dBTP). Off: sample peaks only. The latency is the
+    /// same either way.
+    pub fn set_true_peak(self: &mut Self, enabled: bool) -> void { self.true_peak = enabled; }
+
+    /// @brief Output the input delayed by the latency, untouched.
+    pub fn set_bypass(self: &mut Self, enabled: bool) -> void { self.bypass = enabled; }
+
+    /// @brief Delay through the limiter, in samples: the 1.5 ms look-ahead,
+    /// two detector delays, one sample for the clipper and the 0.5 ms guard.
+    pub fn latency_samples(self: PunchLimiter) -> i64 {
+        return self.lookahead + 2 * punch_detector_delay() + 1 + self.guard_lookahead;
+    }
+
+    /// @brief Current total gain reduction (compressor, limiter and guard), dB >= 0.
+    pub fn gain_reduction_db(self: PunchLimiter) -> f32 {
+        return -punch_gain_to_db(self.limiter_gain * self.comp_gain * self.guard_gain);
+    }
+
+    fn fatten(self: PunchLimiter, input: f32, low: f32) -> f32 {
+        if self.fat <= 0.0f { return input; }
+        let drive: f32 = 1.0f + 3.0f * self.fat;
+        let saturated: f32 = tanhf(low * drive) / drive * (1.0f + 0.7f * self.fat);
+        return input + self.fat * (saturated - low);
+    }
+
+    /// The clean signal one sample late plus the clipper's distortion,
+    /// anti-aliased by its first antiderivative over the same half-sample
+    /// span. Below the knee this is exactly `previous`.
+    fn clip(self: PunchLimiter, u: f32, previous: f32) -> f32 {
+        let knee: f32 = 1.0f - 0.5f * self.punch;
+        let width: f32 = 1.0f - knee < 0.001f ? 0.001f : 1.0f - knee;
+        if punch_abs(u) <= knee && punch_abs(previous) <= knee { return previous; }
+        let delta: f32 = u - previous;
+        if punch_abs(delta) < 0.0001f {
+            let mid: f32 = 0.5f * (u + previous);
+            return previous + punch_clip(mid, knee, width) - mid;
+        }
+        let excess: f32 = (punch_excess_integral(u, knee, width) - punch_excess_integral(previous, knee, width)) / delta;
+        return previous + excess;
+    }
+
+    /// @brief Process one stereo sample.
+    pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> PunchLimiterFrame {
+        self.drive_smooth = punch_glide(self.drive_smooth, self.drive, self.glide);
+        self.ceiling_smooth = punch_glide(self.ceiling_smooth, self.ceiling, self.glide);
+
+        // Fat, then drive into the normalised limiter (limit at 1.0).
+        let a: f32 = self.fat_coefficient;
+        self.low_left1 = self.low_left1 + (input_left - self.low_left1) * a;
+        self.low_left2 = self.low_left2 + (self.low_left1 - self.low_left2) * a;
+        self.low_right1 = self.low_right1 + (input_right - self.low_right1) * a;
+        self.low_right2 = self.low_right2 + (self.low_right1 - self.low_right2) * a;
+        var left: f32 = self.fatten(input_left, self.low_left2) * self.drive_smooth;
+        var right: f32 = self.fatten(input_right, self.low_right2) * self.drive_smooth;
+        var peak: f32 = punch_abs(left);
+        if punch_abs(right) > peak { peak = punch_abs(right); }
+
+        // Smooth mode: soft-knee 3:1 compressor 6 dB under the limit.
+        if self.mode == PunchLimiterMode::Smooth {
+            let level_db: f32 = punch_gain_to_db(peak);
+            let coefficient: f32 = level_db > self.comp_env_db ? self.comp_attack : self.release_coefficient;
+            self.comp_env_db = self.comp_env_db + (level_db - self.comp_env_db) * coefficient;
+            let over: f32 = self.comp_env_db + 6.0f;
+            var reduction: f32 = 0.0f;
+            if over > 3.0f { reduction = over * 0.6666667f; }
+            else if over > -3.0f { reduction = 0.6666667f * (over + 3.0f) * (over + 3.0f) / 12.0f; }
+            self.comp_gain = punch_db_to_gain(-reduction);
+            left = left * self.comp_gain; right = right * self.comp_gain; peak = peak * self.comp_gain;
+        } else {
+            self.comp_gain = 1.0f; self.comp_env_db = -120.0f;
+        }
+
+        // Limiter: required gain for the (true) peak one detector delay back,
+        // held across the look-ahead, then released.
+        self.detector.push(left, right, self.true_peak);
+        let detected: f32 = self.true_peak ? self.detector.true_peak : self.detector.sample_peak;
+        let limit: f32 = 1.0f + self.punch;
+        let required_db: f32 = detected > limit ? punch_gain_to_db(limit / detected) : 0.0f;
+        if required_db <= self.held_db {
+            // Two extra steps cover the gap after the peak sample.
+            self.held_db = required_db; self.hold_remaining = self.lookahead + 2;
+        } else if self.hold_remaining > 0 {
+            self.hold_remaining = self.hold_remaining - 1;
+        } else {
+            var coefficient: f32 = self.release_coefficient;
+            if self.arc { coefficient = self.held_db < self.arc_average_db - 0.5f ? self.release_fast : self.release_slow; }
+            self.held_db = self.held_db + (required_db - self.held_db) * coefficient;
+        }
+        self.arc_average_db = self.arc_average_db + (self.held_db - self.arc_average_db) * self.arc_coefficient;
+
+        // Boxcar: ramp each reduction in over the look-ahead.
+        let held_gain: f32 = punch_db_to_gain(self.held_db);
+        self.gain_sum = self.gain_sum + held_gain - self.gains[self.gain_pos];
+        set_f32(self.gains, self.gain_pos, held_gain);
+        self.gain_pos = self.gain_pos + 1;
+        if self.gain_pos >= self.lookahead {
+            self.gain_pos = 0;
+            // Re-sum once per lap so rounding never accumulates.
+            var sum: f32 = 0.0f;
+            for i in 0..self.gains.len() { sum = sum + self.gains[i]; }
+            self.gain_sum = sum;
+        }
+        self.limiter_gain = self.gain_sum / f32(self.lookahead);
+
+        // Delay by the detector delay plus the look-ahead.
+        let size: i64 = self.delay_left.len();
+        set_f32(self.delay_left, self.delay_pos, left);
+        set_f32(self.delay_right, self.delay_pos, right);
+        var read: i64 = self.delay_pos - self.lookahead - punch_detector_delay();
+        if read < 0 { read = read + size; }
+        self.delay_pos = self.delay_pos + 1;
+        if self.delay_pos >= size { self.delay_pos = 0; }
+        let limited_left: f32 = self.delay_left[read] * self.limiter_gain;
+        let limited_right: f32 = self.delay_right[read] * self.limiter_gain;
+
+        // Punch: the anti-aliased soft clipper takes what is over 1.0.
+        let clipped_left: f32 = self.clip(limited_left, self.clip_prev_left);
+        let clipped_right: f32 = self.clip(limited_right, self.clip_prev_right);
+        self.clip_prev_left = limited_left;
+        self.clip_prev_right = limited_right;
+
+        // True-peak guard: catches what the clipper puts between samples.
+        self.guard_detector.push(clipped_left, clipped_right, self.true_peak);
+        let over: f32 = self.guard_detector.true_peak;
+        let guard_db: f32 = self.true_peak && over > 1.0f ? punch_gain_to_db(1.0f / over) : 0.0f;
+        if guard_db <= self.guard_held_db {
+            self.guard_held_db = guard_db; self.guard_hold = self.guard_lookahead + 2;
+        } else if self.guard_hold > 0 {
+            self.guard_hold = self.guard_hold - 1;
+        } else {
+            self.guard_held_db = self.guard_held_db + (guard_db - self.guard_held_db) * self.guard_release;
+        }
+        let guard_held: f32 = punch_db_to_gain(self.guard_held_db);
+        self.guard_sum = self.guard_sum + guard_held - self.guard_gains[self.guard_pos];
+        set_f32(self.guard_gains, self.guard_pos, guard_held);
+        self.guard_pos = self.guard_pos + 1;
+        if self.guard_pos >= self.guard_lookahead {
+            self.guard_pos = 0;
+            var guard_total: f32 = 0.0f;
+            for i in 0..self.guard_gains.len() { guard_total = guard_total + self.guard_gains[i]; }
+            self.guard_sum = guard_total;
+        }
+        self.guard_gain = self.guard_sum / f32(self.guard_lookahead);
+        let guard_size: i64 = self.guard_left.len();
+        set_f32(self.guard_left, self.guard_delay_pos, clipped_left);
+        set_f32(self.guard_right, self.guard_delay_pos, clipped_right);
+        var guard_read: i64 = self.guard_delay_pos - self.guard_lookahead - punch_detector_delay();
+        if guard_read < 0 { guard_read = guard_read + guard_size; }
+        self.guard_delay_pos = self.guard_delay_pos + 1;
+        if self.guard_delay_pos >= guard_size { self.guard_delay_pos = 0; }
+        let final_left: f32 = self.guard_left[guard_read] * self.guard_gain;
+        let final_right: f32 = self.guard_right[guard_read] * self.guard_gain;
+
+        // The raw input, delayed by the full latency, for bypass.
+        let raw_size: i64 = self.raw_left.len();
+        set_f32(self.raw_left, self.raw_pos, input_left);
+        set_f32(self.raw_right, self.raw_pos, input_right);
+        var raw_read: i64 = self.raw_pos - self.latency_samples();
+        if raw_read < 0 { raw_read = raw_read + raw_size; }
+        self.raw_pos = self.raw_pos + 1;
+        if self.raw_pos >= raw_size { self.raw_pos = 0; }
+        if self.bypass {
+            return PunchLimiterFrame { left_value: self.raw_left[raw_read], right_value: self.raw_right[raw_read] };
+        }
+        let c: f32 = self.ceiling_smooth;
+        return PunchLimiterFrame {
+            left_value: punch_clamp(final_left * c, -c, c),
+            right_value: punch_clamp(final_right * c, -c, c)
+        };
+    }
+}
+
+/// @}

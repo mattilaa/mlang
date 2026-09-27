@@ -1,0 +1,142 @@
+mod std::testing;
+mod dsp::punch_limiter;
+use dsp::punch_limiter::PunchLimiter;
+use dsp::punch_limiter::PunchLimiterFrame;
+use dsp::punch_limiter::PunchLimiterMode;
+use std::testing::verify;
+
+fn abs32(value: f32) -> f32 { return value < 0.0f ? -value : value; }
+
+// A spiky test signal: a 100 Hz square with a 7-sample spike every 100 ms,
+// like drum hits over a sustained bed.
+fn hot(i: i32) -> f32 {
+    let base: f32 = (i % 480) < 240 ? 0.5f : -0.5f;
+    return (i % 4800) < 7 ? 1.9f : base;
+}
+
+// Peak |output| over 1 s after 0.5 s of settling.
+fn output_peak(mode: PunchLimiterMode, threshold_db: f32, ceiling_db: f32, punch: f32, fat: f32) -> f32 {
+    var limiter: PunchLimiter = PunchLimiter::new(48000.0f);
+    limiter.set_mode(mode); limiter.set_threshold_db(threshold_db); limiter.set_ceiling_db(ceiling_db);
+    limiter.set_punch(punch); limiter.set_fat(fat); limiter.reset();
+    var peak: f32 = 0.0f;
+    for i in 0..72000 {
+        let frame: PunchLimiterFrame = limiter.process_stereo(hot(i), -hot(i));
+        if i >= 24000 {
+            if abs32(frame.left()) > peak { peak = abs32(frame.left()); }
+            if abs32(frame.right()) > peak { peak = abs32(frame.right()); }
+        }
+    }
+    return peak;
+}
+
+// Mean square of the output over the last second.
+fn output_power(threshold_db: f32, punch: f32) -> f32 {
+    var limiter: PunchLimiter = PunchLimiter::new(48000.0f);
+    limiter.set_threshold_db(threshold_db); limiter.set_punch(punch); limiter.set_fat(0.0f); limiter.reset();
+    var sum: f32 = 0.0f;
+    for i in 0..72000 {
+        let frame: PunchLimiterFrame = limiter.process_stereo(hot(i), hot(i));
+        if i >= 24000 { sum = sum + frame.left() * frame.left(); }
+    }
+    return sum / 48000.0f;
+}
+
+#[test]
+fn test_punch_limiter_holds_the_ceiling() {
+    let ceiling: f32 = 0.9660509f;
+    verify(output_peak(PunchLimiterMode::Maximizer, -12.0f, -0.3f, 0.0f, 0.0f) <= ceiling);
+    verify(output_peak(PunchLimiterMode::Maximizer, -12.0f, -0.3f, 1.0f, 1.0f) <= ceiling);
+    verify(output_peak(PunchLimiterMode::Smooth, -30.0f, -0.3f, 1.0f, 1.0f) <= ceiling);
+    let low: f32 = output_peak(PunchLimiterMode::Maximizer, -12.0f, -6.0f, 0.5f, 0.0f);
+    verify(low <= 0.5011873f && low > 0.45f);
+}
+
+#[test]
+fn test_punch_limiter_threshold_drives_louder() {
+    verify(output_power(-12.0f, 0.3f) > 3.0f * output_power(0.0f, 0.3f));
+}
+
+#[test]
+fn test_punch_limiter_punch_ducks_less() {
+    // The spikes go to the clipper instead of pulling the square down.
+    verify(output_power(-6.0f, 1.0f) > 1.25f * output_power(-6.0f, 0.0f));
+}
+
+#[test]
+fn test_punch_limiter_is_clean_below_the_limit() {
+    var limiter: PunchLimiter = PunchLimiter::new(48000.0f);
+    limiter.set_threshold_db(0.0f); limiter.set_ceiling_db(0.0f); limiter.set_punch(0.0f); limiter.set_fat(0.0f);
+    limiter.reset();
+    let latency: i64 = limiter.latency_samples();
+    // 72 look-ahead + 2 x 24 detector + 1 clipper + 24 guard at 48 kHz.
+    verify(latency == 145);
+    for i in 0..4800 {
+        let frame: PunchLimiterFrame = limiter.process_stereo(i == 100 ? 0.5f : 0.0f, i == 200 ? -0.25f : 0.0f);
+        let left_expected: f32 = i == 245 ? 0.5f : 0.0f;
+        let right_expected: f32 = i == 345 ? -0.25f : 0.0f;
+        verify(abs32(frame.left() - left_expected) < 0.00001f && abs32(frame.right() - right_expected) < 0.00001f);
+    }
+    verify(limiter.gain_reduction_db() < 0.001f);
+}
+
+#[test]
+fn test_punch_limiter_reports_reduction() {
+    var limiter: PunchLimiter = PunchLimiter::new(48000.0f);
+    limiter.set_threshold_db(-18.0f); limiter.set_punch(0.0f);
+    var deepest: f32 = 0.0f;
+    for i in 0..9600 {
+        let frame: PunchLimiterFrame = limiter.process_stereo(hot(i), hot(i));
+        if limiter.gain_reduction_db() > deepest { deepest = limiter.gain_reduction_db(); }
+    }
+    verify(deepest > 6.0f);
+}
+
+#[test]
+fn test_punch_limiter_bypass_is_latency_aligned() {
+    var limiter: PunchLimiter = PunchLimiter::new(48000.0f);
+    limiter.set_threshold_db(-20.0f); limiter.set_bypass(true);
+    for i in 0..2000 {
+        let frame: PunchLimiterFrame = limiter.process_stereo(hot(i), -hot(i));
+        let expected: f32 = i >= 145 ? hot(i - 145) : 0.0f;
+        verify(frame.left() == expected && frame.right() == -expected);
+    }
+}
+
+#[test]
+fn test_punch_limiter_extremes_stay_finite() {
+    var limiter: PunchLimiter = PunchLimiter::new(8000.0f);
+    limiter.set_mode(PunchLimiterMode::Smooth); limiter.set_threshold_db(-30.0f); limiter.set_ceiling_db(0.0f);
+    limiter.set_release_ms(1.0f); limiter.set_attack_ms(0.1f); limiter.set_punch(1.0f); limiter.set_fat(1.0f);
+    for i in 0..40000 {
+        let x: f32 = (i % 29) < 14 ? 40.0f : -40.0f;
+        let frame: PunchLimiterFrame = limiter.process_stereo(x, -x);
+        verify(frame.left() == frame.left() && abs32(frame.left()) <= 1.0f);
+        verify(frame.right() == frame.right() && abs32(frame.right()) <= 1.0f);
+    }
+}
+
+// A quarter-rate sine at 45 degrees: samples at 0.707 of a peak that lies
+// between them. Returns the largest midpoint of adjacent output samples
+// scaled by the exact fs/4 reconstruction factor (sqrt 2 over the samples).
+fn quarter_rate_peak(true_peak: bool) -> f32 {
+    var limiter: PunchLimiter = PunchLimiter::new(48000.0f);
+    limiter.set_threshold_db(-9.0f); limiter.set_ceiling_db(-1.0f); limiter.set_true_peak(true_peak); limiter.reset();
+    var peak: f32 = 0.0f;
+    let pattern: list<f32> = [0.6363961f, 0.6363961f, -0.6363961f, -0.6363961f];
+    for i in 0..24000 {
+        let frame: PunchLimiterFrame = limiter.process_stereo(pattern[i % 4], pattern[i % 4]);
+        if i >= 12000 && abs32(frame.left()) * 1.4142136f > peak { peak = abs32(frame.left()) * 1.4142136f; }
+    }
+    return peak;
+}
+
+#[test]
+fn test_punch_limiter_true_peak_between_samples() {
+    // -1 dB is 0.8912509. Sample-peak mode reaches it with its samples, so
+    // the waveform peaks 3 dB higher; true-peak mode keeps the waveform there
+    // (this estimate uses the largest sample, so allow +0.03 dB).
+    verify(quarter_rate_peak(false) > 1.2f);
+    let held: f32 = quarter_rate_peak(true);
+    verify(held <= 0.8944f && held > 0.87f);
+}
