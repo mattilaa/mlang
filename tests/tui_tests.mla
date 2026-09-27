@@ -714,6 +714,31 @@ fn test_menus() -> MenuBar {
     ]);
 }
 
+#[test]
+fn tui_menu_function_key_shortcuts() {
+    var menus: MenuBar = test_menus(); menus.shortcuts = true;
+    // F2 opens Edit, F2 again closes it; keys without a menu change nothing.
+    verify(menus.on_function_key(Key::Function2) && menus.active == 1);
+    verify(menus.on_function_key(Key::Function2) && menus.active == -1);
+    verify(!menus.on_function_key(Key::Function3) && menus.active == -1);
+    verify(!menus.on_function_key(Key::Enter));
+    verify(menus.on_function_key(Key::Function1) && menus.active == 0);
+    // "[F1]File  [F2]Edit": popups follow the wider tabs.
+    menus.open(1);
+    let bounds: Rect = Rect::new(0, 0, 40, 8);
+    let popup: Rect = menus.popup_rect(bounds);
+    verify(popup.x == 10);
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(40, 8);
+    menus.paint(surface, bounds, theme);
+    let bracket: Cell = surface.cell(1, 0); let file: Cell = surface.cell(5, 0);
+    let edit_key: Cell = surface.cell(11, 0); let edit: Cell = surface.cell(15, 0);
+    verify(bracket.glyph == 91 && file.glyph == 70 && edit_key.glyph == 91 && edit.glyph == 69);
+    // Shortcuts are a darker blue than the titles.
+    verify(bracket.foreground == darken(theme.accent, 72) && file.foreground == theme.foreground);
+    surface.release();
+}
+
 fn cascade_menus() -> MenuBar {
     return MenuBar::new([Menu { title: "File", items: [
         MenuItem { label: "Open", action: 1, enabled: true },
@@ -994,6 +1019,17 @@ fn tui_input_menu_and_pane_keys() {
     verify(ss3.kind == InputKind::Menu && ss3.key == Key::Function1);
     let csi: InputEvent = decode_input("\x1b[11~");
     verify(csi.kind == InputKind::Menu && csi.key == Key::Function1);
+    // F2-F12 in their SS3, CSI letter and CSI n~ spellings.
+    let f2: InputEvent = decode_input("\x1bOQ"); verify(f2.kind == InputKind::Menu && f2.key == Key::Function2);
+    let f3: InputEvent = decode_input("\x1b[1;1R"); verify(f3.key == Key::Function3);
+    let f4: InputEvent = decode_input("\x1b[14~"); verify(f4.key == Key::Function4);
+    let f5: InputEvent = decode_input("\x1b[15~"); verify(f5.key == Key::Function5);
+    let f6: InputEvent = decode_input("\x1b[17~"); verify(f6.key == Key::Function6);
+    let f10: InputEvent = decode_input("\x1b[21~"); verify(f10.key == Key::Function10);
+    let f12: InputEvent = decode_input("\x1b[24~"); verify(f12.key == Key::Function12 && function_number(f12.key) == 12);
+    verify(function_number(Key::Enter) == 0 && function_key(9) == Key::Function9);
+    // A cursor position report is not F3.
+    let report: InputEvent = decode_input("\x1b[5;1R"); verify(report.kind == InputKind::None);
     let tab: InputEvent = decode_input("\t");
     verify(tab.kind == InputKind::Menu && tab.key == Key::Toggle && tab.modifiers == 1);
     // Shift+Tab cycles panes backwards.

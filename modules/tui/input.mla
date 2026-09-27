@@ -1,5 +1,6 @@
 mod tui::menu;
 use tui::menu::Key;
+use tui::menu::function_key;
 
 pub enum InputKind { None, Menu, Pane, Quit, Text, Edit };
 pub struct InputEvent {
@@ -8,6 +9,14 @@ pub struct InputEvent {
     /// A key release (kitty event type 3), only from a decoder with `releases` on.
     var released: bool{false};
 };
+
+/// F1-F12 from their CSI `n~` numbers (rxvt F1-F4 included); 0 otherwise.
+fn tilde_function(code: i32) -> i32 {
+    if code >= 11 && code <= 15 { return code - 10; }
+    if code >= 17 && code <= 21 { return code - 11; }
+    if code == 23 || code == 24 { return code - 12; }
+    return 0;
+}
 
 fn no_input() -> InputEvent { return InputEvent { kind: InputKind::None, key: Key::Escape }; }
 fn key_event(kind: InputKind, key: Key) -> InputEvent { return InputEvent { kind: kind, key: key }; }
@@ -130,8 +139,10 @@ impl InputDecoder {
                 if byte == 66 { output = key_event(InputKind::Menu, Key::Down); }
                 if byte == 67 { output = key_event(InputKind::Menu, Key::Right); }
                 if byte == 68 { output = key_event(InputKind::Menu, Key::Left); }
-                if byte == 80 { output = key_event(InputKind::Menu, Key::Function1); }
-                if byte == 126 && self.code == 11 { output = key_event(InputKind::Menu, Key::Function1); }
+                // F1-F4 are SS3/CSI P-S; F1-F12 also arrive as CSI n~. A
+                // cursor position report (CSI row;col R) carries a row first.
+                if byte >= 80 && byte <= 83 && self.code <= 1 { output = key_event(InputKind::Menu, function_key(byte - 79)); }
+                if byte == 126 && tilde_function(self.code) > 0 { output = key_event(InputKind::Menu, function_key(tilde_function(self.code))); }
                 if byte == 72 { output = key_event(InputKind::Edit, Key::Home); }
                 if byte == 70 { output = key_event(InputKind::Edit, Key::End); }
                 if byte == 126 && self.code == 3 { output = key_event(InputKind::Edit, Key::Delete); }

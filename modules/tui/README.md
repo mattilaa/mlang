@@ -65,6 +65,13 @@ zero for navigation and a positive application-defined command ID on Enter.
 Handle the command in the application; the library does not invoke callbacks.
 Applications typically map arrows, Tab, Escape, Enter, and `hjkl` to these semantic keys.
 
+The input decoder reports F1–F12 as `Key::Function1` … `Key::Function12`
+(`function_number(key)` gives 1–12, 0 for other keys). Set `shortcuts = true` on a
+`MenuBar` to draw each of the first twelve titles after its key (`[F1]File  [F2]Edit`,
+the key in a darker shade of the theme accent) and pass function keys to
+`on_function_key(key)`: it opens that menu, or closes it when it is already open,
+and returns false for keys without a menu.
+
 ### Cascading submenus
 
 Add a submenu as a menu item with `MenuItem::submenu(label, children)`:

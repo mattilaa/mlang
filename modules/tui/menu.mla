@@ -6,10 +6,33 @@ mod std::bytes;
 use tui::geometry::*;
 use tui::surface::*;
 use tui::theme::Theme;
+use tui::theme::darken;
 use tui::widgets::Panel;
 use std::bytes::Bytes;
 
-pub enum Key { Left, Right, Up, Down, Enter, Escape, Toggle, Backspace, Delete, Home, End, Function1 };
+pub enum Key { Left, Right, Up, Down, Enter, Escape, Toggle, Backspace, Delete, Home, End, Function1,
+    Function2, Function3, Function4, Function5, Function6, Function7, Function8, Function9, Function10, Function11, Function12 };
+
+/// 1-12 for the function keys F1-F12, 0 for any other key.
+pub fn function_number(key: Key) -> i32 {
+    if key == Key::Function1 { return 1; } if key == Key::Function2 { return 2; }
+    if key == Key::Function3 { return 3; } if key == Key::Function4 { return 4; }
+    if key == Key::Function5 { return 5; } if key == Key::Function6 { return 6; }
+    if key == Key::Function7 { return 7; } if key == Key::Function8 { return 8; }
+    if key == Key::Function9 { return 9; } if key == Key::Function10 { return 10; }
+    if key == Key::Function11 { return 11; } if key == Key::Function12 { return 12; }
+    return 0;
+}
+/// Function key `number` (1-12); any other number gives Function1.
+pub fn function_key(number: i32) -> Key {
+    if number == 2 { return Key::Function2; } if number == 3 { return Key::Function3; }
+    if number == 4 { return Key::Function4; } if number == 5 { return Key::Function5; }
+    if number == 6 { return Key::Function6; } if number == 7 { return Key::Function7; }
+    if number == 8 { return Key::Function8; } if number == 9 { return Key::Function9; }
+    if number == 10 { return Key::Function10; } if number == 11 { return Key::Function11; }
+    if number == 12 { return Key::Function12; }
+    return Key::Function1;
+}
 /// action > 0 identifies an application command; 0 is reserved for no action.
 pub struct MenuItem {
     var label: str8;
@@ -38,10 +61,18 @@ fn label_width(text: str8) -> i32 {
 }
 
 /// path contains the selected row in each ancestor; selected is the deepest row.
+/// With `shortcuts` set, the first twelve titles are drawn after their function
+/// key ("[F1]File  [F2]Edit") and on_function_key opens them.
 pub struct MenuBar {
     var menus: list<Menu>; var active: i32; var selected: i32;
     var path: list<i32>{[]};
+    var shortcuts: bool{false};
 };
+
+fn shortcut_label(index: i32) -> str8 {
+    let labels: list<str8> = ["[F1]", "[F2]", "[F3]", "[F4]", "[F5]", "[F6]", "[F7]", "[F8]", "[F9]", "[F10]", "[F11]", "[F12]"];
+    return index >= 0 && index < 12 ? labels[index] : "";
+}
 impl MenuBar {
     pub fn new(menus: list<Menu>) -> MenuBar {
         return MenuBar { menus: menus, active: -1, selected: -1, path: [] };
@@ -53,6 +84,19 @@ impl MenuBar {
         self.active = -1; self.selected = -1; self.path.clear();
     }
     pub fn depth(self: MenuBar) -> i32 { return i32(self.path.len()); }
+    /// Menu-bar cells taken by title `index`, its shortcut and padding.
+    fn tab_width(self: MenuBar, index: i32) -> i32 {
+        let menu: Menu = self.menus[index];
+        return label_width(menu.title) + 2 + (self.shortcuts ? label_width(shortcut_label(index)) : 0);
+    }
+    /// Function key `key` opens its menu, or closes it when it is already the
+    /// open one. Returns false for keys without a menu; the bar is unchanged.
+    pub fn on_function_key(self: &mut Self, key: Key) -> bool {
+        let index: i32 = function_number(key) - 1;
+        if index < 0 || index >= self.menus.len() { return false; }
+        if self.active == index { self.dismiss(); } else { self.open(index); }
+        return true;
+    }
     fn items_at(self: MenuBar, depth: i32) -> list<MenuItem> {
         if self.active < 0 || self.active >= self.menus.len() { return []; }
         let menu: Menu = self.menus[self.active];
@@ -141,10 +185,7 @@ impl MenuBar {
             return Rect::new(bounds.x, bounds.y, 0, 0);
         }
         var x: i32 = bounds.x;
-        for i in 0..self.active {
-            let previous: Menu = self.menus[i];
-            x = x + label_width(previous.title) + 2;
-        }
+        for i in 0..self.active { x = x + self.tab_width(i32(i)); }
         var popup: Rect = Rect::new(x, bounds.y + 1, 0, 0);
         let levels: i32 = depth + 1;
         for level in 0..levels {
@@ -182,12 +223,18 @@ impl MenuBar {
         var x: i32 = bounds.x;
         for i in 0..self.menus.len() {
             let menu: Menu = self.menus[i];
-            let width: i32 = label_width(menu.title) + 2;
+            let width: i32 = self.tab_width(i32(i));
             let bg: i32 = i == self.active ? theme.selection : theme.menu_background;
             let tab_area: Rect = Rect::new(x, bounds.y, width, 1);
             let tab: Rect = tab_area.intersect(bounds);
             surface.fill(tab, Cell { glyph: 32, foreground: theme.foreground, background: bg });
-            let text_area: Rect = Rect::new(x + 1, bounds.y, width - 2, 1);
+            var text_area: Rect = Rect::new(x + 1, bounds.y, width - 2, 1);
+            if self.shortcuts {
+                // The function key in a darker blue than the title.
+                let label: str8 = shortcut_label(i32(i));
+                surface.text(text_area.intersect(bounds), label, darken(theme.accent, 72), bg);
+                text_area = Rect::new(text_area.x + label_width(label), bounds.y, text_area.width - label_width(label), 1);
+            }
             surface.text(text_area.intersect(bounds),
                 menu.title, theme.foreground, bg);
             x = x + width;
