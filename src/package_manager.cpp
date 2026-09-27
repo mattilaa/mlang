@@ -1396,7 +1396,7 @@ static void print_pkg_usage(const std::string& programName)
     const std::string tool = programName.empty() ? "mlang" : programName;
     std::cerr
         << "Usage: " << tool
-        << " pkg [--config FILE] <init|add|lock|verify|vendor|tree|why|fetch|build|run|clean|package|publish|install|audit|sbom|sign|verify-signature> "
+        << " pkg [--config FILE] <init|help|add|lock|verify|vendor|tree|why|fetch|build|run|clean|package|publish|install|audit|sbom|sign|verify-signature> "
            "[options...]\n"
         << "       " << tool
         << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
@@ -1416,8 +1416,10 @@ static void print_pkg_usage(const std::string& programName)
         << "  --no-global-cache             Disable global artifact/source caching.\n"
         << "  --vendor-dir DIR              Build dependencies from a vendor tree.\n"
         << "\nCommands:\n"
-        << "  " << tool << " pkg init\n"
-        << "      Scaffold mlang.toml and src/main.mla in the current dir.\n"
+        << "  " << tool << " pkg init [--no-readme]\n"
+        << "      Scaffold mlang.toml, src/main.mla, and README.md in the current dir.\n"
+        << "  " << tool << " pkg help <build|run>\n"
+        << "      Print the '# Build and run' instructions from README.md.\n"
         << "  " << tool
         << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] "
            "[--submodules] [--version REQ]\n"
@@ -3457,6 +3459,65 @@ static std::string package_stub_source(const std::string& depName)
            depName +
            " subproject scaffold ready\");\n"
            "}\n";
+}
+
+static std::string package_readme_template(const std::string& name)
+{
+    return "# " + name +
+           "\n\n# Build and run\n\n"
+           "```sh\n"
+           "mlang pkg build\n"
+           "./build/" + name +
+           "\n```\n";
+}
+
+static bool print_package_readme_instructions(
+    const std::filesystem::path& manifestPath)
+{
+    const auto readmePath = manifestPath.parent_path() / "README.md";
+    std::ifstream in(readmePath, std::ios::binary);
+    if(!in)
+    {
+        std::cerr << "README.md not found in " << manifestPath.parent_path()
+                  << ". Create one with:\n\n"
+                  << package_readme_template("your-project") << "\n";
+        return false;
+    }
+
+    std::string line;
+    std::string section;
+    bool found = false;
+    while(std::getline(in, line))
+    {
+        if(!found)
+        {
+            if(line == "# Build and run" || line == "#Build and run")
+            {
+                found = true;
+                section += line + "\n";
+            }
+            continue;
+        }
+        if(line.rfind("# ", 0) == 0 || line.rfind("#", 0) == 0)
+            break;
+        section += line + "\n";
+    }
+
+    const auto contentStart = section.find('\n');
+    const bool hasInstructions =
+        found && contentStart != std::string::npos &&
+        section.find_first_not_of(" \t\r\n", contentStart + 1) !=
+            std::string::npos;
+    if(!hasInstructions)
+    {
+        std::cerr << "README.md must contain a '# Build and run' section "
+                     "with instructions. Example:\n\n"
+                  << package_readme_template("your-project") << "\n";
+        return false;
+    }
+
+    std::cout << section;
+    return true;
 }
 
 static bool ensure_package_entry_stub(const std::filesystem::path& manifestPath,
@@ -10523,6 +10584,13 @@ int PackageManager::run(int argc, char** argv)
         }
     }
 
+    if(sub == "help" && subIndex + 1 < argc &&
+       (std::string(argv[subIndex + 1]) == "build" ||
+        std::string(argv[subIndex + 1]) == "run"))
+    {
+        return print_package_readme_instructions(manifestPath) ? 0 : 1;
+    }
+
     if(sub == "--help" || sub == "-h" || sub == "help")
     {
         print_pkg_usage(programName);
@@ -10874,6 +10942,19 @@ int PackageManager::run(int argc, char** argv)
 
     if(sub == "init")
     {
+        bool noReadme = false;
+        for(int i = subIndex + 1; i < argc; ++i)
+        {
+            if(std::string(argv[i]) == "--no-readme")
+                noReadme = true;
+            else
+            {
+                std::cerr << "Unknown option for 'pkg init': " << argv[i]
+                          << "\nUsage: " << argv[0]
+                          << " pkg init [--no-readme]\n";
+                return 1;
+            }
+        }
         if(std::filesystem::exists(manifestPath))
         {
             std::cerr << manifestLabel << " already exists\n";
@@ -10902,6 +10983,13 @@ int PackageManager::run(int argc, char** argv)
                                        package_stub_source(name)))
         {
             std::cerr << "Failed to write src/main.mla\n";
+            return 1;
+        }
+        if(!noReadme &&
+           !write_text_file_if_missing(manifestPath.parent_path() / "README.md",
+                                       package_readme_template(name)))
+        {
+            std::cerr << "Failed to write README.md\n";
             return 1;
         }
         return 0;

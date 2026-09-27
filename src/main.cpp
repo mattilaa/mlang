@@ -85,7 +85,8 @@ void printUsage(const char* programName)
               << "  -h, --help    Show this help message\n"
               << "\nPackage manager (flag order is flexible; --config may\n"
               << "appear anywhere; --color alone implies --tasks output):\n"
-              << "  " << programName << " pkg [--config FILE] init\n"
+              << "  " << programName << " pkg [--config FILE] init [--no-readme]\n"
+              << "  " << programName << " pkg [--config FILE] help <build|run>\n"
               << "  " << programName << " pkg [--config FILE] add <name> [--git URL] [--rev "
                  "REV] [--tag TAG] [--submodules]\n"
               << "  " << programName
@@ -109,6 +110,8 @@ void printUsage(const char* programName)
               << "  Separate steps: " << programName << " pkg fetch ; "
               << programName << " pkg build ; " << programName
               << " pkg run <task>\n"
+              << "  Project instructions: " << programName
+              << " pkg help build   # print README.md '# Build and run'\n"
               << "  One command: " << programName
               << " pkg run <task>    # fetches if needed, then runs the task chain\n"
               << "  Show task tree: " << programName
