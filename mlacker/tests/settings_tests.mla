@@ -1,0 +1,83 @@
+mod std::testing;
+mod tui;
+mod tui::dialog;
+use tui::dialog::*;
+use tui::table::*;
+use std::strbuf::*;
+mod tui::dropdown;
+mod mlacker_ui::settings_dialog;
+use std::testing::verify;
+use tui::dropdown::*;
+use mlacker_ui::settings_dialog::SettingsDialog;
+use tui::input::*;
+use tui::menu::Key;
+use tui::surface::*;
+use tui::geometry::*;
+use tui::theme::*;
+mod mlacker_ui::audio_controller;
+mod mlacker_ui::audio_clip;
+mod mlacker_ui::session;
+use mlacker_ui::audio_controller::AudioSystem;
+use mlacker_ui::audio_clip::AudioClip;
+use mlacker_ui::session::SessionData;
+
+#[test]
+fn settings_modal_focus_and_buttons() {
+    var settings: SettingsDialog = SettingsDialog::new();
+    settings.active = true; settings.reset_buttons();
+    settings.midi.set_items([DropDownItem { id: -2, label: "Disabled" }, DropDownItem { id: -1, label: "Default" }], -1);
+    settings.output.set_items([DropDownItem { id: -2, label: "Disabled" }], -2);
+    settings.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter }); verify(settings.midi.expanded);
+    settings.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }); verify(settings.active && !settings.midi.expanded);
+    settings.on_event(InputEvent { kind: InputKind::Pane, key: Key::Down }); verify(settings.focus.selected == 1);
+    settings.on_event(InputEvent { kind: InputKind::Pane, key: Key::Down }); verify(settings.focus.selected == 2);
+    settings.on_event(InputEvent { kind: InputKind::Pane, key: Key::Down }); verify(settings.focus.selected == 4);
+    settings.on_event(InputEvent { kind: InputKind::Pane, key: Key::Down }); verify(settings.focus.selected == 3);
+    settings.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter }); verify(settings.pressed_button == 0);
+    for _i in 0..10 { settings.tick(); }
+    verify(!settings.active && settings.result == 1);
+    settings.fail("Output unavailable"); verify(settings.active && settings.result == 0);
+    settings.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape }); verify(!settings.active && settings.result == 2);
+    settings.release();
+}
+
+#[test]
+fn settings_buffer_request_survives_audio_replacement() {
+    var audio: AudioSystem = AudioSystem {};
+    let samples: list<AudioClip> = [];
+    let configured: result<i32, str8> = audio.configure_buffer(-2, -2, 512, samples);
+    verify(configured.is_ok());
+    verify(audio.requested_buffer_frames == 512);
+    let invalid: result<i32, str8> = audio.configure_buffer(-2, -2, 8192, samples);
+    verify(invalid.is_err());
+    verify(audio.requested_buffer_frames == 512);
+    let session: SessionData = SessionData {};
+    let prepared: result<AudioSystem, str8> = session.prepare_audio(audio);
+    verify(prepared.is_ok());
+    let next: AudioSystem = prepared.unwrap();
+    verify(next.output.buffer_frames() == 512);
+    audio.adopt(next);
+    verify(audio.requested_buffer_frames == 512 && audio.output.buffer_frames() == 512);
+    audio.release();
+}
+
+#[test]
+fn settings_sample_rates_survive_audio_replacement() {
+    let rates: list<i64> = [44100, 48000, 96000];
+    let samples: list<AudioClip> = [];
+    for rate in rates {
+        var audio: AudioSystem = AudioSystem {};
+        let configured: result<i32, str8> = audio.configure_audio(-2, -2, 256, rate, samples);
+        verify(configured.is_ok());
+        let invalid: result<i32, str8> = audio.configure_audio(-2, -2, 256, 22050, samples);
+        verify(invalid.is_err() && audio.requested_sample_rate == rate);
+        let session: SessionData = SessionData {};
+        let prepared: result<AudioSystem, str8> = session.prepare_audio(audio);
+        verify(prepared.is_ok());
+        let next: AudioSystem = prepared.unwrap();
+        verify(next.output.sample_rate() == rate && next.output.buffer_frames() == 256);
+        audio.adopt(next);
+        verify(audio.requested_sample_rate == rate && audio.output.sample_rate() == rate);
+        audio.release();
+    }
+}

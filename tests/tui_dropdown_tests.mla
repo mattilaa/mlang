@@ -1,0 +1,56 @@
+mod std::testing;
+mod tui;
+mod tui::dialog;
+use tui::dialog::*;
+use tui::table::*;
+use std::strbuf::*;
+mod tui::dropdown;
+use std::testing::verify;
+use tui::dropdown::*;
+use tui::input::*;
+use tui::menu::Key;
+use tui::surface::*;
+use tui::geometry::*;
+use tui::theme::*;
+
+#[test]
+fn dropdown_selection_cancel_and_overlay() {
+    var dropdown: DropDown = DropDown {};
+    dropdown.set_items([DropDownItem { id: 11, label: "First" }, DropDownItem { id: 22, label: "Second" }, DropDownItem { id: 33, label: "Third" }], 22);
+    verify(dropdown.selected_id() == 22);
+    dropdown.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter });
+    dropdown.on_event(InputEvent { kind: InputKind::Menu, key: Key::Down });
+    verify(dropdown.selected_id() == 22 && dropdown.cursor == 2);
+    dropdown.on_event(InputEvent { kind: InputKind::Menu, key: Key::Escape });
+    verify(!dropdown.expanded && dropdown.selected_id() == 22);
+    dropdown.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter });
+    dropdown.on_event(InputEvent { kind: InputKind::Menu, key: Key::Down });
+    dropdown.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter });
+    verify(dropdown.selected_id() == 33);
+    dropdown.set_items(dropdown.items, 33);
+    verify(dropdown.selected_id() == 33);
+    let surface: Surface = Surface::new(20, 10); let theme: Theme = Theme::dark_blue();
+    let anchor: Rect = Rect::new(2, 1, 12, 1); let viewport: Rect = Rect::new(0, 0, 20, 10);
+    surface.fill(viewport, Cell { glyph: 65, foreground: theme.foreground, background: theme.background });
+    dropdown.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter });
+    dropdown.paint(surface, anchor, theme, true); dropdown.paint_popup(surface, anchor, viewport, theme);
+    let title: Cell = surface.cell(3, 3); verify(title.glyph == 70);
+    let selected: Cell = surface.cell(3, 5); verify(selected.background == theme.selection && selected.glyph == 84);
+    let shadow: Cell = surface.cell(14, 4); verify(shadow.glyph == 65 && shadow.foreground != theme.foreground);
+    dropdown.release(); dropdown.release(); surface.release();
+}
+
+#[test]
+fn dropdown_empty_and_small_viewport() {
+    var dropdown: DropDown = DropDown {};
+    dropdown.set_items([], -1);
+    dropdown.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter });
+    verify(!dropdown.expanded && dropdown.selected_id() == -2);
+    dropdown.set_items([DropDownItem { id: 7, label: "A long device name" }], 7);
+    dropdown.on_event(InputEvent { kind: InputKind::Menu, key: Key::Enter });
+    let surface: Surface = Surface::new(4, 3); let theme: Theme = Theme::dark_blue();
+    let viewport: Rect = Rect::new(0, 0, 4, 3);
+    dropdown.paint_popup(surface, Rect::new(0, 2, 20, 1), viewport, theme);
+    let cell: Cell = surface.cell(1, 1); verify(cell.glyph == 65);
+    dropdown.release(); surface.release();
+}

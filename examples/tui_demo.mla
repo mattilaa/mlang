@@ -1,4 +1,0 @@
-/// SDK-free widget demo; the full tracker project now lives in mlacker/.
-mod tui_demo::app;
-use tui_demo::app::run;
-fn main() -> i32 { return run(); }

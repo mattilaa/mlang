@@ -1,0 +1,2272 @@
+/// Run in a terminal for interaction, or redirect stdout for a plain snapshot.
+mod tui;
+mod std::io;
+mod std::time;
+mod std::env::detail;
+use std::env::detail::__env_get_var;
+use tui::geometry::*;
+use tui::theme::*;
+use tui::surface::*;
+use tui::layout::*;
+use tui::widgets::*;
+use tui::menu::*;
+use tui::terminal::*;
+use tui::focus::*;
+use tui::input::*;
+use tui::dialog::*;
+use tui::table::*;
+mod mlacker_ui::sidebar_clipboard;
+use mlacker_ui::sidebar_clipboard::SidebarClipboard;
+use mlacker_ui::sidebar_clipboard::SidebarPaste;
+use tui::listview::ListView;
+mod mlacker_ui::sequence;
+use mlacker_ui::sequence::SequenceTable;
+use mlacker_ui::sequence::curve_names;
+mod mlacker_ui::mixer;
+use mlacker_ui::mixer::Mixer;
+mod mlacker_ui::spectrum;
+use mlacker_ui::spectrum::SpectrumView;
+use mlacker_ui::spectrum::MasterBus;
+mod mlacker_ui::patterns;
+use mlacker_ui::patterns::PatternLibrary;
+use mlacker_ui::patterns::SongCover;
+mod mlacker_ui::transport;
+use mlacker_ui::transport::TransportStatus;
+mod mlacker_ui::sample_view;
+use mlacker_ui::sample_view::SampleView;
+mod mlacker_ui::audio_clip;
+mod mlacker_ui::piano_dialog;
+mod mlacker_ui::song_matrix;
+mod mlacker_ui::pattern_picker;
+use mlacker_ui::pattern_picker::PatternPicker;
+mod mlacker_ui::output_picker;
+use mlacker_ui::output_picker::OutputPicker;
+use mlacker_ui::song_matrix::SongMatrix;
+mod mlacker_ui::sample_editor;
+use mlacker_ui::piano_dialog::PianoDialog;
+mod mlacker_ui::virtual_keyboard;
+use mlacker_ui::virtual_keyboard::VirtualKeyboard;
+use mlacker_ui::virtual_keyboard::HeldNote;
+use mlacker_ui::sample_editor::SampleEditor;
+use mlacker_ui::audio_clip::base_name;
+mod mlacker_ui::bpm_dialog;
+mod mlacker_ui::curve_dialog;
+mod mlacker_ui::note_playback;
+use mlacker_ui::note_playback::NotePlayback;
+mod mlacker_ui::audio_controller;
+mod mlacker_ui::midi_controller;
+use mlacker_ui::midi_controller::MidiInputEvent;
+use mlacker_ui::audio_controller::AudioSystem;
+use mlacker_ui::audio_controller::EffectChannel;
+use mlacker_ui::audio_controller::PadAssignment;
+use std::audio::controller::AudioController;
+mod mlacker_ui::settings_dialog;
+mod mlacker_ui::instrument_editor;
+use mlacker_ui::instrument_editor::InstrumentEditor;
+use mlacker_ui::settings_dialog::SettingsDialog;
+use mlacker_ui::bpm_dialog::BpmDialog;
+use mlacker_ui::curve_dialog::CurveDialog;
+mod mlacker_ui::frame_rate;
+use mlacker_ui::frame_rate::FrameRate;
+mod mlacker_ui::session;
+use mlacker_ui::session::SessionCodec;
+use mlacker_ui::session::SessionData;
+use mlacker_ui::session::PatternData;
+use mlacker_ui::session::PresetResult;
+use mlacker_ui::session::SessionView;
+use mlacker_ui::midi_controller::MidiController;
+use std::env::detail::__env_args;
+use std::strbuf::clone;
+use std::strbuf::free;
+use std::strbuf::starts_with;
+use std::io::stdin;
+use std::io::read_keycode_nonblocking;
+use std::time::sleep_ms;
+use std::time::now_ms;
+
+fn demo_menus(fixture: bool, follow_matrix: bool, metronome: bool, extend: bool, metronome_always: bool, spectrum: bool, keyboard: bool) -> MenuBar {
+    // Grouped like a DAW's menu bar: each menu starts with what it creates,
+    // then what it changes, then what it removes; families use submenus.
+    let plugins: bool = AudioController::processor_support();
+    return MenuBar::new([
+                    Menu {title: "File", items: [
+                                MenuItem { label: "New session", action: 1, enabled: true },
+                                MenuItem { label: "Open session", action: 2, enabled: true },
+                                MenuItem::submenu("Recent sessions", [
+                                                MenuItem { label: "Blue hour", action: 8, enabled: true },
+                                                MenuItem::submenu("Templates", [
+                                                                MenuItem { label: "Ambient", action: 9, enabled: true },
+                                                                MenuItem { label: "Dance", action: 10, enabled: true }
+                                                        ])
+                                        ]),
+                                MenuItem { label: "Save session", action: 3, enabled: !fixture },
+                                MenuItem { label: "Save session as", action: 96, enabled: !fixture },
+                                MenuItem { label: "Settings", action: 90, enabled: true },
+                                MenuItem { label: "Quit", action: 99, enabled: true }] },
+                    Menu {title: "Edit", items: [
+                                MenuItem { label: "Undo", action: 4, enabled: true },
+                                MenuItem { label: "Redo", action: 5, enabled: true },
+                                MenuItem { label: "Copy clip", action: 61, enabled: true },
+                                MenuItem { label: "Cut clip", action: 62, enabled: true },
+                                MenuItem { label: "Paste clip", action: 63, enabled: true }] },
+                    Menu {title: "View", items: [
+                                MenuItem { label: "Patterns", action: 42, enabled: true },
+                                MenuItem { label: "Song matrix", action: 43, enabled: true },
+                                MenuItem { label: "Audio", action: 44, enabled: true },
+                                MenuItem { label: "Instruments", action: 45, enabled: plugins },
+                                MenuItem::submenu("Sample view", [
+                                                MenuItem { label: "Normal", action: 70, enabled: true },
+                                                MenuItem { label: "Grainy", action: 71, enabled: true },
+                                                MenuItem::submenu("Type", [
+                                                                MenuItem { label: "Filled blocks", action: 72, enabled: true },
+                                                                MenuItem { label: "Wave (osc)", action: 73, enabled: true }])]),
+                                MenuItem::submenu("Meter", [
+                                                MenuItem { label: "Solid bars", action: 40, enabled: true },
+                                                MenuItem { label: "Grainy (osc)", action: 41, enabled: true },
+                                                MenuItem { label: "Set update rate", action: 74, enabled: true }]),
+                                MenuItem { label: spectrum ? "[x] Show spectrum analyzer" : "[ ] Show spectrum analyzer", action: 160, enabled: true },
+                                MenuItem::submenu("Spectrum analyzer", [
+                                                MenuItem { label: "Change details", action: 161, enabled: true },
+                                                MenuItem { label: "Update rate", action: 162, enabled: true }]),
+                                MenuItem { label: keyboard ? "[x] Show virtual keyboard" : "[ ] Show virtual keyboard", action: 163, enabled: true },
+                                MenuItem { label: "Reset layout", action: 6, enabled: true },
+                                MenuItem { label: "Show details", action: 7, enabled: true }] },
+                    Menu {title: "Track", items: [
+                                // Plain entries, not a submenu: a submenu as the first
+                                // item would swallow the Right key that walks the menu bar.
+                                MenuItem { label: "Create MIDI track", action: 21, enabled: true },
+                                MenuItem { label: "Create AUDIO track", action: 28, enabled: true },
+                                MenuItem { label: "Create Instrument track", action: 29, enabled: plugins },
+                                MenuItem { label: "Rename", action: 20, enabled: true },
+                                MenuItem { label: "Duplicate", action: 23, enabled: true },
+                                MenuItem { label: "Mute / unmute", action: 25, enabled: true },
+                                MenuItem { label: "Set output channel", action: 30, enabled: true },
+                                MenuItem::submenu("Note lines", [
+                                                MenuItem { label: "Add note line", action: 80, enabled: true },
+                                                MenuItem { label: "Duplicate note line", action: 82, enabled: true },
+                                                MenuItem { label: "Remove note line", action: 81, enabled: true },
+                                                MenuItem { label: "Collapse all", action: 83, enabled: true },
+                                                MenuItem { label: "Expand all", action: 84, enabled: true }]),
+                                MenuItem::submenu("Automation", [
+                                                MenuItem { label: "Add CC column", action: 27, enabled: true },
+                                                MenuItem { label: "Configure CC column", action: 26, enabled: true },
+                                                MenuItem { label: "Remove CC column", action: 85, enabled: true }]),
+                                MenuItem { label: "Clear pattern", action: 24, enabled: true },
+                                MenuItem { label: "Delete", action: 22, enabled: true }] },
+                    Menu {title: "Pattern", items: [
+                                MenuItem { label: "Add pattern", action: 50, enabled: true },
+                                MenuItem { label: "Clone pattern", action: 53, enabled: true },
+                                MenuItem { label: "Rename pattern", action: 51, enabled: true },
+                                MenuItem { label: "Set length", action: 54, enabled: true },
+                                MenuItem { label: follow_matrix ? "[x] Follow matrix patterns" : "[ ] Follow matrix patterns",
+                                    action: 55, enabled: true },
+                                MenuItem { label: "Set matrix row length", action: 56, enabled: true },
+                                MenuItem { label: "Remove pattern", action: 52, enabled: true },
+                                MenuItem { label: "Save pattern", action: 57, enabled: true },
+                                MenuItem { label: "Load pattern", action: 58, enabled: true }] },
+                    Menu {title: "Audio", items: [
+                                MenuItem { label: "Add audio", action: 60, enabled: true },
+                                MenuItem { label: "Edit sample (destructive)", action: 107, enabled: true },
+                                MenuItem::submenu("Clip", [
+                                                MenuItem { label: "Move clip up", action: 103, enabled: true },
+                                                MenuItem { label: "Move clip down", action: 104, enabled: true },
+                                                MenuItem { label: "Trim to selection", action: 105, enabled: true },
+                                                MenuItem { label: "Slice selection", action: 106, enabled: true },
+                                                MenuItem { label: "Reverse clip", action: 102, enabled: true }]),
+                                MenuItem { label: "Remove audio", action: 120, enabled: true }] },
+                    Menu {title: "Instrument", items: [
+                                MenuItem { label: "Add instrument", action: 93, enabled: plugins },
+                                MenuItem { label: "Open VST3 editor", action: 94, enabled: plugins },
+                                MenuItem::submenu("Drum pads", [
+                                                MenuItem { label: "Send audio sample to pad", action: 117, enabled: plugins },
+                                                MenuItem { label: "Load pad sample from file", action: 118, enabled: plugins }]),
+                                MenuItem::submenu("Presets", [
+                                                MenuItem { label: "Save plugin preset", action: 100, enabled: plugins },
+                                                MenuItem { label: "Load plugin preset", action: 101, enabled: plugins }]),
+                                MenuItem::submenu("MIDI learn", [
+                                                MenuItem { label: "Save MIDI learn", action: 97, enabled: plugins },
+                                                MenuItem { label: "Load MIDI learn", action: 98, enabled: plugins }]),
+                                MenuItem { label: "Remove instrument", action: 95, enabled: plugins }] },
+                    Menu {title: "Effect", items: [
+                                MenuItem { label: "Add effect channel", action: 110, enabled: plugins },
+                                MenuItem { label: "Load effect plugin", action: 111, enabled: plugins },
+                                MenuItem { label: "Edit effect plugin", action: 112, enabled: plugins },
+                                MenuItem { label: "Set track send", action: 113, enabled: plugins },
+                                MenuItem::submenu("Master", [
+                                                MenuItem { label: "Load master VST3", action: 91, enabled: plugins },
+                                                MenuItem { label: "Unload master VST3", action: 92, enabled: plugins }]),
+                                MenuItem { label: "Remove effect plugin", action: 114, enabled: plugins },
+                                MenuItem::submenu("Presets", [
+                                                MenuItem { label: "Load plugin preset", action: 140, enabled: plugins },
+                                                MenuItem { label: "Save plugin preset", action: 141, enabled: plugins }])] },
+                    Menu { title: "Record", items: [
+                        MenuItem { label: metronome ? "[x] Play metronome" : "[ ] Play metronome", action: 150, enabled: true },
+                        MenuItem { label: extend ? "[x] Extend pattern when playing" : "[ ] Extend pattern when playing", action: 151, enabled: true },
+                        MenuItem::submenu("Metronome", [
+                            MenuItem { label: !metronome_always ? "[x] On recording" : "[ ] On recording", action: 152, enabled: true },
+                            MenuItem { label: metronome_always ? "[x] Always" : "[ ] Always", action: 153, enabled: true }])] }
+            ]);
+}
+
+fn demo_panes(content: Rect) -> list<Pane> {
+    let vertical: Layout = Layout {axis: Axis::Vertical, gap: 0,
+        sizes: [Size::flex(1), Size::fixed(1)]};
+    let rows: list<Rect> = vertical.split(content);
+    let horizontal: Layout = Layout {axis: Axis::Horizontal, gap: 1,
+        sizes: [Size::fixed(22), Size::flex(1)]};
+    let columns: list<Rect> = horizontal.split(rows[0]);
+    let right_layout: Layout = Layout {axis: Axis::Vertical, gap: 1,
+        sizes: [Size::flex(2), Size::flex(1)]};
+    let right: list<Rect> = right_layout.split(columns[1]);
+    return [Pane { id: 0, bounds: columns[0] }, Pane { id: 1, bounds: right[0] },
+            Pane { id: 2, bounds: right[1] }];
+}
+
+fn paint_demo(surface: Surface, menus: &MenuBar, focus: PaneFocus, panes: &list<Pane>, message: str8, table: &SequenceTable, mixer: &Mixer, patterns: &PatternLibrary, transport: TransportStatus, sample: SampleView, matrix_visible: bool, channels: &SequenceTable, merged_channels: bool, spectrum: &SpectrumView, keyboard: &VirtualKeyboard, keyboard_title: str8) -> void {
+    let theme: Theme = Theme::dark_blue();
+    surface.fill(surface.bounds(), Cell { glyph: 32, foreground: theme.foreground, background: theme.background });
+    let library: Pane = panes[0];
+    let editor: Pane = panes[1];
+    let inspector: Pane = panes[2];
+    let sidebar: Panel = Panel { title: patterns.instruments_mode ? " Instruments " : (patterns.audio_mode ? " Audio " : " Patterns ") };
+    let left: Rect = sidebar.paint_focused(surface, library.bounds, theme, focus.is_active(0));
+    if patterns.instruments_mode { patterns.instruments.paint(surface, left, theme); }
+    else if patterns.audio_mode { patterns.audio.view.paint(surface, left, theme); }
+    else { patterns.view.paint(surface, left, theme); }
+    // The song matrix takes over this pane; the caller paints it right after,
+    // still below the menu bar.
+    if !matrix_visible {
+        let title: str8 = format!(" Pattern / {} {} | 1/{} ", patterns.active_id, patterns.active_name(), table.row_spacing() * 16);
+        let sequence: Panel = Panel { title: title };
+        let top: Rect = sequence.paint_focused(surface, editor.bounds, theme, focus.is_active(1));
+        free(title);
+        table.mark_hidden_notes();
+        table.paint(surface, top, theme);
+        table.paint_audio_style(surface, top, theme, sample.grainy, sample.wave);
+        table.paint_subdivision_notes(surface, top, theme);
+        table.paint_automation(surface, top, theme);
+        table.paint_note_lengths(surface, top, theme);
+        table.paint_editor(surface, top, theme);
+    }
+    // The virtual keyboard (Shift+P) covers whatever else this pane shows.
+    let show_keyboard: bool = keyboard.visible;
+    let show_spectrum: bool = !show_keyboard && spectrum.visible;
+    let show_sample: bool = !show_keyboard && !show_spectrum && sample.visible && table.audio_under_cursor();
+    var sample_title: str8 = "";
+    if show_sample {
+        let track: SequenceTrack = table.tracks[table.active_track()];
+        let instance: AudioInstance = track.instances[track.instance_at(table.selected_row)];
+        let name: str8 = base_name(instance.clip.source); sample_title = format!(" Sample: {} ", name); free(name);
+    }
+    let details: Panel = Panel { title: show_keyboard ? keyboard_title : (show_spectrum ? " Spectrum / Master " : (show_sample ? sample_title : (mixer.visible ? " Mixer " : " Inspector ")) )};
+    let bottom: Rect = details.paint_focused(surface, inspector.bounds, theme, focus.is_active(2));
+    let label: Label = Label { text: patterns.error != "" ? patterns.error : (table.error != "" ? table.error : (table.editing ? "Editing: Enter saves | Esc cancels": message)) };
+    if show_keyboard {
+        keyboard.paint(surface, bottom, theme, table.editing ? "Editing: Enter saves | Esc cancels" : message);
+        if(patterns.error != "" || table.error != "") && bottom.height > 0 {
+            surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
+        }
+    }
+    else if show_spectrum {
+        spectrum.paint(surface, bottom, theme, mixer.master.left, mixer.master.right, focus.is_active(2), message);
+        if(patterns.error != "" || table.error != "") && bottom.height > 0 {
+            surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
+        }
+    }
+    else if show_sample {
+        let track: SequenceTrack = table.tracks[table.active_track()];
+        let instance: AudioInstance = track.instances[track.instance_at(table.selected_row)];
+        let render_clip: AudioClip = instance.render_clip();
+        sample.paint_at(surface, bottom, theme, render_clip, table.selected_row - instance.start_row, transport.playing ? transport.phase : 0);
+        if(patterns.error != "" || table.error != "") && bottom.height > 0 {
+            surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
+        }
+    }
+    else if mixer.visible {
+        let mix_area: Rect = Rect::new(bottom.x, bottom.y, bottom.width, bottom.height - (mixer.effect_volumes.len() > 0 && bottom.height > 1 ? 1 : 0));
+        if merged_channels { mixer.paint(surface, mix_area, theme, channels.tracks, channels.active_track()); }
+        else { mixer.paint(surface, mix_area, theme, table.tracks, table.active_track()); }
+        if mixer.effect_volumes.len() > 0 && bottom.height > 1 { surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), message, theme.muted, theme.panel); }
+        if(patterns.error != "" || table.error != "") && bottom.height > 0 {
+            surface.text(Rect::new(bottom.x, bottom.y + bottom.height - 1, bottom.width, 1), patterns.error != "" ? patterns.error : table.error, theme.accent, theme.panel);
+        }
+    }
+    else { label.paint(surface, bottom, theme); table.paint_track_details(surface, bottom, theme); }
+    if show_sample { free(sample_title); }
+    transport.paint(surface, Rect::new(0, surface.height - 1, surface.width, 1), theme);
+}
+
+pub fn run() -> i32 {
+    let fixture_env: str8 = __env_get_var("MLACKER_DEMO");
+    let fixture: bool = fixture_env == "1" || !AudioController::processor_support(); free(fixture_env);
+    var terminal: Terminal = Terminal::begin();
+    // Browsing or playing the matrix shows that pattern: editor, sidebar and
+    // the mixer's channels. Pattern > Follow matrix patterns turns it off.
+    var follow_matrix: bool = true;
+    // Channels of the playing song row, one strip per channel even when
+    // parallel patterns share it. Only the mixer reads it.
+    var mixer_table: SequenceTable = SequenceTable {};
+    var play_metronome: bool = true; var extend_recording: bool = true; var metronome_always: bool = false;
+    // Spectrum analyzer and master bus (Ctrl+Shift+M), shown in the mixer's
+    // pane. `spectrum_area` is where it was last painted, for the analysis.
+    var spectrum: SpectrumView = SpectrumView::new(); var spectrum_area: Rect = Rect::new(0, 0, 0, 0);
+    // Computer-keyboard piano in the same pane (View menu / Shift+P).
+    var keyboard: VirtualKeyboard = VirtualKeyboard {};
+    var menus: MenuBar = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
+    if fixture { menus.open(0); }
+    var focus: PaneFocus = PaneFocus::new(0);
+    var input: InputDecoder = InputDecoder::new();
+    var dialog: OpenSessionDialog = OpenSessionDialog::new();
+    var adding_audio: bool = false;
+    var adding_plugin: bool = false;
+    var adding_instrument: bool = false;
+    var adding_effect: i32 = -1; var send_track: i32 = -1; var send_fx: i32 = -1;
+    var adding_insert_track: i32 = -1; var adding_insert_position: i32 = 0;
+    var library: PatternLibrary = fixture ? PatternLibrary::new() : PatternLibrary::empty();
+    var session_path: str8 = clone(""); var request_path: str8 = clone("");
+    var session_request: i32 = 0; var saving_session: bool = false;
+    var pattern_action: i32 = 0; var last_pattern_dir: str8 = clone("");
+    var learn_action: i32 = 0; var learn_slot: i64 = 0;
+    // Sampler pads: 117 = from the Audio list, 118 = from a file.
+    var pad_action: i32 = 0; var pad_slot: i32 = 0; var pad_sample: i32 = -1; var pad_index: i32 = 0;
+    var adding_pad_file: bool = false;
+    // Audio file dialogs: the file Ctrl+P is previewing on the master output.
+    var preview_path: str8 = clone("");
+    // View > Audio: the sample index Ctrl+P is previewing, or -1.
+    var preview_sample: i32 = -1;
+    var accept_pending: bool = false;
+    var transport_request: bool = false;
+    var preset_request: i32 = 0; var preset_path: str8 = clone(""); var preset_worker: bool = false;
+    // Last directory browsed per kind, so each chooser reopens where it was.
+    var last_session_dir: str8 = clone(""); var last_audio_dir: str8 = clone("");
+    var last_plugin_dir: str8 = clone("/Library/Audio/Plug-Ins/VST3"); var last_preset_dir: str8 = clone("");
+    var piano: PianoDialog = PianoDialog::new();
+    var sample_editor: SampleEditor = SampleEditor {};
+    if !fixture {
+        let arguments: list<str8> = __env_args();
+        if arguments.len() == 2 { free(request_path); request_path = clone(arguments[1]); session_request = 1; }
+    }
+    var transport: TransportStatus = TransportStatus {};
+    var bpm_dialog: BpmDialog = BpmDialog::new();
+    // Ctrl+A in the pattern: the curve between two Ctrl+V-marked CC values,
+    // applied on the frame after the dialog closes with OK.
+    var curve_dialog: CurveDialog = CurveDialog::new(); var curve_pending: bool = false;
+    var settings: SettingsDialog = SettingsDialog::new();
+    var instrument_editor: InstrumentEditor = InstrumentEditor {};
+    var note_playback: NotePlayback = NotePlayback {};
+    var pending_length: i32 = 0;
+    var length_target: i32 = 0;
+    var mixer: Mixer = Mixer { visible: false };
+    var sample: SampleView = SampleView {};
+    var last_tick: i64 = now_ms(); var ui_clock: i64 = last_tick;
+    var frame_rate: FrameRate = FrameRate {};
+    var playback_dirty: bool = false; var play_pattern: i32 = library.active_id;
+    var question: QuestionDialog = QuestionDialog::new("New session", "Start a new session?");
+    var paste_error: QuestionDialog = QuestionDialog::new("Cannot paste selection", "");
+    // Share an instrument instance, or give the track its own new instance.
+    var share_question: QuestionDialog = QuestionDialog::new("Instrument already in use", "");
+    share_question.width = 72; share_question.height = 12;
+    share_question.buttons = [PushButton { label: "New instance", action: 1 }, PushButton { label: "Share", action: 3 }];
+    var share_id: i32 = 0;
+    // Removing a library item that is still used asks what to do with its uses.
+    var remove_question: QuestionDialog = QuestionDialog::new("Remove", "");
+    remove_question.width = 72; remove_question.height = 12;
+    var sidebar_clipboard: SidebarClipboard = SidebarClipboard {};
+    var sidebar_remove: list<i32> = []; var sidebar_remove_kind: i32 = 0;
+    var remove_request: i32 = 0; var remove_target: i32 = 0; var remove_pending: i32 = 0;
+    // Song matrix (Shift+M) and the warning shown when parallel patterns would
+    // drive one instrument with the same notes.
+    var matrix: SongMatrix = SongMatrix {};
+    var clash_question: QuestionDialog = QuestionDialog::new("Parallel patterns clash", "");
+    clash_question.width = 74; clash_question.height = 12;
+    clash_question.buttons = [PushButton { label: "OK", action: 1 }, PushButton { label: "Cancel", action: 2 },
+        PushButton { label: "Split", action: 3 }];
+    var clash_row: i32 = 0; var clash_lane: i32 = 0; var clash_id: i32 = 0;
+    var picker: PatternPicker = PatternPicker::new();
+    // Output channel of the selected mixer strip (Track > Set output channel).
+    // kind 1 = the instrument a MIDI track plays, 2 = the audio channel this
+    // track feeds.
+    var outputs: OutputPicker = OutputPicker::new();
+    var output_kind: i32 = 0; var output_track: i32 = -1;
+    // Matrix playback: the merged table of the playing row, and which row it is.
+    var song_playing: bool = false; var song_row: i32 = -1;
+    var song_table: SequenceTable = SequenceTable {};
+    // Matrix recording: the pattern armed with Shift+R in the matrix (0 when
+    // none), whether a take is running into it, the pattern time where the
+    // take began, and the track the take armed itself (-1 when it was armed).
+    var matrix_armed_id: i32 = 0; var matrix_recording: bool = false;
+    var matrix_record_offset: i64 = 0; var matrix_auto_armed: i32 = -1;
+    // The next matrix row, merged and scheduled ahead of time during a quiet
+    // moment of the playing row, so the row change is a swap: merging at the
+    // boundary stalls this UI-driven sequencer and delays the downbeat.
+    var prepared_row: i32 = -1; var prepared_revision: i64 = -1;
+    var prepared_table: SequenceTable = SequenceTable {}; var prepared_mixer: SequenceTable = SequenceTable {};
+    var prepared_playback: NotePlayback = NotePlayback {};
+    var song_request: i32 = 0;
+    paste_error.buttons = [PushButton { label: "OK", action: 1 }];
+    var message: str8 = clone("Select a command from the menu.");
+    if AudioController::processor_support() { free(message); message = clone("mlacker | Add > VST3 master plugin to load an instrument or effect."); }
+    var running: bool = true;
+    var dirty: bool = true;
+    var previous_width: i32 = 0;
+    var previous_height: i32 = 0;
+    var escape_ticks: i32 = 0;
+    var confirm_track_action: i32 = 0;
+    var last_processor_errors: i64 = 0;
+    var prev_sample_row: i32 = -1;
+    let no_hardware: str8 = __env_get_var("MLANG_TUI_NO_HARDWARE");
+    var midi: AudioSystem = AudioSystem::start(terminal.active && no_hardware != "1");
+    free(no_hardware);
+    var master_meter_clock: i64 = now_ms();
+    while running {
+        if session_request != 0 {
+            var session_status: str8 = "";
+            transport.playing = false;
+            note_playback.update(library.table, transport.ticks, false); midi.sequencer_events(note_playback.events);
+            if session_request == 2 {
+                let view: SessionView = SessionView { bpm: transport.bpm, beats: transport.beats_per_bar, unit: transport.beat_unit,
+                    row: transport.row < 0 ? 0 : transport.row, phase: transport.phase, pane: focus.selected,
+                    sidebar: library.instruments_mode ? 3 : (library.audio_mode ? 2 : 0),
+                    list_selected: library.view.selected, list_scroll: library.view.scroll,
+                    audio_selected: library.audio.view.selected, audio_scroll: library.audio.view.scroll,
+                    instrument_selected: library.instruments.selected, instrument_scroll: library.instruments.scroll,
+                    mixer: mixer.visible, meter_grainy: mixer.grainy, meter_fps: frame_rate.fps, effect_focus: mixer.bus_focus, effect_selected: mixer.selected_effect,
+                    sample: sample.visible, sample_grainy: sample.grainy, sample_wave: sample.wave, sample_zoom: sample.zoom,
+                    editor: instrument_editor.active, editor_slot: i32(instrument_editor.slot), editor_selected: instrument_editor.selected, editor_scroll: instrument_editor.scroll,
+                    spectrum: spectrum.visible, spectrum_detail: spectrum.detail, spectrum_fps: spectrum.fps, master: spectrum.bus,
+                    master_saved: spectrum.visible || spectrum.detail != 0 || spectrum.fps != 30 || !spectrum.bus.is_default() };
+                var serializer: SessionCodec = SessionCodec {};
+                let saved: bool = serializer.save(request_path, library, view, midi);
+                if saved { free(session_path); session_path = clone(request_path); session_status = format!("Saved: {}", session_path); }
+                else { session_status = clone("Save failed: invalid state, size limit or unwritable path. Original file retained."); }
+            } else {
+                var result: result<SessionData, str8> = session_request == 3 ? Ok<SessionData, str8>(SessionData { library: PatternLibrary::empty(), view: SessionView {} }) : SessionCodec::load(request_path);
+                if result.is_err() { session_status = clone(result.unwrap_err()); }
+                else {
+                    var data: SessionData = result.unwrap();
+                    let prepared: result<AudioSystem, str8> = data.prepare_audio(midi);
+                    if prepared.is_err() { session_status = clone(prepared.unwrap_err()); data.release(); }
+                    else {
+                        var next: AudioSystem = prepared.unwrap();
+                        let worker: bool = midi.midi.worker.raw != 0;
+                        let hardware: bool = midi.output.hardware_output();
+                        var accepted: bool = midi.output.handle == 0 || midi.output.stop() == 0;
+                        if accepted && next.output.hardware_output() { accepted = next.output.start() == 0; }
+                        if !accepted {
+                            if hardware { midi.output.start(); }
+                            next.release(); data.release(); session_status = clone("Cannot switch audio output; previous session retained");
+                        } else {
+                            midi.adopt(next);
+                            if worker { midi.midi = MidiController::start_selected(midi.midi_id, midi.output.handle); }
+                            library.adopt(data.library); data.release_plugins();
+                            for i in 0..midi.instrument_paths.len() {
+                                if midi.instrument_paths[i] != "" {
+                                    library.name_instrument(i32(i) + 1, midi.output.instrument_name(i + 1));
+                                }
+                            }
+                            let v: SessionView = data.view;
+                            transport = TransportStatus { bpm: v.bpm, beats_per_bar: v.beats, beat_unit: v.unit, row: v.row, phase: v.phase,
+                                ticks: wide(v.row) * 15000 + v.phase, elapsed_ms: i32((wide(v.row) * 15000 + v.phase) / wide(v.bpm)) };
+                            focus.selected = v.pane;
+                            mixer = Mixer { visible: v.mixer, grainy: v.meter_grainy, bus_focus: v.effect_focus, selected_effect: v.effect_selected };
+                            mixer.update_effects(midi.output, midi.effects, 0);
+                            sample = SampleView { visible: v.sample, grainy: v.sample_grainy, wave: v.sample_wave, zoom: v.sample_zoom };
+                            spectrum = SpectrumView::new();
+                            if v.master_saved { spectrum.visible = v.spectrum; spectrum.detail = v.spectrum_detail; spectrum.fps = v.spectrum_fps; spectrum.bus = v.master; }
+                            menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
+                            frame_rate.set(v.meter_fps, now_ms()); note_playback = NotePlayback {}; play_pattern = library.active_id;
+                            instrument_editor.release();
+                            instrument_editor.slot = v.editor_slot;
+                            instrument_editor.selected = v.editor_selected;
+                            instrument_editor.scroll = v.editor_scroll;
+                            if v.editor {
+                                if instrument_editor.open(midi.output, v.editor_slot) {
+                                    if v.editor_selected < instrument_editor.sliders.len() { instrument_editor.selected = v.editor_selected; }
+                                    instrument_editor.scroll = v.editor_scroll;
+                                }
+                            }
+                            free(session_path); session_path = session_request == 3 ? clone("") : clone(request_path);
+                            session_status = session_request == 3 ? clone("New empty session") : format!("Opened: {}", session_path);
+                        }
+                    }
+                }
+            }
+            free(message); message = clone(session_status); free(session_status);
+            session_request = 0; menus.dismiss(); dirty = true;
+        }
+        if sidebar_remove.len() > 0 && remove_request == 0 && remove_pending == 0 && !remove_question.active {
+            // Work backwards because sample list IDs are renumbered on removal.
+            let id: i32 = sidebar_remove[sidebar_remove.len() - 1]; var remaining: list<i32> = [];
+            for i in 0..sidebar_remove.len() - 1 { remaining.push(sidebar_remove[i]); } sidebar_remove = remaining;
+            if sidebar_remove_kind == 3 {
+                if library.index_of(id) >= 0 { library.select(id); library.remove_active(terminal_bounds()); }
+                free(message); message = clone(library.error == "" ? "Pattern removed" : library.error);
+            } else {
+                remove_target = sidebar_remove_kind == 1 ? id - 1 : id;
+                let uses: i32 = sidebar_remove_kind == 1 ? library.sample_usage(remove_target) : library.instrument_usage(id);
+                if uses == 0 { remove_request = sidebar_remove_kind == 1 ? 1 : 3; }
+                else {
+                    remove_pending = sidebar_remove_kind;
+                    remove_question.title = sidebar_remove_kind == 1 ? "Remove marked audio" : "Remove marked instrument";
+                    remove_question.question = sidebar_remove_kind == 1 ? format!("{} clip(s) use this sample. Remove them too?", uses) : format!("{} track(s) use this instrument. Remove tracks or keep their notes?", uses);
+                    remove_question.buttons = sidebar_remove_kind == 1
+                        ? [PushButton { label: "Remove clips", action: 1 }, PushButton { label: "Cancel", action: 2 }]
+                        : [PushButton { label: "Remove tracks", action: 1 }, PushButton { label: "Keep tracks", action: 3 }];
+                    remove_question.open(); focus.set_menu_active(true);
+                }
+            }
+            dirty = true;
+        }
+        if remove_request != 0 {
+            // 1 = sample (with its clips), 2 = instrument and its tracks,
+            // 3 = instrument only, leaving the tracks for another plugin.
+            let kind: i32 = remove_request; remove_request = 0;
+            let area: Rect = terminal_bounds();
+            free(message);
+            if kind == 1 {
+                let cleared: i32 = midi.drop_sample_pads(remove_target);
+                let clips: i32 = library.remove_sample(remove_target, area);
+                message = clips < 0 ? clone("Select a sample in Audio first")
+                    : format!("Removed sample {}: {} clip(s), {} drum pad(s) cleared", remove_target + 1, clips, cleared);
+                playback_dirty = true;
+            } else {
+                let uses: i32 = library.instrument_usage(remove_target);
+                var tracks: i32 = 0;
+                if kind == 2 { tracks = library.remove_tracks_using_instrument(remove_target, area); }
+                transport.playing = false;
+                note_playback.update(library.table, transport.ticks, false);
+                midi.sequencer_events(note_playback.events);
+                let error: str8 = midi.remove_instrument(remove_target);
+                if error != "" { message = error; }
+                else {
+                    instrument_editor.release(); library.remove_instrument(remove_target, area);
+                    message = kind == 2 ? format!("Removed instrument {} and {} track(s)", remove_target, tracks)
+                        : (uses > 0 ? clone("Instrument removed; track assignments cleared")
+                            : format!("Removed instrument {}", remove_target));
+                }
+            }
+            dirty = true;
+        }
+        if song_request != 0 {
+            let start: bool = song_request == 1; song_request = 0;
+            if prepared_row >= 0 {
+                // End what the next row already sent ahead.
+                prepared_playback.update(prepared_table, transport.ticks, false);
+                midi.sequencer_events(prepared_playback.events);
+                prepared_table.release(); prepared_mixer.release();
+            }
+            prepared_table = SequenceTable {}; prepared_mixer = SequenceTable {}; prepared_row = -1;
+            transport.playing = false;
+            note_playback.update(song_playing ? song_table : library.table, transport.ticks, false);
+            midi.sequencer_events(note_playback.events);
+            song_table.release(); song_table = SequenceTable {};
+            note_playback = NotePlayback {};
+            free(message);
+            if !start {
+                song_playing = false; song_row = -1; message = clone("Matrix stopped");
+                mixer_table.release(); mixer_table = SequenceTable {};
+            }
+            else {
+                song_row = matrix.row;
+                // An armed pattern records from where it starts, or from the
+                // cursor when that is inside it; the editor shows it growing.
+                if matrix_armed_id > 0 && library.index_of(matrix_armed_id) >= 0 {
+                    let unit: i32 = library.matrix_steps < 1 ? 1 : library.matrix_steps;
+                    let cover: SongCover = library.song_cover(matrix.row, matrix.armed_lane);
+                    let inside: bool = cover.id == matrix_armed_id && matrix.row - cover.offset == matrix.armed_row;
+                    song_row = inside ? matrix.row : matrix.armed_row;
+                    library.select(matrix_armed_id); play_pattern = library.active_id;
+                    let index: i32 = library.table.recording_candidate();
+                    if index >= 0 {
+                        let track: SequenceTrack = library.table.tracks[index];
+                        matrix_auto_armed = track.record_armed ? -1 : index;
+                        library.table.set_record_armed(index, true);
+                        library.table.selected_column = library.table.track_start(index);
+                        library.table.recording_extend = true;
+                        if library.table.start_recording() {
+                            matrix_recording = true; matrix.recording = true;
+                            library.recording_pattern = matrix_armed_id;
+                            matrix_record_offset = wide(inside ? cover.offset : 0) * wide(unit) * 15000;
+                        }
+                    }
+                }
+                song_table = library.merge_song_row(song_row, terminal_bounds(), false);
+                mixer_table.release(); mixer_table = library.merge_song_row(song_row, terminal_bounds(), true);
+                if follow_matrix && !matrix_recording { if library.follow_pattern(library.song_row_pattern(song_row)) { play_pattern = library.active_id; } }
+                if song_table.rows.len() == 0 {
+                    song_playing = false; song_row = -1; message = clone("Matrix row is empty");
+                } else {
+                    song_playing = true;
+                    transport.toggle(now_ms(), 0, i32(song_table.rows.len()));
+                    note_playback.start_row = 0; midi.restart_samples(0);
+                    message = matrix_recording ? format!("Recording into pattern {} from matrix row {}", matrix_armed_id, song_row + 1)
+                        : (matrix_armed_id > 0 ? clone("The armed pattern has no MIDI track to record into")
+                            : format!("Playing the matrix from row {}", song_row + 1));
+                }
+            }
+            playback_dirty = true; dirty = true;
+        }
+        if transport_request {
+            transport_request = false;
+            if song_playing {
+                // Space always means "the selected pattern"; leave matrix play.
+                note_playback.update(song_table, transport.ticks, false);
+                midi.sequencer_events(note_playback.events);
+                song_playing = false; song_row = -1; transport.playing = false;
+                song_table.release(); song_table = SequenceTable {};
+                note_playback = NotePlayback {};
+            }
+            let starting: bool = !transport.playing;
+            if starting { library.table.recording_extend = extend_recording; library.table.start_recording(); }
+            transport.toggle(now_ms(), library.table.selected_row, library.table.recording_track >= 0 && extend_recording ? 2147483647 : i32(library.table.rows.len()));
+            if starting && library.table.recording_track >= 0 && play_metronome { transport.begin_count_in(); }
+            note_playback.start_row = transport.row;
+            if transport.playing { midi.restart_samples(transport.row); }
+            if !midi.sample_playback(library.table, transport.ticks, transport.playing && transport.count_in == 0, transport.bpm) {
+                transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)");
+            }
+            note_playback.update(library.table, transport.ticks, transport.playing && transport.count_in == 0);
+            midi.sequencer_events(note_playback.events);
+            if transport.row >= 0 { library.table.selected_row = transport.row; }
+            dirty = true;
+        }
+        if accept_pending {
+            // One place for every chooser result, whichever way it was accepted
+            // (Enter in the browser, or the OK button). Multi-selected files
+            // arrive in dialog.accepted_paths; flows that take a single file use
+            // the first one.
+            accept_pending = false;
+            let paths: list<str8> = dialog.accepted_paths;
+            let first: str8 = dialog.accepted_path;
+            if pattern_action != 0 { free(last_pattern_dir); last_pattern_dir = clone(dialog.directory); }
+            else if adding_audio || adding_pad_file { free(last_audio_dir); last_audio_dir = clone(dialog.directory); }
+            else if adding_plugin || adding_instrument || adding_effect >= 0 || adding_insert_track >= 0 { free(last_plugin_dir); last_plugin_dir = clone(dialog.directory); }
+            else if learn_action != 0 { free(last_preset_dir); last_preset_dir = clone(dialog.directory); }
+            else { free(last_session_dir); last_session_dir = clone(dialog.directory); }
+            free(message);
+            if pattern_action != 0 {
+                if pattern_action == 57 {
+                    let saved: bool = SessionCodec::save_pattern(first, library.active_name(), library.table);
+                    message = clone(saved ? "Saved pattern (.mlapatt)" : "Cannot save pattern");
+                } else {
+                    let loaded: result<PatternData, str8> = SessionCodec::load_pattern(first);
+                    if loaded.is_err() { message = clone(loaded.unwrap_err()); }
+                    else {
+                        let data: PatternData = loaded.unwrap();
+                        let imported: bool = library.import_pattern(data.name, data.table, data.clips);
+                        message = clone(imported ? "Loaded pattern; assign instruments to its tracks" : library.error);
+                        data.release();
+                    }
+                }
+                pattern_action = 0;
+            }
+            else if adding_audio {
+                // The first sample lands on the selected audio track; the rest
+                // join the Audio list.
+                var loaded: i32 = 0;
+                for i in 0..paths.len() {
+                    let ok: bool = i == 0 ? library.load_audio(paths[i], transport.bpm, terminal_bounds()) : library.audio.load(paths[i], transport.bpm);
+                    if ok { loaded = loaded + 1; }
+                }
+                message = paths.len() == 1 ? format!("Selected: {}", first)
+                    : (loaded == paths.len() ? format!("Added {} samples", loaded)
+                        : format!("Added {} of {} samples: {}", loaded, paths.len(), library.audio.error));
+                adding_audio = false;
+            }
+            else if adding_pad_file {
+                // Several files fill consecutive pads from the chosen key.
+                var filled: i32 = 0; var failure: str8 = ""; var first_name: str8 = clone("");
+                for i in 0..paths.len() {
+                    let pad: i32 = pad_index + i32(i);
+                    if pad >= i32(midi.output.instrument_sampler(pad_slot, 1)) { failure = clone("ran out of pads"); break; }
+                    if !library.audio.load(paths[i], transport.bpm) { failure = clone(library.audio.error); break; }
+                    let index: i32 = i32(library.audio.samples.len()) - 1;
+                    let clip: AudioClip = library.audio.samples[index];
+                    let name: str8 = base_name(clip.source);
+                    let error: str8 = midi.assign_pad(pad_slot, pad, index, clip.samples, clip.channels, clip.sample_rate, name);
+                    if i == 0 { free(first_name); first_name = clone(name); }
+                    free(name);
+                    if error != "" { failure = error; break; }
+                    filled = filled + 1;
+                }
+                message = failure != "" ? format!("Filled {} pad(s), then stopped: {}", filled, failure)
+                    : (filled == 1 ? format!("Pad {}: {} (added to Audio)", pad_index + 1, first_name)
+                        : format!("Pads {}-{}: {} samples added to Audio", pad_index + 1, pad_index + filled, filled));
+                free(first_name);
+                if failure != "" { free(failure); }
+                adding_pad_file = false;
+            }
+            else if adding_insert_track >= 0 {
+                let id: i32 = midi.add_insert(first, library.free_insert_id(i32(midi.insert_paths.len())));
+                if id > 0 { library.table.set_insert(adding_insert_track, adding_insert_position, id); }
+                message = clone(id > 0 ? "Insert effect loaded" : "Cannot load insert: select a VST3 effect (maximum 256 loaded inserts)");
+                adding_insert_track = -1;
+            }
+            else if adding_effect >= 0 { message = midi.load_effect(adding_effect, first); adding_effect = -1; }
+            else if learn_action != 0 {
+                if learn_action >= 100 {
+                    // Handled below; kit presets also touch the Audio list.
+                    free(preset_path); preset_path = clone(first); preset_request = learn_action; preset_worker = midi.midi.worker.raw != 0;
+                    message = clone("");
+                } else { message = SessionCodec::learn_file(first, midi.output, learn_slot, learn_action == 97); }
+                learn_action = 0;
+            }
+            else if adding_instrument {
+                // Each chosen bundle becomes its own instance.
+                var names: str8 = clone(""); var failure: str8 = "";
+                for i in 0..paths.len() {
+                    let error: str8 = midi.add_instrument(paths[i]);
+                    if error != "" { failure = error; break; }
+                    let id: i32 = midi.last_instrument_id;
+                    let name: str8 = midi.output.instrument_name(id);
+                    library.add_instrument(id, name);
+                    let joined: str8 = format!("{}{}#{} {}", names, names == "" ? "" : ", ", id, name);
+                    free(names); names = joined;
+                }
+                message = failure != "" ? failure
+                    : (paths.len() == 1 ? format!("Instrument loaded: {} | {}", midi.output.instrument_name(midi.last_instrument_id), midi.instrument_output_failed ? "Audio restart failed; reopen Settings" : "Enter assigns to selected Instrument track")
+                        : format!("Instruments loaded: {}", names));
+                free(names);
+                adding_instrument = false;
+            }
+            else if adding_plugin { message = midi.set_processor(first); adding_plugin = false; }
+            else {
+                message = format!("Selected: {}", first);
+                if !fixture { free(request_path); request_path = clone(first); session_request = saving_session ? 2 : 1; }
+            }
+            dirty = true;
+        }
+        if preset_request != 0 {
+            // Instrument presets may carry pads; FX presets contain parameters only.
+            let effect_preset: bool = preset_request == 140 || preset_request == 141;
+            let saving_preset: bool = preset_request == 100 || preset_request == 141;
+            var kit_pads: list<i32> = []; var kit_clips: list<AudioClip> = [];
+            if preset_request == 100 {
+                let assigned: list<PadAssignment> = midi.pads;
+                for entry in assigned { if entry.slot == learn_slot { kit_pads.push(entry.pad); kit_clips.push(library.audio.samples[entry.sample]); } }
+            }
+            if !saving_preset { midi.midi.release(); }
+            var preset: PresetResult = PresetResult {};
+            if effect_preset { preset = SessionCodec::effect_preset_file(preset_path, midi.output, learn_slot, saving_preset); }
+            else { preset = SessionCodec::preset_file(preset_path, midi.output, learn_slot, saving_preset, kit_pads, kit_clips); }
+            free(message); message = preset.status;
+            if !saving_preset {
+                if preset.ok && preset.has_pads {
+                    // A kit replaces every pad of the instrument.
+                    let slot: i32 = i32(learn_slot);
+                    let pads: i64 = midi.output.instrument_sampler(slot, 1);
+                    let loaded: i64 = midi.output.instrument_sampler(slot, 2);
+                    var pad_mask: i64 = 1;
+                    for p in 0..pads {
+                        var kept: bool = false; let wanted: list<i32> = preset.pads;
+                        for pad in wanted { if pad == i32(p) { kept = true; } }
+                        if !kept && p < 63 && (loaded / pad_mask) % 2 == 1 { let cleared: str8 = midi.clear_pad(slot, i32(p)); if cleared != "" { free(cleared); } }
+                        if p < 62 { pad_mask = pad_mask * 2; }
+                    }
+                    var failed: str8 = "";
+                    for i in 0..preset.pads.len() {
+                        let clip: AudioClip = preset.clips[i];
+                        let name: str8 = base_name(clip.source);
+                        let index: i32 = library.audio.add_clip(clip);
+                        if index < 0 { failed = clone(library.audio.error); free(name); break; }
+                        let added: AudioClip = library.audio.samples[index];
+                        let error: str8 = midi.assign_pad(slot, preset.pads[i], index, added.samples, added.channels, added.sample_rate, name);
+                        free(name);
+                        if error != "" { failed = error; break; }
+                    }
+                    if failed != "" { free(message); message = format!("Preset parameters loaded, but a pad failed: {}", failed); }
+                    else { free(message); message = format!("Loaded kit preset: {} pad(s) | {}", preset.pads.len(), preset_path); }
+                } else { let unused: list<AudioClip> = preset.clips; for clip in unused { clip.release(); } }
+                midi.resume_midi(preset_worker);
+                if preset.ok && instrument_editor.active && instrument_editor.slot == learn_slot { instrument_editor.open(midi.output, learn_slot); }
+            }
+            preset_request = 0; dirty = true;
+        }
+        let now: i64 = now_ms(); let delta: i32 = i32(now - last_tick > 1000 ? 1000 : now - last_tick); last_tick = now;
+        // MIDI dispatch is independent of modal keyboard focus.
+        midi.route_selected(library.table);
+        // Faders, sends, inserts and output channels belong to the pattern that
+        // is playing. While the matrix runs, that is the merged song row, not
+        // whatever pattern the sidebar happens to have selected.
+        midi.sync_volumes(song_playing ? song_table : library.table);
+        let midi_active: bool = midi.poll(now);
+        // Virtual keyboard notes whose keys stopped repeating end now; its
+        // notes join the MIDI input for step entry and recording.
+        let released: list<HeldNote> = keyboard.release_due(now, !keyboard.visible);
+        if released.len() > 0 { dirty = true; }
+        for held in released { midi.keyboard_note(held.target, false, held.note, 0); }
+        midi.midi.inject(keyboard.take_events());
+        // An Audio view preview ends at the clip's end, or when the selection,
+        // the sidebar focus or the view changes, or a dialog opens.
+        if preview_sample >= 0 {
+            if !midi.previewing() || focus.selected != 0 || !library.audio_mode || library.audio.view.selected != preview_sample || dialog.active {
+                midi.stop_preview(); preview_sample = -1; dirty = true;
+                if starts_with(message, "Playing sample ") == 1 { free(message); message = clone("Preview stopped"); }
+            }
+        }
+        // A preview ends at the clip's end, when the dialog closes, or when
+        // the cursor moves to another file.
+        if preview_path != "" {
+            var stop: bool = !midi.previewing() || !dialog.active;
+            if !stop { let selected: str8 = dialog.selected_file(); stop = selected != preview_path; free(selected); }
+            if stop {
+                midi.stop_preview(); free(preview_path); preview_path = clone("");
+                if dialog.active { dialog.status = "Ctrl+P: play/stop preview | Enter: open | Esc: cancel"; }
+                dirty = true;
+            }
+        }
+        let processor_errors: i64 = midi.output.processor_errors();
+        if processor_errors > last_processor_errors {
+            free(message); message = clone("VST3 processing failed; a plugin block was silenced."); dirty = true;
+        }
+        last_processor_errors = processor_errors;
+        if transport.midi_received != midi_active { transport.midi_received = midi_active; dirty = true; }
+        let ui_steps: i64 = (now - ui_clock) / 10; ui_clock = ui_clock + ui_steps * 10;
+        if play_pattern != library.active_id {
+            mixer.expanded = []; mixer.selected_send = -1; mixer.send_track = -1;
+            transport.playing = false; mixer.levels = []; play_pattern = library.active_id;
+            transport.row = library.table.selected_row < 0 ? 0 : library.table.selected_row; transport.phase = 0;
+            transport.elapsed_ms = i32(wide(transport.row) * 15000 / wide(transport.bpm));
+        }
+        // Editing a moving row would otherwise commit to a different row.
+        if library.table.editing || library.table.visual || library.renaming || dialog.active || question.active || paste_error.active || settings.active || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active || curve_dialog.active { transport.playing = false; }
+        if library.table.recording_track >= 0 {
+            let armed: SequenceTrack = library.table.tracks[library.table.recording_track];
+            if !armed.record_armed { transport.playing = false; }
+            let pending: i64 = transport.playing ? (now - transport.clock_ms) * wide(transport.bpm) : 0;
+            let record_now: i64 = transport.ticks + pending - transport.count_in;
+            // Matrix time runs on across rows; the take counts from where its
+            // pattern started.
+            let base: i64 = matrix_recording ? matrix_record_offset : 0;
+            let notes: list<MidiInputEvent> = midi.midi.note_events;
+            for note in notes {
+                let tick: i64 = record_now - (now - note.received_ms) * wide(transport.bpm);
+                if transport.playing && pending >= transport.count_in && (transport.count_in == 0 || tick >= transport.ticks) {
+                    if library.table.record_timed(note.note, note.velocity, note.channel, base + tick, note.kind == 1) { dirty = true; }
+                }
+            }
+            // Controllers moved during the take land in the track's CC columns.
+            let controls: list<MidiInputEvent> = midi.midi.control_events;
+            for control in controls {
+                let tick: i64 = record_now - (now - control.received_ms) * wide(transport.bpm);
+                if transport.playing && pending >= transport.count_in && (transport.count_in == 0 || tick >= transport.ticks) {
+                    if library.table.record_control(control.note, control.velocity, base + tick) { dirty = true; }
+                }
+            }
+            if transport.playing && (!song_playing || matrix_recording) {
+                if pending >= transport.count_in { library.table.grow_recording(base + record_now); }
+            } else {
+                library.table.stop_recording(base + transport.ticks, terminal_bounds());
+                if matrix_recording {
+                    // The take ends the pattern at the nearest bar line, never
+                    // cutting off what was recorded.
+                    let bar_rows: i32 = transport.beats_per_bar * 16 / (transport.beat_unit < 1 ? 1 : transport.beat_unit);
+                    library.table.set_length(library.table.take_length(base + transport.ticks, bar_rows), terminal_bounds());
+                    if matrix_auto_armed >= 0 { library.table.set_record_armed(matrix_auto_armed, false); }
+                    free(message);
+                    message = format!("Recorded pattern {}: {} rows", matrix_armed_id, library.table.rows.len());
+                    matrix_recording = false; matrix.recording = false; matrix_auto_armed = -1;
+                    library.recording_pattern = 0; matrix_armed_id = 0; matrix.armed_row = -1; matrix.armed_lane = -1;
+                }
+                // A take played on the virtual keyboard keeps it focused for the next one.
+                if !keyboard.visible || focus.selected != 2 { focus.selected = 1; }
+                dirty = true;
+            }
+        }
+        transport.recording = library.table.recording_track >= 0;
+        if song_playing {
+            let previous: i32 = transport.row;
+            if transport.advance(now, i32(song_table.rows.len())) { playback_dirty = true; }
+            if transport.row < previous {
+                // The row finished: move to the next matrix row holding patterns.
+                let next: i32 = library.next_song_row(song_row);
+                if next < 0 { song_playing = false; transport.playing = false; }
+                else if next != song_row {
+                    song_row = next;
+                    var upcoming: NotePlayback = NotePlayback { start_row: 0 };
+                    // A take edits only the pattern the rows leave out.
+                    // One that already sent its first notes ahead must play on.
+                    if prepared_row == next && (prepared_revision == library.table.revision || matrix_recording || prepared_playback.started()) {
+                        // Prepared ahead: swap, no merge on the downbeat.
+                        song_table.release(); song_table = prepared_table;
+                        mixer_table.release(); mixer_table = prepared_mixer;
+                        upcoming = prepared_playback; prepared_playback = NotePlayback {};
+                    } else {
+                        if prepared_row >= 0 {
+                            prepared_playback.update(prepared_table, transport.ticks, false);
+                            midi.sequencer_events(prepared_playback.events);
+                            prepared_table.release(); prepared_mixer.release();
+                        }
+                        song_table.release(); song_table = library.merge_song_row(song_row, terminal_bounds(), false);
+                        mixer_table.release(); mixer_table = library.merge_song_row(song_row, terminal_bounds(), true);
+                    }
+                    prepared_table = SequenceTable {}; prepared_mixer = SequenceTable {}; prepared_row = -1;
+                    // The editor, sidebar and mixer move to the row that plays.
+                    if follow_matrix && !matrix_recording { if library.follow_pattern(library.song_row_pattern(song_row)) { play_pattern = library.active_id; } }
+                    // Notes still sounding from the last row end at their own
+                    // length: dropping them left their note-offs unsent.
+                    upcoming.carry_voices(note_playback);
+                    note_playback = upcoming;
+                    midi.restart_samples(0);
+                    if song_table.rows.len() == 0 { song_playing = false; transport.playing = false; }
+                }
+                playback_dirty = true; dirty = true;
+            }
+        }
+        else if transport.advance(now, i32(library.table.rows.len())) {
+            if transport.row >= 0 { library.table.selected_row = transport.row; }
+            playback_dirty = true;
+        } else if !transport.playing {
+            let cursor: i32 = library.table.selected_row < 0 ? 0 : library.table.selected_row;
+            if transport.row != cursor { transport.follow_row(cursor); dirty = true; }
+        }
+        if play_metronome && transport.playing && (metronome_always || transport.recording) {
+            let beat: i32 = transport.metronome_beat(); if beat >= 0 { midi.metronome(beat == 0); }
+        }
+        // Browsing the matrix selects the pattern under the cursor, so the
+        // mixer, the inspector and the editor behind the matrix all show that
+        // pattern's tracks and routing. Nothing follows while the transport
+        // runs: switching patterns would stop it.
+        // `&&` evaluates both sides, so the guard cannot carry the call.
+        if follow_matrix && matrix.visible && focus.selected == 1 && !transport.playing && !song_playing {
+            if library.follow_matrix_cell(matrix.row, matrix.lane) {
+                play_pattern = library.active_id; playback_dirty = true; dirty = true;
+            }
+        }
+        if library.table.selected_row != prev_sample_row {
+            if sample.anchor_active { sample.anchor_active = false; dirty = true; }
+            prev_sample_row = library.table.selected_row;
+        }
+        // Consume every note-on, including a note released within this poll.
+        // Modal editors never receive destructive background recording edits.
+        if menus.active < 0 && !dialog.active && !question.active && !paste_error.active && !settings.active && !bpm_dialog.active && !curve_dialog.active && !instrument_editor.active && !sample_editor.active && !piano.active && !share_question.active && !remove_question.active && !library.renaming && !mixer.bus_focus && library.table.group_detail_rows == 0 {
+            let notes: list<MidiInputEvent> = midi.midi.note_events;
+            if library.table.recording_track < 0 && !library.table.editing {
+                for note in notes { if note.kind == 1 { if library.table.record_note(note.note, note.velocity) { dirty = true; } } }
+            }
+        }
+        if !midi.sample_playback(song_playing ? song_table : library.table, transport.ticks, transport.playing && transport.count_in == 0, transport.bpm) {
+            transport.playing = false; free(message); message = clone("Cannot prepare sample playback (maximum 256 placements per pattern)"); dirty = true;
+        }
+        midi.sync_transport(transport.bpm, transport.ticks, transport.playing && transport.count_in == 0);
+        // Notes go out a little ahead, stamped with the audio frame they sound
+        // on, so a slow UI frame (a matrix row being merged) never delays one.
+        midi.schedule_transport(transport.ticks, transport.bpm, transport.playing && transport.count_in == 0);
+        let ahead: i64 = midi.lookahead_ticks(transport.bpm);
+        note_playback.lookahead = ahead;
+        // A matrix row followed by another one sends nothing past its end.
+        note_playback.once = song_playing && library.next_song_row(song_row) != song_row;
+        note_playback.update(song_playing ? song_table : library.table, transport.ticks, transport.playing && transport.count_in == 0);
+        midi.sequencer_events(note_playback.events);
+        if prepared_row >= 0 {
+            // The next row sends its first notes ahead before the change.
+            let running: bool = song_playing && transport.playing && transport.count_in == 0;
+            prepared_playback.lookahead = ahead; prepared_playback.once = true;
+            prepared_playback.update(prepared_table, transport.ticks, running);
+            midi.sequencer_events(prepared_playback.events);
+            if !running {
+                prepared_table.release(); prepared_mixer.release();
+                prepared_table = SequenceTable {}; prepared_mixer = SequenceTable {}; prepared_row = -1;
+            }
+        }
+        // Merge and schedule the next matrix row once this frame's notes are
+        // out and none is due for a while (or two rows before the change).
+        if song_playing && transport.playing && prepared_row < 0 && song_table.rows.len() > 0 && transport.bpm > 0 {
+            let boundary: i64 = note_playback.epoch + wide(i32(song_table.rows.len())) * 15000;
+            let due: i64 = note_playback.next_event_tick();
+            let quiet: bool = due < 0 || due - transport.ticks >= 40 * wide(transport.bpm);
+            let closing: bool = boundary - transport.ticks <= 30000 + 2 * ahead;
+            let next: i32 = library.next_song_row(song_row);
+            if (quiet || closing) && next >= 0 && next != song_row && boundary > transport.ticks {
+                prepared_row = next; prepared_revision = library.table.revision;
+                prepared_table = library.merge_song_row(next, terminal_bounds(), false);
+                prepared_mixer = library.merge_song_row(next, terminal_bounds(), true);
+                prepared_playback = NotePlayback {};
+                prepared_playback.prepare(prepared_table, boundary);
+            }
+        }
+        // The mixer shows the playing song row while following it, so its
+        // meters come from the same channels the strips do.
+        let following_channels: bool = follow_matrix && song_playing && mixer_table.tracks.len() > 0;
+        if following_channels {
+            if mixer.update(mixer_table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
+        } else if mixer.update(library.table, transport.row, i32(transport.phase), transport.playing, delta) { playback_dirty = true; }
+        let meter_delta: i32 = i32(now - master_meter_clock);
+        if meter_delta >= 1000 / frame_rate.fps {
+            if instrument_editor.sync(midi.output) { dirty = true; }
+            if mixer.update_master(midi.output.master_peak(0), midi.output.master_peak(1), meter_delta) { playback_dirty = true; }
+            if mixer.update_instruments(midi.output, meter_delta) { playback_dirty = true; }
+            if mixer.update_channels(midi.output, meter_delta) { playback_dirty = true; }
+            if mixer.update_effects(midi.output, midi.effects, meter_delta) { playback_dirty = true; }
+            master_meter_clock = now;
+        }
+        // Pushes the master bus to a new controller, then analyses at its own rate.
+        if spectrum.update(midi.output, now, spectrum_area) { playback_dirty = true; }
+        if playback_dirty && frame_rate.ready(now) { dirty = true; }
+        if sample.visible && !library.table.audio_under_cursor() { sample.visible = false; dirty = true; }
+        for _ui_step in 0..ui_steps {
+            if settings.active && settings.pressed_button >= 0 {
+                settings.tick(); dirty = true;
+                if !settings.active && settings.result == 1 {
+                    let applied: result<i32, str8> = midi.configure_audio(settings.midi.selected_id(), settings.output.selected_id(), settings.buffer.selected_id(), settings.rate.selected_id(), library.audio.samples);
+                    if applied.is_err() { settings.fail(applied.unwrap_err()); }
+                    else {
+                        free(message);
+                        if !midi.output.hardware_output() { message = clone("Settings applied. Audio disabled."); }
+                        else { message = format!("AUHAL: {} Hz / {} frames. Settings applied.", midi.output.sample_rate(), midi.output.buffer_frames()); }
+                    }
+                }
+            }
+            if curve_dialog.active && curve_dialog.pressed_button >= 0 {
+                curve_dialog.tick(); dirty = true;
+                if !curve_dialog.active && curve_dialog.result == 1 { curve_pending = true; }
+            }
+            if bpm_dialog.active && bpm_dialog.pressed_button >= 0 {
+                bpm_dialog.tick(); dirty = true;
+                if !bpm_dialog.active && !curve_dialog.active && bpm_dialog.result == 1 {
+                    if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
+                    else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
+                    else if bpm_dialog.matrix_steps { library.matrix_steps = bpm_dialog.value; }
+                    else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
+                    else if bpm_dialog.spectrum_rate { spectrum.fps = bpm_dialog.value; }
+                    else { transport.set_bpm(bpm_dialog.value); }
+                }
+            }
+            if dialog.active && dialog.pressed_button >= 0 {
+                dialog.tick(); dirty = true;
+                if dialog.accepted { accept_pending = true; }
+            }
+            if clash_question.active && clash_question.pressed_button >= 0 {
+                clash_question.tick(); dirty = true;
+                if !clash_question.active {
+                    free(message);
+                    if clash_question.result == 2 { message = clone("Cancelled."); }
+                    else {
+                        var split: i32 = 0;
+                        if clash_question.result == 3 { split = library.split_song_clashes(clash_row, clash_lane, clash_id, terminal_bounds()); }
+                        let placed: bool = library.set_song_at(clash_row, clash_lane, clash_id);
+                        message = !placed ? clone("Cannot place the pattern here")
+                            : (split > 0 ? format!("Row {} lane {}: pattern {}; {} track(s) split onto their own note line", clash_row + 1, clash_lane + 1, clash_id, split)
+                                : format!("Row {} lane {}: pattern {} (clashing notes kept)", clash_row + 1, clash_lane + 1, clash_id));
+                    }
+                }
+            }
+            if remove_question.active && remove_question.pressed_button >= 0 {
+                remove_question.tick(); dirty = true;
+                if !remove_question.active {
+                    if remove_question.result == 1 || remove_question.result == 3 {
+                        remove_request = remove_question.result == 1 ? remove_pending : 3;
+                    } else { sidebar_remove = []; free(message); message = clone("Cancelled."); }
+                    remove_pending = 0;
+                }
+            }
+            if share_question.active && share_question.pressed_button >= 0 {
+                share_question.tick(); dirty = true;
+                if !share_question.active {
+                    free(message);
+                    if share_question.result == 3 {
+                        library.table.assign_instrument(share_id);
+                        message = format!("Track now shares instrument #{} (same sound, pads, fader and inserts)", share_id);
+                    } else if share_question.result == 1 {
+                        transport.playing = false;
+                        let error: str8 = midi.add_instrument(midi.instrument_paths[share_id - 1]);
+                        if error != "" { message = error; }
+                        else {
+                            let id: i32 = midi.last_instrument_id;
+                            let name: str8 = midi.output.instrument_name(id);
+                            library.add_instrument(id, name);
+                            library.table.clear_active_inserts();
+                            message = format!("New instance: {} #{} for this track (own pads, fader and inserts)", name, id);
+                        }
+                    } else { message = clone("Cancelled."); }
+                    share_id = 0;
+                }
+            }
+            if question.active && question.pressed_button >= 0 {
+                question.tick(); dirty = true;
+                if !question.active {
+                    if confirm_track_action != 0 {
+                        if question.result == 1 {
+                            if confirm_track_action == 54 { library.table.set_length(length_target, terminal_bounds()); }
+                            else { library.table.track_action(confirm_track_action, terminal_bounds()); }
+                        }
+                        confirm_track_action = 0;
+                        free(message); message = clone("Track action finished.");
+                    } else {free(message); message = clone(question.result == 1 ? "New session confirmed." : "New session cancelled."); if question.result == 1 && !fixture { session_request = 3; } }
+                }
+            }
+        }
+        if pending_length > 0 {
+            length_target = pending_length; pending_length = 0;
+            if library.table.length_truncates_data(length_target) {
+                question.title = "Set length";
+                question.question = "Are you sure, data will be truncated";
+                confirm_track_action = 54; question.open();
+            } else {library.table.set_length(length_target, terminal_bounds());}
+            dirty = true;
+        }
+        if library.table.paste_error {
+            paste_error.question = library.table.error; paste_error.open(); library.table.paste_error = false; dirty = true;
+        }
+        if paste_error.active && paste_error.pressed_button >= 0 { paste_error.tick(); dirty = true; }
+        let area: Rect = terminal_bounds();
+        let viewport: Viewport = menus.viewport(area);
+        let panes: list<Pane> = demo_panes(viewport.content());
+        focus.reconcile(panes);
+        focus.set_menu_active((instrument_editor.active && instrument_editor.focused) || sample_editor.active || piano.active || share_question.active || remove_question.active || clash_question.active || picker.active || outputs.active || menus.active >= 0 || dialog.active || question.active || paste_error.active || bpm_dialog.active || curve_dialog.active || settings.active || library.table.edit_mode > 0 || library.renaming);
+        if curve_pending {
+            curve_pending = false;
+            let written: i32 = library.table.apply_curve(curve_dialog.selected);
+            let names: list<str8> = curve_names();
+            free(message);
+            message = written < 0 ? clone(library.table.error) : format!("{} curve: {} CC step(s) written", names[curve_dialog.selected], written);
+            dirty = true;
+        }
+        // Inserting or removing matrix rows moves the armed cell; follow its
+        // pattern down the lane, and disarm when it is no longer there.
+        if matrix_armed_id > 0 && !matrix_recording && library.song_at(matrix.armed_row, matrix.armed_lane) != matrix_armed_id {
+            var found: i32 = -1;
+            for r in 0..library.song.len() { if found < 0 && library.song_at(i32(r), matrix.armed_lane) == matrix_armed_id { found = i32(r); } }
+            if found < 0 { matrix_armed_id = 0; matrix.armed_lane = -1; }
+            matrix.armed_row = found; dirty = true;
+        }
+        if dirty || area.width != previous_width || area.height != previous_height {
+            library.table.instrument_labels(midi.output);
+            library.table.insert_labels(midi.output);
+            let surface: Surface = Surface::new(area.width, area.height);
+            if !surface.is_valid() { instrument_editor.release(); midi.release(); settings.release(); library.release(); dialog.release(); bpm_dialog.release(); free(message); terminal.finish(); return 1; }
+            library.table.reconcile(panes[1].bounds.inset(1));
+            library.view.reconcile(panes[0].bounds.inset(1));
+            library.audio.view.reconcile(panes[0].bounds.inset(1));
+            var keyboard_title: str8 = "";
+            if keyboard.visible {
+                let target: i64 = AudioSystem::live_target(library.table);
+                var track_name: str8 = "Select a MIDI or Instrument track";
+                if target >= 0 { let track: SequenceTrack = library.table.tracks[target % 64]; track_name = track.name; }
+                keyboard_title = keyboard.title(track_name);
+            }
+            paint_demo(surface, menus, focus, panes, message, library.table, mixer, library, transport, sample, matrix.visible, mixer_table, following_channels, spectrum, keyboard, keyboard_title);
+            if keyboard.visible { free(keyboard_title); }
+            let details_pane: Pane = panes[2]; spectrum_area = details_pane.bounds.inset(1);
+            matrix.paint(surface, panes[1].bounds, Theme::dark_blue(), library, focus.is_active(1), song_playing ? song_row : -1);
+            instrument_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
+            // Menus sit above the pane contents, below the modal dialogs.
+            menus.paint(surface, surface.bounds(), Theme::dark_blue());
+            sample_editor.paint(surface, panes[1].bounds, Theme::dark_blue());
+            dialog.paint(surface, area, Theme::dark_blue());
+            question.paint(surface, area, Theme::dark_blue());
+            share_question.paint(surface, area, Theme::dark_blue());
+            remove_question.paint(surface, area, Theme::dark_blue());
+            clash_question.paint(surface, area, Theme::dark_blue());
+            picker.paint(surface, area, Theme::dark_blue());
+            outputs.paint(surface, area, Theme::dark_blue());
+            library.table.paint_track_dialog(surface, area, Theme::dark_blue());
+            library.paint_rename(surface, area, Theme::dark_blue());
+            bpm_dialog.paint(surface, area, Theme::dark_blue());
+            curve_dialog.paint(surface, area, Theme::dark_blue());
+            piano.paint(surface, area, Theme::dark_blue());
+            settings.paint(surface, area, Theme::dark_blue());
+            paste_error.paint(surface, area, Theme::dark_blue());
+            terminal.present(surface);
+            surface.release();
+            previous_width = area.width;
+            previous_height = area.height;
+            dirty = false;
+            frame_rate.presented(now_ms()); playback_dirty = false;
+        }
+        if !terminal.active { break; }
+        // Drain a bounded batch so multi-byte shortcuts/repeats do not acquire
+        // a separate polling delay for every byte in their escape sequence.
+        var received_input: bool = false;
+        for _i in 0..128 {
+            let byte: i32 = read_keycode_nonblocking(stdin());
+            if byte < 0 {
+                if byte == -1 { running = false; }
+                break;
+            }
+            received_input = true;
+            let event: InputEvent = input.feed(byte);
+            // Key releases (reported only while the virtual keyboard shows)
+            // end its notes and reach nothing else.
+            if event.released {
+                let ended: list<HeldNote> = keyboard.on_release(event, now_ms());
+                if ended.len() > 0 { dirty = true; }
+                for held in ended { midi.keyboard_note(held.target, false, held.note, 0); }
+                continue;
+            }
+            // Any edit may change the next row: prepare it again afterwards.
+            if prepared_row >= 0 && !prepared_playback.started() && (event.kind != InputKind::None || event.code != 0) {
+                prepared_table.release(); prepared_mixer.release();
+                prepared_table = SequenceTable {}; prepared_mixer = SequenceTable {}; prepared_row = -1;
+            }
+            // dd is consecutive input in the active sequence, never across a
+            // menu, dialog, pane switch, or unrelated key.
+            if event.kind != InputKind::None || event.code != 0 {
+                if menus.active >= 0 || settings.active || dialog.active || question.active || bpm_dialog.active || curve_dialog.active || library.table.editing || library.renaming || focus.selected != 0 ||
+                   event.kind == InputKind::Pane ||(event.kind == InputKind::Menu && event.key == Key::Toggle) { library.view.cancel_pending(); library.audio.view.cancel_pending(); library.instruments.cancel_pending(); }
+                if menus.active >= 0 || settings.active || dialog.active || question.active || bpm_dialog.active || curve_dialog.active || focus.selected != 1 ||
+                   event.code != 100 || event.modifiers != 1 { library.table.delete_pending = false; }
+                if menus.active >= 0 || settings.active || dialog.active || question.active || bpm_dialog.active || curve_dialog.active || focus.selected != 1 ||
+                   event.code != 103 || event.modifiers != 1 { library.table.top_pending = false; }
+            }
+            escape_ticks = 0;
+            var command: i32 = 0;
+            if library.table.paste_error {
+                paste_error.question = library.table.error; paste_error.open(); library.table.paste_error = false; dirty = true;
+            }
+            if paste_error.active { paste_error.on_event(event); dirty = true; }
+            else if (event.code == 19 && event.modifiers == 1) || (event.code == 115 && event.modifiers == 5) { command = 3; dirty = true; }
+            // Space starts/stops from every pane, including the mixer and the
+            // VST3 editor. Text entry and modal dialogs keep it for themselves.
+            // Ctrl+P plays the matrix. Terminals send it as the control byte
+            // 0x10, or as a modified "p" in the kitty/modifyOtherKeys modes;
+            // Ctrl+Space works too where a terminal reports it.
+            // Ctrl+P in View > Audio (sidebar focused) plays the selected sample
+            // on the master output instead; again stops it.
+            else if ((event.code == 16 && event.modifiers == 1) || (event.code == 112 && event.modifiers == 5)) &&
+                    focus.selected == 0 && library.audio_mode && menus.active < 0 &&
+                    !dialog.active && !settings.active && !bpm_dialog.active && !curve_dialog.active && !question.active &&
+                    !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !outputs.active &&
+                    !paste_error.active && !library.renaming && !sample_editor.active && !piano.active {
+                let index: i32 = library.audio.view.selected;
+                let replay: bool = preview_sample != index || !midi.previewing();
+                midi.stop_preview(); preview_sample = -1;
+                if preview_path != "" { free(preview_path); preview_path = clone(""); }
+                free(message);
+                if !replay { message = clone("Preview stopped"); }
+                else if index < 0 || index >= library.audio.samples.len() { message = clone("Select a sample to preview"); }
+                else {
+                    let clip: AudioClip = library.audio.samples[index];
+                    let error: str8 = midi.preview_clip(clip);
+                    if error == "" {
+                        preview_sample = index;
+                        let name: str8 = base_name(clip.source);
+                        message = format!("Playing sample {}: {} | Ctrl+P stops", index + 1, name); free(name);
+                    } else { message = clone(error); }
+                }
+                dirty = true;
+            }
+            else if ((event.code == 16 && event.modifiers == 1) || (event.code == 112 && event.modifiers == 5) ||
+                     (event.code == 32 && event.modifiers == 5)) && matrix.visible && menus.active < 0 &&
+                    !dialog.active && !settings.active && !bpm_dialog.active && !curve_dialog.active && !question.active &&
+                    !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !outputs.active &&
+                    !paste_error.active && !library.renaming {
+                song_request = song_playing ? 2 : 1; dirty = true;
+            }
+            else if event.code == 32 && event.modifiers == 1 && menus.active < 0 && !dialog.active && !settings.active && !bpm_dialog.active && !curve_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !outputs.active && !paste_error.active && !library.renaming && !library.table.editing {
+                // In the song matrix, Space plays the matrix from the cursor
+                // row, every lane mixed, like Ctrl+P; it stops whatever plays.
+                // Elsewhere it plays the selected pattern.
+                if matrix.visible && focus.selected == 1 { song_request = song_playing || transport.playing ? 2 : 1; }
+                else { transport_request = true; }
+                dirty = true;
+            }
+            // Tab / Shift+Tab cycle every pane of the main view: sidebar,
+            // pattern, inspector/mixer, the FX bus, and the VST3 editor.
+            else if event.kind == InputKind::Menu && event.key == Key::Toggle && menus.active < 0 &&
+                    !sample_editor.active && !piano.active && !dialog.active && !settings.active && !bpm_dialog.active && !curve_dialog.active && !question.active && !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !outputs.active && !paste_error.active && !library.renaming && !library.table.editing {
+                let has_bus: bool = mixer.visible && !keyboard.visible && midi.effects.len() > 0;
+                let has_editor: bool = instrument_editor.active;
+                var stop: i32 = focus.selected == 0 ? 0 : (focus.selected == 1 ? 1 : (mixer.bus_focus && has_bus ? 3 : 2));
+                if has_editor && instrument_editor.focused { stop = 4; }
+                let back: bool = event.modifiers == 2;
+                var next: i32 = stop;
+                for _i in 0..5 {
+                    next = back ? (next + 4) % 5 : (next + 1) % 5;
+                    // The editor covers the pattern pane, so skip it while open.
+                    if next == 1 && has_editor { continue; }
+                    if next == 3 && !has_bus { continue; }
+                    if next == 4 && !has_editor { continue; }
+                    break;
+                }
+                instrument_editor.focused = next == 4;
+                if next != 4 {
+                    focus.selected = next == 0 ? 0 : (next == 1 ? 1 : 2);
+                    mixer.bus_focus = next == 3;
+                    if next == 3 && mixer.selected_effect < 0 { mixer.selected_effect = 0; }
+                }
+                dirty = true;
+            }
+            else if instrument_editor.active && instrument_editor.focused && !dialog.active {
+                instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true;
+            }
+            else if sample_editor.active {
+                let action: i32 = sample_editor.on_event(event, panes[1].bounds.width - 2);
+                if action == 1 && !sample_editor.modified { sample_editor.release(); free(message); message = clone("Sample unchanged"); }
+                else if action == 1 {
+                    let index: i32 = sample_editor.index;
+                    let placed: i32 = library.replace_sample(index, sample_editor.take());
+                    let edited: AudioClip = library.audio.samples[index];
+                    let pads: i32 = midi.refresh_pads(index, edited);
+                    free(message);
+                    message = pads < 0 ? format!("Sample {} saved, but a drum pad rejected it: {}", index + 1, __mlang_std_audio_last_error())
+                        : format!("Sample {} saved: {} placement(s), {} drum pad(s) updated", index + 1, placed, pads);
+                }
+                else if action == 2 { sample_editor.release(); free(message); message = clone("Sample edits discarded"); }
+                dirty = true;
+            }
+            else if piano.active {
+                if event.kind != InputKind::None || event.code != 0 {
+                    piano.on_event(event); dirty = true;
+                    if !piano.active { command = piano.result == 2 ? 0 : 119; }
+                }
+            }
+            else if settings.active {
+                if event.kind != InputKind::None || event.code != 0 { settings.on_event(event); dirty = true; }
+            }
+            else if curve_dialog.active {
+                if event.kind != InputKind::None || event.code != 0 {
+                    curve_dialog.on_event(event); dirty = true;
+                    if !curve_dialog.active && curve_dialog.result == 1 { curve_pending = true; }
+                    if !curve_dialog.active && curve_dialog.result == 2 { free(message); message = clone("Cancelled."); }
+                }
+            }
+            else if bpm_dialog.active {
+                if event.kind != InputKind::None || event.code != 0 {
+                    bpm_dialog.on_event(event); dirty = true;
+                    if !bpm_dialog.active && !curve_dialog.active && bpm_dialog.result == 1 {
+                        if bpm_dialog.send_level { library.table.set_send(send_track, send_fx, bpm_dialog.value); }
+                        else if bpm_dialog.pattern_length { pending_length = bpm_dialog.value; }
+                        else if bpm_dialog.matrix_steps { library.matrix_steps = bpm_dialog.value; }
+                        else if bpm_dialog.meter_rate { frame_rate.set(bpm_dialog.value, now_ms()); }
+                        else if bpm_dialog.spectrum_rate { spectrum.fps = bpm_dialog.value; }
+                        else { transport.set_bpm(bpm_dialog.value); }
+                    }
+                }
+            }
+            else if library.renaming {
+                if event.kind != InputKind::None || event.code != 0 { library.rename_event(event); dirty = true; }
+            }
+            else if picker.active {
+                picker.on_event(event);
+                if !picker.active {
+                    if picker.result == 2 { free(message); message = clone("Cancelled."); }
+                    else if picker.result == 3 {
+                        free(message);
+                        message = library.set_song_at(matrix.row, matrix.lane, 0) ? clone("Matrix cell cleared") : clone("No cell here");
+                    } else { command = 121; }
+                }
+                dirty = true;
+            }
+            else if outputs.active {
+                outputs.on_event(event);
+                if !outputs.active {
+                    if outputs.result == 2 { free(message); message = clone("Cancelled."); }
+                    else { command = 31; }
+                }
+                dirty = true;
+            }
+            else if clash_question.active {
+                clash_question.on_event(event);
+                if !clash_question.active && clash_question.result == 2 { free(message); message = clone("Cancelled."); }
+                dirty = true;
+            }
+            else if remove_question.active {
+                remove_question.on_event(event);
+                if !remove_question.active && remove_question.result == 2 { remove_pending = 0; sidebar_remove = []; free(message); message = clone("Cancelled."); }
+                dirty = true;
+            }
+            else if share_question.active {
+                share_question.on_event(event);
+                if !share_question.active { share_id = 0; free(message); message = clone("Cancelled."); }
+                dirty = true;
+            }
+            else if question.active {
+                question.on_event(event);
+                if !question.active { confirm_track_action = 0; free(message); message = clone("Cancelled."); }
+                dirty = true;
+            }
+            else if dialog.active {
+                // Ctrl+P (byte 0x10, or a kitty/CSI-u Ctrl+p) plays the audio
+                // file under the cursor on the master output; again stops it.
+                let preview_key: bool = (event.code == 16 && event.modifiers == 1) || (event.code == 112 && event.modifiers == 5);
+                if preview_key && (adding_audio || adding_pad_file) {
+                    let target: str8 = dialog.selected_file();
+                    let replay: bool = preview_path == "" || preview_path != target;
+                    midi.stop_preview(); free(preview_path); preview_path = clone("");
+                    dialog.status = "Ctrl+P: play/stop preview | Enter: open | Esc: cancel";
+                    if replay && target != "" && dialog.matches_file(target) {
+                        let error: str8 = midi.preview_file(target);
+                        if error == "" { free(preview_path); preview_path = clone(target); preview_sample = -1; dialog.status = "Playing preview | Ctrl+P stops"; }
+                        else { dialog.status = error; }
+                    }
+                    free(target); dirty = true;
+                }
+                else if event.kind != InputKind::None || event.code != 0 {
+                    dialog.on_event(event, area);
+                    focus.set_menu_active(dialog.active);
+                    let pad_file_dialog: bool = adding_pad_file;
+                    if dialog.accepted { accept_pending = true; }
+                    if pad_file_dialog && !dialog.active && !dialog.accepted { adding_pad_file = false; }
+                    dirty = true;
+                }
+            }
+            else if library.table.editing {
+                if event.kind != InputKind::None || event.code != 0 {
+                    library.table.edit_event(event, panes[1].bounds.inset(1)); dirty = true;
+                }
+            }
+            // The focused virtual keyboard plays its keys ("q" included) and
+            // leaves pane moves, Tab, Space and shortcuts to the app.
+            else if keyboard.visible && focus.selected == 2 && !mixer.bus_focus && !instrument_editor.focused && menus.active < 0 && VirtualKeyboard::handles(event) {
+                let target: i64 = AudioSystem::live_target(library.table);
+                let octave: i32 = keyboard.octave;
+                let note: i32 = keyboard.on_event(event, target, now_ms());
+                if note >= 0 { midi.keyboard_note(target, true, note, keyboard.velocity); dirty = true; }
+                else if keyboard.octave != octave { dirty = true; }
+                else if target < 0 && VirtualKeyboard::key_offset(event.code) >= 0 {
+                    free(message); message = clone("Keyboard: select a MIDI or Instrument track (audio and muted tracks do not play)"); dirty = true;
+                }
+            }
+            else if event.kind == InputKind::Quit { running = false; }
+            // Exclusive input ownership: never call a widget handler from a
+            // boolean guard. The compiler may evaluate every operand.
+            else if menus.active >= 0 {
+                if event.kind != InputKind::None { dirty = true; }
+                if event.kind == InputKind::Menu {
+                    command = menus.on_key(event.key == Key::Function1 ? Key::Toggle : event.key);
+                    focus.set_menu_active(menus.active >= 0);
+                    dirty = true;
+                }
+            }
+            else if(event.code == 98 && event.modifiers == 5) ||(event.code == 2 && event.modifiers == 1) {
+                bpm_dialog.open(transport.bpm); dirty = true;
+            }
+            // Ctrl+V marks the two CC values a curve runs between; Ctrl+A draws it.
+            else if ((event.code == 22 && event.modifiers == 1) || (event.code == 118 && event.modifiers == 5)) && focus.selected == 1 && !matrix.visible && !library.table.editing {
+                let marked: i32 = library.table.toggle_curve_point(); free(message);
+                message = marked < 0 ? clone(library.table.error)
+                    : (marked == 2 ? clone("Two CC values marked: Ctrl+A draws a curve between them")
+                        : (marked == 1 ? clone("CC value marked: mark the other end with Ctrl+V") : clone("Curve marks cleared")));
+                dirty = true;
+            }
+            else if ((event.code == 1 && event.modifiers == 1) || (event.code == 97 && event.modifiers == 5)) && focus.selected == 1 && !matrix.visible && !library.table.editing {
+                free(message);
+                if library.table.curve_ready() { curve_dialog.open(); message = clone("Choose the curve between the marked CC values"); }
+                else { message = clone(library.table.error); }
+                dirty = true;
+            }
+            else if ((event.code == 26 && event.modifiers == 1) || (event.code == 122 && event.modifiers == 5)) && focus.selected == 1 && !matrix.visible {
+                library.table.cycle_vertical_zoom(panes[1].bounds.inset(1)); dirty = true;
+            }
+            // Ctrl+Shift+M (kitty/CSI-u); plain Ctrl+M is Enter on most terminals.
+            else if (event.code == 109 || event.code == 77) && event.modifiers == 6 { command = 160; }
+            // Shift+P: legacy terminals send "P", kitty/CSI-u a shifted "p".
+            else if (event.code == 80 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 112 || event.code == 80)) { command = 163; }
+            else if event.code == 109 && event.modifiers == 1 {
+                mixer.visible = !mixer.visible; dirty = true;
+            }
+            else if (event.code == 77 && event.modifiers == 1) || (event.modifiers == 2 && event.code == 109) {
+                matrix.visible = !matrix.visible;
+                // A session with no song yet opens on one empty row to edit.
+                if matrix.visible && library.song.len() == 0 { library.matrix_insert_row(0, false); }
+                if matrix.visible { focus.selected = 1; }
+                free(message);
+                message = clone(matrix.visible ? "Song matrix: Enter places the pattern selected in the sidebar; parallel lanes play together"
+                    : "Song matrix closed");
+                dirty = true;
+            }
+            else if event.kind == InputKind::Menu && event.key == Key::Function1 {
+                command = menus.on_key(Key::Toggle);
+                focus.set_menu_active(menus.active >= 0);
+                dirty = true;
+            } else if event.kind == InputKind::Pane {
+                focus.navigate(event.key, panes);
+                dirty = true;
+            } else if focus.selected == 2 && spectrum.visible && spectrum.handles(event) {
+                spectrum.on_event(event, midi.output);
+                free(message); message = spectrum.status(); dirty = true;
+            // While the song matrix covers the pattern pane it owns `s` (split).
+            } else if event.code == 115 && event.modifiers == 1 && library.table.visual && focus.selected == 1 && !matrix.visible && library.table.audio_under_cursor() {
+                free(message);
+                message = library.table.slice_audio(panes[1].bounds.inset(1))
+                    ? clone("Sliced audio clip into three parts.")
+                    : clone(library.table.error);
+                dirty = true;
+            } else if event.code == 115 && event.modifiers == 1 && ((focus.selected == 1 && !matrix.visible) || focus.selected == 2) {
+                if library.table.audio_under_cursor() {
+                    sample.visible = !sample.visible;
+                    if sample.visible {
+                        let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                        let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
+                        let rc: AudioClip = instance.render_clip(); sample.reset_selection(rc.frames);
+                    }
+                    dirty = true;
+                }
+            } else if event.code == 116 && event.modifiers == 1 &&(focus.selected == 1 || focus.selected == 2) && sample.visible && library.table.audio_under_cursor() {
+                free(message);
+                if library.table.trim_audio(sample.sel_start, sample.sel_end, panes[1].bounds.inset(1)) {
+                    let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                    let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
+                    let rc: AudioClip = instance.render_clip(); sample.reset_selection(rc.frames);
+                    message = clone("Trimmed audio clip to selection.");
+                } else { message = clone(library.table.error); }
+                dirty = true;
+            } else if event.modifiers == 5 && event.code == 121 &&
+            (focus.selected == 1 || focus.selected == 2) && sample.visible && library.table.audio_under_cursor() {
+                let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
+                let region: AudioClip = instance.clip.slice_frames(sample.sel_start, sample.sel_end);
+                free(message);
+                if region.peaks.len() > 0 {
+                    library.table.audio_clipboard.release(); library.table.audio_clipboard = region;
+                    message = clone("Copied waveform selection to clipboard.");
+                } else { region.release(); message = clone("Waveform selection is empty."); }
+                dirty = true;
+            } else if ((event.modifiers == 5 &&(event.code == 104 || event.code == 108 || event.code == 110 || event.code == 109)) ||
+            (event.modifiers == 2 &&(event.code == 110 || event.code == 109)) ||
+            (event.modifiers == 1 &&(event.code == 78 || event.code == 77))) &&
+            (focus.selected == 1 || focus.selected == 2) && sample.visible && library.table.audio_under_cursor() {
+                let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                let instance: AudioInstance = track.instances[track.instance_at(library.table.selected_row)];
+                let rc: AudioClip = instance.render_clip();
+                if sample.on_event(event, rc, panes[2].bounds.width - 2) { dirty = true; }
+            } else if focus.selected == 2 && mixer.visible && follow_matrix && song_playing && mixer_table.tracks.len() > 0 {
+                // The strips belong to the playing song row, not to one
+                // pattern, so they are a view of the mix, not a place to edit.
+                free(message);
+                message = clone("Mixer follows the matrix; stop it or turn off Pattern > Follow matrix patterns to mix");
+                dirty = true;
+            } else if focus.selected == 2 && mixer.visible && !(sample.visible && library.table.audio_under_cursor()) {
+                if mixer.send_navigation(event, library.table.active_track()) { dirty = true; }
+                else if !mixer.bus_focus && mixer.selected_send >= 0 {
+                    let track: SequenceTrack = library.table.tracks[library.table.active_track()];
+                    let value: i32 = mixer.send_value(event, track);
+                    if value >= 0 { library.table.set_send(library.table.active_track(), mixer.selected_send, value); dirty = true; }
+                    else if (event.code == 82 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 114 || event.code == 82)) {
+                        if library.table.mixer_event(event, panes[1].bounds.inset(1)) { dirty = true; }
+                    }
+                } else if mixer.bus_focus && midi.effects.len() > 0 {
+                    if event.kind == InputKind::Menu && event.key == Key::Left {
+                        if mixer.selected_effect > 0 { mixer.selected_effect = mixer.selected_effect - 1; } else { mixer.bus_focus = false; } dirty = true;
+                    } else if event.kind == InputKind::Menu && event.key == Key::Right {
+                        if mixer.selected_effect + 1 < midi.effects.len() { mixer.selected_effect = mixer.selected_effect + 1; } dirty = true;
+                    } else if event.kind == InputKind::Menu && event.key == Key::Enter {
+                        let effect: EffectChannel = midi.effects[mixer.selected_effect]; command = effect.path == "" ? 111 : 112;
+                    } else {
+                        let down: bool = (event.code == 74 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 106 || event.code == 74));
+                        let up: bool = (event.code == 75 && event.modifiers == 1) || (event.modifiers == 2 && (event.code == 107 || event.code == 75));
+                        if down || up { let effect: EffectChannel = midi.effects[mixer.selected_effect]; midi.effect_level(mixer.selected_effect, effect.volume + (up ? 1 : -1)); dirty = true; }
+                    }
+                } else if event.kind == InputKind::Menu && event.key == Key::Right && library.table.active_track() == library.table.tracks.len() - 1 && midi.effects.len() > 0 {
+                    mixer.bus_focus = true; mixer.selected_effect = 0; dirty = true;
+                } else { if library.table.mixer_event(event, panes[1].bounds.inset(1)) { dirty = true; } }
+            } else if focus.selected == 1 && matrix.visible {
+                let previous_row: i32 = matrix.row; let previous_lane: i32 = matrix.lane;
+                let action: i32 = matrix.on_event(event, i32(library.song.len()), library.song_lanes() + 1);
+                let area: Rect = terminal_bounds();
+                if action == 0 && follow_matrix && !transport.playing && !song_playing {
+                    if matrix.row != previous_row || matrix.lane != previous_lane {
+                        // Browsing names the pattern the mixer and the editor
+                        // behind the matrix now show.
+                        if library.follow_matrix_cell(matrix.row, matrix.lane) {
+                            free(message);
+                            message = format!("Pattern {}: {}", library.active_id, library.active_name());
+                        }
+                    }
+                }
+                if action == 1 && library.song_continues(matrix.row, matrix.lane) {
+                    let cover: SongCover = library.song_cover(matrix.row, matrix.lane);
+                    free(message);
+                    message = format!("Row {} plays pattern {} from row {}; clear it there to place another",
+                        matrix.row + 1, cover.id, matrix.row + 1 - cover.offset);
+                }
+                else if action == 1 {
+                    // Pattern list for this cell: "<no>:<name>", plus an empty entry.
+                    var ids: list<i32> = [0]; var labels: list<str8> = [clone("  -  (empty)")];
+                    let entries: list<PatternEntry> = library.patterns;
+                    for entry in entries { ids.push(entry.id); labels.push(format!("{}{}:{}", entry.id < 10 ? "00" : (entry.id < 100 ? "0" : ""), entry.id, entry.name)); }
+                    picker.open(ids, labels, library.song_at(matrix.row, matrix.lane));
+                    focus.set_menu_active(true);
+                }
+                else if action == 2 && library.song_split(matrix.row, matrix.lane) {
+                    library.set_song_raw(matrix.row, matrix.lane, 0);
+                    free(message); message = format!("Split removed at row {}", matrix.row + 1);
+                }
+                else if action == 2 && library.song_loop_repeat(matrix.row, matrix.lane) {
+                    // Clearing a loop repeat ends the loop there rather than
+                    // removing the pattern it repeats.
+                    library.split_song(matrix.row, matrix.lane);
+                    free(message); message = format!("Loop ends at row {}", matrix.row + 1);
+                }
+                else if action == 10 {
+                    let origin: i32 = library.toggle_song_loop(matrix.row, matrix.lane);
+                    free(message);
+                    if origin < 0 { message = clone("No pattern plays in this cell"); }
+                    else {
+                        let id: i32 = library.song_at(origin, matrix.lane);
+                        message = library.song_loops(origin, matrix.lane)
+                            ? format!("Pattern {} loops from row {} until the next pattern or split", id, origin + 1)
+                            : format!("Pattern {} at row {} no longer loops", id, origin + 1);
+                    }
+                }
+                else if action == 11 {
+                    free(message);
+                    message = library.split_song(matrix.row, matrix.lane)
+                        ? format!("Split at row {}: the lane is silent from here", matrix.row + 1)
+                        : clone("Split a loop repeat or a long pattern's later row");
+                }
+                else if action == 2 {
+                    let cover: SongCover = library.song_cover(matrix.row, matrix.lane);
+                    let origin: i32 = matrix.row - cover.offset;
+                    free(message);
+                    message = library.set_song_at(origin, matrix.lane, 0)
+                        ? (cover.offset > 0 ? format!("Cleared pattern {} from row {}", cover.id, origin + 1) : clone("Matrix cell cleared"))
+                        : clone("No cell here");
+                }
+                else if action == 3 || action == 4 {
+                    free(message);
+                    message = library.matrix_insert_row(matrix.row, action == 3)
+                        ? format!("Row inserted {} {}", action == 3 ? "below" : "above", matrix.row + 1) : clone("Cannot insert a row");
+                    if action == 3 { matrix.row = matrix.row + 1; }
+                }
+                else if action == 5 || action == 6 {
+                    free(message);
+                    message = library.matrix_insert_cell(matrix.row, matrix.lane, action == 5)
+                        ? format!("Lane {} shifted down from row {}", matrix.lane + 1, matrix.row + 1) : clone("Cannot shift this lane");
+                    if action == 5 { matrix.row = matrix.row + 1; }
+                }
+                else if action == 7 {
+                    free(message);
+                    message = library.matrix_remove_row(matrix.row) ? clone("Matrix row removed") : clone("No row to remove");
+                }
+                else if action == 8 {
+                    matrix.clipboard = library.song_at(matrix.row, matrix.lane);
+                    free(message);
+                    message = matrix.clipboard > 0 ? format!("Copied pattern {}", matrix.clipboard) : clone("Copied an empty cell");
+                }
+                else if action == 12 {
+                    free(message);
+                    let cover: SongCover = library.song_cover(matrix.row, matrix.lane);
+                    if song_playing || transport.playing { message = clone("Stop playback to arm a pattern"); }
+                    else if cover.id <= 0 { message = clone("Arm a cell that holds a pattern"); }
+                    else if matrix_armed_id == cover.id && matrix.armed_lane == matrix.lane && matrix.armed_row == matrix.row - cover.offset {
+                        matrix_armed_id = 0; matrix.armed_row = -1; matrix.armed_lane = -1;
+                        message = clone("Recording disarmed");
+                    } else {
+                        matrix_armed_id = cover.id; matrix.armed_row = matrix.row - cover.offset; matrix.armed_lane = matrix.lane;
+                        message = format!("Pattern {} armed: Ctrl+P plays the matrix and records into it until Ctrl+P stops", cover.id);
+                    }
+                }
+                else if action == 9 {
+                    if matrix.clipboard > 0 && library.song_row_clashes(matrix.row, matrix.lane, matrix.clipboard) > 0 {
+                        command = 122;
+                    } else {
+                        free(message);
+                        message = library.set_song_at(matrix.row, matrix.lane, matrix.clipboard)
+                            ? format!("Pasted pattern {}", matrix.clipboard) : clone("Nothing to paste");
+                    }
+                }
+                dirty = true;
+            } else if focus.selected == 1 {
+                if !library.table.editing && (library.table.group_detail_rows > 0 || (event.code == 102 && event.modifiers == 1)) {
+                    command = library.table.insert_event(event, panes[1].bounds.inset(1)); dirty = true;
+                } else { if library.table.edit_event(event, panes[1].bounds.inset(1)) { dirty = true; } }
+            } else if focus.selected == 0 {
+                if (event.code == 14 && event.modifiers == 1) || (event.code == 110 && event.modifiers == 5) {
+                    if library.audio_mode { library.audio.view.toggle_mark(); }
+                    else if library.instruments_mode { library.instruments.toggle_mark(); }
+                    else { library.view.toggle_mark(); }
+                    dirty = true;
+                }
+                else if event.kind == InputKind::Edit && event.key == Key::Backspace && (event.modifiers == 1 || event.modifiers == 2) {
+                    var view: ListView = ListView {}; view = library.audio_mode ? library.audio.view : (library.instruments_mode ? library.instruments : library.view);
+                    sidebar_remove = view.targets(); sidebar_remove_kind = library.audio_mode ? 1 : (library.instruments_mode ? 2 : 3);
+                    library.audio.view.marks = []; library.instruments.marks = []; library.view.marks = [];
+                    dirty = true;
+                }
+                else if event.code == 121 && event.modifiers == 1 {
+                    let count: i32 = sidebar_clipboard.copy(library, midi);
+                    free(message); message = format!("Copied {} list item(s); p duplicates", count); dirty = true;
+                }
+                else if event.code == 112 && event.modifiers == 1 {
+                    transport.playing = false;
+                    let pasted: SidebarPaste = sidebar_clipboard.paste(library, midi);
+                    library = pasted.library; midi = pasted.audio; let count: i32 = pasted.count;
+                    free(message); message = sidebar_clipboard.error == "" ? format!("Duplicated {} list item(s)", count) : format!("Duplicated {}: {}", count, sidebar_clipboard.error);
+                    playback_dirty = true; dirty = true;
+                }
+                else if library.audio_mode && event.code == 101 && event.modifiers == 1 { command = 107; }
+                else if library.on_event(event, panes[0].bounds.inset(1)) { dirty = true; }
+                if library.share_request > 0 {
+                    share_id = library.share_request; library.share_request = 0;
+                    let user: i32 = library.table.instrument_user(share_id, library.table.active_track());
+                    let other: SequenceTrack = library.table.tracks[user];
+                    let name: str8 = midi.output.instrument_name(share_id);
+                    // One line: dialog text does not wrap. Sharing links sound, pads, fader and inserts.
+                    share_question.title = format!("{} #{} already plays '{}'", name, share_id, other.name);
+                    share_question.question = format!("Load a new {} for this track, or share #{}?", name, share_id);
+                    share_question.open(); focus.set_menu_active(true); dirty = true;
+                }
+            }
+            if command > 0 { dirty = true; pattern_action = 0; }
+            if command > 0 && command != 115 { adding_insert_track = -1; }
+            if command == 99 { running = false; }
+            else if command == 90 {
+                transport.playing = false; settings.open_audio(midi.midi_id, midi.output_id, midi.requested_buffer_frames, midi.requested_sample_rate); focus.set_menu_active(true);
+            }
+            else if command == 1 {
+                question.title = "New session"; question.question = "Start a new session?";
+                confirm_track_action = 0; question.open(); focus.set_menu_active(true);
+            }
+            else if command == 3 && session_path != "" {
+                free(request_path); request_path = clone(session_path); session_request = 2;
+            }
+            else if command == 2 || command == 3 || command == 96 {
+                adding_effect = -1;
+                learn_action = 0;
+                adding_audio = false; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = "";
+                saving_session = command != 2; dialog.save_mode = saving_session; dialog.multi_select = false;
+                dialog.title = saving_session ? "Save session (.mlack)" : "Open session"; dialog.file_pattern = fixture ? "" : ".*\\.[mM][lL][aA][cC][kK]";
+                dialog.open(last_session_dir);
+                focus.set_menu_active(true);
+            }
+            else if command == 60 {
+                adding_effect = -1;
+                learn_action = 0;
+                dialog.save_mode = false; saving_session = false;
+                adding_audio = true; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = ""; dialog.title = "Add audio"; dialog.multi_select = true;
+                dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
+                dialog.open(last_audio_dir); focus.set_menu_active(true);
+                if dialog.files.len() > 0 { dialog.status = "Ctrl+P: play/stop preview | Enter: open | Esc: cancel"; }
+            }
+            else if command == 91 || command == 93 {
+                adding_effect = -1;
+                learn_action = 0;
+                dialog.save_mode = false; saving_session = false;
+                transport.playing = false; adding_audio = false; adding_plugin = command == 91; adding_instrument = command == 93;
+                dialog.multi_select = adding_instrument;
+                dialog.title = adding_instrument ? "Add VST3 instrument" : "Load master VST3"; dialog.file_pattern = ".*\\.[vV][sS][tT]3";
+                dialog.bundle_pattern = dialog.file_pattern;
+                dialog.open(last_plugin_dir); focus.set_menu_active(true);
+            }
+            else if command == 97 || command == 98 || command == 100 || command == 101 {
+                adding_effect = -1;
+                learn_slot = library.selected_instrument();
+                if learn_slot < 1 || midi.output.parameter_info(learn_slot, 0, 0) < 0.0 {
+                    free(message); message = clone("Select a loaded instrument in Instruments first");
+                } else {
+                    learn_action = command; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                    midi.output.midi_learn(-1, 0, 0);
+                    if command == 101 { transport.playing = false; }
+                    dialog.save_mode = command == 97 || command == 100; dialog.bundle_pattern = ""; dialog.multi_select = false;
+                    dialog.title = command == 97 ? "Save MIDI learn (.mlalearn)" : "Load MIDI learn (.mlalearn)";
+                    dialog.file_pattern = command == 97 ? "" : ".*\\.[mM][lL][aA][lL][eE][aA][rR][nN]";
+                    if command >= 100 {
+                        dialog.title = command == 100 ? "Save plugin preset (.mlapre)" : "Load plugin preset (.mlapre)";
+                        dialog.file_pattern = command == 100 ? "" : ".*\\.[mM][lL][aA][pP][rR][eE]";
+                    }
+                    dialog.open(last_preset_dir);
+                    if command == 97 || command == 100 {
+                        let suggested: str8 = SessionCodec::learn_suggestion(learn_slot == 0 ? midi.output.processor_name() : midi.output.instrument_name(learn_slot));
+                        dialog.path_field.set_text(suggested); free(suggested);
+                    }
+                    focus.set_menu_active(true);
+                }
+            }
+            else if command == 140 || command == 141 {
+                learn_slot = -1;
+                if instrument_editor.active && (instrument_editor.slot == 0 || instrument_editor.slot >= 33) { learn_slot = instrument_editor.slot; }
+                else if focus.selected == 1 && library.table.group_detail_rows > 0 {
+                    let index: i32 = library.table.active_track();
+                    if index >= 0 {
+                        let track: SequenceTrack = library.table.tracks[index];
+                        let id: i32 = track.insert_id(library.table.selected_group_detail);
+                        if id > 0 { learn_slot = id + 40; }
+                    }
+                } else if mixer.selected_effect >= 0 && mixer.selected_effect < midi.effects.len() { learn_slot = mixer.selected_effect + 33; }
+                if learn_slot < 0 || midi.output.parameter_info(learn_slot, 0, 0) < 0.0 {
+                    free(message); message = clone("Select a loaded effect in Mixer or open its editor first");
+                } else {
+                    learn_action = command; adding_effect = -1; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                    midi.output.midi_learn(-1, 0, 0);
+                    if command == 140 { transport.playing = false; }
+                    dialog.save_mode = command == 141; dialog.bundle_pattern = ""; dialog.multi_select = false;
+                    dialog.title = command == 141 ? "Save plugin preset (.mlafxpre)" : "Load plugin preset (.mlafxpre)";
+                    dialog.file_pattern = command == 141 ? "" : ".*\\.[mM][lL][aA][fF][xX][pP][rR][eE]";
+                    dialog.open(last_preset_dir);
+                    if command == 141 {
+                        let suggested: str8 = SessionCodec::learn_suggestion(learn_slot == 0 ? midi.output.processor_name() : midi.output.instrument_name(learn_slot));
+                        dialog.path_field.set_text(suggested); free(suggested);
+                    }
+                    focus.set_menu_active(true);
+                }
+            }
+            else if command == 110 {
+                if midi.add_effect() {
+                    mixer.visible = true; sample.visible = false; focus.selected = 2; mixer.bus_focus = true; mixer.selected_effect = i32(midi.effects.len()) - 1;
+                    mixer.update_effects(midi.output, midi.effects, 0);
+                    free(message); message = clone("Effect channel added. Enter loads plugin; Effect > Set track send routes the selected track.");
+                } else { free(message); message = clone("Maximum 8 effect channels"); }
+            }
+            else if command == 115 || command == 116 || (command == 112 && focus.selected == 1 && library.table.group_detail_rows > 0) {
+                let index: i32 = library.table.active_track();
+                if index >= 0 {
+                    let track: SequenceTrack = library.table.tracks[index];
+                    let position: i32 = library.table.selected_group_detail;
+                    let id: i32 = track.insert_id(position);
+                    if command == 116 { library.table.set_insert(index, position, 0); }
+                    else if id > 0 { instrument_editor.open(midi.output, id + 40); }
+                    else if command == 112 { free(message); message = clone("Select a loaded insert effect first"); }
+                    else {
+                        adding_insert_track = index; adding_insert_position = position;
+                        adding_effect = -1; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                        transport.playing = false; dialog.save_mode = false; dialog.multi_select = false; dialog.title = "Load VST3 insert effect";
+                        dialog.file_pattern = ".*\\.[vV][sS][tT]3"; dialog.bundle_pattern = dialog.file_pattern;
+                        dialog.open(last_plugin_dir); focus.set_menu_active(true);
+                    }
+                }
+            }
+            else if command >= 111 && command <= 114 {
+                if mixer.selected_effect < 0 || mixer.selected_effect >= midi.effects.len() { free(message); message = clone("Add/select an effect channel in Mixer first"); }
+                else if command == 111 {
+                    adding_effect = mixer.selected_effect; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                    transport.playing = false; dialog.save_mode = false; dialog.multi_select = false; dialog.title = "Load VST3 effect";
+                    dialog.file_pattern = ".*\\.[vV][sS][tT]3"; dialog.bundle_pattern = dialog.file_pattern;
+                    dialog.open(last_plugin_dir); focus.set_menu_active(true);
+                } else if command == 112 {
+                    if !instrument_editor.open(midi.output, mixer.selected_effect + 33) { free(message); message = clone("Load an effect plugin first"); }
+                } else if command == 114 { free(message); message = midi.load_effect(mixer.selected_effect, ""); }
+                else {
+                    send_track = library.table.active_track(); send_fx = mixer.selected_effect;
+                    if send_track >= 0 { let track: SequenceTrack = library.table.tracks[send_track]; bpm_dialog.open_send(track.send_level(send_fx)); }
+                    else { free(message); message = clone("Select a source track in Pattern view first"); }
+                }
+            }
+            else if command == 117 || command == 118 {
+                // The selected Instrument track decides which instance gets the
+                // pad; the Instruments list is the fallback for other tracks.
+                let track_slot: i32 = library.table.active_instrument();
+                let slot: i32 = track_slot > 0 ? track_slot : library.selected_instrument();
+                let selected: i32 = library.audio.view.selected;
+                let root: i64 = slot < 1 ? -1 : midi.output.instrument_sampler(slot, 0);
+                if root < 0 {
+                    free(message); message = clone("Select a loaded sampler instrument (e.g. Mla Drum) in Instruments first");
+                } else if command == 117 && (selected < 0 || selected >= library.audio.samples.len()) {
+                    free(message); message = clone("Select a sample in Audio first (View > Audio)");
+                } else {
+                    pad_action = command; pad_slot = slot; pad_sample = selected;
+                    let pads: i64 = midi.output.instrument_sampler(slot, 1);
+                    var names: list<str8> = [];
+                    for p in 0..pads {
+                        let used: i32 = midi.pad_sample(slot, i32(p));
+                        if used >= 0 && used < library.audio.samples.len() { let clip: AudioClip = library.audio.samples[used]; names.push(base_name(clip.source)); }
+                        else { names.push(clone("")); }
+                    }
+                    let title: str8 = format!("{} | {} #{}", command == 117 ? "Send sample to drum key" : "Load drum key from file", midi.output.instrument_name(slot), slot);
+                    piano.open(title, i32(root), i32(pads),
+                        midi.output.instrument_sampler(slot, 2), names, command == 117 ? "inserts the Audio sample" : "picks a file");
+                    focus.set_menu_active(true);
+                }
+            }
+            else if command == 119 {
+                pad_index = piano.pad();
+                if piano.result == 3 {
+                    let error: str8 = midi.clear_pad(pad_slot, pad_index);
+                    free(message); message = error == "" ? format!("Pad {} cleared", pad_index + 1) : error;
+                } else if pad_action == 117 {
+                    let clip: AudioClip = library.audio.samples[pad_sample];
+                    let name: str8 = base_name(clip.source);
+                    let error: str8 = midi.assign_pad(pad_slot, pad_index, pad_sample, clip.samples, clip.channels, clip.sample_rate, name);
+                    free(message);
+                    message = error == "" ? format!("Pad {}: {}", pad_index + 1, name) : error;
+                    free(name);
+                } else {
+                    adding_effect = -1; learn_action = 0; adding_audio = false; adding_plugin = false; adding_instrument = false; saving_session = false;
+                    adding_pad_file = true; dialog.save_mode = false; dialog.bundle_pattern = ""; dialog.multi_select = true;
+                    dialog.title = format!("Load sample for pad {}", pad_index + 1);
+                    dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
+                    dialog.open(last_audio_dir); focus.set_menu_active(true);
+                    if dialog.files.len() > 0 { dialog.status = "Ctrl+P: play/stop preview | Enter: open | Esc: cancel"; }
+                }
+            }
+            else if command == 107 {
+                let index: i32 = library.audio.view.selected;
+                if index < 0 || index >= library.audio.samples.len() { free(message); message = clone("Select a sample in Audio first (View > Audio)"); }
+                else {
+                    transport.playing = false;
+                    let clip: AudioClip = library.audio.samples[index];
+                    sample_editor.open(clip, index);
+                    free(message); message = clone("Editing a copy: Enter saves to the session and drum pads, Esc discards");
+                }
+            }
+            else if command == 94 {
+                if !instrument_editor.open(midi.output, library.selected_instrument()) {
+                    free(message); message = clone("Select a loaded instrument in Instruments first");
+                }
+            }
+            else if command == 121 || command == 122 {
+                let id: i32 = command == 122 ? matrix.clipboard : picker.chosen();
+                if id <= 0 { free(message); message = clone("Select a pattern in the sidebar first (View > Patterns)"); }
+                else {
+                    let blocked: i32 = library.song_placement_blocked(matrix.row, matrix.lane, id);
+                    let clashes: i32 = library.song_row_clashes(matrix.row, matrix.lane, id);
+                    if blocked != 0 {
+                        free(message);
+                        message = blocked < 0
+                            ? format!("Row {} already plays a pattern that started above it", matrix.row + 1)
+                            : format!("Pattern {} needs {} matrix rows and pattern {} is in the way", id, library.song_span(id), blocked);
+                    }
+                    else if clashes == 0 {
+                        free(message);
+                        message = library.set_song_at(matrix.row, matrix.lane, id)
+                            ? format!("Row {} lane {}: pattern {}", matrix.row + 1, matrix.lane + 1, id)
+                            : clone("Cannot place the pattern here");
+                    } else {
+                        clash_row = matrix.row; clash_lane = matrix.lane; clash_id = id;
+                        clash_question.title = format!("{} note(s) clash in row {}", clashes, matrix.row + 1);
+                        clash_question.question = clone("Same instrument and note as a parallel pattern. Split gives it its own note line.");
+                        clash_question.open(); focus.set_menu_active(true); dirty = true;
+                    }
+                }
+            }
+            else if command == 120 {
+                let index: i32 = library.audio.view.selected;
+                let uses: i32 = library.sample_usage(index);
+                if index < 0 || index >= library.audio.samples.len() { free(message); message = clone("Select a sample in Audio first (View > Audio)"); }
+                else if uses == 0 { remove_target = index; remove_request = 1; }
+                else {
+                    let clip: AudioClip = library.audio.samples[index];
+                    let name: str8 = base_name(clip.source);
+                    remove_target = index; remove_pending = 1;
+                    remove_question.title = format!("Remove sample {}: {}", index + 1, name);
+                    remove_question.question = format!("{} clip(s) in the song use it. Remove them too?", uses);
+                    remove_question.buttons = [PushButton { label: "Remove clips", action: 1 }, PushButton { label: "Cancel", action: 2 }];
+                    remove_question.open(); focus.set_menu_active(true);
+                    free(name);
+                }
+            }
+            else if command == 95 {
+                let id: i32 = library.selected_instrument();
+                let uses: i32 = library.instrument_usage(id);
+                if id < 1 { free(message); message = clone("Select a loaded instrument in Instruments first"); }
+                else if uses == 0 { remove_target = id; remove_request = 3; }
+                else {
+                    let name: str8 = midi.output.instrument_name(id);
+                    remove_target = id; remove_pending = 2;
+                    remove_question.title = format!("Remove {} #{}", name, id);
+                    remove_question.question = format!("{} track(s) play it. Remove those tracks, or keep their notes?", uses);
+                    remove_question.buttons = [PushButton { label: "Remove tracks", action: 1 }, PushButton { label: "Keep tracks", action: 3 }];
+                    remove_question.open(); focus.set_menu_active(true);
+                }
+            }
+            else if command == 92 {
+                transport.playing = false; free(message); message = midi.set_processor("");
+            }
+            else if command == 30 {
+                // A MIDI track chooses the instrument it plays; an audio or
+                // instrument track chooses the channel it feeds.
+                let index: i32 = library.table.active_track();
+                if index < 0 { free(message); message = clone("Select a track first"); }
+                else {
+                    let track: SequenceTrack = library.table.tracks[index];
+                    var ids: list<i32> = [0]; var labels: list<str8> = [];
+                    output_track = index; output_kind = track.audio || track.instrument ? 2 : 1;
+                    var current: i32 = 0;
+                    if output_kind == 1 {
+                        labels.push(clone("  MST  master (preview tone)"));
+                        for i in 0..midi.instrument_paths.len() {
+                            if midi.instrument_paths[i] == "" { continue; }
+                            // instrument_name borrows the plugin's own name; never free it.
+                            let name: str8 = midi.output.instrument_name(i + 1);
+                            ids.push(i32(i) + 1); labels.push(format!("  I{}   {}", i + 1, name));
+                        }
+                    } else {
+                        labels.push(clone("  MST  master"));
+                        current = library.table.track_output(index);
+                        let channels: list<SequenceTrack> = library.table.tracks;
+                        for t in 0..channels.len() {
+                            let other: SequenceTrack = channels[t];
+                            if !other.audio || i32(t) == index || library.table.output_loops(index, i32(t) + 1) { continue; }
+                            ids.push(i32(t) + 1); labels.push(format!("  A{}   {}", t + 1, other.name));
+                        }
+                    }
+                    if ids.len() == 1 {
+                        free(message);
+                        message = output_kind == 1 ? clone("No instrument loaded yet (Instrument > Add instrument)")
+                            : clone("No AUDIO track to feed; create one with Track > Create AUDIO track");
+                        let spare: list<str8> = labels; for label in spare { free(label); }
+                    } else {
+                        outputs.title = output_kind == 1 ? "MIDI output" : "Output channel";
+                        outputs.open(ids, labels, current);
+                        focus.set_menu_active(true);
+                    }
+                }
+            }
+            else if command == 31 {
+                let choice: i32 = outputs.chosen();
+                let index: i32 = output_track;
+                free(message);
+                if output_kind == 1 {
+                    let shared: bool = choice > 0 && library.table.instrument_used_by_other(choice, index);
+                    if !library.table.set_instrument_output(index, choice) { message = clone(library.table.error); }
+                    else if choice == 0 { message = clone("MIDI output: master (preview tone)"); }
+                    else {
+                        let name: str8 = midi.output.instrument_name(wide(choice));
+                        message = shared ? format!("MIDI output: {} #{}, shared with another track (same pads, fader and inserts)", name, choice)
+                            : format!("MIDI output: {} #{}", name, choice);
+                    }
+                } else if !library.table.set_track_output(index, choice) { message = clone(library.table.error); }
+                else { message = choice == 0 ? clone("Output channel: master") : format!("Output channel: A{}", choice); }
+                playback_dirty = true;
+            }
+            else if command == 22 || command == 24 {
+                confirm_track_action = command;
+                question.title = command == 22 ? "Delete track" : "Clear track";
+                question.question = command == 22 ? "Delete the selected track and its pattern?" : "Clear all rows of the selected track?";
+                question.open(); focus.set_menu_active(true);
+            }
+            else if command == 85 {
+                let slot: i32 = library.table.automation_slot_at(library.table.selected_column);
+                free(message);
+                if slot == 0 { message = clone("Select a CC column first (expand the track with z)"); }
+                else {
+                    message = clone("");
+                    confirm_track_action = command;
+                    question.title = "Remove CC column";
+                    question.question = "Remove the selected CC column and its values?";
+                    question.open(); focus.set_menu_active(true);
+                }
+            }
+            else if command == 42 {
+                matrix.visible = false; library.show_patterns();
+            }
+            else if command == 43 {
+                if library.song.len() == 0 { library.matrix_insert_row(0, false); }
+                matrix.visible = true; focus.selected = 1;
+                free(message); message = clone("Song matrix: Enter chooses a pattern for the cell; parallel lanes play together");
+            }
+            else if command == 44 { library.show_audio(); }
+            else if command == 45 { library.show_instruments(); }
+            else if command == 29 {
+                // Never join an instance another track already plays through: two
+                // tracks on one instance share its pads, fader and meters. Sharing
+                // stays available explicitly (Enter in Instruments, Track > Duplicate).
+                let candidate: i32 = library.selected_instrument();
+                let shared: bool = library.table.instrument_in_use(candidate);
+                library.table.create_instrument_track(shared ? 0 : candidate, panes[1].bounds.inset(1));
+                library.show_instruments();
+                free(message);
+                message = shared ? format!("Instrument track created unassigned (instance {} is used by another track). Add > Instrument loads a new one; Enter in Instruments shares it.", candidate)
+                    : clone("Instrument track created. Add > Instrument loads a plugin; Enter in Instruments assigns it.");
+            }
+            else if command == 57 || command == 58 {
+                pattern_action = command; learn_action = 0; adding_audio = false; adding_plugin = false;
+                adding_instrument = false; adding_effect = -1; adding_insert_track = -1; adding_pad_file = false;
+                transport.playing = false; dialog.save_mode = command == 57; dialog.multi_select = false; dialog.bundle_pattern = "";
+                dialog.title = command == 57 ? "Save pattern (.mlapatt)" : "Load pattern (.mlapatt)";
+                dialog.file_pattern = command == 57 ? "" : ".*\\.[mM][lL][aA][pP][aA][tT][tT]";
+                dialog.open(last_pattern_dir);
+                if command == 57 { dialog.path_field.set_text(library.active_name()); }
+                focus.set_menu_active(true);
+            }
+            else if command >= 150 && command <= 153 {
+                if command == 150 { play_metronome = !play_metronome; }
+                else if command == 151 { extend_recording = !extend_recording; }
+                else { metronome_always = command == 153; }
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
+            }
+            else if command == 50 || command == 53 { library.add(command == 53); }
+            else if command == 51 {
+                library.editor.set_text(library.active_name()); library.renaming = true; library.error = "";
+            }
+            else if command == 56 {
+                transport.playing = false; song_playing = false;
+                bpm_dialog.open_matrix_steps(library.matrix_steps);
+                focus.set_menu_active(true);
+            }
+            else if command == 55 {
+                follow_matrix = !follow_matrix;
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
+                free(message);
+                if follow_matrix {
+                    if song_playing { library.follow_pattern(library.song_row_pattern(song_row)); play_pattern = library.active_id; }
+                    message = clone("Follow matrix patterns: on. The editor and mixer show the row the matrix browses or plays.");
+                } else { message = clone("Follow matrix patterns: off. The editor and mixer stay on the selected pattern."); }
+            }
+            else if command == 52 { library.remove_active(panes[0].bounds.inset(1)); }
+            else if command == 54 {
+                transport.playing = false;
+                bpm_dialog.open_pattern_length(i32(library.table.rows.len()));
+            }
+            else if command == 70 || command == 71 { sample.grainy = command == 71; }
+            else if command == 72 || command == 73 { sample.wave = command == 73; }
+            else if command == 74 { bpm_dialog.open_meter_rate(frame_rate.fps); }
+            else if command == 160 {
+                spectrum.visible = !spectrum.visible;
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
+                free(message);
+                message = spectrum.visible ? clone("Spectrum / Master: Left/Right picks HP, EQ1-4 or Master; Enter picks gain/freq/Q; Up/Down adjusts")
+                    : clone("Spectrum analyzer closed");
+            }
+            else if command == 163 {
+                keyboard.visible = !keyboard.visible;
+                // Kitty-protocol terminals then report key releases: a note
+                // lasts exactly as long as its key is held.
+                terminal.report_key_releases(keyboard.visible); input.releases = keyboard.visible;
+                menus = demo_menus(fixture, follow_matrix, play_metronome, extend_recording, metronome_always, spectrum.visible, keyboard.visible);
+                // Keys only play while the pane has focus.
+                if keyboard.visible { focus.selected = 2; mixer.bus_focus = false; instrument_editor.focused = false; }
+                free(message);
+                message = keyboard.visible ? clone("Keyboard: z-m and q-p play the selected track; Left/Right or -/= change octave; Space plays")
+                    : clone("Virtual keyboard closed");
+            }
+            else if command == 161 {
+                spectrum.detail = (spectrum.detail + 1) % 3; spectrum.levels = []; spectrum.peaks = [];
+                free(message); message = format!("Spectrum detail: {}", spectrum.detail_name());
+            }
+            else if command == 162 { bpm_dialog.open_spectrum_rate(spectrum.fps); }
+            else if command == 40 || command == 41 {
+                mixer.grainy = command == 41;
+                free(message); message = clone(mixer.grainy ? "Meter style: grainy (osc)": "Meter style: solid bars");
+            }
+            else if command == 61 {
+                free(message);
+                message = library.table.copy_audio()
+                    ? clone("Copied audio tail to clipboard.")
+                    : clone(library.table.error);
+            }
+            else if command == 62 {
+                free(message);
+                message = library.table.cut_audio(panes[1].bounds.inset(1))
+                    ? clone("Cut audio tail to clipboard.")
+                    : clone(library.table.error);
+            }
+            else if command == 63 {
+                free(message);
+                message = library.table.paste_audio(panes[1].bounds.inset(1))
+                    ? clone("Pasted audio from clipboard.")
+                    : clone(library.table.error);
+            }
+            else if command == 102 {
+                free(message);
+                message = library.table.reverse_audio(panes[1].bounds.inset(1))
+                    ? clone("Reversed audio clip.")
+                    : clone(library.table.error);
+            }
+            else if command == 105 {
+                free(message);
+                message = library.table.trim_audio(sample.sel_start, sample.sel_end, panes[1].bounds.inset(1))
+                    ? clone("Trimmed audio clip to selection.")
+                    : clone(library.table.error);
+            }
+            else if command == 106 {
+                free(message);
+                message = library.table.slice_audio(panes[1].bounds.inset(1))
+                    ? clone("Sliced audio clip into three parts.")
+                    : clone(library.table.error);
+            }
+            else if command == 103 {
+                free(message);
+                message = library.table.move_audio(-1, panes[1].bounds.inset(1))
+                    ? clone("Moved audio clip up.")
+                    : clone(library.table.error);
+            }
+            else if command == 104 {
+                free(message);
+                message = library.table.move_audio(1, panes[1].bounds.inset(1))
+                    ? clone("Moved audio clip down.")
+                    : clone(library.table.error);
+            }
+            else if(command >= 20 && command <= 28) ||(command >= 80 && command <= 84) {
+                library.table.error = "";
+                library.table.track_action(command, panes[1].bounds.inset(1));
+                free(message);
+                message = library.table.error != "" ? clone(library.table.error) : clone("Track updated. Mute affects demo state only.");
+            }
+            else if command > 0 {
+                free(message); message = clone("Command selected. Ready for the application handler.");
+            }
+            if pending_length > 0 {
+                length_target = pending_length; pending_length = 0;
+                if library.table.length_truncates_data(length_target) {
+                    question.title = "Set length";
+                    question.question = "Are you sure, data will be truncated";
+                    confirm_track_action = 54; question.open();
+                } else {library.table.set_length(length_target, panes[1].bounds.inset(1));}
+                dirty = true;
+            }
+            if !running { break; }
+        }
+        if !received_input && input.pending() {
+            escape_ticks = escape_ticks + i32(ui_steps);
+            if escape_ticks >= 5 {
+                let event: InputEvent = input.expire();
+                library.table.delete_pending = false;
+                library.table.top_pending = false;
+                library.view.cancel_pending();
+                library.audio.view.cancel_pending();
+                library.instruments.cancel_pending();
+                if paste_error.active { paste_error.on_event(event); dirty = true; }
+                else if instrument_editor.active && instrument_editor.focused && !dialog.active { instrument_editor.on_event(event, midi.output, panes[1].bounds); dirty = true; }
+                else if sample_editor.active {
+                    if sample_editor.on_event(event, panes[1].bounds.width - 2) == 2 { sample_editor.release(); free(message); message = clone("Sample edits discarded"); }
+                    dirty = true;
+                }
+                else if piano.active { piano.on_event(event); dirty = true; }
+                else if settings.active { settings.on_event(event); dirty = true; }
+                else if curve_dialog.active {
+                    curve_dialog.on_event(event); dirty = true;
+                    if !curve_dialog.active && curve_dialog.result == 1 { curve_pending = true; }
+                    if !curve_dialog.active && curve_dialog.result == 2 { free(message); message = clone("Cancelled."); }
+                }
+                else if bpm_dialog.active { bpm_dialog.on_event(event); dirty = true; }
+                else if library.renaming { library.rename_event(event); dirty = true; }
+                else if picker.active {
+                    picker.on_event(event);
+                    if !picker.active && picker.result == 2 { free(message); message = clone("Cancelled."); }
+                    dirty = true;
+                }
+                else if outputs.active {
+                    outputs.on_event(event);
+                    if !outputs.active && outputs.result == 2 { free(message); message = clone("Cancelled."); }
+                    dirty = true;
+                }
+                else if clash_question.active {
+                    clash_question.on_event(event); dirty = true;
+                }
+                else if remove_question.active {
+                    remove_question.on_event(event);
+                    if !remove_question.active && remove_question.result == 2 { remove_pending = 0; sidebar_remove = []; free(message); message = clone("Cancelled."); }
+                    dirty = true;
+                }
+                else if share_question.active {
+                    share_question.on_event(event);
+                    if !share_question.active { share_id = 0; free(message); message = clone("Cancelled."); }
+                    dirty = true;
+                }
+                else if question.active {
+                    question.on_event(event);
+                    if !question.active { confirm_track_action = 0; free(message); message = clone("Cancelled."); }
+                    dirty = true;
+                }
+                else if dialog.active {
+                    dialog.on_event(event, area);
+                    focus.set_menu_active(dialog.active);
+                    if !dialog.active && !dialog.accepted { adding_pad_file = false; }
+                    dirty = true;
+                }
+                else if library.table.editing || (library.table.visual && menus.active < 0 && focus.selected == 1) {
+                    library.table.edit_event(event, panes[1].bounds.inset(1)); dirty = true;
+                }
+                else if event.kind == InputKind::Menu {
+                    menus.on_key(event.key);
+                    focus.set_menu_active(menus.active >= 0);
+                    dirty = true;
+                }
+            }
+        }
+        midi.route_selected(library.table);
+        sleep_ms(frame_rate.sleep_ms(now_ms()));
+    }
+    note_playback.update(library.table, transport.ticks, false);
+    midi.release();
+    settings.release();
+    free(session_path); free(request_path);
+    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); mixer_table.release(); free(preset_path); free(preview_path);
+    free(last_pattern_dir); free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
+    sidebar_clipboard.release();
+    library.release(); dialog.release(); bpm_dialog.release(); free(message);
+    terminal.finish();
+    return 0;
+}

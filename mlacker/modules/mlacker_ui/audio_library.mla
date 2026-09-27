@@ -1,0 +1,51 @@
+mod mlacker_ui::audio_clip;
+mod tui::listview;
+use mlacker_ui::audio_clip::AudioClip;
+use mlacker_ui::audio_clip::base_name;
+use tui::listview::*;
+use std::strbuf::free;
+
+/// Session-wide loaded samples; independent from removable pattern instances.
+pub struct AudioLibrary { var samples: list<AudioClip>; var view: ListView; var error: str8{""}; };
+impl AudioLibrary {
+    pub fn load(self: &mut Self, path: str8, bpm: i32) -> bool {
+        let loaded: result<AudioClip, str8> = AudioClip::load(path, bpm);
+        if loaded.is_err() { self.error = loaded.unwrap_err(); return false; }
+        self.samples.push(loaded.unwrap());
+        // Basename without changing the source path used by the sample.
+        let name: str8 = base_name(path);
+        self.view.items.push(ListItem { id: i32(self.samples.len()), label: format!("{} {}", self.samples.len(), name) });
+        free(name); self.view.selected = i32(self.samples.len()) - 1;
+        self.view.cancel_pending(); self.error = ""; return true;
+    }
+    /// Index of a sample with identical format and PCM, or -1.
+    pub fn find_clip(self: AudioLibrary, source: &AudioClip) -> i32 {
+        var clip: AudioClip = AudioClip {}; clip = source;
+        for i in 0..self.samples.len() {
+            let other: AudioClip = self.samples[i];
+            if other.source != clip.source || other.frames != clip.frames || other.channels != clip.channels ||
+               other.sample_rate != clip.sample_rate || other.frames_per_row != clip.frames_per_row ||
+               other.samples.len() != clip.samples.len() { continue; }
+            var same: bool = true;
+            for s in 0..clip.samples.len() { if other.samples[s] != clip.samples[s] { same = false; break; } }
+            if same { return i32(i); }
+        }
+        return -1;
+    }
+    /// Take ownership of a decoded clip; reuses an identical existing sample
+    /// (releasing `clip`). Returns the sample index, or -1 at the 256 limit.
+    pub fn add_clip(self: &mut Self, clip: AudioClip) -> i32 {
+        let existing: i32 = self.find_clip(clip);
+        if existing >= 0 { clip.release(); return existing; }
+        if self.samples.len() >= 256 { clip.release(); self.error = "Maximum 256 samples"; return -1; }
+        self.samples.push(clip);
+        let name: str8 = base_name(clip.source);
+        self.view.items.push(ListItem { id: i32(self.samples.len()), label: format!("{} {}", self.samples.len(), name) });
+        free(name); self.view.cancel_pending(); self.error = "";
+        return i32(self.samples.len()) - 1;
+    }
+    pub fn release(self: AudioLibrary) -> void {
+        let samples: list<AudioClip> = self.samples; for sample in samples { sample.release(); }
+        let items: list<ListItem> = self.view.items; for item in items { free(item.label); }
+    }
+}

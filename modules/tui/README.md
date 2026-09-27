@@ -315,13 +315,13 @@ returns 0 for unhandled input, 1 for navigation, 2 for activation, or 3 for a
 delete request; it does not delete application data itself. `reconcile(area)`
 clamps selection and scrolling after data changes, and `paint` also reconciles.
 Call `cancel_pending()` when suspending list input. Empty lists select `-1`.
-The demo model is `modules/tui_demo/patterns.mla` and owns its labels/snapshots;
+The mlacker model is `mlacker/modules/mlacker_ui/patterns.mla` and owns its labels/snapshots;
 call its `release()` once and do not shallow-copy the owning library.
 
 ### MIDI, AUHAL output, and Settings
 
 The demo opens the default MIDI input on a dedicated worker thread at startup.
-`tui_demo::midi_controller` decodes note-on/off (including velocity-zero note-on)
+`mlacker_ui::midi_controller` decodes note-on/off (including velocity-zero note-on)
 and running status, then posts fixed-size `MidiInputEvent` values through a
 1024-entry `std::sync::SpscQueue`. The main loop drains at most 256 events per
 iteration, independently of modal keyboard focus. `MidiController.dispatch`
@@ -427,7 +427,7 @@ instance. Its fractional tail is visible in the waveform and its mixer gate
 ends at LEN, leaving the loaded sample unchanged. Clear audio LEN to restore
 the available sample duration.
 
-`tui_demo::note_playback::NotePlayback` produces timestamped note-on/off events
+`mlacker_ui::note_playback::NotePlayback` produces timestamped note-on/off events
 using the transport's continuous musical ticks (15000 per sixteenth). Note-offs
 are scheduled at LEN, independent of row/frame boundaries and visual meter
 decay. Equal-pitch overlaps on a track hold until the last voice ends; stopping
@@ -517,7 +517,7 @@ for a future playback engine, and custom parameters need an application mapping.
 #### Mixer preview
 
 Press `m` outside menus, dialogs, or cell editing to toggle Inspector/Mixer.
-`modules/tui_demo/mixer.mla` provides six-cell-wide track strips (five content
+`mlacker/modules/mlacker_ui/mixer.mla` provides six-cell-wide track strips (five content
 cells plus a separator). Headers use `M1`, `A2`, etc. for MIDI/audio and their
 current track order; full names remain in the sequence and Inspector. Compact
 readouts show `V100` for volume (0–100) and `P0` for pan (-100 left to +100 right).
@@ -595,7 +595,7 @@ read-only writes. The base still borrows strings: callers keep accepted values
 alive and manage replaced strings. Directly replacing the public `rows` data
 bypasses write validation; use `set_cell` for interactive edits.
 
-The demo uses `SequenceTable : Table` in `modules/tui_demo/sequence.mla`, outside
+The demo uses `SequenceTable : Table` in `mlacker/modules/mlacker_ui/sequence.mla`, outside
 the reusable widget library. It owns its cell strings and a compiler-provided
 `std::array` (`array<str8, 128>`) containing every MIDI note. Notes use tracker
 spelling: MIDI 0 is `C--1`, MIDI 60 is `C-4`, and MIDI 127 is `G-9`; sharps use
@@ -780,10 +780,10 @@ differential repainting yet.
 From the repository root:
 
 ```sh
-build/mlang examples/tui_demo.mla -L build -lmlang_std -o /tmp/mlang_tui_demo
-/tmp/mlang_tui_demo
 build/mlang --tests tests/tui_tests.mla -L build -lmlang_std
-python3 tests/tui_terminal_smoke.py /tmp/mlang_tui_demo
+build/mlang --tests mlacker/tests            # mlacker_ui tests
+build/mlang pkg --config mlacker/mlang.toml build
+python3 mlacker/tests/terminal_tui_smoke.py mlacker/build/cmake/bin/mlacker
 ```
 
 The demo is an interaction/layout showcase. Open session browses real files and
