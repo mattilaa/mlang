@@ -80,6 +80,8 @@ add_test(NAME vertical_zoom_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT
 set_tests_properties(vertical_zoom_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 60)
 add_test(NAME virtual_keyboard_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/virtual_keyboard_tui_smoke.py" "$<TARGET_FILE:mlacker>")
 set_tests_properties(virtual_keyboard_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 60)
+add_test(NAME audio_preview_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_preview_tui_smoke.py" "$<TARGET_FILE:mlacker>" "$<TARGET_BUNDLE_DIR:MlackerTestInstrument>")
+set_tests_properties(audio_preview_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 60)
 add_test(NAME record_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/record_tui_smoke.py" "$<TARGET_FILE:mlacker>")
 set_tests_properties(record_tui PROPERTIES WORKING_DIRECTORY "${MLANG_ROOT}" TIMEOUT 60)
 add_test(NAME patterns_tui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/patterns_tui_smoke.py" "$<TARGET_FILE:mlacker>")

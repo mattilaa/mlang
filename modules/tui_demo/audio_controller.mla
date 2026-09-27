@@ -1,4 +1,6 @@
 mod std::audio::controller;
+mod std::audio;
+use std::audio::PcmAudio;
 mod tui_demo::midi_controller;
 mod tui_demo::note_playback;
 mod tui_demo::sequence;
@@ -589,6 +591,28 @@ impl AudioSystem {
         if path == "" { return clone("Master VST3 unloaded; preview synth restored."); }
         return format!("Master VST3: {}{}", self.output.processor_name(), restart ? "" : " (audio output disabled)");
     }
+    /// Auditions a WAV/AIFF file on the master output, replacing any preview.
+    /// Returns a static error text, or "" once it plays.
+    pub fn preview_file(self: AudioSystem, path: str8) -> str8 {
+        if self.output.handle == 0 { return "No audio output to preview on (File > Settings)"; }
+        let loaded: result<PcmAudio, str8> = PcmAudio::load(path);
+        if loaded.is_err() { return "Cannot decode: use mono/stereo PCM16/float32 WAV or PCM16 AIFF"; }
+        let audio: PcmAudio = loaded.unwrap();
+        let channels: i64 = audio.channels(); let rate: i64 = audio.sample_rate();
+        let samples: list<f32> = audio.samples(); audio.close();
+        if self.output.preview(samples, channels, rate) != 0 { return "Cannot preview this file"; }
+        return "";
+    }
+    /// Auditions a loaded sample on the master output, replacing any preview.
+    /// Returns a static error text, or "" once it plays.
+    pub fn preview_clip(self: AudioSystem, source: &AudioClip) -> str8 {
+        var clip: AudioClip = AudioClip {}; clip = source;
+        if self.output.handle == 0 { return "No audio output to preview on (File > Settings)"; }
+        if self.output.preview(clip.samples, clip.channels, clip.sample_rate) != 0 { return "Cannot preview this sample"; }
+        return "";
+    }
+    pub fn stop_preview(self: AudioSystem) -> void { if self.output.handle != 0 { self.output.stop_preview(); } }
+    pub fn previewing(self: AudioSystem) -> bool { return self.output.handle != 0 && self.output.preview_playing(); }
     pub fn sequencer_events(self: AudioSystem, events: list<NoteEvent>) -> void {
         if self.output.handle == 0 { return; }
         for event in events {

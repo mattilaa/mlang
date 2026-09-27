@@ -41,6 +41,16 @@ when source and output rates differ. `PlaySample` starts a registered sample;
 0–1. `process(block, frames)` runs the same renderer into a preallocated PcmBlock
 while stopped, for offline processing and tests.
 
+`preview(samples, channels, rate)` auditions interleaved PCM on the master bus,
+outside every track, for example to play a file under a file-browser cursor. It
+starts from the beginning and replaces any preview already playing.
+`stop_preview()` silences it, and `preview_playing()` reports whether one is
+loaded and has not reached its end. Previews use no sample slot. Call them from
+a control thread, while the device runs or is stopped. A replaced clip is freed
+once the render thread confirms the swap, so `preview` may wait up to one
+callback (at most about 250 ms). Voices and previews both go through the master
+gain.
+
 Overflow increments `dropped_events()` and requests a panic rather than risking
 stuck notes. `panic()` atomically requests clearing voices and both event queues
 at the next callback. Stop/join producers before `close()`; handle copies are

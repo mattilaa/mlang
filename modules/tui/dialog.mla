@@ -368,6 +368,11 @@ impl OpenSessionDialog {
         let node: DirectoryNode = self.nodes[index];
         if self.load_files(node.path) { self.tree_selected = index; }
     }
+    /// Owned full path of the file under the Files cursor, or "" when none.
+    pub fn selected_file(self: OpenSessionDialog) -> str8 {
+        if self.file_selected < 0 || self.file_selected >= self.files.len() { return clone(""); }
+        return join_owned(self.directory, self.files[self.file_selected]);
+    }
     pub fn matches_file(self: OpenSessionDialog, path: str8) -> bool {
         return self.file_pattern == "" || tui::table::table_matches(self.file_pattern, path);
     }

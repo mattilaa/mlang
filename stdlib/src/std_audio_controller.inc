@@ -19,6 +19,13 @@
 #define M_PI 3.14159265358979323846
 #endif
 #include "../include/mlang_audio_processor.h"
+#if defined(_WIN32)
+#include <windows.h>
+static void ac_sleep_ms(int ms) { Sleep((DWORD)ms); }
+#else
+#include <time.h>
+static void ac_sleep_ms(int ms) { struct timespec t = {0, (long)ms * 1000000L}; nanosleep(&t, NULL); }
+#endif
 static mlang_audio_processor_factory ac_processor_factory;
 static mlang_audio_processor_factory ac_instrument_factory;
 void mlang_audio_register_instrument_factory(mlang_audio_processor_factory factory) {
@@ -106,6 +113,14 @@ typedef struct {
     double transport_tempo, transport_beat;
     int transport_playing;
     float master_dry[8192];
+    /* Audition clip (e.g. a file browser preview) mixed into the master bus,
+     * outside every track. The control thread swaps the clip and bumps the
+     * serial; the render thread acknowledges the serial of each block it
+     * rendered, so a replaced clip is freed only once nothing reads it. */
+    _Atomic(ac_sample *) preview;
+    _Atomic uint64_t preview_serial, preview_ack, preview_done;
+    ac_sample *preview_current; /* Render-owned: the clip `preview_phase` plays. */
+    double preview_phase;
     float spectrum_ring[AC_SPECTRUM_RING];
     _Atomic uint64_t spectrum_write;
     /* Control-thread analyzer snapshot (single UI consumer). */
@@ -529,6 +544,11 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     }
     uint64_t clock = atomic_load_explicit(&c->clock, memory_order_relaxed);
     ac_transport_begin(c);
+    /* Serial before clip: an acknowledged serial then covers this clip. */
+    uint64_t preview_serial = atomic_load_explicit(&c->preview_serial, memory_order_acquire);
+    ac_sample *preview = atomic_load_explicit(&c->preview, memory_order_acquire);
+    if(preview != c->preview_current) { c->preview_current = preview; c->preview_phase = 0; }
+    double preview_step = preview ? (double)preview->rate / c->rate : 0;
     uint32_t routes[96][4]; int routed[96] = {0};
     /* Output channel of each source (-1 = master) and the tracks that need a
      * buffer of their own: those with inserts, those feeding another track,
@@ -628,6 +648,18 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
                 l = before_l + (l - before_l) * dry[track];
                 r = before_r + (r - before_r) * dry[track];
             }
+        }
+        if(preview && c->preview_phase < (double)preview->frames) {
+            int64_t pos = (int64_t)c->preview_phase;
+            int64_t next = pos + 1 < preview->frames ? pos + 1 : pos;
+            double mix = c->preview_phase - (double)pos;
+            for(int ch = 0; ch < 2; ++ch) {
+                int channel = preview->channels == 1 ? 0 : ch;
+                float a = preview->data[pos * preview->channels + channel], b = preview->data[next * preview->channels + channel];
+                double value = a + (b - a) * mix;
+                if(ch == 0) l += value; else r += value;
+            }
+            c->preview_phase += preview_step;
         }
         c->render_gains[f] = c->gain;
         out[f * 2] = (float)l;
@@ -731,7 +763,40 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             memory_order_relaxed, memory_order_relaxed)) {}
     }
     ac_transport_end(c, frames);
+    if(preview && c->preview_phase >= (double)preview->frames)
+        atomic_store_explicit(&c->preview_done, preview_serial, memory_order_release);
+    atomic_store_explicit(&c->preview_ack, preview_serial, memory_order_release);
     atomic_store_explicit(&c->clock, clock + frames, memory_order_release);
+}
+/* Control thread: audition PCM on the master bus from its start, replacing any
+ * clip playing; no samples stops. The copy is owned by the controller. A
+ * replaced clip is freed once the render thread acknowledges the swap (at
+ * most ~250 ms); a stalled device leaks it rather than racing the render. */
+int32_t __mlang_std_audio_controller_preview(int64_t handle, mlang_list_t samples, int64_t channels, int64_t rate) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || channels < 1 || channels > 2 || rate <= 0 || samples.size < 0 || samples.size % channels ||
+       (samples.size > 0 && !samples.data) || (uint64_t)samples.size > SIZE_MAX / sizeof(float)) return -1;
+    ac_sample *clip = NULL;
+    if(samples.size > 0) {
+        clip = malloc(sizeof(*clip));
+        float *data = clip ? malloc((size_t)samples.size * sizeof(float)) : NULL;
+        if(!data) { free(clip); return -1; }
+        memcpy(data, samples.data, (size_t)samples.size * sizeof(float));
+        *clip = (ac_sample){data, samples.size / channels, channels, rate};
+    }
+    ac_sample *old = atomic_exchange_explicit(&c->preview, clip, memory_order_acq_rel);
+    uint64_t serial = atomic_fetch_add_explicit(&c->preview_serial, 1, memory_order_acq_rel) + 1;
+    if(old) {
+        for(int i = 0; c->running && i < 250 && atomic_load_explicit(&c->preview_ack, memory_order_acquire) < serial; ++i) ac_sleep_ms(1);
+        if(!c->running || atomic_load_explicit(&c->preview_ack, memory_order_acquire) >= serial) { free(old->data); free(old); }
+    }
+    return 0;
+}
+/* 1 while a preview clip is loaded and has not played to its end. */
+int32_t __mlang_std_audio_controller_preview_playing(int64_t handle) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || !atomic_load_explicit(&c->preview, memory_order_acquire)) return 0;
+    return atomic_load_explicit(&c->preview_done, memory_order_acquire) != atomic_load_explicit(&c->preview_serial, memory_order_acquire);
 }
 
 /* Copy a sample on the control thread, only while stopped. Controller owns it. */
@@ -831,6 +896,8 @@ int32_t __mlang_std_audio_controller_close(int64_t handle) {
 #endif
     int registered = atomic_load_explicit(&c->sample_count, memory_order_relaxed);
     for(int i = 0; i < registered; ++i) free(c->samples[i].data);
+    ac_sample *preview = atomic_load_explicit(&c->preview, memory_order_relaxed);
+    if(preview) { free(preview->data); free(preview); }
     if(c->processor.context) c->processor.destroy(c->processor.context);
     for(int i = 0; i < 32; ++i)
         if(c->instruments[i].context) c->instruments[i].destroy(c->instruments[i].context);

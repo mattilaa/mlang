@@ -298,6 +298,18 @@ instance) and pad samples (which fill consecutive pads from the chosen key).
 Session, preset, MIDI-learn, effect/insert and every save chooser stay
 single-file, and Space does nothing there.
 
+In the audio choosers (**Audio → Add audio** and pad samples), **Ctrl+P** plays
+the file under the Files cursor on the master output, at full level and outside
+every track. Pressing Ctrl+P again stops it. Moving to another file, or closing
+the chooser, stops it too. It needs an audio output. With audio disabled, the
+chooser's status line says so.
+
+**View → Audio** works the same way. With the sidebar focused, **Ctrl+P** plays
+the selected sample on the master output, and again stops it. Moving to another
+sample, leaving the sidebar or the Audio view, or opening a dialog stops it too.
+While the sidebar shows Audio, its Ctrl+P previews instead of playing the song
+matrix. Ctrl+P from the pattern or the matrix still plays the matrix.
+
 Browsing starts focused on the **Directories** pane on the left, where `j/k`
 moves, Enter or `l` expands, and `h` collapses. Tab cycles Path → Directories →
 Files → buttons, and Ctrl+Shift+H/J/K/L moves between them. Typing `/` or `~`

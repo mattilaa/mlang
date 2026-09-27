@@ -78,6 +78,7 @@ use tui_demo::midi_controller::MidiController;
 use std::env::detail::__env_args;
 use std::strbuf::clone;
 use std::strbuf::free;
+use std::strbuf::starts_with;
 use std::io::stdin;
 use std::io::read_keycode_nonblocking;
 use std::time::sleep_ms;
@@ -329,6 +330,10 @@ pub fn run() -> i32 {
     // Sampler pads: 117 = from the Audio list, 118 = from a file.
     var pad_action: i32 = 0; var pad_slot: i32 = 0; var pad_sample: i32 = -1; var pad_index: i32 = 0;
     var adding_pad_file: bool = false;
+    // Audio file dialogs: the file Ctrl+P is previewing on the master output.
+    var preview_path: str8 = clone("");
+    // View > Audio: the sample index Ctrl+P is previewing, or -1.
+    var preview_sample: i32 = -1;
     var accept_pending: bool = false;
     var transport_request: bool = false;
     var preset_request: i32 = 0; var preset_path: str8 = clone(""); var preset_worker: bool = false;
@@ -791,6 +796,25 @@ pub fn run() -> i32 {
         if released.len() > 0 { dirty = true; }
         for held in released { midi.keyboard_note(held.target, false, held.note, 0); }
         midi.midi.inject(keyboard.take_events());
+        // An Audio view preview ends at the clip's end, or when the selection,
+        // the sidebar focus or the view changes, or a dialog opens.
+        if preview_sample >= 0 {
+            if !midi.previewing() || focus.selected != 0 || !library.audio_mode || library.audio.view.selected != preview_sample || dialog.active {
+                midi.stop_preview(); preview_sample = -1; dirty = true;
+                if starts_with(message, "Playing sample ") == 1 { free(message); message = clone("Preview stopped"); }
+            }
+        }
+        // A preview ends at the clip's end, when the dialog closes, or when
+        // the cursor moves to another file.
+        if preview_path != "" {
+            var stop: bool = !midi.previewing() || !dialog.active;
+            if !stop { let selected: str8 = dialog.selected_file(); stop = selected != preview_path; free(selected); }
+            if stop {
+                midi.stop_preview(); free(preview_path); preview_path = clone("");
+                if dialog.active { dialog.status = "Ctrl+P: play/stop preview | Enter: open | Esc: cancel"; }
+                dirty = true;
+            }
+        }
         let processor_errors: i64 = midi.output.processor_errors();
         if processor_errors > last_processor_errors {
             free(message); message = clone("VST3 processing failed; a plugin block was silenced."); dirty = true;
@@ -1197,6 +1221,31 @@ pub fn run() -> i32 {
             // Ctrl+P plays the matrix. Terminals send it as the control byte
             // 0x10, or as a modified "p" in the kitty/modifyOtherKeys modes;
             // Ctrl+Space works too where a terminal reports it.
+            // Ctrl+P in View > Audio (sidebar focused) plays the selected sample
+            // on the master output instead; again stops it.
+            else if ((event.code == 16 && event.modifiers == 1) || (event.code == 112 && event.modifiers == 5)) &&
+                    focus.selected == 0 && library.audio_mode && menus.active < 0 &&
+                    !dialog.active && !settings.active && !bpm_dialog.active && !curve_dialog.active && !question.active &&
+                    !share_question.active && !remove_question.active && !clash_question.active && !picker.active && !outputs.active &&
+                    !paste_error.active && !library.renaming && !sample_editor.active && !piano.active {
+                let index: i32 = library.audio.view.selected;
+                let replay: bool = preview_sample != index || !midi.previewing();
+                midi.stop_preview(); preview_sample = -1;
+                if preview_path != "" { free(preview_path); preview_path = clone(""); }
+                free(message);
+                if !replay { message = clone("Preview stopped"); }
+                else if index < 0 || index >= library.audio.samples.len() { message = clone("Select a sample to preview"); }
+                else {
+                    let clip: AudioClip = library.audio.samples[index];
+                    let error: str8 = midi.preview_clip(clip);
+                    if error == "" {
+                        preview_sample = index;
+                        let name: str8 = base_name(clip.source);
+                        message = format!("Playing sample {}: {} | Ctrl+P stops", index + 1, name); free(name);
+                    } else { message = clone(error); }
+                }
+                dirty = true;
+            }
             else if ((event.code == 16 && event.modifiers == 1) || (event.code == 112 && event.modifiers == 5) ||
                      (event.code == 32 && event.modifiers == 5)) && matrix.visible && menus.active < 0 &&
                     !dialog.active && !settings.active && !bpm_dialog.active && !curve_dialog.active && !question.active &&
@@ -1328,7 +1377,22 @@ pub fn run() -> i32 {
                 dirty = true;
             }
             else if dialog.active {
-                if event.kind != InputKind::None || event.code != 0 {
+                // Ctrl+P (byte 0x10, or a kitty/CSI-u Ctrl+p) plays the audio
+                // file under the cursor on the master output; again stops it.
+                let preview_key: bool = (event.code == 16 && event.modifiers == 1) || (event.code == 112 && event.modifiers == 5);
+                if preview_key && (adding_audio || adding_pad_file) {
+                    let target: str8 = dialog.selected_file();
+                    let replay: bool = preview_path == "" || preview_path != target;
+                    midi.stop_preview(); free(preview_path); preview_path = clone("");
+                    dialog.status = "Ctrl+P: play/stop preview | Enter: open | Esc: cancel";
+                    if replay && target != "" && dialog.matches_file(target) {
+                        let error: str8 = midi.preview_file(target);
+                        if error == "" { free(preview_path); preview_path = clone(target); preview_sample = -1; dialog.status = "Playing preview | Ctrl+P stops"; }
+                        else { dialog.status = error; }
+                    }
+                    free(target); dirty = true;
+                }
+                else if event.kind != InputKind::None || event.code != 0 {
                     dialog.on_event(event, area);
                     focus.set_menu_active(dialog.active);
                     let pad_file_dialog: bool = adding_pad_file;
@@ -1664,6 +1728,7 @@ pub fn run() -> i32 {
                 adding_audio = true; adding_plugin = false; adding_instrument = false; dialog.bundle_pattern = ""; dialog.title = "Add audio"; dialog.multi_select = true;
                 dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
                 dialog.open(last_audio_dir); focus.set_menu_active(true);
+                if dialog.files.len() > 0 { dialog.status = "Ctrl+P: play/stop preview | Enter: open | Esc: cancel"; }
             }
             else if command == 91 || command == 93 {
                 adding_effect = -1;
@@ -1812,6 +1877,7 @@ pub fn run() -> i32 {
                     dialog.title = format!("Load sample for pad {}", pad_index + 1);
                     dialog.file_pattern = ".*\\.([wW][aA][vV]|[aA][iI][fF]([fF])?)";
                     dialog.open(last_audio_dir); focus.set_menu_active(true);
+                    if dialog.files.len() > 0 { dialog.status = "Ctrl+P: play/stop preview | Enter: open | Esc: cancel"; }
                 }
             }
             else if command == 107 {
@@ -2197,7 +2263,7 @@ pub fn run() -> i32 {
     midi.release();
     settings.release();
     free(session_path); free(request_path);
-    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); mixer_table.release(); free(preset_path);
+    instrument_editor.release(); sample_editor.release(); piano.release(); picker.release(); outputs.release(); song_table.release(); mixer_table.release(); free(preset_path); free(preview_path);
     free(last_pattern_dir); free(last_session_dir); free(last_audio_dir); free(last_plugin_dir); free(last_preset_dir);
     sidebar_clipboard.release();
     library.release(); dialog.release(); bpm_dialog.release(); free(message);

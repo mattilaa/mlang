@@ -289,3 +289,40 @@ fn audio_controller_transport_beat_follows_tempo() {
     verify(near_beat(controller, 0.0));
     block.close(); controller.close();
 }
+
+#[test]
+fn audio_controller_preview_plays_on_master_and_stops() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(1024);
+    verify(allocated.is_ok()); if allocated.is_err() { controller.close(); return; }
+    let block: PcmBlock = allocated.unwrap();
+    verify(!controller.preview_playing());
+    // 300 mono frames at 0.25, then 200 stereo frames of L=0.5 / R=-0.5.
+    var mono: list<f32> = [];
+    for _i in 0..300 { mono.push(0.25f); }
+    verify(controller.preview(mono, 1, 48000) == 0 && controller.preview_playing());
+    verify(controller.process(block, 256) == 0);
+    // Scaled by the master gain like any voice: same value on both channels.
+    let level: f32 = block.left(10);
+    verify(level > 0.0f && block.right(10) == level && block.left(200) == level && controller.preview_playing());
+    verify(controller.process(block, 256) == 0);
+    // It played to its end: silence after frame 300, no longer playing.
+    verify(block.left(20) == level && block.left(100) == 0.0f && !controller.preview_playing());
+    var stereo: list<f32> = [];
+    for _i in 0..200 { stereo.push(0.5f); stereo.push(-0.5f); }
+    verify(controller.preview(stereo, 2, 48000) == 0);
+    controller.process(block, 64);
+    verify(block.left(5) == level * 2.0f && block.right(5) == -level * 2.0f);
+    // Replacing restarts from the new clip's start; stopping silences at once.
+    verify(controller.stop_preview() == 0 && !controller.preview_playing());
+    controller.process(block, 64);
+    verify(block.left(5) == 0.0f);
+    // Previews use no sample slot, and malformed PCM is refused.
+    var registered: list<f32> = [0.1f, 0.2f];
+    verify(controller.add_sample_data(registered, 1, 48000) == 0);
+    let odd: list<f32> = [0.1f, 0.2f, 0.3f];
+    verify(controller.preview(odd, 2, 48000) == -1);
+    block.close(); controller.close();
+}
