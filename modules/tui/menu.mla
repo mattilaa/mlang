@@ -34,11 +34,13 @@ pub fn function_key(number: i32) -> Key {
     return Key::Function1;
 }
 /// action > 0 identifies an application command; 0 is reserved for no action.
+/// `shortcut` is an optional key label ("C-s") drawn right-aligned in the popup.
 pub struct MenuItem {
     var label: str8;
     var action: i32;
     var enabled: bool;
     var children: list<MenuItem>{[]};
+    var shortcut: str8{""};
 };
 impl MenuItem {
     pub fn submenu(label: str8, children: list<MenuItem>) -> MenuItem {
@@ -68,6 +70,27 @@ pub struct MenuBar {
     var path: list<i32>{[]};
     var shortcuts: bool{false};
 };
+
+/// Color of key labels: the menu-bar function keys and item shortcuts.
+pub fn shortcut_color(theme: Theme) -> i32 { return darken(theme.accent, 72); }
+
+/// Popup width for `items`: every label with its margins (and a submenu
+/// arrow), and with shortcuts, the longest label, three cells of padding
+/// and the longest shortcut, right-aligned.
+fn popup_width(items: &list<MenuItem>) -> i32 {
+    var entries: list<MenuItem> = []; entries = items;
+    var width: i32 = 8; var longest: i32 = 0; var keys: i32 = 0;
+    for item in entries {
+        let label: i32 = label_width(item.label);
+        let needed: i32 = label + (item.children.len() > 0 ? 6 : 4);
+        if needed > width { width = needed; }
+        if label > longest { longest = label; }
+        let key: i32 = label_width(item.shortcut);
+        if key > keys { keys = key; }
+    }
+    if keys > 0 && longest + 3 + keys + 4 > width { width = longest + 3 + keys + 4; }
+    return width;
+}
 
 fn shortcut_label(index: i32) -> str8 {
     let labels: list<str8> = ["[F1]", "[F2]", "[F3]", "[F4]", "[F5]", "[F6]", "[F7]", "[F8]", "[F9]", "[F10]", "[F11]", "[F12]"];
@@ -190,11 +213,7 @@ impl MenuBar {
         let levels: i32 = depth + 1;
         for level in 0..levels {
             let items: list<MenuItem> = self.items_at(i32(level));
-            var width: i32 = 8;
-            for item in items {
-                let needed: i32 = label_width(item.label) + (item.children.len() > 0 ? 6 : 4);
-                if needed > width { width = needed; }
-            }
+            var width: i32 = popup_width(items);
             if width > bounds.width { width = bounds.width; }
             let wanted: i32 = i32(items.len()) + 2;
             let height: i32 = wanted > bounds.height - 1 ? bounds.height - 1 : wanted;
@@ -232,7 +251,7 @@ impl MenuBar {
             if self.shortcuts {
                 // The function key in a darker blue than the title.
                 let label: str8 = shortcut_label(i32(i));
-                surface.text(text_area.intersect(bounds), label, darken(theme.accent, 72), bg);
+                surface.text(text_area.intersect(bounds), label, shortcut_color(theme), bg);
                 text_area = Rect::new(text_area.x + label_width(label), bounds.y, text_area.width - label_width(label), 1);
             }
             surface.text(text_area.intersect(bounds),
@@ -269,7 +288,13 @@ impl MenuBar {
             let line: Rect = Rect::new(inside.x, inside.y + i32(row), inside.width, 1);
             surface.fill(line, Cell { glyph: 32, foreground: fg, background: bg });
             let has_children: bool = item.children.len() > 0;
-            surface.text(Rect::new(line.x + 1, line.y, line.width - (has_children ? 4 : 2), 1), item.label, fg, bg);
+            let key: i32 = label_width(item.shortcut);
+            let reserved: i32 = has_children ? 4 : (key > 0 ? key + 3 : 2);
+            surface.text(Rect::new(line.x + 1, line.y, line.width - reserved, 1), item.label, fg, bg);
+            if key > 0 && !has_children && line.width > key + 2 {
+                surface.text(Rect::new(line.x + line.width - 1 - key, line.y, key, 1), item.shortcut,
+                    item.enabled ? shortcut_color(theme) : theme.muted, bg);
+            }
             if has_children && line.width >= 2 {
                 surface.put(line.x + line.width - 2, line.y,
                     Cell { glyph: 62, foreground: fg, background: bg });

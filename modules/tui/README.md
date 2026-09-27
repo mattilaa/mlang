@@ -72,6 +72,12 @@ the key in a darker shade of the theme accent) and pass function keys to
 `on_function_key(key)`: it opens that menu, or closes it when it is already open,
 and returns false for keys without a menu.
 
+A `MenuItem` may carry a `shortcut` label (`MenuItem { label: "Save", action: 3,
+enabled: true, shortcut: "C-s" }`). The popup draws it right-aligned in the same
+color as the function keys (`shortcut_color(theme)`, muted when the item is
+disabled) and widens to leave three cells between the longest label and the
+longest shortcut.
+
 ### Cascading submenus
 
 Add a submenu as a menu item with `MenuItem::submenu(label, children)`:

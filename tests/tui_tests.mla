@@ -739,6 +739,37 @@ fn tui_menu_function_key_shortcuts() {
     surface.release();
 }
 
+#[test]
+fn tui_menu_item_shortcuts_align_right() {
+    var menus: MenuBar = MenuBar::new([Menu { title: "File", items: [
+        MenuItem { label: "Save session", action: 1, enabled: true, shortcut: "C-s" },
+        MenuItem { label: "Open", action: 2, enabled: true },
+        MenuItem { label: "Keyboard", action: 3, enabled: false, shortcut: "C+S-m" }] }]);
+    menus.open(0);
+    let bounds: Rect = Rect::new(0, 0, 40, 8);
+    let popup: Rect = menus.popup_rect(bounds);
+    // Borders, a space either side, "Save session", three spaces, "C+S-m".
+    verify(popup.width == 2 + 1 + 12 + 3 + 5 + 1);
+    let theme: Theme = Theme::dark_blue();
+    let surface: Surface = Surface::new(40, 8);
+    menus.paint(surface, bounds, theme);
+    // Right-aligned: "C-s" ends where "C+S-m" ends, one space before the border.
+    let right: i32 = popup.x + popup.width - 3;
+    let margin: Cell = surface.cell(right + 1, popup.y + 1); verify(margin.glyph == 32);
+    let s: Cell = surface.cell(right, popup.y + 1); let c: Cell = surface.cell(right - 2, popup.y + 1);
+    verify(s.glyph == 115 && c.glyph == 67 && c.foreground == shortcut_color(theme));
+    let m: Cell = surface.cell(right, popup.y + 3);
+    verify(m.glyph == 109 && m.foreground == theme.muted); // disabled item
+    // Three cells of padding after the longest label ("Save session").
+    let longest: Cell = surface.cell(popup.x + 2 + 11, popup.y + 1); verify(longest.glyph == 110);
+    for x in 0..3 { let pad: Cell = surface.cell(popup.x + 2 + 12 + i32(x), popup.y + 3); verify(pad.glyph == 32); }
+    let first: Cell = surface.cell(popup.x + 2 + 15, popup.y + 3); verify(first.glyph == 67);
+    // Without shortcuts the width is unchanged.
+    var plain: MenuBar = test_menus(); plain.open(0);
+    let narrow: Rect = plain.popup_rect(bounds); verify(narrow.width == 8);
+    surface.release();
+}
+
 fn cascade_menus() -> MenuBar {
     return MenuBar::new([Menu { title: "File", items: [
         MenuItem { label: "Open", action: 1, enabled: true },
