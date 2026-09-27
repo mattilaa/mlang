@@ -56,9 +56,9 @@ target_link_libraries(mlacker_vst3_tests PRIVATE mlacker_host)
 add_dependencies(mlacker_vst3_tests MlackerTestInstrument MlackerTestEffect)
 add_test(NAME vst3_host COMMAND mlacker_vst3_tests "$<TARGET_BUNDLE_DIR:MlackerTestInstrument>" "$<TARGET_BUNDLE_DIR:MlackerTestEffect>")
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
-# Sampler-pad end to end runs when plugins/mla_drum has been built.
-set(MLA_DRUM_VST3 "${MLANG_ROOT}/plugins/mla_drum/build/cmake/VST3/Release/MlaDrum.vst3")
-set(MLA_DELAY_VST3 "${MLANG_ROOT}/plugins/mla_delay/build/cmake/VST3/Release/MlaDelay.vst3")
+# Sampler-pad end to end runs when mlacker/plugins/mla_drum has been built.
+set(MLA_DRUM_VST3 "${CMAKE_CURRENT_SOURCE_DIR}/plugins/mla_drum/build/cmake/VST3/Release/MlaDrum.vst3")
+set(MLA_DELAY_VST3 "${CMAKE_CURRENT_SOURCE_DIR}/plugins/mla_delay/build/cmake/VST3/Release/MlaDelay.vst3")
 # Real bundles built in this tree join the host test when they exist.
 set(VST3_HOST_TEST_ENV "")
 if(EXISTS "${MLA_DELAY_VST3}")

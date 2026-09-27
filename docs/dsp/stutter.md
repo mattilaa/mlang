@@ -100,5 +100,5 @@ The recording holds up to `max_seconds`; a longer cell is silent after that.
 `is_active()` reports a stutter in progress, and `reset()` forgets the
 recording, the history and the grid position while keeping the storage.
 
-See [Mla Stutter](../../plugins/mla_stutter/README.md) for the VST3 effect built
+See [Mla Stutter](../../mlacker/plugins/mla_stutter/README.md) for the VST3 effect built
 on this module.

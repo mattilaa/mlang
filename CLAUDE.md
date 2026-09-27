@@ -58,7 +58,7 @@ Other layers (all need `-DBUILD_TESTS=ON`, the CMake default):
 
 **Apps on top of the toolchain**, each a standalone `mlang.toml` project built with `build/mlang pkg --config <dir>/mlang.toml build` (they need `build/libmlang_std.a` first, and fetch the pinned VST3 SDK):
 - `mlacker/` — terminal tracker (AUHAL output, VST3 host, `.mlack` sessions); its UI/model code lives in `mlacker/modules/mlacker_ui` (imported as `mlacker_ui::*`), with MLang unit tests in `mlacker/tests/*.mla` (`build/mlang pkg --config mlacker/mlang.toml run unit-test`). Run: `build/mlang pkg --config mlacker/mlang.toml run run`.
-- `plugins/mla_verb`, `plugins/mla_distortion`, `plugins/mla_delay`, `plugins/mla_eq`, `plugins/mla_filter`, `plugins/mla_stutter`, `plugins/mla_juno_chorus`, `plugins/mla_gated_verb`, `plugins/mla_limiter` — VST3 effects: DSP in MLang (`modules/dsp/*`), thin C++ `plugin.cpp` wrapper. Output bundle lands in `<plugin>/build/cmake/VST3/`.
+- `mlacker/plugins/mla_verb`, `mlacker/plugins/mla_distortion`, `mlacker/plugins/mla_delay`, `mlacker/plugins/mla_eq`, `mlacker/plugins/mla_filter`, `mlacker/plugins/mla_stutter`, `mlacker/plugins/mla_juno_chorus`, `mlacker/plugins/mla_gated_verb`, `mlacker/plugins/mla_limiter` — VST3 effects: DSP in MLang (`modules/dsp/*`), thin C++ `plugin.cpp` wrapper. Output bundle lands in `<plugin>/build/cmake/VST3/`.
 
 ## Conventions
 

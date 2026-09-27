@@ -91,7 +91,7 @@ workdir = "{{root}}/.."
 depends_on = ["prepare"]
 shell = [
   "set -e",
-  "for plugin in {{option.plugins}}; do build/mlang pkg --config plugins/$plugin/mlang.toml build; done"
+  "for plugin in {{option.plugins}}; do build/mlang pkg --config mlacker/plugins/$plugin/mlang.toml build; done"
 ]
 
 [[task]]
@@ -103,7 +103,7 @@ shell = [
   "set -e",
   "plugin_dir={{option.plugin_dir}}",
   "mkdir -p \"$plugin_dir\"",
-  "for plugin in {{option.plugins}}; do for bundle in plugins/$plugin/build/cmake/VST3/Release/*.vst3; do dest=\"$plugin_dir/$(basename \"$bundle\")\"; rm -rf \"$dest\"; cp -R \"$bundle\" \"$dest\"; codesign --force --sign - \"$dest\"; echo \"Installed $dest\"; done; done"
+  "for plugin in {{option.plugins}}; do for bundle in mlacker/plugins/$plugin/build/cmake/VST3/Release/*.vst3; do dest=\"$plugin_dir/$(basename \"$bundle\")\"; rm -rf \"$dest\"; cp -R \"$bundle\" \"$dest\"; codesign --force --sign - \"$dest\"; echo \"Installed $dest\"; done; done"
 ]
 
 [[task]]

@@ -38,7 +38,7 @@ build/mlang pkg --config mlacker/mlang.toml run install-all      # both
 
 Each task builds what it installs first and ad-hoc signs the copies. Override the
 destinations with `--option bin_dir=DIR` and `--option plugin_dir=DIR`, or the
-plugin set with `--option plugins="mla_verb mla_eq"` (names under `plugins/`).
+plugin set with `--option plugins="mla_verb mla_eq"` (names under `mlacker/plugins/`).
 Existing bundles of the same name are replaced.
 
 ## Sessions (.mlack 1.1)
@@ -447,7 +447,7 @@ hidden and read-only cells stay unchanged; selection remains active for repeats.
 
 ### Drum sampler pads
 
-[Mla Drum](../plugins/mla_drum) (and any instrument implementing
+[Mla Drum](plugins/mla_drum) (and any instrument implementing
 `stdlib/include/mla_sampler_protocol.h`) takes samples into numbered pads. Select
 the loaded instance in **View → Instruments**, then:
 
@@ -891,7 +891,7 @@ Current scope:
 - Every plugin's `ProcessContext` carries the sequencer tempo and quarter-note
   position (`projectTimeMusic`), with `kPlaying` while the transport runs (after
   any count-in), so tempo-synced effects such as Mla Delay and
-  [Mla Stutter](../plugins/mla_stutter/README.md) follow the BPM. The position
+  [Mla Stutter](plugins/mla_stutter/README.md) follow the BPM. The position
   is sent on start, stop and tempo changes; the audio thread advances it
   sample-accurately in between. Playback starts at the starting row's beat
   (four rows per beat) and keeps counting across pattern loops and matrix rows. There is no time
