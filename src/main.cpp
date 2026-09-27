@@ -2048,7 +2048,7 @@ int main(int argc, char** argv)
             {
                 linkArgs.push_back(arg);
             }
-            else if(report_directory_input_argument(arg))
+            else if(!testMode && report_directory_input_argument(arg))
             {
                 return 1;
             }
@@ -2099,7 +2099,7 @@ int main(int argc, char** argv)
         }
     }
 
-    if(report_directory_input_argument(inputFile))
+    if(!testMode && report_directory_input_argument(inputFile))
         return 1;
 
     if(emitSharedLibrary && emitStaticLibrary)

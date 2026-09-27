@@ -93,7 +93,8 @@ def _result_label(rc: int, xml: Path) -> str:
     return "PASS"
 
 
-def _discover_tests(python_bin: str, suite: str, output_dir: Path) -> list[str]:
+def _discover_tests(python_bin: str, suite: str, output_dir: Path,
+                    excludes: list[str]) -> list[str]:
     dry_xml = output_dir / "dryrun_output.xml"
     cmd = [
         python_bin,
@@ -108,6 +109,7 @@ def _discover_tests(python_bin: str, suite: str, output_dir: Path) -> list[str]:
         "none",
         "--output",
         str(dry_xml),
+        *[item for tag in excludes for item in ("--exclude", tag)],
         suite,
     ]
     rc = subprocess.call(cmd)
@@ -141,6 +143,7 @@ def _run_one(
     test_name: str,
     case_dir: Path,
     idx: int,
+    excludes: list[str],
 ) -> tuple[int, str, float, Path]:
     case_dir.mkdir(parents=True, exist_ok=True)
     out_xml = case_dir / f"test_{idx}.xml"
@@ -183,6 +186,7 @@ exec {mlang_bin!r} "$@"
         f"MLANG:{str(mlang_wrapper)}",
         "--test",
         test_name,
+        *[item for tag in excludes for item in ("--exclude", tag)],
         suite,
     ]
     start = time.time()
@@ -226,6 +230,7 @@ def main() -> int:
     ap.add_argument("--time-format", choices=["full", "hms", "off"], default="full")
     ap.add_argument("--color", choices=["auto", "always", "never"], default="auto")
     ap.add_argument("--python-bin", default=sys.executable)
+    ap.add_argument("--exclude", action="append", default=[])
     ap.add_argument("--repo-root", default=os.getcwd())
     ap.add_argument("--allow-flaky-pass", action="store_true")
     ap.add_argument("--show-run", action="store_true")
@@ -235,7 +240,7 @@ def main() -> int:
     outdir.mkdir(parents=True, exist_ok=True)
     work = outdir / "parallel_cases"
     work.mkdir(parents=True, exist_ok=True)
-    tests = _discover_tests(args.python_bin, args.suite, outdir)
+    tests = _discover_tests(args.python_bin, args.suite, outdir, args.exclude)
     if not tests:
         print("No robot tests discovered", file=sys.stderr)
         return 1
@@ -290,6 +295,7 @@ def main() -> int:
                     tn,
                     work / f"case_{i}",
                     i,
+                    args.exclude,
                 )
             )
 
@@ -321,8 +327,9 @@ def main() -> int:
                         args.mlang,
                         args.repo_root,
                         next_t,
-                        work / f"case_{i}",
-                        i,
+                    work / f"case_{i}",
+                    i,
+                    args.exclude,
                     )
                 )
 
@@ -336,6 +343,7 @@ def main() -> int:
             tn,
             work / f"case_{i}",
             i,
+            args.exclude,
         )
         finished += 1
         if rc != 0:
@@ -357,6 +365,7 @@ def main() -> int:
             tn,
             work / f"rerun_case_{i}",
             i,
+            args.exclude,
         )
         xmls.append(xml)
         latest_status[tn] = rc
@@ -384,6 +393,7 @@ def main() -> int:
             tn,
             work / f"flaky_check_case_{i}",
             i,
+            args.exclude,
         )
         xmls.append(xml)
         if rc == 0:

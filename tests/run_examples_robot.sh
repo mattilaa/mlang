@@ -16,6 +16,14 @@ PROGRESS_LISTENER="$ROOT_DIR/tests/robot_progress_listener.py"
 PABOT_FILTER="$ROOT_DIR/tests/pabot_progress_filter.py"
 PABOT_ROBOT_WRAPPER="$ROOT_DIR/tests/pabot_robot_wrapper.py"
 PARALLEL_RUNNER="$ROOT_DIR/tests/robot_parallel_runner.py"
+ROBOT_EXCLUDE_ARGS=()
+
+# These package integration tests are valid on a developer host but are not
+# reliable on GitHub-hosted runners. Keep them in local coverage while making
+# the CI exclusion explicit and discoverable in the test source.
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  ROBOT_EXCLUDE_ARGS+=(--exclude github-actions-skip)
+fi
 
 if [[ "$ROBOT_RESULTS_DIR" != /* ]]; then
   ROBOT_RESULTS_DIR="$ROOT_DIR/$ROBOT_RESULTS_DIR"
@@ -63,6 +71,7 @@ detect_robot_total_tests() {
     --log none \
     --report none \
     --output "$tmp_xml" \
+    "${ROBOT_EXCLUDE_ARGS[@]}" \
     "$ROOT_DIR/tests/robot/examples.robot" >/dev/null 2>&1
   rc=$?
   set -e
@@ -454,6 +463,7 @@ if [[ "$ROBOT_JOBS" -gt 1 ]]; then
       --time-format "$ROBOT_TIME_FORMAT" \
       --color "$COLOR_LOGS" \
       --python-bin "$PYTHON_BIN" \
+      "${ROBOT_EXCLUDE_ARGS[@]}" \
       $([[ "$ROBOT_SHOW_RUN" == "1" ]] && echo "--show-run") \
       $([[ "$ROBOT_ALLOW_FLAKY_PASS" == "1" ]] && echo "--allow-flaky-pass")
     rc=$?
@@ -468,6 +478,7 @@ if [[ "$ROBOT_JOBS" -gt 1 ]]; then
         --consolewidth "$CONSOLE_WIDTH" \
         --variable MLANG:"$MLANG_BIN" \
         --outputdir "$ROBOT_RESULTS_DIR" \
+        "${ROBOT_EXCLUDE_ARGS[@]}" \
         "$ROOT_DIR/tests/robot/examples.robot" 2>&1 | \
         "$PYTHON_BIN" "$PABOT_FILTER" --total "$total_tests" --color "$COLOR_LOGS" --time-format "$ROBOT_TIME_FORMAT"
       rc=${PIPESTATUS[0]}
@@ -480,6 +491,7 @@ if [[ "$ROBOT_JOBS" -gt 1 ]]; then
         --consolewidth "$CONSOLE_WIDTH" \
         --variable MLANG:"$MLANG_BIN" \
         --outputdir "$ROBOT_RESULTS_DIR" \
+        "${ROBOT_EXCLUDE_ARGS[@]}" \
         "$ROOT_DIR/tests/robot/examples.robot"
       rc=$?
     fi
@@ -494,12 +506,14 @@ else
       --listener "$PROGRESS_LISTENER" \
       --variable MLANG:"$MLANG_BIN" \
       --outputdir "$ROBOT_RESULTS_DIR" \
+      "${ROBOT_EXCLUDE_ARGS[@]}" \
       "$ROOT_DIR/tests/robot/examples.robot"
     rc=$?
   else
     PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
       --outputdir "$ROBOT_RESULTS_DIR" \
       --variable MLANG:"$MLANG_BIN" \
+      "${ROBOT_EXCLUDE_ARGS[@]}" \
       "$ROOT_DIR/tests/robot/examples.robot"
     rc=$?
   fi

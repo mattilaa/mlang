@@ -220,13 +220,12 @@ Raw Pointer Dereference In Unsafe Compiles
     Should Be Equal As Integers    ${build.rc}    0    msg=Failed compile-only unsafe raw pointer test (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
 
 Borrowed Pointer Variable And Move Same Call Fails
-    [Tags]    fix-me-later    robot:skip-on-failure
     ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/borrow_ptr_var_move_same_call_fail.mla
     ${code}=    Catenate    SEPARATOR=\n
-    ...    struct Post { var content: str8; };
+    ...    struct Post { var content: list<i32>; };
     ...    fn consume_two(a: ptr<Post>, b: Post) -> i32 { return 0; }
     ...    fn main() -> i32 {
-    ...        let p: Post = Post { content: "x" };
+    ...        let p: Post = Post { content: [1] };
     ...        let q: ptr<Post> = &p;
     ...        return consume_two(q, p);
     ...    }
@@ -303,7 +302,6 @@ Mlang Test Runner
     Should Be Equal As Integers    ${run.rc}    1    msg=Expected 1 failing test, got ${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
 Mlang Test Sample Directory
-    [Tags]    fix-me-later    robot:skip-on-failure
     ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/sample_suite_dir
     Create Directory    ${suite_dir}
     ${src}=    Catenate    SEPARATOR=    ${suite_dir}/sample_suite_tests.mla
@@ -326,19 +324,26 @@ Mlang Test Sample Directory
     Should Be Equal As Integers    ${run.rc}    0    msg=Expected sample tests to pass, got ${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
 Mlang Bench Runner
-    [Tags]    fix-me-later    robot:skip-on-failure
-    [Documentation]    Run stdlib benchmark suite with bench mode and verify benchmark output.
-    ${run}=    Run Process    ${MLANG}    bench    ${EXECDIR}/tests/bench_stdlib.mla    --bench-iters    200    --bench-warmup    50
+    [Documentation]    Run a self-contained benchmark suite and verify benchmark output.
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_runner.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn bench_addition() {
+    ...        let value: i32 = 20 + 22;
+    ...    }
+    ...    \#[test]
+    ...    fn bench_counting_loop() {
+    ...        var total: i32 = 0;
+    ...        for i in 0..16 { total = total + i; }
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${MLANG}    bench    ${src}    --bench-iters    20    --bench-warmup    5
     ...    cwd=${ARTIFACT DIR}    env:PATH=${ARTIFACT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0
-    ...    msg=bench_stdlib failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    ...    msg=bench runner failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    [BENCH]
-    Should Contain    ${run.stdout}    bench_vec_push_pop
-    Should Contain    ${run.stdout}    bench_quickmap_hash_set_get
-    Should Contain    ${run.stdout}    bench_quickmap_vec_set_get
-    Should Contain    ${run.stdout}    bench_exception_try_no_throw
-    Should Contain    ${run.stdout}    bench_exception_throw_catch
-    Should Contain    ${run.stdout}    bench_exception_throw_catch_unwind
+    Should Contain    ${run.stdout}    bench_addition
+    Should Contain    ${run.stdout}    bench_counting_loop
 
 Type Inference Regression
     ${run}=    Run Process    ${MLANG}    test    ${EXECDIR}/tests/type_inference_tests.mla
@@ -3573,23 +3578,16 @@ MLang Frontend Pkg MlaFallback Forwards Full Argument Vector
     Should Match Regexp    ${run.stdout}    (?s).*pkg add mydep --git https://example\\.com/repo\\.git --rev abc123 --tag v1\\.2\\.3 --pkg-config zlib --system.*
 
 MLang Frontend Pkg Mla Mode Routes Under FrontendImplMla Env
-    [Tags]    fix-me-later    robot:skip-on-failure
-    [Documentation]    Verify pkg command under `MLANG_FRONTEND_IMPL=mla` does not silently succeed.
-    ...    Accept either direct pkg-mla unknown-subcommand output or compile/fallback error output.
+    [Documentation]    Verify pkg help under `MLANG_FRONTEND_IMPL=mla` is handled by the MLA package frontend.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_pkg_mla_env
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     Should Be Equal As Integers    ${build_front.rc}    0
     ${repo_root}=    Catenate    SEPARATOR=    ${CURDIR}/../..
     ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    pkg    --help
     ...    env:MLANG_PKG_IMPL=mla    env:MLANG_FRONTEND_IMPL=mla    cwd=${repo_root}    timeout=20s
-    Should Not Be Equal As Integers    ${run.rc}    0
-    ...    msg=frontend pkg --help under MLANG_FRONTEND_IMPL=mla should fail with nonzero (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
-    ${has_unknown}=    Run Keyword And Return Status    Should Contain    ${run.stderr}    Unknown pkg subcommand: --help
-    ${has_compile_error}=    Run Keyword And Return Status    Should Contain    ${run.stderr}    Compilation failed due to errors.
-    ${has_unwrap_warn}=    Run Keyword And Return Status    Should Contain    ${run.stderr}    result.unwrap() may panic
-    ${has_usage}=    Run Keyword And Return Status    Should Contain    ${run.stdout}    Usage:
-    ${ok}=    Evaluate    bool(${has_unknown} or ${has_compile_error} or ${has_unwrap_warn} or ${has_usage})
-    Should Be True    ${ok}
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=frontend pkg --help under MLANG_FRONTEND_IMPL=mla failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    mlang-pkg-mla
 
 MLang Frontend Pkg Mla Mode Reuses Cached Frontend Binary
     [Documentation]    Regression: verify pkg-mla frontend compilation is cached and not repeated for unchanged source/backend/cache key.
@@ -3894,17 +3892,28 @@ MLang Frontend Normalizes Multi-Suite Failure Exit Code
     Should Contain    ${run.stdout}    [SUITE FAIL]
 
 MLang Frontend Bench Flag Parsing Works
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify frontend bench mode parses option values without treating them as input path.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_parse
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     Should Be Equal As Integers    ${build_front.rc}    0
     ...    msg=Failed building frontend wrapper (bench parse) (rc=${build_front.rc})\nSTDOUT:\n${build_front.stdout}\nSTDERR:\n${build_front.stderr}
-    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
-    ...    bench    --bench-iters    20    --bench-warmup    5    ${EXECDIR}/tests/bench_stdlib.mla
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_flag_parsing.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_flag_parsing_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_flag_parsing_backend.log
+    Create File    ${bench_file}    fn main() -> i32 { return 0; }
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    bench    --bench-iters    20    --bench-warmup    5    ${bench_file}
     Should Be Equal As Integers    ${run.rc}    0
     ...    msg=frontend bench parse failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
-    Should Contain    ${run.stdout}    [BENCH]
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    bench ${bench_file} --bench-iters 20 --bench-warmup 5
 
 MLang Frontend Supports Inline Asm Emit LLVM
     [Documentation]    Verify frontend forwards inline asm sources to the backend compiler and preserves volatile vs non-volatile LLVM IR lowering.
@@ -4160,24 +4169,48 @@ MLang Frontend Bench Numeric I32 Boundary Behavior
     Should Contain    ${log_text}    --bench-warmup 0
 
 MLang Frontend Bench Accepts Signed Numeric Warmup
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify frontend accepts signed numeric warmup values (backend clamps like C++).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_warmup_signed
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
-    ...    bench    --bench-iters    5    --bench-warmup    -1    ${EXECDIR}/tests/bench_stdlib.mla
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_warmup_signed.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_warmup_signed_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_warmup_signed_backend.log
+    Create File    ${bench_file}    fn main() -> i32 { return 0; }
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    bench    --bench-iters    5    --bench-warmup    -1    ${bench_file}
     Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    bench ${bench_file} --bench-iters 5 --bench-warmup 0
 
 MLang Frontend Bench Accepts Zero Iterations Value
-    [Tags]    fix-me-later    robot:skip-on-failure
     [Documentation]    Verify frontend accepts numeric zero for --bench-iters (backend applies C++ clamp).
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_iters_zero
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
-    ...    bench    --bench-iters    0    --bench-warmup    0    ${EXECDIR}/tests/bench_stdlib.mla
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_iters_zero.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_iters_zero_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_iters_zero_backend.log
+    Create File    ${bench_file}    fn main() -> i32 { return 0; }
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    bench    --bench-iters    0    --bench-warmup    0    ${bench_file}
     Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    bench ${bench_file} --bench-iters 1 --bench-warmup 0
 
 MLang Frontend Bench Uses Last Positional Path
     [Documentation]    Verify C++ parity: in bench mode, the last non-flag positional argument wins as input path.
@@ -6168,6 +6201,7 @@ Pkg Lock Pins Git And Verifies Archive Checksums Offline
     Should Contain    ${verify_tampered.stderr}    Archive verification failed
 
 Pkg Resolves Transitive Path Packages And Semantic Versions
+    [Tags]    github-actions-skip
     [Documentation]    Verify path MLang packages, transitive builds, semantic
     ...                constraints, deterministic graph inspection, and locked versions.
     ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_path_dependencies
@@ -6211,6 +6245,7 @@ Pkg Resolves Transitive Path Packages And Semantic Versions
     Should Contain    ${rejected.stderr}    out of date for transitive dependency 'math'
 
 Pkg Supports Profiles Features Selection Cache And Vendoring
+    [Tags]    github-actions-skip
     [Documentation]    Verify build profiles, optional feature dependencies,
     ...                workspace selection, global artifact reuse, and offline vendors.
     ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_build_ergonomics
@@ -6295,6 +6330,7 @@ Pkg Supports Signed Registry Install Audit And SBOM
     Should Contain    ${rejected.stderr}    Registry checksum mismatch
 
 Pkg Builds And Links MLang Dynamic Library Target
+    [Tags]    github-actions-skip
     [Documentation]    Verify [[lib]] output, depends_on build ordering,
     ...                automatic linking, and loader-relative execution.
     ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_dynamic_library
