@@ -2626,8 +2626,13 @@ fn tui_unicode_clipping_and_boxes() {
 }
 mod tui_demo::sample_editor;
 mod tui_demo::piano_dialog;
+mod tui::piano;
+mod tui_demo::virtual_keyboard;
+use tui_demo::virtual_keyboard::*;
+use tui_demo::midi_controller::MidiInputEvent;
 use tui_demo::sample_editor::*;
 use tui_demo::piano_dialog::*;
+use tui::piano::*;
 
 fn test_clip(frames: i64, value: f32) -> AudioClip {
     var samples: list<f32> = [];
@@ -2814,6 +2819,123 @@ fn tui_piano_dialog_black_keys_sit_between_their_notes() {
     let label: Cell = surface.cell(left, top + 4);
     verify(label.glyph == 67); // "C-2" under the C key
     free(row); surface.release(); piano.release();
+}
+
+#[test]
+fn tui_piano_keyboard_widget_darkens_pressed_keys() {
+    verify(piano_white_index(60) == 35 && piano_white_index(61) == 36 && PianoKeyboard::octaves_for(50, 3) == 2);
+    // Two octaves from C-3; E-3 and F#3 pressed, C-4 captioned "Q".
+    var captions: list<i32> = [];
+    for k in 0..128 { captions.push(k == 60 ? 81 : 0); }
+    let keyboard: PianoKeyboard = PianoKeyboard { first_octave: 4, octaves: 2, low: 48, high: 71,
+        pressed: [52, 54], captions: captions };
+    let surface: Surface = Surface::new(42, 6);
+    keyboard.paint(surface, surface.bounds(), Theme::dark_blue());
+    var darkened: i32 = 0; var captioned: bool = false;
+    for y in 0..6 { for x in 0..42 {
+        let cell: Cell = surface.cell(i32(x), i32(y));
+        if cell.background == PianoKeyboard::darkened() { darkened = darkened + 1; }
+        if cell.glyph == 81 && cell.background == PianoKeyboard::white() { captioned = true; }
+    } }
+    // E-3: a 3x5 white key minus the column of D#3 over its top three rows;
+    // F#3: a 2x3 black key.
+    verify(darkened == 12 + 6);
+    verify(captioned);
+    let label: Cell = surface.cell(0, 5);
+    verify(label.glyph == 67); // "C-3" under the first key
+    surface.release();
+}
+
+#[test]
+fn tui_virtual_keyboard_plays_and_releases_notes() {
+    var keyboard: VirtualKeyboard = VirtualKeyboard { visible: true };
+    verify(VirtualKeyboard::key_offset(122) == 0 && VirtualKeyboard::key_offset(113) == 12 && VirtualKeyboard::key_offset(112) == 28);
+    verify(VirtualKeyboard::key_offset(97) == -1 && keyboard.base() == 48);
+    let z: InputEvent = InputEvent { kind: InputKind::Text, key: Key::Escape, code: 122 };
+    verify(VirtualKeyboard::handles(z) && keyboard.on_event(z, 3, 1000) == 48);
+    // Auto-repeat keeps the note sounding without restarting it.
+    verify(keyboard.on_event(z, 3, 1300) == -1 && keyboard.is_held(48));
+    let early: list<HeldNote> = keyboard.release_due(1600, false);
+    verify(early.len() == 0);
+    let due: list<HeldNote> = keyboard.release_due(1700, false);
+    verify(due.len() == 1 && !keyboard.is_held(48));
+    let first: HeldNote = due[0];
+    verify(first.note == 48 && first.target == 3);
+    let events: list<MidiInputEvent> = keyboard.take_events();
+    verify(events.len() == 2);
+    let on: MidiInputEvent = events[0]; let off: MidiInputEvent = events[1];
+    verify(on.kind == 1 && on.note == 48 && on.velocity == 100 && off.kind == 2 && off.received_ms == 1700);
+    // Octave keys: "=" up, Right arrow up, "-" down; "q" plays C an octave above.
+    keyboard.on_event(InputEvent { kind: InputKind::Text, key: Key::Escape, code: 61 }, 3, 2000);
+    keyboard.on_event(InputEvent { kind: InputKind::Menu, key: Key::Right }, 3, 2000);
+    keyboard.on_event(InputEvent { kind: InputKind::Text, key: Key::Escape, code: 45 }, 3, 2000);
+    verify(keyboard.octave == 4);
+    verify(keyboard.on_event(InputEvent { kind: InputKind::Quit, key: Key::Escape, code: 113 }, 3, 2000) == 72);
+    // "h" is a note, not the Left arrow; no target plays nothing.
+    verify(keyboard.on_event(InputEvent { kind: InputKind::Menu, key: Key::Left, code: 104 }, -1, 2000) == -1 && keyboard.octave == 4);
+    let all: list<HeldNote> = keyboard.release_due(2000, true);
+    verify(all.len() == 1);
+    // Pane moves, Tab, Space and the view toggles reach the application.
+    verify(!VirtualKeyboard::handles(InputEvent { kind: InputKind::Pane, key: Key::Up, code: 107, modifiers: 6 }));
+    verify(!VirtualKeyboard::handles(InputEvent { kind: InputKind::Text, key: Key::Escape, code: 32 }));
+    verify(!VirtualKeyboard::handles(InputEvent { kind: InputKind::Text, key: Key::Escape, code: 80 }));
+    verify(!VirtualKeyboard::handles(InputEvent { kind: InputKind::Menu, key: Key::Toggle, code: 9 }));
+    // Painted keys: the held note is darkened.
+    keyboard.on_event(z, 3, 3000);
+    let surface: Surface = Surface::new(90, 9);
+    keyboard.paint(surface, surface.bounds(), Theme::dark_blue(), "status");
+    var darkened: i32 = 0;
+    for y in 0..9 { for x in 0..90 { let cell: Cell = surface.cell(i32(x), i32(y)); if cell.background == PianoKeyboard::darkened() { darkened = darkened + 1; } } }
+    verify(darkened > 0);
+    surface.release();
+}
+
+fn decode_with_releases(text: str8) -> InputEvent {
+    var decoder: InputDecoder = InputDecoder::new(); decoder.releases = true;
+    let result: result<Bytes, str8> = Bytes::from_string(text);
+    let bytes: Bytes = result.unwrap();
+    var event: InputEvent = InputEvent { kind: InputKind::None, key: Key::Escape };
+    for i in 0..bytes.len() { event = decoder.feed(bytes.get(i)); }
+    bytes.close();
+    return event;
+}
+
+#[test]
+fn tui_input_key_releases_are_opt_in() {
+    // Kitty event type 3: dropped by default, a released key when enabled.
+    let dropped: InputEvent = decode_input("\x1b[122;1:3u");
+    verify(dropped.kind == InputKind::None && !dropped.released);
+    let release: InputEvent = decode_with_releases("\x1b[122;1:3u");
+    verify(release.released && release.code == 122 && release.modifiers == 1);
+    // Repeats (type 2) stay presses; plain bytes are never releases.
+    let repeat: InputEvent = decode_with_releases("\x1b[122;1:2u");
+    verify(!repeat.released && repeat.code == 122);
+    let plain: InputEvent = decode_with_releases("z");
+    verify(!plain.released && plain.code == 122);
+}
+
+#[test]
+fn tui_virtual_keyboard_holds_chords_until_key_release() {
+    var keyboard: VirtualKeyboard = VirtualKeyboard { visible: true };
+    let z: InputEvent = InputEvent { kind: InputKind::Text, key: Key::Escape, code: 122 };
+    let c: InputEvent = InputEvent { kind: InputKind::Text, key: Key::Escape, code: 99 };
+    let b: InputEvent = InputEvent { kind: InputKind::Text, key: Key::Escape, code: 98 };
+    // The first release shows the terminal reports them: no more timeouts.
+    verify(keyboard.on_event(z, 3, 1000) == 48);
+    let first: list<HeldNote> = keyboard.on_release(InputEvent { kind: InputKind::Text, key: Key::Escape, code: 122, released: true }, 1100);
+    verify(first.len() == 1 && keyboard.releases_seen);
+    // A C major chord, held with no repeats far past the old hold time.
+    verify(keyboard.on_event(z, 3, 2000) == 48 && keyboard.on_event(c, 3, 2010) == 52 && keyboard.on_event(b, 3, 2020) == 55);
+    let none: list<HeldNote> = keyboard.release_due(9000, false);
+    verify(none.len() == 0 && keyboard.is_held(48) && keyboard.is_held(52) && keyboard.is_held(55));
+    // Releasing one key ends only its note, even after an octave change.
+    keyboard.shift_octave(1);
+    let ended: list<HeldNote> = keyboard.on_release(InputEvent { kind: InputKind::Text, key: Key::Escape, code: 99, released: true }, 9100);
+    verify(ended.len() == 1 && !keyboard.is_held(52) && keyboard.is_held(48) && keyboard.is_held(55));
+    let gone: HeldNote = ended[0];
+    verify(gone.note == 52 && gone.target == 3);
+    let rest: list<HeldNote> = keyboard.release_due(9200, true);
+    verify(rest.len() == 2);
 }
 
 #[test]

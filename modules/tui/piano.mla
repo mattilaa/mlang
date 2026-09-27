@@ -1,0 +1,117 @@
+mod tui::geometry;
+mod tui::surface;
+mod tui::theme;
+use tui::geometry::*;
+use tui::surface::*;
+use tui::theme::*;
+use std::strbuf::free;
+
+/// Tracker spelling, matching the pattern NOTE column (MIDI 60 = C-4).
+pub fn piano_note_name(key: i32) -> str8 {
+    let names: array<str8, 12> = {"C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"};
+    return format!("{}{}", names[key % 12], key / 12 - 1);
+}
+pub fn piano_is_black(key: i32) -> bool {
+    let n: i32 = key % 12;
+    return n == 1 || n == 3 || n == 6 || n == 8 || n == 10;
+}
+/// White keys before `key` within its octave, plus seven per octave.
+pub fn piano_white_index(key: i32) -> i32 {
+    let offsets: array<i32, 12> = {0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6};
+    return (key / 12) * 7 + offsets[key % 12];
+}
+
+/// ASCII piano of whole octaves, from `first_octave` (octave 0 starts at MIDI
+/// 0), centered in the area it paints. Keys outside `low..high` are dimmed;
+/// the cursor and pressed keys are darkened; `markers` get a red dot; each
+/// C is labelled with its note name below the keys. `captions` optionally
+/// holds one glyph per MIDI key (0 = none), such as the computer key playing it.
+pub struct PianoKeyboard {
+    var first_octave: i32; var octaves: i32{1}; var key_width: i32{3};
+    var low: i32{0}; var high: i32{127}; var cursor: i32{-1};
+    var pressed: list<i32>; var markers: list<i32>; var captions: list<i32>;
+    var labels: bool{true};
+};
+impl PianoKeyboard {
+    pub fn white() -> i32 { return 0xf2f2f2; }
+    pub fn black() -> i32 { return 0x0c0c0c; }
+    /// Background of the cursor and pressed keys.
+    pub fn darkened() -> i32 { return 0x5f5f5f; }
+    /// Whole octaves that fit `width` columns, at least one.
+    pub fn octaves_for(width: i32, key_width: i32) -> i32 {
+        let octave: i32 = 7 * (key_width < 1 ? 1 : key_width);
+        return width / octave < 1 ? 1 : width / octave;
+    }
+    pub fn is_pressed(self: PianoKeyboard, key: i32) -> bool {
+        for i in 0..self.pressed.len() { if self.pressed[i] == key { return true; } }
+        return false;
+    }
+    pub fn is_marked(self: PianoKeyboard, key: i32) -> bool {
+        for i in 0..self.markers.len() { if self.markers[i] == key { return true; } }
+        return false;
+    }
+    fn caption(self: PianoKeyboard, key: i32) -> i32 {
+        if key < 0 || key >= self.captions.len() { return 0; }
+        return self.captions[key];
+    }
+    fn darkened_key(self: PianoKeyboard, key: i32) -> bool { return key == self.cursor || self.is_pressed(key); }
+    /// The lowest key painted, and how many octaves fit `width` columns.
+    pub fn first_key(self: PianoKeyboard) -> i32 { return (self.first_octave < 0 ? 0 : self.first_octave) * 12; }
+    pub fn shown_octaves(self: PianoKeyboard, width: i32) -> i32 {
+        let fit: i32 = PianoKeyboard::octaves_for(width, self.key_width);
+        var shown: i32 = self.octaves < 1 ? 1 : self.octaves;
+        if shown > fit { shown = fit; }
+        let left: i32 = 11 - (self.first_octave < 0 ? 0 : self.first_octave);
+        return shown > left ? left : shown;
+    }
+    /// White keys fill all rows but the label row; black keys cover their upper half.
+    pub fn paint(self: PianoKeyboard, surface: Surface, area: Rect, theme: Theme) -> void {
+        let rows: i32 = area.height - (self.labels ? 1 : 0);
+        let key_width: i32 = self.key_width < 2 ? 2 : self.key_width;
+        if rows < 2 || area.width < 7 * key_width { return; }
+        let black_rows: i32 = (rows + 1) / 2;
+        let shown: i32 = self.shown_octaves(area.width);
+        let first: i32 = self.first_key();
+        let stop: i32 = first + shown * 12 > 128 ? 128 : first + shown * 12;
+        let x0: i32 = area.x + (area.width - shown * 7 * key_width) / 2;
+        let y0: i32 = area.y;
+        let base: i32 = piano_white_index(first);
+        let marker: i32 = 0xd8453a;
+        // White keys first, then black keys over their upper rows.
+        for k in first..stop {
+            let key: i32 = i32(k);
+            if piano_is_black(key) { continue; }
+            let in_range: bool = key >= self.low && key <= self.high;
+            let darkened: bool = self.darkened_key(key);
+            let background: i32 = darkened ? PianoKeyboard::darkened() : (in_range ? PianoKeyboard::white() : 0xb9b9b9);
+            let x: i32 = x0 + (piano_white_index(key) - base) * key_width;
+            surface.fill(Rect::new(x, y0, key_width, rows), Cell { glyph: 32, foreground: 0x777777, background: background });
+            for row in 0..rows { surface.put(x, y0 + i32(row), Cell { glyph: 0x2502, foreground: 0x777777, background: background }); }
+            if self.is_marked(key) {
+                surface.put(x + 1, y0 + rows - 1, Cell { glyph: 0x25cf, foreground: marker, background: background });
+            } else if self.caption(key) != 0 {
+                surface.put(x + 1, y0 + rows - 1, Cell { glyph: self.caption(key), foreground: darkened ? PianoKeyboard::white() : 0x777777, background: background });
+            }
+            if self.labels && key % 12 == 0 {
+                let label: str8 = piano_note_name(key);
+                surface.text(Rect::new(x, y0 + rows, key_width, 1), label, theme.muted, theme.panel); free(label);
+            }
+        }
+        for k in first..stop {
+            let key: i32 = i32(k);
+            if !piano_is_black(key) { continue; }
+            let in_range: bool = key >= self.low && key <= self.high;
+            let darkened: bool = self.darkened_key(key);
+            let background: i32 = darkened ? PianoKeyboard::darkened() : (in_range ? PianoKeyboard::black() : 0x3a3a3a);
+            // piano_white_index counts the white keys before this black key, so
+            // the gap it sits on is at that many key widths; straddle it by one column.
+            let x: i32 = x0 + (piano_white_index(key) - base) * key_width - 1;
+            surface.fill(Rect::new(x, y0, 2, black_rows), Cell { glyph: 32, foreground: marker, background: background });
+            if self.is_marked(key) {
+                surface.put(x, y0 + black_rows - 1, Cell { glyph: 0x25cf, foreground: marker, background: background });
+            } else if self.caption(key) != 0 {
+                surface.put(x, y0 + black_rows - 1, Cell { glyph: self.caption(key), foreground: darkened ? PianoKeyboard::white() : 0x9a9a9a, background: background });
+            }
+        }
+    }
+}

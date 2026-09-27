@@ -66,7 +66,7 @@ it changes, then what it removes; related entries live in submenus.
 |------|----------|
 | File | New / Open / Recent sessions ▸ / Save / Save as / Settings / Quit |
 | Edit | Undo, Redo, Copy/Cut/Paste clip |
-| View | Patterns, Song matrix, Audio, Instruments, Sample view ▸, Meter ▸, Reset layout, Show details |
+| View | Patterns, Song matrix, Audio, Instruments, Sample view ▸, Meter ▸, Show spectrum analyzer, Spectrum analyzer ▸, Show virtual keyboard, Reset layout, Show details |
 | Track | Create MIDI/AUDIO/Instrument track, Rename, Duplicate, Mute, Note lines ▸, Automation ▸, Clear pattern, Delete |
 | Pattern | Add, Clone, Rename, Set length, Follow matrix patterns, Set matrix row length, Remove, Save pattern, Load pattern |
 | Audio | Add audio, Edit sample (destructive), Clip ▸, Remove audio |
@@ -572,6 +572,47 @@ destination's chain.
 
 Output channels are saved in `.mlack` per pattern track.
 
+### Virtual keyboard
+
+**Shift+P**, or **View → Show virtual keyboard**, shows a piano in the lowest
+pane (over the inspector, mixer or spectrum analyzer) and focuses it, so you can
+play without a MIDI keyboard. Notes go where a MIDI keyboard's would: the armed
+track, else the selected one. MIDI tracks play the preview synth and Instrument
+tracks play their instrument. Audio and muted tracks do not play. The pane title
+shows the octave, the playable range and the target track.
+
+Keys use the tracker layout, and each playable key shows the computer key that
+plays it:
+
+| Keys | Notes |
+|------|-------|
+| `z s x d c v g b h n j m` | C to B of the current octave |
+| `, l . ; /` | C to E one octave up |
+| `q 2 w 3 e r 5 t 6 y 7 u` | C to B one octave up |
+| `i 9 o 0 p` | C to E two octaves up |
+| `Left` / `-` | Octave down (0–8, default 3: `z` plays C-3) |
+| `Right` / `=` / `+` | Octave up |
+
+`C-2`, `C-3`, `C-4` … label each octave under the keys. Keys outside the
+playable range are dimmed, and a sounding key is darkened like the selected key
+in the drum-pad picker. Each key plays from key-down to key-up, so chords and
+overlapping notes work. While the keyboard shows, mlacker asks the terminal to
+report key releases through the kitty keyboard protocol. kitty, Ghostty,
+WezTerm (with `enable_kitty_keyboard`), foot, Alacritty and recent iTerm2
+support this. Terminals without it, such as macOS Terminal.app, send only
+presses. There a note sounds while its key auto-repeats and ends about 400 ms
+after the last repeat. Only the most recently pressed key repeats, so chords
+fade. The notes join the MIDI input. An armed track records them while
+playing, and step-enters them at the cursor while stopped. **Space** still
+starts and stops playback. A take played from the keyboard leaves the keyboard
+focused.
+
+While the keyboard has focus, it keeps printable keys for itself, including `q`
+(quit with `Ctrl+C`, or leave the pane first). Tab, Shift+Tab,
+`Ctrl+Shift+H/J/K/L`, F1, `Shift+M` and control shortcuts keep working as usual.
+The widget behind it is `tui::piano::PianoKeyboard`, which the drum-pad picker
+uses too.
+
 ### Spectrum analyzer and master bus
 
 `Ctrl+Shift+M` (from the sidebar, Pattern view or Mixer), or **View → Show
@@ -875,7 +916,9 @@ Instrument track creation/assignment, Instruments view, existing widgets and
 playback. They open no audio devices.
 The session PTY test separately checks real empty startup, command-line opening,
 parameter/editor-state round trips and rejected files. The spectrum PTY test toggles the
-analyzer, edits the master bus and checks it survives a session round trip. Legacy widget tests opt in
+analyzer, edits the master bus and checks it survives a session round trip. The
+virtual keyboard PTY test toggles the keyboard, changes octave, step-enters a note
+and checks that Space and `q` behave. Legacy widget tests opt in
 to seeded demo data with `MLANG_TUI_DEMO=1`; normal mlacker startup does not.
 
 For a hardware-free manual run:

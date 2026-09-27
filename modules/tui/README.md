@@ -663,6 +663,44 @@ avoid copying this owning widget. No process-directory changes or filesystem
 writes occur. The chooser does not deserialize sessions; the demo reports the
 selected path for an application handler to load.
 
+### Key releases
+
+`Terminal::report_key_releases(true)` asks kitty-protocol terminals to report
+key releases too. Set `InputDecoder.releases = true` to receive them as events
+with `released` set. Leave it off (the default) and releases are dropped, so
+handlers that expect only presses need no changes. `finish()` restores the
+terminal's keyboard mode.
+
+### Piano keyboard
+
+`tui::piano::PianoKeyboard` paints an ASCII piano of whole octaves, centered in
+the area you pass to `paint(surface, area, theme)`. White keys fill every row
+except the last, which labels each C (`C-2`, `C-3`, …, where MIDI 60 is `C-4`).
+Black keys cover the upper half of the white keys.
+
+```mlang
+mod tui::piano;
+use tui::piano::*;
+
+let keyboard: PianoKeyboard = PianoKeyboard { first_octave: 4, octaves: 2,
+    low: 48, high: 71, cursor: 60, pressed: [64], markers: [48] };
+keyboard.paint(surface, Rect::new(2, 2, 42, 6), theme);
+```
+
+- `first_octave` is the lowest octave shown (octave 0 starts at MIDI 0), and
+  `octaves` is how many to show. Fewer are shown when they do not fit;
+  `PianoKeyboard::octaves_for(width, key_width)` gives the number that fits.
+- Keys outside `low..high` are dimmed.
+- The `cursor` key and every `pressed` key are darkened
+  (`PianoKeyboard::darkened()`).
+- `markers` get a red dot.
+- `captions` can hold one glyph per MIDI key (index = key, 0 = none), for
+  example the computer key that plays it.
+- `labels: false` drops the note-name row.
+
+`piano_note_name`, `piano_is_black` and `piano_white_index` are the key helpers.
+mlacker uses this widget for its drum-pad picker and for its virtual keyboard.
+
 ### Base dialogs and push buttons
 
 `OpenSessionDialog` and `QuestionDialog` both derive from `Dialog`. Construct a
