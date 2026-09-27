@@ -1,0 +1,497 @@
+/// \file gated_reverb.mla
+/// \brief 80s drum-machine gated reverb: loud, dense, held, then cut.
+///
+/// @defgroup dsp_gated_reverb dsp::gated_reverb
+/// @ingroup dsp
+/// @brief A squashed room/plate reverb opened by each drum hit, held for a
+/// set time, then released over a short decay that darkens as it closes.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod dsp::detail;
+mod std::vec;
+use dsp::detail::expf;
+use dsp::detail::logf;
+use dsp::detail::llroundf;
+use dsp::detail::tanhf;
+use std::vec::set_f32;
+/// \endcond
+
+fn gated_clamp(value: f32, low: f32, high: f32) -> f32 {
+    if value < low { return low; }
+    if value > high { return high; }
+    return value;
+}
+
+fn gated_abs(value: f32) -> f32 { return value < 0.0f ? -value : value; }
+
+/// One-pole step toward `target`, landing on it once within 1e-6.
+fn gated_glide(value: f32, target: f32, coefficient: f32) -> f32 {
+    let next: f32 = value + (target - value) * coefficient;
+    return gated_abs(target - next) < 0.000001f ? target : next;
+}
+
+fn gated_db(db: f32) -> f32 { return expf(db * 0.115129255f); }
+
+/// One-pole low-pass coefficient for `hz` at `rate`.
+fn gated_pole(hz: f32, rate: f32) -> f32 { return 1.0f - expf(-6.2831853f * hz / rate); }
+
+/// Tank line lengths in ms at size scale 1; mutually prime-ish so the echoes
+/// never line up.
+fn gated_tank_ms(line: i64) -> f32 {
+    if line == 0 { return 8.9f; }
+    if line == 1 { return 11.3f; }
+    if line == 2 { return 13.7f; }
+    if line == 3 { return 16.1f; }
+    if line == 4 { return 19.3f; }
+    if line == 5 { return 22.9f; }
+    if line == 6 { return 26.3f; }
+    return 29.9f;
+}
+
+/// Input diffuser lengths in ms.
+fn gated_diffuser_ms(stage: i64) -> f32 {
+    if stage == 0 { return 1.37f; }
+    if stage == 1 { return 2.11f; }
+    if stage == 2 { return 3.29f; }
+    return 4.73f;
+}
+
+/// Early reflection taps in ms at size scale 1: left taps 0..5, right 6..11.
+fn gated_early_ms(tap: i64) -> f32 {
+    if tap == 0 { return 4.3f; }
+    if tap == 1 { return 9.1f; }
+    if tap == 2 { return 14.9f; }
+    if tap == 3 { return 21.7f; }
+    if tap == 4 { return 29.3f; }
+    if tap == 5 { return 37.1f; }
+    if tap == 6 { return 5.9f; }
+    if tap == 7 { return 11.3f; }
+    if tap == 8 { return 17.9f; }
+    if tap == 9 { return 24.1f; }
+    if tap == 10 { return 31.7f; }
+    return 39.7f;
+}
+
+fn gated_early_gain(tap: i64) -> f32 {
+    let step: i64 = tap % 6;
+    let level: f32 = 0.9f - f32(step) * 0.1f;
+    return step % 2 == 0 ? level : -level;
+}
+
+/// @brief The reverb character under the gate.
+pub enum GatedVerbType : i32 {
+    /// A bright, compressed live room with early reflections: the classic
+    /// gated snare.
+    Room = 0,
+    /// Denser and smoother, no discrete reflections.
+    Plate = 1,
+    /// The reverb swells up over the hold time, then is cut.
+    Reverse = 2
+};
+
+/// @brief One processed stereo sample.
+pub struct GatedVerbFrame {
+    var left_value: f32;
+    var right_value: f32;
+};
+
+impl GatedVerbFrame {
+    /// @brief Return the left output sample.
+    pub fn left(self: GatedVerbFrame) -> f32 { return self.left_value; }
+
+    /// @brief Return the right output sample.
+    pub fn right(self: GatedVerbFrame) -> f32 { return self.right_value; }
+}
+
+/// @brief Gated reverb in the style of 80s studio units used on LinnDrum and
+/// DMX snares and toms.
+///
+/// The mono input is band-limited, pre-delayed, diffused and fed to an
+/// eight-line feedback delay network with a long decay, so the tail stays
+/// dense for the whole hold. The wet signal is compressed ("squash") to
+/// flatten it, then shaped by a gate keyed from the dry input: each hit above
+/// the threshold opens it, it stays open for pre-delay + hold, then releases
+/// over a short decay while a sweeping low-pass darkens the tail. Storage is
+/// allocated only by `new()`; processing and parameter changes do not
+/// allocate or lock.
+pub struct GatedVerb {
+    var sample_rate_hz: f32;
+    var verb_type: GatedVerbType;
+    var size: f32;
+    var hold_ms: f32;
+    var release_ms: f32;
+    var damp: f32;
+    var tone_hz: f32;
+    var threshold: f32;
+    var predelay_ms: f32;
+    var squash: f32;
+    var width: f32;
+    var low_cut_coefficient: f32;
+    var tone_coefficient: f32;
+    var tank_damp_coefficient: f32;
+    var feedback: f32;
+    var diffuser_feedback: f32;
+    var early_level: f32;
+    var reverb_gain: f32;
+    var dry_gain: f32;
+    var output_gain: f32;
+    /// Smoothed copies of the level controls (about 10 ms).
+    var reverb_smooth: f32;
+    var dry_smooth: f32;
+    var output_smooth: f32;
+    var level_glide: f32;
+    /// Input filters.
+    var low_cut_state: f32;
+    var tone_state: f32;
+    /// Pre-delay line; early reflections tap it past the pre-delay.
+    var pre_line: list<f32>;
+    var pre_pos: i64;
+    var pre_samples: i64;
+    /// Four input allpasses sharing one buffer and write position.
+    var diff_line: list<f32>;
+    var diff_capacity: i64;
+    var diff_pos: i64;
+    var diff_length: list<f32>;
+    /// Eight tank lines sharing one buffer and write position.
+    var tank_line: list<f32>;
+    var tank_capacity: i64;
+    var tank_pos: i64;
+    var tank_length: list<f32>;
+    var tank_low: list<f32>;
+    var tank_read: list<f32>;
+    var early_offset: list<f32>;
+    /// Squash compressor.
+    var squash_env: f32;
+    var squash_attack: f32;
+    var squash_release: f32;
+    /// Gate: 0 closed, 1 open (pre-delay + hold), 2 releasing.
+    var key: f32;
+    var key_release: f32;
+    var armed: bool;
+    var stage: i32;
+    var counter: i64;
+    var hold_samples: i64;
+    var release_samples: i64;
+    var gate_gain: f32;
+    var gate_glide: f32;
+    /// Release progress 0 .. 1, drives the closing low-pass.
+    var closing: f32;
+    var damp_left1: f32;
+    var damp_left2: f32;
+    var damp_right1: f32;
+    var damp_right2: f32;
+};
+
+impl GatedVerb {
+    /// @brief Allocate the lines for `sample_rate_hz` (8 .. 384 kHz).
+    pub fn new(sample_rate_hz: f32) -> GatedVerb {
+        let rate: f32 = gated_clamp(sample_rate_hz, 8000.0f, 384000.0f);
+        // 100 ms pre-delay plus the latest early tap at the largest size.
+        let pre_capacity: i64 = llroundf(rate * 0.160f) + 8;
+        let diff_capacity: i64 = llroundf(rate * 0.006f) + 8;
+        // Longest line 29.9 ms at the largest scale 1.8.
+        let tank_capacity: i64 = llroundf(rate * 0.056f) + 8;
+        var verb: GatedVerb = GatedVerb {
+            sample_rate_hz: rate,
+            verb_type: GatedVerbType::Room,
+            size: 0.5f, hold_ms: 250.0f, release_ms: 80.0f, damp: 0.6f,
+            tone_hz: 9000.0f, threshold: gated_db(-24.0f), predelay_ms: 8.0f,
+            squash: 0.6f, width: 1.0f,
+            low_cut_coefficient: 0.0f, tone_coefficient: 0.0f, tank_damp_coefficient: 0.0f,
+            feedback: 0.0f, diffuser_feedback: 0.62f, early_level: 0.6f,
+            reverb_gain: 1.0f, dry_gain: 1.0f, output_gain: 1.0f,
+            reverb_smooth: 1.0f, dry_smooth: 1.0f, output_smooth: 1.0f,
+            level_glide: gated_pole(16.0f, rate),
+            low_cut_state: 0.0f, tone_state: 0.0f,
+            pre_line: [0.0f; pre_capacity], pre_pos: 0, pre_samples: 1,
+            diff_line: [0.0f; diff_capacity * 4], diff_capacity: diff_capacity, diff_pos: 0,
+            diff_length: [0.0f; 4],
+            tank_line: [0.0f; tank_capacity * 8], tank_capacity: tank_capacity, tank_pos: 0,
+            tank_length: [0.0f; 8], tank_low: [0.0f; 8], tank_read: [0.0f; 8],
+            early_offset: [0.0f; 12],
+            squash_env: 0.0f,
+            squash_attack: gated_pole(300.0f, rate),
+            squash_release: gated_pole(2.0f, rate),
+            key: 0.0f, key_release: expf(-1.0f / (rate * 0.01f)), armed: true,
+            stage: 0, counter: 0, hold_samples: 1, release_samples: 1,
+            gate_gain: 0.0f, gate_glide: gated_pole(230.0f, rate), closing: 1.0f,
+            damp_left1: 0.0f, damp_left2: 0.0f, damp_right1: 0.0f, damp_right2: 0.0f
+        };
+        verb.set_low_cut_hz(120.0f);
+        verb.set_tone_hz(9000.0f);
+        verb.set_predelay_ms(8.0f);
+        verb.set_hold_ms(250.0f);
+        verb.set_release_ms(80.0f);
+        verb.configure();
+        return verb;
+    }
+
+    /// Delay lengths, diffusion and feedback from type and size.
+    fn configure(self: &mut Self) -> void {
+        let rate: f32 = self.sample_rate_hz;
+        var scale: f32 = 0.6f + 1.2f * self.size;
+        var decay_seconds: f32 = 1.2f + 2.4f * self.size;
+        self.diffuser_feedback = 0.62f;
+        self.early_level = 0.6f;
+        if self.verb_type == GatedVerbType::Plate {
+            scale = scale * 0.75f; decay_seconds = decay_seconds * 1.2f;
+            self.diffuser_feedback = 0.74f; self.early_level = 0.0f;
+        } else if self.verb_type == GatedVerbType::Reverse {
+            self.diffuser_feedback = 0.7f; self.early_level = 0.3f;
+        }
+        var total_ms: f32 = 0.0f;
+        for i in 0..8 {
+            let ms: f32 = gated_tank_ms(i) * scale;
+            total_ms = total_ms + ms;
+            set_f32(self.tank_length, i, gated_clamp(f32(llroundf(ms * rate * 0.001f)), 2.0f, f32(self.tank_capacity - 2)));
+        }
+        for i in 0..4 {
+            set_f32(self.diff_length, i, gated_clamp(f32(llroundf(gated_diffuser_ms(i) * rate * 0.001f)), 1.0f, f32(self.diff_capacity - 2)));
+        }
+        let early_scale: f32 = 0.6f + 0.8f * self.size;
+        for i in 0..12 { set_f32(self.early_offset, i, f32(llroundf(gated_early_ms(i) * early_scale * rate * 0.001f))); }
+        // Per pass through an average line, lose 60 dB over decay_seconds.
+        self.feedback = expf(-6.907755f * total_ms * 0.125f * 0.001f / decay_seconds);
+    }
+
+    /// @brief Clear every line, filter and the gate; settings are kept.
+    pub fn reset(self: &mut Self) -> void {
+        for i in 0..self.pre_line.len() { set_f32(self.pre_line, i, 0.0f); }
+        for i in 0..self.diff_line.len() { set_f32(self.diff_line, i, 0.0f); }
+        for i in 0..self.tank_line.len() { set_f32(self.tank_line, i, 0.0f); }
+        for i in 0..8 { set_f32(self.tank_low, i, 0.0f); set_f32(self.tank_read, i, 0.0f); }
+        self.pre_pos = 0; self.diff_pos = 0; self.tank_pos = 0;
+        self.low_cut_state = 0.0f; self.tone_state = 0.0f; self.squash_env = 0.0f;
+        self.key = 0.0f; self.armed = true; self.stage = 0; self.counter = 0;
+        self.gate_gain = 0.0f; self.closing = 1.0f;
+        self.damp_left1 = 0.0f; self.damp_left2 = 0.0f; self.damp_right1 = 0.0f; self.damp_right2 = 0.0f;
+        self.reverb_smooth = self.reverb_gain; self.dry_smooth = self.dry_gain; self.output_smooth = self.output_gain;
+    }
+
+    /// @brief Room, Plate or Reverse.
+    pub fn set_type(self: &mut Self, value: GatedVerbType) -> void { self.verb_type = value; self.configure(); }
+
+    /// @brief Current type.
+    pub fn verb_type(self: GatedVerb) -> GatedVerbType { return self.verb_type; }
+
+    /// @brief Room size 0 .. 1: line lengths and the tank's decay.
+    pub fn set_size(self: &mut Self, value: f32) -> void { self.size = gated_clamp(value, 0.0f, 1.0f); self.configure(); }
+
+    /// @brief Time the gate stays fully open after the reverb starts, 10 .. 1000 ms.
+    pub fn set_hold_ms(self: &mut Self, ms: f32) -> void {
+        self.hold_ms = gated_clamp(ms, 10.0f, 1000.0f);
+        self.hold_samples = llroundf(self.hold_ms * self.sample_rate_hz * 0.001f);
+    }
+
+    /// @brief Length of the closing decay, 5 .. 1000 ms.
+    pub fn set_release_ms(self: &mut Self, ms: f32) -> void {
+        self.release_ms = gated_clamp(ms, 5.0f, 1000.0f);
+        self.release_samples = llroundf(self.release_ms * self.sample_rate_hz * 0.001f);
+    }
+
+    /// @brief How dark the tail gets by the end of the release, 0 .. 1
+    /// (1 = five octaves below Tone).
+    pub fn set_damp(self: &mut Self, value: f32) -> void { self.damp = gated_clamp(value, 0.0f, 1.0f); }
+
+    /// @brief Brightness of the reverb, 1.5 .. 16 kHz (below Nyquist).
+    pub fn set_tone_hz(self: &mut Self, hz: f32) -> void {
+        let limit: f32 = self.sample_rate_hz * 0.45f;
+        self.tone_hz = gated_clamp(hz, 1500.0f, limit < 16000.0f ? limit : 16000.0f);
+        self.tone_coefficient = gated_pole(self.tone_hz, self.sample_rate_hz);
+        let tank_hz: f32 = self.tone_hz * 1.5f;
+        self.tank_damp_coefficient = gated_pole(tank_hz < limit ? tank_hz : limit, self.sample_rate_hz);
+    }
+
+    /// @brief Input level that opens the gate, -60 .. 0 dBFS.
+    pub fn set_threshold_db(self: &mut Self, db: f32) -> void { self.threshold = gated_db(gated_clamp(db, -60.0f, 0.0f)); }
+
+    /// @brief Gap between the hit and the reverb, 0 .. 100 ms.
+    pub fn set_predelay_ms(self: &mut Self, ms: f32) -> void {
+        self.predelay_ms = gated_clamp(ms, 0.0f, 100.0f);
+        self.pre_samples = llroundf(self.predelay_ms * self.sample_rate_hz * 0.001f) + 1;
+    }
+
+    /// @brief Compression of the wet signal before the gate, 0 .. 1. Higher
+    /// values flatten the tail into the dense wall of the 80s sound.
+    pub fn set_squash(self: &mut Self, value: f32) -> void { self.squash = gated_clamp(value, 0.0f, 1.0f); }
+
+    /// @brief Stereo width of the reverb, 0 (mono) .. 1.
+    pub fn set_width(self: &mut Self, value: f32) -> void { self.width = gated_clamp(value, 0.0f, 1.0f); }
+
+    /// @brief High-pass on the reverb's input, 20 .. 1000 Hz, to keep kicks
+    /// from muddying the tank.
+    pub fn set_low_cut_hz(self: &mut Self, hz: f32) -> void {
+        self.low_cut_coefficient = gated_pole(gated_clamp(hz, 20.0f, 1000.0f), self.sample_rate_hz);
+    }
+
+    /// @brief Reverb return level, -24 .. +12 dB.
+    pub fn set_reverb_db(self: &mut Self, db: f32) -> void { self.reverb_gain = gated_db(gated_clamp(db, -24.0f, 12.0f)); }
+
+    /// @brief Dry level, -60 .. +6 dB; -60 mutes the dry path.
+    pub fn set_dry_db(self: &mut Self, db: f32) -> void {
+        let safe: f32 = gated_clamp(db, -60.0f, 6.0f);
+        self.dry_gain = safe <= -60.0f ? 0.0f : gated_db(safe);
+    }
+
+    /// @brief Output level, -24 .. +12 dB.
+    pub fn set_output_db(self: &mut Self, db: f32) -> void { self.output_gain = gated_db(gated_clamp(db, -24.0f, 12.0f)); }
+
+    /// @brief Current gate gain 0 .. 1 applied to the reverb.
+    pub fn envelope(self: GatedVerb) -> f32 { return self.gate_gain; }
+
+    /// @brief Whether the gate is open or releasing.
+    pub fn is_open(self: GatedVerb) -> bool { return self.stage != 0; }
+
+    /// Advance the gate one sample and return its raw (unsmoothed) gain.
+    fn gate_step(self: &mut Self, left: f32, right: f32) -> f32 {
+        var peak: f32 = gated_abs(left);
+        let other: f32 = gated_abs(right);
+        if other > peak { peak = other; }
+        self.key = peak > self.key ? peak : self.key * self.key_release;
+        if self.armed && self.key >= self.threshold {
+            // A new hit restarts the gate, even mid-release.
+            self.armed = false; self.stage = 1; self.counter = 0;
+        } else if self.key < self.threshold * 0.5f {
+            self.armed = true;
+        }
+        if self.stage == 0 { self.closing = 1.0f; return 0.0f; }
+        self.counter = self.counter + 1;
+        let open_samples: i64 = self.pre_samples + self.hold_samples;
+        if self.stage == 1 {
+            self.closing = 0.0f;
+            if self.counter >= open_samples { self.stage = 2; self.counter = 0; return 1.0f; }
+            if self.verb_type == GatedVerbType::Reverse {
+                let phase: f32 = gated_clamp(f32(self.counter - self.pre_samples) / f32(self.hold_samples), 0.0f, 1.0f);
+                return phase * phase;
+            }
+            return 1.0f;
+        }
+        if self.counter >= self.release_samples { self.stage = 0; self.counter = 0; self.closing = 1.0f; return 0.0f; }
+        // An exponential decay forced to reach zero at the end.
+        let t: f32 = f32(self.counter) / f32(self.release_samples);
+        self.closing = t;
+        return (expf(-4.0f * t) - 0.0183156f) * 1.0186573f;
+    }
+
+    fn tank_read_at(self: &mut Self, line: i64) -> f32 {
+        var index: i64 = self.tank_pos - llroundf(self.tank_length[line]);
+        if index < 0 { index = index + self.tank_capacity; }
+        return self.tank_line[line * self.tank_capacity + index];
+    }
+
+    fn pre_read(self: &mut Self, delay: i64) -> f32 {
+        let size: i64 = self.pre_line.len();
+        var safe: i64 = delay < 1 ? 1 : delay;
+        if safe > size - 1 { safe = size - 1; }
+        var index: i64 = self.pre_pos - safe;
+        if index < 0 { index = index + size; }
+        return self.pre_line[index];
+    }
+
+    /// @brief Process one stereo sample.
+    pub fn process_stereo(self: &mut Self, input_left: f32, input_right: f32) -> GatedVerbFrame {
+        let raw_gate: f32 = self.gate_step(input_left, input_right);
+        self.gate_gain = self.gate_gain + (raw_gate - self.gate_gain) * self.gate_glide;
+        if self.stage == 0 && self.gate_gain < 0.00001f { self.gate_gain = 0.0f; }
+
+        // Input: mono, low cut, tone, then into the pre-delay line.
+        let mono: f32 = 0.5f * (input_left + input_right);
+        self.low_cut_state = self.low_cut_state + (mono - self.low_cut_state) * self.low_cut_coefficient;
+        self.tone_state = self.tone_state + (mono - self.low_cut_state - self.tone_state) * self.tone_coefficient;
+        set_f32(self.pre_line, self.pre_pos, self.tone_state + 0.000000000001f);
+        self.pre_pos = self.pre_pos + 1;
+        if self.pre_pos >= self.pre_line.len() { self.pre_pos = 0; }
+        var feed: f32 = self.pre_read(self.pre_samples);
+
+        // Early reflections: taps past the pre-delay.
+        var early_left: f32 = 0.0f;
+        var early_right: f32 = 0.0f;
+        if self.early_level > 0.0f {
+            for i in 0..6 {
+                early_left = early_left + self.pre_read(self.pre_samples + llroundf(self.early_offset[i])) * gated_early_gain(i);
+                early_right = early_right + self.pre_read(self.pre_samples + llroundf(self.early_offset[i + 6])) * gated_early_gain(i + 6);
+            }
+            early_left = early_left * self.early_level * 0.6f;
+            early_right = early_right * self.early_level * 0.6f;
+        }
+
+        // Diffusers: four allpasses in series.
+        let g: f32 = self.diffuser_feedback;
+        for i in 0..4 {
+            var index: i64 = self.diff_pos - llroundf(self.diff_length[i]);
+            if index < 0 { index = index + self.diff_capacity; }
+            let base: i64 = i * self.diff_capacity;
+            let delayed: f32 = self.diff_line[base + index];
+            let written: f32 = feed + delayed * g;
+            set_f32(self.diff_line, base + self.diff_pos, written);
+            feed = delayed - written * g;
+        }
+        self.diff_pos = self.diff_pos + 1;
+        if self.diff_pos >= self.diff_capacity { self.diff_pos = 0; }
+
+        // Tank: eight damped lines mixed by a Householder matrix.
+        var sum: f32 = 0.0f;
+        for i in 0..8 {
+            let value: f32 = self.tank_read_at(i);
+            set_f32(self.tank_read, i, value);
+            let low: f32 = self.tank_low[i] + (value - self.tank_low[i]) * self.tank_damp_coefficient;
+            set_f32(self.tank_low, i, low);
+            sum = sum + low;
+        }
+        let spread: f32 = sum * 0.25f;
+        for i in 0..8 {
+            let sign: f32 = i % 2 == 0 ? 1.0f : -1.0f;
+            let injection: f32 = feed * sign * (1.0f - f32(i) * 0.05f);
+            let next: f32 = (self.tank_low[i] - spread) * self.feedback + injection;
+            set_f32(self.tank_line, i * self.tank_capacity + self.tank_pos, tanhf(next));
+        }
+        self.tank_pos = self.tank_pos + 1;
+        if self.tank_pos >= self.tank_capacity { self.tank_pos = 0; }
+
+        let r0: f32 = self.tank_read[0]; let r1: f32 = self.tank_read[1];
+        let r2: f32 = self.tank_read[2]; let r3: f32 = self.tank_read[3];
+        let r4: f32 = self.tank_read[4]; let r5: f32 = self.tank_read[5];
+        let r6: f32 = self.tank_read[6]; let r7: f32 = self.tank_read[7];
+        var wet_left: f32 = (r0 - r1 + r2 - r3 + r4 - r5 + r6 - r7) * 0.35f + early_left;
+        var wet_right: f32 = (r0 + r1 - r2 - r3 + r4 + r5 - r6 - r7) * 0.35f + early_right;
+
+        // Squash: a hard, stereo-linked compressor with make-up gain, so the
+        // tail holds level while the gate is open.
+        var peak: f32 = gated_abs(wet_left);
+        let other: f32 = gated_abs(wet_right);
+        if other > peak { peak = other; }
+        let coefficient: f32 = peak > self.squash_env ? self.squash_attack : self.squash_release;
+        self.squash_env = self.squash_env + (peak - self.squash_env) * coefficient;
+        if self.squash > 0.0f {
+            let exponent: f32 = self.squash * 0.9f;
+            let knee: f32 = 0.06f;
+            var squash_gain: f32 = expf(logf(0.35f / knee) * exponent);
+            if self.squash_env > knee { squash_gain = squash_gain * expf(logf(knee / self.squash_env) * exponent); }
+            wet_left = wet_left * squash_gain;
+            wet_right = wet_right * squash_gain;
+        }
+
+        // Closing low-pass: open while held, sweeping down over the release.
+        let cutoff: f32 = self.tone_hz * expf(-3.4657359f * self.damp * self.closing);
+        let a: f32 = gated_pole(cutoff, self.sample_rate_hz);
+        self.damp_left1 = self.damp_left1 + (wet_left - self.damp_left1) * a;
+        self.damp_left2 = self.damp_left2 + (self.damp_left1 - self.damp_left2) * a;
+        self.damp_right1 = self.damp_right1 + (wet_right - self.damp_right1) * a;
+        self.damp_right2 = self.damp_right2 + (self.damp_right1 - self.damp_right2) * a;
+        let mid: f32 = 0.5f * (self.damp_left2 + self.damp_right2);
+        let side: f32 = 0.5f * (self.damp_left2 - self.damp_right2) * self.width;
+
+        let glide: f32 = self.level_glide;
+        self.reverb_smooth = gated_glide(self.reverb_smooth, self.reverb_gain, glide);
+        self.dry_smooth = gated_glide(self.dry_smooth, self.dry_gain, glide);
+        self.output_smooth = gated_glide(self.output_smooth, self.output_gain, glide);
+        let wet_gain: f32 = self.gate_gain * self.reverb_smooth;
+        return GatedVerbFrame {
+            left_value: (input_left * self.dry_smooth + (mid + side) * wet_gain) * self.output_smooth,
+            right_value: (input_right * self.dry_smooth + (mid - side) * wet_gain) * self.output_smooth
+        };
+    }
+}
+
+/// @}
