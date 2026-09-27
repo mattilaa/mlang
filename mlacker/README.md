@@ -41,7 +41,7 @@ destinations with `--option bin_dir=DIR` and `--option plugin_dir=DIR`, or the
 plugin set with `--option plugins="mla_verb mla_eq"` (names under `plugins/`).
 Existing bundles of the same name are replaced.
 
-## Sessions (.mlack 1.0)
+## Sessions (.mlack 1.1)
 
 Launching mlacker without a filename starts one empty, 64-row **Untitled**
 pattern, with no tracks, song entries, instruments, or samples. Menus stay closed.
@@ -92,6 +92,7 @@ pattern list.
 | `dd` | Remove the whole row |
 | `r` | Loop the cell's pattern down its lane, or stop it looping |
 | `s` | Split: end a loop (or a long pattern) at this row |
+| `Shift+R` | Arm the cell's pattern for recording, or disarm it |
 | `Space` / `Ctrl+P` | Play the matrix from the cursor row, or stop |
 | `Shift+M` | Close the matrix |
 
@@ -106,6 +107,34 @@ when no note is due for 40 ms (or two pattern rows before the change at the
 latest), so the change itself does no work on the downbeat. Notes still
 sounding when a row ends keep their length and get their note-offs in the next
 row. Editing anything while the matrix plays prepares the next row again.
+
+On an audio device, sequencer notes and CCs go to the audio engine 60 ms ahead
+of the transport, each stamped with the exact audio frame it sounds on, so
+every track keeps sample-accurate time with the others however busy the UI is
+(merging a row with long patterns can take tens of milliseconds). The next row
+sends its first notes ahead the same way before the change, and once it has, it
+plays even if you edit in the meantime; a row never sends anything past its
+own end. Audio clips and the metronome are still started when the UI
+reaches them.
+
+### Recording in the matrix
+
+**Shift+R** on a cell arms its pattern: its lane header shows a red **R** and
+the cell turns red. **Ctrl+P** (or Space) then plays the matrix and records
+MIDI notes and controllers into that pattern while the other lanes play along.
+Playback starts on the armed pattern's row, or on the cursor row when that lies
+inside the pattern. The pattern opens in the editor and grows row by row for as
+long as the take runs, across matrix rows and past the end of the song, which
+wraps around. Its own notes are not played back during the take; you hear what
+you play. Only **Ctrl+P** (or Space) stops the take. The pattern then ends at
+the nearest bar line (moving on a bar when that would cut off a recorded note),
+the pattern is disarmed, and as after any take the track can be named.
+
+The take goes to the pattern's armed MIDI track, else the MIDI track under its
+cursor, else its first MIDI track; a track armed only for the take is disarmed
+again afterwards. The pattern must hold a MIDI track. A matrix take has no
+count-in. A longer pattern takes as many matrix rows as it needs, up to the next
+pattern placed below it in its lane.
 
 ### Looping patterns
 
@@ -277,7 +306,7 @@ and focuses it. Save choosers open in the path field instead, since they start
 from a suggested filename. Relative paths typed into the field resolve against
 the directory being browsed.
 
-Version 1.0 stores all patterns and song order, track types and assignments,
+Version 1.1 stores all patterns and song order, track types and assignments,
 NOTE/VEL/LEN/OFF/automation data, audio placements, loaded samples, loaded
 instrument/master-plugin paths and normalized parameter states, BPM/time signature,
 playhead/cursors, pane focus, track zoom, scroll positions, sidebar mode, mixer and
@@ -297,7 +326,8 @@ There is no autosave or unsaved-change prompt on Open/Quit yet. Native plugin
 opaque presets, internal sample banks, and non-parameter controller state are not
 stored in 1.0; exposed parameter values are restored by ID. Device changes still
 reload plugins with defaults. See [the binary format](FORMAT.md) for the schema
-and limits.
+and limits. Sessions and `.mlapatt` files saved as 1.0 still open: their tracks
+keep both of their old CC columns.
 
 **Pattern → Save pattern / Load pattern** uses `.mlapatt` files. Saving includes
 the active pattern’s notes, track settings and embedded audio clips. Loading adds
@@ -695,17 +725,52 @@ Saved `.mlack` sessions restore exposed parameter edits across application
 restarts and audio-device changes. Dynamic parameter-list changes and plugin-originated
 parameter notifications are not handled yet; reopen to refresh cached values.
 
-### Pattern CC1 / CC2
+### Pattern CC columns
 
-Both automation columns send their non-empty values at the pattern row boundary,
-even without a note or when the columns are collapsed. **Track → Configure CC1 /
-Configure CC2** selects `cc:N` (0–127; values 0–127) or `pitchbend` (values
--8192–8191). Defaults are CC1 = `cc:1`, CC2 = `cc:74`; the column labels are slot
-names, not fixed MIDI controller numbers. Instrument tracks target their assigned
-instance; MIDI tracks target the master plugin. Muted/audio tracks do not send
-these events. Empty cells leave the current parameter value unchanged.
+Each MIDI track has its own list of automation columns after its note lines, one
+per controller, headed by what it plays: `CC1`, `CC74`, `PB` for pitch bend.
+A new track has only `CC1` (modulation wheel). **Track → Automation → Add CC
+column** adds one for `cc:N` (0–127; values 0–127), `pitchbend` (values
+-8192–8191) or a custom `name:min:max`, up to 16 per track and one per
+controller; **Configure CC column** changes the selected one (the first one
+when the cursor is elsewhere) and **Remove CC column** deletes the selected
+one with its values after confirmation. AUDIO tracks have no CC columns.
+Columns belong to the track in its pattern, so every pattern can automate
+different controllers.
 
-The host translates controllers using the plugin's `IMidiMapping` assignments
+A cell holds one value, sent on its row, or four 1/64-note steps written as
+`12 . 31 40` (`.` is an empty step). At 1/64 vertical detail (Ctrl-Z) each line
+of a row is one step: Enter and Shift-J/K edit the step under the cursor. At
+1/16 detail Enter edits the whole cell text and Shift-J/K moves every step; a
+value followed by `+` has more steps between the lines shown, and its row
+number is highlighted. Values are sent even without a note or when the columns
+are collapsed. Instrument tracks target their assigned instance (Track → Set
+output channel chooses it); MIDI tracks target the master plugin. Muted tracks
+do not send these events. Empty cells leave the current parameter value unchanged.
+
+**Curves between two values.** Put the cursor on a CC value and press
+**Ctrl+V** to mark it (amber), then mark a second value in the same column
+(Ctrl+V on a marked value unmarks it; unzoomed, a cell's first value is
+marked, at 1/64 zoom the step under the cursor). **Ctrl+A** opens the curve
+dialog: **Linear** (the default), **Logarithmic** (rises fast, then settles),
+**Exponential** (starts slow, then speeds up), **S-curve** (eases in and out)
+or **Inverse S** (fast at both ends, flat in the middle), with a preview and
+OK/Cancel. OK ramps from the first value to the second through every 1/64
+step between them, writing a step only where the value changes, so a slow
+ramp leaves the steps in between empty and replaces what was there.
+
+While recording, every controller and pitch-bend message from the MIDI input is
+written to the armed track at the nearest 1/64 note, in the column for that
+controller. A controller the track has no column for gets a new one, shown at
+once: turning the filter cutoff knob (CC74) during a take adds a `CC74` column
+holding the movement. Later messages in the same 1/64 step replace earlier ones.
+
+A CC that is MIDI-learned to a parameter of the track's instrument drives that
+parameter during playback, exactly as the knob did while recording; the learn
+binding of the track's own MIDI channel wins, else the first channel binding
+that CC to that instrument. Other controllers go to the plugin as MIDI.
+
+The host translates those controllers using the plugin's `IMidiMapping` assignments
 for event bus 0 and the track's MIDI channel. Assignments are cached at load time;
 unmapped controllers and custom `name:min:max` slots are not sent. Plugins without
 MIDI mappings cannot receive these controls yet. Parameter queues are bounded and

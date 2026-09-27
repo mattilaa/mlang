@@ -61,6 +61,11 @@ pub struct AudioSystem {
     var registered_clips: list<RegisteredClip>;
     /// Transport last handed to `output` for tempo-synced plugins.
     var transport_output: i64; var transport_bpm: i32; var transport_playing: bool;
+    /// Sequencer timing: while `scheduling`, tick `schedule_tick` sounds on
+    /// audio frame `schedule_frame` at `schedule_bpm`, so notes carry the
+    /// exact frame they belong to however late the UI posts them.
+    var scheduling: bool; var schedule_output: i64; var schedule_tick: i64;
+    var schedule_frame: i64; var schedule_bpm: i32; var schedule_rate: i64;
 };
 impl AudioSystem {
     pub fn adopt(self: &mut Self, source: &AudioSystem) -> void {
@@ -260,6 +265,31 @@ impl AudioSystem {
         if self.output.transport(f64(bpm), beat, playing) != 0 { return; }
         self.transport_output = self.output.handle; self.transport_bpm = bpm; self.transport_playing = playing;
     }
+    /// Keep sequencer ticks mapped to audio frames while the transport runs on
+    /// a hardware output. `tick` is the transport position now. The mapping
+    /// starts over on start, a tempo change or a new device, and whenever the
+    /// UI clock and the audio clock drift apart by more than two buffers.
+    pub fn schedule_transport(self: &mut Self, tick: i64, bpm: i32, playing: bool) -> void {
+        if !playing || bpm <= 0 || self.output.handle == 0 || !self.output.hardware_output() { self.scheduling = false; return; }
+        let rate: i64 = self.output.sample_rate(); let buffer: i64 = self.output.buffer_frames();
+        if rate <= 0 { self.scheduling = false; return; }
+        // Posted now, an event is heard from the next buffer on.
+        let now_frame: i64 = self.output.frame_clock() + buffer;
+        if self.scheduling && self.schedule_output == self.output.handle && self.schedule_bpm == bpm && self.schedule_rate == rate {
+            let drift: i64 = self.frame_of(tick) - now_frame;
+            let limit: i64 = 2 * buffer + rate / 100;
+            if drift >= -limit && drift <= limit { return; }
+        }
+        self.scheduling = true; self.schedule_output = self.output.handle; self.schedule_bpm = bpm;
+        self.schedule_rate = rate; self.schedule_tick = tick; self.schedule_frame = now_frame;
+    }
+    /// Audio frame a sequencer tick sounds on (15000 ticks per sixteenth).
+    pub fn frame_of(self: AudioSystem, tick: i64) -> i64 {
+        return self.schedule_frame + (tick - self.schedule_tick) * self.schedule_rate / (wide(self.schedule_bpm) * 1000);
+    }
+    /// How far ahead of the transport sequencer events may be posted: 60 ms
+    /// while notes are frame-stamped, none otherwise (they would sound early).
+    pub fn lookahead_ticks(self: AudioSystem, bpm: i32) -> i64 { return self.scheduling ? 60 * wide(bpm) : 0; }
     /// Short decaying clicks use the existing realtime PCM mixer, outside track routing.
     pub fn metronome(self: &mut Self, accent: bool) -> void {
         if self.output.handle == 0 { return; }
@@ -549,8 +579,13 @@ impl AudioSystem {
             var kind: AudioEventKind = event.on == 1 ? AudioEventKind::NoteOn : AudioEventKind::NoteOff;
             if event.instrument != 0 { kind = event.on == 1 ? AudioEventKind::InstrumentNoteOn : AudioEventKind::InstrumentNoteOff; }
             if event.on == 2 { kind = event.instrument == 0 ? AudioEventKind::ControlChange : AudioEventKind::InstrumentControlChange; }
+            // The sequencer has lane 2 to itself, so a note stamped ahead
+            // never holds back clips, clicks or live input.
+            var frame: i64 = self.scheduling ? self.frame_of(event.tick) : -1;
+            if self.scheduling && frame < 0 { frame = 0; }
             self.output.post(AudioEvent { kind: kind, sample: event.instrument > 0 ? event.instrument : 0,
-                midi: AudioMidiEvent { channel: event.track % 16, note: event.note, velocity: event.velocity }, source: event.track }, 0);
+                midi: AudioMidiEvent { channel: event.track % 16, note: event.note, velocity: event.velocity }, source: event.track,
+                frame: frame }, 2);
         }
     }
     pub fn add_insert(self: &mut Self, path: str8, id: i32) -> i32 {

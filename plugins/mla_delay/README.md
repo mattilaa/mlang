@@ -83,6 +83,21 @@ Parameters persist through `.mlack` sessions and plugin state/presets.
 not provide it. Mlacker sends its sequencer BPM. Synced delay is clamped
 to 1–5000 ms. A dotted eighth note is `0.75` beats.
 
+To sync to the sequencer in mlacker, set **Tempo Source** to `2` (Host), then
+set **Beats**. The echo follows the BPM, including tempo changes while
+playing. mlacker's generic editor shows Beats as normalized `0..1`, i.e.
+`(beats − 0.0625) / 15.9375`:
+
+| Note | Beats | mlacker value |
+|---|---|---|
+| 1/16 | 0.25 | 0.0118 |
+| 1/8 | 0.5 | 0.0275 |
+| dotted 1/8 | 0.75 | 0.0431 |
+| 1/4 | 1 | 0.0588 |
+| dotted 1/4 | 1.5 | 0.0902 |
+| 1/2 | 2 | 0.1216 |
+| 1 bar (4/4) | 4 | 0.2471 |
+
 **Filter** types are None plus the eight `dsp::multimode` models of
 [Mla Filter](../mla_filter/README.md), in the same order: 1 Lowpass 12,
 2 Lowpass 24, 3 Highpass 12, 4 Highpass 24, 5 Bandpass 12, 6 Bandpass 24,
@@ -120,6 +135,10 @@ python3 plugins/mla_delay/tests/mlacker_editor_smoke.py \
   mlacker/build/cmake/bin/mlacker \
   plugins/mla_delay/build/cmake/VST3/Release/MlaDelay.vst3
 ```
+
+mlacker's `vst3_host` test also loads this bundle, when it has been built, as
+an aux effect with Tempo Source Host and checks that a one-beat echo lands
+500 ms after an impulse at 120 BPM and 250 ms after it at 240 BPM.
 
 Processor coverage includes impulse timing, ping-pong routing, instance isolation,
 multimode repeat filtering for every type,

@@ -1,4 +1,4 @@
-# MLACK session format 1.0
+# MLACK session format 1.1
 
 Extension: `.mlack`. A self-contained binary document for the editor's committed
 state. No compression, executable code, or live pointers are stored. Plugin paths
@@ -15,7 +15,8 @@ are accepted. Unsupported major or minor versions fail closed.
 
 ## Document order
 
-1. String `MLACK`, integer major `1`, integer minor `0`.
+1. String `MLACK`, integer major `1`, integer minor `1`. Minor `0` documents
+   are still read; they differ only in the track automation record below.
 2. View record, in order:
    - BPM, beats per bar, beat unit, transport row, fractional phase (0–14999).
    - Focused pane; sidebar mode (0 Patterns, 1 Song, 2 Audio, 3 Instruments).
@@ -41,7 +42,14 @@ are accepted. Unsupported major or minor versions fail closed.
      horizontal/vertical scrollbar flags; alternate-track text flag.
    - Track list. Each track: name, mute, volume, pan, audio flag, instrument flag,
      assigned instrument slot, note-line count, waveform zoom, zoom stage;
-     CC1 name/min/max; CC2 name/min/max; audio-instance list.
+     automation slots; audio-instance list.
+   - Automation slots: a count (0–16), then per slot its parameter string
+     (`cc:N`, `pitchbend` or `name:min:max`), minimum and maximum. Each slot is
+     one column after the track's note lines. A minor-0 document has no count
+     and always stores exactly two slots.
+   - An automation cell is empty, one integer played on its row, or four
+     space-separated 1/64-note steps where `.` is an empty step (`12 . 31 40`).
+     Values must lie within the slot's limits.
    - Each audio instance: zero-based sample-list index, starting row, length ticks
      (0 means natural sample length). 15000 ticks represent one sixteenth note.
    - Row list. Each row is a string list containing all cells, including hidden

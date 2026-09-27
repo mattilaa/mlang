@@ -230,7 +230,7 @@ def main():
         read_frame(1, table_text=((34, 4), "42"))
         # CC cells reject text and remain editable until corrected.
         os.write(master, b"lll\r\x15qhjk\r")
-        assert b"Invalid type" in read_frame(1)
+        assert b"four 1/64 steps" in read_frame(1)
         os.write(master, b"\x1564\r")
         read_frame(1, table_text=((51, 4), "64"))
         os.write(master, b"hhhh")
@@ -251,7 +251,7 @@ def main():
         read_frame(1)
         # dd in an inline editor is text, not a row command.
         os.write(master, b"llll\r\x15dd\r")
-        assert b"Invalid type" in read_frame(1)
+        assert b"four 1/64 steps" in read_frame(1)
         os.write(master, b"\x1b")
         read_frame(1)
         os.write(master, b"hhhh")
@@ -306,14 +306,24 @@ def main():
             pass
         track_menu(b"jjjjj\r")
         assert b"[M]" in read_frame(1)
+        # Automation: add a CC column, reassign it, then remove it again.
         track_menu(b"jjjjjjjj\r\r")
-        assert b"Configure CC1" in read_frame(None)
-        os.write(master, b"\x15pitchbend\r")
-        assert b"CC1=pitchbend" in read_frame(1)
+        assert b"Add CC column" in read_frame(None)
+        os.write(master, b"\x15cc:74\r")
+        assert b"CC: cc:1 cc:74" in read_frame(1)
         track_menu(b"jjjjjjjj\rj\r")
-        assert b"Configure CC2" in read_frame(None)
+        assert b"Configure CC column" in read_frame(None)
         os.write(master, b"\x15cutoff:0:1000\r")
-        assert b"CC2=cutoff:0:1000" in read_frame(1)
+        assert b"CC: cc:1 cutoff:0:1000" in read_frame(1)
+        track_menu(b"jjjjjjjj\rjj\r")
+        assert b"Remove the selected CC column" in read_frame(None)
+        os.write(master, b"\r")
+        read_frame(None)
+        while True:
+            frame = read_until(b"\x1b[0m")
+            if b"Remove the selected CC column" not in frame:
+                break
+        assert b"CC: cc:1" in frame and b"cutoff" not in frame
         track_menu(b"")
         os.write(master, b"j\r")
         assert b"[AUDIO]" in read_frame(1)
