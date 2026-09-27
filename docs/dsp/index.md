@@ -15,12 +15,13 @@ Submodules:
 - [dsp::gated_reverb](gated_reverb.md)
 - [dsp::limiter](limiter.md)
 - [dsp::multimode](multimode.md)
+- [dsp::punch_limiter](punch_limiter.md)
 - [dsp::reverb](reverb.md)
 - [dsp::reverb2](reverb2.md)
 - [dsp::stutter](stutter.md)
 
 Import specific DSP modules such as `dsp::chorus`, `dsp::convolution`, `dsp::filter`,
-`dsp::distortion`, `dsp::envelope`, `dsp::delay`, `dsp::fft`, `dsp::gated_reverb`, `dsp::limiter`, `dsp::multimode`, `dsp::reverb`,
+`dsp::distortion`, `dsp::envelope`, `dsp::delay`, `dsp::fft`, `dsp::gated_reverb`, `dsp::limiter`, `dsp::multimode`, `dsp::punch_limiter`, `dsp::reverb`,
 `dsp::reverb2`, and `dsp::stutter` in application code. This library is installed and discovered
 separately from the `std` namespace.
 
