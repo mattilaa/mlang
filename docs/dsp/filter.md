@@ -30,7 +30,7 @@ Equalizer sections (RBJ cookbook shapes, gain clamped to `±48 dB`):
 - `set_high_shelf(corner_hz, gain_db, q, sample_rate_hz)` — `q = 0.7071` is the
   steepest shelf without overshoot; larger values add a bump at the corner.
 
-`mlacker/plugins/mla_eq` builds a 4/8-band parametric EQ from these sections.
+The Mla EQ plugin in [mlacker](https://github.com/mattilaa/mlacker) (`plugins/mla_eq`) builds a 4/8-band parametric EQ from these sections.
 
 Cutoff is clamped to `1 Hz .. 0.495 * sample_rate` and resonance to
 `0 .. 36 dB` before coefficient calculation.

@@ -7,19 +7,24 @@ Module file: `modules/dsp/mod.mla`
 Digital signal processing namespace root.
 
 Submodules:
+- [dsp::chorus](https://github.com/mattilaa/mlang/blob/main/docs/dsp/chorus.md)
 - [dsp::convolution](DSP-Convolution)
 - [dsp::filter](DSP-Filter)
 - [dsp::distortion](https://github.com/mattilaa/mlang/blob/main/docs/dsp/distortion.md)
 - [dsp::envelope](DSP-Envelope)
 - [dsp::delay](https://github.com/mattilaa/mlang/blob/main/docs/dsp/delay.md)
 - [dsp::fft](DSP-FFT)
+- [dsp::gated_reverb](https://github.com/mattilaa/mlang/blob/main/docs/dsp/gated_reverb.md)
 - [dsp::limiter](DSP-Limiter)
+- [dsp::multimode](https://github.com/mattilaa/mlang/blob/main/docs/dsp/multimode.md)
+- [dsp::punch_limiter](https://github.com/mattilaa/mlang/blob/main/docs/dsp/punch_limiter.md)
 - [dsp::reverb](DSP-Reverb)
 - [dsp::reverb2](DSP-Reverb2)
+- [dsp::stutter](https://github.com/mattilaa/mlang/blob/main/docs/dsp/stutter.md)
 
-Import specific DSP modules such as [`dsp::convolution`](DSP-Convolution), [`dsp::filter`](DSP-Filter),
-[`dsp::distortion`](DSP), [`dsp::envelope`](DSP-Envelope), [`dsp::delay`](DSP), [`dsp::fft`](DSP-FFT), [`dsp::limiter`](DSP-Limiter), [`dsp::reverb`](DSP-Reverb), and
-[`dsp::reverb2`](DSP-Reverb2) in application code. This library is installed and discovered
+Import specific DSP modules such as [`dsp::chorus`](DSP), [`dsp::convolution`](DSP-Convolution), [`dsp::filter`](DSP-Filter),
+[`dsp::distortion`](DSP), [`dsp::envelope`](DSP-Envelope), [`dsp::delay`](DSP), [`dsp::fft`](DSP-FFT), [`dsp::gated_reverb`](DSP), [`dsp::limiter`](DSP-Limiter), [`dsp::multimode`](DSP), [`dsp::punch_limiter`](DSP), [`dsp::reverb`](DSP-Reverb),
+[`dsp::reverb2`](DSP-Reverb2), and [`dsp::stutter`](DSP) in application code. This library is installed and discovered
 separately from the `std` namespace.
 
 The compiler searches the repository's `modules/` directory in source builds,

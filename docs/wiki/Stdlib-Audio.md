@@ -43,6 +43,16 @@ when source and output rates differ. `PlaySample` starts a registered sample;
 0–1. `process(block, frames)` runs the same renderer into a preallocated PcmBlock
 while stopped, for offline processing and tests.
 
+`preview(samples, channels, rate)` auditions interleaved PCM on the master bus,
+outside every track, for example to play a file under a file-browser cursor. It
+starts from the beginning and replaces any preview already playing.
+`stop_preview()` silences it, and `preview_playing()` reports whether one is
+loaded and has not reached its end. Previews use no sample slot. Call them from
+a control thread, while the device runs or is stopped. A replaced clip is freed
+once the render thread confirms the swap, so `preview` may wait up to one
+callback (at most about 250 ms). Voices and previews both go through the master
+gain.
+
 Overflow increments `dropped_events()` and requests a panic rather than risking
 stuck notes. `panic()` atomically requests clearing voices and both event queues
 at the next callback. Stop/join producers before `close()`; handle copies are
@@ -61,8 +71,8 @@ render blocks, and `hardware_output()` distinguishes AUHAL and offline handles.
 The application-owned host registers an `mlang_audio_processor_factory` through
 `stdlib/include/mlang_audio_processor.h` before creating controllers. It supplies
 preallocated native begin/note/process callbacks, plus control-thread name and
-destruction callbacks. The runtime keeps SDK dependencies out of stdlib. mlacker
-installs a VST3 implementation; the original widget demo installs none. Master
+destruction callbacks. The runtime keeps SDK dependencies out of stdlib.
+[mlacker](https://github.com/mattilaa/mlacker) installs a VST3 implementation. Master
 gain/clipping is applied after the processor, and instruments suppress the
 reference sine voices while preserving the PCM mix. Failure silences the block
 and increments an atomic counter. Hosting plugins does not guarantee that
@@ -112,6 +122,45 @@ use separate source IDs from sequencer voices. No UI round trip is required.
 post-master, post-gain/clipping peak since the previous read, scaled 0–1000.
 One UI consumer should read at meter refresh cadence, then apply display decay.
 Stopping output clears pending peaks. These APIs also work with offline output.
+
+### Master bus and spectrum analyzer
+
+The master bus is the last stage before the device: after the aux returns and
+the optional master processor, the output runs through a 24 dB/oct high-pass,
+four peaking EQ bands and a volume, then the fixed master gain and clipping.
+Every setting defaults to transparent (high-pass off, flat bands, unity volume)
+and can change while audio runs: the render thread glides to new values over
+about 30 ms, with frequencies moving in log space.
+
+- `master_high_pass(hz)`: cutoff 5–40000 Hz, or 0 to switch it off.
+- `master_band(band, hz, gain_db, q)`: band 0–3, centre 5–40000 Hz, gain
+  −24…24 dB (0 bypasses the band), Q 0.1–18.
+- `master_volume(gain)`: linear 0–4, where 1 is unity.
+- `master_eq_enabled(on)`: switch the high-pass and bands in or out (default
+  in), crossfading over about 20 ms. Volume and the analyzer follow either way.
+- `master_changes()`: how many settings have been published; 0 on a fresh
+  controller, so an application can tell when it must apply its bus again.
+
+The final output, the same signal `master_peak` measures, is also written to a
+mono ring for analysis. A single UI consumer calls `spectrum_capture(size)` to
+Hann-window and FFT the newest `size` samples (power of two, 256–8192; returns
+the bin count), then `spectrum_level(low_hz, high_hz)` for the loudest level
+in dBFS between two frequencies. A span narrower than one bin interpolates
+between the neighbouring bins, so log-spaced display columns stay smooth.
+
+### Sequencer transport
+
+`transport(tempo, beat, playing)` tells tempo-synced processors where the
+song is: tempo 20–999 BPM (0 clears it), `beat` in quarter notes from the song
+start, or negative to keep the running position (for a tempo change or a
+stop). It returns 0, or -1 for an out-of-range value, and is safe to call
+while audio runs. The render thread adopts it at the next block and advances
+the beat itself while playing, so an application sends it only on start,
+stop, relocation and tempo changes. Before each block, every loaded processor
+with the optional `transport` callback of `mlang_audio_processor` receives the
+tempo, the block's first beat and the playing flag; mlacker's VST3 host turns
+that into the `ProcessContext` tempo, `projectTimeMusic` and `kPlaying`
+fields. `transport_beat()` reads the position after the latest block.
 
 Common audio output and duplex processing helpers:
 - macOS uses CoreAudio Audio Queue input/output.

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-`mlang` is the compiler for the MLang language (`.mla` files), plus its stdlib, package manager, formatter, LSP servers, and a few audio apps written in the language itself. The full README (`README.md`, ~115KB) and `docs/` are the detailed reference; the GitHub wiki under `docs/wiki/` is generated from `docs/` by `scripts/generate_github_wiki.py`, so edit `docs/`, not the wiki copies.
+`mlang` is the compiler for the MLang language (`.mla` files), plus its stdlib, package manager, formatter, and LSP servers. The full README (`README.md`, ~115KB) and `docs/` are the detailed reference; the GitHub wiki under `docs/wiki/` is generated from `docs/` by `scripts/generate_github_wiki.py`, so edit `docs/`, not the wiki copies.
 
 ## Build
 
@@ -56,12 +56,10 @@ Other layers (all need `-DBUILD_TESTS=ON`, the CMake default):
 
 **Tools** (`tools/`): `mlang_config.cpp` and `tools/mlang_lsp_cpp` (legacy C++ `mlangd`) are CMake-built; `mlangd-mla`, `mlang-format-mla`, `mlang-frontend-mla`, `mlang-pkg-mla`, `mlangpkg` are written in MLang. `mlang pkg` is the package manager (implementation in `src/package_manager.cpp`; `MLANG_PKG_IMPL` selects the MLang frontend vs the C++ one). Projects are described by `mlang.toml` with `[[task]]` blocks (`depends_on`, `commands`, `sign`); `bootstrap/mlang.toml` is the canonical example.
 
-**Apps on top of the toolchain**, each a standalone `mlang.toml` project built with `build/mlang pkg --config <dir>/mlang.toml build` (they need `build/libmlang_std.a` first, and fetch the pinned VST3 SDK):
-- `mlacker/` — terminal tracker (AUHAL output, VST3 host, `.mlack` sessions); its UI/model code lives in `mlacker/modules/mlacker_ui` (imported as `mlacker_ui::*`), with MLang unit tests in `mlacker/tests/*.mla` (`build/mlang pkg --config mlacker/mlang.toml run unit-test`). Run: `build/mlang pkg --config mlacker/mlang.toml run run`.
-- `mlacker/plugins/mla_verb`, `mlacker/plugins/mla_distortion`, `mlacker/plugins/mla_delay`, `mlacker/plugins/mla_eq`, `mlacker/plugins/mla_filter`, `mlacker/plugins/mla_stutter`, `mlacker/plugins/mla_juno_chorus`, `mlacker/plugins/mla_gated_verb`, `mlacker/plugins/mla_limiter` — VST3 effects: DSP in MLang (`modules/dsp/*`), thin C++ `plugin.cpp` wrapper. Output bundle lands in `<plugin>/build/cmake/VST3/`.
+**mlacker** (the terminal tracker, its VST3 host and the Mla VST3 plugins) is developed in its own repository, https://github.com/mattilaa/mlacker. It builds against an MLang checkout and uses `modules/tui`, `modules/dsp`, `std::audio` and the headers in `stdlib/include` (`mlang_audio_processor.h`, `mla_sampler_protocol.h`), so changes to those affect it.
 
 ## Conventions
 
 - MLang code is formatted with `mlang-format` using `.mlang-format` (Rust-style, 4-space indent, 100 cols, no forced trailing newline); C++ uses `.clang-format`.
-- `build/`, `*_commands.json`, `*bin`, `*.out`, and `*html`/`*xml` are gitignored. `mlang.lock` files are committed for `mlacker/` (the plugins' are currently untracked). Stray binaries in the repo root (`a.out`, `mlang_*_bin`) and `.vst3` bundles are build artifacts, not sources.
+- `build/`, `*_commands.json`, `*bin`, `*.out`, and `*html`/`*xml` are gitignored. Stray binaries in the repo root (`a.out`, `mlang_*_bin`) and `.vst3` bundles are build artifacts, not sources.
 - CMake auto-increments a build number on every configure (`MLANG_AUTO_INCREMENT_BUILD`); CI overrides it with `-DMLANG_VERSION_BUILD`.

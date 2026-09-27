@@ -4,7 +4,8 @@
 // Mla Drum has no editor, so pads are filled through IMessage notifications
 // sent to the *component's* IConnectionPoint. Any host may send these; mlacker
 // uses them to load drum pads from disk or from its own sample pool.
-// Implemented by mlacker/plugins/mla_drum; sent by mlacker/src/vst3_host.cpp.
+// Implemented by plugins/mla_drum and sent by src/vst3_host.cpp in mlacker
+// (https://github.com/mattilaa/mlacker).
 //
 // All messages carry an integer "pad" attribute (0-based). Strings are UTF-8
 // sent with setBinary (no terminator). On failure the plug-in returns

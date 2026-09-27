@@ -69,8 +69,8 @@ render blocks, and `hardware_output()` distinguishes AUHAL and offline handles.
 The application-owned host registers an `mlang_audio_processor_factory` through
 `stdlib/include/mlang_audio_processor.h` before creating controllers. It supplies
 preallocated native begin/note/process callbacks, plus control-thread name and
-destruction callbacks. The runtime keeps SDK dependencies out of stdlib. mlacker
-installs a VST3 implementation; the original widget demo installs none. Master
+destruction callbacks. The runtime keeps SDK dependencies out of stdlib.
+[mlacker](https://github.com/mattilaa/mlacker) installs a VST3 implementation. Master
 gain/clipping is applied after the processor, and instruments suppress the
 reference sine voices while preserving the PCM mix. Failure silences the block
 and increments an atomic counter. Hosting plugins does not guarantee that

@@ -4,8 +4,8 @@ MLang - Programming Language
 
 For more documentation, visit the [MLang GitHub Wiki](https://github.com/mattilaa/mlang/wiki).
 
-The terminal tracker application is now [mlacker](mlacker/README.md), a separate
-`mlang.toml` project with AUHAL output and VST3 master-plugin hosting.
+The terminal tracker [mlacker](https://github.com/mattilaa/mlacker) (AUHAL output, VST3 hosting and the Mla
+VST3 plugins) is now developed in its own repository: <https://github.com/mattilaa/mlacker>.
 
 ## Table Of Contents
 
