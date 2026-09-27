@@ -30,6 +30,20 @@ def main():
             frame = tui.send(F1 + b"lllllll" + b"jj\r")  # Effect > Edit effect plugin.
             assert b"0.25" in frame, frame[-5000:]
             tui.send(b"\x1b")
+            # Ctrl+J moves the effect down the chain (legacy LF, then kitty):
+            # slot 3 holds it and slot 1 is empty. Ctrl+K moves it back up.
+            tui.send(b"\n")
+            tui.send(b"\x1b[106;5u")
+            assert b"VST3 editor:" in tui.send(b"\r")
+            tui.send(b"\x1b")
+            tui.send(b"kk")
+            assert b"Load VST3 insert effect" in tui.send(b"\r")
+            tui.send(b"\x1b")
+            tui.send(b"jj")
+            tui.send(b"\x0b")
+            tui.send(b"\x1b[107;5u")
+            assert b"VST3 editor:" in tui.send(b"\r")
+            tui.send(b"\x1b")
             tui.send(b"j\r")
             tui.send(b"\x15" + os.fsencode(os.path.abspath(sys.argv[2])) + b"\r", .8)
             tui.send(b"k")

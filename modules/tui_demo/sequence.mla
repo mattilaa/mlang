@@ -333,6 +333,19 @@ pub fn insert_labels(self: &mut Self, output: AudioController) -> void {
     }
     self.groups = groups;
 }
+/// Moves the selected insert one slot down (1) or up (-1), swapping it with
+/// whatever that slot holds; the selection follows it. Tracks sharing the
+/// instrument share the chain, so they change too.
+pub fn move_insert(self: &mut Self, delta: i32) -> bool {
+    let index: i32 = self.active_track();
+    let from: i32 = self.selected_group_detail; let to: i32 = from + delta;
+    if index < 0 || from < 0 || from > 3 || to < 0 || to > 3 { return false; }
+    let track: SequenceTrack = self.tracks[index];
+    let moving: i32 = track.insert_id(from); let other: i32 = track.insert_id(to);
+    if moving == 0 { return false; }
+    self.set_insert(index, to, moving); self.set_insert(index, from, other);
+    self.selected_group_detail = to; return true;
+}
 /// Returns 115=load/edit, 116=remove. Insert mode never edits pattern cells.
 pub fn insert_event(self: &mut Self, event: InputEvent, area: Rect) -> i32 {
     if event.code == 102 && event.modifiers == 1 {
@@ -341,6 +354,10 @@ pub fn insert_event(self: &mut Self, event: InputEvent, area: Rect) -> i32 {
         self.visual = false; self.delete_pending = false; self.reconcile(area); return 0;
     }
     if self.group_detail_rows == 0 { return 0; }
+    // Ctrl+J/K reorder the chain: kitty/CSI-u spell them as modified j/k, legacy
+    // terminals as the raw bytes LF (10, Enter is CR) and VT (11).
+    if (event.modifiers == 5 && event.code == 106) || (event.raw_byte && event.code == 10) { self.move_insert(1); return 0; }
+    if (event.modifiers == 5 && event.code == 107) || (event.raw_byte && event.code == 11) { self.move_insert(-1); return 0; }
     if event.kind == InputKind::Menu {
         if event.key == Key::Left || event.key == Key::Right { self.mixer_event(event, area); }
         if event.key == Key::Up && self.selected_group_detail > 0 { self.selected_group_detail = self.selected_group_detail - 1; }

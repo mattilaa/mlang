@@ -668,6 +668,9 @@ selects one of its four slots. Enter browses for a VST3 audio effect in an empty
 slot, or opens the existing effect's parameter editor. **Effect → Edit effect
 plugin** also edits the selected insert. Backspace removes the slot's assignment;
 `f` returns to normal pattern navigation. Loaded plugin names appear in the slots.
+`Ctrl+J` / `Ctrl+K` move the selected effect one slot down or up the chain. If
+that slot already holds an effect, the two swap places. The selection follows
+the moved effect, and the audio chain changes at once, including while playing.
 
 Inserts process serially from top to bottom, before channel volume and aux sends.
 They work on sample tracks, MIDI preview audio, and VST instrument outputs.

@@ -120,6 +120,34 @@ fn tui_aux_send_pattern_independence() {
 }
 
 #[test]
+fn tui_pattern_insert_ctrl_jk_moves_effects() {
+    var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 16);
+    table.insert_event(decode_input("f"), area);
+    table.set_insert(0, 0, 5); table.set_insert(0, 2, 9);
+    // Ctrl+J (kitty) moves slot 1 into the empty slot 2.
+    table.insert_event(decode_input("\x1b[106;5u"), area);
+    var track: SequenceTrack = table.tracks[0];
+    verify(track.insert_id(0) == 0 && track.insert_id(1) == 5 && table.selected_group_detail == 1);
+    // Ctrl+J as raw LF swaps it with the effect in slot 3.
+    table.insert_event(decode_input("\n"), area);
+    track = table.tracks[0];
+    verify(track.insert_id(1) == 9 && track.insert_id(2) == 5 && table.selected_group_detail == 2);
+    // Ctrl+K (raw VT, then kitty) moves it back up to the top.
+    table.insert_event(decode_input("\x0b"), area);
+    table.insert_event(decode_input("\x1b[107;5u"), area);
+    track = table.tracks[0];
+    verify(track.insert_id(0) == 5 && track.insert_id(1) == 0 && track.insert_id(2) == 9 && table.selected_group_detail == 0);
+    // No move past the ends, and an empty slot stays put.
+    table.insert_event(decode_input("\x1b[107;5u"), area);
+    verify(table.selected_group_detail == 0);
+    table.insert_event(decode_input("j"), area);
+    table.insert_event(decode_input("\x1b[106;5u"), area);
+    track = table.tracks[0];
+    verify(table.selected_group_detail == 1 && track.insert_id(1) == 0 && track.insert_id(2) == 9);
+    table.release();
+}
+
+#[test]
 fn tui_pattern_insert_header() {
     var table: SequenceTable = SequenceTable::new(); let area: Rect = Rect::new(0, 0, 80, 16);
     let row: i32 = table.selected_row;
