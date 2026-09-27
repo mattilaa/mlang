@@ -6244,6 +6244,39 @@ Pkg Resolves Transitive Path Packages And Semantic Versions
     Should Not Be Equal As Integers    ${rejected.rc}    0
     Should Contain    ${rejected.stderr}    out of date for transitive dependency 'math'
 
+Pkg Init Creates Readme And Help Prints Build Instructions
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_init_readme
+    ${without_readme}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_init_no_readme
+    ${setup}=    Run Process    /bin/sh    -lc    rm -rf '${base}' '${without_readme}' && mkdir -p '${base}' '${without_readme}'
+    Should Be Equal As Integers    ${setup.rc}    0
+
+    ${init}=    Run Process    ${MLANG}    pkg    init
+    ...    cwd=${base}    env:MLANG_PKG_IMPL=cpp
+    Should Be Equal As Integers    ${init.rc}    0
+    File Should Exist    ${base}/README.md
+    ${readme}=    Get File    ${base}/README.md
+    Should Contain    ${readme}    \# pkg_init_readme
+    Should Contain    ${readme}    \# Build and run
+
+    ${build_help}=    Run Process    ${MLANG}    pkg    help    build
+    ...    cwd=${base}    env:MLANG_PKG_IMPL=cpp
+    Should Be Equal As Integers    ${build_help.rc}    0
+    Should Contain    ${build_help.stdout}    \# Build and run
+    ${run_help}=    Run Process    ${MLANG}    pkg    help    run
+    ...    cwd=${base}    env:MLANG_PKG_IMPL=cpp
+    Should Be Equal As Integers    ${run_help.rc}    0
+    Should Be Equal    ${run_help.stdout}    ${build_help.stdout}
+
+    ${no_readme_init}=    Run Process    ${MLANG}    pkg    init    --no-readme
+    ...    cwd=${without_readme}    env:MLANG_PKG_IMPL=cpp
+    Should Be Equal As Integers    ${no_readme_init.rc}    0
+    File Should Not Exist    ${without_readme}/README.md
+    ${missing_help}=    Run Process    ${MLANG}    pkg    help    build
+    ...    cwd=${without_readme}    env:MLANG_PKG_IMPL=cpp
+    Should Not Be Equal As Integers    ${missing_help.rc}    0
+    Should Contain    ${missing_help.stderr}    Create one with
+    Should Contain    ${missing_help.stderr}    \# Build and run
+
 Pkg Supports Profiles Features Selection Cache And Vendoring
     [Tags]    github-actions-skip
     [Documentation]    Verify build profiles, optional feature dependencies,

@@ -21,7 +21,7 @@
 ///   after the subcommand and its arguments.
 ///
 /// \section subcommands Subcommands
-/// - \b init — Scaffold a new `mlang.toml` (and `src/main.mla` stub).
+/// - \b init — Scaffold a new project, including `README.md` by default.
 /// - \b add — Append a dependency entry (git, tag/rev, pkg-config, system).
 /// - \b fetch — Fetch Git dependencies into the deps directory.
 /// - \b build — Compile the package (delegates to the C++ backend for
@@ -105,7 +105,8 @@ fn print_usage() -> void {
     println!("                          (delegated to the C++ backend)");
     println!("");
     println!("Subcommands:");
-    println!("  init                  Scaffold mlang.toml and src/main.mla");
+    println!("  init [--no-readme]    Scaffold mlang.toml, src/main.mla, and README.md");
+    println!("  help <build|run>      Print the README.md Build and run instructions (delegated)");
     println!("  add <name> [--git URL [--rev REV] [--tag TAG] [--submodules]]");
     println!("  add <name> --path DIR [--version REQ] (delegated to the C++ backend)");
     println!("             [--url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]]");
@@ -1352,8 +1353,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 0;
     }
 
-    if (eq(sub, "init") == 1) {
-        return run_init(manifest);
+    if (eq(sub, "init") == 1 || eq(sub, "help") == 1) {
+        return delegate_pkg_to_cpp(backend, sub, argv, idx + 1);
     }
     if (eq(sub, "add") == 1) {
         var add_i: i64 = idx + 1;
