@@ -3035,8 +3035,17 @@ fn handle_completion(payload: str8) -> str8 {
     var current_symbols: list<DocumentSymbol> = [];
     var current_text: str8 = String::new();
     if need_symbol_meta == 1 {
-        current_symbols = load_document_symbols(uri);
         current_text = text_store_get(g_text_store_handle, uri);
+        // Looking up declaration metadata reparses the document.  That is
+        // disproportionate for a completion popup in a large file; the
+        // compiler API already supplies fast lexical labels in that case.
+        if len(current_text) <= 65536 {
+            current_symbols = load_document_symbols(uri);
+        } else {
+            // Avoid a declaration-comment scan of the entire buffer for each
+            // completion item when metadata is intentionally skipped.
+            current_text = String::new();
+        }
     }
 
     var out: str8 = String::new();
@@ -3424,6 +3433,13 @@ fn handle_diagnostic(payload: str8) -> str8 {
 fn diagnostic_items_json(uri: str8) -> str8 {
     if ensure_session() != 0 { return "[]"; }
     if len(uri) == 0 { return "[]"; }
+    // Publishing parser diagnostics is synchronous with didChange.  Defer the
+    // expensive full-document pass for very large buffers so typing stays
+    // responsive; a full compiler check remains available on demand.
+    if ensure_text_store() == 0 {
+        let current_text: str8 = text_store_get(g_text_store_handle, uri);
+        if len(current_text) > 65536 { return "[]"; }
+    }
     let s: SessionRef = current_session();
     let cr: result<i32, str8> = s.syntax_diagnostic_count(uri);
     if cr.is_err() { return "[]"; }

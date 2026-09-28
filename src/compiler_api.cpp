@@ -1632,6 +1632,21 @@ static void addSemanticSymbol(DocumentSemantic& out,
         {
             return 1;
         }
+        // Parser nodes normally retain their declaration line.  Scanning the
+        // entire document for every symbol turned semantic indexing of a
+        // several-thousand-line file into O(symbols * lines), even though the
+        // supplied line is already correct.  Keep the old recovery search for
+        // nodes with a stale/generated location, but take the fast path when
+        // the declaration name is present on its recorded line.
+        if(line_no > 0 && static_cast<size_t>(line_no) <= lines.size())
+        {
+            const std::string_view recorded_line =
+                lines[static_cast<size_t>(line_no - 1)];
+            if(recorded_line.find(s.name) != std::string_view::npos)
+            {
+                return line_no;
+            }
+        }
         int best_line = -1;
         int best_depth_delta = 1 << 30;
         int best_line_delta = 1 << 30;
@@ -2453,6 +2468,58 @@ loadFilesystemSemanticDocument(const std::string& file_path)
     return buildDocumentSemanticFromAst(doc);
 }
 
+// Filesystem modules do not change when an editor sends a new version of the
+// current document.  Keep their semantic form across those versions: a large
+// import list otherwise reparses the whole transitive module graph on every
+// keystroke.  The file metadata check still refreshes modules that are edited
+// outside the active LSP session.
+static std::optional<DocumentSemantic>
+loadCachedFilesystemSemanticDocument(const std::string& file_path)
+{
+    struct CachedDocument
+    {
+        std::filesystem::file_time_type modified;
+        std::uintmax_t size = 0;
+        DocumentSemantic semantic;
+    };
+    static std::mutex cache_mutex;
+    static std::unordered_map<std::string, CachedDocument> cache;
+
+    std::error_code ec;
+    const auto modified = std::filesystem::last_write_time(file_path, ec);
+    if(ec)
+    {
+        return loadFilesystemSemanticDocument(file_path);
+    }
+    const auto size = std::filesystem::file_size(file_path, ec);
+    if(ec)
+    {
+        return loadFilesystemSemanticDocument(file_path);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        const auto it = cache.find(file_path);
+        if(it != cache.end() && it->second.modified == modified &&
+           it->second.size == size)
+        {
+            return it->second.semantic;
+        }
+    }
+
+    auto loaded = loadFilesystemSemanticDocument(file_path);
+    if(!loaded.has_value())
+    {
+        return std::nullopt;
+    }
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        cache.insert_or_assign(
+            file_path, CachedDocument{modified, size, *loaded});
+    }
+    return loaded;
+}
+
 static void
 enqueueDocModules(const DocumentSemantic& doc,
                   std::deque<std::pair<std::string, std::string>>& q)
@@ -2517,7 +2584,7 @@ static void hydrateFilesystemModulesFor(std::string_view root_uri,
             continue;
         }
 
-        const auto loaded = loadFilesystemSemanticDocument(*file_path);
+        const auto loaded = loadCachedFilesystemSemanticDocument(*file_path);
         if(!loaded.has_value() || !loaded->ast_valid)
         {
             continue;
@@ -4265,6 +4332,52 @@ static std::vector<std::string> moduleNamesFromText(std::string_view text)
     return out;
 }
 
+static std::vector<std::string>
+publicModuleSymbolsFromText(std::string_view text)
+{
+    std::set<std::string> names;
+    for(const std::string_view raw_line : splitLines(text))
+    {
+        const std::string trimmed = trimTextWs(raw_line);
+        std::string_view line = trimmed;
+        if(startsWith(line, "pub "))
+        {
+            line.remove_prefix(4);
+        }
+        else
+        {
+            continue;
+        }
+        for(const std::string_view keyword : {std::string_view("fn "),
+                                              std::string_view("struct "),
+                                              std::string_view("enum "),
+                                              std::string_view("alias ")})
+        {
+            if(!startsWith(line, keyword))
+            {
+                continue;
+            }
+            size_t begin = keyword.size();
+            while(begin < line.size() &&
+                  std::isspace(static_cast<unsigned char>(line[begin])) != 0)
+            {
+                ++begin;
+            }
+            size_t end = begin;
+            while(end < line.size() && isIdentContinue(line[end]))
+            {
+                ++end;
+            }
+            if(end > begin)
+            {
+                names.insert(std::string(line.substr(begin, end - begin)));
+            }
+            break;
+        }
+    }
+    return {names.begin(), names.end()};
+}
+
 static const std::vector<std::string>&
 builtinMemberNames(std::string_view owner)
 {
@@ -4567,7 +4680,8 @@ computeSemanticCompletions(const DocumentSemantic& current,
                 {
                     continue;
                 }
-                const auto loaded = loadFilesystemSemanticDocument(*file_path);
+                const auto loaded =
+                    loadCachedFilesystemSemanticDocument(*file_path);
                 if(!loaded.has_value())
                 {
                     continue;
@@ -4689,6 +4803,178 @@ fastBuiltinCompletionsFromText(std::string_view text, int line, int column)
         }
     }
     return out;
+}
+
+// Complete a module path without hydrating the current document's whole
+// import graph.  This covers the common `use tui::` -> `table` -> exported
+// symbol workflow in large files.
+static std::optional<std::vector<std::string>>
+fastModulePathCompletionsFromText(std::string_view uri, std::string_view text,
+                                  int line, int column)
+{
+    const auto offset = offsetFromLineColumn(text, line, column);
+    if(!offset.has_value())
+    {
+        return std::nullopt;
+    }
+    const auto qualified = qualifiedCompletionContextAtOffset(text, *offset);
+    if(!qualified.has_value() || qualified->member_access)
+    {
+        return std::nullopt;
+    }
+
+    size_t prefix_start = *offset;
+    while(prefix_start > 0 && isIdentContinue(text[prefix_start - 1]))
+    {
+        --prefix_start;
+    }
+    if(prefix_start < 2 || text[prefix_start - 1] != ':' ||
+       text[prefix_start - 2] != ':')
+    {
+        return std::nullopt;
+    }
+    size_t path_start = prefix_start - 2;
+    while(path_start > 0 &&
+          (isIdentContinue(text[path_start - 1]) || text[path_start - 1] == ':'))
+    {
+        --path_start;
+    }
+    const std::string module_name(
+        text.substr(path_start, prefix_start - 2 - path_start));
+    if(module_name.empty())
+    {
+        return std::nullopt;
+    }
+
+    const auto file_path = resolveModuleFilePath(uri, module_name);
+    std::set<std::string> candidates;
+    if(!file_path.has_value())
+    {
+        // Not every namespace has a `mod.mla`.  Projects commonly organize
+        // local modules as a plain directory such as modules/mlacker_ui/, so
+        // list its direct .mla children as the next path segment.
+        std::string relative_dir = module_name;
+        for(size_t i = 0; i + 1 < relative_dir.size(); ++i)
+        {
+            if(relative_dir[i] == ':' && relative_dir[i + 1] == ':')
+            {
+                relative_dir.replace(i, 2, "/");
+            }
+        }
+        for(const auto& root : moduleSearchPathsForUri(uri))
+        {
+            std::error_code ec;
+            const std::filesystem::path dir =
+                std::filesystem::path(root) / relative_dir;
+            if(!std::filesystem::is_directory(dir, ec))
+            {
+                continue;
+            }
+            for(const auto& entry : std::filesystem::directory_iterator(dir, ec))
+            {
+                if(ec || !entry.is_regular_file(ec) ||
+                   entry.path().extension() != ".mla")
+                {
+                    continue;
+                }
+                const std::string name = entry.path().stem().string();
+                if(name != "mod")
+                {
+                    candidates.insert(name);
+                }
+            }
+        }
+    }
+    else
+    {
+        std::ifstream in(*file_path, std::ios::binary);
+        if(!in)
+        {
+            return std::nullopt;
+        }
+        const std::string module_text((std::istreambuf_iterator<char>(in)),
+                                      std::istreambuf_iterator<char>());
+
+    const std::string child_prefix = module_name + "::";
+    for(const auto& child : moduleNamesFromText(module_text))
+    {
+        if(!startsWith(child, child_prefix))
+        {
+            continue;
+        }
+        const std::string_view remainder(child.data() + child_prefix.size(),
+                                         child.size() - child_prefix.size());
+        const size_t next_scope = remainder.find("::");
+        candidates.insert(std::string(remainder.substr(0, next_scope)));
+    }
+    // A leaf module has no child modules, so offer its public top-level
+    // declarations after a second `::`.  This deliberately scans text rather
+    // than constructing an AST: it is the latency-sensitive import path.
+    for(const auto& name : publicModuleSymbolsFromText(module_text))
+    {
+        candidates.insert(name);
+    }
+    }
+
+    std::vector<std::string> out;
+    for(const auto& candidate : candidates)
+    {
+        if(qualified->member_prefix.empty() ||
+           startsWith(candidate, qualified->member_prefix))
+        {
+            out.push_back(candidate);
+        }
+    }
+    return out;
+}
+
+// A generic completion request does not need a full AST to offer useful
+// in-document names.  In particular, parsing and hydrating every imported
+// module synchronously after each edit makes editing a large file feel stuck.
+// Keep rich semantic completion for qualified access, where it matters most,
+// while making ordinary completion in large files a single lexical pass.
+static std::optional<std::vector<std::string>>
+fastLexicalCompletionsFromText(std::string_view text, int line, int column)
+{
+    constexpr size_t kLargeDocumentThreshold = 64 * 1024;
+    if(text.size() < kLargeDocumentThreshold)
+    {
+        return std::nullopt;
+    }
+    const auto offset = offsetFromLineColumn(text, line, column);
+    if(!offset.has_value() ||
+       qualifiedCompletionContextAtOffset(text, *offset).has_value())
+    {
+        return std::nullopt;
+    }
+
+    const std::string prefix = completionPrefixAtOffset(text, *offset);
+    std::set<std::string> dedup;
+    auto consider = [&](std::string_view candidate)
+    {
+        if(prefix.empty() || startsWith(candidate, prefix))
+        {
+            dedup.insert(std::string(candidate));
+        }
+    };
+    static constexpr std::string_view kLargeDocumentKeywords[] = {
+        "fn",     "cexpr", "let",   "var", "struct", "mod", "namespace",
+        "use",    "alias", "if",    "else", "likely", "unlikely",
+        "while",  "for",   "return",
+    };
+    for(const std::string_view kw : kLargeDocumentKeywords)
+    {
+        consider(kw);
+    }
+    for(const std::string_view builtin : kBuiltinCompletionLabels)
+    {
+        consider(builtin);
+    }
+    for(const auto& ident : lexicalIdentifiersBeforeOffset(text, *offset))
+    {
+        consider(ident);
+    }
+    return std::vector<std::string>(dedup.begin(), dedup.end());
 }
 
 static const char* symbolKindName(int kind)
@@ -4914,30 +5200,38 @@ computeSyntaxDiagnostics(std::string_view text)
         push_diag(line, column, "unclosed delimiter");
     }
 
-    int parse_error_line = 1;
-    mlang::diag::begin_parser_diagnostic_capture();
-    ProgramNode* parsed = parseProgramFromText(text, &parse_error_line);
-    mlang::diag::ParserDiagnostic parser_diag =
-        mlang::diag::end_parser_diagnostic_capture();
-    if(!parsed)
+    // Full parser recovery is useful for concise documents, but it dominates
+    // the didChange path for large files.  The inexpensive checks above still
+    // immediately report unmatched delimiters and unterminated strings there.
+    constexpr size_t kParserDiagnosticLimit = 64 * 1024;
+    if(text.size() <= kParserDiagnosticLimit)
     {
-        if(parser_diag.message.empty())
+        int parse_error_line = 1;
+        mlang::diag::begin_parser_diagnostic_capture();
+        ProgramNode* parsed = parseProgramFromText(text, &parse_error_line);
+        mlang::diag::ParserDiagnostic parser_diag =
+            mlang::diag::end_parser_diagnostic_capture();
+        if(!parsed)
         {
-            parser_diag.line = parse_error_line > 0 ? parse_error_line : 1;
-            parser_diag.column = 1;
-            parser_diag.message = mlang::diag::format_message_with_code(
-                "MLANG-E1999", "syntax error");
-        }
+            if(parser_diag.message.empty())
+            {
+                parser_diag.line = parse_error_line > 0 ? parse_error_line : 1;
+                parser_diag.column = 1;
+                parser_diag.message = mlang::diag::format_message_with_code(
+                    "MLANG-E1999", "syntax error");
+            }
 
-        const bool already_reported =
-            std::any_of(out.begin(), out.end(), [&](const SyntaxDiagnostic& d) {
-                return d.line == parser_diag.line &&
-                       d.column == parser_diag.column &&
-                       d.message == parser_diag.message;
-            });
-        if(!already_reported)
-            push_diag(parser_diag.line, parser_diag.column,
-                      std::move(parser_diag.message));
+            const bool already_reported =
+                std::any_of(out.begin(), out.end(), [&](const SyntaxDiagnostic& d) {
+                    return d.line == parser_diag.line &&
+                           d.column == parser_diag.column &&
+                           d.message == parser_diag.message;
+                });
+            if(!already_reported)
+                push_diag(parser_diag.line, parser_diag.column,
+                          std::move(parser_diag.message));
+        }
+        delete parsed;
     }
     return out;
 }
@@ -5126,6 +5420,30 @@ public:
             return Status::DocumentNotFound;
         }
         if(const auto quick = fastBuiltinCompletionsFromText(
+               doc_it->second.text, line, column);
+           quick.has_value())
+        {
+            completion_cache_items_ = *quick;
+            completion_cache_generation_ = semantic_generation_;
+            completion_cache_uri_ = key;
+            completion_cache_line_ = line;
+            completion_cache_column_ = column;
+            out_items = completion_cache_items_;
+            return Status::Ok;
+        }
+        if(const auto quick = fastModulePathCompletionsFromText(
+               key, doc_it->second.text, line, column);
+           quick.has_value())
+        {
+            completion_cache_items_ = *quick;
+            completion_cache_generation_ = semantic_generation_;
+            completion_cache_uri_ = key;
+            completion_cache_line_ = line;
+            completion_cache_column_ = column;
+            out_items = completion_cache_items_;
+            return Status::Ok;
+        }
+        if(const auto quick = fastLexicalCompletionsFromText(
                doc_it->second.text, line, column);
            quick.has_value())
         {
