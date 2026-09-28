@@ -4847,19 +4847,54 @@ fastModulePathCompletionsFromText(std::string_view uri, std::string_view text,
     }
 
     const auto file_path = resolveModuleFilePath(uri, module_name);
+    std::set<std::string> candidates;
     if(!file_path.has_value())
     {
-        return std::nullopt;
+        // Not every namespace has a `mod.mla`.  Projects commonly organize
+        // local modules as a plain directory such as modules/mlacker_ui/, so
+        // list its direct .mla children as the next path segment.
+        std::string relative_dir = module_name;
+        for(size_t i = 0; i + 1 < relative_dir.size(); ++i)
+        {
+            if(relative_dir[i] == ':' && relative_dir[i + 1] == ':')
+            {
+                relative_dir.replace(i, 2, "/");
+            }
+        }
+        for(const auto& root : moduleSearchPathsForUri(uri))
+        {
+            std::error_code ec;
+            const std::filesystem::path dir =
+                std::filesystem::path(root) / relative_dir;
+            if(!std::filesystem::is_directory(dir, ec))
+            {
+                continue;
+            }
+            for(const auto& entry : std::filesystem::directory_iterator(dir, ec))
+            {
+                if(ec || !entry.is_regular_file(ec) ||
+                   entry.path().extension() != ".mla")
+                {
+                    continue;
+                }
+                const std::string name = entry.path().stem().string();
+                if(name != "mod")
+                {
+                    candidates.insert(name);
+                }
+            }
+        }
     }
-    std::ifstream in(*file_path, std::ios::binary);
-    if(!in)
+    else
     {
-        return std::nullopt;
-    }
-    const std::string module_text((std::istreambuf_iterator<char>(in)),
-                                  std::istreambuf_iterator<char>());
+        std::ifstream in(*file_path, std::ios::binary);
+        if(!in)
+        {
+            return std::nullopt;
+        }
+        const std::string module_text((std::istreambuf_iterator<char>(in)),
+                                      std::istreambuf_iterator<char>());
 
-    std::set<std::string> candidates;
     const std::string child_prefix = module_name + "::";
     for(const auto& child : moduleNamesFromText(module_text))
     {
@@ -4878,6 +4913,7 @@ fastModulePathCompletionsFromText(std::string_view uri, std::string_view text,
     for(const auto& name : publicModuleSymbolsFromText(module_text))
     {
         candidates.insert(name);
+    }
     }
 
     std::vector<std::string> out;
