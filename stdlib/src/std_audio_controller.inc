@@ -26,6 +26,218 @@ static void ac_sleep_ms(int ms) { Sleep((DWORD)ms); }
 #include <time.h>
 static void ac_sleep_ms(int ms) { struct timespec t = {0, (long)ms * 1000000L}; nanosleep(&t, NULL); }
 #endif
+/* Render worker pool. The render thread splits a stage (instruments, one level
+ * of tracks, aux returns) into jobs that only touch their own buffer and
+ * plugin, runs a share of them itself, waits for the rest, then sums the
+ * results in slot order on its own, so the mix is identical for any thread
+ * count. Workers sleep on a semaphore between blocks and never allocate,
+ * lock or call MLang while rendering. */
+#define AC_MAX_THREADS 32
+#if !defined(_WIN32)
+#include <pthread.h>
+#include <sched.h>
+#include <unistd.h>
+#endif
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+#include <mach/thread_policy.h>
+#include <os/workgroup.h>
+#include <sys/sysctl.h>
+typedef dispatch_semaphore_t ac_sem;
+static int ac_sem_init(ac_sem *s) { *s = dispatch_semaphore_create(0); return *s ? 0 : -1; }
+static void ac_sem_post(ac_sem *s) { dispatch_semaphore_signal(*s); }
+static void ac_sem_wait(ac_sem *s) { dispatch_semaphore_wait(*s, DISPATCH_TIME_FOREVER); }
+static void ac_sem_destroy(ac_sem *s) { if(*s) dispatch_release(*s); *s = NULL; }
+static uint64_t ac_now_ns(void) {
+    static mach_timebase_info_data_t base;
+    if(!base.denom) mach_timebase_info(&base);
+    return mach_absolute_time() * base.numer / base.denom;
+}
+#elif !defined(_WIN32)
+#include <semaphore.h>
+typedef sem_t ac_sem;
+static int ac_sem_init(ac_sem *s) { return sem_init(s, 0, 0); }
+static void ac_sem_post(ac_sem *s) { sem_post(s); }
+static void ac_sem_wait(ac_sem *s) { while(sem_wait(s) != 0) {} }
+static void ac_sem_destroy(ac_sem *s) { sem_destroy(s); }
+static uint64_t ac_now_ns(void) {
+    struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000u + (uint64_t)t.tv_nsec;
+}
+#endif
+#if defined(_WIN32)
+static uint64_t ac_now_ns(void) {
+    LARGE_INTEGER frequency, counter;
+    QueryPerformanceFrequency(&frequency); QueryPerformanceCounter(&counter);
+    return (uint64_t)((double)counter.QuadPart * 1e9 / (double)frequency.QuadPart);
+}
+#endif
+#if defined(__x86_64__) || defined(__i386__)
+#include <immintrin.h>
+static void ac_relax(void) { _mm_pause(); }
+#elif defined(__aarch64__)
+static void ac_relax(void) { __asm__ __volatile__("yield"); }
+#else
+static void ac_relax(void) {}
+#endif
+/* Logical cores the OS reports online. */
+static int ac_cpu_count(void) {
+#if defined(_WIN32)
+    SYSTEM_INFO info; GetSystemInfo(&info); return info.dwNumberOfProcessors > 0 ? (int)info.dwNumberOfProcessors : 1;
+#else
+    long n = sysconf(_SC_NPROCESSORS_ONLN); return n > 0 ? (int)n : 1;
+#endif
+}
+/* Global cap on threads (render thread included) per controller; 0 = every
+ * core. Read once per block, so it applies to running controllers too. */
+static _Atomic int ac_thread_limit = 0;
+typedef void (*ac_job_fn)(void *context, int job);
+typedef struct ac_pool {
+    int workers; /* spawned, excluding the render thread */
+    /* (generation << 32) | (job count << 16) | next job. Claimed by CAS, so a
+     * worker that wakes late can never run a job of a finished batch. */
+    _Atomic uint64_t cursor;
+    _Atomic uint32_t finished;
+    _Atomic int stop;
+    ac_job_fn run; void *context;
+    uint32_t generation;
+    /* Nanoseconds workers spent running jobs, for the load meter. */
+    _Atomic uint64_t worker_busy_ns;
+#if !defined(_WIN32)
+    ac_sem wake;
+    pthread_t threads[AC_MAX_THREADS];
+#endif
+#if defined(__APPLE__)
+    /* Realtime period for worker threads and the device IO workgroup they
+     * join, so the scheduler keeps them on performance cores with the
+     * AUHAL thread. Published by the control thread; joined by each worker. */
+    _Atomic uint64_t period_ns;
+    _Atomic(void *) workgroup;
+#endif
+} ac_pool;
+/* Runs claimed jobs until the batch is exhausted. Returns the count run. */
+static int ac_pool_drain(ac_pool *pool, uint32_t generation) {
+    int ran = 0;
+    for(;;) {
+        uint64_t cursor = atomic_load_explicit(&pool->cursor, memory_order_acquire);
+        uint32_t count = (uint32_t)(cursor >> 16) & 0xffffu, next = (uint32_t)cursor & 0xffffu;
+        if((uint32_t)(cursor >> 32) != generation || next >= count) return ran;
+        if(!atomic_compare_exchange_weak_explicit(&pool->cursor, &cursor, cursor + 1,
+            memory_order_acq_rel, memory_order_acquire)) continue;
+        pool->run(pool->context, (int)next);
+        atomic_fetch_add_explicit(&pool->finished, 1, memory_order_release);
+        ++ran;
+    }
+}
+#if !defined(_WIN32)
+/* Worker-owned realtime state: the period and workgroup last applied. */
+typedef struct { uint64_t period; void *workgroup_seen, *joined; } ac_worker_state;
+static void ac_worker_realtime(ac_pool *pool, ac_worker_state *state, void *token) {
+#if defined(__APPLE__)
+    uint64_t period = atomic_load_explicit(&pool->period_ns, memory_order_acquire);
+    if(period && period != state->period) {
+        static mach_timebase_info_data_t base;
+        if(!base.denom) mach_timebase_info(&base);
+        uint64_t ticks = period * base.denom / base.numer;
+        thread_time_constraint_policy_data_t policy = {(uint32_t)ticks, (uint32_t)(ticks / 2), (uint32_t)ticks, 1};
+        thread_policy_set(pthread_mach_thread_np(pthread_self()), THREAD_TIME_CONSTRAINT_POLICY,
+            (thread_policy_t)&policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+        state->period = period;
+    }
+    void *workgroup = atomic_load_explicit(&pool->workgroup, memory_order_acquire);
+    if(workgroup != state->workgroup_seen) {
+        state->workgroup_seen = workgroup;
+        if(__builtin_available(macOS 11.0, *)) {
+            if(state->joined) { os_workgroup_leave((os_workgroup_t)state->joined, token); state->joined = NULL; }
+            if(workgroup && os_workgroup_join((os_workgroup_t)workgroup, token) == 0) state->joined = workgroup;
+        }
+    }
+#else
+    (void)pool; (void)state; (void)token;
+#endif
+}
+static void *ac_worker_main(void *argument) {
+    ac_pool *pool = argument;
+    ac_worker_state state = {0};
+#if defined(__APPLE__)
+    os_workgroup_join_token_s token = {0};
+    void *token_ptr = &token;
+#else
+    void *token_ptr = NULL;
+    struct sched_param param = {0};
+    param.sched_priority = sched_get_priority_min(SCHED_FIFO) + 10;
+    (void)pthread_setschedparam(pthread_self(), SCHED_FIFO, &param); /* best effort */
+#endif
+    for(;;) {
+        ac_sem_wait(&pool->wake);
+        if(atomic_load_explicit(&pool->stop, memory_order_acquire)) break;
+        ac_worker_realtime(pool, &state, token_ptr);
+        uint32_t generation = (uint32_t)(atomic_load_explicit(&pool->cursor, memory_order_acquire) >> 32);
+        uint64_t start = ac_now_ns();
+        if(ac_pool_drain(pool, generation))
+            atomic_fetch_add_explicit(&pool->worker_busy_ns, ac_now_ns() - start, memory_order_relaxed);
+    }
+#if defined(__APPLE__)
+    if(state.joined) { if(__builtin_available(macOS 11.0, *)) os_workgroup_leave((os_workgroup_t)state.joined, &token); }
+#endif
+    return NULL;
+}
+#endif
+/* Control thread, while stopped: spawn up to cores - 1 sleeping workers. */
+static void ac_pool_ensure(ac_pool *pool) {
+#if !defined(_WIN32)
+    if(pool->workers < 0) return; /* spawning failed before; stay serial */
+    int wanted = ac_cpu_count() - 1;
+    if(wanted > AC_MAX_THREADS - 1) wanted = AC_MAX_THREADS - 1;
+    if(pool->workers >= wanted) return;
+    if(pool->workers == 0 && ac_sem_init(&pool->wake) != 0) { pool->workers = -1; return; }
+    while(pool->workers < wanted) {
+        if(pthread_create(&pool->threads[pool->workers], NULL, ac_worker_main, pool) != 0) break;
+        ++pool->workers;
+    }
+#else
+    (void)pool;
+#endif
+}
+static void ac_pool_shutdown(ac_pool *pool) {
+#if !defined(_WIN32)
+    if(pool->workers <= 0) return;
+    atomic_store_explicit(&pool->stop, 1, memory_order_release);
+    for(int i = 0; i < pool->workers; ++i) ac_sem_post(&pool->wake);
+    for(int i = 0; i < pool->workers; ++i) pthread_join(pool->threads[i], NULL);
+    ac_sem_destroy(&pool->wake);
+    pool->workers = 0;
+#else
+    (void)pool;
+#endif
+}
+/* Threads the next block may use, render thread included. */
+static int ac_pool_threads(const ac_pool *pool) {
+    int limit = atomic_load_explicit(&ac_thread_limit, memory_order_relaxed);
+    int available = (pool->workers > 0 ? pool->workers : 0) + 1;
+    return limit > 0 && limit < available ? limit : available;
+}
+/* Render thread: run jobs 0..count-1 on up to `threads` threads and return
+ * when every job has finished. One job, or one thread, runs inline. */
+static void ac_pool_run(ac_pool *pool, int threads, int count, ac_job_fn run, void *context) {
+    if(count <= 0) return;
+    if(threads <= 1 || count == 1) { for(int i = 0; i < count; ++i) run(context, i); return; }
+#if !defined(_WIN32)
+    pool->run = run; pool->context = context;
+    uint32_t generation = ++pool->generation;
+    if(generation == 0) generation = ++pool->generation; /* 0 is the idle cursor */
+    atomic_store_explicit(&pool->finished, 0, memory_order_relaxed);
+    atomic_store_explicit(&pool->cursor, ((uint64_t)generation << 32) | ((uint64_t)count << 16), memory_order_release);
+    int helpers = (threads < count ? threads : count) - 1;
+    for(int i = 0; i < helpers; ++i) ac_sem_post(&pool->wake);
+    ac_pool_drain(pool, generation);
+    while(atomic_load_explicit(&pool->finished, memory_order_acquire) < (uint32_t)count) ac_relax();
+#else
+    for(int i = 0; i < count; ++i) run(context, i);
+#endif
+}
+
 static mlang_audio_processor_factory ac_processor_factory;
 static mlang_audio_processor_factory ac_instrument_factory;
 void mlang_audio_register_instrument_factory(mlang_audio_processor_factory factory) {
@@ -89,8 +301,21 @@ typedef struct {
     float track_buffer[64][8192];
     _Atomic uint32_t sends[96][8], effect_volume[8], effect_peak[8][2];
     float effect_buffer[8][8192];
-    float instrument_buffer[8192];
+    float instrument_buffer[32][8192];
     int32_t render_offset, processor_reset;
+    /* Render-owned job table for the worker pool: the sources of the stage
+     * being run, and what each job needs. `failed` is written by the job that
+     * owns the source and read after the stage joins. */
+    ac_pool pool;
+    int job_slot[96];
+    uint8_t failed[96], effect_failed[8];
+    uint32_t job_frames;
+    uint64_t job_clock;
+    uint32_t (*job_routes)[4];
+    /* Load meter: the longest block's render time over its real duration, in
+     * permille, since the last read; threads the last block could use. */
+    _Atomic uint32_t dsp_load;
+    _Atomic uint32_t render_threads;
     _Atomic uint64_t processor_errors;
     double render_gains[4096];
     /* Control thread publishes targets and bumps the serial; the render
@@ -276,6 +501,12 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     atomic_init(&c->learn_target, 0);
     for(int i = 0; i < 2048; ++i) atomic_init(&c->learn_map[i], 0);
     atomic_init(&c->processor_errors, 0);
+    atomic_init(&c->dsp_load, 0); atomic_init(&c->render_threads, 1);
+    atomic_init(&c->pool.cursor, 0); atomic_init(&c->pool.finished, 0);
+    atomic_init(&c->pool.stop, 0); atomic_init(&c->pool.worker_busy_ns, 0);
+#if defined(__APPLE__)
+    atomic_init(&c->pool.period_ns, 0); atomic_init(&c->pool.workgroup, NULL);
+#endif
     if(!atomic_is_lock_free(&c->queues[0].read) || !atomic_is_lock_free(&c->peak)) {
         free(c); audio_set_error("audio controller: lock-free atomics unavailable"); return 0;
     }
@@ -498,6 +729,49 @@ static void ac_insert_process(ac_controller *c, const uint32_t route[4], float *
         }
     }
 }
+/* Pool jobs. Each touches only its own source's buffer, plugin and inserts. */
+static void ac_instrument_job(void *context, int job) {
+    ac_controller *c = context; int i = c->job_slot[job];
+    mlang_audio_processor *p = &c->instruments[i];
+    float *buffer = c->instrument_buffer[i];
+    memset(buffer, 0, c->job_frames * 2u * sizeof(float));
+    c->failed[64 + i] = p->process(p->context, buffer, (int32_t)c->job_frames, c->job_clock) != 0;
+    if(c->failed[64 + i]) { atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed); return; }
+    ac_insert_process(c, c->job_routes[64 + i], buffer, c->job_frames, c->job_clock);
+}
+static void ac_track_job(void *context, int job) {
+    ac_controller *c = context; int t = c->job_slot[job];
+    ac_insert_process(c, c->job_routes[t], c->track_buffer[t], c->job_frames, c->job_clock);
+}
+static void ac_effect_job(void *context, int job) {
+    ac_controller *c = context; int fx = c->job_slot[job];
+    mlang_audio_processor *p = &c->effects[fx];
+    c->effect_failed[fx] = p->process(p->context, c->effect_buffer[fx], (int32_t)c->job_frames, c->job_clock) != 0;
+    if(c->effect_failed[fx]) atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed);
+}
+/* Run the jobs for `count` sources (ids as job_routes indexes them, in slot
+ * order). Sources that share an insert instance with an earlier source run
+ * after the parallel batch, one by one in slot order, so no plugin instance is
+ * ever processed on two threads at once and each still sees the serial order. */
+static void ac_run_stage(ac_controller *c, int threads, const int *sources, const int *ids, int count, ac_job_fn run) {
+    uint8_t claimed[257]; memset(claimed, 0, sizeof(claimed));
+    int serial[96], parallel = 0, deferred = 0;
+    for(int k = 0; k < count; ++k) {
+        int shared = 0;
+        if(ids) for(int n = 0; n < 4; ++n) {
+            uint32_t id = c->job_routes[ids[k]][n];
+            if(id && id <= 256 && claimed[id]) shared = 1;
+        }
+        if(ids) for(int n = 0; n < 4; ++n) {
+            uint32_t id = c->job_routes[ids[k]][n];
+            if(id && id <= 256) claimed[id] = 1;
+        }
+        if(shared) serial[deferred++] = sources[k]; else c->job_slot[parallel++] = sources[k];
+    }
+    ac_pool_run(&c->pool, threads, parallel, run, c);
+    for(int k = 0; k < deferred; ++k) { c->job_slot[parallel + k] = serial[k]; run(c, parallel + k); }
+}
+
 static uint64_t ac_double_bits(double value) { uint64_t bits; memcpy(&bits, &value, sizeof(bits)); return bits; }
 static double ac_bits_double(uint64_t bits) { double value; memcpy(&value, &bits, sizeof(value)); return value; }
 /* Once per block: adopt a published transport, then hand it to every loaded
@@ -529,6 +803,7 @@ static void ac_transport_end(ac_controller *c, uint32_t frames) {
 }
 static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     if(frames == 0) return; /* Do not consume events/reset on an empty block. */
+    uint64_t render_start = ac_now_ns();
     uint64_t panic = atomic_load_explicit(&c->panic, memory_order_acquire);
     int reset = c->processor_reset || panic != c->seen_panic;
     c->processor_reset = 0;
@@ -665,23 +940,25 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         out[f * 2] = (float)l;
         out[f * 2 + 1] = (float)r;
     }
+    /* Plugins run on the worker pool, one stage at a time; each stage's
+     * results are summed here in slot order, as a single thread would. */
+    int threads = ac_pool_threads(&c->pool);
+    atomic_store_explicit(&c->render_threads, (uint32_t)threads, memory_order_relaxed);
+    c->job_frames = frames; c->job_clock = clock; c->job_routes = routes;
     // Instruments first: one routed into a track must reach its buffer before
     // that track runs its own inserts and fader.
+    int sources[96], ids[96], jobs = 0;
+    for(int i = 0; i < 32; ++i) if(c->instruments[i].context) { sources[jobs] = i; ids[jobs++] = 64 + i; }
+    ac_run_stage(c, threads, sources, ids, jobs, ac_instrument_job);
     for(int i = 0; i < 32; ++i) {
-        mlang_audio_processor *p = &c->instruments[i];
-        if(!p->context) continue;
-        memset(c->instrument_buffer, 0, frames * 2u * sizeof(float));
-        if(p->process(p->context, c->instrument_buffer, (int32_t)frames, clock) != 0) {
-            atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed);
-            continue;
-        }
-        ac_insert_process(c, routes[64 + i], c->instrument_buffer, frames, clock);
+        if(!c->instruments[i].context || c->failed[64 + i]) continue;
+        const float *buffer = c->instrument_buffer[i];
         float volume = atomic_load_explicit(&c->instrument_volume[i], memory_order_relaxed) / 100.f;
         float *destination = target[64 + i] >= 0 ? c->track_buffer[target[64 + i]] : out;
         float peaks[2] = {0, 0};
         for(uint32_t f = 0; f < frames * 2u; ++f) {
-            if(isfinite(c->instrument_buffer[f])) {
-                float value = c->instrument_buffer[f] * volume;
+            if(isfinite(buffer[f])) {
+                float value = buffer[f] * volume;
                 destination[f] += value * dry[64 + i];
                 for(int fx = 0; fx < 8; ++fx)
                     if(sends[64 + i][fx] > 0) c->effect_buffer[fx][f] += value * sends[64 + i][fx];
@@ -695,33 +972,48 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
                 memory_order_relaxed, memory_order_relaxed)) {}
         }
     }
+    /* Tracks by depth: a track runs once everything feeding it has been
+     * summed into its buffer. The feeder order is sorted by depth already;
+     * tracks left in a routing cycle go last, straight to master. */
+    int depth[64] = {0}, deepest = 0;
     for(int i = 0; i < count; ++i) {
         int t = order[i];
-        ac_insert_process(c, routes[t], c->track_buffer[t], frames, clock);
-        float volume = atomic_load_explicit(&c->track_volume[t], memory_order_relaxed) / 100.f;
-        float *destination = target[t] >= 0 && !cycled[t] ? c->track_buffer[target[t]] : out;
-        float peaks[2] = {0, 0};
-        for(uint32_t f = 0; f < frames * 2u; ++f) {
-            float value = c->track_buffer[t][f] * volume; if(!isfinite(value)) continue;
-            destination[f] += value * dry[t];
-            for(int fx = 0; fx < 8; ++fx) if(sends[t][fx] > 0) c->effect_buffer[fx][f] += value * sends[t][fx];
-            peaks[f & 1] = fmaxf(peaks[f & 1], fabsf(value));
+        if(cycled[t]) continue;
+        if(depth[t] > deepest) deepest = depth[t];
+        if(target[t] >= 0 && !cycled[target[t]] && depth[target[t]] < depth[t] + 1) depth[target[t]] = depth[t] + 1;
+    }
+    for(int t = 0; t < 64; ++t) if(cycled[t]) depth[t] = deepest + 1;
+    for(int begin = 0; begin < count;) {
+        int end = begin, level = depth[order[begin]];
+        while(end < count && depth[order[end]] == level) ++end;
+        ac_run_stage(c, threads, order + begin, order + begin, end - begin, ac_track_job);
+        for(int i = begin; i < end; ++i) {
+            int t = order[i];
+            float volume = atomic_load_explicit(&c->track_volume[t], memory_order_relaxed) / 100.f;
+            float *destination = target[t] >= 0 && !cycled[t] ? c->track_buffer[target[t]] : out;
+            float peaks[2] = {0, 0};
+            for(uint32_t f = 0; f < frames * 2u; ++f) {
+                float value = c->track_buffer[t][f] * volume; if(!isfinite(value)) continue;
+                destination[f] += value * dry[t];
+                for(int fx = 0; fx < 8; ++fx) if(sends[t][fx] > 0) c->effect_buffer[fx][f] += value * sends[t][fx];
+                peaks[f & 1] = fmaxf(peaks[f & 1], fabsf(value));
+            }
+            /* Everything the channel carries: its own voices plus what feeds it. */
+            for(int ch = 0; ch < 2; ++ch) {
+                uint32_t value = (uint32_t)(fminf(peaks[ch], 1.f) * 1000.f);
+                uint32_t old = atomic_load_explicit(&c->track_peak[t][ch], memory_order_relaxed);
+                while(old < value && !atomic_compare_exchange_weak_explicit(&c->track_peak[t][ch], &old, value,
+                    memory_order_relaxed, memory_order_relaxed)) {}
+            }
         }
-        /* Everything the channel carries: its own voices plus what feeds it. */
-        for(int ch = 0; ch < 2; ++ch) {
-            uint32_t value = (uint32_t)(fminf(peaks[ch], 1.f) * 1000.f);
-            uint32_t old = atomic_load_explicit(&c->track_peak[t][ch], memory_order_relaxed);
-            while(old < value && !atomic_compare_exchange_weak_explicit(&c->track_peak[t][ch], &old, value,
-                memory_order_relaxed, memory_order_relaxed)) {}
-        }
+        begin = end;
     }
     // Parallel post-fader aux returns. No return feeds another effect or itself.
+    jobs = 0;
+    for(int fx = 0; fx < 8; ++fx) if(c->effects[fx].context) sources[jobs++] = fx;
+    ac_run_stage(c, threads, sources, NULL, jobs, ac_effect_job);
     for(int fx = 0; fx < 8; ++fx) {
-        mlang_audio_processor *p = &c->effects[fx];
-        if(!p->context) continue;
-        if(p->process(p->context, c->effect_buffer[fx], (int32_t)frames, clock) != 0) {
-            atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed); continue;
-        }
+        if(!c->effects[fx].context || c->effect_failed[fx]) continue;
         float volume = atomic_load_explicit(&c->effect_volume[fx], memory_order_relaxed) / 100.f;
         float peaks[2] = {0, 0};
         for(uint32_t f = 0; f < frames * 2u; ++f) {
@@ -767,6 +1059,12 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         atomic_store_explicit(&c->preview_done, preview_serial, memory_order_release);
     atomic_store_explicit(&c->preview_ack, preview_serial, memory_order_release);
     atomic_store_explicit(&c->clock, clock + frames, memory_order_release);
+    /* Wall time spent against the block's real duration; keep the worst. */
+    double block_ns = (double)frames / c->rate * 1e9;
+    uint32_t load = (uint32_t)fmin(9999.0, (double)(ac_now_ns() - render_start) / block_ns * 1000.0);
+    uint32_t seen = atomic_load_explicit(&c->dsp_load, memory_order_relaxed);
+    while(seen < load && !atomic_compare_exchange_weak_explicit(&c->dsp_load, &seen, load,
+        memory_order_relaxed, memory_order_relaxed)) {}
 }
 /* Control thread: audition PCM on the master bus from its start, replacing any
  * clip playing; no samples stops. The copy is owned by the controller. A
@@ -891,7 +1189,11 @@ int32_t __mlang_std_audio_controller_stop(int64_t handle) {
 int32_t __mlang_std_audio_controller_close(int64_t handle) {
     ac_controller *c = (ac_controller*)(intptr_t)handle; if(!c) return 0;
     if(__mlang_std_audio_controller_stop(handle) != 0) return -1;
+    /* Workers leave the device workgroup before the unit that owns it goes. */
+    ac_pool_shutdown(&c->pool);
 #if defined(__APPLE__)
+    void *workgroup = atomic_exchange_explicit(&c->pool.workgroup, NULL, memory_order_acq_rel);
+    if(workgroup) { if(__builtin_available(macOS 11.0, *)) os_release((os_workgroup_t)workgroup); }
     if(c->unit) { AudioUnitUninitialize(c->unit); AudioComponentInstanceDispose(c->unit); }
 #endif
     int registered = atomic_load_explicit(&c->sample_count, memory_order_relaxed);
@@ -906,11 +1208,25 @@ int32_t __mlang_std_audio_controller_close(int64_t handle) {
     free(c->spectrum_db);
     free(c); return 0;
 }
+#if defined(__APPLE__)
+/* Control thread, before start: publish the block period and the AUHAL IO
+ * workgroup, which the workers apply on their next wake. */
+static void ac_audio_workgroup(ac_controller *c) {
+    atomic_store_explicit(&c->pool.period_ns, (uint64_t)((double)c->buffer_frames / c->rate * 1e9), memory_order_release);
+    if(atomic_load_explicit(&c->pool.workgroup, memory_order_acquire)) return;
+    if(__builtin_available(macOS 11.0, *)) {
+        os_workgroup_t workgroup = NULL; UInt32 size = sizeof(workgroup);
+        if(AudioUnitGetProperty(c->unit, kAudioOutputUnitProperty_OSWorkgroup, kAudioUnitScope_Global, 0, &workgroup, &size) == noErr && workgroup)
+            atomic_store_explicit(&c->pool.workgroup, (void *)workgroup, memory_order_release);
+    }
+}
+#endif
 int32_t __mlang_std_audio_controller_start(int64_t handle) {
     ac_controller *c = (ac_controller*)(intptr_t)handle; if(!c) return -1;
 #if defined(__APPLE__)
     if(c->unit) {
         if(c->running) return 0;
+        ac_audio_workgroup(c);
         c->running = 1;
         if(AudioOutputUnitStart(c->unit) == noErr) return 0;
         c->running = 0; audio_set_error("AUHAL start failed"); return -1;
@@ -976,6 +1292,11 @@ int64_t __mlang_std_audio_controller_info(int64_t handle, int64_t key) {
     if(key == 3) return atomic_load_explicit(&c->dropped, memory_order_relaxed);
     if(key == 4) return atomic_load_explicit(&c->processor_errors, memory_order_relaxed);
     if(key == 6) return (int64_t)atomic_load_explicit(&c->master_serial, memory_order_relaxed);
+    /* 7: threads the last block could use; 8: worst DSP load since the last
+     * read, in permille of real time (read resets); 9: spawned workers. */
+    if(key == 7) return atomic_load_explicit(&c->render_threads, memory_order_relaxed);
+    if(key == 8) return atomic_exchange_explicit(&c->dsp_load, 0, memory_order_relaxed);
+    if(key == 9) return c->pool.workers > 0 ? c->pool.workers : 0;
 #if defined(__APPLE__)
     if(key == 5) return c->unit != NULL;
 #endif
@@ -983,6 +1304,21 @@ int64_t __mlang_std_audio_controller_info(int64_t handle, int64_t key) {
 }
 
 int32_t __mlang_std_audio_controller_processor_support(void) { return ac_processor_factory != NULL; }
+
+/* Any thread. Caps the threads each controller renders with, the render
+ * thread included: 0 = every core, 1 = no workers. Applies from the next block. */
+int32_t __mlang_std_audio_controller_set_render_threads(int64_t threads) {
+    if(threads < 0 || threads > AC_MAX_THREADS) return -1;
+    atomic_store_explicit(&ac_thread_limit, (int)threads, memory_order_relaxed); return 0;
+}
+int64_t __mlang_std_audio_controller_render_thread_limit(void) {
+    return atomic_load_explicit(&ac_thread_limit, memory_order_relaxed);
+}
+/* Most threads a controller spawns: the render thread plus one worker per
+ * further core, up to AC_MAX_THREADS. */
+int64_t __mlang_std_audio_controller_max_render_threads(void) {
+    int cores = ac_cpu_count(); return cores < AC_MAX_THREADS ? cores : AC_MAX_THREADS;
+}
 
 /* Control thread, safe while rendering. index as in AC_MASTER_PARAMS. */
 int32_t __mlang_std_audio_controller_master_param(int64_t handle, int64_t index, double value) {
@@ -1136,7 +1472,7 @@ int32_t __mlang_std_audio_controller_load_insert(int64_t handle, int64_t id, con
         }
     }
     mlang_audio_processor *p = &c->inserts[id - 1];
-    if(p->context) p->destroy(p->context); *p = next; c->processor_reset = 1;
+    if(p->context) p->destroy(p->context); *p = next; c->processor_reset = 1; if(next.context) ac_pool_ensure(&c->pool);
     audio_clear_error(); return 0;
 }
 int32_t __mlang_std_audio_controller_load_effect(int64_t handle, int64_t fx, const char *path) {
@@ -1152,6 +1488,7 @@ int32_t __mlang_std_audio_controller_load_effect(int64_t handle, int64_t fx, con
     }
     if(c->effects[fx].context) c->effects[fx].destroy(c->effects[fx].context);
     c->effects[fx] = next; c->processor_reset = 1;
+    if(next.context) ac_pool_ensure(&c->pool);
     for(int ch = 0; ch < 2; ++ch) atomic_store(&c->effect_peak[fx][ch], 0);
     audio_clear_error(); return 0;
 }
@@ -1298,7 +1635,7 @@ int32_t __mlang_std_audio_controller_load_instrument(int64_t handle, int64_t slo
     mlang_audio_processor *old = &c->instruments[slot - 1];
     ac_clear_learn_slot(c, slot);
     if(old->context) old->destroy(old->context);
-    *old = next; c->processor_reset = 1; audio_clear_error(); return 0;
+    *old = next; c->processor_reset = 1; ac_pool_ensure(&c->pool); audio_clear_error(); return 0;
 }
 const char *__mlang_std_audio_controller_processor_name(int64_t handle) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;

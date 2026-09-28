@@ -101,6 +101,39 @@ the same way, covering its own voices plus everything routed into it. A track
 that mixes straight into master with no inserts and no routing owns no buffer and
 reads 0.
 
+### Multicore rendering
+
+Plugins render on a per-controller worker pool. Once a plugin is loaded, the
+controller starts one sleeping worker per extra core (up to 31). Each block then
+runs in stages, and the jobs inside a stage run in parallel:
+
+1. every loaded instrument slot, with its own inserts, into its own buffer;
+2. buffered tracks one routing depth at a time (a track runs after everything
+   that feeds it);
+3. the aux effect returns.
+
+After each stage the render thread sums the results into tracks, sends and
+master in slot order, the same way a single thread does. The output is
+therefore bit-identical whatever the thread count. If two sources route through
+the same insert instance, the later one runs after the parallel batch, so a
+plugin instance never runs on two threads at once. Event dispatch, the reference
+voices, the master processor and the master bus stay on the render thread. On
+macOS, workers take the block period as a realtime time constraint and join the
+AUHAL device's audio workgroup (macOS 11+), which keeps them scheduled next to
+the IO thread.
+
+- `AudioController::set_render_threads(n) -> i32` caps the threads every
+  controller renders with, the render thread included: `0` = one per core (the
+  default), `1` = no workers, up to 32. It can be called from any thread, and
+  running controllers apply it from their next block.
+- `AudioController::render_thread_limit() -> i64` returns that cap, and
+  `AudioController::max_render_threads() -> i64` returns the most threads this
+  machine allows.
+- `render_threads() -> i64` returns the threads the latest block could use.
+- `dsp_load() -> f64` returns the worst block render time since the last call,
+  as a fraction of the block's real duration (1.0 is the dropout limit). Reading
+  it resets it.
+
 `ControlChange` (master) and `InstrumentControlChange` (slot in `sample`) use
 `midi.note` for the controller number and `midi.velocity` for its integer value.
 CC numbers 0–127 accept 0–127; controller 129 is pitch bend and accepts 0–16383.

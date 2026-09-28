@@ -5,12 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <unistd.h>
 #if defined(__APPLE__)
+#include <sys/sysctl.h>
 #include <util.h>
 #elif !defined(_WIN32)
 #include <pty.h>
@@ -908,4 +910,34 @@ int __mlang_std_process_child_close(int64_t child_handle)
     restore_foreground_terminal(child);
     free(child);
     return 0;
+}
+
+/* CPU time (user + system) of every thread in this process, microseconds. */
+int64_t __mlang_std_process_cpu_time_us(void)
+{
+    struct rusage usage;
+    if(getrusage(RUSAGE_SELF, &usage) != 0)
+        return -1;
+    return ((int64_t)usage.ru_utime.tv_sec + (int64_t)usage.ru_stime.tv_sec) * 1000000 +
+           (int64_t)usage.ru_utime.tv_usec + (int64_t)usage.ru_stime.tv_usec;
+}
+
+/* Logical cores the OS reports online. */
+int64_t __mlang_std_process_cpu_count(void)
+{
+    long count = sysconf(_SC_NPROCESSORS_ONLN);
+    return count > 0 ? (int64_t)count : 1;
+}
+
+/* Logical performance cores on hybrid CPUs the OS describes (Apple silicon);
+ * every online core elsewhere. */
+int64_t __mlang_std_process_performance_cpu_count(void)
+{
+#if defined(__APPLE__)
+    int count = 0;
+    size_t size = sizeof(count);
+    if(sysctlbyname("hw.perflevel0.logicalcpu", &count, &size, NULL, 0) == 0 && count > 0)
+        return count;
+#endif
+    return __mlang_std_process_cpu_count();
 }

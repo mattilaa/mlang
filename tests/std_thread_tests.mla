@@ -255,3 +255,11 @@ fn test_mutex_property_struct_copy_after_lock_init() {
     verify(pair_stamp_eq(original_after, mutex_property_stamp(5)) == 1);
     verify(pair_stamp_eq(copied_after, mutex_property_stamp(6)) == 1);
 }
+
+#[test]
+fn test_cpu_counts() {
+    let cores: i64 = std::thread::cpu_count();
+    let performance: i64 = std::thread::performance_cpu_count();
+    verify(cores >= 1);
+    verify(performance >= 1 && performance <= cores);
+}

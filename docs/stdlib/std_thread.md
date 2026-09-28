@@ -7,6 +7,10 @@ Module file: `stdlib/std/thread.mla`
 - `spawn(fn_ptr: ptr<void>) -> thread` (compiler-lowered for function names and closures)
 - `join(handle: thread) -> i32`
 
+### CPUs
+- `cpu_count() -> i64`: logical cores the OS reports online
+- `performance_cpu_count() -> i64`: logical performance cores on hybrid CPUs the OS describes (Apple silicon), otherwise `cpu_count()`
+
 ### Atomics
 - `atomic64`: stdlib-owned native 64-bit atomic handle
 - `atomic_new(initial: i64) -> atomic64`

@@ -85,6 +85,15 @@ if(TARGET mlang)
     add_dependencies(run_tests mlang)
 endif()
 
+# Native runtime test: the audio controller's worker pool must not change the
+# mix. Links the static runtime directly, so only in the full source build.
+if(TARGET mlang_std)
+    add_executable(audio_render_pool_test audio_render_pool_test.c)
+    target_link_libraries(audio_render_pool_test PRIVATE mlang_std)
+    add_test(NAME audio_render_pool COMMAND audio_render_pool_test)
+    set_tests_properties(audio_render_pool PROPERTIES LABELS "cpp")
+endif()
+
 if(BUILD_CPP_GTESTS)
     include(FetchContent)
     FetchContent_Declare(
