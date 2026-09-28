@@ -36,6 +36,8 @@ extern fn atomic_i64_load(raw: i64) -> i64;
 extern fn atomic_i64_store(raw: i64, value: i64) -> i64;
 extern fn atomic_i64_add(raw: i64, delta: i64) -> i64;
 extern fn atomic_i64_free(raw: i64) -> void;
+extern fn __mlang_std_process_cpu_count() -> i64;
+extern fn __mlang_std_process_performance_cpu_count() -> i64;
 
 /// @brief Spawn a thread from a closure/function pointer.
 ///
@@ -75,4 +77,15 @@ pub fn atomic_add_value(handle: &atomic64, delta: i64) -> i64 {
 /// @brief Free atomic handle.
 pub fn atomic_free_handle(handle: atomic64) -> void {
     atomic_i64_free(handle.raw);
+}
+
+/// @brief Logical CPU cores the OS reports online (at least 1).
+pub fn cpu_count() -> i64 {
+    return __mlang_std_process_cpu_count();
+}
+
+/// @brief Logical performance cores on hybrid CPUs the OS describes (Apple
+/// silicon P-cores); the same as `cpu_count()` elsewhere.
+pub fn performance_cpu_count() -> i64 {
+    return __mlang_std_process_performance_cpu_count();
 }

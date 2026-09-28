@@ -6,8 +6,11 @@ extern "C" {
 #endif
 /* Optional native master processor. No SDK dependency in the runtime.
  * Install the factory on the control thread before creating audio controllers.
- * Load/destroy are control-thread calls; begin/note/process run on the audio
- * thread and must be bounded, allocation-free and lock-free in the host.
+ * Load/destroy are control-thread calls; begin/note/process run on realtime
+ * render threads and must be bounded, allocation-free and lock-free in the
+ * host. begin/note/transport come from the audio thread; process may run on a
+ * render worker, but never on two threads at once for one instance, and always
+ * after that block's begin/note calls have completed.
  * Third-party processor realtime behavior remains that processor's contract.
  */
 typedef struct mlang_audio_processor {

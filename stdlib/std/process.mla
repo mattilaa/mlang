@@ -84,6 +84,13 @@ pub fn last_error() -> str8 {
     return __mlang_std_process_last_error();
 }
 
+/// @brief CPU time (user + system) used so far by all threads of this
+/// process, in microseconds; -1 when unavailable. Sample it twice and divide
+/// the difference by the elapsed wall time for a usage percentage.
+pub fn cpu_time_us() -> i64 {
+    return __mlang_std_process_cpu_time_us();
+}
+
 /// @brief Spawn a child process with stdin/stdout/stderr pipes enabled.
 pub fn spawn(program: str8, args: list<str8>) -> result<Child, str8> {
     let h: i64 = __mlang_std_process_spawn(program, args, 1, 1, 1);

@@ -326,3 +326,27 @@ fn audio_controller_preview_plays_on_master_and_stops() {
     verify(controller.preview(odd, 2, 48000) == -1);
     block.close(); controller.close();
 }
+
+#[test]
+fn audio_controller_render_thread_limit() {
+    let cores: i64 = AudioController::max_render_threads();
+    verify(cores >= 1 && cores <= 32);
+    verify(AudioController::render_thread_limit() == 0);
+    verify(AudioController::set_render_threads(2) == 0);
+    verify(AudioController::render_thread_limit() == 2);
+    verify(AudioController::set_render_threads(-1) == -1);
+    verify(AudioController::set_render_threads(33) == -1);
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { AudioController::set_render_threads(0); return; }
+    let controller: AudioController = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(128);
+    verify(allocated.is_ok()); if allocated.is_err() { controller.close(); AudioController::set_render_threads(0); return; }
+    let block: PcmBlock = allocated.unwrap();
+    verify(controller.process(block, 128) == 0);
+    // No plugin loaded, so no workers: the render thread runs alone.
+    verify(controller.render_threads() == 1);
+    verify(controller.dsp_load() >= 0.0);
+    verify(controller.dsp_load() == 0.0);
+    verify(AudioController::set_render_threads(0) == 0);
+    block.close(); controller.close();
+}

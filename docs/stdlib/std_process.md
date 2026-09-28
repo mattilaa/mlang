@@ -16,6 +16,9 @@ Module file: `stdlib/std/process.mla`
 - `spawn_inherit(program: str8, args: list<str8>) -> result<child, str8>`
 - `last_error() -> str8`
 
+### CPU usage
+- `cpu_time_us() -> i64`: user + system CPU time of every thread in this process, in microseconds (-1 if unavailable). Divide the difference between two samples by the wall time between them for a usage share (1.0 = one core busy).
+
 ### child and pipe API
 - `child::stdin(self: child) -> result<child_stdin, str8>`
 - `child::stdout(self: child) -> result<child_stdout, str8>`

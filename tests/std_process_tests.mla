@@ -149,3 +149,13 @@ fn test_nonblocking_process_poll_and_pipe_read() {
     out.close();
     child.close();
 }
+
+#[test]
+fn test_cpu_time_advances() {
+    let before: i64 = std::process::cpu_time_us();
+    verify(before >= 0);
+    var sum: i64 = 0;
+    for i in 0..20000000 { sum = sum + i % 7; }
+    verify(sum > 0);
+    verify(std::process::cpu_time_us() > before);
+}
