@@ -62,6 +62,9 @@ pub struct AudioController { var handle: i64; };
 extern fn __mlang_std_audio_controller_load_insert(handle: i64, id: i64, path: str8) -> i32;
 extern fn __mlang_std_audio_controller_insert_route(handle: i64, source: i64, position: i64, id: i64) -> i32;
 extern fn __mlang_std_audio_controller_output_route(handle: i64, source: i64, destination: i64) -> i32;
+extern fn __mlang_std_audio_controller_instrument_outputs(handle: i64, slot: i64) -> i64;
+extern fn __mlang_std_audio_controller_instrument_output_name(handle: i64, slot: i64, bus: i64) -> str8;
+extern fn __mlang_std_audio_controller_instrument_output_route(handle: i64, slot: i64, bus: i64, destination: i64) -> i32;
 extern fn __mlang_std_audio_controller_load_effect(handle: i64, fx: i64, path: str8) -> i32;
 extern fn __mlang_std_audio_controller_effect_send(handle: i64, track: i64, slot: i64, fx: i64, percent: i64) -> i32;
 extern fn __mlang_std_audio_controller_effect_volume(handle: i64, fx: i64, percent: i64) -> i32;
@@ -203,6 +206,21 @@ impl AudioController {
     /// bitmask. -1 when the instrument is not a sampler.
     pub fn instrument_sampler(self: AudioController, slot: i64, key: i64) -> i64 {
         return __mlang_std_audio_controller_instrument_sampler(self.handle, slot, key);
+    }
+    /// Stereo output buses of the instrument in `slot`, main included (1 for a
+    /// single-output instrument), or -1 when the slot is empty.
+    pub fn instrument_outputs(self: AudioController, slot: i64) -> i64 {
+        return __mlang_std_audio_controller_instrument_outputs(self.handle, slot);
+    }
+    /// Name of output bus `bus` (0 = main), "" when unknown. Borrowed.
+    pub fn instrument_output_name(self: AudioController, slot: i64, bus: i64) -> str8 {
+        return __mlang_std_audio_controller_instrument_output_name(self.handle, slot, bus);
+    }
+    /// Route aux bus `bus` (1..outputs-1): -1 = with the instrument's main
+    /// output (the default), 0 = master, 1-64 = that PCM track's channel.
+    /// Audio may run. Loading an instrument resets its routes. 0 or -1.
+    pub fn instrument_output_route(self: AudioController, slot: i64, bus: i64, destination: i64) -> i32 {
+        return __mlang_std_audio_controller_instrument_output_route(self.handle, slot, bus, destination);
     }
     /// Optional host is installed by the application (mlacker installs VST3).
     pub fn processor_support() -> bool { return __mlang_std_audio_controller_processor_support() != 0; }

@@ -6,6 +6,8 @@
 #define AC_LANES 3
 #define AC_VOICES 128u
 #define AC_SAMPLES 256u
+/* Stereo output buses per instrument, main included. */
+#define AC_OUTPUTS 16
 /* Master bus: 24 dB/oct high-pass, four peaking bands, then volume. Parameter
  * slots: 0 = HP Hz (0 = off), 1 + 3*band = band Hz, gain dB, Q; 13 = linear
  * volume; 14 = EQ (high-pass and bands) enabled, 1 or 0. Defaults are
@@ -298,6 +300,12 @@ typedef struct {
     /* Output channel per source (tracks 0-63, instruments 64-95):
      * 0 = master, 1-64 = the PCM track it feeds instead. */
     _Atomic uint32_t output_route[96];
+    /* Aux output buses 1-15 of each instrument: 0 = mixed into the
+     * instrument's own output before its inserts (the default), 1 = master,
+     * 2-65 = PCM track 1-64. `instrument_outputs` counts the buses, main
+     * included; it changes only while the controller is stopped. */
+    _Atomic uint32_t aux_route[32][AC_OUTPUTS];
+    int instrument_outputs[32];
     float track_buffer[64][8192];
     _Atomic uint32_t sends[96][8], effect_volume[8], effect_peak[8][2];
     float effect_buffer[8][8192];
@@ -312,6 +320,7 @@ typedef struct {
     uint32_t job_frames;
     uint64_t job_clock;
     uint32_t (*job_routes)[4];
+    uint32_t (*job_aux)[AC_OUTPUTS];
     /* Load meter: the longest block's render time over its real duration, in
      * permille, since the last read; threads the last block could use. */
     _Atomic uint32_t dsp_load;
@@ -737,6 +746,12 @@ static void ac_instrument_job(void *context, int job) {
     memset(buffer, 0, c->job_frames * 2u * sizeof(float));
     c->failed[64 + i] = p->process(p->context, buffer, (int32_t)c->job_frames, c->job_clock) != 0;
     if(c->failed[64 + i]) { atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed); return; }
+    /* Aux buses that follow the main output join it before the inserts. */
+    for(int bus = 1; p->aux_output && bus < c->instrument_outputs[i]; ++bus) {
+        if(c->job_aux[i][bus] != 0) continue;
+        const float *aux = p->aux_output(p->context, bus); if(!aux) continue;
+        for(uint32_t f = 0; f < c->job_frames * 2u; ++f) if(isfinite(aux[f])) buffer[f] += aux[f];
+    }
     ac_insert_process(c, c->job_routes[64 + i], buffer, c->job_frames, c->job_clock);
 }
 static void ac_track_job(void *context, int job) {
@@ -840,6 +855,15 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         if(source < 64 && routed[source]) buffered[source] = 1;
         if(target[source] >= 0) { buffered[target[source]] = 1; if(source < 64) buffered[source] = 1; }
     }
+    /* Aux buses routed to a track give that track a buffer too. */
+    uint32_t aux_routes[32][AC_OUTPUTS];
+    for(int i = 0; i < 32; ++i)
+        for(int bus = 0; bus < AC_OUTPUTS; ++bus) {
+            uint32_t route = bus > 0 && bus < c->instrument_outputs[i] && c->instruments[i].context
+                ? atomic_load_explicit(&c->aux_route[i][bus], memory_order_relaxed) : 0;
+            aux_routes[i][bus] = route <= 65 ? route : 0;
+            if(aux_routes[i][bus] >= 2) buffered[aux_routes[i][bus] - 2] = 1;
+        }
     for(int t = 0; t < 64; ++t) if(buffered[t]) memset(c->track_buffer[t], 0, frames * 2u * sizeof(float));
     /* Feeders before their destination; a cycle falls back to master. */
     int order[64], count = 0, indegree[64] = {0}, cycled[64] = {0};
@@ -944,7 +968,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
      * results are summed here in slot order, as a single thread would. */
     int threads = ac_pool_threads(&c->pool);
     atomic_store_explicit(&c->render_threads, (uint32_t)threads, memory_order_relaxed);
-    c->job_frames = frames; c->job_clock = clock; c->job_routes = routes;
+    c->job_frames = frames; c->job_clock = clock; c->job_routes = routes; c->job_aux = aux_routes;
     // Instruments first: one routed into a track must reach its buffer before
     // that track runs its own inserts and fader.
     int sources[96], ids[96], jobs = 0;
@@ -970,6 +994,18 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             uint32_t old = atomic_load_explicit(&c->instrument_peak[i][ch], memory_order_relaxed);
             while(old < value && !atomic_compare_exchange_weak_explicit(&c->instrument_peak[i][ch], &old, value,
                 memory_order_relaxed, memory_order_relaxed)) {}
+        }
+    }
+    /* Aux buses routed away from their instrument are separate channels: they
+     * skip its fader, sends and inserts, and take the destination's own. */
+    for(int i = 0; i < 32; ++i) {
+        mlang_audio_processor *p = &c->instruments[i];
+        if(!p->context || !p->aux_output || c->failed[64 + i]) continue;
+        for(int bus = 1; bus < c->instrument_outputs[i]; ++bus) {
+            uint32_t route = aux_routes[i][bus]; if(route == 0) continue;
+            const float *aux = p->aux_output(p->context, bus); if(!aux) continue;
+            float *destination = route == 1 ? out : c->track_buffer[route - 2];
+            for(uint32_t f = 0; f < frames * 2u; ++f) if(isfinite(aux[f])) destination[f] += aux[f];
         }
     }
     /* Tracks by depth: a track runs once everything feeding it has been
@@ -1460,6 +1496,29 @@ int32_t __mlang_std_audio_controller_output_route(int64_t handle, int64_t source
     if(destination > 0 && destination - 1 == source) return -1;
     atomic_store_explicit(&c->output_route[source], (uint32_t)destination, memory_order_relaxed); return 0;
 }
+/* Stereo output buses of the instrument in `slot`, main included (1 for a
+ * single-output instrument), or -1 when the slot is empty. */
+int64_t __mlang_std_audio_controller_instrument_outputs(int64_t handle, int64_t slot) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || !c->instruments[slot - 1].context) return -1;
+    return c->instrument_outputs[slot - 1];
+}
+/* Name of output bus `bus` (0 = main); "" when unknown. Borrowed. */
+const char *__mlang_std_audio_controller_instrument_output_name(int64_t handle, int64_t slot, int64_t bus) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || bus < 0 || bus >= c->instrument_outputs[slot - 1]) return "";
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    const char *name = p->context && p->output_name ? p->output_name(p->context, (int32_t)bus) : NULL;
+    return name ? name : "";
+}
+/* Where aux bus `bus` (1..outputs-1) of an instrument goes: -1 = with the
+ * instrument's main output (the default), 0 = master, 1-64 = that PCM track's
+ * channel. Audio may run; loading an instrument resets its routes. */
+int32_t __mlang_std_audio_controller_instrument_output_route(int64_t handle, int64_t slot, int64_t bus, int64_t destination) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || bus < 1 || bus >= AC_OUTPUTS || destination < -1 || destination > 64) return -1;
+    atomic_store_explicit(&c->aux_route[slot - 1][bus], (uint32_t)(destination + 1), memory_order_relaxed); return 0;
+}
 int32_t __mlang_std_audio_controller_load_insert(int64_t handle, int64_t id, const char *path) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || c->running || id < 1 || id > 256 || !ac_processor_factory) return -1;
@@ -1575,7 +1634,7 @@ int32_t __mlang_std_audio_controller_unload_instrument(int64_t handle, int64_t s
     ac_clear_learn_slot(c, slot);
     mlang_audio_processor *p = &c->instruments[slot - 1];
     if(p->context) p->destroy(p->context);
-    *p = (mlang_audio_processor){0}; c->processor_reset = 1; return 0;
+    *p = (mlang_audio_processor){0}; c->instrument_outputs[slot - 1] = 0; c->processor_reset = 1; return 0;
 }
 /* Control thread; audio may run. Hands PCM to a sampler instrument's pad. */
 int32_t __mlang_std_audio_controller_instrument_pad(int64_t handle, int64_t slot, int64_t pad,
@@ -1635,7 +1694,11 @@ int32_t __mlang_std_audio_controller_load_instrument(int64_t handle, int64_t slo
     mlang_audio_processor *old = &c->instruments[slot - 1];
     ac_clear_learn_slot(c, slot);
     if(old->context) old->destroy(old->context);
-    *old = next; c->processor_reset = 1; ac_pool_ensure(&c->pool); audio_clear_error(); return 0;
+    *old = next; c->processor_reset = 1;
+    int outputs = next.output_count ? next.output_count(next.context) : 1;
+    c->instrument_outputs[slot - 1] = outputs < 1 ? 1 : (outputs > AC_OUTPUTS ? AC_OUTPUTS : outputs);
+    for(int bus = 0; bus < AC_OUTPUTS; ++bus) atomic_store_explicit(&c->aux_route[slot - 1][bus], 0, memory_order_relaxed);
+    ac_pool_ensure(&c->pool); audio_clear_error(); return 0;
 }
 const char *__mlang_std_audio_controller_processor_name(int64_t handle) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
