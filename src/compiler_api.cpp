@@ -1632,6 +1632,21 @@ static void addSemanticSymbol(DocumentSemantic& out,
         {
             return 1;
         }
+        // Parser nodes normally retain their declaration line.  Scanning the
+        // entire document for every symbol turned semantic indexing of a
+        // several-thousand-line file into O(symbols * lines), even though the
+        // supplied line is already correct.  Keep the old recovery search for
+        // nodes with a stale/generated location, but take the fast path when
+        // the declaration name is present on its recorded line.
+        if(line_no > 0 && static_cast<size_t>(line_no) <= lines.size())
+        {
+            const std::string_view recorded_line =
+                lines[static_cast<size_t>(line_no - 1)];
+            if(recorded_line.find(s.name) != std::string_view::npos)
+            {
+                return line_no;
+            }
+        }
         int best_line = -1;
         int best_depth_delta = 1 << 30;
         int best_line_delta = 1 << 30;
@@ -2453,6 +2468,58 @@ loadFilesystemSemanticDocument(const std::string& file_path)
     return buildDocumentSemanticFromAst(doc);
 }
 
+// Filesystem modules do not change when an editor sends a new version of the
+// current document.  Keep their semantic form across those versions: a large
+// import list otherwise reparses the whole transitive module graph on every
+// keystroke.  The file metadata check still refreshes modules that are edited
+// outside the active LSP session.
+static std::optional<DocumentSemantic>
+loadCachedFilesystemSemanticDocument(const std::string& file_path)
+{
+    struct CachedDocument
+    {
+        std::filesystem::file_time_type modified;
+        std::uintmax_t size = 0;
+        DocumentSemantic semantic;
+    };
+    static std::mutex cache_mutex;
+    static std::unordered_map<std::string, CachedDocument> cache;
+
+    std::error_code ec;
+    const auto modified = std::filesystem::last_write_time(file_path, ec);
+    if(ec)
+    {
+        return loadFilesystemSemanticDocument(file_path);
+    }
+    const auto size = std::filesystem::file_size(file_path, ec);
+    if(ec)
+    {
+        return loadFilesystemSemanticDocument(file_path);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        const auto it = cache.find(file_path);
+        if(it != cache.end() && it->second.modified == modified &&
+           it->second.size == size)
+        {
+            return it->second.semantic;
+        }
+    }
+
+    auto loaded = loadFilesystemSemanticDocument(file_path);
+    if(!loaded.has_value())
+    {
+        return std::nullopt;
+    }
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex);
+        cache.insert_or_assign(
+            file_path, CachedDocument{modified, size, *loaded});
+    }
+    return loaded;
+}
+
 static void
 enqueueDocModules(const DocumentSemantic& doc,
                   std::deque<std::pair<std::string, std::string>>& q)
@@ -2517,7 +2584,7 @@ static void hydrateFilesystemModulesFor(std::string_view root_uri,
             continue;
         }
 
-        const auto loaded = loadFilesystemSemanticDocument(*file_path);
+        const auto loaded = loadCachedFilesystemSemanticDocument(*file_path);
         if(!loaded.has_value() || !loaded->ast_valid)
         {
             continue;
@@ -4567,7 +4634,8 @@ computeSemanticCompletions(const DocumentSemantic& current,
                 {
                     continue;
                 }
-                const auto loaded = loadFilesystemSemanticDocument(*file_path);
+                const auto loaded =
+                    loadCachedFilesystemSemanticDocument(*file_path);
                 if(!loaded.has_value())
                 {
                     continue;
@@ -4689,6 +4757,55 @@ fastBuiltinCompletionsFromText(std::string_view text, int line, int column)
         }
     }
     return out;
+}
+
+// A generic completion request does not need a full AST to offer useful
+// in-document names.  In particular, parsing and hydrating every imported
+// module synchronously after each edit makes editing a large file feel stuck.
+// Keep rich semantic completion for qualified access, where it matters most,
+// while making ordinary completion in large files a single lexical pass.
+static std::optional<std::vector<std::string>>
+fastLexicalCompletionsFromText(std::string_view text, int line, int column)
+{
+    constexpr size_t kLargeDocumentThreshold = 64 * 1024;
+    if(text.size() < kLargeDocumentThreshold)
+    {
+        return std::nullopt;
+    }
+    const auto offset = offsetFromLineColumn(text, line, column);
+    if(!offset.has_value() ||
+       qualifiedCompletionContextAtOffset(text, *offset).has_value())
+    {
+        return std::nullopt;
+    }
+
+    const std::string prefix = completionPrefixAtOffset(text, *offset);
+    std::set<std::string> dedup;
+    auto consider = [&](std::string_view candidate)
+    {
+        if(prefix.empty() || startsWith(candidate, prefix))
+        {
+            dedup.insert(std::string(candidate));
+        }
+    };
+    static constexpr std::string_view kLargeDocumentKeywords[] = {
+        "fn",     "cexpr", "let",   "var", "struct", "mod", "namespace",
+        "use",    "alias", "if",    "else", "likely", "unlikely",
+        "while",  "for",   "return",
+    };
+    for(const std::string_view kw : kLargeDocumentKeywords)
+    {
+        consider(kw);
+    }
+    for(const std::string_view builtin : kBuiltinCompletionLabels)
+    {
+        consider(builtin);
+    }
+    for(const auto& ident : lexicalIdentifiersBeforeOffset(text, *offset))
+    {
+        consider(ident);
+    }
+    return std::vector<std::string>(dedup.begin(), dedup.end());
 }
 
 static const char* symbolKindName(int kind)
@@ -4914,30 +5031,38 @@ computeSyntaxDiagnostics(std::string_view text)
         push_diag(line, column, "unclosed delimiter");
     }
 
-    int parse_error_line = 1;
-    mlang::diag::begin_parser_diagnostic_capture();
-    ProgramNode* parsed = parseProgramFromText(text, &parse_error_line);
-    mlang::diag::ParserDiagnostic parser_diag =
-        mlang::diag::end_parser_diagnostic_capture();
-    if(!parsed)
+    // Full parser recovery is useful for concise documents, but it dominates
+    // the didChange path for large files.  The inexpensive checks above still
+    // immediately report unmatched delimiters and unterminated strings there.
+    constexpr size_t kParserDiagnosticLimit = 64 * 1024;
+    if(text.size() <= kParserDiagnosticLimit)
     {
-        if(parser_diag.message.empty())
+        int parse_error_line = 1;
+        mlang::diag::begin_parser_diagnostic_capture();
+        ProgramNode* parsed = parseProgramFromText(text, &parse_error_line);
+        mlang::diag::ParserDiagnostic parser_diag =
+            mlang::diag::end_parser_diagnostic_capture();
+        if(!parsed)
         {
-            parser_diag.line = parse_error_line > 0 ? parse_error_line : 1;
-            parser_diag.column = 1;
-            parser_diag.message = mlang::diag::format_message_with_code(
-                "MLANG-E1999", "syntax error");
-        }
+            if(parser_diag.message.empty())
+            {
+                parser_diag.line = parse_error_line > 0 ? parse_error_line : 1;
+                parser_diag.column = 1;
+                parser_diag.message = mlang::diag::format_message_with_code(
+                    "MLANG-E1999", "syntax error");
+            }
 
-        const bool already_reported =
-            std::any_of(out.begin(), out.end(), [&](const SyntaxDiagnostic& d) {
-                return d.line == parser_diag.line &&
-                       d.column == parser_diag.column &&
-                       d.message == parser_diag.message;
-            });
-        if(!already_reported)
-            push_diag(parser_diag.line, parser_diag.column,
-                      std::move(parser_diag.message));
+            const bool already_reported =
+                std::any_of(out.begin(), out.end(), [&](const SyntaxDiagnostic& d) {
+                    return d.line == parser_diag.line &&
+                           d.column == parser_diag.column &&
+                           d.message == parser_diag.message;
+                });
+            if(!already_reported)
+                push_diag(parser_diag.line, parser_diag.column,
+                          std::move(parser_diag.message));
+        }
+        delete parsed;
     }
     return out;
 }
@@ -5126,6 +5251,18 @@ public:
             return Status::DocumentNotFound;
         }
         if(const auto quick = fastBuiltinCompletionsFromText(
+               doc_it->second.text, line, column);
+           quick.has_value())
+        {
+            completion_cache_items_ = *quick;
+            completion_cache_generation_ = semantic_generation_;
+            completion_cache_uri_ = key;
+            completion_cache_line_ = line;
+            completion_cache_column_ = column;
+            out_items = completion_cache_items_;
+            return Status::Ok;
+        }
+        if(const auto quick = fastLexicalCompletionsFromText(
                doc_it->second.text, line, column);
            quick.has_value())
         {
