@@ -3041,6 +3041,10 @@ fn handle_completion(payload: str8) -> str8 {
         // compiler API already supplies fast lexical labels in that case.
         if len(current_text) <= 65536 {
             current_symbols = load_document_symbols(uri);
+        } else {
+            // Avoid a declaration-comment scan of the entire buffer for each
+            // completion item when metadata is intentionally skipped.
+            current_text = String::new();
         }
     }
 

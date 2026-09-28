@@ -34,7 +34,7 @@ def main() -> int:
             }})
             client.read_until_notification("textDocument/publishDiagnostics")
 
-            changed = text + "\nci\n"
+            changed = text + "\nuse tui::"
             started = time.monotonic()
             client.notify("textDocument/didChange", {"textDocument": {
                 "uri": to_uri(path), "version": 2,
@@ -45,10 +45,21 @@ def main() -> int:
             started = time.monotonic()
             items = client.request("textDocument/completion", {
                 "textDocument": {"uri": to_uri(path)},
-                "position": {"line": changed.count("\n") - 2, "character": 2},
+                "position": {"line": changed.count("\n"), "character": len("use tui::")},
             })
             assert time.monotonic() - started < 1, "completion stalled on large document"
-            assert isinstance(items, list), items
+            assert any(item.get("label") == "table" for item in items), items
+
+            nested = text + "\nuse tui::table::"
+            client.notify("textDocument/didChange", {"textDocument": {
+                "uri": to_uri(path), "version": 3,
+            }, "contentChanges": [{"text": nested}]})
+            client.read_until_notification("textDocument/publishDiagnostics")
+            items = client.request("textDocument/completion", {
+                "textDocument": {"uri": to_uri(path)},
+                "position": {"line": nested.count("\n"), "character": len("use tui::table::")},
+            })
+            assert any(item.get("label") == "Table" for item in items), items
             client.close()
         finally:
             watchdog.cancel()

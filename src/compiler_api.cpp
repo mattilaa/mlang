@@ -4332,6 +4332,52 @@ static std::vector<std::string> moduleNamesFromText(std::string_view text)
     return out;
 }
 
+static std::vector<std::string>
+publicModuleSymbolsFromText(std::string_view text)
+{
+    std::set<std::string> names;
+    for(const std::string_view raw_line : splitLines(text))
+    {
+        const std::string trimmed = trimTextWs(raw_line);
+        std::string_view line = trimmed;
+        if(startsWith(line, "pub "))
+        {
+            line.remove_prefix(4);
+        }
+        else
+        {
+            continue;
+        }
+        for(const std::string_view keyword : {std::string_view("fn "),
+                                              std::string_view("struct "),
+                                              std::string_view("enum "),
+                                              std::string_view("alias ")})
+        {
+            if(!startsWith(line, keyword))
+            {
+                continue;
+            }
+            size_t begin = keyword.size();
+            while(begin < line.size() &&
+                  std::isspace(static_cast<unsigned char>(line[begin])) != 0)
+            {
+                ++begin;
+            }
+            size_t end = begin;
+            while(end < line.size() && isIdentContinue(line[end]))
+            {
+                ++end;
+            }
+            if(end > begin)
+            {
+                names.insert(std::string(line.substr(begin, end - begin)));
+            }
+            break;
+        }
+    }
+    return {names.begin(), names.end()};
+}
+
 static const std::vector<std::string>&
 builtinMemberNames(std::string_view owner)
 {
@@ -4754,6 +4800,93 @@ fastBuiltinCompletionsFromText(std::string_view text, int line, int column)
            startsWith(name, qualified->member_prefix))
         {
             out.push_back(name);
+        }
+    }
+    return out;
+}
+
+// Complete a module path without hydrating the current document's whole
+// import graph.  This covers the common `use tui::` -> `table` -> exported
+// symbol workflow in large files.
+static std::optional<std::vector<std::string>>
+fastModulePathCompletionsFromText(std::string_view uri, std::string_view text,
+                                  int line, int column)
+{
+    const auto offset = offsetFromLineColumn(text, line, column);
+    if(!offset.has_value())
+    {
+        return std::nullopt;
+    }
+    const auto qualified = qualifiedCompletionContextAtOffset(text, *offset);
+    if(!qualified.has_value() || qualified->member_access)
+    {
+        return std::nullopt;
+    }
+
+    size_t prefix_start = *offset;
+    while(prefix_start > 0 && isIdentContinue(text[prefix_start - 1]))
+    {
+        --prefix_start;
+    }
+    if(prefix_start < 2 || text[prefix_start - 1] != ':' ||
+       text[prefix_start - 2] != ':')
+    {
+        return std::nullopt;
+    }
+    size_t path_start = prefix_start - 2;
+    while(path_start > 0 &&
+          (isIdentContinue(text[path_start - 1]) || text[path_start - 1] == ':'))
+    {
+        --path_start;
+    }
+    const std::string module_name(
+        text.substr(path_start, prefix_start - 2 - path_start));
+    if(module_name.empty())
+    {
+        return std::nullopt;
+    }
+
+    const auto file_path = resolveModuleFilePath(uri, module_name);
+    if(!file_path.has_value())
+    {
+        return std::nullopt;
+    }
+    std::ifstream in(*file_path, std::ios::binary);
+    if(!in)
+    {
+        return std::nullopt;
+    }
+    const std::string module_text((std::istreambuf_iterator<char>(in)),
+                                  std::istreambuf_iterator<char>());
+
+    std::set<std::string> candidates;
+    const std::string child_prefix = module_name + "::";
+    for(const auto& child : moduleNamesFromText(module_text))
+    {
+        if(!startsWith(child, child_prefix))
+        {
+            continue;
+        }
+        const std::string_view remainder(child.data() + child_prefix.size(),
+                                         child.size() - child_prefix.size());
+        const size_t next_scope = remainder.find("::");
+        candidates.insert(std::string(remainder.substr(0, next_scope)));
+    }
+    // A leaf module has no child modules, so offer its public top-level
+    // declarations after a second `::`.  This deliberately scans text rather
+    // than constructing an AST: it is the latency-sensitive import path.
+    for(const auto& name : publicModuleSymbolsFromText(module_text))
+    {
+        candidates.insert(name);
+    }
+
+    std::vector<std::string> out;
+    for(const auto& candidate : candidates)
+    {
+        if(qualified->member_prefix.empty() ||
+           startsWith(candidate, qualified->member_prefix))
+        {
+            out.push_back(candidate);
         }
     }
     return out;
@@ -5252,6 +5385,18 @@ public:
         }
         if(const auto quick = fastBuiltinCompletionsFromText(
                doc_it->second.text, line, column);
+           quick.has_value())
+        {
+            completion_cache_items_ = *quick;
+            completion_cache_generation_ = semantic_generation_;
+            completion_cache_uri_ = key;
+            completion_cache_line_ = line;
+            completion_cache_column_ = column;
+            out_items = completion_cache_items_;
+            return Status::Ok;
+        }
+        if(const auto quick = fastModulePathCompletionsFromText(
+               key, doc_it->second.text, line, column);
            quick.has_value())
         {
             completion_cache_items_ = *quick;
