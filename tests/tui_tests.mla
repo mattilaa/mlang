@@ -1071,6 +1071,12 @@ fn tui_input_menu_and_pane_keys() {
     let f10: InputEvent = decode_input("\x1b[21~"); verify(f10.key == Key::Function10);
     let f12: InputEvent = decode_input("\x1b[24~"); verify(f12.key == Key::Function12 && function_number(f12.key) == 12);
     verify(function_number(Key::Enter) == 0 && function_key(9) == Key::Function9);
+    // Modified function keys keep their modifier mask; plain ones report 1.
+    let ctrl_f1: InputEvent = decode_input("\x1b[1;5P"); verify(ctrl_f1.key == Key::Function1 && ctrl_f1.modifiers == 5);
+    let ctrl_f3: InputEvent = decode_input("\x1b[13;5~"); verify(ctrl_f3.key == Key::Function3 && ctrl_f3.modifiers == 5);
+    let shift_f5: InputEvent = decode_input("\x1b[15;2~"); verify(shift_f5.key == Key::Function5 && shift_f5.modifiers == 2);
+    let both_f2: InputEvent = decode_input("\x1b[1;6Q"); verify(both_f2.key == Key::Function2 && both_f2.modifiers == 6);
+    verify(f2.modifiers == 1);
     // A cursor position report is not F3.
     let report: InputEvent = decode_input("\x1b[5;1R"); verify(report.kind == InputKind::None);
     let tab: InputEvent = decode_input("\t");

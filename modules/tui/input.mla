@@ -149,6 +149,15 @@ impl InputDecoder {
                 if byte == 126 && self.code == 1 { output = key_event(InputKind::Edit, Key::Home); }
                 if byte == 126 && self.code == 4 { output = key_event(InputKind::Edit, Key::End); }
             }
+            else {
+                // Modified F1-F12 (CSI 1;5P, CSI 15;5~, ...) keep their modifier
+                // mask (2 Shift, 5 Ctrl, 6 Ctrl+Shift); check `modifiers` when
+                // only the plain key is meant.
+                var number: i32 = 0;
+                if byte >= 80 && byte <= 83 && self.code <= 1 { number = byte - 79; }
+                if byte == 126 { number = tilde_function(self.code); }
+                if number > 0 { output = InputEvent { kind: InputKind::Menu, key: function_key(number), modifiers: self.modifiers }; }
+            }
         }
         self.reset();
         return output;
