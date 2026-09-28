@@ -1,0 +1,43 @@
+mod std::testing;
+
+use std::testing::verify_eq;
+
+enum Status {
+    Idle,
+    Busy,
+    Done
+};
+
+enum HttpMethod: str8 {
+    Get = "GET",
+    Patch = "PATCH"
+};
+
+struct EnumInitCounter { var calls: i32; };
+impl EnumInitCounter {
+    fn status(self: &mut Self) -> Status { self.calls = self.calls + 1; return Status::Busy; }
+    fn method(self: &mut Self) -> HttpMethod { self.calls = self.calls + 1; return HttpMethod::Patch; }
+}
+
+#[test]
+fn test_let_enum_initializer_runs_once() {
+    // A typed `let` of enum type used to generate its initializer twice, so
+    // a method call with side effects ran twice.
+    var counter: EnumInitCounter = EnumInitCounter {};
+    let status: Status = counter.status();
+    verify_eq(1, counter.calls);
+    let busy: bool = status == Status::Busy;
+    verify_eq(true, busy);
+    let method: HttpMethod = counter.method();
+    verify_eq(2, counter.calls);
+    verify_eq("PATCH", method);
+}
+
+#[test]
+fn test_var_enum_initializer_runs_once() {
+    var counter: EnumInitCounter = EnumInitCounter {};
+    var status: Status = counter.status();
+    verify_eq(1, counter.calls);
+    status = Status::Done;
+    verify_eq(1, counter.calls);
+}

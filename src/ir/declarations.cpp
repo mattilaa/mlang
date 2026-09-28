@@ -799,11 +799,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             llvm::AllocaInst* alloca =
                 builder.CreateAlloca(targetType, nullptr, node->name);
 
-            llvm::Value* initValue = nullptr;
-            if(node->expression)
-            {
-                initValue = generateExpression(node->expression);
-            }
+            // The initializer was generated above; generating it again would
+            // repeat its side effects (e.g. a method call running twice).
             if(!initValue)
             {
                 if(Helpers::isEnumStringType(baseKind))
