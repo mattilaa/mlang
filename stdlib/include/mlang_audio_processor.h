@@ -48,6 +48,17 @@ typedef struct mlang_audio_processor {
      * beat counts quarter notes from song start and keeps its last value
      * (still valid) while stopped. */
     void (*transport)(void *context, double tempo, double beat, int32_t playing);
+    /* Optional, multi-output instruments. output_count (control thread) is
+     * the number of stereo output buses, main included (1 when absent);
+     * output_name names bus 0..count-1 (borrowed until destruction). `process`
+     * writes bus 0. After each process call, aux_output returns bus 1..count-1
+     * of that block as interleaved stereo (frames * 2 floats), valid until the
+     * next process call, or NULL when the bus rendered nothing. Called from a
+     * render thread after that process call returned, never concurrently
+     * with process. */
+    int32_t (*output_count)(void *context);
+    const char *(*output_name)(void *context, int32_t bus);
+    const float *(*aux_output)(void *context, int32_t bus);
 } mlang_audio_processor;
 typedef int32_t (*mlang_audio_processor_factory)(const char *path, double rate,
     int32_t max_frames, mlang_audio_processor *out, char *error, int32_t error_size);

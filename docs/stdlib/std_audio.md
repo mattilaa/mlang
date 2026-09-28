@@ -96,6 +96,18 @@ the source's own post-fader signal, and feeders always render before the channel
 they feed. A source cannot feed itself (the call returns -1), and a routing cycle
 falls back to master rather than dropping audio.
 
+Instruments with several outputs (a native processor that fills `output_count`
+and `aux_output`, see `stdlib/include/mlang_audio_processor.h`) report them with
+`instrument_outputs(slot)`, main included, and name them with
+`instrument_output_name(slot, bus)`. By default every aux bus joins the
+instrument's main output before its inserts and fader, so a multi-output
+instrument sounds the same as a single-output one.
+`instrument_output_route(slot, bus, destination)` sends aux bus 1–15 elsewhere:
+0 for master or 1–64 for a PCM track's channel, which then applies its own
+inserts, fader and sends. A routed bus skips the instrument's own inserts, fader
+and sends. -1 puts the bus back on the main output. Loading an instrument resets
+its routes.
+
 `track_peak(track, channel)` consumes the post-fader peak of a buffered channel
 the same way, covering its own voices plus everything routed into it. A track
 that mixes straight into master with no inserts and no routing owns no buffer and
