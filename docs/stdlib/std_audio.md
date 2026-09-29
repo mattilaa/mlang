@@ -148,7 +148,8 @@ the IO thread.
 
 `ControlChange` (master) and `InstrumentControlChange` (slot in `sample`) use
 `midi.note` for the controller number and `midi.velocity` for its integer value.
-CC numbers 0–127 accept 0–127; controller 129 is pitch bend and accepts 0–16383.
+CC numbers 0–127 accept 0–127; controller 128 is aftertouch (channel pressure)
+and accepts 0–127; controller 129 is pitch bend and accepts 0–16383.
 The optional native `control` callback receives the block-relative sample offset.
 mlacker converts these through cached VST3 `IMidiMapping` assignments to normalized
 `IParameterChanges` points. Unsupported mappings are ignored, never treated as notes.

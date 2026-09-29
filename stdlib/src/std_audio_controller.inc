@@ -547,7 +547,7 @@ int32_t __mlang_std_audio_controller_post(int64_t handle, int64_t lane,
     if(kind == 10 && (sample < 1 || sample > 296 || note < 0 || note > 16383)) return -1;
     if((kind == 6 || kind == 7) && (sample < 0 || sample > 32)) return -1;
     if((kind == 8 || kind == 9) && (channel < 0 || channel > 15 ||
-        !((note >= 0 && note <= 127) || note == 129) || velocity < 0 ||
+        note < 0 || note > 129 || velocity < 0 ||
         velocity > (note == 129 ? 16383 : 127) || sample < 0 || sample > 32)) return -1;
     ac_queue *q = &c->queues[lane];
     uint64_t w = atomic_load_explicit(&q->write, memory_order_relaxed);
@@ -610,7 +610,7 @@ int32_t __mlang_std_audio_controller_live_note(int64_t handle, int64_t on, int64
  * currently selected destination, while note-offs retain their held target. */
 int32_t __mlang_std_audio_controller_live_control(int64_t handle, int64_t channel, int64_t controller, int64_t value) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || channel < 0 || channel > 15 || !((controller >= 0 && controller <= 127) || controller == 129) ||
+    if(!c || channel < 0 || channel > 15 || controller < 0 || controller > 129 ||
        value < 0 || value > (controller == 129 ? 16383 : 127)) return -1;
     if(controller <= 127) {
         int key = (int)(channel * 128 + controller);
