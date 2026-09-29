@@ -861,8 +861,8 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         for(int bus = 0; bus < AC_OUTPUTS; ++bus) {
             uint32_t route = bus > 0 && bus < c->instrument_outputs[i] && c->instruments[i].context
                 ? atomic_load_explicit(&c->aux_route[i][bus], memory_order_relaxed) : 0;
-            aux_routes[i][bus] = route <= 65 ? route : 0;
-            if(aux_routes[i][bus] >= 2) buffered[aux_routes[i][bus] - 2] = 1;
+            aux_routes[i][bus] = route <= 74 ? route : 0;
+            if(aux_routes[i][bus] >= 2 && aux_routes[i][bus] <= 65) buffered[aux_routes[i][bus] - 2] = 1;
         }
     for(int t = 0; t < 64; ++t) if(buffered[t]) memset(c->track_buffer[t], 0, frames * 2u * sizeof(float));
     /* Feeders before their destination; a cycle falls back to master. */
@@ -1002,9 +1002,12 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         mlang_audio_processor *p = &c->instruments[i];
         if(!p->context || !p->aux_output || c->failed[64 + i]) continue;
         for(int bus = 1; bus < c->instrument_outputs[i]; ++bus) {
-            uint32_t route = aux_routes[i][bus]; if(route == 0) continue;
+            uint32_t route = aux_routes[i][bus]; if(route == 0 || route == 74) continue;
+            // An aux effect channel takes the bus as a send: post its own
+            // level, into the effect's input only.
+            if(route >= 66 && !c->effects[route - 66].context) continue;
             const float *aux = p->aux_output(p->context, bus); if(!aux) continue;
-            float *destination = route == 1 ? out : c->track_buffer[route - 2];
+            float *destination = route == 1 ? out : (route >= 66 ? c->effect_buffer[route - 66] : c->track_buffer[route - 2]);
             for(uint32_t f = 0; f < frames * 2u; ++f) if(isfinite(aux[f])) destination[f] += aux[f];
         }
     }
@@ -1516,7 +1519,7 @@ const char *__mlang_std_audio_controller_instrument_output_name(int64_t handle, 
  * channel. Audio may run; loading an instrument resets its routes. */
 int32_t __mlang_std_audio_controller_instrument_output_route(int64_t handle, int64_t slot, int64_t bus, int64_t destination) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || slot < 1 || slot > 32 || bus < 1 || bus >= AC_OUTPUTS || destination < -1 || destination > 64) return -1;
+    if(!c || slot < 1 || slot > 32 || bus < 1 || bus >= AC_OUTPUTS || destination < -1 || destination > 73) return -1;
     atomic_store_explicit(&c->aux_route[slot - 1][bus], (uint32_t)(destination + 1), memory_order_relaxed); return 0;
 }
 int32_t __mlang_std_audio_controller_load_insert(int64_t handle, int64_t id, const char *path) {

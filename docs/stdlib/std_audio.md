@@ -104,7 +104,9 @@ instrument's main output before its inserts and fader, so a multi-output
 instrument sounds the same as a single-output one.
 `instrument_output_route(slot, bus, destination)` sends aux bus 1–15 elsewhere:
 0 for master or 1–64 for a PCM track's channel, which then applies its own
-inserts, fader and sends. A routed bus skips the instrument's own inserts, fader
+inserts, fader and sends. 65–72 feed aux effect channel 0–7's input, as a send
+from the plugin (nothing plays while that channel has no effect), and 73
+silences the bus. A routed bus skips the instrument's own inserts, fader
 and sends. -1 puts the bus back on the main output. Loading an instrument resets
 its routes.
 
