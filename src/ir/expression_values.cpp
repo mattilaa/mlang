@@ -271,6 +271,79 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
     return value;
 }
 
+static bool isNumericTypeKind(TypeNode::TypeKind kind)
+{
+    switch(kind)
+    {
+        case TypeNode::TYPE_INT:
+        case TypeNode::TYPE_FLOAT:
+        case TypeNode::TYPE_DOUBLE:
+        case TypeNode::TYPE_I8:
+        case TypeNode::TYPE_I16:
+        case TypeNode::TYPE_I32:
+        case TypeNode::TYPE_I64:
+        case TypeNode::TYPE_U8:
+        case TypeNode::TYPE_U16:
+        case TypeNode::TYPE_U32:
+        case TypeNode::TYPE_U64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// A list literal (or array fill) passed for a parameter declared as a list of
+// a numeric type takes that element type, as it does when a `let` declares
+// one. Otherwise its integer literals default to i64 while the callee reads
+// its declared width: `f([6, 7, 8])` with `fn f(v: list<i32>)` read 0 as the
+// second element. A list value carries no element type, so nothing else
+// would catch the mismatch. Other arguments generate as usual.
+llvm::Value* CodeGenerator::generateArgumentValue(ExpressionNode* arg,
+                                                  TypeNode* declaredType)
+{
+    auto* listType = dynamic_cast<GenericListTypeNode*>(declaredType);
+    if(listType && listType->elementType &&
+       isNumericTypeKind(listType->elementType->kind))
+    {
+        if(llvm::Type* elemType = getLLVMTypeFromNode(listType->elementType))
+        {
+            if(auto* listLit = dynamic_cast<ListLiteralNode*>(arg))
+                return generateListLiteral(listLit, elemType,
+                                           listType->elementType);
+            if(auto* arrFill = dynamic_cast<ArrayFillNode*>(arg))
+                return generateArrayFill(arrFill, elemType);
+        }
+    }
+    return generateExpression(arg);
+}
+
+// The declared type of argument `index` when every overload that takes
+// `argCount` arguments declares the same type there; nullptr otherwise, so an
+// ambiguous call keeps generating its arguments untyped.
+TypeNode* CodeGenerator::overloadParameterType(
+    const std::vector<FunctionOverloadInfo>& overloads, size_t argCount,
+    size_t index) const
+{
+    TypeNode* found = nullptr;
+    std::string foundKey;
+    for(const auto& info : overloads)
+    {
+        if(!info.node || !info.node->parameters ||
+           info.node->parameters->isVarArg ||
+           info.node->parameters->parameters.size() != argCount)
+            continue;
+        ParameterNode* param = info.node->parameters->parameters[index];
+        if(!param || !param->type)
+            return nullptr;
+        std::string key = typeMangle(param->type);
+        if(found && key != foundKey)
+            return nullptr;
+        found = param->type;
+        foundKey = key;
+    }
+    return found;
+}
+
 llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
                                                 llvm::Type* declaredElemType,
                                                 TypeNode* declaredElemTypeNode)

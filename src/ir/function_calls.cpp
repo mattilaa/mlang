@@ -1091,9 +1091,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
     std::vector<llvm::Value*> argVals;
     argVals.reserve(node->arguments.size());
-    for(auto arg : node->arguments)
+    for(size_t argIndex = 0; argIndex < node->arguments.size(); ++argIndex)
     {
-        llvm::Value* argVal = generateExpression(arg);
+        auto arg = node->arguments[argIndex];
+        llvm::Value* argVal = generateArgumentValue(
+            arg, overloadParameterType(overloadIt->second,
+                                       node->arguments.size(), argIndex));
         if(!argVal)
             return nullptr;
         // &s / &mut s where s is a string: generateExpression(OP_ADDR) returns
