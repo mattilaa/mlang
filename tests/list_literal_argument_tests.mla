@@ -1,0 +1,39 @@
+mod std::testing;
+
+use std::testing::verify_eq;
+
+// A list literal passed for a list parameter takes the parameter's element
+// type, as it does for a typed `let`. Integer literals used to stay i64 and
+// the callee read them at its declared width (the second i32 read as 0).
+
+fn second_i32(values: list<i32>) -> i32 { return values[1]; }
+fn second_u8(values: list<u8>) -> u8 { return values[1]; }
+fn sum_f32(values: list<f32>) -> f32 { var total: f32 = 0.0f; for v in values { total = total + v; } return total; }
+generic<T> fn count_any(values: list<T>) -> i64 { return values.len(); }
+
+struct Widths { var total: i32; };
+impl Widths {
+    fn add_all(self: &mut Self, widths: list<i32>) -> void {
+        for w in widths { self.total = self.total + w; }
+    }
+}
+
+#[test]
+fn test_list_literal_argument_takes_parameter_element_type() {
+    verify_eq(7, second_i32([6, 7, 8]));
+    let byte: u8 = 200;
+    verify_eq(true, second_u8([1, 200, 3]) == byte);
+    verify_eq(true, sum_f32([0.5, 1.5, 2.0]) == 4.0f);
+}
+
+#[test]
+fn test_list_literal_method_argument_takes_parameter_element_type() {
+    var widths: Widths = Widths {};
+    widths.add_all([6, 6, 4, 5, 4]);
+    verify_eq(25, widths.total);
+}
+
+#[test]
+fn test_list_literal_generic_argument_unchanged() {
+    verify_eq(3, count_any([1, 2, 3]));
+}

@@ -5845,7 +5845,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     for(size_t argIndex = 0; argIndex < node->arguments.size(); ++argIndex)
     {
         auto* arg = node->arguments[argIndex];
-        llvm::Value* argVal = generateExpression(arg);
+        llvm::Value* argVal = generateArgumentValue(
+            arg, argIndex < declaredParams.size() && declaredParams[argIndex]
+                     ? declaredParams[argIndex]->type
+                     : nullptr);
         if(!argVal)
             return nullptr;
 

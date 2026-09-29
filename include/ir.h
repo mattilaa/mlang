@@ -695,6 +695,14 @@ private:
     llvm::Value* generateCastExpression(CastExpressionNode* node);
     void emitNarrowCastRuntimeCheck(CastExpressionNode* node,
                                     llvm::Value* valid);
+    // A call argument, typed by the declared parameter where that matters
+    // (see the definition), and the parameter type the candidate overloads
+    // agree on for one argument.
+    llvm::Value* generateArgumentValue(ExpressionNode* arg,
+                                       TypeNode* declaredType);
+    TypeNode* overloadParameterType(
+        const std::vector<FunctionOverloadInfo>& overloads, size_t argCount,
+        size_t index) const;
     llvm::Value* generateListLiteral(ListLiteralNode* node,
                                     llvm::Type* declaredElemType = nullptr,
                                     TypeNode* declaredElemTypeNode = nullptr);
