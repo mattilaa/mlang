@@ -59,6 +59,13 @@ typedef struct mlang_audio_processor {
     int32_t (*output_count)(void *context);
     const char *(*output_name)(void *context, int32_t bus);
     const float *(*aux_output)(void *context, int32_t bus);
+    /* Optional, control thread, audio may be running: sampler pad `pad`'s
+     * slice markers (frames, ascending, the first 0). pad_markers copies up to
+     * `max` into `out` and returns how many the pad has, or -1 when
+     * unsupported or the pad is empty. set_pad_markers replaces them with
+     * `count` frames, or detects them again when count < 0; 0 or -1. */
+    int32_t (*pad_markers)(void *context, int32_t pad, double *out, int32_t max);
+    int32_t (*set_pad_markers)(void *context, int32_t pad, const double *frames, int32_t count);
 } mlang_audio_processor;
 typedef int32_t (*mlang_audio_processor_factory)(const char *path, double rate,
     int32_t max_frames, mlang_audio_processor *out, char *error, int32_t error_size);

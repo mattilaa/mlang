@@ -39,6 +39,14 @@ inline constexpr const char *kClearMessage = "mlang.sampler.clear";
 //   "occupied" int    bit n set when pad n holds a sample
 inline constexpr const char *kInfoMessage = "mlang.sampler.info";
 
+// Read or replace a pad's slice markers: the frames where its hits start,
+// ascending, the first 0. Mla Sampler detects them when a sample loads.
+//   "pad"    int     target pad
+//   "set"    int     optional: 1 replaces them with "frames", 2 detects them again
+//   "frames" binary  float64 frames: the new markers with set=1; the plug-in
+//                    writes back the pad's markers the same way
+inline constexpr const char *kMarkersMessage = "mlang.sampler.markers";
+
 inline constexpr int kMaxFrames = 16777216;
 
 } // namespace mla_sampler

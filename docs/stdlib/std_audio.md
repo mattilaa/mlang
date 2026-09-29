@@ -107,7 +107,14 @@ instrument sounds the same as a single-output one.
 inserts, fader and sends. 65–72 feed aux effect channel 0–7's input, as a send
 from the plugin (nothing plays while that channel has no effect), and 73
 silences the bus. A routed bus skips the instrument's own inserts, fader
-and sends. -1 puts the bus back on the main output. Loading an instrument resets
+and sends. -1 puts the bus back on the main output.
+
+A sampler instrument (such as Mla Sampler) may report a pad's slice markers,
+the frames where its hits start: `instrument_markers(slot, pad)` returns them
+(the first is 0; empty when it has none), and `instrument_set_markers(slot,
+pad, frames, detect)` replaces them, or has the instrument detect them again
+when `detect`. Both use the optional `pad_markers` and `set_pad_markers`
+processor hooks. Loading an instrument resets
 its routes.
 
 `track_peak(track, channel)` consumes the post-fader peak of a buffered channel

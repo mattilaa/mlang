@@ -1677,6 +1677,33 @@ int64_t __mlang_std_audio_controller_instrument_sampler(int64_t handle, int64_t 
     mlang_audio_processor *p = &c->instruments[slot - 1];
     return p->context && p->sampler_info ? p->sampler_info(p->context, (int32_t)key) : -1;
 }
+/* Control thread. A sampler pad's slice markers (frames); empty when the
+ * instrument has none for it. */
+mlang_list_t __mlang_std_audio_controller_instrument_markers(int64_t handle, int64_t slot, int64_t pad) {
+    mlang_list_t out = {0, NULL};
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || pad < 0 || pad > 127) return out;
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    if(!p->context || !p->pad_markers) return out;
+    double probe[1];
+    int32_t count = p->pad_markers(p->context, (int32_t)pad, probe, 0);
+    if(count <= 0 || count > 65536) return out;
+    double *frames = malloc((size_t)count * sizeof(double));
+    if(!frames) return out;
+    int32_t got = p->pad_markers(p->context, (int32_t)pad, frames, count);
+    if(got <= 0) { free(frames); return out; }
+    out.data = frames; out.size = got < count ? got : count;
+    return out;
+}
+/* Control thread. Replace a sampler pad's slice markers with `frames`, or
+ * detect them again (`detect`). 0 or -1. */
+int32_t __mlang_std_audio_controller_instrument_set_markers(int64_t handle, int64_t slot, int64_t pad, mlang_list_t frames, int64_t detect) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || pad < 0 || pad > 127 || frames.size < 0 || frames.size > 65536) return -1;
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    if(!p->context || !p->set_pad_markers) return -1;
+    return p->set_pad_markers(p->context, (int32_t)pad, (const double *)frames.data, detect ? -1 : (int32_t)frames.size);
+}
 const char *__mlang_std_audio_controller_instrument_name(int64_t handle, int64_t slot) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || slot < 1 || slot > 296) return "";
