@@ -171,6 +171,15 @@ An atomic destination snapshot and producer-owned held-key table preserve the
 original route for note-offs; input channels are preserved. Preview live voices
 use separate source IDs from sequencer voices. No UI round trip is required.
 
+Live notes and controllers are timestamped: while a device runs, each render
+publishes the audio clock at its first frame and the time it started, and a
+live event plays on the frame it arrived on, one block later. Events keep
+their place within the block (sample-accurate, a fixed block of latency)
+instead of all landing on the next block's first frame. `live_timing(mode)`
+chooses: 0 plays them when the next block starts, 1 (the default) stamps
+them while a device runs, 2 also when the host renders with `process`. When
+audio stalls for more than four blocks, events play at once.
+
 `master_peak(channel)` (0 = left, 1 = right) atomically consumes the maximum
 post-master, post-gain/clipping peak since the previous read, scaled 0–1000.
 One UI consumer should read at meter refresh cadence, then apply display decay.

@@ -284,6 +284,14 @@ typedef struct {
     _Atomic uint64_t learn_target, learn_map[2048];
     uint64_t live_notes[2048]; /* MIDI producer owned: original destination per key. */
     uint64_t live_panic;
+    /* Live MIDI timing: each render publishes the clock at its first frame,
+     * the wall time it started and its length (under a sequence count), so a
+     * live event can be stamped with the frame it arrived on, one block
+     * later (see ac_live_frame). live_timing: 0 immediate, 1 stamped while a
+     * device runs (default), 2 also when the host calls process. */
+    _Atomic uint64_t live_sequence, live_anchor_clock, live_anchor_ns;
+    _Atomic uint32_t live_block;
+    _Atomic int live_timing;
     ac_voice voices[AC_VOICES];
     ac_sample samples[AC_SAMPLES];
     /* Registration appends while the device runs: the entry is written before
@@ -493,6 +501,8 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
         atomic_init(&c->queues[i].read, 0); atomic_init(&c->queues[i].write, 0);
     }
     atomic_init(&c->dropped, 0); atomic_init(&c->clock, 0);
+    atomic_init(&c->live_sequence, 0); atomic_init(&c->live_anchor_clock, 0); atomic_init(&c->live_anchor_ns, 0);
+    atomic_init(&c->live_block, 0); atomic_init(&c->live_timing, 1);
     atomic_init(&c->panic, 0); atomic_init(&c->peak, 0);
     atomic_init(&c->master_peak[0], 0); atomic_init(&c->master_peak[1], 0);
     for(int i = 0; i < 32; ++i) for(int ch = 0; ch < 2; ++ch) atomic_init(&c->instrument_peak[i][ch], 0);
@@ -581,13 +591,41 @@ int32_t __mlang_std_audio_controller_track_volume(int64_t handle, int64_t track,
     if(slot) atomic_store_explicit(&c->instrument_volume[slot - 1], (uint32_t)percent, memory_order_relaxed);
     return 0;
 }
+/* The frame a live event arriving now plays on: where the audio clock is
+ * now (the last render's first frame plus the time since it started), one
+ * block later, so every event keeps its place within the block instead of
+ * all landing on the next block's first frame. -1 (now) when timing is off,
+ * before the first stamped render, or when the audio has stalled. */
+static int64_t ac_live_frame(ac_controller *c) {
+    if(atomic_load_explicit(&c->live_timing, memory_order_relaxed) == 0) return -1;
+    uint64_t sequence, anchor_clock, anchor_ns; uint32_t block;
+    do {
+        sequence = atomic_load_explicit(&c->live_sequence, memory_order_acquire);
+        anchor_clock = atomic_load_explicit(&c->live_anchor_clock, memory_order_relaxed);
+        anchor_ns = atomic_load_explicit(&c->live_anchor_ns, memory_order_relaxed);
+        block = atomic_load_explicit(&c->live_block, memory_order_relaxed);
+    } while((sequence & 1u) || sequence != atomic_load_explicit(&c->live_sequence, memory_order_acquire));
+    if(!anchor_ns || !block) return -1;
+    uint64_t now = ac_now_ns();
+    double elapsed = now > anchor_ns ? (double)(now - anchor_ns) * c->rate / 1e9 : 0.0;
+    if(elapsed > 4.0 * block) return -1;
+    return (int64_t)(anchor_clock + (uint64_t)elapsed + block);
+}
 static int32_t ac_post_live(ac_controller *c, uint64_t target, int on, int64_t channel, int64_t pitch, int64_t velocity) {
     if(!target) return 0;
     int64_t source = (int64_t)(target & 127u) - 1;
     int64_t instrument = (int64_t)(target >> 7) - 1;
     return __mlang_std_audio_controller_post((int64_t)(intptr_t)c, 1,
         instrument ? (on ? 6 : 7) : (on ? 1 : 2), channel, pitch, velocity,
-        source + 65536, -1, instrument, 1.0);
+        source + 65536, ac_live_frame(c), instrument, 1.0);
+}
+/* 0 plays live MIDI at once, 1 stamps it while a device runs (the default),
+ * 2 stamps it when the host renders with process too. */
+int32_t __mlang_std_audio_controller_live_timing(int64_t handle, int64_t mode) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || mode < 0 || mode > 2) return -1;
+    atomic_store_explicit(&c->live_timing, (int)mode, memory_order_relaxed);
+    return 0;
 }
 /* Exactly one MIDI producer, sharing lane 1 with no other producer. UI focus
  * changes affect new note-ons; held-note offs keep their original destination. */
@@ -622,7 +660,7 @@ int32_t __mlang_std_audio_controller_live_control(int64_t handle, int64_t channe
             double normalized = (double)value / 127.0;
             if(steps > 0) normalized = floor(normalized * steps + 0.5) / steps;
             return __mlang_std_audio_controller_post(handle, 1, 10, channel,
-                (mapping >> 6) & 16383, 0, 0, -1, mapping & 63, normalized);
+                (mapping >> 6) & 16383, 0, 0, ac_live_frame(c), mapping & 63, normalized);
         }
     }
     uint64_t target = atomic_load_explicit(&c->live_target, memory_order_acquire);
@@ -630,7 +668,7 @@ int32_t __mlang_std_audio_controller_live_control(int64_t handle, int64_t channe
     int64_t source = (int64_t)(target & 127u) - 1;
     int64_t instrument = (int64_t)(target >> 7) - 1;
     return __mlang_std_audio_controller_post(handle, 1, instrument ? 9 : 8,
-        channel, controller, value, source + 65536, -1, instrument, 1.0);
+        channel, controller, value, source + 65536, ac_live_frame(c), instrument, 1.0);
 }
 int32_t __mlang_std_audio_controller_master_peak(int64_t handle, int64_t channel) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
@@ -833,6 +871,16 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         }
     }
     uint64_t clock = atomic_load_explicit(&c->clock, memory_order_relaxed);
+    /* Anchor live MIDI timing to this block (see ac_live_frame). */
+    int timing = atomic_load_explicit(&c->live_timing, memory_order_relaxed);
+    if(timing == 2 || (timing == 1 && c->running)) {
+        uint64_t sequence = atomic_load_explicit(&c->live_sequence, memory_order_relaxed);
+        atomic_store_explicit(&c->live_sequence, sequence + 1, memory_order_release);
+        atomic_store_explicit(&c->live_anchor_clock, clock, memory_order_relaxed);
+        atomic_store_explicit(&c->live_anchor_ns, render_start, memory_order_relaxed);
+        atomic_store_explicit(&c->live_block, frames, memory_order_relaxed);
+        atomic_store_explicit(&c->live_sequence, sequence + 2, memory_order_release);
+    }
     ac_transport_begin(c);
     /* Serial before clip: an acknowledged serial then covers this clip. */
     uint64_t preview_serial = atomic_load_explicit(&c->preview_serial, memory_order_acquire);
@@ -1215,6 +1263,7 @@ int32_t __mlang_std_audio_controller_stop(int64_t handle) {
     }
 #endif
     c->running = 0; ac_silence(c); c->processor_reset = 1;
+    atomic_store_explicit(&c->live_anchor_ns, 0, memory_order_relaxed); /* live MIDI plays at once until the next render */
     atomic_store_explicit(&c->master_peak[0], 0, memory_order_relaxed);
     atomic_store_explicit(&c->master_peak[1], 0, memory_order_relaxed);
     for(int i = 0; i < 32; ++i) for(int ch = 0; ch < 2; ++ch) atomic_store_explicit(&c->instrument_peak[i][ch], 0, memory_order_relaxed);

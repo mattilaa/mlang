@@ -1,6 +1,7 @@
 mod std::testing;
 mod std::audio::controller;
 mod std::thread;
+mod std::time;
 use std::testing::verify;
 use std::audio::controller::*;
 use std::audio::PcmAudio;
@@ -36,6 +37,43 @@ fn audio_controller_live_route_and_master_meter() {
     verify(controller.live_note(true, 0, 60, 127) == 0);
     verify(controller.process(block, 1024) == 0);
     controller.stop(); verify(controller.master_peak(0) == 0 && controller.master_peak(1) == 0);
+    block.close(); controller.close();
+}
+
+/// Index of the first frame of `block` louder than silence, or -1.
+fn first_sound(block: PcmBlock, frames: i64) -> i64 {
+    for f in 0..frames { if block.left(f) != 0.0f { return f; } }
+    return -1;
+}
+
+#[test]
+fn audio_controller_live_midi_timing() {
+    let opened: result<AudioController, str8> = AudioController::new(48000, 128);
+    verify(opened.is_ok()); if opened.is_err() { return; }
+    let controller: AudioController = opened.unwrap();
+    let allocated: result<PcmBlock, str8> = PcmBlock::new(512);
+    verify(allocated.is_ok()); if allocated.is_err() { controller.close(); return; }
+    let block: PcmBlock = allocated.unwrap();
+    verify(controller.midi_target(0, 0) == 0);
+    // Immediate (0): a live note plays from the next block's first frame.
+    verify(controller.live_timing(0) == 0);
+    verify(controller.process(block, 512) == 0);
+    std::time::sleep_ms(3);
+    verify(controller.live_note(true, 2, 69, 127) == 0);
+    verify(controller.process(block, 512) == 0);
+    verify(first_sound(block, 512) >= 0 && first_sound(block, 512) < 2);
+    verify(controller.live_note(false, 2, 69, 0) == 0);
+    for _i in 0..8 { controller.process(block, 512); }
+    // Stamped (2 here, as the host calls process): a note 3 ms after a
+    // block started plays 3 ms into the block after it, at least 144 frames.
+    verify(controller.live_timing(2) == 0);
+    verify(controller.process(block, 512) == 0);
+    std::time::sleep_ms(3);
+    verify(controller.live_note(true, 2, 69, 127) == 0);
+    verify(controller.process(block, 512) == 0);
+    let at: i64 = first_sound(block, 512);
+    verify(at >= 140);
+    verify(controller.live_timing(3) == -1);
     block.close(); controller.close();
 }
 
