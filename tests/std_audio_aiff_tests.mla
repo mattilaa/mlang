@@ -1,0 +1,94 @@
+mod std::strbuf;
+mod std::audio;
+mod std::bytes;
+mod std::fs;
+mod std::testing;
+
+use std::audio::PcmAudio;
+use std::bytes::Bytes;
+use std::fs::File;
+use std::testing::verify;
+use std::strbuf::*;
+
+// AIFF / AIFF-C decoding by PcmAudio::load: integer samples of any size up to
+// 32 bits (big-endian, or little-endian "sowt") and float32/64 ("fl32",
+// "fl64"). The files are built byte by byte, through `&mut` list helpers.
+
+/// Append `text`'s bytes (a chunk tag or compression code).
+fn put_text(out: &mut list<i32>, text: str8) -> void {
+    let codes: list<i32> = std::strbuf::to_bytes(text);
+    for b in codes { out.push(b); }
+}
+
+/// Append `value` as `count` big-endian bytes.
+fn put_be(out: &mut list<i32>, value: i64, count: i64) -> void {
+    for i in 0..count { out.push(i32((value >> ((count - 1 - i) * 8)) & 255)); }
+}
+
+/// A mono 48 kHz AIFF (or AIFF-C with `compression`) of `frames` frames of
+/// `bits`-bit samples whose raw bytes are `data`, written to `path`.
+fn write_aiff(path: str8, compression: str8, bits: i64, frames: i64, data: list<i32>) -> bool {
+    let aifc: bool = std::strbuf::len(compression) == 4;
+    // Channels, frames, bits, then 48000 as an 80-bit extended float.
+    var comm: list<i32> = [];
+    put_be(&mut comm, 1, 2); put_be(&mut comm, frames, 4); put_be(&mut comm, bits, 2);
+    put_be(&mut comm, 16398, 2); put_be(&mut comm, 48000, 2); put_be(&mut comm, 0, 6);
+    if aifc { put_text(&mut comm, compression); put_be(&mut comm, 0, 2); }
+    var body: list<i32> = [];
+    put_text(&mut body, aifc ? "AIFC" : "AIFF");
+    put_text(&mut body, "COMM"); put_be(&mut body, comm.len(), 4);
+    for b in comm { body.push(b); }
+    put_text(&mut body, "SSND"); put_be(&mut body, data.len() + 8, 4); put_be(&mut body, 0, 8);
+    for b in data { body.push(b); }
+    var file_bytes: list<i32> = [];
+    put_text(&mut file_bytes, "FORM"); put_be(&mut file_bytes, body.len(), 4);
+    for b in body { file_bytes.push(b); }
+    let created: result<Bytes, str8> = Bytes::new(file_bytes.len());
+    if created.is_err() { return false; }
+    let raw: Bytes = created.unwrap();
+    for b in file_bytes { raw.append_byte(b); }
+    let text: str8 = raw.to_string();
+    let count: i64 = raw.len();
+    raw.close();
+    let opened: result<File, str8> = File::create(path);
+    if opened.is_err() { std::strbuf::free(text); return false; }
+    let file: File = opened.unwrap();
+    let written: result<i64, str8> = file.write_bytes(text, count);
+    file.close();
+    std::strbuf::free(text);
+    return written.is_ok();
+}
+
+/// Decoded samples of an AIFF built by `write_aiff`, or [] when rejected.
+fn decode_aiff(compression: str8, bits: i64, frames: i64, data: list<i32>) -> list<f32> {
+    let path: str8 = "/tmp/mlang_std_audio_aiff_test.aif";
+    if !write_aiff(path, compression, bits, frames, data) { return []; }
+    let loaded: result<PcmAudio, str8> = PcmAudio::load(path);
+    if loaded.is_err() { return []; }
+    let audio: PcmAudio = loaded.unwrap();
+    let samples: list<f32> = audio.samples();
+    audio.close();
+    return samples;
+}
+
+#[test]
+fn test_audio_pcm_aiff_decode() {
+    // 24-bit: +0.5, -0.5, full scale up, the smallest step.
+    let deep: list<f32> = decode_aiff("", 24, 4, [64, 0, 0, 192, 0, 0, 127, 255, 255, 0, 0, 1]);
+    verify(deep.len() == 4 && deep[0] == 0.5f && deep[1] == -0.5f && deep[2] > 0.99999f && deep[3] > 0.0f && deep[3] < 0.0000002f);
+    // 8-bit (signed in AIFF) and 16-bit, as before.
+    let coarse: list<f32> = decode_aiff("", 8, 2, [128, 64]);
+    verify(coarse.len() == 2 && coarse[0] == -1.0f && coarse[1] == 0.5f);
+    let cd: list<f32> = decode_aiff("", 16, 2, [64, 0, 128, 0]);
+    verify(cd.len() == 2 && cd[0] == 0.5f && cd[1] == -1.0f);
+    // AIFF-C float32 (0.25, -1) and float64 (0.75), big-endian.
+    let single: list<f32> = decode_aiff("fl32", 32, 2, [62, 128, 0, 0, 191, 128, 0, 0]);
+    verify(single.len() == 2 && single[0] == 0.25f && single[1] == -1.0f);
+    let double: list<f32> = decode_aiff("fl64", 64, 1, [63, 232, 0, 0, 0, 0, 0, 0]);
+    verify(double.len() == 1 && double[0] == 0.75f);
+    // Little-endian integers ("sowt"), and an unknown compression refused.
+    let swapped: list<f32> = decode_aiff("sowt", 24, 1, [0, 0, 64]);
+    verify(swapped.len() == 1 && swapped[0] == 0.5f);
+    let refused: list<f32> = decode_aiff("ulaw", 8, 1, [0]);
+    verify(refused.len() == 0);
+}

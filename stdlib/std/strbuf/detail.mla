@@ -6,6 +6,8 @@
 
 extern fn __mlang_std_strbuf_len(s: str8) -> i64;
 extern fn __mlang_std_strbuf_is_empty(s: str8) -> i32;
+extern fn __mlang_std_strbuf_byte_at(s: str8, index: i64) -> i32;
+extern fn __mlang_std_strbuf_bytes(s: str8) -> list<i32>;
 extern fn __mlang_std_strbuf_clone(s: str8) -> str8;
 extern fn __mlang_std_strbuf_eq(a: str8, b: str8) -> i32;
 extern fn __mlang_std_strbuf_compare(a: str8, b: str8) -> i64;

@@ -1,0 +1,19 @@
+mod std::strbuf;
+mod std::testing;
+
+use std::strbuf::*;
+use std::testing::verify;
+
+#[test]
+fn test_strbuf_bytes() {
+    // byte_at: the byte, or -1 outside the string.
+    verify(byte_at("AZ", 0) == 65 && byte_at("AZ", 1) == 90);
+    verify(byte_at("AZ", 2) == -1 && byte_at("AZ", -1) == -1 && byte_at("", 0) == -1);
+    // UTF-8 bytes stay 0-255.
+    verify(byte_at("\xc3\xa4", 0) == 195 && byte_at("\xc3\xa4", 1) == 164);
+    // to_bytes: every byte, as a list.
+    let tag: list<i32> = to_bytes("FORM");
+    verify(tag.len() == 4 && tag[0] == 70 && tag[3] == 77);
+    let none: list<i32> = to_bytes("");
+    verify(none.len() == 0);
+}

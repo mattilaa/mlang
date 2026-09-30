@@ -186,6 +186,7 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
         if(currentFunctionExceptionFrame)
             builder.CreateCall(exceptionsPopFrameFunc,
                                {currentFunctionExceptionFrame});
+        emitInoutWriteBack();
         emitAllActiveCleanups();
         builder.CreateRet(returnValue);
     }
@@ -200,6 +201,7 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
         if(currentFunctionExceptionFrame)
             builder.CreateCall(exceptionsPopFrameFunc,
                                {currentFunctionExceptionFrame});
+        emitInoutWriteBack();
         emitAllActiveCleanups();
         builder.CreateRetVoid();
     }

@@ -435,8 +435,10 @@ buffers; they do not allocate or lock. `pcm_underrun_count()` counts callbacks
 that requested PCM after the ring became empty. Call `clear_pcm_queue()` while
 the device is stopped.
 
-`PcmAudio` decodes mono or stereo 16-bit PCM WAV, AIFF, and uncompressed
-AIFF-C (`NONE`, `twos`, or `sowt`). `samples()` returns source-channel
+`PcmAudio` decodes mono or stereo 16-bit PCM or float32 WAV; AIFF with
+integer samples of any size up to 32 bits (8, 16, 24 and 32-bit); and AIFF-C
+with big-endian (`NONE`, `twos`) or little-endian (`sowt`) integers of the
+same sizes, or float32 (`fl32`) and float64 (`fl64`) samples. `samples()` returns source-channel
 interleaved `f32` samples. Paths beginning with `~/` are expanded before open.
 
 `PcmBlock` is a fixed-size native stereo producer buffer. Allocate it before

@@ -1099,13 +1099,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                        node->arguments.size(), argIndex));
         if(!argVal)
             return nullptr;
-        // &s / &mut s where s is a string: generateExpression(OP_ADDR) returns
-        // the alloca (char**). Load through to get the actual char* so the
-        // callee receives the string pointer, not the stack address.
+        // &s where s is a string: generateExpression(OP_ADDR) returns the
+        // alloca (char**). Load through to get the actual char* so the callee
+        // receives the string pointer, not the stack address. `&mut s` keeps
+        // the address: a `&mut` parameter writes back through it.
         if(auto* unary = dynamic_cast<UnaryOpNode*>(arg))
         {
-            if(unary->op == UnaryOpNode::OP_ADDR ||
-               unary->op == UnaryOpNode::OP_ADDR_MUT)
+            if(unary->op == UnaryOpNode::OP_ADDR)
             {
                 if(auto* id = dynamic_cast<IdentifierNode*>(unary->operand))
                 {
@@ -1168,6 +1168,29 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                        dynamic_cast<ReferenceTypeNode*>(expectedSemantic))
                 {
                     expectedSemantic = refType->elementType;
+                    // `&mut x` must name a value of the parameter's type;
+                    // without `&mut` the call-site check reports it.
+                    if(refType->isMutable)
+                    {
+                        auto* unary = dynamic_cast<UnaryOpNode*>(node->arguments[i]);
+                        if(!(unary && unary->op == UnaryOpNode::OP_ADDR_MUT))
+                            continue;
+                        {
+                            TypeNode* operandType = semanticArgumentType(unary->operand);
+                            if(operandType && typeMangle(operandType) != typeMangle(expectedSemantic))
+                            {
+                                ok = false;
+                                break;
+                            }
+                            int cost = 0;
+                            if(!canConvertType(argVals[i]->getType(), callee->getArg(i)->getType(), cost))
+                            {
+                                ok = false;
+                                break;
+                            }
+                            continue;
+                        }
+                    }
                 }
 
                 TypeNode* actualSemantic =

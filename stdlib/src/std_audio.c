@@ -833,7 +833,9 @@ static int audio_decode_aiff(mlang_pcm_audio_t* out,
     int64_t sample_rate = 0;
     int found_common = 0;
     int supported_compression = is_aiff;
-    int little_endian = 0;
+    /* 0 big-endian integers, 1 little-endian integers ("sowt"), 2 big-endian
+     * float32 ("fl32"), 3 big-endian float64 ("fl64"). */
+    int encoding = 0;
     const unsigned char* pcm = NULL;
     size_t pcm_bytes = 0;
     size_t offset = 12;
@@ -857,10 +859,15 @@ static int audio_decode_aiff(mlang_pcm_audio_t* out,
             if(is_aifc && chunk_size >= 22)
             {
                 const unsigned char* compression = bytes + data_offset + 18;
-                supported_compression = memcmp(compression, "NONE", 4) == 0 ||
-                                        memcmp(compression, "twos", 4) == 0 ||
-                                        memcmp(compression, "sowt", 4) == 0;
-                little_endian = memcmp(compression, "sowt", 4) == 0;
+                supported_compression = 1;
+                if(memcmp(compression, "sowt", 4) == 0)
+                    encoding = 1;
+                else if(memcmp(compression, "fl32", 4) == 0 || memcmp(compression, "FL32", 4) == 0)
+                    encoding = 2;
+                else if(memcmp(compression, "fl64", 4) == 0 || memcmp(compression, "FL64", 4) == 0)
+                    encoding = 3;
+                else if(memcmp(compression, "NONE", 4) != 0 && memcmp(compression, "twos", 4) != 0)
+                    supported_compression = 0;
             }
         }
         else if(memcmp(bytes + offset, "SSND", 4) == 0 && chunk_size >= 8)
@@ -874,10 +881,13 @@ static int audio_decode_aiff(mlang_pcm_audio_t* out,
         }
         offset = data_offset + chunk_size + (chunk_size & 1u);
     }
-    if(!found_common || !supported_compression || bits != 16 ||
+    /* Integers of 1-32 bits sit left-justified in whole bytes; floats are
+     * 32 or 64 bits whatever the sample size field says. */
+    const size_t sample_bytes = encoding == 2 ? 4u : (encoding == 3 ? 8u : ((size_t)bits + 7u) / 8u);
+    if(!found_common || !supported_compression || (encoding < 2 && (bits < 1 || bits > 32)) ||
        channels < 1 || channels > 2 || sample_rate == 0 || !pcm)
         return -1;
-    size_t sample_count = pcm_bytes / 2u;
+    size_t sample_count = pcm_bytes / sample_bytes;
     const uint64_t declared_samples = (uint64_t)declared_frames * channels;
     if(declared_frames > 0 && declared_samples < sample_count)
         sample_count = (size_t)declared_samples;
@@ -888,10 +898,32 @@ static int audio_decode_aiff(mlang_pcm_audio_t* out,
         return -2;
     for(size_t i = 0; i < sample_count; ++i)
     {
-        const uint16_t encoded = little_endian
-            ? audio_read_u16_le(pcm + i * 2u)
-            : audio_read_u16_be(pcm + i * 2u);
-        out->samples[i] = (float)(int16_t)encoded / 32768.0f;
+        const unsigned char* at = pcm + i * sample_bytes;
+        if(encoding == 2 || encoding == 3)
+        {
+            uint64_t word = 0;
+            for(size_t b = 0; b < sample_bytes; ++b)
+                word = (word << 8) | at[b];
+            double value = 0.0;
+            if(encoding == 2)
+            {
+                const uint32_t narrow = (uint32_t)word; float single = 0.0f;
+                memcpy(&single, &narrow, sizeof(single)); value = single;
+            }
+            else
+                memcpy(&value, &word, sizeof(value));
+            out->samples[i] = isfinite(value) ? (float)value : 0.0f;
+            continue;
+        }
+        /* The sample's bytes, most significant first, at the top of 32 bits:
+         * 8, 16, 24 and 32-bit samples then share one scale. */
+        uint32_t word = 0;
+        for(size_t b = 0; b < sample_bytes; ++b)
+        {
+            const unsigned char byte = encoding == 1 ? at[sample_bytes - 1u - b] : at[b];
+            word |= (uint32_t)byte << (24u - 8u * (uint32_t)b);
+        }
+        out->samples[i] = (float)((double)(int32_t)word / 2147483648.0);
     }
     out->sample_rate = sample_rate;
     out->channels = channels;
@@ -924,7 +956,7 @@ int64_t __mlang_std_audio_pcm_load(const char* path)
         free(audio);
         audio_set_error(rc == -2
             ? "std::audio PCM sample allocation failed"
-            : "std::audio requires mono/stereo 16-bit PCM or float32 WAV, or 16-bit AIFF/AIFF-C");
+            : "std::audio requires mono/stereo 16-bit PCM or float32 WAV, or 8-32-bit or float32/64 AIFF/AIFF-C");
         return 0;
     }
     audio_clear_error();

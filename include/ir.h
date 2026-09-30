@@ -382,6 +382,15 @@ private:
     llvm::FunctionCallee exceptionsTakeMessageFunc;
     llvm::FunctionCallee exceptionsTakeSourceLineFunc;
     llvm::Value* currentFunctionExceptionFrame = nullptr;
+    // `&mut T` parameters of the function being generated: the caller's
+    // pointer and the local copy's name. Copied in on entry, written back
+    // before each return (emitInoutWriteBack); only for `inoutFunction`.
+    std::vector<std::pair<llvm::Value*, std::string>> inoutParams;
+    llvm::Function* inoutFunction = nullptr;
+    void emitInoutWriteBack();
+    // LLVM type of a parameter: a pointer for `&mut T` (copy-in/copy-out),
+    // otherwise the type itself.
+    llvm::Type* parameterLLVMType(TypeNode* type);
     TypeNode* currentSemanticReturnType = nullptr;
     // Pthread support
     bool pthreadInitialized;

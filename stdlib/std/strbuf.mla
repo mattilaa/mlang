@@ -130,6 +130,16 @@ pub fn len(s: str8) -> i64 {
     return __mlang_std_strbuf_len(s);
 }
 
+/// @brief The byte at `index` (0-255), or -1 outside the string.
+pub fn byte_at(s: str8, index: i64) -> i32 {
+    return __mlang_std_strbuf_byte_at(s, index);
+}
+
+/// @brief The string's bytes (0-255) as a new list, e.g. for binary formats.
+pub fn to_bytes(s: str8) -> list<i32> {
+    return __mlang_std_strbuf_bytes(s);
+}
+
 /// @brief Return `1` when empty, `0` otherwise.
 pub fn is_empty(s: str8) -> i32 {
     return __mlang_std_strbuf_is_empty(s);

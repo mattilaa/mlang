@@ -114,6 +114,38 @@ int64_t __mlang_std_strbuf_len(const char* s)
     return (int64_t)strlen(s);
 }
 
+/* The byte at `index` (0-255), or -1 outside the string. */
+int32_t __mlang_std_strbuf_byte_at(const char* s, int64_t index)
+{
+    if(!s || index < 0)
+        return -1;
+    const int64_t size = (int64_t)strlen(s);
+    return index < size ? (int32_t)(unsigned char)s[index] : -1;
+}
+
+typedef struct
+{
+    int64_t size;
+    void* data;
+} mlang_strbuf_list_t;
+
+/* The string's bytes (0-255) as a new list<i32>. */
+mlang_strbuf_list_t __mlang_std_strbuf_bytes(const char* s)
+{
+    mlang_strbuf_list_t out = {0, NULL};
+    const size_t size = s ? strlen(s) : 0;
+    if(size == 0)
+        return out;
+    int32_t* bytes = (int32_t*)malloc(size * sizeof(int32_t));
+    if(!bytes)
+        return out;
+    for(size_t i = 0; i < size; ++i)
+        bytes[i] = (int32_t)(unsigned char)s[i];
+    out.size = (int64_t)size;
+    out.data = bytes;
+    return out;
+}
+
 int __mlang_std_strbuf_is_empty(const char* s)
 {
     if(!s)

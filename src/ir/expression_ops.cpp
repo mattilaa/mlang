@@ -2416,6 +2416,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     retResult = builder.CreateInsertValue(
         retResult, errPayload, static_cast<unsigned>(expectedErrIndex),
         "try.ret.err");
+    emitInoutWriteBack();
     emitAllActiveCleanups();
     builder.CreateRet(retResult);
 

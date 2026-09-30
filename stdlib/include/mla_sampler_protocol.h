@@ -15,7 +15,8 @@
 
 namespace mla_sampler {
 
-// Decode a mono/stereo 16-bit PCM WAV, AIFF or AIFF-C file into a pad.
+// Decode a mono/stereo WAV (16-bit PCM or float32), AIFF (8-32-bit) or
+// AIFF-C (integer, float32 or float64) file into a pad.
 //   "pad"  int    target pad
 //   "path" binary UTF-8 file path
 inline constexpr const char *kLoadFileMessage = "mlang.sampler.loadFile";

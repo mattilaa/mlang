@@ -228,6 +228,59 @@ fn test_mut_ref_param_string() {
     verify_eq_i64(6, n);   // "hello!" has 6 chars
     }
 
+// ── 17b. &mut parameters write through to the caller ──────────────────────
+// A `&mut T` parameter is the caller's storage (copy-in/copy-out): the
+// callee works on a local and it is written back before every return.
+
+struct MutCounter { var n: i32; };
+
+fn bump_scalar(value: &mut i32) -> void { value = value + 1; }
+fn bump_counter(counter: &mut MutCounter) -> void { counter.n = counter.n + 1; }
+fn push_twice(out: &mut list<i32>, value: i32) -> void { out.push(value); out.push(value); }
+fn push_until(out: &mut list<i32>, stop: bool) -> i32 {
+    out.push(1);
+    if stop { return 1; }
+    out.push(2);
+    return 2;
+}
+fn exclaim(s: &mut str8) -> void { s = format!("{}!", s); }
+
+struct MutSource {
+    var value: i32;
+    fn copy_into(self: MutSource, out: &mut list<i32>) -> void { out.push(self.value); }
+};
+
+#[test]
+fn test_mut_ref_params_write_back() {
+    var x: i32 = 1;
+    bump_scalar(&mut x); bump_scalar(&mut x);
+    verify_eq_i64(3, x);
+    var counter: MutCounter = MutCounter { n: 5 };
+    bump_counter(&mut counter);
+    verify_eq_i64(6, counter.n);
+    // Growing past the list's capacity reallocates; the caller sees it.
+    var items: list<i32> = [];
+    for _i in 0..100 { push_twice(&mut items, 7); }
+    verify_eq_i64(200, items.len());
+    verify_eq_i64(7, items[199]);
+    // Early returns write back too.
+    var partial: list<i32> = [];
+    verify_eq_i64(1, push_until(&mut partial, true));
+    verify_eq_i64(1, partial.len());
+    verify_eq_i64(2, push_until(&mut partial, false));
+    verify_eq_i64(3, partial.len());
+    // Methods take `&mut` parameters the same way.
+    let source: MutSource = MutSource { value: 9 };
+    var copied: list<i32> = [];
+    source.copy_into(&mut copied); source.copy_into(&mut copied);
+    verify_eq_i64(2, copied.len());
+    verify_eq_i64(9, copied[1]);
+    // A string: the callee's new string reaches the caller.
+    var word: str8 = String::from("hey");
+    exclaim(&mut word);
+    verify_eq_i64(4, len(word));
+    }
+
 // ── 18. &str8 return type ───────────────────────────────────────────────────
 
 fn get_greeting(s: &str8) -> &str8 {

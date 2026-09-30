@@ -17,7 +17,9 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
     std::vector<llvm::Type*> paramTypes;
     for(auto param : node->parameters->parameters)
     {
-        llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+        // `&mut T` passes the caller's storage (copy-in/copy-out, see
+        // generateFunction); `&T` passes the value.
+        llvm::Type* paramType = parameterLLVMType(param->type);
         if(!paramType)
         {
             reportError(param->line,
@@ -61,6 +63,34 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
     }
 
     return function;
+}
+
+llvm::Type* CodeGenerator::parameterLLVMType(TypeNode* type)
+{
+    if(auto* ref = dynamic_cast<ReferenceTypeNode*>(type))
+        if(ref->isMutable)
+            return llvm::PointerType::get(context, 0);
+    return getLLVMTypeFromNode(type);
+}
+
+// Before a return: store each `&mut` parameter's local copy back through
+// the caller's pointer.
+void CodeGenerator::emitInoutWriteBack()
+{
+    llvm::BasicBlock* block = builder.GetInsertBlock();
+    if(!block || block->getParent() != inoutFunction)
+        return;
+    for(const auto& inout : inoutParams)
+    {
+        auto it = namedValues.find(inout.second);
+        if(it == namedValues.end())
+            continue;
+        if(auto* local = llvm::dyn_cast<llvm::AllocaInst>(it->second))
+        {
+            llvm::Value* value = builder.CreateLoad(local->getAllocatedType(), local, inout.second + ".out");
+            builder.CreateStore(value, inout.first);
+        }
+    }
 }
 
 void CodeGenerator::seedFunctionScopeWithGlobals()
@@ -312,13 +342,29 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
 
     // Set up parameters
     unsigned paramIdx = 0;
+    inoutParams.clear();
+    inoutFunction = function;
     for(auto& arg : function->args())
     {
+        // A `&mut T` parameter arrives as the caller's pointer: copy the
+        // value in (shallow, it stays the caller's) and write it back before
+        // every return, so the body works on a local like any parameter.
+        ReferenceTypeNode* inoutType = nullptr;
+        if(paramIdx < node->parameters->parameters.size())
+            if(auto* ref = dynamic_cast<ReferenceTypeNode*>(node->parameters->parameters[paramIdx]->type))
+                if(ref->isMutable)
+                    inoutType = ref;
+        llvm::Type* localType = inoutType ? getLLVMTypeFromNode(inoutType->elementType) : arg.getType();
         // Allocate space for parameters so they can be modified
         llvm::AllocaInst* alloca = builder.CreateAlloca(
-            arg.getType(), nullptr, std::string(arg.getName()) + ".addr");
+            localType, nullptr, std::string(arg.getName()) + ".addr");
         llvm::Value* paramValue = &arg;
-        if(arg.getType()->isStructTy())
+        if(inoutType)
+        {
+            paramValue = builder.CreateLoad(localType, &arg, std::string(arg.getName()) + ".in");
+            inoutParams.push_back({&arg, std::string(arg.getName())});
+        }
+        else if(arg.getType()->isStructTy())
             paramValue = applyStructCopySemantics(paramValue);
         builder.CreateStore(paramValue, alloca);
         namedValues[std::string(arg.getName())] = alloca;
@@ -485,7 +531,10 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto exceptionCleanupScopes = cleanupScopes;
     auto exceptionMovedVariables = movedVariables;
 
-    // Run scope-exit destructors for locals at normal function fallthrough.
+    // `&mut` parameters go back to the caller, then scope-exit destructors
+    // run for locals at normal function fallthrough.
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+        emitInoutWriteBack();
     exitCleanupScope();
 
     // If the function is void and doesn't have a return, add one

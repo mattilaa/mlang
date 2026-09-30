@@ -123,7 +123,7 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
         if(param->name == "self")
             continue;
 
-        llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+        llvm::Type* paramType = parameterLLVMType(param->type);
         if(!paramType)
         {
             reportError(param->line,
@@ -344,15 +344,39 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     seedFunctionScopeWithGlobals();
     enterCleanupScope();
 
-    // Set up self parameter and other parameters
+    // Set up self parameter and other parameters. A `&mut T` parameter
+    // (not self) arrives as the caller's pointer: copied in here and
+    // written back before each return, as for functions.
+    std::vector<ReferenceTypeNode*> inoutForArg(function->arg_size(), nullptr);
+    {
+        unsigned slot = method->isStatic ? 0 : 1;
+        for(auto* param : method->parameters->parameters)
+        {
+            if(param->name == "self")
+                continue;
+            if(auto* ref = dynamic_cast<ReferenceTypeNode*>(param->type))
+                if(ref->isMutable && slot < inoutForArg.size())
+                    inoutForArg[slot] = ref;
+            ++slot;
+        }
+    }
+    inoutParams.clear();
+    inoutFunction = function;
     unsigned argIdx = 0;
     unsigned methodParamIdx = 0;
     for(auto& arg : function->args())
     {
+        ReferenceTypeNode* inoutType = argIdx < inoutForArg.size() ? inoutForArg[argIdx] : nullptr;
+        llvm::Type* localType = inoutType ? getLLVMTypeFromNode(inoutType->elementType) : arg.getType();
         llvm::AllocaInst* alloca = builder.CreateAlloca(
-            arg.getType(), nullptr, std::string(arg.getName()) + ".addr");
+            localType, nullptr, std::string(arg.getName()) + ".addr");
         llvm::Value* paramValue = &arg;
-        if(arg.getType()->isStructTy())
+        if(inoutType)
+        {
+            paramValue = builder.CreateLoad(localType, &arg, std::string(arg.getName()) + ".in");
+            inoutParams.push_back({&arg, std::string(arg.getName())});
+        }
+        else if(arg.getType()->isStructTy())
             paramValue = applyStructCopySemantics(paramValue);
         builder.CreateStore(paramValue, alloca);
         namedValues[std::string(arg.getName())] = alloca;
@@ -515,7 +539,10 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         generateStatement(stmt);
     }
 
-    // Run scope-exit destructors for locals at normal method fallthrough.
+    // `&mut` parameters go back to the caller, then scope-exit destructors
+    // run for locals at normal method fallthrough.
+    if(!mlang::llvm_compat::terminatorOrNull(builder.GetInsertBlock()))
+        emitInoutWriteBack();
     exitCleanupScope();
 
     // Add terminator if needed
@@ -2679,7 +2706,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(!param || param->name == "self")
                         continue;
-                    llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+                    llvm::Type* paramType = parameterLLVMType(param->type);
                     if(!paramType)
                     {
                         reportError(node->line,
@@ -2855,7 +2882,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(!param || param->name == "self")
                         continue;
-                    llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+                    llvm::Type* paramType = parameterLLVMType(param->type);
                     if(!paramType)
                     {
                         reportError(node->line,
@@ -3064,7 +3091,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(!param || param->name == "self")
                         continue;
-                    llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+                    llvm::Type* paramType = parameterLLVMType(param->type);
                     if(!paramType)
                     {
                         reportError(node->line,
@@ -5855,6 +5882,17 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         if(argIndex < declaredParams.size())
         {
             auto* declParam = declaredParams[argIndex];
+            // A `&mut` parameter takes `&mut value` (the address), checked
+            // before the value types are compared.
+            if(auto* mutRef = dynamic_cast<ReferenceTypeNode*>(declParam->type))
+            {
+                auto* unary = dynamic_cast<UnaryOpNode*>(arg);
+                if(mutRef->isMutable && !(unary && unary->op == UnaryOpNode::OP_ADDR_MUT))
+                {
+                    reportError(node->line, "parameter '" + declParam->name + "' expects &mut argument");
+                    return nullptr;
+                }
+            }
             llvm::Type* expectedType =
                 callee->getArg(static_cast<unsigned>(argIndex + 1))->getType();
             llvm::Type* actualType = argVal->getType();
