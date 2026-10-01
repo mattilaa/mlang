@@ -3,6 +3,8 @@ mod tui::surface;
 mod tui::theme;
 mod tui::widgets;
 mod std::bytes;
+mod std::strbuf;
+use std::strbuf::starts_with;
 use tui::geometry::*;
 use tui::surface::*;
 use tui::theme::Theme;
@@ -65,6 +67,10 @@ fn label_width(text: str8) -> i32 {
 /// path contains the selected row in each ancestor; selected is the deepest row.
 /// With `shortcuts` set, the first twelve titles are drawn after their function
 /// key ("[F1]File  [F2]Edit") and on_function_key opens them.
+/// True for a check-box item label: "[x] ..." or "[ ] ...".
+pub fn is_option_label(label: str8) -> bool {
+    return starts_with(label, "[x] ") == 1 || starts_with(label, "[ ] ") == 1;
+}
 pub struct MenuBar {
     var menus: list<Menu>; var active: i32; var selected: i32;
     var path: list<i32>{[]};
@@ -196,6 +202,30 @@ impl MenuBar {
             }
         }
         return 0;
+    }
+    /// Space on an option: activate the selected item when its label is a
+    /// check box ("[x] ..." or "[ ] ...") and keep the menu open, so several
+    /// options can be toggled in a row. Returns its command ID, otherwise 0
+    /// (other items wait for Enter).
+    pub fn toggle_selected(self: &mut Self) -> i32 {
+        if self.active < 0 { return 0; }
+        let items: list<MenuItem> = self.items_at(self.depth());
+        if self.selected < 0 || self.selected >= items.len() { return 0; }
+        let item: MenuItem = items[self.selected];
+        if !item.enabled || item.action <= 0 || !is_option_label(item.label) { return 0; }
+        return item.action;
+    }
+    /// Reopen the menu, submenu and item `previous` had open, e.g. after the
+    /// bar was rebuilt to relabel a toggled option. Ignored when that item no
+    /// longer exists.
+    pub fn keep_open(self: &mut Self, previous: MenuBar) -> void {
+        if previous.active < 0 || previous.active >= self.menus.len() { return; }
+        self.active = previous.active; self.path = [];
+        let path: list<i32> = previous.path;
+        for index in path { self.path.push(index); }
+        self.selected = previous.selected;
+        let items: list<MenuItem> = self.items_at(self.depth());
+        if self.depth() != previous.depth() || self.selected < 0 || self.selected >= items.len() { self.open(previous.active); }
     }
     pub fn popup_rect(self: MenuBar, bounds: Rect) -> Rect {
         return self.popup_rect_at(bounds, 0);

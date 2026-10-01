@@ -1118,3 +1118,36 @@ fn tui_input_shift_backspace() {
     let letter: InputEvent = decode_input("\x1b[97;2u");
     verify(letter.kind == InputKind::Text && letter.code == 97);
 }
+
+#[test]
+fn menu_space_toggles_options_and_stays_open() {
+    let options: list<MenuItem> = [MenuItem { label: "[x] Loud", action: 7, enabled: true },
+        MenuItem { label: "Plain", action: 8, enabled: true },
+        MenuItem::submenu("More", [MenuItem { label: "[ ] Deep", action: 9, enabled: true }])];
+    var menus: MenuBar = MenuBar::new([Menu { title: "Options", items: options }]);
+    verify(is_option_label("[x] Loud") && is_option_label("[ ] Deep") && !is_option_label("Plain") && !is_option_label("[x]"));
+    // Closed: nothing toggles.
+    verify_eq_i32(0, menus.toggle_selected());
+    menus.open(0);
+    verify_eq_i32(7, menus.toggle_selected());
+    verify(menus.active == 0 && menus.selected == 0);
+    // A plain item waits for Enter.
+    menus.on_key(Key::Down);
+    verify_eq_i32(0, menus.toggle_selected());
+    verify(menus.active == 0);
+    // In a submenu: rebuilding the bar (relabelled) keeps the same place open.
+    menus.on_key(Key::Down); menus.on_key(Key::Right);
+    verify_eq_i32(9, menus.toggle_selected());
+    let relabelled: list<MenuItem> = [MenuItem { label: "[x] Loud", action: 7, enabled: true },
+        MenuItem { label: "Plain", action: 8, enabled: true },
+        MenuItem::submenu("More", [MenuItem { label: "[x] Deep", action: 9, enabled: true }])];
+    var rebuilt: MenuBar = MenuBar::new([Menu { title: "Options", items: relabelled }]);
+    rebuilt.keep_open(menus);
+    verify(rebuilt.active == 0 && rebuilt.depth() == 1 && rebuilt.selected == 0);
+    verify_eq_i32(9, rebuilt.on_key(Key::Enter));
+    verify(rebuilt.active < 0);
+    // Nothing open: nothing to keep.
+    var closed: MenuBar = MenuBar::new([Menu { title: "Options", items: [MenuItem { label: "[x] Loud", action: 7, enabled: true }] }]);
+    closed.keep_open(rebuilt);
+    verify(closed.active < 0);
+}
