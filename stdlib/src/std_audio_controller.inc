@@ -314,6 +314,10 @@ typedef struct {
      * included; it changes only while the controller is stopped. */
     _Atomic uint32_t aux_route[32][AC_OUTPUTS];
     int instrument_outputs[32];
+    /* Audio input of each instrument (e.g. a vocoder's modulator): 0 = none
+     * (silence), 1-64 = the voices of that PCM track, taken before its
+     * inserts and fader. */
+    _Atomic uint32_t input_route[32];
     float track_buffer[64][8192];
     _Atomic uint32_t sends[96][8], effect_volume[8], effect_peak[8][2];
     float effect_buffer[8][8192];
@@ -326,6 +330,7 @@ typedef struct {
     int job_slot[96];
     uint8_t failed[96], effect_failed[8];
     uint32_t job_frames;
+    int job_input[32]; /* Track whose voices feed each instrument, or -1. */
     uint64_t job_clock;
     uint32_t (*job_routes)[4];
     uint32_t (*job_aux)[AC_OUTPUTS];
@@ -511,6 +516,7 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     for(int i = 0; i < 96; ++i) for(int fx = 0; fx < 8; ++fx) atomic_init(&c->sends[i][fx], 0);
     for(int i = 0; i < 96; ++i) for(int n = 0; n < 4; ++n) atomic_init(&c->insert_route[i][n], 0);
     for(int i = 0; i < 96; ++i) atomic_init(&c->output_route[i], 0);
+    for(int i = 0; i < 32; ++i) atomic_init(&c->input_route[i], 0);
     for(int fx = 0; fx < 8; ++fx) {
         atomic_init(&c->effect_volume[fx], 100);
         for(int ch = 0; ch < 2; ++ch) atomic_init(&c->effect_peak[fx][ch], 0);
@@ -781,7 +787,9 @@ static void ac_instrument_job(void *context, int job) {
     ac_controller *c = context; int i = c->job_slot[job];
     mlang_audio_processor *p = &c->instruments[i];
     float *buffer = c->instrument_buffer[i];
-    memset(buffer, 0, c->job_frames * 2u * sizeof(float));
+    /* The input track's buffer holds only its own voices at this stage. */
+    if(c->job_input[i] >= 0) memcpy(buffer, c->track_buffer[c->job_input[i]], c->job_frames * 2u * sizeof(float));
+    else memset(buffer, 0, c->job_frames * 2u * sizeof(float));
     c->failed[64 + i] = p->process(p->context, buffer, (int32_t)c->job_frames, c->job_clock) != 0;
     if(c->failed[64 + i]) { atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed); return; }
     /* Aux buses that follow the main output join it before the inserts. */
@@ -912,6 +920,12 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
             aux_routes[i][bus] = route <= 74 ? route : 0;
             if(aux_routes[i][bus] >= 2 && aux_routes[i][bus] <= 65) buffered[aux_routes[i][bus] - 2] = 1;
         }
+    /* A track feeding an instrument's input keeps its voices in its buffer. */
+    for(int i = 0; i < 32; ++i) {
+        uint32_t input = c->instruments[i].context ? atomic_load_explicit(&c->input_route[i], memory_order_relaxed) : 0;
+        c->job_input[i] = input >= 1 && input <= 64 ? (int)input - 1 : -1;
+        if(c->job_input[i] >= 0) buffered[c->job_input[i]] = 1;
+    }
     for(int t = 0; t < 64; ++t) if(buffered[t]) memset(c->track_buffer[t], 0, frames * 2u * sizeof(float));
     /* Feeders before their destination; a cycle falls back to master. */
     int order[64], count = 0, indegree[64] = {0}, cycled[64] = {0};
@@ -1547,6 +1561,14 @@ int32_t __mlang_std_audio_controller_output_route(int64_t handle, int64_t source
     if(!c || source < 0 || source >= 96 || destination < 0 || destination > 64) return -1;
     if(destination > 0 && destination - 1 == source) return -1;
     atomic_store_explicit(&c->output_route[source], (uint32_t)destination, memory_order_relaxed); return 0;
+}
+/* Audio input of the instrument in `slot`: 0 = none (silence), 1-64 = the
+ * voices of that PCM track before its inserts and fader. The track still
+ * plays through its own channel. Audio may run. */
+int32_t __mlang_std_audio_controller_instrument_input(int64_t handle, int64_t slot, int64_t source) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || source < 0 || source > 64) return -1;
+    atomic_store_explicit(&c->input_route[slot - 1], (uint32_t)source, memory_order_relaxed); return 0;
 }
 /* Stereo output buses of the instrument in `slot`, main included (1 for a
  * single-output instrument), or -1 when the slot is empty. */

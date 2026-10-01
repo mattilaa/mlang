@@ -109,6 +109,14 @@ from the plugin (nothing plays while that channel has no effect), and 73
 silences the bus. A routed bus skips the instrument's own inserts, fader
 and sends. -1 puts the bus back on the main output.
 
+An instrument can also take audio in: `instrument_input(slot, source)` feeds the
+voices of PCM track `source` (1–64; 0 = none, the default) into the instrument's
+buffer before it renders, for an instrument whose processor reads its input
+(such as a vocoder's modulator). The voices are taken before the track's
+inserts and fader, and the track still plays on its own channel. The host
+replaces the buffer with the output of a processor that has an input, so the
+input is not heard twice.
+
 A sampler instrument (such as Mla Sampler) may report a pad's slice markers,
 the frames where its hits start: `instrument_markers(slot, pad)` returns them
 (the first is 0; empty when it has none), and `instrument_set_markers(slot,
