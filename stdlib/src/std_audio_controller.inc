@@ -16,6 +16,8 @@
 #define AC_MASTER_FILTERS 6
 /* Post-master mono tap for the analyzer: power of two, >= largest FFT. */
 #define AC_SPECTRUM_RING 16384u
+/* Live audio input ring: interleaved stereo frames at the input's rate. */
+#define AC_INPUT_RING 131072u
 #define AC_SPECTRUM_MAX 8192
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -316,8 +318,20 @@ typedef struct {
     int instrument_outputs[32];
     /* Audio input of each instrument (e.g. a vocoder's modulator): 0 = none
      * (silence), 1-64 = the voices of that PCM track, taken before its
-     * inserts and fader. */
+     * inserts and fader, 65 = the live audio input. */
     _Atomic uint32_t input_route[32];
+    /* Live audio input. One writer (the input device callback, or
+     * input_feed while no device is open) appends frames at `input_rate` and
+     * publishes `input_write`; the render thread reads behind it at its own
+     * position, resampling to the controller rate, and skips ahead if it
+     * falls too far behind. `live_input` holds the current block. */
+    float input_ring[AC_INPUT_RING * 2];
+    _Atomic uint64_t input_write;
+    _Atomic uint64_t input_rate_bits;
+    _Atomic uint32_t input_peak[2];
+    double input_position; int input_primed;
+    float live_input[8192];
+    float *input_capture; uint32_t input_capture_frames, input_channels;
     float track_buffer[64][8192];
     _Atomic uint32_t sends[96][8], effect_volume[8], effect_peak[8][2];
     float effect_buffer[8][8192];
@@ -376,6 +390,7 @@ typedef struct {
     double spectrum_bin_hz;
 #if defined(__APPLE__)
     AudioComponentInstance unit;
+    AudioComponentInstance input_unit;
 #endif
 } ac_controller;
 
@@ -517,6 +532,8 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     for(int i = 0; i < 96; ++i) for(int n = 0; n < 4; ++n) atomic_init(&c->insert_route[i][n], 0);
     for(int i = 0; i < 96; ++i) atomic_init(&c->output_route[i], 0);
     for(int i = 0; i < 32; ++i) atomic_init(&c->input_route[i], 0);
+    atomic_init(&c->input_write, 0); atomic_init(&c->input_rate_bits, 0);
+    atomic_init(&c->input_peak[0], 0); atomic_init(&c->input_peak[1], 0);
     for(int fx = 0; fx < 8; ++fx) {
         atomic_init(&c->effect_volume[fx], 100);
         for(int ch = 0; ch < 2; ++ch) atomic_init(&c->effect_peak[fx][ch], 0);
@@ -789,6 +806,7 @@ static void ac_instrument_job(void *context, int job) {
     float *buffer = c->instrument_buffer[i];
     /* The input track's buffer holds only its own voices at this stage. */
     if(c->job_input[i] >= 0) memcpy(buffer, c->track_buffer[c->job_input[i]], c->job_frames * 2u * sizeof(float));
+    else if(c->job_input[i] == -2) memcpy(buffer, c->live_input, c->job_frames * 2u * sizeof(float));
     else memset(buffer, 0, c->job_frames * 2u * sizeof(float));
     c->failed[64 + i] = p->process(p->context, buffer, (int32_t)c->job_frames, c->job_clock) != 0;
     if(c->failed[64 + i]) { atomic_fetch_add_explicit(&c->processor_errors, 1, memory_order_relaxed); return; }
@@ -862,6 +880,54 @@ static void ac_transport_end(ac_controller *c, uint32_t frames) {
         c->transport_beat += frames * c->transport_tempo / (60.0 * c->rate);
     atomic_store_explicit(&c->transport_beat_out, ac_double_bits(c->transport_beat), memory_order_relaxed);
 }
+/* Writer side of the live input: append interleaved frames (1 or 2
+ * channels) and track their peak. */
+static void ac_input_write(ac_controller *c, const float *data, uint64_t frames, uint32_t channels) {
+    uint64_t write = atomic_load_explicit(&c->input_write, memory_order_relaxed);
+    float peaks[2] = {0, 0};
+    for(uint64_t f = 0; f < frames; ++f) {
+        float l = data[f * channels], r = channels > 1 ? data[f * channels + 1] : l;
+        if(!isfinite(l)) l = 0; if(!isfinite(r)) r = 0;
+        uint64_t slot = (write + f) % AC_INPUT_RING;
+        c->input_ring[slot * 2] = l; c->input_ring[slot * 2 + 1] = r;
+        peaks[0] = fmaxf(peaks[0], fabsf(l)); peaks[1] = fmaxf(peaks[1], fabsf(r));
+    }
+    atomic_store_explicit(&c->input_write, write + frames, memory_order_release);
+    for(int ch = 0; ch < 2; ++ch) {
+        uint32_t value = (uint32_t)(fminf(peaks[ch], 1.f) * 1000.f);
+        uint32_t old = atomic_load_explicit(&c->input_peak[ch], memory_order_relaxed);
+        while(old < value && !atomic_compare_exchange_weak_explicit(&c->input_peak[ch], &old, value,
+            memory_order_relaxed, memory_order_relaxed)) {}
+    }
+}
+/* Render thread: the next `frames` of live input into `live_input`, linearly
+ * resampled from the input rate. It reads a little behind the writer (one
+ * block plus a margin) and re-anchors there after an underrun or when it
+ * has fallen far behind (clock drift between two devices). */
+static void ac_input_block(ac_controller *c, uint32_t frames) {
+    double rate = 0; uint64_t bits = atomic_load_explicit(&c->input_rate_bits, memory_order_acquire);
+    memcpy(&rate, &bits, sizeof(rate));
+    uint64_t write = atomic_load_explicit(&c->input_write, memory_order_acquire);
+    if(rate <= 0 || write == 0) { memset(c->live_input, 0, frames * 2u * sizeof(float)); c->input_primed = 0; return; }
+    double step = rate / c->rate, need = frames * step + 2.0;
+    double margin = (double)(c->buffer_frames > 0 ? c->buffer_frames : 256) * step + 64.0;
+    double behind = (double)write - c->input_position;
+    if(!c->input_primed || behind > need + margin * 4.0 + 4096.0 || behind > (double)AC_INPUT_RING / 2) {
+        if((double)write < need + margin) { memset(c->live_input, 0, frames * 2u * sizeof(float)); return; }
+        c->input_position = (double)write - need - margin; c->input_primed = 1;
+    }
+    if(c->input_position + need > (double)write) {
+        /* Underrun: silence this block and re-anchor on the next one. */
+        memset(c->live_input, 0, frames * 2u * sizeof(float)); c->input_primed = 0; return;
+    }
+    for(uint32_t f = 0; f < frames; ++f) {
+        uint64_t whole = (uint64_t)c->input_position; double mix = c->input_position - (double)whole;
+        uint64_t a = whole % AC_INPUT_RING, b = (whole + 1) % AC_INPUT_RING;
+        for(int ch = 0; ch < 2; ++ch)
+            c->live_input[f * 2 + ch] = (float)(c->input_ring[a * 2 + ch] + (c->input_ring[b * 2 + ch] - c->input_ring[a * 2 + ch]) * mix);
+        c->input_position += step;
+    }
+}
 static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     if(frames == 0) return; /* Do not consume events/reset on an empty block. */
     uint64_t render_start = ac_now_ns();
@@ -890,6 +956,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         atomic_store_explicit(&c->live_sequence, sequence + 2, memory_order_release);
     }
     ac_transport_begin(c);
+    ac_input_block(c, frames);
     /* Serial before clip: an acknowledged serial then covers this clip. */
     uint64_t preview_serial = atomic_load_explicit(&c->preview_serial, memory_order_acquire);
     ac_sample *preview = atomic_load_explicit(&c->preview, memory_order_acquire);
@@ -923,7 +990,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     /* A track feeding an instrument's input keeps its voices in its buffer. */
     for(int i = 0; i < 32; ++i) {
         uint32_t input = c->instruments[i].context ? atomic_load_explicit(&c->input_route[i], memory_order_relaxed) : 0;
-        c->job_input[i] = input >= 1 && input <= 64 ? (int)input - 1 : -1;
+        c->job_input[i] = input >= 1 && input <= 64 ? (int)input - 1 : (input == 65 ? -2 : -1);
         if(c->job_input[i] >= 0) buffered[c->job_input[i]] = 1;
     }
     for(int t = 0; t < 64; ++t) if(buffered[t]) memset(c->track_buffer[t], 0, frames * 2u * sizeof(float));
@@ -1268,6 +1335,9 @@ static OSStatus ac_callback(void *context, AudioUnitRenderActionFlags *flags,
 }
 #endif
 
+#if defined(__APPLE__)
+static void ac_input_close(ac_controller *c);
+#endif
 int32_t __mlang_std_audio_controller_stop(int64_t handle) {
     ac_controller *c = (ac_controller*)(intptr_t)handle; if(!c) return -1;
 #if defined(__APPLE__)
@@ -1296,6 +1366,7 @@ int32_t __mlang_std_audio_controller_close(int64_t handle) {
 #if defined(__APPLE__)
     void *workgroup = atomic_exchange_explicit(&c->pool.workgroup, NULL, memory_order_acq_rel);
     if(workgroup) { if(__builtin_available(macOS 11.0, *)) os_release((os_workgroup_t)workgroup); }
+    ac_input_close(c);
     if(c->unit) { AudioUnitUninitialize(c->unit); AudioComponentInstanceDispose(c->unit); }
 #endif
     int registered = atomic_load_explicit(&c->sample_count, memory_order_relaxed);
@@ -1383,6 +1454,112 @@ int64_t __mlang_std_audio_controller_open_rate(int64_t device, int64_t frames, i
     (void)device; (void)frames; (void)requested_rate; audio_set_error("AUHAL output requires macOS"); return 0;
 #endif
 }
+#if defined(__APPLE__)
+static OSStatus ac_input_callback(void *context, AudioUnitRenderActionFlags *flags,
+    const AudioTimeStamp *time, UInt32 bus, UInt32 frames, AudioBufferList *data) {
+    (void)data;
+    ac_controller *c = context;
+    if(!c->input_unit || !c->input_capture || frames > c->input_capture_frames) return noErr;
+    AudioBufferList list = {1, {{c->input_channels, frames * c->input_channels * (UInt32)sizeof(float), c->input_capture}}};
+    OSStatus rc = AudioUnitRender(c->input_unit, flags, time, bus, frames, &list);
+    if(rc == noErr) ac_input_write(c, c->input_capture, frames, c->input_channels);
+    return rc;
+}
+static void ac_input_close(ac_controller *c) {
+    if(c->input_unit) {
+        AudioOutputUnitStop(c->input_unit); AudioUnitUninitialize(c->input_unit);
+        AudioComponentInstanceDispose(c->input_unit); c->input_unit = NULL;
+    }
+    free(c->input_capture); c->input_capture = NULL; c->input_capture_frames = 0;
+}
+#endif
+/* Open the live audio input on input device `device` (an input device index
+ * as std::audio counts them, -1 = the system default), replacing any open
+ * one; -2 closes it. The input runs on its own device clock: blocks read it
+ * a little behind its writer, resampled to the controller rate. Control
+ * thread; audio may run. Returns -1 (see last_error) on failure. */
+int32_t __mlang_std_audio_controller_input_open(int64_t handle, int64_t device) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || device < -2) { audio_set_error("Invalid audio input selection"); return -1; }
+#if defined(__APPLE__)
+    ac_input_close(c);
+    double none = 0; uint64_t bits; memcpy(&bits, &none, sizeof(bits));
+    atomic_store_explicit(&c->input_rate_bits, bits, memory_order_release);
+    if(device == -2) return 0;
+    AudioDeviceID id = coreaudio_input_device_for_index(device == -1 ? coreaudio_default_input_index() : device);
+    if(id == kAudioObjectUnknown) { audio_set_error("Audio input device unavailable"); return -1; }
+    UInt32 channels = coreaudio_input_channel_count(id);
+    c->input_channels = channels >= 2 ? 2 : 1;
+    double rate = coreaudio_nominal_sample_rate(id);
+    if(!(rate >= 8000 && rate <= 384000)) rate = c->rate;
+    c->input_capture_frames = 8192;
+    c->input_capture = calloc((size_t)c->input_capture_frames * c->input_channels, sizeof(float));
+    AudioComponentDescription desc = {kAudioUnitType_Output, kAudioUnitSubType_HALOutput, kAudioUnitManufacturer_Apple, 0, 0};
+    AudioComponent component = AudioComponentFindNext(NULL, &desc);
+    OSStatus rc = component && c->input_capture ? noErr : kAudio_ParamError;
+    if(rc == noErr) rc = AudioComponentInstanceNew(component, &c->input_unit);
+    UInt32 enabled = 1, disabled = 0;
+    if(rc == noErr) rc = AudioUnitSetProperty(c->input_unit, kAudioOutputUnitProperty_EnableIO, kAudioUnitScope_Input, 1, &enabled, sizeof(enabled));
+    if(rc == noErr) rc = AudioUnitSetProperty(c->input_unit, kAudioOutputUnitProperty_EnableIO, kAudioUnitScope_Output, 0, &disabled, sizeof(disabled));
+    if(rc == noErr) rc = AudioUnitSetProperty(c->input_unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &id, sizeof(id));
+    /* AUHAL does not convert the input's rate: ask for the device rate,
+     * interleaved float, and resample in ac_input_block. */
+    AudioStreamBasicDescription fmt = {0};
+    fmt.mSampleRate = rate; fmt.mFormatID = kAudioFormatLinearPCM;
+    fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat | kLinearPCMFormatFlagIsPacked;
+    fmt.mBytesPerPacket = fmt.mBytesPerFrame = c->input_channels * (UInt32)sizeof(float);
+    fmt.mFramesPerPacket = 1; fmt.mChannelsPerFrame = c->input_channels; fmt.mBitsPerChannel = 32;
+    if(rc == noErr) rc = AudioUnitSetProperty(c->input_unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1, &fmt, sizeof(fmt));
+    if(rc == noErr) rc = AudioUnitSetProperty(c->input_unit, kAudioUnitProperty_MaximumFramesPerSlice, kAudioUnitScope_Global, 0, &c->input_capture_frames, sizeof(c->input_capture_frames));
+    AURenderCallbackStruct callback = {ac_input_callback, c};
+    if(rc == noErr) rc = AudioUnitSetProperty(c->input_unit, kAudioOutputUnitProperty_SetInputCallback, kAudioUnitScope_Global, 0, &callback, sizeof(callback));
+    if(rc == noErr) {
+        memcpy(&bits, &rate, sizeof(bits));
+        atomic_store_explicit(&c->input_rate_bits, bits, memory_order_release);
+        rc = AudioUnitInitialize(c->input_unit);
+    }
+    if(rc == noErr) rc = AudioOutputUnitStart(c->input_unit);
+    if(rc != noErr) {
+        ac_input_close(c);
+        memcpy(&bits, &none, sizeof(bits)); atomic_store_explicit(&c->input_rate_bits, bits, memory_order_release);
+        snprintf(g_audio_last_error, sizeof(g_audio_last_error), "Audio input setup failed (%d); check microphone access", (int)rc); return -1;
+    }
+    return 0;
+#else
+    if(device == -2) return 0;
+    audio_set_error("Audio input requires macOS"); return -1;
+#endif
+}
+/* Feed interleaved input frames (1 or 2 channels at `rate`) as if a device
+ * had captured them: for tests and hosts without an input device. Only one
+ * writer may run, so this is refused while a device input is open. */
+int32_t __mlang_std_audio_controller_input_feed(int64_t handle, mlang_list_t samples, int64_t channels, int64_t rate) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || channels < 1 || channels > 2 || rate < 8000 || rate > 384000 || samples.size < 0 || (samples.size && !samples.data)) return -1;
+#if defined(__APPLE__)
+    if(c->input_unit) return -1;
+#endif
+    double value = (double)rate; uint64_t bits; memcpy(&bits, &value, sizeof(bits));
+    atomic_store_explicit(&c->input_rate_bits, bits, memory_order_release);
+    ac_input_write(c, (const float *)samples.data, (uint64_t)(samples.size / channels), (uint32_t)channels);
+    return 0;
+}
+/* Peak of the live input since the last read, 0-1000 per channel; the read
+ * resets it. */
+int32_t __mlang_std_audio_controller_input_peak(int64_t handle, int64_t channel) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || channel < 0 || channel > 1) return 0;
+    return (int32_t)atomic_exchange_explicit(&c->input_peak[channel], 0, memory_order_relaxed);
+}
+/* 1 while a device input is open. */
+int32_t __mlang_std_audio_controller_input_active(int64_t handle) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle; if(!c) return 0;
+#if defined(__APPLE__)
+    return c->input_unit != NULL;
+#else
+    return 0;
+#endif
+}
 int64_t __mlang_std_audio_controller_open(int64_t device, int64_t frames) {
     return __mlang_std_audio_controller_open_rate(device, frames, 0);
 }
@@ -1399,6 +1576,8 @@ int64_t __mlang_std_audio_controller_info(int64_t handle, int64_t key) {
     if(key == 7) return atomic_load_explicit(&c->render_threads, memory_order_relaxed);
     if(key == 8) return atomic_exchange_explicit(&c->dsp_load, 0, memory_order_relaxed);
     if(key == 9) return c->pool.workers > 0 ? c->pool.workers : 0;
+    /* 10: live input frames captured (or fed) so far. */
+    if(key == 10) return (int64_t)atomic_load_explicit(&c->input_write, memory_order_acquire);
 #if defined(__APPLE__)
     if(key == 5) return c->unit != NULL;
 #endif
@@ -1563,11 +1742,12 @@ int32_t __mlang_std_audio_controller_output_route(int64_t handle, int64_t source
     atomic_store_explicit(&c->output_route[source], (uint32_t)destination, memory_order_relaxed); return 0;
 }
 /* Audio input of the instrument in `slot`: 0 = none (silence), 1-64 = the
- * voices of that PCM track before its inserts and fader. The track still
- * plays through its own channel. Audio may run. */
+ * voices of that PCM track before its inserts and fader, 65 = the live audio
+ * input (see input_open). The track still plays through its own channel.
+ * Audio may run. */
 int32_t __mlang_std_audio_controller_instrument_input(int64_t handle, int64_t slot, int64_t source) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || slot < 1 || slot > 32 || source < 0 || source > 64) return -1;
+    if(!c || slot < 1 || slot > 32 || source < 0 || source > 65) return -1;
     atomic_store_explicit(&c->input_route[slot - 1], (uint32_t)source, memory_order_relaxed); return 0;
 }
 /* Stereo output buses of the instrument in `slot`, main included (1 for a

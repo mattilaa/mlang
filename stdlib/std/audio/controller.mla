@@ -69,6 +69,10 @@ extern fn __mlang_std_audio_controller_instrument_outputs(handle: i64, slot: i64
 extern fn __mlang_std_audio_controller_instrument_output_name(handle: i64, slot: i64, bus: i64) -> str8;
 extern fn __mlang_std_audio_controller_instrument_output_route(handle: i64, slot: i64, bus: i64, destination: i64) -> i32;
 extern fn __mlang_std_audio_controller_instrument_input(handle: i64, slot: i64, source: i64) -> i32;
+extern fn __mlang_std_audio_controller_input_open(handle: i64, device: i64) -> i32;
+extern fn __mlang_std_audio_controller_input_feed(handle: i64, samples: list<f32>, channels: i64, rate: i64) -> i32;
+extern fn __mlang_std_audio_controller_input_peak(handle: i64, channel: i64) -> i32;
+extern fn __mlang_std_audio_controller_input_active(handle: i64) -> i32;
 extern fn __mlang_std_audio_controller_load_effect(handle: i64, fx: i64, path: str8) -> i32;
 extern fn __mlang_std_audio_controller_effect_send(handle: i64, track: i64, slot: i64, fx: i64, percent: i64) -> i32;
 extern fn __mlang_std_audio_controller_effect_volume(handle: i64, fx: i64, percent: i64) -> i32;
@@ -244,12 +248,24 @@ impl AudioController {
     /// Audio may run. Loading an instrument resets its routes. 0 or -1.
     /// Audio input of the instrument in `slot` (1-32), e.g. a vocoder's
     /// modulator: 0 = none (silence), 1-64 = the voices of that PCM track,
-    /// taken before its inserts and fader; the track still plays on its own
-    /// channel. An instrument with an input bus replaces its buffer with its
+    /// taken before its inserts and fader (the track still plays on its own
+    /// channel), 65 = the live audio input (`input_open`). An instrument with an input bus replaces its buffer with its
     /// output, so the input is not heard twice.
     pub fn instrument_input(self: AudioController, slot: i64, source: i64) -> i32 {
         return __mlang_std_audio_controller_instrument_input(self.handle, slot, source);
     }
+    /// Open the live audio input on input device `device` (an index as
+    /// `std::audio::input_device_count()` counts them, -1 = the system
+    /// default); -2 closes it. It runs on its own device clock and is read a
+    /// little behind, resampled to the controller rate. Audio may run.
+    pub fn input_open(self: AudioController, device: i64) -> i32 { return __mlang_std_audio_controller_input_open(self.handle, device); }
+    /// Feed interleaved frames (1 or 2 channels at `rate`) as if an input
+    /// device had captured them; refused while a device input is open.
+    pub fn input_feed(self: AudioController, samples: list<f32>, channels: i64, rate: i64) -> i32 { return __mlang_std_audio_controller_input_feed(self.handle, samples, channels, rate); }
+    /// Peak of the live input since the last read, 0-1000; the read resets it.
+    pub fn input_peak(self: AudioController, channel: i64) -> i32 { return __mlang_std_audio_controller_input_peak(self.handle, channel); }
+    /// True while a device input is open.
+    pub fn input_active(self: AudioController) -> bool { return __mlang_std_audio_controller_input_active(self.handle) != 0; }
     pub fn instrument_output_route(self: AudioController, slot: i64, bus: i64, destination: i64) -> i32 {
         return __mlang_std_audio_controller_instrument_output_route(self.handle, slot, bus, destination);
     }

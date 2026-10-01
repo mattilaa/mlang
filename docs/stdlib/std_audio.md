@@ -117,6 +117,18 @@ inserts and fader, and the track still plays on its own channel. The host
 replaces the buffer with the output of a processor that has an input, so the
 input is not heard twice.
 
+Source 65 is the live audio input. `input_open(device)` opens an input device
+(an index as `input_device_count()` counts them, -1 = the system default, -2
+closes it) on its own AUHAL unit. Its frames go into a ring buffer on the
+device's clock, and each block reads them about one buffer behind the
+writer, resampled to the controller rate. After an underrun, or when clock
+drift leaves the reader too far behind, it re-anchors. `input_feed(samples,
+channels, rate)` writes frames the same way without a device (for tests and
+offline hosts). `input_peak(channel)` reads and resets the input's peak
+(0–1000), `input_active()` tells whether a device input is open, and `info(10)`
+counts the frames captured so far. Without microphone permission, macOS
+delivers silence: the frame count still grows, but the peak stays 0.
+
 A sampler instrument (such as Mla Sampler) may report a pad's slice markers,
 the frames where its hits start: `instrument_markers(slot, pad)` returns them
 (the first is 0; empty when it has none), and `instrument_set_markers(slot,
