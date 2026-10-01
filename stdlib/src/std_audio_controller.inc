@@ -18,6 +18,8 @@
 #define AC_SPECTRUM_RING 16384u
 /* Live audio input ring: interleaved stereo frames at the input's rate. */
 #define AC_INPUT_RING 131072u
+/* Recording ring (stereo frames) the control thread drains while a take runs. */
+#define AC_RECORD_RING 524288u
 #define AC_SPECTRUM_MAX 8192
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -332,6 +334,16 @@ typedef struct {
     double input_position; int input_primed;
     float live_input[8192];
     float *input_capture; uint32_t input_capture_frames, input_channels;
+    /* Recording of the live input: from output frame `record_from` on (-1 =
+     * off) the render thread appends each block's input to `record_ring`;
+     * the control thread drains it (record_read). `latency` is the frames a
+     * sound played at an output frame takes to come back in the live input
+     * (output and input device latency plus the read margin). */
+    float record_ring[AC_RECORD_RING * 2];
+    _Atomic int64_t record_from;
+    _Atomic uint64_t record_write, record_read, record_overruns;
+    _Atomic int64_t input_latency_frames;
+    int64_t output_latency_frames;
     float track_buffer[64][8192];
     _Atomic uint32_t sends[96][8], effect_volume[8], effect_peak[8][2];
     float effect_buffer[8][8192];
@@ -534,6 +546,8 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     for(int i = 0; i < 32; ++i) atomic_init(&c->input_route[i], 0);
     atomic_init(&c->input_write, 0); atomic_init(&c->input_rate_bits, 0);
     atomic_init(&c->input_peak[0], 0); atomic_init(&c->input_peak[1], 0);
+    atomic_init(&c->record_from, -1); atomic_init(&c->record_write, 0); atomic_init(&c->record_read, 0);
+    atomic_init(&c->record_overruns, 0); atomic_init(&c->input_latency_frames, 0);
     for(int fx = 0; fx < 8; ++fx) {
         atomic_init(&c->effect_volume[fx], 100);
         for(int ch = 0; ch < 2; ++ch) atomic_init(&c->effect_peak[fx][ch], 0);
@@ -928,6 +942,25 @@ static void ac_input_block(ac_controller *c, uint32_t frames) {
         c->input_position += step;
     }
 }
+/* Render thread: append the part of this block's live input at or after
+ * `record_from` to the recording ring; a full ring drops frames (counted). */
+static void ac_record_block(ac_controller *c, uint64_t clock, uint32_t frames) {
+    int64_t from = atomic_load_explicit(&c->record_from, memory_order_acquire);
+    if(from < 0 || (int64_t)(clock + frames) <= from) return;
+    uint32_t first = (int64_t)clock >= from ? 0 : (uint32_t)(from - (int64_t)clock);
+    uint64_t write = atomic_load_explicit(&c->record_write, memory_order_relaxed);
+    uint64_t read = atomic_load_explicit(&c->record_read, memory_order_acquire);
+    uint32_t count = frames - first;
+    if(write - read + count > AC_RECORD_RING) {
+        atomic_fetch_add_explicit(&c->record_overruns, count, memory_order_relaxed); return;
+    }
+    for(uint32_t f = 0; f < count; ++f) {
+        uint64_t slot = (write + f) % AC_RECORD_RING;
+        c->record_ring[slot * 2] = c->live_input[(first + f) * 2];
+        c->record_ring[slot * 2 + 1] = c->live_input[(first + f) * 2 + 1];
+    }
+    atomic_store_explicit(&c->record_write, write + count, memory_order_release);
+}
 static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     if(frames == 0) return; /* Do not consume events/reset on an empty block. */
     uint64_t render_start = ac_now_ns();
@@ -957,6 +990,7 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
     }
     ac_transport_begin(c);
     ac_input_block(c, frames);
+    ac_record_block(c, clock, frames);
     /* Serial before clip: an acknowledged serial then covers this clip. */
     uint64_t preview_serial = atomic_load_explicit(&c->preview_serial, memory_order_acquire);
     ac_sample *preview = atomic_load_explicit(&c->preview, memory_order_acquire);
@@ -1337,6 +1371,7 @@ static OSStatus ac_callback(void *context, AudioUnitRenderActionFlags *flags,
 
 #if defined(__APPLE__)
 static void ac_input_close(ac_controller *c);
+static int64_t ac_device_latency(AudioDeviceID id, int input);
 #endif
 int32_t __mlang_std_audio_controller_stop(int64_t handle) {
     ac_controller *c = (ac_controller*)(intptr_t)handle; if(!c) return -1;
@@ -1445,6 +1480,11 @@ int64_t __mlang_std_audio_controller_open_rate(int64_t device, int64_t frames, i
     AURenderCallbackStruct callback = {ac_callback, c};
     if(rc == noErr) rc = AudioUnitSetProperty(c->unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &callback, sizeof(callback));
     if(rc == noErr) rc = AudioUnitInitialize(c->unit);
+    if(rc == noErr) {
+        double device_rate = coreaudio_nominal_sample_rate(id);
+        int64_t latency = ac_device_latency(id, 0);
+        c->output_latency_frames = device_rate > 0 ? (int64_t)((double)latency * rate / device_rate) : latency;
+    }
     if(rc != noErr) {
         __mlang_std_audio_controller_close(handle);
         snprintf(g_audio_last_error, sizeof(g_audio_last_error), "AUHAL output setup failed (%d)", (int)rc); return 0;
@@ -1455,6 +1495,30 @@ int64_t __mlang_std_audio_controller_open_rate(int64_t device, int64_t frames, i
 #endif
 }
 #if defined(__APPLE__)
+/* Frames (at the device rate) between the hardware and the IO buffer in one
+ * direction: device and stream latency, safety offset and the buffer. */
+static int64_t ac_device_latency(AudioDeviceID id, int input) {
+    AudioObjectPropertyScope scope = input ? kAudioObjectPropertyScopeInput : kAudioObjectPropertyScopeOutput;
+    UInt32 value = 0, size = sizeof(value); int64_t total = 0;
+    AudioObjectPropertyAddress address = {kAudioDevicePropertyLatency, scope, kAudioObjectPropertyElementMain};
+    if(AudioObjectGetPropertyData(id, &address, 0, NULL, &size, &value) == noErr) total += value;
+    address.mSelector = kAudioDevicePropertySafetyOffset; size = sizeof(value); value = 0;
+    if(AudioObjectGetPropertyData(id, &address, 0, NULL, &size, &value) == noErr) total += value;
+    address.mSelector = kAudioDevicePropertyBufferFrameSize; address.mScope = kAudioObjectPropertyScopeGlobal; size = sizeof(value); value = 0;
+    if(AudioObjectGetPropertyData(id, &address, 0, NULL, &size, &value) == noErr) total += value;
+    AudioObjectPropertyAddress streams = {kAudioDevicePropertyStreams, scope, kAudioObjectPropertyElementMain};
+    UInt32 bytes = 0;
+    if(AudioObjectGetPropertyDataSize(id, &streams, 0, NULL, &bytes) == noErr && bytes >= sizeof(AudioStreamID)) {
+        AudioStreamID *ids = malloc(bytes);
+        if(ids && AudioObjectGetPropertyData(id, &streams, 0, NULL, &bytes, ids) == noErr) {
+            AudioObjectPropertyAddress latency = {kAudioStreamPropertyLatency, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+            size = sizeof(value); value = 0;
+            if(AudioObjectGetPropertyData(ids[0], &latency, 0, NULL, &size, &value) == noErr) total += value;
+        }
+        free(ids);
+    }
+    return total < 0 || total > 1000000 ? 0 : total;
+}
 static OSStatus ac_input_callback(void *context, AudioUnitRenderActionFlags *flags,
     const AudioTimeStamp *time, UInt32 bus, UInt32 frames, AudioBufferList *data) {
     (void)data;
@@ -1519,6 +1583,7 @@ int32_t __mlang_std_audio_controller_input_open(int64_t handle, int64_t device) 
         rc = AudioUnitInitialize(c->input_unit);
     }
     if(rc == noErr) rc = AudioOutputUnitStart(c->input_unit);
+    if(rc == noErr) atomic_store_explicit(&c->input_latency_frames, ac_device_latency(id, 1), memory_order_relaxed);
     if(rc != noErr) {
         ac_input_close(c);
         memcpy(&bits, &none, sizeof(bits)); atomic_store_explicit(&c->input_rate_bits, bits, memory_order_release);
@@ -1559,6 +1624,57 @@ int32_t __mlang_std_audio_controller_input_active(int64_t handle) {
 #else
     return 0;
 #endif
+}
+/* Frames a sound played at an output frame takes to reach the live input as
+ * blocks read it: both devices' reported latency plus the read margin. */
+int64_t __mlang_std_audio_controller_record_latency(int64_t handle) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle; if(!c) return 0;
+    double rate = 0; uint64_t bits = atomic_load_explicit(&c->input_rate_bits, memory_order_acquire);
+    memcpy(&rate, &bits, sizeof(rate));
+    double step = rate > 0 ? rate / c->rate : 1.0;
+    int64_t margin = (int64_t)(((double)(c->buffer_frames > 0 ? c->buffer_frames : 256) * step + 64.0) / step) + (c->buffer_frames > 0 ? c->buffer_frames : 256);
+    int64_t input = (int64_t)(atomic_load_explicit(&c->input_latency_frames, memory_order_relaxed) / step);
+    return c->output_latency_frames + input + margin;
+}
+/* Start recording the live input so that its first frame lines up with what
+ * output frame `frame` played (record_latency later in the input); any
+ * unread frames of an earlier take are dropped. Control thread. */
+int32_t __mlang_std_audio_controller_record_start(int64_t handle, int64_t frame) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || frame < 0) return -1;
+    atomic_store_explicit(&c->record_from, -1, memory_order_release);
+    atomic_store_explicit(&c->record_read, atomic_load_explicit(&c->record_write, memory_order_acquire), memory_order_release);
+    atomic_store_explicit(&c->record_overruns, 0, memory_order_relaxed);
+    atomic_store_explicit(&c->record_from, frame + __mlang_std_audio_controller_record_latency(handle), memory_order_release);
+    return 0;
+}
+/* Stop appending; frames already recorded stay readable. */
+int32_t __mlang_std_audio_controller_record_stop(int64_t handle) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle; if(!c) return -1;
+    atomic_store_explicit(&c->record_from, -1, memory_order_release); return 0;
+}
+/* Drain up to `max_frames` recorded frames as interleaved stereo (empty
+ * when none are waiting). Control thread; call often while a take runs. */
+mlang_list_t __mlang_std_audio_controller_record_read(int64_t handle, int64_t max_frames) {
+    mlang_list_t out = {0, NULL};
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || max_frames <= 0) return out;
+    uint64_t read = atomic_load_explicit(&c->record_read, memory_order_relaxed);
+    uint64_t write = atomic_load_explicit(&c->record_write, memory_order_acquire);
+    uint64_t count = write - read; if(count > (uint64_t)max_frames) count = (uint64_t)max_frames;
+    if(count == 0) return out;
+    float *data = malloc((size_t)count * 2u * sizeof(float)); if(!data) return out;
+    for(uint64_t f = 0; f < count; ++f) {
+        uint64_t slot = (read + f) % AC_RECORD_RING;
+        data[f * 2] = c->record_ring[slot * 2]; data[f * 2 + 1] = c->record_ring[slot * 2 + 1];
+    }
+    atomic_store_explicit(&c->record_read, read + count, memory_order_release);
+    out.data = data; out.size = (int64_t)count * 2; return out;
+}
+/* Frames dropped because the recording was not drained in time. */
+int64_t __mlang_std_audio_controller_record_overruns(int64_t handle) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle; if(!c) return 0;
+    return (int64_t)atomic_load_explicit(&c->record_overruns, memory_order_relaxed);
 }
 int64_t __mlang_std_audio_controller_open(int64_t device, int64_t frames) {
     return __mlang_std_audio_controller_open_rate(device, frames, 0);

@@ -129,6 +129,15 @@ offline hosts). `input_peak(channel)` reads and resets the input's peak
 counts the frames captured so far. Without microphone permission, macOS
 delivers silence: the frame count still grows, but the peak stays 0.
 
+The live input can be recorded. `record_start(frame)` records from the block
+frame where something played at output frame `frame` comes back in the input:
+`record_latency()` frames later, which is both devices' reported latency
+(device, stream, safety offset and buffer) plus the input read margin. The
+render thread appends to a ring of about ten seconds that `record_read(max)`
+drains as interleaved stereo at the controller rate. Drain it often while a take
+runs: frames that do not fit are dropped and counted by `record_overruns()`.
+`record_stop()` ends the take, and what was recorded stays readable.
+
 A sampler instrument (such as Mla Sampler) may report a pad's slice markers,
 the frames where its hits start: `instrument_markers(slot, pad)` returns them
 (the first is 0; empty when it has none), and `instrument_set_markers(slot,

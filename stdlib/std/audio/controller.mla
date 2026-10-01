@@ -73,6 +73,11 @@ extern fn __mlang_std_audio_controller_input_open(handle: i64, device: i64) -> i
 extern fn __mlang_std_audio_controller_input_feed(handle: i64, samples: list<f32>, channels: i64, rate: i64) -> i32;
 extern fn __mlang_std_audio_controller_input_peak(handle: i64, channel: i64) -> i32;
 extern fn __mlang_std_audio_controller_input_active(handle: i64) -> i32;
+extern fn __mlang_std_audio_controller_record_latency(handle: i64) -> i64;
+extern fn __mlang_std_audio_controller_record_start(handle: i64, frame: i64) -> i32;
+extern fn __mlang_std_audio_controller_record_stop(handle: i64) -> i32;
+extern fn __mlang_std_audio_controller_record_read(handle: i64, max_frames: i64) -> list<f32>;
+extern fn __mlang_std_audio_controller_record_overruns(handle: i64) -> i64;
 extern fn __mlang_std_audio_controller_load_effect(handle: i64, fx: i64, path: str8) -> i32;
 extern fn __mlang_std_audio_controller_effect_send(handle: i64, track: i64, slot: i64, fx: i64, percent: i64) -> i32;
 extern fn __mlang_std_audio_controller_effect_volume(handle: i64, fx: i64, percent: i64) -> i32;
@@ -266,6 +271,19 @@ impl AudioController {
     pub fn input_peak(self: AudioController, channel: i64) -> i32 { return __mlang_std_audio_controller_input_peak(self.handle, channel); }
     /// True while a device input is open.
     pub fn input_active(self: AudioController) -> bool { return __mlang_std_audio_controller_input_active(self.handle) != 0; }
+    /// Frames a sound played at an output frame takes to come back in the
+    /// live input (both devices' latency plus the read margin).
+    pub fn record_latency(self: AudioController) -> i64 { return __mlang_std_audio_controller_record_latency(self.handle); }
+    /// Record the live input so its first frame lines up with what output
+    /// frame `frame` played; drops anything an earlier take left unread.
+    pub fn record_start(self: AudioController, frame: i64) -> i32 { return __mlang_std_audio_controller_record_start(self.handle, frame); }
+    /// Stop recording; what was recorded stays readable.
+    pub fn record_stop(self: AudioController) -> i32 { return __mlang_std_audio_controller_record_stop(self.handle); }
+    /// Drain up to `max_frames` recorded frames as interleaved stereo. Call
+    /// often while a take runs: the ring holds about ten seconds.
+    pub fn record_read(self: AudioController, max_frames: i64) -> list<f32> { return __mlang_std_audio_controller_record_read(self.handle, max_frames); }
+    /// Frames dropped because the take was not drained in time.
+    pub fn record_overruns(self: AudioController) -> i64 { return __mlang_std_audio_controller_record_overruns(self.handle); }
     pub fn instrument_output_route(self: AudioController, slot: i64, bus: i64, destination: i64) -> i32 {
         return __mlang_std_audio_controller_instrument_output_route(self.handle, slot, bus, destination);
     }
