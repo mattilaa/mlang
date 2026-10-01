@@ -66,6 +66,15 @@ typedef struct mlang_audio_processor {
      * `count` frames, or detects them again when count < 0; 0 or -1. */
     int32_t (*pad_markers)(void *context, int32_t pad, double *out, int32_t max);
     int32_t (*set_pad_markers)(void *context, int32_t pad, const double *frames, int32_t count);
+    /* Optional, text-driven instruments such as speech or vocal synths.
+     * set_text (control thread, audio may run) stores UTF-8 `text` as phrase
+     * `index` (0-255), replacing what was there; 0 or -1. The phrase table is
+     * a ring: a sequencer reuses an index only long after the event that used
+     * it played. text (audio thread, like note) attaches phrase `index` to the
+     * next note-on on `channel` in the same block (a VST3 host sends it as a
+     * note-expression text event of that note); without one it is dropped. */
+    int32_t (*set_text)(void *context, int32_t index, const char *text);
+    void (*text)(void *context, int32_t channel, int32_t index, int32_t offset);
 } mlang_audio_processor;
 typedef int32_t (*mlang_audio_processor_factory)(const char *path, double rate,
     int32_t max_frames, mlang_audio_processor *out, char *error, int32_t error_size);

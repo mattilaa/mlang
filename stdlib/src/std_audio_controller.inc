@@ -586,13 +586,14 @@ int32_t __mlang_std_audio_controller_post(int64_t handle, int64_t lane,
     int64_t kind, int64_t channel, int64_t note, int64_t velocity,
     int64_t source, int64_t frame, int64_t sample, double gain) {
     ac_controller *c = (ac_controller*)(intptr_t)handle;
-    if(!c || lane < 0 || lane >= AC_LANES || kind < 1 || kind > 10 || frame < -1 ||
+    if(!c || lane < 0 || lane >= AC_LANES || kind < 1 || kind > 11 || frame < -1 ||
        source < 0 || source > INT32_MAX || !isfinite(gain) || gain < 0 || gain > 1) return -1;
     if((kind == 1 || kind == 2 || kind == 6 || kind == 7) && (channel < 0 || channel > 15 ||
         note < 0 || note > 127 || velocity < 0 || velocity > 127)) return -1;
     if(kind == 4 && (sample < 0 || sample >= AC_SAMPLES || note < 0 || velocity < 0)) return -1;
     if(kind == 10 && (sample < 1 || sample > 296 || note < 0 || note > 16383)) return -1;
     if((kind == 6 || kind == 7) && (sample < 0 || sample > 32)) return -1;
+    if(kind == 11 && (sample < 1 || sample > 32 || channel < 0 || channel > 15 || note < 0 || note > 255)) return -1;
     if((kind == 8 || kind == 9) && (channel < 0 || channel > 15 ||
         note < 0 || note > 129 || velocity < 0 ||
         velocity > (note == 129 ? 16383 : 127) || sample < 0 || sample > 32)) return -1;
@@ -752,6 +753,11 @@ static void ac_dispatch(ac_controller *c, const ac_event *e) {
     if(e->kind == 10) {
         mlang_audio_processor *p = ac_plugin(c, e->sample);
         if(p->context && p->parameter) p->parameter(p->context, (int32_t)e->note, e->gain, c->render_offset);
+        return;
+    }
+    if(e->kind == 11) {
+        mlang_audio_processor *p = &c->instruments[e->sample - 1];
+        if(p->context && p->text) p->text(p->context, (int32_t)e->channel, (int32_t)e->note, c->render_offset);
         return;
     }
     /* Live knobs (source >= 65536) were resolved against MIDI learn already. */
@@ -2034,6 +2040,17 @@ int32_t __mlang_std_audio_controller_instrument_clear_pad(int64_t handle, int64_
     if(p->load_pad(p->context, (int32_t)pad, NULL, 0, 0, 0.0, "", error, (int32_t)sizeof(error)) != 0) {
         audio_set_error(error[0] ? error : "Instrument could not clear the pad"); return -1;
     }
+    audio_clear_error(); return 0;
+}
+/* Control thread; audio may run. Stores phrase `index` of a text-driven
+ * instrument (speech synth); an InstrumentText event plays it. */
+int32_t __mlang_std_audio_controller_instrument_text(int64_t handle, int64_t slot, int64_t index, const char *text) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || slot < 1 || slot > 32 || index < 0 || index > 255) { audio_set_error("Invalid instrument slot or phrase"); return -1; }
+    mlang_audio_processor *p = &c->instruments[slot - 1];
+    if(!p->context) { audio_set_error("Select a loaded instrument"); return -1; }
+    if(!p->set_text || !p->text) { audio_set_error("This instrument does not take text"); return -1; }
+    if(p->set_text(p->context, (int32_t)index, text ? text : "") != 0) { audio_set_error("Instrument rejected the text"); return -1; }
     audio_clear_error(); return 0;
 }
 /* Control thread. Sampler layout of an instrument: key 0 root key, 1 pad

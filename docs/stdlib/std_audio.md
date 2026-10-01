@@ -192,6 +192,18 @@ The optional native `control` callback receives the block-relative sample offset
 mlacker converts these through cached VST3 `IMidiMapping` assignments to normalized
 `IParameterChanges` points. Unsupported mappings are ignored, never treated as notes.
 
+Text-driven instruments (speech or vocal synths such as Mla Speech) take words
+with their notes. `instrument_text(slot, index, text)` stores UTF-8 `text` as
+phrase `index` (0–255) of the instrument in `slot`, on the control thread while
+audio runs; it fails with "This instrument does not take text" unless the
+processor has the optional `set_text` and `text` hooks. An `InstrumentText`
+event (slot in `sample`, phrase in `midi.note`, `midi.channel`) posted right
+before an `InstrumentNoteOn` on the same channel and frame attaches the phrase
+to that note: the native `text` callback runs first, with the block-relative
+offset, and mlacker's VST3 host sends the phrase as a `kTextTypeID`
+note-expression text event of the note. The phrase table is a ring; reuse an
+index only after the event that used it has played.
+
 For selected-track live input, the control thread publishes
 `midi_target(track, instrument)` (`track` 0–63; instrument -1 disables new notes,
 0 routes to preview/master, 1–32 routes to a slot). The MIDI worker calls
