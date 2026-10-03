@@ -247,12 +247,15 @@ An optional POSIX `pattern` must match the entire value in addition to its type
 rules; invalid regexes reject input. `bounded` applies only to integer columns.
 Cells remain textual display values, not a dynamically typed language object.
 
-`read_only` columns are skipped by `l/h` and selection reconciliation; an
-all-read-only table has `selected_column == -1`. `can_set(row, column, value)`
-and `set_cell(row, column, value)` reject invalid values, missing cells, and
-read-only writes. The base still borrows strings: callers keep accepted values
-alive and manage replaced strings. Directly replacing the public `rows` data
-bypasses write validation; use `set_cell` for interactive edits.
+`read_only` columns are skipped by `l/h` and selection reconciliation unless
+they set `selectable: true`. This supports protected action columns whose cursor
+position is handled by the application. An all-read-only, non-selectable table
+has `selected_column == -1`. `can_set(row, column, value)` and
+`set_cell(row, column, value)` reject invalid values, missing cells, and all
+read-only writes, including selectable ones. The base still borrows strings:
+callers keep accepted values alive and manage replaced strings. Directly
+replacing the public `rows` data bypasses write validation; use `set_cell` for
+interactive edits.
 
 Columns can opt into `nullable: true`: an empty string represents no value and
 bypasses the value regex/range checks, but unsupported types still fail.

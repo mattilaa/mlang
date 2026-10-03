@@ -169,6 +169,11 @@ fn tui_read_only_columns() {
     verify(table.selected_column == 1);
     table.columns = [TableColumn { title: "ROW", width: 5, read_only: true }];
     table.reconcile(area); verify(table.selected_column == -1);
+    table.columns = [TableColumn { title: "ROW", width: 5, read_only: true },
+        TableColumn { title: "ACTION", width: 8, read_only: true, selectable: true }];
+    table.rows = [TableRow { cells: ["1", "Open"] }]; table.selected_row = 0;
+    table.selected_column = 0; table.reconcile(area); verify(table.selected_column == 1);
+    verify(!table.can_set(0, 1, "changed"));
 }
 
 fn sample_table() -> Table {

@@ -43,7 +43,10 @@ pub fn table_integer(text: str8) -> result<i64, str8> {
 
 pub struct TableColumn {
     var title: str8; var width: i32;
-    var read_only: bool{false}; var value_type: str8{"str8"};
+    var read_only: bool{false};
+    /// A read-only column normally cannot receive the cursor. Set this for an
+    /// action column whose contents stay protected but react to Enter.
+    var selectable: bool{false}; var value_type: str8{"str8"};
     var hidden: bool{false};
     var pattern: str8{""};
     var nullable: bool{false};
@@ -172,12 +175,12 @@ pub struct Table {
         self.selected_column = columns == 0 ? -1 : (self.selected_column < 0 ? 0 : (self.selected_column >= columns ? columns - 1 : self.selected_column));
         if self.selected_column >= 0 {
             let selected: TableColumn = self.columns[self.selected_column];
-            if selected.read_only || selected.hidden {
+            if (selected.read_only && !selected.selectable) || selected.hidden {
                 let previous: i32 = self.selected_column;
                 self.move_column(1);
                 if self.selected_column == previous { self.move_column(-1); }
                 let candidate: TableColumn = self.columns[self.selected_column];
-                if candidate.read_only || candidate.hidden { self.selected_column = -1; }
+                if (candidate.read_only && !candidate.selectable) || candidate.hidden { self.selected_column = -1; }
             }
         }
         if self.selected_row >= 0 && body.height > 0 {
@@ -222,7 +225,7 @@ pub struct Table {
         var next: i32 = self.selected_column + direction;
         while next >= 0 && next < self.columns.len() {
             let column: TableColumn = self.columns[next];
-            if !column.read_only && !column.hidden { self.selected_column = next; return; }
+            if (!column.read_only || column.selectable) && !column.hidden { self.selected_column = next; return; }
             next = next + direction;
         }
     }
