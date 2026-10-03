@@ -255,7 +255,8 @@ has `selected_column == -1`. `can_set(row, column, value)` and
 read-only writes, including selectable ones. The base still borrows strings:
 callers keep accepted values alive and manage replaced strings. Directly
 replacing the public `rows` data bypasses write validation; use `set_cell` for
-interactive edits.
+interactive edits. Selectable read-only columns receive the same rectangular
+visual-selection highlight as writable columns.
 
 Columns can opt into `nullable: true`: an empty string represents no value and
 bypasses the value regex/range checks, but unsupported types still fail.

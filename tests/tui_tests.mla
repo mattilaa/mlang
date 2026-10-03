@@ -171,9 +171,15 @@ fn tui_read_only_columns() {
     table.reconcile(area); verify(table.selected_column == -1);
     table.columns = [TableColumn { title: "ROW", width: 5, read_only: true },
         TableColumn { title: "ACTION", width: 8, read_only: true, selectable: true }];
-    table.rows = [TableRow { cells: ["1", "Open"] }]; table.selected_row = 0;
+    table.rows = [TableRow { cells: ["1", "Open"] }, TableRow { cells: ["2", "Close"] }]; table.selected_row = 0;
     table.selected_column = 0; table.reconcile(area); verify(table.selected_column == 1);
     verify(!table.can_set(0, 1, "changed"));
+    table.visual = true; table.anchor_row = 0; table.anchor_column = 1;
+    table.selected_row = 1; table.selected_column = 1;
+    let surface: Surface = Surface::new(30, 10); let theme: Theme = Theme::dark_blue();
+    table.paint(surface, area, theme);
+    let body: Rect = table.body(area); let action: Cell = surface.cell(table.column_x(1), body.y);
+    verify(action.background == lighten(theme.panel, 20)); surface.release();
 }
 
 fn sample_table() -> Table {

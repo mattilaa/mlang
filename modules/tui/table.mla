@@ -296,7 +296,8 @@ pub struct Table {
                 let width: i32 = self.column_width(i32(c));
                 if width == 0 { continue; }
                 let definition: TableColumn = self.columns[c];
-                let cell_bg: i32 = !self.visual_rows && !definition.read_only && self.visual_position(row_index, subrow, c) ? lighten(bg, 20) : (c == self.selected_column ? lighten(bg, 8) : bg);
+                let selectable: bool = !definition.read_only || definition.selectable;
+                let cell_bg: i32 = !self.visual_rows && selectable && self.visual_position(row_index, subrow, c) ? lighten(bg, 20) : (c == self.selected_column ? lighten(bg, 8) : bg);
                 let base_fg: i32 = self.dim_column(c) ? darken(theme.foreground, 88) : theme.foreground;
                 let part: i32 = i32(y) % self.row_spacing();
                 let fg: i32 = darken(base_fg, part == 0 ? 100 : (self.row_spacing() == 4 && part % 2 == 1 ? 68 : 84));
