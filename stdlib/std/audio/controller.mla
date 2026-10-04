@@ -72,6 +72,7 @@ extern fn __mlang_std_audio_controller_instrument_outputs(handle: i64, slot: i64
 extern fn __mlang_std_audio_controller_instrument_output_name(handle: i64, slot: i64, bus: i64) -> str8;
 extern fn __mlang_std_audio_controller_instrument_output_route(handle: i64, slot: i64, bus: i64, destination: i64) -> i32;
 extern fn __mlang_std_audio_controller_instrument_input(handle: i64, slot: i64, source: i64) -> i32;
+extern fn __mlang_std_audio_controller_input_monitor(handle: i64, track: i64, on: i32) -> i32;
 extern fn __mlang_std_audio_controller_input_open(handle: i64, device: i64) -> i32;
 extern fn __mlang_std_audio_controller_input_feed(handle: i64, samples: list<f32>, channels: i64, rate: i64) -> i32;
 extern fn __mlang_std_audio_controller_input_peak(handle: i64, channel: i64) -> i32;
@@ -267,6 +268,12 @@ impl AudioController {
     /// output, so the input is not heard twice.
     pub fn instrument_input(self: AudioController, slot: i64, source: i64) -> i32 {
         return __mlang_std_audio_controller_instrument_input(self.handle, slot, source);
+    }
+    /// Monitor the live audio input on PCM track `track` (1-64), or stop: the
+    /// input plays through that track's inserts, fader, sends and output, like
+    /// its own clips. Several tracks may monitor at once. Audio may run. 0 or -1.
+    pub fn input_monitor(self: AudioController, track: i64, on: bool) -> i32 {
+        return __mlang_std_audio_controller_input_monitor(self.handle, track, on ? 1 : 0);
     }
     /// Open the live audio input on input device `device` (an index as
     /// `std::audio::input_device_count()` counts them, -1 = the system

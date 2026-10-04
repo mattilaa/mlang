@@ -322,6 +322,9 @@ typedef struct {
      * (silence), 1-64 = the voices of that PCM track, taken before its
      * inserts and fader, 65 = the live audio input. */
     _Atomic uint32_t input_route[32];
+    /* PCM tracks monitoring the live input (bit t = track t + 1): the input
+     * is added to the track's channel before its inserts and fader. */
+    _Atomic uint64_t input_monitor;
     /* Live audio input. One writer (the input device callback, or
      * input_feed while no device is open) appends frames at `input_rate` and
      * publishes `input_write`; the render thread reads behind it at its own
@@ -544,6 +547,7 @@ int64_t __mlang_std_audio_controller_new(int64_t rate, int64_t frames) {
     for(int i = 0; i < 96; ++i) for(int n = 0; n < 4; ++n) atomic_init(&c->insert_route[i][n], 0);
     for(int i = 0; i < 96; ++i) atomic_init(&c->output_route[i], 0);
     for(int i = 0; i < 32; ++i) atomic_init(&c->input_route[i], 0);
+    atomic_init(&c->input_monitor, 0);
     atomic_init(&c->input_write, 0); atomic_init(&c->input_rate_bits, 0);
     atomic_init(&c->input_peak[0], 0); atomic_init(&c->input_peak[1], 0);
     atomic_init(&c->record_from, -1); atomic_init(&c->record_write, 0); atomic_init(&c->record_read, 0);
@@ -1033,7 +1037,14 @@ static void ac_render(ac_controller *c, float *out, uint32_t frames) {
         c->job_input[i] = input >= 1 && input <= 64 ? (int)input - 1 : (input == 65 ? -2 : -1);
         if(c->job_input[i] >= 0) buffered[c->job_input[i]] = 1;
     }
-    for(int t = 0; t < 64; ++t) if(buffered[t]) memset(c->track_buffer[t], 0, frames * 2u * sizeof(float));
+    /* A track monitoring the live input starts its buffer with it, so the
+     * input runs through the track's inserts, fader, sends and output. */
+    uint64_t monitor = atomic_load_explicit(&c->input_monitor, memory_order_relaxed);
+    for(int t = 0; t < 64; ++t) if((monitor >> t) & 1u) buffered[t] = 1;
+    for(int t = 0; t < 64; ++t) if(buffered[t]) {
+        if((monitor >> t) & 1u) memcpy(c->track_buffer[t], c->live_input, frames * 2u * sizeof(float));
+        else memset(c->track_buffer[t], 0, frames * 2u * sizeof(float));
+    }
     /* Feeders before their destination; a cycle falls back to master. */
     int order[64], count = 0, indegree[64] = {0}, cycled[64] = {0};
     for(int t = 0; t < 64; ++t) if(buffered[t] && target[t] >= 0) ++indegree[target[t]];
@@ -1871,6 +1882,16 @@ int32_t __mlang_std_audio_controller_instrument_input(int64_t handle, int64_t sl
     ac_controller *c = (ac_controller*)(intptr_t)handle;
     if(!c || slot < 1 || slot > 32 || source < 0 || source > 65) return -1;
     atomic_store_explicit(&c->input_route[slot - 1], (uint32_t)source, memory_order_relaxed); return 0;
+}
+/* Monitor the live input on PCM track `track` (1-64), or stop: the input
+ * plays through that track's inserts and fader. Audio may run. 0 or -1. */
+int32_t __mlang_std_audio_controller_input_monitor(int64_t handle, int64_t track, int32_t on) {
+    ac_controller *c = (ac_controller*)(intptr_t)handle;
+    if(!c || track < 1 || track > 64) return -1;
+    uint64_t bit = (uint64_t)1 << (track - 1);
+    if(on) atomic_fetch_or_explicit(&c->input_monitor, bit, memory_order_relaxed);
+    else atomic_fetch_and_explicit(&c->input_monitor, ~bit, memory_order_relaxed);
+    return 0;
 }
 /* Stereo output buses of the instrument in `slot`, main included (1 for a
  * single-output instrument), or -1 when the slot is empty. */
