@@ -511,6 +511,13 @@ fn tui_dialog_focus_and_rendering() {
     verify(files.bounds.x > tree.bounds.x && tree.bounds.y == files.bounds.y);
     // Browsing starts in the tree; move up to the path row first.
     verify(dialog.focus.selected == 1);
+    dialog.on_event(decode_input("\t"), bounds);
+    verify(dialog.focus.selected == 2);
+    dialog.on_event(decode_input("\x1b[Z"), bounds);
+    verify(dialog.focus.selected == 1);
+    dialog.on_event(decode_input("\x1b[Z"), bounds);
+    verify(dialog.focus.selected == 0);
+    dialog.focus.selected = 1;
     dialog.on_event(decode_input("\x1b[107;6u"), bounds);
     verify(dialog.focus.selected == 0);
     dialog.on_event(decode_input("\x1b[106;6u"), bounds); // path -> files (nearest center)

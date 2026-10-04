@@ -432,7 +432,8 @@ impl OpenSessionDialog {
         if event.code == 3 ||(event.code == 99 && event.modifiers == 5) { self.cancel(); return; }
         if self.pressed_button >= 0 { return; }
         if event.kind == InputKind::Menu && event.key == Key::Toggle {
-            self.focus.selected = (self.focus.selected + 1) % 4; return;
+            let step: i32 = event.modifiers == 2 ? 3 : 1;
+            self.focus.selected = (self.focus.selected + step) % 4; return;
         }
         if self.focus.selected == 3 { self.on_button_event(event); return; }
         if self.focus.selected == 0 {
