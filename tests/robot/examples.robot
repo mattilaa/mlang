@@ -592,7 +592,7 @@ MLang Frontend CompileOnly TestsFlag UnknownOption Fails
     ...    --tests    --definitely-unknown-flag
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend CompileOnly TestsFlag OutputOption IsAcceptedAndIgnoredInDirMode
     [Documentation]    Verify C++ parity: bare compile-stream --tests accepts -o <file> but does not forward it per-suite in directory mode.
@@ -624,7 +624,7 @@ MLang Frontend CompileOnly TestsFlag MissingOutputValue Fails
     ...    --tests    -o
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: -o
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Last Backend option Wins
     [Documentation]    Verify wrapper parsing uses the last --backend value before passthrough args.
@@ -1080,7 +1080,7 @@ MLang Frontend Test Help Uses Backend Semantics
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    test    --help
     Should Be Equal As Integers    ${run.rc}    0
     Should Not Contain    ${run.stderr}    mlang-frontend-mla
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Test Unknown Before Help Fails
     [Documentation]    Verify argument order parity: unknown option before --help in test mode should fail.
@@ -1233,7 +1233,7 @@ MLang Frontend Test Help Before Unknown Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    test    --help    --definitely-unknown-flag
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Test Help Before MissingValueOption Succeeds
     [Documentation]    Verify `test --help -o` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
@@ -1243,7 +1243,7 @@ MLang Frontend Test Help Before MissingValueOption Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    test    --help    -o
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Test ShortHelp Before Unknown Succeeds
     [Documentation]    Verify argument order parity: -h before unknown option in test mode should succeed.
@@ -1253,7 +1253,7 @@ MLang Frontend Test ShortHelp Before Unknown Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    test    -h    --definitely-unknown-flag
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Test ShortHelp Before MissingValueOption Succeeds
     [Documentation]    Verify `test -h -o` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
@@ -1263,7 +1263,7 @@ MLang Frontend Test ShortHelp Before MissingValueOption Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    test    -h    -o
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Test Version Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --version before unknown option in test mode should succeed.
@@ -1303,7 +1303,7 @@ MLang Frontend DirectTests Help Uses Backend Semantics
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    --tests    --help
     Should Be Equal As Integers    ${run.rc}    0
     Should Not Contain    ${run.stderr}    mlang-frontend-mla
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend DirectTests Version Uses Backend Semantics
     [Documentation]    Verify `--tests --version` is passed through and reports backend version semantics.
@@ -1323,7 +1323,7 @@ MLang Frontend DirectTests Help Before Unknown Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    --tests    --help    --definitely-unknown-flag
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend DirectTests Help Before MissingValueOption Succeeds
     [Documentation]    Verify `--tests --help -o` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
@@ -1333,7 +1333,7 @@ MLang Frontend DirectTests Help Before MissingValueOption Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    --tests    --help    -o
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend DirectTests Unknown Before Help Fails
     [Documentation]    Verify argument order parity: unknown option before --help in direct --tests mode should fail.
@@ -1353,7 +1353,7 @@ MLang Frontend DirectTests ShortHelp Before Unknown Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    --tests    -h    --definitely-unknown-flag
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend DirectTests ShortHelp Before MissingValueOption Succeeds
     [Documentation]    Verify `--tests -h -L` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
@@ -1363,7 +1363,7 @@ MLang Frontend DirectTests ShortHelp Before MissingValueOption Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    --tests    -h    -L
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend DirectTests Version Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --version before unknown option in direct --tests mode should succeed.
@@ -1403,7 +1403,7 @@ MLang Frontend RunTests Help Uses Backend Semantics
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    run    tests    --help
     Should Be Equal As Integers    ${run.rc}    0
     Should Not Contain    ${run.stderr}    mlang-frontend-mla
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend RunTests Unknown Before Help Fails
     [Documentation]    Verify argument order parity: unknown option before --help should still fail.
@@ -1433,7 +1433,7 @@ MLang Frontend RunTests Help Before Unknown Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    run    tests    --help    --definitely-unknown-flag
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend RunTests Help Before MissingValueOption Succeeds
     [Documentation]    Verify `run tests --help -o` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
@@ -1443,7 +1443,7 @@ MLang Frontend RunTests Help Before MissingValueOption Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    run    tests    --help    -o
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend RunTests ShortHelp Before Unknown Succeeds
     [Documentation]    Verify argument order parity: -h before unknown option in run tests mode should succeed.
@@ -1453,7 +1453,7 @@ MLang Frontend RunTests ShortHelp Before Unknown Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    run    tests    -h    --definitely-unknown-flag
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend RunTests ShortHelp Before MissingValueOption Succeeds
     [Documentation]    Verify `run tests -h -L` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
@@ -1463,7 +1463,7 @@ MLang Frontend RunTests ShortHelp Before MissingValueOption Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    run    tests    -h    -L
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend RunTests Version Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --version before unknown option in run tests mode should succeed.
@@ -1503,7 +1503,7 @@ MLang Frontend Bench Help Uses Backend Semantics
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    bench    --help
     Should Be Equal As Integers    ${run.rc}    0
     Should Not Contain    ${run.stderr}    mlang-frontend-mla
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Bench Version Uses Backend Semantics
     [Documentation]    Verify `bench --version` is passed through and reports backend version semantics.
@@ -1553,7 +1553,7 @@ MLang Frontend Bench ShortHelp Uses Backend Semantics
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    bench    -h
     Should Be Equal As Integers    ${run.rc}    0
     Should Not Contain    ${run.stderr}    mlang-frontend-mla
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Bench Unknown Before Help Fails
     [Documentation]    Verify argument order parity: unknown option before --help in bench mode should fail.
@@ -1583,7 +1583,7 @@ MLang Frontend Bench Help Before Unknown Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    bench    --help    --definitely-unknown-flag
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Bench ShortHelp Before Unknown Succeeds
     [Documentation]    Verify argument order parity: -h before unknown option in bench mode should succeed.
@@ -1593,7 +1593,7 @@ MLang Frontend Bench ShortHelp Before Unknown Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    bench    -h    --definitely-unknown-flag
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Bench ShortHelp Before MissingValueOption Succeeds
     [Documentation]    Verify `bench -h -l` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
@@ -1603,7 +1603,7 @@ MLang Frontend Bench ShortHelp Before MissingValueOption Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    bench    -h    -l
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Bench Version Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --version before unknown option in bench mode should succeed.
@@ -1623,7 +1623,7 @@ MLang Frontend Bench Help Before MissingValueOption Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    bench    --help    -l
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Bench Version Before MissingValueOption Succeeds
     [Documentation]    Verify `bench --version -o` short-circuits to backend version and ignores trailing missing-value options (C++ parity).
@@ -2958,7 +2958,7 @@ MLang Frontend Test Inline Bench Flags Are Rejected
     ...    test    ${src}    ${iters}    ${warmup}
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-iters=20
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend RunTests Inline Bench Flags Are Rejected
     [Documentation]    Verify run tests mode rejects inline --bench-iters=N/--bench-warmup=N as unknown options (C++ parity).
@@ -2978,7 +2978,7 @@ MLang Frontend RunTests Inline Bench Flags Are Rejected
     ...    run    tests    ${src}    ${iters}    ${warmup}
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-iters=20
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend RunTests Directory Invalid BenchIters Value Errors
     [Documentation]    Verify `run tests <dir>` reports invalid numeric value for --bench-iters (C++ parity).
@@ -3154,7 +3154,7 @@ MLang Frontend Trailing Tests Flag Unknown option Fails
     ...    ${src}    --tests    --definitely-unknown-flag
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Trailing Tests SingleFile Forwards OutputOption
     [Documentation]    Verify C++ parity: in trailing --tests single-file mode, -o <file> is forwarded.
@@ -3234,19 +3234,19 @@ MLang Frontend Trailing Tests SingleFile MissingLinkOrOutputValue Fails
     ...    ${src}    --tests    -o
     Should Not Be Equal As Integers    ${run_o.rc}    0
     Should Contain    ${run_o.stderr}    Unknown option: -o
-    Should Contain    ${run_o.stderr}    Usage:
+    Should Contain    ${run_o.stderr}    USAGE
 
     ${run_L}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    ${src}    --tests    -L
     Should Not Be Equal As Integers    ${run_L.rc}    0
     Should Contain    ${run_L.stderr}    Unknown option: -L
-    Should Contain    ${run_L.stderr}    Usage:
+    Should Contain    ${run_L.stderr}    USAGE
 
     ${run_l}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    ${src}    --tests    -l
     Should Not Be Equal As Integers    ${run_l.rc}    0
     Should Contain    ${run_l.stderr}    Unknown option: -l
-    Should Contain    ${run_l.stderr}    Usage:
+    Should Contain    ${run_l.stderr}    USAGE
 
 MLang Frontend Trailing Tests Help Before Unknown Succeeds
     [Documentation]    Verify C++ parity: in trailing --tests stream, --help before unknown option short-circuits successfully.
@@ -3263,7 +3263,7 @@ MLang Frontend Trailing Tests Help Before Unknown Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    ${src}    --tests    --help    --definitely-unknown-flag
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Trailing Tests Unknown Before Help Fails
     [Documentation]    Verify C++ parity: in trailing --tests stream, unknown option before --help fails.
@@ -3281,7 +3281,7 @@ MLang Frontend Trailing Tests Unknown Before Help Fails
     ...    ${src}    --tests    --definitely-unknown-flag    --help
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Trailing Tests Version Before Unknown Succeeds
     [Documentation]    Verify C++ parity: in trailing --tests stream, --version before unknown option short-circuits successfully.
@@ -3316,7 +3316,7 @@ MLang Frontend Trailing Tests Unknown Before Version Fails
     ...    ${src}    --tests    --definitely-unknown-flag    --version
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Trailing Tests ShortHelp Before Unknown Succeeds
     [Documentation]    Verify C++ parity: in trailing --tests stream, -h before unknown option short-circuits successfully.
@@ -3333,7 +3333,7 @@ MLang Frontend Trailing Tests ShortHelp Before Unknown Succeeds
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    ${src}    --tests    -h    --definitely-unknown-flag
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Trailing Tests Unknown Before ShortHelp Fails
     [Documentation]    Verify C++ parity: in trailing --tests stream, unknown option before -h fails.
@@ -3351,7 +3351,7 @@ MLang Frontend Trailing Tests Unknown Before ShortHelp Fails
     ...    ${src}    --tests    --definitely-unknown-flag    -h
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Trailing Tests Help ShortCircuits MissingValueOption
     [Documentation]    Verify C++ parity: in trailing --tests stream, --help short-circuits and ignores trailing missing-value options.
@@ -3368,7 +3368,7 @@ MLang Frontend Trailing Tests Help ShortCircuits MissingValueOption
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    ${src}    --tests    --help    -o
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Trailing Tests Version ShortCircuits MissingValueOption
     [Documentation]    Verify C++ parity: in trailing --tests stream, --version short-circuits and ignores trailing missing-value options.
@@ -3402,7 +3402,7 @@ MLang Frontend Trailing Tests ShortHelp ShortCircuits MissingValueOption
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    ${src}    --tests    -h    -L
     Should Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Trailing Tests Flag Injects Default Colon Suppression
     [Documentation]    Verify C++ parity: trailing --tests in compile stream injects default -Wno-colon-if/-Wno-colon-while.
@@ -4001,7 +4001,7 @@ MLang Frontend Bench Inline Flags Are Rejected
     ...    bench    ${iters}    ${warmup}    ${EXECDIR}/tests/bench_stdlib.mla
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-iters=20
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Bench SingleFile Rejects Bare Wl Flag
     [Documentation]    Verify C++ parity: bare -Wl, is rejected in single-file bench mode as unknown.
@@ -5079,19 +5079,19 @@ MLang Frontend Missing LinkOrOutput Value Uses Unknown option Error
     ...    test    ${src}    -o
     Should Not Be Equal As Integers    ${run_o.rc}    0
     Should Contain    ${run_o.stderr}    Unknown option: -o
-    Should Contain    ${run_o.stderr}    Usage:
+    Should Contain    ${run_o.stderr}    USAGE
 
     ${run_L}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    test    ${src}    -L
     Should Not Be Equal As Integers    ${run_L.rc}    0
     Should Contain    ${run_L.stderr}    Unknown option: -L
-    Should Contain    ${run_L.stderr}    Usage:
+    Should Contain    ${run_L.stderr}    USAGE
 
     ${run_l}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    test    ${src}    -l
     Should Not Be Equal As Integers    ${run_l.rc}    0
     Should Contain    ${run_l.stderr}    Unknown option: -l
-    Should Contain    ${run_l.stderr}    Usage:
+    Should Contain    ${run_l.stderr}    USAGE
 
 MLang Frontend RunTests Missing LinkOrOutput Value Uses Unknown option Error
     [Documentation]    Verify missing value for -o/-L/-l in run tests mode reports unknown option and usage (C++ parity).
@@ -5110,19 +5110,19 @@ MLang Frontend RunTests Missing LinkOrOutput Value Uses Unknown option Error
     ...    run    tests    ${src}    -o
     Should Not Be Equal As Integers    ${run_o.rc}    0
     Should Contain    ${run_o.stderr}    Unknown option: -o
-    Should Contain    ${run_o.stderr}    Usage:
+    Should Contain    ${run_o.stderr}    USAGE
 
     ${run_L}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    run    tests    ${src}    -L
     Should Not Be Equal As Integers    ${run_L.rc}    0
     Should Contain    ${run_L.stderr}    Unknown option: -L
-    Should Contain    ${run_L.stderr}    Usage:
+    Should Contain    ${run_L.stderr}    USAGE
 
     ${run_l}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    run    tests    ${src}    -l
     Should Not Be Equal As Integers    ${run_l.rc}    0
     Should Contain    ${run_l.stderr}    Unknown option: -l
-    Should Contain    ${run_l.stderr}    Usage:
+    Should Contain    ${run_l.stderr}    USAGE
 
 MLang Frontend Bench Missing LinkOrOutput Value Uses Unknown option Error
     [Documentation]    Verify missing value for -o/-L/-l in bench mode reports unknown option and usage (C++ parity).
@@ -5140,19 +5140,19 @@ MLang Frontend Bench Missing LinkOrOutput Value Uses Unknown option Error
     ...    bench    ${src}    -o
     Should Not Be Equal As Integers    ${run_o.rc}    0
     Should Contain    ${run_o.stderr}    Unknown option: -o
-    Should Contain    ${run_o.stderr}    Usage:
+    Should Contain    ${run_o.stderr}    USAGE
 
     ${run_L}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    bench    ${src}    -L
     Should Not Be Equal As Integers    ${run_L.rc}    0
     Should Contain    ${run_L.stderr}    Unknown option: -L
-    Should Contain    ${run_L.stderr}    Usage:
+    Should Contain    ${run_L.stderr}    USAGE
 
     ${run_l}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    bench    ${src}    -l
     Should Not Be Equal As Integers    ${run_l.rc}    0
     Should Contain    ${run_l.stderr}    Unknown option: -l
-    Should Contain    ${run_l.stderr}    Usage:
+    Should Contain    ${run_l.stderr}    USAGE
 
 MLang Frontend Compile Missing LinkOrOutput Value Uses Unknown option Error
     [Documentation]    Verify C++ parity: missing value for -o/-L/-l in compile mode reports unknown option and usage.
@@ -5170,19 +5170,19 @@ MLang Frontend Compile Missing LinkOrOutput Value Uses Unknown option Error
     ...    ${src}    -o
     Should Not Be Equal As Integers    ${run_o.rc}    0
     Should Contain    ${run_o.stderr}    Unknown option: -o
-    Should Contain    ${run_o.stderr}    Usage:
+    Should Contain    ${run_o.stderr}    USAGE
 
     ${run_L}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    ${src}    -L
     Should Not Be Equal As Integers    ${run_L.rc}    0
     Should Contain    ${run_L.stderr}    Unknown option: -L
-    Should Contain    ${run_L.stderr}    Usage:
+    Should Contain    ${run_L.stderr}    USAGE
 
     ${run_l}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    ${src}    -l
     Should Not Be Equal As Integers    ${run_l.rc}    0
     Should Contain    ${run_l.stderr}    Unknown option: -l
-    Should Contain    ${run_l.stderr}    Usage:
+    Should Contain    ${run_l.stderr}    USAGE
 
 MLang Frontend Unknown option Prints Usage
     [Documentation]    Verify unknown test/bench options print usage text in addition to error (C++ parity style).
@@ -5193,7 +5193,7 @@ MLang Frontend Unknown option Prints Usage
     ...    bench    ${EXECDIR}/tests/bench_stdlib.mla    --definitely-unknown-flag
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Compile Mode Rejects Bench Flags
     [Documentation]    Verify C++ parity: non-test compile mode rejects bench-only flags as unknown options.
@@ -5210,7 +5210,7 @@ MLang Frontend Compile Mode Rejects Bench Flags
     ...    ${src}    --bench-iters    10
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-iters
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Compile Mode Rejects Inline Bench Flags
     [Documentation]    Verify C++ parity: non-test compile mode rejects inline bench flag forms.
@@ -5228,7 +5228,7 @@ MLang Frontend Compile Mode Rejects Inline Bench Flags
     ...    ${src}    ${warmup}
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-warmup=5
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Compile Mode Rejects NoRun Flag
     [Documentation]    Verify C++ parity: non-test compile mode rejects --no-run as unknown option.
@@ -5245,7 +5245,7 @@ MLang Frontend Compile Mode Rejects NoRun Flag
     ...    ${src}    --no-run
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --no-run
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Compile Mode Surfaces DoubleFree Diagnostics
     [Documentation]    Verify compile-time memory safety diagnostics from backend are surfaced by mlang-frontend-mla.
@@ -5330,7 +5330,7 @@ MLang Frontend Compile Mode Rejects NoRun Before Tests
     ...    ${src}    --no-run    --tests
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --no-run
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Compile Mode Allows BenchFlags After Tests
     [Documentation]    Verify C++ left-to-right parity: `--tests` enables later bench flags in compile-mode stream.
@@ -5375,7 +5375,7 @@ MLang Frontend Compile Mode Rejects BenchFlags Before Tests
     ...    ${src}    --bench-iters    9    --tests
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-iters
-    Should Contain    ${run.stderr}    Usage:
+    Should Contain    ${run.stderr}    USAGE
 
 MLang Frontend Compile Mode TestsFlag Invalid BenchValue Fails Early
     [Documentation]    Verify C++ parity: after --tests in compile stream, invalid bench values fail with explicit diagnostics.
