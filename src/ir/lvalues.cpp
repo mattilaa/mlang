@@ -158,7 +158,25 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         return;
     }
 
-    llvm::Value* value = generateExpression(node->expression);
+    std::unique_ptr<TypeNode> expectedSemanticType;
+    auto listTypeIt = listElementTypes.find(node->name);
+    if(listTypeIt != listElementTypes.end())
+    {
+        expectedSemanticType =
+            std::make_unique<GenericListTypeNode>(listTypeIt->second);
+    }
+    else
+    {
+        auto mapTypeIt = mapKeyValueTypes.find(node->name);
+        if(mapTypeIt != mapKeyValueTypes.end())
+        {
+            expectedSemanticType = std::make_unique<MapTypeNode>(
+                mapTypeIt->second.first, mapTypeIt->second.second);
+        }
+    }
+
+    llvm::Value* value =
+        generateExpression(node->expression, expectedSemanticType.get());
     if(!value)
         return;
 
@@ -630,7 +648,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     }
     else
     {
-        value = generateExpression(node->expression);
+        value = generateExpression(node->expression, fieldType);
         if(!value)
             return;
     }
@@ -749,7 +767,7 @@ void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
     if(!elemType)
         return;
 
-    llvm::Value* value = generateExpression(node->value);
+    llvm::Value* value = generateExpression(node->value, elemTypeNode);
     if(!value)
         return;
     consumeMoveFromExpression(node->value, node->line,

@@ -168,7 +168,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             initValue = generateArrayFill(arrFill, declElem);
     }
     if(!initValue)
-        initValue = generateExpression(node->expression);
+        initValue = generateExpression(node->expression, node->type);
     if(!initValue)
         return;
     initValue = applyBooleanBranchPrediction(
@@ -1657,7 +1657,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                         dynamic_cast<ArrayFillNode*>(node->initExpr))
                 initValue = generateArrayFill(arrFill, declElem);
             else
-                initValue = generateExpression(node->initExpr);
+                initValue = generateExpression(node->initExpr, node->type);
             if(initValue)
             {
                 builder.CreateStore(initValue, alloca);
@@ -1696,7 +1696,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         if(node->initExpr)
         {
-            llvm::Value* initValue = generateExpression(node->initExpr);
+            llvm::Value* initValue =
+                generateExpression(node->initExpr, node->type);
             if(initValue)
             {
                 builder.CreateStore(initValue, alloca);

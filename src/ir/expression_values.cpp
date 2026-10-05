@@ -314,7 +314,7 @@ llvm::Value* CodeGenerator::generateArgumentValue(ExpressionNode* arg,
                 return generateArrayFill(arrFill, elemType);
         }
     }
-    return generateExpression(arg);
+    return generateExpression(arg, declaredType);
 }
 
 // The declared type of argument `index` when every overload that takes
@@ -1610,7 +1610,8 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             }
 
             if(!fieldValue)
-                fieldValue = generateExpression(valueExpr);
+                fieldValue = generateExpression(
+                    valueExpr, currentMembers[memberIndex].second);
             if(!fieldValue)
             {
                 reportError(node->line, "failed to generate value for field '" +

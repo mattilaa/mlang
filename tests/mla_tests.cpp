@@ -3162,6 +3162,46 @@ TEST_F(MLATest, TernaryTypeMismatch)
               std::string::npos);
 }
 
+TEST_F(MLATest, TernaryListLiteralsUseDeclaredElementType)
+{
+    std::string code = R"(
+        fn second(values: list<i32>) -> i32 {
+            return values[1];
+        }
+
+        fn choose(cond: bool) -> list<i32> {
+            return cond ? [82, 65] : ([63, 64]);
+        }
+
+        fn main() -> i32 {
+            let choose_letters: bool = true;
+            let letters: list<i32> =
+                choose_letters ? [82, 65] : ([63, 64]);
+            if letters[0] != 82 { return 1; }
+            if letters[1] != 65 { return 2; }
+
+            let choose_fallback: bool = false;
+            let fallback: list<i32> =
+                choose_fallback ? [82, 65] : ([63, 64]);
+            if fallback[0] != 63 { return 3; }
+            if fallback[1] != 64 { return 4; }
+
+            var assigned: list<i32> = [0, 0];
+            assigned = choose_fallback ? [82, 65] : ([63, 64]);
+            if assigned[1] != 64 { return 5; }
+
+            if second(choose_letters ? [82, 65] : ([63, 64])) != 65 {
+                return 6;
+            }
+
+            let returned: list<i32> = choose(false);
+            if returned[1] != 64 { return 7; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, TernaryPrecedence)
 {
     std::string code = R"(

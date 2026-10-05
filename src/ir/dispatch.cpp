@@ -133,7 +133,8 @@ void CodeGenerator::generateStatement(StatementNode* node)
     }
 }
 
-llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
+llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node,
+                                               TypeNode* expectedType)
 {
     if(auto intLit = dynamic_cast<IntLiteralNode*>(node))
     {
@@ -181,7 +182,7 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     }
     else if(auto ternary = dynamic_cast<TernaryNode*>(node))
     {
-        return generateTernaryExpression(ternary);
+        return generateTernaryExpression(ternary, expectedType);
     }
     else if(auto tryExpr = dynamic_cast<TryExpressionNode*>(node))
     {
@@ -221,10 +222,18 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     }
     else if(auto listLit = dynamic_cast<ListLiteralNode*>(node))
     {
+        if(auto* listType = dynamic_cast<GenericListTypeNode*>(expectedType))
+            return generateListLiteral(
+                listLit, getLLVMTypeFromNode(listType->elementType),
+                listType->elementType);
         return generateListLiteral(listLit);
     }
     else if(auto mapLit = dynamic_cast<MapLiteralNode*>(node))
     {
+        if(auto* mapType = dynamic_cast<MapTypeNode*>(expectedType))
+            return generateMapLiteral(
+                mapLit, getLLVMTypeFromNode(mapType->keyType),
+                getLLVMTypeFromNode(mapType->valueType));
         return generateMapLiteral(mapLit);
     }
     else if(auto indexExpr = dynamic_cast<IndexExpressionNode*>(node))
@@ -262,8 +271,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     }
     else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(node))
     {
+        if(auto* listType = dynamic_cast<GenericListTypeNode*>(expectedType))
+            return generateArrayFill(
+                arrFill, getLLVMTypeFromNode(listType->elementType));
         return generateArrayFill(arrFill);
     }
     return nullptr;
 }
-

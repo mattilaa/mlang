@@ -1917,7 +1917,8 @@ llvm::Value* CodeGenerator::generateShortCircuitLogicalOp(BinaryOpNode* node)
     return phi;
 }
 
-llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
+llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node,
+                                                      TypeNode* expectedType)
 {
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
@@ -1980,7 +1981,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     pointerBorrowTarget = incomingPointerBorrowTarget;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
-    llvm::Value* thenVal = generateExpression(node->trueExpr);
+    llvm::Value* thenVal = generateExpression(node->trueExpr, expectedType);
     if(!thenVal)
         return nullptr;
     auto thenMoved = movedVariables;
@@ -1998,7 +1999,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     pointerBorrowTarget = incomingPointerBorrowTarget;
     activeBorrowers = incomingActiveBorrowers;
     activeMutBorrower = incomingActiveMutBorrower;
-    llvm::Value* elseVal = generateExpression(node->falseExpr);
+    llvm::Value* elseVal = generateExpression(node->falseExpr, expectedType);
     if(!elseVal)
         return nullptr;
     auto elseMoved = movedVariables;

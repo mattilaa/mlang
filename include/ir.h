@@ -648,10 +648,12 @@ private:
     void registerStructCleanupIfNeeded(const std::string& varName,
                                        const std::string& structTypeName);
 
-    llvm::Value* generateExpression(ExpressionNode* node);
+    llvm::Value* generateExpression(ExpressionNode* node,
+                                    TypeNode* expectedType = nullptr);
     llvm::Value* generateMatchExpression(MatchExpressionNode* node);
     llvm::Value* generateShortCircuitLogicalOp(BinaryOpNode* node);
-    llvm::Value* generateTernaryExpression(TernaryNode* node);
+    llvm::Value* generateTernaryExpression(TernaryNode* node,
+                                           TypeNode* expectedType = nullptr);
     llvm::Value* generateTryExpression(TryExpressionNode* node);
     llvm::Value* generateSizeofExpression(SizeofExpressionNode* node);
     llvm::Value* generateCexprExpression(CexprExpressionNode* node);

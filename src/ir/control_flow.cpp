@@ -84,7 +84,8 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
             }
 
             if(!returnValue)
-                returnValue = generateExpression(node->expression);
+                returnValue = generateExpression(node->expression,
+                                                 currentSemanticReturnType);
         }
         if(!returnValue)
             return;
