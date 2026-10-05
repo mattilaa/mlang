@@ -65,7 +65,7 @@ jobs:
         run: |
           set +e
           cmake --build build \
-            --target mlang mlang_std mlang-config mlangd-mla mlang_format mla_tests \
+            --target mlang mlang_std mlang-config mlangd-mla mlang_format mla_tests audio_render_pool_test \
             --parallel 2 2>&1 | tee build-output.log
           build_status=${PIPESTATUS[0]}
           set -e
