@@ -112,6 +112,28 @@ fn add(a: i32, b: i32) -> i32 {
 MLang also supports return-type inference for non-extern functions in many
 cases. See [Language Syntax](Language-Syntax).
 
+A `&T` parameter borrows a value read-only; a `&mut T` parameter borrows it
+mutably, and the caller writes `&mut` so the change is visible at the call
+site. The callee's changes, including through early returns, reach the
+caller's variable (lists, structs, strings and scalars alike):
+
+```rust
+fn push_twice(out: &mut list<i32>, value: i32) -> void {
+    out.push(value);
+    out.push(value);
+}
+
+fn main() -> i32 {
+    var items: list<i32> = [];
+    push_twice(&mut items, 7);   // items now holds 7, 7
+    return i32(items.len());
+}
+```
+
+Passing `items` without `&mut` is an error ("expects &mut argument"), as is
+`&mut` of a value of another type. Methods take `&mut` parameters the same
+way (`self: &mut Self` aside).
+
 ## Structs and Enums
 
 ```rust

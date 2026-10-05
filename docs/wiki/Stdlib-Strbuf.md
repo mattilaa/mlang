@@ -27,6 +27,8 @@ Module file: `stdlib/std/strbuf.mla`
 
 ### String helpers
 - `len(s: str8) -> i64`
+- `byte_at(s: str8, index: i64) -> i32` (the byte 0-255, -1 outside the string)
+- `to_bytes(s: str8) -> list<i32>` (every byte, 0-255, e.g. for binary formats)
 - `is_empty(s: str8) -> i32`
 - `clone(s: str8) -> str8`
 - `eq(a: str8, b: str8) -> i32`

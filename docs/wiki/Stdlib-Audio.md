@@ -98,10 +98,93 @@ the source's own post-fader signal, and feeders always render before the channel
 they feed. A source cannot feed itself (the call returns -1), and a routing cycle
 falls back to master rather than dropping audio.
 
+Instruments with several outputs (a native processor that fills `output_count`
+and `aux_output`, see `stdlib/include/mlang_audio_processor.h`) report them with
+`instrument_outputs(slot)`, main included, and name them with
+`instrument_output_name(slot, bus)`. By default every aux bus joins the
+instrument's main output before its inserts and fader, so a multi-output
+instrument sounds the same as a single-output one.
+`instrument_output_route(slot, bus, destination)` sends aux bus 1–15 elsewhere:
+0 for master or 1–64 for a PCM track's channel, which then applies its own
+inserts, fader and sends. 65–72 feed aux effect channel 0–7's input, as a send
+from the plugin (nothing plays while that channel has no effect), and 73
+silences the bus. A routed bus skips the instrument's own inserts, fader
+and sends. -1 puts the bus back on the main output.
+
+An instrument can also take audio in: `instrument_input(slot, source)` feeds the
+voices of PCM track `source` (1–64; 0 = none, the default) into the instrument's
+buffer before it renders, for an instrument whose processor reads its input
+(such as a vocoder's modulator). The voices are taken before the track's
+inserts and fader, and the track still plays on its own channel. The host
+replaces the buffer with the output of a processor that has an input, so the
+input is not heard twice.
+
+Source 65 is the live audio input. `input_open(device)` opens an input device
+(an index as `input_device_count()` counts them, -1 = the system default, -2
+closes it) on its own AUHAL unit. Its frames go into a ring buffer on the
+device's clock, and each block reads them about one buffer behind the
+writer, resampled to the controller rate. After an underrun, or when clock
+drift leaves the reader too far behind, it re-anchors. `input_feed(samples,
+channels, rate)` writes frames the same way without a device (for tests and
+offline hosts). `input_peak(channel)` reads and resets the input's peak
+(0–1000), `input_active()` tells whether a device input is open, and `info(10)`
+counts the frames captured so far. Without microphone permission, macOS
+delivers silence: the frame count still grows, but the peak stays 0.
+
+The live input can be recorded. `record_start(frame)` records from the block
+frame where something played at output frame `frame` comes back in the input:
+`record_latency()` frames later, which is both devices' reported latency
+(device, stream, safety offset and buffer) plus the input read margin. The
+render thread appends to a ring of about ten seconds that `record_read(max)`
+drains as interleaved stereo at the controller rate. Drain it often while a take
+runs: frames that do not fit are dropped and counted by `record_overruns()`.
+`record_stop()` ends the take, and what was recorded stays readable.
+
+A sampler instrument (such as Mla Sampler) may report a pad's slice markers,
+the frames where its hits start: `instrument_markers(slot, pad)` returns them
+(the first is 0; empty when it has none), and `instrument_set_markers(slot,
+pad, frames, detect)` replaces them, or has the instrument detect them again
+when `detect`. Both use the optional `pad_markers` and `set_pad_markers`
+processor hooks. Loading an instrument resets
+its routes.
+
 `track_peak(track, channel)` consumes the post-fader peak of a buffered channel
 the same way, covering its own voices plus everything routed into it. A track
 that mixes straight into master with no inserts and no routing owns no buffer and
 reads 0.
+
+### Multicore rendering
+
+Plugins render on a per-controller worker pool. Once a plugin is loaded, the
+controller starts one sleeping worker per extra core (up to 31). Each block then
+runs in stages, and the jobs inside a stage run in parallel:
+
+1. every loaded instrument slot, with its own inserts, into its own buffer;
+2. buffered tracks one routing depth at a time (a track runs after everything
+   that feeds it);
+3. the aux effect returns.
+
+After each stage the render thread sums the results into tracks, sends and
+master in slot order, the same way a single thread does. The output is
+therefore bit-identical whatever the thread count. If two sources route through
+the same insert instance, the later one runs after the parallel batch, so a
+plugin instance never runs on two threads at once. Event dispatch, the reference
+voices, the master processor and the master bus stay on the render thread. On
+macOS, workers take the block period as a realtime time constraint and join the
+AUHAL device's audio workgroup (macOS 11+), which keeps them scheduled next to
+the IO thread.
+
+- `AudioController::set_render_threads(n) -> i32` caps the threads every
+  controller renders with, the render thread included: `0` = one per core (the
+  default), `1` = no workers, up to 32. It can be called from any thread, and
+  running controllers apply it from their next block.
+- `AudioController::render_thread_limit() -> i64` returns that cap, and
+  `AudioController::max_render_threads() -> i64` returns the most threads this
+  machine allows.
+- `render_threads() -> i64` returns the threads the latest block could use.
+- `dsp_load() -> f64` returns the worst block render time since the last call,
+  as a fraction of the block's real duration (1.0 is the dropout limit). Reading
+  it resets it.
 
 `ControlChange` (master) and `InstrumentControlChange` (slot in `sample`) use
 `midi.note` for the controller number and `midi.velocity` for its integer value.
@@ -111,6 +194,18 @@ The optional native `control` callback receives the block-relative sample offset
 mlacker converts these through cached VST3 `IMidiMapping` assignments to normalized
 `IParameterChanges` points. Unsupported mappings are ignored, never treated as notes.
 
+Text-driven instruments (speech or vocal synths such as Mla Speech) take words
+with their notes. `instrument_text(slot, index, text)` stores UTF-8 `text` as
+phrase `index` (0–255) of the instrument in `slot`, on the control thread while
+audio runs; it fails with "This instrument does not take text" unless the
+processor has the optional `set_text` and `text` hooks. An `InstrumentText`
+event (slot in `sample`, phrase in `midi.note`, `midi.channel`) posted right
+before an `InstrumentNoteOn` on the same channel and frame attaches the phrase
+to that note: the native `text` callback runs first, with the block-relative
+offset, and mlacker's VST3 host sends the phrase as a `kTextTypeID`
+note-expression text event of the note. The phrase table is a ring; reuse an
+index only after the event that used it has played.
+
 For selected-track live input, the control thread publishes
 `midi_target(track, instrument)` (`track` 0–63; instrument -1 disables new notes,
 0 routes to preview/master, 1–32 routes to a slot). The MIDI worker calls
@@ -118,6 +213,15 @@ For selected-track live input, the control thread publishes
 An atomic destination snapshot and producer-owned held-key table preserve the
 original route for note-offs; input channels are preserved. Preview live voices
 use separate source IDs from sequencer voices. No UI round trip is required.
+
+Live notes and controllers are timestamped: while a device runs, each render
+publishes the audio clock at its first frame and the time it started, and a
+live event plays on the frame it arrived on, one block later. Events keep
+their place within the block (sample-accurate, a fixed block of latency)
+instead of all landing on the next block's first frame. `live_timing(mode)`
+chooses: 0 plays them when the next block starts, 1 (the default) stamps
+them while a device runs, 2 also when the host renders with `process`. When
+audio stalls for more than four blocks, events play at once.
 
 `master_peak(channel)` (0 = left, 1 = right) atomically consumes the maximum
 post-master, post-gain/clipping peak since the previous read, scaled 0–1000.
@@ -374,8 +478,10 @@ buffers; they do not allocate or lock. `pcm_underrun_count()` counts callbacks
 that requested PCM after the ring became empty. Call `clear_pcm_queue()` while
 the device is stopped.
 
-`PcmAudio` decodes mono or stereo 16-bit PCM WAV, AIFF, and uncompressed
-AIFF-C (`NONE`, `twos`, or `sowt`). `samples()` returns source-channel
+`PcmAudio` decodes mono or stereo 16-bit PCM or float32 WAV; AIFF with
+integer samples of any size up to 32 bits (8, 16, 24 and 32-bit); and AIFF-C
+with big-endian (`NONE`, `twos`) or little-endian (`sowt`) integers of the
+same sizes, or float32 (`fl32`) and float64 (`fl64`) samples. `samples()` returns source-channel
 interleaved [`f32`](Quick-Guide#types) samples. Paths beginning with `~/` are expanded before open.
 
 `PcmBlock` is a fixed-size native stereo producer buffer. Allocate it before
