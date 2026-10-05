@@ -32,7 +32,7 @@
 #include <llvm/Support/SHA256.h>
 
 #ifndef MLANG_VERSION
-#define MLANG_VERSION "0.1.0"
+#define MLANG_VERSION "0.3.0"
 #endif
 
 namespace

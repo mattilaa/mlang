@@ -62,4 +62,4 @@ Other layers (all need `-DBUILD_TESTS=ON`, the CMake default):
 
 - MLang code is formatted with `mlang-format` using `.mlang-format` (Rust-style, 4-space indent, 100 cols, no forced trailing newline); C++ uses `.clang-format`.
 - `build/`, `*_commands.json`, `*bin`, `*.out`, and `*html`/`*xml` are gitignored. Stray binaries in the repo root (`a.out`, `mlang_*_bin`) and `.vst3` bundles are build artifacts, not sources.
-- CMake auto-increments a build number on every configure (`MLANG_AUTO_INCREMENT_BUILD`); CI overrides it with `-DMLANG_VERSION_BUILD`.
+- Versions use `MAJOR.MINOR.BUGFIX.BUILD`. CMake auto-increments the fourth-component build number on every configure (`MLANG_AUTO_INCREMENT_BUILD`); CI can override it with `-DMLANG_VERSION_BUILD`. Release builds may omit the build component.

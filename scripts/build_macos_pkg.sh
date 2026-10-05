@@ -3,13 +3,13 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/build_macos_pkg.sh --root DIR --version vMAJOR.MINOR.PATCH [options]
+Usage: scripts/build_macos_pkg.sh --root DIR --version vMAJOR.MINOR.BUGFIX [options]
 
 Creates an unsigned macOS installer from build_release.sh's install-root.
 
 Options:
   --root DIR           DESTDIR tree containing usr/local/bin/mlang
-  --version VERSION    Public vMAJOR.MINOR.PATCH release version
+  --version VERSION    Public vMAJOR.MINOR.BUGFIX release version
   -o, --output-dir DIR Package destination (default: dist)
   --identifier ID      Package identifier (default: io.github.mattilaa.mlang)
   --sign IDENTITY      Optional Developer ID Installer identity

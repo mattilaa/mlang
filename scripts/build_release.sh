@@ -3,14 +3,14 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/build_release.sh --version vMAJOR.MINOR.PATCH [options]
+Usage: scripts/build_release.sh --version vMAJOR.MINOR.BUGFIX [options]
 
 Builds MLang and creates a relocatable release archive containing the compiler,
 static runtime library, standard-library modules, standalone modules, README,
 license, dependency report, and setup instructions.
 
 Options:
-  --version VERSION       Public vMAJOR.MINOR.PATCH release version (required)
+  --version VERSION       Public vMAJOR.MINOR.BUGFIX release version (required)
   -B, --build-dir DIR     Isolated CMake directory (default: build-release)
   -o, --output-dir DIR    Archive destination (default: dist)
   -j, --jobs N            Parallel build jobs (default: detected CPU count)
@@ -55,7 +55,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "$public_version" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || {
-  echo "error: --version must use vMAJOR.MINOR.PATCH" >&2
+  echo "error: --version must use vMAJOR.MINOR.BUGFIX" >&2
   exit 2
 }
 release_version="${public_version#v}"
