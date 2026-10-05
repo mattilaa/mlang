@@ -7,6 +7,7 @@
 
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/InlineAsm.h>
+#include <functional>
 
 using mlang::ir_detail::ast_analysis::contains_unsupported_try_control_flow;
 using mlang::ir_detail::common::Helpers;
@@ -1143,6 +1144,9 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     case BinaryOpNode::OP_OR:
         // Handled before numeric op checks.
         return nullptr;
+    case BinaryOpNode::OP_COMMA:
+        // Only fold expressions currently construct this operator.
+        return R;
     case BinaryOpNode::OP_SPACESHIP:
         // Handled in dedicated branch above (numeric + trait-based struct
         // path).
@@ -1153,6 +1157,141 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
 
 llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
 {
+    if(!activePackExpansions.empty())
+    {
+        std::vector<IdentifierNode*> packIdentifiers;
+        std::string packName;
+        std::function<void(ExpressionNode*)> collectPackIdentifiers =
+            [&](ExpressionNode* expression)
+        {
+            if(!expression)
+                return;
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(expression))
+            {
+                if(activePackExpansions.count(identifier->name))
+                {
+                    if(packName.empty())
+                        packName = identifier->name;
+                    if(identifier->name == packName)
+                        packIdentifiers.push_back(identifier);
+                }
+                return;
+            }
+            if(auto* call = dynamic_cast<FunctionCallNode*>(expression))
+            {
+                for(auto* argument : call->arguments)
+                    collectPackIdentifiers(argument);
+                return;
+            }
+            if(auto* call = dynamic_cast<MethodCallNode*>(expression))
+            {
+                collectPackIdentifiers(call->object);
+                for(auto* argument : call->arguments)
+                    collectPackIdentifiers(argument);
+                return;
+            }
+            if(auto* binary = dynamic_cast<BinaryOpNode*>(expression))
+            {
+                collectPackIdentifiers(binary->left);
+                collectPackIdentifiers(binary->right);
+                return;
+            }
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expression))
+            {
+                collectPackIdentifiers(unary->operand);
+                return;
+            }
+            if(auto* ternary = dynamic_cast<TernaryNode*>(expression))
+            {
+                collectPackIdentifiers(ternary->condition);
+                collectPackIdentifiers(ternary->trueExpr);
+                collectPackIdentifiers(ternary->falseExpr);
+            }
+        };
+        collectPackIdentifiers(node->packExpr);
+
+        if(!packName.empty())
+        {
+            const auto& expansions = activePackExpansions.at(packName);
+            llvm::Value* accumulator = nullptr;
+            auto restoreNames = [&]()
+            {
+                for(auto* identifier : packIdentifiers)
+                    identifier->name = packName;
+            };
+
+            for(const auto& expansionName : expansions)
+            {
+                for(auto* identifier : packIdentifiers)
+                    identifier->name = expansionName;
+                llvm::Value* value = generateExpression(node->packExpr);
+                restoreNames();
+                if(!value)
+                    return nullptr;
+
+                if(node->op == BinaryOpNode::OP_COMMA)
+                {
+                    accumulator = value;
+                    continue;
+                }
+                if(!accumulator)
+                {
+                    accumulator = value;
+                    continue;
+                }
+                if(node->op == BinaryOpNode::OP_AND ||
+                   node->op == BinaryOpNode::OP_OR)
+                {
+                    if(!accumulator->getType()->isIntegerTy(1) ||
+                       !value->getType()->isIntegerTy(1))
+                    {
+                        reportError(node->line,
+                                    "logical parameter-pack fold requires bool values");
+                        return nullptr;
+                    }
+                    accumulator = node->op == BinaryOpNode::OP_AND
+                        ? builder.CreateAnd(accumulator, value, "pack.fold.and")
+                        : builder.CreateOr(accumulator, value, "pack.fold.or");
+                }
+                else if(node->op == BinaryOpNode::OP_PLUS ||
+                        node->op == BinaryOpNode::OP_MULTIPLY)
+                {
+                    if(accumulator->getType() != value->getType())
+                    {
+                        reportError(node->line,
+                                    "numeric parameter-pack fold requires matching types");
+                        return nullptr;
+                    }
+                    if(accumulator->getType()->isFloatingPointTy())
+                        accumulator = node->op == BinaryOpNode::OP_PLUS
+                            ? builder.CreateFAdd(accumulator, value,
+                                                 "pack.fold.add")
+                            : builder.CreateFMul(accumulator, value,
+                                                 "pack.fold.mul");
+                    else if(accumulator->getType()->isIntegerTy())
+                        accumulator = node->op == BinaryOpNode::OP_PLUS
+                            ? builder.CreateAdd(accumulator, value,
+                                                "pack.fold.add")
+                            : builder.CreateMul(accumulator, value,
+                                                "pack.fold.mul");
+                    else
+                    {
+                        reportError(node->line,
+                                    "numeric parameter-pack fold requires numeric values");
+                        return nullptr;
+                    }
+                }
+            }
+
+            if(accumulator)
+                return accumulator;
+            if(node->op == BinaryOpNode::OP_MULTIPLY ||
+               node->op == BinaryOpNode::OP_AND)
+                return llvm::ConstantInt::getTrue(context);
+            return llvm::ConstantInt::getFalse(context);
+        }
+    }
+
     auto* listId = dynamic_cast<IdentifierNode*>(node->packExpr);
     if(!listId)
     {

@@ -858,6 +858,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
         {
             if(funcDef->isTest && !includeTests)
                 continue;
+            if(!funcDef->typePackParam.empty())
+            {
+                variadicGenericFunctionTemplates[funcDef->name].push_back(funcDef);
+                continue;
+            }
             if(!funcDef->typeParams.empty() && funcDef->isCexpr)
             {
                 registerFunctionOverload(funcDef, nullptr);
@@ -914,6 +919,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
         for(auto funcDef : program->functionList->functions)
         {
             if(funcDef->isTest && !includeTests)
+                continue;
+            if(!funcDef->typePackParam.empty())
                 continue;
             if(!funcDef->typeParams.empty() && funcDef->isCexpr)
                 continue;

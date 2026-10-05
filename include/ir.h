@@ -452,6 +452,11 @@ private:
     std::map<std::string, std::vector<TypeNode*>> monomorphizedTypeArgs;
     // Active generic type bindings while generating a monomorphized method body.
     std::map<std::string, TypeNode*> activeTypeParamBindings;
+    // Runtime generic function templates with a trailing heterogeneous pack.
+    std::map<std::string, std::vector<FunctionDefNode*>>
+        variadicGenericFunctionTemplates;
+    std::map<std::string, std::vector<std::string>> activePackExpansions;
+    std::map<std::string, TypeNode*> activeFunctionTypeBindings;
 
     // Generics helper methods
     TypeNode* substituteTypeParams(TypeNode* type,
@@ -685,6 +690,8 @@ private:
     llvm::Value* generateEnumLiteral(EnumLiteralNode* node);
     llvm::Value* generateFieldAccess(FieldAccessNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
+    llvm::Value* generateVariadicGenericCall(FunctionCallNode* node,
+                                              FunctionDefNode* functionTemplate);
     llvm::Value* generateThreadSpawn(FunctionCallNode* node);
     llvm::Function* generateClosureFn(ClosureNode* node);
     llvm::Value* generateThreadJoin(FunctionCallNode* node);

@@ -365,6 +365,7 @@ public:
         OP_BITXOR,
         OP_SHL,
         OP_SHR,
+        OP_COMMA,
         OP_AND,
         OP_OR
     };
@@ -1335,6 +1336,7 @@ class TypeParamListNode : public ASTNode
 public:
     std::vector<std::string> params;
     std::map<std::string, std::string> traitBounds;
+    std::string packParam;
 
     void addParam(const std::string& p, const std::string& traitBound = "")
     {
@@ -1440,6 +1442,7 @@ class ParameterNode : public ASTNode
 public:
     TypeNode* type;
     std::string name;
+    bool isPack = false;
 
     ParameterNode(TypeNode* t, const std::string& n) : type(t), name(n) {}
     std::string toString() const override;
@@ -1469,6 +1472,9 @@ public:
     bool isInlineNever = false;
     std::vector<std::string> typeParams;
     std::map<std::string, std::string> typeParamTraitBounds;
+    std::string typePackParam;
+    std::map<std::string, std::vector<std::string>> packExpansionNames;
+    std::map<std::string, TypeNode*> concreteTypeBindings;
     std::string sourceModule; // Module this function was defined in (for
                               // visibility checks)
 

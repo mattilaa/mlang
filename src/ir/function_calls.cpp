@@ -11,8 +11,269 @@
 
 using mlang::ir_detail::common::Helpers;
 
+llvm::Value* CodeGenerator::generateVariadicGenericCall(
+    FunctionCallNode* node, FunctionDefNode* functionTemplate)
+{
+    if(!functionTemplate || !functionTemplate->parameters)
+        return nullptr;
+
+    ParameterNode* packParameter = nullptr;
+    std::vector<ParameterNode*> fixedParameters;
+    for(auto* parameter : functionTemplate->parameters->parameters)
+    {
+        if(parameter && parameter->isPack)
+        {
+            if(packParameter ||
+               parameter != functionTemplate->parameters->parameters.back())
+            {
+                reportError(node->line,
+                            "a variadic generic function must have exactly one "
+                            "trailing parameter pack");
+                return nullptr;
+            }
+            packParameter = parameter;
+        }
+        else
+        {
+            fixedParameters.push_back(parameter);
+        }
+    }
+    if(!packParameter || node->arguments.size() < fixedParameters.size())
+    {
+        reportError(node->line,
+                    "invalid argument count for variadic generic function '" +
+                        node->name + "'");
+        return nullptr;
+    }
+    if(functionTemplate->typeParams.empty() ||
+       functionTemplate->typeParams.back() != functionTemplate->typePackParam)
+    {
+        reportError(node->line,
+                    "the type parameter pack must be the final generic parameter");
+        return nullptr;
+    }
+    auto* packType = dynamic_cast<StructTypeRefNode*>(packParameter->type);
+    if(!packType || packType->structName != functionTemplate->typePackParam)
+    {
+        reportError(node->line,
+                    "parameter pack '" + packParameter->name +
+                        "' must use type pack '" +
+                        functionTemplate->typePackParam + "'");
+        return nullptr;
+    }
+
+    std::set<std::string> fixedTypeParams;
+    for(const auto& param : functionTemplate->typeParams)
+        if(param != functionTemplate->typePackParam)
+            fixedTypeParams.insert(param);
+    std::map<std::string, TypeNode*> bindings;
+    std::function<bool(TypeNode*, TypeNode*)> bindType =
+        [&](TypeNode* pattern, TypeNode* concrete) -> bool
+    {
+        if(!pattern || !concrete)
+            return false;
+        if(auto* ref = dynamic_cast<ReferenceTypeNode*>(pattern))
+            return bindType(ref->elementType, concrete);
+        if(auto* named = dynamic_cast<StructTypeRefNode*>(pattern))
+        {
+            if(fixedTypeParams.count(named->structName))
+            {
+                auto found = bindings.find(named->structName);
+                if(found == bindings.end())
+                    bindings[named->structName] = cloneTypeNode(concrete);
+                else if(typeMangle(found->second) != typeMangle(concrete))
+                    return false;
+                return true;
+            }
+        }
+        if(auto* patternList = dynamic_cast<GenericListTypeNode*>(pattern))
+        {
+            auto* concreteList = dynamic_cast<GenericListTypeNode*>(concrete);
+            return concreteList &&
+                   bindType(patternList->elementType, concreteList->elementType);
+        }
+        if(auto* patternPtr = dynamic_cast<PointerTypeNode*>(pattern))
+        {
+            auto* concretePtr = dynamic_cast<PointerTypeNode*>(concrete);
+            return concretePtr &&
+                   bindType(patternPtr->elementType, concretePtr->elementType);
+        }
+        if(auto* patternGeneric =
+               dynamic_cast<GenericStructTypeRefNode*>(pattern))
+        {
+            auto* concreteGeneric =
+                dynamic_cast<GenericStructTypeRefNode*>(concrete);
+            if(!concreteGeneric ||
+               patternGeneric->structName != concreteGeneric->structName ||
+               patternGeneric->typeArgs.size() != concreteGeneric->typeArgs.size())
+                return false;
+            for(size_t i = 0; i < patternGeneric->typeArgs.size(); ++i)
+                if(!bindType(patternGeneric->typeArgs[i],
+                             concreteGeneric->typeArgs[i]))
+                    return false;
+            return true;
+        }
+        return typeMangle(pattern) == typeMangle(concrete);
+    };
+
+    for(size_t i = 0; i < fixedParameters.size(); ++i)
+    {
+        TypeNode* pattern = fixedParameters[i]->type;
+        ExpressionNode* argument = node->arguments[i];
+        TypeNode* concrete = nullptr;
+        if(auto* reference = dynamic_cast<ReferenceTypeNode*>(pattern))
+        {
+            auto* unary = dynamic_cast<UnaryOpNode*>(argument);
+            const bool correctBorrow =
+                unary && (reference->isMutable
+                              ? unary->op == UnaryOpNode::OP_ADDR_MUT
+                              : unary->op == UnaryOpNode::OP_ADDR);
+            if(!correctBorrow)
+            {
+                reportError(node->line,
+                            "parameter '" + fixedParameters[i]->name +
+                                "' requires an explicit reference");
+                return nullptr;
+            }
+            concrete = inferExpressionTypeNode(unary->operand, node->line);
+        }
+        else
+        {
+            concrete = inferExpressionTypeNode(argument, node->line);
+        }
+        if(!bindType(pattern, concrete))
+        {
+            reportError(node->line, "cannot infer generic arguments for '" +
+                                        node->name + "'");
+            return nullptr;
+        }
+    }
+
+    std::vector<std::string> fixedTypeNames;
+    std::vector<TypeNode*> fixedTypeArgs;
+    for(const auto& typeParam : functionTemplate->typeParams)
+    {
+        if(typeParam == functionTemplate->typePackParam)
+            continue;
+        auto found = bindings.find(typeParam);
+        if(found == bindings.end())
+        {
+            reportError(node->line, "could not infer type parameter '" +
+                                        typeParam + "' for '" + node->name + "'");
+            return nullptr;
+        }
+        fixedTypeNames.push_back(typeParam);
+        fixedTypeArgs.push_back(found->second);
+    }
+
+    std::vector<TypeNode*> packTypes;
+    for(size_t i = fixedParameters.size(); i < node->arguments.size(); ++i)
+    {
+        TypeNode* type = inferExpressionTypeNode(node->arguments[i], node->line);
+        if(!type)
+        {
+            reportError(node->line, "cannot infer parameter-pack argument " +
+                                        std::to_string(i + 1));
+            return nullptr;
+        }
+        packTypes.push_back(type);
+    }
+
+    std::string specializedName = functionTemplate->name + "__pack";
+    for(auto* type : fixedTypeArgs)
+        specializedName += "__" + typeMangle(type);
+    for(auto* type : packTypes)
+        specializedName += "__" + typeMangle(type);
+
+    if(functionOverloads.find(specializedName) == functionOverloads.end())
+    {
+        auto* parameters = new ParameterListNode();
+        for(auto* parameter : fixedParameters)
+        {
+            parameters->parameters.push_back(new ParameterNode(
+                substituteTypeParams(parameter->type, fixedTypeNames,
+                                     fixedTypeArgs),
+                parameter->name));
+        }
+
+        std::vector<std::string> expansionNames;
+        for(size_t i = 0; i < packTypes.size(); ++i)
+        {
+            std::string name = packParameter->name + "$" + std::to_string(i);
+            parameters->parameters.push_back(
+                new ParameterNode(cloneTypeNode(packTypes[i]), name));
+            expansionNames.push_back(name);
+        }
+
+        auto* specialized = new FunctionDefNode(
+            substituteTypeParams(functionTemplate->returnType, fixedTypeNames,
+                                 fixedTypeArgs),
+            specializedName, parameters, functionTemplate->body,
+            functionTemplate->isPublic, false);
+        specialized->line = functionTemplate->line;
+        specialized->sourceModule = functionTemplate->sourceModule;
+        specialized->isInline = true;
+        specialized->packExpansionNames[packParameter->name] = expansionNames;
+        specialized->concreteTypeBindings = bindings;
+        llvm::Function* declaration = generateFunctionDeclaration(specialized);
+        registerFunctionOverload(specialized, declaration);
+        generateFunctionDefinition(specialized);
+    }
+
+    FunctionCallNode specializedCall(specializedName);
+    specializedCall.arguments = node->arguments;
+    specializedCall.line = node->line;
+    specializedCall.col = node->col;
+    return generateFunctionCall(&specializedCall);
+}
+
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
+    auto variadicIt = variadicGenericFunctionTemplates.find(node->name);
+    if(variadicIt != variadicGenericFunctionTemplates.end() &&
+       !variadicIt->second.empty())
+        return generateVariadicGenericCall(node, variadicIt->second.front());
+
+    const std::string constructiblePrefix = "is_constructible<";
+    if(node->name.rfind(constructiblePrefix, 0) == 0 &&
+       !node->name.empty() && node->name.back() == '>')
+    {
+        if(node->arguments.size() != 1)
+        {
+            reportError(node->line,
+                        "is_constructible<T> expects exactly one value");
+            return nullptr;
+        }
+        std::string targetName = node->name.substr(
+            constructiblePrefix.size(),
+            node->name.size() - constructiblePrefix.size() - 1);
+        TypeNode* targetType = nullptr;
+        auto bound = activeFunctionTypeBindings.find(targetName);
+        if(bound != activeFunctionTypeBindings.end())
+            targetType = bound->second;
+        else
+            targetType = Helpers::type_from_text(targetName);
+        TypeNode* sourceType =
+            inferExpressionTypeNode(node->arguments.front(), node->line);
+        bool constructible = false;
+        if(targetType && sourceType)
+        {
+            if(typeMangle(targetType) == typeMangle(sourceType))
+                constructible = true;
+            else if(llvm::Type* targetLLVM = getLLVMTypeFromNode(targetType))
+            {
+                if(llvm::Type* sourceLLVM = getLLVMTypeFromNode(sourceType))
+                {
+                    int conversionCost = 0;
+                    constructible =
+                        canConvertType(sourceLLVM, targetLLVM, conversionCost);
+                }
+            }
+        }
+        return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context),
+                                      constructible ? 1 : 0);
+    }
+
     auto validateTemporaryBorrowArguments =
         [&](const std::vector<ExpressionNode*>& args,
             const std::string& calleeName,

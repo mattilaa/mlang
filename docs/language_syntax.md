@@ -1052,6 +1052,34 @@ let all_true: bool = (... && bs);
 let any_true: bool = (... || bs);
 ```
 
+Generic functions can also declare a trailing type and value parameter pack.
+The pack is expanded at compile time, so its arguments may have different
+types. A right fold can invoke the same expression once for every argument:
+
+```mla
+generic<Args...>
+fn release_all(args: Args...) -> void {
+    (args.release(), ...);
+}
+
+release_all(session, project);
+```
+
+Use `is_constructible<T>(value)` in a boolean fold to validate every pack
+element with `static_assert!`. The comma fold preserves argument order:
+
+```mla
+generic<T, Args...>
+fn push_back_vec(values: &mut list<T>, args: Args...) -> void {
+    static_assert!((is_constructible<T>(args) && ...));
+    (values.push(args), ...);
+}
+```
+
+The type pack and value pack must both be last. Parameter-pack folds support
+`+`, `*`, `&&`, `||`, and comma. Existing list folds remain runtime folds over
+one homogeneous `list<T>` value.
+
 Mutable lists can append another compatible `list<T>`, `array<T, N>`, or
 literal/fill list source:
 
@@ -1153,6 +1181,7 @@ Supported fold operators:
 - `*`
 - `&&`
 - `||`
+- `,` for parameter packs
 
 ### Lambda/Fold Examples
 
