@@ -1509,8 +1509,7 @@ static ASTNode* create_switch_statement_desugared(ASTNode* subject,
     {
         SwitchCaseParseNode* caseNode = *it;
         ASTNode* lhs = create_identifier_line(strdup(tempName), line);
-        ASTNode* cmp =
-            create_binary_op(BinaryOpNode::OP_EQ, lhs, caseNode->value);
+        ASTNode* cmp = create_binary_op(EQ, lhs, caseNode->value);
         ASTNode* ifStmt =
             create_if_statement(cmp, caseNode->body, NULL, currentElse);
         if(ifStmt)

@@ -5519,6 +5519,25 @@ TEST_F(MLATest, FreeObjsRejectsEmptyPack)
               std::string::npos);
 }
 
+TEST_F(MLATest, SwitchCasesCanReturnFromFunction)
+{
+    std::string code = R"(
+        fn choose(x: i32) -> i32 {
+            switch x {
+                case 0: { return 9; }
+                default: { return 1; }
+            }
+        }
+
+        fn main() -> i32 {
+            if choose(0) != 9 { return 1; }
+            if choose(4) != 1 { return 1; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, NamespaceBlockQualifiesDeclarationsAndLocalTypes)
 {
     std::string code = R"(
