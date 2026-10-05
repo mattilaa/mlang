@@ -268,6 +268,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedNamedValues = namedValues;
     auto savedConstantVariables = constantVariables;
     auto savedConstexprValues = constexprValues;
+    auto savedPackExpansions = activePackExpansions;
+    auto savedFunctionTypeBindings = activeFunctionTypeBindings;
     auto savedMovedVariables = movedVariables;
     auto savedPointerBorrowTarget = pointerBorrowTarget;
     auto savedActiveBorrowers = activeBorrowers;
@@ -291,6 +293,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedSemanticReturnType = currentSemanticReturnType;
     int savedUnsafeDepth = unsafeDepth;
     currentSemanticReturnType = node->returnType;
+    activePackExpansions = node->packExpansionNames;
+    activeFunctionTypeBindings = node->concreteTypeBindings;
 
     // Create a new basic block for the function
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
@@ -604,6 +608,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     unsafeDepth = savedUnsafeDepth;
     currentModule = savedModule;
     constexprValues = std::move(savedConstexprValues);
+    activePackExpansions = std::move(savedPackExpansions);
+    activeFunctionTypeBindings = std::move(savedFunctionTypeBindings);
     builder.restoreIP(savedIP);
 
     // Verify the function

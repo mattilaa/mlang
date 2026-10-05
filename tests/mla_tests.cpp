@@ -5516,6 +5516,81 @@ TEST_F(MLATest, FreeObjsReleasesHeterogeneousStructs)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, VariadicGenericCommaFoldPushesArgumentsInOrder)
+{
+    std::string code = R"(
+        generic<T, Args...>
+        fn push_back_vec(values: &mut list<T>, args: Args...) -> void {
+            static_assert!((is_constructible<T>(args) && ...));
+            (values.push(args), ...);
+        }
+
+        fn main() -> i32 {
+            var values: list<i32> = [];
+            push_back_vec(&mut values, 4, 7, 9);
+            if values.len() != 3 { return 1; }
+            if values[0] != 4 { return 2; }
+            if values[1] != 7 { return 3; }
+            if values[2] != 9 { return 4; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, VariadicGenericConstructibilityFoldRejectsBadArgument)
+{
+    writeSource(R"(
+        generic<T, Args...>
+        fn push_back_vec(values: &mut list<T>, args: Args...) -> void {
+            static_assert!((is_constructible<T>(args) && ...));
+            (values.push(args), ...);
+        }
+
+        fn main() -> i32 {
+            var values: list<i32> = [];
+            push_back_vec(&mut values, 4, "not an integer");
+            return 0;
+        }
+    )");
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("static_assert! failed"), std::string::npos);
+}
+
+TEST_F(MLATest, VariadicGenericCommaFoldSupportsHeterogeneousReceivers)
+{
+    std::string code = R"(
+        struct Session { var value: i32; };
+        impl Session {
+            fn release(self: Session) -> void {
+                let ignored: i32 = self.value;
+            }
+        }
+
+        struct Project { var value: i64; };
+        impl Project {
+            fn release(self: Project) -> void {
+                let ignored: i64 = self.value;
+            }
+        }
+
+        generic<Args...>
+        fn release_all(args: Args...) -> void {
+            (args.release(), ...);
+        }
+
+        fn main() -> i32 {
+            var session: Session = Session { value: 1 };
+            var project: Project = Project { value: 2 };
+            release_all(session, project);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, FreeObjsRejectsObjectWithoutReleaseMethod)
 {
     std::string code = R"(

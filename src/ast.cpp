@@ -378,6 +378,9 @@ ASTNode* create_binary_op_impl(int op, ASTNode* left, ASTNode* right)
     case PIPE_PIPE:
         opType = BinaryOpNode::OP_OR;
         break;
+    case COMMA:
+        opType = BinaryOpNode::OP_COMMA;
+        break;
     case COLON:
         return nullptr;
     default:
@@ -403,6 +406,9 @@ ASTNode* create_fold_expression_impl(int op, ASTNode* pack_expr, int is_right_fo
         break;
     case PIPE_PIPE:
         opType = BinaryOpNode::OP_OR;
+        break;
+    case COMMA:
+        opType = BinaryOpNode::OP_COMMA;
         break;
     default:
         throw std::runtime_error("Unsupported fold operator");
@@ -1616,7 +1622,7 @@ std::string PointerTypeNode::toString() const
 
 std::string ParameterNode::toString() const
 {
-    return name + ": " + type->toString();
+    return name + ": " + type->toString() + (isPack ? "..." : "");
 }
 
 std::string ParameterListNode::toString() const
@@ -1654,6 +1660,8 @@ std::string FunctionDefNode::toString() const
             if(i > 0)
                 result += ", ";
             result += typeParams[i];
+            if(typeParams[i] == typePackParam)
+                result += "...";
             auto boundIt = typeParamTraitBounds.find(typeParams[i]);
             if(boundIt != typeParamTraitBounds.end() &&
                !boundIt->second.empty())
@@ -1890,6 +1898,9 @@ std::string BinaryOpNode::toString() const
     case OP_OR:
         op_str = "||";
         break;
+    case OP_COMMA:
+        op_str = ",";
+        break;
     }
     return "(" + left->toString() + " " + op_str + " " + right->toString() +
            ")";
@@ -1911,6 +1922,9 @@ std::string FoldExpressionNode::toString() const
         break;
     case BinaryOpNode::OP_OR:
         op_str = "||";
+        break;
+    case BinaryOpNode::OP_COMMA:
+        op_str = ",";
         break;
     default:
         op_str = "?";
@@ -3139,6 +3153,8 @@ std::string TypeParamListNode::toString() const
         if(i > 0)
             result += ", ";
         result += params[i];
+        if(params[i] == packParam)
+            result += "...";
         auto boundIt = traitBounds.find(params[i]);
         if(boundIt != traitBounds.end() && !boundIt->second.empty())
             result += ": " + boundIt->second;

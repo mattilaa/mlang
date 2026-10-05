@@ -1961,12 +1961,12 @@ enum UpdatePosition
 %token LET VAR OBJECT
 %token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD NAMESPACE USE AS ALIAS TYPE_KW COLONCOLON
-%token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT DEBUGJSONPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
+%token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT DEBUGJSONPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT IS_CONSTRUCTIBLE UNSAFE
 %token WINDOWS_MACRO POSIX_MACRO LINUX_MACRO MACOS_MACRO
 %token X64_MACRO AARCH64_MACRO
 %token PLUS_PLUS MINUS_MINUS
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE PIPE_GT CARET NOT TILDE SHL SHR
-%token PLUS_ELLIPSIS MULTIPLY_ELLIPSIS AMP_AMP_ELLIPSIS PIPE_PIPE_ELLIPSIS
+%token PLUS_ELLIPSIS MULTIPLY_ELLIPSIS AMP_AMP_ELLIPSIS PIPE_PIPE_ELLIPSIS COMMA_ELLIPSIS
 %token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN PIPE_ASSIGN CARET_ASSIGN SHL_ASSIGN SHR_ASSIGN
 %token <sval> DEREF_ASSIGN_IDENT
 %token LT GT LE GE EQ NE SPACESHIP
@@ -2326,9 +2326,21 @@ trait_method_decl
 type_param_list
     : IDENTIFIER { $$ = create_type_param_list($1); }
     | IDENTIFIER COLON trait_bound_chain { $$ = create_bounded_type_param_list($1, $3); }
+    | IDENTIFIER ELLIPSIS
+        {
+            auto* params = static_cast<TypeParamListNode*>(create_type_param_list($1));
+            params->packParam = $1;
+            $$ = params;
+        }
     | type_param_list COMMA IDENTIFIER { $$ = add_type_param($1, $3); }
     | type_param_list COMMA IDENTIFIER COLON trait_bound_chain
         { $$ = add_bounded_type_param($1, $3, $5); }
+    | type_param_list COMMA IDENTIFIER ELLIPSIS
+        {
+            auto* params = static_cast<TypeParamListNode*>(add_type_param($1, $3));
+            params->packParam = $3;
+            $$ = params;
+        }
     ;
 
 trait_bound_chain
@@ -2560,6 +2572,7 @@ function_def
             auto* params = static_cast<TypeParamListNode*>($3);
             fn->typeParams = params->params;
             fn->typeParamTraitBounds = params->traitBounds;
+            fn->typePackParam = params->packParam;
             $$ = fn;
         }
     | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
@@ -2755,6 +2768,12 @@ parameters
 
 parameter
     : IDENTIFIER COLON type { $$ = mla_ast_parameter($3, $1); }
+    | IDENTIFIER COLON type ELLIPSIS
+        {
+            auto* param = static_cast<ParameterNode*>(mla_ast_parameter($3, $1));
+            param->isPack = true;
+            $$ = param;
+        }
     | AMP IDENTIFIER
         { $$ = mla_ast_parameter(mla_ast_struct_type_ref(strdup("Self")), $2); }
     ;
@@ -3555,6 +3574,8 @@ condition_postfix
         { $$ = mla_ast_method_call_expr($1, $3, NULL, yylineno); }
     | condition_postfix DOT IDENTIFIER LPAREN argument_list RPAREN
         { $$ = mla_ast_method_call_expr($1, $3, $5, yylineno); }
+    | condition_postfix COMMA_ELLIPSIS
+        { $$ = mla_ast_fold_expression(COMMA, $1, 1); }
     | condition_postfix DOT INT_LITERAL { $$ = mla_ast_tuple_access($1, $3, yylineno); }
     | condition_postfix LBRACKET expression RBRACKET
         { $$ = mla_ast_index_expression($1, $3, yylineno); }
@@ -3668,6 +3689,15 @@ fold_expression
         { $$ = mla_ast_fold_expression(MULTIPLY, $2, 1); }
     | LPAREN ELLIPSIS AMP_AMP expression RPAREN
         { $$ = mla_ast_fold_expression(AMP_AMP, $4, 0); }
+    | LPAREN IS_CONSTRUCTIBLE GENERIC_LT IDENTIFIER GT LPAREN IDENTIFIER RPAREN AMP_AMP_ELLIPSIS RPAREN
+        {
+            std::string callee = "is_constructible<" + std::string($4) + ">";
+            ASTNode* args = mla_ast_argument_list_create(
+                mla_ast_identifier($7));
+            ASTNode* call = mla_ast_function_call_from_list(
+                strdup(callee.c_str()), args, yylineno);
+            $$ = mla_ast_fold_expression(AMP_AMP, call, 1);
+        }
     | LPAREN postfix_expression AMP_AMP_ELLIPSIS RPAREN
         { $$ = mla_ast_fold_expression(AMP_AMP, $2, 1); }
     | LPAREN ELLIPSIS PIPE_PIPE expression RPAREN

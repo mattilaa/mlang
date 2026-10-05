@@ -455,6 +455,13 @@ CodeGenerator::substituteTypeParams(TypeNode* type,
     if(!type)
         return nullptr;
 
+    if(auto* ref = dynamic_cast<ReferenceTypeNode*>(type))
+    {
+        return new ReferenceTypeNode(
+            substituteTypeParams(ref->elementType, typeParams, typeArgs),
+            ref->isMutable);
+    }
+
     if(auto* ptr = dynamic_cast<PointerTypeNode*>(type))
     {
         return new PointerTypeNode(

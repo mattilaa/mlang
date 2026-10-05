@@ -339,6 +339,7 @@ static int mla_lex_peek_branch_declaration()
 "x64!"          { return X64_MACRO; }
 "aarch64!"      { return AARCH64_MACRO; }
 "static_assert!" { return STATIC_ASSERT; }
+"is_constructible" { return IS_CONSTRUCTIBLE; }
 "vec!"          { return VEC_MACRO; }
 "#[derive(Debug)]"    { return DERIVE_DEBUG; }
 "#[derive(Json)]"     { return DERIVE_JSON; }
@@ -380,6 +381,7 @@ static int mla_lex_peek_branch_declaration()
 "*"[[:space:]]*"..."   { return MULTIPLY_ELLIPSIS; }
 "&&"[[:space:]]*"..."  { return AMP_AMP_ELLIPSIS; }
 "||"[[:space:]]*"..."  { return PIPE_PIPE_ELLIPSIS; }
+","[[:space:]]*"..."   { return COMMA_ELLIPSIS; }
 "..."           { return ELLIPSIS; }
 "?"             { return is_try_question_context() ? TRY_QUESTION : QUESTION; }
 "..="           { return DOTDOTEQ; }
