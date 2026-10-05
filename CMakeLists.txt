@@ -228,6 +228,7 @@ endif()
 set(HEADER_FILES
     ${CMAKE_SOURCE_DIR}/include/ast.h
     ${CMAKE_SOURCE_DIR}/include/ir.h
+    ${CMAKE_SOURCE_DIR}/include/install_paths.h
     ${CMAKE_SOURCE_DIR}/include/package_manager.h
     ${CMAKE_SOURCE_DIR}/include/incremental_compiler.h
     ${CMAKE_SOURCE_DIR}/include/ide_query.h

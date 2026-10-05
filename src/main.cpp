@@ -1,5 +1,6 @@
 #include "ast.h"
 #include "diagnostics.h"
+#include "install_paths.h"
 #include "ir.h"
 #include "llvm_compat.h"
 #include "module.h"
@@ -385,6 +386,9 @@ static std::vector<std::string> default_stdlib_paths()
             paths.emplace_back(MLANG_STDLIB_SOURCE_DIR);
     }
 #endif
+    const std::string installedModules = mlang::installed_path("share/mlang/modules");
+    if(!installedModules.empty())
+        paths.emplace_back(installedModules);
     if(const char* xdg = std::getenv("XDG_DATA_HOME"))
         paths.emplace_back(std::string(xdg) + "/mlang/modules");
     if(const char* home = std::getenv("HOME"))
@@ -394,6 +398,9 @@ static std::vector<std::string> default_stdlib_paths()
 #endif
     paths.emplace_back("/usr/local/share/mlang/modules");
     paths.emplace_back("/usr/share/mlang/modules");
+    const std::string installedStdlib = mlang::installed_path("share/mlang/stdlib");
+    if(!installedStdlib.empty())
+        paths.emplace_back(installedStdlib);
     if(const char* xdg = std::getenv("XDG_DATA_HOME"))
         paths.emplace_back(std::string(xdg) + "/mlang/stdlib");
     if(const char* home = std::getenv("HOME"))
@@ -457,6 +464,9 @@ static std::vector<std::string> default_stdlib_lib_paths()
         for(const auto& p : split_env_paths(env))
             paths.emplace_back(p);
     }
+    const std::string installedLib = mlang::installed_path("lib/mlang");
+    if(!installedLib.empty())
+        paths.emplace_back(installedLib);
     if(const char* home = std::getenv("HOME"))
     {
         paths.emplace_back(std::string(home) + "/.local/lib");
@@ -602,42 +612,57 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
     if(!hasLibm)
         linkArgs.push_back("-lm");
 
+    // OpenSSL archives shipped next to libmlang_std.a (a relocatable install
+    // bundles them) are linked statically, so programs need no OpenSSL of
+    // their own and no OpenSSL path from the machine that built mlang.
+    std::error_code sslEc;
+    const std::filesystem::path sslDir(foundDir);
+    if(!foundDir.empty() &&
+       std::filesystem::exists(sslDir / "libssl.a", sslEc) &&
+       std::filesystem::exists(sslDir / "libcrypto.a", sslEc))
+    {
+        append_unique_link_arg(linkArgs, (sslDir / "libssl.a").string());
+        append_unique_link_arg(linkArgs, (sslDir / "libcrypto.a").string());
+    }
+    else
+    {
 #ifdef MLANG_OPENSSL_SSL_DIR
-    append_unique_link_arg(linkArgs,
-                           std::string("-L") + MLANG_OPENSSL_SSL_DIR);
+        append_unique_link_arg(linkArgs,
+                               std::string("-L") + MLANG_OPENSSL_SSL_DIR);
 #endif
 #ifdef MLANG_OPENSSL_CRYPTO_DIR
-    append_unique_link_arg(linkArgs,
-                           std::string("-L") + MLANG_OPENSSL_CRYPTO_DIR);
+        append_unique_link_arg(linkArgs,
+                               std::string("-L") + MLANG_OPENSSL_CRYPTO_DIR);
 #endif
 #ifdef MLANG_OPENSSL_SSL_LIBRARY
-    append_unique_link_arg(linkArgs, MLANG_OPENSSL_SSL_LIBRARY);
+        append_unique_link_arg(linkArgs, MLANG_OPENSSL_SSL_LIBRARY);
 #else
-    if(const char* env = std::getenv("MLANG_OPENSSL_LIB_PATH"))
-    {
-        for(const auto& dir : split_env_paths(env))
-            append_unique_link_arg(linkArgs, std::string("-L") + dir);
-    }
+        if(const char* env = std::getenv("MLANG_OPENSSL_LIB_PATH"))
+        {
+            for(const auto& dir : split_env_paths(env))
+                append_unique_link_arg(linkArgs, std::string("-L") + dir);
+        }
 #ifdef __APPLE__
-    const char* portableOpenSSLDirs[] = {
-        "/opt/homebrew/opt/openssl@3/lib",
-        "/usr/local/opt/openssl@3/lib",
-        "/opt/homebrew/opt/openssl/lib",
-        "/usr/local/opt/openssl/lib"};
-    for(const char* dir : portableOpenSSLDirs)
-    {
-        std::error_code ec;
-        if(std::filesystem::is_directory(dir, ec))
-            append_unique_link_arg(linkArgs, std::string("-L") + dir);
-    }
+        const char* portableOpenSSLDirs[] = {
+            "/opt/homebrew/opt/openssl@3/lib",
+            "/usr/local/opt/openssl@3/lib",
+            "/opt/homebrew/opt/openssl/lib",
+            "/usr/local/opt/openssl/lib"};
+        for(const char* dir : portableOpenSSLDirs)
+        {
+            std::error_code ec;
+            if(std::filesystem::is_directory(dir, ec))
+                append_unique_link_arg(linkArgs, std::string("-L") + dir);
+        }
 #endif
-    append_unique_link_arg(linkArgs, "-lssl");
+        append_unique_link_arg(linkArgs, "-lssl");
 #endif
 #ifdef MLANG_OPENSSL_CRYPTO_LIBRARY
-    append_unique_link_arg(linkArgs, MLANG_OPENSSL_CRYPTO_LIBRARY);
+        append_unique_link_arg(linkArgs, MLANG_OPENSSL_CRYPTO_LIBRARY);
 #else
-    append_unique_link_arg(linkArgs, "-lcrypto");
+        append_unique_link_arg(linkArgs, "-lcrypto");
 #endif
+    }
 
 #ifdef __APPLE__
     append_framework_link_args(linkArgs, "CoreFoundation");

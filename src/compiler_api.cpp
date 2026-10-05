@@ -1,6 +1,7 @@
 #include "ast.h"
 #include "diagnostics.h"
 #include "source_filter.h"
+#include "install_paths.h"
 
 #include <algorithm>
 #include <array>
@@ -944,6 +945,12 @@ static std::vector<std::string> defaultStdlibPaths()
         }
     }
 #endif
+    const std::string installedModules =
+        mlang::installed_path("share/mlang/modules");
+    if(!installedModules.empty())
+    {
+        paths.emplace_back(installedModules);
+    }
     if(const char* xdg = std::getenv("XDG_DATA_HOME"))
     {
         paths.emplace_back(std::string(xdg) + "/mlang/modules");
@@ -957,6 +964,12 @@ static std::vector<std::string> defaultStdlibPaths()
 #endif
     paths.emplace_back("/usr/local/share/mlang/modules");
     paths.emplace_back("/usr/share/mlang/modules");
+    const std::string installedStdlib =
+        mlang::installed_path("share/mlang/stdlib");
+    if(!installedStdlib.empty())
+    {
+        paths.emplace_back(installedStdlib);
+    }
     if(const char* xdg = std::getenv("XDG_DATA_HOME"))
     {
         paths.emplace_back(std::string(xdg) + "/mlang/stdlib");
