@@ -5655,6 +5655,47 @@ TEST_F(MLATest, NamespaceAliasShortensQualifiedPaths)
 // Main
 // ============================================================================
 
+
+TEST_F(MLATest, DiagnosticsInImportedModuleNameModuleFile)
+{
+    // An empty block in an imported module is reported at the module's file,
+    // not at the file given on the command line; the main file's own
+    // warnings keep naming the main file.
+    {
+        std::ofstream helper(testDir + "/helper.mla");
+        helper << "pub fn helper_value() -> i32 {\n"
+                  "    let x: i32 = 1;\n"
+                  "    if x > 0 { }\n"
+                  "    return x;\n"
+                  "}\n";
+    }
+    writeSource("mod helper;\n"
+                "use helper::helper_value;\n"
+                "fn main() -> i32 {\n"
+                "    let y: i32 = helper_value();\n"
+                "    if y > 5 { }\n"
+                "    return y - 1;\n"
+                "}\n");
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    ASSERT_EQ(rc, 0) << out;
+    std::istringstream lines(out);
+    std::string line;
+    int helperWarnings = 0;
+    int mainWarnings = 0;
+    while(std::getline(lines, line))
+    {
+        if(line.find("empty block") == std::string::npos)
+            continue;
+        if(line.find("helper.mla:") != std::string::npos)
+            helperWarnings++;
+        else if(line.find("test.mla:") != std::string::npos)
+            mainWarnings++;
+    }
+    EXPECT_EQ(helperWarnings, 1) << out;
+    EXPECT_EQ(mainWarnings, 1) << out;
+}
+
 int main(int argc, char** argv)
 {
     ::testing::InitGoogleTest(&argc, argv);

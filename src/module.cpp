@@ -238,9 +238,13 @@ ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
     // Reset lexer line number
     yylineno = 1;
 
-    // Parse the file
+    // Parse the file. Its nodes record its path; the file being parsed when
+    // this module was reached gets its own back afterwards.
     parseHadError = false;
-    g_sourceFile = filePath.c_str();
+    const char* savedSourceFile = g_sourceFile;
+    const char* savedAstSourceFile = g_astSourceFile;
+    g_astSourceFile = mla_intern_source_file(filePath);
+    g_sourceFile = g_astSourceFile;
     g_targetArchForParse = targetArchOverride.c_str();
     YY_BUFFER_STATE buffer =
         mlang_scan_bytes(filteredText.data(), filteredText.size());
@@ -255,6 +259,8 @@ ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
 
     // Restore previous parser state
     programRoot = savedRoot;
+    g_sourceFile = savedSourceFile;
+    g_astSourceFile = savedAstSourceFile;
 
     return parsedProgram;
 }

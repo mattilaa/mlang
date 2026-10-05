@@ -9,10 +9,16 @@ void CodeGenerator::reportError(int line, const std::string& message)
     reportError(line, 0, message);
 }
 
+std::string CodeGenerator::diagnosticFileName() const
+{
+    if(diagnosticFile && *diagnosticFile)
+        return diagnosticFile;
+    return sourceFileName.empty() ? std::string("<input>") : sourceFileName;
+}
+
 void CodeGenerator::reportError(int line, int col, const std::string& message)
 {
-    const std::string& file =
-        sourceFileName.empty() ? std::string("<input>") : sourceFileName;
+    const std::string file = diagnosticFileName();
     mlang::diag::print_diagnostic_location(std::cerr, file, line, col, "error");
     std::cerr << mlang::diag::format_error_message(message) << std::endl;
     hasError = true;
@@ -20,8 +26,7 @@ void CodeGenerator::reportError(int line, int col, const std::string& message)
 
 void CodeGenerator::reportWarning(int line, int col, const std::string& message)
 {
-    const std::string& file =
-        sourceFileName.empty() ? std::string("<input>") : sourceFileName;
+    const std::string file = diagnosticFileName();
     mlang::diag::print_diagnostic_location(std::cerr, file, line, col,
                                            "warning");
     std::cerr << mlang::diag::format_warning_message(message) << std::endl;

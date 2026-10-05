@@ -261,6 +261,10 @@ private:
     bool warnResultUnwrap = true;
     bool warnImplicitZeroInit = true;
     std::string sourceFileName;        ///< Source file path for default suite name derivation.
+    /// File of the statement being generated (from ASTNode::file), or null.
+    /// Diagnostics name it instead of \c sourceFileName, so code from an
+    /// imported module is reported at that module's file.
+    const char* diagnosticFile = nullptr;
     /// \brief Substring filter for selecting individual tests.
     ///
     /// Matched against both the display name (\c suite.case) and the raw
@@ -847,6 +851,8 @@ private:
     void reportError(int line, const std::string& message);
     void reportError(int line, int col, const std::string& message);
     void reportWarning(int line, int col, const std::string& message);
+    /// File diagnostics name: the current statement's, else the input file.
+    std::string diagnosticFileName() const;
 };
 
 class Backend

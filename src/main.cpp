@@ -2223,10 +2223,14 @@ int main(int argc, char** argv)
         parseHadError = false;
         g_sourceFile = inputFile.c_str();
         g_targetArchForParse = targetArch.c_str();
+        // Nodes record the file they come from; ones made after parsing have
+        // none and keep the file of the code around them.
+        g_astSourceFile = mla_intern_source_file(inputFile);
         YY_BUFFER_STATE parseBuffer =
             mlang_scan_bytes(filteredInput.data(), filteredInput.size());
         const int parseResult = yyparse();
         mlang_delete_buffer(parseBuffer);
+        g_astSourceFile = nullptr;
         if(parseResult != 0 || parseHadError)
         {
             std::cerr << "Parsing failed. See previous diagnostics and "

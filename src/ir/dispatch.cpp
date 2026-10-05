@@ -7,6 +7,21 @@ using mlang::ir_detail::ast_analysis::collect_used_idents;
 
 void CodeGenerator::generateStatement(StatementNode* node)
 {
+    // Diagnostics while generating this statement name its file (an imported
+    // module's, say); the enclosing code gets its own back afterwards.
+    struct DiagnosticFileScope
+    {
+        const char*& current;
+        const char* saved;
+        DiagnosticFileScope(const char*& c, const char* file)
+            : current(c), saved(c)
+        {
+            if(file)
+                current = file;
+        }
+        ~DiagnosticFileScope() { current = saved; }
+    } diagnosticScope(diagnosticFile, node ? node->file : nullptr);
+
     if(auto returnNode = dynamic_cast<ReturnNode*>(node))
     {
         generateReturnStatement(returnNode);

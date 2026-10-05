@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -31,12 +32,26 @@ class EnumVariantListNode;
 class EnumLiteralNode;
 class TypeAliasNode;
 
+// File the parser is reading. Every node created meanwhile records it in
+// ASTNode::file, so diagnostics for code from an imported module name that
+// module's file. Null outside parsing: nodes synthesized later have no file
+// of their own and keep the one of the code around them.
+inline const char* g_astSourceFile = nullptr;
+
+// A copy of `path` that lives as long as the compiler, for ASTNode::file.
+inline const char* mla_intern_source_file(const std::string& path)
+{
+    static std::set<std::string> paths;
+    return paths.insert(path).first->c_str();
+}
+
 // Base AST node
 class ASTNode
 {
 public:
     int line = 0;
     int col  = 0;
+    const char* file = g_astSourceFile;  // source file, or null if unknown
     virtual ~ASTNode() = default;
     virtual std::string toString() const = 0;
 };

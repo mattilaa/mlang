@@ -92,7 +92,7 @@ void CodeGenerator::emitNarrowCastRuntimeCheck(CastExpressionNode* node,
         "narrow_cast panic at %s:%d: value cannot be represented as %s\n",
         "narrow.panic.format");
     llvm::Value* fileStr = builder.CreateGlobalString(
-        sourceFileName.empty() ? "<input>" : sourceFileName,
+        diagnosticFileName(),
         "narrow.panic.file");
     llvm::Value* typeStr = builder.CreateGlobalString(
         narrowTypeName(node->targetType), "narrow.panic.type");
@@ -101,7 +101,7 @@ void CodeGenerator::emitNarrowCastRuntimeCheck(CastExpressionNode* node,
         "narrow_cast panic at %s:%d: value cannot be represented as %s\n",
         "narrow.panic.format");
     llvm::Value* fileStr = builder.CreateGlobalStringPtr(
-        sourceFileName.empty() ? "<input>" : sourceFileName,
+        diagnosticFileName(),
         "narrow.panic.file");
     llvm::Value* typeStr = builder.CreateGlobalStringPtr(
         narrowTypeName(node->targetType), "narrow.panic.type");
