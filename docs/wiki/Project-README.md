@@ -1289,11 +1289,11 @@ Linux `x86_64` and macOS `arm64` archives, creates or updates the matching
 GitHub Release, and uploads the archives and SHA-256 checksum files. The macOS
 job also creates an unsigned `.pkg` installer for `/usr/local`.
 
-For the first `v0.2.0` release:
+For the `v0.3.0` release:
 
 ```sh
-git tag -a v0.2.0 -m "MLang v0.2.0"
-git push origin v0.2.0
+git tag -a v0.3.0 -m "MLang v0.3.0"
+git push origin v0.3.0
 ```
 
 The archives contain `mlang`, `libmlang_std.a`, standard-library sources,
@@ -1302,8 +1302,8 @@ Their `bin/mlang` wrapper locates all bundled resources, so an archive can be
 unpacked and run in place:
 
 ```sh
-tar -xzf mlang-v0.2.0-linux-x86_64.tar.gz
-./mlang-v0.2.0-linux-x86_64/bin/mlang --version
+tar -xzf mlang-v0.3.0-linux-x86_64.tar.gz
+./mlang-v0.3.0-linux-x86_64/bin/mlang --version
 ```
 
 Native programs produced by MLang still need a C++ linker and OpenSSL
@@ -1315,13 +1315,13 @@ compiler/linker and its native runtime dependencies. Each archive also includes
 downloaded artifacts before use:
 
 ```sh
-shasum -a 256 -c mlang-v0.2.0-macos-arm64.tar.gz.sha256
+shasum -a 256 -c mlang-v0.3.0-macos-arm64.tar.gz.sha256
 ```
 
 Build the current-host archive locally with:
 
 ```sh
-scripts/build_release.sh --version v0.2.0
+scripts/build_release.sh --version v0.3.0
 ```
 
 For an existing tag, open **Actions > Release binaries > Run workflow** and
