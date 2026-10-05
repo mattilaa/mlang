@@ -377,6 +377,41 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         }
     };
 
+    // `free_objs(a, b, ...)` is the heterogeneous object equivalent of a
+    // C++ fold over `release()`.  Keep this as a compiler intrinsic: ordinary
+    // MLang generic parameters are homogeneous and therefore cannot express a
+    // parameter pack containing unrelated struct types.  Each synthesized
+    // method call goes through the normal method resolver, which gives us the
+    // same static checks (struct receiver, visible instance method, and zero
+    // explicit arguments) as spelling every `object.release()` separately.
+    if(node->name == "free_objs")
+    {
+        if(node->arguments.empty())
+        {
+            reportError(node->line,
+                        "free_objs expects at least one releasable object");
+            return nullptr;
+        }
+
+        llvm::Value* lastCall = nullptr;
+        for(size_t i = 0; i < node->arguments.size(); ++i)
+        {
+            MethodCallNode releaseCall(node->arguments[i], "release");
+            releaseCall.line = node->line;
+            releaseCall.col = node->col;
+            lastCall = generateMethodCall(&releaseCall);
+            if(!lastCall)
+            {
+                reportError(node->line,
+                            "argument " + std::to_string(i + 1) +
+                                " to free_objs must be an object with a "
+                                "zero-argument release() method");
+                return nullptr;
+            }
+        }
+        return lastCall;
+    }
+
     // Vec::new() — returns an empty list struct {0, null}
     if(node->name == "Vec::new")
     {

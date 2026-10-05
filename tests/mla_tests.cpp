@@ -5449,6 +5449,76 @@ TEST_F(MLATest, BorrowedPointerDereferenceOutsideUnsafeStillAllowed)
     EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
+TEST_F(MLATest, FreeObjsReleasesHeterogeneousStructs)
+{
+    std::string code = R"(
+        struct Session { var value: i32; };
+        impl Session {
+            fn release(self: Session) -> void {
+                let ignored: i32 = self.value;
+            }
+        }
+
+        struct Project { var value: i64; };
+        impl Project {
+            fn release(self: Project) -> void {
+                let ignored: i64 = self.value;
+            }
+        }
+
+        fn main() -> i32 {
+            var session: Session = Session { value: 1 };
+            var project: Project = Project { value: 2 };
+            free_objs(session, project);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, FreeObjsRejectsObjectWithoutReleaseMethod)
+{
+    std::string code = R"(
+        struct Session { var value: i32; };
+        impl Session {
+            fn release(self: Session) -> void {
+                let ignored: i32 = self.value;
+            }
+        }
+
+        struct Project { var value: i64; };
+
+        fn main() -> i32 {
+            var session: Session = Session { value: 1 };
+            var project: Project = Project { value: 2 };
+            free_objs(session, project);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("argument 2 to free_objs must be an object with a "
+                       "zero-argument release() method"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, FreeObjsRejectsEmptyPack)
+{
+    writeSource(R"(
+        fn main() -> i32 {
+            free_objs();
+            return 0;
+        }
+    )");
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("free_objs expects at least one releasable object"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, NamespaceBlockQualifiesDeclarationsAndLocalTypes)
 {
     std::string code = R"(

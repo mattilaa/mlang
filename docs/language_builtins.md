@@ -113,6 +113,22 @@ Associated calls and instance method lookup resolve through aliases, so an alias
 can be used as a real type name in calls such as `mutex::new()` and on variables
 typed as `mutex`.
 
+## `free_objs`
+
+`free_objs(first, second, ...)` releases a heterogeneous pack of struct
+objects in argument order. It is equivalent to writing `first.release();
+second.release(); ...`, while keeping the call site compact:
+
+```mla
+free_objs(instrument_editor, sample_editor, sample_dialog, piano, picker);
+```
+
+Every argument is checked at compile time and must be an object exposing a
+visible, non-static, zero-argument `release()` method. This is the MLang
+equivalent of folding a C++ parameter pack over `object.release()`. Raw heap
+pointers and strings are intentionally not accepted; continue to pass those to
+`free(...)`.
+
 ## Builtin `bit` and `size_of`
 
 Builtin reference source: `stdlib/types.mla`

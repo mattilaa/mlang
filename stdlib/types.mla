@@ -120,6 +120,13 @@
 // @builtin map
 // Generic map type: map<K, V>.
 
+/// Release a heterogeneous object pack in argument order.
+///
+/// `free_objs(a, b, ...)` requires every argument to expose a visible,
+/// zero-argument `release()` instance method. Raw pointers and strings still
+/// use `free(...)`.
+// Compiler intrinsic: free_objs(objects...)
+
 // @builtin multiarray
 // Fixed-size multidimensional array: multiarray<T, D1, ..., DN>.
 // Each dimension is a compile-time capacity. Initialize all dimensions with
