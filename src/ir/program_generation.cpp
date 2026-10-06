@@ -18,6 +18,7 @@ using mlang::ir_detail::return_inference::infer_function_return_type;
 
 void CodeGenerator::generateCode(ProgramNode* program)
 {
+    debugInfoBegin();
     globalNamedValues.clear();
     globalConstantVariables.clear();
     globalVariableTypes.clear();
@@ -1162,4 +1163,5 @@ void CodeGenerator::generateCode(ProgramNode* program)
             }
         }
     }
+    debugInfoFinish();
 }

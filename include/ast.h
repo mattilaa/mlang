@@ -52,6 +52,11 @@ public:
     int line = 0;
     int col  = 0;
     const char* file = g_astSourceFile;  // source file, or null if unknown
+    // Where a statement or top-level item starts (its first token), set by
+    // the parser's list rules; 0 when unknown. `line` can be later (the
+    // parser may have read ahead); debug info uses these when set.
+    int startLine = 0;
+    int startCol = 0;
     virtual ~ASTNode() = default;
     virtual std::string toString() const = 0;
 };

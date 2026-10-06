@@ -70,10 +70,17 @@ int yycolumn_token = 1; // column at start of the current token
 
 #define YY_USER_ACTION                          \
     yycolumn_token = yycolumn;                  \
+    yylloc.first_line = yylineno;               \
+    yylloc.first_column = yycolumn;             \
     for(int _yci = 0; _yci < yyleng; _yci++) { \
-        if(yytext[_yci] == '\n') yycolumn = 1;  \
+        if(yytext[_yci] == '\n') {              \
+            yycolumn = 1;                      \
+            --yylloc.first_line;               \
+        }                                      \
         else                     yycolumn++;    \
-    }
+    }                                          \
+    yylloc.last_line = yylineno;                \
+    yylloc.last_column = yycolumn - 1;
 
 static int yyinput(void);
 static void yyunput(int, char*);

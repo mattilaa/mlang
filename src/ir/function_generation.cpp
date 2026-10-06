@@ -299,6 +299,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     // Create a new basic block for the function
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
     builder.SetInsertPoint(bb);
+    // mlang -g: the function's DISubprogram while its body is generated.
+    DebugFunctionScope debugScope(*this, function, node, node->name);
 
     // Clear the named values map and constant tracking for new function scope
     namedValues.clear();
@@ -493,6 +495,11 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                     traitObjType->traitName;
             }
         }
+        // mlang -g: the parameter, with its MLang type.
+        if(paramIdx < node->parameters->parameters.size())
+            debugDeclareVariable(std::string(arg.getName()), alloca,
+                                 node->parameters->parameters[paramIdx]->type,
+                                 node->parameters->parameters[paramIdx], paramIdx + 1);
         paramIdx++;
     }
 

@@ -2,7 +2,9 @@
 #define IR_H
 
 #include "ast.h"
+#include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Target/TargetMachine.h>
@@ -96,6 +98,14 @@ public:
     void setSourceFile(const std::string& file)
     {
         sourceFileName = file;
+    }
+    /// Emit DWARF debug info (mlang -g): source lines, functions, local
+    /// variables and parameters with their types, for lldb and gdb.
+    /// \p optimized marks the compile unit as optimized (-O1 and up).
+    void setDebugInfo(bool enabled, bool optimized)
+    {
+        debugInfoEnabled = enabled;
+        debugInfoOptimized = optimized;
     }
 
     /// Enable runtime validation for narrow_cast in debug builds.
@@ -261,6 +271,51 @@ private:
     bool warnResultUnwrap = true;
     bool warnImplicitZeroInit = true;
     std::string sourceFileName;        ///< Source file path for default suite name derivation.
+
+    // --- Debug info (mlang -g; src/ir/debug_info.cpp) ----------------------
+    bool debugInfoEnabled = false;
+    bool debugInfoOptimized = false;
+    std::unique_ptr<llvm::DIBuilder> diBuilder;
+    llvm::DICompileUnit* diCompileUnit = nullptr;
+    std::map<std::string, llvm::DIFile*> diFiles;
+    std::map<std::string, llvm::DIType*> diTypes;
+    /// Lexical scopes of the function being generated, innermost last; the
+    /// first entry is its DISubprogram. Empty outside functions with debug
+    /// info.
+    std::vector<llvm::DIScope*> diScopes;
+    /// Gives a function a DISubprogram for as long as it is generated, and
+    /// gives the enclosing function its scopes and debug location back.
+    class DebugFunctionScope
+    {
+    public:
+        DebugFunctionScope(CodeGenerator& gen, llvm::Function* function,
+                           ASTNode* node, const std::string& displayName);
+        ~DebugFunctionScope();
+        DebugFunctionScope(const DebugFunctionScope&) = delete;
+        DebugFunctionScope& operator=(const DebugFunctionScope&) = delete;
+
+    private:
+        CodeGenerator& gen;
+        std::vector<llvm::DIScope*> savedScopes;
+        llvm::DebugLoc savedLocation;
+    };
+    void debugInfoBegin();
+    void debugInfoFinish();
+    llvm::DIFile* debugFile(const char* path);
+    /// Point the builder at \p node's line in the current scope.
+    void debugSetLocation(ASTNode* node);
+    void debugPushBlock(ASTNode* node);
+    void debugPopBlock();
+    /// Describe a variable stored in \p storage (an alloca); \p argNo is the
+    /// 1-based parameter number, 0 for a local.
+    void debugDeclareVariable(const std::string& name, llvm::Value* storage,
+                              TypeNode* type, ASTNode* at, unsigned argNo = 0);
+    llvm::DIType* debugType(TypeNode* type, llvm::Type* fallback);
+    llvm::DIType* debugTypeFromLLVM(llvm::Type* type);
+    llvm::DIType* debugStructType(const std::string& name);
+    llvm::DIType* debugAggregateType(
+        const std::string& name, llvm::StructType* layout,
+        const std::vector<std::pair<std::string, llvm::DIType*>>& fields);
     /// File of the statement being generated (from ASTNode::file), or null.
     /// Diagnostics name it instead of \c sourceFileName, so code from an
     /// imported module is reported at that module's file.
@@ -866,7 +921,8 @@ class Backend
 {
 public:
     Backend(std::unique_ptr<llvm::Module>& m,
-            const std::string& archOverride = "");
+            const std::string& archOverride = "",
+            bool unoptimizedCodegen = false);
     bool emitObjectFile(const std::string& filename);
     bool emitAssemblyFile(const std::string& filename);
     bool emitLLVMIR(const std::string& filename);
@@ -877,6 +933,10 @@ public:
                                 const std::vector<std::string>& linkArgs);
     bool compileToStaticLibrary(const std::string& outputFile);
     void optimize(const std::string& level);
+    /// Generate machine code without optimization (mlang -g -O0), so every
+    /// variable lives in its stack slot at each source line, as debuggers
+    /// expect; the default level keeps values in registers and moves stores.
+    void useUnoptimizedCodegen();
     std::string getTargetTriple() const
     {
         return targetTriple;
@@ -887,6 +947,7 @@ private:
     llvm::TargetMachine* targetMachine;
     std::string targetTriple;
     std::string targetArchOverride;
+    bool unoptimizedCodegen;
 
     bool initializeTarget();
     bool linkExecutable(const std::string& objectFile,

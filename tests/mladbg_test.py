@@ -1,0 +1,370 @@
+"""Integration checks against real MLang DWARF and the LLDB process engine."""
+import argparse
+import fcntl
+import os
+from pathlib import Path
+import pty
+import re
+import select
+import signal
+import struct
+import subprocess
+import tempfile
+import termios
+import time
+
+
+def run(args, expected=0, env=None):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=60, env=env)
+    output = result.stdout + result.stderr
+    assert result.returncode == expected, "%r returned %s:\n%s" % (args, result.returncode, output)
+    return output
+
+
+def check_tui(debugger, executable, source, no_colors=False, tree_demo=False, no_glyphs=False):
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
+    env = dict(os.environ, TERM="xterm-256color", LC_ALL="en_US.UTF-8")
+    line = (next(i for i, text in enumerate(Path(source).read_text().splitlines(), 1)
+                 if "stack-break" in text) if tree_demo else 13)
+    args = [debugger] + (["--no-colors"] if no_colors else []) + (["--no-glyphs"] if no_glyphs else [])
+    process = subprocess.Popen(args + ["-ex", "b " + source + ":" + str(line), executable],
+                               stdin=slave, stdout=slave, stderr=slave, env=env,
+                               cwd=Path(__file__).resolve().parents[1])
+    os.close(slave)
+    output = bytearray()
+
+    def wait_for(text):
+        deadline = time.monotonic() + 15
+        def clean():
+            return re.sub(rb"\x1b(?:\[[0-?]*[ -/]*[@-~]|[()][A-Za-z0-9]|[@-_])", b"", output)
+        while text not in clean() and time.monotonic() < deadline:
+            if select.select([master], [], [], 0.1)[0]:
+                try:
+                    output.extend(os.read(master, 65536))
+                except OSError:
+                    break
+        assert text in clean(), "TUI did not display %r:\n%s" % (text, output.decode(errors="replace"))
+
+    try:
+        wait_for(b"Console / program output")
+        wait_for(b"Ready")
+        # Bare :b lists cwd; j/k and arrows browse without editing the prompt.
+        os.write(master, b":b\t")
+        wait_for(b"Files | ./")
+        os.write(master, b"jk\x1bOB\x1bOA\x1b\x1b:b examples/debugger.ml\t")
+        wait_for(b"examples/debugger.mla")
+        os.write(master, b"\n:13\n")  # Accept the file, then add a line and execute.
+        wait_for(b"Breakpoint 2:")
+        if no_glyphs:
+            assert b"+--" in output, "ASCII borders were not drawn"
+        else:
+            assert "┌".encode() in output and "│".encode() in output, "UTF-8 box glyphs were not drawn"
+        os.write(master, b"\x1bOP")  # F1 in xterm-256color.
+        wait_for(b"MLADBG HELP")
+        os.write(master, b"?")  # Closing help must leave the session usable.
+        os.write(master, b":run\n")
+        if tree_demo:
+            wait_for(b"[+] (Engineer) engineer")
+            # Move backwards from locals, wrap source -> console, then return
+            # forwards to locals. Shift-Tab is xterm's CSI Z sequence.
+            os.write(master, b"\t\x1b[Z\x1b[Z\t\tl")
+            wait_for(b'name = "Ada"')
+            os.write(master, b"jjl")  # Select and expand its nested position.
+            wait_for(b"x = 1.5")
+            os.write(master, b"jw3")  # Add the selected nested field through the actions menu.
+            wait_for(b"Expression 1: engineer.position.x")
+            os.write(master, b"v")  # Return to Locals without deleting the expression.
+            os.write(master, b"JK:frame 3\n")  # Collapse/restore, then inspect a caller.
+            wait_for(b"[+] (Team) team")
+            os.write(master, b":display list\n")
+            wait_for(b"<unavailable in this frame>")
+            os.write(master, b":frame 0\n:p adjusted\n")
+            wait_for(b"adjusted = 20")
+            # Repeated Vim navigation must neither trap the tree cursor nor
+            # prevent the command prompt from responding afterward.
+            os.write(master, b"j"*30+b"k"*40+b"hjlk"*30+b"JK:p adjusted + 123\n")
+            wait_for(b"= 143")
+        else:
+            wait_for(b"count = 7")
+            wait_for(b"ratio = 1.5")
+            os.write(master, b"\tw")
+            wait_for(b"Variable | count")
+            os.write(master, b"j\n")
+            wait_for(b"(mladbg) watch count ==")
+            os.write(master, b"12\n")
+            wait_for(b"writes to count if count == 12")
+            wait_for(b"W1 on")
+            os.write(master, b":watchpoint delete 1\n")
+            os.write(master, b"d")
+            wait_for(b"Watch expressions")
+            wait_for(b"1 count = (int) 7")
+            os.write(master, b"ndisplay_dummy\x1b")  # Cancel add without creating anything.
+            os.write(master, b":display count + 1000\n")
+            wait_for(b"2 count + 1000 = (int) 1007")
+            os.write(master, b"je\x7f\x7f\x7f\x7f2000\n")
+            wait_for(b"Updated expression 2: count + 2000")
+            os.write(master, b"d")
+            wait_for(b"Remov")  # curses may redraw only the changed message prefix.
+            fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 120, 0, 0))
+            os.kill(process.pid, signal.SIGWINCH)
+            os.write(master, b"a")
+            wait_for(b"Assembly | function")
+            os.write(master, b"b")
+            wait_for(b"Breakpoint 3:")
+            os.write(master, b"jke")
+            wait_for(b"(mladbg) patch 0x")
+            os.write(master, b"\x1b:asm line\n")
+            wait_for(b"Assembly view: mixed (line)")
+            os.write(master, b":asm off\n")
+            wait_for(b"source (line)")
+            # Exercise the smallest supported layout with a stopped process.
+            fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 18, 70, 0, 0))
+            os.kill(process.pid, signal.SIGWINCH)
+            os.write(master, b"ljjkh:next\n")
+            wait_for(b"step over")
+            os.write(master, b":display list\n")
+            wait_for(b"1 count = (int) 12")
+            # h/j/k/l must remain literal text inside the command prompt.
+            os.write(master, b":help frames\n")
+            wait_for(b"Frame 0 is the current function")
+            os.write(master, b"8")
+            wait_for(b"KEYBOARD AND COMMAND ENTRY")
+            os.write(master, b"\x1b:p count\n")
+            wait_for(b"count = 12")
+        os.write(master, b"q")
+        deadline = time.monotonic() + 10
+        while process.poll() is None and time.monotonic() < deadline:
+            # Drain redraw output while quitting; a full PTY buffer can block
+            # curses before it has a chance to consume the queued q key.
+            if select.select([master], [], [], 0.1)[0]:
+                try:
+                    output.extend(os.read(master, 65536))
+                except OSError:
+                    break
+        assert process.wait(timeout=2) == 0
+        if no_glyphs:
+            assert all(byte < 128 for byte in output), "--no-glyphs emitted non-ASCII text"
+        sgr = re.findall(rb"\x1b\[([\d;]*)m", output)
+        colors = [code for codes in sgr for code in codes.split(b";")
+                  if code.isdigit() and (30 <= int(code) <= 37 or 40 <= int(code) <= 47)]
+        if no_colors:
+            assert not colors, "--no-colors emitted foreground/background colors"
+        else:
+            assert b"44" in colors, "Selected source row did not have a blue background"
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        os.close(master)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--debugger", required=True)
+    parser.add_argument("--compiler", required=True)
+    parser.add_argument("--source", required=True)
+    options = parser.parse_args()
+    debugger = str(Path(options.debugger).resolve())
+    compiler = str(Path(options.compiler).resolve())
+    source = str(Path(options.source).resolve())
+    assert "MLang terminal debugger" in run([debugger, "--help"])
+    assert "--no-glyphs" in run([debugger, "--help"])
+    assert "mladbg" in run([debugger, "--version"])
+    with tempfile.TemporaryDirectory(prefix="mladbg-test-") as temporary:
+        executable = str(Path(temporary) / "demo")
+        run([compiler, "-g", "-O0", source, "-o", executable])
+
+        def debug(commands, expected=0, program=None):
+            args = [debugger, "--batch"]
+            for command in commands:
+                args.extend(["-ex", command])
+            return run(args + [program or executable], expected)
+
+        output = debug(["b " + source + ":13", "run", "locals", "p count", "bt",
+                        "step", "next", "next", "locals", "finish", "next", "p count",
+                        "registers", "disassemble", "continue"])
+        for expected in ("Breakpoint 1: 1 location(s)", "count = 7", "unsigned_value = 42",
+                         "enabled = true", "ratio = 1.5", "left = 7", "right = 5",
+                         "total = 12", "count = 12", "main", "Process exited with status 0"):
+            assert expected in output, "Missing %r:\n%s" % (expected, output)
+        output = debug(["b add", "run", "next", "locals", "continue"])
+        assert "Breakpoint 1: 1 location(s)" in output, output
+        assert "left = 7" in output and "right = 5" in output, output
+        expression_file = str(Path(temporary)/"watch-expressions.json")
+        output = debug(["display count", "display count + 1000", "display save " + expression_file,
+                        "b " + source + ":13", "run", "display list", "next", "display list",
+                        "p count = 14", "display list", "p count = 12",
+                        "frame 1", "display list", "frame 0", "display list", "continue",
+                        "run", "display list"])
+        for token in ("1 count = (int) 7", "2 count + 1000 = (int) 1007",
+                      "1 count = (int) 12", "1 count = (int) 14", "<unavailable in this frame>"):
+            assert token in output, "Missing persistent expression %r:\n%s" % (token, output)
+        assert output.count("1 count = (int) 7") >= 2, "Expressions did not survive relaunch:\n"+output
+        output = run([debugger, "--batch", "--watch-expressions", expression_file,
+                      "-ex", "b " + source + ":13", "-ex", "run", "-ex", "display list", executable])
+        assert "2 count + 1000 = (int) 1007" in output, output
+        debug(["display count = 9"], expected=1)
+        output = debug(["b " + source + ":13", "run", "asm line",
+                        "patch pc nop", "patch list", "si", "patch undo", "continue"])
+        for token in ("Assembly view: mixed (line)", "// debugger.mla:13",
+                      "Patched 0x", "process memory only", "Restored 0x",
+                      "Process exited with status 0"):
+            assert token in output, "Missing assembly/patch result %r:\n%s" % (token, output)
+        output = debug(["b " + source + ":13", "run", "asm line"])
+        instruction = re.search(r"^=> 0x[0-9a-f]+\s+(?:[0-9a-f]{2} )+\s*(.*?)\s+//", output, re.M)
+        assert instruction, output
+        # Reassemble the actual target instruction (including cross-target
+        # assembler selection), undo it, then execute the original program.
+        output = debug(["b " + source + ":13", "run",
+                        "patch pc " + instruction.group(1), "patch undo", "continue"])
+        assert "Patched 0x" in output and "Restored 0x" in output, output
+        assert "Process exited with status 0" in output, output
+        output = debug(["b add", "run", "asm function"])
+        pc = int(re.search(r"^=> 0x([0-9a-f]+)", output, re.M).group(1), 16)
+        arithmetic = re.search(r"^\s+0x([0-9a-f]+)\s+(?:[0-9a-f]{2} )+\s*(add(?:l|q)?)\s+([^\n]*?)\s+//", output, re.M)
+        assert arithmetic and not re.search(r"\b(?:sp|rsp)\b", arithmetic[3]), output
+        offset = int(arithmetic[1], 16)-pc
+        replacement = arithmetic[2].replace("add", "sub", 1)+" "+arithmetic[3]
+        output = debug(["b add", "run", "patch pc%+d %s" % (offset, replacement),
+                        "asm function", "continue"])
+        assert "Patched 0x" in output and replacement.split()[0] in output, output
+        assert re.search(r"^2$", output, re.M), "Patched addition did not become subtraction:\n"+output
+        debug(["patch pc nop"], expected=1)
+        debug(["b " + source + ":13", "run", "patch pc .byte 0"], expected=1)
+        debug(["b " + source + ":13", "run", "patch-bytes pc 00"], expected=1)
+        output = debug(["b " + source + ":13", "disable 1", "run"])
+        assert "Stopped: breakpoint" not in output, output
+        assert "Process exited with status 0" in output, output
+        output = debug(["help frames", "help execution", "help variables", "help breakpoints",
+                        "help threads", "help memory", "help session", "help keys",
+                        "help lldb frame select"])
+        for token in ("Frame 0 is the current function", "up", "down", "p team.members",
+                      "breakpoint modify", "watchpoint delete", "command history",
+                      "KEYBOARD AND COMMAND ENTRY", "frame select"):
+            assert token.lower() in output.lower(), "Missing help %r:\n%s" % (token, output)
+        debug(["help nonexistent-topic"], expected=1)
+        output = debug(["b " + source + ":13", "run", "watch count", "continue",
+                        "p count", "continue"])
+        assert "watchpoint" in output.lower() and "count = 12" in output, output
+        output = debug(["b " + source + ":9", "run", "watch count == 12", "continue",
+                        "p count", "watchpoint list", "watchpoint delete 1", "continue"])
+        assert "Watchpoint 1: writes to count if count == 12" in output, output
+        assert "Stopped: watchpoint" in output and "count = 12" in output, output
+        assert "count = 7" not in output, "False condition stopped on the initial write:\n"+output
+        output = debug(["b " + source + ":9", "run", "watch count >= 99", "continue"])
+        assert "Stopped: watchpoint" not in output, output
+        assert "Process exited with status 0" in output, output
+        output = debug(["b " + source + ":11", "run", "watch enabled == true", "continue",
+                        "p enabled", "watchpoint delete 1", "continue"])
+        assert "Stopped: watchpoint" in output and "enabled = true" in output, output
+        output = debug(["b " + source + ":9", "run", "watch count if count > 10 && count < 20",
+                        "continue", "p count", "watchpoint delete 1", "continue"])
+        assert "Stopped: watchpoint" in output and "count = 12" in output, output
+        debug(["watch count == 12"], expected=1)
+        debug(["b " + source + ":13", "run", "watch missing == 12"], expected=1)
+        debug(["b " + source + ":13", "run", "watch count if count = 9"], expected=1)
+        debug(["b " + source + ":13", "run", "watch count == unknown_value"], expected=1)
+        debug(["not-a-real-command"], expected=1)
+        run([debugger, executable], expected=2)  # Non-TTY invocation must fail clearly.
+        check_tui(debugger, executable, source)
+        check_tui(debugger, executable, source, no_colors=True, no_glyphs=True)
+        complex_source = Path(__file__).parent / "fixtures" / "mladbg_complex.mla"
+        complex_executable = str(Path(temporary) / "complex")
+        run([compiler, "-g", "-O0", str(complex_source), "-o", complex_executable])
+
+        def marker(name):
+            return next(i for i, line in enumerate(complex_source.read_text().splitlines(), 1)
+                        if name in line)
+
+        output = debug(["b " + str(complex_source) + ":" + str(marker("complex-break")),
+                        "run", "display point.x", "display numbers.data[1]", "display pointer->x",
+                        "display list"], program=complex_executable)
+        for token in ("1 point.x = (int) -3", "2 numbers.data[1] = (unsigned int) 9",
+                      "3 pointer->x = (int) -3"):
+            assert token in output, "Missing watched field %r:\n%s" % (token, output)
+
+        for condition in ("point.x == -3", "shape.weight > 2.0", "numbers.data[1] == 12",
+                          "pointer->x == -3", "color == 255"):
+            output = debug(["b " + str(complex_source) + ":" + str(marker("complex-break")),
+                            "run", "watch " + condition, "watchpoint list"], program=complex_executable)
+            assert "Watchpoint 1: writes to " in output and "if " + condition in output, output
+
+        output = debug(["b " + str(complex_source) + ":" + str(marker("complex-break")),
+                        "b " + str(complex_source) + ":" + str(marker("parameter-break")),
+                        "run", "locals", "p point.x", "p numbers.data[1]",
+                        "p mapping.values[0].x", "p pair._0", "p *pointer",
+                        "p empty.len = -1", "p empty", "p empty.len = 1",
+                        "p empty.data = 0", "p empty", "p empty.len = 0",
+                        "continue", "locals", "continue"], program=complex_executable)
+
+        def block(name):
+            match = re.search(r"^\([^\n]+\) " + re.escape(name) + r" = .*\n(?:  .*\n)*", output, re.M)
+            assert match, "Missing variable %s:\n%s" % (name, output)
+            return match.group()
+
+        for name, tokens in {
+            "point": ["x = -3", "y = 42"],
+            "shape": ["position = {", "visible = true", "selected = false", "weight = 1.5"],
+            "boxed": ["value = {", "x = -3"],
+            "tagged": ["x = -8", "y = 80", "tag = 3"],
+            "numbers": ["len=3", "[1] = 9"],
+            "empty": ["len=0"],
+            "fixed": ["len=3", "[2] = 30"],
+            "points": ["len=2", "x = 5", "y = 99"],
+            "mapping": ['[0].key = "first"', "[0].value = {", "x = -3"],
+            "empty_mapping": ["len=0"],
+            "nested": ["len=1", "len=2", "[1] = 2"],
+            "pair": ["_0 = 12", '_1 = "tuple text"'],
+            "label": ['"hello debugger"'],
+            "wide": ['"wide text"'],
+            "color": ["Blue"],
+            "inferred_numbers": ["len=2", "[1] = 14"],
+            "inferred_mapping": ['[0].key = "second"', "x = 8", "y = 88"],
+            "inferred_pair": ["_0 = 13", '"inferred tuple"'],
+            "many": ["len=18", "[15] = 15", "... 2 more element(s)"],
+        }.items():
+            for token in tokens:
+                assert token in block(name), "Missing %r in %s:\n%s" % (token, name, output)
+        assert "<invalid length -1>" in output, output
+        assert "<unavailable data>" in output, output
+        assert output.count("shape = {") >= 2, output  # Also inspect by-value parameters.
+        assert "Process exited with status 0" in output, output
+        demo_source = Path(source).parent / "debugger_demo.mla"
+        demo_executable = str(Path(temporary) / "debugger-demo")
+        run([compiler, "-g", "-O0", str(demo_source), "-o", demo_executable])
+        demo_line = next(i for i, line in enumerate(demo_source.read_text().splitlines(), 1)
+                         if "demo-break" in line)
+        output = debug(["b " + str(demo_source) + ":" + str(demo_line), "run",
+                        "locals", "p team.members", "p team.ratings", "p tasks",
+                        "p checkpoint", "p summary", "p stage",
+                        "p lead_pointer->position.x", "p team.members.data[1].name",
+                        "bt", "continue"], program=demo_executable)
+        for token in ('name = "Ada"', 'name = "Linus"', "checkpoint = {", "stage = Review",
+                      "members = len=2", "ratings = len=2", '[1].key = "Linus"',
+                      "[1].value = 88", "effort = 16", "Total effort: 16"):
+            assert token in output, "Missing demo value %r:\n%s" % (token, output)
+        stack_line = next(i for i, line in enumerate(demo_source.read_text().splitlines(), 1)
+                          if "stack-break" in line)
+        output = debug(["b " + str(demo_source) + ":" + str(stack_line), "run", "bt",
+                        "frame 0", "locals", "p engineer", "p hours", "p adjusted", "p snapshot",
+                        "frame 1", "locals", "p details", "p requested", "p budget", "p remaining",
+                        "frame 2", "locals", "p team.members", "p cycle", "p policy", "p total",
+                        "frame 3", "locals", "p team.ratings", "p tasks", "p effort", "p stage",
+                        "frame 4", "locals", "p batch_name", "p started_at",
+                        "frame 2", "up", "p effort", "down", "p cycle",
+                        "frame 0", "finish", "next", "p result", "continue"],
+                       program=demo_executable)
+        for index, function in enumerate(("finalize_work", "score_work", "plan_work", "review", "main")):
+            assert re.search(r"frame #%d:.*`%s" % (index, function), output), output
+        for token in ("adjusted = 20", "remaining = 8", "budget = 24", "hours = 16",
+                      "effort = 16", 'batch_name = "Weekly rollout"', "started_at = 9",
+                      "snapshot = {", "details = {", "cycle = {", "policy = {", "result = 16"):
+            assert token in output, "Missing stack value %r:\n%s" % (token, output)
+        assert "Process exited with status 0" in output, output
+        check_tui(debugger, demo_executable, str(demo_source), tree_demo=True)
+    print("mladbg integration checks passed")
+
+
+if __name__ == "__main__":
+    main()

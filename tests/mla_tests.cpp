@@ -5771,6 +5771,141 @@ TEST_F(MLATest, DiagnosticsInImportedModuleNameModuleFile)
     EXPECT_EQ(mainWarnings, 1) << out;
 }
 
+
+// Source for the mlang -g tests; line numbers matter (see the checks).
+static const char* kDebugInfoSource =
+    "struct Point { var x: i32; var y: i32; };\n"          // 1
+    "fn scale(value: i32, factor: i32) -> i32 {\n"         // 2
+    "    let result: i32 = value * factor;\n"              // 3
+    "    return result;\n"                                 // 4
+    "}\n"                                                  // 5
+    "fn main() -> i32 {\n"                                 // 6
+    "    let p: Point = Point { x: 3, y: 4 };\n"           // 7
+    "    var sum: i32 = 0;\n"                              // 8
+    "    for i in 0..3 {\n"                                // 9
+    "        sum = sum + scale(i32(i), p.x);\n"            // 10
+    "    }\n"                                              // 11
+    "    {\n"                                              // 12
+    "        let inner: i32 = sum + p.y;\n"                // 13
+    "        println!(\"{}\", inner);\n"                   // 14
+    "    }\n"                                              // 15
+    "    return 0;\n"                                      // 16
+    "}\n";
+
+static std::string readTextFile(const fs::path& path)
+{
+    std::ifstream input(path);
+    std::stringstream buffer;
+    buffer << input.rdbuf();
+    return buffer.str();
+}
+
+TEST_F(MLATest, DebugInfoDescribesFunctionsLinesAndVariables)
+{
+    writeSource(kDebugInfoSource);
+    const fs::path irFile = fs::path(testDir) / "debug_info.ll";
+    std::string cmd = compilerPath + " -O0 -g -emit-llvm -o " + irFile.string() +
+                      " " + sourceFile + " 2>&1";
+    ASSERT_EQ(system(cmd.c_str()), 0);
+    const std::string ir = readTextFile(irFile);
+    EXPECT_NE(ir.find("!DICompileUnit("), std::string::npos) << ir;
+    EXPECT_NE(ir.find("\"Debug Info Version\""), std::string::npos);
+    EXPECT_NE(ir.find("!DISubprogram(name: \"scale\""), std::string::npos);
+    EXPECT_NE(ir.find("!DISubprogram(name: \"main\""), std::string::npos);
+    // Parameters with their numbers, locals, the loop variable.
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"value\", arg: 1"), std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"factor\", arg: 2"), std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"result\""), std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"sum\""), std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"i\""), std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"inner\""), std::string::npos);
+    // Struct type with its fields.
+    EXPECT_NE(ir.find("name: \"Point\""), std::string::npos);
+    EXPECT_NE(ir.find("!DIDerivedType(tag: DW_TAG_member, name: \"x\""), std::string::npos);
+    EXPECT_NE(ir.find("!DIDerivedType(tag: DW_TAG_member, name: \"y\""), std::string::npos);
+    // Statements at their first token: `let` (after an empty rule in the
+    // grammar), `return`, and the first statement of a nested block.
+    EXPECT_NE(ir.find("!DILocation(line: 3, column: 5"), std::string::npos);
+    EXPECT_NE(ir.find("!DILocation(line: 4, column: 5"), std::string::npos);
+    EXPECT_NE(ir.find("!DILocation(line: 13, column: 9"), std::string::npos);
+    EXPECT_NE(ir.find("!DILexicalBlock("), std::string::npos);
+}
+
+TEST_F(MLATest, DebugInfoOnlyWithFlag)
+{
+    writeSource(kDebugInfoSource);
+    const fs::path irFile = fs::path(testDir) / "no_debug_info.ll";
+    std::string cmd = compilerPath + " -O0 -emit-llvm -o " + irFile.string() +
+                      " " + sourceFile + " 2>&1";
+    ASSERT_EQ(system(cmd.c_str()), 0);
+    const std::string ir = readTextFile(irFile);
+    EXPECT_EQ(ir.find("!DICompileUnit("), std::string::npos);
+    EXPECT_EQ(ir.find("!dbg"), std::string::npos);
+}
+
+TEST_F(MLATest, DebugInfoDescribesComplexContainerAndFieldTypes)
+{
+    const fs::path fixture = fs::path(__FILE__).parent_path() /
+                             "fixtures/mladbg_complex.mla";
+    writeSource(readTextFile(fixture));
+    const fs::path irFile = fs::path(testDir) / "complex_debug_info.ll";
+    const std::string cmd = compilerPath + " -O0 -g -emit-llvm -o " +
+                            irFile.string() + " " + sourceFile + " 2>&1";
+    ASSERT_EQ(system(cmd.c_str()), 0);
+    const std::string ir = readTextFile(irFile);
+    // The emitted types must remain usable after module verification.
+    EXPECT_NE(ir.find("!DICompileUnit("), std::string::npos) << ir;
+    for(const char* name : {"Point", "Shape", "Box_Point", "Tagged",
+                            "list<Point>", "array<i32, 3>", "map<str8, Point>",
+                            "tuple<u32, str8>", "str16"})
+        EXPECT_NE(ir.find(std::string("name: \"") + name + "\""), std::string::npos)
+            << name << "\n" << ir;
+    for(const char* name : {"len", "data", "keys", "values", "_0", "_1"})
+        EXPECT_NE(ir.find(std::string("DW_TAG_member, name: \"") + name + "\""),
+                  std::string::npos) << name;
+    // A u8 enum must retain its unsigned 8-bit backing type, rather than
+    // acquiring the default signed i32 representation during type emission.
+    const auto enumAt = ir.find("DW_TAG_enumeration_type, name: \"Color\"");
+    ASSERT_NE(enumAt, std::string::npos) << ir;
+    EXPECT_NE(ir.substr(enumAt, 200).find("size: 8"), std::string::npos);
+    EXPECT_NE(ir.find("name: \"u8\", size: 8, encoding: DW_ATE_unsigned"), std::string::npos);
+    EXPECT_NE(ir.find("DIFlagBitField"), std::string::npos);
+    // Inferred map literals must carry their named struct element type too.
+    EXPECT_EQ(ir.find("name: \"map<str8, struct>\""), std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"inferred_mapping\""), std::string::npos);
+}
+
+TEST_F(MLATest, DebugInfoProgramRunsTheSame)
+{
+    writeSource(kDebugInfoSource);
+    ASSERT_TRUE(compile(true, "-O0 -g"));
+    EXPECT_EQ(run(), "13\n");  // 0 + 3 + 6, plus p.y
+}
+
+TEST_F(MLATest, DebugInfoNamesImportedModuleFile)
+{
+    {
+        std::ofstream helper(testDir + "/helper.mla");
+        helper << "pub fn helper_value(seed: i32) -> i32 {\n"
+                  "    let doubled: i32 = seed * 2;\n"
+                  "    return doubled;\n"
+                  "}\n";
+    }
+    writeSource("mod helper;\n"
+                "use helper::helper_value;\n"
+                "fn main() -> i32 {\n"
+                "    return helper_value(0);\n"
+                "}\n");
+    const fs::path irFile = fs::path(testDir) / "module_debug_info.ll";
+    std::string cmd = compilerPath + " -O0 -g -emit-llvm -o " + irFile.string() +
+                      " " + sourceFile + " 2>&1";
+    ASSERT_EQ(system(cmd.c_str()), 0);
+    const std::string ir = readTextFile(irFile);
+    EXPECT_NE(ir.find("!DIFile(filename: \"helper.mla\""), std::string::npos) << ir;
+    EXPECT_NE(ir.find("!DISubprogram(name: \"helper_value\""), std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"doubled\""), std::string::npos);
+}
+
 int main(int argc, char** argv)
 {
     ::testing::InitGoogleTest(&argc, argv);

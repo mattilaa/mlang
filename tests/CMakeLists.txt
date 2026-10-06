@@ -39,6 +39,37 @@ endif()
 
 option(BUILD_CPP_GTESTS "Build GoogleTest-based C++ compiler tests" ON)
 
+if(TARGET mlang-config)
+    add_test(NAME mlang_config_debugger_option
+        COMMAND ${CMAKE_COMMAND}
+            -DMLANG_CONFIG=$<TARGET_FILE:mlang-config>
+            -DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/mlang_config_debugger_option
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/mlang_config_debugger_option.cmake)
+    set_tests_properties(mlang_config_debugger_option PROPERTIES LABELS "bootstrap")
+endif()
+
+if(TARGET mladbg)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME mladbg_ui
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/mladbg_ui_test.py)
+        set_tests_properties(mladbg_ui PROPERTIES LABELS "debugger")
+    endif()
+    add_test(NAME mladbg_help COMMAND mladbg --help)
+    set_tests_properties(mladbg_help PROPERTIES LABELS "debugger")
+    # Launching a debuggee requires ptrace/task_for_pid permission. Opt in on
+    # hosts with LLDB Python bindings and process debugging enabled.
+    option(MLADBG_INTEGRATION_TESTS "Run live LLDB/MLang debugger tests" OFF)
+    if(MLADBG_INTEGRATION_TESTS AND Python3_Interpreter_FOUND)
+        add_test(NAME mladbg_integration
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/mladbg_test.py
+                --debugger $<TARGET_FILE:mladbg>
+                --compiler $<TARGET_FILE:mlang>
+                --source ${CMAKE_SOURCE_DIR}/examples/debugger.mla)
+        set_tests_properties(mladbg_integration PROPERTIES LABELS "debugger" TIMEOUT 120)
+    endif()
+endif()
+
 option(MLA_REGISTER_ALL_MLANG_SUITES
        "Register all *_tests.mla/test_*.mla as CTest suites"
        OFF)

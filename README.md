@@ -21,6 +21,7 @@ VST3 plugins) is now developed in its own repository: <https://github.com/mattil
 - [C++ LSP](#c-lsp)
 - [Mlangd (Mlang LSP)](#mlangd-mlang-lsp)
 - [Compiler Frontend (Primary MLang CLI)](#compiler-frontend-primary-mlang-cli)
+- [Debugging With GDB Or LLDB](#debugging-with-gdb-or-lldb)
 - [Inline Assembly](#inline-assembly)
 - [Package Manager (MLang Backend Default)](#package-manager-mlang-backend-default)
 - [Stdlib Linking](#stdlib-linking)
@@ -52,6 +53,294 @@ The self-hosted tools are then produced by feeding their `.mla` sources
 through the seed compiler. The repository also retains C++ utilities such as
 `mlang-config` and the legacy `mlangd` server. The bootstrap manifest in
 `bootstrap/` uses `mlang pkg` to orchestrate the self-hosted build order.
+
+## Debugging With GDB Or LLDB
+
+Build an executable with `-g` (or `--debug-info`) to include DWARF debug info:
+source lines, every function and method, and parameters and local variables
+with their MLang types. When you do not specify an optimization level, MLang
+uses `-Og` for this build, which keeps most variables visible but may hold some
+(loop counters, say) in registers only part of the time; `-g -O0` keeps every
+variable in memory at every line. On macOS the executable gets a `.dSYM` bundle
+next to it.
+
+```rust
+// dbg.mla
+fn scale(value: i32, factor: i32) -> i32 {
+    let result: i32 = value * factor;
+    return result;
+}
+fn total(count: i32) -> i32 {
+    var sum: i32 = 0;
+    for i in 0..count {
+        sum = sum + scale(i32(i), 3);
+    }
+    return sum;
+}
+fn main() -> i32 {
+    println!("total {}", total(4));
+    return 0;
+}
+```
+
+For a terminal UI with source, variables, stack frames, breakpoints, and program
+output, use the bundled LLDB-based debugger (macOS/Linux):
+
+```sh
+mlang -g -O0 main.mla -o app
+mladbg ./app
+```
+
+Use `:` for commands, Tab/Shift-Tab to switch panes, F5 to run/continue,
+F6/F7/F8 to step over/into/out, and F1 or `?` for scrollable help. Press `a`
+to cycle source and assembly views. `:help frames` explains selecting callers
+and inspecting their variables; `:help keys` covers navigation and command history.
+Help topics also cover breakpoints, stepping, threads, memory, and sessions;
+use `0`–`8` or Tab to switch topics and Esc to close help.
+LLDB with matching Python bindings is required.
+
+For a complete demo from the repository root, build
+[examples/debugger_demo.mla](examples/debugger_demo.mla) and stop after its
+review data is initialized:
+
+```sh
+cmake --build build --target mlang mlang_std mladbg
+build/mlang -g -O0 examples/debugger_demo.mla -o build/debugger-demo
+build/mladbg -ex 'b examples/debugger_demo.mla:26' build/debugger-demo
+```
+
+Press F5 to run to the breakpoint. The bordered panes show the current source
+line, locals and arguments, stack frames, breakpoints, and program output.
+The demo includes a `Team` with nested engineers and positions, a list of
+engineers, a map of ratings, a fixed array, a generic `Box<Position>`, packed
+bit fields, a tuple, a pointer, and an enum. Press `:` and enter commands such as:
+
+```text
+p team
+p team.members
+p team.ratings
+p tasks
+p checkpoint
+p summary
+p stage
+p lead_pointer->position.x
+p team.members.data[1].name
+bt
+```
+
+The locals pane is a browsable tree: structs, collections and pointers start
+collapsed. Use Tab/Shift-Tab to focus the next/previous pane, `j`/Down to select
+the next row, `k`/Up to select the previous row, `l`/Right to expand, and
+`h`/Left to collapse a node or return to its parent. Moving with `j`/`k` never
+changes expansions. Shift-J collapses everything; Shift-K restores the previous
+expansions and selection. Expansion state is remembered independently for each
+stack frame. Select a variable or expanded field and press `w` to choose a
+break-on-change, break-on-value, or display action (`j`/`k`, Enter, or `1`–`3`);
+`d` adds it to Watch expressions, and `p` prints its full details.
+
+Press `a` to cycle source, source/assembly split, and assembly-only views.
+Assembly follows the selected stack frame, showing instruction bytes,
+source-line locations and the current PC. Use `:asm line` to limit it to the
+current source line, or `:asm function` for the function (up to 256 instructions).
+Small terminals show assembly alone instead of the split. In the assembly pane,
+`j`/`k` select an instruction, `b` sets an address breakpoint, and `i`/`I`
+step into/over one instruction. `e` opens a prefilled patch command for the
+selected address; enter replacement assembly and press Enter. For example:
+
+```text
+patch pc nop
+patch list
+si
+patch undo
+continue
+```
+
+Live patches require a stopped process and exactly the original instruction's
+size (`nop` fills it with NOPs). They affect process memory only, not the binary
+or source, and never resume execution automatically. `u` in assembly undoes the
+last patch. General assembly uses `clang` (override with `MLADBG_CLANG`), with
+AT&T syntax on x86; labels, directives and unresolved relocations are rejected.
+`:patch-bytes pc HEX` also accepts explicit hex bytes. Bad patches can crash or
+corrupt the program; code-signing or memory protections may refuse writes.
+See `:help memory` for details.
+
+In the other panes, scroll with `j`/`k` (down/up) and `h`/`l` (left/right), or
+the corresponding arrow keys; Page Up/Down scrolls a page.
+The Vim keys apply outside the command prompt, so commands can still contain
+those letters. F6 steps over the print statement, F8 returns to `main`,
+and F5 continues to completion. With installed tools, replace `build/mlang`
+and `build/mladbg` with `mlang` and `mladbg`.
+
+For file completion, type `:b m` and press Tab to open a dropdown of matching
+files and directories, or `:b` then Tab to browse the current directory.
+Use `j`/`k` or Up/Down to select, Enter/Tab to choose a file or enter a directory,
+Left to browse the parent, and Esc to close the dropdown. Choosing a file
+returns to the prompt; append `:LINE` and press Enter to set the breakpoint.
+Completion also supports `file`, `target create`, `command source`, and
+`display load`/`display save`. The dropdown browses directories without a
+recursive scan, includes hidden entries, and caps each listing at 256 matches.
+
+To stop when a variable reaches a state, pause with it in scope, create a
+conditional watchpoint, then continue:
+
+```text
+watch count == 12
+watch enabled == true
+watch point.x >= 10
+watch count if count > 10 && enabled
+continue
+```
+
+`watch count` stops on any write; `watch count = 12` is also accepted as an
+equality condition (it does not assign). Conditions are checked after writes,
+not continuously or immediately when created. Use scalar fields for complex
+objects, e.g. `watch team.members.len > 3`. Watchpoints and conditions appear
+in the Breakpoints pane; manage them with `watchpoint list`,
+`watchpoint disable 1`, `watchpoint enable 1`, and `watchpoint delete 1`.
+Hardware storage/slot limits apply. Conditions use LLDB's C/C++ expression
+syntax, must be read-only, and must remain valid at the write location; remove
+local watchpoints before their storage is reused. See `:help watch`.
+
+Locals shortcuts avoid typing paths: select a variable or expanded field and
+press `w` for a break-on-change/value menu (`j`/`k`, Enter, or `1`–`3` choose an
+action). “Break on value” prefills a condition; enter the target value and press
+Enter. `d` adds the selection to Watch expressions; `p` prints its full details.
+
+Watch expressions are a persistent, read-only value list, not hardware
+watchpoints. Add expressions with `:display count + 1` or `:display team.members.len`.
+Press `v` to toggle the view; tall terminals show it alongside Locals. Values
+refresh on stops, frame/thread changes and debugger commands. Expressions
+survive stepping and process relaunches in the same debugger session; out-of-scope
+entries remain marked unavailable.
+In Watch expressions, `n` adds, `e` edits, `d`/Delete removes, `p` prints, and
+`r` refreshes. Use `j`/`k` or arrows to select; Tab/Shift-Tab changes panes.
+
+```text
+display count
+display count + 1
+display list
+display edit 2 count + 2
+display remove 2
+display save watches.json
+```
+
+Load a saved list using `:display load watches.json` or
+`mladbg --watch-expressions watches.json ./app`. Saving is explicit, refuses
+to overwrite an existing file, and loading replaces the list. Up to 32
+expressions of 512 characters each are supported; assignments and function
+calls are rejected. If no path is supplied, save/load use
+`.mladbg-watches.json` in the current directory. No file is created automatically.
+
+Try it with the small debugger example:
+
+```sh
+build/mlang -g -O0 examples/debugger.mla -o build/watch-demo
+build/mladbg -ex 'b examples/debugger.mla:13' build/watch-demo
+```
+
+Press F5, enter `:watch count == 12`, then `:continue`. Execution stops after
+`add` updates `count` from 7 to 12. Inspect it with `:p count`; remove the watch
+with `:watchpoint delete 1` before continuing to completion.
+
+The TUI colors source keywords, types, strings, and numbers, with a blue
+execution-line and selected-variable background. Unsupported terminals fall
+back to monochrome, or you can explicitly disable colors on startup:
+
+```sh
+build/mladbg --no-colors -ex 'b examples/debugger_demo.mla:26' build/debugger-demo
+```
+
+Panes, help and autocomplete use UTF-8 box-drawing glyphs. For terminals without
+UTF-8 support, launch with `mladbg --no-glyphs ./app` for ASCII borders and
+escaped non-ASCII display text. Non-UTF-8 terminal encodings automatically use
+that fallback. `--no-glyphs` and `--no-colors` can be combined.
+
+The same demo also has a deeper call chain:
+`main → review → plan_work → score_work → finalize_work`. Start a new session
+with a breakpoint in the innermost function, after its locals are initialized:
+
+```sh
+build/mladbg -ex 'b examples/debugger_demo.mla:49' build/debugger-demo
+```
+
+Press F5, then enter `bt` to see all five MLang frames. Frame 0 is
+`finalize_work`, frame 1 is `score_work`, frame 2 is `plan_work`, frame 3 is
+`review`, and frame 4 is `main`. Use `:` to enter each command below:
+
+```text
+frame 0
+locals
+p engineer
+p hours
+p adjusted
+p snapshot
+
+frame 1
+locals
+p details
+p requested
+p budget
+p remaining
+
+frame 2
+locals
+p team.members
+p cycle
+p policy
+p total
+
+frame 3
+locals
+p team.ratings
+p tasks
+p effort
+p stage
+
+frame 4
+locals
+p batch_name
+p started_at
+```
+
+The source and locals panes follow the selected frame, and the stack pane marks
+it with `>`. Selecting a frame changes the inspection context while execution
+stays paused. You can jump back and forth with `frame N`, or move one frame
+with `up` and `down`. Expected values include `adjusted = 20`, `remaining = 8`,
+`budget = 24`, `effort = 16`, and `batch_name = "Weekly rollout"`.
+
+Return to `frame 0`, then press F8 (or enter `finish`) to return from
+`finalize_work` to `score_work`. Press F6 (or enter `next`) to finish assigning
+the return value, then `p result` shows `16`. F5 runs the remaining calls to
+completion. Before a call returns, its caller's `result` or `total` destination
+is not initialized yet; inspect arguments and the earlier locals instead.
+
+You can also use LLDB directly:
+
+```text
+$ mlang -g -o dbg dbg.mla
+$ lldb ./dbg
+(lldb) b dbg.mla:3                  # file:line; `b scale__i32_i32` also works
+(lldb) run
+-> 3        return result;
+(lldb) frame variable
+(int) value = 0
+(int) factor = 3
+(int) result = 0
+(lldb) p value * 10
+(int) 0
+(lldb) bt
+  * frame #0: dbg`scale__i32_i32(value=0, factor=3) at dbg.mla:3:5
+    frame #1: dbg`total__i32(count=4) at dbg.mla:8:9
+    frame #2: dbg`main at dbg.mla:13:5
+(lldb) up                           # total's frame: count, sum, i
+(lldb) next                         # step over, line by line
+```
+
+In GDB the same session is `break dbg.mla:3`, `run`, `info locals`,
+`print value * 10`, `bt`, `up` and `next`. An explicitly supplied optimization
+level is preserved; the existing `--debug` option is separate and enables
+verbose/debug-print behavior. See the [debugging notes](docs/debugging.md) for
+what is described and its limits.
 
 ## Compile-Time Evaluation With `cexpr`
 
@@ -315,6 +604,7 @@ rejected.
 | Binary                | Source                              | Built By           | What It Does                                                                                       | Why It Exists                                                                                                                           |
 | --------------------- | ----------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `mlang`               | `src/*.cpp` + generated lexer/parser sources | CMake              | Compiler driver: lex → parse → IR → LLVM → object/exec. Also routes `mlang test`, `mlang pkg`, etc.| The seed compiler used to build the self-hosted MLang tools.                                                                             |
+| `mladbg`              | `tools/mladbg/`                      | CMake (POSIX)      | LLDB-powered terminal debugger with source, variables, stack, breakpoints, and batch commands. | Source debugging of native MLang programs compiled with `-g`. |
 | `libmlang_std.a`      | `stdlib/src/*.{c,cpp}` plus compiler-runtime sources | CMake | Native runtime backing the MLang modules under `stdlib/std/`.                                     | The runtime MLang programs link against with `-lmlang_std`; the `.mla` module sources are installed separately.                        |
 | `mlang-config`        | `tools/mlang_config.cpp`             | CMake              | Writes the reusable bootstrap and CMake configuration files under the build directory.            | Provides the interactive and non-interactive configuration step used by the root build scripts.                                       |
 | `mlangd`              | `tools/mlang_lsp_cpp/main.cpp` + compiler sources | CMake       | Legacy C++ language server using LSP over stdio.                                                   | Provides the native C++ LSP implementation alongside `mlangd-mla`.                                                                      |
@@ -331,6 +621,7 @@ Running `bootstrap.sh` followed by `build.sh` produces these files under
 
 ```
 build/mlang                  ← seed compiler (CMake)
+build/mladbg                 ← terminal debugger (CMake, macOS/Linux)
 build/libmlang_std.a         ← runtime stdlib (CMake)
 build/mlang-config           ← bootstrap configuration utility (CMake)
 build/mlangd-mla             ← LSP server          (bootstrap, depends on seed)
@@ -393,6 +684,10 @@ What the scripts do:
   `mlang_std`, and `mlang-config`.
 - `mlang-config` writes `build/mlang-config.conf` and
   `build/mlang_config_cache.cmake`.
+- Its Install section includes an **Install mladbg** toggle, enabled by default
+  on macOS/Linux. Use `mlang-config --mladbg off --write` to omit the debugger
+  from subsequent builds and installs, or `--mladbg on` to enable it again.
+  The preference is saved as `install_mladbg` and sets CMake's `BUILD_MLADBG`.
 - `build.sh` / `build.ps1` reconfigure from that cache, rebuild the seed
   compiler/runtime, then explicitly compile:
   `tools/mlangd-mla/main.mla`, `tools/mlang-format-mla/main.mla`,

@@ -14,6 +14,7 @@ ${MLANG}           ${EXECDIR}/build/mlang
 ...    examples/closure_thread.mla
 ...    examples/closures_demo.mla
 ...    examples/debug_test.mla
+...    examples/debugger_demo.mla
 ...    examples/enum_option_match.mla
 ...    examples/ffi_add.mla
 ...    examples/ffi_cos.mla

@@ -168,6 +168,7 @@ struct Config
     std::string jobs;
     bool runUnitTests = false;
     bool runRobotTests = false;
+    bool installMladbg = true;
 };
 
 struct Item
@@ -265,6 +266,8 @@ void load_config(Config& cfg, const fs::path& path)
         cfg.runUnitTests = truthy(kv["run_unit_tests"]);
     if(kv.count("run_robot_tests"))
         cfg.runRobotTests = truthy(kv["run_robot_tests"]);
+    if(kv.count("install_mladbg"))
+        cfg.installMladbg = truthy(kv["install_mladbg"]);
 }
 
 void normalize_config_paths(Config& cfg)
@@ -286,6 +289,7 @@ void save_config(const Config& cfg)
         out << "install_prefix=" << normalized.installPrefix << "\n";
         out << "bin_dir=" << normalized.binDir << "\n";
         out << "jobs=" << normalized.jobs << "\n";
+        out << "install_mladbg=" << (normalized.installMladbg ? "ON" : "OFF") << "\n";
         out << "run_unit_tests=" << (normalized.runUnitTests ? "ON" : "OFF") << "\n";
         out << "run_robot_tests=" << (normalized.runRobotTests ? "ON" : "OFF")
             << "\n";
@@ -296,6 +300,8 @@ void save_config(const Config& cfg)
         out << "set(CMAKE_BUILD_TYPE \"" << normalized.buildType
             << "\" CACHE STRING \"\" FORCE)\n";
         out << "set(BUILD_TESTS " << (normalized.runUnitTests ? "ON" : "OFF")
+            << " CACHE BOOL \"\" FORCE)\n";
+        out << "set(BUILD_MLADBG " << (normalized.installMladbg ? "ON" : "OFF")
             << " CACHE BOOL \"\" FORCE)\n";
         out << "set(CMAKE_INSTALL_PREFIX \"" << normalized.installPrefix
             << "\" CACHE PATH \"\" FORCE)\n";
@@ -492,7 +498,14 @@ std::vector<Section> make_sections()
            &Config::binDir,
            {},
            "Directory where mlang, mlangd-mla, mlang-format, and related "
-           "tool binaries are copied."}}},
+           "tool binaries are copied."},
+          {ItemKind::Toggle,
+           "Install mladbg",
+           &Config::installMladbg,
+           nullptr,
+           {},
+           "Build and install the MLang terminal debugger on macOS/Linux. "
+           "Enabled by default. Running it requires LLDB Python bindings."}}},
         {"Tests",
          "Test tasks are opt-in. Unit tests and Robot tests stay off unless "
          "you enable them here.",
@@ -915,6 +928,7 @@ void print_summary(const Config& cfg)
     std::cout << "  install prefix  " << cfg.installPrefix << "\n";
     std::cout << "  bin dir         " << cfg.binDir << "\n";
     std::cout << "  jobs            " << cfg.jobs << "\n";
+    std::cout << "  install mladbg  " << (cfg.installMladbg ? "ON" : "OFF") << "\n";
     std::cout << "  unit tests      " << (cfg.runUnitTests ? "ON" : "OFF")
               << "\n";
     std::cout << "  Robot tests     " << (cfg.runRobotTests ? "ON" : "OFF")
@@ -954,6 +968,7 @@ void run_menu(Config& cfg)
             std::cout << "  5. Edit parallel jobs\n";
             std::cout << "  6. Toggle unit tests\n";
             std::cout << "  7. Toggle Robot tests\n";
+            std::cout << "  8. Toggle mladbg installation (macOS/Linux)\n";
             std::cout << "  s. Save and exit\n";
             std::cout << "  q. Quit without saving\n";
             std::cout << "> ";
@@ -974,6 +989,8 @@ void run_menu(Config& cfg)
                 cfg.runUnitTests = !cfg.runUnitTests;
             else if(choice == "7")
                 cfg.runRobotTests = !cfg.runRobotTests;
+            else if(choice == "8")
+                cfg.installMladbg = !cfg.installMladbg;
             else if(choice == "s" || choice == "S")
             {
                 save_config(cfg);
@@ -1113,6 +1130,7 @@ void print_help(const char* argv0)
               << "  --install-prefix DIR  Install prefix, default ~/.local\n"
               << "  --bin-dir DIR         Binary install directory, default ~/.local/bin\n"
               << "  --jobs N              Parallel build jobs\n"
+              << "  --mladbg on|off       Build/install debugger on macOS/Linux, default on\n"
               << "  --unit-tests on|off   Save unit-test preference, default off\n"
               << "  --robot-tests on|off  Save Robot-test preference, default off\n"
               << "  --write               Write config without opening the menu\n"
@@ -1159,6 +1177,8 @@ int main(int argc, char** argv)
             cfg.runUnitTests = truthy(needValue(arg));
         else if(arg == "--robot-tests")
             cfg.runRobotTests = truthy(needValue(arg));
+        else if(arg == "--mladbg")
+            cfg.installMladbg = truthy(needValue(arg));
         else if(arg == "--import")
             importPath = needValue(arg);
         else if(arg == "--write")
@@ -1198,6 +1218,8 @@ int main(int argc, char** argv)
             cfg.runUnitTests = truthy(needValue(arg));
         else if(arg == "--robot-tests")
             cfg.runRobotTests = truthy(needValue(arg));
+        else if(arg == "--mladbg")
+            cfg.installMladbg = truthy(needValue(arg));
         else if(arg == "--import")
             (void)needValue(arg);
     }
