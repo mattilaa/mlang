@@ -160,6 +160,20 @@ def main():
         assert "<unavailable data>" in output, output
         assert output.count("shape = {") >= 2, output  # Also inspect by-value parameters.
         assert "Process exited with status 0" in output, output
+        demo_source = Path(source).parent / "debugger_demo.mla"
+        demo_executable = str(Path(temporary) / "debugger-demo")
+        run([compiler, "-g", "-O0", str(demo_source), "-o", demo_executable])
+        demo_line = next(i for i, line in enumerate(demo_source.read_text().splitlines(), 1)
+                         if "demo-break" in line)
+        output = debug(["b " + str(demo_source) + ":" + str(demo_line), "run",
+                        "locals", "p team.members", "p team.ratings", "p tasks",
+                        "p checkpoint", "p summary", "p stage",
+                        "p lead_pointer->position.x", "p team.members.data[1].name",
+                        "bt", "continue"], program=demo_executable)
+        for token in ('name = "Ada"', 'name = "Linus"', "checkpoint = {", "stage = Review",
+                      "members = len=2", "ratings = len=2", '[1].key = "Linus"',
+                      "[1].value = 88", "effort = 16", "Total effort: 16"):
+            assert token in output, "Missing demo value %r:\n%s" % (token, output)
     print("mladbg integration checks passed")
 
 

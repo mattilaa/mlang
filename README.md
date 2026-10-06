@@ -94,6 +94,40 @@ mladbg ./app
 Use `:` for commands, F5 to run/continue, F6/F7/F8 to step over/into/out, and
 `help` for the command list. LLDB with matching Python bindings is required.
 
+For a complete demo from the repository root, build
+[examples/debugger_demo.mla](examples/debugger_demo.mla) and stop after its
+review data is initialized:
+
+```sh
+cmake --build build --target mlang mlang_std mladbg
+build/mlang -g -O0 examples/debugger_demo.mla -o build/debugger-demo
+build/mladbg -ex 'b examples/debugger_demo.mla:26' build/debugger-demo
+```
+
+Press F5 to run to the breakpoint. The bordered panes show the current source
+line, locals and arguments, stack frames, breakpoints, and program output.
+The demo includes a `Team` with nested engineers and positions, a list of
+engineers, a map of ratings, a fixed array, a generic `Box<Position>`, packed
+bit fields, a tuple, a pointer, and an enum. Press `:` and enter commands such as:
+
+```text
+p team
+p team.members
+p team.ratings
+p tasks
+p checkpoint
+p summary
+p stage
+p lead_pointer->position.x
+p team.members.data[1].name
+bt
+```
+
+Use Tab to focus the locals pane and arrows or Page Up/Down to scroll through
+expanded structures. F6 steps over the print statement, F8 returns to `main`,
+and F5 continues to completion. With installed tools, replace `build/mlang`
+and `build/mladbg` with `mlang` and `mladbg`.
+
 You can also use LLDB directly:
 
 ```text

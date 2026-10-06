@@ -1,0 +1,48 @@
+// Build: build/mlang -g -O0 examples/debugger_demo.mla -o build/debugger-demo
+// Debug: build/mladbg -ex 'b review' build/debugger-demo
+struct Position { var x: f64; var y: f64; };
+struct Engineer {
+    var name: str8;
+    var position: Position;
+    var active: bit;
+    var reviewer: bit;
+};
+struct Team {
+    var lead: Engineer;
+    var members: list<Engineer>;
+    var ratings: map<str8, i32>;
+};
+struct Box<T> { var value: T; };
+enum Stage : u8 { Planning = 1, Review = 2, Done = 3 };
+
+fn review(team: Team, tasks: array<i32, 3>, stage: Stage) -> i32 {
+    let checkpoint: Box<Position> = Box<Position> { value: team.lead.position };
+    let summary: tuple<str8, u32> = ("Open tasks", 3);
+    let lead_pointer: ptr<Engineer> = &team.lead;
+    var effort: i32 = 0;
+    for i in 0..3 {
+        effort = effort + tasks[i];
+    }
+    println!("Review for {}: {} hours", team.lead.name, effort); // demo-break
+    return effort;
+}
+
+fn main() -> i32 {
+    let lead: Engineer = Engineer {
+        name: "Ada", position: Position { x: 1.5, y: -2.0 }, active: true, reviewer: true
+    };
+    let colleague: Engineer = Engineer {
+        name: "Linus", position: Position { x: 4.0, y: 3.5 }, active: true, reviewer: false
+    };
+    let team: Team = Team {
+        lead: lead,
+        members: [Engineer {
+            name: "Ada", position: Position { x: 1.5, y: -2.0 }, active: true, reviewer: true
+        }, colleague],
+        ratings: {"Ada": 95, "Linus": 88}
+    };
+    let tasks: array<i32, 3> = {3, 5, 8};
+    let total: i32 = review(team, tasks, Stage::Review);
+    println!("Total effort: {}", total);
+    return 0;
+}
