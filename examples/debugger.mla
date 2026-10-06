@@ -1,0 +1,16 @@
+// Build: mlang -g -O0 examples/debugger.mla -o debugger-demo
+// Debug: mladbg ./debugger-demo
+fn add(left: i32, right: i32) -> i32 {
+    let total: i32 = left + right;
+    return total;
+}
+
+fn main() -> i32 {
+    var count: i32 = 7;
+    let unsigned_value: u32 = 42;
+    let enabled: bool = true;
+    let ratio: f64 = 1.5;
+    count = add(count, 5);
+    println!(count);
+    return 0;
+}

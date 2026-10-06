@@ -63,7 +63,18 @@ When you do not specify an optimization level, MLang uses `-Og` for this build:
 mlang -g main.mla -o app
 ```
 
-Launch the result in GDB or LLDB, set a breakpoint, and run it:
+For a terminal UI with source, variables, stack frames, breakpoints, and program
+output, use the bundled LLDB-based debugger (macOS/Linux):
+
+```sh
+mlang -g -O0 main.mla -o app
+mladbg ./app
+```
+
+Use `:` for commands, F5 to run/continue, F6/F7/F8 to step over/into/out, and
+`help` for the command list. LLDB with matching Python bindings is required.
+
+To use GDB directly:
 
 ```sh
 gdb ./app
@@ -92,7 +103,7 @@ bt
 An explicitly supplied optimization level is preserved, for example
 `mlang -g -O0 main.mla -o app`. `--debug-info` is an alias for `-g`; the
 existing `--debug` option is separate and enables verbose/debug-print behavior.
-Local-variable inspection is not yet emitted in DWARF. See the
+Scalar local variables and parameters are emitted in DWARF. See the
 [debugging notes](docs/debugging.md) for details.
 
 ## Compile-Time Evaluation With `cexpr`
@@ -357,6 +368,7 @@ rejected.
 | Binary                | Source                              | Built By           | What It Does                                                                                       | Why It Exists                                                                                                                           |
 | --------------------- | ----------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `mlang`               | `src/*.cpp` + generated lexer/parser sources | CMake              | Compiler driver: lex → parse → IR → LLVM → object/exec. Also routes `mlang test`, `mlang pkg`, etc.| The seed compiler used to build the self-hosted MLang tools.                                                                             |
+| `mladbg`              | `tools/mladbg/`                      | CMake (POSIX)      | LLDB-powered terminal debugger with source, variables, stack, breakpoints, and batch commands. | Source debugging of native MLang programs compiled with `-g`. |
 | `libmlang_std.a`      | `stdlib/src/*.{c,cpp}` plus compiler-runtime sources | CMake | Native runtime backing the MLang modules under `stdlib/std/`.                                     | The runtime MLang programs link against with `-lmlang_std`; the `.mla` module sources are installed separately.                        |
 | `mlang-config`        | `tools/mlang_config.cpp`             | CMake              | Writes the reusable bootstrap and CMake configuration files under the build directory.            | Provides the interactive and non-interactive configuration step used by the root build scripts.                                       |
 | `mlangd`              | `tools/mlang_lsp_cpp/main.cpp` + compiler sources | CMake       | Legacy C++ language server using LSP over stdio.                                                   | Provides the native C++ LSP implementation alongside `mlangd-mla`.                                                                      |
@@ -373,6 +385,7 @@ Running `bootstrap.sh` followed by `build.sh` produces these files under
 
 ```
 build/mlang                  ← seed compiler (CMake)
+build/mladbg                 ← terminal debugger (CMake, macOS/Linux)
 build/libmlang_std.a         ← runtime stdlib (CMake)
 build/mlang-config           ← bootstrap configuration utility (CMake)
 build/mlangd-mla             ← LSP server          (bootstrap, depends on seed)

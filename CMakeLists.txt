@@ -129,6 +129,19 @@ unset(_mlang_expanded_install_prefix)
 
 include(GNUInstallDirs)
 
+option(BUILD_MLADBG "Build the LLDB-powered MLang terminal debugger (POSIX)" ON)
+if(BUILD_MLADBG AND UNIX)
+    add_executable(mladbg tools/mladbg/main.cpp)
+    target_compile_features(mladbg PRIVATE cxx_std_17)
+    target_compile_definitions(mladbg PRIVATE
+        MLANG_DEBUGGER_SOURCE="${CMAKE_SOURCE_DIR}/tools/mladbg/mladbg.py"
+        MLANG_DEBUGGER_DATA_DIR="${CMAKE_INSTALL_DATADIR}/mlang/debugger")
+    install(TARGETS mladbg RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT mlang-core)
+    install(FILES tools/mladbg/mladbg.py
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/mlang/debugger COMPONENT mlang-core)
+endif()
+
 add_executable(mlang-config tools/mlang_config.cpp)
 target_compile_features(mlang-config PRIVATE cxx_std_17)
 target_compile_definitions(mlang-config PRIVATE
@@ -346,6 +359,10 @@ target_compile_definitions(mlang PRIVATE MLANG_VERSION="${PROJECT_VERSION}")
 
 # Add dependencies to ensure Flex and Bison run before building the executable
 add_dependencies(mlang ParserTarget LexerTarget)
+if(TARGET mladbg)
+    # Root build/bootstrap scripts explicitly build mlang rather than "all".
+    add_dependencies(mlang mladbg)
+endif()
 
 target_include_directories(mlang PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(mlang PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
