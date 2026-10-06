@@ -111,7 +111,8 @@ Inside help, `0`–`8` or Tab select a topic, Vim/arrow/Page keys scroll, and
 Esc/F1/`?`/`q` return to the debugger. Opening help does not pause execution.
 `help lldb COMMAND` prints native command details to the console.
 
-While entering `b`/`break`, `file`, `target create`, or `command source`, Tab
+While entering `b`/`break`, `file`, `target create`, `command source`, or
+`display load`/`display save`, Tab
 opens a file dropdown. `:b m` filters names starting with `m`; bare `:b` lists
 the current working directory. Listings include directories and hidden files;
 choose directories to browse paths beneath them, without a recursive scan.
@@ -186,6 +187,65 @@ condition must be resolvable in the frame where the write happens; a condition
 error is reported by LLDB and can stop execution rather than silently skip it.
 No software polling or pre-launch variable watches are implemented.
 See `:help watch` and the [LLDB watchpoint reference](https://lldb.llvm.org/use/map.html#watchpoint-commands).
+
+### Locals actions and persistent watch expressions
+
+Select a Locals row and press `w` to open its action menu. `j`/`k` or Up/Down
+select; Enter/Tab chooses, `1`–`3` chooses directly, and Esc closes it.
+“Break on change” creates an unconditional hardware watchpoint. “Break on
+value” prefills `watch PATH == `: enter a value and press Enter to create the
+conditional watch. “Add watch expression” keeps the value visible without
+stopping on writes. `d` directly adds the selection; `p` prints full details.
+Nested struct fields, pointer fields and list/map/array backing elements use
+their actual expression paths, not the tree's display labels. Unavailable and
+truncation rows have no expression. Storage/type limits still apply to watches.
+
+Watch expressions use `display`, independently of `watch` hardware watchpoints:
+
+```text
+display count
+display count + 1
+display team.members.len
+display pointer->position.x
+display list
+display edit 2 count + 10
+display remove 2
+display clear
+```
+
+`display` alone lists values. Entries have stable, separate expression IDs.
+`v` toggles Locals/Watch expressions; tall layouts split the right-hand area
+to show both. Tab/Shift-Tab cycles the visible panes. In Watch expressions,
+`j`/`k`, arrows or Page Up/Down select; `n` prefills an add command, `e` prefills
+an edit, `d`/Delete removes, `p` prints full details, and `r` forces refresh.
+Enter confirms edits and Esc cancels them.
+
+The list persists across stops, frame/thread selections and process relaunches.
+Values are cached between stops, updated after debugger commands, and never
+evaluated while running. Out-of-scope entries stay listed as unavailable and
+recover when their frame is selected again. Complex values use compact field
+count/length summaries; use `p` or the Locals tree for details. Expressions use
+C/C++ syntax, with assignments, statements and function calls rejected, and
+inferior JIT execution disabled. Evaluation is bounded to keep the UI responsive;
+budget-limited entries indicate that they were not evaluated. Up to 32 expressions
+of 512 characters each are supported.
+
+Saving across debugger sessions is explicit:
+
+```text
+display save watches.json
+display load watches.json
+```
+
+Save refuses to overwrite an existing file. Load validates a versioned JSON
+file and replaces the list only if valid. A filename can be omitted to use
+`.mladbg-watches.json`; no automatic file is written. To restore on startup:
+
+```sh
+mladbg --watch-expressions watches.json ./app
+```
+
+Saved files contain expressions only, not captured values or hardware watchpoints.
 
 Prefer `-g -O0` when inspecting variables. Scalar locals, parameters, structs,
 strings, pointers, enums, and lists have DWARF descriptions; see the type

@@ -196,6 +196,34 @@ Hardware storage/slot limits apply. Conditions use LLDB's C/C++ expression
 syntax, must be read-only, and must remain valid at the write location; remove
 local watchpoints before their storage is reused. See `:help watch`.
 
+Locals shortcuts avoid typing paths: select a variable or expanded field and
+press `w` for a break-on-change/value menu (`j`/`k`, Enter, or `1`–`3` choose an
+action). “Break on value” prefills a condition; enter the target value and press
+Enter. `d` adds the selection to Watch expressions; `p` prints its full details.
+
+Watch expressions are a persistent, read-only value list, not hardware
+watchpoints. Add expressions with `:display count + 1` or `:display team.members.len`.
+Press `v` to toggle the view; tall terminals show it alongside Locals. Values
+refresh on stops, frame/thread changes and debugger commands. Expressions
+survive stepping and relaunching; out-of-scope entries remain marked unavailable.
+In Watch expressions, `n` adds, `e` edits, `d`/Delete removes, `p` prints, and
+`r` refreshes. Use `j`/`k` or arrows to select; Tab/Shift-Tab changes panes.
+
+```text
+display count
+display count + 1
+display list
+display edit 2 count + 2
+display remove 2
+display save watches.json
+```
+
+Load a saved list using `:display load watches.json` or
+`mladbg --watch-expressions watches.json ./app`. Saving is explicit, refuses
+to overwrite an existing file, and loading replaces the list. Up to 32
+expressions of 512 characters each are supported; assignments and function
+calls are rejected. No watch-expression settings file is created automatically.
+
 Try it with the small debugger example:
 
 ```sh
