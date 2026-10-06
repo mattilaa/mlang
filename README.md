@@ -128,8 +128,9 @@ bt
 ```
 
 The locals pane is a browsable tree: structs, collections and pointers start
-collapsed. Use Tab to focus it, `j`/Down to select the next row, `k`/Up to
-select the previous row, `l`/Right to expand, and `h`/Left to collapse a node
+collapsed. Use Tab/Shift-Tab to focus the next/previous pane, `j`/Down to select
+the next row, `k`/Up to select the previous row, `l`/Right to expand, and
+`h`/Left to collapse a node
 or return to its parent. Moving with `j`/`k` never changes expansions. Shift-J
 collapses everything; Shift-K restores the previous expansions and selection.
 Expansion state is remembered independently for each stack frame.
