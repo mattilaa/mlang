@@ -4,9 +4,10 @@ import sys
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
+import tempfile
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools" / "mladbg"))
-from ui import Theme, VariableTree, token_spans
+from ui import Theme, VariableTree, FileCompletion, token_spans
 from mladbg import assemble_instruction
 
 
@@ -29,6 +30,61 @@ class AssemblyTests(unittest.TestCase):
         run.return_value.stdout = "mov # encoding: [0x20,0x01,0x80,0xd2]"
         self.assertEqual(assemble_instruction("mov x0, #9", "arm64-apple-macosx", 4),
                          bytes.fromhex("200180d2"))
+
+
+class CompletionTests(unittest.TestCase):
+    def test_prefix_browsing_and_parent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"modules").mkdir()
+            (root/"modules"/"main.txt").touch()
+            (root/"main.txt").touch()
+            (root/"other.txt").touch()
+            completion = FileCompletion("b m", directory)
+            self.assertEqual(completion.choices, [("modules/", True), ("main.txt", False)])
+            completion.move(1)
+            self.assertEqual(completion.accept(), "b main.txt")
+            completion.move(-1)
+            self.assertIsNone(completion.accept())
+            self.assertEqual(completion.accept(), "b modules/main.txt")
+            completion.parent()
+            self.assertEqual(completion.fragment, "")
+            self.assertEqual(len(completion.choices), 3)
+            self.assertEqual(FileCompletion("b", directory).choices, completion.choices)
+
+    def test_spaces_line_suffix_and_empty_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory)/"my file.txt").touch()
+            completion = FileCompletion('break "my":12', directory)
+            self.assertEqual(completion.accept(), "break my file.txt:12")
+            self.assertEqual(FileCompletion("file my", directory).accept(), "file 'my file.txt'")
+            empty = FileCompletion("b missing/", directory)
+            empty.move(100)
+            self.assertIsNone(empty.accept())
+            self.assertIn("Cannot browse", empty.message)
+            self.assertIsNone(FileCompletion("p count", directory).accept())
+
+    def test_listing_is_bounded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for i in range(300):
+                (Path(directory)/("item%03d.txt" % i)).touch()
+            completion = FileCompletion("b", directory)
+            self.assertEqual(len(completion.choices), 256)
+            self.assertIn("limited", completion.message)
+
+    def test_empty_directory_and_navigation_bounds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory)/"empty").mkdir()
+            completion = FileCompletion("b em", directory)
+            completion.move(100)
+            self.assertEqual(completion.cursor, 0)
+            self.assertIsNone(completion.accept())
+            self.assertEqual(completion.fragment, "empty/")
+            self.assertIn("No matching files", completion.message)
+            completion.move(-100)
+            self.assertEqual(completion.cursor, 0)
+            completion.parent()
+            self.assertEqual(completion.choices, [("empty/", True)])
 
 
 class FakeType:

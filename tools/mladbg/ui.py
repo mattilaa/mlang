@@ -2,6 +2,95 @@
 from collections import OrderedDict
 from dataclasses import dataclass, field
 import re
+import os
+import shlex
+import time
+
+
+class FileCompletion:
+    """Bounded directory browsing, without recursively walking project trees."""
+    def __init__(self, command, cwd=None):
+        self.cwd = cwd or os.getcwd()
+        self.prefix = ""
+        self.fragment = ""
+        self.suffix = ""
+        self.choices = []
+        self.cursor = 0
+        self.message = ""
+        self.breakpoint = False
+        match = re.fullmatch(r"(b|break|file|target\s+create|command\s+source)(?:\s+(.*))?", command)
+        if not match:
+            self.message = "File completion: b, break, file, target create, command source"
+            return
+        self.prefix = match[1]+" "
+        self.breakpoint = match[1] in ("b", "break")
+        self.fragment = (match[2] or "").strip().strip("\"'")
+        if self.breakpoint:
+            line = re.search(r":\d*$", self.fragment)
+            if line:
+                self.fragment, self.suffix = self.fragment[:line.start()], line.group()
+                self.fragment = self.fragment.strip("\"'")
+        self.refresh()
+
+    def refresh(self):
+        self.cursor = 0
+        self.choices = []
+        directory, partial = os.path.split(self.fragment)
+        base = os.path.expanduser(directory or ".")
+        if not os.path.isabs(base):
+            base = os.path.join(self.cwd, base)
+        self.message = "No matching files"
+        deadline = time.monotonic()+0.1
+        limited = False
+        try:
+            with os.scandir(base) as entries:
+                for i, entry in enumerate(entries):
+                    if i >= 4096 or time.monotonic() > deadline:
+                        limited = True
+                        break
+                    if not entry.name.startswith(partial):
+                        continue
+                    try:
+                        directory_entry = entry.is_dir(follow_symlinks=True)
+                    except OSError:
+                        directory_entry = False
+                    path = os.path.join(directory, entry.name)
+                    self.choices.append((path+"/" if directory_entry else path, directory_entry))
+            self.choices.sort(key=lambda entry: (not entry[1], entry[0].casefold(), entry[0]))
+            if len(self.choices) > 256:
+                limited = True
+                self.choices = self.choices[:256]
+            if self.choices:
+                self.message = "%d matches%s" % (len(self.choices), " (limited; type a longer prefix)" if limited else "")
+            elif limited:
+                self.message = "No matches in bounded scan (listing incomplete)"
+        except OSError as error:
+            self.message = "Cannot browse: " + str(error)
+
+    def move(self, delta):
+        self.cursor = max(0, min(max(0, len(self.choices)-1), self.cursor+delta))
+
+    def accept(self):
+        """Return a completed command; directories instead reopen their children."""
+        if not self.choices:
+            return None
+        path, directory = self.choices[self.cursor]
+        if directory:
+            self.fragment = path
+            self.refresh()
+            return None
+        path += self.suffix
+        path = os.path.expanduser(path)
+        # b treats its entire argument as a path; other LLDB commands tokenize.
+        return self.prefix+(path if self.breakpoint else shlex.quote(path))
+
+    def parent(self):
+        directory = os.path.dirname(self.fragment)
+        if directory.startswith("~"):
+            directory = os.path.expanduser(directory)
+        parent = os.path.normpath(os.path.join(directory or ".", ".."))
+        self.fragment = "" if parent == "." else parent.rstrip("/")+"/"
+        self.refresh()
 
 
 KEYWORDS = set("fn let var struct enum impl trait pub mod use return if else for while loop "

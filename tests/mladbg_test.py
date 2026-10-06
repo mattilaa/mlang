@@ -29,7 +29,8 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False):
                  if "stack-break" in text) if tree_demo else 13)
     args = [debugger] + (["--no-colors"] if no_colors else [])
     process = subprocess.Popen(args + ["-ex", "b " + source + ":" + str(line), executable],
-                               stdin=slave, stdout=slave, stderr=slave, env=env)
+                               stdin=slave, stdout=slave, stderr=slave, env=env,
+                               cwd=Path(__file__).resolve().parents[1])
     os.close(slave)
     output = bytearray()
 
@@ -48,6 +49,13 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False):
     try:
         wait_for(b"Console / program output")
         wait_for(b"Ready")
+        # Bare :b lists cwd; j/k and arrows browse without editing the prompt.
+        os.write(master, b":b\t")
+        wait_for(b"Files | ./")
+        os.write(master, b"jk\x1bOB\x1bOA\x1b\x1b:b examples/debugger.ml\t")
+        wait_for(b"examples/debugger.mla")
+        os.write(master, b"\n:13\n")  # Accept the file, then add a line and execute.
+        wait_for(b"Breakpoint 2:")
         assert b"\x1b(0" in output or "┌".encode() in output, "Pane borders were not drawn"
         os.write(master, b"\x1bOP")  # F1 in xterm-256color.
         wait_for(b"MLADBG HELP")
@@ -75,7 +83,7 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False):
             os.write(master, b"a")
             wait_for(b"Assembly | function")
             os.write(master, b"b")
-            wait_for(b"Breakpoint 2:")
+            wait_for(b"Breakpoint 3:")
             os.write(master, b"jke")
             wait_for(b"(mladbg) patch 0x")
             os.write(master, b"\x1b:asm line\n")

@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 import subprocess
 import sys
-from ui import Theme, VariableTree, token_spans
+from ui import Theme, VariableTree, FileCompletion, token_spans
 
 
 def load_lldb():
@@ -259,6 +259,11 @@ Inside command entry (command history uses Up/Down):
   Enter            execute the command
   Esc              cancel it
   Up / Down        recall previous / next command
+  Tab              open file completion (b/break, file, target create,
+                   command source); :b then Tab lists the current directory
+  In completion    j/k or Up/Down select; Enter/Tab accepts a file or
+                   browses a directory; Left browses the parent; Esc closes
+                   without cancelling the command. Enter again executes.
   Backspace        delete the last character
   h/j/k/l          type normal letters
 
@@ -752,6 +757,7 @@ def tui(screen, session, use_colors=True):
     screen.keypad(True)
     command = ""
     editing = False
+    completion = None
     focus = 0
     offsets = [0] * 7
     horizontal_offsets = [0] * 7
@@ -943,13 +949,63 @@ def tui(screen, session, use_colors=True):
                      if focus == 1 else "j/k: select | e: edit | b: break | i/I: step | u: undo | a: view"
                      if focus == 6 else "Tab: pane | hjkl/arrows: scroll | a: asm | F1/? help")
             put(height-1, 0, hints, width, curses.A_DIM)
+        if completion is not None and editing and height >= 8 and width >= 30:
+            visible_rows = min(8, height-6, max(1, len(completion.choices)))
+            popup_height = visible_rows+3
+            popup_width = min(width-2, max(36, min(78, max(
+                (len(path)+6 for path, _ in completion.choices), default=36))))
+            x = min(8+len(completion.prefix), width-popup_width-1)
+            y = height-2-popup_height
+            for row in range(popup_height):
+                put(y+row, x, " "*popup_width, popup_width)
+            edge = "+"+"-"*(popup_width-2)+"+"
+            put(y, x, edge, popup_width, focus_attr)
+            put(y, x+2, " Files | "+(completion.fragment or "./")+" ", popup_width-4, focus_attr)
+            start = max(0, completion.cursor-visible_rows+1)
+            for row in range(visible_rows):
+                put(y+row+1, x, "|"+" "*(popup_width-2)+"|", popup_width, focus_attr)
+                i = start+row
+                if i < len(completion.choices):
+                    path, directory = completion.choices[i]
+                    selected = i == completion.cursor
+                    put(y+row+1, x+2, (("> " if selected else "  ")+path).ljust(popup_width-4),
+                        popup_width-4, theme.attr("type" if directory else "text", selected))
+            put(y+popup_height-2, x, "|"+" "*(popup_width-2)+"|", popup_width, focus_attr)
+            put(y+popup_height-2, x+2, completion.message, popup_width-4)
+            put(y+popup_height-1, x, edge, popup_width, focus_attr)
+            put(height-1, 0, "j/k/arrows: select | Enter/Tab: choose | Left: parent | Esc: close".ljust(width),
+                width, curses.A_DIM)
         screen.refresh()
         try:
             key = screen.get_wch()
         except curses.error:
             continue
         if key == "\x03":
+            completion = None
             session.command("interrupt")
+        elif completion is not None and editing:
+            if key == "\x1b":
+                completion = None
+            elif key in ("j", "k", curses.KEY_UP, curses.KEY_DOWN, curses.KEY_PPAGE, curses.KEY_NPAGE):
+                completion.move({"j": 1, "k": -1, curses.KEY_UP: -1, curses.KEY_DOWN: 1,
+                                 curses.KEY_PPAGE: -8, curses.KEY_NPAGE: 8}[key])
+            elif key in ("\t", "\n", "\r", curses.KEY_ENTER, curses.KEY_RIGHT):
+                had_choices = bool(completion.choices)
+                completed = completion.accept()
+                if completed is not None:
+                    command = completed
+                    completion = None
+                elif had_choices:
+                    command = completion.prefix+completion.fragment+completion.suffix
+            elif key == curses.KEY_LEFT:
+                completion.parent()
+                command = completion.prefix+completion.fragment+completion.suffix
+            elif key in (curses.KEY_BACKSPACE, "\x7f", "\b"):
+                command = command[:-1]
+                completion = FileCompletion(command)
+            elif isinstance(key, str) and key.isprintable():
+                command += key
+                completion = FileCompletion(command)
         elif help_topic is not None:
             if key in ("\x1b", "q", "?", curses.KEY_F1):
                 help_topic = None
@@ -969,7 +1025,11 @@ def tui(screen, session, use_colors=True):
             help_topic = "overview"
             offsets[5] = horizontal_offsets[5] = 0
         elif editing:
-            if key in ("\n", "\r", curses.KEY_ENTER):
+            if key == "\t":
+                completion = FileCompletion(command)
+                if completion.prefix:
+                    command = completion.prefix+completion.fragment+completion.suffix
+            elif key in ("\n", "\r", curses.KEY_ENTER):
                 if command:
                     history.append(command)
                     session.output("(mladbg) " + command)
