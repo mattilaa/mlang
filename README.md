@@ -129,7 +129,9 @@ bt
 
 The locals pane is a browsable tree: structs, collections and pointers start
 collapsed. Use Tab to focus it, Up/Down or `j` to select a row, `l`/Right to
-expand, and `k`/`h`/Left to collapse a node or return to its parent. Shift-J
+expand, and `k`/`h`/Left to collapse a node or return to its parent.
+On a collapsed top-level variable, `k` selects the previous row; Up always
+selects the previous row without collapsing anything. Shift-J
 collapses everything; Shift-K restores the previous expansions and selection.
 Expansion state is remembered independently for each stack frame.
 In the other panes, scroll with `j`/`k` (down/up) and `h`/`l` (left/right), or

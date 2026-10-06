@@ -63,6 +63,10 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False):
             wait_for(b"[+] (Team) team")
             os.write(master, b":frame 0\n:p adjusted\n")
             wait_for(b"adjusted = 20")
+            # Repeated Vim navigation must neither trap the tree cursor nor
+            # prevent the command prompt from responding afterward.
+            os.write(master, b"j"*30+b"k"*40+b"hjlk"*30+b"JK:p adjusted + 123\n")
+            wait_for(b"= 143")
         else:
             wait_for(b"count = 7")
             wait_for(b"ratio = 1.5")

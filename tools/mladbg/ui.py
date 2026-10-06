@@ -215,13 +215,23 @@ class VariableTree:
 
     def collapse(self):
         if not self.rows:
-            return
+            return False
         row = self.rows[self.cursor]
         if row.path in self.state.expanded:
             self.state.expanded.remove(row.path)
+            return True
         elif row.parent:
             self.state.expanded.discard(row.parent)
             self.state.selected = row.parent
+            return True
+        return False
+
+    def back(self):
+        # k must not trap the cursor on a collapsed/scalar root. Preserve its
+        # collapse/back behavior inside a structure, then move to the previous
+        # row when there is no parent or expansion left to close.
+        if not self.collapse():
+            self.move(-1)
 
     def collapse_all(self):
         if self.state.saved is None:
