@@ -50,9 +50,10 @@ def check_tui(debugger, executable, source):
         # Exercise the smallest supported layout with a stopped process.
         fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 18, 70, 0, 0))
         os.kill(process.pid, signal.SIGWINCH)
-        os.write(master, b":next\n")
+        os.write(master, b"ljjkh:next\n")
         wait_for(b"step over")
-        os.write(master, b":p count\n")
+        # h/j/k/l must remain literal text inside the command prompt.
+        os.write(master, b":help\n:p count\n")
         wait_for(b"count = 12")
         os.write(master, b"q")
         deadline = time.monotonic() + 10

@@ -123,8 +123,10 @@ p team.members.data[1].name
 bt
 ```
 
-Use Tab to focus the locals pane and arrows or Page Up/Down to scroll through
-expanded structures. F6 steps over the print statement, F8 returns to `main`,
+Use Tab to focus the locals pane. Scroll with `j`/`k` (down/up) and `h`/`l`
+(left/right), or the corresponding arrow keys; Page Up/Down scrolls a page.
+The Vim keys apply outside the command prompt, so commands can still contain
+those letters. F6 steps over the print statement, F8 returns to `main`,
 and F5 continues to completion. With installed tools, replace `build/mlang`
 and `build/mladbg` with `mlang` and `mladbg`.
 

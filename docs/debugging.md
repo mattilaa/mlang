@@ -33,8 +33,10 @@ packages commonly provide `lldb`, `python3-lldb`, and `python3`.
 `MLADBG_LLDB` selects the `lldb` executable used to locate those bindings.
 
 The TUI displays source, locals and arguments, stack frames, breakpoints, and
-program output. Press `:` to enter commands, `Tab` to select a pane, and arrows
-or Page Up/Down to scroll. Resize the terminal to at least 70 columns by 18 rows.
+program output. Press `:` to enter commands and `Tab` to select a pane. Use
+`j`/`k` or Up/Down to scroll vertically, `h`/`l` or Left/Right to scroll
+horizontally, and Page Up/Down to scroll a page. Vim navigation applies outside
+command entry. Resize the terminal to at least 70 columns by 18 rows.
 
 | Action | Command | Key |
 | --- | --- | --- |

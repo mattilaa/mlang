@@ -46,7 +46,8 @@ Any other command is passed to LLDB (including conditional breakpoints,
 memory write, watchpoint options, source maps and expression assignment).
 Expressions use LLDB's C/C++ syntax, not the MLang parser.
 F5 continue, F6 next, F7 step, F8 finish, F9 break at current line.
-Tab changes pane; arrows/PgUp/PgDn scroll; : enters a command; q quits.
+Tab changes pane; j/k or Up/Down scroll vertically; h/l or Left/Right scroll
+horizontally; PgUp/PgDn page; : enters a command; q quits.
 """
 
 
@@ -336,6 +337,7 @@ def tui(screen, session):
     editing = False
     focus = 0
     offsets = [0] * 5
+    horizontal_offsets = [0] * 5
     history = []
     history_index = 0
     source_position = None
@@ -382,10 +384,13 @@ def tui(screen, session):
         put(y, x+2, " " + title + " ", width-4, attr)
         content_height = height-2
         offsets[index] = min(offsets[index], max(0, len(lines)-content_height))
+        content_width = width-4
+        longest = max((len(safe_text(line)) for line in lines), default=0)
+        horizontal_offsets[index] = min(horizontal_offsets[index], max(0, longest-content_width))
         offset = offsets[index]
         for row, line in enumerate(lines[offset:offset+content_height], 1):
             line_attr = curses.A_REVERSE if index == 0 and line.lstrip().startswith("=>") else 0
-            put(y+row, x+2, line, width-4, line_attr)
+            put(y+row, x+2, safe_text(line)[horizontal_offsets[index]:], content_width, line_attr)
 
     while True:
         session.poll()
@@ -450,7 +455,7 @@ def tui(screen, session):
                  "Console / program output", list(session.log), 4)
         put(height-2, 0, "(mladbg) " + command if editing else ": command  |  F5 run/continue  |  q quit",
             width, curses.A_BOLD)
-        put(height-1, 0, "Tab: focus pane  |  arrows/PgUp/PgDn: scroll  |  Ctrl-C: interrupt", width, curses.A_DIM)
+        put(height-1, 0, "Tab: pane | hjkl/arrows: scroll | PgUp/Dn: page | Ctrl-C: stop", width, curses.A_DIM)
         screen.refresh()
         try:
             key = screen.get_wch()
@@ -485,9 +490,12 @@ def tui(screen, session):
             history_index = len(history)
         elif key == "\t":
             focus = (focus + 1) % 5
-        elif key in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_PPAGE, curses.KEY_NPAGE):
+        elif key in ("h", "l", curses.KEY_LEFT, curses.KEY_RIGHT):
+            delta = -1 if key in ("h", curses.KEY_LEFT) else 1
+            horizontal_offsets[focus] = max(0, horizontal_offsets[focus] + delta)
+        elif key in ("j", "k", curses.KEY_UP, curses.KEY_DOWN, curses.KEY_PPAGE, curses.KEY_NPAGE):
             delta = {curses.KEY_UP: -1, curses.KEY_DOWN: 1,
-                     curses.KEY_PPAGE: -10, curses.KEY_NPAGE: 10}[key]
+                     "k": -1, "j": 1, curses.KEY_PPAGE: -10, curses.KEY_NPAGE: 10}[key]
             offsets[focus] = max(0, offsets[focus] + delta)
         elif key == curses.KEY_F5:
             session.command("continue" if session.process().IsValid() and
