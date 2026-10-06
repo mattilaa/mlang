@@ -72,6 +72,7 @@ void printUsage(const char* programName)
         << "  --shared                     Build a shared library; main is not required.\n"
         << "  --static-library             Build a static .a library; main is not required.\n"
         << "  -O0|-Og|-O1|-O2|-O3|-Os|-Oz Select an optimization level (default: -O2).\n"
+        << "  -g | --debug-info            Emit source-level DWARF info for GDB/LLDB.\n"
         << "  --target-arch ARCH           Target x86, x64, or aarch64.\n"
         << "  -L DIR | -l NAME | -Wl,ARGS  Add a library path, library, or linker arguments.\n"
         << "  --no-tests                   Exclude #[test] functions from a normal build.\n"
@@ -1887,6 +1888,7 @@ int main(int argc, char** argv)
     bool emitAssembly = false;
     bool emitLLVMIR = false;
     bool emitBitcode = false;
+    bool optimizationLevelExplicit = false;
     std::string optimizationLevel = "-O2";
     if(const char* defaultOptEnv = std::getenv("MLANG_DEFAULT_OPT_LEVEL"))
     {
@@ -1895,10 +1897,14 @@ int main(int argc, char** argv)
             opt = "-" + opt;
         if(opt == "-O0" || opt == "-Og" || opt == "-O1" || opt == "-O2" ||
            opt == "-O3" || opt == "-Os" || opt == "-Oz")
+        {
             optimizationLevel = opt;
+            optimizationLevelExplicit = true;
+        }
     }
     bool verbose = false;
     bool debugMode = false;
+    bool debugInfo = false;
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
     bool warnResultUnwrap = true;
@@ -1987,6 +1993,7 @@ int main(int argc, char** argv)
                 arg == "-Oz")
         {
             optimizationLevel = arg;
+            optimizationLevelExplicit = true;
         }
         else if(arg == "-v")
         {
@@ -1995,6 +2002,10 @@ int main(int argc, char** argv)
         else if(arg == "--debug")
         {
             debugMode = true;
+        }
+        else if(arg == "-g" || arg == "--debug-info")
+        {
+            debugInfo = true;
         }
         else if(arg == "--no-tests")
         {
@@ -2075,6 +2086,9 @@ int main(int argc, char** argv)
             return 1;
         }
     }
+
+    if(debugInfo && !optimizationLevelExplicit)
+        optimizationLevel = "-Og";
 
     if(testMode)
     {
@@ -2358,6 +2372,7 @@ int main(int argc, char** argv)
         // Initialize code generator
         CodeGenerator generator(context, builder, module, debugMode);
         generator.setSourceFile(inputFile);
+        generator.setDebugInfo(debugInfo);
         generator.setCheckedNarrowCasts(optimizationLevel == "-O0" ||
                                         optimizationLevel == "-Og");
         generator.setTestMode(testMode);

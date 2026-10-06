@@ -265,6 +265,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     std::string savedModule = currentModule;
     currentModule = node->sourceModule;
     auto savedIP = builder.saveIP();
+    auto savedDebugLocation = builder.getCurrentDebugLocation();
+    llvm::DIScope* savedDebugScope = currentDebugScope;
     auto savedNamedValues = namedValues;
     auto savedConstantVariables = constantVariables;
     auto savedConstexprValues = constexprValues;
@@ -299,6 +301,22 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     // Create a new basic block for the function
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
     builder.SetInsertPoint(bb);
+
+    if(emitDebugInfo && debugInfoBuilder)
+    {
+        llvm::DIFile* file = getDebugFile(node);
+        auto* subroutineType = debugInfoBuilder->createSubroutineType(
+            debugInfoBuilder->getOrCreateTypeArray({}));
+        auto* subprogram = debugInfoBuilder->createFunction(
+            file, node->name, function->getName(), file,
+            static_cast<unsigned>(std::max(1, node->line)), subroutineType,
+            static_cast<unsigned>(std::max(1, node->line)),
+            llvm::DINode::FlagPrototyped,
+            llvm::DISubprogram::SPFlagDefinition);
+        function->setSubprogram(subprogram);
+        currentDebugScope = subprogram;
+        setDebugLocation(node);
+    }
 
     // Clear the named values map and constant tracking for new function scope
     namedValues.clear();
@@ -610,6 +628,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     constexprValues = std::move(savedConstexprValues);
     activePackExpansions = std::move(savedPackExpansions);
     activeFunctionTypeBindings = std::move(savedFunctionTypeBindings);
+    currentDebugScope = savedDebugScope;
+    builder.SetCurrentDebugLocation(savedDebugLocation);
     builder.restoreIP(savedIP);
 
     // Verify the function

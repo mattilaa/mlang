@@ -21,6 +21,7 @@ VST3 plugins) is now developed in its own repository: <https://github.com/mattil
 - [C++ LSP](#c-lsp)
 - [Mlangd (Mlang LSP)](#mlangd-mlang-lsp)
 - [Compiler Frontend (Primary MLang CLI)](#compiler-frontend-primary-mlang-cli)
+- [Debugging With GDB Or LLDB](#debugging-with-gdb-or-lldb)
 - [Inline Assembly](#inline-assembly)
 - [Package Manager (MLang Backend Default)](#package-manager-mlang-backend-default)
 - [Stdlib Linking](#stdlib-linking)
@@ -52,6 +53,47 @@ The self-hosted tools are then produced by feeding their `.mla` sources
 through the seed compiler. The repository also retains C++ utilities such as
 `mlang-config` and the legacy `mlangd` server. The bootstrap manifest in
 `bootstrap/` uses `mlang pkg` to orchestrate the self-hosted build order.
+
+## Debugging With GDB Or LLDB
+
+Build an executable with `-g` to include DWARF source and function information.
+When you do not specify an optimization level, MLang uses `-Og` for this build:
+
+```sh
+mlang -g main.mla -o app
+```
+
+Launch the result in GDB or LLDB, set a breakpoint, and run it:
+
+```sh
+gdb ./app
+```
+
+```gdb
+break main
+run
+next
+bt
+```
+
+Or use LLDB:
+
+```sh
+lldb ./app
+```
+
+```lldb
+b main
+run
+next
+bt
+```
+
+An explicitly supplied optimization level is preserved, for example
+`mlang -g -O0 main.mla -o app`. `--debug-info` is an alias for `-g`; the
+existing `--debug` option is separate and enables verbose/debug-print behavior.
+Local-variable inspection is not yet emitted in DWARF. See the
+[debugging notes](docs/debugging.md) for details.
 
 ## Compile-Time Evaluation With `cexpr`
 

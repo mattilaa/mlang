@@ -7,6 +7,9 @@
 
 #include <functional>
 #include <llvm/Config/llvm-config.h>
+#include <llvm/BinaryFormat/Dwarf.h>
+#include <llvm/IR/DebugInfoMetadata.h>
+#include <filesystem>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -16,8 +19,53 @@ using mlang::ir_detail::normalize_target_arch_name;
 using mlang::ir_detail::common::Helpers;
 using mlang::ir_detail::return_inference::infer_function_return_type;
 
+llvm::DIFile* CodeGenerator::getDebugFile(const ASTNode* node)
+{
+    if(!debugInfoBuilder)
+        return nullptr;
+    std::string path = node && node->file && *node->file
+                           ? node->file
+                           : sourceFileName;
+    if(path.empty())
+        path = "<unknown>";
+    auto found = debugFiles.find(path);
+    if(found != debugFiles.end())
+        return found->second;
+
+    std::filesystem::path sourcePath(path);
+    llvm::DIFile* file = debugInfoBuilder->createFile(
+        sourcePath.filename().string(), sourcePath.parent_path().string());
+    debugFiles[path] = file;
+    return file;
+}
+
+void CodeGenerator::setDebugLocation(const ASTNode* node)
+{
+    if(!emitDebugInfo || !debugInfoBuilder || !currentDebugScope || !node ||
+       node->line <= 0)
+        return;
+    llvm::DIFile* file = getDebugFile(node);
+    llvm::DIScope* scope = currentDebugScope;
+    if(file)
+        scope = debugInfoBuilder->createLexicalBlockFile(scope, file);
+    builder.SetCurrentDebugLocation(llvm::DILocation::get(
+        context, static_cast<unsigned>(node->line),
+        static_cast<unsigned>(std::max(1, node->col)), scope));
+}
+
 void CodeGenerator::generateCode(ProgramNode* program)
 {
+    if(emitDebugInfo)
+    {
+        debugInfoBuilder = std::make_unique<llvm::DIBuilder>(*module);
+        llvm::DIFile* mainFile = getDebugFile(nullptr);
+        debugCompileUnit = debugInfoBuilder->createCompileUnit(
+            llvm::dwarf::DW_LANG_C, mainFile, "MLang compiler", false, "", 0);
+        module->addModuleFlag(llvm::Module::Warning, "Debug Info Version",
+                              llvm::DEBUG_METADATA_VERSION);
+        module->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 4);
+    }
+
     globalNamedValues.clear();
     globalConstantVariables.clear();
     globalVariableTypes.clear();
@@ -1161,5 +1209,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
                     allocation->moveBefore(entry, entry.begin());
             }
         }
+    }
+
+    if(debugInfoBuilder)
+    {
+        debugInfoBuilder->finalize();
+        debugInfoBuilder.reset();
     }
 }

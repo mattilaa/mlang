@@ -3,6 +3,7 @@
 
 #include "ast.h"
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Target/TargetMachine.h>
@@ -96,6 +97,12 @@ public:
     void setSourceFile(const std::string& file)
     {
         sourceFileName = file;
+    }
+
+    /// Emit DWARF source and function locations for GDB/LLDB.
+    void setDebugInfo(bool enabled)
+    {
+        emitDebugInfo = enabled;
     }
 
     /// Enable runtime validation for narrow_cast in debug builds.
@@ -248,6 +255,11 @@ private:
     std::map<std::string, std::string> structDebugDisplayNames;
     bool hasError;
     bool debugEnabled;
+    bool emitDebugInfo = false;
+    std::unique_ptr<llvm::DIBuilder> debugInfoBuilder;
+    llvm::DICompileUnit* debugCompileUnit = nullptr;
+    llvm::DIScope* currentDebugScope = nullptr;
+    std::map<std::string, llvm::DIFile*> debugFiles;
     bool checkedNarrowCasts = false;
     bool testMode = false;             ///< Compile and run \c #[test] functions.
     bool benchmarkMode = false;        ///< Generate benchmark harness instead of test harness.
@@ -695,6 +707,8 @@ private:
     llvm::Value* generateThreadSpawn(FunctionCallNode* node);
     llvm::Function* generateClosureFn(ClosureNode* node);
     llvm::Value* generateThreadJoin(FunctionCallNode* node);
+    llvm::DIFile* getDebugFile(const ASTNode* node);
+    void setDebugLocation(const ASTNode* node);
     llvm::Value* buildHandleValue(const std::string& handleTypeName,
                                   llvm::Value* rawHandle, int line);
     llvm::Value* extractHandleValue(ExpressionNode* expr,

@@ -7,6 +7,8 @@ using mlang::ir_detail::ast_analysis::collect_used_idents;
 
 void CodeGenerator::generateStatement(StatementNode* node)
 {
+    setDebugLocation(node);
+
     // Diagnostics while generating this statement name its file (an imported
     // module's, say); the enclosing code gets its own back afterwards.
     struct DiagnosticFileScope
