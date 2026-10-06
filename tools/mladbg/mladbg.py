@@ -164,6 +164,9 @@ class Session:
             return True
         if name == "print" and self.stopped():
             value = self.frame().FindVariable(rest)
+            if not value.IsValid() and re.fullmatch(
+                    r"[A-Za-z_]\w*(?:(?:\.|->)[A-Za-z_]\w*|\[\d+\])*", rest):
+                value = self.frame().GetValueForVariablePath(rest, self.lldb.eDynamicDontRunTarget)
             if value.IsValid():
                 self.output("\n".join(format_value(value)))
                 return True
@@ -305,6 +308,12 @@ def source_lines(session):
     frame = session.frame()
     entry = frame.GetLineEntry()
     if not entry.IsValid():
+        if not session.process().IsValid():
+            return "Source", ["Program loaded. Press F5 to run.",
+                              "Use :b main to set a breakpoint before running."], 0
+        if not session.stopped():
+            return "Source", ["Source appears when execution stops.",
+                              "Ctrl-C interrupts a running program."], 0
         return "Source", ["No source location. Compile with: mlang -g -O0 file.mla -o app"], 0
     spec = entry.GetFileSpec()
     path = Path(spec.GetDirectory() or "") / spec.GetFilename()
@@ -331,6 +340,16 @@ def tui(screen, session):
     history_index = 0
     source_position = None
     session.output("mladbg — type help for commands; F5 run/continue; : command; q quit")
+    border_attr = curses.A_DIM
+    focus_attr = curses.A_BOLD
+    if curses.has_colors():
+        try:
+            curses.start_color()
+            curses.use_default_colors()
+            curses.init_pair(1, curses.COLOR_CYAN, -1)
+            focus_attr |= curses.color_pair(1)
+        except curses.error:
+            pass
 
     def put(y, x, text, width, attr=0):
         height, cols = screen.getmaxyx()
@@ -341,45 +360,97 @@ def tui(screen, session):
                 pass  # Resize or bottom-right cell during a repaint.
 
     def pane(y, x, height, width, title, lines, index):
-        put(y, x, ("> " if focus == index else "  ") + title, width, curses.A_REVERSE)
-        offset = min(offsets[index], max(0, len(lines) - height + 1))
-        for row, line in enumerate(lines[offset:offset + height - 1], 1):
-            put(y + row, x, line, width)
+        attr = focus_attr if focus == index else border_attr
+
+        def cell(row, col, character):
+            try:
+                screen.addch(row, col, character, attr)
+            except curses.error:
+                pass
+
+        for col in range(x+1, x+width-1):
+            cell(y, col, curses.ACS_HLINE)
+            cell(y+height-1, col, curses.ACS_HLINE)
+        for row in range(y+1, y+height-1):
+            cell(row, x, curses.ACS_VLINE)
+            cell(row, x+width-1, curses.ACS_VLINE)
+        for row, col, character in ((y, x, curses.ACS_ULCORNER),
+                                    (y, x+width-1, curses.ACS_URCORNER),
+                                    (y+height-1, x, curses.ACS_LLCORNER),
+                                    (y+height-1, x+width-1, curses.ACS_LRCORNER)):
+            cell(row, col, character)
+        put(y, x+2, " " + title + " ", width-4, attr)
+        content_height = height-2
+        offsets[index] = min(offsets[index], max(0, len(lines)-content_height))
+        offset = offsets[index]
+        for row, line in enumerate(lines[offset:offset+content_height], 1):
+            line_attr = curses.A_REVERSE if index == 0 and line.lstrip().startswith("=>") else 0
+            put(y+row, x+2, line, width-4, line_attr)
 
     while True:
         session.poll()
         screen.erase()
         height, width = screen.getmaxyx()
         state = session.lldb.SBDebugger.StateAsCString(session.process().GetState())
-        put(0, 0, " mladbg | %s | F5 continue F6 next F7 step F8 finish F9 break | : command q quit" % state,
-            width, curses.A_REVERSE)
+        ready = not session.process().IsValid()
+        status = "Ready" if ready else state.capitalize()
+        put(0, 0, " mladbg | %s | F5 run/continue  F6 next  F7 step  F8 finish  F9 break" % status,
+            width, curses.A_BOLD)
         if height < 18 or width < 70:
             put(2, 0, "Resize terminal to at least 70 columns x 18 rows", width)
         else:
-            top = max(7, (height - 5) // 2)
-            bottom = height - top - 4
-            left = width * 2 // 3
+            gap = 1 if height >= 22 else 0
+            available = height-3-2*gap
+            top = max(5, available//2)
+            console_height = max(4, available//4)
+            middle = available-top-console_height
+            left = (width-1)*3//5
+            right_x = left+1
+            middle_y = 1+top+gap
+            console_y = middle_y+middle+gap
             title, source, current = source_lines(session)
-            position = (title, session.frame().GetPC())
+            position = (title, session.frame().GetPC(), top)
             if position != source_position:
-                offsets[0] = max(0, current - (top-2)//2)
+                offsets[0] = max(0, current - (top-3)//2)
                 source_position = position
-            pane(1, 0, top, left, title, source, 0)
-            locals_ = value_lines(session.frame()) if session.stopped() else ["Process is " + state]
-            pane(1, left, top, width-left, "Locals / arguments", locals_, 1)
+            source_title = "Source" if title == "Source" else "Source | " + Path(title).name
+            pane(1, 0, top, left, source_title, source, 0)
+            locals_ = value_lines(session.frame()) if session.stopped() else [
+                "Run and stop to inspect variables." if ready else "Process is " + state]
+            pane(1, right_x, top, width-right_x, "Locals / arguments", locals_, 1)
             thread = session.process().GetSelectedThread()
-            stack = [str(frame) for frame in thread] if session.stopped() else []
-            console_height = max(3, bottom // 2)
-            pane(top+1, 0, bottom-console_height, left, "Stack", stack, 2)
-            breaks = [str(bp) for bp in session.target.breakpoint_iter()]
-            pane(top+1, left, bottom-console_height, width-left, "Breakpoints", breaks, 3)
+            stack = []
+            if session.stopped():
+                selected = thread.GetSelectedFrame().GetFrameID()
+                for frame in thread:
+                    function = frame.GetFunctionName() or "<unknown>"
+                    function = function.split("__", 1)[0] or function
+                    entry = frame.GetLineEntry()
+                    location = ("  %s:%d" % (entry.GetFileSpec().GetFilename(), entry.GetLine())
+                                if entry.IsValid() else "")
+                    stack.append("%s %d  %s%s" % (">" if frame.GetFrameID() == selected else " ",
+                                                   frame.GetFrameID(), function, location))
+            stack = stack or ["No stopped stack frames."]
+            pane(middle_y, 0, middle, left, "Stack", stack, 2)
+            breaks = []
+            for bp in session.target.breakpoint_iter():
+                count = bp.GetNumLocations()
+                entry = bp.GetLocationAtIndex(0).GetAddress().GetLineEntry() if count else None
+                location = ("%s:%d" % (entry.GetFileSpec().GetFilename(), entry.GetLine())
+                            if entry and entry.IsValid() else "%d location(s)" % count)
+                breaks.append("%d %s  %s" % (bp.GetID(), "on" if bp.IsEnabled() else "off", location))
+                if bp.GetCondition():
+                    breaks.append("  if " + bp.GetCondition())
+            pane(middle_y, right_x, middle, width-right_x, "Breakpoints",
+                 breaks or ["Use :b FUNCTION or FILE:LINE"], 3)
             # A dedicated console occupies the lower quarter on larger screens.
-            pane(height-console_height-2, 0, console_height, width,
-                 "Console / program output", list(session.log), 4)
             if focus != 4:
-                offsets[4] = max(0, len(session.log) - console_height + 1)
-        put(height-2, 0, "(mladbg) " + command if editing else "Tab: pane  arrows: scroll  : command  Ctrl-C: interrupt",
+                offsets[4] = max(0, len(session.log)-console_height+2)
+            pane(console_y, 0, console_height, width,
+                 "Console / program output", list(session.log), 4)
+        put(height-2, 0, "(mladbg) " + command if editing else ": command  |  F5 run/continue  |  q quit",
             width, curses.A_BOLD)
+        put(height-1, 0, "Tab: focus pane  |  arrows/PgUp/PgDn: scroll  |  Ctrl-C: interrupt", width, curses.A_DIM)
         screen.refresh()
         try:
             key = screen.get_wch()

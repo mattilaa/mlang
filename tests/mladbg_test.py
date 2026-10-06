@@ -6,6 +6,7 @@ from pathlib import Path
 import pty
 import re
 import select
+import signal
 import struct
 import subprocess
 import tempfile
@@ -41,9 +42,14 @@ def check_tui(debugger, executable, source):
 
     try:
         wait_for(b"Console / program output")
+        wait_for(b"Ready")
+        assert b"\x1b(0" in output or "┌".encode() in output, "Pane borders were not drawn"
         os.write(master, b":run\n")
         wait_for(b"count = 7")
         wait_for(b"ratio = 1.5")
+        # Exercise the smallest supported layout with a stopped process.
+        fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 18, 70, 0, 0))
+        os.kill(process.pid, signal.SIGWINCH)
         os.write(master, b":next\n")
         wait_for(b"step over")
         os.write(master, b":p count\n")
