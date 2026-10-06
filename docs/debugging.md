@@ -103,6 +103,19 @@ Inside help, `0`–`8` or Tab select a topic, Vim/arrow/Page keys scroll, and
 Esc/F1/`?`/`q` return to the debugger. Opening help does not pause execution.
 `help lldb COMMAND` prints native command details to the console.
 
+While entering `b`/`break`, `file`, `target create`, or `command source`, Tab
+opens a file dropdown. `:b m` filters names starting with `m`; bare `:b` lists
+the current working directory. Listings include directories and hidden files;
+choose directories to browse paths beneath them, without a recursive scan.
+Use `j`/`k`, Up/Down or Page Up/Down to browse, Enter/Tab/Right to choose a file
+or open a directory, and Left to browse the parent. Esc closes the menu while
+keeping your command; another Esc cancels command entry. Other printable keys
+refine the prefix, except `j`/`k` while the menu is open (close it first to type
+those letters). Selecting a file does not execute the command: append `:LINE`
+for a breakpoint and press Enter. Existing line suffixes and paths with spaces
+are preserved. Unreadable directories and empty matches are reported; results
+are bounded to 256 entries, so narrow the prefix in very large directories.
+
 | Action | Command | Key |
 | --- | --- | --- |
 | Launch | `run` or `r` | F5 |

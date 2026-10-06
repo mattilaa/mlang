@@ -167,6 +167,13 @@ those letters. F6 steps over the print statement, F8 returns to `main`,
 and F5 continues to completion. With installed tools, replace `build/mlang`
 and `build/mladbg` with `mlang` and `mladbg`.
 
+For file completion, type `:b m` and press Tab to open a dropdown of matching
+files and directories, or `:b` then Tab to browse the current directory.
+Use `j`/`k` or Up/Down to select, Enter/Tab to choose a file or enter a directory,
+Left to browse the parent, and Esc to close the dropdown. Choosing a file
+returns to the prompt; append `:LINE` and press Enter to set the breakpoint.
+Completion also supports `file`, `target create`, and `command source`.
+
 The TUI colors source keywords, types, strings, and numbers, with a blue
 execution-line and selected-variable background. Unsupported terminals fall
 back to monochrome, or you can explicitly disable colors on startup:
