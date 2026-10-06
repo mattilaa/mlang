@@ -207,6 +207,18 @@ bool Backend::initializeTarget()
     return true;
 }
 
+void Backend::useUnoptimizedCodegen()
+{
+    if(!targetMachine)
+        return;
+    // As MLANG_DEFAULT_OPT_LEVEL=0: no optimization, SelectionDAG selection.
+    targetMachine->setOptLevel(mlang::llvm_compat::CodeGenOptLevel::None);
+    targetMachine->setFastISel(false);
+    targetMachine->setO0WantsFastISel(false);
+    targetMachine->setGlobalISel(false);
+    targetMachine->setGlobalISelAbort(llvm::GlobalISelAbortMode::Disable);
+}
+
 bool Backend::emitObjectFile(const std::string& filename)
 {
     if(!targetMachine)

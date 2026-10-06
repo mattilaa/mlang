@@ -73,7 +73,11 @@ int yycolumn_token = 1; // column at start of the current token
     for(int _yci = 0; _yci < yyleng; _yci++) { \
         if(yytext[_yci] == '\n') yycolumn = 1;  \
         else                     yycolumn++;    \
-    }
+    }                                           \
+    /* Token position for the parser's @n. */   \
+    yylloc.first_line = yylloc.last_line = yylineno; \
+    yylloc.first_column = yycolumn_token;       \
+    yylloc.last_column = yycolumn;
 
 static int yyinput(void);
 static void yyunput(int, char*);

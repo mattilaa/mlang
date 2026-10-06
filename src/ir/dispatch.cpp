@@ -7,8 +7,6 @@ using mlang::ir_detail::ast_analysis::collect_used_idents;
 
 void CodeGenerator::generateStatement(StatementNode* node)
 {
-    setDebugLocation(node);
-
     // Diagnostics while generating this statement name its file (an imported
     // module's, say); the enclosing code gets its own back afterwards.
     struct DiagnosticFileScope
@@ -23,6 +21,8 @@ void CodeGenerator::generateStatement(StatementNode* node)
         }
         ~DiagnosticFileScope() { current = saved; }
     } diagnosticScope(diagnosticFile, node ? node->file : nullptr);
+    // mlang -g: the statement's source line (no-op without debug info).
+    debugSetLocation(node);
 
     if(auto returnNode = dynamic_cast<ReturnNode*>(node))
     {
@@ -35,10 +35,16 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto letNode = dynamic_cast<LetDeclNode*>(node))
     {
         generateLetDeclaration(letNode);
+        auto slot = namedValues.find(letNode->name);
+        if(slot != namedValues.end())
+            debugDeclareVariable(letNode->name, slot->second, letNode->type, letNode);
     }
     else if(auto varNode = dynamic_cast<VarDeclNode*>(node))
     {
         generateVarDeclaration(varNode);
+        auto slot = namedValues.find(varNode->name);
+        if(slot != namedValues.end())
+            debugDeclareVariable(varNode->name, slot->second, varNode->type, varNode);
     }
     else if(auto assignNode = dynamic_cast<AssignmentNode*>(node))
     {
@@ -76,6 +82,7 @@ void CodeGenerator::generateStatement(StatementNode* node)
     {
         auto savedConstexprValues = constexprValues;
         enterCleanupScope();
+        debugPushBlock(blockNode);
         if(blockNode->isUnsafe)
             unsafeDepth++;
         const auto& blkStmts = blockNode->statements->statements;
@@ -113,6 +120,7 @@ void CodeGenerator::generateStatement(StatementNode* node)
         }
         if(blockNode->isUnsafe)
             unsafeDepth--;
+        debugPopBlock();
         exitCleanupScope();
         constexprValues = std::move(savedConstexprValues);
     }

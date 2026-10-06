@@ -2,6 +2,7 @@
 #define IR_H
 
 #include "ast.h"
+#include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/LLVMContext.h>
@@ -98,11 +99,13 @@ public:
     {
         sourceFileName = file;
     }
-
-    /// Emit DWARF source and function locations for GDB/LLDB.
-    void setDebugInfo(bool enabled)
+    /// Emit DWARF debug info (mlang -g): source lines, functions, local
+    /// variables and parameters with their types, for lldb and gdb.
+    /// \p optimized marks the compile unit as optimized (-O1 and up).
+    void setDebugInfo(bool enabled, bool optimized)
     {
-        emitDebugInfo = enabled;
+        debugInfoEnabled = enabled;
+        debugInfoOptimized = optimized;
     }
 
     /// Enable runtime validation for narrow_cast in debug builds.
@@ -255,11 +258,6 @@ private:
     std::map<std::string, std::string> structDebugDisplayNames;
     bool hasError;
     bool debugEnabled;
-    bool emitDebugInfo = false;
-    std::unique_ptr<llvm::DIBuilder> debugInfoBuilder;
-    llvm::DICompileUnit* debugCompileUnit = nullptr;
-    llvm::DIScope* currentDebugScope = nullptr;
-    std::map<std::string, llvm::DIFile*> debugFiles;
     bool checkedNarrowCasts = false;
     bool testMode = false;             ///< Compile and run \c #[test] functions.
     bool benchmarkMode = false;        ///< Generate benchmark harness instead of test harness.
@@ -273,6 +271,48 @@ private:
     bool warnResultUnwrap = true;
     bool warnImplicitZeroInit = true;
     std::string sourceFileName;        ///< Source file path for default suite name derivation.
+
+    // --- Debug info (mlang -g; src/ir/debug_info.cpp) ----------------------
+    bool debugInfoEnabled = false;
+    bool debugInfoOptimized = false;
+    std::unique_ptr<llvm::DIBuilder> diBuilder;
+    llvm::DICompileUnit* diCompileUnit = nullptr;
+    std::map<std::string, llvm::DIFile*> diFiles;
+    std::map<std::string, llvm::DIType*> diTypes;
+    /// Lexical scopes of the function being generated, innermost last; the
+    /// first entry is its DISubprogram. Empty outside functions with debug
+    /// info.
+    std::vector<llvm::DIScope*> diScopes;
+    /// Gives a function a DISubprogram for as long as it is generated, and
+    /// gives the enclosing function its scopes and debug location back.
+    class DebugFunctionScope
+    {
+    public:
+        DebugFunctionScope(CodeGenerator& gen, llvm::Function* function,
+                           ASTNode* node, const std::string& displayName);
+        ~DebugFunctionScope();
+        DebugFunctionScope(const DebugFunctionScope&) = delete;
+        DebugFunctionScope& operator=(const DebugFunctionScope&) = delete;
+
+    private:
+        CodeGenerator& gen;
+        std::vector<llvm::DIScope*> savedScopes;
+        llvm::DebugLoc savedLocation;
+    };
+    void debugInfoBegin();
+    void debugInfoFinish();
+    llvm::DIFile* debugFile(const char* path);
+    /// Point the builder at \p node's line in the current scope.
+    void debugSetLocation(ASTNode* node);
+    void debugPushBlock(ASTNode* node);
+    void debugPopBlock();
+    /// Describe a variable stored in \p storage (an alloca); \p argNo is the
+    /// 1-based parameter number, 0 for a local.
+    void debugDeclareVariable(const std::string& name, llvm::Value* storage,
+                              TypeNode* type, ASTNode* at, unsigned argNo = 0);
+    llvm::DIType* debugType(TypeNode* type, llvm::Type* fallback);
+    llvm::DIType* debugTypeFromLLVM(llvm::Type* type);
+    llvm::DIType* debugStructType(const std::string& name);
     /// File of the statement being generated (from ASTNode::file), or null.
     /// Diagnostics name it instead of \c sourceFileName, so code from an
     /// imported module is reported at that module's file.
@@ -707,8 +747,6 @@ private:
     llvm::Value* generateThreadSpawn(FunctionCallNode* node);
     llvm::Function* generateClosureFn(ClosureNode* node);
     llvm::Value* generateThreadJoin(FunctionCallNode* node);
-    llvm::DIFile* getDebugFile(const ASTNode* node);
-    void setDebugLocation(const ASTNode* node);
     llvm::Value* buildHandleValue(const std::string& handleTypeName,
                                   llvm::Value* rawHandle, int line);
     llvm::Value* extractHandleValue(ExpressionNode* expr,
@@ -891,6 +929,10 @@ public:
                                 const std::vector<std::string>& linkArgs);
     bool compileToStaticLibrary(const std::string& outputFile);
     void optimize(const std::string& level);
+    /// Generate machine code without optimization (mlang -g -O0), so every
+    /// variable lives in its stack slot at each source line, as debuggers
+    /// expect; the default level keeps values in registers and moves stores.
+    void useUnoptimizedCodegen();
     std::string getTargetTriple() const
     {
         return targetTriple;
