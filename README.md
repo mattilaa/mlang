@@ -127,12 +127,25 @@ p team.members.data[1].name
 bt
 ```
 
-Use Tab to focus the locals pane. Scroll with `j`/`k` (down/up) and `h`/`l`
-(left/right), or the corresponding arrow keys; Page Up/Down scrolls a page.
+The locals pane is a browsable tree: structs, collections and pointers start
+collapsed. Use Tab to focus it, Up/Down or `j` to select a row, `l`/Right to
+expand, and `k`/`h`/Left to collapse a node or return to its parent. Shift-J
+collapses everything; Shift-K restores the previous expansions and selection.
+Expansion state is remembered independently for each stack frame.
+In the other panes, scroll with `j`/`k` (down/up) and `h`/`l` (left/right), or
+the corresponding arrow keys; Page Up/Down scrolls a page.
 The Vim keys apply outside the command prompt, so commands can still contain
 those letters. F6 steps over the print statement, F8 returns to `main`,
 and F5 continues to completion. With installed tools, replace `build/mlang`
 and `build/mladbg` with `mlang` and `mladbg`.
+
+The TUI colors source keywords, types, strings, and numbers, with a blue
+execution-line and selected-variable background. Unsupported terminals fall
+back to monochrome, or you can explicitly disable colors on startup:
+
+```sh
+build/mladbg --no-colors -ex 'b examples/debugger_demo.mla:26' build/debugger-demo
+```
 
 The same demo also has a deeper call chain:
 `main → review → plan_work → score_work → finalize_work`. Start a new session

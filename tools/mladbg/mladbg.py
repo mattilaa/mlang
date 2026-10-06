@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 import subprocess
 import sys
+from ui import Theme, VariableTree, token_spans
 
 
 def load_lldb():
@@ -130,6 +131,13 @@ Variables belong to the selected frame and thread.
 
 Structs/tuples expand; lists/arrays/maps preview their elements.
 Previews stop at 16 elements, 3 nested levels and 128 values.
+These limits apply to p/locals output; the TUI uses a lazy tree:
+  Tab to Locals; Up/Down or j selects a row
+  l/Right opens a node; k/h/Left closes it or its parent
+  Shift-J collapses all; Shift-K restores previous expansions
+Structures start collapsed. Expansion is remembered per frame.
+The tree shows 16 children per node, up to 8 levels/256 rows.
+Opening a pointer node explicitly reads its pointee.
 Pointers are not followed automatically. str8/str16 show text;
 numeric enums show variant names. Unavailable values are marked.
 
@@ -211,6 +219,7 @@ For moved source trees:
 Batch mode (options before the executable):
   mladbg --batch -ex 'b main' -ex run -ex locals ./app
 Initialization files are not loaded automatically.
+Colors are automatic; use mladbg --no-colors ./app for monochrome.
 """,
     "keys": """KEYBOARD AND COMMAND ENTRY
 
@@ -234,8 +243,20 @@ Inside command entry (command history uses Up/Down):
   Backspace        delete the last character
   h/j/k/l          type normal letters
 
+In the Locals pane (structures start collapsed):
+  Up/Down or j     select a variable or field
+  l / Right       expand; on an open node, enter its first child
+  k / h / Left    collapse; on a closed child, return to its parent
+  Shift-J         collapse all nodes
+  Shift-K         restore the expansions saved by Shift-J
+  PgUp/PgDn       move the selection by ten rows
+Here k collapses nodes; use Up to select the previous row.
+
 Inside help: 0-8 choose a topic; Tab cycles topics. Scrolling keys
 still work. The program stays in its current execution state.
+--no-colors disables the palette; unsupported terminals fall back
+to monochrome. Source keywords/types/strings/numbers are colored;
+the current source line and focused tree selection use blue.
 """,
 }
 HELP_ORDER = tuple(HELP_TOPICS)
@@ -529,7 +550,7 @@ def source_lines(session):
     return str(path), ["Source unavailable: " + str(path)], 0
 
 
-def tui(screen, session):
+def tui(screen, session, use_colors=True):
     import curses
     curses.raw()  # Ctrl-C goes to the debuggee interrupt command, not SIGINT.
     curses.curs_set(0)
@@ -544,17 +565,18 @@ def tui(screen, session):
     history = []
     history_index = 0
     source_position = None
+    locals_tree = VariableTree()
     session.output("mladbg — type help for commands; F5 run/continue; : command; q quit")
-    border_attr = curses.A_DIM
-    focus_attr = curses.A_BOLD
-    if curses.has_colors():
+    theme = Theme(curses, use_colors)
+    if not theme.enabled:
+        # curses.wrapper may initialize color support itself. Keep pair 0
+        # at the terminal defaults even when application colors are disabled.
         try:
-            curses.start_color()
             curses.use_default_colors()
-            curses.init_pair(1, curses.COLOR_CYAN, -1)
-            focus_attr |= curses.color_pair(1)
         except curses.error:
             pass
+    border_attr = theme.attr("border") | curses.A_DIM
+    focus_attr = theme.attr("border") | curses.A_BOLD
 
     def put(y, x, text, width, attr=0):
         height, cols = screen.getmaxyx()
@@ -592,8 +614,19 @@ def tui(screen, session):
         horizontal_offsets[index] = min(horizontal_offsets[index], max(0, longest-content_width))
         offset = offsets[index]
         for row, line in enumerate(lines[offset:offset+content_height], 1):
-            line_attr = curses.A_REVERSE if index == 0 and line.lstrip().startswith("=>") else 0
-            put(y+row, x+2, safe_text(line)[horizontal_offsets[index]:], content_width, line_attr)
+            selected = (index == 0 and line.lstrip().startswith("=>") or
+                        index == 1 and focus == 1 and offset+row-1 == locals_tree.cursor and session.stopped())
+            line = safe_text(line)
+            start = horizontal_offsets[index]
+            visible = line[start:start+content_width]
+            role = "error" if index == 4 and line.lower().startswith("error:") else "text"
+            put(y+row, x+2, visible.ljust(content_width), content_width, theme.attr(role, selected))
+            if index in (0, 1):
+                for begin, end, token_role in token_spans(line):
+                    begin, end = max(begin, start), min(end, start+content_width)
+                    if begin < end:
+                        put(y+row, x+2+begin-start, line[begin:end], end-begin,
+                            theme.attr(token_role, selected))
 
     while True:
         session.poll()
@@ -629,8 +662,21 @@ def tui(screen, session):
                 source_position = position
             source_title = "Source" if title == "Source" else "Source | " + Path(title).name
             pane(1, 0, top, left, source_title, source, 0)
-            locals_ = value_lines(session.frame()) if session.stopped() else [
-                "Run and stop to inspect variables." if ready else "Process is " + state]
+            if session.stopped():
+                frame = session.frame()
+                thread = session.process().GetSelectedThread()
+                context = (session.process().GetProcessID(), thread.GetThreadID(),
+                           frame.GetCFA(), frame.GetFunctionName())
+                locals_ = locals_tree.refresh(frame, context)
+                if locals_tree.rows:
+                    cursor = locals_tree.cursor
+                    offsets[1] = min(offsets[1], cursor)
+                    offsets[1] = max(offsets[1], cursor-(top-2)+1)
+                    locals_ = [("> " if i == cursor else "  ")+text for i, text in enumerate(locals_)]
+                else:
+                    locals_ = ["No locals available (compile with -g -O0)"]
+            else:
+                locals_ = ["Run and stop to inspect variables." if ready else "Process is " + state]
             pane(1, right_x, top, width-right_x, "Locals / arguments", locals_, 1)
             thread = session.process().GetSelectedThread()
             stack = []
@@ -668,7 +714,9 @@ def tui(screen, session):
         else:
             put(height-2, 0, "(mladbg) " + command if editing else ": command | F5 run/continue | Ctrl-C: stop | q quit",
                 width, curses.A_BOLD)
-            put(height-1, 0, "Tab: pane | hjkl/arrows: scroll | PgUp/Dn: page | F1/? help", width, curses.A_DIM)
+            hints = ("Up/Down/j: select | l: expand | k/h: collapse | J/K: all/restore"
+                     if focus == 1 else "Tab: pane | hjkl/arrows: scroll | PgUp/Dn: page | F1/? help")
+            put(height-1, 0, hints, width, curses.A_DIM)
         screen.refresh()
         try:
             key = screen.get_wch()
@@ -729,6 +777,21 @@ def tui(screen, session):
             history_index = len(history)
         elif key == "\t":
             focus = (focus + 1) % 5
+        elif focus == 1 and session.stopped() and key in (
+                "j", "k", "h", "l", "J", "K", curses.KEY_UP, curses.KEY_DOWN,
+                curses.KEY_LEFT, curses.KEY_RIGHT, curses.KEY_PPAGE, curses.KEY_NPAGE):
+            if key in ("l", curses.KEY_RIGHT):
+                locals_tree.expand()
+            elif key in ("k", "h", curses.KEY_LEFT):
+                locals_tree.collapse()
+            elif key == "J":
+                locals_tree.collapse_all()
+            elif key == "K":
+                locals_tree.restore()
+            else:
+                delta = {"j": 1, curses.KEY_UP: -1, curses.KEY_DOWN: 1,
+                         curses.KEY_PPAGE: -10, curses.KEY_NPAGE: 10}[key]
+                locals_tree.move(delta)
         elif key in ("h", "l", curses.KEY_LEFT, curses.KEY_RIGHT):
             delta = -1 if key in ("h", curses.KEY_LEFT) else 1
             horizontal_offsets[focus] = max(0, horizontal_offsets[focus] + delta)
@@ -754,6 +817,7 @@ def main():
                                             "Use mladbg ./app -- program arguments. "
                                             "In the TUI, F1/? opens help; :help frames explains stack navigation.")
     parser.add_argument("--batch", action="store_true", help="run commands without the TUI")
+    parser.add_argument("--no-colors", action="store_true", help="use a monochrome terminal UI")
     parser.add_argument("-ex", "--command", action="append", default=[], help="startup command (repeatable)")
     parser.add_argument("--attach", type=int, metavar="PID", help="attach to an existing process")
     parser.add_argument("--version", action="version", version="mladbg 0.1 (LLDB backend)")
@@ -783,7 +847,7 @@ def main():
                 return 1
         if not options.batch:
             import curses
-            curses.wrapper(tui, session)
+            curses.wrapper(tui, session, not options.no_colors)
         return 0
     except (RuntimeError, OSError, KeyboardInterrupt) as error:
         print("mladbg: " + str(error), file=sys.stderr)

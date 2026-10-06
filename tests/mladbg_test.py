@@ -21,24 +21,29 @@ def run(args, expected=0, env=None):
     return output
 
 
-def check_tui(debugger, executable, source):
+def check_tui(debugger, executable, source, no_colors=False, tree_demo=False):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
     env = dict(os.environ, TERM="xterm-256color")
-    process = subprocess.Popen([debugger, "-ex", "b " + source + ":13", executable],
+    line = (next(i for i, text in enumerate(Path(source).read_text().splitlines(), 1)
+                 if "stack-break" in text) if tree_demo else 13)
+    args = [debugger] + (["--no-colors"] if no_colors else [])
+    process = subprocess.Popen(args + ["-ex", "b " + source + ":" + str(line), executable],
                                stdin=slave, stdout=slave, stderr=slave, env=env)
     os.close(slave)
     output = bytearray()
 
     def wait_for(text):
         deadline = time.monotonic() + 15
-        while text not in output and time.monotonic() < deadline:
+        def clean():
+            return re.sub(rb"\x1b(?:\[[0-?]*[ -/]*[@-~]|[()][A-Za-z0-9]|[@-_])", b"", output)
+        while text not in clean() and time.monotonic() < deadline:
             if select.select([master], [], [], 0.1)[0]:
                 try:
                     output.extend(os.read(master, 65536))
                 except OSError:
                     break
-        assert text in output, "TUI did not display %r:\n%s" % (text, output.decode(errors="replace"))
+        assert text in clean(), "TUI did not display %r:\n%s" % (text, output.decode(errors="replace"))
 
     try:
         wait_for(b"Console / program output")
@@ -48,20 +53,31 @@ def check_tui(debugger, executable, source):
         wait_for(b"MLADBG HELP")
         os.write(master, b"?")  # Closing help must leave the session usable.
         os.write(master, b":run\n")
-        wait_for(b"count = 7")
-        wait_for(b"ratio = 1.5")
-        # Exercise the smallest supported layout with a stopped process.
-        fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 18, 70, 0, 0))
-        os.kill(process.pid, signal.SIGWINCH)
-        os.write(master, b"ljjkh:next\n")
-        wait_for(b"step over")
-        # h/j/k/l must remain literal text inside the command prompt.
-        os.write(master, b":help frames\n")
-        wait_for(b"Frame 0 is the current function")
-        os.write(master, b"8")
-        wait_for(b"KEYBOARD AND COMMAND ENTRY")
-        os.write(master, b"\x1b:p count\n")
-        wait_for(b"count = 12")
+        if tree_demo:
+            wait_for(b"[+] (Engineer) engineer")
+            os.write(master, b"\tl")  # Focus locals and open the argument.
+            wait_for(b'name = "Ada"')
+            os.write(master, b"jjl")  # Select and expand its nested position.
+            wait_for(b"x = 1.5")
+            os.write(master, b"JK:frame 3\n")  # Collapse/restore, then inspect a caller.
+            wait_for(b"[+] (Team) team")
+            os.write(master, b":frame 0\n:p adjusted\n")
+            wait_for(b"adjusted = 20")
+        else:
+            wait_for(b"count = 7")
+            wait_for(b"ratio = 1.5")
+            # Exercise the smallest supported layout with a stopped process.
+            fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 18, 70, 0, 0))
+            os.kill(process.pid, signal.SIGWINCH)
+            os.write(master, b"ljjkh:next\n")
+            wait_for(b"step over")
+            # h/j/k/l must remain literal text inside the command prompt.
+            os.write(master, b":help frames\n")
+            wait_for(b"Frame 0 is the current function")
+            os.write(master, b"8")
+            wait_for(b"KEYBOARD AND COMMAND ENTRY")
+            os.write(master, b"\x1b:p count\n")
+            wait_for(b"count = 12")
         os.write(master, b"q")
         deadline = time.monotonic() + 10
         while process.poll() is None and time.monotonic() < deadline:
@@ -73,6 +89,13 @@ def check_tui(debugger, executable, source):
                 except OSError:
                     break
         assert process.wait(timeout=2) == 0
+        sgr = re.findall(rb"\x1b\[([\d;]*)m", output)
+        colors = [code for codes in sgr for code in codes.split(b";")
+                  if code.isdigit() and (30 <= int(code) <= 37 or 40 <= int(code) <= 47)]
+        if no_colors:
+            assert not colors, "--no-colors emitted foreground/background colors"
+        else:
+            assert b"44" in colors, "Selected source row did not have a blue background"
     finally:
         if process.poll() is None:
             process.kill()
@@ -128,6 +151,7 @@ def main():
         debug(["not-a-real-command"], expected=1)
         run([debugger, executable], expected=2)  # Non-TTY invocation must fail clearly.
         check_tui(debugger, executable, source)
+        check_tui(debugger, executable, source, no_colors=True)
         complex_source = Path(__file__).parent / "fixtures" / "mladbg_complex.mla"
         complex_executable = str(Path(temporary) / "complex")
         run([compiler, "-g", "-O0", str(complex_source), "-o", complex_executable])
@@ -208,6 +232,7 @@ def main():
                       "snapshot = {", "details = {", "cycle = {", "policy = {", "result = 16"):
             assert token in output, "Missing stack value %r:\n%s" % (token, output)
         assert "Process exited with status 0" in output, output
+        check_tui(debugger, demo_executable, str(demo_source), tree_demo=True)
     print("mladbg integration checks passed")
 
 

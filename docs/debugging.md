@@ -38,6 +38,18 @@ program output. Press `:` to enter commands and `Tab` to select a pane. Use
 horizontally, and Page Up/Down to scroll a page. Vim navigation applies outside
 command entry. Resize the terminal to at least 70 columns by 18 rows.
 
+Colors are enabled when the terminal supports them: keywords/types, strings,
+and numbers have distinct colors, and the execution line uses a blue
+background. Launch with `mladbg --no-colors ./app` for a monochrome display.
+
+Locals are a tree with structures and collections collapsed initially. Focus
+the pane with Tab; Up/Down or `j` selects a row, `l`/Right expands it, and
+`k`/`h`/Left collapses it. On an already-open node, `l` enters its first child;
+on a closed child, collapse returns to the parent. Shift-J collapses all;
+Shift-K restores the previous expansions and selection. These keys apply only
+to the locals pane outside command entry; use Up instead of `k` to move up.
+Expansion state is preserved separately for each selected stack frame.
+
 Press F1 or `?` for a full-screen, scrollable help pane, or enter `:help frames`
 to jump directly to stack navigation. Help also covers execution, variables,
 breakpoints/watchpoints, threads, memory, sessions, and keyboard controls.
@@ -144,13 +156,17 @@ next
 - `{ }` blocks as lexical scopes; code from imported modules at its own `.mla`
   file.
 
-The `mladbg` locals pane and `p VARIABLE` expand structs and tuples, display
-collection lengths, and preview list/array elements and map entries. Previews
-are limited to 16 elements, 3 levels of nesting, and 128 values per variable.
+The `mladbg` locals tree reads children only when opened, with up to 16 children
+per node, 8 levels, and 256 displayed rows. Pointer nodes can be opened
+explicitly; null pointers remain leaves. Collection lengths are shown while
+collapsed. `p VARIABLE` and `locals` in the console expand structs and tuples
+and preview collection entries, limited to 16 elements, 3 levels of nesting,
+and 128 values per variable.
 Unreadable memory, negative lengths, and null data pointers show an unavailable
-or invalid-value message. Pointers are not followed automatically: use
-`p *pointer` to inspect a pointee explicitly. Previews read memory without
-calling functions in the debuggee. The same display is used in batch mode.
+or invalid-value message. Pointers are not followed automatically: expand a
+pointer row or use `p *pointer` to inspect its pointee explicitly. All previews
+read memory without calling functions in the debuggee. Batch mode uses the
+console format.
 
 ## Limits
 
