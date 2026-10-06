@@ -91,9 +91,10 @@ mlang -g -O0 main.mla -o app
 mladbg ./app
 ```
 
-Use `:` for commands, F5 to run/continue, F6/F7/F8 to step over/into/out, and
-F1 or `?` for scrollable help. `:help frames` explains selecting callers and
-inspecting their variables; `:help keys` covers navigation and command history.
+Use `:` for commands, Tab/Shift-Tab to switch panes, F5 to run/continue,
+F6/F7/F8 to step over/into/out, and F1 or `?` for scrollable help. Press `a`
+to cycle source and assembly views. `:help frames` explains selecting callers
+and inspecting their variables; `:help keys` covers navigation and command history.
 Help topics also cover breakpoints, stepping, threads, memory, and sessions;
 use `0`–`8` or Tab to switch topics and Esc to close help.
 LLDB with matching Python bindings is required.
@@ -130,10 +131,12 @@ bt
 The locals pane is a browsable tree: structs, collections and pointers start
 collapsed. Use Tab/Shift-Tab to focus the next/previous pane, `j`/Down to select
 the next row, `k`/Up to select the previous row, `l`/Right to expand, and
-`h`/Left to collapse a node
-or return to its parent. Moving with `j`/`k` never changes expansions. Shift-J
-collapses everything; Shift-K restores the previous expansions and selection.
-Expansion state is remembered independently for each stack frame.
+`h`/Left to collapse a node or return to its parent. Moving with `j`/`k` never
+changes expansions. Shift-J collapses everything; Shift-K restores the previous
+expansions and selection. Expansion state is remembered independently for each
+stack frame. Select a variable or expanded field and press `w` to choose a
+break-on-change, break-on-value, or display action (`j`/`k`, Enter, or `1`–`3`);
+`d` adds it to Watch expressions, and `p` prints its full details.
 
 Press `a` to cycle source, source/assembly split, and assembly-only views.
 Assembly follows the selected stack frame, showing instruction bytes,
@@ -173,7 +176,9 @@ files and directories, or `:b` then Tab to browse the current directory.
 Use `j`/`k` or Up/Down to select, Enter/Tab to choose a file or enter a directory,
 Left to browse the parent, and Esc to close the dropdown. Choosing a file
 returns to the prompt; append `:LINE` and press Enter to set the breakpoint.
-Completion also supports `file`, `target create`, and `command source`.
+Completion also supports `file`, `target create`, `command source`, and
+`display load`/`display save`. The dropdown browses directories without a
+recursive scan, includes hidden entries, and caps each listing at 256 matches.
 
 To stop when a variable reaches a state, pause with it in scope, create a
 conditional watchpoint, then continue:
@@ -205,7 +210,8 @@ Watch expressions are a persistent, read-only value list, not hardware
 watchpoints. Add expressions with `:display count + 1` or `:display team.members.len`.
 Press `v` to toggle the view; tall terminals show it alongside Locals. Values
 refresh on stops, frame/thread changes and debugger commands. Expressions
-survive stepping and relaunching; out-of-scope entries remain marked unavailable.
+survive stepping and process relaunches in the same debugger session; out-of-scope
+entries remain marked unavailable.
 In Watch expressions, `n` adds, `e` edits, `d`/Delete removes, `p` prints, and
 `r` refreshes. Use `j`/`k` or arrows to select; Tab/Shift-Tab changes panes.
 
@@ -222,7 +228,8 @@ Load a saved list using `:display load watches.json` or
 `mladbg --watch-expressions watches.json ./app`. Saving is explicit, refuses
 to overwrite an existing file, and loading replaces the list. Up to 32
 expressions of 512 characters each are supported; assignments and function
-calls are rejected. No watch-expression settings file is created automatically.
+calls are rejected. If no path is supplied, save/load use
+`.mladbg-watches.json` in the current directory. No file is created automatically.
 
 Try it with the small debugger example:
 
