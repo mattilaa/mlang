@@ -175,6 +175,38 @@ Left to browse the parent, and Esc to close the dropdown. Choosing a file
 returns to the prompt; append `:LINE` and press Enter to set the breakpoint.
 Completion also supports `file`, `target create`, and `command source`.
 
+To stop when a variable reaches a state, pause with it in scope, create a
+conditional watchpoint, then continue:
+
+```text
+watch count == 12
+watch enabled == true
+watch point.x >= 10
+watch count if count > 10 && enabled
+continue
+```
+
+`watch count` stops on any write; `watch count = 12` is also accepted as an
+equality condition (it does not assign). Conditions are checked after writes,
+not continuously or immediately when created. Use scalar fields for complex
+objects, e.g. `watch team.members.len > 3`. Watchpoints and conditions appear
+in the Breakpoints pane; manage them with `watchpoint list`,
+`watchpoint disable 1`, `watchpoint enable 1`, and `watchpoint delete 1`.
+Hardware storage/slot limits apply. Conditions use LLDB's C/C++ expression
+syntax, must be read-only, and must remain valid at the write location; remove
+local watchpoints before their storage is reused. See `:help watch`.
+
+Try it with the small debugger example:
+
+```sh
+build/mlang -g -O0 examples/debugger.mla -o build/watch-demo
+build/mladbg -ex 'b examples/debugger.mla:13' build/watch-demo
+```
+
+Press F5, enter `:watch count == 12`, then `:continue`. Execution stops after
+`add` updates `count` from 7 to 12. Inspect it with `:p count`; remove the watch
+with `:watchpoint delete 1` before continuing to completion.
+
 The TUI colors source keywords, types, strings, and numbers, with a blue
 execution-line and selected-variable background. Unsupported terminals fall
 back to monochrome, or you can explicitly disable colors on startup:

@@ -135,6 +135,8 @@ are bounded to 256 entries, so narrow the prefix in very large directories.
 | Variables / expressions | `locals`, `p count`, `p count + 1` | |
 | Threads | `threads`, `thread 2` | |
 | Write watchpoint | `watch count` | |
+| Stop on value | `watch count == 12`, `watch enabled == true` | |
+| Conditional write watchpoint | `watch count if count > 10 && enabled` | |
 | Registers / assembly / memory | `registers`, `disassemble`, `memory 0xADDRESS` | |
 | Interrupt | `interrupt` | Ctrl-C |
 | Attach / detach | `attach PID`, `detach` | |
@@ -147,6 +149,43 @@ conditional breakpoints (`breakpoint modify -c 'count > 5' 1`), read watchpoints
 memory writes, source maps (`settings set target.source-map OLD NEW`), and other
 LLDB commands remain available. Expressions use LLDB's C/C++ syntax; arbitrary
 MLang expressions are not implemented.
+
+### Stop when a variable reaches a state
+
+Stop in a frame where the variable has addressable storage, then enter
+`watch count == 12` and `continue`. A hardware write watchpoint stops after a
+write when the condition is true; writes with a false condition continue.
+Setting the watch does not stop immediately if the value already matches.
+`watch count` remains an unconditional write watchpoint. `= VALUE` is shorthand
+for `== VALUE`, not an assignment. Comparisons `!=`, `<`, `<=`, `>` and `>=`
+also work, as does `watch VARIABLE if CONDITION` for a compound predicate.
+
+```text
+watch enabled == true
+watch count >= 100
+watch point.x == -3
+watch pointer->x > 10
+watch team.members.len > 3
+watch count if count > 10 && count < 20
+```
+
+Booleans, integers, floats, pointers and scalar fields can be compared using
+LLDB's C/C++ expression syntax. For structs, lists, maps, tuples and strings,
+watch their scalar fields or backing elements rather than assuming whole-object
+equality/string-content comparisons. The selected field's storage must fit
+the target's supported hardware watch sizes; available slots are limited.
+Conditions are validated before creating the watchpoint. Assignments,
+increments/decrements, statements and function calls are rejected.
+
+Watchpoints appear as `W1`, etc., alongside breakpoints, with a condition line.
+Their IDs are independent of breakpoint IDs: use `watchpoint list`,
+`watchpoint disable 1`, `watchpoint enable 1`, or `watchpoint delete 1`.
+The watch follows storage, not a variable's logical lifetime: delete local
+watches before returning from the frame or reusing its storage. Names in the
+condition must be resolvable in the frame where the write happens; a condition
+error is reported by LLDB and can stop execution rather than silently skip it.
+No software polling or pre-launch variable watches are implemented.
+See `:help watch` and the [LLDB watchpoint reference](https://lldb.llvm.org/use/map.html#watchpoint-commands).
 
 Prefer `-g -O0` when inspecting variables. Scalar locals, parameters, structs,
 strings, pointers, enums, and lists have DWARF descriptions; see the type
