@@ -3,6 +3,7 @@
 
 using mlang::ir_detail::common::Helpers;
 
+#include <limits>
 #include <optional>
 
 
@@ -312,6 +313,124 @@ bool CodeGenerator::evalConstexprCall(FunctionCallNode* call,
         if(errorMessage)
             *errorMessage = "cexpr recursion depth exceeded";
         return false;
+    }
+
+    const std::string numericLimitsMarker = "numeric_limits<";
+    const size_t numericLimitsPos = call->name.rfind(numericLimitsMarker);
+    if(numericLimitsPos != std::string::npos)
+    {
+        const size_t typeBegin = numericLimitsPos + numericLimitsMarker.size();
+        const size_t typeEnd = call->name.find(">::", typeBegin);
+        if(typeEnd != std::string::npos)
+        {
+            const std::string operation = call->name.substr(typeEnd + 3);
+            if(operation == "max" || operation == "min")
+            {
+                if(!call->arguments.empty())
+                {
+                    if(errorMessage)
+                        *errorMessage = "numeric_limits<T>::" + operation +
+                                        "() does not take arguments";
+                    return false;
+                }
+                const std::string typeName =
+                    call->name.substr(typeBegin, typeEnd - typeBegin);
+                TypeNode* type = nullptr;
+                if(env)
+                {
+                    auto binding = env->find("__type:" + typeName);
+                    if(binding != env->end() &&
+                       binding->second.kind == ConstexprValue::Kind::Type)
+                        type = Helpers::type_from_text(
+                            binding->second.typeName);
+                }
+                if(!type)
+                    type = Helpers::type_from_text(typeName);
+                if(!type)
+                {
+                    if(errorMessage)
+                        *errorMessage = "numeric_limits<T>::" + operation +
+                                        "() requires a primitive numeric type";
+                    return false;
+                }
+
+                out.typeKind = type->kind;
+                switch(type->kind)
+                {
+                case TypeNode::TYPE_BOOL:
+                case TypeNode::TYPE_BIT:
+                    out.kind = ConstexprValue::Kind::Bool;
+                    out.boolValue = operation == "max";
+                    out.intValue = out.boolValue ? 1 : 0;
+                    out.floatValue = out.boolValue ? 1.0 : 0.0;
+                    return true;
+                case TypeNode::TYPE_I8:
+                    out.intValue = operation == "max"
+                        ? std::numeric_limits<int8_t>::max()
+                        : std::numeric_limits<int8_t>::min();
+                    break;
+                case TypeNode::TYPE_I16:
+                    out.intValue = operation == "max"
+                        ? std::numeric_limits<int16_t>::max()
+                        : std::numeric_limits<int16_t>::min();
+                    break;
+                case TypeNode::TYPE_I32:
+                    out.intValue = operation == "max"
+                        ? std::numeric_limits<int32_t>::max()
+                        : std::numeric_limits<int32_t>::min();
+                    break;
+                case TypeNode::TYPE_I64:
+                case TypeNode::TYPE_INT:
+                    out.intValue = operation == "max"
+                        ? std::numeric_limits<int64_t>::max()
+                        : std::numeric_limits<int64_t>::min();
+                    break;
+                case TypeNode::TYPE_U8:
+                    out.intValue = operation == "max"
+                        ? std::numeric_limits<uint8_t>::max()
+                        : 0;
+                    break;
+                case TypeNode::TYPE_U16:
+                    out.intValue = operation == "max"
+                        ? std::numeric_limits<uint16_t>::max()
+                        : 0;
+                    break;
+                case TypeNode::TYPE_U32:
+                    out.intValue = operation == "max"
+                        ? std::numeric_limits<uint32_t>::max()
+                        : 0;
+                    break;
+                case TypeNode::TYPE_U64:
+                    out.intValue = operation == "max"
+                        ? static_cast<int64_t>(
+                              std::numeric_limits<uint64_t>::max())
+                        : 0;
+                    break;
+                case TypeNode::TYPE_FLOAT:
+                    out.kind = ConstexprValue::Kind::Float;
+                    out.floatValue = operation == "max"
+                        ? std::numeric_limits<float>::max()
+                        : std::numeric_limits<float>::min();
+                    out.intValue = static_cast<int64_t>(out.floatValue);
+                    return true;
+                case TypeNode::TYPE_DOUBLE:
+                    out.kind = ConstexprValue::Kind::Float;
+                    out.floatValue = operation == "max"
+                        ? std::numeric_limits<double>::max()
+                        : std::numeric_limits<double>::min();
+                    out.intValue = 0;
+                    return true;
+                default:
+                    if(errorMessage)
+                        *errorMessage = "numeric_limits<T>::" + operation +
+                                        "() supports only primitive numeric types";
+                    return false;
+                }
+                out.kind = ConstexprValue::Kind::Int;
+                out.floatValue = static_cast<double>(out.intValue);
+                return true;
+            }
+        }
     }
 
     if(call->name == "type_id")

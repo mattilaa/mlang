@@ -4,6 +4,20 @@ Module file: `stdlib/std/limits.mla`
 
 Integer limit helpers for MLang primitive integer types.
 
+The compiler also provides generic numeric limits using a C++-style qualified
+call. The type may be any supported integer type, `bool`, `f32`, or `f64`:
+
+```mla
+let largest: i32 = std::numeric_limits<i32>::max();
+let lowest: i64 = std::limits::numeric_limits<i64>::min();
+let largest_float: f32 = std::numeric_limits<f32>::max();
+```
+
+For integers, `min()` is the least representable value. For floating-point
+types it follows C++ `std::numeric_limits<T>::min()` and returns the smallest
+positive normalized value. Both calls are compile-time constants and can be
+used in `static_assert!`.
+
 ### Signed widths
 - `i8_min() -> i8`
 - `i8_max() -> i8`

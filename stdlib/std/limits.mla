@@ -1,5 +1,11 @@
 /// \file limits.mla
-/// \brief Integer limit helpers for MLang primitive numeric types.
+/// \brief Limits for MLang primitive numeric types.
+
+// The generic C++-style calls `std::numeric_limits<T>::max()` and
+// `std::numeric_limits<T>::min()` are compiler-provided intrinsics. They may
+// also be qualified through this module as `std::limits::numeric_limits<T>`.
+// `min()` follows C++ semantics: lowest integer for integer types and smallest
+// positive normalized value for floating-point types.
 
 /// @brief Minimum signed 8-bit integer.
 pub fn i8_min() -> i8 { return 0 - 127 - 1; }

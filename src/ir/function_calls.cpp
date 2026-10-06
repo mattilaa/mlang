@@ -229,6 +229,103 @@ llvm::Value* CodeGenerator::generateVariadicGenericCall(
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
+    const std::string numericLimitsMarker = "numeric_limits<";
+    const size_t numericLimitsPos = node->name.rfind(numericLimitsMarker);
+    if(numericLimitsPos != std::string::npos)
+    {
+        const size_t typeBegin = numericLimitsPos + numericLimitsMarker.size();
+        const size_t typeEnd = node->name.find(">::", typeBegin);
+        if(typeEnd != std::string::npos)
+        {
+            const std::string operation = node->name.substr(typeEnd + 3);
+            if(operation == "max" || operation == "min")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line,
+                                "numeric_limits<T>::" + operation +
+                                    "() does not take arguments");
+                    return nullptr;
+                }
+
+                const std::string typeName =
+                    node->name.substr(typeBegin, typeEnd - typeBegin);
+                TypeNode* numericType = nullptr;
+                auto typeBinding = activeTypeParamBindings.find(typeName);
+                if(typeBinding != activeTypeParamBindings.end())
+                    numericType = typeBinding->second;
+                if(!numericType)
+                {
+                    auto functionBinding =
+                        activeFunctionTypeBindings.find(typeName);
+                    if(functionBinding != activeFunctionTypeBindings.end())
+                        numericType = functionBinding->second;
+                }
+                if(!numericType)
+                    numericType = Helpers::type_from_text(typeName);
+                if(!numericType)
+                {
+                    reportError(node->line,
+                                "numeric_limits<T>::" + operation +
+                                    "() requires a primitive numeric type");
+                    return nullptr;
+                }
+
+                if(numericType->kind == TypeNode::TYPE_BOOL)
+                {
+                    return llvm::ConstantInt::get(
+                        llvm::Type::getInt1Ty(context), operation == "max");
+                }
+
+                llvm::Type* llvmType = getLLVMTypeFromNode(numericType);
+                if(!llvmType)
+                {
+                    reportError(node->line,
+                                "numeric_limits<T>::" + operation +
+                                    "() supports only primitive numeric types");
+                    return nullptr;
+                }
+
+                if(llvmType->isIntegerTy())
+                {
+                    const unsigned width = llvmType->getIntegerBitWidth();
+                    const bool isSigned =
+                        numericType->kind == TypeNode::TYPE_I8 ||
+                        numericType->kind == TypeNode::TYPE_I16 ||
+                        numericType->kind == TypeNode::TYPE_I32 ||
+                        numericType->kind == TypeNode::TYPE_I64 ||
+                        numericType->kind == TypeNode::TYPE_INT;
+                    llvm::APInt value = operation == "max"
+                        ? (isSigned ? llvm::APInt::getSignedMaxValue(width)
+                                    : llvm::APInt::getMaxValue(width))
+                        : (isSigned ? llvm::APInt::getSignedMinValue(width)
+                                    : llvm::APInt(width, 0));
+                    return llvm::ConstantInt::get(context, value);
+                }
+
+                if(llvmType->isFloatTy())
+                {
+                    const double value = operation == "max"
+                        ? std::numeric_limits<float>::max()
+                        : std::numeric_limits<float>::min();
+                    return llvm::ConstantFP::get(llvmType, value);
+                }
+                if(llvmType->isDoubleTy())
+                {
+                    const double value = operation == "max"
+                        ? std::numeric_limits<double>::max()
+                        : std::numeric_limits<double>::min();
+                    return llvm::ConstantFP::get(llvmType, value);
+                }
+
+                reportError(node->line,
+                            "numeric_limits<T>::" + operation +
+                                "() supports only primitive numeric types");
+                return nullptr;
+            }
+        }
+    }
+
     auto variadicIt = variadicGenericFunctionTemplates.find(node->name);
     if(variadicIt != variadicGenericFunctionTemplates.end() &&
        !variadicIt->second.empty())
