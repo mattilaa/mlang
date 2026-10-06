@@ -138,7 +138,7 @@ if(BUILD_MLADBG AND UNIX)
         MLANG_DEBUGGER_DATA_DIR="${CMAKE_INSTALL_DATADIR}/mlang/debugger")
     install(TARGETS mladbg RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         COMPONENT mlang-core)
-    install(FILES tools/mladbg/mladbg.py
+    install(FILES tools/mladbg/mladbg.py tools/mladbg/ui.py
         DESTINATION ${CMAKE_INSTALL_DATADIR}/mlang/debugger COMPONENT mlang-core)
 endif()
 

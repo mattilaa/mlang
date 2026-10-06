@@ -50,6 +50,11 @@ endif()
 
 if(TARGET mladbg)
     find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME mladbg_ui
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/mladbg_ui_test.py)
+        set_tests_properties(mladbg_ui PROPERTIES LABELS "debugger")
+    endif()
     add_test(NAME mladbg_help COMMAND mladbg --help)
     set_tests_properties(mladbg_help PROPERTIES LABELS "debugger")
     # Launching a debuggee requires ptrace/task_for_pid permission. Opt in on
