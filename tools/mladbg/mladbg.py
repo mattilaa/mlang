@@ -28,27 +28,221 @@ def load_lldb():
                            + str(error)) from error
 
 
-HELP = """run [args] / r     launch (arguments can also follow -- on the CLI)
-continue / c       resume         next / n       step over
-step / s           step into      finish / f     step out
-interrupt          stop a running process (Ctrl-C)
-break / b NAME     function breakpoint; b FILE:LINE or b LINE
-delete ID          remove breakpoint; enable/disable ID
-bt                 backtrace      frame N        select frame
-locals             locals and arguments
-print / p EXPR     inspect variable or evaluate a C-compatible expression
-threads            list threads   thread N       select thread index
-watch VAR          write watchpoint on a variable
-registers          registers      disassemble    assembly
-memory ADDRESS     read memory    attach PID     attach to process
-detach             detach         kill           terminate process
-Any other command is passed to LLDB (including conditional breakpoints,
-memory write, watchpoint options, source maps and expression assignment).
-Expressions use LLDB's C/C++ syntax, not the MLang parser.
-F5 continue, F6 next, F7 step, F8 finish, F9 break at current line.
-Tab changes pane; j/k or Up/Down scroll vertically; h/l or Left/Right scroll
-horizontally; PgUp/PgDn page; : enters a command; q quits.
-"""
+HELP_TOPICS = {
+    "overview": """MLADBG HELP
+
+Press : to enter a command. Press Enter to execute it.
+F1 or ? opens help; Esc, F1, ? or q closes help.
+In help, use 0-8 or Tab to choose a topic:
+
+  0  Overview
+  1  Frames       bt, frame N, up/down, per-frame variables
+  2  Execution    run, continue, next, step, finish, interrupt
+  3  Variables    locals, print, nested values, expressions
+  4  Breakpoints  source/function breaks, conditions, watches
+  5  Threads      choose a thread and inspect its stack
+  6  Memory       registers, assembly, memory reads/writes
+  7  Session      launch arguments, attach, detach, quit
+  8  Keys         pane focus, Vim scrolling, command history
+
+Commands: help frames, help variables, help keys, etc.
+For native command details: help lldb breakpoint modify
+Other debugger commands are passed directly to LLDB.
+
+Quick start:
+  b main       set a function breakpoint
+  run          launch and stop there
+  next         step past initialization
+  locals       inspect arguments and local variables
+  bt           list the call stack
+  frame 1      inspect the caller
+  p count      print count in that frame
+  frame 0      return to the current function before stepping
+  continue     resume execution
+""",
+    "frames": """STACK FRAMES
+
+Frame 0 is the current function. Higher numbers are callers.
+Frame commands require a stopped process (breakpoint or Ctrl-C).
+
+  bt              list frames in the selected thread
+  frame 0         select the current function
+  frame 1         select its caller
+  frame N         jump directly to any listed frame
+  up              select the next caller (higher number)
+  down            move toward the current function
+  locals          print the selected frame's locals/arguments
+  p variable      inspect a variable in the selected frame
+
+The source and locals panes follow your selection. The stack
+pane marks the selected frame with >. Scrolling the stack pane
+does not select a frame; use frame N, up or down.
+
+Selecting a frame keeps execution paused. Choose frame 0 before
+F6/F7/F8 to step from the current function. finish runs until
+that function returns; next then completes the caller's store.
+A caller's result variable may be uninitialized until then.
+
+Example at a nested breakpoint:
+  bt
+  frame 1
+  locals
+  p budget
+  frame 2
+  p team.members
+  frame 0
+  finish
+  next
+  p result
+""",
+    "execution": """EXECUTION AND STEPPING
+
+  run / r [args]  launch the target (F5 when not running)
+  continue / c    resume until a breakpoint or exit (F5)
+  next / n        step over a source statement (F6)
+  step / s        step into a function call (F7)
+  finish / f      run until the selected function returns (F8)
+  interrupt      pause a running process (Ctrl-C)
+  kill           terminate the current process
+
+Use frame 0 before stepping from the innermost function.
+Step past declarations before inspecting their initialized values.
+next executes called functions; step enters them. finish executes
+the remaining body rather than simply changing the selected frame.
+
+Compile with -g -O0 for predictable source stepping and locals:
+  mlang -g -O0 examples/debugger_demo.mla -o app
+""",
+    "variables": """VARIABLES AND COMPLEX VALUES
+
+Variables belong to the selected frame and thread.
+  locals                   show locals and arguments
+  p count                  inspect a scalar
+  p team                   expand a nested struct
+  p team.members           preview a list of structs
+  p team.ratings           preview a map's keys and values
+  p numbers.data[1]        inspect a collection element
+  p pair._0                inspect a tuple field
+  p pointer->position.x    follow a pointer field explicitly
+  p *pointer               inspect the pointee
+  p count + 1              evaluate an expression
+  p count = 10             change a value (when writable)
+
+Structs/tuples expand; lists/arrays/maps preview their elements.
+Previews stop at 16 elements, 3 nested levels and 128 values.
+Pointers are not followed automatically. str8/str16 show text;
+numeric enums show variant names. Unavailable values are marked.
+
+Expressions use LLDB's C/C++ syntax, not MLang syntax. Explicit
+expressions can change state or call functions in the program.
+Optimized or uninitialized variables may not have useful values.
+""",
+    "breakpoints": """BREAKPOINTS AND WATCHPOINTS
+
+  b main                   break on a function
+  b review                 also resolves MLang overloads
+  b file.mla:26            break at a source line
+  b 26                     line in the selected source frame
+  F9                       break at the current execution line
+  breakpoint list          list IDs and locations
+  disable 1 / enable 1     toggle a breakpoint
+  delete 1                 remove it
+  breakpoint modify -c 'count > 5' 1
+                           set a C-compatible condition
+
+Pending breakpoints have no resolved locations yet. A source
+line without executable code may resolve to the next statement.
+F9 uses the selected frame's execution line, not a scrolled row.
+
+  watch count              watch writes to a variable
+  watchpoint list          list watchpoints
+  watchpoint delete 1      remove a watchpoint
+  watchpoint set variable -w read count
+                           watch reads (if supported)
+Watchpoints require stopped variable storage and hardware support.
+""",
+    "threads": """THREADS
+
+  threads         list threads and their index numbers
+  thread 2        select thread index 2 (not its OS thread ID)
+  bt              inspect that thread's call stack
+  frame 0         select its current function
+  locals          inspect its arguments and locals
+  p variable      print a value in its selected frame
+
+When a process stops, mladbg selects a thread with a stop reason.
+Select another thread while paused to inspect its own stack.
+continue resumes execution; it does not just change thread focus.
+""",
+    "memory": """REGISTERS, ASSEMBLY AND MEMORY
+
+  registers                   read the selected frame's registers
+  disassemble                 show the selected function's assembly
+  memory 0xADDRESS            read memory at an address
+  memory read -f x -s 1 -c 16 0xADDRESS
+                              read 16 bytes in hexadecimal
+  memory write -s 1 0xADDRESS 0xff
+                              write a byte
+  thread step-inst            step into one machine instruction
+  thread step-inst-over       step over one machine instruction
+
+Addresses and register names depend on the target architecture.
+Use p &variable to locate its storage in the selected frame.
+Native options: help lldb memory read / help lldb disassemble
+""",
+    "session": """LAUNCHING, ATTACHING AND SOURCE FILES
+
+  mladbg ./app -- argument1 argument2
+                              start with program arguments
+  run argument1 argument2      launch with new arguments
+  mladbg --attach PID          attach from the command line
+  attach PID                   attach inside the debugger
+  detach                       release an attached process
+  kill                         terminate a process
+  quit / q / exit              close the debugger
+
+Quitting kills a process launched here and detaches one attached
+here. Inferior stdin defaults to /dev/null; for input redirection:
+  process launch -i input.txt -- argument1
+
+For moved source trees:
+  settings set target.source-map OLD_DIRECTORY NEW_DIRECTORY
+
+Batch mode (options before the executable):
+  mladbg --batch -ex 'b main' -ex run -ex locals ./app
+Initialization files are not loaded automatically.
+""",
+    "keys": """KEYBOARD AND COMMAND ENTRY
+
+  F1 / ?           open help; close it with Esc/F1/?/q
+  F5               run or continue
+  F6 / F7 / F8     next / step / finish
+  F9               breakpoint at the selected execution line
+  Ctrl-C           interrupt a running process
+  Tab              focus the next pane
+  j / k            scroll the focused pane down / up
+  h / l            scroll it left / right
+  arrow keys       same scroll directions
+  PgUp / PgDn      scroll by ten rows
+  :                start entering a command
+  q                quit (outside command entry or help)
+
+Inside command entry (command history uses Up/Down):
+  Enter            execute the command
+  Esc              cancel it
+  Up / Down        recall previous / next command
+  Backspace        delete the last character
+  h/j/k/l          type normal letters
+
+Inside help: 0-8 choose a topic; Tab cycles topics. Scrolling keys
+still work. The program stays in its current execution state.
+""",
+}
+HELP_ORDER = tuple(HELP_TOPICS)
+HELP_ALIASES = {"stack": "frames", "frame": "frames", "stepping": "execution",
+                "locals": "variables", "print": "variables", "break": "breakpoints",
+                "keyboard": "keys"}
+HELP = HELP_TOPICS["overview"]
 
 
 class Session:
@@ -133,8 +327,16 @@ class Session:
             return True
         name, _, rest = text.partition(" ")
         if name in ("help", "h", "?"):
-            self.output(HELP)
-            return True
+            topic = rest.strip().lower() or "overview"
+            topic = HELP_ALIASES.get(topic, topic)
+            if topic in HELP_TOPICS:
+                self.output(HELP_TOPICS[topic])
+                return True
+            if topic == "lldb" or topic.startswith("lldb "):
+                name, rest = "help", rest.strip()[4:].strip()
+            else:
+                self.output("Unknown help topic. Use help or help lldb COMMAND.")
+                return False
         if name in ("quit", "q", "exit"):
             return None
         aliases = {"r": "run", "c": "continue", "n": "next", "s": "step",
@@ -336,8 +538,9 @@ def tui(screen, session):
     command = ""
     editing = False
     focus = 0
-    offsets = [0] * 5
-    horizontal_offsets = [0] * 5
+    offsets = [0] * 6
+    horizontal_offsets = [0] * 6
+    help_topic = None
     history = []
     history_index = 0
     source_position = None
@@ -362,7 +565,7 @@ def tui(screen, session):
                 pass  # Resize or bottom-right cell during a repaint.
 
     def pane(y, x, height, width, title, lines, index):
-        attr = focus_attr if focus == index else border_attr
+        attr = focus_attr if focus == index or index == 5 else border_attr
 
         def cell(row, col, character):
             try:
@@ -399,9 +602,15 @@ def tui(screen, session):
         state = session.lldb.SBDebugger.StateAsCString(session.process().GetState())
         ready = not session.process().IsValid()
         status = "Ready" if ready else state.capitalize()
-        put(0, 0, " mladbg | %s | F5 run/continue  F6 next  F7 step  F8 finish  F9 break" % status,
+        put(0, 0, " mladbg | %s | F1 help | F5 run/continue  F6 next  F7 step  F8 finish  F9 break" % status,
             width, curses.A_BOLD)
-        if height < 18 or width < 70:
+        if help_topic is not None:
+            if height >= 8 and width >= 40:
+                pane(1, 0, height-3, width, "Help | " + help_topic.title(),
+                     HELP_TOPICS[help_topic].splitlines(), 5)
+            else:
+                put(2, 0, "Resize to 40 columns x 8 rows for help", width)
+        elif height < 18 or width < 70:
             put(2, 0, "Resize terminal to at least 70 columns x 18 rows", width)
         else:
             gap = 1 if height >= 22 else 0
@@ -453,9 +662,13 @@ def tui(screen, session):
                 offsets[4] = max(0, len(session.log)-console_height+2)
             pane(console_y, 0, console_height, width,
                  "Console / program output", list(session.log), 4)
-        put(height-2, 0, "(mladbg) " + command if editing else ": command  |  F5 run/continue  |  q quit",
-            width, curses.A_BOLD)
-        put(height-1, 0, "Tab: pane | hjkl/arrows: scroll | PgUp/Dn: page | Ctrl-C: stop", width, curses.A_DIM)
+        if help_topic is not None:
+            put(height-2, 0, "0-8/Tab: topics | j/k/PgUp/PgDn: scroll", width, curses.A_BOLD)
+            put(height-1, 0, "Esc/F1/?/q: close help | Ctrl-C: interrupt", width, curses.A_DIM)
+        else:
+            put(height-2, 0, "(mladbg) " + command if editing else ": command | F5 run/continue | Ctrl-C: stop | q quit",
+                width, curses.A_BOLD)
+            put(height-1, 0, "Tab: pane | hjkl/arrows: scroll | PgUp/Dn: page | F1/? help", width, curses.A_DIM)
         screen.refresh()
         try:
             key = screen.get_wch()
@@ -463,13 +676,39 @@ def tui(screen, session):
             continue
         if key == "\x03":
             session.command("interrupt")
+        elif help_topic is not None:
+            if key in ("\x1b", "q", "?", curses.KEY_F1):
+                help_topic = None
+            elif key == "\t" or isinstance(key, str) and key in "012345678":
+                index = ((HELP_ORDER.index(help_topic)+1) % len(HELP_ORDER)
+                         if key == "\t" else int(key))
+                help_topic = HELP_ORDER[index]
+                offsets[5] = horizontal_offsets[5] = 0
+            elif key in ("j", "k", curses.KEY_UP, curses.KEY_DOWN, curses.KEY_PPAGE, curses.KEY_NPAGE):
+                delta = {"j": 1, "k": -1, curses.KEY_UP: -1, curses.KEY_DOWN: 1,
+                         curses.KEY_PPAGE: -10, curses.KEY_NPAGE: 10}[key]
+                offsets[5] = max(0, offsets[5]+delta)
+            elif key in ("h", "l", curses.KEY_LEFT, curses.KEY_RIGHT):
+                delta = -1 if key in ("h", curses.KEY_LEFT) else 1
+                horizontal_offsets[5] = max(0, horizontal_offsets[5]+delta)
+        elif key == curses.KEY_F1 or key == "?" and not editing:
+            help_topic = "overview"
+            offsets[5] = horizontal_offsets[5] = 0
         elif editing:
             if key in ("\n", "\r", curses.KEY_ENTER):
                 if command:
                     history.append(command)
                     session.output("(mladbg) " + command)
-                    if session.command(command) is None:
+                    result = session.command(command)
+                    if result is None:
                         break
+                    parts = command.strip().split(maxsplit=1)
+                    if result and parts and parts[0] in ("help", "h", "?"):
+                        topic = parts[1].strip().lower() if len(parts) > 1 else "overview"
+                        topic = HELP_ALIASES.get(topic, topic)
+                        if topic in HELP_TOPICS:
+                            help_topic = topic
+                            offsets[5] = horizontal_offsets[5] = 0
                 command = ""
                 editing = False
             elif key == "\x1b":
@@ -512,7 +751,8 @@ def tui(screen, session):
 def main():
     parser = argparse.ArgumentParser(prog="mladbg", description="MLang terminal debugger powered by LLDB",
                                      epilog="Compile with mlang -g -O0 source.mla -o app. "
-                                            "Use mladbg ./app -- program arguments.")
+                                            "Use mladbg ./app -- program arguments. "
+                                            "In the TUI, F1/? opens help; :help frames explains stack navigation.")
     parser.add_argument("--batch", action="store_true", help="run commands without the TUI")
     parser.add_argument("-ex", "--command", action="append", default=[], help="startup command (repeatable)")
     parser.add_argument("--attach", type=int, metavar="PID", help="attach to an existing process")

@@ -38,6 +38,13 @@ program output. Press `:` to enter commands and `Tab` to select a pane. Use
 horizontally, and Page Up/Down to scroll a page. Vim navigation applies outside
 command entry. Resize the terminal to at least 70 columns by 18 rows.
 
+Press F1 or `?` for a full-screen, scrollable help pane, or enter `:help frames`
+to jump directly to stack navigation. Help also covers execution, variables,
+breakpoints/watchpoints, threads, memory, sessions, and keyboard controls.
+Inside help, `0`–`8` or Tab select a topic, Vim/arrow/Page keys scroll, and
+Esc/F1/`?`/`q` return to the debugger. Opening help does not pause execution.
+`help lldb COMMAND` prints native command details to the console.
+
 | Action | Command | Key |
 | --- | --- | --- |
 | Launch | `run` or `r` | F5 |
@@ -45,7 +52,7 @@ command entry. Resize the terminal to at least 70 columns by 18 rows.
 | Step over / into / out | `next`, `step`, `finish` (`n`, `s`, `f`) | F6 / F7 / F8 |
 | Breakpoint | `b main`, `b add`, `b file.mla:12`, `b 12` | F9 at current line |
 | Breakpoint management | `delete 1`, `disable 1`, `enable 1` | |
-| Stack / frame | `bt`, `frame 1` | |
+| Stack / frame | `bt`, `frame 1`, `up`, `down` | |
 | Variables / expressions | `locals`, `p count`, `p count + 1` | |
 | Threads | `threads`, `thread 2` | |
 | Write watchpoint | `watch count` | |
@@ -53,6 +60,7 @@ command entry. Resize the terminal to at least 70 columns by 18 rows.
 | Interrupt | `interrupt` | Ctrl-C |
 | Attach / detach | `attach PID`, `detach` | |
 | Quit | `quit` | q |
+| Help | `help`, `help frames`, `help keys` | F1 / ? |
 
 `b add` also resolves MLang overloads such as `add__i32_i32`. Unresolved
 breakpoints remain pending. Commands not listed above are passed to LLDB, so

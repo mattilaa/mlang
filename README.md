@@ -92,7 +92,11 @@ mladbg ./app
 ```
 
 Use `:` for commands, F5 to run/continue, F6/F7/F8 to step over/into/out, and
-`help` for the command list. LLDB with matching Python bindings is required.
+F1 or `?` for scrollable help. `:help frames` explains selecting callers and
+inspecting their variables; `:help keys` covers navigation and command history.
+Help topics also cover breakpoints, stepping, threads, memory, and sessions;
+use `0`–`8` or Tab to switch topics and Esc to close help.
+LLDB with matching Python bindings is required.
 
 For a complete demo from the repository root, build
 [examples/debugger_demo.mla](examples/debugger_demo.mla) and stop after its

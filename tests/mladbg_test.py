@@ -44,6 +44,9 @@ def check_tui(debugger, executable, source):
         wait_for(b"Console / program output")
         wait_for(b"Ready")
         assert b"\x1b(0" in output or "┌".encode() in output, "Pane borders were not drawn"
+        os.write(master, b"\x1bOP")  # F1 in xterm-256color.
+        wait_for(b"MLADBG HELP")
+        os.write(master, b"?")  # Closing help must leave the session usable.
         os.write(master, b":run\n")
         wait_for(b"count = 7")
         wait_for(b"ratio = 1.5")
@@ -53,7 +56,11 @@ def check_tui(debugger, executable, source):
         os.write(master, b"ljjkh:next\n")
         wait_for(b"step over")
         # h/j/k/l must remain literal text inside the command prompt.
-        os.write(master, b":help\n:p count\n")
+        os.write(master, b":help frames\n")
+        wait_for(b"Frame 0 is the current function")
+        os.write(master, b"8")
+        wait_for(b"KEYBOARD AND COMMAND ENTRY")
+        os.write(master, b"\x1b:p count\n")
         wait_for(b"count = 12")
         os.write(master, b"q")
         deadline = time.monotonic() + 10
@@ -107,6 +114,14 @@ def main():
         output = debug(["b " + source + ":13", "disable 1", "run"])
         assert "Stopped: breakpoint" not in output, output
         assert "Process exited with status 0" in output, output
+        output = debug(["help frames", "help execution", "help variables", "help breakpoints",
+                        "help threads", "help memory", "help session", "help keys",
+                        "help lldb frame select"])
+        for token in ("Frame 0 is the current function", "up", "down", "p team.members",
+                      "breakpoint modify", "watchpoint delete", "command history",
+                      "KEYBOARD AND COMMAND ENTRY", "frame select"):
+            assert token.lower() in output.lower(), "Missing help %r:\n%s" % (token, output)
+        debug(["help nonexistent-topic"], expected=1)
         output = debug(["b " + source + ":13", "run", "watch count", "continue",
                         "p count", "continue"])
         assert "watchpoint" in output.lower() and "count = 12" in output, output
