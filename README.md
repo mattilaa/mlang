@@ -133,6 +133,33 @@ select the previous row, `l`/Right to expand, and `h`/Left to collapse a node
 or return to its parent. Moving with `j`/`k` never changes expansions. Shift-J
 collapses everything; Shift-K restores the previous expansions and selection.
 Expansion state is remembered independently for each stack frame.
+
+Press `a` to cycle source, source/assembly split, and assembly-only views.
+Assembly follows the selected stack frame, showing instruction bytes,
+source-line locations and the current PC. Use `:asm line` to limit it to the
+current source line, or `:asm function` for the function (up to 256 instructions).
+Small terminals show assembly alone instead of the split. In the assembly pane,
+`j`/`k` select an instruction, `b` sets an address breakpoint, and `i`/`I`
+step into/over one instruction. `e` opens a prefilled patch command for the
+selected address; enter replacement assembly and press Enter. For example:
+
+```text
+patch pc nop
+patch list
+si
+patch undo
+continue
+```
+
+Live patches require a stopped process and exactly the original instruction's
+size (`nop` fills it with NOPs). They affect process memory only, not the binary
+or source, and never resume execution automatically. `u` in assembly undoes the
+last patch. General assembly uses `clang` (override with `MLADBG_CLANG`), with
+AT&T syntax on x86; labels, directives and unresolved relocations are rejected.
+`:patch-bytes pc HEX` also accepts explicit hex bytes. Bad patches can crash or
+corrupt the program; code-signing or memory protections may refuse writes.
+See `:help memory` for details.
+
 In the other panes, scroll with `j`/`k` (down/up) and `h`/`l` (left/right), or
 the corresponding arrow keys; Page Up/Down scrolls a page.
 The Vim keys apply outside the command prompt, so commands can still contain

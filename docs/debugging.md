@@ -51,6 +51,51 @@ Shift-K restores the previous expansions and selection. These keys apply only
 to the locals pane outside command entry.
 Expansion state is preserved separately for each selected stack frame.
 
+### Assembly and live instruction editing
+
+Press `a` to cycle source, mixed source/assembly, and assembly-only views.
+Mixed view splits the source area vertically; small terminals use assembly
+alone. `:asm line` filters to the selected source line, `:asm function` shows
+the selected function (bounded to 256 instructions), and `:asm off` restores
+source-only viewing. Bytes, addresses and source locations are shown, with
+`=>` marking the selected frame PC. Both views follow frame/thread selection.
+
+In assembly, `j`/`k` and arrows select instructions, `h`/`l` scroll horizontally,
+`b` adds an address breakpoint, and `i`/`I` step into/over a machine instruction
+(`:si`/`:ni` work from any pane). `e` prefills `patch 0xADDRESS ` in the command
+prompt; enter assembly or cancel with Esc. Instructions already executed are
+not replayed by patching them; select frame 0 to inspect the actual next PC.
+
+```text
+patch pc nop                 # replace the current instruction with NOPs
+patch 0xADDRESS ASM          # replace one instruction at a visible address
+patch-bytes pc 1f 20 03 d5   # explicit bytes (this example is AArch64 NOP)
+patch list                  # original and replacement bytes
+patch undo                  # restore the last patch (also u in assembly)
+si                          # execute one machine instruction
+continue                    # resume explicitly
+```
+
+The inline comments above are explanations, not part of the commands.
+Replacements must have exactly the original instruction size; multiple
+instructions separated by `;` may fit that space. `nop` automatically fills
+the original space on x86/AArch64.
+`pc+OFFSET` / `pc-OFFSET` can address a nearby instruction without hardcoding
+ASLR-dependent addresses (for example `patch pc+4 nop`).
+Instruction starts are validated against the selected function, and writes
+are verified. Undo checks for intervening
+edits and refuses to overwrite them. History is scoped to the live process;
+relaunching discards it. Patches never change the executable on disk or source
+and do not automatically continue. All threads remain stopped during editing.
+
+General assembly requires clang's integrated assembler; `MLADBG_CLANG` can
+select its executable. x86 assembly uses AT&T syntax. Directives, labels and
+symbolic/PC-relative relocations are rejected; use explicit resolved bytes
+for such changes. No trampoline or instruction resizing is performed.
+Incorrect code can crash/corrupt the inferior, and OS code-signing/W^X or
+remote debugger restrictions may prevent writes. Errors are reported; failed
+writes trigger a best-effort rollback. See `:help memory` for built-in help.
+
 Press F1 or `?` for a full-screen, scrollable help pane, or enter `:help frames`
 to jump directly to stack navigation. Help also covers execution, variables,
 breakpoints/watchpoints, threads, memory, sessions, and keyboard controls.
