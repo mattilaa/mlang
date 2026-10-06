@@ -514,6 +514,14 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         paramIdx++;
     }
 
+    // Parameter storage and semantic types are now available. Describe them
+    // before generating the body so stepping can inspect incoming values.
+    for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
+    {
+        auto* parameter = node->parameters->parameters[i];
+        emitDebugVariable(parameter->name, parameter, static_cast<unsigned>(i + 1));
+    }
+
     // Generate the function body
     if(node->body)
     {

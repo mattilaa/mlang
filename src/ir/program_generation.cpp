@@ -53,6 +53,50 @@ void CodeGenerator::setDebugLocation(const ASTNode* node)
         static_cast<unsigned>(std::max(1, node->col)), scope));
 }
 
+void CodeGenerator::emitDebugVariable(const std::string& name,
+                                       const ASTNode* node, unsigned argument)
+{
+    if(!debugInfoBuilder || !currentDebugScope || !builder.GetInsertBlock())
+        return;
+    auto storage = namedValues.find(name);
+    auto kind = variableTypes.find(name);
+    if(storage == namedValues.end() || kind == variableTypes.end())
+        return;
+    auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(storage->second);
+    if(!alloca)
+        return;
+    llvm::Type* type = alloca->getAllocatedType();
+    // Containers and structs require their own member/layout metadata. Never
+    // misrepresent them as scalar values merely because their kind is known.
+    if(!type->isIntegerTy() && !type->isFloatingPointTy())
+        return;
+    unsigned encoding = type->isFloatingPointTy() ? llvm::dwarf::DW_ATE_float
+                        : kind->second == TypeNode::TYPE_BOOL ||
+                                  kind->second == TypeNode::TYPE_BIT
+                            ? llvm::dwarf::DW_ATE_boolean
+                        : isUnsignedType(kind->second)
+                            ? llvm::dwarf::DW_ATE_unsigned
+                            : llvm::dwarf::DW_ATE_signed;
+    const unsigned bits = type->isIntegerTy() ? type->getIntegerBitWidth()
+                                            : type->isFloatTy() ? 32 : 64;
+    auto* diType = debugInfoBuilder->createBasicType(
+        TypeNode(kind->second).toString(), bits, encoding);
+    auto* scope = llvm::dyn_cast<llvm::DILocalScope>(currentDebugScope);
+    if(!scope)
+        return;
+    unsigned line = static_cast<unsigned>(std::max(1, node->line));
+    auto* variable = argument
+        ? debugInfoBuilder->createParameterVariable(scope, name, argument,
+                                                     getDebugFile(node), line,
+                                                     diType, true)
+        : debugInfoBuilder->createAutoVariable(scope, name, getDebugFile(node),
+                                                line, diType, true);
+    auto* location = llvm::DILocation::get(context, line, 1, scope);
+    debugInfoBuilder->insertDeclare(alloca, variable,
+                                    debugInfoBuilder->createExpression(),
+                                    location, builder.GetInsertBlock());
+}
+
 void CodeGenerator::generateCode(ProgramNode* program)
 {
     if(emitDebugInfo)

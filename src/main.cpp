@@ -2404,7 +2404,7 @@ int main(int argc, char** argv)
             // The backend sets the target triple and data layout. Do it
             // before code generation, so size_of and every other layout query
             // see the target's padding and alignment, not LLVM's defaults.
-            Backend backend(module, targetArch);
+            Backend backend(module, targetArch, optimizationLevel == "-O0");
 
             generator.generateCode(program);
 

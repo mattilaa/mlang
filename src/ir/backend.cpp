@@ -88,8 +88,9 @@ static std::string shell_quote(const std::string& value)
 } // namespace
 
 Backend::Backend(std::unique_ptr<llvm::Module>& m,
-                 const std::string& archOverride)
-    : module(m), targetMachine(nullptr), targetArchOverride(archOverride)
+                 const std::string& archOverride, bool unoptimizedCodegen)
+    : module(m), targetMachine(nullptr), targetArchOverride(archOverride),
+      unoptimizedCodegen(unoptimizedCodegen)
 {
     initializeTarget();
 }
@@ -162,8 +163,9 @@ bool Backend::initializeTarget()
     auto relocModel = mlang::llvm_compat::Optional<llvm::Reloc::Model>(
         llvm::Reloc::PIC_);
     using CodeGenOptLevel = mlang::llvm_compat::CodeGenOptLevel;
-    CodeGenOptLevel codegenOpt = CodeGenOptLevel::Default;
-    bool conservativeCodegen = false;
+    CodeGenOptLevel codegenOpt = unoptimizedCodegen ? CodeGenOptLevel::None
+                                                   : CodeGenOptLevel::Default;
+    bool conservativeCodegen = unoptimizedCodegen;
     if(const char* defaultOptEnv = std::getenv("MLANG_DEFAULT_OPT_LEVEL"))
     {
         if(defaultOptEnv[0] == '0' && defaultOptEnv[1] == '\0')

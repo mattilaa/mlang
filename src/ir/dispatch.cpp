@@ -35,10 +35,12 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto letNode = dynamic_cast<LetDeclNode*>(node))
     {
         generateLetDeclaration(letNode);
+        emitDebugVariable(letNode->name, letNode);
     }
     else if(auto varNode = dynamic_cast<VarDeclNode*>(node))
     {
         generateVarDeclaration(varNode);
+        emitDebugVariable(varNode->name, varNode);
     }
     else if(auto assignNode = dynamic_cast<AssignmentNode*>(node))
     {

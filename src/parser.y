@@ -2576,9 +2576,9 @@ function_def
             $$ = fn;
         }
     | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { auto* node = mla_ast_function_def($7, $2, $4, $9, 0, 0); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_function_def($7, $2, $4, $9, 0, 0); node->line = @1.first_line; node->col = @1.first_column; $$ = node; }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { auto* node = mla_ast_function_def($8, $3, $5, $10, 1, 0); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_function_def($8, $3, $5, $10, 1, 0); node->line = @2.first_line; node->col = @2.first_column; $$ = node; }
     | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN CEXPR ARROW type LBRACE statement_list RBRACE
         {
             auto* node = mla_ast_function_def($8, $2, $4, $10, 0, 0);
@@ -2613,7 +2613,8 @@ function_def
             if(strcmp($2, "main") == 0)
                 inferred = static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_I32));
             auto* node = mla_ast_function_def(inferred, $2, $4, $7, 0, 0);
-            node->line = yylineno;
+            node->line = @1.first_line;
+            node->col = @1.first_column;
             $$ = node;
         }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
@@ -2622,7 +2623,8 @@ function_def
             if(strcmp($3, "main") == 0)
                 inferred = static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_I32));
             auto* node = mla_ast_function_def(inferred, $3, $5, $8, 1, 0);
-            node->line = yylineno;
+            node->line = @2.first_line;
+            node->col = @2.first_column;
             $$ = node;
         }
     | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN CEXPR LBRACE statement_list RBRACE
@@ -2767,7 +2769,7 @@ parameters
     ;
 
 parameter
-    : IDENTIFIER COLON type { $$ = mla_ast_parameter($3, $1); }
+    : IDENTIFIER COLON type { $$ = mla_ast_parameter($3, $1); $$->line = @1.first_line; $$->col = @1.first_column; }
     | IDENTIFIER COLON type ELLIPSIS
         {
             auto* param = static_cast<ParameterNode*>(mla_ast_parameter($3, $1));
@@ -2856,7 +2858,7 @@ statement
     | static_var_statement
     | assignment_statement
     | expression_statement
-    | return_statement
+    | return_statement { $$ = $1; $$->line = @1.first_line; $$->col = @1.first_column; }
     | if_statement
     | cexpr_if_statement
     | for_statement
@@ -2884,7 +2886,7 @@ colon_statement
     | static_var_statement
     | assignment_statement
     | expression_statement
-    | return_statement
+    | return_statement { $$ = $1; $$->line = @1.first_line; $$->col = @1.first_column; }
     | struct_init
     | print_statement
     | assert_eq_statement
@@ -2909,24 +2911,26 @@ nested_function_statement
 
 let_statement
     : optional_branch_prediction LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
-        { $$ = apply_declaration_branch_prediction(create_let_declaration($5, $3, $7), $1); }
+        { $$ = apply_declaration_branch_prediction(create_let_declaration($5, $3, $7), $1); $$->line = @2.first_line; $$->col = @2.first_column; }
     | optional_branch_prediction LET IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
             report_brace_list_initializer_suggestion(
                 static_cast<TypeNode*>($5), yylineno, yycolumn_token);
             $$ = create_let_declaration($5, $3, $7);
             $$ = apply_declaration_branch_prediction($$, $1);
+            $$->line = @2.first_line; $$->col = @2.first_column;
         }
     | optional_branch_prediction LET IDENTIFIER ASSIGN expression SEMICOLON
-        { $$ = apply_declaration_branch_prediction(create_let_declaration(NULL, $3, $5), $1); }
+        { $$ = apply_declaration_branch_prediction(create_let_declaration(NULL, $3, $5), $1); $$->line = @2.first_line; $$->col = @2.first_column; }
     | optional_branch_prediction LET IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
-        { $$ = apply_declaration_branch_prediction(create_let_declaration($5, $3, $7), $1); }
+        { $$ = apply_declaration_branch_prediction(create_let_declaration($5, $3, $7), $1); $$->line = @2.first_line; $$->col = @2.first_column; }
     | optional_branch_prediction LET IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
         {
             ASTNode* lit = mla_ast_struct_literal($5, NULL, $7, yylineno);
             ASTNode* typeRef = mla_ast_struct_type_ref($5);
             $$ = create_let_declaration(typeRef, $3, lit);
             $$ = apply_declaration_branch_prediction($$, $1);
+            $$->line = @2.first_line; $$->col = @2.first_column;
         }
     ;
 
@@ -2937,18 +2941,19 @@ cexpr_declaration
 
 var_statement
     : optional_branch_prediction VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
-        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, $7), $1); }
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, $7), $1); $$->line = @2.first_line; $$->col = @2.first_column; }
     | optional_branch_prediction VAR IDENTIFIER COLON type ASSIGN brace_array_initializer SEMICOLON
         {
             report_brace_list_initializer_suggestion(
                 static_cast<TypeNode*>($5), yylineno, yycolumn_token);
             $$ = mla_ast_var_declaration($5, $3, $7);
             $$ = apply_declaration_branch_prediction($$, $1);
+            $$->line = @2.first_line; $$->col = @2.first_column;
         }
     | optional_branch_prediction VAR IDENTIFIER ASSIGN expression SEMICOLON
-        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration(NULL, $3, $5), $1); }
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration(NULL, $3, $5), $1); $$->line = @2.first_line; $$->col = @2.first_column; }
     | optional_branch_prediction VAR IDENTIFIER COLON type SEMICOLON
-        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, NULL), $1); }
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, NULL), $1); $$->line = @2.first_line; $$->col = @2.first_column; }
     | optional_branch_prediction VAR IDENTIFIER COLON type LBRACE RBRACE SEMICOLON
         {
             $$ = mla_ast_var_declaration($5, $3, NULL);
@@ -2957,15 +2962,17 @@ var_statement
                 n->isExplicitZeroInit = true;
             }
             $$ = apply_declaration_branch_prediction($$, $1);
+            $$->line = @2.first_line; $$->col = @2.first_column;
         }
     | optional_branch_prediction VAR IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
-        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, $7), $1); }
+        { $$ = apply_declaration_branch_prediction(mla_ast_var_declaration($5, $3, $7), $1); $$->line = @2.first_line; $$->col = @2.first_column; }
     | optional_branch_prediction VAR IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
         {
             ASTNode* lit = mla_ast_struct_literal($5, NULL, $7, yylineno);
             ASTNode* typeRef = mla_ast_struct_type_ref($5);
             $$ = mla_ast_var_declaration(typeRef, $3, lit);
             $$ = apply_declaration_branch_prediction($$, $1);
+            $$->line = @2.first_line; $$->col = @2.first_column;
         }
     ;
 

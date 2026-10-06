@@ -709,6 +709,8 @@ private:
     llvm::Value* generateThreadJoin(FunctionCallNode* node);
     llvm::DIFile* getDebugFile(const ASTNode* node);
     void setDebugLocation(const ASTNode* node);
+    void emitDebugVariable(const std::string& name, const ASTNode* node,
+                           unsigned argument = 0);
     llvm::Value* buildHandleValue(const std::string& handleTypeName,
                                   llvm::Value* rawHandle, int line);
     llvm::Value* extractHandleValue(ExpressionNode* expr,
@@ -880,7 +882,8 @@ class Backend
 {
 public:
     Backend(std::unique_ptr<llvm::Module>& m,
-            const std::string& archOverride = "");
+            const std::string& archOverride = "",
+            bool unoptimizedCodegen = false);
     bool emitObjectFile(const std::string& filename);
     bool emitAssemblyFile(const std::string& filename);
     bool emitLLVMIR(const std::string& filename);
@@ -901,6 +904,7 @@ private:
     llvm::TargetMachine* targetMachine;
     std::string targetTriple;
     std::string targetArchOverride;
+    bool unoptimizedCodegen;
 
     bool initializeTarget();
     bool linkExecutable(const std::string& objectFile,
