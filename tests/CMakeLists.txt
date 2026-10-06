@@ -39,6 +39,15 @@ endif()
 
 option(BUILD_CPP_GTESTS "Build GoogleTest-based C++ compiler tests" ON)
 
+if(TARGET mlang-config)
+    add_test(NAME mlang_config_debugger_option
+        COMMAND ${CMAKE_COMMAND}
+            -DMLANG_CONFIG=$<TARGET_FILE:mlang-config>
+            -DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/mlang_config_debugger_option
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/mlang_config_debugger_option.cmake)
+    set_tests_properties(mlang_config_debugger_option PROPERTIES LABELS "bootstrap")
+endif()
+
 if(TARGET mladbg)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     add_test(NAME mladbg_help COMMAND mladbg --help)

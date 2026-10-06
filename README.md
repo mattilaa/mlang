@@ -464,6 +464,10 @@ What the scripts do:
   `mlang_std`, and `mlang-config`.
 - `mlang-config` writes `build/mlang-config.conf` and
   `build/mlang_config_cache.cmake`.
+- Its Install section includes an **Install mladbg** toggle, enabled by default
+  on macOS/Linux. Use `mlang-config --mladbg off --write` to omit the debugger
+  from subsequent builds and installs, or `--mladbg on` to enable it again.
+  The preference is saved as `install_mladbg` and sets CMake's `BUILD_MLADBG`.
 - `build.sh` / `build.ps1` reconfigure from that cache, rebuild the seed
   compiler/runtime, then explicitly compile:
   `tools/mlangd-mla/main.mla`, `tools/mlang-format-mla/main.mla`,

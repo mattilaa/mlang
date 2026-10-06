@@ -22,6 +22,11 @@ mladbg ./app -- program-arguments
 `mladbg` is a native launcher for an LLDB-powered Python/curses frontend on
 macOS and Linux. It is built by default (`BUILD_MLADBG=ON`) and installed with
 the compiler. Install LLDB with its Python bindings and Python's curses module.
+The bootstrap `mlang-config` Install menu includes an **Install mladbg** option,
+enabled by default. For scripted configuration, use `mlang-config --mladbg off
+--write` to disable it or `--mladbg on --write` to enable it; `build.sh --install`
+then uses the saved selection. Existing
+configuration files without this preference default to enabling the debugger.
 On macOS, Xcode's command-line tools supply them. On Linux, distribution
 packages commonly provide `lldb`, `python3-lldb`, and `python3`.
 `MLADBG_PYTHON` selects a Python interpreter matching the installed bindings;
