@@ -7,8 +7,22 @@ from types import SimpleNamespace
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools" / "mladbg"))
-from ui import Theme, VariableTree, FileCompletion, token_spans
+from ui import Theme, Glyphs, VariableTree, FileCompletion, token_spans
 from mladbg import assemble_instruction
+
+
+class GlyphTests(unittest.TestCase):
+    def test_unicode_boxes_and_ascii_fallback(self):
+        glyphs = Glyphs(encoding="UTF-8")
+        self.assertTrue(glyphs.enabled)
+        self.assertEqual(glyphs.top_left+glyphs.horizontal+glyphs.top_right, "┌─┐")
+        self.assertEqual(glyphs.bottom_left+glyphs.vertical+glyphs.bottom_right, "└│┘")
+        self.assertEqual(glyphs.text("café"), "café")
+        for glyphs in (Glyphs(False), Glyphs(encoding="ascii"), Glyphs(encoding="ISO-8859-1")):
+            self.assertFalse(glyphs.enabled)
+            self.assertEqual(glyphs.top_left+glyphs.horizontal+glyphs.top_right, "+-+")
+            self.assertEqual(glyphs.bottom_left+glyphs.vertical+glyphs.bottom_right, "+|+")
+            self.assertEqual(glyphs.text("mladbg — café"), "mladbg - caf\\xe9")
 
 
 class AssemblyTests(unittest.TestCase):

@@ -7,6 +7,22 @@ import shlex
 import time
 
 
+class Glyphs:
+    """Single-cell box glyphs, with an explicit ASCII-only rendering mode."""
+    def __init__(self, enabled=True, encoding="utf-8"):
+        self.enabled = enabled and encoding.lower().replace("-", "").replace("_", "") == "utf8"
+        self.horizontal, self.vertical = ("─", "│") if self.enabled else ("-", "|")
+        self.top_left, self.top_right, self.bottom_left, self.bottom_right = (
+            ("┌", "┐", "└", "┘") if self.enabled else ("+", "+", "+", "+"))
+
+    def text(self, text):
+        if self.enabled:
+            return text
+        # Keep source, file names and inferior output readable on ASCII-only
+        # terminals without changing the actual command or filesystem path.
+        return text.replace("—", "-").encode("ascii", "backslashreplace").decode("ascii")
+
+
 class FileCompletion:
     """Bounded directory browsing, without recursively walking project trees."""
     def __init__(self, command, cwd=None):

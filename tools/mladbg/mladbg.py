@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 import subprocess
 import sys
-from ui import Theme, VariableTree, FileCompletion, token_spans
+from ui import Theme, Glyphs, VariableTree, FileCompletion, token_spans
 
 
 def load_lldb():
@@ -238,6 +238,7 @@ Batch mode (options before the executable):
   mladbg --batch -ex 'b main' -ex run -ex locals ./app
 Initialization files are not loaded automatically.
 Colors are automatic; use mladbg --no-colors ./app for monochrome.
+Box glyphs are automatic on UTF-8 terminals; --no-glyphs uses ASCII.
 """,
     "keys": """KEYBOARD AND COMMAND ENTRY
 
@@ -281,6 +282,7 @@ still work. The program stays in its current execution state.
 --no-colors disables the palette; unsupported terminals fall back
 to monochrome. Source keywords/types/strings/numbers are colored;
 the current source line and focused tree selection use blue.
+Use --no-glyphs for ASCII borders and escaped non-ASCII display text.
 """,
 }
 HELP_ORDER = tuple(HELP_TOPICS)
@@ -749,7 +751,7 @@ def source_lines(session):
     return str(path), ["Source unavailable: " + str(path)], 0
 
 
-def tui(screen, session, use_colors=True):
+def tui(screen, session, use_colors=True, use_glyphs=True):
     import curses
     curses.raw()  # Ctrl-C goes to the debuggee interrupt command, not SIGINT.
     curses.curs_set(0)
@@ -771,6 +773,7 @@ def tui(screen, session, use_colors=True):
     locals_tree = VariableTree()
     session.output("mladbg — type help for commands; F5 run/continue; : command; q quit")
     theme = Theme(curses, use_colors)
+    glyphs = Glyphs(use_glyphs, getattr(screen, "encoding", None) or sys.stdout.encoding or "ascii")
     if not theme.enabled:
         # curses.wrapper may initialize color support itself. Keep pair 0
         # at the terminal defaults even when application colors are disabled.
@@ -785,7 +788,7 @@ def tui(screen, session, use_colors=True):
         height, cols = screen.getmaxyx()
         if 0 <= y < height and 0 <= x < cols:
             try:
-                screen.addnstr(y, x, safe_text(text), max(0, min(width, cols-x-1)), attr)
+                screen.addnstr(y, x, glyphs.text(safe_text(text)), max(0, min(width, cols-x-1)), attr)
             except curses.error:
                 pass  # Resize or bottom-right cell during a repaint.
 
@@ -799,21 +802,21 @@ def tui(screen, session, use_colors=True):
                 pass
 
         for col in range(x+1, x+width-1):
-            cell(y, col, curses.ACS_HLINE)
-            cell(y+height-1, col, curses.ACS_HLINE)
+            cell(y, col, glyphs.horizontal)
+            cell(y+height-1, col, glyphs.horizontal)
         for row in range(y+1, y+height-1):
-            cell(row, x, curses.ACS_VLINE)
-            cell(row, x+width-1, curses.ACS_VLINE)
-        for row, col, character in ((y, x, curses.ACS_ULCORNER),
-                                    (y, x+width-1, curses.ACS_URCORNER),
-                                    (y+height-1, x, curses.ACS_LLCORNER),
-                                    (y+height-1, x+width-1, curses.ACS_LRCORNER)):
+            cell(row, x, glyphs.vertical)
+            cell(row, x+width-1, glyphs.vertical)
+        for row, col, character in ((y, x, glyphs.top_left),
+                                    (y, x+width-1, glyphs.top_right),
+                                    (y+height-1, x, glyphs.bottom_left),
+                                    (y+height-1, x+width-1, glyphs.bottom_right)):
             cell(row, col, character)
         put(y, x+2, " " + title + " ", width-4, attr)
         content_height = height-2
         offsets[index] = min(offsets[index], max(0, len(lines)-content_height))
         content_width = width-4
-        longest = max((len(safe_text(line)) for line in lines), default=0)
+        longest = max((len(glyphs.text(safe_text(line))) for line in lines), default=0)
         horizontal_offsets[index] = min(horizontal_offsets[index], max(0, longest-content_width))
         offset = offsets[index]
         for row, line in enumerate(lines[offset:offset+content_height], 1):
@@ -821,7 +824,7 @@ def tui(screen, session, use_colors=True):
                         index == 6 and (line.lstrip().startswith("=>") or
                                         focus == 6 and offset+row-1 == assembly_cursor) or
                         index == 1 and focus == 1 and offset+row-1 == locals_tree.cursor and session.stopped())
-            line = safe_text(line)
+            line = glyphs.text(safe_text(line))
             start = horizontal_offsets[index]
             visible = line[start:start+content_width]
             role = "error" if index == 4 and line.lower().startswith("error:") else "text"
@@ -953,26 +956,27 @@ def tui(screen, session, use_colors=True):
             visible_rows = min(8, height-6, max(1, len(completion.choices)))
             popup_height = visible_rows+3
             popup_width = min(width-2, max(36, min(78, max(
-                (len(path)+6 for path, _ in completion.choices), default=36))))
+                (len(glyphs.text(path))+6 for path, _ in completion.choices), default=36))))
             x = min(8+len(completion.prefix), width-popup_width-1)
             y = height-2-popup_height
             for row in range(popup_height):
                 put(y+row, x, " "*popup_width, popup_width)
-            edge = "+"+"-"*(popup_width-2)+"+"
+            edge = glyphs.top_left+glyphs.horizontal*(popup_width-2)+glyphs.top_right
             put(y, x, edge, popup_width, focus_attr)
             put(y, x+2, " Files | "+(completion.fragment or "./")+" ", popup_width-4, focus_attr)
             start = max(0, completion.cursor-visible_rows+1)
             for row in range(visible_rows):
-                put(y+row+1, x, "|"+" "*(popup_width-2)+"|", popup_width, focus_attr)
+                put(y+row+1, x, glyphs.vertical+" "*(popup_width-2)+glyphs.vertical, popup_width, focus_attr)
                 i = start+row
                 if i < len(completion.choices):
                     path, directory = completion.choices[i]
                     selected = i == completion.cursor
-                    put(y+row+1, x+2, (("> " if selected else "  ")+path).ljust(popup_width-4),
+                    put(y+row+1, x+2, (("> " if selected else "  ")+glyphs.text(path)).ljust(popup_width-4),
                         popup_width-4, theme.attr("type" if directory else "text", selected))
-            put(y+popup_height-2, x, "|"+" "*(popup_width-2)+"|", popup_width, focus_attr)
+            put(y+popup_height-2, x, glyphs.vertical+" "*(popup_width-2)+glyphs.vertical, popup_width, focus_attr)
             put(y+popup_height-2, x+2, completion.message, popup_width-4)
-            put(y+popup_height-1, x, edge, popup_width, focus_attr)
+            put(y+popup_height-1, x, glyphs.bottom_left+glyphs.horizontal*(popup_width-2)+glyphs.bottom_right,
+                popup_width, focus_attr)
             put(height-1, 0, "j/k/arrows: select | Enter/Tab: choose | Left: parent | Esc: close".ljust(width),
                 width, curses.A_DIM)
         screen.refresh()
@@ -1125,6 +1129,7 @@ def main():
                                             "In the TUI, F1/? opens help; :help frames explains stack navigation.")
     parser.add_argument("--batch", action="store_true", help="run commands without the TUI")
     parser.add_argument("--no-colors", action="store_true", help="use a monochrome terminal UI")
+    parser.add_argument("--no-glyphs", action="store_true", help="use ASCII borders and escape non-ASCII display text")
     parser.add_argument("-ex", "--command", action="append", default=[], help="startup command (repeatable)")
     parser.add_argument("--attach", type=int, metavar="PID", help="attach to an existing process")
     parser.add_argument("--version", action="version", version="mladbg 0.1 (LLDB backend)")
@@ -1154,7 +1159,7 @@ def main():
                 return 1
         if not options.batch:
             import curses
-            curses.wrapper(tui, session, not options.no_colors)
+            curses.wrapper(tui, session, not options.no_colors, not options.no_glyphs)
         return 0
     except (RuntimeError, OSError, KeyboardInterrupt) as error:
         print("mladbg: " + str(error), file=sys.stderr)

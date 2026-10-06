@@ -21,13 +21,13 @@ def run(args, expected=0, env=None):
     return output
 
 
-def check_tui(debugger, executable, source, no_colors=False, tree_demo=False):
+def check_tui(debugger, executable, source, no_colors=False, tree_demo=False, no_glyphs=False):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
-    env = dict(os.environ, TERM="xterm-256color")
+    env = dict(os.environ, TERM="xterm-256color", LC_ALL="en_US.UTF-8")
     line = (next(i for i, text in enumerate(Path(source).read_text().splitlines(), 1)
                  if "stack-break" in text) if tree_demo else 13)
-    args = [debugger] + (["--no-colors"] if no_colors else [])
+    args = [debugger] + (["--no-colors"] if no_colors else []) + (["--no-glyphs"] if no_glyphs else [])
     process = subprocess.Popen(args + ["-ex", "b " + source + ":" + str(line), executable],
                                stdin=slave, stdout=slave, stderr=slave, env=env,
                                cwd=Path(__file__).resolve().parents[1])
@@ -56,7 +56,10 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False):
         wait_for(b"examples/debugger.mla")
         os.write(master, b"\n:13\n")  # Accept the file, then add a line and execute.
         wait_for(b"Breakpoint 2:")
-        assert b"\x1b(0" in output or "┌".encode() in output, "Pane borders were not drawn"
+        if no_glyphs:
+            assert b"+--" in output, "ASCII borders were not drawn"
+        else:
+            assert "┌".encode() in output and "│".encode() in output, "UTF-8 box glyphs were not drawn"
         os.write(master, b"\x1bOP")  # F1 in xterm-256color.
         wait_for(b"MLADBG HELP")
         os.write(master, b"?")  # Closing help must leave the session usable.
@@ -113,6 +116,8 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False):
                 except OSError:
                     break
         assert process.wait(timeout=2) == 0
+        if no_glyphs:
+            assert all(byte < 128 for byte in output), "--no-glyphs emitted non-ASCII text"
         sgr = re.findall(rb"\x1b\[([\d;]*)m", output)
         colors = [code for codes in sgr for code in codes.split(b";")
                   if code.isdigit() and (30 <= int(code) <= 37 or 40 <= int(code) <= 47)]
@@ -137,6 +142,7 @@ def main():
     compiler = str(Path(options.compiler).resolve())
     source = str(Path(options.source).resolve())
     assert "MLang terminal debugger" in run([debugger, "--help"])
+    assert "--no-glyphs" in run([debugger, "--help"])
     assert "mladbg" in run([debugger, "--version"])
     with tempfile.TemporaryDirectory(prefix="mladbg-test-") as temporary:
         executable = str(Path(temporary) / "demo")
@@ -203,7 +209,7 @@ def main():
         debug(["not-a-real-command"], expected=1)
         run([debugger, executable], expected=2)  # Non-TTY invocation must fail clearly.
         check_tui(debugger, executable, source)
-        check_tui(debugger, executable, source, no_colors=True)
+        check_tui(debugger, executable, source, no_colors=True, no_glyphs=True)
         complex_source = Path(__file__).parent / "fixtures" / "mladbg_complex.mla"
         complex_executable = str(Path(temporary) / "complex")
         run([compiler, "-g", "-O0", str(complex_source), "-o", complex_executable])
