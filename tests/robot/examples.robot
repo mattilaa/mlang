@@ -5968,10 +5968,10 @@ Pkg Fetch Build Parity (CPP vs MLA)
     Should Be Equal As Integers    ${cpp_init.rc}    0
     ${cpp_add}=    Run Process    ${MLANG}    pkg    add    depmini    --git    ${dep_repo}
     ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp
-    Should Be Equal As Integers    ${cpp_add.rc}    0
+    Should Be Equal As Integers    ${cpp_add.rc}    0    msg=pkg add failed (rc=${cpp_add.rc})\nSTDOUT:\n${cpp_add.stdout}\nSTDERR:\n${cpp_add.stderr}
     ${cpp_fetch}=    Run Process    ${MLANG}    pkg    fetch
     ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp
-    Should Be Equal As Integers    ${cpp_fetch.rc}    0
+    Should Be Equal As Integers    ${cpp_fetch.rc}    0    msg=pkg fetch failed (rc=${cpp_fetch.rc})\nSTDOUT:\n${cpp_fetch.stdout}\nSTDERR:\n${cpp_fetch.stderr}
     ${cpp_build}=    Run Process    ${MLANG}    pkg    build    -O0
     ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp
     Should Be Equal As Integers    ${cpp_build.rc}    0
@@ -5985,10 +5985,10 @@ Pkg Fetch Build Parity (CPP vs MLA)
     Should Be Equal As Integers    ${mla_init.rc}    0
     ${mla_add}=    Run Process    ${MLANG}    pkg    add    depmini    --git    ${dep_repo}
     ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla
-    Should Be Equal As Integers    ${mla_add.rc}    0
+    Should Be Equal As Integers    ${mla_add.rc}    0    msg=pkg add failed (rc=${mla_add.rc})\nSTDOUT:\n${mla_add.stdout}\nSTDERR:\n${mla_add.stderr}
     ${mla_fetch}=    Run Process    ${MLANG}    pkg    fetch
     ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla
-    Should Be Equal As Integers    ${mla_fetch.rc}    0
+    Should Be Equal As Integers    ${mla_fetch.rc}    0    msg=pkg fetch failed (rc=${mla_fetch.rc})\nSTDOUT:\n${mla_fetch.stdout}\nSTDERR:\n${mla_fetch.stderr}
     ${mla_build}=    Run Process    ${MLANG}    pkg    build    -O0
     ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla
     Should Be Equal As Integers    ${mla_build.rc}    0
@@ -6031,10 +6031,10 @@ Pkg PkgConfig Parity (CPP vs MLA)
     Should Be Equal As Integers    ${cpp_init.rc}    0
     ${cpp_add}=    Run Process    ${MLANG}    pkg    add    fakelib    --pkg-config    fakelib
     ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    env:PATH=${path_env}
-    Should Be Equal As Integers    ${cpp_add.rc}    0
+    Should Be Equal As Integers    ${cpp_add.rc}    0    msg=pkg add failed (rc=${cpp_add.rc})\nSTDOUT:\n${cpp_add.stdout}\nSTDERR:\n${cpp_add.stderr}
     ${cpp_fetch}=    Run Process    ${MLANG}    pkg    fetch
     ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    env:PATH=${path_env}
-    Should Be Equal As Integers    ${cpp_fetch.rc}    0
+    Should Be Equal As Integers    ${cpp_fetch.rc}    0    msg=pkg fetch failed (rc=${cpp_fetch.rc})\nSTDOUT:\n${cpp_fetch.stdout}\nSTDERR:\n${cpp_fetch.stderr}
     ${cpp_build}=    Run Process    ${MLANG}    pkg    build    -O0
     ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    env:PATH=${path_env}
     Should Be Equal As Integers    ${cpp_build.rc}    0
@@ -6048,10 +6048,10 @@ Pkg PkgConfig Parity (CPP vs MLA)
     Should Be Equal As Integers    ${mla_init.rc}    0
     ${mla_add}=    Run Process    ${MLANG}    pkg    add    fakelib    --pkg-config    fakelib
     ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    env:PATH=${path_env}
-    Should Be Equal As Integers    ${mla_add.rc}    0
+    Should Be Equal As Integers    ${mla_add.rc}    0    msg=pkg add failed (rc=${mla_add.rc})\nSTDOUT:\n${mla_add.stdout}\nSTDERR:\n${mla_add.stderr}
     ${mla_fetch}=    Run Process    ${MLANG}    pkg    fetch
     ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    env:PATH=${path_env}
-    Should Be Equal As Integers    ${mla_fetch.rc}    0
+    Should Be Equal As Integers    ${mla_fetch.rc}    0    msg=pkg fetch failed (rc=${mla_fetch.rc})\nSTDOUT:\n${mla_fetch.stdout}\nSTDERR:\n${mla_fetch.stderr}
     ${mla_build}=    Run Process    ${MLANG}    pkg    build    -O0
     ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    env:PATH=${path_env}
     Should Be Equal As Integers    ${mla_build.rc}    0

@@ -164,6 +164,9 @@ exec {mlang_bin!r} "$@"
     mlang_wrapper.chmod(0o755)
     env = dict(os.environ)
     env["MLANG_ARTIFACT_DIR"] = str(case_dir / "artifacts")
+    # Keep package-manager tests hermetic and avoid writing into the user's
+    # shared ~/.cache (which can also cause cross-test races).
+    env["MLANG_PKG_CACHE"] = str(case_dir / "pkg-cache")
     env["MLANG_PKG_CACHE_KEY"] = f"parallel_{idx}_{os.getpid()}"
     env["TMPDIR"] = str(tmp_dir)
     env["TMP"] = str(tmp_dir)

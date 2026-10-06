@@ -35,6 +35,24 @@
 #define MLANG_VERSION "0.3.0"
 #endif
 
+static std::string package_semantic_version()
+{
+    // The compiler's display version may include a fourth build-number
+    // component (for example 0.3.0.180). Package manifests use SemVer, whose
+    // core version has exactly three numeric components.
+    std::string version = MLANG_VERSION;
+    const auto first = version.find('.');
+    if(first == std::string::npos)
+        return version;
+    const auto second = version.find('.', first + 1);
+    if(second == std::string::npos)
+        return version;
+    const auto third = version.find('.', second + 1);
+    if(third != std::string::npos)
+        version.resize(third);
+    return version;
+}
+
 namespace
 {
 
@@ -3653,7 +3671,7 @@ static bool scaffold_added_package(
             relative_path_string(packageDir, packageDir / "src" / "main.mla");
         packageContent = "[package]\n";
         packageContent += "name = \"" + packageName + "\"\n";
-        packageContent += "version = \"" + std::string(MLANG_VERSION) + "\"\n";
+        packageContent += "version = \"" + package_semantic_version() + "\"\n";
         packageContent += "entry = \"" + entry + "\"\n\n";
         packageContent += "[dependencies]\n\n";
         packageContent += "[c-dependencies]\n";
@@ -11029,7 +11047,7 @@ int PackageManager::run(int argc, char** argv)
         }
         out << "[package]\n"
             << "name = \"" << name << "\"\n"
-            << "version = \"" << MLANG_VERSION << "\"\n"
+            << "version = \"" << package_semantic_version() << "\"\n"
             << "entry = \"src/main.mla\"\n\n"
             << "[dependencies]\n\n"
             << "[c-dependencies]\n";

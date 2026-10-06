@@ -28,6 +28,13 @@ def main() -> int:
         artifact_dir.mkdir(parents=True, exist_ok=True)
         env["MLANG_ARTIFACT_DIR"] = str(artifact_dir)
 
+    # Isolate package downloads and git mirrors per worker rather than
+    # sharing or modifying the developer's global cache.
+    if not env.get("MLANG_PKG_CACHE"):
+        cache_root = Path(env.get("MLANG_ARTIFACT_DIR") or ".") / "pkg-cache"
+        cache_root.mkdir(parents=True, exist_ok=True)
+        env["MLANG_PKG_CACHE"] = str(cache_root)
+
     # Avoid cross-worker races in mlang-pkg-mla temporary cache names.
     if not env.get("MLANG_PKG_CACHE_KEY"):
         env["MLANG_PKG_CACHE_KEY"] = f"{token}_{pid}"

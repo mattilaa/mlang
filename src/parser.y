@@ -2801,6 +2801,7 @@ parameter_list
     : /* empty */ { $$ = mla_ast_empty_parameter_list(); }
     | parameters
     | parameters COMMA ELLIPSIS { $$ = set_parameter_list_vararg($1); }
+    | parameters COMMA_ELLIPSIS { $$ = set_parameter_list_vararg($1); }
     | ELLIPSIS { $$ = set_parameter_list_vararg(mla_ast_empty_parameter_list()); }
     ;
 
