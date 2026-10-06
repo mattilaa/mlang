@@ -70,6 +70,18 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False):
         else:
             wait_for(b"count = 7")
             wait_for(b"ratio = 1.5")
+            fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 120, 0, 0))
+            os.kill(process.pid, signal.SIGWINCH)
+            os.write(master, b"a")
+            wait_for(b"Assembly | function")
+            os.write(master, b"b")
+            wait_for(b"Breakpoint 2:")
+            os.write(master, b"jke")
+            wait_for(b"(mladbg) patch 0x")
+            os.write(master, b"\x1b:asm line\n")
+            wait_for(b"Assembly view: mixed (line)")
+            os.write(master, b":asm off\n")
+            wait_for(b"source (line)")
             # Exercise the smallest supported layout with a stopped process.
             fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 18, 70, 0, 0))
             os.kill(process.pid, signal.SIGWINCH)
@@ -138,6 +150,34 @@ def main():
         output = debug(["b add", "run", "next", "locals", "continue"])
         assert "Breakpoint 1: 1 location(s)" in output, output
         assert "left = 7" in output and "right = 5" in output, output
+        output = debug(["b " + source + ":13", "run", "asm line",
+                        "patch pc nop", "patch list", "si", "patch undo", "continue"])
+        for token in ("Assembly view: mixed (line)", "// debugger.mla:13",
+                      "Patched 0x", "process memory only", "Restored 0x",
+                      "Process exited with status 0"):
+            assert token in output, "Missing assembly/patch result %r:\n%s" % (token, output)
+        output = debug(["b " + source + ":13", "run", "asm line"])
+        instruction = re.search(r"^=> 0x[0-9a-f]+\s+(?:[0-9a-f]{2} )+\s*(.*?)\s+//", output, re.M)
+        assert instruction, output
+        # Reassemble the actual target instruction (including cross-target
+        # assembler selection), undo it, then execute the original program.
+        output = debug(["b " + source + ":13", "run",
+                        "patch pc " + instruction.group(1), "patch undo", "continue"])
+        assert "Patched 0x" in output and "Restored 0x" in output, output
+        assert "Process exited with status 0" in output, output
+        output = debug(["b add", "run", "asm function"])
+        pc = int(re.search(r"^=> 0x([0-9a-f]+)", output, re.M).group(1), 16)
+        arithmetic = re.search(r"^\s+0x([0-9a-f]+)\s+(?:[0-9a-f]{2} )+\s*(add(?:l|q)?)\s+([^\n]*?)\s+//", output, re.M)
+        assert arithmetic and not re.search(r"\b(?:sp|rsp)\b", arithmetic[3]), output
+        offset = int(arithmetic[1], 16)-pc
+        replacement = arithmetic[2].replace("add", "sub", 1)+" "+arithmetic[3]
+        output = debug(["b add", "run", "patch pc%+d %s" % (offset, replacement),
+                        "asm function", "continue"])
+        assert "Patched 0x" in output and replacement.split()[0] in output, output
+        assert re.search(r"^2$", output, re.M), "Patched addition did not become subtraction:\n"+output
+        debug(["patch pc nop"], expected=1)
+        debug(["b " + source + ":13", "run", "patch pc .byte 0"], expected=1)
+        debug(["b " + source + ":13", "run", "patch-bytes pc 00"], expected=1)
         output = debug(["b " + source + ":13", "disable 1", "run"])
         assert "Stopped: breakpoint" not in output, output
         assert "Process exited with status 0" in output, output

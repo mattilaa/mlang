@@ -4,6 +4,7 @@ from collections import deque
 import importlib
 import os
 import re
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -186,6 +187,23 @@ continue resumes execution; it does not just change thread focus.
 
   registers                   read the selected frame's registers
   disassemble                 show the selected function's assembly
+  asm mixed                   source/assembly split view (a cycles views)
+  asm line / asm function     selected source line / function instructions
+  si / ni                     step into / over one instruction
+  patch pc nop                replace the current instruction with NOPs
+  patch 0xADDRESS ASM          equal-size assembly replacement
+  patch-bytes 0xADDRESS HEX    equal-size raw bytes, e.g. 90 90
+  patch list / patch undo     inspect edits / undo the last edit
+
+In assembly: j/k select, e edits the selected instruction, b sets an
+address breakpoint, i/I instruction-step/step-over, u undoes a patch.
+Bytes and source locations are shown; => marks the selected frame PC.
+Assembly edits use clang (MLADBG_CLANG overrides its path). x86 uses
+AT&T syntax. Labels/directives/relocations are rejected. NOP fills the
+whole selected instruction. Patches affect stopped process memory only;
+they do not change source or the executable. Continue explicitly to run.
+Wrong instructions can corrupt/crash the process. Code-signing/W^X or
+remote-target restrictions may refuse writes; an error is displayed.
   memory 0xADDRESS            read memory at an address
   memory read -f x -s 1 -c 16 0xADDRESS
                               read 16 bytes in hexadecimal
@@ -229,6 +247,7 @@ Colors are automatic; use mladbg --no-colors ./app for monochrome.
   F9               breakpoint at the selected execution line
   Ctrl-C           interrupt a running process
   Tab              focus the next pane
+  a                cycle source / mixed source+assembly / assembly views
   j / k            scroll the focused pane down / up
   h / l            scroll it left / right
   arrow keys       same scroll directions
@@ -262,6 +281,7 @@ the current source line and focused tree selection use blue.
 HELP_ORDER = tuple(HELP_TOPICS)
 HELP_ALIASES = {"stack": "frames", "frame": "frames", "stepping": "execution",
                 "locals": "variables", "print": "variables", "break": "breakpoints",
+                "asm": "memory", "assembly": "memory", "patch": "memory",
                 "keyboard": "keys"}
 HELP = HELP_TOPICS["overview"]
 
@@ -278,6 +298,11 @@ class Session:
         self.attached = False
         self.last_stop = None
         self.arguments = arguments
+        self.asm_mode = "source"
+        self.asm_scope = "function"
+        self.patch_history = []
+        self.code_revision = 0
+        self.asm_cache = (None, [])
         self.target = self.debugger.CreateTarget(executable or "")
         if executable and not self.target.IsValid():
             raise RuntimeError("cannot load executable: " + executable)
@@ -347,6 +372,26 @@ class Session:
         if not text:
             return True
         name, _, rest = text.partition(" ")
+        if name == "asm":
+            option = rest.strip() or "mixed"
+            if option in ("source", "mixed", "assembly", "off"):
+                self.asm_mode = "source" if option == "off" else option
+            elif option in ("line", "function"):
+                self.asm_scope = option
+                self.asm_mode = "mixed"
+            else:
+                self.output("Usage: asm [source|mixed|assembly|line|function|off]")
+                return False
+            self.output("Assembly view: %s (%s)" % (self.asm_mode, self.asm_scope))
+            if self.batch and self.stopped():
+                self.output("\n".join(row[1] for row in self.assembly()))
+            return True
+        if name in ("patch", "patch-bytes"):
+            try:
+                return self.patch(rest, raw=name == "patch-bytes")
+            except (ValueError, OSError, subprocess.SubprocessError) as error:
+                self.output("Patch refused: " + str(error))
+                return False
         if name in ("help", "h", "?"):
             topic = rest.strip().lower() or "overview"
             topic = HELP_ALIASES.get(topic, topic)
@@ -398,6 +443,7 @@ class Session:
             self.output("\n".join(value_lines(self.frame())))
             return True
         mappings = {"run": "process launch", "continue": "process continue",
+                    "si": "thread step-inst", "ni": "thread step-inst-over",
                     "next": "thread step-over", "step": "thread step-in",
                     "finish": "thread step-out", "interrupt": "process interrupt",
                     "delete": "breakpoint delete", "enable": "breakpoint enable",
@@ -423,6 +469,121 @@ class Session:
         self.poll()
         return result.Succeeded()
 
+    def assembly(self):
+        """Bounded, cached instructions from the selected frame's function."""
+        if not self.stopped() or not self.frame().IsValid():
+            return []
+        frame, target = self.frame(), self.target
+        key = (self.process().GetProcessID(), self.process().GetStopID(),
+               frame.GetPC(), self.code_revision, self.asm_scope)
+        if key == self.asm_cache[0]:
+            return self.asm_cache[1]
+        start = frame.GetFunction().GetStartAddress()
+        if not start.IsValid():
+            start = frame.GetSymbol().GetStartAddress()
+        end = frame.GetFunction().GetEndAddress()
+        if not end.IsValid():
+            end = frame.GetSymbol().GetEndAddress()
+        if not start.IsValid():
+            start = frame.GetPCAddress()
+        flavor = "att" if target.GetTriple().split("-", 1)[0] in ("x86_64", "i386", "i686") else "default"
+        instructions = target.ReadInstructions(start, 256, flavor)
+        rows = []
+        selected_entry = frame.GetLineEntry()
+        for instruction in instructions:
+            address = instruction.GetAddress()
+            load = address.GetLoadAddress(target)
+            if end.IsValid() and load >= end.GetLoadAddress(target):
+                break
+            entry = address.GetLineEntry()
+            same_line = (entry.IsValid() and selected_entry.IsValid() and
+                         entry.GetFileSpec() == selected_entry.GetFileSpec() and
+                         entry.GetLine() == selected_entry.GetLine())
+            if self.asm_scope == "line" and not same_line and load != frame.GetPC():
+                continue
+            error = self.lldb.SBError()
+            data = self.process().ReadMemory(load, instruction.GetByteSize(), error)
+            encoded = data.hex(" ") if error.Success() else "??"
+            location = ("%s:%d" % (entry.GetFileSpec().GetFilename(), entry.GetLine())
+                        if entry.IsValid() else "no source")
+            text = "%s 0x%x  %-22s %s %s  // %s" % (
+                "=>" if load == frame.GetPC() else "  ", load, encoded,
+                instruction.GetMnemonic(target) or "?", instruction.GetOperands(target) or "",
+                location)
+            rows.append((load, text))
+        self.asm_cache = (key, rows)
+        return rows
+
+    def patch(self, text, raw=False):
+        if not self.stopped():
+            raise ValueError("stop the process before editing code")
+        process = self.process()
+        pid = process.GetProcessID()
+        self.patch_history = [p for p in self.patch_history if p[0] == pid]
+        if text.strip() == "list":
+            for _, address, original, replacement in self.patch_history:
+                self.output("0x%x: %s -> %s" % (address, original.hex(" "), replacement.hex(" ")))
+            if not self.patch_history:
+                self.output("No live patches.")
+            return True
+        undo = text.strip() == "undo"
+        if undo:
+            if not self.patch_history:
+                raise ValueError("no patch to undo in this process")
+            _, address, replacement, original = self.patch_history[-1]
+        else:
+            location, _, assembly = text.strip().partition(" ")
+            if not assembly:
+                raise ValueError("usage: patch PC|0xADDRESS ASM | patch undo | patch list")
+            pc_relative = re.fullmatch(r"pc(?:([+-])(0x[0-9a-fA-F]+|[0-9]+))?", location.lower())
+            if pc_relative:
+                address = self.frame().GetPC()
+                if pc_relative[1]:
+                    address += int(pc_relative[2], 0) * (1 if pc_relative[1] == "+" else -1)
+            else:
+                address = int(location, 0)
+            # Only known instruction starts are accepted, never the middle of one.
+            scope = self.asm_scope
+            self.asm_scope = "function"
+            try:
+                starts = {row[0] for row in self.assembly()}
+            finally:
+                self.asm_scope = scope
+            if address not in starts:
+                raise ValueError("choose an instruction address in the selected function (first 256 instructions)")
+            instruction = self.target.ReadInstructions(self.target.ResolveLoadAddress(address), 1).GetInstructionAtIndex(0)
+            size = instruction.GetByteSize()
+            replacement = bytes.fromhex(assembly) if raw else assemble_instruction(assembly, self.target.GetTriple(), size)
+            if not replacement or len(replacement) != size:
+                raise ValueError("replacement must occupy exactly %d byte(s); got %d" % (size, len(replacement)))
+            error = self.lldb.SBError()
+            original = process.ReadMemory(address, size, error)
+            if error.Fail() or len(original) != size:
+                raise ValueError("cannot read original instruction: " + str(error))
+        error = self.lldb.SBError()
+        # Check stale undo records before overwriting another tool's edits.
+        current = process.ReadMemory(address, len(replacement), error)
+        if error.Fail() or current != original:
+            raise ValueError("code changed since this patch; refusing to overwrite it")
+        count = process.WriteMemory(address, replacement, error)
+        if error.Fail() or count != len(replacement):
+            rollback = self.lldb.SBError()
+            process.WriteMemory(address, original, rollback)
+            raise ValueError("code write failed: %s; rollback: %s" % (error, rollback))
+        self.code_revision += 1
+        verify = process.ReadMemory(address, len(replacement), error)
+        if error.Fail() or verify != replacement:
+            rollback = self.lldb.SBError()
+            process.WriteMemory(address, original, rollback)
+            raise ValueError("patch verification failed; rollback: %s" % rollback)
+        if undo:
+            self.patch_history.pop()
+        else:
+            self.patch_history.append((pid, address, original, replacement))
+        self.output("%s 0x%x: %s -> %s (process memory only)" % (
+            "Restored" if undo else "Patched", address, original.hex(" "), replacement.hex(" ")))
+        return True
+
     def close(self):
         process = self.process()
         if process.IsValid() and process.GetState() not in (self.lldb.eStateExited,
@@ -432,6 +593,39 @@ class Session:
             else:
                 process.Kill()
         self.lldb.SBDebugger.Destroy(self.debugger)
+
+
+def assemble_instruction(text, triple, size):
+    """Use LLVM's assembler; reject symbolic fixups and assembly directives."""
+    arch = triple.split("-", 1)[0]
+    if text.strip().lower() == "nop":
+        if arch in ("x86_64", "i386", "i686"):
+            return b"\x90" * size
+        if arch in ("arm64", "aarch64") and size == 4:
+            return bytes.fromhex("1f 20 03 d5")
+    statements = text.split(";")
+    if "\n" in text or "\r" in text or any(
+            not re.fullmatch(r"\s*[A-Za-z][A-Za-z0-9]*\s*(?:[^\n\r:]*)", s) for s in statements):
+        raise ValueError("only instructions are allowed; no directives, labels or newlines")
+    assembler = shutil.which(os.environ.get("MLADBG_CLANG", "clang"))
+    if not assembler:
+        raise ValueError("clang is required for assembly edits (or use patch-bytes)")
+    result = subprocess.run([assembler, "-cc1as", "-triple", triple, "-filetype", "asm",
+                             "-show-encoding", "-o", "-", "-"],
+                            input="\n".join(statements)+"\n", text=True,
+                            capture_output=True, timeout=10)
+    if result.returncode:
+        raise ValueError(result.stderr.strip())
+    encodings = re.findall(r"encoding:\s*\[([^\]]*)\]", result.stdout)
+    if len(encodings) != len(statements):
+        raise ValueError("assembler did not emit one encoding per instruction")
+    data = bytearray()
+    for encoding in encodings:
+        for byte in encoding.split(","):
+            if not re.fullmatch(r"\s*0x[0-9a-fA-F]{2}\s*", byte):
+                raise ValueError("symbolic/PC-relative relocations are unsupported; use resolved bytes")
+            data.append(int(byte, 16))
+    return bytes(data)
 
 
 def format_value(value, depth=0, budget=None):
@@ -559,12 +753,15 @@ def tui(screen, session, use_colors=True):
     command = ""
     editing = False
     focus = 0
-    offsets = [0] * 6
-    horizontal_offsets = [0] * 6
+    offsets = [0] * 7
+    horizontal_offsets = [0] * 7
     help_topic = None
     history = []
     history_index = 0
     source_position = None
+    assembly_position = None
+    assembly_cursor = 0
+    assembly_rows = []
     locals_tree = VariableTree()
     session.output("mladbg — type help for commands; F5 run/continue; : command; q quit")
     theme = Theme(curses, use_colors)
@@ -615,13 +812,15 @@ def tui(screen, session, use_colors=True):
         offset = offsets[index]
         for row, line in enumerate(lines[offset:offset+content_height], 1):
             selected = (index == 0 and line.lstrip().startswith("=>") or
+                        index == 6 and (line.lstrip().startswith("=>") or
+                                        focus == 6 and offset+row-1 == assembly_cursor) or
                         index == 1 and focus == 1 and offset+row-1 == locals_tree.cursor and session.stopped())
             line = safe_text(line)
             start = horizontal_offsets[index]
             visible = line[start:start+content_width]
             role = "error" if index == 4 and line.lower().startswith("error:") else "text"
             put(y+row, x+2, visible.ljust(content_width), content_width, theme.attr(role, selected))
-            if index in (0, 1):
+            if index in (0, 1, 6):
                 for begin, end, token_role in token_spans(line):
                     begin, end = max(begin, start), min(end, start+content_width)
                     if begin < end:
@@ -656,12 +855,38 @@ def tui(screen, session, use_colors=True):
             middle_y = 1+top+gap
             console_y = middle_y+middle+gap
             title, source, current = source_lines(session)
-            position = (title, session.frame().GetPC(), top)
+            source_height = top//2 if session.asm_mode == "mixed" and top >= 10 else top
+            position = (title, session.frame().GetPC(), source_height)
             if position != source_position:
-                offsets[0] = max(0, current - (top-3)//2)
+                offsets[0] = max(0, current - (source_height-3)//2)
                 source_position = position
             source_title = "Source" if title == "Source" else "Source | " + Path(title).name
-            pane(1, 0, top, left, source_title, source, 0)
+            assembly_rows = session.assembly() if session.asm_mode != "source" else []
+            assembly_text = [row[1] for row in assembly_rows] or ["Run and stop to inspect assembly."]
+            asm_position = (session.process().GetProcessID(), session.process().GetStopID(),
+                            session.frame().GetPC(), session.asm_scope, session.code_revision,
+                            session.asm_mode)
+            if asm_position != assembly_position:
+                assembly_cursor = next((i for i, row in enumerate(assembly_rows)
+                                        if row[0] == session.frame().GetPC()), 0)
+                offsets[6] = max(0, assembly_cursor-2)
+                assembly_position = asm_position
+            mixed = session.asm_mode == "mixed" and top >= 10
+            if session.asm_mode == "source" and focus == 6:
+                focus = 0
+            elif session.asm_mode != "source" and not mixed and focus == 0:
+                focus = 6
+            if session.asm_mode == "source":
+                pane(1, 0, top, left, source_title, source, 0)
+            else:
+                asm_y, asm_height = (1+top//2, top-top//2) if mixed else (1, top)
+                if mixed:
+                    pane(1, 0, top//2, left, source_title, source, 0)
+                offsets[6] = min(offsets[6], assembly_cursor)
+                offsets[6] = max(offsets[6], assembly_cursor-asm_height+3)
+                assembly_text = [("> " if focus == 6 and i == assembly_cursor else "  ")+line
+                                 for i, line in enumerate(assembly_text)]
+                pane(asm_y, 0, asm_height, left, "Assembly | " + session.asm_scope, assembly_text, 6)
             if session.stopped():
                 frame = session.frame()
                 thread = session.process().GetSelectedThread()
@@ -715,7 +940,8 @@ def tui(screen, session, use_colors=True):
             put(height-2, 0, "(mladbg) " + command if editing else ": command | F5 run/continue | Ctrl-C: stop | q quit",
                 width, curses.A_BOLD)
             hints = ("j/k: down/up | h: close | l: open | J/K: all/restore"
-                     if focus == 1 else "Tab: pane | hjkl/arrows: scroll | PgUp/Dn: page | F1/? help")
+                     if focus == 1 else "j/k: select | e: edit | b: break | i/I: step | u: undo | a: view"
+                     if focus == 6 else "Tab: pane | hjkl/arrows: scroll | a: asm | F1/? help")
             put(height-1, 0, hints, width, curses.A_DIM)
         screen.refresh()
         try:
@@ -776,7 +1002,28 @@ def tui(screen, session, use_colors=True):
             editing = True
             history_index = len(history)
         elif key == "\t":
-            focus = (focus + 1) % 5
+            panes = ([0] if session.asm_mode == "source" else
+                     [0, 6] if session.asm_mode == "mixed" and height >= 26 else [6]) + [1, 2, 3, 4]
+            focus = panes[(panes.index(focus)+1) % len(panes)] if focus in panes else panes[0]
+        elif key == "a":
+            modes = ("source", "mixed", "assembly")
+            session.asm_mode = modes[(modes.index(session.asm_mode)+1) % len(modes)]
+            focus = 0 if session.asm_mode == "source" else 6
+        elif focus == 6 and key in ("i", "I", "u"):
+            session.command({"i": "si", "I": "ni", "u": "patch undo"}[key])
+        elif focus == 6 and assembly_rows and key in ("e", "b"):
+            address = assembly_rows[assembly_cursor][0]
+            if key == "b":
+                session.command("breakpoint set --address 0x%x" % address)
+            else:
+                command = "patch 0x%x " % address
+                editing = True
+                history_index = len(history)
+        elif focus == 6 and key in ("j", "k", curses.KEY_UP, curses.KEY_DOWN,
+                                    curses.KEY_PPAGE, curses.KEY_NPAGE):
+            delta = {"j": 1, "k": -1, curses.KEY_UP: -1, curses.KEY_DOWN: 1,
+                     curses.KEY_PPAGE: -10, curses.KEY_NPAGE: 10}[key]
+            assembly_cursor = max(0, min(max(0, len(assembly_rows)-1), assembly_cursor+delta))
         elif focus == 1 and session.stopped() and key in (
                 "j", "k", "h", "l", "J", "K", curses.KEY_UP, curses.KEY_DOWN,
                 curses.KEY_LEFT, curses.KEY_RIGHT, curses.KEY_PPAGE, curses.KEY_NPAGE):

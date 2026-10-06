@@ -2,9 +2,33 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools" / "mladbg"))
 from ui import Theme, VariableTree, token_spans
+from mladbg import assemble_instruction
+
+
+class AssemblyTests(unittest.TestCase):
+    def test_nop_fills_instruction(self):
+        self.assertEqual(assemble_instruction("nop", "x86_64-unknown-linux", 5), b"\x90"*5)
+        self.assertEqual(assemble_instruction("nop", "arm64-apple-macosx", 4), bytes.fromhex("1f2003d5"))
+
+    def test_rejects_directives_labels_and_newlines(self):
+        for text in (".byte 0", "label: nop", "nop\n.byte 0", "nop; .org 8"):
+            with self.assertRaises(ValueError):
+                assemble_instruction(text, "x86_64-unknown-linux", 1)
+
+    @patch("mladbg.shutil.which", return_value="clang")
+    @patch("mladbg.subprocess.run")
+    def test_rejects_symbolic_fixups(self, run, which):
+        run.return_value = SimpleNamespace(returncode=0, stdout="jmp foo # encoding: [0xe9,A,A,A,A]", stderr="")
+        with self.assertRaisesRegex(ValueError, "relocations"):
+            assemble_instruction("jmp foo", "x86_64-unknown-linux", 5)
+        run.return_value.stdout = "mov # encoding: [0x20,0x01,0x80,0xd2]"
+        self.assertEqual(assemble_instruction("mov x0, #9", "arm64-apple-macosx", 4),
+                         bytes.fromhex("200180d2"))
 
 
 class FakeType:
