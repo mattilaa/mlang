@@ -132,9 +132,8 @@ Variables belong to the selected frame and thread.
 Structs/tuples expand; lists/arrays/maps preview their elements.
 Previews stop at 16 elements, 3 nested levels and 128 values.
 These limits apply to p/locals output; the TUI uses a lazy tree:
-  Tab to Locals; Up/Down or j selects a row
+  Tab to Locals; j/Down moves down, k/Up moves up
   l/Right opens a node; h/Left closes it or its parent
-  k closes/backs out too; at a closed root it selects the previous row
   Shift-J collapses all; Shift-K restores previous expansions
 Structures start collapsed. Expansion is remembered per frame.
 The tree shows 16 children per node, up to 8 levels/256 rows.
@@ -245,14 +244,13 @@ Inside command entry (command history uses Up/Down):
   h/j/k/l          type normal letters
 
 In the Locals pane (structures start collapsed):
-  Up/Down or j     select a variable or field
+  j/Down, k/Up     select the next/previous variable or field
   l / Right       expand; on an open node, enter its first child
   h / Left        collapse; on a closed child, return to its parent
-  k               collapse/back; at a closed root, select the previous row
   Shift-J         collapse all nodes
   Shift-K         restore the expansions saved by Shift-J
   PgUp/PgDn       move the selection by ten rows
-Up always selects the previous row without collapsing nodes.
+j/k and Up/Down never change which nodes are expanded.
 
 Inside help: 0-8 choose a topic; Tab cycles topics. Scrolling keys
 still work. The program stays in its current execution state.
@@ -716,7 +714,7 @@ def tui(screen, session, use_colors=True):
         else:
             put(height-2, 0, "(mladbg) " + command if editing else ": command | F5 run/continue | Ctrl-C: stop | q quit",
                 width, curses.A_BOLD)
-            hints = ("j/Down: next | k: back/up | h: close | l: open | J/K: all/restore"
+            hints = ("j/k: down/up | h: close | l: open | J/K: all/restore"
                      if focus == 1 else "Tab: pane | hjkl/arrows: scroll | PgUp/Dn: page | F1/? help")
             put(height-1, 0, hints, width, curses.A_DIM)
         screen.refresh()
@@ -784,8 +782,6 @@ def tui(screen, session, use_colors=True):
                 curses.KEY_LEFT, curses.KEY_RIGHT, curses.KEY_PPAGE, curses.KEY_NPAGE):
             if key in ("l", curses.KEY_RIGHT):
                 locals_tree.expand()
-            elif key == "k":
-                locals_tree.back()
             elif key in ("h", curses.KEY_LEFT):
                 locals_tree.collapse()
             elif key == "J":
@@ -793,7 +789,7 @@ def tui(screen, session, use_colors=True):
             elif key == "K":
                 locals_tree.restore()
             else:
-                delta = {"j": 1, curses.KEY_UP: -1, curses.KEY_DOWN: 1,
+                delta = {"j": 1, "k": -1, curses.KEY_UP: -1, curses.KEY_DOWN: 1,
                          curses.KEY_PPAGE: -10, curses.KEY_NPAGE: 10}[key]
                 locals_tree.move(delta)
         elif key in ("h", "l", curses.KEY_LEFT, curses.KEY_RIGHT):

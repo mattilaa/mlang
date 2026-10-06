@@ -115,28 +115,30 @@ class UITest(unittest.TestCase):
         self.assertTrue(any("count = 12" in line for line in tree.refresh(frame, "caller")))
         self.assertTrue(tree.state.expanded)
 
-    def test_k_can_recover_from_last_collapsed_variable(self):
+    def test_moving_up_and_down_preserves_expansions(self):
         box = FakeValue("box", "Box", children=[FakeValue("value", scalar=2)])
         frame = FakeFrame(FakeValue("first", scalar=1), box, FakeValue("last", scalar=3))
         tree = VariableTree()
         tree.refresh(frame, "main")
         tree.move(2)
-        tree.back()
+        tree.move(-1)
         tree.refresh(frame, "main")
         self.assertEqual(tree.state.selected[0][0], "box")
         tree.expand()
         tree.refresh(frame, "main")
+        expanded = set(tree.state.expanded)
         tree.move(100)  # Traverse the whole expanded tree to the final scalar.
         for _ in range(10):
-            tree.back()
-            tree.refresh(frame, "main")
+            tree.move(-1)
+            lines = tree.refresh(frame, "main")
+            self.assertEqual(tree.state.expanded, expanded)
+            self.assertTrue(any("value = 2" in line for line in lines))
         self.assertEqual(tree.cursor, 0)
-        self.assertFalse(tree.state.expanded)
-        # Browse forward again, even after repeated collapse/back operations.
-        tree.move(1)
-        tree.expand()
-        lines = tree.refresh(frame, "main")
-        self.assertTrue(any("value = 2" in line for line in lines))
+        for _ in range(10):
+            tree.move(1)
+            tree.refresh(frame, "main")
+            self.assertEqual(tree.state.expanded, expanded)
+        self.assertEqual(tree.cursor, len(tree.rows) - 1)
 
     def test_collection_reads_are_lazy_and_bounded(self):
         length = FakeValue("len", "i64", scalar=1000000)

@@ -43,13 +43,12 @@ and numbers have distinct colors, and the execution line uses a blue
 background. Launch with `mladbg --no-colors ./app` for a monochrome display.
 
 Locals are a tree with structures and collections collapsed initially. Focus
-the pane with Tab; Up/Down or `j` selects a row, `l`/Right expands it, and
-`k`/`h`/Left collapses it. On an already-open node, `l` enters its first child;
-on a closed child, collapse returns to the parent. When a top-level node is
-already collapsed or scalar, `k` selects the previous row instead of doing
-nothing. Up always moves to the previous row. Shift-J collapses all;
+the pane with Tab; `j`/Down selects the next row, `k`/Up selects the previous
+row, `l`/Right expands it, and `h`/Left collapses it. On an already-open node,
+`l` enters its first child; on a closed child, collapse returns to the parent.
+Moving with `j`/`k` never changes expansions. Shift-J collapses all;
 Shift-K restores the previous expansions and selection. These keys apply only
-to the locals pane outside command entry; use Up instead of `k` to move up.
+to the locals pane outside command entry.
 Expansion state is preserved separately for each selected stack frame.
 
 Press F1 or `?` for a full-screen, scrollable help pane, or enter `:help frames`
