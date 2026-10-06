@@ -164,11 +164,21 @@ line without executable code may resolve to the next statement.
 F9 uses the selected frame's execution line, not a scrolled row.
 
   watch count              watch writes to a variable
+  watch count == 12        stop on a write when count becomes 12
+  watch enabled == true    stop when a boolean is set to true
+  watch point.x >= 10      watch a field, stop at a threshold
+  watch count if count > 5 && enabled
+                           watch count with a C/C++ condition
+  watch count = 12         shorthand for == (does NOT assign)
   watchpoint list          list watchpoints
   watchpoint delete 1      remove a watchpoint
   watchpoint set variable -w read count
                            watch reads (if supported)
 Watchpoints require stopped variable storage and hardware support.
+Conditions are tested after writes, not continuously; setting a watch
+does not immediately stop if the value already matches. Watch a scalar
+field for complex objects. Locals must be in scope when the condition
+is evaluated; delete a local watch before its storage is reused.
 """,
     "threads": """THREADS
 
@@ -289,6 +299,7 @@ Use --no-glyphs for ASCII borders and escaped non-ASCII display text.
 HELP_ORDER = tuple(HELP_TOPICS)
 HELP_ALIASES = {"stack": "frames", "frame": "frames", "stepping": "execution",
                 "locals": "variables", "print": "variables", "break": "breakpoints",
+                "watch": "breakpoints", "watchpoints": "breakpoints",
                 "asm": "memory", "assembly": "memory", "patch": "memory",
                 "keyboard": "keys"}
 HELP = HELP_TOPICS["overview"]
@@ -416,6 +427,12 @@ class Session:
         aliases = {"r": "run", "c": "continue", "n": "next", "s": "step",
                    "f": "finish", "p": "print", "b": "break"}
         name = aliases.get(name, name)
+        if name == "watch":
+            try:
+                return self.watch(rest)
+            except ValueError as error:
+                self.output("Watch refused: " + str(error))
+                return False
         if name == "break":
             if not rest:
                 self.output("Usage: break FUNCTION | FILE:LINE | LINE")
@@ -458,7 +475,7 @@ class Session:
                     "disable": "breakpoint disable", "bt": "thread backtrace",
                     "frame": "frame select", "locals": "frame variable",
                     "print": "expression --", "threads": "thread list",
-                    "thread": "thread select", "watch": "watchpoint set variable",
+                    "thread": "thread select",
                     "registers": "register read", "memory": "memory read",
                     "attach": "process attach --pid", "detach": "process detach",
                     "kill": "process kill"}
@@ -476,6 +493,36 @@ class Session:
             self.attached = False
         self.poll()
         return result.Succeeded()
+
+    def watch(self, text):
+        if not self.stopped() or not self.frame().IsValid():
+            raise ValueError("stop in a frame with the variable in scope first")
+        path, condition = parse_watch(text)
+        frame = self.frame()
+        value = frame.FindVariable(path)
+        if not value.IsValid():
+            value = frame.GetValueForVariablePath(path, self.lldb.eDynamicDontRunTarget)
+        if not value.IsValid() or value.GetError().Fail():
+            raise ValueError("variable/field is unavailable: " + path)
+        if condition:
+            # Validate before consuming a hardware slot. Do not run functions
+            # inside the inferior merely to check a user's condition.
+            options = self.lldb.SBExpressionOptions()
+            options.SetAllowJIT(False)
+            options.SetTimeoutInMicroSeconds(100000)
+            options.SetSuppressPersistentResult(True)
+            check = frame.EvaluateExpression("(bool)("+condition+")", options)
+            if not check.IsValid() or check.GetError().Fail():
+                raise ValueError("invalid condition: " + str(check.GetError()))
+        error = self.lldb.SBError()
+        watch = value.Watch(True, False, True, error)
+        if not watch.IsValid() or error.Fail():
+            raise ValueError("cannot watch storage (hardware slots/size may be limited): " + str(error))
+        if condition:
+            watch.SetCondition(condition)
+        self.output("Watchpoint %d: writes to %s%s" % (
+            watch.GetID(), path, " if "+condition if condition else " (any write)"))
+        return True
 
     def assembly(self):
         """Bounded, cached instructions from the selected frame's function."""
@@ -601,6 +648,33 @@ class Session:
             else:
                 process.Kill()
         self.lldb.SBDebugger.Destroy(self.debugger)
+
+
+def parse_watch(text):
+    path_pattern = r"[A-Za-z_]\w*(?:(?:\.|->)[A-Za-z_]\w*|\[\d+\])*"
+    match = re.fullmatch(r"\s*("+path_pattern+r")\s*(.*)", text, re.S)
+    if not match:
+        raise ValueError("usage: watch VARIABLE [== VALUE | if CONDITION]")
+    path, tail = match.groups()
+    tail = tail.strip()
+    if not tail:
+        return path, ""
+    if tail.startswith("if "):
+        condition = tail[3:].strip()
+    else:
+        comparison = re.fullmatch(r"(==|!=|<=|>=|<|>|=)\s*(.+)", tail, re.S)
+        if not comparison:
+            raise ValueError("use watch VARIABLE == VALUE or watch VARIABLE if CONDITION")
+        operator, value = comparison.groups()
+        condition = path+" "+("==" if operator == "=" else operator)+" "+value.strip()
+    # Read-only predicates only: avoid accidental assignment, statements and
+    # calls. Quoted literals are ignored when detecting operators/identifiers.
+    tokens = re.sub(r'''"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*' ''', "", condition, flags=re.X)
+    if not condition or re.search(r"(?<![=!<>])=(?!=)|\+\+|--|[;{}\n\r]", tokens):
+        raise ValueError("condition must be a read-only expression, not an assignment")
+    if re.search(r"\b[A-Za-z_]\w*\s*\(", tokens):
+        raise ValueError("function calls are not allowed in watch conditions")
+    return path, condition
 
 
 def assemble_instruction(text, triple, size):
@@ -936,6 +1010,12 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
                 breaks.append("%d %s  %s" % (bp.GetID(), "on" if bp.IsEnabled() else "off", location))
                 if bp.GetCondition():
                     breaks.append("  if " + bp.GetCondition())
+            for watch in session.target.watchpoint_iter():
+                breaks.append("W%d %s  0x%x (%d bytes)" % (
+                    watch.GetID(), "on" if watch.IsEnabled() else "off",
+                    watch.GetWatchAddress(), watch.GetWatchSize()))
+                if watch.GetCondition():
+                    breaks.append("  if " + watch.GetCondition())
             pane(middle_y, right_x, middle, width-right_x, "Breakpoints",
                  breaks or ["Use :b FUNCTION or FILE:LINE"], 3)
             # A dedicated console occupies the lower quarter on larger screens.

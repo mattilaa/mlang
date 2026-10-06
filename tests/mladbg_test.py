@@ -83,6 +83,10 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False, no
         else:
             wait_for(b"count = 7")
             wait_for(b"ratio = 1.5")
+            os.write(master, b":watch count == 12\n")
+            wait_for(b"writes to count if count == 12")
+            wait_for(b"W1 on")
+            os.write(master, b":watchpoint delete 1\n")
             fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 120, 0, 0))
             os.kill(process.pid, signal.SIGWINCH)
             os.write(master, b"a")
@@ -208,6 +212,24 @@ def main():
         output = debug(["b " + source + ":13", "run", "watch count", "continue",
                         "p count", "continue"])
         assert "watchpoint" in output.lower() and "count = 12" in output, output
+        output = debug(["b " + source + ":9", "run", "watch count == 12", "continue",
+                        "p count", "watchpoint list", "watchpoint delete 1", "continue"])
+        assert "Watchpoint 1: writes to count if count == 12" in output, output
+        assert "Stopped: watchpoint" in output and "count = 12" in output, output
+        assert "count = 7" not in output, "False condition stopped on the initial write:\n"+output
+        output = debug(["b " + source + ":9", "run", "watch count >= 99", "continue"])
+        assert "Stopped: watchpoint" not in output, output
+        assert "Process exited with status 0" in output, output
+        output = debug(["b " + source + ":11", "run", "watch enabled == true", "continue",
+                        "p enabled", "watchpoint delete 1", "continue"])
+        assert "Stopped: watchpoint" in output and "enabled = true" in output, output
+        output = debug(["b " + source + ":9", "run", "watch count if count > 10 && count < 20",
+                        "continue", "p count", "watchpoint delete 1", "continue"])
+        assert "Stopped: watchpoint" in output and "count = 12" in output, output
+        debug(["watch count == 12"], expected=1)
+        debug(["b " + source + ":13", "run", "watch missing == 12"], expected=1)
+        debug(["b " + source + ":13", "run", "watch count if count = 9"], expected=1)
+        debug(["b " + source + ":13", "run", "watch count == unknown_value"], expected=1)
         debug(["not-a-real-command"], expected=1)
         run([debugger, executable], expected=2)  # Non-TTY invocation must fail clearly.
         check_tui(debugger, executable, source)
@@ -219,6 +241,12 @@ def main():
         def marker(name):
             return next(i for i, line in enumerate(complex_source.read_text().splitlines(), 1)
                         if name in line)
+
+        for condition in ("point.x == -3", "shape.weight > 2.0", "numbers.data[1] == 12",
+                          "pointer->x == -3", "color == 255"):
+            output = debug(["b " + str(complex_source) + ":" + str(marker("complex-break")),
+                            "run", "watch " + condition, "watchpoint list"], program=complex_executable)
+            assert "Watchpoint 1: writes to " in output and "if " + condition in output, output
 
         output = debug(["b " + str(complex_source) + ":" + str(marker("complex-break")),
                         "b " + str(complex_source) + ":" + str(marker("parameter-break")),

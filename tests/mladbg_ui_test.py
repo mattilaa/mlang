@@ -8,7 +8,28 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools" / "mladbg"))
 from ui import Theme, Glyphs, VariableTree, FileCompletion, token_spans
-from mladbg import assemble_instruction
+from mladbg import assemble_instruction, parse_watch
+
+
+class WatchTests(unittest.TestCase):
+    def test_watch_conditions_and_paths(self):
+        for text, expected in (
+                ("count", ("count", "")),
+                ("count==12", ("count", "count == 12")),
+                ("enabled = true", ("enabled", "enabled == true")),
+                ("point.x >= -3", ("point.x", "point.x >= -3")),
+                ("items.data[1].x != 0", ("items.data[1].x", "items.data[1].x != 0")),
+                ("pointer->x < 4", ("pointer->x", "pointer->x < 4")),
+                ("count if count > 5 && enabled", ("count", "count > 5 && enabled")),
+                ('label if label.data[0] == \'=\'', ("label", "label.data[0] == '='"))):
+            self.assertEqual(parse_watch(text), expected)
+
+    def test_watch_rejects_invalid_or_mutating_conditions(self):
+        for text in ("", "count 12", "count ==", "count if", "count if enabled = false",
+                     "count if ++count", "count if count--", "count == 12; count = 9",
+                     "count if change()", "count if true\n; continue"):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                parse_watch(text)
 
 
 class GlyphTests(unittest.TestCase):
