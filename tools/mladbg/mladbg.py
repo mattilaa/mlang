@@ -248,6 +248,7 @@ Box glyphs are automatic on UTF-8 terminals; --no-glyphs uses ASCII.
   F9               breakpoint at the selected execution line
   Ctrl-C           interrupt a running process
   Tab              focus the next pane
+  Shift-Tab        focus the previous pane (wraps around)
   a                cycle source / mixed source+assembly / assembly views
   j / k            scroll the focused pane down / up
   h / l            scroll it left / right
@@ -950,7 +951,7 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
                 width, curses.A_BOLD)
             hints = ("j/k: down/up | h: close | l: open | J/K: all/restore"
                      if focus == 1 else "j/k: select | e: edit | b: break | i/I: step | u: undo | a: view"
-                     if focus == 6 else "Tab: pane | hjkl/arrows: scroll | a: asm | F1/? help")
+                     if focus == 6 else "Tab/Shift-Tab: pane | hjkl/arrows: scroll | a: asm | F1/? help")
             put(height-1, 0, hints, width, curses.A_DIM)
         if completion is not None and editing and height >= 8 and width >= 30:
             visible_rows = min(8, height-6, max(1, len(completion.choices)))
@@ -1065,10 +1066,11 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
         elif key == ":":
             editing = True
             history_index = len(history)
-        elif key == "\t":
+        elif key in ("\t", curses.KEY_BTAB):
             panes = ([0] if session.asm_mode == "source" else
                      [0, 6] if session.asm_mode == "mixed" and height >= 26 else [6]) + [1, 2, 3, 4]
-            focus = panes[(panes.index(focus)+1) % len(panes)] if focus in panes else panes[0]
+            direction = -1 if key == curses.KEY_BTAB else 1
+            focus = panes[(panes.index(focus)+direction) % len(panes)] if focus in panes else panes[0]
         elif key == "a":
             modes = ("source", "mixed", "assembly")
             session.asm_mode = modes[(modes.index(session.asm_mode)+1) % len(modes)]

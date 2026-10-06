@@ -66,7 +66,9 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False, no
         os.write(master, b":run\n")
         if tree_demo:
             wait_for(b"[+] (Engineer) engineer")
-            os.write(master, b"\tl")  # Focus locals and open the argument.
+            # Move backwards from locals, wrap source -> console, then return
+            # forwards to locals. Shift-Tab is xterm's CSI Z sequence.
+            os.write(master, b"\t\x1b[Z\x1b[Z\t\tl")
             wait_for(b'name = "Ada"')
             os.write(master, b"jjl")  # Select and expand its nested position.
             wait_for(b"x = 1.5")
