@@ -5,10 +5,51 @@ import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
 import tempfile
+from collections import deque
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools" / "mladbg"))
 from ui import Theme, Glyphs, VariableTree, FileCompletion, token_spans
-from mladbg import assemble_instruction, parse_watch
+from mladbg import Session, assemble_instruction, parse_watch, validate_display
+
+
+class DisplayTests(unittest.TestCase):
+    def session(self):
+        session = object.__new__(Session)
+        session.displays, session.next_display_id, session.display_revision = {}, 1, 0
+        session.display_cache, session.show_displays = (None, []), False
+        session.log, session.batch = deque(), False
+        session.stopped = lambda: False
+        return session
+
+    def test_add_edit_remove_and_readonly_validation(self):
+        session = self.session()
+        self.assertTrue(session.command("display count + 1"))
+        self.assertTrue(session.command("display count + 1"))
+        self.assertEqual(session.displays, {1: "count + 1"})
+        self.assertTrue(session.command("display edit 1 count + 2"))
+        self.assertIn("<not stopped>", session.display_lines()[0][1])
+        self.assertFalse(session.command("display edit 1 count = 3"))
+        self.assertEqual(session.displays, {1: "count + 2"})
+        self.assertTrue(session.command("display remove 1"))
+        self.assertFalse(session.command("display remove 1"))
+        self.assertFalse(session.command("display call()"))
+        for expression in ("", "x"*513, None, "++count", "count; continue"):
+            with self.assertRaises(ValueError):
+                validate_display(expression)
+
+    def test_explicit_save_load_and_no_overwrite(self):
+        session = self.session()
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory)/"expressions.json")
+            session.command("display count")
+            self.assertTrue(session.command("display save "+path))
+            self.assertFalse(session.command("display save "+path))
+            session.command("display clear")
+            self.assertTrue(session.command("display load "+path))
+            self.assertEqual(session.displays, {1: "count"})
+            (Path(directory)/"bad.json").write_text('{"version":1,"expressions":["count = 99"]}')
+            self.assertFalse(session.command("display load "+str(Path(directory)/"bad.json")))
+            self.assertEqual(session.displays, {1: "count"})
 
 
 class WatchTests(unittest.TestCase):
@@ -20,6 +61,7 @@ class WatchTests(unittest.TestCase):
                 ("point.x >= -3", ("point.x", "point.x >= -3")),
                 ("items.data[1].x != 0", ("items.data[1].x", "items.data[1].x != 0")),
                 ("pointer->x < 4", ("pointer->x", "pointer->x < 4")),
+                ("*pointer == 4", ("*pointer", "*pointer == 4")),
                 ("count if count > 5 && enabled", ("count", "count > 5 && enabled")),
                 ('label if label.data[0] == \'=\'', ("label", "label.data[0] == '='"))):
             self.assertEqual(parse_watch(text), expected)
@@ -93,6 +135,7 @@ class CompletionTests(unittest.TestCase):
             completion = FileCompletion('break "my":12', directory)
             self.assertEqual(completion.accept(), "break my file.txt:12")
             self.assertEqual(FileCompletion("file my", directory).accept(), "file 'my file.txt'")
+            self.assertEqual(FileCompletion("display load my", directory).accept(), "display load my file.txt")
             empty = FileCompletion("b missing/", directory)
             empty.move(100)
             self.assertIsNone(empty.accept())
@@ -189,6 +232,20 @@ class FakeCurses:
 
 
 class UITest(unittest.TestCase):
+    def test_pointer_field_expression_paths(self):
+        position = FakeValue("position", "Position", children=[FakeValue("x", scalar=3)])
+        pointer = FakeValue("pointer", scalar=4096,
+                            type_=FakeType("Position *", pointee=FakeType("Position")))
+        pointer.Dereference = lambda: position
+        tree, frame = VariableTree(), FakeFrame(pointer)
+        tree.refresh(frame, "main")
+        tree.expand()
+        tree.refresh(frame, "main")
+        tree.move(1)
+        tree.expand()
+        tree.refresh(frame, "main")
+        self.assertEqual([row.expression for row in tree.rows], ["pointer", "*pointer", "pointer->x"])
+
     def test_collapsed_structs_do_not_fetch_children(self):
         position = FakeValue("position", "Position", children=[FakeValue("x", scalar=3)])
         team = FakeValue("team", "Team", children=[position, FakeValue("count", scalar=5)])
@@ -204,6 +261,8 @@ class UITest(unittest.TestCase):
         tree.expand()
         lines = tree.refresh(frame, "review")
         self.assertTrue(any("x = 3" in line for line in lines))
+        self.assertEqual([row.expression for row in tree.rows],
+                         ["team", "team.position", "team.position.x", "team.count"])
         selection, expanded = tree.state.selected, set(tree.state.expanded)
         tree.collapse_all()
         tree.collapse_all()  # Repeating J must not replace the saved state.
@@ -265,6 +324,7 @@ class UITest(unittest.TestCase):
         self.assertFalse(data.memory_reads)
         tree.expand()
         lines = tree.refresh(frame, "main")
+        self.assertIn("values.data[0]", [row.expression for row in tree.rows])
         self.assertEqual(len(data.memory_reads), 16)
         self.assertTrue(any("999984 more" in line for line in lines))
         data.scalar = 0

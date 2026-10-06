@@ -34,12 +34,13 @@ class FileCompletion:
         self.cursor = 0
         self.message = ""
         self.breakpoint = False
-        match = re.fullmatch(r"(b|break|file|target\s+create|command\s+source)(?:\s+(.*))?", command)
+        match = re.fullmatch(r"(b|break|file|target\s+create|command\s+source|display\s+(?:load|save))(?:\s+(.*))?", command)
         if not match:
-            self.message = "File completion: b, break, file, target create, command source"
+            self.message = "File completion: b/break, file, target create, command source, display load/save"
             return
         self.prefix = match[1]+" "
         self.breakpoint = match[1] in ("b", "break")
+        self.whole_argument = self.breakpoint or match[1].startswith("display")
         self.fragment = (match[2] or "").strip().strip("\"'")
         if self.breakpoint:
             line = re.search(r":\d*$", self.fragment)
@@ -98,7 +99,7 @@ class FileCompletion:
         path += self.suffix
         path = os.path.expanduser(path)
         # b treats its entire argument as a path; other LLDB commands tokenize.
-        return self.prefix+(path if self.breakpoint else shlex.quote(path))
+        return self.prefix+(path if self.whole_argument else shlex.quote(path))
 
     def parent(self):
         directory = os.path.dirname(self.fragment)
@@ -199,6 +200,7 @@ class TreeRow:
     depth: int
     text: str
     expandable: bool = False
+    expression: str = None
 
 
 class VariableTree:
@@ -229,10 +231,11 @@ class VariableTree:
             self.state.selected = self.rows[self.cursor].path
         return [row.text for row in self.rows]
 
-    def _visit(self, value, path, parent, depth, name):
+    def _visit(self, value, path, parent, depth, name, expression=None):
         if len(self.rows) >= 256:
             return
         type_ = value.GetType()
+        expression = name if expression is None and not parent else expression
         type_name = type_.GetName() or "unknown"
         prefix = "  " * depth
         header = "(%s) %s" % (type_name, name)
@@ -272,11 +275,12 @@ class VariableTree:
                 details += " (depth limit)"
         expanded = expandable and path in self.state.expanded
         marker = "[-] " if expanded else "[+] " if expandable else "    "
-        self.rows.append(TreeRow(path, parent, depth, prefix+marker+header+" "+details, expandable))
+        self.rows.append(TreeRow(path, parent, depth, prefix+marker+header+" "+details, expandable, expression))
         if not expanded:
             return
         if pointer:
-            self._visit(value.Dereference(), path+("*",), path, depth+1, "*"+name)
+            self._visit(value.Dereference(), path+("*",), path, depth+1, "*"+name,
+                        "*"+expression if expression else None)
         elif collection and length and length.IsValid():
             for i in range(min(count, 16)):
                 for label, buffer in (("[%d]" % i, data),) if data and data.IsValid() else (
@@ -291,11 +295,19 @@ class VariableTree:
                         self._unavailable(child_path, path, depth+1, label)
                         continue
                     child = buffer.CreateValueFromAddress(label, address+i*size, element_type)
-                    self._visit(child, child_path, path, depth+1, label)
+                    field = "data" if data and data.IsValid() else "keys" if label.endswith(".key") else "values"
+                    self._visit(child, child_path, path, depth+1, label,
+                                ((expression[1:]+"->" if expression.startswith("*") else expression+".")+
+                                 "%s[%d]" % (field, i)) if expression else None)
         else:
             for i in range(min(count, 16)):
                 child = value.GetChildAtIndex(i)
-                self._visit(child, path+(i,), path, depth+1, child.GetName() or "[%d]" % i)
+                child_name = child.GetName()
+                child_expression = None
+                if expression and child_name:
+                    child_expression = (expression[1:]+"->"+child_name if expression.startswith("*")
+                                        else expression+"."+child_name)
+                self._visit(child, path+(i,), path, depth+1, child_name or "[%d]" % i, child_expression)
         if count > 16 and not pointer and len(self.rows) < 256:
             self.rows.append(TreeRow(path+("more",), path, depth+1,
                                      "  "*(depth+1)+"... %d more (use p to inspect)" % (count-16)))

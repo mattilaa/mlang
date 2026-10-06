@@ -72,8 +72,13 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False, no
             wait_for(b'name = "Ada"')
             os.write(master, b"jjl")  # Select and expand its nested position.
             wait_for(b"x = 1.5")
+            os.write(master, b"jw3")  # Add the selected nested field through the actions menu.
+            wait_for(b"Expression 1: engineer.position.x")
+            os.write(master, b"v")  # Return to Locals without deleting the expression.
             os.write(master, b"JK:frame 3\n")  # Collapse/restore, then inspect a caller.
             wait_for(b"[+] (Team) team")
+            os.write(master, b":display list\n")
+            wait_for(b"<unavailable in this frame>")
             os.write(master, b":frame 0\n:p adjusted\n")
             wait_for(b"adjusted = 20")
             # Repeated Vim navigation must neither trap the tree cursor nor
@@ -83,10 +88,24 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False, no
         else:
             wait_for(b"count = 7")
             wait_for(b"ratio = 1.5")
-            os.write(master, b":watch count == 12\n")
+            os.write(master, b"\tw")
+            wait_for(b"Variable | count")
+            os.write(master, b"j\n")
+            wait_for(b"(mladbg) watch count ==")
+            os.write(master, b"12\n")
             wait_for(b"writes to count if count == 12")
             wait_for(b"W1 on")
             os.write(master, b":watchpoint delete 1\n")
+            os.write(master, b"d")
+            wait_for(b"Watch expressions")
+            wait_for(b"1 count = (int) 7")
+            os.write(master, b"ndisplay_dummy\x1b")  # Cancel add without creating anything.
+            os.write(master, b":display count + 1000\n")
+            wait_for(b"2 count + 1000 = (int) 1007")
+            os.write(master, b"je\x7f\x7f\x7f\x7f2000\n")
+            wait_for(b"Updated expression 2: count + 2000")
+            os.write(master, b"d")
+            wait_for(b"Remov")  # curses may redraw only the changed message prefix.
             fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 120, 0, 0))
             os.kill(process.pid, signal.SIGWINCH)
             os.write(master, b"a")
@@ -104,6 +123,8 @@ def check_tui(debugger, executable, source, no_colors=False, tree_demo=False, no
             os.kill(process.pid, signal.SIGWINCH)
             os.write(master, b"ljjkh:next\n")
             wait_for(b"step over")
+            os.write(master, b":display list\n")
+            wait_for(b"1 count = (int) 12")
             # h/j/k/l must remain literal text inside the command prompt.
             os.write(master, b":help frames\n")
             wait_for(b"Frame 0 is the current function")
@@ -170,6 +191,20 @@ def main():
         output = debug(["b add", "run", "next", "locals", "continue"])
         assert "Breakpoint 1: 1 location(s)" in output, output
         assert "left = 7" in output and "right = 5" in output, output
+        expression_file = str(Path(temporary)/"watch-expressions.json")
+        output = debug(["display count", "display count + 1000", "display save " + expression_file,
+                        "b " + source + ":13", "run", "display list", "next", "display list",
+                        "p count = 14", "display list", "p count = 12",
+                        "frame 1", "display list", "frame 0", "display list", "continue",
+                        "run", "display list"])
+        for token in ("1 count = (int) 7", "2 count + 1000 = (int) 1007",
+                      "1 count = (int) 12", "1 count = (int) 14", "<unavailable in this frame>"):
+            assert token in output, "Missing persistent expression %r:\n%s" % (token, output)
+        assert output.count("1 count = (int) 7") >= 2, "Expressions did not survive relaunch:\n"+output
+        output = run([debugger, "--batch", "--watch-expressions", expression_file,
+                      "-ex", "b " + source + ":13", "-ex", "run", "-ex", "display list", executable])
+        assert "2 count + 1000 = (int) 1007" in output, output
+        debug(["display count = 9"], expected=1)
         output = debug(["b " + source + ":13", "run", "asm line",
                         "patch pc nop", "patch list", "si", "patch undo", "continue"])
         for token in ("Assembly view: mixed (line)", "// debugger.mla:13",
@@ -241,6 +276,13 @@ def main():
         def marker(name):
             return next(i for i, line in enumerate(complex_source.read_text().splitlines(), 1)
                         if name in line)
+
+        output = debug(["b " + str(complex_source) + ":" + str(marker("complex-break")),
+                        "run", "display point.x", "display numbers.data[1]", "display pointer->x",
+                        "display list"], program=complex_executable)
+        for token in ("1 point.x = (int) -3", "2 numbers.data[1] = (unsigned int) 9",
+                      "3 pointer->x = (int) -3"):
+            assert token in output, "Missing watched field %r:\n%s" % (token, output)
 
         for condition in ("point.x == -3", "shape.weight > 2.0", "numbers.data[1] == 12",
                           "pointer->x == -3", "color == 255"):

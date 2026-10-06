@@ -2,12 +2,14 @@
 import argparse
 from collections import deque
 import importlib
+import json
 import os
 import re
 import shutil
 from pathlib import Path
 import subprocess
 import sys
+import time
 from ui import Theme, Glyphs, VariableTree, FileCompletion, token_spans
 
 
@@ -142,6 +144,23 @@ Opening a pointer node explicitly reads its pointee.
 Pointers are not followed automatically. str8/str16 show text;
 numeric enums show variant names. Unavailable values are marked.
 
+Locals shortcuts: w opens break-on-change/value actions; d adds the
+selected variable/field to Watch expressions; p prints full details.
+v toggles the Watch expressions view (split beside Locals when tall).
+  display count + 1         add a persistent, read-only expression
+  display list              show values in the selected frame
+  display edit 1 EXPR        edit expression ID 1
+  display remove 1 / clear  remove an expression / all expressions
+  display save FILE         save JSON (refuses an existing file)
+  display load FILE         replace the list with saved expressions
+  mladbg --watch-expressions FILE ./app
+In Watch expressions: n adds, e edits, d/Delete removes, p prints,
+r refreshes, j/k selects. Values refresh on stops/frame changes and
+debugger commands; the list survives stepping and relaunching.
+Out-of-scope expressions stay listed as unavailable. Display expressions
+cannot call functions or assign; complex objects get compact summaries.
+Up to 32 expressions / 512 characters each. Save/load is explicit only.
+
 Expressions use LLDB's C/C++ syntax, not MLang syntax. Explicit
 expressions can change state or call functions in the program.
 Optimized or uninitialized variables may not have useful values.
@@ -272,7 +291,8 @@ Inside command entry (command history uses Up/Down):
   Esc              cancel it
   Up / Down        recall previous / next command
   Tab              open file completion (b/break, file, target create,
-                   command source); :b then Tab lists the current directory
+                   command source, display load/save)
+                   :b then Tab lists the current directory
   In completion    j/k or Up/Down select; Enter/Tab accepts a file or
                    browses a directory; Left browses the parent; Esc closes
                    without cancelling the command. Enter again executes.
@@ -286,7 +306,14 @@ In the Locals pane (structures start collapsed):
   Shift-J         collapse all nodes
   Shift-K         restore the expansions saved by Shift-J
   PgUp/PgDn       move the selection by ten rows
+  w                break-on-change/value menu for the selected variable
+  d                add selected variable/field to Watch expressions
+  p                print the selected variable's full details
+  v                toggle Locals / Watch expressions
 j/k and Up/Down never change which nodes are expanded.
+
+In Watch expressions: n adds, e edits, d/Delete removes, p prints,
+r refreshes, j/k or Up/Down selects. v returns to Locals.
 
 Inside help: 0-8 choose a topic; Tab cycles topics. Scrolling keys
 still work. The program stays in its current execution state.
@@ -298,7 +325,7 @@ Use --no-glyphs for ASCII borders and escaped non-ASCII display text.
 }
 HELP_ORDER = tuple(HELP_TOPICS)
 HELP_ALIASES = {"stack": "frames", "frame": "frames", "stepping": "execution",
-                "locals": "variables", "print": "variables", "break": "breakpoints",
+                "locals": "variables", "print": "variables", "display": "variables", "break": "breakpoints",
                 "watch": "breakpoints", "watchpoints": "breakpoints",
                 "asm": "memory", "assembly": "memory", "patch": "memory",
                 "keyboard": "keys"}
@@ -322,6 +349,11 @@ class Session:
         self.patch_history = []
         self.code_revision = 0
         self.asm_cache = (None, [])
+        self.displays = {}
+        self.next_display_id = 1
+        self.display_revision = 0
+        self.display_cache = (None, [])
+        self.show_displays = False
         self.target = self.debugger.CreateTarget(executable or "")
         if executable and not self.target.IsValid():
             raise RuntimeError("cannot load executable: " + executable)
@@ -390,7 +422,14 @@ class Session:
         text = text.strip()
         if not text:
             return True
+        self.display_revision += 1
         name, _, rest = text.partition(" ")
+        if name == "display":
+            try:
+                return self.display_command(rest)
+            except (ValueError, OSError) as error:
+                self.output("Display refused: " + str(error))
+                return False
         if name == "asm":
             option = rest.strip() or "mixed"
             if option in ("source", "mixed", "assembly", "off"):
@@ -499,9 +538,14 @@ class Session:
             raise ValueError("stop in a frame with the variable in scope first")
         path, condition = parse_watch(text)
         frame = self.frame()
-        value = frame.FindVariable(path)
+        value_path = path[1:] if path.startswith("*") else path
+        value = frame.FindVariable(value_path)
         if not value.IsValid():
-            value = frame.GetValueForVariablePath(path, self.lldb.eDynamicDontRunTarget)
+            value = frame.GetValueForVariablePath(value_path, self.lldb.eDynamicDontRunTarget)
+        if path.startswith("*") and value.IsValid() and value.GetType().IsPointerType():
+            value = value.Dereference()
+        elif path.startswith("*"):
+            raise ValueError("dereference requires a pointer variable/field")
         if not value.IsValid() or value.GetError().Fail():
             raise ValueError("variable/field is unavailable: " + path)
         if condition:
@@ -523,6 +567,120 @@ class Session:
         self.output("Watchpoint %d: writes to %s%s" % (
             watch.GetID(), path, " if "+condition if condition else " (any write)"))
         return True
+
+    def display_command(self, text):
+        """Persistent expressions are independent of hardware watchpoints."""
+        action, _, rest = text.strip().partition(" ")
+        if not action or action == "list":
+            self.output("\n".join(line for _, line in self.display_lines()) or "No watch expressions. Use display EXPR.")
+            return True
+        if action == "clear":
+            if rest:
+                raise ValueError("display clear takes no arguments; use display add EXPR for reserved names")
+            self.displays.clear()
+            self.output("Cleared watch expressions.")
+            return True
+        if action in ("remove", "delete"):
+            id_ = int(rest)
+            if id_ not in self.displays:
+                raise ValueError("unknown expression ID")
+            del self.displays[id_]
+            self.output("Removed expression %d." % id_)
+            return True
+        if action == "edit":
+            id_text, _, expression = rest.partition(" ")
+            id_ = int(id_text)
+            if id_ not in self.displays:
+                raise ValueError("unknown expression ID")
+            validate_display(expression)
+            self.displays[id_] = expression.strip()
+            self.output("Updated expression %d: %s" % (id_, expression.strip()))
+            return True
+        if action in ("save", "load"):
+            path = Path(rest.strip().strip("\"'") or ".mladbg-watches.json").expanduser()
+            if action == "save":
+                # Exclusive creation: never silently overwrite a user file.
+                with path.open("x", encoding="utf-8") as file:
+                    json.dump({"version": 1, "expressions": list(self.displays.values())}, file, indent=2)
+                    file.write("\n")
+                self.output("Saved expressions to " + str(path))
+            else:
+                if path.stat().st_size > 131072:
+                    raise ValueError("watch-expression file exceeds 128 KiB")
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(data, dict) or data.get("version") != 1:
+                    raise ValueError("unsupported expression file format")
+                expressions = data.get("expressions")
+                if not isinstance(expressions, list) or len(expressions) > 32:
+                    raise ValueError("expected a list of at most 32 expressions")
+                for expression in expressions:
+                    validate_display(expression)
+                # Replace only after all expressions pass validation.
+                self.displays = dict(enumerate(expressions, 1))
+                self.next_display_id = len(expressions)+1
+                self.show_displays = True
+                self.output("Loaded %d watch expressions from %s" % (len(expressions), path))
+            return True
+        expression = rest if action == "add" else text
+        validate_display(expression)
+        expression = expression.strip()
+        if expression in self.displays.values():
+            self.show_displays = True
+            self.output("Expression already displayed: " + expression)
+            return True
+        if len(self.displays) >= 32:
+            raise ValueError("at most 32 watch expressions are supported")
+        id_ = self.next_display_id
+        self.next_display_id += 1
+        self.displays[id_] = expression
+        self.show_displays = True
+        self.output("Expression %d: %s" % (id_, expression))
+        return True
+
+    def display_lines(self):
+        if not self.stopped() or not self.frame().IsValid():
+            return [(id_, "%d %s = <not stopped>" % (id_, expression))
+                    for id_, expression in self.displays.items()]
+        frame = self.frame()
+        key = (self.process().GetProcessID(), self.process().GetStopID(),
+               self.process().GetSelectedThread().GetThreadID(), frame.GetFrameID(), frame.GetPC(),
+               self.display_revision)
+        if key == self.display_cache[0]:
+            return self.display_cache[1]
+        lines = []
+        deadline = time.monotonic()+0.25
+        for id_, expression in self.displays.items():
+            budget_exceeded = False
+            value = frame.FindVariable(expression)
+            if not value.IsValid() and re.fullmatch(
+                    r"[A-Za-z_]\w*(?:(?:\.|->)[A-Za-z_]\w*|\[\d+\])*", expression):
+                value = frame.GetValueForVariablePath(expression, self.lldb.eDynamicDontRunTarget)
+            if not value.IsValid() and time.monotonic() < deadline:
+                options = self.lldb.SBExpressionOptions()
+                options.SetAllowJIT(False)
+                options.SetTimeoutInMicroSeconds(20000)
+                options.SetSuppressPersistentResult(True)
+                value = frame.EvaluateExpression(expression, options)
+            elif not value.IsValid():
+                budget_exceeded = True
+            if not value.IsValid() or value.GetError().Fail():
+                result = "<evaluation budget reached; r to retry>" if budget_exceeded else "<unavailable in this frame>"
+            else:
+                type_ = value.GetType()
+                type_name = type_.GetName() or "?"
+                result = value.GetSummary() or value.GetValue()
+                if type_name in ("unsigned char", "u8"):
+                    result = str(value.GetValueAsUnsigned())
+                elif type_name in ("signed char", "i8"):
+                    result = str(value.GetValueAsSigned())
+                if not result:
+                    length = value.GetChildMemberWithName("len")
+                    result = ("len=%d" % length.GetValueAsSigned() if length.IsValid() and not length.GetError().Fail()
+                              else "{%d fields}" % value.GetNumChildren())
+                result = "(%s) %s" % (type_name, result)
+            lines.append((id_, "%d %s = %s" % (id_, expression, result)))
+        self.display_cache = (key, lines)
+        return lines
 
     def assembly(self):
         """Bounded, cached instructions from the selected frame's function."""
@@ -650,8 +808,22 @@ class Session:
         self.lldb.SBDebugger.Destroy(self.debugger)
 
 
+def validate_display(expression):
+    if not isinstance(expression, str) or not expression.strip() or len(expression) > 512:
+        raise ValueError("expected a nonempty expression of at most 512 characters")
+    validate_read_expression(expression)
+
+
+def validate_read_expression(condition):
+    tokens = re.sub(r'''"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*' ''', "", condition, flags=re.X)
+    if not condition or re.search(r"(?<![=!<>])=(?!=)|\+\+|--|[;{}\n\r]", tokens):
+        raise ValueError("expression must be read-only, not an assignment")
+    if re.search(r"\b[A-Za-z_]\w*\s*\(", tokens):
+        raise ValueError("function calls are not allowed in watch expressions")
+
+
 def parse_watch(text):
-    path_pattern = r"[A-Za-z_]\w*(?:(?:\.|->)[A-Za-z_]\w*|\[\d+\])*"
+    path_pattern = r"\*?[A-Za-z_]\w*(?:(?:\.|->)[A-Za-z_]\w*|\[\d+\])*"
     match = re.fullmatch(r"\s*("+path_pattern+r")\s*(.*)", text, re.S)
     if not match:
         raise ValueError("usage: watch VARIABLE [== VALUE | if CONDITION]")
@@ -669,11 +841,7 @@ def parse_watch(text):
         condition = path+" "+("==" if operator == "=" else operator)+" "+value.strip()
     # Read-only predicates only: avoid accidental assignment, statements and
     # calls. Quoted literals are ignored when detecting operators/identifiers.
-    tokens = re.sub(r'''"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*' ''', "", condition, flags=re.X)
-    if not condition or re.search(r"(?<![=!<>])=(?!=)|\+\+|--|[;{}\n\r]", tokens):
-        raise ValueError("condition must be a read-only expression, not an assignment")
-    if re.search(r"\b[A-Za-z_]\w*\s*\(", tokens):
-        raise ValueError("function calls are not allowed in watch conditions")
+    validate_read_expression(condition)
     return path, condition
 
 
@@ -836,8 +1004,8 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
     editing = False
     completion = None
     focus = 0
-    offsets = [0] * 7
-    horizontal_offsets = [0] * 7
+    offsets = [0] * 8
+    horizontal_offsets = [0] * 8
     help_topic = None
     history = []
     history_index = 0
@@ -845,6 +1013,9 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
     assembly_position = None
     assembly_cursor = 0
     assembly_rows = []
+    display_rows = []
+    display_cursor = 0
+    local_menu = None
     locals_tree = VariableTree()
     session.output("mladbg — type help for commands; F5 run/continue; : command; q quit")
     theme = Theme(curses, use_colors)
@@ -896,6 +1067,7 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
         offset = offsets[index]
         for row, line in enumerate(lines[offset:offset+content_height], 1):
             selected = (index == 0 and line.lstrip().startswith("=>") or
+                        index == 7 and focus == 7 and offset+row-1 == display_cursor or
                         index == 6 and (line.lstrip().startswith("=>") or
                                         focus == 6 and offset+row-1 == assembly_cursor) or
                         index == 1 and focus == 1 and offset+row-1 == locals_tree.cursor and session.stopped())
@@ -904,7 +1076,7 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
             visible = line[start:start+content_width]
             role = "error" if index == 4 and line.lower().startswith("error:") else "text"
             put(y+row, x+2, visible.ljust(content_width), content_width, theme.attr(role, selected))
-            if index in (0, 1, 6):
+            if index in (0, 1, 6, 7):
                 for begin, end, token_role in token_spans(line):
                     begin, end = max(begin, start), min(end, start+content_width)
                     if begin < end:
@@ -971,6 +1143,12 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
                 assembly_text = [("> " if focus == 6 and i == assembly_cursor else "  ")+line
                                  for i, line in enumerate(assembly_text)]
                 pane(asm_y, 0, asm_height, left, "Assembly | " + session.asm_scope, assembly_text, 6)
+            split_variables = session.show_displays and top >= 10
+            locals_height = top//2 if split_variables else top
+            if focus == 1 and session.show_displays and not split_variables:
+                focus = 7
+            elif focus == 7 and not session.show_displays:
+                focus = 1
             if session.stopped():
                 frame = session.frame()
                 thread = session.process().GetSelectedThread()
@@ -980,13 +1158,23 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
                 if locals_tree.rows:
                     cursor = locals_tree.cursor
                     offsets[1] = min(offsets[1], cursor)
-                    offsets[1] = max(offsets[1], cursor-(top-2)+1)
+                    offsets[1] = max(offsets[1], cursor-(locals_height-2)+1)
                     locals_ = [("> " if i == cursor else "  ")+text for i, text in enumerate(locals_)]
                 else:
                     locals_ = ["No locals available (compile with -g -O0)"]
             else:
                 locals_ = ["Run and stop to inspect variables." if ready else "Process is " + state]
-            pane(1, right_x, top, width-right_x, "Locals / arguments", locals_, 1)
+            if not session.show_displays or split_variables:
+                pane(1, right_x, locals_height, width-right_x, "Locals / arguments", locals_, 1)
+            if session.show_displays:
+                display_rows = session.display_lines()
+                display_cursor = min(display_cursor, max(0, len(display_rows)-1))
+                display_height = top-locals_height if split_variables else top
+                offsets[7] = min(offsets[7], display_cursor)
+                offsets[7] = max(offsets[7], display_cursor-display_height+3)
+                pane(1+locals_height if split_variables else 1, right_x, display_height, width-right_x,
+                     "Watch expressions | v: locals", [row[1] for row in display_rows] or
+                     ["n: add expression | v: locals", "Values refresh at each stop / frame change."], 7)
             thread = session.process().GetSelectedThread()
             stack = []
             if session.stopped():
@@ -1029,36 +1217,44 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
         else:
             put(height-2, 0, "(mladbg) " + command if editing else ": command | F5 run/continue | Ctrl-C: stop | q quit",
                 width, curses.A_BOLD)
-            hints = ("j/k: down/up | h: close | l: open | J/K: all/restore"
+            hints = ("j/k: select | h/l: tree | w: break | d: display | p: print | v: watches"
                      if focus == 1 else "j/k: select | e: edit | b: break | i/I: step | u: undo | a: view"
-                     if focus == 6 else "Tab/Shift-Tab: pane | hjkl/arrows: scroll | a: asm | F1/? help")
+                     if focus == 6 else "j/k: select | n: add | e: edit | d: remove | p: print | r: refresh | v: locals"
+                     if focus == 7 else "Tab/Shift-Tab: pane | hjkl/arrows: scroll | a: asm | v: watches | F1/? help")
             put(height-1, 0, hints, width, curses.A_DIM)
-        if completion is not None and editing and height >= 8 and width >= 30:
-            visible_rows = min(8, height-6, max(1, len(completion.choices)))
+        if (completion is not None and editing or local_menu is not None) and height >= 8 and width >= 30:
+            choices = completion.choices if local_menu is None else [
+                ("1 Break on change", False), ("2 Break on value...", False), ("3 Add watch expression", False)]
+            menu_cursor = completion.cursor if local_menu is None else local_menu[1]
+            menu_title = "Files | "+(completion.fragment or "./") if local_menu is None else "Variable | "+local_menu[0]
+            menu_message = completion.message if local_menu is None else "Enter: choose | Esc: cancel"
+            visible_rows = min(8, height-6, max(1, len(choices)))
             popup_height = visible_rows+3
             popup_width = min(width-2, max(36, min(78, max(
-                (len(glyphs.text(path))+6 for path, _ in completion.choices), default=36))))
-            x = min(8+len(completion.prefix), width-popup_width-1)
+                (len(glyphs.text(path))+6 for path, _ in choices), default=36))))
+            x = min(8+(len(completion.prefix) if local_menu is None else 0), width-popup_width-1)
             y = height-2-popup_height
             for row in range(popup_height):
                 put(y+row, x, " "*popup_width, popup_width)
             edge = glyphs.top_left+glyphs.horizontal*(popup_width-2)+glyphs.top_right
             put(y, x, edge, popup_width, focus_attr)
-            put(y, x+2, " Files | "+(completion.fragment or "./")+" ", popup_width-4, focus_attr)
-            start = max(0, completion.cursor-visible_rows+1)
+            put(y, x+2, " "+menu_title+" ", popup_width-4, focus_attr)
+            start = max(0, menu_cursor-visible_rows+1)
             for row in range(visible_rows):
                 put(y+row+1, x, glyphs.vertical+" "*(popup_width-2)+glyphs.vertical, popup_width, focus_attr)
                 i = start+row
-                if i < len(completion.choices):
-                    path, directory = completion.choices[i]
-                    selected = i == completion.cursor
+                if i < len(choices):
+                    path, directory = choices[i]
+                    selected = i == menu_cursor
                     put(y+row+1, x+2, (("> " if selected else "  ")+glyphs.text(path)).ljust(popup_width-4),
                         popup_width-4, theme.attr("type" if directory else "text", selected))
             put(y+popup_height-2, x, glyphs.vertical+" "*(popup_width-2)+glyphs.vertical, popup_width, focus_attr)
-            put(y+popup_height-2, x+2, completion.message, popup_width-4)
+            put(y+popup_height-2, x+2, menu_message, popup_width-4)
             put(y+popup_height-1, x, glyphs.bottom_left+glyphs.horizontal*(popup_width-2)+glyphs.bottom_right,
                 popup_width, focus_attr)
-            put(height-1, 0, "j/k/arrows: select | Enter/Tab: choose | Left: parent | Esc: close".ljust(width),
+            menu_hint = ("j/k/arrows: select | Enter/Tab: choose | Left: parent | Esc: close" if local_menu is None
+                         else "j/k/arrows: select | Enter/1-3: choose | Esc: cancel")
+            put(height-1, 0, menu_hint.ljust(width),
                 width, curses.A_DIM)
         screen.refresh()
         try:
@@ -1067,7 +1263,27 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
             continue
         if key == "\x03":
             completion = None
+            local_menu = None
             session.command("interrupt")
+        elif local_menu is not None:
+            if key == "\x1b":
+                local_menu = None
+            elif key in ("j", "k", curses.KEY_UP, curses.KEY_DOWN):
+                local_menu[1] = max(0, min(2, local_menu[1]+(1 if key in ("j", curses.KEY_DOWN) else -1)))
+            elif key in ("\n", "\r", "\t", curses.KEY_ENTER, "1", "2", "3"):
+                expression, choice = local_menu
+                if key in ("1", "2", "3"):
+                    choice = int(key)-1
+                local_menu = None
+                if choice == 0:
+                    session.command("watch "+expression)
+                elif choice == 1:
+                    command = "watch "+expression+" == "
+                    editing = True
+                    history_index = len(history)
+                else:
+                    session.command("display "+expression)
+                    focus = 7
         elif completion is not None and editing:
             if key == "\x1b":
                 completion = None
@@ -1148,9 +1364,43 @@ def tui(screen, session, use_colors=True, use_glyphs=True):
             history_index = len(history)
         elif key in ("\t", curses.KEY_BTAB):
             panes = ([0] if session.asm_mode == "source" else
-                     [0, 6] if session.asm_mode == "mixed" and height >= 26 else [6]) + [1, 2, 3, 4]
+                     [0, 6] if session.asm_mode == "mixed" and height >= 26 else [6]) + (
+                         [1, 7] if session.show_displays and height >= 26 else
+                         [7] if session.show_displays else [1]) + [2, 3, 4]
             direction = -1 if key == curses.KEY_BTAB else 1
             focus = panes[(panes.index(focus)+direction) % len(panes)] if focus in panes else panes[0]
+        elif key == "v":
+            session.show_displays = not session.show_displays
+            focus = 7 if session.show_displays else 1
+        elif focus == 7 and key in ("j", "k", curses.KEY_UP, curses.KEY_DOWN, curses.KEY_PPAGE, curses.KEY_NPAGE):
+            delta = {"j": 1, "k": -1, curses.KEY_UP: -1, curses.KEY_DOWN: 1,
+                     curses.KEY_PPAGE: -10, curses.KEY_NPAGE: 10}[key]
+            display_cursor = max(0, min(max(0, len(display_rows)-1), display_cursor+delta))
+        elif focus == 7 and key in ("n", "e", "d", "p", "r", curses.KEY_DC):
+            if key == "n":
+                command, editing = "display ", True
+            elif key == "r":
+                session.display_revision += 1
+            elif display_rows:
+                id_ = display_rows[display_cursor][0]
+                if key == "e":
+                    command, editing = "display edit %d %s" % (id_, session.displays[id_]), True
+                elif key in ("d", curses.KEY_DC):
+                    session.command("display remove %d" % id_)
+                elif key == "p":
+                    session.command("p "+session.displays[id_])
+            history_index = len(history)
+        elif focus == 1 and session.stopped() and locals_tree.rows and key in ("w", "d", "p"):
+            expression = locals_tree.rows[locals_tree.cursor].expression
+            if not expression:
+                session.output("Selected row has no available variable expression.")
+            elif key == "w":
+                local_menu = [expression, 0]
+            elif key == "d":
+                session.command("display "+expression)
+                focus = 7
+            else:
+                session.command("p "+expression)
         elif key == "a":
             modes = ("source", "mixed", "assembly")
             session.asm_mode = modes[(modes.index(session.asm_mode)+1) % len(modes)]
@@ -1212,6 +1462,7 @@ def main():
     parser.add_argument("--batch", action="store_true", help="run commands without the TUI")
     parser.add_argument("--no-colors", action="store_true", help="use a monochrome terminal UI")
     parser.add_argument("--no-glyphs", action="store_true", help="use ASCII borders and escape non-ASCII display text")
+    parser.add_argument("--watch-expressions", metavar="FILE", help="load saved display expressions at startup")
     parser.add_argument("-ex", "--command", action="append", default=[], help="startup command (repeatable)")
     parser.add_argument("--attach", type=int, metavar="PID", help="attach to an existing process")
     parser.add_argument("--version", action="version", version="mladbg 0.1 (LLDB backend)")
@@ -1230,7 +1481,8 @@ def main():
         if arguments[:1] == ["--"]:
             arguments = arguments[1:]
         session = Session(lldb, options.executable, arguments, options.batch)
-        commands = (["attach " + str(options.attach)] if options.attach else []) + options.command
+        commands = (["display load " + options.watch_expressions] if options.watch_expressions else []) + (
+            ["attach " + str(options.attach)] if options.attach else []) + options.command
         for command in commands:
             result = session.command(command)
             if result is None:
