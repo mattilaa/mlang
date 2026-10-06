@@ -909,6 +909,46 @@ static void report_colon_semicolon_typo(int line, int col)
 extern int yylex();
 extern int yylineno;
 extern int yycolumn_token;
+
+// Locations (@n) for rules. An empty rule (optional_branch_prediction before
+// `let`/`var`, say) gets the position of the lookahead token after it, which
+// the parser has already read, instead of the end of the token before it: a
+// rule starting with an empty part then starts at its first real token.
+#define YYLLOC_DEFAULT(Current, Rhs, N)                                       \
+    do                                                                        \
+    {                                                                         \
+        if(N)                                                                 \
+        {                                                                     \
+            (Current).first_line = YYRHSLOC(Rhs, 1).first_line;               \
+            (Current).first_column = YYRHSLOC(Rhs, 1).first_column;           \
+            (Current).last_line = YYRHSLOC(Rhs, N).last_line;                 \
+            (Current).last_column = YYRHSLOC(Rhs, N).last_column;             \
+        }                                                                     \
+        else if(yychar != YYEMPTY)                                            \
+        {                                                                     \
+            (Current).first_line = (Current).last_line = yylloc.first_line;   \
+            (Current).first_column = (Current).last_column =                  \
+                yylloc.first_column;                                          \
+        }                                                                     \
+        else                                                                  \
+        {                                                                     \
+            (Current).first_line = (Current).last_line =                      \
+                YYRHSLOC(Rhs, 0).last_line;                                   \
+            (Current).first_column = (Current).last_column =                  \
+                YYRHSLOC(Rhs, 0).last_column;                                 \
+        }                                                                     \
+    } while(0)
+
+// Record where a statement or top-level item starts (its first token's @n);
+// `line` may already point past it when the parser read ahead.
+static void mark_start(ASTNode* node, int line, int column)
+{
+    if(node && line > 0 && node->startLine == 0)
+    {
+        node->startLine = line;
+        node->startCol = column;
+    }
+}
 extern char* yytext;
 void yyerror(const char* s);
 extern const char* g_targetArchForParse;
@@ -2052,8 +2092,8 @@ program
     ;
 
 top_level_list
-    : top_level_item { $$ = mla_ast_top_level_list($1); }
-    | top_level_list top_level_item { $$ = mla_ast_add_to_top_level_list($1, $2); }
+    : top_level_item { mark_start($1, @1.first_line, @1.first_column); $$ = mla_ast_top_level_list($1); }
+    | top_level_list top_level_item { mark_start($2, @2.first_line, @2.first_column); $$ = mla_ast_add_to_top_level_list($1, $2); }
     ;
 
 top_level_item
@@ -2436,6 +2476,7 @@ impl_method_list
     : /* empty */ { $$ = mla_ast_impl_block(strdup(""), NULL, NULL); }
     | impl_method_list struct_method
         {
+            mark_start($2, @2.first_line, @2.first_column);
             $$ = mla_ast_impl_add_method($1, $2);
         }
     ;
@@ -2845,8 +2886,8 @@ type_list
     ;
 
 statement_list
-    : statement { $$ = mla_ast_statement_list_create($1); }
-    | statement_list statement { $$ = mla_ast_statement_list_add($1, $2); }
+    : statement { mark_start($1, @1.first_line, @1.first_column); $$ = mla_ast_statement_list_create($1); }
+    | statement_list statement { mark_start($2, @2.first_line, @2.first_column); $$ = mla_ast_statement_list_add($1, $2); }
     ;
 
 statement

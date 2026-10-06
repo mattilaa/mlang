@@ -1098,6 +1098,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         auto stateBeforeLoopActiveBorrowers = activeBorrowers;
 
         namedValues[node->varName] = loopVar;
+
+        debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
         variableTypes[node->varName] = TypeNode::TYPE_I64;
         clearMovedVariable(node->varName);
         recordVariableScopeDepth(node->varName);
@@ -1382,6 +1384,8 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
 
     namedValues[node->varName] = loopVar;
+
+    debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
     variableTypes[node->varName] = elemTypeNode->kind;
     if(auto* structRef = dynamic_cast<StructTypeRefNode*>(elemTypeNode))
     {
@@ -1465,6 +1469,7 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
         oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
+        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node);  // mlang -g
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
         recordVariableScopeDepth(node->indexVarName);
     }
@@ -1709,6 +1714,8 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
 
     namedValues[node->varName] = loopVar;
+
+    debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
     variableTypes[node->varName] = elemTypeNode->kind;
     if(auto* structRef = dynamic_cast<StructTypeRefNode*>(elemTypeNode))
     {
@@ -1793,6 +1800,7 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
         oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
+        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node);  // mlang -g
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
         recordVariableScopeDepth(node->indexVarName);
     }
@@ -1969,6 +1977,8 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     std::string oldEnumType = hadOldEnumType ? oldEnumTypeIt->second : "";
 
     namedValues[node->varName] = loopVar;
+
+    debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
     variableTypes[node->varName] = baseKind;
     enumVariableTypes[node->varName] = enumName;
     clearMovedVariable(node->varName);
@@ -1993,6 +2003,7 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
         hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
         oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
+        debugDeclareVariable(node->indexVarName, indexVar, nullptr, node);  // mlang -g
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
         recordVariableScopeDepth(node->indexVarName);
     }
@@ -2208,6 +2219,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
         loopVarType = keyType;
         loopVar = builder.CreateAlloca(keyType, nullptr, node->varName);
         namedValues[node->varName] = loopVar;
+        debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
         variableTypes[node->varName] = keyTypeNode->kind;
         clearMovedVariable(node->varName);
         recordVariableScopeDepth(node->varName);
@@ -2217,6 +2229,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
         loopVarType = valueType;
         loopVar = builder.CreateAlloca(valueType, nullptr, node->varName);
         namedValues[node->varName] = loopVar;
+        debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
         variableTypes[node->varName] = valTypeNode->kind;
         clearMovedVariable(node->varName);
         recordVariableScopeDepth(node->varName);
@@ -2231,6 +2244,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
             loopVar =
                 builder.CreateAlloca(entryStructType, nullptr, node->varName);
             namedValues[node->varName] = loopVar;
+            debugDeclareVariable(node->varName, loopVar, nullptr, node);  // mlang -g
             variableTypes[node->varName] = TypeNode::TYPE_TUPLE;
             clearMovedVariable(node->varName);
             recordVariableScopeDepth(node->varName);

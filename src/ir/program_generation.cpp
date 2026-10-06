@@ -7,9 +7,6 @@
 
 #include <functional>
 #include <llvm/Config/llvm-config.h>
-#include <llvm/BinaryFormat/Dwarf.h>
-#include <llvm/IR/DebugInfoMetadata.h>
-#include <filesystem>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -19,97 +16,9 @@ using mlang::ir_detail::normalize_target_arch_name;
 using mlang::ir_detail::common::Helpers;
 using mlang::ir_detail::return_inference::infer_function_return_type;
 
-llvm::DIFile* CodeGenerator::getDebugFile(const ASTNode* node)
-{
-    if(!debugInfoBuilder)
-        return nullptr;
-    std::string path = node && node->file && *node->file
-                           ? node->file
-                           : sourceFileName;
-    if(path.empty())
-        path = "<unknown>";
-    auto found = debugFiles.find(path);
-    if(found != debugFiles.end())
-        return found->second;
-
-    std::filesystem::path sourcePath(path);
-    llvm::DIFile* file = debugInfoBuilder->createFile(
-        sourcePath.filename().string(), sourcePath.parent_path().string());
-    debugFiles[path] = file;
-    return file;
-}
-
-void CodeGenerator::setDebugLocation(const ASTNode* node)
-{
-    if(!emitDebugInfo || !debugInfoBuilder || !currentDebugScope || !node ||
-       node->line <= 0)
-        return;
-    llvm::DIFile* file = getDebugFile(node);
-    llvm::DIScope* scope = currentDebugScope;
-    if(file)
-        scope = debugInfoBuilder->createLexicalBlockFile(scope, file);
-    builder.SetCurrentDebugLocation(llvm::DILocation::get(
-        context, static_cast<unsigned>(node->line),
-        static_cast<unsigned>(std::max(1, node->col)), scope));
-}
-
-void CodeGenerator::emitDebugVariable(const std::string& name,
-                                       const ASTNode* node, unsigned argument)
-{
-    if(!debugInfoBuilder || !currentDebugScope || !builder.GetInsertBlock())
-        return;
-    auto storage = namedValues.find(name);
-    auto kind = variableTypes.find(name);
-    if(storage == namedValues.end() || kind == variableTypes.end())
-        return;
-    auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(storage->second);
-    if(!alloca)
-        return;
-    llvm::Type* type = alloca->getAllocatedType();
-    // Containers and structs require their own member/layout metadata. Never
-    // misrepresent them as scalar values merely because their kind is known.
-    if(!type->isIntegerTy() && !type->isFloatingPointTy())
-        return;
-    unsigned encoding = type->isFloatingPointTy() ? llvm::dwarf::DW_ATE_float
-                        : kind->second == TypeNode::TYPE_BOOL ||
-                                  kind->second == TypeNode::TYPE_BIT
-                            ? llvm::dwarf::DW_ATE_boolean
-                        : isUnsignedType(kind->second)
-                            ? llvm::dwarf::DW_ATE_unsigned
-                            : llvm::dwarf::DW_ATE_signed;
-    const unsigned bits = type->isIntegerTy() ? type->getIntegerBitWidth()
-                                            : type->isFloatTy() ? 32 : 64;
-    auto* diType = debugInfoBuilder->createBasicType(
-        TypeNode(kind->second).toString(), bits, encoding);
-    auto* scope = llvm::dyn_cast<llvm::DILocalScope>(currentDebugScope);
-    if(!scope)
-        return;
-    unsigned line = static_cast<unsigned>(std::max(1, node->line));
-    auto* variable = argument
-        ? debugInfoBuilder->createParameterVariable(scope, name, argument,
-                                                     getDebugFile(node), line,
-                                                     diType, true)
-        : debugInfoBuilder->createAutoVariable(scope, name, getDebugFile(node),
-                                                line, diType, true);
-    auto* location = llvm::DILocation::get(context, line, 1, scope);
-    debugInfoBuilder->insertDeclare(alloca, variable,
-                                    debugInfoBuilder->createExpression(),
-                                    location, builder.GetInsertBlock());
-}
-
 void CodeGenerator::generateCode(ProgramNode* program)
 {
-    if(emitDebugInfo)
-    {
-        debugInfoBuilder = std::make_unique<llvm::DIBuilder>(*module);
-        llvm::DIFile* mainFile = getDebugFile(nullptr);
-        debugCompileUnit = debugInfoBuilder->createCompileUnit(
-            llvm::dwarf::DW_LANG_C, mainFile, "MLang compiler", false, "", 0);
-        module->addModuleFlag(llvm::Module::Warning, "Debug Info Version",
-                              llvm::DEBUG_METADATA_VERSION);
-        module->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 4);
-    }
-
+    debugInfoBegin();
     globalNamedValues.clear();
     globalConstantVariables.clear();
     globalVariableTypes.clear();
@@ -1254,10 +1163,5 @@ void CodeGenerator::generateCode(ProgramNode* program)
             }
         }
     }
-
-    if(debugInfoBuilder)
-    {
-        debugInfoBuilder->finalize();
-        debugInfoBuilder.reset();
-    }
+    debugInfoFinish();
 }

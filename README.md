@@ -56,11 +56,31 @@ through the seed compiler. The repository also retains C++ utilities such as
 
 ## Debugging With GDB Or LLDB
 
-Build an executable with `-g` to include DWARF source and function information.
-When you do not specify an optimization level, MLang uses `-Og` for this build:
+Build an executable with `-g` (or `--debug-info`) to include DWARF debug info:
+source lines, every function and method, and parameters and local variables
+with their MLang types. When you do not specify an optimization level, MLang
+uses `-Og` for this build, which keeps most variables visible but may hold some
+(loop counters, say) in registers only part of the time; `-g -O0` keeps every
+variable in memory at every line. On macOS the executable gets a `.dSYM` bundle
+next to it.
 
-```sh
-mlang -g main.mla -o app
+```rust
+// dbg.mla
+fn scale(value: i32, factor: i32) -> i32 {
+    let result: i32 = value * factor;
+    return result;
+}
+fn total(count: i32) -> i32 {
+    var sum: i32 = 0;
+    for i in 0..count {
+        sum = sum + scale(i32(i), 3);
+    }
+    return sum;
+}
+fn main() -> i32 {
+    println!("total {}", total(4));
+    return 0;
+}
 ```
 
 For a terminal UI with source, variables, stack frames, breakpoints, and program
@@ -74,37 +94,33 @@ mladbg ./app
 Use `:` for commands, F5 to run/continue, F6/F7/F8 to step over/into/out, and
 `help` for the command list. LLDB with matching Python bindings is required.
 
-To use GDB directly:
+You can also use LLDB directly:
 
-```sh
-gdb ./app
+```text
+$ mlang -g -o dbg dbg.mla
+$ lldb ./dbg
+(lldb) b dbg.mla:3                  # file:line; `b scale__i32_i32` also works
+(lldb) run
+-> 3        return result;
+(lldb) frame variable
+(int) value = 0
+(int) factor = 3
+(int) result = 0
+(lldb) p value * 10
+(int) 0
+(lldb) bt
+  * frame #0: dbg`scale__i32_i32(value=0, factor=3) at dbg.mla:3:5
+    frame #1: dbg`total__i32(count=4) at dbg.mla:8:9
+    frame #2: dbg`main at dbg.mla:13:5
+(lldb) up                           # total's frame: count, sum, i
+(lldb) next                         # step over, line by line
 ```
 
-```gdb
-break main
-run
-next
-bt
-```
-
-Or use LLDB:
-
-```sh
-lldb ./app
-```
-
-```lldb
-b main
-run
-next
-bt
-```
-
-An explicitly supplied optimization level is preserved, for example
-`mlang -g -O0 main.mla -o app`. `--debug-info` is an alias for `-g`; the
-existing `--debug` option is separate and enables verbose/debug-print behavior.
-Scalar local variables and parameters are emitted in DWARF. See the
-[debugging notes](docs/debugging.md) for details.
+In GDB the same session is `break dbg.mla:3`, `run`, `info locals`,
+`print value * 10`, `bt`, `up` and `next`. An explicitly supplied optimization
+level is preserved; the existing `--debug` option is separate and enables
+verbose/debug-print behavior. See the [debugging notes](docs/debugging.md) for
+what is described and its limits.
 
 ## Compile-Time Evaluation With `cexpr`
 

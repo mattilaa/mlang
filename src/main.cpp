@@ -72,7 +72,9 @@ void printUsage(const char* programName)
         << "  --shared                     Build a shared library; main is not required.\n"
         << "  --static-library             Build a static .a library; main is not required.\n"
         << "  -O0|-Og|-O1|-O2|-O3|-Os|-Oz Select an optimization level (default: -O2).\n"
-        << "  -g | --debug-info            Emit source-level DWARF info for GDB/LLDB.\n"
+        << "  -g | --debug-info            Emit DWARF debug info (source lines, variables) for\n"
+        << "                               lldb/gdb; use with -O0. On macOS an executable gets\n"
+        << "                               a .dSYM bundle next to it.\n"
         << "  --target-arch ARCH           Target x86, x64, or aarch64.\n"
         << "  -L DIR | -l NAME | -Wl,ARGS  Add a library path, library, or linker arguments.\n"
         << "  --no-tests                   Exclude #[test] functions from a normal build.\n"
@@ -2372,7 +2374,8 @@ int main(int argc, char** argv)
         // Initialize code generator
         CodeGenerator generator(context, builder, module, debugMode);
         generator.setSourceFile(inputFile);
-        generator.setDebugInfo(debugInfo);
+        generator.setDebugInfo(debugInfo, optimizationLevel != "-O0" &&
+                                              optimizationLevel != "-Og");
         generator.setCheckedNarrowCasts(optimizationLevel == "-O0" ||
                                         optimizationLevel == "-Og");
         generator.setTestMode(testMode);
@@ -2405,6 +2408,8 @@ int main(int argc, char** argv)
             // before code generation, so size_of and every other layout query
             // see the target's padding and alignment, not LLVM's defaults.
             Backend backend(module, targetArch, optimizationLevel == "-O0");
+            if(debugInfo && (optimizationLevel == "-O0" || optimizationLevel == "-Og"))
+                backend.useUnoptimizedCodegen();
 
             generator.generateCode(program);
 
@@ -2509,6 +2514,18 @@ int main(int argc, char** argv)
             {
                 // Compile to executable
                 success = backend.compileToExecutable(outputFile, linkArgs);
+#ifdef __APPLE__
+                // The linker leaves DWARF in the object file and only notes
+                // where it is; collect it into <output>.dSYM so the debug
+                // info stays with the executable.
+                if(success && debugInfo)
+                {
+                    const std::string command = "dsymutil '" + outputFile + "' 2>&1";
+                    if(std::system(command.c_str()) != 0)
+                        std::cerr << "warning: dsymutil failed; lldb may not find the "
+                                     "debug info for " << outputFile << std::endl;
+                }
+#endif
             }
 
             if(!success)

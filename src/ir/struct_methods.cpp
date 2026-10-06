@@ -301,6 +301,8 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     // Create entry block
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
     builder.SetInsertPoint(bb);
+    // mlang -g: the method's DISubprogram while its body is generated.
+    DebugFunctionScope debugScope(*this, function, method, structName + "::" + method->name);
 
     // Clear scope
     namedValues.clear();
@@ -387,6 +389,9 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
             // 'self' is a pointer to the struct
             structVariableTypes["self"] = structName;
             variableTypes["self"] = TypeNode::TYPE_STRUCT;
+            StructTypeRefNode selfStruct(structName);
+            PointerTypeNode selfPointer(&selfStruct);
+            debugDeclareVariable("self", alloca, &selfPointer, method, 1);
         }
         else
         {
@@ -489,6 +494,9 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                     traitObjectVariableTypes[std::string(arg.getName())] =
                         traitObjType->traitName;
                 }
+                // mlang -g: the parameter, with its MLang type.
+                debugDeclareVariable(std::string(arg.getName()), alloca, paramNode->type,
+                                     paramNode, argIdx + 1);
                 methodParamIdx++;
             }
         }
