@@ -4,6 +4,7 @@ import fcntl
 import os
 from pathlib import Path
 import pty
+import re
 import select
 import struct
 import subprocess
@@ -80,11 +81,11 @@ def main():
         executable = str(Path(temporary) / "demo")
         run([compiler, "-g", "-O0", source, "-o", executable])
 
-        def debug(commands, expected=0):
+        def debug(commands, expected=0, program=None):
             args = [debugger, "--batch"]
             for command in commands:
                 args.extend(["-ex", command])
-            return run(args + [executable], expected)
+            return run(args + [program or executable], expected)
 
         output = debug(["b " + source + ":13", "run", "locals", "p count", "bt",
                         "step", "next", "next", "locals", "finish", "next", "p count",
@@ -105,6 +106,54 @@ def main():
         debug(["not-a-real-command"], expected=1)
         run([debugger, executable], expected=2)  # Non-TTY invocation must fail clearly.
         check_tui(debugger, executable, source)
+        complex_source = Path(__file__).parent / "fixtures" / "mladbg_complex.mla"
+        complex_executable = str(Path(temporary) / "complex")
+        run([compiler, "-g", "-O0", str(complex_source), "-o", complex_executable])
+
+        def marker(name):
+            return next(i for i, line in enumerate(complex_source.read_text().splitlines(), 1)
+                        if name in line)
+
+        output = debug(["b " + str(complex_source) + ":" + str(marker("complex-break")),
+                        "b " + str(complex_source) + ":" + str(marker("parameter-break")),
+                        "run", "locals", "p point.x", "p numbers.data[1]",
+                        "p mapping.values[0].x", "p pair._0", "p *pointer",
+                        "p empty.len = -1", "p empty", "p empty.len = 1",
+                        "p empty.data = 0", "p empty", "p empty.len = 0",
+                        "continue", "locals", "continue"], program=complex_executable)
+
+        def block(name):
+            match = re.search(r"^\([^\n]+\) " + re.escape(name) + r" = .*\n(?:  .*\n)*", output, re.M)
+            assert match, "Missing variable %s:\n%s" % (name, output)
+            return match.group()
+
+        for name, tokens in {
+            "point": ["x = -3", "y = 42"],
+            "shape": ["position = {", "visible = true", "selected = false", "weight = 1.5"],
+            "boxed": ["value = {", "x = -3"],
+            "tagged": ["x = -8", "y = 80", "tag = 3"],
+            "numbers": ["len=3", "[1] = 9"],
+            "empty": ["len=0"],
+            "fixed": ["len=3", "[2] = 30"],
+            "points": ["len=2", "x = 5", "y = 99"],
+            "mapping": ['[0].key = "first"', "[0].value = {", "x = -3"],
+            "empty_mapping": ["len=0"],
+            "nested": ["len=1", "len=2", "[1] = 2"],
+            "pair": ["_0 = 12", '_1 = "tuple text"'],
+            "label": ['"hello debugger"'],
+            "wide": ['"wide text"'],
+            "color": ["Blue"],
+            "inferred_numbers": ["len=2", "[1] = 14"],
+            "inferred_mapping": ['[0].key = "second"', "x = 8", "y = 88"],
+            "inferred_pair": ["_0 = 13", '"inferred tuple"'],
+            "many": ["len=18", "[15] = 15", "... 2 more element(s)"],
+        }.items():
+            for token in tokens:
+                assert token in block(name), "Missing %r in %s:\n%s" % (token, name, output)
+        assert "<invalid length -1>" in output, output
+        assert "<unavailable data>" in output, output
+        assert output.count("shape = {") >= 2, output  # Also inspect by-value parameters.
+        assert "Process exited with status 0" in output, output
     print("mladbg integration checks passed")
 
 

@@ -52,7 +52,7 @@ breakpoints remain pending. Commands not listed above are passed to LLDB, so
 conditional breakpoints (`breakpoint modify -c 'count > 5' 1`), read watchpoints,
 memory writes, source maps (`settings set target.source-map OLD NEW`), and other
 LLDB commands remain available. Expressions use LLDB's C/C++ syntax; arbitrary
-MLang expressions and container formatters are not implemented.
+MLang expressions are not implemented.
 
 Prefer `-g -O0` when inspecting variables. Scalar locals, parameters, structs,
 strings, pointers, enums, and lists have DWARF descriptions; see the type
@@ -115,14 +115,27 @@ next
 ## What is described
 
 - Integers (with their signedness), `f32`/`f64` and `bool` as base types;
-  `str8` as a C string, so the debugger prints its text; `ptr<T>` and
-  references as pointers.
+  `str8` as a C string and UTF-16 buffers as `str16`, so the debugger prints
+  their text. `ptr<T>` carries its pointee type; references describe the local
+  value storage, including copy-in/copy-out parameters.
 - Structs with their fields (`p p.x`), a method's `self` as a pointer to its
   struct (`p self->x`), enums with their variants (shown by name), and
-  `list<T>` as `{ len, data }` with `data` typed (`p numbers.data[1]`). Tuples,
-  maps and other aggregates show numbered fields.
+  `list<T>` and `array<T, N>` as `{ len, data }` with `data` typed
+  (`p numbers.data[1]`). Maps expose `{ len, keys, values }` with typed pointers
+  (`p mapping.values[0].x`). Tuples expose typed `_0`, `_1`, etc. fields
+  (`p pair._0`). Nested, generic and inherited structs retain field layouts,
+  including packed `bit` fields. Inferred collection declarations retain
+  semantic element types.
 - `{ }` blocks as lexical scopes; code from imported modules at its own `.mla`
   file.
+
+The `mladbg` locals pane and `p VARIABLE` expand structs and tuples, display
+collection lengths, and preview list/array elements and map entries. Previews
+are limited to 16 elements, 3 levels of nesting, and 128 values per variable.
+Unreadable memory, negative lengths, and null data pointers show an unavailable
+or invalid-value message. Pointers are not followed automatically: use
+`p *pointer` to inspect a pointee explicitly. Previews read memory without
+calling functions in the debuggee. The same display is used in batch mode.
 
 ## Limits
 
@@ -130,6 +143,10 @@ next
   `Point_sum`), so breakpoints by name use those; `file:line` breakpoints need
   no names.
 - Closures and compiler-generated wrappers carry no debug info.
+- Globals and arbitrary MLang expressions are not described. String-backed
+  enums display their underlying text; numeric enums display variant names.
+- `str16` inspection expects a UTF-16 buffer (for example from `to_utf16`);
+  a UTF-8 string literal assigned directly to `str16` still has UTF-8 storage.
 - DWARF has no language code for MLang; the compile unit is marked as C, so
   `p`/`print` and `expression` use C syntax on MLang values.
 - With optimization (`-O1` and up) values may live in registers or be gone;

@@ -165,8 +165,11 @@ class Session:
         if name == "print" and self.stopped():
             value = self.frame().FindVariable(rest)
             if value.IsValid():
-                self.output(str(value))
+                self.output("\n".join(format_value(value)))
                 return True
+        if name == "locals" and self.stopped():
+            self.output("\n".join(value_lines(self.frame())))
+            return True
         mappings = {"run": "process launch", "continue": "process continue",
                     "next": "thread step-over", "step": "thread step-in",
                     "finish": "thread step-out", "interrupt": "process interrupt",
@@ -204,11 +207,92 @@ class Session:
         self.lldb.SBDebugger.Destroy(self.debugger)
 
 
+def format_value(value, depth=0, budget=None):
+    """Inspect DWARF children without running code inside the debuggee.
+
+    Bound both recursion and memory reads; a corrupt length or cyclic pointer
+    must not freeze the terminal. Pointers are expanded only on explicit p *x.
+    """
+    budget = [128] if budget is None else budget
+    if budget[0] <= 0:
+        return []
+    budget[0] -= 1
+    name = value.GetName() or "value"
+    type_ = value.GetType()
+    type_name = type_.GetName() or "unknown"
+    prefix = "  " * depth
+    header = prefix + "(%s) %s" % (type_name, name)
+    if value.GetError().Fail():
+        return [header + " = <unavailable: %s>" % value.GetError().GetCString()]
+    summary = value.GetSummary()
+    scalar = value.GetValue()
+    # LLDB presents DWARF 8-bit integers as C character types. MLang i8/u8
+    # are numeric, so show their numeric value rather than a character escape.
+    if type_name in ("unsigned char", "u8"):
+        summary, scalar = None, str(value.GetValueAsUnsigned())
+    elif type_name in ("signed char", "i8"):
+        summary, scalar = None, str(value.GetValueAsSigned())
+    if type_.IsPointerType() or value.GetNumChildren() == 0:
+        return [header + " = " + (summary or scalar or "<unavailable>")]
+    if depth >= 3:
+        return [header + " = {...}"]
+    length = value.GetChildMemberWithName("len")
+    data = value.GetChildMemberWithName("data")
+    keys = value.GetChildMemberWithName("keys")
+    values = value.GetChildMemberWithName("values")
+    collection = type_name.startswith(("list<", "array<", "multiarray<", "mutmultiarray<", "map<"))
+    if collection and length.IsValid() and (data.IsValid() or keys.IsValid()):
+        if length.GetError().Fail():
+            return [header + " = <unavailable length>"]
+        count = length.GetValueAsSigned()
+        if count < 0:
+            return [header + " = <invalid length %d>" % count]
+        lines = [header + " = len=%d" % count]
+
+        def element(pointer, i, label):
+            element_type = pointer.GetType().GetPointeeType()
+            size = element_type.GetByteSize()
+            address = pointer.GetValueAsUnsigned()
+            if pointer.GetError().Fail() or not address or not size:
+                return None
+            return pointer.CreateValueFromAddress(label, address + i * size, element_type)
+
+        for i in range(min(count, 16)):
+            if budget[0] <= 0:
+                break
+            if data.IsValid():
+                item = element(data, i, "[%d]" % i)
+                lines.extend(format_value(item, depth+1, budget) if item and item.IsValid()
+                             else [prefix + "  [%d] = <unavailable data>" % i])
+            else:
+                key = element(keys, i, "[%d].key" % i)
+                item = element(values, i, "[%d].value" % i)
+                for entry, label in ((key, "key"), (item, "value")):
+                    lines.extend(format_value(entry, depth+1, budget) if entry and entry.IsValid()
+                                 else [prefix + "  [%d].%s = <unavailable data>" % (i, label)])
+        if count > 16:
+            lines.append(prefix + "  ... %d more element(s)" % (count-16))
+        return lines
+    lines = [header + " = {"]
+    children = value.GetNumChildren()
+    for i in range(min(children, 16)):
+        if budget[0] <= 0:
+            lines.append(prefix + "  ...")
+            break
+        lines.extend(format_value(value.GetChildAtIndex(i), depth+1, budget))
+    if children > 16:
+        lines.append(prefix + "  ... %d more field(s)" % (children-16))
+    lines.append(prefix + "}")
+    return lines
+
+
 def value_lines(frame):
     if not frame.IsValid():
         return ["No selected frame"]
     values = frame.GetVariables(True, True, False, True)
-    lines = [str(value) for value in values]
+    lines = []
+    for value in values:
+        lines.extend(format_value(value))
     return lines or ["No locals available (compile with -g -O0)"]
 
 
