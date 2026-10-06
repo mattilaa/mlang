@@ -174,6 +174,24 @@ def main():
                       "members = len=2", "ratings = len=2", '[1].key = "Linus"',
                       "[1].value = 88", "effort = 16", "Total effort: 16"):
             assert token in output, "Missing demo value %r:\n%s" % (token, output)
+        stack_line = next(i for i, line in enumerate(demo_source.read_text().splitlines(), 1)
+                          if "stack-break" in line)
+        output = debug(["b " + str(demo_source) + ":" + str(stack_line), "run", "bt",
+                        "frame 0", "locals", "p engineer", "p hours", "p adjusted", "p snapshot",
+                        "frame 1", "locals", "p details", "p requested", "p budget", "p remaining",
+                        "frame 2", "locals", "p team.members", "p cycle", "p policy", "p total",
+                        "frame 3", "locals", "p team.ratings", "p tasks", "p effort", "p stage",
+                        "frame 4", "locals", "p batch_name", "p started_at",
+                        "frame 2", "up", "p effort", "down", "p cycle",
+                        "frame 0", "finish", "next", "p result", "continue"],
+                       program=demo_executable)
+        for index, function in enumerate(("finalize_work", "score_work", "plan_work", "review", "main")):
+            assert re.search(r"frame #%d:.*`%s" % (index, function), output), output
+        for token in ("adjusted = 20", "remaining = 8", "budget = 24", "hours = 16",
+                      "effort = 16", 'batch_name = "Weekly rollout"', "started_at = 9",
+                      "snapshot = {", "details = {", "cycle = {", "policy = {", "result = 16"):
+            assert token in output, "Missing stack value %r:\n%s" % (token, output)
+        assert "Process exited with status 0" in output, output
     print("mladbg integration checks passed")
 
 

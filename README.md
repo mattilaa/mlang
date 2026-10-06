@@ -128,6 +128,65 @@ expanded structures. F6 steps over the print statement, F8 returns to `main`,
 and F5 continues to completion. With installed tools, replace `build/mlang`
 and `build/mladbg` with `mlang` and `mladbg`.
 
+The same demo also has a deeper call chain:
+`main → review → plan_work → score_work → finalize_work`. Start a new session
+with a breakpoint in the innermost function, after its locals are initialized:
+
+```sh
+build/mladbg -ex 'b examples/debugger_demo.mla:49' build/debugger-demo
+```
+
+Press F5, then enter `bt` to see all five MLang frames. Frame 0 is
+`finalize_work`, frame 1 is `score_work`, frame 2 is `plan_work`, frame 3 is
+`review`, and frame 4 is `main`. Use `:` to enter each command below:
+
+```text
+frame 0
+locals
+p engineer
+p hours
+p adjusted
+p snapshot
+
+frame 1
+locals
+p details
+p requested
+p budget
+p remaining
+
+frame 2
+locals
+p team.members
+p cycle
+p policy
+p total
+
+frame 3
+locals
+p team.ratings
+p tasks
+p effort
+p stage
+
+frame 4
+locals
+p batch_name
+p started_at
+```
+
+The source and locals panes follow the selected frame, and the stack pane marks
+it with `>`. Selecting a frame changes the inspection context while execution
+stays paused. You can jump back and forth with `frame N`, or move one frame
+with `up` and `down`. Expected values include `adjusted = 20`, `remaining = 8`,
+`budget = 24`, `effort = 16`, and `batch_name = "Weekly rollout"`.
+
+Return to `frame 0`, then press F8 (or enter `finish`) to return from
+`finalize_work` to `score_work`. Press F6 (or enter `next`) to finish assigning
+the return value, then `p result` shows `16`. F5 runs the remaining calls to
+completion. Before a call returns, its caller's `result` or `total` destination
+is not initialized yet; inspect arguments and the earlier locals instead.
+
 You can also use LLDB directly:
 
 ```text

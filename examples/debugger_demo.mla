@@ -24,10 +24,35 @@ fn review(team: Team, tasks: array<i32, 3>, stage: Stage) -> i32 {
         effort = effort + tasks[i];
     }
     println!("Review for {}: {} hours", team.lead.name, effort); // demo-break
-    return effort;
+    return plan_work(team, effort, stage);
+}
+
+fn plan_work(team: &Team, total: i32, stage: Stage) -> i32 {
+    let cycle: tuple<str8, i32> = ("Weekly review", total);
+    let policy: Box<Position> = Box<Position> { value: Position { x: 1.25, y: 0.25 } };
+    let budget: i32 = 24;
+    let result: i32 = score_work(team.lead, total, budget, policy.value.x);
+    return result;
+}
+
+fn score_work(engineer: &Engineer, requested: i32, budget: i32, multiplier: f64) -> i32 {
+    let details: tuple<str8, i32> = (engineer.name, requested);
+    let remaining: i32 = budget - requested;
+    let result: i32 = finalize_work(engineer, requested, remaining, multiplier);
+    return result;
+}
+
+fn finalize_work(engineer: &Engineer, hours: i32, remaining: i32, multiplier: f64) -> i32 {
+    let decision: Stage = Stage::Review;
+    let adjusted: f64 = f64(hours) * multiplier;
+    let snapshot: Box<Position> = Box<Position> { value: engineer.position };
+    println!("Assessment for {}: adjusted {}, remaining {}", engineer.name, adjusted, remaining); // stack-break
+    return hours;
 }
 
 fn main() -> i32 {
+    let batch_name: str8 = "Weekly rollout";
+    let started_at: i32 = 9;
     let lead: Engineer = Engineer {
         name: "Ada", position: Position { x: 1.5, y: -2.0 }, active: true, reviewer: true
     };
