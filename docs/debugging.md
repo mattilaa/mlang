@@ -42,6 +42,13 @@ Colors are enabled when the terminal supports them: keywords/types, strings,
 and numbers have distinct colors, and the execution line uses a blue
 background. Launch with `mladbg --no-colors ./app` for a monochrome display.
 
+Panes, help and file-completion dropdowns use UTF-8 box-drawing glyphs.
+Use `mladbg --no-glyphs ./app` for ASCII `+`, `-`, `|` borders. Non-UTF-8
+terminal encodings automatically fall back to ASCII. In this mode, non-ASCII
+source, filenames and program output are escaped for display; commands and
+actual filesystem paths are unchanged. Combine `--no-glyphs --no-colors` for
+a plain ASCII monochrome UI.
+
 Locals are a tree with structures and collections collapsed initially. Focus
 the pane with Tab; `j`/Down selects the next row, `k`/Up selects the previous
 row, `l`/Right expands it, and `h`/Left collapses it. On an already-open node,

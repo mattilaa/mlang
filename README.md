@@ -182,6 +182,11 @@ back to monochrome, or you can explicitly disable colors on startup:
 build/mladbg --no-colors -ex 'b examples/debugger_demo.mla:26' build/debugger-demo
 ```
 
+Panes, help and autocomplete use UTF-8 box-drawing glyphs. For terminals without
+UTF-8 support, launch with `mladbg --no-glyphs ./app` for ASCII borders and
+escaped non-ASCII display text. Non-UTF-8 terminal encodings automatically use
+that fallback. `--no-glyphs` and `--no-colors` can be combined.
+
 The same demo also has a deeper call chain:
 `main → review → plan_work → score_work → finalize_work`. Start a new session
 with a breakpoint in the innermost function, after its locals are initialized:
