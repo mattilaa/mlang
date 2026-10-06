@@ -37,14 +37,28 @@ void CodeGenerator::generateStatement(StatementNode* node)
         generateLetDeclaration(letNode);
         auto slot = namedValues.find(letNode->name);
         if(slot != namedValues.end())
-            debugDeclareVariable(letNode->name, slot->second, letNode->type, letNode);
+        {
+            TypeNode* type = letNode->type;
+            if(diBuilder && !type && (dynamic_cast<ListLiteralNode*>(letNode->expression) ||
+                                     dynamic_cast<MapLiteralNode*>(letNode->expression) ||
+                                     dynamic_cast<TupleLiteralNode*>(letNode->expression)))
+                type = inferExpressionTypeNode(letNode->expression, letNode->line);
+            debugDeclareVariable(letNode->name, slot->second, type, letNode);
+        }
     }
     else if(auto varNode = dynamic_cast<VarDeclNode*>(node))
     {
         generateVarDeclaration(varNode);
         auto slot = namedValues.find(varNode->name);
         if(slot != namedValues.end())
-            debugDeclareVariable(varNode->name, slot->second, varNode->type, varNode);
+        {
+            TypeNode* type = varNode->type;
+            if(diBuilder && !type && (dynamic_cast<ListLiteralNode*>(varNode->initExpr) ||
+                                     dynamic_cast<MapLiteralNode*>(varNode->initExpr) ||
+                                     dynamic_cast<TupleLiteralNode*>(varNode->initExpr)))
+                type = inferExpressionTypeNode(varNode->initExpr, varNode->line);
+            debugDeclareVariable(varNode->name, slot->second, type, varNode);
+        }
     }
     else if(auto assignNode = dynamic_cast<AssignmentNode*>(node))
     {

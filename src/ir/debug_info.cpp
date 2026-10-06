@@ -11,6 +11,7 @@
 // function with one get a location in it.
 
 #include "ir.h"
+#include "llvm_compat.h"
 
 #include <filesystem>
 #include <llvm/Config/llvm-config.h>
@@ -171,7 +172,49 @@ void CodeGenerator::debugDeclareVariable(const std::string& name,
     llvm::DIFile* file =
         at && at->file ? debugFile(at->file) : scope->getFile();
     unsigned line = nodeLine(at);
-    llvm::DIType* diType = debugType(type, slot->getAllocatedType());
+    llvm::Type* allocated = slot->getAllocatedType();
+    llvm::DIType* diType = nullptr;
+    // Inferred declarations still have semantic element types recorded by
+    // code generation. Opaque LLVM pointers alone cannot recover these.
+    if(!type)
+    {
+        if(auto it = structVariableTypes.find(name); it != structVariableTypes.end())
+            diType = debugStructType(it->second);
+        else if(auto it = listElementTypes.find(name); it != listElementTypes.end())
+        {
+            GenericListTypeNode inferred(it->second);
+            diType = debugType(&inferred, allocated);
+        }
+        else if(auto it = mapKeyValueTypes.find(name); it != mapKeyValueTypes.end())
+        {
+            MapTypeNode inferred(it->second.first, it->second.second);
+            diType = debugType(&inferred, allocated);
+        }
+        else if(auto it = tupleElementTypes.find(name); it != tupleElementTypes.end())
+        {
+            TypeListNode elements;
+            elements.types = it->second;
+            TupleTypeNode inferred(&elements);
+            diType = debugType(&inferred, allocated);
+        }
+        else if(auto it = pointerElementTypes.find(name); it != pointerElementTypes.end())
+        {
+            PointerTypeNode inferred(it->second);
+            diType = debugType(&inferred, allocated);
+        }
+        else if(auto it = enumVariableTypes.find(name); it != enumVariableTypes.end())
+        {
+            StructTypeRefNode inferred(it->second);
+            diType = debugType(&inferred, allocated);
+        }
+        else if(auto it = variableTypes.find(name); it != variableTypes.end())
+        {
+            TypeNode inferred(it->second);
+            diType = debugType(&inferred, allocated);
+        }
+    }
+    if(!diType)
+        diType = debugType(type, allocated);
     if(!diType)
         return;
     llvm::DILocalVariable* variable =
@@ -212,6 +255,7 @@ llvm::DIType* CodeGenerator::debugType(TypeNode* type, llvm::Type* fallback)
     if(!type)
         return debugTypeFromLLVM(fallback);
     auto& b = *diBuilder;
+    const auto pointerBits = module->getDataLayout().getPointerSizeInBits();
     using namespace llvm::dwarf;
     switch(type->kind)
     {
@@ -247,30 +291,27 @@ llvm::DIType* CodeGenerator::debugType(TypeNode* type, llvm::Type* fallback)
         if(it != diTypes.end())
             return it->second;
         llvm::DIType* chars = basicType(b, diTypes, "char", 8, DW_ATE_signed_char);
-        llvm::DIType* str = b.createTypedef(b.createPointerType(chars, 64), "str8",
+        llvm::DIType* str = b.createTypedef(b.createPointerType(chars, pointerBits), "str8",
                                             nullptr, 0, diCompileUnit);
         diTypes["str8"] = str;
         return str;
     }
     case TypeNode::TYPE_STR16:
-        return b.createPointerType(basicType(b, diTypes, "u16", 16, DW_ATE_unsigned), 64);
+        return b.createTypedef(
+            b.createPointerType(basicType(b, diTypes, "char16_t", 16, DW_ATE_UTF), pointerBits),
+            "str16", nullptr, 0, diCompileUnit);
     case TypeNode::TYPE_PTR:
         if(auto* ptr = dynamic_cast<PointerTypeNode*>(type))
             if(llvm::DIType* element = debugType(ptr->elementType, nullptr))
-                return b.createPointerType(element, 64);
+                return b.createPointerType(element, pointerBits);
         return debugTypeFromLLVM(fallback);
     case TypeNode::TYPE_REF:
     case TypeNode::TYPE_REF_MUT:
         if(auto* ref = dynamic_cast<ReferenceTypeNode*>(type))
         {
-            // Stored as the referenced value (&mut T is copied in) or a
-            // pointer to it, depending on the slot.
-            llvm::DIType* element = debugType(ref->elementType, nullptr);
-            if(element && fallback && fallback->isPointerTy() &&
-               !(ref->elementType &&
-                 (ref->elementType->kind == TypeNode::TYPE_STR8 ||
-                  ref->elementType->kind == TypeNode::TYPE_STRING)))
-                return b.createPointerType(element, 64);
+            // References use local value storage, including copy-in/copy-out
+            // &mut parameters. A referenced pointer is not pointer-to-pointer.
+            llvm::DIType* element = debugType(ref->elementType, fallback);
             if(element)
                 return element;
         }
@@ -279,24 +320,35 @@ llvm::DIType* CodeGenerator::debugType(TypeNode* type, llvm::Type* fallback)
         if(auto* list = dynamic_cast<GenericListTypeNode*>(type))
         {
             // { i64 len, ptr data } with data typed as the elements.
-            std::string name = "list<" + list->elementType->toString() + ">";
-            auto it = diTypes.find(name);
-            if(it != diTypes.end())
-                return it->second;
+            std::string name = type->toString();
             llvm::DIType* element = debugType(list->elementType, nullptr);
             llvm::DIType* i64 = basicType(b, diTypes, "i64", 64, DW_ATE_signed);
             llvm::DIType* data = b.createPointerType(
-                element ? element : basicType(b, diTypes, "u8", 8, DW_ATE_unsigned), 64);
-            llvm::Metadata* members[] = {
-                b.createMemberType(diCompileUnit, "len", nullptr, 0, 64, 64, 0,
-                                   llvm::DINode::FlagZero, i64),
-                b.createMemberType(diCompileUnit, "data", nullptr, 0, 64, 64, 64,
-                                   llvm::DINode::FlagZero, data)};
-            llvm::DIType* composite = b.createStructType(
-                diCompileUnit, name, nullptr, 0, 128, 64, llvm::DINode::FlagZero,
-                nullptr, b.getOrCreateArray(members));
-            diTypes[name] = composite;
-            return composite;
+                element ? element : basicType(b, diTypes, "u8", 8, DW_ATE_unsigned), pointerBits);
+            return debugAggregateType(name, llvm::dyn_cast_or_null<llvm::StructType>(
+                                          fallback ? fallback : getLLVMTypeFromNode(type)),
+                                      {{"len", i64}, {"data", data}});
+        }
+        return debugTypeFromLLVM(fallback);
+    case TypeNode::TYPE_MAP:
+        if(auto* map = dynamic_cast<MapTypeNode*>(type))
+            return debugAggregateType(type->toString(),
+                llvm::dyn_cast_or_null<llvm::StructType>(
+                    fallback ? fallback : getLLVMTypeFromNode(type)),
+                {{"len", basicType(b, diTypes, "i64", 64, DW_ATE_signed)},
+                 {"keys", b.createPointerType(debugType(map->keyType, nullptr), pointerBits)},
+                 {"values", b.createPointerType(debugType(map->valueType, nullptr), pointerBits)}});
+        return debugTypeFromLLVM(fallback);
+    case TypeNode::TYPE_TUPLE:
+        if(auto* tuple = dynamic_cast<TupleTypeNode*>(type))
+        {
+            std::vector<std::pair<std::string, llvm::DIType*>> fields;
+            for(size_t i = 0; i < tuple->elementTypes->types.size(); ++i)
+                fields.push_back({"_" + std::to_string(i),
+                                  debugType(tuple->elementTypes->types[i], nullptr)});
+            return debugAggregateType(type->toString(),
+                llvm::dyn_cast_or_null<llvm::StructType>(
+                    fallback ? fallback : getLLVMTypeFromNode(type)), fields);
         }
         return debugTypeFromLLVM(fallback);
     case TypeNode::TYPE_STRUCT:
@@ -319,11 +371,20 @@ llvm::DIType* CodeGenerator::debugType(TypeNode* type, llvm::Type* fallback)
                 if(order != enumVariantOrder.end())
                     for(const auto& [variant, value] : order->second)
                         enumerators.push_back(b.createEnumerator(variant, value));
-                uint64_t bits = fallback && fallback->isIntegerTy()
-                                    ? fallback->getIntegerBitWidth()
-                                    : 32;
+                auto base = enumBaseTypes.find(enumName);
+                auto kind = base != enumBaseTypes.end() ? base->second : TypeNode::TYPE_I32;
+                if(kind == TypeNode::TYPE_STRING || kind == TypeNode::TYPE_STR8)
+                {
+                    TypeNode stringType(TypeNode::TYPE_STR8);
+                    return debugType(&stringType, fallback);
+                }
+                llvm::Type* storageType = getLLVMType(kind);
+                uint64_t bits = storageType && storageType->isIntegerTy()
+                                    ? storageType->getIntegerBitWidth() : 32;
+                const bool isUnsigned = isUnsignedType(kind);
                 llvm::DIType* underlying =
-                    basicType(b, diTypes, "i" + std::to_string(bits), bits, DW_ATE_signed);
+                    basicType(b, diTypes, (isUnsigned ? "u" : "i") + std::to_string(bits),
+                              bits, isUnsigned ? DW_ATE_unsigned : DW_ATE_signed);
                 llvm::DIType* enumType = b.createEnumerationType(
                     diCompileUnit, enumName, nullptr, 0, bits, bits,
                     b.getOrCreateArray(enumerators), underlying);
@@ -339,6 +400,36 @@ llvm::DIType* CodeGenerator::debugType(TypeNode* type, llvm::Type* fallback)
     default:
         return debugTypeFromLLVM(fallback);
     }
+}
+
+llvm::DIType* CodeGenerator::debugAggregateType(
+    const std::string& name, llvm::StructType* type,
+    const std::vector<std::pair<std::string, llvm::DIType*>>& fields)
+{
+    if(!type || type->isOpaque() || fields.size() != type->getNumElements())
+        return debugTypeFromLLVM(type);
+    auto cached = diTypes.find("aggregate " + name);
+    if(cached != diTypes.end())
+        return cached->second;
+    const auto& dl = module->getDataLayout();
+    const auto* layout = dl.getStructLayout(type);
+    llvm::SmallVector<llvm::Metadata*, 8> members;
+    for(size_t i = 0; i < fields.size(); ++i)
+    {
+        if(!fields[i].second)
+            continue;
+        auto* storage = type->getElementType(i);
+        members.push_back(diBuilder->createMemberType(
+            diCompileUnit, fields[i].first, nullptr, 0, dl.getTypeSizeInBits(storage),
+            dl.getABITypeAlign(storage).value() * 8, layout->getElementOffsetInBits(i),
+            llvm::DINode::FlagZero, fields[i].second));
+    }
+    auto* result = diBuilder->createStructType(
+        diCompileUnit, name, nullptr, 0, layout->getSizeInBits(),
+        dl.getABITypeAlign(type).value() * 8, llvm::DINode::FlagZero, nullptr,
+        diBuilder->getOrCreateArray(members));
+    diTypes["aggregate " + name] = result;
+    return result;
 }
 
 llvm::DIType* CodeGenerator::debugStructType(const std::string& name)
@@ -430,7 +521,8 @@ llvm::DIType* CodeGenerator::debugTypeFromLLVM(llvm::Type* type)
         auto it = diTypes.find("ptr");
         if(it != diTypes.end())
             return it->second;
-        llvm::DIType* ptr = b.createPointerType(nullptr, 64, 0, std::nullopt, "ptr");
+        llvm::DIType* ptr = b.createPointerType(nullptr, module->getDataLayout().getPointerSizeInBits(),
+                                               0, mlang::llvm_compat::NoValue, "ptr");
         diTypes["ptr"] = ptr;
         return ptr;
     }

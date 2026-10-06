@@ -1,0 +1,41 @@
+mod std::strbuf;
+use std::strbuf::*;
+
+struct Point { var x: i32; var y: u64; };
+struct Shape { var position: Point; var visible: bit; var selected: bit; var weight: f64; };
+struct Box<T> { var value: T; };
+struct Tagged : Point { var tag: u8; };
+enum Color : u8 { Red = 1, Green = 2, Blue = 255 };
+
+fn inspect(shape: Shape, points: list<Point>) -> i32 {
+    println!(shape.position.x); // parameter-break
+    return 0;
+}
+
+fn main() -> i32 {
+    let point: Point = Point { x: -3, y: 42 };
+    let shape: Shape = Shape { position: point, visible: true, selected: false, weight: 1.5 };
+    let boxed: Box<Point> = Box<Point> { value: point };
+    let tagged: Tagged = Tagged { x: -8, y: 80, tag: 3 };
+    let numbers: list<u32> = [7, 9, 11];
+    let empty: list<i32> = [];
+    let fixed: array<i32, 3> = {10, 20, 30};
+    let points: list<Point> = [point, Point { x: 5, y: 99 }];
+    let mapping: map<str8, Point> = {"first": point};
+    var empty_mapping: map<str8, Point>{};
+    let inner: list<i32> = [1, 2];
+    let nested: list<list<i32>> = [inner];
+    let pair: tuple<u32, str8> = (12, "tuple text");
+    let label: str8 = "hello debugger";
+    let wide: str16 = to_utf16("wide text");
+    let color: Color = Color::Blue;
+    let pointer: ptr<Point> = &point;
+    let inferred_numbers = [12u32, 14u32];
+    let inferred_mapping = {"second": Point { x: 8, y: 88 }};
+    let inferred_pair = (13u32, "inferred tuple");
+    let many: list<i32> = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+    println!(label); // complex-break
+    inspect(shape, points);
+    free_utf16(wide);
+    return 0;
+}

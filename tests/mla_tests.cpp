@@ -5843,6 +5843,38 @@ TEST_F(MLATest, DebugInfoOnlyWithFlag)
     EXPECT_EQ(ir.find("!dbg"), std::string::npos);
 }
 
+TEST_F(MLATest, DebugInfoDescribesComplexContainerAndFieldTypes)
+{
+    const fs::path fixture = fs::path(__FILE__).parent_path() /
+                             "fixtures/mladbg_complex.mla";
+    writeSource(readTextFile(fixture));
+    const fs::path irFile = fs::path(testDir) / "complex_debug_info.ll";
+    const std::string cmd = compilerPath + " -O0 -g -emit-llvm -o " +
+                            irFile.string() + " " + sourceFile + " 2>&1";
+    ASSERT_EQ(system(cmd.c_str()), 0);
+    const std::string ir = readTextFile(irFile);
+    // The emitted types must remain usable after module verification.
+    EXPECT_NE(ir.find("!DICompileUnit("), std::string::npos) << ir;
+    for(const char* name : {"Point", "Shape", "Box_Point", "Tagged",
+                            "list<Point>", "array<i32, 3>", "map<str8, Point>",
+                            "tuple<u32, str8>", "str16"})
+        EXPECT_NE(ir.find(std::string("name: \"") + name + "\""), std::string::npos)
+            << name << "\n" << ir;
+    for(const char* name : {"len", "data", "keys", "values", "_0", "_1"})
+        EXPECT_NE(ir.find(std::string("DW_TAG_member, name: \"") + name + "\""),
+                  std::string::npos) << name;
+    // A u8 enum must retain its unsigned 8-bit backing type, rather than
+    // acquiring the default signed i32 representation during type emission.
+    const auto enumAt = ir.find("DW_TAG_enumeration_type, name: \"Color\"");
+    ASSERT_NE(enumAt, std::string::npos) << ir;
+    EXPECT_NE(ir.substr(enumAt, 200).find("size: 8"), std::string::npos);
+    EXPECT_NE(ir.find("name: \"u8\", size: 8, encoding: DW_ATE_unsigned"), std::string::npos);
+    EXPECT_NE(ir.find("DIFlagBitField"), std::string::npos);
+    // Inferred map literals must carry their named struct element type too.
+    EXPECT_EQ(ir.find("name: \"map<str8, struct>\""), std::string::npos);
+    EXPECT_NE(ir.find("!DILocalVariable(name: \"inferred_mapping\""), std::string::npos);
+}
+
 TEST_F(MLATest, DebugInfoProgramRunsTheSame)
 {
     writeSource(kDebugInfoSource);

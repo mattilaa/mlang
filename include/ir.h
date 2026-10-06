@@ -313,6 +313,9 @@ private:
     llvm::DIType* debugType(TypeNode* type, llvm::Type* fallback);
     llvm::DIType* debugTypeFromLLVM(llvm::Type* type);
     llvm::DIType* debugStructType(const std::string& name);
+    llvm::DIType* debugAggregateType(
+        const std::string& name, llvm::StructType* layout,
+        const std::vector<std::pair<std::string, llvm::DIType*>>& fields);
     /// File of the statement being generated (from ASTNode::file), or null.
     /// Diagnostics name it instead of \c sourceFileName, so code from an
     /// imported module is reported at that module's file.
