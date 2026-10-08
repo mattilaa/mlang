@@ -83,6 +83,35 @@ pub fn starts_with(data: &list<T>, prefix: &list<T>) -> bool {
     return true;
 }
 
+/// @brief Find the first occurrence of a subsequence, returning its start index.
+/// Returns 0 for an empty pattern and -1 when no match exists.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn search(data: &list<T>, pattern: &list<U>) -> i64 {
+    let data_len: i64 = data.len();
+    let pattern_len: i64 = pattern.len();
+    if pattern_len == 0 {
+        return 0;
+    }
+    if pattern_len > data_len {
+        return -1;
+    }
+    let last_start: i64 = data_len - pattern_len;
+    for start in 0..(last_start + 1) {
+        var matched: bool = true;
+        for offset in 0..pattern_len {
+            if data[start + offset] != pattern[offset] {
+                matched = false;
+                break;
+            }
+        }
+        if matched {
+            return start;
+        }
+    }
+    return -1;
+}
+
 /// @brief Return whether `suffix` matches the end of `data`.
 /// @ingroup algorithm_ranges
 generic<T>
