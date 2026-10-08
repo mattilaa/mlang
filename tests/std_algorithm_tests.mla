@@ -42,6 +42,7 @@ use std::algorithm::ranges::find;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
+use std::algorithm::ranges::starts_with;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -187,6 +188,20 @@ fn test_algorithm_ranges_generic_size_empty_equal() {
     verify(equal(numbers, same_values));
     verify(equal(numbers, different_values) == false);
     verify(equal(numbers, no_values) == false);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_starts_with() {
+    let values: list<i32> = [3, 5, 8, 13];
+    let prefix: list<i32> = [3, 5];
+    let mismatch: list<i32> = [3, 6];
+    let too_long: list<i32> = [3, 5, 8, 13, 21];
+    let empty: list<i32> = [];
+
+    verify(starts_with(values, prefix));
+    verify(starts_with(values, mismatch) == false);
+    verify(starts_with(values, too_long) == false);
+    verify(starts_with(values, empty));
 }
 
 #[test]

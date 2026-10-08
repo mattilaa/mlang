@@ -52,6 +52,22 @@ pub fn equal(left: &list<T>, right: &list<T>) -> bool {
     return true;
 }
 
+/// @brief Return whether `prefix` matches the beginning of `data`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn starts_with(data: &list<T>, prefix: &list<T>) -> bool {
+    let prefix_len: i64 = prefix.len();
+    if prefix_len > data.len() {
+        return false;
+    }
+    for i in 0..prefix_len {
+        if data[i] != prefix[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// @brief Return count of elements equal to value.
 /// @ingroup algorithm_ranges
 generic<T, U>
