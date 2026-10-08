@@ -1,0 +1,67 @@
+/// \file numbers.mla
+/// \brief Standard mathematical constants inspired by C++20 `<numbers>`.
+
+/// @brief Euler's number.
+pub fn e() -> f64 {
+    return 2.71828182845904523536;
+}
+
+/// @brief Natural logarithm of two.
+pub fn ln2() -> f64 {
+    return 0.69314718055994530942;
+}
+
+/// @brief Natural logarithm of ten.
+pub fn ln10() -> f64 {
+    return 2.30258509299404568402;
+}
+
+/// @brief Base-two logarithm of Euler's number.
+pub fn log2e() -> f64 {
+    return 1.44269504088896340736;
+}
+
+/// @brief Base-ten logarithm of Euler's number.
+pub fn log10e() -> f64 {
+    return 0.43429448190325182765;
+}
+
+/// @brief The circle constant pi.
+pub fn pi() -> f64 {
+    return 3.14159265358979323846;
+}
+
+/// @brief The reciprocal of pi.
+pub fn inv_pi() -> f64 {
+    return 0.31830988618379067154;
+}
+
+/// @brief The reciprocal of the square root of pi.
+pub fn inv_sqrtpi() -> f64 {
+    return 0.56418958354775628695;
+}
+
+/// @brief The square root of two.
+pub fn sqrt2() -> f64 {
+    return 1.41421356237309504880;
+}
+
+/// @brief The square root of three.
+pub fn sqrt3() -> f64 {
+    return 1.73205080756887729353;
+}
+
+/// @brief The reciprocal of the square root of three.
+pub fn inv_sqrt3() -> f64 {
+    return 0.57735026918962576451;
+}
+
+/// @brief Euler–Mascheroni constant (C++23 addition to `<numbers>`).
+pub fn egamma() -> f64 {
+    return 0.57721566490153286061;
+}
+
+/// @brief Golden ratio (C++23 addition to `<numbers>`).
+pub fn phi() -> f64 {
+    return 1.61803398874989484820;
+}
