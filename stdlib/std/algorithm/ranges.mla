@@ -234,6 +234,37 @@ pub fn search(data: &list<T>, pattern: &list<U>) -> i64 {
     return -1;
 }
 
+/// @brief Return the start index of the last matching subrange.
+/// Returns the range length for an empty pattern and -1 when absent.
+/// C++20 `std::ranges::find_end` equivalent.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_end(data: &list<T>, pattern: &list<U>) -> i64 {
+    let n: i64 = data.len();
+    let m: i64 = pattern.len();
+    if m == 0 {
+        return n;
+    }
+    if m > n {
+        return -1;
+    }
+    let last_start: i64 = n - m;
+    var found: i64 = -1;
+    for start in 0..(last_start + 1) {
+        var matches: bool = true;
+        for offset in 0..m {
+            if data[start + offset] != pattern[offset] {
+                matches = false;
+                break;
+            }
+        }
+        if matches {
+            found = start;
+        }
+    }
+    return found;
+}
+
 /// @brief Return whether `pattern` occurs as a contiguous subsequence.
 /// C++23 ranges-style subrange membership check.
 /// @ingroup algorithm_ranges

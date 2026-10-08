@@ -53,6 +53,7 @@ use std::algorithm::ranges::equal;
 use std::algorithm::ranges::is_permutation;
 use std::algorithm::ranges::starts_with;
 use std::algorithm::ranges::search;
+use std::algorithm::ranges::find_end;
 use std::algorithm::ranges::contains_subrange;
 use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::lexicographical_compare;
@@ -321,6 +322,17 @@ fn test_algorithm_ranges_generic_search_subrange() {
     verify(contains_subrange(values, later));
     verify(contains_subrange(values, absent) == false);
     verify(contains_subrange(values, empty));
+}
+
+#[test]
+fn test_algorithm_ranges_generic_find_end() {
+    let data: list<i32> = [1, 2, 1, 2, 1];
+    let pattern: list<i64> = [1, 2, 1];
+    let missing: list<i32> = [2, 2];
+    let empty: list<i32> = [];
+    verify(find_end(data, pattern) == 2);
+    verify(find_end(data, missing) == -1);
+    verify(find_end(data, empty) == 5);
 }
 
 #[test]
