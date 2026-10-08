@@ -333,6 +333,91 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
         return typeMangle(pattern) == typeMangle(concrete);
     };
 
+    // Closure parameters are intentionally represented as opaque pointers in
+    // the generic argument list. When the function's return type contains an
+    // otherwise-unbound type parameter (for example list<Output> in
+    // ranges::transform), infer that parameter from the closure's return
+    // expression. Keep this local to overload probing: callback parameters
+    // must not leak into the enclosing function's variable scopes.
+    auto inferClosureResult = [&](ClosureNode* closure) -> TypeNode* {
+        if(!closure || !closure->body)
+            return nullptr;
+        std::map<std::string, TypeNode*> parametersByName;
+        if(closure->parameters)
+            for(auto* parameter : closure->parameters->parameters)
+                if(parameter && parameter->type)
+                    parametersByName[parameter->name] = parameter->type;
+
+        std::function<TypeNode*(ExpressionNode*)> inferClosureExpr =
+            [&](ExpressionNode* expr) -> TypeNode* {
+            if(!expr)
+                return nullptr;
+            if(auto* identifier = dynamic_cast<IdentifierNode*>(expr))
+            {
+                auto found = parametersByName.find(identifier->name);
+                if(found != parametersByName.end())
+                    return cloneTypeNode(found->second);
+                return inferExpressionTypeNode(expr, functionTemplate->line);
+            }
+            if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
+            {
+                switch(binary->op)
+                {
+                    case BinaryOpNode::OP_LT:
+                    case BinaryOpNode::OP_GT:
+                    case BinaryOpNode::OP_LE:
+                    case BinaryOpNode::OP_GE:
+                    case BinaryOpNode::OP_EQ:
+                    case BinaryOpNode::OP_NE:
+                    case BinaryOpNode::OP_AND:
+                    case BinaryOpNode::OP_OR:
+                        return new TypeNode(TypeNode::TYPE_BOOL);
+                    default:
+                        break;
+                }
+                TypeNode* left = inferClosureExpr(binary->left);
+                TypeNode* right = inferClosureExpr(binary->right);
+                if(left && (left->kind == TypeNode::TYPE_STR8 ||
+                            left->kind == TypeNode::TYPE_STR16 ||
+                            left->kind == TypeNode::TYPE_STRING))
+                    return left;
+                if(right && (right->kind == TypeNode::TYPE_DOUBLE ||
+                             right->kind == TypeNode::TYPE_FLOAT))
+                    return right;
+                return left ? left : right;
+            }
+            if(auto* cast = dynamic_cast<CastExpressionNode*>(expr))
+                return new TypeNode(cast->targetType);
+            if(dynamic_cast<BoolLiteralNode*>(expr))
+                return new TypeNode(TypeNode::TYPE_BOOL);
+            if(dynamic_cast<IntLiteralNode*>(expr))
+                return new TypeNode(TypeNode::TYPE_I64);
+            if(dynamic_cast<FloatLiteralNode*>(expr))
+                return new TypeNode(TypeNode::TYPE_FLOAT);
+            if(dynamic_cast<DoubleLiteralNode*>(expr))
+                return new TypeNode(TypeNode::TYPE_DOUBLE);
+            if(dynamic_cast<StringLiteralNode*>(expr) ||
+               dynamic_cast<FormatNode*>(expr))
+                return new TypeNode(TypeNode::TYPE_STR8);
+            return inferExpressionTypeNode(expr, functionTemplate->line);
+        };
+
+        TypeNode* result = nullptr;
+        for(auto* statement : closure->body->statements)
+        {
+            auto* ret = dynamic_cast<ReturnNode*>(statement);
+            if(!ret || !ret->expression)
+                continue;
+            TypeNode* returned = inferClosureExpr(ret->expression);
+            if(!returned)
+                return nullptr;
+            if(result && typeMangle(result) != typeMangle(returned))
+                return nullptr;
+            result = returned;
+        }
+        return result;
+    };
+
     for(size_t i = 0; i < arguments.size(); ++i)
     {
         TypeNode* concrete = nullptr;
@@ -353,6 +438,64 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
            !bindType(functionTemplate->parameters->parameters[i]->type,
                      concrete))
             return false;
+    }
+
+    auto bindUnboundReturnType = [&](TypeNode* pattern,
+                                     TypeNode* concrete) -> bool {
+        std::function<bool(TypeNode*)> bindFirst = [&](TypeNode* current) {
+            if(!current)
+                return false;
+            if(auto* name = dynamic_cast<StructTypeRefNode*>(current))
+            {
+                if(typeParamNames.count(name->structName) &&
+                   bindings.count(name->structName) == 0)
+                {
+                    bindings[name->structName] = cloneTypeNode(concrete);
+                    return true;
+                }
+                return false;
+            }
+            if(auto* list = dynamic_cast<GenericListTypeNode*>(current))
+                return bindFirst(list->elementType);
+            if(auto* array = dynamic_cast<ArrayTypeNode*>(current))
+                return bindFirst(array->elementType);
+            if(auto* multi = dynamic_cast<MultiArrayTypeNode*>(current))
+                return bindFirst(multi->elementType);
+            if(auto* pointer = dynamic_cast<PointerTypeNode*>(current))
+                return bindFirst(pointer->elementType);
+            if(auto* reference = dynamic_cast<ReferenceTypeNode*>(current))
+                return bindFirst(reference->elementType);
+            if(auto* tuple = dynamic_cast<TupleTypeNode*>(current))
+                if(tuple->elementTypes)
+                    for(auto* element : tuple->elementTypes->types)
+                        if(bindFirst(element))
+                            return true;
+            if(auto* map = dynamic_cast<MapTypeNode*>(current))
+                return bindFirst(map->valueType);
+            if(auto* generic =
+                   dynamic_cast<GenericStructTypeRefNode*>(current))
+                for(auto* argument : generic->typeArgs)
+                    if(bindFirst(argument))
+                        return true;
+            return false;
+        };
+        return bindFirst(pattern);
+    };
+    for(size_t i = 0; i < arguments.size(); ++i)
+    {
+        ClosureNode* closure = dynamic_cast<ClosureNode*>(arguments[i]);
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]))
+        {
+            auto found = closureVariables.find(identifier->name);
+            if(found != closureVariables.end())
+                closure = found->second;
+        }
+        if(!closure)
+            continue;
+        TypeNode* closureResult = inferClosureResult(closure);
+        if(closureResult)
+            bindUnboundReturnType(functionTemplate->returnType,
+                                  closureResult);
     }
     return true;
 }
