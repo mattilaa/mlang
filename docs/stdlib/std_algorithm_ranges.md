@@ -58,6 +58,8 @@ fn example() {
   (C++23 `views::stride` style); non-positive steps produce an empty list.
 - `joined(data)` flattens one list-of-lists level into a copied list (C++20
   `views::join` style); empty inner lists contribute no elements.
+- `concat(left, right)` copies two same-typed ranges into one list (C++23
+  `views::concat` style).
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 
