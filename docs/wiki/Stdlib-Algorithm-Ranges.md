@@ -37,6 +37,8 @@ fn example() {
 - `equal` compares lists in order, including across distinct equality-comparable
   element types; `is_permutation` compares element multiplicities without
   considering order.
+- `lexicographical_compare` supports ranges with distinct mutually
+  order-comparable element types.
 - `starts_with` and `ends_with` compare prefixes and suffixes, including across
   distinct equality-comparable element types.
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and

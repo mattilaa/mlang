@@ -352,6 +352,9 @@ fn test_algorithm_ranges_generic_lexicographical_compare() {
     verify(lexicographical_compare(first, equal_values) == false);
     verify(lexicographical_compare(empty, first));
     verify(lexicographical_compare(first, empty) == false);
+    let mixed: list<i64> = [1, 2, 10];
+    verify(lexicographical_compare(first, mixed));
+    verify(lexicographical_compare(mixed, first) == false);
 }
 
 #[test]
