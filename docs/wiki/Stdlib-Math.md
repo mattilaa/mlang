@@ -24,10 +24,10 @@ Module file: `stdlib/std/math.mla`
 - `log(x)`
 - `exp(x)`
 - `modulo(a, b)`
-- `lerp(a, b, t)` for `f32` and `f64`, with exact endpoint results and
-  overflow-aware interpolation across opposite-sign endpoints (C++20 `std::lerp`)
-- `midpoint(a, b)` for `i32`, `i64`, `f32`, and `f64`; integer results round
-  toward the first argument without signed overflow (C++20 `std::midpoint`)
+- `lerp(a, b, t)` for [`f32`](Quick-Guide#types) and [`f64`](Quick-Guide#types), with exact endpoint results and
+  overflow-aware interpolation across opposite-sign endpoints (C++20 [`std::lerp`](Stdlib-Module-API))
+- `midpoint(a, b)` for [`i32`](Quick-Guide#types), [`i64`](Quick-Guide#types), [`f32`](Quick-Guide#types), and [`f64`](Quick-Guide#types); integer results round
+  toward the first argument without signed overflow (C++20 [`std::midpoint`](Stdlib-Module-API))
 
 ### Integer-specific
 - `sum_range(start: i32, end: i32) -> i32`

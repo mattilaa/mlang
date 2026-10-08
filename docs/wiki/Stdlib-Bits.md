@@ -4,10 +4,9 @@
 
 Module file: `stdlib/std/bits.mla`
 
-The module provides constructors for Mlang's logical [`bit`](Quick-Guide#types)
-type and C++20–23-inspired operations on unsigned integers and IEEE-754
-floating-point representations. Packed collections remain available in
-[`std::bitset`](Stdlib-Bitset).
+The module provides constructors for Mlang's logical [`bit`](Quick-Guide#types) type and C++20–23
+inspired operations on unsigned integers and IEEE-754 floating-point
+representations. Packed collections remain available in [`std::bitset`](Stdlib-Bitset).
 
 ### Logical bit values
 
@@ -16,8 +15,8 @@ floating-point representations. Packed collections remain available in
 
 ### Unsigned integer operations
 
-- `popcount`, `has_single_bit`, and `bit_width` are available for `u8`, `u16`,
-  `u32`, and `u64` (with width suffixes).
+- `popcount`, `has_single_bit`, and `bit_width` are available for [`u8`](Quick-Guide#types), [`u16`](Quick-Guide#types),
+  [`u32`](Quick-Guide#types), and [`u64`](Quick-Guide#types) (with width suffixes).
 - `countl_zero`, `countl_one`, `countr_zero`, and `countr_one` are available at
   the same widths; zero-input zero counts return the type's bit width.
 - `bit_floor`, `bit_ceil`, `rotl`, and `rotr` are available at the same widths.
