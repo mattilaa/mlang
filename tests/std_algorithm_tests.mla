@@ -36,6 +36,9 @@ use std::algorithm::ranges::take_i64;
 use std::algorithm::ranges::unique_i64;
 use std::algorithm::ranges::unique_stable_i64;
 use std::algorithm::ranges::clamp_i64;
+use std::algorithm::ranges::contains;
+use std::algorithm::ranges::count;
+use std::algorithm::ranges::find;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -151,6 +154,21 @@ fn test_algorithm_ranges_unique_variants() {
     let stable: list<i64> = unique_stable_i64(data);
     verify(stable.len() == 4);
     verify(stable[0] == 1 && stable[1] == 2 && stable[2] == 3 && stable[3] == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_find_count_contains() {
+    let numbers: list<i32> = [3, 4, 4, 8];
+    verify(find(numbers, 4) == 1);
+    verify(find(numbers, 9) == -1);
+    verify(count(numbers, 4) == 2);
+    verify(contains(numbers, 8));
+    verify(contains(numbers, 9) == false);
+
+    let words: list<str8> = ["mango", "pear", "mango"];
+    verify(find(words, "pear") == 1);
+    verify(count(words, "mango") == 2);
+    verify(contains(words, "plum") == false);
 }
 
 #[test]
