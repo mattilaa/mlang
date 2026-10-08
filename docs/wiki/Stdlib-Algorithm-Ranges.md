@@ -104,6 +104,9 @@ fn example() {
 - `remove`, `take`, `drop`, `unique`, `unique_stable`, and `clamp` return a
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.
+- `take_while(data, predicate)` copies the initial matching prefix;
+  `drop_while(data, predicate)` copies the rest after that prefix, matching the
+  eager behavior of C++20 `views::take_while` and `views::drop_while`.
 - `clamp_by(data, low, high, less)` clamps each element using a custom ordering;
   bounds must be ordered according to the comparator.
 - `sorted` returns a stable ascending copy and leaves the input unchanged.

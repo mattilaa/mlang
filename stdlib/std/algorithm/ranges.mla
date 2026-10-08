@@ -1102,6 +1102,22 @@ pub fn take(data: &list<T>, n: i64) -> list<T> {
     return out;
 }
 
+/// @brief Copy the initial prefix accepted by `predicate`.
+/// Eager C++20 `views::take_while` equivalent.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn take_while(data: &list<T>, predicate: Predicate) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(data[i]) {
+            break;
+        }
+        out.push(data[i]);
+    }
+    return out;
+}
+
 /// @brief Materialize the integers in the half-open interval `[start, end)`.
 /// This is an eager list counterpart to C++20 `std::views::iota`.
 /// If `start >= end`, the result is empty.
@@ -1128,6 +1144,23 @@ pub fn drop(data: &list<T>, n: i64) -> list<T> {
         return out;
     }
     for i in start..len {
+        out.push(data[i]);
+    }
+    return out;
+}
+
+/// @brief Copy the range after skipping its initial predicate-matching prefix.
+/// Eager C++20 `views::drop_while` equivalent.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn drop_while(data: &list<T>, predicate: Predicate) -> list<T> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var start: i64 = 0;
+    while start < n && predicate(data[start]) {
+        start = start + 1;
+    }
+    for i in start..n {
         out.push(data[i]);
     }
     return out;
