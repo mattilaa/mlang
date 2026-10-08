@@ -222,6 +222,24 @@ pub fn lower_bound(data: &list<T>, value: U) -> i64 {
     return lo;
 }
 
+/// @brief First index where `value` would be inserted after equal elements.
+/// Requires nondecreasing input; returns `data.len()` when value is too large.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn upper_bound(data: &list<T>, value: U) -> i64 {
+    var lo: i64 = 0;
+    var hi: i64 = data.len();
+    while lo < hi {
+        let mid: i64 = lo + (hi - lo) / 2;
+        if value < data[mid] {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    return lo;
+}
+
 /// @brief Return the index of the smallest element, or -1 for an empty list.
 /// @ingroup algorithm_ranges
 generic<T>
