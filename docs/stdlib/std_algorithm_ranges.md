@@ -84,6 +84,8 @@ fn example() {
   transformed copy. `unique` removes only adjacent duplicates;
   `unique_stable` keeps the first occurrence of each value.
 - `sorted` returns a stable ascending copy and leaves the input unchanged.
+- `sorted_by(data, less)` returns a stable copied ordering by a strict
+  comparator. Equivalent elements retain their original relative order.
 - `reversed` returns the elements in reverse order; `rotate_left` returns a
   copy rotated by a normalized signed offset.
 - `chunked(data, size)` materializes consecutive sublists (C++23

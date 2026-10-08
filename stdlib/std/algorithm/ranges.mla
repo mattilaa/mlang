@@ -894,6 +894,49 @@ pub fn sorted(data: &list<T>) -> list<T> {
     return merge_sorted_runs(left, right);
 }
 
+generic<T, Less>
+fn merge_sorted_runs_by(left: &list<T>, right: &list<T>, less: Less)
+    -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var i: i64 = 0;
+    var j: i64 = 0;
+    while i < left_len && j < right_len {
+        if less(right[j], left[i]) {
+            out.push(right[j]);
+            j = j + 1;
+        } else {
+            out.push(left[i]);
+            i = i + 1;
+        }
+    }
+    while i < left_len {
+        out.push(left[i]);
+        i = i + 1;
+    }
+    while j < right_len {
+        out.push(right[j]);
+        j = j + 1;
+    }
+    return out;
+}
+
+/// @brief Return a stable copy sorted by the strict ordering `less`.
+/// Equivalent elements keep their input order; the input is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn sorted_by(data: &list<T>, less: Less) -> list<T> {
+    let n: i64 = data.len();
+    if n < 2 {
+        return take(data, n);
+    }
+    let middle: i64 = n / 2;
+    let left: list<T> = sorted_by(take(data, middle), less);
+    let right: list<T> = sorted_by(drop(data, middle), less);
+    return merge_sorted_runs_by(left, right, less);
+}
+
 /// @brief Return a reversed copy of a list.
 /// @ingroup algorithm_ranges
 generic<T>
