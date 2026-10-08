@@ -67,6 +67,38 @@ pub fn equal(left: &list<T>, right: &list<T>) -> bool {
     return true;
 }
 
+/// @brief Return whether two lists contain the same multiset of values.
+/// Duplicate multiplicities matter; element order does not.
+/// C++20 ranges-style permutation comparison.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn is_permutation(left: &list<T>, right: &list<U>) -> bool {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    if left_len != right_len {
+        return false;
+    }
+    for i in 0..left_len {
+        let value: T = left[i];
+        var left_count: i64 = 0;
+        var right_count: i64 = 0;
+        for j in 0..left_len {
+            if left[j] == value {
+                left_count = left_count + 1;
+            }
+        }
+        for j in 0..right_len {
+            if right[j] == value {
+                right_count = right_count + 1;
+            }
+        }
+        if left_count != right_count {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// @brief Return whether `prefix` matches the beginning of `data`.
 /// @ingroup algorithm_ranges
 generic<T>

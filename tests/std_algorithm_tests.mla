@@ -47,6 +47,7 @@ use std::algorithm::ranges::find_last;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
+use std::algorithm::ranges::is_permutation;
 use std::algorithm::ranges::starts_with;
 use std::algorithm::ranges::search;
 use std::algorithm::ranges::contains_subrange;
@@ -208,6 +209,20 @@ fn test_algorithm_ranges_generic_size_empty_equal() {
     verify(equal(numbers, same_values));
     verify(equal(numbers, different_values) == false);
     verify(equal(numbers, no_values) == false);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_is_permutation() {
+    let values: list<i32> = [1, 2, 2, 3];
+    let reordered: list<i32> = [3, 2, 1, 2];
+    let wrong_counts: list<i32> = [3, 3, 1, 2];
+    let different_size: list<i32> = [1, 2, 3];
+    let mixed_width: list<i64> = [2, 3, 2, 1];
+
+    verify(is_permutation(values, reordered));
+    verify(is_permutation(values, mixed_width));
+    verify(is_permutation(values, wrong_counts) == false);
+    verify(is_permutation(values, different_size) == false);
 }
 
 #[test]
