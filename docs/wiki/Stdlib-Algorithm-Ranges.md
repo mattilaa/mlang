@@ -103,7 +103,7 @@ fn example() {
   `less(parent, child)` is true.
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
-  indices; binary search returns `bool`.
+  indices; binary search returns [`bool`](Quick-Guide#types).
 - `is_sorted_by`, `is_sorted_until_by`, `lower_bound_by`, `upper_bound_by`, and
   `binary_search_by` accept a strict ordering comparator, enabling descending or
   custom orderings while keeping binary searches logarithmic.
@@ -121,14 +121,14 @@ fn example() {
   differ from the input element type.
 - `zip_transform(left, right, operation)` applies a binary operation to
   corresponding values and stops at the shorter input, matching C++23
-  `std::ranges::zip_transform`.
+  [`std::ranges::zip_transform`](Stdlib-Module-API).
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
   a copy without accepted elements, and `replace_if` substitutes a value for
   every accepted element. These transforms leave their input unchanged.
 - `unique_by(data, equivalent)` removes adjacent equivalent elements while
   keeping the first value in each run.
 - `all_of`, `any_of`, and `none_of` accept predicates as well as retaining the
-  one-argument `list<bool>` identity forms. Empty-range results match the
+  one-argument [`list<bool>`](Quick-Guide#types) identity forms. Empty-range results match the
   standard algorithms: true, false, and true respectively.
 - `is_partitioned` checks whether all matching elements precede nonmatches;
   `partition_point` binary-searches for the first nonmatch index in an

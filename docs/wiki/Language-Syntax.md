@@ -1061,7 +1061,7 @@ Generic functions can also declare a trailing type and value parameter pack.
 The pack is expanded at compile time, so its arguments may have different
 types. A right fold can invoke the same expression once for every argument:
 
-```mla
+```rust
 generic<Args...>
 fn release_all(args: Args...) -> void {
     (args.release(), ...);
@@ -1071,9 +1071,9 @@ release_all(session, project);
 ```
 
 Use `is_constructible<T>(value)` in a boolean fold to validate every pack
-element with `static_assert!`. The comma fold preserves argument order:
+element with [`static_assert!`](Language-Syntax). The comma fold preserves argument order:
 
-```mla
+```rust
 generic<T, Args...>
 fn push_back_vec(values: &mut list<T>, args: Args...) -> void {
     static_assert!((is_constructible<T>(args) && ...));
@@ -1083,7 +1083,7 @@ fn push_back_vec(values: &mut list<T>, args: Args...) -> void {
 
 The type pack and value pack must both be last. Parameter-pack folds support
 `+`, `*`, `&&`, `||`, and comma. Existing list folds remain runtime folds over
-one homogeneous `list<T>` value.
+one homogeneous [`list<T>`](Quick-Guide#types) value.
 
 Mutable lists can append another compatible [`list<T>`](Quick-Guide#types), `array<T, N>`, or
 literal/fill list source:

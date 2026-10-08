@@ -90,6 +90,21 @@ and
 Select the optimization level. The default is
 .BR \-O2 .
 .TP
+.BR \-g ", " \-\-debug\-info
+Emit DWARF debug info: source lines, functions and methods, parameters and
+local variables with their types, for
+.BR lldb (1)
+and
+.BR gdb (1).
+Without an explicit optimization level this selects
+.BR \-Og .
+With
+.B \-O0
+it also generates unoptimized machine code, so every variable is in memory at
+each line. On macOS an executable gets a
+.I .dSYM
+bundle next to it.
+.TP
 .B \-\-no\-tests
 Skip compiling functions marked with
 .BR #[test] .
