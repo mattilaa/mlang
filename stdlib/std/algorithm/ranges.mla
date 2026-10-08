@@ -285,6 +285,73 @@ pub fn stable_partition(data: &list<T>, predicate: Predicate) -> list<T> {
     return partitioned;
 }
 
+/// @brief Return the first index rejected by `predicate`, or -1 if all match.
+/// C++20 `std::ranges::find_if_not` semantics.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn find_if_not(data: &list<T>, predicate: Predicate) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(data[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/// @brief Return a compacted copy without elements accepted by `predicate`.
+/// This eager form leaves the input range unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn remove_if(data: &list<T>, predicate: Predicate) -> list<T> {
+    var kept: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !predicate(data[i]) {
+            kept.push(data[i]);
+        }
+    }
+    return kept;
+}
+
+/// @brief Replace each element accepted by `predicate` in a copied range.
+/// The original range is unchanged.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn replace_if(data: &list<T>, predicate: Predicate, replacement: T) -> list<T> {
+    var replaced: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            replaced.push(replacement);
+        } else {
+            replaced.push(data[i]);
+        }
+    }
+    return replaced;
+}
+
+/// @brief Remove adjacent elements equivalent under `equivalent`.
+/// The first element in each adjacent run is preserved.
+/// @ingroup algorithm_ranges
+generic<T, Equivalent>
+pub fn unique_by(data: &list<T>, equivalent: Equivalent) -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var unique_values: list<T> = [];
+    var previous: T = data[0];
+    unique_values.push(previous);
+    for i in 1..n {
+        if !equivalent(previous, data[i]) {
+            previous = data[i];
+            unique_values.push(previous);
+        }
+    }
+    return unique_values;
+}
+
 
 /// @brief Return whether two lists contain the same elements in order.
 /// The ranges may have different, equality-comparable element types.
