@@ -1,0 +1,32 @@
+/// \file expected.mla
+/// \brief Monadic transformations for the built-in result<T, E> type.
+///
+/// Mlang's `result<T, E>` is the native counterpart of C++23 `std::expected`.
+/// These functions preserve the inactive alternative and invoke their
+/// callback only for the active value.
+
+/// @brief Transform a successful result value while preserving its error.
+/// The operation is not called for Err; its original error is propagated.
+/// C++23 `std::expected::transform` equivalent.
+/// @ingroup expected
+generic<T, E, Output, Operation>
+pub fn transform(input: result<T, E>, operation: Operation)
+    -> result<Output, E> {
+    if input.is_ok() {
+        return Ok<Output, E>(operation(input.unwrap()));
+    }
+    return Err<Output, E>(input.unwrap_err());
+}
+
+/// @brief Transform an error while preserving a successful result value.
+/// The operation is not called for Ok; its original value is propagated.
+/// C++23 `std::expected::transform_error` equivalent.
+/// @ingroup expected
+generic<T, E, NewError, Operation>
+pub fn transform_error(input: result<T, E>, operation: Operation)
+    -> result<T, NewError> {
+    if input.is_err() {
+        return Err<T, NewError>(operation(input.unwrap_err()));
+    }
+    return Ok<T, NewError>(input.unwrap());
+}

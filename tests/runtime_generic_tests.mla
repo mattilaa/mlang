@@ -1,5 +1,8 @@
 mod std::testing;
+mod std::expected;
 use std::testing::verify;
+use std::expected::transform;
+use std::expected::transform_error;
 
 var generic_closure_call_count: i32 = 0;
 
@@ -145,4 +148,44 @@ fn test_generic_function_can_construct_option_of_type_parameter() {
         None => true
     };
     verify(is_absent);
+}
+
+#[test]
+fn test_expected_transform_and_error_propagation() {
+    let scale = |value: i32| { return f64(value) * 1.5; };
+    let success: result<i32, str8> = Ok<i32, str8>(8);
+    let converted: result<f64, str8> = transform(success, scale);
+    verify(converted.is_ok());
+    verify(converted.unwrap() == 12.0);
+
+    var calls: i32 = 0;
+    let counted_scale = |value: i32| {
+        calls = calls + 1;
+        return f64(value) * 2.0;
+    };
+    let failure: result<i32, str8> = Err<i32, str8>("no value");
+    let propagated: result<f64, str8> = transform(failure, counted_scale);
+    verify(propagated.is_err());
+    let propagated_error: str8 = propagated.unwrap_err();
+    verify(propagated_error == "no value");
+    verify(calls == 0);
+}
+
+#[test]
+fn test_expected_transform_error_and_value_propagation() {
+    var calls: i32 = 0;
+    let is_broken = |message: str8| {
+        calls = calls + 1;
+        return message == "broken";
+    };
+    let failure: result<i32, str8> = Err<i32, str8>("broken");
+    let converted_error: result<i32, bool> = transform_error(failure, is_broken);
+    verify(converted_error.is_err());
+    verify(converted_error.unwrap_err());
+    verify(calls == 1);
+
+    let success: result<i32, str8> = Ok<i32, str8>(17);
+    let preserved: result<i32, bool> = transform_error(success, is_broken);
+    verify(preserved.is_ok() && preserved.unwrap() == 17);
+    verify(calls == 1);
 }
