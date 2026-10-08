@@ -64,6 +64,9 @@ use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::windows;
 use std::algorithm::ranges::strided;
 use std::algorithm::ranges::joined;
+use std::algorithm::ranges::all_of;
+use std::algorithm::ranges::any_of;
+use std::algorithm::ranges::none_of;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
@@ -452,6 +455,20 @@ fn test_algorithm_ranges_generic_joined() {
     let no_lists: list<list<i32>> = [];
     let empty_flattened: list<i32> = joined(no_lists);
     verify(empty_flattened.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_predicate_queries() {
+    let flags: list<bool> = [true, true, false];
+    let all_flags: bool = all_of(flags);
+    let any_flags: bool = any_of(flags);
+    let no_flags: bool = none_of(flags);
+    let empty: list<bool> = [];
+    let empty_all: bool = all_of(empty);
+    let empty_any: bool = any_of(empty);
+    let empty_none: bool = none_of(empty);
+    verify(!all_flags && any_flags && !no_flags);
+    verify(empty_all && !empty_any && empty_none);
 }
 
 #[test]
