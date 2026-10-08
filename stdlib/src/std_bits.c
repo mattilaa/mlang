@@ -72,6 +72,22 @@ uint64_t __mlang_std_bits_bit_floor_u64(uint64_t value)
     return floor;
 }
 
+uint64_t __mlang_std_bits_bit_ceil_u64(uint64_t value)
+{
+    if(value <= 1)
+        return 1;
+    --value;
+    value |= value >> 1;
+    value |= value >> 2;
+    value |= value >> 4;
+    value |= value >> 8;
+    value |= value >> 16;
+    value |= value >> 32;
+    ++value;
+    // There is no representable 2^64 in the u64 domain.
+    return value;
+}
+
 static uint32_t normalize_rotation(int64_t shift)
 {
     int64_t normalized = shift % 64;
