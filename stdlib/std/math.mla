@@ -528,3 +528,33 @@ pub fn modulo(a: f32, b: f32) -> f32 {
 pub fn modulo(a: f64, b: f64) -> f64 {
     return __mlang_std_math_modulo_f64(a, b);
 }
+
+/// @brief Linearly interpolate between two `f32` values (C++20 `std::lerp`).
+/// Returns `a` exactly when `t` is zero and `b` exactly when `t` is one.
+pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    if t == 0.0f { return a; }
+    if t == 1.0f { return b; }
+    if (a <= 0.0f && b >= 0.0f) || (a >= 0.0f && b <= 0.0f) {
+        return t * b + (1.0f - t) * a;
+    }
+    let value: f32 = a + t * (b - a);
+    if (t > 1.0f) == (b > a) {
+        return value > b ? value : b;
+    }
+    return value < b ? value : b;
+}
+
+/// @brief Linearly interpolate between two `f64` values (C++20 `std::lerp`).
+/// Returns `a` exactly when `t` is zero and `b` exactly when `t` is one.
+pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
+    if t == 0.0 { return a; }
+    if t == 1.0 { return b; }
+    if (a <= 0.0 && b >= 0.0) || (a >= 0.0 && b <= 0.0) {
+        return t * b + (1.0 - t) * a;
+    }
+    let value: f64 = a + t * (b - a);
+    if (t > 1.0) == (b > a) {
+        return value > b ? value : b;
+    }
+    return value < b ? value : b;
+}
