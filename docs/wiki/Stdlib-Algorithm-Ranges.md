@@ -84,6 +84,8 @@ fn example() {
   sorted list; equal elements from the left range come first.
 - `union_sorted(left, right)` returns the sorted multiset union, keeping the
   maximum duplicate count for every value.
+- `intersection_sorted(left, right)` returns the sorted multiset intersection,
+  keeping the minimum duplicate count for every value.
 - `replace(data, old, new)` copies a range while replacing every value equal
   to `old`; the original range is unchanged.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
