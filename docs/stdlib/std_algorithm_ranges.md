@@ -17,6 +17,7 @@ use std::algorithm::ranges::transform;
 use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::pairwise;
+use std::algorithm::ranges::adjacent_transform;
 
 fn example() {
     let data: list<i32> = [4, 2, 4, 7];
@@ -32,6 +33,8 @@ fn example() {
     let consecutive = |left: i32, right: i32| { return right == left + 1; };
     let groups: list<list<i32>> = chunk_by(data, consecutive);
     let adjacent: list<tuple<i32, i32>> = pairwise(data);
+    let adjacent_add = |left: i32, right: i32| { return left + right; };
+    let sums: list<i32> = adjacent_transform(data, adjacent_add);
 }
 ```
 
@@ -150,6 +153,10 @@ fn example() {
 - `pairwise(data)` materializes tuples of each adjacent pair (C++23
   `views::pairwise` style); inputs shorter than two elements produce an empty
   list.
+- `adjacent_transform(data, operation)` applies a binary operation to each
+  neighboring pair, returning up to one fewer result than input elements and
+  inferring the output element type from the operation (C++23
+  `views::adjacent_transform<2>` style).
 - `enumerate(data)` materializes `(index, value)` tuples with zero-based indices
   (C++23 `views::enumerate` style).
 - `cartesian_product(left, right)` materializes all tuple pairs, with the right

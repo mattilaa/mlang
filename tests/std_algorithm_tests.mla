@@ -106,6 +106,7 @@ use std::algorithm::ranges::zip;
 use std::algorithm::ranges::enumerate;
 use std::algorithm::ranges::cartesian_product;
 use std::algorithm::ranges::pairwise;
+use std::algorithm::ranges::adjacent_transform;
 use std::algorithm::ranges::replace;
 use std::algorithm::ranges::all_of;
 use std::algorithm::ranges::any_of;
@@ -983,6 +984,13 @@ fn test_algorithm_ranges_pairwise() {
     let singleton: list<i32> = [7];
     let no_pairs: list<tuple<i32, i32>> = pairwise(singleton);
     verify(no_pairs.len() == 0);
+
+    let sum_as_double = |left: i32, right: i32| {
+        return f64(left + right);
+    };
+    let adjacent_sums: list<f64> = adjacent_transform(values, sum_as_double);
+    verify(adjacent_sums.len() == 2);
+    verify(adjacent_sums[0] == 10.0 && adjacent_sums[1] == 15.0);
 }
 
 #[test]
