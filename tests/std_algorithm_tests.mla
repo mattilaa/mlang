@@ -116,6 +116,7 @@ use std::algorithm::ranges::none_of;
 use std::algorithm::ranges::find_if;
 use std::algorithm::ranges::find_last_if;
 use std::algorithm::ranges::count_if;
+use std::algorithm::ranges::for_each;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::is_partitioned;
 use std::algorithm::ranges::partition_point;
@@ -1576,6 +1577,21 @@ fn test_algorithm_ranges_predicate_algorithms() {
     verify(all_of(no_values, is_even));
     verify(!any_of(no_values, is_even));
     verify(none_of(no_values, is_even));
+}
+
+#[test]
+fn test_algorithm_ranges_for_each() {
+    let values: list<i32> = [2, 3, 5];
+    var total: i32 = 0;
+    let add_to_total = |value: i32| {
+        total = total + value;
+    };
+    for_each(values, add_to_total);
+    verify(total == 10);
+
+    let empty: list<i32> = [];
+    for_each(empty, add_to_total);
+    verify(total == 10);
 }
 
 
