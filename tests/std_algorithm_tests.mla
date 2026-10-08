@@ -69,6 +69,11 @@ use std::algorithm::ranges::symmetric_difference_sorted;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::upper_bound;
 use std::algorithm::ranges::binary_search;
+use std::algorithm::ranges::is_sorted_by;
+use std::algorithm::ranges::is_sorted_until_by;
+use std::algorithm::ranges::lower_bound_by;
+use std::algorithm::ranges::upper_bound_by;
+use std::algorithm::ranges::binary_search_by;
 use std::algorithm::ranges::sorted;
 use std::algorithm::ranges::reversed;
 use std::algorithm::ranges::rotate_left;
@@ -521,6 +526,31 @@ fn test_algorithm_ranges_generic_binary_search() {
     let words: list<str8> = ["ant", "bee", "fox"];
     verify(binary_search(words, "bee"));
     verify(binary_search(words, "cat") == false);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_order_queries() {
+    let descending: list<i32> = [9, 7, 7, 3, 1];
+    let broken: list<i32> = [9, 7, 8, 3];
+    let empty: list<i32> = [];
+    let greater = |left: i32, right: i32| { return left > right; };
+
+    verify(is_sorted_by(descending, greater));
+    verify(!is_sorted_by(broken, greater));
+    verify(is_sorted_until_by(descending, greater) == 5);
+    verify(is_sorted_until_by(broken, greater) == 2);
+    verify(is_sorted_by(empty, greater));
+    verify(is_sorted_until_by(empty, greater) == 0);
+
+    verify(lower_bound_by(descending, 7, greater) == 1);
+    verify(upper_bound_by(descending, 7, greater) == 3);
+    verify(lower_bound_by(descending, 10, greater) == 0);
+    verify(upper_bound_by(descending, 0, greater) == 5);
+    verify(binary_search_by(descending, 7, greater));
+    verify(!binary_search_by(descending, 8, greater));
+    verify(lower_bound_by(empty, 4, greater) == 0);
+    verify(upper_bound_by(empty, 4, greater) == 0);
+    verify(!binary_search_by(empty, 4, greater));
 }
 
 #[test]

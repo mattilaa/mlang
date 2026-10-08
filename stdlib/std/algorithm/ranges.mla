@@ -624,6 +624,86 @@ pub fn binary_search(data: &list<T>, value: U) -> bool {
     return data[position] == value;
 }
 
+/// @brief Check sorted order using `less` as the strict ordering comparator.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn is_sorted_by(data: &list<T>, less: Less) -> bool {
+    let n: i64 = data.len();
+    for i in 1..n {
+        if less(data[i], data[i - 1]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Return the first index violating comparator order, or range length.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn is_sorted_until_by(data: &list<T>, less: Less) -> i64 {
+    let n: i64 = data.len();
+    for i in 1..n {
+        if less(data[i], data[i - 1]) {
+            return i;
+        }
+    }
+    return n;
+}
+
+/// @brief Comparator-based lower bound for a range sorted by `less`.
+/// @ingroup algorithm_ranges
+generic<T, U, Less>
+pub fn lower_bound_by(data: &list<T>, value: U, less: Less) -> i64 {
+    var lo: i64 = 0;
+    var hi: i64 = data.len();
+    while lo < hi {
+        let mid: i64 = lo + (hi - lo) / 2;
+        if less(data[mid], value) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
+/// @brief Comparator-based upper bound for a range sorted by `less`.
+/// @ingroup algorithm_ranges
+generic<T, U, Less>
+pub fn upper_bound_by(data: &list<T>, value: U, less: Less) -> i64 {
+    var lo: i64 = 0;
+    var hi: i64 = data.len();
+    while lo < hi {
+        let mid: i64 = lo + (hi - lo) / 2;
+        if less(value, data[mid]) {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    return lo;
+}
+
+/// @brief Check whether a comparator-sorted range contains `value`.
+/// @ingroup algorithm_ranges
+generic<T, U, Less>
+pub fn binary_search_by(data: &list<T>, value: U, less: Less) -> bool {
+    var lo: i64 = 0;
+    var hi: i64 = data.len();
+    while lo < hi {
+        let mid: i64 = lo + (hi - lo) / 2;
+        if less(data[mid], value) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if lo >= data.len() {
+        return false;
+    }
+    return !less(data[lo], value) && !less(value, data[lo]);
+}
+
 /// @brief Return the index of the smallest element, or -1 for an empty list.
 /// @ingroup algorithm_ranges
 generic<T>
