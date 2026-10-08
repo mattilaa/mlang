@@ -70,11 +70,14 @@ fn test_runtime_generic_functions_specialize_by_argument_type() {
 #[test]
 fn test_bound_closure_can_be_passed_to_generic_function() {
     generic_closure_call_count = 0;
+    var local_call_count: i32 = 0;
     let mark_called = || {
         generic_closure_call_count = generic_closure_call_count + 1;
+        local_call_count = local_call_count + 1;
     };
     invoke_generic_callback(mark_called);
     verify(generic_closure_call_count == 1);
+    verify(local_call_count == 1);
 }
 
 #[test]
@@ -87,4 +90,10 @@ fn test_bound_predicate_closure_can_be_passed_to_generic_function() {
 
     let values: list<i32> = [-3, -1, 0, 2, 5];
     verify(count_matching(values, is_positive) == 2);
+
+    let threshold: i32 = 3;
+    let above_threshold = |value: i32| {
+        return value > threshold;
+    };
+    verify(count_matching(values, above_threshold) == 1);
 }

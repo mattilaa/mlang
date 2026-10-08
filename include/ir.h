@@ -216,6 +216,14 @@ private:
     // Inline closures: var inc = || { ... }; inc();
     // Maps closure variable name -> its AST node for inline body generation.
     std::map<std::string, ClosureNode*> closureVariables;
+    // Generic closure parameter -> captured local name -> hidden parameter
+    // name used to transfer captures into its specialization.
+    std::map<std::string, std::map<std::string, std::string>>
+        closureCaptureAliases;
+    std::map<std::string, std::map<std::string, TypeNode*>>
+        closureCaptureTypes;
+    std::map<std::string, std::set<std::string>> closureConstCaptures;
+    std::set<std::string> closureCaptureReferenceAliases;
     // Re-entrancy guard: tracks closures currently being inlined.
     std::set<std::string> activeInlineClosures;
     struct InlineClosureReturnState
