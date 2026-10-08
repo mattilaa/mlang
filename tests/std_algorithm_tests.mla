@@ -47,6 +47,7 @@ use std::algorithm::ranges::find_last;
 use std::algorithm::ranges::adjacent_find;
 use std::algorithm::ranges::find_first_of;
 use std::algorithm::ranges::includes;
+use std::algorithm::ranges::includes_by;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
@@ -57,6 +58,7 @@ use std::algorithm::ranges::find_end;
 use std::algorithm::ranges::contains_subrange;
 use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::lexicographical_compare;
+use std::algorithm::ranges::lexicographical_compare_by;
 use std::algorithm::ranges::is_sorted;
 use std::algorithm::ranges::is_sorted_until;
 use std::algorithm::ranges::is_heap;
@@ -294,6 +296,18 @@ fn test_algorithm_ranges_generic_includes() {
 }
 
 #[test]
+fn test_algorithm_ranges_includes_by_comparator() {
+    let range: list<i32> = [9, 7, 7, 3, 1];
+    let subset: list<i32> = [7, 3];
+    let too_many: list<i32> = [7, 7, 7];
+    let empty: list<i32> = [];
+    let greater = |a: i32, b: i32| { return a > b; };
+    verify(includes_by(range, subset, greater));
+    verify(!includes_by(range, too_many, greater));
+    verify(includes_by(range, empty, greater));
+}
+
+#[test]
 fn test_algorithm_ranges_generic_size_empty_equal() {
     let numbers: list<i32> = [2, 4, 6];
     let same_values: list<i32> = [2, 4, 6];
@@ -404,6 +418,22 @@ fn test_algorithm_ranges_generic_lexicographical_compare() {
     let mixed: list<i64> = [1, 2, 10];
     verify(lexicographical_compare(first, mixed));
     verify(lexicographical_compare(mixed, first) == false);
+}
+
+#[test]
+fn test_algorithm_ranges_lexicographical_compare_by() {
+    let first: list<i32> = [9, 7];
+    let before: list<i32> = [9, 6];
+    let after: list<i32> = [9, 8];
+    let extended: list<i32> = [9, 7, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+    verify(lexicographical_compare_by(first, before, greater));
+    verify(!lexicographical_compare_by(first, after, greater));
+    verify(lexicographical_compare_by(first, extended, greater));
+    verify(!lexicographical_compare_by(extended, first, greater));
+
+    let equivalent: list<i32> = [9, 7];
+    verify(!lexicographical_compare_by(first, equivalent, greater));
 }
 
 #[test]
