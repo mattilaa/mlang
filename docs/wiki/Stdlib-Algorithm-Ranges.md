@@ -48,6 +48,9 @@ fn example() {
 - `sorted` returns a stable ascending copy and leaves the input unchanged.
 - `reversed` returns the elements in reverse order; `rotate_left` returns a
   copy rotated by a normalized signed offset.
+- `chunked(data, size)` materializes consecutive sublists (C++23
+  `views::chunk` style); the final chunk can be shorter, and non-positive sizes
+  produce an empty list.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
   it returns an empty list when `start >= end`.
 

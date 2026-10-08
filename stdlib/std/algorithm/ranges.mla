@@ -447,6 +447,29 @@ pub fn rotate_left(data: &list<T>, amount: i64) -> list<T> {
     return out;
 }
 
+/// @brief Materialize consecutive chunks of at most `chunk_size` elements.
+/// Eager-list counterpart to C++23 `views::chunk`; non-positive sizes are empty.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn chunked(data: &list<T>, chunk_size: i64) -> list<list<T>> {
+    var out: list<list<T>> = [];
+    let n: i64 = data.len();
+    if chunk_size <= 0 || n == 0 {
+        return out;
+    }
+    var start: i64 = 0;
+    while start < n {
+        var chunk: list<T> = [];
+        let end: i64 = start + chunk_size < n ? start + chunk_size : n;
+        for i in start..end {
+            chunk.push(data[i]);
+        }
+        out.push(chunk);
+        start = end;
+    }
+    return out;
+}
+
 /// @brief Copy a list while removing adjacent duplicate values.
 /// @ingroup algorithm_ranges
 generic<T>
