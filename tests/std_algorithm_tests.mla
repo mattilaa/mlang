@@ -43,6 +43,7 @@ use std::algorithm::ranges::clamp_i64;
 use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
 use std::algorithm::ranges::find;
+use std::algorithm::ranges::find_last;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
@@ -186,8 +187,10 @@ fn test_algorithm_ranges_generic_find_count_contains() {
 
     let words: list<str8> = ["mango", "pear", "mango"];
     verify(find(words, "pear") == 1);
+    verify(find_last(words, "mango") == 2);
     verify(count(words, "mango") == 2);
     verify(contains(words, "plum") == false);
+    verify(find_last(words, "plum") == -1);
 }
 
 #[test]

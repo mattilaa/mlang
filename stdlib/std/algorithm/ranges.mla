@@ -22,6 +22,21 @@ pub fn find(data: &list<T>, value: U) -> i64 {
     return -1;
 }
 
+/// @brief Return the last index of a value, or -1 when it is absent.
+/// C++23 ranges-style last-match search.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_last(data: &list<T>, value: U) -> i64 {
+    var found: i64 = -1;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == value {
+            found = i;
+        }
+    }
+    return found;
+}
+
 /// @brief Return the number of elements in a list.
 /// @ingroup algorithm_ranges
 generic<T>
