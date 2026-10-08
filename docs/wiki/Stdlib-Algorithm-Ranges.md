@@ -42,6 +42,8 @@ fn example() {
 - `equal` compares lists in order, including across distinct equality-comparable
   element types; `is_permutation` compares element multiplicities without
   considering order.
+- `equal_by` compares each pair with a supplied equivalence predicate, while
+  `is_permutation_by` compares multiplicities under that equivalence.
 - `lexicographical_compare` supports ranges with distinct mutually
   order-comparable element types.
 - `lexicographical_compare_by` performs the same range comparison with a
