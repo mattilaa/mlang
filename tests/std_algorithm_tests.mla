@@ -66,6 +66,11 @@ use std::algorithm::ranges::union_sorted;
 use std::algorithm::ranges::intersection_sorted;
 use std::algorithm::ranges::difference_sorted;
 use std::algorithm::ranges::symmetric_difference_sorted;
+use std::algorithm::ranges::merged_by;
+use std::algorithm::ranges::union_sorted_by;
+use std::algorithm::ranges::intersection_sorted_by;
+use std::algorithm::ranges::difference_sorted_by;
+use std::algorithm::ranges::symmetric_difference_sorted_by;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::upper_bound;
 use std::algorithm::ranges::binary_search;
@@ -551,6 +556,68 @@ fn test_algorithm_ranges_comparator_order_queries() {
     verify(lower_bound_by(empty, 4, greater) == 0);
     verify(upper_bound_by(empty, 4, greater) == 0);
     verify(!binary_search_by(empty, 4, greater));
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_merged() {
+    let left: list<i32> = [9, 7, 7, 3, 1];
+    let right: list<i32> = [8, 7, 4, 3, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+
+    let merged_values: list<i32> = merged_by(left, right, greater);
+    verify(merged_values.len() == 10);
+    verify(merged_values[0] == 9 && merged_values[1] == 8);
+    verify(merged_values[2] == 7 && merged_values[3] == 7 &&
+           merged_values[4] == 7);
+    verify(merged_values[5] == 4 && merged_values[6] == 3);
+    verify(merged_values[7] == 3 && merged_values[8] == 3);
+    verify(merged_values[9] == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_union_sorted() {
+    let left: list<i32> = [9, 7, 7, 3, 1];
+    let right: list<i32> = [8, 7, 4, 3, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let union_values: list<i32> = union_sorted_by(left, right, greater);
+    verify(union_values.len() == 8);
+    verify(union_values[0] == 9 && union_values[1] == 8);
+    verify(union_values[2] == 7 && union_values[3] == 7);
+    verify(union_values[4] == 4 && union_values[5] == 3);
+    verify(union_values[6] == 3 && union_values[7] == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_intersection_sorted() {
+    let left: list<i32> = [9, 7, 7, 3, 1];
+    let right: list<i32> = [8, 7, 4, 3, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let intersection_values: list<i32> = intersection_sorted_by(left, right, greater);
+    verify(intersection_values.len() == 2);
+    verify(intersection_values[0] == 7 && intersection_values[1] == 3);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_difference_sorted() {
+    let left: list<i32> = [9, 7, 7, 3, 1];
+    let right: list<i32> = [8, 7, 4, 3, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let difference_values: list<i32> = difference_sorted_by(left, right, greater);
+    verify(difference_values.len() == 3);
+    verify(difference_values[0] == 9 && difference_values[1] == 7 &&
+           difference_values[2] == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_symmetric_difference_sorted() {
+    let left: list<i32> = [9, 7, 7, 3, 1];
+    let right: list<i32> = [8, 7, 4, 3, 3];
+    let greater = |a: i32, b: i32| { return a > b; };
+    let symmetric_values: list<i32> = symmetric_difference_sorted_by(left, right, greater);
+    verify(symmetric_values.len() == 6);
+    verify(symmetric_values[0] == 9 && symmetric_values[1] == 8);
+    verify(symmetric_values[2] == 7 && symmetric_values[3] == 4);
+    verify(symmetric_values[4] == 3 && symmetric_values[5] == 1);
 }
 
 #[test]

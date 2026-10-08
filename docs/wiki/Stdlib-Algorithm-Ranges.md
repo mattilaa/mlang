@@ -110,6 +110,12 @@ fn example() {
 - `symmetric_difference_sorted(left, right)` returns values present in exactly
   one sorted input, with each value's output count equal to the difference in
   input multiplicities.
+- `merged_by`, `union_sorted_by`, `intersection_sorted_by`,
+  `difference_sorted_by`, and `symmetric_difference_sorted_by` take a strict
+  ordering comparator. Both inputs must be sorted with that comparator; set
+  operations define equivalent values as neither being less than the other.
+  They preserve the same stability and duplicate-count rules as their default
+  ordering counterparts.
 - `replace(data, old, new)` copies a range while replacing every value equal
   to `old`; the original range is unchanged.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
