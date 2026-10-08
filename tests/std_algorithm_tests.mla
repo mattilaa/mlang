@@ -296,6 +296,8 @@ fn test_algorithm_ranges_generic_starts_with() {
     verify(starts_with(values, mismatch) == false);
     verify(starts_with(values, too_long) == false);
     verify(starts_with(values, empty));
+    let mixed_prefix: list<i64> = [3, 5, 8];
+    verify(starts_with(values, mixed_prefix));
 }
 
 #[test]
