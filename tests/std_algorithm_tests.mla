@@ -58,6 +58,7 @@ use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
 use std::algorithm::ranges::remove;
 use std::algorithm::ranges::take;
+use std::algorithm::ranges::iota;
 use std::algorithm::ranges::drop;
 use std::algorithm::ranges::unique;
 use std::algorithm::ranges::unique_stable;
@@ -326,6 +327,18 @@ fn test_algorithm_ranges_generic_sequence_transforms() {
     let none_taken: list<i32> = take(data, -2);
     let all_dropped: list<i32> = drop(data, 99);
     verify(none_taken.len() == 0 && all_dropped.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_iota() {
+    let values: list<i64> = iota(-2, 3);
+    verify(values.len() == 5);
+    verify(values[0] == -2 && values[1] == -1 && values[2] == 0);
+    verify(values[3] == 1 && values[4] == 2);
+
+    let empty: list<i64> = iota(4, 4);
+    let reversed: list<i64> = iota(5, 1);
+    verify(empty.len() == 0 && reversed.len() == 0);
 }
 
 #[test]
