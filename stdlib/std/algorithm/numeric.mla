@@ -105,6 +105,43 @@ pub fn inner_product(left: &list<T>, right: &list<T>, init: U) -> U {
     return acc;
 }
 
+/// @brief Return all inclusive prefix accumulations using `operation`.
+/// The first output is the first input element; empty input produces an empty list.
+/// C++ `std::inclusive_scan` equivalent.
+/// @ingroup algorithm_numeric
+generic<T, Operation>
+pub fn inclusive_scan(data: &list<T>, operation: Operation) -> list<T> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var out: list<T> = [];
+    var acc: T = data[0];
+    out.push(acc);
+    for i in 1..n {
+        acc = operation(acc, data[i]);
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Return exclusive prefix accumulations using `init` and `operation`.
+/// Each output is the accumulator before incorporating that position's element.
+/// C++ `std::exclusive_scan` equivalent.
+/// @ingroup algorithm_numeric
+generic<T, Operation>
+pub fn exclusive_scan(data: &list<T>, init: T, operation: Operation)
+    -> list<T> {
+    var out: list<T> = [];
+    var acc: T = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push(acc);
+        acc = operation(acc, data[i]);
+    }
+    return out;
+}
+
 /// @brief Generic prefix sums with an initial value.
 /// Returns `[init + d0, init + d0 + d1, ...]`.
 /// @ingroup algorithm_numeric

@@ -21,6 +21,8 @@ use std::algorithm::numeric::accumulate;
 use std::algorithm::numeric::fold_left;
 use std::algorithm::numeric::fold_right;
 use std::algorithm::numeric::transform_reduce;
+use std::algorithm::numeric::inclusive_scan;
+use std::algorithm::numeric::exclusive_scan;
 use std::algorithm::numeric::adjacent_difference_i64;
 use std::algorithm::numeric::inner_product_i64;
 use std::algorithm::numeric::inner_product;
@@ -1112,6 +1114,37 @@ fn test_algorithm_numeric_transform_reduce() {
     let empty: list<i32> = [];
     verify(transform_reduce(empty, 9, add, square) == 9);
     verify(transform_reduce(left, empty, 13, add, multiply) == 13);
+}
+
+#[test]
+fn test_algorithm_numeric_scans() {
+    let values: list<i32> = [1, 2, 3, 4];
+    let add = |acc: i32, value: i32| { return acc + value; };
+    let inclusive: list<i32> = inclusive_scan(values, add);
+    verify(inclusive.len() == 4);
+    verify(inclusive[0] == 1 && inclusive[1] == 3);
+    verify(inclusive[2] == 6 && inclusive[3] == 10);
+
+    let initial: i32 = 10;
+    let exclusive: list<i32> = exclusive_scan(values, initial, add);
+    verify(exclusive.len() == 4);
+    verify(exclusive[0] == 10 && exclusive[1] == 11);
+    verify(exclusive[2] == 13 && exclusive[3] == 16);
+
+    let subtract = |acc: i32, value: i32| { return acc - value; };
+    let ordered_input: list<i32> = [20, 3, 2];
+    let ordered: list<i32> = inclusive_scan(ordered_input, subtract);
+    verify(ordered[0] == 20 && ordered[1] == 17 && ordered[2] == 15);
+
+    let empty: list<i32> = [];
+    let empty_initial: i32 = 7;
+    let empty_inclusive: list<i32> = inclusive_scan(empty, add);
+    let empty_exclusive: list<i32> = exclusive_scan(empty, empty_initial, add);
+    verify(empty_inclusive.len() == 0 && empty_exclusive.len() == 0);
+    let one: list<i32> = [8];
+    let one_inclusive: list<i32> = inclusive_scan(one, add);
+    let one_exclusive: list<i32> = exclusive_scan(one, empty_initial, add);
+    verify(one_inclusive[0] == 8 && one_exclusive[0] == 7);
 }
 
 #[test]

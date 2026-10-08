@@ -13,6 +13,9 @@ Numeric sequence helpers for integer lists, including generic list folds.
 - `transform_reduce(data, init, reduce, project)` projects each element and
   reduces it in one pass. Its two-range overload transforms corresponding pairs
   and stops at the shorter input.
+- `inclusive_scan(data, operation)` returns each accumulated prefix, beginning
+  with the first input value. `exclusive_scan(data, init, operation)` emits the
+  accumulator before incorporating each element; empty inputs yield empty lists.
 - `partial_sum_i64(data: &list<i64>, init: i64) -> list<i64>`
 - `adjacent_difference_i64(data: &list<i64>, init: i64) -> list<i64>`
 - `inner_product_i64(a: &list<i64>, b: &list<i64>, init: i64) -> i64`
