@@ -1,4 +1,13 @@
+#include <float.h>
 #include <stdint.h>
+#include <string.h>
+
+_Static_assert(sizeof(float) == sizeof(uint32_t) && FLT_RADIX == 2 &&
+                   FLT_MANT_DIG == 24 && FLT_MAX_EXP == 128,
+               "f32 bit_cast requires IEEE-754 binary32");
+_Static_assert(sizeof(double) == sizeof(uint64_t) && FLT_RADIX == 2 &&
+                   DBL_MANT_DIG == 53 && DBL_MAX_EXP == 1024,
+               "f64 bit_cast requires IEEE-754 binary64");
 
 int64_t __mlang_std_bits_popcount_u64(uint64_t value)
 {
@@ -122,4 +131,32 @@ uint64_t __mlang_std_bits_byteswap_u64(uint64_t value)
            ((value & UINT64_C(0x0000FF0000000000)) >> 24) |
            ((value & UINT64_C(0x00FF000000000000)) >> 40) |
            ((value & UINT64_C(0xFF00000000000000)) >> 56);
+}
+
+uint32_t __mlang_std_bits_f32_to_u32(float value)
+{
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+float __mlang_std_bits_u32_to_f32(uint32_t bits)
+{
+    float value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+uint64_t __mlang_std_bits_f64_to_u64(double value)
+{
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+double __mlang_std_bits_u64_to_f64(uint64_t bits)
+{
+    double value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
 }

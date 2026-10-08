@@ -16,6 +16,10 @@ use std::bits::bit_ceil_u64;
 use std::bits::rotl_u64;
 use std::bits::rotr_u64;
 use std::bits::byteswap_u64;
+use std::bits::bit_cast_u32_from_f32;
+use std::bits::bit_cast_f32_from_u32;
+use std::bits::bit_cast_u64_from_f64;
+use std::bits::bit_cast_f64_from_u64;
 use std::bitset::BitSet;
 use std::testing::verify;
 use std::testing::verify_eq;
@@ -121,6 +125,19 @@ fn test_cpp23_byteswap_u64() {
     let swapped: u64 = 578437695752307201;
     verify(byteswap_u64(value) == swapped);
     verify(byteswap_u64(swapped) == value);
+}
+
+#[test]
+fn test_cpp20_bit_cast_float_integer_pairs() {
+    let one_f32: f32 = 1.0f;
+    let one_f32_bits: u32 = 1065353216;
+    let one_f64: f64 = 1.0;
+    let one_f64_bits: u64 = 4607182418800017408;
+
+    verify(bit_cast_u32_from_f32(one_f32) == one_f32_bits);
+    verify(bit_cast_f32_from_u32(one_f32_bits) == one_f32);
+    verify(bit_cast_u64_from_f64(one_f64) == one_f64_bits);
+    verify(bit_cast_f64_from_u64(one_f64_bits) == one_f64);
 }
 
 #[test]
