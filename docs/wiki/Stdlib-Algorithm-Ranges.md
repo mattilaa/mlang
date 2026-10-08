@@ -48,6 +48,8 @@ fn example() {
   return `-1` on an empty list and keep the first index on ties.
 - `is_sorted_until(data)` returns the first index that breaks nondecreasing
   order, or `data.len()` when the entire range is sorted.
+- `is_heap(data)` checks max-heap order; `is_heap_until(data)` returns the
+  first violating child index, or `data.len()` when the range is a heap.
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns `bool`.
