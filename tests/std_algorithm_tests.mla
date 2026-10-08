@@ -39,6 +39,9 @@ use std::algorithm::ranges::clamp_i64;
 use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
 use std::algorithm::ranges::find;
+use std::algorithm::ranges::size;
+use std::algorithm::ranges::empty;
+use std::algorithm::ranges::equal;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -169,6 +172,21 @@ fn test_algorithm_ranges_generic_find_count_contains() {
     verify(find(words, "pear") == 1);
     verify(count(words, "mango") == 2);
     verify(contains(words, "plum") == false);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_size_empty_equal() {
+    let numbers: list<i32> = [2, 4, 6];
+    let same_values: list<i32> = [2, 4, 6];
+    let different_values: list<i32> = [2, 4, 7];
+    let no_values: list<i32> = [];
+
+    verify(size(numbers) == 3);
+    verify(empty(numbers) == false);
+    verify(empty(no_values));
+    verify(equal(numbers, same_values));
+    verify(equal(numbers, different_values) == false);
+    verify(equal(numbers, no_values) == false);
 }
 
 #[test]

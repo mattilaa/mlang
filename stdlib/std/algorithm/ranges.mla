@@ -1,7 +1,7 @@
 /// \file ranges.mla
 /// \brief Ranges-style algorithms under std::algorithm.
 ///
-/// C++20 `<ranges>` inspired helpers for `list<i64>`.
+/// C++20 `<ranges>` inspired helpers for Mlang lists.
 ///
 /// @defgroup algorithm_ranges std::algorithm::ranges
 /// @ingroup algorithm
@@ -20,6 +20,36 @@ pub fn find(data: &list<T>, value: U) -> i64 {
         }
     }
     return -1;
+}
+
+/// @brief Return the number of elements in a list.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn size(data: &list<T>) -> i64 {
+    return data.len();
+}
+
+/// @brief Return true when a list has no elements.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn empty(data: &list<T>) -> bool {
+    return data.len() == 0;
+}
+
+/// @brief Return whether two lists contain the same elements in order.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn equal(left: &list<T>, right: &list<T>) -> bool {
+    let n: i64 = left.len();
+    if n != right.len() {
+        return false;
+    }
+    for i in 0..n {
+        if left[i] != right[i] {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// @brief Return count of elements equal to value.
