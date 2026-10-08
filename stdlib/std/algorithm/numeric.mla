@@ -31,6 +31,20 @@ pub fn accumulate(data: &list<T>, init: U) -> U {
     return acc;
 }
 
+/// @brief Generic inner product over the shared prefix of two lists.
+/// @ingroup algorithm_numeric
+generic<T, U>
+pub fn inner_product(left: &list<T>, right: &list<T>, init: U) -> U {
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    var acc: U = init;
+    for i in 0..n {
+        acc = acc + (left[i] * right[i]);
+    }
+    return acc;
+}
+
 /// @brief Generic prefix sums with an initial value.
 /// Returns `[init + d0, init + d0 + d1, ...]`.
 /// @ingroup algorithm_numeric
