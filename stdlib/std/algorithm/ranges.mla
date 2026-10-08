@@ -188,9 +188,10 @@ pub fn is_permutation(left: &list<T>, right: &list<U>) -> bool {
 }
 
 /// @brief Return whether `prefix` matches the beginning of `data`.
+/// The two ranges may have different, equality-comparable element types.
 /// @ingroup algorithm_ranges
-generic<T>
-pub fn starts_with(data: &list<T>, prefix: &list<T>) -> bool {
+generic<T, U>
+pub fn starts_with(data: &list<T>, prefix: &list<U>) -> bool {
     let prefix_len: i64 = prefix.len();
     if prefix_len > data.len() {
         return false;

@@ -34,7 +34,8 @@ fn example() {
   membership result.
 - `equal` compares lists in order; `is_permutation` compares element
   multiplicities without considering order.
-- `starts_with` and `ends_with` compare prefixes and suffixes.
+- `starts_with` compares prefixes, including across distinct equality-comparable
+  element types; `ends_with` compares suffixes.
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and
   `max_element_index` provide ordering queries. The min/max index functions
   return `-1` on an empty list and keep the first index on ties.
