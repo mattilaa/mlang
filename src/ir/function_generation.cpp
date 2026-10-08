@@ -289,6 +289,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
     auto savedClosureVariables = closureVariables;
     auto savedActiveInlineClosures = activeInlineClosures;
+    auto savedInlineClosureReturnStates = inlineClosureReturnStates;
     auto savedCurrentFunctionExceptionFrame = currentFunctionExceptionFrame;
     auto savedSemanticReturnType = currentSemanticReturnType;
     int savedUnsafeDepth = unsafeDepth;
@@ -309,6 +310,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     closureVariables.clear();
     closureVariables = node->boundClosureParameters;
     activeInlineClosures.clear();
+    inlineClosureReturnStates.clear();
     pointerBorrowTarget.clear();
     pointerKnownNull.clear();
     activeBorrowers.clear();
@@ -611,6 +613,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     variableScopeDepthScopes = std::move(savedVariableScopeDepthScopes);
     closureVariables = std::move(savedClosureVariables);
     activeInlineClosures = std::move(savedActiveInlineClosures);
+    inlineClosureReturnStates = std::move(savedInlineClosureReturnStates);
     currentFunctionExceptionFrame = savedCurrentFunctionExceptionFrame;
     currentSemanticReturnType = savedSemanticReturnType;
     unsafeDepth = savedUnsafeDepth;
