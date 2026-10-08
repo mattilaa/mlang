@@ -61,6 +61,7 @@ use std::algorithm::ranges::is_sorted;
 use std::algorithm::ranges::is_sorted_until;
 use std::algorithm::ranges::is_heap;
 use std::algorithm::ranges::is_heap_until;
+use std::algorithm::ranges::merged;
 use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::upper_bound;
 use std::algorithm::ranges::binary_search;
@@ -408,6 +409,20 @@ fn test_algorithm_ranges_generic_heap_queries() {
     verify(!is_heap(invalid) && is_heap_until(invalid) == 3);
     verify(is_heap(empty) && is_heap_until(empty) == 0);
     verify(is_heap(one) && is_heap_until(one) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_merged() {
+    let left: list<i32> = [1, 3, 3, 8];
+    let right: list<i32> = [2, 3, 7];
+    let result: list<i32> = merged(left, right);
+    verify(result.len() == 7);
+    verify(result[0] == 1 && result[1] == 2 && result[2] == 3);
+    verify(result[3] == 3 && result[4] == 3 && result[5] == 7 && result[6] == 8);
+    verify(left[0] == 1 && right[0] == 2);
+    let empty: list<i32> = [];
+    let one_side: list<i32> = merged(empty, right);
+    verify(one_side.len() == 3 && one_side[2] == 7);
 }
 
 #[test]

@@ -78,6 +78,8 @@ fn example() {
   `views::join` style); empty inner lists contribute no elements.
 - `concat(left, right)` copies two same-typed ranges into one list (C++23
   `views::concat` style).
+- `merged(left, right)` stably merges two sorted same-typed ranges into a new
+  sorted list; equal elements from the left range come first.
 - `replace(data, old, new)` copies a range while replacing every value equal
   to `old`; the original range is unchanged.
 - `iota(start, end)` materializes the half-open integer interval `[start, end)`;
