@@ -1366,6 +1366,19 @@ pub fn zip(left: &list<T>, right: &list<U>) -> list<tuple<T, U>> {
     return out;
 }
 
+/// @brief Pair each element with its zero-based position.
+/// Eager C++23 `views::enumerate` equivalent; the input remains unchanged.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn enumerate(data: &list<T>) -> list<tuple<i64, T>> {
+    var out: list<tuple<i64, T>> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push((i, data[i]));
+    }
+    return out;
+}
+
 /// @brief Merge two nondecreasing ranges into one stable sorted copy.
 /// Both inputs must already be sorted; equal elements from `left` come first.
 /// C++20 `std::ranges::merge` equivalent for same-typed lists.
