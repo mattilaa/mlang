@@ -106,12 +106,14 @@ use std::algorithm::ranges::all_of;
 use std::algorithm::ranges::any_of;
 use std::algorithm::ranges::none_of;
 use std::algorithm::ranges::find_if;
+use std::algorithm::ranges::find_last_if;
 use std::algorithm::ranges::count_if;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::is_partitioned;
 use std::algorithm::ranges::partition_point;
 use std::algorithm::ranges::stable_partition;
 use std::algorithm::ranges::find_if_not;
+use std::algorithm::ranges::find_last_if_not;
 use std::algorithm::ranges::remove_if;
 use std::algorithm::ranges::replace_if;
 use std::algorithm::ranges::unique_by;
@@ -1351,6 +1353,8 @@ fn test_algorithm_ranges_predicate_algorithms() {
     let above_ten = |value: i32| { return value > 10; };
 
     verify(find_if(values, is_even) == 0);
+    verify(find_last_if(values, is_even) == 5);
+    verify(find_last_if_not(values, is_even) == 4);
     verify(count_if(values, is_even) == 4);
     verify(all_of(values, less_than_ten));
     verify(any_of(values, is_five));
@@ -1367,6 +1371,8 @@ fn test_algorithm_ranges_predicate_algorithms() {
 
     let no_values: list<i32> = [];
     verify(find_if(no_values, is_even) == -1);
+    verify(find_last_if(no_values, is_even) == -1);
+    verify(find_last_if_not(no_values, is_even) == -1);
     verify(count_if(no_values, is_even) == 0);
     let no_selected: list<i32> = filter(no_values, is_even);
     verify(no_selected.len() == 0);

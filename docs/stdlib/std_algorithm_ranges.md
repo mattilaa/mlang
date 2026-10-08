@@ -28,6 +28,8 @@ fn example() {
 
 - `find`, `find_last`, `adjacent_find`, `count`, and `contains` search for a
   value; `adjacent_find` returns the first index of equal neighbors or `-1`.
+- `find_last_if` and `find_last_if_not` return the last index accepted or
+  rejected by a predicate, respectively, or `-1` when no element matches.
 - `adjacent_find_by(data, equivalent)` returns the first adjacent index whose
   pair satisfies a caller-provided binary equivalence predicate, or `-1`.
 - `find_first_of(data, candidates)` returns the first index in `data` matching
