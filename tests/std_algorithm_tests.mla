@@ -45,6 +45,7 @@ use std::algorithm::ranges::count;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::find_last;
 use std::algorithm::ranges::adjacent_find;
+use std::algorithm::ranges::find_first_of;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
@@ -225,6 +226,17 @@ fn test_algorithm_ranges_generic_adjacent_find() {
     verify(adjacent_find(no_match) == -1);
     verify(adjacent_find(one) == -1 && adjacent_find(empty) == -1);
     verify(adjacent_find(repeated) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_find_first_of() {
+    let values: list<i32> = [8, 6, 4, 2];
+    let candidates: list<i64> = [2, 6];
+    verify(find_first_of(values, candidates) == 1);
+    let none: list<i64> = [11, 13];
+    let empty: list<i32> = [];
+    verify(find_first_of(values, none) == -1);
+    verify(find_first_of(empty, candidates) == -1);
 }
 
 #[test]

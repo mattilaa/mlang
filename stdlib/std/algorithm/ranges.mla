@@ -55,6 +55,23 @@ pub fn adjacent_find(data: &list<T>) -> i64 {
     return -1;
 }
 
+/// @brief Return the first index in `data` matching any value in `candidates`.
+/// Returns -1 when the ranges have no matching values (C++20 `find_first_of`).
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn find_first_of(data: &list<T>, candidates: &list<U>) -> i64 {
+    let n: i64 = data.len();
+    let candidate_count: i64 = candidates.len();
+    for i in 0..n {
+        for j in 0..candidate_count {
+            if data[i] == candidates[j] {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
 /// @brief Return the number of elements in a list.
 /// @ingroup algorithm_ranges
 generic<T>
