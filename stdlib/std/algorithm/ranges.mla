@@ -1244,6 +1244,21 @@ pub fn concat(left: &list<T>, right: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Pair corresponding elements into tuples, stopping at the shorter list.
+/// Eager C++23 `views::zip` equivalent; both inputs remain unchanged.
+/// @ingroup algorithm_ranges
+generic<T, U>
+pub fn zip(left: &list<T>, right: &list<U>) -> list<tuple<T, U>> {
+    var out: list<tuple<T, U>> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    let n: i64 = left_len < right_len ? left_len : right_len;
+    for i in 0..n {
+        out.push((left[i], right[i]));
+    }
+    return out;
+}
+
 /// @brief Merge two nondecreasing ranges into one stable sorted copy.
 /// Both inputs must already be sorted; equal elements from `left` come first.
 /// C++20 `std::ranges::merge` equivalent for same-typed lists.
