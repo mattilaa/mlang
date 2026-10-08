@@ -97,6 +97,8 @@ fn example() {
 - `find_if` and `count_if` search/count elements accepted by a bound predicate;
   `filter` eagerly copies accepted values to a new list. Predicates may capture
   local values, and captured mutations are visible to the caller.
+- `for_each(data, operation)` invokes a closure once per element in iteration
+  order; captured mutable state can collect side effects or a result.
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.

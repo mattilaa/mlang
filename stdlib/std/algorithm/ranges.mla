@@ -220,6 +220,18 @@ pub fn count_if(data: &list<T>, predicate: Predicate) -> i64 {
     return matched;
 }
 
+/// @brief Invoke `operation` once for each element, from first to last.
+/// Captured closure state can be used to accumulate effects or results.
+/// C++20 `std::ranges::for_each` equivalent (without iterator result).
+/// @ingroup algorithm_ranges
+generic<T, Operation>
+pub fn for_each(data: &list<T>, operation: Operation) -> void {
+    let n: i64 = data.len();
+    for i in 0..n {
+        operation(data[i]);
+    }
+}
+
 /// @brief Return a copied list containing elements accepted by `predicate`.
 /// This is an eager ranges-style filter/copy-if operation.
 /// @ingroup algorithm_ranges
