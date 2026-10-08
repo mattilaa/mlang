@@ -20,6 +20,8 @@ use std::algorithm::numeric::accumulate_i64;
 use std::algorithm::numeric::adjacent_difference_i64;
 use std::algorithm::numeric::inner_product_i64;
 use std::algorithm::numeric::partial_sum_i64;
+use std::algorithm::numeric::partial_sum;
+use std::algorithm::numeric::adjacent_difference;
 use std::algorithm::order::binary_search_i64;
 use std::algorithm::order::is_sorted_i64;
 use std::algorithm::order::lower_bound_i64;
@@ -384,6 +386,24 @@ fn test_algorithm_numeric_partial_sum_and_adjacent_difference() {
     verify(ad[0] == 2);
     verify(ad[1] == 3);
     verify(ad[2] == 5);
+}
+
+#[test]
+fn test_algorithm_numeric_generic_partial_sum_and_adjacent_difference() {
+    let data: list<i32> = [2, 3, 5];
+    let init: i32 = 10;
+    let prefix: list<i32> = partial_sum(data, init);
+    verify(prefix.len() == 3);
+    verify(prefix[0] == 12 && prefix[1] == 15 && prefix[2] == 20);
+
+    let differences: list<i32> = adjacent_difference(prefix, init);
+    verify(differences.len() == 3);
+    verify(differences[0] == 2 && differences[1] == 3 && differences[2] == 5);
+
+    let empty: list<i32> = [];
+    let empty_prefix: list<i32> = partial_sum(empty, init);
+    let empty_diff: list<i32> = adjacent_difference(empty, init);
+    verify(empty_prefix.len() == 0 && empty_diff.len() == 0);
 }
 
 #[test]
