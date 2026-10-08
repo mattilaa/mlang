@@ -65,6 +65,7 @@ use std::algorithm::ranges::windows;
 use std::algorithm::ranges::strided;
 use std::algorithm::ranges::joined;
 use std::algorithm::ranges::concat;
+use std::algorithm::ranges::replace;
 use std::algorithm::ranges::all_of;
 use std::algorithm::ranges::any_of;
 use std::algorithm::ranges::none_of;
@@ -469,6 +470,19 @@ fn test_algorithm_ranges_generic_concat() {
     let empty: list<i32> = [];
     let one_side: list<i32> = concat(empty, right);
     verify(one_side.len() == 3 && one_side[0] == 3);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_replace() {
+    let values: list<i32> = [1, 2, 2, 3, 2];
+    let updated: list<i32> = replace(values, 2, 9);
+    verify(updated.len() == 5);
+    verify(updated[0] == 1 && updated[1] == 9 && updated[2] == 9);
+    verify(updated[3] == 3 && updated[4] == 9);
+    verify(values[1] == 2 && values[4] == 2);
+    let words: list<str8> = ["red", "blue", "red"];
+    let renamed: list<str8> = replace(words, "red", "green");
+    verify(renamed[0] == "green" && renamed[1] == "blue");
 }
 
 #[test]
