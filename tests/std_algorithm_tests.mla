@@ -48,6 +48,7 @@ use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
 use std::algorithm::ranges::starts_with;
+use std::algorithm::ranges::search;
 use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::ranges::is_sorted;
@@ -220,6 +221,24 @@ fn test_algorithm_ranges_generic_starts_with() {
     verify(starts_with(values, mismatch) == false);
     verify(starts_with(values, too_long) == false);
     verify(starts_with(values, empty));
+}
+
+#[test]
+fn test_algorithm_ranges_generic_search_subrange() {
+    let values: list<i32> = [4, 7, 4, 7, 9];
+    let pattern: list<i32> = [4, 7];
+    let mixed_pattern: list<i64> = [7, 9];
+    let later: list<i32> = [7, 9];
+    let absent: list<i32> = [9, 7];
+    let too_long: list<i32> = [4, 7, 4, 7, 9, 10];
+    let empty: list<i32> = [];
+
+    verify(search(values, pattern) == 0);
+    verify(search(values, later) == 3);
+    verify(search(values, mixed_pattern) == 3);
+    verify(search(values, absent) == -1);
+    verify(search(values, too_long) == -1);
+    verify(search(values, empty) == 0);
 }
 
 #[test]
