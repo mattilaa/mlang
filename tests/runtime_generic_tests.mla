@@ -1,6 +1,8 @@
 mod std::testing;
 use std::testing::verify;
 
+var generic_closure_call_count: i32 = 0;
+
 generic<T>
 fn identity(value: T) -> T {
     return value;
@@ -19,6 +21,11 @@ fn copy_list(values: &list<T>) -> list<T> {
         copied.push(values[i]);
     }
     return copied;
+}
+
+generic<Callback>
+fn invoke_generic_callback(callback: Callback) -> void {
+    callback();
 }
 
 #[test]
@@ -41,4 +48,14 @@ fn test_runtime_generic_functions_specialize_by_argument_type() {
     let copied_words: list<str8> = copy_list(words);
     verify(copied_words.len() == 2);
     verify(copied_words[0] == "modern" && copied_words[1] == "mlang");
+}
+
+#[test]
+fn test_bound_closure_can_be_passed_to_generic_function() {
+    generic_closure_call_count = 0;
+    let mark_called = || {
+        generic_closure_call_count = generic_closure_call_count + 1;
+    };
+    invoke_generic_callback(mark_called);
+    verify(generic_closure_call_count == 1);
 }

@@ -307,6 +307,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     constantVariables.clear();
     movedVariables.clear();
     closureVariables.clear();
+    closureVariables = node->boundClosureParameters;
     activeInlineClosures.clear();
     pointerBorrowTarget.clear();
     pointerKnownNull.clear();

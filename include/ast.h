@@ -1480,6 +1480,11 @@ public:
     std::string typePackParam;
     std::map<std::string, std::vector<std::string>> packExpansionNames;
     std::map<std::string, TypeNode*> concreteTypeBindings;
+    // Generic specializations bind inline closure parameters at compile time.
+    // The parameter remains an opaque pointer in the ABI; calls to it are
+    // lowered by inlining this closure AST into the specialization.
+    std::map<std::string, ClosureNode*> boundClosureParameters;
+    std::string closureSpecializationKey;
     std::string sourceModule; // Module this function was defined in (for
                               // visibility checks)
 
