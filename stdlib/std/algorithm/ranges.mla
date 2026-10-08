@@ -37,6 +37,24 @@ pub fn find_last(data: &list<T>, value: U) -> i64 {
     return found;
 }
 
+/// @brief Return the first index whose value equals its immediate successor.
+/// Returns -1 when the range has fewer than two elements or no adjacent match.
+/// C++20 ranges-style `adjacent_find`.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn adjacent_find(data: &list<T>) -> i64 {
+    let n: i64 = data.len();
+    if n < 2 {
+        return -1;
+    }
+    for i in 0..(n - 1) {
+        if data[i] == data[i + 1] {
+            return i;
+        }
+    }
+    return -1;
+}
+
 /// @brief Return the number of elements in a list.
 /// @ingroup algorithm_ranges
 generic<T>

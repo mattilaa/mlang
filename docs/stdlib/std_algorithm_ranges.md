@@ -23,7 +23,8 @@ fn example() {
 
 ### Search and comparison
 
-- `find`, `find_last`, `count`, and `contains` search for a value.
+- `find`, `find_last`, `adjacent_find`, `count`, and `contains` search for a
+  value; `adjacent_find` returns the first index of equal neighbors or `-1`.
 - `search` returns the first index of a contiguous pattern (`0` for an empty
   pattern, `-1` if absent); `contains_subrange` returns the corresponding
   membership result.
