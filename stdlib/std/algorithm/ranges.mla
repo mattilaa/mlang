@@ -1359,6 +1359,173 @@ pub fn sorted_by(data: &list<T>, less: Less) -> list<T> {
     return merge_sorted_runs_by(left, right, less);
 }
 
+/// @brief Return the next lexicographic permutation and whether it exists.
+/// If no next permutation exists, return the ascending first permutation.
+/// The source range is unchanged (C++20 `std::ranges::next_permutation`).
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn next_permutation(data: &list<T>) -> tuple<bool, list<T>> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !(data[pivot] < data[pivot + 1]) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        var i: i64 = n;
+        while i > 0 {
+            i = i - 1;
+            out.push(data[i]);
+        }
+        return (false, out);
+    }
+    var successor: i64 = n - 1;
+    while !(data[pivot] < data[successor]) {
+        successor = successor - 1;
+    }
+    for i in 0..pivot {
+        out.push(data[i]);
+    }
+    out.push(data[successor]);
+    var i: i64 = n - 1;
+    while i > successor {
+        out.push(data[i]);
+        i = i - 1;
+    }
+    out.push(data[pivot]);
+    i = successor - 1;
+    while i > pivot {
+        out.push(data[i]);
+        i = i - 1;
+    }
+    return (true, out);
+}
+
+/// @brief Next permutation under a strict ordering, with an unchanged input.
+/// Wraps to the first permutation and returns false when no successor exists.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn next_permutation_by(data: &list<T>, less: Less)
+    -> tuple<bool, list<T>> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !less(data[pivot], data[pivot + 1]) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        var i: i64 = n;
+        while i > 0 {
+            i = i - 1;
+            out.push(data[i]);
+        }
+        return (false, out);
+    }
+    var successor: i64 = n - 1;
+    while !less(data[pivot], data[successor]) {
+        successor = successor - 1;
+    }
+    for i in 0..pivot {
+        out.push(data[i]);
+    }
+    out.push(data[successor]);
+    var i: i64 = n - 1;
+    while i > successor {
+        out.push(data[i]);
+        i = i - 1;
+    }
+    out.push(data[pivot]);
+    i = successor - 1;
+    while i > pivot {
+        out.push(data[i]);
+        i = i - 1;
+    }
+    return (true, out);
+}
+
+/// @brief Return the previous lexicographic permutation and whether it exists.
+/// If no predecessor exists, return the descending last permutation.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn prev_permutation(data: &list<T>) -> tuple<bool, list<T>> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !(data[pivot] > data[pivot + 1]) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        var i: i64 = n;
+        while i > 0 {
+            i = i - 1;
+            out.push(data[i]);
+        }
+        return (false, out);
+    }
+    var predecessor: i64 = n - 1;
+    while !(data[pivot] > data[predecessor]) {
+        predecessor = predecessor - 1;
+    }
+    for i in 0..pivot {
+        out.push(data[i]);
+    }
+    out.push(data[predecessor]);
+    var i: i64 = n - 1;
+    while i > predecessor {
+        out.push(data[i]);
+        i = i - 1;
+    }
+    out.push(data[pivot]);
+    i = predecessor - 1;
+    while i > pivot {
+        out.push(data[i]);
+        i = i - 1;
+    }
+    return (true, out);
+}
+
+/// @brief Previous permutation under a strict ordering, with unchanged input.
+/// Wraps to the last permutation and returns false when none exists.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn prev_permutation_by(data: &list<T>, less: Less)
+    -> tuple<bool, list<T>> {
+    var out: list<T> = [];
+    let n: i64 = data.len();
+    var pivot: i64 = n - 2;
+    while pivot >= 0 && !less(data[pivot + 1], data[pivot]) {
+        pivot = pivot - 1;
+    }
+    if pivot < 0 {
+        var i: i64 = n;
+        while i > 0 {
+            i = i - 1;
+            out.push(data[i]);
+        }
+        return (false, out);
+    }
+    var predecessor: i64 = n - 1;
+    while !less(data[predecessor], data[pivot]) {
+        predecessor = predecessor - 1;
+    }
+    for i in 0..pivot {
+        out.push(data[i]);
+    }
+    out.push(data[predecessor]);
+    var i: i64 = n - 1;
+    while i > predecessor {
+        out.push(data[i]);
+        i = i - 1;
+    }
+    out.push(data[pivot]);
+    i = predecessor - 1;
+    while i > pivot {
+        out.push(data[i]);
+        i = i - 1;
+    }
+    return (true, out);
+}
+
 /// @brief Return a reversed copy of a list.
 /// @ingroup algorithm_ranges
 generic<T>

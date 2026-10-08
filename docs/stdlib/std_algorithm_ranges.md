@@ -18,6 +18,7 @@ use std::algorithm::ranges::zip_transform;
 use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::pairwise;
 use std::algorithm::ranges::adjacent_transform;
+use std::algorithm::ranges::next_permutation;
 
 fn example() {
     let data: list<i32> = [4, 2, 4, 7];
@@ -77,6 +78,10 @@ fn example() {
 - `lexicographical_compare`, `is_sorted`, `min_element_index`, and
   `max_element_index` provide ordering queries. The min/max index functions
   return `-1` on an empty list and keep the first index on ties.
+- `next_permutation` and `prev_permutation` return `(advanced, copied_list)`;
+  when no next/previous permutation exists, they wrap the copy to the first or
+  last permutation and return `false`. The `_by` variants use a strict
+  comparator. Inputs are never mutated.
 - `min_element_value` and `max_element_value` return the selected value for a
   nonempty input. Use the index forms to handle empty ranges; value forms keep
   the first value on ties.
