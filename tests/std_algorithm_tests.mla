@@ -138,6 +138,7 @@ use std::algorithm::ranges::take_while;
 use std::algorithm::ranges::drop_while;
 use std::algorithm::ranges::transform;
 use std::algorithm::ranges::zip_transform;
+use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::unique;
 use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::clamp;
@@ -1100,6 +1101,24 @@ fn test_algorithm_ranges_zip_transform() {
     let combined: list<f64> = zip_transform(counts, offsets, combine);
     verify(combined.len() == 2);
     verify(combined[0] == 10.5 && combined[1] == 21.5);
+}
+
+#[test]
+fn test_algorithm_ranges_chunk_by() {
+    let values: list<i32> = [1, 2, 5, 6, 7, 10];
+    let consecutive = |left: i32, right: i32| { return right == left + 1; };
+    let groups: list<list<i32>> = chunk_by(values, consecutive);
+    verify(groups.len() == 3);
+    let first_group: list<i32> = groups[0];
+    let middle_group: list<i32> = groups[1];
+    let last_group: list<i32> = groups[2];
+    verify(first_group.len() == 2 && first_group[0] == 1 && first_group[1] == 2);
+    verify(middle_group.len() == 3 && middle_group[0] == 5 && middle_group[2] == 7);
+    verify(last_group.len() == 1 && last_group[0] == 10);
+
+    let empty: list<i32> = [];
+    let no_groups: list<list<i32>> = chunk_by(empty, consecutive);
+    verify(no_groups.len() == 0);
 }
 
 #[test]
