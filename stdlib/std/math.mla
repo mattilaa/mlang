@@ -558,3 +558,38 @@ pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
     }
     return value < b ? value : b;
 }
+
+extern pub fn __mlang_std_math_midpoint_i32(a: i32, b: i32) -> i32;
+extern pub fn __mlang_std_math_midpoint_i64(a: i64, b: i64) -> i64;
+
+/// @brief Overflow-safe integer midpoint, rounded toward the first argument.
+/// C++20 `std::midpoint` equivalent.
+pub fn midpoint(a: i32, b: i32) -> i32 {
+    return __mlang_std_math_midpoint_i32(a, b);
+}
+
+/// @brief Overflow-safe integer midpoint, rounded toward the first argument.
+/// C++20 `std::midpoint` equivalent.
+pub fn midpoint(a: i64, b: i64) -> i64 {
+    return __mlang_std_math_midpoint_i64(a, b);
+}
+
+/// @brief Floating-point midpoint without overflowing for opposite signs.
+/// C++20 `std::midpoint` equivalent.
+pub fn midpoint(a: f32, b: f32) -> f32 {
+    if a == b { return a; }
+    if (a <= 0.0f && b >= 0.0f) || (a >= 0.0f && b <= 0.0f) {
+        return a / 2.0f + b / 2.0f;
+    }
+    return a + (b - a) / 2.0f;
+}
+
+/// @brief Floating-point midpoint without overflowing for opposite signs.
+/// C++20 `std::midpoint` equivalent.
+pub fn midpoint(a: f64, b: f64) -> f64 {
+    if a == b { return a; }
+    if (a <= 0.0 && b >= 0.0) || (a >= 0.0 && b <= 0.0) {
+        return a / 2.0 + b / 2.0;
+    }
+    return a + (b - a) / 2.0;
+}

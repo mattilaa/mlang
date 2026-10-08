@@ -1,6 +1,7 @@
 mod std::testing;
 mod std::math;
 mod std::numbers;
+mod std::limits;
 
 use std::math::*;
 use std::numbers::pi as numbers_pi;
@@ -18,6 +19,10 @@ use std::numbers::phi as numbers_phi;
 use std::numbers::egamma as numbers_egamma;
 use std::numbers::phi as numbers_phi;
 use std::testing::verify;
+use std::limits::i32_min as limits_i32_min;
+use std::limits::i32_max as limits_i32_max;
+use std::limits::i64_min as limits_i64_min;
+use std::limits::i64_max as limits_i64_max;
 
 fn approx_float(a: f32, b: f32, eps: f32) -> bool {
     var diff: f32 = a - b;
@@ -146,6 +151,18 @@ fn test_cpp20_lerp_interpolation() {
     verify(lerp(-1000000000000.0, 1000000000000.0, 0.5) == 0.0);
     verify(lerp(1000000000000.0, 2000000000000.0, 0.0) == 1000000000000.0);
     verify(lerp(1000000000000.0, 2000000000000.0, 1.0) == 2000000000000.0);
+}
+
+#[test]
+fn test_cpp20_midpoint() {
+    verify(midpoint(0, 1) == 0);
+    verify(midpoint(1, 0) == 1);
+    verify(midpoint(-2, -1) == -2);
+    verify(midpoint(-1, -2) == -1);
+    verify(midpoint(limits_i32_min(), limits_i32_max()) == -1);
+    verify(midpoint(limits_i64_min(), limits_i64_max()) == -1);
+    verify(midpoint(2.0f, 6.0f) == 4.0f);
+    verify(midpoint(-1000000000000.0, 1000000000000.0) == 0.0);
 }
 
 #[test]
