@@ -732,6 +732,37 @@ pub fn concat(left: &list<T>, right: &list<T>) -> list<T> {
     return out;
 }
 
+/// @brief Merge two nondecreasing ranges into one stable sorted copy.
+/// Both inputs must already be sorted; equal elements from `left` come first.
+/// C++20 `std::ranges::merge` equivalent for same-typed lists.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn merged(left: &list<T>, right: &list<T>) -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var left_index: i64 = 0;
+    var right_index: i64 = 0;
+    while left_index < left_len && right_index < right_len {
+        if right[right_index] < left[left_index] {
+            out.push(right[right_index]);
+            right_index = right_index + 1;
+        } else {
+            out.push(left[left_index]);
+            left_index = left_index + 1;
+        }
+    }
+    while left_index < left_len {
+        out.push(left[left_index]);
+        left_index = left_index + 1;
+    }
+    while right_index < right_len {
+        out.push(right[right_index]);
+        right_index = right_index + 1;
+    }
+    return out;
+}
+
 /// @brief Copy a list, replacing every value equal to `old_value`.
 /// C++20 ranges-style replace algorithm; the input remains unchanged.
 /// @ingroup algorithm_ranges
