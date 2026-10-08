@@ -336,7 +336,15 @@ bool CodeGenerator::inferGenericFunctionTypeBindings(
     for(size_t i = 0; i < arguments.size(); ++i)
     {
         TypeNode* concrete = nullptr;
-        if(dynamic_cast<ClosureNode*>(arguments[i]))
+        // A named inline closure is not a normal local value: it lives in
+        // closureVariables and is expanded into the generic specialization.
+        // Resolve it here before ordinary identifier inference, otherwise
+        // overload probing can diagnose the closure name as an unknown local.
+        bool isBoundClosure =
+            dynamic_cast<ClosureNode*>(arguments[i]) != nullptr;
+        if(auto* identifier = dynamic_cast<IdentifierNode*>(arguments[i]))
+            isBoundClosure = closureVariables.count(identifier->name) != 0;
+        if(isBoundClosure)
             concrete = new PointerTypeNode(new TypeNode(TypeNode::TYPE_VOID));
         else
             concrete = inferExpressionTypeNode(arguments[i],
