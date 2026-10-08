@@ -373,6 +373,26 @@ pub fn stable_partition(data: &list<T>, predicate: Predicate) -> list<T> {
     return partitioned;
 }
 
+/// @brief Copy matching and nonmatching elements into separate stable lists.
+/// Each element's predicate is evaluated exactly once; the source is unchanged.
+/// C++20 `std::ranges::partition_copy` equivalent.
+/// @ingroup algorithm_ranges
+generic<T, Predicate>
+pub fn partition_copy(data: &list<T>, predicate: Predicate)
+    -> tuple<list<T>, list<T>> {
+    var matching: list<T> = [];
+    var nonmatching: list<T> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        if predicate(data[i]) {
+            matching.push(data[i]);
+        } else {
+            nonmatching.push(data[i]);
+        }
+    }
+    return (matching, nonmatching);
+}
+
 /// @brief Return the first index rejected by `predicate`, or -1 if all match.
 /// C++20 `std::ranges::find_if_not` semantics.
 /// @ingroup algorithm_ranges
