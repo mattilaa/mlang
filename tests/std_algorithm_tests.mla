@@ -63,6 +63,7 @@ use std::algorithm::ranges::rotate_left;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::windows;
 use std::algorithm::ranges::strided;
+use std::algorithm::ranges::joined;
 use std::algorithm::ranges::chunked;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
@@ -439,6 +440,18 @@ fn test_algorithm_ranges_generic_strided() {
     let words: list<str8> = ["a", "b", "c"];
     let selected: list<str8> = strided(words, 2);
     verify(selected.len() == 2 && selected[0] == "a" && selected[1] == "c");
+}
+
+#[test]
+fn test_algorithm_ranges_generic_joined() {
+    let nested: list<list<i32>> = [[1, 2], [], [3], [4, 5]];
+    let flattened: list<i32> = joined(nested);
+    verify(flattened.len() == 5);
+    verify(flattened[0] == 1 && flattened[1] == 2);
+    verify(flattened[2] == 3 && flattened[3] == 4 && flattened[4] == 5);
+    let no_lists: list<list<i32>> = [];
+    let empty_flattened: list<i32> = joined(no_lists);
+    verify(empty_flattened.len() == 0);
 }
 
 #[test]

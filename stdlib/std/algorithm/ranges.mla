@@ -509,6 +509,23 @@ pub fn strided(data: &list<T>, stride: i64) -> list<T> {
     return out;
 }
 
+/// @brief Flatten a list of lists into one copied list.
+/// Eager-list counterpart to the C++20 `views::join` adaptor.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn joined(data: &list<list<T>>) -> list<T> {
+    var out: list<T> = [];
+    let outer_len: i64 = data.len();
+    for outer_index in 0..outer_len {
+        let inner: list<T> = data[outer_index];
+        let inner_len: i64 = inner.len();
+        for inner_index in 0..inner_len {
+            out.push(inner[inner_index]);
+        }
+    }
+    return out;
+}
+
 /// @brief Copy a list while removing adjacent duplicate values.
 /// @ingroup algorithm_ranges
 generic<T>
