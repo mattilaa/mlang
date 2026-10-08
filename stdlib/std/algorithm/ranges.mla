@@ -444,6 +444,36 @@ pub fn max_element_index(data: &list<T>) -> i64 {
     return best;
 }
 
+/// @brief Return the smallest element of a nonempty range.
+/// Use `min_element_index` to handle an empty range without a precondition.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn min_element_value(data: &list<T>) -> T {
+    let n: i64 = data.len();
+    var best: T = data[0];
+    for i in 1..n {
+        if data[i] < best {
+            best = data[i];
+        }
+    }
+    return best;
+}
+
+/// @brief Return the largest element of a nonempty range.
+/// Use `max_element_index` to handle an empty range without a precondition.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn max_element_value(data: &list<T>) -> T {
+    let n: i64 = data.len();
+    var best: T = data[0];
+    for i in 1..n {
+        if data[i] > best {
+            best = data[i];
+        }
+    }
+    return best;
+}
+
 /// @brief Return count of elements equal to value.
 /// @ingroup algorithm_ranges
 generic<T, U>
