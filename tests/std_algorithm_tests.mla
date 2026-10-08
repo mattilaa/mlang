@@ -54,6 +54,7 @@ use std::algorithm::ranges::contains_subrange;
 use std::algorithm::ranges::ends_with;
 use std::algorithm::ranges::lexicographical_compare;
 use std::algorithm::ranges::is_sorted;
+use std::algorithm::ranges::lower_bound;
 use std::algorithm::ranges::min_element_index;
 use std::algorithm::ranges::max_element_index;
 use std::algorithm::ranges::remove;
@@ -301,6 +302,19 @@ fn test_algorithm_ranges_generic_is_sorted() {
     verify(is_sorted(unsorted) == false);
     verify(is_sorted(empty));
     verify(is_sorted(one));
+}
+
+#[test]
+fn test_algorithm_ranges_generic_lower_bound() {
+    let values: list<i32> = [1, 3, 3, 7, 9];
+    verify(lower_bound(values, 0) == 0);
+    verify(lower_bound(values, 3) == 1);
+    verify(lower_bound(values, 4) == 3);
+    verify(lower_bound(values, 12) == 5);
+
+    let words: list<str8> = ["ant", "bee", "bee", "fox"];
+    verify(lower_bound(words, "bee") == 1);
+    verify(lower_bound(words, "cat") == 3);
 }
 
 #[test]
