@@ -14,6 +14,7 @@ use std::algorithm::ranges::take;
 use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::transform;
+use std::algorithm::ranges::zip_transform;
 
 fn example() {
     let data: list<i32> = [4, 2, 4, 7];
@@ -24,6 +25,8 @@ fn example() {
     let positives: list<i32> = filter(data, positive); // [4, 2, 4, 7]
     let to_double = |value: i32| { return f64(value); };
     let converted: list<f64> = transform(data, to_double);
+    let add = |left: i32, right: i32| { return left + right; };
+    let sums: list<i32> = zip_transform(data, data, add);
 }
 ```
 
@@ -89,6 +92,9 @@ fn example() {
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.
+- `zip_transform(left, right, operation)` applies a binary operation to
+  corresponding values and stops at the shorter input, matching C++23
+  `std::ranges::zip_transform`.
 - `find_if_not` returns the first rejected element's index; `remove_if` returns
   a copy without accepted elements, and `replace_if` substitutes a value for
   every accepted element. These transforms leave their input unchanged.
