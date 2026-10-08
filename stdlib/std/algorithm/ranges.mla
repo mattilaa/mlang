@@ -368,6 +368,49 @@ pub fn drop(data: &list<T>, n: i64) -> list<T> {
     return out;
 }
 
+generic<T>
+fn merge_sorted_runs(left: &list<T>, right: &list<T>) -> list<T> {
+    var out: list<T> = [];
+    let left_len: i64 = left.len();
+    let right_len: i64 = right.len();
+    var left_index: i64 = 0;
+    var right_index: i64 = 0;
+
+    while left_index < left_len && right_index < right_len {
+        if left[left_index] <= right[right_index] {
+            out.push(left[left_index]);
+            left_index = left_index + 1;
+        } else {
+            out.push(right[right_index]);
+            right_index = right_index + 1;
+        }
+    }
+    while left_index < left_len {
+        out.push(left[left_index]);
+        left_index = left_index + 1;
+    }
+    while right_index < right_len {
+        out.push(right[right_index]);
+        right_index = right_index + 1;
+    }
+    return out;
+}
+
+/// @brief Return a stable, ascending sorted copy of a list.
+/// The input is unchanged; elements must support ordering.
+/// @ingroup algorithm_ranges
+generic<T>
+pub fn sorted(data: &list<T>) -> list<T> {
+    let n: i64 = data.len();
+    if n < 2 {
+        return take(data, n);
+    }
+    let middle: i64 = n / 2;
+    let left: list<T> = sorted(take(data, middle));
+    let right: list<T> = sorted(drop(data, middle));
+    return merge_sorted_runs(left, right);
+}
+
 /// @brief Copy a list while removing adjacent duplicate values.
 /// @ingroup algorithm_ranges
 generic<T>
