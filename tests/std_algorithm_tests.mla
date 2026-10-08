@@ -125,6 +125,7 @@ use std::algorithm::ranges::find_if;
 use std::algorithm::ranges::find_last_if;
 use std::algorithm::ranges::count_if;
 use std::algorithm::ranges::for_each;
+use std::algorithm::ranges::generate_n;
 use std::algorithm::ranges::filter;
 use std::algorithm::ranges::is_partitioned;
 use std::algorithm::ranges::partition_point;
@@ -1688,6 +1689,25 @@ fn test_algorithm_ranges_for_each() {
     let empty: list<i32> = [];
     for_each(empty, add_to_total);
     verify(total == 10);
+}
+
+#[test]
+fn test_algorithm_ranges_generate_n() {
+    var next_value: i32 = 0;
+    let next = || {
+        next_value = next_value + 1;
+        return next_value;
+    };
+    let generated: list<i32> = generate_n(4, next);
+    verify(generated.len() == 4);
+    verify(generated[0] == 1 && generated[1] == 2);
+    verify(generated[2] == 3 && generated[3] == 4);
+    verify(next_value == 4);
+
+    let empty: list<i32> = generate_n(0, next);
+    let negative: list<i32> = generate_n(-3, next);
+    verify(empty.len() == 0 && negative.len() == 0);
+    verify(next_value == 4);
 }
 
 

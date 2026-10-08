@@ -21,6 +21,7 @@ use std::algorithm::ranges::chunk_by;
 use std::algorithm::ranges::pairwise;
 use std::algorithm::ranges::adjacent_transform;
 use std::algorithm::ranges::next_permutation;
+use std::algorithm::ranges::generate_n;
 
 fn example() {
     let data: list<i32> = [4, 2, 4, 7];
@@ -112,6 +113,9 @@ fn example() {
   local values, and captured mutations are visible to the caller.
 - `for_each(data, operation)` invokes a closure once per element in iteration
   order; captured mutable state can collect side effects or a result.
+- `generate_n(count, generator)` materializes values by invoking a zero-argument
+  generator closure `count` times; non-positive counts return an empty list.
+  Captured generator state is preserved between invocations.
 - `transform(data, operation)` eagerly maps every element into a new list;
   the output element type is inferred from the closure return type and may
   differ from the input element type.

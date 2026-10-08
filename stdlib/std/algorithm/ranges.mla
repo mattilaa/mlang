@@ -232,6 +232,21 @@ pub fn for_each(data: &list<T>, operation: Operation) -> void {
     }
 }
 
+/// @brief Materialize `count` values from a zero-argument generator closure.
+/// Non-positive counts return an empty list without invoking the generator.
+/// Mlang's eager-list form of C++ `std::generate_n`.
+/// @ingroup algorithm_ranges
+generic<T, Generator>
+pub fn generate_n(count: i64, generator: Generator) -> list<T> {
+    var generated: list<T> = [];
+    var i: i64 = 0;
+    while i < count {
+        generated.push(generator());
+        i = i + 1;
+    }
+    return generated;
+}
+
 /// @brief Return a copied list containing elements accepted by `predicate`.
 /// This is an eager ranges-style filter/copy-if operation.
 /// @ingroup algorithm_ranges
