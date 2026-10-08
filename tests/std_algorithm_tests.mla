@@ -44,6 +44,7 @@ use std::algorithm::ranges::contains;
 use std::algorithm::ranges::count;
 use std::algorithm::ranges::find;
 use std::algorithm::ranges::find_last;
+use std::algorithm::ranges::adjacent_find;
 use std::algorithm::ranges::size;
 use std::algorithm::ranges::empty;
 use std::algorithm::ranges::equal;
@@ -211,6 +212,19 @@ fn test_algorithm_ranges_generic_find_count_contains() {
     verify(count(words, "mango") == 2);
     verify(contains(words, "plum") == false);
     verify(find_last(words, "plum") == -1);
+}
+
+#[test]
+fn test_algorithm_ranges_generic_adjacent_find() {
+    let values: list<i32> = [4, 7, 7, 9, 9];
+    verify(adjacent_find(values) == 1);
+    let no_match: list<str8> = ["a", "b", "c"];
+    let one: list<i32> = [5];
+    let empty: list<i32> = [];
+    let repeated: list<str8> = ["x", "y", "y"];
+    verify(adjacent_find(no_match) == -1);
+    verify(adjacent_find(one) == -1 && adjacent_find(empty) == -1);
+    verify(adjacent_find(repeated) == 1);
 }
 
 #[test]
