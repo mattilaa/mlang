@@ -429,7 +429,8 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
             functionTemplate->boundClosureConstCaptures;
         specialized->closureSpecializationKey =
             functionTemplate->closureSpecializationKey;
-        static size_t closureSpecializationSequence = 0;
+        static std::map<ClosureNode*, size_t> closureSpecializationIds;
+        static size_t nextClosureSpecializationId = 0;
         for(size_t i = 0; i < call->arguments.size(); ++i)
         {
             ClosureNode* closure =
@@ -482,8 +483,16 @@ void CodeGenerator::instantiateGenericFunctionOverloads(
                 }
                 if(!specialized->closureSpecializationKey.empty())
                     specialized->closureSpecializationKey += "_";
+                auto closureId = closureSpecializationIds.find(closure);
+                if(closureId == closureSpecializationIds.end())
+                {
+                    closureId = closureSpecializationIds
+                                    .emplace(closure,
+                                             ++nextClosureSpecializationId)
+                                    .first;
+                }
                 specialized->closureSpecializationKey +=
-                    std::to_string(++closureSpecializationSequence);
+                    std::to_string(closureId->second);
             }
         }
         for(const auto& binding : bindings)
