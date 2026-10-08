@@ -134,6 +134,8 @@ use std::algorithm::ranges::remove;
 use std::algorithm::ranges::take;
 use std::algorithm::ranges::iota;
 use std::algorithm::ranges::drop;
+use std::algorithm::ranges::take_while;
+use std::algorithm::ranges::drop_while;
 use std::algorithm::ranges::unique;
 use std::algorithm::ranges::unique_stable;
 use std::algorithm::ranges::clamp;
@@ -1048,6 +1050,28 @@ fn test_algorithm_ranges_generic_sequence_transforms() {
     let none_taken: list<i32> = take(data, -2);
     let all_dropped: list<i32> = drop(data, 99);
     verify(none_taken.len() == 0 && all_dropped.len() == 0);
+}
+
+#[test]
+fn test_algorithm_ranges_take_drop_while() {
+    let values: list<i32> = [1, 2, 3, 0, 4];
+    let below_three = |value: i32| { return value < 3; };
+    let prefix: list<i32> = take_while(values, below_three);
+    let suffix: list<i32> = drop_while(values, below_three);
+    verify(prefix.len() == 2 && prefix[0] == 1 && prefix[1] == 2);
+    verify(suffix.len() == 3 && suffix[0] == 3 && suffix[1] == 0 && suffix[2] == 4);
+    verify(values.len() == 5 && values[0] == 1 && values[4] == 4);
+
+    let starts_rejected: list<i32> = [3, 1, 2];
+    let empty_prefix: list<i32> = take_while(starts_rejected, below_three);
+    let unchanged: list<i32> = drop_while(starts_rejected, below_three);
+    verify(empty_prefix.len() == 0);
+    verify(unchanged.len() == 3 && unchanged[0] == 3 && unchanged[2] == 2);
+
+    let empty: list<i32> = [];
+    let empty_prefix2: list<i32> = take_while(empty, below_three);
+    let empty_suffix2: list<i32> = drop_while(empty, below_three);
+    verify(empty_prefix2.len() == 0 && empty_suffix2.len() == 0);
 }
 
 #[test]
