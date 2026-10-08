@@ -1497,6 +1497,24 @@ pub fn pairwise(data: &list<T>) -> list<tuple<T, T>> {
     return out;
 }
 
+/// @brief Apply a binary operation to every adjacent pair of elements.
+/// Eager C++23 `views::adjacent_transform<2>` equivalent; output length is
+/// max(data.len() - 1, 0), and output type follows the operation's result.
+/// @ingroup algorithm_ranges
+generic<T, Output, Operation>
+pub fn adjacent_transform(data: &list<T>, operation: Operation)
+    -> list<Output> {
+    var out: list<Output> = [];
+    let n: i64 = data.len();
+    if n < 2 {
+        return out;
+    }
+    for i in 0..(n - 1) {
+        out.push(operation(data[i], data[i + 1]));
+    }
+    return out;
+}
+
 /// @brief Materialize every pair from two ranges in nested-loop order.
 /// The right range varies fastest; equivalent to C++23 `views::cartesian_product`.
 /// @ingroup algorithm_ranges
