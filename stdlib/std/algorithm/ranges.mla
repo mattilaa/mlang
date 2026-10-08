@@ -51,6 +51,36 @@ pub fn empty(data: &list<T>) -> bool {
     return data.len() == 0;
 }
 
+/// @brief Return whether every boolean in a range is true (C++20 all_of identity form).
+/// @ingroup algorithm_ranges
+pub fn all_of(data: &list<bool>) -> bool {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if !data[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Return whether at least one boolean in a range is true (C++20 any_of identity form).
+/// @ingroup algorithm_ranges
+pub fn any_of(data: &list<bool>) -> bool {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// @brief Return whether no boolean in a range is true (C++20 none_of identity form).
+/// @ingroup algorithm_ranges
+pub fn none_of(data: &list<bool>) -> bool {
+    return !any_of(data);
+}
+
 /// @brief Return whether two lists contain the same elements in order.
 /// @ingroup algorithm_ranges
 generic<T>

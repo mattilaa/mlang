@@ -37,6 +37,9 @@ fn example() {
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns `bool`.
 - `size` and `empty` provide generic list size queries.
+- `all_of`, `any_of`, and `none_of` quantify `list<bool>` values directly. These
+  identity-predicate forms preserve the usual empty-range identities; callback
+  predicates are not supported by this API.
 
 ### Transforms and sequence creation
 
