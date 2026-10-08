@@ -577,6 +577,28 @@ pub fn is_heap(data: &list<T>) -> bool {
     return is_heap_until(data) == data.len();
 }
 
+/// @brief Return the first child violating heap order defined by `less`.
+/// A child violates the heap when its parent compares less than it.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn is_heap_until_by(data: &list<T>, less: Less) -> i64 {
+    let n: i64 = data.len();
+    for child in 1..n {
+        let parent: i64 = (child - 1) / 2;
+        if less(data[parent], data[child]) {
+            return child;
+        }
+    }
+    return n;
+}
+
+/// @brief Return whether a list satisfies heap order defined by `less`.
+/// @ingroup algorithm_ranges
+generic<T, Less>
+pub fn is_heap_by(data: &list<T>, less: Less) -> bool {
+    return is_heap_until_by(data, less) == data.len();
+}
+
 /// @brief First index where `value` can be inserted without breaking order.
 /// Requires nondecreasing input; returns `data.len()` when value is too large.
 /// @ingroup algorithm_ranges

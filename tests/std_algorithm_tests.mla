@@ -61,6 +61,8 @@ use std::algorithm::ranges::is_sorted;
 use std::algorithm::ranges::is_sorted_until;
 use std::algorithm::ranges::is_heap;
 use std::algorithm::ranges::is_heap_until;
+use std::algorithm::ranges::is_heap_by;
+use std::algorithm::ranges::is_heap_until_by;
 use std::algorithm::ranges::merged;
 use std::algorithm::ranges::union_sorted;
 use std::algorithm::ranges::intersection_sorted;
@@ -434,6 +436,22 @@ fn test_algorithm_ranges_generic_heap_queries() {
     verify(!is_heap(invalid) && is_heap_until(invalid) == 3);
     verify(is_heap(empty) && is_heap_until(empty) == 0);
     verify(is_heap(one) && is_heap_until(one) == 1);
+}
+
+#[test]
+fn test_algorithm_ranges_comparator_heap_queries() {
+    let min_heap: list<i32> = [1, 3, 2, 9, 8, 4];
+    let invalid: list<i32> = [1, 5, 2, 3];
+    let empty: list<i32> = [];
+    let one: list<i32> = [4];
+    let greater = |a: i32, b: i32| { return a > b; };
+    verify(is_heap_by(min_heap, greater));
+    verify(is_heap_until_by(min_heap, greater) == 6);
+    verify(!is_heap_by(invalid, greater));
+    verify(is_heap_until_by(invalid, greater) == 3);
+    verify(is_heap_by(empty, greater));
+    verify(is_heap_until_by(empty, greater) == 0);
+    verify(is_heap_by(one, greater) && is_heap_until_by(one, greater) == 1);
 }
 
 #[test]

@@ -56,6 +56,9 @@ fn example() {
   order, or `data.len()` when the entire range is sorted.
 - `is_heap(data)` checks max-heap order; `is_heap_until(data)` returns the
   first violating child index, or `data.len()` when the range is a heap.
+- `is_heap_by(data, less)` and `is_heap_until_by(data, less)` check heap order
+  using a strict comparator; the returned index is the first child for which
+  `less(parent, child)` is true.
 - `lower_bound`, `upper_bound`, and `binary_search` perform logarithmic-time
   queries on a list sorted in nondecreasing order. The bounds return insertion
   indices; binary search returns `bool`.
