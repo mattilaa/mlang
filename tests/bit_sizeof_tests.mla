@@ -9,6 +9,8 @@ use std::bits::has_single_bit_u64;
 use std::bits::bit_width_u64;
 use std::bits::countl_zero_u64;
 use std::bits::countr_zero_u64;
+use std::bits::countl_one_u64;
+use std::bits::countr_one_u64;
 use std::bits::bit_floor_u64;
 use std::bits::rotl_u64;
 use std::bits::rotr_u64;
@@ -100,6 +102,8 @@ fn test_cpp20_unsigned_bit_utilities() {
     verify_eq_i64(63, countl_zero_u64(one));
     verify_eq_i64(64, countr_zero_u64(zero));
     verify_eq_i64(8, countr_zero_u64(two_fifty_six));
+    verify_eq_i64(0, countl_one_u64(zero));
+    verify_eq_i64(8, countr_one_u64(two_fifty_five));
     verify(bit_floor_u64(two_fifty_five) == one_twenty_eight);
     verify(bit_floor_u64(zero) == zero);
     verify(rotl_u64(one, 1) == two);
